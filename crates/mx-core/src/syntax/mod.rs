@@ -1,6 +1,7 @@
 mod highlight;
 mod indent;
 mod items;
+mod layers;
 pub(crate) mod motion;
 
 use std::fmt;
@@ -9,6 +10,8 @@ use std::path::Path;
 use tree_sitter::{InputEdit, Node, Parser, Point, Tree};
 
 pub use items::Item;
+
+use layers::{Grammar, Layer};
 
 use crate::text::{Buffer, TextChange};
 
@@ -130,14 +133,6 @@ impl Language {
             Self::Markdown => "Markdown",
         }
     }
-
-    fn grammar(self) -> tree_sitter::Language {
-        match self {
-            Self::Rust => tree_sitter_rust::LANGUAGE.into(),
-            Self::Toml => tree_sitter_toml_ng::LANGUAGE.into(),
-            Self::Markdown => tree_sitter_md::LANGUAGE.into(),
-        }
-    }
 }
 
 pub struct Syntax {
@@ -145,6 +140,8 @@ pub struct Syntax {
     parser: Parser,
     tree: Option<Tree>,
     revision: Option<u64>,
+    layers: Vec<Layer>,
+    injectors: Vec<(Grammar, Parser)>,
 }
 
 impl fmt::Debug for Syntax {
@@ -160,12 +157,14 @@ impl fmt::Debug for Syntax {
 impl Syntax {
     pub fn new(language: Language) -> Self {
         let mut parser = Parser::new();
-        let _ = parser.set_language(&language.grammar());
+        let _ = parser.set_language(&language.grammar().language());
         Self {
             language,
             parser,
             tree: None,
             revision: None,
+            layers: Vec::new(),
+            injectors: Vec::new(),
         }
     }
 
@@ -264,6 +263,7 @@ impl Syntax {
             None,
         );
         self.revision = Some(revision);
+        self.inject(buffer);
     }
 }
 

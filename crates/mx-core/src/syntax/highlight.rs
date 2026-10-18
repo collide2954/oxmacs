@@ -4,15 +4,16 @@ use std::ops::Range;
 use std::sync::LazyLock;
 
 use streaming_iterator::StreamingIterator;
-use tree_sitter::{Node, Query, QueryCursor};
+use tree_sitter::{Node, Query, QueryCursor, Tree};
 
-use crate::syntax::{Language, Syntax};
+use crate::syntax::{Grammar, Syntax};
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
 const RUST: &str = include_str!("../../queries/rust/highlights.scm");
 const TOML: &str = include_str!("../../queries/toml/highlights.scm");
 const MARKDOWN: &str = include_str!("../../queries/markdown/highlights.scm");
+const MARKDOWN_INLINE: &str = include_str!("../../queries/markdown/inline.scm");
 
 struct Highlighter {
     query: Query,
@@ -20,15 +21,17 @@ struct Highlighter {
 }
 
 static RUST_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
-    LazyLock::new(|| Highlighter::new(Language::Rust, RUST));
+    LazyLock::new(|| Highlighter::new(Grammar::Rust, RUST));
 static TOML_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
-    LazyLock::new(|| Highlighter::new(Language::Toml, TOML));
+    LazyLock::new(|| Highlighter::new(Grammar::Toml, TOML));
 static MARKDOWN_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
-    LazyLock::new(|| Highlighter::new(Language::Markdown, MARKDOWN));
+    LazyLock::new(|| Highlighter::new(Grammar::Markdown, MARKDOWN));
+static MARKDOWN_INLINE_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
+    LazyLock::new(|| Highlighter::new(Grammar::MarkdownInline, MARKDOWN_INLINE));
 
 impl Highlighter {
-    fn new(language: Language, source: &str) -> Option<Self> {
-        let query = Query::new(&language.grammar(), source).ok()?;
+    fn new(grammar: Grammar, source: &str) -> Option<Self> {
+        let query = Query::new(&grammar.language(), source).ok()?;
         let faces = query
             .capture_names()
             .iter()
@@ -37,11 +40,12 @@ impl Highlighter {
         Some(Self { query, faces })
     }
 
-    fn of(language: Language) -> Option<&'static Self> {
-        match language {
-            Language::Rust => RUST_HIGHLIGHTER.as_ref(),
-            Language::Toml => TOML_HIGHLIGHTER.as_ref(),
-            Language::Markdown => MARKDOWN_HIGHLIGHTER.as_ref(),
+    fn of(grammar: Grammar) -> Option<&'static Self> {
+        match grammar {
+            Grammar::Rust => RUST_HIGHLIGHTER.as_ref(),
+            Grammar::Toml => TOML_HIGHLIGHTER.as_ref(),
+            Grammar::Markdown => MARKDOWN_HIGHLIGHTER.as_ref(),
+            Grammar::MarkdownInline => MARKDOWN_INLINE_HIGHLIGHTER.as_ref(),
         }
     }
 }
@@ -73,22 +77,55 @@ fn contains_others(highlight: Highlight) -> bool {
 
 impl Syntax {
     pub fn highlights(&self, buffer: &Buffer, line: usize) -> Vec<(Range<usize>, Highlight)> {
-        let Some(highlighter) = Highlighter::of(self.language) else {
-            return Vec::new();
-        };
-        let Some(tree) = self
-            .tree
-            .as_ref()
-            .filter(|_| self.revision == Some(buffer.revision()))
-        else {
+        let Some(tree) = self.synced(buffer) else {
             return Vec::new();
         };
         let start = buffer.line_start(line);
         let end = buffer.line_end(line);
         let bytes = buffer.char_to_byte(start)..buffer.char_to_byte(end);
+        let mut faces = vec![None; end - start];
+        let span = Span {
+            buffer,
+            start,
+            bytes: bytes.clone(),
+        };
+        span.paint(&mut faces, self.language.grammar(), tree);
+        for layer in &self.layers {
+            if layer.replaces {
+                for range in &layer.ranges {
+                    if let Some(chars) = span.chars(range) {
+                        faces[chars].fill(None);
+                    }
+                }
+            }
+            span.paint(&mut faces, layer.grammar, &layer.tree);
+        }
+        runs(&faces)
+    }
+}
+
+struct Span<'a> {
+    buffer: &'a Buffer,
+    start: usize,
+    bytes: Range<usize>,
+}
+
+impl Span<'_> {
+    fn chars(&self, range: &Range<usize>) -> Option<Range<usize>> {
+        let from = range.start.max(self.bytes.start);
+        let to = range.end.min(self.bytes.end);
+        (from < to).then(|| {
+            self.buffer.byte_to_char(from) - self.start..self.buffer.byte_to_char(to) - self.start
+        })
+    }
+
+    fn paint(&self, faces: &mut [Option<Highlight>], grammar: Grammar, tree: &Tree) {
+        let Some(highlighter) = Highlighter::of(grammar) else {
+            return;
+        };
         let mut cursor = QueryCursor::new();
-        cursor.set_byte_range(bytes.clone());
-        let text = |node: Node<'_>| iter::once(buffer.text_in_bytes(node.byte_range()));
+        cursor.set_byte_range(self.bytes.clone());
+        let text = |node: Node<'_>| iter::once(self.buffer.text_in_bytes(node.byte_range()));
         let mut captures = cursor.captures(&highlighter.query, tree.root_node(), text);
         let mut found = Vec::new();
         while let Some((matched, index)) = captures.next() {
@@ -97,21 +134,16 @@ impl Syntax {
                 continue;
             };
             let range = capture.node.byte_range();
-            let from = range.start.max(bytes.start);
-            let to = range.end.min(bytes.end);
-            if from < to {
-                let chars = buffer.byte_to_char(from) - start..buffer.byte_to_char(to) - start;
+            if let Some(chars) = self.chars(&range) {
                 found.push((chars, range.len(), matched.pattern_index, *highlight));
             }
         }
         found.sort_by_key(|(_, length, pattern, highlight)| {
             (contains_others(*highlight), Reverse(*length), *pattern)
         });
-        let mut faces = vec![None; end - start];
         for (chars, _, _, highlight) in found {
             faces[chars].fill(Some(highlight));
         }
-        runs(&faces)
     }
 }
 
@@ -132,6 +164,7 @@ fn runs(faces: &[Option<Highlight>]) -> Vec<(Range<usize>, Highlight)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::syntax::Language;
 
     fn faces(text: &str, line: usize) -> Vec<(Range<usize>, Highlight)> {
         faces_in(Language::Rust, text, line)
@@ -253,6 +286,39 @@ mod tests {
         assert_eq!(markdown(4), [(0..3, Highlight::Comment)]);
         assert_eq!(markdown(5), [(0..4, Highlight::String)]);
         assert_eq!(markdown(8), [(0..7, Highlight::DocComment)]);
+    }
+
+    #[test]
+    fn markdown_inlines_are_highlighted() {
+        let text = "Some *em* and **strong** with `code` and [link](url).\n# A *b*\n";
+        let markdown = |line| faces_in(Language::Markdown, text, line);
+
+        assert_eq!(
+            markdown(0),
+            [
+                (5..9, Highlight::Constant),
+                (14..24, Highlight::Keyword),
+                (30..36, Highlight::String),
+                (42..46, Highlight::Link),
+                (48..51, Highlight::Comment)
+            ]
+        );
+        assert_eq!(
+            markdown(1),
+            [(0..4, Highlight::Heading), (4..7, Highlight::Constant)]
+        );
+    }
+
+    #[test]
+    fn fenced_code_is_highlighted_in_its_language() {
+        let text = "```rust\nfn a() {}\n```\n\n```py\nx = 1\n```\n";
+        let markdown = |line| faces_in(Language::Markdown, text, line);
+
+        assert_eq!(
+            markdown(1),
+            [(0..2, Highlight::Keyword), (3..4, Highlight::Function)]
+        );
+        assert_eq!(markdown(5), [(0..5, Highlight::String)]);
     }
 
     #[test]
