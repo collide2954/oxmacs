@@ -16,6 +16,13 @@ impl Buffer {
         }
     }
 
+    pub fn with_text(name: impl Into<String>, text: &str) -> Self {
+        Self {
+            text: Rope::from_str(text),
+            ..Self::new(name)
+        }
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -26,6 +33,10 @@ impl Buffer {
 
     pub fn point(&self) -> usize {
         self.point
+    }
+
+    pub fn set_point(&mut self, point: usize) {
+        self.point = point.min(self.len_chars());
     }
 
     pub fn contents(&self) -> String {
@@ -70,5 +81,35 @@ mod tests {
         buffer.insert("héllo→");
 
         assert_eq!(buffer.point(), 6);
+    }
+
+    #[test]
+    fn with_text_starts_with_point_at_beginning() {
+        let buffer = Buffer::with_text("t", "abc");
+
+        assert_eq!(buffer.contents(), "abc");
+        assert_eq!(buffer.point(), 0);
+    }
+
+    #[test]
+    fn set_point_clamps_to_end_of_buffer() {
+        let mut buffer = Buffer::with_text("t", "abc");
+
+        buffer.set_point(2);
+        assert_eq!(buffer.point(), 2);
+
+        buffer.set_point(99);
+        assert_eq!(buffer.point(), 3);
+    }
+
+    #[test]
+    fn insert_in_middle_keeps_surrounding_text() {
+        let mut buffer = Buffer::with_text("t", "ac");
+        buffer.set_point(1);
+
+        buffer.insert("b");
+
+        assert_eq!(buffer.contents(), "abc");
+        assert_eq!(buffer.point(), 2);
     }
 }
