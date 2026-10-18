@@ -3,6 +3,8 @@ use std::ops::Range;
 
 use ropey::Rope;
 
+use crate::text::history::{Edit, History};
+
 #[derive(Debug, Clone)]
 pub struct Buffer {
     name: String,
@@ -10,6 +12,7 @@ pub struct Buffer {
     point: usize,
     mark: Option<usize>,
     mark_active: bool,
+    history: History,
 }
 
 impl Buffer {
@@ -20,6 +23,7 @@ impl Buffer {
             point: 0,
             mark: None,
             mark_active: false,
+            history: History::default(),
         }
     }
 
@@ -131,13 +135,82 @@ impl Buffer {
     }
 
     pub fn insert(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
         let at = self.point;
+        self.apply_insert(at, text);
+        self.point = at + text.chars().count();
+        self.history.record(
+            Edit::Insert {
+                at,
+                text: text.to_owned(),
+            },
+            at,
+            self.point,
+        );
+    }
+
+    pub fn close_undo_step(&mut self) {
+        self.history.close();
+    }
+
+    pub fn undo(&mut self) -> bool {
+        let Some(step) = self.history.take_undo() else {
+            return false;
+        };
+        for edit in step.edits.iter().rev() {
+            match edit {
+                Edit::Insert { at, text } => {
+                    self.apply_delete(*at, at + text.chars().count());
+                }
+                Edit::Delete { at, text } => self.apply_insert(*at, text),
+            }
+        }
+        self.finish_history_move(step.point_before);
+        self.history.push_undone(step);
+        true
+    }
+
+    pub fn redo(&mut self) -> bool {
+        let Some(step) = self.history.take_redo() else {
+            return false;
+        };
+        for edit in &step.edits {
+            match edit {
+                Edit::Insert { at, text } => self.apply_insert(*at, text),
+                Edit::Delete { at, text } => {
+                    self.apply_delete(*at, at + text.chars().count());
+                }
+            }
+        }
+        self.finish_history_move(step.point_after);
+        self.history.push_done(step);
+        true
+    }
+
+    fn finish_history_move(&mut self, point: usize) {
+        self.point = point.min(self.len_chars());
+        self.mark_active = false;
+    }
+
+    fn apply_insert(&mut self, at: usize, text: &str) {
         let inserted = text.chars().count();
         self.text.insert(at, text);
-        self.point += inserted;
+        self.point = position_after_insert(self.point, at, inserted);
         self.mark = self
             .mark
-            .map(|mark| if mark > at { mark + inserted } else { mark });
+            .map(|mark| position_after_insert(mark, at, inserted));
+    }
+
+    fn apply_delete(&mut self, start: usize, end: usize) -> String {
+        let removed = self.text_in(start..end);
+        self.text.remove(start..end);
+        self.point = position_after_removal(self.point, start, end);
+        self.mark = self
+            .mark
+            .map(|mark| position_after_removal(mark, start, end));
+        removed
     }
 
     pub fn delete_forward(&mut self, count: usize) {
@@ -157,13 +230,28 @@ impl Buffer {
     pub fn delete_range(&mut self, range: Range<usize>) -> String {
         let end = range.end.min(self.len_chars());
         let start = range.start.min(end);
-        let removed = self.text_in(start..end);
-        self.text.remove(start..end);
-        self.point = position_after_removal(self.point, start, end);
-        self.mark = self
-            .mark
-            .map(|mark| position_after_removal(mark, start, end));
+        if start == end {
+            return String::new();
+        }
+        let before = self.point;
+        let removed = self.apply_delete(start, end);
+        self.history.record(
+            Edit::Delete {
+                at: start,
+                text: removed.clone(),
+            },
+            before,
+            self.point,
+        );
         removed
+    }
+}
+
+fn position_after_insert(position: usize, at: usize, inserted: usize) -> usize {
+    if position > at {
+        position + inserted
+    } else {
+        position
     }
 }
 
@@ -351,6 +439,89 @@ mod tests {
 
         assert_eq!(buffer.chars_after(1).collect::<String>(), "bcd");
         assert_eq!(buffer.chars_before(3).collect::<String>(), "cba");
+    }
+
+    #[test]
+    fn undo_reverts_an_insert_and_restores_point() {
+        let mut buffer = Buffer::with_text("t", "ab");
+        buffer.set_point(1);
+        buffer.insert("X");
+        buffer.close_undo_step();
+
+        assert!(buffer.undo());
+
+        assert_eq!(buffer.contents(), "ab");
+        assert_eq!(buffer.point(), 1);
+    }
+
+    #[test]
+    fn undo_reverts_a_deletion() {
+        let mut buffer = Buffer::with_text("t", "abc");
+        buffer.set_point(1);
+        buffer.delete_forward(1);
+
+        assert!(buffer.undo());
+
+        assert_eq!(buffer.contents(), "abc");
+        assert_eq!(buffer.point(), 1);
+    }
+
+    #[test]
+    fn redo_reapplies_an_undone_step() {
+        let mut buffer = Buffer::with_text("t", "ab");
+        buffer.set_point(1);
+        buffer.insert("X");
+        buffer.undo();
+
+        assert!(buffer.redo());
+
+        assert_eq!(buffer.contents(), "aXb");
+        assert_eq!(buffer.point(), 2);
+    }
+
+    #[test]
+    fn new_edits_drop_the_redo_branch() {
+        let mut buffer = Buffer::with_text("t", "");
+        buffer.insert("a");
+        buffer.undo();
+        buffer.insert("b");
+
+        assert!(!buffer.redo());
+        assert_eq!(buffer.contents(), "b");
+    }
+
+    #[test]
+    fn edits_without_a_step_boundary_undo_together() {
+        let mut buffer = Buffer::new("t");
+        buffer.insert("a");
+        buffer.insert("b");
+
+        buffer.undo();
+
+        assert_eq!(buffer.contents(), "");
+    }
+
+    #[test]
+    fn closed_steps_undo_one_at_a_time() {
+        let mut buffer = Buffer::new("t");
+        buffer.insert("a");
+        buffer.close_undo_step();
+        buffer.insert("b");
+
+        buffer.undo();
+        assert_eq!(buffer.contents(), "a");
+        buffer.undo();
+        assert_eq!(buffer.contents(), "");
+        assert!(!buffer.undo());
+    }
+
+    #[test]
+    fn undo_and_redo_are_inert_without_history() {
+        let mut buffer = Buffer::with_text("t", "abc");
+
+        assert!(!buffer.undo());
+        assert!(!buffer.redo());
+        assert_eq!(buffer.contents(), "abc");
     }
 
     #[test]
