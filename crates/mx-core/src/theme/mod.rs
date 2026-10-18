@@ -38,6 +38,22 @@ pub struct Theme {
     pub flagged: Color,
     pub search_match: Color,
     pub search_current: Color,
+    pub syntax: SyntaxColors,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[must_use]
+pub struct SyntaxColors {
+    pub keyword: Color,
+    pub string: Color,
+    pub comment: Color,
+    pub doc_comment: Color,
+    pub function: Color,
+    pub type_name: Color,
+    pub constant: Color,
+    pub macro_name: Color,
+    pub attribute: Color,
+    pub lifetime: Color,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -49,6 +65,16 @@ pub enum Highlight {
     Flagged,
     SearchMatch,
     SearchCurrent,
+    Keyword,
+    String,
+    Comment,
+    DocComment,
+    Function,
+    Type,
+    Constant,
+    Macro,
+    Attribute,
+    Lifetime,
 }
 
 impl Face {
@@ -56,6 +82,23 @@ impl Face {
         Self {
             foreground: self.foreground.mix(other.foreground, amount),
             background: self.background.mix(other.background, amount),
+        }
+    }
+}
+
+impl SyntaxColors {
+    pub fn mix(self, other: Self, amount: f32) -> Self {
+        Self {
+            keyword: self.keyword.mix(other.keyword, amount),
+            string: self.string.mix(other.string, amount),
+            comment: self.comment.mix(other.comment, amount),
+            doc_comment: self.doc_comment.mix(other.doc_comment, amount),
+            function: self.function.mix(other.function, amount),
+            type_name: self.type_name.mix(other.type_name, amount),
+            constant: self.constant.mix(other.constant, amount),
+            macro_name: self.macro_name.mix(other.macro_name, amount),
+            attribute: self.attribute.mix(other.attribute, amount),
+            lifetime: self.lifetime.mix(other.lifetime, amount),
         }
     }
 }
@@ -85,6 +128,7 @@ impl Theme {
             flagged: self.flagged.mix(other.flagged, amount),
             search_match: self.search_match.mix(other.search_match, amount),
             search_current: self.search_current.mix(other.search_current, amount),
+            syntax: self.syntax.mix(other.syntax, amount),
         }
     }
 
@@ -97,6 +141,16 @@ impl Theme {
             Highlight::Flagged => self.flagged,
             Highlight::SearchMatch => self.search_match,
             Highlight::SearchCurrent => self.search_current,
+            Highlight::Keyword => self.syntax.keyword,
+            Highlight::String => self.syntax.string,
+            Highlight::Comment => self.syntax.comment,
+            Highlight::DocComment => self.syntax.doc_comment,
+            Highlight::Function => self.syntax.function,
+            Highlight::Type => self.syntax.type_name,
+            Highlight::Constant => self.syntax.constant,
+            Highlight::Macro => self.syntax.macro_name,
+            Highlight::Attribute => self.syntax.attribute,
+            Highlight::Lifetime => self.syntax.lifetime,
         }
     }
 }
@@ -160,7 +214,21 @@ mod tests {
     #[test]
     fn highlights_are_readable() {
         for theme in builtin() {
-            for highlight in [Highlight::Heading, Highlight::Link, Highlight::Symlink] {
+            for highlight in [
+                Highlight::Heading,
+                Highlight::Link,
+                Highlight::Symlink,
+                Highlight::Keyword,
+                Highlight::String,
+                Highlight::Comment,
+                Highlight::DocComment,
+                Highlight::Function,
+                Highlight::Type,
+                Highlight::Constant,
+                Highlight::Macro,
+                Highlight::Attribute,
+                Highlight::Lifetime,
+            ] {
                 let ratio = theme
                     .highlight(highlight)
                     .contrast_ratio(theme.default.background);

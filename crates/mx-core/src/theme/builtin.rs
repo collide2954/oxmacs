@@ -1,5 +1,9 @@
-use super::{Appearance, Color, Face, Theme};
+use super::{Appearance, Color, Face, SyntaxColors, Theme};
 
+#[expect(
+    clippy::mistyped_literal_suffixes,
+    reason = "0x5E_5C_64 is a color, not a typed literal"
+)]
 pub static ADWAITA: Theme = Theme {
     name: "adwaita",
     appearance: Appearance::Light,
@@ -31,6 +35,18 @@ pub static ADWAITA: Theme = Theme {
     flagged: Color::hex(0xF6_C9_CC),
     search_match: Color::hex(0xF9_F0_6B),
     search_current: Color::hex(0xFF_A3_48),
+    syntax: SyntaxColors {
+        keyword: Color::hex(0xB3_3F_00),
+        string: Color::hex(0x1A_6B_6B),
+        comment: Color::hex(0x5E_5C_64),
+        doc_comment: Color::hex(0x1C_68_49),
+        function: Color::hex(0x1A_5F_B4),
+        type_name: Color::hex(0x81_3D_9C),
+        constant: Color::hex(0x4E_57_BA),
+        macro_name: Color::hex(0xA5_1D_2D),
+        attribute: Color::hex(0x86_5E_3C),
+        lifetime: Color::hex(0x3B_75_04),
+    },
 };
 
 pub static ADWAITA_DARK: Theme = Theme {
@@ -64,4 +80,16 @@ pub static ADWAITA_DARK: Theme = Theme {
     flagged: Color::hex(0x5C_2A_2E),
     search_match: Color::hex(0x5C_54_20),
     search_current: Color::hex(0x9C_3C_00),
+    syntax: SyntaxColors {
+        keyword: Color::hex(0xFF_A3_48),
+        string: Color::hex(0x5B_C8_AF),
+        comment: Color::hex(0x9A_99_96),
+        doc_comment: Color::hex(0x26_A2_69),
+        function: Color::hex(0x62_A0_EA),
+        type_name: Color::hex(0xDC_8A_DD),
+        constant: Color::hex(0x7D_8A_C7),
+        macro_name: Color::hex(0xF6_61_51),
+        attribute: Color::hex(0xB5_83_5A),
+        lifetime: Color::hex(0x4E_9A_06),
+    },
 };
