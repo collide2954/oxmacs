@@ -26,6 +26,11 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-<home>", Command::BeginningOfBuffer),
     ("M->", Command::EndOfBuffer),
     ("C-<end>", Command::EndOfBuffer),
+    ("C-SPC", Command::SetMarkCommand),
+    ("C-@", Command::SetMarkCommand),
+    ("C-x C-x", Command::ExchangePointAndMark),
+    ("C-x h", Command::MarkWholeBuffer),
+    ("s-a", Command::MarkWholeBuffer),
     ("C-g", Command::KeyboardQuit),
     ("C-x C-c", Command::SaveBuffersKillMx),
 ];

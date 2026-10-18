@@ -17,6 +17,9 @@ pub enum Command {
     BackwardWord,
     BeginningOfBuffer,
     EndOfBuffer,
+    SetMarkCommand,
+    ExchangePointAndMark,
+    MarkWholeBuffer,
     KeyboardQuit,
     SaveBuffersKillMx,
 }

@@ -1,5 +1,6 @@
 mod editing;
 mod movement;
+mod selection;
 #[cfg(test)]
 mod test_support;
 
@@ -20,6 +21,7 @@ pub struct Editor {
     keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
+    last_command: Option<Command>,
     goal_column: Option<usize>,
     message: Option<String>,
     quit_requested: bool,
@@ -46,6 +48,7 @@ impl Editor {
             keymap: bindings::global(),
             pending: Vec::new(),
             last_key: None,
+            last_command: None,
             goal_column: None,
             message: None,
             quit_requested: false,
@@ -148,6 +151,7 @@ impl Editor {
 
     pub fn execute(&mut self, command: Command) {
         let goal_column = self.goal_column.take();
+        let previous = self.last_command.replace(command);
         match command {
             Command::SelfInsertCommand => self.self_insert(),
             Command::Newline => self.buffer.insert("\n"),
@@ -163,7 +167,10 @@ impl Editor {
             Command::BackwardWord => self.move_point(motion::backward_word),
             Command::BeginningOfBuffer => self.move_point(|_, _| 0),
             Command::EndOfBuffer => self.move_point(|b, _| b.len_chars()),
-            Command::KeyboardQuit => self.message = Some("Quit".to_owned()),
+            Command::SetMarkCommand => self.set_mark_command(previous),
+            Command::ExchangePointAndMark => self.exchange_point_and_mark(),
+            Command::MarkWholeBuffer => self.mark_whole_buffer(),
+            Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.quit_requested = true,
         }
         self.viewport.reveal(self.point_line());
