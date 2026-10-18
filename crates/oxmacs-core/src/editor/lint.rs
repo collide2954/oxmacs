@@ -254,33 +254,33 @@ impl Editor {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod fixtures {
     use std::fs;
 
-    use crate::config::Config;
-    use crate::diagnostics::{Severity, sample};
+    use crate::diagnostics::sample;
     use crate::editor::test_support::{press, type_text};
     use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 
-    const FINISHED: &str = r#"{"reason":"build-finished","success":false}"#;
+    pub(crate) const FINISHED: &str = r#"{"reason":"build-finished","success":false}"#;
 
-    fn project() -> (tempfile::TempDir, Editor) {
+    pub(crate) fn project() -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("Cargo.toml"), "[package]\n").unwrap();
         fs::create_dir(dir.path().join("src")).unwrap();
         fs::write(dir.path().join("src").join("main.rs"), "fn main() {}\n").unwrap();
+        fs::write(dir.path().join("src").join("other.rs"), "\nfn f() {}\n").unwrap();
         let mut editor = Editor::new();
         editor.open_file(&dir.path().join("src").join("main.rs"));
         (dir, editor)
     }
 
-    fn save(editor: &mut Editor) {
+    pub(crate) fn save(editor: &mut Editor) {
         press(editor, "C-e");
         type_text(editor, " ");
         press(editor, "C-x C-s");
     }
 
-    fn spawned(editor: &mut Editor) -> Vec<Job> {
+    pub(crate) fn spawned(editor: &mut Editor) -> Vec<Job> {
         editor
             .take_effects()
             .into_iter()
@@ -291,17 +291,43 @@ mod tests {
             .collect()
     }
 
-    fn linting(editor: &mut Editor) -> JobId {
+    pub(crate) fn linting(editor: &mut Editor) -> JobId {
         save(editor);
         spawned(editor).pop().unwrap().id
     }
 
-    fn report(editor: &mut Editor, job: JobId, lines: &[String]) {
+    pub(crate) fn report(editor: &mut Editor, job: JobId, lines: &[String]) {
         for line in lines {
             editor.job_output(job, line);
         }
         editor.job_finished(job, &Outcome::Exited(Some(101)));
     }
+
+    pub(crate) fn reported(editor: &mut Editor) {
+        let job = linting(editor);
+        report(
+            editor,
+            job,
+            &[
+                sample("error", "src/main.rs", (1, 1), (1, 3), "bad"),
+                sample("warning", "src/main.rs", (1, 4), (1, 8), "meh"),
+                sample("warning", "src/main.rs", (1, 14), (1, 14), "at the end"),
+                sample("warning", "src/other.rs", (2, 1), (2, 3), "elsewhere"),
+                FINISHED.to_owned(),
+            ],
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::fixtures::{FINISHED, linting, project, report, reported, save, spawned};
+    use crate::config::Config;
+    use crate::diagnostics::{Severity, sample};
+    use crate::editor::test_support::{press, type_text};
+    use crate::editor::{Effect, Job};
 
     #[test]
     fn saving_a_rust_file_checks_its_project() {
@@ -425,21 +451,6 @@ mod tests {
         save(&mut editor);
 
         assert_eq!(spawned(&mut editor), Vec::<Job>::new());
-    }
-
-    fn reported(editor: &mut Editor) {
-        let job = linting(editor);
-        report(
-            editor,
-            job,
-            &[
-                sample("error", "src/main.rs", (1, 1), (1, 3), "bad"),
-                sample("warning", "src/main.rs", (1, 4), (1, 8), "meh"),
-                sample("warning", "src/main.rs", (1, 14), (1, 14), "at the end"),
-                sample("warning", "src/other.rs", (2, 1), (2, 3), "elsewhere"),
-                FINISHED.to_owned(),
-            ],
-        );
     }
 
     #[test]
