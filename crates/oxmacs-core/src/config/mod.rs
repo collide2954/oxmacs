@@ -161,6 +161,38 @@ pub fn default_path() -> Option<PathBuf> {
     dirs::config_dir().map(|dir| dir.join("oxmacs").join("config.toml"))
 }
 
+pub fn rewrite(text: &str, config: &Config) -> Result<String, ConfigError> {
+    let on_disk = Config::parse(text)?;
+    let mut document: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|error: toml_edit::TomlError| ConfigError::Syntax(error.message().to_owned()))?;
+    for setting in schema::SETTINGS {
+        let wanted = config.get(setting.key);
+        if wanted == on_disk.get(setting.key) {
+            continue;
+        }
+        let Some(wanted) = wanted else {
+            document.remove(setting.key);
+            continue;
+        };
+        let mut value: toml_edit::Value =
+            wanted
+                .to_string()
+                .parse()
+                .map_err(|error: toml_edit::TomlError| {
+                    ConfigError::Syntax(error.message().to_owned())
+                })?;
+        if let Some(old) = document
+            .get(setting.key)
+            .and_then(toml_edit::Item::as_value)
+        {
+            *value.decor_mut() = old.decor().clone();
+        }
+        document[setting.key] = toml_edit::Item::Value(value);
+    }
+    Ok(document.to_string())
+}
+
 fn syntax_error(text: &str, error: &toml::de::Error) -> ConfigError {
     let line = error
         .span()
@@ -315,6 +347,43 @@ mod tests {
                 .with("rust-lint", Some(toml::Value::String("miri".to_owned())))
                 .is_err()
         );
+    }
+
+    fn rewritten(text: &str, key: &str, value: Option<toml::Value>) -> String {
+        let config = Config::parse(text).unwrap().with(key, value).unwrap();
+        rewrite(text, &config).unwrap()
+    }
+
+    #[test]
+    fn rewriting_changes_only_the_edited_keys_and_keeps_comments() {
+        let text = "# my config\ntheme = \"adwaita\" # light\n\n# tabs\ntab-width = 4 # wide\n";
+
+        assert_eq!(
+            rewritten(text, "tab-width", Some(toml::Value::Integer(2))),
+            "# my config\ntheme = \"adwaita\" # light\n\n# tabs\ntab-width = 2 # wide\n"
+        );
+    }
+
+    #[test]
+    fn rewriting_adds_new_keys_and_removes_unset_ones() {
+        assert_eq!(
+            rewritten(
+                "",
+                "rust-lint",
+                Some(toml::Value::String("clippy".to_owned()))
+            ),
+            "rust-lint = \"clippy\"\n"
+        );
+        assert_eq!(
+            rewritten("theme = \"adwaita\"\ntab-width = 4\n", "theme", None),
+            "tab-width = 4\n"
+        );
+    }
+
+    #[test]
+    fn broken_files_are_not_rewritten() {
+        assert!(rewrite("tab-width = \n", &Config::default()).is_err());
+        assert!(rewrite("tab-width = 0\n", &Config::default()).is_err());
     }
 
     #[test]

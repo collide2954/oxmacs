@@ -29,6 +29,7 @@ strum = { version = "0.28.0", features = ["derive"] }
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 toml = "1.1.8"
+toml_edit = "0.25.17"
 trash = { version = "5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }
 tree-sitter = "0.27.1"
 tree-sitter-md = "0.5.3"
