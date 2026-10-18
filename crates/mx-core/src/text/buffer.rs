@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::ops::Range;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use ropey::Rope;
 
@@ -14,8 +15,14 @@ pub struct FileInfo {
     pub disk: Option<DiskState>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BufferId(u64);
+
+static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
 #[derive(Debug, Clone)]
 pub struct Buffer {
+    id: BufferId,
     name: String,
     text: Rope,
     point: usize,
@@ -29,6 +36,7 @@ pub struct Buffer {
 impl Buffer {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
+            id: BufferId(NEXT_ID.fetch_add(1, Ordering::Relaxed)),
             name: name.into(),
             text: Rope::new(),
             point: 0,
@@ -38,6 +46,10 @@ impl Buffer {
             saved: 0,
             file: None,
         }
+    }
+
+    pub fn id(&self) -> BufferId {
+        self.id
     }
 
     pub fn set_name(&mut self, name: impl Into<String>) {
@@ -300,6 +312,14 @@ fn position_after_removal(position: usize, start: usize, end: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_buffer_has_its_own_id() {
+        let first = Buffer::new("t");
+        let second = Buffer::with_text("t", "x");
+
+        assert_ne!(first.id(), second.id());
+    }
 
     #[test]
     fn new_buffer_is_empty_with_point_at_start() {
