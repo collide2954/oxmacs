@@ -245,9 +245,12 @@ impl Editor {
         }
         match command {
             Command::SelfInsertCommand => self.self_insert(),
-            Command::Newline => self.current_mut().insert("\n"),
-            Command::DeleteChar => self.current_mut().delete_forward(1),
-            Command::DeleteBackwardChar => self.current_mut().delete_backward(1),
+            Command::Newline => self.insert_over_selection("\n"),
+            Command::DeleteChar => self.delete_char(true),
+            Command::DeleteBackwardChar => self.delete_char(false),
+            Command::DeleteLine => self.delete_line(),
+            Command::DeleteWord => self.delete_to(motion::forward_word),
+            Command::BackwardDeleteWord => self.delete_to(motion::backward_word),
             Command::ForwardChar => self.move_point(|b, p| motion::forward_char(b, p, 1)),
             Command::BackwardChar => self.move_point(|_, p| motion::backward_char(p, 1)),
             Command::NextLine => self.move_vertically(1, goal_column),

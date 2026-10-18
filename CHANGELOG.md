@@ -8,6 +8,8 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 - System clipboard `copy` (`M-w`, `s-c`), `cut` (`C-w`, `s-x`) and `paste` (`C-y`, `s-v`); copy and cut act on the whole line without a selection, and pasting replaces the selection.
 - `paste-from-history` (`M-y`) picks from the last 50 copies in the minibuffer list.
+- `delete-line` (`C-k`), `delete-word` (`M-d`, `C-<delete>`) and `backward-delete-word` (`M-DEL`, `C-DEL`); they never touch the clipboard.
+- Typing, `RET` and paste replace the selection; `DEL`, `C-d` and `<delete>` delete it.
 
 ## [0.4.0] - 2026-10-18
 

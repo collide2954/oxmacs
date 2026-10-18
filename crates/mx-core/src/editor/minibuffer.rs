@@ -343,10 +343,8 @@ mod tests {
         press(&mut editor, "M-x");
 
         let names = names(&editor);
-        assert_eq!(
-            names[..3],
-            ["backward-char", "backward-word", "beginning-of-buffer"]
-        );
+        assert!(names.is_sorted(), "{names:?}");
+        assert!(names.iter().any(|name| name == "forward-char"));
         assert!(!names.iter().any(|name| name == "exit-minibuffer"));
         assert!(!names.iter().any(|name| name == "minibuffer-next"));
     }
@@ -377,7 +375,9 @@ mod tests {
 
         press(&mut editor, "M-x");
 
-        assert_eq!(names(&editor)[..2], ["end-of-buffer", "backward-char"]);
+        let names = names(&editor);
+        assert_eq!(names[0], "end-of-buffer");
+        assert!(names[1..].is_sorted(), "{names:?}");
     }
 
     #[test]
@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn next_and_previous_move_the_selection_within_bounds() {
         let mut editor = Editor::new();
-        open_with(&mut editor, "word");
+        open_with(&mut editor, "forward-");
         let selected = |editor: &Editor| editor.minibuffer().unwrap().selected();
 
         press(&mut editor, "C-n");
@@ -409,7 +409,7 @@ mod tests {
     #[test]
     fn return_runs_the_selected_candidate() {
         let mut editor = editor_with("alpha beta", 0);
-        open_with(&mut editor, "word");
+        open_with(&mut editor, "forward-");
 
         press(&mut editor, "C-n RET");
 

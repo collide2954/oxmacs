@@ -453,6 +453,9 @@ mod tests {
     fn m_x_lists_commands_with_their_keys() {
         let mut app = App::default();
         press(&mut app, "x", Modifiers::ALT);
+        for c in ["e", "n", "d"] {
+            press(&mut app, c, Modifiers::empty());
+        }
         let mut ui = iced_test::simulator(app.view());
 
         assert!(ui.find("end-of-buffer").is_ok());
