@@ -6,6 +6,7 @@ use crate::config::Config;
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
+use crate::editor::page::Page;
 use crate::syntax::{Feature, Language};
 use crate::text::Buffer;
 use crate::theme::{Appearance, Highlight};
@@ -30,36 +31,9 @@ impl Doctor {
     }
 }
 
-#[derive(Default)]
-struct Page {
-    text: String,
-    styles: Vec<LineStyle>,
-}
-
-impl Page {
-    fn line(&mut self, parts: &[(&str, Option<Highlight>)]) {
-        let mut style = LineStyle::default();
-        let mut column = 0;
-        for (part, highlight) in parts {
-            let width = part.chars().count();
-            if let Some(highlight) = highlight {
-                style.spans.push((column..column + width, *highlight));
-            }
-            self.text.push_str(part);
-            column += width;
-        }
-        self.text.push('\n');
-        self.styles.push(style);
-    }
-
-    fn heading(&mut self, title: &str) {
-        self.line(&[(title, Some(Highlight::Heading))]);
-    }
-
-    fn field(&mut self, label: &str, value: &str, highlight: Option<Highlight>) {
-        let label = format!("  {label:<LABEL_WIDTH$}");
-        self.line(&[(&label, None), (value, highlight)]);
-    }
+fn field(page: &mut Page, label: &str, value: &str, highlight: Option<Highlight>) {
+    let label = format!("  {label:<LABEL_WIDTH$}");
+    page.line(&[(&label, None), (value, highlight)]);
 }
 
 impl Editor {
@@ -103,12 +77,14 @@ impl Editor {
 
     fn examine_environment(&self, page: &mut Page) {
         page.heading("Environment");
-        page.field(
+        field(
+            page,
             "Version",
             &format!("oxmacs {}", env!("CARGO_PKG_VERSION")),
             None,
         );
-        page.field(
+        field(
+            page,
             "System",
             &format!("{} {}", env::consts::OS, env::consts::ARCH),
             None,
@@ -124,19 +100,24 @@ impl Editor {
                 self.theme().name
             ),
         };
-        page.field("Theme", &theme, None);
+        field(page, "Theme", &theme, None);
         let font = self.font_note.as_deref().unwrap_or("unknown");
-        page.field("Font", font, None);
+        field(page, "Font", font, None);
         match &self.config_path {
             Some(path) => {
                 let (status, highlight) = config_status(path);
-                page.field("Config", &path.display().to_string(), None);
-                page.field("", &status, Some(highlight));
+                field(page, "Config", &path.display().to_string(), None);
+                field(page, "", &status, Some(highlight));
             }
-            None => page.field("Config", "no config directory", Some(Highlight::Warning)),
+            None => field(
+                page,
+                "Config",
+                "no config directory",
+                Some(Highlight::Warning),
+            ),
         }
         let data = dirs::data_dir().map(|dir| dir.join("oxmacs").display().to_string());
-        page.field("Data", data.as_deref().unwrap_or("none"), None);
+        field(page, "Data", data.as_deref().unwrap_or("none"), None);
     }
 
     fn examine_tools(&self, page: &mut Page) {

@@ -20,6 +20,7 @@ mod minibuffer;
 mod modes;
 mod mouse;
 mod movement;
+mod page;
 mod pairs;
 mod pane;
 mod preview;
