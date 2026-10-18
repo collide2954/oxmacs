@@ -2,6 +2,7 @@ use std::path::Path;
 
 use iced::animation::Easing;
 use iced::font::Family;
+use iced::futures::channel::mpsc;
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
 use iced::widget::{
@@ -15,7 +16,8 @@ use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{self, Config, ConfigError};
-use oxmacs_core::editor::{Axis, Editor, Effect, Tiling, WindowId};
+use oxmacs_core::editor::{Axis, Editor, Effect, Job, JobId, Outcome, Tiling, WindowId};
+use oxmacs_core::process::{self, Killer};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
@@ -38,6 +40,7 @@ pub struct App {
     reveal: Animation<bool>,
     clock: Option<String>,
     previews: Vec<(BufferId, u64, markdown::Content)>,
+    jobs: Vec<(JobId, Killer)>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +60,7 @@ pub enum Message {
     Opened(Result<(), String>),
     Clock,
     OpenLink(markdown::Uri),
+    Job(JobId, process::Event),
 }
 
 impl Default for App {
@@ -94,6 +98,7 @@ impl App {
             reveal: transition(false, animation::REVEAL),
             clock: config.clock.then_some(config.clock_format),
             previews: Vec::new(),
+            jobs: Vec::new(),
         }
     }
 
@@ -302,14 +307,60 @@ impl App {
                     self.editor.show_message(format!("{uri}: {error}"));
                 }
             }
+            Message::Job(job, process::Event::Line(line)) => self.editor.job_output(job, &line),
+            Message::Job(job, process::Event::Finished(outcome)) => {
+                self.jobs.retain(|(id, _)| *id != job);
+                self.editor.job_finished(job, &outcome);
+            }
         }
         self.editor.prepare_display();
         self.refresh_previews();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {
+            for (_, killer) in self.jobs.drain(..) {
+                killer.kill();
+            }
             return iced::exit();
         }
-        Task::batch(self.editor.take_effects().into_iter().map(effect_task))
+        let effects = self.editor.take_effects();
+        Task::batch(effects.into_iter().map(|effect| self.perform(effect)))
+    }
+
+    fn perform(&mut self, effect: Effect) -> Task<Message> {
+        match effect {
+            Effect::WriteClipboard(text) => clipboard::write(text),
+            Effect::ReadClipboard => clipboard::read().map(Message::Pasted),
+            Effect::WritePrimary(text) if HAS_PRIMARY_SELECTION => clipboard::write_primary(text),
+            Effect::ReadPrimary if HAS_PRIMARY_SELECTION => {
+                clipboard::read_primary().map(Message::PastedPrimary)
+            }
+            Effect::WritePrimary(_) | Effect::ReadPrimary => Task::none(),
+            Effect::OpenExternally(path) => Task::done(Message::Opened(open_externally(&path))),
+            Effect::Spawn(job) => self.spawn(&job),
+            Effect::Kill(job) => {
+                if let Some((_, killer)) = self.jobs.iter().find(|(id, _)| *id == job) {
+                    killer.kill();
+                }
+                Task::none()
+            }
+        }
+    }
+
+    fn spawn(&mut self, job: &Job) -> Task<Message> {
+        let id = job.id;
+        let (sender, events) = mpsc::unbounded();
+        match process::spawn(job, move |event| {
+            let _ = sender.unbounded_send(event);
+        }) {
+            Ok(killer) => {
+                self.jobs.push((id, killer));
+                Task::run(events, move |event| Message::Job(id, event))
+            }
+            Err(error) => Task::done(Message::Job(
+                id,
+                process::Event::Finished(Outcome::Failed(error.to_string())),
+            )),
+        }
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -489,21 +540,6 @@ fn open_externally(path: &Path) -> Result<(), String> {
     open::that_detached(path).map_err(|error| format!("{}: {error}", path.display()))
 }
 
-fn effect_task(effect: Effect) -> Task<Message> {
-    match effect {
-        Effect::WriteClipboard(text) => clipboard::write(text),
-        Effect::ReadClipboard => clipboard::read().map(Message::Pasted),
-        Effect::WritePrimary(text) if HAS_PRIMARY_SELECTION => clipboard::write_primary(text),
-        Effect::ReadPrimary if HAS_PRIMARY_SELECTION => {
-            clipboard::read_primary().map(Message::PastedPrimary)
-        }
-        Effect::WritePrimary(_) | Effect::ReadPrimary | Effect::Spawn(_) | Effect::Kill(_) => {
-            Task::none()
-        }
-        Effect::OpenExternally(path) => Task::done(Message::Opened(open_externally(&path))),
-    }
-}
-
 fn transition(state: bool, duration: Duration) -> Animation<bool> {
     Animation::new(state)
         .duration(duration)
@@ -529,9 +565,9 @@ fn appearance(mode: Mode) -> Option<Appearance> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use iced::keyboard::key::{Code, Physical};
+    use iced::keyboard::key::{Code, Named, Physical};
     use iced::keyboard::{Key, Location, Modifiers};
-    use oxmacs_core::editor::{Cell, Clicks};
+    use oxmacs_core::editor::{Cell, Clicks, JobId, Outcome};
     use oxmacs_core::theme::{ADWAITA, ADWAITA_DARK};
 
     fn press(app: &mut App, c: &str, modifiers: Modifiers) {
@@ -629,16 +665,57 @@ mod tests {
         assert!(!app.is_animating());
     }
 
-    fn enter(app: &mut App) {
+    fn named(app: &mut App, named: Named, code: Code) {
         let _ = app.update(Message::Keyboard(keyboard::Event::KeyPressed {
-            key: Key::Named(keyboard::key::Named::Enter),
-            modified_key: Key::Named(keyboard::key::Named::Enter),
-            physical_key: Physical::Code(Code::Enter),
+            key: Key::Named(named),
+            modified_key: Key::Named(named),
+            physical_key: Physical::Code(code),
             location: Location::Standard,
             modifiers: Modifiers::empty(),
             text: None,
             repeat: false,
         }));
+    }
+
+    fn enter(app: &mut App) {
+        named(app, Named::Enter, Code::Enter);
+    }
+
+    fn type_text(app: &mut App, text: &str) {
+        for c in text.chars() {
+            if c == ' ' {
+                named(app, Named::Space, Code::Space);
+            } else {
+                press(app, &c.to_string(), Modifiers::empty());
+            }
+        }
+    }
+
+    #[test]
+    fn job_events_reach_the_compilation_buffer() {
+        let mut app = App::default();
+        press(&mut app, "x", Modifiers::ALT);
+        type_text(&mut app, "compile");
+        enter(&mut app);
+        press(&mut app, "a", Modifiers::CTRL);
+        press(&mut app, "k", Modifiers::CTRL);
+        type_text(&mut app, "cargo --version");
+        enter(&mut app);
+
+        let _ = app.update(Message::Job(
+            JobId(0),
+            process::Event::Line("hello".to_owned()),
+        ));
+        let _ = app.update(Message::Job(
+            JobId(0),
+            process::Event::Finished(Outcome::Exited(Some(0))),
+        ));
+
+        let window = app.editor().tiling().windows()[1];
+        let output = app.editor().pane_of(window).unwrap().buffer().contents();
+        assert!(output.contains("$ cargo --version\n\nhello\n"), "{output}");
+        assert_eq!(app.editor().message(), Some("Compilation finished"));
+        assert!(app.jobs.is_empty());
     }
 
     #[test]
