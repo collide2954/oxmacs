@@ -102,7 +102,10 @@ impl Language {
                     | Feature::Pairs
                     | Feature::Motion
                     | Feature::Items
-            ) | (Self::Markdown, Feature::Highlighting | Feature::Indentation)
+            ) | (
+                Self::Markdown,
+                Feature::Highlighting | Feature::Indentation | Feature::Motion | Feature::Items
+            )
         )
     }
 

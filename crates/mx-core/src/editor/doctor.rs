@@ -152,7 +152,7 @@ impl Editor {
                 Probe::Broken { error, .. } => page.line(&[
                     (&label, None),
                     ("! ", Some(Highlight::Warning)),
-                    (&format!("{error}; {hint}"), None),
+                    (&format!("{}; {hint}", error.trim_end_matches('.')), None),
                 ]),
                 Probe::Missing => page.line(&[
                     (&label, None),
@@ -165,7 +165,24 @@ impl Editor {
 }
 
 fn examine_languages(page: &mut Page) {
-    let mut header = format!("{:<width$}", "Languages", width = LABEL_WIDTH + 2);
+    let names: Vec<String> = Language::ALL
+        .iter()
+        .map(|language| {
+            let extensions: Vec<String> = language
+                .extensions()
+                .iter()
+                .map(|extension| format!(".{extension}"))
+                .collect();
+            format!("{} ({})", language.name(), extensions.join(" "))
+        })
+        .collect();
+    let name_width = names
+        .iter()
+        .map(|name| name.chars().count() + 2)
+        .max()
+        .unwrap_or(0)
+        .max(LABEL_WIDTH);
+    let mut header = format!("{:<width$}", "Languages", width = name_width + 2);
     for feature in Feature::ALL {
         let _ = write!(
             header,
@@ -175,16 +192,8 @@ fn examine_languages(page: &mut Page) {
         );
     }
     page.line(&[(header.trim_end(), Some(Highlight::Heading))]);
-    for language in Language::ALL {
-        let extensions: Vec<String> = language
-            .extensions()
-            .iter()
-            .map(|extension| format!(".{extension}"))
-            .collect();
-        let name = format!(
-            "  {:<LABEL_WIDTH$}",
-            format!("{} ({})", language.name(), extensions.join(" "))
-        );
+    for (language, name) in Language::ALL.into_iter().zip(names) {
+        let name = format!("  {name:<name_width$}");
         let mut parts: Vec<(String, Option<Highlight>)> = vec![(name, None)];
         for feature in Feature::ALL {
             let width = column_width(feature);
@@ -275,12 +284,14 @@ mod tests {
         let (_dir, editor) = doctor();
 
         let header = line_with(&editor, "Languages");
-        let rust = line_with(&editor, "Rust (.rs)");
         let column = |label: &str| header.find(label).unwrap();
-        let mark = |label: &str| rust.chars().nth(column(label)).unwrap();
+        let mark =
+            |row: &str, label: &str| line_with(&editor, row).chars().nth(column(label)).unwrap();
 
-        assert_eq!(mark("Highlight"), '✓');
-        assert_eq!(mark("LSP"), '–');
+        assert_eq!(mark("Rust (.rs)", "Highlight"), '✓');
+        assert_eq!(mark("Rust (.rs)", "LSP"), '–');
+        assert_eq!(mark("Markdown (", "Items"), '✓');
+        assert_eq!(mark("Markdown (", "Comment"), '–');
     }
 
     #[test]
