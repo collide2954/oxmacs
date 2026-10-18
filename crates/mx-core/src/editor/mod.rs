@@ -141,16 +141,14 @@ impl Editor {
         if let Some(minibuffer) = &mut self.minibuffer {
             minibuffer.note = None;
         }
-        if !self.pending.is_empty() && is_keyboard_quit(key) {
+        if self.quits_pending_sequence(key) {
             self.dispatch(key, Command::KeyboardQuit);
             return;
         }
         self.pending.push(key);
         match self.lookup() {
-            Lookup::Prefix => {
-                let keys = KeySequence::from(self.pending.clone());
-                self.message = Some(format!("{keys}-"));
-            }
+            Lookup::Prefix => self.echo_pending(),
+            Lookup::Unbound if is_escape(key) => self.echo_pending(),
             Lookup::Command(command) => self.dispatch(key, command),
             Lookup::Unbound if self.pending.len() == 1 && inserts_itself(key) => {
                 self.dispatch(key, Command::SelfInsertCommand);
@@ -160,6 +158,16 @@ impl Editor {
                 self.message = Some(format!("{keys} is undefined"));
             }
         }
+    }
+
+    fn quits_pending_sequence(&self, key: Key) -> bool {
+        let after_escape = self.pending.last().copied().is_some_and(is_escape);
+        !self.pending.is_empty() && (is_keyboard_quit(key) || (is_escape(key) && after_escape))
+    }
+
+    fn echo_pending(&mut self) {
+        let keys = KeySequence::from(self.pending.clone());
+        self.message = Some(format!("{keys}-"));
     }
 
     fn lookup(&self) -> Lookup {
@@ -214,6 +222,10 @@ impl Editor {
 
 fn is_keyboard_quit(key: Key) -> bool {
     key.code() == KeyCode::Char('g') && key.modifiers() == Modifiers::CONTROL
+}
+
+fn is_escape(key: Key) -> bool {
+    key.code() == KeyCode::Escape && key.modifiers().is_empty()
 }
 
 fn inserts_itself(key: Key) -> bool {
@@ -276,6 +288,39 @@ mod tests {
         let mut editor = Editor::new();
 
         press(&mut editor, "C-x C-g");
+        assert_eq!(editor.message(), Some("Quit"));
+
+        press(&mut editor, "a");
+        assert_eq!(editor.buffer().contents(), "a");
+    }
+
+    #[test]
+    fn escape_twice_quits_like_c_g() {
+        let mut editor = editor_with("hello", 0);
+
+        press(&mut editor, "C-SPC C-f ESC ESC");
+
+        assert_eq!(editor.message(), Some("Quit"));
+        assert_eq!(editor.buffer().selection(), None);
+    }
+
+    #[test]
+    fn escape_twice_closes_the_minibuffer() {
+        let mut editor = Editor::new();
+
+        press(&mut editor, "M-x a ESC ESC");
+
+        assert!(editor.minibuffer().is_none());
+    }
+
+    #[test]
+    fn escape_twice_aborts_a_pending_prefix() {
+        let mut editor = Editor::new();
+
+        press(&mut editor, "C-x ESC");
+        assert_eq!(editor.message(), Some("C-x ESC-"));
+
+        press(&mut editor, "ESC");
         assert_eq!(editor.message(), Some("Quit"));
 
         press(&mut editor, "a");

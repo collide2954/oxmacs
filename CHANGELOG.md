@@ -10,6 +10,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 - Minibuffer with `M-x` to run commands by name; `RET` runs, `C-g` aborts, `[No match]` on unknown names.
 - Vertical `M-x` completion: space-separated substring matching, recent commands first, key hints, `C-n`/`C-p` to select, `TAB` to insert.
 - Hollow cursor in the buffer while the minibuffer is active.
+- `ESC ESC` quits like `C-g`, including mid-sequence and in the minibuffer.
 
 ## [0.3.0] - 2026-10-17
 
