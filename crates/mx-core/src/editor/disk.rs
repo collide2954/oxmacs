@@ -45,6 +45,14 @@ impl Editor {
         }
     }
 
+    pub(super) fn differs_on_disk(file: &FileInfo) -> bool {
+        file.changed_on_disk
+            || DiskState::of(&file.path)
+                .ok()
+                .flatten()
+                .is_some_and(|now| Some(now) != file.disk)
+    }
+
     pub(super) fn note_disk_state(&mut self, index: usize, disk: Option<DiskState>, changed: bool) {
         if let Some(file) = self.buffers.get_mut(index).and_then(Buffer::file_mut) {
             file.disk = disk;
@@ -294,6 +302,49 @@ mod tests {
             question(&editor),
             Some("a.txt changed on disk; reread it? (y or n) ".to_owned())
         );
+    }
+
+    #[test]
+    fn saving_over_a_changed_file_asks_first() {
+        let (_dir, path, mut editor) = opened("old");
+        type_text(&mut editor, "x");
+        fs::write(&path, "new text").unwrap();
+
+        press(&mut editor, "C-x C-s");
+        assert_eq!(
+            question(&editor),
+            Some("a.txt changed on disk; save anyway? (y or n) ".to_owned())
+        );
+        press(&mut editor, "n");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new text");
+        assert!(editor.buffer().is_modified());
+
+        press(&mut editor, "C-x C-s y");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "xold");
+        assert!(!editor.buffer().is_modified());
+    }
+
+    #[test]
+    fn saving_after_a_noticed_change_still_asks() {
+        let (_dir, path, mut editor) = opened("old");
+        type_text(&mut editor, "x");
+        fs::write(&path, "new text").unwrap();
+        editor.check_disk_changes();
+
+        press(&mut editor, "C-x C-s");
+
+        assert!(question(&editor).is_some());
+    }
+
+    #[test]
+    fn saving_an_unchanged_file_does_not_ask() {
+        let (_dir, path, mut editor) = opened("old");
+        type_text(&mut editor, "x");
+
+        press(&mut editor, "C-x C-s");
+
+        assert_eq!(question(&editor), None);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "xold");
     }
 
     #[test]

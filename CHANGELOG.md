@@ -15,6 +15,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 - Mode line shows `**` for unsaved changes, `--` otherwise, and `CRLF` for Windows line endings.
 - `save-buffer` (`C-x C-s`) writes atomically, keeping permissions and the original line endings.
 - `write-file` (`C-x C-w`) saves under a new name, asking before overwriting another file; `C-x C-s` in a buffer without a file asks where to write it.
+- `C-x C-s` asks before overwriting a file that changed on disk since it was read or saved.
 - `revert-buffer` rereads the file, asking first only when there are unsaved edits; reverting can be undone.
 - `save-some-buffers` (`C-x s`) and the `C-x C-c` quit guard ask per modified file: `y`, `n`, `!` (save the rest) or `q`.
 

@@ -26,6 +26,7 @@ enum Pending {
         index: usize,
         disk: Option<DiskState>,
     },
+    SaveOver,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,7 +143,20 @@ impl Editor {
                 }
                 self.check_disk_changes();
             }
+            Pending::SaveOver => {
+                if answer == 'y' {
+                    self.save_buffer_at(0);
+                }
+            }
         }
+    }
+
+    pub(super) fn ask_to_save_over(&mut self, name: &str) {
+        self.question = Some(Question {
+            prompt: format!("{name} changed on disk; save anyway? (y or n) "),
+            choices: YES_NO,
+            pending: Pending::SaveOver,
+        });
     }
 
     pub(super) fn ask_to_reread(&mut self, index: usize, name: &str, disk: Option<DiskState>) {

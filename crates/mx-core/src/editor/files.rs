@@ -227,10 +227,15 @@ impl Editor {
 
     pub(super) fn save_buffer(&mut self) {
         let buffer = self.buffers.current();
-        if buffer.file().is_none() {
+        let Some(file) = buffer.file() else {
             self.write_file();
-        } else if !buffer.is_modified() {
+            return;
+        };
+        if !buffer.is_modified() {
             self.show_message("(No changes need to be saved)");
+        } else if Self::differs_on_disk(file) {
+            let name = buffer.name().to_owned();
+            self.ask_to_save_over(&name);
         } else {
             self.save_buffer_at(0);
         }
