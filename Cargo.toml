@@ -23,11 +23,14 @@ open = "5.4.4"
 regex = "1.13.1"
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
 serde = { version = "1.0.229", features = ["derive"] }
+streaming-iterator = "0.1.9"
 strum = { version = "0.28.0", features = ["derive"] }
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 toml = "1.1.8"
 trash = { version = "5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }
+tree-sitter = "0.27.1"
+tree-sitter-rust = "0.24.2"
 ttf-parser = "0.25.1"
 unicode-width = "0.2.2"
 
