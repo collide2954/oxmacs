@@ -54,6 +54,10 @@ fn item_label(node: Node<'_>, buffer: &Buffer) -> Option<String> {
         "static_item" => "static",
         "type_item" => "type",
         "macro_definition" => return field("name").map(|name| format!("macro {name}!")),
+        "atx_heading" | "setext_heading" => {
+            let line = buffer.line_of(buffer.byte_to_char(node.start_byte()));
+            return Some(buffer.line_text(line).trim().to_owned());
+        }
         "table" | "table_array_element" => {
             let mut cursor = node.walk();
             let key = node
@@ -82,6 +86,22 @@ fn item_label(node: Node<'_>, buffer: &Buffer) -> Option<String> {
 mod tests {
     use super::*;
     use crate::syntax::Language;
+
+    #[test]
+    fn markdown_headings_are_items() {
+        let text = "# Guide\n\nIntro.\n\n## Install\n\nSteps\n=====\n";
+        let mut buffer = Buffer::with_text("t", text);
+        let mut syntax = Syntax::new(Language::Markdown);
+        syntax.sync(&mut buffer);
+
+        let labels: Vec<String> = syntax
+            .items(&buffer)
+            .into_iter()
+            .map(|item| item.label)
+            .collect();
+
+        assert_eq!(labels, ["# Guide", "## Install", "Steps"]);
+    }
 
     #[test]
     fn toml_tables_are_items() {

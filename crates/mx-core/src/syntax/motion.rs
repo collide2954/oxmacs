@@ -23,6 +23,7 @@ const DEFUNS: &[&str] = &[
     "type_item",
     "table",
     "table_array_element",
+    "section",
 ];
 const OPENERS: &[&str] = &["(", "[", "{"];
 const CLOSERS: &[&str] = &[")", "]", "}"];

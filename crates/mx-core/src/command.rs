@@ -101,6 +101,7 @@ pub enum Command {
     ToggleTheme,
     RustMode,
     TomlMode,
+    MarkdownMode,
     TextMode,
     MxDoctor,
     RustFormatBuffer,

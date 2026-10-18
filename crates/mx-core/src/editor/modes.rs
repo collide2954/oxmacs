@@ -73,6 +73,16 @@ mod tests {
     }
 
     #[test]
+    fn markdown_mode_is_available_by_command() {
+        let mut editor = Editor::new();
+
+        run(&mut editor, "markdown-mode");
+
+        assert_eq!(editor.language(), Some(Language::Markdown));
+        assert!(editor.mode_line().ends_with("(Markdown)"));
+    }
+
+    #[test]
     fn toml_comments_use_hashes() {
         let mut editor = Editor::new();
         run(&mut editor, "toml-mode");
