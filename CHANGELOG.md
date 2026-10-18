@@ -9,6 +9,9 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Windows: `C-x 2` and `C-x 3` split the selected window, `C-x o` and `C-c <arrow>` move between windows, and `C-x 0` and `C-x 1` close them. Each window keeps its own point and scroll and has its own mode line, dimmed when inactive.
 - Clicking selects a window, and the wheel scrolls the window under the mouse. Drag the borders between windows, or use `C-x +` to balance them and `C-x ^`, `C-x }` and `C-x {` to resize.
 - Markdown preview: `C-c C-c p` shows the rendered document beside its source and updates as you type; links open in the browser. Press it again to close the preview.
+- `M-x compile` runs a command, `cargo build` by default, in a `*compilation*` window that follows its output. `g` reruns it and `C-c C-k` stops it. In Rust buffers, `C-c C-c` then `C-k`, `C-b`, `C-t`, `C-r` or `C-l` runs cargo check, build, test, run or clippy.
+- `M-g n` and `M-g p` visit each compiler error and warning in turn. In `*compilation*`, `RET` or a click visits the one at point and `n`/`p` show the next or previous without leaving.
+- Settings: `M-x customize` lists every setting with its value. `RET` or a click changes one at once, `C-x C-s` writes the changes to `config.toml` keeping its comments, and `g` reverts.
 
 ### Changed
 
