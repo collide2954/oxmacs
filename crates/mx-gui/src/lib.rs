@@ -11,9 +11,10 @@ mod units;
 pub use iced::Result;
 
 use app::App;
+use mx_core::cli::Visit;
 
-pub fn run() -> Result {
-    iced::application(App::boot, App::update, App::view)
+pub fn run(visits: Vec<Visit>) -> Result {
+    iced::application(move || App::boot(&visits), App::update, App::view)
         .title(App::title)
         .theme(App::theme)
         .subscription(App::subscription)

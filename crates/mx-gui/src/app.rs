@@ -7,6 +7,7 @@ use iced::{
     Animation, Element, Font, Length, Subscription, Task, Theme, clipboard, keyboard, system,
     window,
 };
+use mx_core::cli::Visit;
 use mx_core::config::{self, Config, ConfigError};
 use mx_core::editor::{Editor, Effect};
 use mx_core::theme::{Appearance, Theme as Faces};
@@ -69,10 +70,13 @@ impl App {
         }
     }
 
-    pub fn boot() -> (Self, Task<Message>) {
+    pub fn boot(visits: &[Visit]) -> (Self, Task<Message>) {
         let config = config::default_path()
             .map_or_else(|| Ok(Config::default()), |path| Config::load(&path));
         let mut app = Self::new(config);
+        for visit in visits {
+            app.editor.visit(visit);
+        }
         app.animations = animations_enabled(app.animations, prefers_reduced_motion());
         (app, system::theme().map(Message::AppearanceChanged))
     }
