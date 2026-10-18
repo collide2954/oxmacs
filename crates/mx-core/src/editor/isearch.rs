@@ -58,6 +58,19 @@ impl Search {
         &self.step.query
     }
 
+    pub fn failing_from(&self) -> Option<usize> {
+        if self.step.success {
+            return None;
+        }
+        let matched = self
+            .previous
+            .iter()
+            .rev()
+            .find(|step| step.success)
+            .map_or(0, |step| step.query.chars().count());
+        Some(matched.min(self.step.query.chars().count()))
+    }
+
     pub fn note(&self) -> Option<&str> {
         self.note
     }
@@ -235,7 +248,25 @@ impl Editor {
         }
     }
 
+    pub(super) fn isearch_delete_char(&mut self) {
+        if let Some(search) = &mut self.search
+            && let Some(previous) = search.previous.pop()
+        {
+            search.step = previous;
+        }
+        self.sync_search_point();
+    }
+
     pub(super) fn isearch_abort(&mut self) {
+        if let Some(search) = self.search.as_mut().filter(|search| !search.step.success) {
+            while !search.step.success
+                && let Some(previous) = search.previous.pop()
+            {
+                search.step = previous;
+            }
+            self.sync_search_point();
+            return;
+        }
         let Some(search) = self.search.take() else {
             return;
         };
@@ -430,6 +461,48 @@ mod tests {
 
         press(&mut editor, "f");
         assert_eq!(editor.search().unwrap().note(), None);
+    }
+
+    #[test]
+    fn delete_undoes_the_last_search_step() {
+        let mut editor = editor_with("foo foo", 0);
+
+        press(&mut editor, "C-s f o o C-s DEL");
+        assert_eq!(point(&editor), 3);
+        assert_eq!(editor.search().unwrap().query(), "foo");
+
+        press(&mut editor, "DEL");
+        assert_eq!(point(&editor), 2);
+        assert_eq!(editor.search().unwrap().query(), "fo");
+
+        press(&mut editor, "DEL DEL DEL");
+        assert_eq!(point(&editor), 0);
+        assert_eq!(editor.search().unwrap().query(), "");
+    }
+
+    #[test]
+    fn the_failing_part_of_the_query_is_known() {
+        let mut editor = editor_with("foo", 0);
+
+        press(&mut editor, "C-s f o");
+        assert_eq!(editor.search().unwrap().failing_from(), None);
+
+        press(&mut editor, "x x");
+        assert_eq!(editor.search().unwrap().failing_from(), Some(2));
+    }
+
+    #[test]
+    fn keyboard_quit_while_failing_rubs_out_the_failing_part() {
+        let mut editor = editor_with("foo", 0);
+
+        press(&mut editor, "C-s f o x x C-g");
+        assert_eq!(editor.search().unwrap().query(), "fo");
+        assert_eq!(prompt(&editor), "I-search: ");
+        assert_eq!(point(&editor), 2);
+
+        press(&mut editor, "C-g");
+        assert!(editor.search().is_none());
+        assert_eq!(point(&editor), 0);
     }
 
     #[test]

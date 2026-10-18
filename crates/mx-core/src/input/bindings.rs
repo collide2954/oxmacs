@@ -83,6 +83,7 @@ const MINIBUFFER: &[(&str, Command)] = &[
 const SEARCH: &[(&str, Command)] = &[
     ("C-s", Command::IsearchRepeatForward),
     ("C-r", Command::IsearchRepeatBackward),
+    ("DEL", Command::IsearchDeleteChar),
     ("RET", Command::IsearchExit),
     ("C-g", Command::IsearchAbort),
 ];

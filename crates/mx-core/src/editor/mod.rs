@@ -417,6 +417,7 @@ impl Editor {
             Command::IsearchRepeatForward => self.isearch_repeat(Direction::Forward),
             Command::IsearchRepeatBackward => self.isearch_repeat(Direction::Backward),
             Command::IsearchPrintingChar => self.isearch_printing_char(),
+            Command::IsearchDeleteChar => self.isearch_delete_char(),
             Command::IsearchExit => self.exit_search(),
             Command::IsearchAbort => self.isearch_abort(),
             Command::FindFile => self.find_file(),

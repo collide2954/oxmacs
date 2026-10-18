@@ -41,6 +41,7 @@ pub enum Command {
     IsearchRepeatForward,
     IsearchRepeatBackward,
     IsearchPrintingChar,
+    IsearchDeleteChar,
     IsearchExit,
     IsearchAbort,
     FindFile,
@@ -152,6 +153,7 @@ impl Command {
             Self::IsearchRepeatForward
             | Self::IsearchRepeatBackward
             | Self::IsearchPrintingChar
+            | Self::IsearchDeleteChar
             | Self::IsearchExit
             | Self::IsearchAbort => Scope::Search,
             _ => Scope::Global,
