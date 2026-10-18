@@ -1,5 +1,6 @@
 use std::fmt::Write;
 use std::iter;
+use std::ops::Range;
 
 use unicode_width::UnicodeWidthChar;
 
@@ -62,6 +63,26 @@ pub fn display_column(text: &str, chars: usize, tab_width: usize) -> usize {
     })
 }
 
+pub fn highlight_columns(
+    text: &str,
+    line: Range<usize>,
+    selection: &Range<usize>,
+    tab_width: usize,
+) -> Option<(usize, Option<usize>)> {
+    let start = selection.start.max(line.start);
+    let covers_newline = selection.end > line.end;
+    if selection.is_empty() || selection.end <= line.start || start > line.end {
+        return None;
+    }
+    if start == line.end && !covers_newline {
+        return None;
+    }
+    let start_column = display_column(text, start - line.start, tab_width);
+    let end_column =
+        (!covers_newline).then(|| display_column(text, selection.end - line.start, tab_width));
+    Some((start_column, end_column))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,5 +122,42 @@ mod tests {
     #[test]
     fn wide_characters_take_two_cells() {
         assert_eq!(display_column("日本語", 2, 8), 4);
+    }
+
+    #[test]
+    fn highlight_within_a_line_spans_its_columns() {
+        assert_eq!(
+            highlight_columns("hello", 0..5, &(1..3), 8),
+            Some((1, Some(3)))
+        );
+    }
+
+    #[test]
+    fn highlight_covering_the_newline_extends_to_the_edge() {
+        assert_eq!(highlight_columns("ab", 0..2, &(1..5), 8), Some((1, None)));
+        assert_eq!(highlight_columns("ab", 0..2, &(2..3), 8), Some((2, None)));
+    }
+
+    #[test]
+    fn highlight_starting_on_an_earlier_line_begins_at_column_zero() {
+        assert_eq!(
+            highlight_columns("cd", 3..5, &(0..4), 8),
+            Some((0, Some(1)))
+        );
+    }
+
+    #[test]
+    fn highlight_uses_display_columns() {
+        assert_eq!(
+            highlight_columns("\tx", 0..2, &(1..2), 8),
+            Some((8, Some(9)))
+        );
+    }
+
+    #[test]
+    fn lines_outside_the_selection_have_no_highlight() {
+        assert_eq!(highlight_columns("cd", 3..5, &(0..2), 8), None);
+        assert_eq!(highlight_columns("ab", 0..2, &(4..6), 8), None);
+        assert_eq!(highlight_columns("ab", 0..2, &(1..1), 8), None);
     }
 }

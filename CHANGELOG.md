@@ -8,6 +8,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 - Mark and selection: `C-SPC`/`C-@` (twice deactivates), `C-x C-x`, `C-x h`/`s-a`; `C-g` deactivates.
 - Shift-selection with any shifted motion (`S-<right>`, `C-S-f`, `M-S-f`, `S-<end>`...).
+- Selection highlighted with the theme's region face, extending to the edge across newlines.
 - Minibuffer with `M-x` to run commands by name; `RET` runs, `C-g` aborts, `[No match]` on unknown names.
 - Vertical `M-x` completion: space-separated substring matching, recent commands first, key hints, `C-n`/`C-p` to select, `TAB` to insert.
 - Hollow cursor in the buffer while the minibuffer is active.

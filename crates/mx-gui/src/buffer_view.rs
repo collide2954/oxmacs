@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::text::{self, Paragraph as _, Text};
@@ -206,16 +208,59 @@ where
             .viewport()
             .lines()
             .take_while(|line| *line < buffer.len_lines());
+        let selection = buffer.selection();
         for (row, line) in visible.enumerate() {
-            let content = display::render_line(&buffer.line_text(line), self.editor.tab_width());
-            renderer.fill_text(
-                self.text(content, Size::new(bounds.width, cell.height)),
+            let text = buffer.line_text(line);
+            let row = Rectangle::new(
                 Point::new(bounds.x, bounds.y + to_f32(row) * cell.height),
+                Size::new(bounds.width, cell.height),
+            );
+            if let Some(selection) = &selection {
+                self.draw_highlight(renderer, &text, line, selection, row, cell.width);
+            }
+            let content = display::render_line(&text, self.editor.tab_width());
+            renderer.fill_text(
+                self.text(content, row.size()),
+                row.position(),
                 foreground,
                 bounds,
             );
         }
         self.draw_cursor(renderer, bounds, cell);
+    }
+}
+
+impl<Message> BufferView<'_, Message> {
+    fn draw_highlight<Renderer>(
+        &self,
+        renderer: &mut Renderer,
+        text: &str,
+        line: usize,
+        selection: &Range<usize>,
+        row: Rectangle,
+        cell_width: f32,
+    ) where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        let buffer = self.editor.buffer();
+        let span = buffer.line_start(line)..buffer.line_end(line);
+        let Some((start, end)) =
+            display::highlight_columns(text, span, selection, self.editor.tab_width())
+        else {
+            return;
+        };
+        let left = row.x + to_f32(start) * cell_width;
+        let right = end.map_or(row.x + row.width, |end| row.x + to_f32(end) * cell_width);
+        renderer.fill_quad(
+            Quad {
+                bounds: Rectangle::new(
+                    Point::new(left, row.y),
+                    Size::new(right - left, row.height),
+                ),
+                ..Quad::default()
+            },
+            style::color(self.editor.theme().region),
+        );
     }
 }
 
