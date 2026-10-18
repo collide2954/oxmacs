@@ -203,6 +203,12 @@ impl KeySequence {
     }
 }
 
+impl From<Vec<Key>> for KeySequence {
+    fn from(keys: Vec<Key>) -> Self {
+        Self(keys)
+    }
+}
+
 impl FromStr for KeySequence {
     type Err = KeyParseError;
 

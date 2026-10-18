@@ -3,6 +3,7 @@ use strum::{EnumString, IntoStaticStr};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Command {
+    SelfInsertCommand,
     ForwardChar,
     BackwardChar,
     NextLine,
