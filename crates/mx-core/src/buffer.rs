@@ -64,6 +64,16 @@ impl Buffer {
             .into()
     }
 
+    pub fn chars_after(&self, position: usize) -> impl Iterator<Item = char> {
+        self.text.chars_at(position.min(self.len_chars()))
+    }
+
+    pub fn chars_before(&self, position: usize) -> impl Iterator<Item = char> {
+        self.text
+            .chars_at(position.min(self.len_chars()))
+            .reversed()
+    }
+
     pub fn column(&self, position: usize) -> usize {
         position - self.line_start(self.line_of(position))
     }
@@ -283,5 +293,13 @@ mod tests {
         assert_eq!(buffer.column(1), 1);
         assert_eq!(buffer.column(3), 0);
         assert_eq!(buffer.column(5), 2);
+    }
+
+    #[test]
+    fn chars_iterate_away_from_position_in_both_directions() {
+        let buffer = Buffer::with_text("t", "abcd");
+
+        assert_eq!(buffer.chars_after(1).collect::<String>(), "bcd");
+        assert_eq!(buffer.chars_before(3).collect::<String>(), "cba");
     }
 }
