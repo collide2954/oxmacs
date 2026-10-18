@@ -17,6 +17,7 @@ pub struct Config {
     pub cursor_blink_interval: u64,
     pub on_disk_change: OnDiskChange,
     pub delete_to_trash: bool,
+    pub splash: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
@@ -39,6 +40,7 @@ impl Default for Config {
             cursor_blink_interval: 400,
             on_disk_change: OnDiskChange::default(),
             delete_to_trash: true,
+            splash: true,
         }
     }
 }
@@ -165,6 +167,12 @@ mod tests {
                 .unwrap()
                 .delete_to_trash
         );
+    }
+
+    #[test]
+    fn the_splash_shows_unless_turned_off() {
+        assert!(Config::default().splash);
+        assert!(!Config::parse("splash = false").unwrap().splash);
     }
 
     #[test]
