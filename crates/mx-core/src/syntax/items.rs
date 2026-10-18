@@ -54,6 +54,18 @@ fn item_label(node: Node<'_>, buffer: &Buffer) -> Option<String> {
         "static_item" => "static",
         "type_item" => "type",
         "macro_definition" => return field("name").map(|name| format!("macro {name}!")),
+        "table" | "table_array_element" => {
+            let mut cursor = node.walk();
+            let key = node
+                .named_children(&mut cursor)
+                .find(|child| matches!(child.kind(), "bare_key" | "dotted_key" | "quoted_key"))?;
+            let key = buffer.text_in_bytes(key.byte_range());
+            return Some(if node.kind() == "table" {
+                format!("[{key}]")
+            } else {
+                format!("[[{key}]]")
+            });
+        }
         "impl_item" => {
             let target = field("type")?;
             return Some(match field("trait") {
@@ -70,6 +82,22 @@ fn item_label(node: Node<'_>, buffer: &Buffer) -> Option<String> {
 mod tests {
     use super::*;
     use crate::syntax::Language;
+
+    #[test]
+    fn toml_tables_are_items() {
+        let text = "[package]\nname = \"mx\"\n\n[[bin]]\nname = \"mx\"\n";
+        let mut buffer = Buffer::with_text("t", text);
+        let mut syntax = Syntax::new(Language::Toml);
+        syntax.sync(&mut buffer);
+
+        let labels: Vec<String> = syntax
+            .items(&buffer)
+            .into_iter()
+            .map(|item| item.label)
+            .collect();
+
+        assert_eq!(labels, ["[package]", "[[bin]]"]);
+    }
 
     #[test]
     fn items_are_listed_in_order_with_their_context() {

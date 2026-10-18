@@ -15,6 +15,7 @@ use crate::text::{Buffer, TextChange};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
     Rust,
+    Toml,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,17 +60,19 @@ impl Feature {
 }
 
 impl Language {
-    pub const ALL: [Self; 1] = [Self::Rust];
+    pub const ALL: [Self; 2] = [Self::Rust, Self::Toml];
 
     pub fn extensions(self) -> &'static [&'static str] {
         match self {
             Self::Rust => &["rs"],
+            Self::Toml => &["toml"],
         }
     }
 
     pub fn line_comment(self) -> Option<&'static str> {
         match self {
             Self::Rust => Some("//"),
+            Self::Toml => Some("#"),
         }
     }
 
@@ -85,10 +88,25 @@ impl Language {
                     | Feature::Formatting
                     | Feature::Motion
                     | Feature::Items
+            ) | (
+                Self::Toml,
+                Feature::Highlighting
+                    | Feature::Indentation
+                    | Feature::Comments
+                    | Feature::Pairs
+                    | Feature::Motion
+                    | Feature::Items
             )
         )
     }
+
     pub fn for_path(path: &Path) -> Option<Self> {
+        if path
+            .file_name()
+            .is_some_and(|name| name.eq_ignore_ascii_case("Cargo.lock"))
+        {
+            return Some(Self::Toml);
+        }
         let extension = path.extension()?.to_str()?;
         Self::ALL.into_iter().find(|language| {
             language
@@ -101,12 +119,14 @@ impl Language {
     pub fn name(self) -> &'static str {
         match self {
             Self::Rust => "Rust",
+            Self::Toml => "TOML",
         }
     }
 
     fn grammar(self) -> tree_sitter::Language {
         match self {
             Self::Rust => tree_sitter_rust::LANGUAGE.into(),
+            Self::Toml => tree_sitter_toml_ng::LANGUAGE.into(),
         }
     }
 }
@@ -303,6 +323,14 @@ mod tests {
         assert_eq!(
             Language::for_path(Path::new("LIB.RS")),
             Some(Language::Rust)
+        );
+        assert_eq!(
+            Language::for_path(Path::new("Cargo.toml")),
+            Some(Language::Toml)
+        );
+        assert_eq!(
+            Language::for_path(Path::new("Cargo.lock")),
+            Some(Language::Toml)
         );
         assert_eq!(Language::for_path(Path::new("notes.txt")), None);
         assert_eq!(Language::for_path(Path::new("Makefile")), None);

@@ -548,6 +548,7 @@ impl Editor {
             Command::LoadTheme => self.load_theme(),
             Command::ToggleTheme => self.toggle_theme(),
             Command::RustMode => self.set_major_mode(Some(Language::Rust)),
+            Command::TomlMode => self.set_major_mode(Some(Language::Toml)),
             Command::TextMode => self.set_major_mode(None),
             Command::MxDoctor => self.mx_doctor(),
             Command::RustFormatBuffer => self.rust_format_buffer(),

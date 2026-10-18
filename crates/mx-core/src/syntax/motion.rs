@@ -21,6 +21,8 @@ const DEFUNS: &[&str] = &[
     "const_item",
     "static_item",
     "type_item",
+    "table",
+    "table_array_element",
 ];
 const OPENERS: &[&str] = &["(", "[", "{"];
 const CLOSERS: &[&str] = &[")", "]", "}"];

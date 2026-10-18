@@ -61,6 +61,29 @@ mod tests {
     }
 
     #[test]
+    fn toml_files_open_in_toml_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "[package]\n").unwrap();
+        let mut editor = Editor::new();
+
+        editor.open_file(&dir.path().join("Cargo.toml"));
+
+        assert_eq!(editor.language(), Some(Language::Toml));
+        assert_eq!(editor.mode_line(), "-- Cargo.toml   L1 C0   (TOML)");
+    }
+
+    #[test]
+    fn toml_comments_use_hashes() {
+        let mut editor = Editor::new();
+        run(&mut editor, "toml-mode");
+        type_text(&mut editor, "a = 1");
+
+        press(&mut editor, "C-a C-x C-;");
+
+        assert_eq!(editor.buffer().contents(), "# a = 1");
+    }
+
+    #[test]
     fn mode_commands_switch_the_major_mode() {
         let mut editor = Editor::new();
 

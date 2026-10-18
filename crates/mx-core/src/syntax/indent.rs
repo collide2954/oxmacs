@@ -11,7 +11,7 @@ const LITERALS: &[&str] = &["string_literal", "raw_string_literal", "block_comme
 impl Language {
     pub fn indent_unit(self) -> usize {
         match self {
-            Self::Rust => 4,
+            Self::Rust | Self::Toml => 4,
         }
     }
 }
@@ -36,8 +36,12 @@ impl Syntax {
         });
         let unit = self.language.indent_unit();
         let Some((container, open)) = container else {
-            let top = statement(node, tree.root_node());
-            return Some(continuation(top, line, &rest) * unit);
+            return Some(match self.language {
+                Language::Rust => {
+                    continuation(statement(node, tree.root_node()), line, &rest) * unit
+                }
+                Language::Toml => previous_indentation(buffer, line, tab_width),
+            });
         };
         let base = indentation_of(buffer, row(open), tab_width);
         let closes = !node.is_named()
@@ -47,8 +51,11 @@ impl Syntax {
         if closes {
             return Some(base);
         }
-        let inner = statement(node, container);
-        Some(base + unit + continuation(inner, line, &rest) * unit)
+        let continues = match self.language {
+            Language::Rust => continuation(statement(node, container), line, &rest),
+            Language::Toml => 0,
+        };
+        Some(base + unit + continues * unit)
     }
 }
 
@@ -91,6 +98,13 @@ fn continuation(statement: Option<Node<'_>>, line: usize, rest: &str) -> usize {
 fn starts_with_word(text: &str, word: &str) -> bool {
     text.strip_prefix(word)
         .is_some_and(|rest| !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_'))
+}
+
+fn previous_indentation(buffer: &Buffer, line: usize, tab_width: usize) -> usize {
+    (0..line)
+        .rev()
+        .find(|earlier| !buffer.line_text(*earlier).trim().is_empty())
+        .map_or(0, |earlier| indentation_of(buffer, earlier, tab_width))
 }
 
 fn indentation_of(buffer: &Buffer, line: usize, tab_width: usize) -> usize {
@@ -163,8 +177,12 @@ impl Point {
 "#;
 
     fn indentations(text: &str) -> (Buffer, Syntax) {
+        parsed(Language::Rust, text)
+    }
+
+    fn parsed(language: Language, text: &str) -> (Buffer, Syntax) {
         let mut buffer = Buffer::with_text("t", text);
-        let mut syntax = Syntax::new(Language::Rust);
+        let mut syntax = Syntax::new(language);
         syntax.sync(&mut buffer);
         (buffer, syntax)
     }
@@ -207,6 +225,16 @@ impl Point {
 
         assert_eq!(syntax.indentation(&buffer, 1, 8), Some(4));
         assert_eq!(syntax.indentation(&buffer, 2, 8), Some(0));
+    }
+
+    #[test]
+    fn toml_indents_arrays_and_keeps_other_lines_level() {
+        let (buffer, syntax) = parsed(Language::Toml, "[a]\n  x = 1\n  y = [\n\"b\",\n]\n");
+        let indent = |line| syntax.indentation(&buffer, line, 8);
+
+        assert_eq!(indent(2), Some(2));
+        assert_eq!(indent(3), Some(6));
+        assert_eq!(indent(4), Some(2));
     }
 
     #[test]

@@ -11,6 +11,7 @@ use crate::text::Buffer;
 use crate::theme::Highlight;
 
 const RUST: &str = include_str!("../../queries/rust/highlights.scm");
+const TOML: &str = include_str!("../../queries/toml/highlights.scm");
 
 struct Highlighter {
     query: Query,
@@ -19,6 +20,8 @@ struct Highlighter {
 
 static RUST_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
     LazyLock::new(|| Highlighter::new(Language::Rust, RUST));
+static TOML_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
+    LazyLock::new(|| Highlighter::new(Language::Toml, TOML));
 
 impl Highlighter {
     fn new(language: Language, source: &str) -> Option<Self> {
@@ -34,6 +37,7 @@ impl Highlighter {
     fn of(language: Language) -> Option<&'static Self> {
         match language {
             Language::Rust => RUST_HIGHLIGHTER.as_ref(),
+            Language::Toml => TOML_HIGHLIGHTER.as_ref(),
         }
     }
 }
@@ -124,8 +128,12 @@ mod tests {
     use super::*;
 
     fn faces(text: &str, line: usize) -> Vec<(Range<usize>, Highlight)> {
+        faces_in(Language::Rust, text, line)
+    }
+
+    fn faces_in(language: Language, text: &str, line: usize) -> Vec<(Range<usize>, Highlight)> {
         let mut buffer = Buffer::with_text("t", text);
-        let mut syntax = Syntax::new(Language::Rust);
+        let mut syntax = Syntax::new(language);
         syntax.sync(&mut buffer);
         syntax.highlights(&buffer, line)
     }
@@ -206,6 +214,27 @@ mod tests {
 
         assert_eq!(faces(text, 1), [(0..4, Highlight::Comment)]);
         assert_eq!(faces(text, 3), [(0..2, Highlight::String)]);
+    }
+
+    #[test]
+    fn toml_tables_keys_and_values_are_highlighted() {
+        let text = "[package]\nname = \"mx\" # c\nversion = 1\n[[bin]]\n";
+        let toml = |line| faces_in(Language::Toml, text, line);
+
+        assert_eq!(toml(0), [(0..9, Highlight::Type)]);
+        assert_eq!(
+            toml(1),
+            [
+                (0..4, Highlight::Function),
+                (7..11, Highlight::String),
+                (12..15, Highlight::Comment)
+            ]
+        );
+        assert_eq!(
+            toml(2),
+            [(0..7, Highlight::Function), (10..11, Highlight::Constant)]
+        );
+        assert_eq!(toml(3), [(0..7, Highlight::Type)]);
     }
 
     #[test]
