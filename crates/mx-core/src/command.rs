@@ -14,6 +14,8 @@ pub enum Command {
     BackwardWord,
     BeginningOfBuffer,
     EndOfBuffer,
+    KeyboardQuit,
+    SaveBuffersKillMx,
 }
 
 impl Command {

@@ -15,6 +15,7 @@ pub struct Editor {
     last_key: Option<Key>,
     goal_column: Option<usize>,
     message: Option<String>,
+    quit_requested: bool,
 }
 
 impl Default for Editor {
@@ -36,6 +37,7 @@ impl Editor {
             last_key: None,
             goal_column: None,
             message: None,
+            quit_requested: false,
         }
     }
 
@@ -47,11 +49,22 @@ impl Editor {
         self.message.as_deref()
     }
 
+    pub fn should_quit(&self) -> bool {
+        self.quit_requested
+    }
+
     pub fn handle_key(&mut self, key: Key) {
         self.message = None;
+        if !self.pending.is_empty() && is_keyboard_quit(key) {
+            self.dispatch(key, Command::KeyboardQuit);
+            return;
+        }
         self.pending.push(key);
         match self.keymap.lookup(&self.pending) {
-            Lookup::Prefix => {}
+            Lookup::Prefix => {
+                let keys = KeySequence::from(self.pending.clone());
+                self.message = Some(format!("{keys}-"));
+            }
             Lookup::Command(command) => self.dispatch(key, command),
             Lookup::Unbound if self.pending.len() == 1 && inserts_itself(key) => {
                 self.dispatch(key, Command::SelfInsertCommand);
@@ -83,6 +96,8 @@ impl Editor {
             Command::BackwardWord => self.move_point(motion::backward_word),
             Command::BeginningOfBuffer => self.move_point(|_, _| 0),
             Command::EndOfBuffer => self.move_point(|b, _| b.len_chars()),
+            Command::KeyboardQuit => self.message = Some("Quit".to_owned()),
+            Command::SaveBuffersKillMx => self.quit_requested = true,
         }
     }
 
@@ -104,6 +119,10 @@ impl Editor {
             self.buffer.insert(c.encode_utf8(&mut [0; 4]));
         }
     }
+}
+
+fn is_keyboard_quit(key: Key) -> bool {
+    key.code() == KeyCode::Char('g') && key.modifiers() == Modifiers::CONTROL
 }
 
 fn inserts_itself(key: Key) -> bool {
@@ -157,6 +176,45 @@ mod tests {
         press(&mut editor, "C-q a");
 
         assert_eq!(editor.message(), None);
+    }
+
+    #[test]
+    fn prefix_keys_are_echoed_while_pending() {
+        let mut editor = Editor::new();
+
+        press(&mut editor, "C-x");
+
+        assert_eq!(editor.message(), Some("C-x-"));
+    }
+
+    #[test]
+    fn keyboard_quit_reports_quit() {
+        let mut editor = Editor::new();
+
+        press(&mut editor, "C-g");
+
+        assert_eq!(editor.message(), Some("Quit"));
+    }
+
+    #[test]
+    fn keyboard_quit_aborts_a_pending_prefix() {
+        let mut editor = Editor::new();
+
+        press(&mut editor, "C-x C-g");
+        assert_eq!(editor.message(), Some("Quit"));
+
+        press(&mut editor, "a");
+        assert_eq!(editor.buffer().contents(), "a");
+    }
+
+    #[test]
+    fn quit_sequence_requests_exit() {
+        let mut editor = Editor::new();
+        assert!(!editor.should_quit());
+
+        press(&mut editor, "C-x C-c");
+
+        assert!(editor.should_quit());
     }
 
     fn editor_with(text: &str, point: usize) -> Editor {
