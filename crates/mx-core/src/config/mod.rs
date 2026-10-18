@@ -16,6 +16,7 @@ pub struct Config {
     pub animations: bool,
     pub cursor_blink_interval: u64,
     pub on_disk_change: OnDiskChange,
+    pub delete_to_trash: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
@@ -37,6 +38,7 @@ impl Default for Config {
             animations: true,
             cursor_blink_interval: 400,
             on_disk_change: OnDiskChange::default(),
+            delete_to_trash: true,
         }
     }
 }
@@ -153,6 +155,16 @@ mod tests {
             OnDiskChange::Ignore
         );
         assert!(read("on-disk-change = \"panic\"").is_err());
+    }
+
+    #[test]
+    fn deleting_moves_to_the_trash_unless_turned_off() {
+        assert!(Config::default().delete_to_trash);
+        assert!(
+            !Config::parse("delete-to-trash = false")
+                .unwrap()
+                .delete_to_trash
+        );
     }
 
     #[test]
