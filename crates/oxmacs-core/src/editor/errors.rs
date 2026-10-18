@@ -170,7 +170,7 @@ fn style(text: &str, current: bool) -> LineStyle {
         None
     };
     LineStyle {
-        background: current.then_some(Highlight::SearchMatch),
+        background: current.then_some(Highlight::Region),
         spans: span.into_iter().collect(),
     }
 }
@@ -333,7 +333,7 @@ mod tests {
         assert_eq!(
             style("  --> src/main.rs:3:5", true),
             LineStyle {
-                background: Some(Highlight::SearchMatch),
+                background: Some(Highlight::Region),
                 spans: vec![(6..21, Highlight::Link)],
             }
         );
@@ -503,7 +503,7 @@ mod tests {
 
         let window = editor.tiling().windows()[1];
         let pane = editor.pane_of(window).unwrap();
-        assert_eq!(pane.line_style(3).background, Some(Highlight::SearchMatch));
+        assert_eq!(pane.line_style(3).background, Some(Highlight::Region));
         assert_eq!(pane.line_style(4).background, None);
     }
 }

@@ -62,6 +62,7 @@ pub struct SyntaxColors {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Highlight {
+    Region,
     Heading,
     Link,
     Symlink,
@@ -146,6 +147,7 @@ impl Theme {
 
     pub fn highlight(&self, highlight: Highlight) -> Color {
         match highlight {
+            Highlight::Region => self.region,
             Highlight::Heading => self.heading,
             Highlight::Link => self.link,
             Highlight::Symlink => self.symlink,
@@ -269,6 +271,11 @@ mod tests {
                 assert_ne!(theme.highlight(highlight), theme.region);
             }
             assert_ne!(theme.search_match, theme.search_current);
+            let ratio = theme
+                .default
+                .foreground
+                .contrast_ratio(theme.highlight(Highlight::Region));
+            assert!(ratio >= 4.5, "{} Region: {ratio:.2}", theme.name);
         }
     }
 
