@@ -52,6 +52,8 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-M-_", Command::Redo),
     ("s-S-z", Command::Redo),
     ("M-x", Command::ExecuteExtendedCommand),
+    ("C-s", Command::IsearchForward),
+    ("C-r", Command::IsearchBackward),
     ("C-x C-f", Command::FindFile),
     ("C-x C-s", Command::SaveBuffer),
     ("C-x s", Command::SaveSomeBuffers),
@@ -76,6 +78,11 @@ const MINIBUFFER: &[(&str, Command)] = &[
     ("TAB", Command::MinibufferComplete),
     ("DEL", Command::MinibufferDeleteBackward),
     ("M-RET", Command::ExitMinibufferWithInput),
+];
+
+const SEARCH: &[(&str, Command)] = &[
+    ("RET", Command::IsearchExit),
+    ("C-g", Command::IsearchAbort),
 ];
 
 const DIRED: &[(&str, Command)] = &[
@@ -128,6 +135,10 @@ pub fn minibuffer() -> Keymap {
     build(MINIBUFFER)
 }
 
+pub fn search() -> Keymap {
+    build(SEARCH)
+}
+
 pub fn dired() -> Keymap {
     build(DIRED)
 }
@@ -171,6 +182,11 @@ mod tests {
     #[test]
     fn every_minibuffer_binding_resolves_to_its_command() {
         assert_resolves(&minibuffer(), MINIBUFFER);
+    }
+
+    #[test]
+    fn every_search_binding_resolves_to_its_command() {
+        assert_resolves(&search(), SEARCH);
     }
 
     #[test]

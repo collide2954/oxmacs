@@ -5,6 +5,7 @@ mod disk;
 mod editing;
 mod effect;
 mod files;
+mod isearch;
 mod minibuffer;
 mod mouse;
 mod movement;
@@ -19,6 +20,7 @@ mod themes;
 mod undo;
 
 pub use effect::Effect;
+pub use isearch::Search;
 pub use minibuffer::{Choice, Completion, Minibuffer};
 pub use mouse::{Cell, Clicks};
 pub use question::Question;
@@ -30,6 +32,7 @@ use std::{env, mem};
 
 use buffers::{BufferList, Mode};
 use dired::Kind;
+use isearch::Direction;
 
 use crate::command::{Command, Scope};
 use crate::config::{Config, OnDiskChange};
@@ -46,10 +49,12 @@ const DEFAULT_ROWS: usize = 24;
 pub struct Editor {
     buffers: BufferList,
     minibuffer: Option<Minibuffer>,
+    search: Option<Search>,
     keymap: Keymap,
     minibuffer_keymap: Keymap,
     dired_keymap: Keymap,
     splash_keymap: Keymap,
+    search_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
     last_command: Option<Command>,
@@ -90,10 +95,12 @@ impl Editor {
         Self {
             buffers: BufferList::new(buffer),
             minibuffer: None,
+            search: None,
             keymap: bindings::global(),
             minibuffer_keymap: bindings::minibuffer(),
             dired_keymap: bindings::dired(),
             splash_keymap: bindings::splash(),
+            search_keymap: bindings::search(),
             pending: Vec::new(),
             last_key: None,
             last_command: None,
@@ -231,7 +238,7 @@ impl Editor {
 
     pub fn handle_key(&mut self, mut key: Key) {
         self.message = None;
-        if self.answer_question(key) {
+        if self.answer_question(key) || self.search_key(key) {
             return;
         }
         if let Some(minibuffer) = &mut self.minibuffer {
@@ -323,7 +330,7 @@ impl Editor {
         match self.buffer_scope() {
             Scope::Dired => Some(&self.dired_keymap),
             Scope::Splash => Some(&self.splash_keymap),
-            Scope::Global | Scope::Minibuffer => None,
+            Scope::Global | Scope::Minibuffer | Scope::Search => None,
         }
     }
 
@@ -403,6 +410,11 @@ impl Editor {
             Command::MinibufferComplete => self.minibuffer_complete(),
             Command::MinibufferDeleteBackward => self.minibuffer_delete_backward(),
             Command::ExitMinibufferWithInput => self.exit_minibuffer_with_input(),
+            Command::IsearchForward => self.isearch(Direction::Forward, false),
+            Command::IsearchBackward => self.isearch(Direction::Backward, false),
+            Command::IsearchPrintingChar => self.isearch_printing_char(),
+            Command::IsearchExit => self.exit_search(),
+            Command::IsearchAbort => self.isearch_abort(),
             Command::FindFile => self.find_file(),
             Command::SaveBuffer => self.save_buffer(),
             Command::WriteFile => self.write_file(),

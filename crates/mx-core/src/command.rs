@@ -36,6 +36,11 @@ pub enum Command {
     MinibufferComplete,
     MinibufferDeleteBackward,
     ExitMinibufferWithInput,
+    IsearchForward,
+    IsearchBackward,
+    IsearchPrintingChar,
+    IsearchExit,
+    IsearchAbort,
     FindFile,
     SaveBuffer,
     WriteFile,
@@ -142,6 +147,7 @@ impl Command {
             | Self::DiredCreateDirectory
             | Self::DiredDoOpen => Scope::Dired,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
+            Self::IsearchPrintingChar | Self::IsearchExit | Self::IsearchAbort => Scope::Search,
             _ => Scope::Global,
         }
     }
@@ -153,6 +159,7 @@ pub enum Scope {
     Minibuffer,
     Dired,
     Splash,
+    Search,
 }
 
 #[cfg(test)]
