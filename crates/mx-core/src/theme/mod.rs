@@ -31,17 +31,17 @@ pub struct Theme {
     pub minibuffer_prompt: Color,
     pub completion_current: Face,
     pub shadow: Color,
-    pub dired_header: Color,
-    pub dired_directory: Color,
-    pub dired_symlink: Color,
-    pub dired_marked: Color,
-    pub dired_flagged: Color,
+    pub heading: Color,
+    pub link: Color,
+    pub symlink: Color,
+    pub marked: Color,
+    pub flagged: Color,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Highlight {
-    Header,
-    Directory,
+    Heading,
+    Link,
     Symlink,
     Marked,
     Flagged,
@@ -74,21 +74,21 @@ impl Theme {
                 .completion_current
                 .mix(other.completion_current, amount),
             shadow: self.shadow.mix(other.shadow, amount),
-            dired_header: self.dired_header.mix(other.dired_header, amount),
-            dired_directory: self.dired_directory.mix(other.dired_directory, amount),
-            dired_symlink: self.dired_symlink.mix(other.dired_symlink, amount),
-            dired_marked: self.dired_marked.mix(other.dired_marked, amount),
-            dired_flagged: self.dired_flagged.mix(other.dired_flagged, amount),
+            heading: self.heading.mix(other.heading, amount),
+            link: self.link.mix(other.link, amount),
+            symlink: self.symlink.mix(other.symlink, amount),
+            marked: self.marked.mix(other.marked, amount),
+            flagged: self.flagged.mix(other.flagged, amount),
         }
     }
 
     pub fn highlight(&self, highlight: Highlight) -> Color {
         match highlight {
-            Highlight::Header => self.dired_header,
-            Highlight::Directory => self.dired_directory,
-            Highlight::Symlink => self.dired_symlink,
-            Highlight::Marked => self.dired_marked,
-            Highlight::Flagged => self.dired_flagged,
+            Highlight::Heading => self.heading,
+            Highlight::Link => self.link,
+            Highlight::Symlink => self.symlink,
+            Highlight::Marked => self.marked,
+            Highlight::Flagged => self.flagged,
         }
     }
 }
@@ -136,9 +136,9 @@ mod tests {
     }
 
     #[test]
-    fn dired_highlights_are_readable() {
+    fn highlights_are_readable() {
         for theme in builtin() {
-            for highlight in [Highlight::Header, Highlight::Directory, Highlight::Symlink] {
+            for highlight in [Highlight::Heading, Highlight::Link, Highlight::Symlink] {
                 let ratio = theme
                     .highlight(highlight)
                     .contrast_ratio(theme.default.background);
@@ -156,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn mixing_blends_the_dired_highlights() {
+    fn mixing_blends_the_highlights() {
         let halfway = ADWAITA.mix(&ADWAITA_DARK, 0.5);
 
         assert_eq!(

@@ -182,13 +182,13 @@ impl Listing {
         if line == 0 {
             return LineStyle {
                 background: None,
-                spans: vec![(0..usize::MAX, Highlight::Header)],
+                spans: vec![(0..usize::MAX, Highlight::Heading)],
             };
         }
         if Some(line) == self.parent_line() {
             return LineStyle {
                 background: None,
-                spans: vec![(column..column + 2, Highlight::Directory)],
+                spans: vec![(column..column + 2, Highlight::Link)],
             };
         }
         let Some(entry) = self.entry_at(line) else {
@@ -196,7 +196,7 @@ impl Listing {
         };
         let name = entry.display_name().chars().count();
         let span = match entry.kind {
-            Kind::Directory => Some((column..column + name + 1, Highlight::Directory)),
+            Kind::Directory => Some((column..column + name + 1, Highlight::Link)),
             Kind::Symlink { .. } => Some((column..column + name, Highlight::Symlink)),
             Kind::File => None,
         };
@@ -453,18 +453,15 @@ mod tests {
             listing.line_style(0),
             LineStyle {
                 background: None,
-                spans: vec![(0..usize::MAX, Highlight::Header)],
+                spans: vec![(0..usize::MAX, Highlight::Heading)],
             }
         );
-        assert_eq!(
-            listing.line_style(1).spans,
-            [(22..24, Highlight::Directory)]
-        );
+        assert_eq!(listing.line_style(1).spans, [(22..24, Highlight::Link)]);
         assert_eq!(
             listing.line_style(2),
             LineStyle {
                 background: Some(Highlight::Marked),
-                spans: vec![(22..29, Highlight::Directory)],
+                spans: vec![(22..29, Highlight::Link)],
             }
         );
         assert_eq!(
