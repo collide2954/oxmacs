@@ -105,6 +105,27 @@ impl App {
         self.reveal.interpolate(0.0, 1.0, self.now)
     }
 
+    fn handle_view_event(&mut self, event: ViewEvent) {
+        match event {
+            ViewEvent::RowsChanged(rows) => self.editor.resize_window(rows),
+            ViewEvent::FontNotMonospaced => self.reject_font(),
+            ViewEvent::Pressed {
+                cell,
+                clicks,
+                extend,
+            } => {
+                self.last_input = self.now;
+                self.editor.click(cell, clicks, extend);
+            }
+            ViewEvent::Dragged(cell) => self.editor.drag(cell),
+            ViewEvent::MiddleClicked(cell) => {
+                self.last_input = self.now;
+                self.editor.middle_click(cell);
+            }
+            ViewEvent::Scrolled(rows) => self.editor.scroll_lines(rows),
+        }
+    }
+
     fn set_appearance(&mut self, appearance: Appearance) {
         let before = self.faces();
         self.editor.set_appearance(appearance);
@@ -170,8 +191,7 @@ impl App {
                 }
             }
             Message::Keyboard(_) => {}
-            Message::View(ViewEvent::RowsChanged(rows)) => self.editor.resize_window(rows),
-            Message::View(ViewEvent::FontNotMonospaced) => self.reject_font(),
+            Message::View(event) => self.handle_view_event(event),
             Message::AppearanceChanged(mode) => {
                 if let Some(appearance) = appearance(mode) {
                     self.set_appearance(appearance);
@@ -291,6 +311,7 @@ mod tests {
     use super::*;
     use iced::keyboard::key::{Code, Physical};
     use iced::keyboard::{Key, Location, Modifiers};
+    use mx_core::editor::{Cell, Clicks};
     use mx_core::theme::{ADWAITA, ADWAITA_DARK};
 
     fn press(app: &mut App, c: &str, modifiers: Modifiers) {
@@ -483,6 +504,42 @@ mod tests {
         press(&mut app, "a", Modifiers::empty());
 
         assert_eq!(app.editor().buffer().contents(), "a");
+    }
+
+    fn view_event(app: &mut App, event: ViewEvent) {
+        let _ = app.update(Message::View(event));
+    }
+
+    #[test]
+    fn mouse_events_reach_the_editor() {
+        let mut app = App::default();
+        for c in ["a", "b", "c", "d"] {
+            press(&mut app, c, Modifiers::empty());
+        }
+
+        view_event(
+            &mut app,
+            ViewEvent::Pressed {
+                cell: Cell { line: 0, column: 1 },
+                clicks: Clicks::Single,
+                extend: false,
+            },
+        );
+        view_event(&mut app, ViewEvent::Dragged(Cell { line: 0, column: 3 }));
+
+        assert_eq!(app.editor().buffer().selection(), Some(1..3));
+    }
+
+    #[test]
+    fn wheel_scrolling_reaches_the_editor() {
+        let mut app = App::default();
+        let _ = app.update(Message::Pasted(Some("x\n".repeat(100))));
+        view_event(&mut app, ViewEvent::RowsChanged(10));
+        press(&mut app, "<", Modifiers::ALT);
+
+        view_event(&mut app, ViewEvent::Scrolled(3));
+
+        assert_eq!(app.editor().viewport().top(), 3);
     }
 
     #[test]

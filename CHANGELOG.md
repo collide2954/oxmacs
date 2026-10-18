@@ -4,6 +4,12 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 ## [Unreleased]
 
+### Added
+
+- Mouse: click moves point, drag selects, double-click selects a word, triple-click a line, shift-click extends; I-beam pointer over text.
+- Mouse wheel scrolls 3 lines per notch (trackpads scroll smoothly) and keeps point in view.
+- On Linux, selections set PRIMARY and middle-click pastes it at the mouse.
+
 ## [0.5.0] - 2026-10-18
 
 ### Added

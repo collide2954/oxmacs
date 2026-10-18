@@ -19,6 +19,18 @@ pub fn floor_to_usize(value: f32) -> usize {
     }
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "callers pass whole numbers of rows that fit comfortably in isize"
+)]
+pub fn trunc_to_isize(value: f32) -> isize {
+    if value.is_finite() {
+        value.trunc() as isize
+    } else {
+        0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

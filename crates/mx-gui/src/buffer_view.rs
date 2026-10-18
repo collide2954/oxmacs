@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use iced::advanced::layout::{self, Layout};
+use iced::advanced::mouse::{self, Click, ScrollDelta, click};
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::text::{self, Paragraph as _, Text};
 use iced::advanced::widget::tree::{self, Tree};
@@ -8,24 +9,33 @@ use iced::advanced::{Clipboard, Shell, Widget};
 use iced::alignment::Vertical;
 use iced::time::{Duration, Instant};
 use iced::{
-    Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, mouse,
+    Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, keyboard,
     window,
 };
 use mx_core::display;
-use mx_core::editor::Editor;
+use mx_core::editor::{Cell, Clicks, Editor};
 use mx_core::theme::Theme as Faces;
 
 use crate::animation::{self, Glide, Scroll};
 use crate::style;
-use crate::units::{floor_to_usize, to_f32};
+use crate::units::{floor_to_usize, to_f32, trunc_to_isize};
 
 const WIDE_SAMPLE: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
 const NARROW_SAMPLE: &str = "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii";
+const WHEEL_ROWS: f32 = 3.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewEvent {
     RowsChanged(usize),
     FontNotMonospaced,
+    Pressed {
+        cell: Cell,
+        clicks: Clicks,
+        extend: bool,
+    },
+    Dragged(Cell),
+    MiddleClicked(Cell),
+    Scrolled(isize),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -59,6 +69,10 @@ struct State {
     cursor: Option<Glide>,
     scroll: Option<Scroll>,
     frame: Option<Instant>,
+    last_click: Option<Click>,
+    dragging: bool,
+    wheel_carry: f32,
+    modifiers: keyboard::Modifiers,
 }
 
 impl State {
@@ -151,6 +165,61 @@ impl<'a, Message> BufferView<'a, Message> {
         {
             shell.request_redraw_at(now + wait);
         }
+    }
+
+    fn handle_mouse(
+        &self,
+        state: &mut State,
+        event: mouse::Event,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+        shell: &mut Shell<'_, Message>,
+    ) {
+        let cell_size = state.metrics.cell;
+        let top = state.top(self.editor.viewport().top());
+        let view_event = match event {
+            mouse::Event::ButtonPressed(button) => {
+                let Some(position) = cursor.position_in(bounds) else {
+                    return;
+                };
+                let cell = cell_at(position, cell_size, top);
+                match button {
+                    mouse::Button::Left => {
+                        let click = Click::new(position, button, state.last_click);
+                        state.last_click = Some(click);
+                        state.dragging = true;
+                        ViewEvent::Pressed {
+                            cell,
+                            clicks: clicks(click.kind()),
+                            extend: state.modifiers.shift(),
+                        }
+                    }
+                    mouse::Button::Middle => ViewEvent::MiddleClicked(cell),
+                    _ => return,
+                }
+            }
+            mouse::Event::CursorMoved { .. } if state.dragging => {
+                let Some(position) = cursor.position_from(bounds.position()) else {
+                    return;
+                };
+                ViewEvent::Dragged(cell_at(position, cell_size, top))
+            }
+            mouse::Event::ButtonReleased(mouse::Button::Left) => {
+                state.dragging = false;
+                return;
+            }
+            mouse::Event::WheelScrolled { delta } if cursor.is_over(bounds) => {
+                let (rows, carry) = wheel_rows(delta, cell_size.height, state.wheel_carry);
+                state.wheel_carry = carry;
+                if rows == 0 {
+                    return;
+                }
+                ViewEvent::Scrolled(rows)
+            }
+            _ => return,
+        };
+        shell.publish((self.on_event)(view_event));
+        shell.capture_event();
     }
 
     fn draw_cursor<Renderer>(&self, renderer: &mut Renderer, state: &State, bounds: Rectangle)
@@ -257,15 +326,20 @@ where
         tree: &mut Tree,
         event: &Event,
         layout: Layout<'_>,
-        _cursor: mouse::Cursor,
+        cursor: mouse::Cursor,
         _renderer: &Renderer,
         _clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
         let state = tree.state.downcast_mut::<State>();
-        if let Event::Window(window::Event::RedrawRequested(now)) = event {
-            self.animate(state, *now, shell);
+        match event {
+            Event::Window(window::Event::RedrawRequested(now)) => self.animate(state, *now, shell),
+            Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
+                state.modifiers = *modifiers;
+            }
+            Event::Mouse(event) => self.handle_mouse(state, *event, layout.bounds(), cursor, shell),
+            _ => {}
         }
         let metrics = &mut state.metrics;
         if metrics.measured_for.is_some() && !metrics.monospaced && !metrics.font_reported {
@@ -275,6 +349,21 @@ where
         let rows = rows_in(layout.bounds().height, metrics.cell.height);
         if rows != self.editor.viewport().rows() {
             shell.publish((self.on_event)(ViewEvent::RowsChanged(rows)));
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        _tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        _viewport: &Rectangle,
+        _renderer: &Renderer,
+    ) -> mouse::Interaction {
+        if cursor.is_over(layout.bounds()) {
+            mouse::Interaction::Text
+        } else {
+            mouse::Interaction::None
         }
     }
 
@@ -367,6 +456,31 @@ where
     }
 }
 
+pub fn cell_at(position: Point, cell: Size, top: f32) -> Cell {
+    Cell {
+        line: floor_to_usize(position.y / cell.height + top),
+        column: floor_to_usize(position.x / cell.width + 0.5),
+    }
+}
+
+pub fn wheel_rows(delta: ScrollDelta, cell_height: f32, carry: f32) -> (isize, f32) {
+    let rows = match delta {
+        ScrollDelta::Lines { y, .. } => -y * WHEEL_ROWS,
+        ScrollDelta::Pixels { y, .. } => -y / cell_height,
+    };
+    let total = carry + rows;
+    let whole = total.trunc();
+    (trunc_to_isize(whole), total - whole)
+}
+
+fn clicks(kind: click::Kind) -> Clicks {
+    match kind {
+        click::Kind::Single => Clicks::Single,
+        click::Kind::Double => Clicks::Double,
+        click::Kind::Triple => Clicks::Triple,
+    }
+}
+
 pub fn is_monospaced(narrow_width: f32, wide_width: f32) -> bool {
     (narrow_width - wide_width).abs() <= wide_width * 0.01
 }
@@ -405,6 +519,59 @@ mod tests {
     fn differing_narrow_and_wide_widths_mean_proportional() {
         assert!(!is_monospaced(64.0, 160.0));
         assert!(!is_monospaced(f32::NAN, 160.0));
+    }
+
+    const CELL: Size = Size {
+        width: 10.0,
+        height: 20.0,
+    };
+
+    #[test]
+    fn positions_map_to_the_nearest_column_boundary_and_row() {
+        assert_eq!(
+            cell_at(Point::new(24.0, 45.0), CELL, 0.0),
+            Cell { line: 2, column: 2 }
+        );
+        assert_eq!(
+            cell_at(Point::new(26.0, 45.0), CELL, 0.0),
+            Cell { line: 2, column: 3 }
+        );
+    }
+
+    #[test]
+    fn positions_account_for_the_scrolled_top() {
+        assert_eq!(cell_at(Point::new(0.0, 45.0), CELL, 5.5).line, 7);
+    }
+
+    #[test]
+    fn positions_left_of_or_above_the_view_clamp_to_zero() {
+        assert_eq!(
+            cell_at(Point::new(-30.0, -40.0), CELL, 0.0),
+            Cell { line: 0, column: 0 }
+        );
+    }
+
+    #[test]
+    fn wheel_notches_scroll_three_rows() {
+        assert_eq!(
+            wheel_rows(ScrollDelta::Lines { x: 0.0, y: 1.0 }, 20.0, 0.0),
+            (-3, 0.0)
+        );
+        assert_eq!(
+            wheel_rows(ScrollDelta::Lines { x: 0.0, y: -1.0 }, 20.0, 0.0),
+            (3, 0.0)
+        );
+    }
+
+    #[test]
+    fn pixel_scrolling_carries_partial_rows() {
+        let (rows, carry) = wheel_rows(ScrollDelta::Pixels { x: 0.0, y: -30.0 }, 20.0, 0.0);
+        assert_eq!(rows, 1);
+        assert!((carry - 0.5).abs() < f32::EPSILON);
+
+        let (rows, carry) = wheel_rows(ScrollDelta::Pixels { x: 0.0, y: -10.0 }, 20.0, carry);
+        assert_eq!(rows, 1);
+        assert!(carry.abs() < f32::EPSILON);
     }
 
     #[test]
