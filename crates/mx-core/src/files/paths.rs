@@ -1,13 +1,6 @@
 use std::path::{self, Component, Path, PathBuf};
-use std::{fs, io};
 
 pub const SEPARATOR: char = path::MAIN_SEPARATOR;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DirEntry {
-    pub name: String,
-    pub is_dir: bool,
-}
 
 pub fn is_separator(c: char) -> bool {
     path::is_separator(c)
@@ -103,27 +96,8 @@ pub fn unique_names(paths: &[PathBuf]) -> Vec<String> {
         .collect()
 }
 
-pub fn list_dir(dir: &Path) -> io::Result<Vec<DirEntry>> {
-    let mut entries: Vec<DirEntry> = fs::read_dir(dir)?
-        .filter_map(Result::ok)
-        .map(|entry| DirEntry {
-            name: entry.file_name().to_string_lossy().into_owned(),
-            is_dir: entry.path().is_dir(),
-        })
-        .collect();
-    entries.sort_by_cached_key(|entry| {
-        (
-            !entry.is_dir,
-            entry.name.starts_with('.'),
-            entry.name.to_lowercase(),
-        )
-    });
-    Ok(entries)
-}
-
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use std::path::Path;
 
     use super::*;
@@ -201,34 +175,6 @@ mod tests {
         assert_eq!(
             names(&["/a/src/main.rs", "/b/src/main.rs"]),
             ["main.rs<a/src>", "main.rs<b/src>"]
-        );
-    }
-
-    #[test]
-    fn listings_put_directories_first_and_dotfiles_last() {
-        let dir = tempfile::tempdir().unwrap();
-        for file in ["b.txt", "A.txt", ".hidden"] {
-            fs::write(dir.path().join(file), "").unwrap();
-        }
-        for subdir in ["zdir", ".git"] {
-            fs::create_dir(dir.path().join(subdir)).unwrap();
-        }
-
-        let entries = list_dir(dir.path()).unwrap();
-
-        let names: Vec<(&str, bool)> = entries
-            .iter()
-            .map(|entry| (entry.name.as_str(), entry.is_dir))
-            .collect();
-        assert_eq!(
-            names,
-            [
-                ("zdir", true),
-                (".git", true),
-                ("A.txt", false),
-                ("b.txt", false),
-                (".hidden", false),
-            ]
         );
     }
 }

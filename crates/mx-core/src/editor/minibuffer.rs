@@ -5,7 +5,7 @@ use strum::VariantArray;
 use crate::command::{Command, Scope};
 use crate::editor::Editor;
 use crate::editor::transfer::Kind;
-use crate::files::paths::DirEntry;
+use crate::files::Entry;
 use crate::text::Buffer;
 
 const LABEL_LIMIT: usize = 80;
@@ -45,9 +45,9 @@ impl Purpose {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct Listing {
+pub(super) struct PathListing {
     pub(super) directory: PathBuf,
-    pub(super) entries: Vec<DirEntry>,
+    pub(super) entries: Vec<Entry>,
 }
 
 #[derive(Debug)]
@@ -57,7 +57,7 @@ pub struct Minibuffer {
     pub(super) input: Buffer,
     pub(super) note: Option<String>,
     pub(super) selected: usize,
-    pub(super) listing: Option<Listing>,
+    pub(super) listing: Option<PathListing>,
     pub(super) sources: Vec<PathBuf>,
 }
 
@@ -315,14 +315,14 @@ fn file_completions(minibuffer: &Minibuffer) -> Vec<Completion> {
         .entries
         .iter()
         .enumerate()
-        .filter(|(_, entry)| entry.is_dir || !minibuffer.purpose.lists_only_directories())
+        .filter(|(_, entry)| entry.is_dir() || !minibuffer.purpose.lists_only_directories())
         .filter(|(_, entry)| {
-            let lower = entry.name.to_lowercase();
+            let lower = entry.display_name().to_lowercase();
             typed.split_whitespace().all(|term| lower.contains(term))
         })
         .map(|(index, entry)| {
-            let mut label = entry.name.clone();
-            if entry.is_dir {
+            let mut label = entry.display_name().into_owned();
+            if entry.is_dir() {
                 label.push(crate::files::paths::SEPARATOR);
             }
             let completion = Completion {
@@ -330,7 +330,7 @@ fn file_completions(minibuffer: &Minibuffer) -> Vec<Completion> {
                 annotation: None,
                 choice: Choice::Entry(index),
             };
-            (entry.name != name, completion)
+            (entry.display_name() != name, completion)
         })
         .collect();
     completions.sort_by_key(|(inexact, _)| *inexact);

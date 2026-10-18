@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 
 use jiff::{Timestamp, Zoned};
 
-use crate::dired::{Entry, Kind, Sort, human_size, ls_time, read_entries, sort};
+use crate::dired::{human_size, ls_time};
 use crate::display::LineStyle;
-use crate::files::paths;
+use crate::files::{Entry, Kind, Sort, paths, read_entries, sort};
 use crate::theme::Highlight;
 
 const TIME_WIDTH: usize = 12;

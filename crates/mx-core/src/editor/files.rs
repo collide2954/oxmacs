@@ -1,9 +1,9 @@
 use std::path::{self, Path, PathBuf};
 
 use crate::cli::Visit;
-use crate::editor::minibuffer::{Listing, Purpose};
+use crate::editor::minibuffer::{PathListing, Purpose};
 use crate::editor::{Choice, Editor};
-use crate::files::{self, paths};
+use crate::files::{self, Sort, paths};
 use crate::text::{Buffer, FileInfo};
 
 impl Editor {
@@ -56,9 +56,10 @@ impl Editor {
         {
             return;
         }
-        let entries = paths::list_dir(&directory).unwrap_or_default();
+        let mut entries = files::read_entries(&directory).unwrap_or_default();
+        files::sort(&mut entries, Sort::Name);
         if let Some(minibuffer) = &mut self.minibuffer {
-            minibuffer.listing = Some(Listing { directory, entries });
+            minibuffer.listing = Some(PathListing { directory, entries });
         }
     }
 
@@ -189,7 +190,7 @@ impl Editor {
         Some((
             completion.label,
             listing.directory.join(&entry.name),
-            entry.is_dir,
+            entry.is_dir(),
         ))
     }
 

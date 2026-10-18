@@ -4,11 +4,11 @@ use std::path::{Path, PathBuf};
 
 use jiff::Zoned;
 
-use crate::dired::{Listing, Mark, read_entries, sort};
+use crate::dired::{Listing, Mark};
 use crate::editor::buffers::Mode;
 use crate::editor::minibuffer::Purpose;
 use crate::editor::{Editor, Effect};
-use crate::files::{ops, paths};
+use crate::files::{ops, paths, read_entries, sort};
 use crate::text::Buffer;
 
 impl Editor {
