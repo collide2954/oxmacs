@@ -37,6 +37,7 @@ pub enum Command {
     MinibufferDeleteBackward,
     ExitMinibufferWithInput,
     FindFile,
+    SaveBuffer,
     KeyboardQuit,
     SaveBuffersKillMx,
 }

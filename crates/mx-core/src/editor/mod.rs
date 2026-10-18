@@ -308,6 +308,7 @@ impl Editor {
             Command::MinibufferDeleteBackward => self.minibuffer_delete_backward(),
             Command::ExitMinibufferWithInput => self.exit_minibuffer_with_input(),
             Command::FindFile => self.find_file(),
+            Command::SaveBuffer => self.save_buffer(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.quit_requested = true,
         }

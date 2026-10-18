@@ -175,6 +175,47 @@ impl Editor {
         }
     }
 
+    pub(super) fn save_buffer(&mut self) {
+        let buffer = self.buffers.current();
+        if buffer.file().is_none() {
+            self.show_message("Buffer is not visiting a file");
+        } else if !buffer.is_modified() {
+            self.show_message("(No changes need to be saved)");
+        } else {
+            self.save_buffer_at(0);
+        }
+    }
+
+    pub(super) fn save_buffer_at(&mut self, index: usize) -> bool {
+        let Some(buffer) = self.buffers.get(index) else {
+            return false;
+        };
+        let Some(file) = buffer.file() else {
+            return false;
+        };
+        let path = file.path.clone();
+        let format = file.format;
+        match files::save(&path, &buffer.contents(), format) {
+            Ok(disk) => {
+                if let Some(buffer) = self.buffers.get_mut(index) {
+                    buffer.set_file(FileInfo {
+                        path: path.clone(),
+                        format,
+                        disk: Some(disk),
+                    });
+                    buffer.mark_saved();
+                }
+                let shown = paths::abbreviate(&path, self.home.as_deref());
+                self.show_message(format!("Wrote {shown}"));
+                true
+            }
+            Err(error) => {
+                self.show_message(error.to_string());
+                false
+            }
+        }
+    }
+
     fn select_buffer(&mut self, index: usize) {
         self.buffers.select(index);
         self.after_buffer_switch();
@@ -398,6 +439,68 @@ mod tests {
 
         assert_eq!(input(&editor), format!("~{SEP}"));
         assert!(labels(&editor).contains(&"a.txt".to_owned()));
+    }
+
+    fn opened(dir: &tempfile::TempDir, name: &str) -> Editor {
+        let mut editor = Editor::new();
+        editor.set_home_directory(None);
+        editor.open_file(&dir.path().join(name));
+        editor
+    }
+
+    #[test]
+    fn save_writes_the_buffer_to_its_file() {
+        let (dir, _) = workspace();
+        let mut editor = opened(&dir, "a.txt");
+        type_text(&mut editor, "x");
+
+        press(&mut editor, "C-x C-s");
+
+        let path = dir.path().join("a.txt");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "xhello");
+        assert!(!editor.buffer().is_modified());
+        assert_eq!(
+            editor.message(),
+            Some(format!("Wrote {}", path.display()).as_str())
+        );
+    }
+
+    #[test]
+    fn saving_keeps_the_original_line_endings() {
+        let (dir, _) = workspace();
+        fs::write(dir.path().join("w.txt"), "one\r\n").unwrap();
+        let mut editor = opened(&dir, "w.txt");
+        type_text(&mut editor, "x");
+
+        press(&mut editor, "C-x C-s");
+
+        assert_eq!(fs::read(dir.path().join("w.txt")).unwrap(), b"xone\r\n");
+    }
+
+    #[test]
+    fn saving_an_unmodified_buffer_does_nothing() {
+        let (dir, _) = workspace();
+        let mut editor = opened(&dir, "a.txt");
+
+        press(&mut editor, "C-x C-s");
+
+        assert_eq!(editor.message(), Some("(No changes need to be saved)"));
+    }
+
+    #[test]
+    fn save_errors_are_reported_and_keep_the_buffer_modified() {
+        let (dir, _) = workspace();
+        let sub = dir.path().join("gone");
+        fs::create_dir(&sub).unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&sub.join("x.txt"));
+        type_text(&mut editor, "x");
+        fs::remove_dir(&sub).unwrap();
+
+        press(&mut editor, "C-x C-s");
+
+        assert!(editor.message().unwrap().contains("x.txt"));
+        assert!(editor.buffer().is_modified());
     }
 
     #[test]

@@ -9,6 +9,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 - `find-file` (`C-x C-f`) with a vertical directory list: typing filters, `TAB`/`RET` descend into directories, `DEL` after a separator goes up, `M-RET` uses the exact input; `~` abbreviates home.
 - Files open in their own buffers; LF/CRLF and UTF-8 BOMs are preserved, and invalid UTF-8 is refused.
 - Mode line shows `**` for unsaved changes, `--` otherwise, and `CRLF` for Windows line endings.
+- `save-buffer` (`C-x C-s`) writes atomically, keeping permissions and the original line endings.
 
 ## [0.6.0] - 2026-10-18
 

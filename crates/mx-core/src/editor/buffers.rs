@@ -20,6 +20,14 @@ impl BufferList {
         &mut self.buffers[0]
     }
 
+    pub(super) fn get(&self, index: usize) -> Option<&Buffer> {
+        self.buffers.get(index)
+    }
+
+    pub(super) fn get_mut(&mut self, index: usize) -> Option<&mut Buffer> {
+        self.buffers.get_mut(index)
+    }
+
     pub(super) fn iter(&self) -> impl Iterator<Item = &Buffer> {
         self.buffers.iter()
     }
