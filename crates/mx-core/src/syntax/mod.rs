@@ -64,7 +64,10 @@ impl Language {
     }
 
     pub fn supports(self, feature: Feature) -> bool {
-        matches!((self, feature), (Self::Rust, Feature::Highlighting))
+        matches!(
+            (self, feature),
+            (Self::Rust, Feature::Highlighting | Feature::Indentation)
+        )
     }
     pub fn for_path(path: &Path) -> Option<Self> {
         let extension = path.extension()?.to_str()?;

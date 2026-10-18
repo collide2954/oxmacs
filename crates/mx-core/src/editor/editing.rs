@@ -6,6 +6,7 @@ impl Editor {
     pub(super) fn self_insert(&mut self) {
         if let Some(KeyCode::Char(c)) = self.last_key.map(Key::code) {
             self.insert_over_selection(c.encode_utf8(&mut [0; 4]));
+            self.reindent_after(c);
         }
     }
 
@@ -46,7 +47,7 @@ impl Editor {
         });
     }
 
-    fn delete_selection(&mut self) -> bool {
+    pub(super) fn delete_selection(&mut self) -> bool {
         self.shift_selection = false;
         let buffer = self.current_mut();
         let selection = buffer.selection();

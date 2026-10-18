@@ -4,6 +4,8 @@ use crate::input::{KeySequence, Keymap};
 const GLOBAL: &[(&str, Command)] = &[
     ("RET", Command::Newline),
     ("C-j", Command::Newline),
+    ("TAB", Command::IndentForTabCommand),
+    ("C-M-\\", Command::IndentRegion),
     ("C-d", Command::DeleteChar),
     ("<delete>", Command::DeleteChar),
     ("DEL", Command::DeleteBackwardChar),

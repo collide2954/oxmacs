@@ -5,6 +5,8 @@ use strum::{EnumString, IntoStaticStr, VariantArray};
 pub enum Command {
     SelfInsertCommand,
     Newline,
+    IndentForTabCommand,
+    IndentRegion,
     DeleteChar,
     DeleteBackwardChar,
     DeleteLine,
@@ -122,6 +124,8 @@ impl Command {
             self,
             Self::SelfInsertCommand
                 | Self::Newline
+                | Self::IndentForTabCommand
+                | Self::IndentRegion
                 | Self::DeleteChar
                 | Self::DeleteBackwardChar
                 | Self::DeleteLine

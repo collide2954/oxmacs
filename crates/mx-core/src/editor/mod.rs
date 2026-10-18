@@ -6,6 +6,7 @@ mod doctor;
 mod editing;
 mod effect;
 mod files;
+mod indent;
 mod isearch;
 mod minibuffer;
 mod modes;
@@ -422,7 +423,9 @@ impl Editor {
     fn perform(&mut self, command: Command, goal_column: Option<usize>, previous: Option<Command>) {
         match command {
             Command::SelfInsertCommand => self.self_insert(),
-            Command::Newline => self.insert_over_selection("\n"),
+            Command::Newline => self.newline(),
+            Command::IndentForTabCommand => self.indent_for_tab(),
+            Command::IndentRegion => self.indent_region(),
             Command::DeleteChar => self.delete_char(true),
             Command::DeleteBackwardChar => self.delete_char(false),
             Command::DeleteLine => self.delete_line(),
