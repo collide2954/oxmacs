@@ -1,9 +1,22 @@
+use std::path::PathBuf;
+
 use crate::config::OnDiskChange;
 use crate::editor::Editor;
 use crate::files::{self, DiskState, paths};
 use crate::text::{Buffer, FileInfo};
 
 impl Editor {
+    pub fn visited_files(&self) -> Vec<PathBuf> {
+        let mut files: Vec<PathBuf> = self
+            .buffers
+            .iter()
+            .filter_map(|buffer| buffer.file().map(|file| file.path.clone()))
+            .collect();
+        files.sort();
+        files.dedup();
+        files
+    }
+
     pub fn check_disk_changes(&mut self) {
         if self.on_disk_change == OnDiskChange::Ignore {
             return;
@@ -345,6 +358,17 @@ mod tests {
 
         assert_eq!(question(&editor), None);
         assert_eq!(fs::read_to_string(&path).unwrap(), "xold");
+    }
+
+    #[test]
+    fn visited_files_are_listed_once_in_order() {
+        let (dir, a, mut editor) = opened("a");
+        let b = dir.path().join("b.txt");
+        fs::write(&b, "b").unwrap();
+        editor.open_file(&b);
+        editor.open_file(&a);
+
+        assert_eq!(editor.visited_files(), [a, b]);
     }
 
     #[test]
