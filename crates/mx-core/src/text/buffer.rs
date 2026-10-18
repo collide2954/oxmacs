@@ -299,6 +299,15 @@ impl Buffer {
         self.text.slice(start..end).to_string()
     }
 
+    pub fn set_text(&mut self, text: &str) {
+        self.text = Rope::from_str(text);
+        self.history = History::default();
+        self.saved = self.history.current();
+        let len = self.len_chars();
+        self.point = self.point.min(len);
+        self.mark = self.mark.map(|mark| mark.min(len));
+    }
+
     pub fn replace_text(&mut self, text: &str) {
         let old = self.contents();
         let prefix = old
@@ -415,6 +424,22 @@ mod tests {
 
         buffer.replace_text("abc");
 
+        assert!(!buffer.is_modified());
+        assert!(!buffer.undo());
+    }
+
+    #[test]
+    fn setting_text_replaces_it_without_history() {
+        let mut buffer = Buffer::with_text("t", "hello world");
+        buffer.insert("x");
+        buffer.set_point(10);
+        buffer.set_mark(11);
+
+        buffer.set_text("short");
+
+        assert_eq!(buffer.contents(), "short");
+        assert_eq!(buffer.point(), 5);
+        assert_eq!(buffer.mark(), Some(5));
         assert!(!buffer.is_modified());
         assert!(!buffer.undo());
     }
