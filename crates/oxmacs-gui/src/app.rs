@@ -31,8 +31,10 @@ use crate::{animation, completions, echo_area, fonts, style, ticker, units, watc
 pub struct App {
     editor: Editor,
     font: Font,
+    family: Option<String>,
     text_size: f32,
     animations: bool,
+    reduced_motion: bool,
     blink_interval: Duration,
     last_input: Instant,
     now: Instant,
@@ -77,29 +79,24 @@ impl App {
             Config::default()
         });
         editor.apply_config(&config);
-        editor.set_font_note(
-            config
-                .font_family
-                .clone()
-                .unwrap_or_else(|| format!("{} (bundled)", fonts::EDITOR_FAMILY)),
-        );
-        let font = config
-            .font_family
-            .map_or(fonts::EDITOR, |family| Font::with_name(family.leak()));
-        Self {
+        let mut app = Self {
             editor,
-            font,
+            font: fonts::EDITOR,
+            family: None,
             text_size: points_to_pixels(config.font_size),
             animations: config.animations,
+            reduced_motion: false,
             blink_interval: Duration::from_millis(config.cursor_blink_interval),
             last_input: Instant::now(),
             now: Instant::now(),
             theme_fade: None,
             reveal: transition(false, animation::REVEAL),
-            clock: config.clock.then_some(config.clock_format),
+            clock: None,
             previews: Vec::new(),
             jobs: Vec::new(),
-        }
+        };
+        app.configure(&config);
+        app
     }
 
     pub fn boot(visits: &[Visit]) -> (Self, Task<Message>) {
@@ -108,8 +105,29 @@ impl App {
         let splash = config.as_ref().map_or(true, |config| config.splash);
         let mut app = Self::new(config);
         app.start(visits, splash);
-        app.animations = animations_enabled(app.animations, prefers_reduced_motion());
+        app.reduced_motion = prefers_reduced_motion();
+        app.configure(&app.editor.config().clone());
         (app, system::theme().map(Message::AppearanceChanged))
+    }
+
+    fn configure(&mut self, config: &Config) {
+        if self.family != config.font_family {
+            self.family.clone_from(&config.font_family);
+            self.font = config
+                .font_family
+                .clone()
+                .map_or(fonts::EDITOR, |family| Font::with_name(family.leak()));
+        }
+        self.editor.set_font_note(
+            config
+                .font_family
+                .clone()
+                .unwrap_or_else(|| format!("{} (bundled)", fonts::EDITOR_FAMILY)),
+        );
+        self.text_size = points_to_pixels(config.font_size);
+        self.animations = animations_enabled(config.animations, self.reduced_motion);
+        self.blink_interval = Duration::from_millis(config.cursor_blink_interval);
+        self.clock = config.clock.then(|| config.clock_format.clone());
     }
 
     pub fn start(&mut self, visits: &[Visit], splash: bool) {
@@ -341,6 +359,11 @@ impl App {
                 if let Some((_, killer)) = self.jobs.iter().find(|(id, _)| *id == job) {
                     killer.kill();
                 }
+                Task::none()
+            }
+            Effect::Reconfigure => {
+                let config = self.editor.config().clone();
+                self.configure(&config);
                 Task::none()
             }
         }
@@ -780,6 +803,29 @@ mod tests {
 
         let config = Config::parse("animations = false").unwrap();
         assert!(!App::new(Ok(config)).animations());
+    }
+
+    #[test]
+    fn reconfiguring_updates_the_view_settings() {
+        let mut app = App::default();
+
+        app.configure(&Config::parse("font-size = 12\nclock = false\nanimations = false").unwrap());
+
+        assert!((app.text_size() - 16.0).abs() < f32::EPSILON);
+        assert_eq!(app.clock_format(), None);
+        assert!(!app.animations());
+    }
+
+    #[test]
+    fn reduced_motion_outlasts_reconfiguring() {
+        let mut app = App {
+            reduced_motion: true,
+            ..App::default()
+        };
+
+        app.configure(&Config::default());
+
+        assert!(!app.animations());
     }
 
     #[test]

@@ -12,6 +12,7 @@ pub enum Effect {
     OpenExternally(PathBuf),
     Spawn(Job),
     Kill(JobId),
+    Reconfigure,
 }
 
 impl Editor {

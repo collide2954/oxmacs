@@ -2,6 +2,7 @@ mod buffers;
 mod clipboard;
 mod comments;
 mod compile;
+mod customize;
 mod dired;
 mod disk;
 mod doctor;
@@ -132,6 +133,7 @@ pub struct Editor {
     next_job: u64,
     last_compile: Option<String>,
     lints: lint::Lints,
+    config: Config,
 }
 
 impl Default for Editor {
@@ -194,6 +196,7 @@ impl Editor {
             next_job: 0,
             last_compile: None,
             lints: lint::Lints::default(),
+            config: Config::default(),
         }
     }
 
@@ -202,6 +205,7 @@ impl Editor {
         self.on_disk_change = config.on_disk_change;
         self.settings = Settings::from(config);
         self.configured_theme = config.theme.as_deref().and_then(theme::find);
+        self.config = config.clone();
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
