@@ -29,6 +29,8 @@ pub static ADWAITA: Theme = Theme {
     symlink: Color::hex(0x0B_6E_6E),
     marked: Color::hex(0xF6_E5_A8),
     flagged: Color::hex(0xF6_C9_CC),
+    search_match: Color::hex(0xF9_F0_6B),
+    search_current: Color::hex(0xFF_A3_48),
 };
 
 pub static ADWAITA_DARK: Theme = Theme {
@@ -60,4 +62,6 @@ pub static ADWAITA_DARK: Theme = Theme {
     symlink: Color::hex(0x93_DD_C2),
     marked: Color::hex(0x4D_44_22),
     flagged: Color::hex(0x5C_2A_2E),
+    search_match: Color::hex(0x5C_54_20),
+    search_current: Color::hex(0x9C_3C_00),
 };

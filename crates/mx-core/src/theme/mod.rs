@@ -36,6 +36,8 @@ pub struct Theme {
     pub symlink: Color,
     pub marked: Color,
     pub flagged: Color,
+    pub search_match: Color,
+    pub search_current: Color,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -45,6 +47,8 @@ pub enum Highlight {
     Symlink,
     Marked,
     Flagged,
+    SearchMatch,
+    SearchCurrent,
 }
 
 impl Face {
@@ -79,6 +83,8 @@ impl Theme {
             symlink: self.symlink.mix(other.symlink, amount),
             marked: self.marked.mix(other.marked, amount),
             flagged: self.flagged.mix(other.flagged, amount),
+            search_match: self.search_match.mix(other.search_match, amount),
+            search_current: self.search_current.mix(other.search_current, amount),
         }
     }
 
@@ -89,6 +95,8 @@ impl Theme {
             Highlight::Symlink => self.symlink,
             Highlight::Marked => self.marked,
             Highlight::Flagged => self.flagged,
+            Highlight::SearchMatch => self.search_match,
+            Highlight::SearchCurrent => self.search_current,
         }
     }
 }
@@ -158,14 +166,21 @@ mod tests {
                     .contrast_ratio(theme.default.background);
                 assert!(ratio >= 4.5, "{} {highlight:?}: {ratio:.2}", theme.name);
             }
-            for highlight in [Highlight::Marked, Highlight::Flagged] {
+            for highlight in [
+                Highlight::Marked,
+                Highlight::Flagged,
+                Highlight::SearchMatch,
+                Highlight::SearchCurrent,
+            ] {
                 let ratio = theme
                     .default
                     .foreground
                     .contrast_ratio(theme.highlight(highlight));
                 assert!(ratio >= 4.5, "{} {highlight:?}: {ratio:.2}", theme.name);
                 assert_ne!(theme.highlight(highlight), theme.default.background);
+                assert_ne!(theme.highlight(highlight), theme.region);
             }
+            assert_ne!(theme.search_match, theme.search_current);
         }
     }
 
