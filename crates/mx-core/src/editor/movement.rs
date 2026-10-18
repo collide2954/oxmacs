@@ -16,6 +16,14 @@ impl Editor {
         buffer.set_point(target);
         self.goal_column = Some(goal);
     }
+
+    pub(super) fn go_to_line(&mut self, line: usize, column: usize) {
+        let buffer = self.buffers.current_mut();
+        let line = line.saturating_sub(1);
+        let target = buffer.line_start(line) + column.saturating_sub(1);
+        buffer.set_point(target.min(buffer.line_end(line)));
+        self.viewport.reveal(self.point_line());
+    }
 }
 
 #[cfg(test)]

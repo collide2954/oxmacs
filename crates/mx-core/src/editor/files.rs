@@ -1,5 +1,6 @@
 use std::path::{self, Path, PathBuf};
 
+use crate::cli::Visit;
 use crate::editor::minibuffer::{Listing, Purpose};
 use crate::editor::{Choice, Editor};
 use crate::files::{self, paths};
@@ -193,7 +194,15 @@ impl Editor {
         self.buffers.iter().map(Buffer::name).collect()
     }
 
-    pub fn open_file(&mut self, path: &Path) {
+    pub fn visit(&mut self, visit: &Visit) {
+        if self.open_file(&visit.path)
+            && let Some(line) = visit.line
+        {
+            self.go_to_line(line, visit.column.unwrap_or(1));
+        }
+    }
+
+    pub fn open_file(&mut self, path: &Path) -> bool {
         let joined = self.default_directory().join(path);
         let path = path::absolute(&joined).unwrap_or(joined);
         if let Some(index) = self
@@ -201,7 +210,7 @@ impl Editor {
             .position(|buffer| buffer.file().is_some_and(|file| file.path == path))
         {
             self.select_buffer(index);
-            return;
+            return true;
         }
         match files::load(&path) {
             Ok(loaded) => {
@@ -215,8 +224,12 @@ impl Editor {
                 if loaded.disk.is_none() {
                     self.show_message("(New file)");
                 }
+                true
             }
-            Err(error) => self.show_message(error.to_string()),
+            Err(error) => {
+                self.show_message(error.to_string());
+                false
+            }
         }
     }
 
@@ -267,6 +280,7 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
+    use crate::cli::Visit;
     use crate::editor::Editor;
     use crate::editor::test_support::{press, type_text};
 
@@ -661,6 +675,50 @@ mod tests {
             editor.buffer_names(),
             ["main.rs<y>", "main.rs<x>", "*scratch*"]
         );
+    }
+
+    fn visit(path: PathBuf, line: Option<usize>, column: Option<usize>) -> Visit {
+        Visit { path, line, column }
+    }
+
+    #[test]
+    fn visiting_goes_to_the_given_line_and_column() {
+        let (dir, mut editor) = workspace();
+        let path = dir.path().join("lines.txt");
+        fs::write(&path, "one\ntwo\nthree").unwrap();
+
+        editor.visit(&visit(path.clone(), Some(2), Some(3)));
+        assert_eq!(editor.buffer().name(), "lines.txt");
+        assert_eq!(editor.buffer().point(), 6);
+
+        editor.visit(&visit(path, Some(3), None));
+        assert_eq!(editor.buffer().point(), 8);
+    }
+
+    #[test]
+    fn visiting_clamps_the_position_to_the_text() {
+        let (dir, mut editor) = workspace();
+        let path = dir.path().join("lines.txt");
+        fs::write(&path, "one\ntwo").unwrap();
+
+        editor.visit(&visit(path.clone(), Some(1), Some(99)));
+        assert_eq!(editor.buffer().point(), 3);
+
+        editor.visit(&visit(path.clone(), Some(99), Some(1)));
+        assert_eq!(editor.buffer().point(), 4);
+
+        editor.visit(&visit(path, Some(0), Some(0)));
+        assert_eq!(editor.buffer().point(), 0);
+    }
+
+    #[test]
+    fn a_failed_visit_leaves_point_alone() {
+        let (dir, mut editor) = workspace();
+        editor.paste(Some("a\nb".to_owned()));
+
+        editor.visit(&visit(dir.path().to_owned(), Some(1), None));
+
+        assert_eq!(editor.buffer().point(), 3);
     }
 
     #[test]
