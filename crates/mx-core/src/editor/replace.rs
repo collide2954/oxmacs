@@ -45,22 +45,34 @@ impl Editor {
     }
 
     pub(super) fn query_replace(&mut self, regex: bool) {
-        let prompt = if regex {
-            "Query replace regexp: "
-        } else {
-            "Query replace: "
-        };
-        self.open_minibuffer(prompt, Purpose::ReplaceFrom(regex));
+        let default = self.last_replacements[usize::from(regex)]
+            .as_ref()
+            .map(|(from, to)| format!(" (default {from} → {to})"))
+            .unwrap_or_default();
+        let kind = if regex { " regexp" } else { "" };
+        self.open_minibuffer(
+            &format!("Query replace{kind}{default}: "),
+            Purpose::ReplaceFrom(regex),
+        );
     }
 
     pub(super) fn exit_replace_prompt(&mut self, purpose: Purpose) {
         let input = self.minibuffer_input();
         match purpose {
+            Purpose::ReplaceFrom(regex) if input.is_empty() => {
+                self.minibuffer = None;
+                if let Some((from, to)) = self.last_replacements[usize::from(regex)].clone() {
+                    self.start_replace(from, to, regex);
+                }
+            }
+            Purpose::ReplaceFrom(regex) if Pattern::new(&input, regex).is_err() => {
+                if let Some(minibuffer) = &mut self.minibuffer {
+                    minibuffer.note = Some("[Invalid regexp]".to_owned());
+                }
+            }
             Purpose::ReplaceFrom(regex) => {
                 self.minibuffer = None;
-                if !input.is_empty() {
-                    self.ask_replacement(input, regex);
-                }
+                self.ask_replacement(input, regex);
             }
             Purpose::ReplaceTo(regex) => {
                 let from = self
@@ -88,9 +100,10 @@ impl Editor {
             return;
         };
         self.shift_selection = false;
+        self.last_replacements[usize::from(regex)] = Some((from.clone(), to.clone()));
         let buffer = self.buffers.current_mut();
         let origin = buffer.point();
-        let scope = origin..buffer.len_chars();
+        let scope = buffer.selection().unwrap_or(origin..buffer.len_chars());
         buffer.set_mark(origin);
         buffer.deactivate_mark();
         buffer.close_undo_step();
@@ -449,6 +462,61 @@ mod tests {
 
         assert_eq!(editor.buffer().contents(), "foo x bar");
         assert_eq!(editor.buffer().mark(), Some(2));
+    }
+
+    #[test]
+    fn an_active_selection_limits_the_replacing() {
+        let mut editor = editor_with("foo foo foo", 0);
+        press(&mut editor, "C-SPC M-f M-f M-%");
+        type_text(&mut editor, "foo");
+        press(&mut editor, "RET");
+        type_text(&mut editor, "bar");
+
+        press(&mut editor, "RET !");
+
+        assert_eq!(editor.buffer().contents(), "bar bar foo");
+        assert_eq!(editor.buffer().selection(), None);
+    }
+
+    #[test]
+    fn regexp_replacements_expand_groups() {
+        let mut editor = editor_with("a1 b2", 0);
+        press(&mut editor, "C-M-%");
+        assert_eq!(prompt(&editor), "Query replace regexp: ");
+        type_text(&mut editor, r"(\w)(\d)");
+        press(&mut editor, "RET");
+        assert_eq!(prompt(&editor), r"Query replace regexp (\w)(\d) with: ");
+        type_text(&mut editor, r"\2\1");
+
+        press(&mut editor, "RET !");
+
+        assert_eq!(editor.buffer().contents(), "1a 2b");
+    }
+
+    #[test]
+    fn invalid_regexps_are_refused_with_a_note() {
+        let mut editor = editor_with("(", 0);
+
+        press(&mut editor, "C-M-% ( RET");
+
+        let minibuffer = editor.minibuffer().unwrap();
+        assert_eq!(minibuffer.prompt(), "Query replace regexp: ");
+        assert_eq!(minibuffer.note(), Some("[Invalid regexp]"));
+    }
+
+    #[test]
+    fn the_last_pair_is_the_default() {
+        let mut editor = replacing("foo foo", 0, "foo", "bar");
+        press(&mut editor, "q M-<");
+
+        press(&mut editor, "M-%");
+        assert_eq!(prompt(&editor), "Query replace (default foo → bar): ");
+
+        press(&mut editor, "RET");
+        assert_eq!(
+            editor.replacing().unwrap().prompt(),
+            "Query replacing foo with bar: (y, n, !, ., ^, q) "
+        );
     }
 
     #[test]
