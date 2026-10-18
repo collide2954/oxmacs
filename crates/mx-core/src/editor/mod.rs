@@ -32,7 +32,7 @@ use dired::Kind;
 use crate::command::{Command, Scope};
 use crate::config::{Config, OnDiskChange};
 use crate::dired::Mark;
-use crate::display::{self, LineStyle, Viewport};
+use crate::display::{self, Layout, LineStyle, Viewport};
 use crate::files::LineEnding;
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::text::{Buffer, motion};
@@ -107,7 +107,7 @@ impl Editor {
             message: None,
             quit_requested: false,
             question: None,
-            viewport: Viewport::new(DEFAULT_ROWS),
+            viewport: Viewport::new(DEFAULT_ROWS, 0),
             tab_width: Config::default().tab_width,
             on_disk_change: OnDiskChange::default(),
             delete_to_trash: Config::default().delete_to_trash,
@@ -154,8 +154,27 @@ impl Editor {
         &self.viewport
     }
 
-    pub fn resize_window(&mut self, rows: usize) {
-        self.viewport.resize(rows, self.point_line());
+    pub fn resize_window(&mut self, rows: usize, columns: usize) {
+        self.viewport.resize(rows, columns);
+        self.reveal_point();
+    }
+
+    pub(super) fn layout(&self) -> Layout<'_> {
+        Layout::new(
+            self.buffers.current(),
+            self.viewport.wrap_width(),
+            self.tab_width,
+        )
+    }
+
+    pub(super) fn reveal_point(&mut self) {
+        let layout = Layout::new(
+            self.buffers.current(),
+            self.viewport.wrap_width(),
+            self.tab_width,
+        );
+        let spot = layout.screen_line(self.buffers.current().point());
+        self.viewport.reveal(spot, &layout);
     }
 
     fn point_line(&self) -> usize {
@@ -423,7 +442,7 @@ impl Editor {
         }
         self.reset_selection(command);
         self.refresh_minibuffer();
-        self.viewport.reveal(self.point_line());
+        self.reveal_point();
     }
 }
 
@@ -577,28 +596,42 @@ mod tests {
     #[test]
     fn moving_point_out_of_the_window_scrolls_it() {
         let mut editor = editor_with(&numbered_lines(30), 0);
-        editor.resize_window(10);
+        editor.resize_window(10, 0);
 
         press(&mut editor, "M->");
-        assert_eq!(editor.viewport().top(), 24);
+        assert_eq!(editor.viewport().top().line, 24);
 
         press(&mut editor, "M-<");
-        assert_eq!(editor.viewport().top(), 0);
+        assert_eq!(editor.viewport().top().line, 0);
+    }
+
+    #[test]
+    fn point_below_the_window_recenters_by_screen_rows() {
+        let mut editor = editor_with(&"x".repeat(40), 0);
+        editor.resize_window(4, 5);
+
+        press(&mut editor, "M->");
+
+        assert_eq!(
+            editor.viewport().top(),
+            display::ScreenLine { line: 0, row: 7 }
+        );
     }
 
     #[test]
     fn resizing_the_window_keeps_point_visible() {
         let mut editor = editor_with(&numbered_lines(30), 0);
-        editor.resize_window(20);
+        editor.resize_window(20, 0);
         press(
             &mut editor,
             "C-n C-n C-n C-n C-n C-n C-n C-n C-n C-n C-n C-n",
         );
-        assert_eq!(editor.viewport().top(), 0);
+        assert_eq!(editor.viewport().top().line, 0);
 
-        editor.resize_window(5);
+        editor.resize_window(5, 0);
 
-        assert!(editor.viewport().lines().contains(&12));
+        let top = editor.viewport().top().line;
+        assert!((top..top + 5).contains(&12));
     }
 
     #[test]

@@ -239,7 +239,14 @@ mod tests {
         let mut editor = shown();
         let line = line_of(&editor, "C-x b");
 
-        editor.click(Cell { line, column: 20 }, Clicks::Single, false);
+        editor.click(
+            Cell {
+                row: line,
+                column: 20,
+            },
+            Clicks::Single,
+            false,
+        );
 
         assert_eq!(editor.minibuffer().unwrap().prompt(), "Switch to buffer: ");
     }
@@ -248,7 +255,7 @@ mod tests {
     fn clicking_elsewhere_only_moves_point() {
         let mut editor = shown();
 
-        editor.click(Cell { line: 2, column: 5 }, Clicks::Single, false);
+        editor.click(Cell { row: 2, column: 5 }, Clicks::Single, false);
 
         assert!(editor.minibuffer().is_none());
         assert_eq!(editor.buffer().line_of(editor.buffer().point()), 2);

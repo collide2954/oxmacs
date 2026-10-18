@@ -1,6 +1,6 @@
-use crate::display;
+use crate::display::{self, Layout};
 use crate::editor::Editor;
-use crate::text::{Buffer, motion};
+use crate::text::Buffer;
 
 pub(super) fn display_column(buffer: &Buffer, point: usize, tab_width: usize) -> usize {
     let line = buffer.line_text(buffer.line_of(point));
@@ -15,11 +15,23 @@ impl Editor {
     }
 
     pub(super) fn move_vertically(&mut self, lines: isize, goal_column: Option<usize>) {
+        let width = if self.minibuffer.is_some() {
+            0
+        } else {
+            self.viewport.wrap_width()
+        };
         let tab_width = self.tab_width;
         let buffer = self.current_mut();
+        let layout = Layout::new(buffer, width, tab_width);
         let point = buffer.point();
-        let goal = goal_column.unwrap_or_else(|| display_column(buffer, point, tab_width));
-        let target = motion::vertical(buffer, point, lines, goal, tab_width);
+        let from = layout.screen_line(point);
+        let goal = goal_column.unwrap_or_else(|| layout.column(point));
+        let to = layout.step(from, lines);
+        let target = match to == from {
+            true if lines < 0 => 0,
+            true => buffer.len_chars(),
+            false => layout.position_at(to, goal),
+        };
         buffer.set_point(target);
         self.goal_column = Some(goal);
     }
@@ -29,13 +41,24 @@ impl Editor {
         let line = line.saturating_sub(1);
         let target = buffer.line_start(line) + column.saturating_sub(1);
         buffer.set_point(target.min(buffer.line_end(line)));
-        self.viewport.reveal(self.point_line());
+        self.reveal_point();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::editor::test_support::point_after;
+
+    #[test]
+    fn line_motion_moves_by_screen_rows_on_wrapped_lines() {
+        let mut editor = crate::editor::test_support::editor_with("abcdefghij\nxy", 1);
+        editor.resize_window(10, 5);
+
+        for (keys, expected) in [("C-n", 5), ("C-n", 9), ("C-n", 12), ("C-p", 9), ("C-p", 5)] {
+            crate::editor::test_support::press(&mut editor, keys);
+            assert_eq!(editor.buffer().point(), expected, "{keys}");
+        }
+    }
 
     #[test]
     fn char_motions() {

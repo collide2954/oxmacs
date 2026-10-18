@@ -124,7 +124,7 @@ impl App {
 
     fn handle_view_event(&mut self, event: ViewEvent) {
         match event {
-            ViewEvent::RowsChanged(rows) => self.editor.resize_window(rows),
+            ViewEvent::RowsChanged(rows) => self.editor.resize_window(rows, 0),
             ViewEvent::FontNotMonospaced => self.reject_font(),
             ViewEvent::Pressed {
                 cell,
@@ -665,12 +665,12 @@ mod tests {
         view_event(
             &mut app,
             ViewEvent::Pressed {
-                cell: Cell { line: 0, column: 1 },
+                cell: Cell { row: 0, column: 1 },
                 clicks: Clicks::Single,
                 extend: false,
             },
         );
-        view_event(&mut app, ViewEvent::Dragged(Cell { line: 0, column: 3 }));
+        view_event(&mut app, ViewEvent::Dragged(Cell { row: 0, column: 3 }));
 
         assert_eq!(app.editor().buffer().selection(), Some(1..3));
     }
@@ -684,7 +684,7 @@ mod tests {
 
         view_event(&mut app, ViewEvent::Scrolled(3));
 
-        assert_eq!(app.editor().viewport().top(), 3);
+        assert_eq!(app.editor().viewport().top().line, 3);
     }
 
     #[test]

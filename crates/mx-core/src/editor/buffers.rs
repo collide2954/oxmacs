@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::dired::Listing;
-use crate::display::Viewport;
+use crate::display::{ScreenLine, Viewport};
 use crate::editor::minibuffer::Purpose;
 use crate::editor::splash::Splash;
 use crate::editor::{Choice, Completion, Editor};
@@ -20,7 +20,7 @@ pub(super) enum Mode {
 #[derive(Debug)]
 struct Entry {
     buffer: Buffer,
-    top: usize,
+    top: ScreenLine,
     mode: Mode,
 }
 
@@ -34,7 +34,7 @@ impl BufferList {
         Self {
             entries: vec![Entry {
                 buffer,
-                top: 0,
+                top: ScreenLine::default(),
                 mode: Mode::Text,
             }],
         }
@@ -92,11 +92,11 @@ impl BufferList {
         &mut self.entries[0].buffer
     }
 
-    pub(super) fn top(&self) -> usize {
+    pub(super) fn top(&self) -> ScreenLine {
         self.entries[0].top
     }
 
-    pub(super) fn set_top(&mut self, top: usize) {
+    pub(super) fn set_top(&mut self, top: ScreenLine) {
         self.entries[0].top = top;
     }
 
@@ -125,7 +125,7 @@ impl BufferList {
             0,
             Entry {
                 buffer,
-                top: 0,
+                top: ScreenLine::default(),
                 mode,
             },
         );
@@ -134,7 +134,7 @@ impl BufferList {
     pub(super) fn replace_current(&mut self, buffer: Buffer, mode: Mode) {
         self.entries[0] = Entry {
             buffer,
-            top: 0,
+            top: ScreenLine::default(),
             mode,
         };
     }
@@ -256,9 +256,9 @@ impl Editor {
     }
 
     pub(super) fn after_buffer_switch(&mut self) {
-        self.viewport = Viewport::new(self.viewport.rows());
+        self.viewport = Viewport::new(self.viewport.rows(), self.viewport.columns());
         self.viewport.set_top(self.buffers.top());
-        self.viewport.reveal(self.point_line());
+        self.reveal_point();
         self.goal_column = None;
         self.shift_selection = false;
         self.last_command = None;
@@ -364,16 +364,16 @@ mod tests {
     #[test]
     fn switching_back_restores_the_view() {
         let mut editor = editor_with_buffers(&["a", "b"]);
-        editor.resize_window(10);
+        editor.resize_window(10, 0);
         editor.paste(Some("x\n".repeat(100)));
         press(&mut editor, "C-p C-p C-p");
-        let top = editor.viewport().top();
+        let top = editor.viewport().top().line;
 
         press(&mut editor, "C-x b RET");
-        assert_eq!(editor.viewport().top(), 0);
+        assert_eq!(editor.viewport().top().line, 0);
         press(&mut editor, "C-x b RET");
 
-        assert_eq!(editor.viewport().top(), top);
+        assert_eq!(editor.viewport().top().line, top);
         assert_eq!(editor.buffer().line_of(editor.buffer().point()), 97);
     }
 
@@ -464,15 +464,15 @@ mod tests {
     #[test]
     fn killing_the_current_buffer_restores_the_next_ones_view() {
         let mut editor = editor_with_buffers(&["a", "b"]);
-        editor.resize_window(10);
+        editor.resize_window(10, 0);
         editor.paste(Some("x\n".repeat(100)));
         press(&mut editor, "C-p C-p C-p");
-        let top = editor.viewport().top();
+        let top = editor.viewport().top().line;
         press(&mut editor, "C-x b RET");
 
         press(&mut editor, "C-x k RET");
 
         assert_eq!(editor.buffer().name(), "a");
-        assert_eq!(editor.viewport().top(), top);
+        assert_eq!(editor.viewport().top().line, top);
     }
 }

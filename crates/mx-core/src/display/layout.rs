@@ -1,4 +1,4 @@
-use crate::display::{Row, wrap};
+use crate::display::{Row, char_at_column, display_column, wrap};
 use crate::text::Buffer;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -38,8 +38,39 @@ impl<'a> Layout<'a> {
         ScreenLine { line, row }
     }
 
+    pub fn column(&self, position: usize) -> usize {
+        let spot = self.screen_line(position);
+        let text = self.buffer.line_text(spot.line);
+        let index = position.min(self.buffer.len_chars()) - self.buffer.line_start(spot.line);
+        let start = self.rows(spot.line)[spot.row].column;
+        display_column(&text, index, self.tab_width) - start
+    }
+
+    pub fn position_at(&self, spot: ScreenLine, column: usize) -> usize {
+        let spot = self.step(spot, 0);
+        let rows = self.rows(spot.line);
+        let row = &rows[spot.row];
+        let text = self.buffer.line_text(spot.line);
+        let index = char_at_column(&text, row.column + column, self.tab_width);
+        let last = if spot.row + 1 == rows.len() {
+            row.chars.end
+        } else {
+            row.chars.end - 1
+        };
+        self.buffer.line_start(spot.line) + index.clamp(row.chars.start, last)
+    }
+
     pub fn step(&self, from: ScreenLine, delta: isize) -> ScreenLine {
-        let mut at = from;
+        let line = from.line.min(self.buffer.len_lines() - 1);
+        let last = self.rows(line).len() - 1;
+        let mut at = ScreenLine {
+            line,
+            row: if line == from.line {
+                from.row.min(last)
+            } else {
+                last
+            },
+        };
         let mut remaining = delta.unsigned_abs();
         if delta >= 0 {
             loop {
@@ -146,6 +177,36 @@ mod tests {
         assert_eq!(layout.distance(at(0, 1), at(1, 0), 10), Some(2));
         assert_eq!(layout.distance(at(1, 0), at(0, 1), 10), Some(-2));
         assert_eq!(layout.distance(at(0, 0), at(2, 2), 3), None);
+    }
+
+    #[test]
+    fn columns_are_counted_from_the_start_of_the_row() {
+        let buffer = buffer();
+        let layout = Layout::new(&buffer, 3, 8);
+
+        assert_eq!(layout.column(4), 1);
+        assert_eq!(layout.column(8), 2);
+        assert_eq!(layout.column(13), 0);
+    }
+
+    #[test]
+    fn positions_come_from_a_screen_line_and_a_column() {
+        let buffer = buffer();
+        let layout = Layout::new(&buffer, 3, 8);
+
+        assert_eq!(layout.position_at(at(0, 1), 1), 4);
+        assert_eq!(layout.position_at(at(0, 1), 9), 5);
+        assert_eq!(layout.position_at(at(0, 2), 9), 8);
+        assert_eq!(layout.position_at(at(9, 0), 0), 14);
+    }
+
+    #[test]
+    fn stale_screen_lines_are_clamped_into_the_buffer() {
+        let buffer = buffer();
+        let layout = Layout::new(&buffer, 3, 8);
+
+        assert_eq!(layout.step(at(9, 7), 0), at(2, 2));
+        assert_eq!(layout.step(at(1, 5), 0), at(1, 0));
     }
 
     #[test]

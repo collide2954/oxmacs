@@ -122,7 +122,7 @@ impl Editor {
         let message = format!("Reverted buffer {}", buffer.name());
         self.show_message(message);
         if index == 0 {
-            self.viewport.reveal(self.point_line());
+            self.reveal_point();
         }
     }
 }

@@ -1,10 +1,10 @@
-use crate::display;
+use crate::display::Layout;
 use crate::editor::{Editor, Effect};
 use crate::text::motion;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
-    pub line: usize,
+    pub row: usize,
     pub column: usize,
 }
 
@@ -96,30 +96,31 @@ impl Editor {
     }
 
     pub fn scroll_lines(&mut self, delta: isize) {
-        let last = self.buffers.current().len_lines() - 1;
-        self.viewport.scroll_by(delta, last);
-        let visible = self.viewport.lines();
-        let line = self.point_line();
-        let target = if line < visible.start {
-            visible.start
-        } else if line >= visible.end {
-            visible.end - 1
-        } else {
+        let layout = Layout::new(
+            self.buffers.current(),
+            self.viewport.wrap_width(),
+            self.tab_width,
+        );
+        self.viewport.scroll_by(delta, &layout);
+        let point = self.buffers.current().point();
+        let spot = layout.screen_line(point);
+        let target = if spot < self.viewport.top() {
+            self.viewport.top()
+        } else if self.viewport.shows(spot, &layout) {
             return;
+        } else {
+            self.viewport.bottom(&layout)
         };
-        let goal = self
-            .goal_column
-            .unwrap_or_else(|| self.point_display_column());
-        let point = motion::at_column(self.buffers.current(), target, goal, self.tab_width);
-        self.buffers.current_mut().set_point(point);
+        let goal = self.goal_column.unwrap_or_else(|| layout.column(point));
+        let position = layout.position_at(target, goal);
+        self.buffers.current_mut().set_point(position);
         self.goal_column = Some(goal);
     }
 
     fn position_at(&self, cell: Cell) -> usize {
-        let line = cell.line.min(self.buffers.current().len_lines() - 1);
-        let text = self.buffers.current().line_text(line);
-        self.buffers.current().line_start(line)
-            + display::char_at_column(&text, cell.column, self.tab_width)
+        let layout = self.layout();
+        let rows = isize::try_from(cell.row).unwrap_or(isize::MAX);
+        layout.position_at(layout.step(self.viewport.top(), rows), cell.column)
     }
 
     fn end_command_chain(&mut self) {
@@ -136,7 +137,7 @@ mod tests {
     use crate::editor::{Cell, Clicks, Editor};
 
     fn cell(line: usize, column: usize) -> Cell {
-        Cell { line, column }
+        Cell { row: line, column }
     }
 
     fn clicked(text: &str, at: Cell, clicks: Clicks) -> Editor {
@@ -236,23 +237,23 @@ mod tests {
     #[test]
     fn scrolling_moves_the_window_and_pulls_point_into_view() {
         let mut editor = editor_with(&lines(50), 2);
-        editor.resize_window(10);
+        editor.resize_window(10, 0);
 
         editor.scroll_lines(3);
 
-        assert_eq!(editor.viewport().top(), 3);
+        assert_eq!(editor.viewport().top().line, 3);
         assert_eq!(editor.buffer().point(), 3 * 4 + 2);
     }
 
     #[test]
     fn scrolling_up_pulls_point_to_the_last_visible_line() {
         let mut editor = editor_with(&lines(50), 20 * 4);
-        editor.resize_window(10);
-        editor.scroll_lines(15 - editor.viewport().top().cast_signed());
+        editor.resize_window(10, 0);
+        editor.scroll_lines(15 - editor.viewport().top().line.cast_signed());
 
         editor.scroll_lines(-10);
 
-        assert_eq!(editor.viewport().top(), 5);
+        assert_eq!(editor.viewport().top().line, 5);
         assert_eq!(editor.buffer().line_of(editor.buffer().point()), 14);
     }
 
@@ -266,7 +267,7 @@ mod tests {
     #[test]
     fn scrolling_past_short_lines_keeps_the_column() {
         let mut editor = editor_with(&ragged(50), 8);
-        editor.resize_window(10);
+        editor.resize_window(10, 0);
 
         editor.scroll_lines(3);
         assert_eq!(editor.buffer().line_of(editor.buffer().point()), 3);
@@ -280,7 +281,7 @@ mod tests {
     #[test]
     fn line_motion_after_scrolling_keeps_the_column() {
         let mut editor = editor_with(&ragged(50), 8);
-        editor.resize_window(10);
+        editor.resize_window(10, 0);
         editor.scroll_lines(3);
 
         press(&mut editor, "C-n");
@@ -292,7 +293,7 @@ mod tests {
     fn scrolling_lines_with_tabs_uses_display_columns() {
         let text = format!("abcdefghij\n{}\n\tx", "\n".repeat(30));
         let mut editor = editor_with(&text, 8);
-        editor.resize_window(5);
+        editor.resize_window(5, 0);
 
         editor.scroll_lines(32);
 
@@ -301,15 +302,44 @@ mod tests {
     }
 
     #[test]
+    fn clicks_land_on_wrapped_rows() {
+        let mut editor = editor_with("abcdefghij", 0);
+        editor.resize_window(10, 5);
+
+        editor.click(cell(1, 2), Clicks::Single, false);
+
+        assert_eq!(editor.buffer().point(), 6);
+    }
+
+    #[test]
+    fn wheel_scrolling_counts_wrapped_rows() {
+        let line = "x".repeat(12);
+        let mut editor = editor_with(&format!("{line}\n{line}\n{line}"), 0);
+        editor.resize_window(4, 5);
+
+        editor.scroll_lines(2);
+        assert_eq!(
+            editor.viewport().top(),
+            crate::display::ScreenLine { line: 0, row: 2 }
+        );
+
+        editor.scroll_lines(2);
+        assert_eq!(
+            editor.viewport().top(),
+            crate::display::ScreenLine { line: 1, row: 1 }
+        );
+    }
+
+    #[test]
     fn scrolling_stops_at_the_ends() {
         let mut editor = editor_with(&lines(50), 0);
-        editor.resize_window(10);
+        editor.resize_window(10, 0);
 
         editor.scroll_lines(-5);
-        assert_eq!(editor.viewport().top(), 0);
+        assert_eq!(editor.viewport().top().line, 0);
 
         editor.scroll_lines(1_000);
-        assert_eq!(editor.viewport().top(), 49);
+        assert_eq!(editor.viewport().top().line, 49);
     }
 
     #[test]

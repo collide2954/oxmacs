@@ -168,7 +168,7 @@ impl Editor {
             && let Some(line) = listing.line_of(name)
         {
             place_point(buffer, listing, line);
-            self.viewport.reveal(self.point_line());
+            self.reveal_point();
         }
     }
 
@@ -215,7 +215,7 @@ impl Editor {
             });
         place_point(buffer, listing, line);
         if index == 0 {
-            self.viewport.reveal(self.point_line());
+            self.reveal_point();
         }
     }
 
@@ -707,7 +707,10 @@ mod tests {
     fn double_clicking_an_entry_opens_it() {
         let (dir, mut editor) = workspace();
         listed(&mut editor, &dir);
-        let cell = |line| crate::editor::Cell { line, column: 30 };
+        let cell = |line| crate::editor::Cell {
+            row: line,
+            column: 30,
+        };
 
         editor.click(cell(3), crate::editor::Clicks::Single, false);
         assert_eq!(editor.buffer().line_of(editor.buffer().point()), 3);
@@ -724,7 +727,7 @@ mod tests {
         listed(&mut editor, &dir);
 
         editor.click(
-            crate::editor::Cell { line: 2, column: 0 },
+            crate::editor::Cell { row: 2, column: 0 },
             crate::editor::Clicks::Double,
             false,
         );

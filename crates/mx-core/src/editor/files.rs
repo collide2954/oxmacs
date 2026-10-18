@@ -792,13 +792,13 @@ mod tests {
     fn opening_resets_the_view_to_the_top() {
         let (dir, mut editor) = workspace();
         fs::write(dir.path().join("long.txt"), "x\n".repeat(200)).unwrap();
-        editor.resize_window(10);
+        editor.resize_window(10, 0);
         editor.paste(Some("\n".repeat(50)));
         press(&mut editor, "M->");
-        assert!(editor.viewport().top() > 0);
+        assert!(editor.viewport().top().line > 0);
 
         editor.open_file(Path::new("long.txt"));
 
-        assert_eq!(editor.viewport().top(), 0);
+        assert_eq!(editor.viewport().top().line, 0);
     }
 }

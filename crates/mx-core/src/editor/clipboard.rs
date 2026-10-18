@@ -144,11 +144,11 @@ mod tests {
         let mut editor = editor_with("hello world", 0);
 
         editor.click(
-            crate::editor::Cell { line: 0, column: 0 },
+            crate::editor::Cell { row: 0, column: 0 },
             crate::editor::Clicks::Single,
             false,
         );
-        editor.drag(crate::editor::Cell { line: 0, column: 5 });
+        editor.drag(crate::editor::Cell { row: 0, column: 5 });
 
         assert_eq!(primary_writes(&mut editor), ["hello"]);
     }
@@ -157,7 +157,7 @@ mod tests {
     fn middle_click_reads_the_primary_selection_at_the_mouse() {
         let mut editor = editor_with("ab", 0);
 
-        editor.middle_click(crate::editor::Cell { line: 0, column: 1 });
+        editor.middle_click(crate::editor::Cell { row: 0, column: 1 });
 
         assert_eq!(editor.take_effects(), [Effect::ReadPrimary]);
         assert_eq!(editor.buffer().point(), 1);

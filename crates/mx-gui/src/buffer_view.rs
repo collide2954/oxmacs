@@ -162,8 +162,13 @@ impl<'a, Message> BufferView<'a, Message> {
         let viewport = self.editor.viewport();
         let scroll = state
             .scroll
-            .get_or_insert_with(|| Scroll::new(viewport.top()));
-        let scrolled = scroll.retarget(viewport.top(), viewport.rows(), now, self.motion.enabled);
+            .get_or_insert_with(|| Scroll::new(viewport.top().line));
+        let scrolled = scroll.retarget(
+            viewport.top().line,
+            viewport.rows(),
+            now,
+            self.motion.enabled,
+        );
         let scrolling = scroll.is_animating(now);
         let pointed = mem::take(&mut state.pointed);
         let target = self.cursor_cell();
@@ -190,7 +195,8 @@ impl<'a, Message> BufferView<'a, Message> {
         shell: &mut Shell<'_, Message>,
     ) {
         let cell_size = state.metrics.cell;
-        let top = state.top(self.editor.viewport().top());
+        let base = self.editor.viewport().top().line;
+        let top = state.top(base) - to_f32(base);
         let view_event = match event {
             mouse::Event::ButtonPressed(button) => {
                 let Some(position) = cursor.position_in(bounds) else {
@@ -247,7 +253,7 @@ impl<'a, Message> BufferView<'a, Message> {
             }
             _ => (to_f32(target.0), to_f32(target.1), false),
         };
-        let top = state.top(self.editor.viewport().top());
+        let top = state.top(self.editor.viewport().top().line);
         let origin = Point::new(
             bounds.x + column * cell.width,
             bounds.y + (line - top) * cell.height,
@@ -411,7 +417,7 @@ where
         let buffer = self.editor.buffer();
         let foreground = style::color(self.faces.default.foreground);
         let viewport = self.editor.viewport();
-        let top = state.top(viewport.top());
+        let top = state.top(viewport.top().line);
         let first = floor_to_usize(top);
         let offset = (top - to_f32(first)) * cell.height;
         let rows: Vec<_> = (first..=first + viewport.rows())
@@ -525,7 +531,7 @@ where
 
 pub fn cell_at(position: Point, cell: Size, top: f32) -> Cell {
     Cell {
-        line: floor_to_usize(position.y / cell.height + top),
+        row: floor_to_usize(position.y / cell.height + top),
         column: floor_to_usize(position.x / cell.width + 0.5),
     }
 }
@@ -599,24 +605,24 @@ mod tests {
     fn positions_map_to_the_nearest_column_boundary_and_row() {
         assert_eq!(
             cell_at(Point::new(24.0, 45.0), CELL, 0.0),
-            Cell { line: 2, column: 2 }
+            Cell { row: 2, column: 2 }
         );
         assert_eq!(
             cell_at(Point::new(26.0, 45.0), CELL, 0.0),
-            Cell { line: 2, column: 3 }
+            Cell { row: 2, column: 3 }
         );
     }
 
     #[test]
     fn positions_account_for_the_scrolled_top() {
-        assert_eq!(cell_at(Point::new(0.0, 45.0), CELL, 5.5).line, 7);
+        assert_eq!(cell_at(Point::new(0.0, 45.0), CELL, 5.5).row, 7);
     }
 
     #[test]
     fn positions_left_of_or_above_the_view_clamp_to_zero() {
         assert_eq!(
             cell_at(Point::new(-30.0, -40.0), CELL, 0.0),
-            Cell { line: 0, column: 0 }
+            Cell { row: 0, column: 0 }
         );
     }
 
