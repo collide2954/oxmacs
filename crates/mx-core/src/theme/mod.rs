@@ -31,6 +31,20 @@ pub struct Theme {
     pub minibuffer_prompt: Color,
     pub completion_current: Face,
     pub shadow: Color,
+    pub dired_header: Color,
+    pub dired_directory: Color,
+    pub dired_symlink: Color,
+    pub dired_marked: Color,
+    pub dired_flagged: Color,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Highlight {
+    Header,
+    Directory,
+    Symlink,
+    Marked,
+    Flagged,
 }
 
 impl Face {
@@ -60,6 +74,21 @@ impl Theme {
                 .completion_current
                 .mix(other.completion_current, amount),
             shadow: self.shadow.mix(other.shadow, amount),
+            dired_header: self.dired_header.mix(other.dired_header, amount),
+            dired_directory: self.dired_directory.mix(other.dired_directory, amount),
+            dired_symlink: self.dired_symlink.mix(other.dired_symlink, amount),
+            dired_marked: self.dired_marked.mix(other.dired_marked, amount),
+            dired_flagged: self.dired_flagged.mix(other.dired_flagged, amount),
+        }
+    }
+
+    pub fn highlight(&self, highlight: Highlight) -> Color {
+        match highlight {
+            Highlight::Header => self.dired_header,
+            Highlight::Directory => self.dired_directory,
+            Highlight::Symlink => self.dired_symlink,
+            Highlight::Marked => self.dired_marked,
+            Highlight::Flagged => self.dired_flagged,
         }
     }
 }
@@ -104,6 +133,38 @@ mod tests {
                 .mix(ADWAITA_DARK.completion_current.foreground, 0.5)
         );
         assert_eq!(ADWAITA.mix(&ADWAITA_DARK, 1.0), ADWAITA_DARK);
+    }
+
+    #[test]
+    fn dired_highlights_are_readable() {
+        for theme in builtin() {
+            for highlight in [Highlight::Header, Highlight::Directory, Highlight::Symlink] {
+                let ratio = theme
+                    .highlight(highlight)
+                    .contrast_ratio(theme.default.background);
+                assert!(ratio >= 4.5, "{} {highlight:?}: {ratio:.2}", theme.name);
+            }
+            for highlight in [Highlight::Marked, Highlight::Flagged] {
+                let ratio = theme
+                    .default
+                    .foreground
+                    .contrast_ratio(theme.highlight(highlight));
+                assert!(ratio >= 4.5, "{} {highlight:?}: {ratio:.2}", theme.name);
+                assert_ne!(theme.highlight(highlight), theme.default.background);
+            }
+        }
+    }
+
+    #[test]
+    fn mixing_blends_the_dired_highlights() {
+        let halfway = ADWAITA.mix(&ADWAITA_DARK, 0.5);
+
+        assert_eq!(
+            halfway.highlight(Highlight::Marked),
+            ADWAITA
+                .highlight(Highlight::Marked)
+                .mix(ADWAITA_DARK.highlight(Highlight::Marked), 0.5)
+        );
     }
 
     #[test]

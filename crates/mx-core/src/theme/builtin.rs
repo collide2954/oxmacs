@@ -24,6 +24,11 @@ pub static ADWAITA: Theme = Theme {
         background: Color::hex(0x4A_90_D9),
     },
     shadow: Color::hex(0x7F_7F_7F),
+    dired_header: Color::hex(0x61_35_83),
+    dired_directory: Color::hex(0x1A_5F_B4),
+    dired_symlink: Color::hex(0x0B_6E_6E),
+    dired_marked: Color::hex(0xF6_E5_A8),
+    dired_flagged: Color::hex(0xF6_C9_CC),
 };
 
 pub static ADWAITA_DARK: Theme = Theme {
@@ -50,4 +55,9 @@ pub static ADWAITA_DARK: Theme = Theme {
         background: Color::hex(0x30_30_30),
     },
     shadow: Color::hex(0x65_65_65),
+    dired_header: Color::hex(0xDC_8A_DD),
+    dired_directory: Color::hex(0x99_C1_F1),
+    dired_symlink: Color::hex(0x93_DD_C2),
+    dired_marked: Color::hex(0x4D_44_22),
+    dired_flagged: Color::hex(0x5C_2A_2E),
 };
