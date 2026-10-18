@@ -1,7 +1,7 @@
 use iced::widget::text::Span;
 use iced::widget::{container, rich_text, span, text};
 use iced::{Element, Font, Length};
-use mx_core::editor::Editor;
+use mx_core::editor::{Editor, Search};
 use mx_core::theme::Theme as Faces;
 
 use crate::style;
@@ -13,6 +13,12 @@ pub fn view<'a, Message: 'a>(
     size: f32,
 ) -> Element<'a, Message> {
     let content: Element<'a, Message> = match (editor.question(), editor.minibuffer()) {
+        (None, None) if let Some(search) = editor.search() => {
+            rich_text(search_spans(search, faces))
+                .font(font)
+                .size(size)
+                .into()
+        }
         (Some(question), _) => {
             let spans: [Span<'a, (), Font>; 4] = [
                 span(question.prompt()).color(style::color(faces.minibuffer_prompt)),
@@ -65,6 +71,32 @@ pub fn view<'a, Message: 'a>(
         .into()
 }
 
+fn search_spans(search: &Search, faces: Faces) -> [Span<'static, (), Font>; 5] {
+    let count = search
+        .count()
+        .map(|(current, total)| format!("{current}/{total} "))
+        .unwrap_or_default();
+    let (matched, failing) = split_failing(search.query(), search.failing_from());
+    let note = search
+        .note()
+        .map(|note| format!(" {note}"))
+        .unwrap_or_default();
+    [
+        span(count).color(style::color(faces.shadow)),
+        span(search.prompt()).color(style::color(faces.minibuffer_prompt)),
+        span(matched.to_owned()),
+        span(failing.to_owned()).background(style::color(faces.flagged)),
+        span(note),
+    ]
+}
+
+pub fn split_failing(query: &str, failing_from: Option<usize>) -> (&str, &str) {
+    let at = failing_from
+        .and_then(|chars| query.char_indices().nth(chars))
+        .map_or(query.len(), |(index, _)| index);
+    query.split_at(at)
+}
+
 pub fn split_at_cursor(text: &str, point: usize) -> (&str, &str, &str) {
     let start = text
         .char_indices()
@@ -88,6 +120,13 @@ mod tests {
     #[test]
     fn cursor_at_end_shows_a_space() {
         assert_eq!(split_at_cursor("abc", 3), ("abc", " ", ""));
+    }
+
+    #[test]
+    fn failing_queries_split_where_matching_stopped() {
+        assert_eq!(split_failing("héllo", Some(2)), ("hé", "llo"));
+        assert_eq!(split_failing("foo", Some(3)), ("foo", ""));
+        assert_eq!(split_failing("foo", None), ("foo", ""));
     }
 
     #[test]

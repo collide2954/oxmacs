@@ -16,7 +16,7 @@ use iced::{
 use mx_core::display::{self, LineStyle};
 use mx_core::editor::{Cell, Clicks, Editor, ScreenRow};
 use mx_core::text::BufferId;
-use mx_core::theme::Theme as Faces;
+use mx_core::theme::{Highlight, Theme as Faces};
 
 use crate::animation::{self, Glide, Scroll};
 use crate::style;
@@ -429,11 +429,19 @@ where
                         style::color(self.faces.highlight(background)),
                     );
                 }
-                if let Some(highlight) = line
+                let selection = line
                     .highlight
-                    .and_then(|line| display::row_highlight(line, row.column, row.end_column))
-                {
-                    self.draw_highlight(renderer, highlight, *rectangle, cell.width);
+                    .map(|columns| (columns, style::color(self.faces.region)));
+                let marks = line
+                    .marks
+                    .iter()
+                    .map(|(columns, mark)| (*columns, style::color(self.faces.highlight(*mark))));
+                for (columns, color) in selection.into_iter().chain(marks) {
+                    if let Some(columns) =
+                        display::row_highlight(columns, row.column, row.end_column)
+                    {
+                        draw_highlight(renderer, columns, *rectangle, cell.width, color);
+                    }
                 }
             }
             if let Some(cursor) = cursor.as_ref().filter(|cursor| cursor.gliding && behind) {
@@ -462,6 +470,7 @@ struct DrawnLine<'a> {
     text: Cow<'a, str>,
     style: LineStyle,
     highlight: Option<(usize, Option<usize>)>,
+    marks: Vec<((usize, Option<usize>), Highlight)>,
 }
 
 impl<'a, Message> BufferView<'a, Message> {
@@ -484,11 +493,22 @@ impl<'a, Message> BufferView<'a, Message> {
             if lines.last().is_none_or(|line| line.number != row.line) {
                 let text = buffer.line_text(row.line);
                 let span = buffer.line_start(row.line)..buffer.line_end(row.line);
+                let marks = self
+                    .editor
+                    .line_marks(row.line)
+                    .into_iter()
+                    .filter_map(|(range, mark)| {
+                        let columns =
+                            display::highlight_columns(&text, 0..span.len(), &range, tab_width)?;
+                        Some((columns, mark))
+                    })
+                    .collect();
                 lines.push(DrawnLine {
                     number: row.line,
                     highlight: selection.as_ref().and_then(|selection| {
                         display::highlight_columns(&text, span, selection, tab_width)
                     }),
+                    marks,
                     style: self.editor.line_style(row.line),
                     text,
                 });
@@ -541,29 +561,6 @@ impl<'a, Message> BufferView<'a, Message> {
             );
         }
     }
-
-    fn draw_highlight<Renderer>(
-        &self,
-        renderer: &mut Renderer,
-        (start, end): (usize, Option<usize>),
-        row: Rectangle,
-        cell_width: f32,
-    ) where
-        Renderer: text::Renderer<Font = Font>,
-    {
-        let left = row.x + to_f32(start) * cell_width;
-        let right = end.map_or(row.x + row.width, |end| row.x + to_f32(end) * cell_width);
-        renderer.fill_quad(
-            Quad {
-                bounds: Rectangle::new(
-                    Point::new(left, row.y),
-                    Size::new(right - left, row.height),
-                ),
-                ..Quad::default()
-            },
-            style::color(self.faces.region),
-        );
-    }
 }
 
 impl<'a, Message, Renderer> From<BufferView<'a, Message>> for Element<'a, Message, Theme, Renderer>
@@ -574,6 +571,26 @@ where
     fn from(view: BufferView<'a, Message>) -> Self {
         Element::new(view)
     }
+}
+
+fn draw_highlight<Renderer>(
+    renderer: &mut Renderer,
+    (start, end): (usize, Option<usize>),
+    row: Rectangle,
+    cell_width: f32,
+    color: Color,
+) where
+    Renderer: text::Renderer<Font = Font>,
+{
+    let left = row.x + to_f32(start) * cell_width;
+    let right = end.map_or(row.x + row.width, |end| row.x + to_f32(end) * cell_width);
+    renderer.fill_quad(
+        Quad {
+            bounds: Rectangle::new(Point::new(left, row.y), Size::new(right - left, row.height)),
+            ..Quad::default()
+        },
+        color,
+    );
 }
 
 pub fn cell_at(position: Point, cell: Size, top: f32) -> Cell {
