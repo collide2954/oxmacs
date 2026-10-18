@@ -36,7 +36,14 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-x C-c", Command::SaveBuffersKillMx),
 ];
 
-const MINIBUFFER: &[(&str, Command)] = &[("RET", Command::ExitMinibuffer)];
+const MINIBUFFER: &[(&str, Command)] = &[
+    ("RET", Command::ExitMinibuffer),
+    ("C-n", Command::MinibufferNext),
+    ("<down>", Command::MinibufferNext),
+    ("C-p", Command::MinibufferPrevious),
+    ("<up>", Command::MinibufferPrevious),
+    ("TAB", Command::MinibufferComplete),
+];
 
 pub fn global() -> Keymap {
     build(GLOBAL)

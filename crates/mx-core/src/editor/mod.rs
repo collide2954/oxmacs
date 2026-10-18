@@ -5,7 +5,7 @@ mod selection;
 #[cfg(test)]
 mod test_support;
 
-pub use minibuffer::Minibuffer;
+pub use minibuffer::{Completion, Minibuffer};
 
 use std::mem;
 
@@ -27,6 +27,7 @@ pub struct Editor {
     pending: Vec<Key>,
     last_key: Option<Key>,
     last_command: Option<Command>,
+    command_history: Vec<Command>,
     goal_column: Option<usize>,
     message: Option<String>,
     quit_requested: bool,
@@ -56,6 +57,7 @@ impl Editor {
             pending: Vec::new(),
             last_key: None,
             last_command: None,
+            command_history: Vec::new(),
             goal_column: None,
             message: None,
             quit_requested: false,
@@ -199,9 +201,13 @@ impl Editor {
             Command::MarkWholeBuffer => self.mark_whole_buffer(),
             Command::ExecuteExtendedCommand => self.execute_extended_command(),
             Command::ExitMinibuffer => self.exit_minibuffer(),
+            Command::MinibufferNext => self.minibuffer_next(),
+            Command::MinibufferPrevious => self.minibuffer_previous(),
+            Command::MinibufferComplete => self.minibuffer_complete(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.quit_requested = true,
         }
+        self.reset_selection(command);
         self.viewport.reveal(self.point_line());
     }
 }

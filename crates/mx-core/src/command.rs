@@ -1,6 +1,6 @@
-use strum::{EnumString, IntoStaticStr};
+use strum::{EnumString, IntoStaticStr, VariantArray};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, IntoStaticStr, VariantArray)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Command {
     SelfInsertCommand,
@@ -22,6 +22,9 @@ pub enum Command {
     MarkWholeBuffer,
     ExecuteExtendedCommand,
     ExitMinibuffer,
+    MinibufferNext,
+    MinibufferPrevious,
+    MinibufferComplete,
     KeyboardQuit,
     SaveBuffersKillMx,
 }
@@ -29,6 +32,16 @@ pub enum Command {
 impl Command {
     pub fn name(self) -> &'static str {
         self.into()
+    }
+
+    pub fn is_minibuffer_only(self) -> bool {
+        matches!(
+            self,
+            Self::ExitMinibuffer
+                | Self::MinibufferNext
+                | Self::MinibufferPrevious
+                | Self::MinibufferComplete
+        )
     }
 }
 
