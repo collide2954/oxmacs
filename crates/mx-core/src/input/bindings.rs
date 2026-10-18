@@ -1,6 +1,5 @@
 use crate::command::Command;
-use crate::key::KeySequence;
-use crate::keymap::Keymap;
+use crate::input::{KeySequence, Keymap};
 
 const GLOBAL: &[(&str, Command)] = &[
     ("RET", Command::Newline),
@@ -45,7 +44,7 @@ pub fn global() -> Keymap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keymap::Lookup;
+    use crate::input::Lookup;
 
     #[test]
     fn every_global_binding_resolves_to_its_command() {

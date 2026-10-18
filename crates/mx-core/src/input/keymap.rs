@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::command::Command;
-use crate::key::Key;
+use crate::input::Key;
 
 #[derive(Debug, Clone, Default)]
 pub struct Keymap {
@@ -54,7 +54,7 @@ impl Keymap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::key::KeySequence;
+    use crate::input::KeySequence;
 
     fn keys(notation: &str) -> Vec<Key> {
         notation.parse::<KeySequence>().unwrap().keys().to_vec()

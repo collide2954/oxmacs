@@ -1,13 +1,9 @@
 use std::mem;
 
-use crate::bindings;
-use crate::buffer::Buffer;
 use crate::command::Command;
-use crate::display;
-use crate::key::{Key, KeyCode, KeySequence, Modifiers};
-use crate::keymap::{Keymap, Lookup};
-use crate::motion;
-use crate::viewport::Viewport;
+use crate::display::{self, Viewport};
+use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
+use crate::text::{Buffer, motion};
 
 const DEFAULT_ROWS: usize = 24;
 const DEFAULT_TAB_WIDTH: usize = 8;

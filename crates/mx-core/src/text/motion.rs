@@ -1,6 +1,6 @@
 use std::iter;
 
-use crate::buffer::Buffer;
+use crate::text::Buffer;
 
 pub fn forward_char(buffer: &Buffer, from: usize, count: usize) -> usize {
     from.saturating_add(count).min(buffer.len_chars())
