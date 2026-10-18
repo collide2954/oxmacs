@@ -58,9 +58,22 @@ pub fn segments<F: Copy + PartialEq>(
     spans: &[(Range<usize>, F)],
     tab_width: usize,
 ) -> Vec<Segment<F>> {
+    segments_in(text, 0..usize::MAX, spans, tab_width)
+}
+
+pub fn segments_in<F: Copy + PartialEq>(
+    text: &str,
+    chars: Range<usize>,
+    spans: &[(Range<usize>, F)],
+    tab_width: usize,
+) -> Vec<Segment<F>> {
     let mut segments: Vec<Segment<F>> = Vec::new();
     let mut column = 0;
-    for (index, c) in text.chars().enumerate() {
+    for (index, c) in text.chars().enumerate().take(chars.end) {
+        if index < chars.start {
+            column += Glyph::of(c, column, tab_width).width();
+            continue;
+        }
         let face = spans
             .iter()
             .find(|(range, _)| range.contains(&index))
@@ -145,6 +158,26 @@ pub fn char_at_column(text: &str, column: usize, tab_width: usize) -> usize {
         start = end;
     }
     text.chars().count()
+}
+
+pub fn row_highlight(
+    line: (usize, Option<usize>),
+    start: usize,
+    end: Option<usize>,
+) -> Option<(usize, Option<usize>)> {
+    let (from, to) = line;
+    let from = from.max(start);
+    let row_end = end.unwrap_or(usize::MAX);
+    let line_end = to.unwrap_or(usize::MAX);
+    if from >= row_end.min(line_end) {
+        return None;
+    }
+    let to = if line_end > row_end {
+        None
+    } else {
+        to.map(|to| to - start)
+    };
+    Some((from - start, to))
 }
 
 pub fn highlight_columns(
@@ -321,6 +354,30 @@ mod tests {
             segments("日x", &[(1..2, 'x')], 8),
             [segment(0, "日", None), segment(2, "x", Some('x'))]
         );
+    }
+
+    #[test]
+    fn row_segments_keep_line_columns() {
+        assert_eq!(
+            segments_in("abcdef", 2..5, &[(3..4, 'x')], 8),
+            [
+                segment(2, "c", None),
+                segment(3, "d", Some('x')),
+                segment(4, "e", None)
+            ]
+        );
+    }
+
+    #[test]
+    fn highlights_clip_to_each_row() {
+        let line = (2, Some(10));
+
+        assert_eq!(row_highlight(line, 0, Some(4)), Some((2, None)));
+        assert_eq!(row_highlight(line, 4, Some(8)), Some((0, None)));
+        assert_eq!(row_highlight(line, 8, None), Some((0, Some(2))));
+        assert_eq!(row_highlight((2, Some(3)), 4, Some(8)), None);
+        assert_eq!(row_highlight((2, Some(4)), 0, Some(4)), Some((2, Some(4))));
+        assert_eq!(row_highlight((5, None), 8, None), Some((0, None)));
     }
 
     #[test]

@@ -10,6 +10,7 @@ mod mouse;
 mod movement;
 mod question;
 mod read_only;
+mod screen;
 mod selection;
 mod splash;
 #[cfg(test)]
@@ -21,6 +22,7 @@ pub use effect::Effect;
 pub use minibuffer::{Choice, Completion, Minibuffer};
 pub use mouse::{Cell, Clicks};
 pub use question::Question;
+pub use screen::ScreenRow;
 
 use std::ops::Range;
 use std::path::PathBuf;
