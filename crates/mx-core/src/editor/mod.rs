@@ -1,6 +1,7 @@
 mod buffers;
 mod clipboard;
 mod editing;
+mod files;
 mod minibuffer;
 mod mouse;
 mod movement;
@@ -13,8 +14,9 @@ pub use clipboard::Effect;
 pub use minibuffer::{Choice, Completion, Minibuffer};
 pub use mouse::{Cell, Clicks};
 
-use std::mem;
 use std::ops::Range;
+use std::path::PathBuf;
+use std::{env, mem};
 
 use buffers::BufferList;
 
@@ -51,6 +53,7 @@ pub struct Editor {
     tab_width: usize,
     appearance: Appearance,
     configured_theme: Option<&'static Theme>,
+    working_directory: PathBuf,
 }
 
 impl Default for Editor {
@@ -88,6 +91,7 @@ impl Editor {
             tab_width: Config::default().tab_width,
             appearance: Appearance::Light,
             configured_theme: None,
+            working_directory: env::current_dir().unwrap_or_default(),
         }
     }
 
