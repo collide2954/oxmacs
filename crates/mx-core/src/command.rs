@@ -22,6 +22,7 @@ pub enum Command {
     MarkWholeBuffer,
     Copy,
     Cut,
+    Paste,
     ExecuteExtendedCommand,
     ExitMinibuffer,
     MinibufferNext,

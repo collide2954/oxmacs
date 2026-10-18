@@ -27,6 +27,7 @@ impl Editor {
             let end = (buffer.line_end(line) + 1).min(buffer.len_chars());
             buffer.line_start(line)..end
         });
+        let whole_line = !buffer.mark_active();
         let text = buffer.text_in(range.clone());
         buffer.deactivate_mark();
         if text.is_empty() {
@@ -35,14 +36,48 @@ impl Editor {
         if cut {
             buffer.delete_range(range);
         }
+        self.line_copy = whole_line.then(|| text.clone());
+        self.remember(text.clone());
+        self.effects.push(Effect::WriteClipboard(text));
+    }
+
+    pub(super) fn request_paste(&mut self) {
+        self.effects.push(Effect::ReadClipboard);
+    }
+
+    pub fn paste(&mut self, clipboard: Option<String>) {
+        let Some(text) = clipboard
+            .filter(|text| !text.is_empty())
+            .or_else(|| self.clipboard_history.first().cloned())
+        else {
+            self.show_message("Clipboard is empty");
+            return;
+        };
+        self.shift_selection = false;
+        let as_line = self.line_copy.as_ref() == Some(&text);
+        let buffer = self.current_mut();
+        let replacing = buffer.selection();
+        buffer.deactivate_mark();
+        match replacing {
+            Some(range) => {
+                buffer.delete_range(range);
+                buffer.insert(&text);
+            }
+            None if as_line => {
+                let point = buffer.point();
+                buffer.set_point(buffer.line_start(buffer.line_of(point)));
+                buffer.insert(&text);
+                buffer.set_point(point + text.chars().count());
+            }
+            None => buffer.insert(&text),
+        }
         self.remember(text);
     }
 
     fn remember(&mut self, text: String) {
         self.clipboard_history.retain(|old| *old != text);
-        self.clipboard_history.insert(0, text.clone());
+        self.clipboard_history.insert(0, text);
         self.clipboard_history.truncate(HISTORY_LIMIT);
-        self.effects.push(Effect::WriteClipboard(text));
     }
 }
 
@@ -114,6 +149,68 @@ mod tests {
         press(&mut editor, "M-w");
 
         assert_eq!(clipboard_writes(&mut editor), Vec::<String>::new());
+    }
+
+    #[test]
+    fn paste_requests_the_clipboard() {
+        for keys in ["C-y", "s-v"] {
+            let mut editor = editor_with("", 0);
+
+            press(&mut editor, keys);
+
+            assert_eq!(editor.take_effects(), [Effect::ReadClipboard], "{keys}");
+        }
+    }
+
+    #[test]
+    fn pasted_text_is_inserted_at_point() {
+        let mut editor = editor_with("ac", 1);
+
+        editor.paste(Some("b".to_owned()));
+
+        assert_eq!(editor.buffer().contents(), "abc");
+        assert_eq!(editor.buffer().point(), 2);
+    }
+
+    #[test]
+    fn paste_replaces_the_selection() {
+        let mut editor = editor_with("hello world", 0);
+        press(&mut editor, "C-SPC M-f");
+
+        editor.paste(Some("bye".to_owned()));
+
+        assert_eq!(editor.buffer().contents(), "bye world");
+        assert_eq!(editor.buffer().selection(), None);
+    }
+
+    #[test]
+    fn whole_line_copies_paste_above_the_current_line() {
+        let mut editor = editor_with("one\ntwo\n", 5);
+        press(&mut editor, "M-w C-p");
+
+        editor.paste(Some("two\n".to_owned()));
+
+        assert_eq!(editor.buffer().contents(), "two\none\ntwo\n");
+        assert_eq!(editor.buffer().point(), 5);
+    }
+
+    #[test]
+    fn a_missing_clipboard_falls_back_to_history() {
+        let mut editor = editor_with("abc", 0);
+        press(&mut editor, "C-SPC C-f M-w C-e");
+
+        editor.paste(None);
+
+        assert_eq!(editor.buffer().contents(), "abca");
+    }
+
+    #[test]
+    fn an_empty_clipboard_and_history_is_reported() {
+        let mut editor = Editor::new();
+
+        editor.paste(Some(String::new()));
+
+        assert_eq!(editor.message(), Some("Clipboard is empty"));
     }
 
     #[test]

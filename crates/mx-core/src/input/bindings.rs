@@ -36,6 +36,8 @@ const GLOBAL: &[(&str, Command)] = &[
     ("s-c", Command::Copy),
     ("C-w", Command::Cut),
     ("s-x", Command::Cut),
+    ("C-y", Command::Paste),
+    ("s-v", Command::Paste),
     ("M-x", Command::ExecuteExtendedCommand),
     ("C-g", Command::KeyboardQuit),
     ("ESC ESC", Command::KeyboardQuit),
