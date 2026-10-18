@@ -55,6 +55,7 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-x C-f", Command::FindFile),
     ("C-x C-s", Command::SaveBuffer),
     ("C-x s", Command::SaveSomeBuffers),
+    ("C-x C-w", Command::WriteFile),
     ("C-g", Command::KeyboardQuit),
     ("ESC ESC", Command::KeyboardQuit),
     ("C-x C-c", Command::SaveBuffersKillMx),

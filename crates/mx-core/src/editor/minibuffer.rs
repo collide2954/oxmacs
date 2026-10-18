@@ -14,6 +14,13 @@ pub(super) enum Purpose {
     RunCommand,
     PasteFromHistory,
     FindFile,
+    WriteFile,
+}
+
+impl Purpose {
+    pub(super) fn takes_path(self) -> bool {
+        matches!(self, Self::FindFile | Self::WriteFile)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,7 +109,7 @@ impl Editor {
                 })
                 .filter(|completion| matches(&completion.label))
                 .collect(),
-            Purpose::FindFile => file_completions(minibuffer),
+            Purpose::FindFile | Purpose::WriteFile => file_completions(minibuffer),
         }
     }
 
@@ -172,16 +179,16 @@ impl Editor {
     }
 
     pub(super) fn exit_minibuffer_with_input(&mut self) {
-        if self.minibuffer_purpose() == Some(Purpose::FindFile) {
-            self.exit_find_file(true);
+        if self.minibuffer_purpose().is_some_and(Purpose::takes_path) {
+            self.exit_file_prompt(true);
         } else {
             self.exit_minibuffer();
         }
     }
 
     pub(super) fn exit_minibuffer(&mut self) {
-        if self.minibuffer_purpose() == Some(Purpose::FindFile) {
-            self.exit_find_file(false);
+        if self.minibuffer_purpose().is_some_and(Purpose::takes_path) {
+            self.exit_file_prompt(false);
             return;
         }
         let chosen = self.selected_completion();
@@ -221,7 +228,7 @@ impl Editor {
     }
 
     pub(super) fn minibuffer_complete(&mut self) {
-        if self.minibuffer_purpose() == Some(Purpose::FindFile) {
+        if self.minibuffer_purpose().is_some_and(Purpose::takes_path) {
             self.complete_file_name();
             return;
         }

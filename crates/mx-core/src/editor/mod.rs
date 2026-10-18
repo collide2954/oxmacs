@@ -316,6 +316,7 @@ impl Editor {
             Command::ExitMinibufferWithInput => self.exit_minibuffer_with_input(),
             Command::FindFile => self.find_file(),
             Command::SaveBuffer => self.save_buffer(),
+            Command::WriteFile => self.write_file(),
             Command::SaveSomeBuffers => self.save_some_buffers(false),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.save_some_buffers(true),

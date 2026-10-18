@@ -40,6 +40,10 @@ impl Buffer {
         }
     }
 
+    pub fn set_name(&mut self, name: impl Into<String>) {
+        self.name = name.into();
+    }
+
     pub fn is_modified(&self) -> bool {
         self.history.current() != self.saved
     }

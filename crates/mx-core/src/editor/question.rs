@@ -5,12 +5,16 @@ use crate::files::paths;
 use crate::input::{Key, KeyCode};
 
 const SAVE_CHOICES: &[char] = &['y', 'n', '!', 'q'];
+const YES_NO: &[char] = &['y', 'n'];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Pending {
     SaveSome {
         remaining: Vec<PathBuf>,
         then_quit: bool,
+    },
+    Overwrite {
+        path: PathBuf,
     },
 }
 
@@ -105,7 +109,21 @@ impl Editor {
                 }
                 _ => self.quit_requested |= then_quit,
             },
+            Pending::Overwrite { path } => {
+                if answer == 'y' {
+                    self.finish_write(path);
+                }
+            }
         }
+    }
+
+    pub(super) fn ask_to_overwrite(&mut self, path: PathBuf) {
+        let shown = paths::abbreviate(&path, self.home.as_deref());
+        self.question = Some(Question {
+            prompt: format!("File {shown} exists; overwrite? (y or n) "),
+            choices: YES_NO,
+            pending: Pending::Overwrite { path },
+        });
     }
 
     fn save_file(&mut self, path: &Path) -> bool {

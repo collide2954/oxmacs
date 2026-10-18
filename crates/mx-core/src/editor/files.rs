@@ -16,7 +16,15 @@ impl Editor {
     }
 
     pub(super) fn find_file(&mut self) {
-        if !self.open_minibuffer("Find file: ", Purpose::FindFile) {
+        self.open_file_prompt("Find file: ", Purpose::FindFile);
+    }
+
+    pub(super) fn write_file(&mut self) {
+        self.open_file_prompt("Write file: ", Purpose::WriteFile);
+    }
+
+    fn open_file_prompt(&mut self, prompt: &str, purpose: Purpose) {
+        if !self.open_minibuffer(prompt, purpose) {
             return;
         }
         let mut start = paths::abbreviate(&self.default_directory(), self.home.as_deref());
@@ -31,7 +39,7 @@ impl Editor {
         let Some(minibuffer) = &self.minibuffer else {
             return;
         };
-        if minibuffer.purpose != Purpose::FindFile {
+        if !minibuffer.purpose.takes_path() {
             return;
         }
         let input = minibuffer.input.contents();
@@ -49,7 +57,14 @@ impl Editor {
         }
     }
 
-    pub(super) fn exit_find_file(&mut self, exact: bool) {
+    pub(super) fn exit_file_prompt(&mut self, exact: bool) {
+        let Some(purpose) = self
+            .minibuffer
+            .as_ref()
+            .map(|minibuffer| minibuffer.purpose)
+        else {
+            return;
+        };
         let input = self.minibuffer_input();
         let (directory, name) = paths::split(&input);
         if name.is_empty() {
@@ -58,18 +73,47 @@ impl Editor {
             }
             return;
         }
-        if !exact && let Some((label, entry_path, is_dir)) = self.selected_entry() {
-            if is_dir {
+        let path = match self.selected_entry().filter(|_| !exact) {
+            Some((label, _, true)) => {
                 self.set_minibuffer_input(&format!("{directory}{label}"));
-            } else {
-                self.minibuffer = None;
-                self.open_file(&entry_path);
+                return;
             }
-            return;
-        }
-        let path = self.resolve_path(&input);
+            Some((_, entry_path, false)) => entry_path,
+            None => self.resolve_path(&input),
+        };
         self.minibuffer = None;
-        self.open_file(&path);
+        if purpose == Purpose::WriteFile {
+            self.write_file_to(path);
+        } else {
+            self.open_file(&path);
+        }
+    }
+
+    fn write_file_to(&mut self, path: PathBuf) {
+        let visiting = self
+            .buffers
+            .current()
+            .file()
+            .is_some_and(|file| file.path == path);
+        if path.exists() && !visiting {
+            self.ask_to_overwrite(path);
+        } else {
+            self.finish_write(path);
+        }
+    }
+
+    pub(super) fn finish_write(&mut self, path: PathBuf) {
+        let buffer = self.buffers.current_mut();
+        let format = buffer.file().map(|file| file.format).unwrap_or_default();
+        if let Some(name) = path.file_name() {
+            buffer.set_name(name.to_string_lossy());
+        }
+        buffer.set_file(FileInfo {
+            path,
+            format,
+            disk: None,
+        });
+        self.save_buffer_at(0);
     }
 
     pub(super) fn complete_file_name(&mut self) {
@@ -91,7 +135,7 @@ impl Editor {
         let minibuffer = self
             .minibuffer
             .as_ref()
-            .filter(|minibuffer| minibuffer.purpose == Purpose::FindFile)?;
+            .filter(|minibuffer| minibuffer.purpose.takes_path())?;
         if minibuffer.input.point() != minibuffer.input.len_chars() {
             return None;
         }
@@ -178,7 +222,7 @@ impl Editor {
     pub(super) fn save_buffer(&mut self) {
         let buffer = self.buffers.current();
         if buffer.file().is_none() {
-            self.show_message("Buffer is not visiting a file");
+            self.write_file();
         } else if !buffer.is_modified() {
             self.show_message("(No changes need to be saved)");
         } else {
@@ -501,6 +545,92 @@ mod tests {
 
         assert!(editor.message().unwrap().contains("x.txt"));
         assert!(editor.buffer().is_modified());
+    }
+
+    #[test]
+    fn write_file_saves_under_a_new_name() {
+        let (dir, _) = workspace();
+        let mut editor = opened(&dir, "a.txt");
+
+        press(&mut editor, "C-x C-w");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Write file: ");
+        type_text(&mut editor, "c.txt");
+        press(&mut editor, "RET");
+
+        assert_eq!(
+            fs::read_to_string(dir.path().join("c.txt")).unwrap(),
+            "hello"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+            "hello"
+        );
+        assert_eq!(editor.buffer().name(), "c.txt");
+        assert_eq!(visited(&editor), Some(dir.path().join("c.txt")));
+    }
+
+    #[test]
+    fn saving_a_buffer_without_a_file_asks_where_to_write_it() {
+        let (dir, mut editor) = workspace();
+        editor.set_home_directory(None);
+        type_text(&mut editor, "hi");
+
+        press(&mut editor, "C-x C-s");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Write file: ");
+        type_text(&mut editor, "new.txt");
+        press(&mut editor, "RET");
+
+        assert_eq!(
+            fs::read_to_string(dir.path().join("new.txt")).unwrap(),
+            "hi"
+        );
+        assert_eq!(editor.buffer().name(), "new.txt");
+        assert!(!editor.buffer().is_modified());
+    }
+
+    #[test]
+    fn write_file_asks_before_overwriting_another_file() {
+        let (dir, _) = workspace();
+        let mut editor = opened(&dir, "a.txt");
+        let target = dir.path().join("b.txt");
+
+        press(&mut editor, "C-x C-w");
+        type_text(&mut editor, "b.txt");
+        press(&mut editor, "RET");
+        assert_eq!(
+            editor
+                .question()
+                .map(|question| question.prompt().to_owned()),
+            Some(format!(
+                "File {} exists; overwrite? (y or n) ",
+                target.display()
+            ))
+        );
+
+        press(&mut editor, "n");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "bee");
+
+        press(&mut editor, "C-x C-w");
+        type_text(&mut editor, "b.txt");
+        press(&mut editor, "RET y");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "hello");
+    }
+
+    #[test]
+    fn writing_to_the_visited_file_does_not_ask() {
+        let (dir, _) = workspace();
+        let mut editor = opened(&dir, "a.txt");
+        type_text(&mut editor, "x");
+
+        press(&mut editor, "C-x C-w");
+        type_text(&mut editor, "a.txt");
+        press(&mut editor, "RET");
+
+        assert_eq!(editor.question(), None);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+            "xhello"
+        );
     }
 
     #[test]
