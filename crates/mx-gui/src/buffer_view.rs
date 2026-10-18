@@ -1,5 +1,5 @@
+use std::borrow::Cow;
 use std::mem;
-use std::ops::Range;
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::mouse::{self, Click, ScrollDelta, click};
@@ -13,22 +13,26 @@ use iced::{
     Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, keyboard,
     window,
 };
-use mx_core::display;
-use mx_core::editor::{Cell, Clicks, Editor};
+use mx_core::display::{self, LineStyle};
+use mx_core::editor::{Cell, Clicks, Editor, ScreenRow};
 use mx_core::text::BufferId;
 use mx_core::theme::Theme as Faces;
 
 use crate::animation::{self, Glide, Scroll};
 use crate::style;
-use crate::units::{floor_to_usize, to_f32, trunc_to_isize};
+use crate::units::{floor_to_isize, floor_to_usize, signed_to_f32, to_f32, trunc_to_isize};
 
 const WIDE_SAMPLE: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
 const NARROW_SAMPLE: &str = "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii";
 const WHEEL_ROWS: f32 = 3.0;
+const CONTINUATION: &str = "\\";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewEvent {
-    RowsChanged(usize),
+    Resized {
+        rows: usize,
+        columns: usize,
+    },
     FontNotMonospaced,
     Pressed {
         cell: Cell,
@@ -87,10 +91,10 @@ impl State {
         }
     }
 
-    fn top(&self, fallback: usize) -> f32 {
+    fn shift(&self) -> f32 {
         match (&self.scroll, self.frame) {
-            (Some(scroll), Some(frame)) => scroll.position(frame),
-            _ => to_f32(fallback),
+            (Some(scroll), Some(frame)) => scroll.shift(frame),
+            _ => 0.0,
         }
     }
 }
@@ -145,11 +149,8 @@ impl<'a, Message> BufferView<'a, Message> {
     }
 
     fn cursor_cell(&self) -> (usize, usize) {
-        let buffer = self.editor.buffer();
-        (
-            self.editor.point_display_column(),
-            buffer.line_of(buffer.point()),
-        )
+        let (column, row) = self.editor.cursor_screen();
+        (column, usize::try_from(row).unwrap_or(0))
     }
 
     fn blinking(&self) -> bool {
@@ -160,15 +161,10 @@ impl<'a, Message> BufferView<'a, Message> {
         state.frame = Some(now);
         state.follow(self.editor.buffer().id());
         let viewport = self.editor.viewport();
-        let scroll = state
-            .scroll
-            .get_or_insert_with(|| Scroll::new(viewport.top().line));
-        let scrolled = scroll.retarget(
-            viewport.top().line,
-            viewport.rows(),
-            now,
-            self.motion.enabled,
-        );
+        let (top, rows) = (viewport.top(), viewport.rows());
+        let scroll = state.scroll.get_or_insert_with(|| Scroll::new(top));
+        let moved = self.editor.screen_distance(scroll.target(), top, rows);
+        let scrolled = scroll.retarget(top, moved, rows, now, self.motion.enabled);
         let scrolling = scroll.is_animating(now);
         let pointed = mem::take(&mut state.pointed);
         let target = self.cursor_cell();
@@ -195,8 +191,7 @@ impl<'a, Message> BufferView<'a, Message> {
         shell: &mut Shell<'_, Message>,
     ) {
         let cell_size = state.metrics.cell;
-        let base = self.editor.viewport().top().line;
-        let top = state.top(base) - to_f32(base);
+        let top = -state.shift();
         let view_event = match event {
             mouse::Event::ButtonPressed(button) => {
                 let Some(position) = cursor.position_in(bounds) else {
@@ -246,17 +241,16 @@ impl<'a, Message> BufferView<'a, Message> {
     fn cursor_block(&self, state: &State, bounds: Rectangle) -> Option<CursorBlock> {
         let cell = state.metrics.cell;
         let target = self.cursor_cell();
-        let (column, line, gliding) = match (&state.cursor, state.frame) {
+        let (column, row, gliding) = match (&state.cursor, state.frame) {
             (Some(glide), Some(frame)) => {
-                let (column, line) = glide.position(frame);
-                (column, line, glide.is_animating(frame))
+                let (column, row) = glide.position(frame);
+                (column, row, glide.is_animating(frame))
             }
             _ => (to_f32(target.0), to_f32(target.1), false),
         };
-        let top = state.top(self.editor.viewport().top().line);
         let origin = Point::new(
             bounds.x + column * cell.width,
-            bounds.y + (line - top) * cell.height,
+            bounds.y + (row + state.shift()) * cell.height,
         );
         if origin.y + cell.height <= bounds.y || origin.y >= bounds.y + bounds.height {
             return None;
@@ -381,8 +375,10 @@ where
             shell.publish((self.on_event)(ViewEvent::FontNotMonospaced));
         }
         let rows = rows_in(layout.bounds().height, metrics.cell.height);
-        if rows != self.editor.viewport().rows() {
-            shell.publish((self.on_event)(ViewEvent::RowsChanged(rows)));
+        let columns = columns_in(layout.bounds().width, metrics.cell.width);
+        let viewport = self.editor.viewport();
+        if (rows, columns) != (viewport.rows(), viewport.columns()) {
+            shell.publish((self.on_event)(ViewEvent::Resized { rows, columns }));
         }
     }
 
@@ -414,45 +410,30 @@ where
         let state = tree.state.downcast_ref::<State>();
         let cell = state.metrics.cell;
         let bounds = layout.bounds();
-        let buffer = self.editor.buffer();
-        let foreground = style::color(self.faces.default.foreground);
-        let viewport = self.editor.viewport();
-        let top = state.top(viewport.top().line);
-        let first = floor_to_usize(top);
-        let offset = (top - to_f32(first)) * cell.height;
-        let rows: Vec<_> = (first..=first + viewport.rows())
-            .take_while(|line| *line < buffer.len_lines())
-            .enumerate()
-            .map(|(row, line)| {
-                let row = Rectangle::new(
-                    Point::new(bounds.x, bounds.y + to_f32(row) * cell.height - offset),
-                    Size::new(bounds.width, cell.height),
-                );
-                (
-                    line,
-                    row,
-                    buffer.line_text(line),
-                    self.editor.line_style(line),
-                )
-            })
-            .collect();
-        let selection = buffer.selection();
+        let (lines, rows) = self.lay_out_rows(state, bounds);
+        let line_of = |number: usize| lines.iter().find(|line| line.number == number);
         let cursor = self.cursor_block(state, bounds);
         let opacity = self.cursor_opacity(state);
         let behind = self.editor.minibuffer().is_none();
         renderer.with_layer(bounds, |renderer| {
-            for (line, row, text, line_style) in &rows {
-                if let Some(background) = line_style.background {
+            for (row, rectangle) in &rows {
+                let Some(line) = line_of(row.line) else {
+                    continue;
+                };
+                if let Some(background) = line.style.background {
                     renderer.fill_quad(
                         Quad {
-                            bounds: *row,
+                            bounds: *rectangle,
                             ..Quad::default()
                         },
                         style::color(self.faces.highlight(background)),
                     );
                 }
-                if let Some(selection) = &selection {
-                    self.draw_highlight(renderer, text, *line, selection, *row, cell.width);
+                if let Some(highlight) = line
+                    .highlight
+                    .and_then(|line| display::row_highlight(line, row.column, row.end_column))
+                {
+                    self.draw_highlight(renderer, highlight, *rectangle, cell.width);
                 }
             }
             if let Some(cursor) = cursor.as_ref().filter(|cursor| cursor.gliding && behind) {
@@ -464,18 +445,9 @@ where
                     style::color(self.faces.cursor).scale_alpha(opacity),
                 );
             }
-            for (_, row, text, line_style) in &rows {
-                for segment in display::segments(text, &line_style.spans, self.editor.tab_width()) {
-                    let color = segment
-                        .face
-                        .map_or(foreground, |face| style::color(self.faces.highlight(face)));
-                    let x = to_f32(segment.column) * cell.width;
-                    renderer.fill_text(
-                        self.text(segment.text, Size::new(f32::INFINITY, row.height)),
-                        Point::new(row.x + x, row.y),
-                        color,
-                        bounds,
-                    );
+            for (row, rectangle) in &rows {
+                if let Some(line) = line_of(row.line) {
+                    self.draw_row_text(renderer, line, row, *rectangle, cell.width, bounds);
                 }
             }
         });
@@ -485,25 +457,100 @@ where
     }
 }
 
-impl<Message> BufferView<'_, Message> {
+struct DrawnLine<'a> {
+    number: usize,
+    text: Cow<'a, str>,
+    style: LineStyle,
+    highlight: Option<(usize, Option<usize>)>,
+}
+
+impl<'a, Message> BufferView<'a, Message> {
+    fn lay_out_rows(
+        &self,
+        state: &State,
+        bounds: Rectangle,
+    ) -> (Vec<DrawnLine<'a>>, Vec<(ScreenRow, Rectangle)>) {
+        let buffer = self.editor.buffer();
+        let tab_width = self.editor.tab_width();
+        let cell = state.metrics.cell;
+        let shift = state.shift();
+        let selection = buffer.selection();
+        let mut lines: Vec<DrawnLine<'a>> = Vec::new();
+        let mut rows = Vec::new();
+        for row in self
+            .editor
+            .screen_rows(floor_to_isize(-shift), self.editor.viewport().rows() + 2)
+        {
+            if lines.last().is_none_or(|line| line.number != row.line) {
+                let text = buffer.line_text(row.line);
+                let span = buffer.line_start(row.line)..buffer.line_end(row.line);
+                lines.push(DrawnLine {
+                    number: row.line,
+                    highlight: selection.as_ref().and_then(|selection| {
+                        display::highlight_columns(&text, span, selection, tab_width)
+                    }),
+                    style: self.editor.line_style(row.line),
+                    text,
+                });
+            }
+            let y = bounds.y + (signed_to_f32(row.offset) + shift) * cell.height;
+            let rectangle = Rectangle::new(
+                Point::new(bounds.x, y),
+                Size::new(bounds.width, cell.height),
+            );
+            rows.push((row, rectangle));
+        }
+        (lines, rows)
+    }
+
+    fn draw_row_text<Renderer>(
+        &self,
+        renderer: &mut Renderer,
+        line: &DrawnLine<'_>,
+        row: &ScreenRow,
+        rectangle: Rectangle,
+        cell_width: f32,
+        bounds: Rectangle,
+    ) where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        let foreground = style::color(self.faces.default.foreground);
+        let tab_width = self.editor.tab_width();
+        for segment in
+            display::segments_in(&line.text, row.chars.clone(), &line.style.spans, tab_width)
+        {
+            let color = segment
+                .face
+                .map_or(foreground, |face| style::color(self.faces.highlight(face)));
+            let x = to_f32(segment.column - row.column) * cell_width;
+            renderer.fill_text(
+                self.text(segment.text, Size::new(f32::INFINITY, rectangle.height)),
+                Point::new(rectangle.x + x, rectangle.y),
+                color,
+                bounds,
+            );
+        }
+        let columns = self.editor.viewport().columns();
+        if row.end_column.is_some() && columns > 0 {
+            let x = to_f32(columns - 1) * cell_width;
+            renderer.fill_text(
+                self.text(CONTINUATION.to_owned(), rectangle.size()),
+                Point::new(rectangle.x + x, rectangle.y),
+                style::color(self.faces.shadow),
+                bounds,
+            );
+        }
+    }
+
     fn draw_highlight<Renderer>(
         &self,
         renderer: &mut Renderer,
-        text: &str,
-        line: usize,
-        selection: &Range<usize>,
+        (start, end): (usize, Option<usize>),
         row: Rectangle,
         cell_width: f32,
     ) where
         Renderer: text::Renderer<Font = Font>,
     {
-        let buffer = self.editor.buffer();
-        let span = buffer.line_start(line)..buffer.line_end(line);
-        let Some((start, end)) =
-            display::highlight_columns(text, span, selection, self.editor.tab_width())
-        else {
-            return;
-        };
         let left = row.x + to_f32(start) * cell_width;
         let right = end.map_or(row.x + row.width, |end| row.x + to_f32(end) * cell_width);
         renderer.fill_quad(
@@ -556,6 +603,14 @@ fn clicks(kind: click::Kind) -> Clicks {
 
 pub fn is_monospaced(narrow_width: f32, wide_width: f32) -> bool {
     (narrow_width - wide_width).abs() <= wide_width * 0.01
+}
+
+pub fn columns_in(width: f32, cell_width: f32) -> usize {
+    if cell_width > 0.0 {
+        floor_to_usize(width / cell_width)
+    } else {
+        0
+    }
 }
 
 #[expect(
@@ -655,7 +710,7 @@ mod tests {
         let mut state = State::default();
         state.follow(first);
         state.cursor = Some(Glide::new((3, 4)));
-        state.scroll = Some(Scroll::new(10));
+        state.scroll = Some(Scroll::new(display::ScreenLine { line: 10, row: 0 }));
 
         state.follow(first);
         assert!(state.cursor.is_some() && state.scroll.is_some());

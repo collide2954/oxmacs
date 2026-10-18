@@ -20,6 +20,26 @@ pub fn floor_to_usize(value: f32) -> usize {
 }
 
 #[expect(
+    clippy::cast_precision_loss,
+    reason = "row offsets stay far below the f32 precision limit"
+)]
+pub fn signed_to_f32(value: isize) -> f32 {
+    value as f32
+}
+
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "callers pass row offsets that fit comfortably in isize"
+)]
+pub fn floor_to_isize(value: f32) -> isize {
+    if value.is_finite() {
+        value.floor() as isize
+    } else {
+        0
+    }
+}
+
+#[expect(
     clippy::cast_possible_truncation,
     reason = "callers pass whole numbers of rows that fit comfortably in isize"
 )]
@@ -39,6 +59,14 @@ mod tests {
     fn floor_rounds_down_to_whole_rows() {
         assert_eq!(floor_to_usize(3.0), 3);
         assert_eq!(floor_to_usize(3.99), 3);
+    }
+
+    #[test]
+    fn signed_floors_round_toward_negative_infinity() {
+        assert_eq!(floor_to_isize(1.5), 1);
+        assert_eq!(floor_to_isize(-1.5), -2);
+        assert_eq!(floor_to_isize(f32::NAN), 0);
+        assert!((signed_to_f32(-3) + 3.0).abs() < f32::EPSILON);
     }
 
     #[test]

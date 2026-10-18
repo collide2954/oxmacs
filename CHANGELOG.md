@@ -12,6 +12,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 ### Changed
 
+- Long lines wrap onto continuation rows marked with `\`, like Emacs; `C-n`/`C-p`, the mouse wheel and clicks work by screen rows.
 - The cursor glides only on real jumps; it snaps on typing, one-line and one-character moves, key repeat, mouse clicks and scrolling, so it never trails behind. While gliding it is drawn behind the text, so no letters vanish under it.
 - The cursor covers the whole glyph under it, two cells wide over wide characters and `^M`-style controls, with the glyph shown inverted.
 
@@ -19,7 +20,6 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 - Scrolling with the mouse wheel no longer drags point to the ends of short lines; it keeps its column across scrolls and into the next `C-n`/`C-p`.
 - Vertical motion keeps the screen column across lines with tabs and wide characters.
-- Lines wider than the window no longer spill over the lines below.
 
 ## [0.8.0] - 2026-10-18
 

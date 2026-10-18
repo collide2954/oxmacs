@@ -124,7 +124,7 @@ impl App {
 
     fn handle_view_event(&mut self, event: ViewEvent) {
         match event {
-            ViewEvent::RowsChanged(rows) => self.editor.resize_window(rows, 0),
+            ViewEvent::Resized { rows, columns } => self.editor.resize_window(rows, columns),
             ViewEvent::FontNotMonospaced => self.reject_font(),
             ViewEvent::Pressed {
                 cell,
@@ -679,7 +679,13 @@ mod tests {
     fn wheel_scrolling_reaches_the_editor() {
         let mut app = App::default();
         let _ = app.update(Message::Pasted(Some("x\n".repeat(100))));
-        view_event(&mut app, ViewEvent::RowsChanged(10));
+        view_event(
+            &mut app,
+            ViewEvent::Resized {
+                rows: 10,
+                columns: 0,
+            },
+        );
         press(&mut app, "<", Modifiers::ALT);
 
         view_event(&mut app, ViewEvent::Scrolled(3));
@@ -715,9 +721,13 @@ mod tests {
     fn window_rows_resize_the_editor_viewport() {
         let mut app = App::default();
 
-        let _ = app.update(Message::View(ViewEvent::RowsChanged(7)));
+        let _ = app.update(Message::View(ViewEvent::Resized {
+            rows: 7,
+            columns: 80,
+        }));
 
         assert_eq!(app.editor().viewport().rows(), 7);
+        assert_eq!(app.editor().viewport().columns(), 80);
     }
 
     #[test]

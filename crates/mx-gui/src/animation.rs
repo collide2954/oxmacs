@@ -2,7 +2,9 @@ use iced::Animation;
 use iced::animation::Easing;
 use iced::time::{Duration, Instant};
 
-use crate::units::to_f32;
+use mx_core::display::ScreenLine;
+
+use crate::units::{signed_to_f32, to_f32};
 
 pub const BLINKS: u32 = 10;
 const FADE: Duration = Duration::from_millis(60);
@@ -107,53 +109,57 @@ fn glide(value: usize) -> Animation<f32> {
 
 #[derive(Debug, Clone)]
 pub struct Scroll {
-    target: usize,
-    animation: Animation<f32>,
+    target: ScreenLine,
+    shift: Animation<f32>,
 }
 
 impl Scroll {
-    pub fn new(top: usize) -> Self {
+    pub fn new(top: ScreenLine) -> Self {
         Self {
             target: top,
-            animation: scroll(to_f32(top)),
+            shift: scroll(0.0),
         }
     }
 
-    pub fn retarget(&mut self, target: usize, rows: usize, now: Instant, enabled: bool) -> bool {
-        if target == self.target {
+    pub fn target(&self) -> ScreenLine {
+        self.target
+    }
+
+    pub fn retarget(
+        &mut self,
+        top: ScreenLine,
+        moved: Option<isize>,
+        rows: usize,
+        now: Instant,
+        enabled: bool,
+    ) -> bool {
+        if top == self.target {
             return false;
         }
+        let screen = to_f32(rows);
+        let direction = if top > self.target { screen } else { -screen };
+        self.target = top;
         if !enabled {
-            *self = Self::new(target);
+            self.shift = scroll(0.0);
             return true;
         }
-        let current = self.position(now);
-        let goal = to_f32(target);
-        let screen = to_f32(rows);
-        if (current - goal).abs() > screen {
-            let start = if current < goal {
-                goal - screen
-            } else {
-                goal + screen
-            };
-            self.animation = scroll(start);
-        }
-        self.animation.go_mut(goal, now);
-        self.target = target;
+        let moved = moved.map_or(direction, signed_to_f32);
+        self.shift = scroll((self.shift(now) + moved).clamp(-screen, screen));
+        self.shift.go_mut(0.0, now);
         true
     }
 
-    pub fn position(&self, now: Instant) -> f32 {
-        self.animation.interpolate_with(|top| top, now)
+    pub fn shift(&self, now: Instant) -> f32 {
+        self.shift.interpolate_with(|shift| shift, now)
     }
 
     pub fn is_animating(&self, now: Instant) -> bool {
-        self.animation.is_animating(now)
+        self.shift.is_animating(now)
     }
 }
 
-fn scroll(top: f32) -> Animation<f32> {
-    Animation::new(top)
+fn scroll(shift: f32) -> Animation<f32> {
+    Animation::new(shift)
         .duration(SCROLL)
         .easing(Easing::EaseOutCubic)
 }
@@ -269,50 +275,55 @@ mod tests {
         assert!(!glide.is_animating(start + MS * 10));
     }
 
-    #[test]
-    fn scrolling_reports_when_its_target_changes() {
-        let start = Instant::now();
-        let mut scroll = Scroll::new(0);
-
-        assert!(!scroll.retarget(0, 30, start, true));
-        assert!(scroll.retarget(5, 30, start, true));
+    fn line(line: usize) -> ScreenLine {
+        ScreenLine { line, row: 0 }
     }
 
     #[test]
-    fn scroll_eases_toward_the_new_top() {
+    fn scrolling_reports_when_its_target_changes() {
         let start = Instant::now();
-        let mut scroll = Scroll::new(0);
+        let mut scroll = Scroll::new(line(0));
 
-        scroll.retarget(10, 30, start, true);
+        assert!(!scroll.retarget(line(0), Some(0), 30, start, true));
+        assert!(scroll.retarget(line(5), Some(5), 30, start, true));
+    }
 
-        let midway = scroll.position(start + MS * 40);
+    #[test]
+    fn scrolling_shifts_the_text_back_into_place() {
+        let start = Instant::now();
+        let mut scroll = Scroll::new(line(0));
+
+        scroll.retarget(line(10), Some(10), 30, start, true);
+
+        assert!(close(scroll.shift(start), 10.0));
+        let midway = scroll.shift(start + MS * 40);
         assert!(midway > 0.0 && midway < 10.0, "{midway}");
-        assert!(close(scroll.position(start + MS * 500), 10.0));
+        assert!(close(scroll.shift(start + MS * 500), 0.0));
         assert!(!scroll.is_animating(start + MS * 500));
     }
 
     #[test]
-    fn long_scrolls_start_one_screen_from_the_target() {
+    fn long_scrolls_start_one_screen_away() {
         let start = Instant::now();
-        let mut scroll = Scroll::new(0);
+        let mut scroll = Scroll::new(line(0));
 
-        scroll.retarget(1_000, 20, start, true);
-        assert!(close(scroll.position(start), 980.0));
+        scroll.retarget(line(1_000), None, 20, start, true);
+        assert!(close(scroll.shift(start), 20.0));
 
-        scroll.retarget(0, 20, start + MS * 500, true);
-        assert!(close(scroll.position(start + MS * 500), 20.0));
+        scroll.retarget(line(0), None, 20, start + MS * 500, true);
+        assert!(close(scroll.shift(start + MS * 500), -20.0));
     }
 
     #[test]
     fn disabled_scroll_jumps_immediately() {
         let start = Instant::now();
-        let mut scroll = Scroll::new(0);
+        let mut scroll = Scroll::new(line(0));
 
-        scroll.retarget(10, 30, start, false);
+        scroll.retarget(line(10), Some(10), 30, start, false);
 
-        assert!(close(scroll.position(start), 10.0));
+        assert!(close(scroll.shift(start), 0.0));
+        assert_eq!(scroll.target(), line(10));
     }
-
     #[test]
     fn disabled_animation_jumps_immediately() {
         let start = Instant::now();
