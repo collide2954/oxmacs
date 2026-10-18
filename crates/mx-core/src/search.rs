@@ -15,6 +15,7 @@ pub struct InvalidPattern;
 pub struct Pattern {
     regex: Regex,
     literal: bool,
+    folds_case: bool,
 }
 
 #[derive(Debug)]
@@ -65,13 +66,15 @@ impl Pattern {
         } else {
             Cow::Owned(regex::escape(query))
         };
+        let folds_case = !has_uppercase(query, regex);
         RegexBuilder::new(&source)
-            .case_insensitive(!has_uppercase(query, regex))
+            .case_insensitive(folds_case)
             .multi_line(true)
             .build()
             .map(|compiled| Self {
                 regex: compiled,
                 literal: !regex,
+                folds_case,
             })
             .map_err(|_| InvalidPattern)
     }
@@ -126,9 +129,25 @@ impl Pattern {
     }
 
     pub fn expand(&self, haystack: &Haystack<'_>, found: Range<usize>, template: &str) -> String {
-        if self.literal {
-            return template.to_owned();
+        let expanded = if self.literal {
+            template.to_owned()
+        } else {
+            self.expand_groups(haystack, found.clone(), template)
+        };
+        if self.folds_case {
+            let matched = &haystack.text[haystack.byte(found.start)..haystack.byte(found.end)];
+            match_case(matched, &expanded)
+        } else {
+            expanded
         }
+    }
+
+    fn expand_groups(
+        &self,
+        haystack: &Haystack<'_>,
+        found: Range<usize>,
+        template: &str,
+    ) -> String {
         let Some(captures) = self
             .regex
             .captures_at(&haystack.text, haystack.byte(found.start))
@@ -158,6 +177,50 @@ impl Pattern {
         }
         expanded
     }
+}
+
+fn match_case(matched: &str, replacement: &str) -> String {
+    let mut lowercase = false;
+    let mut uppercase = false;
+    let mut multiletter = false;
+    let mut lowercase_initial = false;
+    let mut in_word = false;
+    for c in matched.chars() {
+        let word = c.is_alphanumeric();
+        if c.is_lowercase() {
+            lowercase = true;
+            multiletter |= in_word;
+            lowercase_initial |= !in_word;
+        } else if c.is_uppercase() {
+            uppercase = true;
+            multiletter |= in_word;
+        } else if word && !in_word {
+            lowercase_initial = true;
+        }
+        in_word = word;
+    }
+    if !lowercase && multiletter || !lowercase_initial && !multiletter && uppercase {
+        replacement.to_uppercase()
+    } else if !lowercase_initial && multiletter {
+        capitalize_words(replacement)
+    } else {
+        replacement.to_owned()
+    }
+}
+
+fn capitalize_words(text: &str) -> String {
+    let mut capitalized = String::with_capacity(text.len());
+    let mut in_word = false;
+    for c in text.chars() {
+        let word = c.is_alphanumeric();
+        if word && !in_word {
+            capitalized.extend(c.to_uppercase());
+        } else {
+            capitalized.push(c);
+        }
+        in_word = word;
+    }
+    capitalized
 }
 
 fn has_uppercase(query: &str, regex: bool) -> bool {
@@ -294,6 +357,41 @@ mod tests {
             pattern.expand(&haystack, found, r"\2 at \1 (\&) \\"),
             r"host at me (me@host) \"
         );
+    }
+
+    #[test]
+    fn replacements_follow_the_case_of_the_match() {
+        assert_eq!(match_case("foo", "bar"), "bar");
+        assert_eq!(match_case("Foo", "bar"), "Bar");
+        assert_eq!(match_case("FOO", "bar"), "BAR");
+        assert_eq!(match_case("F", "bar"), "BAR");
+        assert_eq!(match_case("Foo Bar", "baz qux"), "Baz Qux");
+        assert_eq!(match_case("fOO", "bar"), "bar");
+        assert_eq!(match_case("1st", "bar"), "bar");
+    }
+
+    #[test]
+    fn lowercase_queries_keep_the_case_of_each_match() {
+        let buffer = buffer("Foo FOO foo");
+        let haystack = Haystack::new(&buffer);
+        let pattern = Pattern::new("foo", false).unwrap();
+
+        let replaced: Vec<String> = pattern
+            .find_all(&haystack, 0..11)
+            .into_iter()
+            .map(|found| pattern.expand(&haystack, found, "bar"))
+            .collect();
+
+        assert_eq!(replaced, ["Bar", "BAR", "bar"]);
+    }
+
+    #[test]
+    fn queries_with_uppercase_replace_as_typed() {
+        let buffer = buffer("Foo");
+        let haystack = Haystack::new(&buffer);
+        let pattern = Pattern::new("Foo", false).unwrap();
+
+        assert_eq!(pattern.expand(&haystack, 0..3, "bar"), "bar");
     }
 
     #[test]

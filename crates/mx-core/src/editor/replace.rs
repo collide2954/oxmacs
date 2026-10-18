@@ -562,6 +562,15 @@ mod tests {
     }
 
     #[test]
+    fn lowercase_queries_keep_the_case_of_what_they_replace() {
+        let mut editor = replacing("Foo FOO foo", 0, "foo", "bar");
+
+        press(&mut editor, "!");
+
+        assert_eq!(editor.buffer().contents(), "Bar BAR bar");
+    }
+
+    #[test]
     fn nothing_to_replace_finishes_at_once() {
         let editor = replacing("abc", 0, "foo", "bar");
 
