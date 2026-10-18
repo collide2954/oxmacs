@@ -1,3 +1,4 @@
+mod clipboard;
 mod editing;
 mod minibuffer;
 mod movement;
@@ -5,6 +6,7 @@ mod selection;
 #[cfg(test)]
 mod test_support;
 
+pub use clipboard::Effect;
 pub use minibuffer::{Completion, Minibuffer};
 
 use std::mem;
@@ -30,6 +32,8 @@ pub struct Editor {
     command_history: Vec<Command>,
     goal_column: Option<usize>,
     shift_selection: bool,
+    effects: Vec<Effect>,
+    clipboard_history: Vec<String>,
     message: Option<String>,
     quit_requested: bool,
     viewport: Viewport,
@@ -61,6 +65,8 @@ impl Editor {
             command_history: Vec::new(),
             goal_column: None,
             shift_selection: false,
+            effects: Vec::new(),
+            clipboard_history: Vec::new(),
             message: None,
             quit_requested: false,
             viewport: Viewport::new(DEFAULT_ROWS),
@@ -253,6 +259,8 @@ impl Editor {
             Command::SetMarkCommand => self.set_mark_command(previous),
             Command::ExchangePointAndMark => self.exchange_point_and_mark(),
             Command::MarkWholeBuffer => self.mark_whole_buffer(),
+            Command::Copy => self.copy(false),
+            Command::Cut => self.copy(true),
             Command::ExecuteExtendedCommand => self.execute_extended_command(),
             Command::ExitMinibuffer => self.exit_minibuffer(),
             Command::MinibufferNext => self.minibuffer_next(),

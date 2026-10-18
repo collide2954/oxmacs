@@ -148,10 +148,16 @@ impl Buffer {
         self.delete_range(self.point.saturating_sub(count)..self.point);
     }
 
+    pub fn text_in(&self, range: Range<usize>) -> String {
+        let end = range.end.min(self.len_chars());
+        let start = range.start.min(end);
+        self.text.slice(start..end).to_string()
+    }
+
     pub fn delete_range(&mut self, range: Range<usize>) -> String {
         let end = range.end.min(self.len_chars());
         let start = range.start.min(end);
-        let removed = self.text.slice(start..end).to_string();
+        let removed = self.text_in(start..end);
         self.text.remove(start..end);
         self.point = position_after_removal(self.point, start, end);
         self.mark = self
@@ -345,6 +351,15 @@ mod tests {
 
         assert_eq!(buffer.chars_after(1).collect::<String>(), "bcd");
         assert_eq!(buffer.chars_before(3).collect::<String>(), "cba");
+    }
+
+    #[test]
+    fn text_in_copies_a_range_without_changing_the_buffer() {
+        let buffer = Buffer::with_text("t", "hello world");
+
+        assert_eq!(buffer.text_in(6..11), "world");
+        assert_eq!(buffer.text_in(6..99), "world");
+        assert_eq!(buffer.contents(), "hello world");
     }
 
     #[test]

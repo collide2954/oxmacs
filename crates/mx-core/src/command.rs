@@ -20,6 +20,8 @@ pub enum Command {
     SetMarkCommand,
     ExchangePointAndMark,
     MarkWholeBuffer,
+    Copy,
+    Cut,
     ExecuteExtendedCommand,
     ExitMinibuffer,
     MinibufferNext,
