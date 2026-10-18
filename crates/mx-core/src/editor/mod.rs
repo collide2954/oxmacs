@@ -29,6 +29,7 @@ pub struct Editor {
     last_command: Option<Command>,
     command_history: Vec<Command>,
     goal_column: Option<usize>,
+    shift_selection: bool,
     message: Option<String>,
     quit_requested: bool,
     viewport: Viewport,
@@ -59,6 +60,7 @@ impl Editor {
             last_command: None,
             command_history: Vec::new(),
             goal_column: None,
+            shift_selection: false,
             message: None,
             quit_requested: false,
             viewport: Viewport::new(DEFAULT_ROWS),
@@ -142,29 +144,46 @@ impl Editor {
             minibuffer.note = None;
         }
         if self.quits_pending_sequence(key) {
-            self.dispatch(key, Command::KeyboardQuit);
+            self.dispatch(key, Command::KeyboardQuit, false);
             return;
         }
         self.pending.push(key);
-        let mut lookup = self.lookup();
+        let mut lookup = self.lookup(&self.pending);
         if lookup == Lookup::Unbound
             && let Some(meta) = self.fold_escape_into_meta()
         {
             key = meta;
-            lookup = self.lookup();
+            lookup = self.lookup(&self.pending);
         }
         match lookup {
             Lookup::Prefix => self.echo_pending(),
             Lookup::Unbound if is_escape(key) => self.echo_pending(),
-            Lookup::Command(command) => self.dispatch(key, command),
-            Lookup::Unbound if self.pending.len() == 1 && inserts_itself(key) => {
-                self.dispatch(key, Command::SelfInsertCommand);
-            }
-            Lookup::Unbound => {
-                let keys = KeySequence::from(mem::take(&mut self.pending));
-                self.message = Some(format!("{keys} is undefined"));
-            }
+            Lookup::Command(command) => self.dispatch(key, command, false),
+            Lookup::Unbound if self.pending.len() == 1 => self.handle_unbound_key(key),
+            Lookup::Unbound => self.report_undefined(),
         }
+    }
+
+    fn handle_unbound_key(&mut self, key: Key) {
+        if let Some(command) = self.shifted_motion(key) {
+            self.dispatch(key, command, true);
+        } else if inserts_itself(key) {
+            self.dispatch(key, Command::SelfInsertCommand, false);
+        } else {
+            self.report_undefined();
+        }
+    }
+
+    fn shifted_motion(&self, key: Key) -> Option<Command> {
+        match self.lookup(&[key.unshifted()?]) {
+            Lookup::Command(command) if command.is_motion() => Some(command),
+            _ => None,
+        }
+    }
+
+    fn report_undefined(&mut self) {
+        let keys = KeySequence::from(mem::take(&mut self.pending));
+        self.message = Some(format!("{keys} is undefined"));
     }
 
     fn quits_pending_sequence(&self, key: Key) -> bool {
@@ -190,25 +209,32 @@ impl Editor {
         self.message = Some(format!("{keys}-"));
     }
 
-    fn lookup(&self) -> Lookup {
+    fn lookup(&self, keys: &[Key]) -> Lookup {
         if self.minibuffer.is_some() {
-            match self.minibuffer_keymap.lookup(&self.pending) {
+            match self.minibuffer_keymap.lookup(keys) {
                 Lookup::Unbound => {}
                 found => return found,
             }
         }
-        self.keymap.lookup(&self.pending)
+        self.keymap.lookup(keys)
     }
 
-    fn dispatch(&mut self, key: Key, command: Command) {
+    fn dispatch(&mut self, key: Key, command: Command, shifted: bool) {
         self.pending.clear();
         self.last_key = Some(key);
-        self.execute(command);
+        self.run(command, shifted);
     }
 
     pub fn execute(&mut self, command: Command) {
+        self.run(command, false);
+    }
+
+    fn run(&mut self, command: Command, shifted: bool) {
         let goal_column = self.goal_column.take();
         let previous = self.last_command.replace(command);
+        if command.is_motion() {
+            self.prepare_motion_selection(shifted);
+        }
         match command {
             Command::SelfInsertCommand => self.self_insert(),
             Command::Newline => self.current_mut().insert("\n"),
