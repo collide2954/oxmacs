@@ -25,6 +25,8 @@ pub struct Config {
     pub format_on_save: bool,
     pub clock: bool,
     pub clock_format: String,
+    pub rust_lint: RustLint,
+    pub auto_save: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
@@ -34,6 +36,15 @@ pub enum OnDiskChange {
     Revert,
     Ask,
     Ignore,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RustLint {
+    #[default]
+    Check,
+    Clippy,
+    Off,
 }
 
 impl Default for Config {
@@ -51,6 +62,8 @@ impl Default for Config {
             format_on_save: false,
             clock: true,
             clock_format: "%H:%M".to_owned(),
+            rust_lint: RustLint::default(),
+            auto_save: true,
         }
     }
 }
@@ -209,6 +222,22 @@ mod tests {
                 .unwrap()
                 .format_on_save
         );
+    }
+
+    #[test]
+    fn rust_lints_use_cargo_check_unless_configured() {
+        let read = |text| Config::parse(text).map(|config| config.rust_lint);
+
+        assert_eq!(Config::default().rust_lint, RustLint::Check);
+        assert_eq!(read("rust-lint = \"clippy\"").unwrap(), RustLint::Clippy);
+        assert_eq!(read("rust-lint = \"off\"").unwrap(), RustLint::Off);
+        assert!(read("rust-lint = \"miri\"").is_err());
+    }
+
+    #[test]
+    fn auto_save_is_on_unless_turned_off() {
+        assert!(Config::default().auto_save);
+        assert!(!Config::parse("auto-save = false").unwrap().auto_save);
     }
 
     #[test]
