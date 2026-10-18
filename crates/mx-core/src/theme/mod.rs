@@ -38,6 +38,9 @@ pub struct Theme {
     pub flagged: Color,
     pub search_match: Color,
     pub search_current: Color,
+    pub success: Color,
+    pub warning: Color,
+    pub error: Color,
     pub syntax: SyntaxColors,
 }
 
@@ -75,6 +78,9 @@ pub enum Highlight {
     Macro,
     Attribute,
     Lifetime,
+    Success,
+    Warning,
+    Error,
 }
 
 impl Face {
@@ -128,6 +134,9 @@ impl Theme {
             flagged: self.flagged.mix(other.flagged, amount),
             search_match: self.search_match.mix(other.search_match, amount),
             search_current: self.search_current.mix(other.search_current, amount),
+            success: self.success.mix(other.success, amount),
+            warning: self.warning.mix(other.warning, amount),
+            error: self.error.mix(other.error, amount),
             syntax: self.syntax.mix(other.syntax, amount),
         }
     }
@@ -151,6 +160,9 @@ impl Theme {
             Highlight::Macro => self.syntax.macro_name,
             Highlight::Attribute => self.syntax.attribute,
             Highlight::Lifetime => self.syntax.lifetime,
+            Highlight::Success => self.success,
+            Highlight::Warning => self.warning,
+            Highlight::Error => self.error,
         }
     }
 }
@@ -228,6 +240,9 @@ mod tests {
                 Highlight::Macro,
                 Highlight::Attribute,
                 Highlight::Lifetime,
+                Highlight::Success,
+                Highlight::Warning,
+                Highlight::Error,
             ] {
                 let ratio = theme
                     .highlight(highlight)

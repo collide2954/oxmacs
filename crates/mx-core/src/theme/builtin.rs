@@ -35,6 +35,9 @@ pub static ADWAITA: Theme = Theme {
     flagged: Color::hex(0xF6_C9_CC),
     search_match: Color::hex(0xF9_F0_6B),
     search_current: Color::hex(0xFF_A3_48),
+    success: Color::hex(0x1C_68_49),
+    warning: Color::hex(0x9C_5A_00),
+    error: Color::hex(0xC0_1C_28),
     syntax: SyntaxColors {
         keyword: Color::hex(0xB3_3F_00),
         string: Color::hex(0x1A_6B_6B),
@@ -80,6 +83,9 @@ pub static ADWAITA_DARK: Theme = Theme {
     flagged: Color::hex(0x5C_2A_2E),
     search_match: Color::hex(0x5C_54_20),
     search_current: Color::hex(0x9C_3C_00),
+    success: Color::hex(0x2E_C2_7E),
+    warning: Color::hex(0xF5_C2_11),
+    error: Color::hex(0xF6_61_51),
     syntax: SyntaxColors {
         keyword: Color::hex(0xFF_A3_48),
         string: Color::hex(0x5B_C8_AF),
