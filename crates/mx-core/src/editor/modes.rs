@@ -13,11 +13,15 @@ impl Editor {
         self.buffers.sync_syntax(0);
     }
 
-    pub(super) fn syntax_highlights(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
-        self.buffers
-            .syntax(0)
-            .map(|syntax| syntax.highlights(self.buffers.current(), line))
-            .unwrap_or_default()
+    pub(super) fn syntax_highlights_at(
+        &self,
+        index: usize,
+        line: usize,
+    ) -> Vec<(Range<usize>, Highlight)> {
+        match (self.buffers.syntax(index), self.buffers.get(index)) {
+            (Some(syntax), Some(buffer)) => syntax.highlights(buffer, line),
+            _ => Vec::new(),
+        }
     }
 
     pub(super) fn set_major_mode(&mut self, language: Option<Language>) {

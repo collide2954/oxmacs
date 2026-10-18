@@ -293,7 +293,7 @@ impl App {
         let faces = self.faces();
         column![
             container(BufferView::new(
-                &self.editor,
+                self.editor.pane(),
                 faces,
                 self.font,
                 self.text_size,

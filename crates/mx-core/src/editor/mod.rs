@@ -17,10 +17,10 @@ mod modes;
 mod mouse;
 mod movement;
 mod pairs;
+mod pane;
 mod question;
 mod read_only;
 mod replace;
-mod screen;
 mod selection;
 mod splash;
 mod structure;
@@ -33,9 +33,9 @@ pub use effect::Effect;
 pub use isearch::Search;
 pub use minibuffer::{Choice, Completion, Minibuffer};
 pub use mouse::{Cell, Clicks};
+pub use pane::{Pane, ScreenRow};
 pub use question::Question;
 pub use replace::Replace;
-pub use screen::ScreenRow;
 
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -48,8 +48,7 @@ use isearch::Direction;
 use crate::command::{Command, Scope};
 use crate::config::{self, Config, OnDiskChange};
 use crate::dired::Mark;
-use crate::display::{self, Layout, LineStyle, Viewport};
-use crate::files::LineEnding;
+use crate::display::{Layout, LineStyle, Viewport};
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::syntax::Language;
 use crate::text::{Buffer, motion};
@@ -253,41 +252,13 @@ impl Editor {
         self.tab_width
     }
 
-    pub fn cursor_glyph(&self) -> (String, usize) {
-        let buffer = self.buffers.current();
-        let point = buffer.point();
-        let line = buffer.line_text(buffer.line_of(point));
-        display::cursor_glyph(&line, buffer.column(point), self.tab_width)
-    }
-
     pub fn point_display_column(&self) -> usize {
         let buffer = self.buffers.current();
         movement::display_column(buffer, buffer.point(), self.tab_width)
     }
 
     pub fn mode_line(&self) -> String {
-        let buffer = self.buffers.current();
-        let state = if buffer.is_read_only() {
-            "%%"
-        } else if buffer.is_modified() {
-            "**"
-        } else {
-            "--"
-        };
-        let crlf = buffer
-            .file()
-            .is_some_and(|file| file.format.line_ending == LineEnding::CrLf);
-        let mode = self
-            .language()
-            .map(|language| format!("   ({})", language.name()))
-            .unwrap_or_default();
-        format!(
-            "{state} {}   L{} C{}{}{mode}",
-            buffer.name(),
-            self.point_line() + 1,
-            self.point_display_column(),
-            if crlf { "   CRLF" } else { "" }
-        )
+        self.pane().mode_line()
     }
 
     pub fn handle_key(&mut self, mut key: Key) {
@@ -406,13 +377,17 @@ impl Editor {
     }
 
     pub fn line_style(&self, line: usize) -> LineStyle {
-        match self.buffers.mode(0) {
+        self.line_style_at(0, line)
+    }
+
+    fn line_style_at(&self, index: usize, line: usize) -> LineStyle {
+        match self.buffers.mode(index) {
             Some(Mode::Dired(listing)) => listing.line_style(line),
             Some(Mode::Splash(splash)) => splash.line_style(line),
             Some(Mode::Doctor(doctor)) => doctor.line_style(line),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,
-                spans: self.syntax_highlights(line),
+                spans: self.syntax_highlights_at(index, line),
             },
         }
     }
@@ -739,7 +714,7 @@ mod tests {
 
         assert_eq!(
             editor.viewport().top(),
-            display::ScreenLine { line: 0, row: 7 }
+            crate::display::ScreenLine { line: 0, row: 7 }
         );
     }
 
@@ -757,13 +732,6 @@ mod tests {
 
         let top = editor.viewport().top().line;
         assert!((top..top + 5).contains(&12));
-    }
-
-    #[test]
-    fn the_cursor_glyph_is_the_one_at_point() {
-        let editor = editor_with("a日b", 1);
-
-        assert_eq!(editor.cursor_glyph(), ("日".to_owned(), 2));
     }
 
     #[test]

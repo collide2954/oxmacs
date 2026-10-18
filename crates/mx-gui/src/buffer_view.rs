@@ -14,7 +14,7 @@ use iced::{
     window,
 };
 use mx_core::display::{self, LineStyle};
-use mx_core::editor::{Cell, Clicks, Editor, ScreenRow};
+use mx_core::editor::{Cell, Clicks, Pane, ScreenRow};
 use mx_core::text::BufferId;
 use mx_core::theme::{Highlight, Theme as Faces};
 
@@ -53,7 +53,7 @@ pub struct Motion {
 
 #[derive(Debug)]
 pub struct BufferView<'a, Message> {
-    editor: &'a Editor,
+    pane: Pane<'a>,
     faces: Faces,
     font: Font,
     size: Pixels,
@@ -101,7 +101,7 @@ impl State {
 
 impl<'a, Message> BufferView<'a, Message> {
     pub fn new(
-        editor: &'a Editor,
+        pane: Pane<'a>,
         faces: Faces,
         font: Font,
         size: impl Into<Pixels>,
@@ -109,7 +109,7 @@ impl<'a, Message> BufferView<'a, Message> {
         on_event: fn(ViewEvent) -> Message,
     ) -> Self {
         Self {
-            editor,
+            pane,
             faces,
             font,
             size: size.into(),
@@ -149,21 +149,21 @@ impl<'a, Message> BufferView<'a, Message> {
     }
 
     fn cursor_cell(&self) -> (usize, usize) {
-        let (column, row) = self.editor.cursor_screen();
+        let (column, row) = self.pane.cursor_screen();
         (column, usize::try_from(row).unwrap_or(0))
     }
 
     fn blinking(&self) -> bool {
-        self.motion.enabled && self.editor.minibuffer().is_none()
+        self.motion.enabled && !self.pane.minibuffer_active()
     }
 
     fn animate<M>(&self, state: &mut State, now: Instant, shell: &mut Shell<'_, M>) {
         state.frame = Some(now);
-        state.follow(self.editor.buffer().id());
-        let viewport = self.editor.viewport();
+        state.follow(self.pane.buffer().id());
+        let viewport = self.pane.viewport();
         let (top, rows) = (viewport.top(), viewport.rows());
         let scroll = state.scroll.get_or_insert_with(|| Scroll::new(top));
-        let moved = self.editor.screen_distance(scroll.target(), top, rows);
+        let moved = self.pane.screen_distance(scroll.target(), top, rows);
         let scrolled = scroll.retarget(top, moved, rows, now, self.motion.enabled);
         let scrolling = scroll.is_animating(now);
         let pointed = mem::take(&mut state.pointed);
@@ -255,7 +255,7 @@ impl<'a, Message> BufferView<'a, Message> {
         if origin.y + cell.height <= bounds.y || origin.y >= bounds.y + bounds.height {
             return None;
         }
-        let (glyph, width) = self.editor.cursor_glyph();
+        let (glyph, width) = self.pane.cursor_glyph();
         Some(CursorBlock {
             bounds: Rectangle::new(origin, Size::new(cell.width * to_f32(width), cell.height)),
             glyph,
@@ -284,7 +284,7 @@ impl<'a, Message> BufferView<'a, Message> {
     {
         let color = style::color(self.faces.cursor);
         renderer.with_layer(bounds, |renderer| {
-            if self.editor.minibuffer().is_some() {
+            if self.pane.minibuffer_active() {
                 let hollow = Quad {
                     bounds: cursor.bounds,
                     border: Border {
@@ -376,7 +376,7 @@ where
         }
         let rows = rows_in(layout.bounds().height, metrics.cell.height);
         let columns = columns_in(layout.bounds().width, metrics.cell.width);
-        let viewport = self.editor.viewport();
+        let viewport = self.pane.viewport();
         if (rows, columns) != (viewport.rows(), viewport.columns()) {
             shell.publish((self.on_event)(ViewEvent::Resized { rows, columns }));
         }
@@ -414,7 +414,7 @@ where
         let line_of = |number: usize| lines.iter().find(|line| line.number == number);
         let cursor = self.cursor_block(state, bounds);
         let opacity = self.cursor_opacity(state);
-        let behind = self.editor.minibuffer().is_none();
+        let behind = !self.pane.minibuffer_active();
         renderer.with_layer(bounds, |renderer| {
             for (row, rectangle) in &rows {
                 let Some(line) = line_of(row.line) else {
@@ -479,22 +479,22 @@ impl<'a, Message> BufferView<'a, Message> {
         state: &State,
         bounds: Rectangle,
     ) -> (Vec<DrawnLine<'a>>, Vec<(ScreenRow, Rectangle)>) {
-        let buffer = self.editor.buffer();
-        let tab_width = self.editor.tab_width();
+        let buffer = self.pane.buffer();
+        let tab_width = self.pane.tab_width();
         let cell = state.metrics.cell;
         let shift = state.shift();
         let selection = buffer.selection();
         let mut lines: Vec<DrawnLine<'a>> = Vec::new();
         let mut rows = Vec::new();
         for row in self
-            .editor
-            .screen_rows(floor_to_isize(-shift), self.editor.viewport().rows() + 2)
+            .pane
+            .screen_rows(floor_to_isize(-shift), self.pane.viewport().rows() + 2)
         {
             if lines.last().is_none_or(|line| line.number != row.line) {
                 let text = buffer.line_text(row.line);
                 let span = buffer.line_start(row.line)..buffer.line_end(row.line);
                 let marks = self
-                    .editor
+                    .pane
                     .line_marks(row.line)
                     .into_iter()
                     .filter_map(|(range, mark)| {
@@ -509,7 +509,7 @@ impl<'a, Message> BufferView<'a, Message> {
                         display::highlight_columns(&text, span, selection, tab_width)
                     }),
                     marks,
-                    style: self.editor.line_style(row.line),
+                    style: self.pane.line_style(row.line),
                     text,
                 });
             }
@@ -535,7 +535,7 @@ impl<'a, Message> BufferView<'a, Message> {
         Renderer: text::Renderer<Font = Font>,
     {
         let foreground = style::color(self.faces.default.foreground);
-        let tab_width = self.editor.tab_width();
+        let tab_width = self.pane.tab_width();
         for segment in
             display::segments_in(&line.text, row.chars.clone(), &line.style.spans, tab_width)
         {
@@ -550,7 +550,7 @@ impl<'a, Message> BufferView<'a, Message> {
                 bounds,
             );
         }
-        let columns = self.editor.viewport().columns();
+        let columns = self.pane.viewport().columns();
         if row.end_column.is_some() && columns > 0 {
             let x = to_f32(columns - 1) * cell_width;
             renderer.fill_text(
