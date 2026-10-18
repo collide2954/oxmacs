@@ -6,7 +6,7 @@ use iced::advanced::text::{self, Paragraph as _, Text};
 use iced::advanced::widget::tree::{self, Tree};
 use iced::advanced::{Clipboard, Shell, Widget};
 use iced::alignment::Vertical;
-use iced::time::Instant;
+use iced::time::{Duration, Instant};
 use iced::{
     Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, mouse,
     window,
@@ -31,6 +31,7 @@ pub enum ViewEvent {
 pub struct Motion {
     pub enabled: bool,
     pub last_input: Instant,
+    pub blink_interval: Duration,
 }
 
 #[derive(Debug)]
@@ -127,7 +128,7 @@ impl<'a, Message> BufferView<'a, Message> {
         }
         let idle = now.saturating_duration_since(self.motion.last_input);
         if self.blinking()
-            && let Some(wait) = animation::next_blink_frame(idle)
+            && let Some(wait) = animation::next_blink_frame(idle, self.motion.blink_interval)
         {
             shell.request_redraw_at(now + wait);
         }
@@ -172,9 +173,10 @@ impl<'a, Message> BufferView<'a, Message> {
             return;
         }
         let opacity = match state.frame {
-            Some(frame) if self.blinking() => {
-                animation::cursor_opacity(frame.saturating_duration_since(self.motion.last_input))
-            }
+            Some(frame) if self.blinking() => animation::cursor_opacity(
+                frame.saturating_duration_since(self.motion.last_input),
+                self.motion.blink_interval,
+            ),
             _ => 1.0,
         };
         let buffer = self.editor.buffer();

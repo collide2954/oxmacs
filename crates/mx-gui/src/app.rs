@@ -1,6 +1,6 @@
 use iced::font::Family;
 use iced::theme::Mode;
-use iced::time::Instant;
+use iced::time::{Duration, Instant};
 use iced::widget::{column, container, text};
 use iced::{Element, Font, Length, Subscription, Task, Theme, keyboard, system};
 use mx_core::config::{self, Config, ConfigError};
@@ -17,6 +17,7 @@ pub struct App {
     font: Font,
     text_size: f32,
     animations: bool,
+    blink_interval: Duration,
     last_input: Instant,
 }
 
@@ -49,6 +50,7 @@ impl App {
             font,
             text_size: points_to_pixels(config.font_size),
             animations: config.animations,
+            blink_interval: Duration::from_millis(config.cursor_blink_interval),
             last_input: Instant::now(),
         }
     }
@@ -148,6 +150,7 @@ impl App {
                 Motion {
                     enabled: self.animations,
                     last_input: self.last_input,
+                    blink_interval: self.blink_interval,
                 },
                 Message::View
             ))

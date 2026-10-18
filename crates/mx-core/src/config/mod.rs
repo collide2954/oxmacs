@@ -14,6 +14,7 @@ pub struct Config {
     pub font_size: f32,
     pub tab_width: usize,
     pub animations: bool,
+    pub cursor_blink_interval: u64,
 }
 
 impl Default for Config {
@@ -24,6 +25,7 @@ impl Default for Config {
             font_size: 11.0,
             tab_width: 8,
             animations: true,
+            cursor_blink_interval: 400,
         }
     }
 }
@@ -116,6 +118,17 @@ mod tests {
         assert!((config.font_size - 11.0).abs() < f32::EPSILON);
         assert_eq!(config.tab_width, 8);
         assert!(config.animations);
+    }
+
+    #[test]
+    fn cursor_blink_interval_defaults_to_400ms_and_accepts_zero() {
+        assert_eq!(Config::default().cursor_blink_interval, 400);
+        assert_eq!(
+            Config::parse("cursor-blink-interval = 0")
+                .unwrap()
+                .cursor_blink_interval,
+            0
+        );
     }
 
     #[test]

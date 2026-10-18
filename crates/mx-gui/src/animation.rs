@@ -4,10 +4,8 @@ use iced::time::{Duration, Instant};
 
 use crate::units::to_f32;
 
-pub const BLINK_DELAY: Duration = Duration::from_millis(500);
-pub const BLINK_INTERVAL: Duration = Duration::from_millis(500);
 pub const BLINKS: u32 = 10;
-const FADE: Duration = Duration::from_millis(120);
+const FADE: Duration = Duration::from_millis(60);
 const GLIDE: Duration = Duration::from_millis(70);
 
 struct Phase {
@@ -15,36 +13,43 @@ struct Phase {
     elapsed: Duration,
 }
 
-fn blink_phase(idle: Duration) -> Option<Phase> {
-    let since = idle.checked_sub(BLINK_DELAY)?;
-    let index = u32::try_from(since.as_nanos() / BLINK_INTERVAL.as_nanos()).ok()?;
+fn blink_phase(idle: Duration, interval: Duration) -> Option<Phase> {
+    if interval.is_zero() {
+        return None;
+    }
+    let since = idle.checked_sub(interval)?;
+    let index = u32::try_from(since.as_nanos() / interval.as_nanos()).ok()?;
     if index >= BLINKS * 2 {
         return None;
     }
     Some(Phase {
         visible: index % 2 == 1,
-        elapsed: since.saturating_sub(BLINK_INTERVAL * index),
+        elapsed: since.saturating_sub(interval * index),
     })
 }
 
-pub fn cursor_opacity(idle: Duration) -> f32 {
-    let Some(phase) = blink_phase(idle) else {
+pub fn cursor_opacity(idle: Duration, interval: Duration) -> f32 {
+    let Some(phase) = blink_phase(idle, interval) else {
         return 1.0;
     };
-    let progress = (phase.elapsed.as_secs_f32() / FADE.as_secs_f32()).min(1.0);
+    let fade = FADE.min(interval);
+    let progress = (phase.elapsed.as_secs_f32() / fade.as_secs_f32()).min(1.0);
     let eased = Easing::EaseInOut.value(progress);
     if phase.visible { eased } else { 1.0 - eased }
 }
 
-pub fn next_blink_frame(idle: Duration) -> Option<Duration> {
-    if let Some(remaining) = BLINK_DELAY.checked_sub(idle).filter(|left| !left.is_zero()) {
+pub fn next_blink_frame(idle: Duration, interval: Duration) -> Option<Duration> {
+    if interval.is_zero() {
+        return None;
+    }
+    if let Some(remaining) = interval.checked_sub(idle).filter(|left| !left.is_zero()) {
         return Some(remaining);
     }
-    let phase = blink_phase(idle)?;
+    let phase = blink_phase(idle, interval)?;
     if phase.elapsed < FADE {
         Some(Duration::ZERO)
     } else {
-        Some(BLINK_INTERVAL.saturating_sub(phase.elapsed))
+        Some(interval.saturating_sub(phase.elapsed))
     }
 }
 
@@ -106,42 +111,52 @@ mod tests {
         (a - b).abs() < 1e-3
     }
 
+    const INTERVAL: Duration = Duration::from_millis(400);
+
     #[test]
     fn cursor_is_solid_until_the_blink_delay() {
-        assert!(close(cursor_opacity(Duration::ZERO), 1.0));
-        assert!(close(cursor_opacity(MS * 499), 1.0));
+        assert!(close(cursor_opacity(Duration::ZERO, INTERVAL), 1.0));
+        assert!(close(cursor_opacity(MS * 399, INTERVAL), 1.0));
     }
 
     #[test]
     fn cursor_fades_out_then_stays_hidden() {
-        assert!(close(cursor_opacity(MS * 500), 1.0));
-        let fading = cursor_opacity(MS * 560);
+        assert!(close(cursor_opacity(MS * 400, INTERVAL), 1.0));
+        let fading = cursor_opacity(MS * 430, INTERVAL);
         assert!(fading > 0.0 && fading < 1.0, "{fading}");
-        assert!(close(cursor_opacity(MS * 800), 0.0));
+        assert!(close(cursor_opacity(MS * 500, INTERVAL), 0.0));
     }
 
     #[test]
     fn cursor_fades_back_in_for_the_second_half() {
-        let fading = cursor_opacity(MS * 1060);
+        let fading = cursor_opacity(MS * 830, INTERVAL);
         assert!(fading > 0.0 && fading < 1.0, "{fading}");
-        assert!(close(cursor_opacity(MS * 1300), 1.0));
+        assert!(close(cursor_opacity(MS * 900, INTERVAL), 1.0));
     }
 
     #[test]
     fn cursor_stops_blinking_after_ten_blinks() {
-        assert!(close(cursor_opacity(MS * 10_500 + MS * 300), 1.0));
-        assert_eq!(next_blink_frame(MS * 10_500 + MS * 300), None);
+        let done = MS * 8_400 + MS * 100;
+        assert!(close(cursor_opacity(done, INTERVAL), 1.0));
+        assert_eq!(next_blink_frame(done, INTERVAL), None);
     }
 
     #[test]
     fn steady_phases_wait_until_the_next_phase() {
-        assert_eq!(next_blink_frame(MS * 100), Some(MS * 400));
-        assert_eq!(next_blink_frame(MS * 800), Some(MS * 200));
+        assert_eq!(next_blink_frame(MS * 100, INTERVAL), Some(MS * 300));
+        assert_eq!(next_blink_frame(MS * 500, INTERVAL), Some(MS * 300));
     }
 
     #[test]
     fn fades_need_the_next_frame_immediately() {
-        assert_eq!(next_blink_frame(MS * 560), Some(Duration::ZERO));
+        assert_eq!(next_blink_frame(MS * 430, INTERVAL), Some(Duration::ZERO));
+    }
+
+    #[test]
+    fn zero_interval_disables_blinking() {
+        assert!(close(cursor_opacity(MS * 5_000, Duration::ZERO), 1.0));
+        assert_eq!(next_blink_frame(MS * 5_000, Duration::ZERO), None);
+        assert_eq!(next_blink_frame(Duration::ZERO, Duration::ZERO), None);
     }
 
     fn at(glide: &Glide, now: Instant, expected: (f32, f32)) -> bool {
