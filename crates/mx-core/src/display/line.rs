@@ -46,17 +46,6 @@ impl Glyph {
     }
 }
 
-pub fn render_line(text: &str, tab_width: usize) -> String {
-    let mut rendered = String::with_capacity(text.len());
-    let mut column = 0;
-    for c in text.chars() {
-        let glyph = Glyph::of(c, column, tab_width);
-        glyph.render(&mut rendered);
-        column += glyph.width();
-    }
-    rendered
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Segment<F> {
     pub column: usize,
@@ -151,6 +140,13 @@ pub fn highlight_columns(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn render_line(text: &str, tab_width: usize) -> String {
+        segments::<()>(text, &[], tab_width)
+            .into_iter()
+            .map(|segment| segment.text)
+            .collect()
+    }
 
     #[test]
     fn c1_control_characters_render_as_octal_escapes() {
