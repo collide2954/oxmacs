@@ -14,9 +14,9 @@ use iced::{
 use mx_core::display;
 use mx_core::editor::Editor;
 
-use crate::animation::{self, Glide};
+use crate::animation::{self, Glide, Scroll};
 use crate::style;
-use crate::units::to_f32;
+use crate::units::{floor_to_usize, to_f32};
 
 const WIDE_SAMPLE: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
 const NARROW_SAMPLE: &str = "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii";
@@ -55,7 +55,17 @@ struct Metrics {
 struct State {
     metrics: Metrics,
     cursor: Option<Glide>,
+    scroll: Option<Scroll>,
     frame: Option<Instant>,
+}
+
+impl State {
+    fn top(&self, fallback: usize) -> f32 {
+        match (&self.scroll, self.frame) {
+            (Some(scroll), Some(frame)) => scroll.position(frame),
+            _ => to_f32(fallback),
+        }
+    }
 }
 
 impl<'a, Message> BufferView<'a, Message> {
@@ -119,10 +129,15 @@ impl<'a, Message> BufferView<'a, Message> {
 
     fn animate<M>(&self, state: &mut State, now: Instant, shell: &mut Shell<'_, M>) {
         state.frame = Some(now);
+        let viewport = self.editor.viewport();
+        let scroll = state
+            .scroll
+            .get_or_insert_with(|| Scroll::new(viewport.top()));
+        scroll.retarget(viewport.top(), viewport.rows(), now, self.motion.enabled);
         let target = self.cursor_cell();
         let cursor = state.cursor.get_or_insert_with(|| Glide::new(target));
         cursor.retarget(target, now, self.motion.enabled);
-        if cursor.is_animating(now) {
+        if cursor.is_animating(now) || scroll.is_animating(now) {
             shell.request_redraw();
             return;
         }
@@ -147,12 +162,12 @@ impl<'a, Message> BufferView<'a, Message> {
             }
             _ => (to_f32(target.0), to_f32(target.1), false),
         };
-        let top = to_f32(self.editor.viewport().top());
+        let top = state.top(self.editor.viewport().top());
         let origin = Point::new(
             bounds.x + column * cell.width,
             bounds.y + (line - top) * cell.height,
         );
-        if origin.y < bounds.y || origin.y >= bounds.y + bounds.height {
+        if origin.y + cell.height <= bounds.y || origin.y >= bounds.y + bounds.height {
             return;
         }
         let block = Rectangle::new(origin, cell);
@@ -274,29 +289,32 @@ where
         let bounds = layout.bounds();
         let buffer = self.editor.buffer();
         let foreground = style::color(self.editor.theme().default.foreground);
-        let visible = self
-            .editor
-            .viewport()
-            .lines()
-            .take_while(|line| *line < buffer.len_lines());
+        let viewport = self.editor.viewport();
+        let top = state.top(viewport.top());
+        let first = floor_to_usize(top);
+        let offset = (top - to_f32(first)) * cell.height;
+        let visible =
+            (first..=first + viewport.rows()).take_while(|line| *line < buffer.len_lines());
         let selection = buffer.selection();
-        for (row, line) in visible.enumerate() {
-            let text = buffer.line_text(line);
-            let row = Rectangle::new(
-                Point::new(bounds.x, bounds.y + to_f32(row) * cell.height),
-                Size::new(bounds.width, cell.height),
-            );
-            if let Some(selection) = &selection {
-                self.draw_highlight(renderer, &text, line, selection, row, cell.width);
+        renderer.with_layer(bounds, |renderer| {
+            for (row, line) in visible.enumerate() {
+                let text = buffer.line_text(line);
+                let row = Rectangle::new(
+                    Point::new(bounds.x, bounds.y + to_f32(row) * cell.height - offset),
+                    Size::new(bounds.width, cell.height),
+                );
+                if let Some(selection) = &selection {
+                    self.draw_highlight(renderer, &text, line, selection, row, cell.width);
+                }
+                let content = display::render_line(&text, self.editor.tab_width());
+                renderer.fill_text(
+                    self.text(content, row.size()),
+                    row.position(),
+                    foreground,
+                    bounds,
+                );
             }
-            let content = display::render_line(&text, self.editor.tab_width());
-            renderer.fill_text(
-                self.text(content, row.size()),
-                row.position(),
-                foreground,
-                bounds,
-            );
-        }
+        });
         self.draw_cursor(renderer, state, bounds);
     }
 }

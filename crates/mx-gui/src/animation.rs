@@ -7,6 +7,7 @@ use crate::units::to_f32;
 pub const BLINKS: u32 = 10;
 const FADE: Duration = Duration::from_millis(60);
 const GLIDE: Duration = Duration::from_millis(70);
+const SCROLL: Duration = Duration::from_millis(120);
 
 struct Phase {
     visible: bool,
@@ -101,6 +102,58 @@ fn glide(value: usize) -> Animation<f32> {
         .easing(Easing::EaseOutCubic)
 }
 
+#[derive(Debug, Clone)]
+pub struct Scroll {
+    target: usize,
+    animation: Animation<f32>,
+}
+
+impl Scroll {
+    pub fn new(top: usize) -> Self {
+        Self {
+            target: top,
+            animation: scroll(to_f32(top)),
+        }
+    }
+
+    pub fn retarget(&mut self, target: usize, rows: usize, now: Instant, enabled: bool) {
+        if target == self.target {
+            return;
+        }
+        if !enabled {
+            *self = Self::new(target);
+            return;
+        }
+        let current = self.position(now);
+        let goal = to_f32(target);
+        let screen = to_f32(rows);
+        if (current - goal).abs() > screen {
+            let start = if current < goal {
+                goal - screen
+            } else {
+                goal + screen
+            };
+            self.animation = scroll(start);
+        }
+        self.animation.go_mut(goal, now);
+        self.target = target;
+    }
+
+    pub fn position(&self, now: Instant) -> f32 {
+        self.animation.interpolate_with(|top| top, now)
+    }
+
+    pub fn is_animating(&self, now: Instant) -> bool {
+        self.animation.is_animating(now)
+    }
+}
+
+fn scroll(top: f32) -> Animation<f32> {
+    Animation::new(top)
+        .duration(SCROLL)
+        .easing(Easing::EaseOutCubic)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,6 +240,41 @@ mod tests {
 
         assert!(at(&glide, start, (4.0, 2.0)));
         assert!(!glide.is_animating(start));
+    }
+
+    #[test]
+    fn scroll_eases_toward_the_new_top() {
+        let start = Instant::now();
+        let mut scroll = Scroll::new(0);
+
+        scroll.retarget(10, 30, start, true);
+
+        let midway = scroll.position(start + MS * 40);
+        assert!(midway > 0.0 && midway < 10.0, "{midway}");
+        assert!(close(scroll.position(start + MS * 500), 10.0));
+        assert!(!scroll.is_animating(start + MS * 500));
+    }
+
+    #[test]
+    fn long_scrolls_start_one_screen_from_the_target() {
+        let start = Instant::now();
+        let mut scroll = Scroll::new(0);
+
+        scroll.retarget(1_000, 20, start, true);
+        assert!(close(scroll.position(start), 980.0));
+
+        scroll.retarget(0, 20, start + MS * 500, true);
+        assert!(close(scroll.position(start + MS * 500), 20.0));
+    }
+
+    #[test]
+    fn disabled_scroll_jumps_immediately() {
+        let start = Instant::now();
+        let mut scroll = Scroll::new(0);
+
+        scroll.retarget(10, 30, start, false);
+
+        assert!(close(scroll.position(start), 10.0));
     }
 
     #[test]
