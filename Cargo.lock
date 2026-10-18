@@ -2082,7 +2082,7 @@ dependencies = [
 
 [[package]]
 name = "mx"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "mx-core",
  "mx-gui",
@@ -2090,7 +2090,7 @@ dependencies = [
 
 [[package]]
 name = "mx-core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bitflags 2.13.2",
  "dirs",
@@ -2108,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "mx-gui"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "iced",
  "iced_test",
