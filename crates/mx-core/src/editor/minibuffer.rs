@@ -527,7 +527,7 @@ mod tests {
     #[test]
     fn next_and_previous_move_the_selection_within_bounds() {
         let mut editor = Editor::new();
-        open_with(&mut editor, "forward-");
+        open_with(&mut editor, "of-buffer");
         let selected = |editor: &Editor| editor.minibuffer().unwrap().selected();
 
         press(&mut editor, "C-n");

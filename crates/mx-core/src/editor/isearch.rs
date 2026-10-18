@@ -184,6 +184,23 @@ impl Editor {
         self.push_step(next);
     }
 
+    pub(super) fn isearch_toggle_regexp(&mut self) {
+        let Some(search) = &self.search else {
+            return;
+        };
+        let next = Step {
+            regex: !search.step.regex,
+            wrapped: false,
+            ..search.step.clone()
+        };
+        let next = if next.query.is_empty() {
+            next
+        } else {
+            self.locate(next, search.origin, false)
+        };
+        self.push_step(next);
+    }
+
     fn note_search(&mut self, note: &'static str) {
         if let Some(search) = &mut self.search {
             search.note = Some(note);
@@ -220,13 +237,16 @@ impl Editor {
         if let Some(search) = &mut self.search {
             search.previous.push(mem::replace(&mut search.step, step));
         }
-        self.sync_search_point();
+        self.refresh_search();
     }
 
-    fn sync_search_point(&mut self) {
-        let Some(search) = &self.search else {
+    fn refresh_search(&mut self) {
+        let Some(search) = &mut self.search else {
             return;
         };
+        if search.step.regex && Pattern::new(&search.step.query, true).is_err() {
+            search.note = Some("[Invalid regexp]");
+        }
         let point = match (&search.step.found, search.step.direction) {
             (Some(found), Direction::Forward) => found.end,
             (Some(found), Direction::Backward) => found.start,
@@ -254,7 +274,7 @@ impl Editor {
         {
             search.step = previous;
         }
-        self.sync_search_point();
+        self.refresh_search();
     }
 
     pub(super) fn isearch_abort(&mut self) {
@@ -264,7 +284,7 @@ impl Editor {
             {
                 search.step = previous;
             }
-            self.sync_search_point();
+            self.refresh_search();
             return;
         }
         let Some(search) = self.search.take() else {
@@ -503,6 +523,55 @@ mod tests {
         press(&mut editor, "C-g");
         assert!(editor.search().is_none());
         assert_eq!(point(&editor), 0);
+    }
+
+    #[test]
+    fn regexp_searches_match_patterns() {
+        let mut editor = editor_with("a1 b22", 0);
+
+        press(&mut editor, "C-M-s");
+        assert_eq!(prompt(&editor), "Regexp I-search: ");
+
+        type_text(&mut editor, "b2+");
+        assert_eq!(point(&editor), 6);
+    }
+
+    #[test]
+    fn regexp_searches_go_backward_too() {
+        let mut editor = editor_with("ab ab", 5);
+
+        press(&mut editor, "C-M-r a .");
+
+        assert_eq!(prompt(&editor), "Regexp I-search backward: ");
+        assert_eq!(point(&editor), 3);
+    }
+
+    #[test]
+    fn invalid_regexps_fail_with_a_note_until_completed() {
+        let mut editor = editor_with("(a)", 0);
+
+        press(&mut editor, "C-M-s (");
+        assert_eq!(prompt(&editor), "Failing regexp I-search: ");
+        assert_eq!(editor.search().unwrap().note(), Some("[Invalid regexp]"));
+
+        press(&mut editor, "a )");
+        assert_eq!(point(&editor), 2);
+        assert_eq!(editor.search().unwrap().note(), None);
+    }
+
+    #[test]
+    fn meta_r_toggles_regexp_matching() {
+        let mut editor = editor_with("abc a.c", 0);
+        press(&mut editor, "C-s a .");
+        assert_eq!(point(&editor), 6);
+
+        press(&mut editor, "M-r");
+        assert_eq!(prompt(&editor), "Regexp I-search: ");
+        assert_eq!(point(&editor), 2);
+
+        press(&mut editor, "M-r");
+        assert_eq!(prompt(&editor), "I-search: ");
+        assert_eq!(point(&editor), 6);
     }
 
     #[test]

@@ -54,6 +54,8 @@ const GLOBAL: &[(&str, Command)] = &[
     ("M-x", Command::ExecuteExtendedCommand),
     ("C-s", Command::IsearchForward),
     ("C-r", Command::IsearchBackward),
+    ("C-M-s", Command::IsearchForwardRegexp),
+    ("C-M-r", Command::IsearchBackwardRegexp),
     ("C-x C-f", Command::FindFile),
     ("C-x C-s", Command::SaveBuffer),
     ("C-x s", Command::SaveSomeBuffers),
@@ -83,7 +85,10 @@ const MINIBUFFER: &[(&str, Command)] = &[
 const SEARCH: &[(&str, Command)] = &[
     ("C-s", Command::IsearchRepeatForward),
     ("C-r", Command::IsearchRepeatBackward),
+    ("C-M-s", Command::IsearchRepeatForward),
+    ("C-M-r", Command::IsearchRepeatBackward),
     ("DEL", Command::IsearchDeleteChar),
+    ("M-r", Command::IsearchToggleRegexp),
     ("RET", Command::IsearchExit),
     ("C-g", Command::IsearchAbort),
 ];

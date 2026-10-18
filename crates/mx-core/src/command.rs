@@ -38,10 +38,13 @@ pub enum Command {
     ExitMinibufferWithInput,
     IsearchForward,
     IsearchBackward,
+    IsearchForwardRegexp,
+    IsearchBackwardRegexp,
     IsearchRepeatForward,
     IsearchRepeatBackward,
     IsearchPrintingChar,
     IsearchDeleteChar,
+    IsearchToggleRegexp,
     IsearchExit,
     IsearchAbort,
     FindFile,
@@ -154,6 +157,7 @@ impl Command {
             | Self::IsearchRepeatBackward
             | Self::IsearchPrintingChar
             | Self::IsearchDeleteChar
+            | Self::IsearchToggleRegexp
             | Self::IsearchExit
             | Self::IsearchAbort => Scope::Search,
             _ => Scope::Global,
