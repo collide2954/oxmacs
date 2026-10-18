@@ -14,6 +14,7 @@ use iced::{
 };
 use mx_core::display;
 use mx_core::editor::{Cell, Clicks, Editor};
+use mx_core::text::BufferId;
 use mx_core::theme::Theme as Faces;
 
 use crate::animation::{self, Glide, Scroll};
@@ -73,9 +74,17 @@ struct State {
     dragging: bool,
     wheel_carry: f32,
     modifiers: keyboard::Modifiers,
+    shown: Option<BufferId>,
 }
 
 impl State {
+    fn follow(&mut self, buffer: BufferId) {
+        if self.shown.replace(buffer) != Some(buffer) {
+            self.cursor = None;
+            self.scroll = None;
+        }
+    }
+
     fn top(&self, fallback: usize) -> f32 {
         match (&self.scroll, self.frame) {
             (Some(scroll), Some(frame)) => scroll.position(frame),
@@ -147,6 +156,7 @@ impl<'a, Message> BufferView<'a, Message> {
 
     fn animate<M>(&self, state: &mut State, now: Instant, shell: &mut Shell<'_, M>) {
         state.frame = Some(now);
+        state.follow(self.editor.buffer().id());
         let viewport = self.editor.viewport();
         let scroll = state
             .scroll
@@ -501,6 +511,8 @@ pub fn rows_in(height: f32, line_height: f32) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use mx_core::text::Buffer;
+
     use super::*;
 
     #[test]
@@ -572,6 +584,21 @@ mod tests {
         let (rows, carry) = wheel_rows(ScrollDelta::Pixels { x: 0.0, y: -10.0 }, 20.0, carry);
         assert_eq!(rows, 1);
         assert!(carry.abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn showing_another_buffer_drops_running_animations() {
+        let first = Buffer::new("a").id();
+        let mut state = State::default();
+        state.follow(first);
+        state.cursor = Some(Glide::new((3, 4)));
+        state.scroll = Some(Scroll::new(10));
+
+        state.follow(first);
+        assert!(state.cursor.is_some() && state.scroll.is_some());
+
+        state.follow(Buffer::new("b").id());
+        assert!(state.cursor.is_none() && state.scroll.is_none());
     }
 
     #[test]
