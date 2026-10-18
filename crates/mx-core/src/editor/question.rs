@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::editor::{Editor, is_keyboard_quit};
-use crate::files::paths;
+use crate::files::{DiskState, paths};
 use crate::input::{Key, KeyCode};
 
 const SAVE_CHOICES: &[char] = &['y', 'n', '!', 'q'];
@@ -21,6 +21,10 @@ enum Pending {
     },
     Revert {
         index: usize,
+    },
+    Reread {
+        index: usize,
+        disk: Option<DiskState>,
     },
 }
 
@@ -130,7 +134,23 @@ impl Editor {
                     self.revert_at(index);
                 }
             }
+            Pending::Reread { index, disk } => {
+                if answer == 'y' {
+                    self.revert_at(index);
+                } else {
+                    self.note_disk_state(index, disk, true);
+                }
+                self.check_disk_changes();
+            }
         }
+    }
+
+    pub(super) fn ask_to_reread(&mut self, index: usize, name: &str, disk: Option<DiskState>) {
+        self.question = Some(Question {
+            prompt: format!("{name} changed on disk; reread it? (y or n) "),
+            choices: YES_NO,
+            pending: Pending::Reread { index, disk },
+        });
     }
 
     pub(super) fn ask_to_revert(&mut self, index: usize, path: &Path) {

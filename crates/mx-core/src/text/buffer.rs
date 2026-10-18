@@ -13,11 +13,17 @@ pub struct FileInfo {
     pub path: PathBuf,
     pub format: Format,
     pub disk: Option<DiskState>,
+    pub changed_on_disk: bool,
 }
 
 impl FileInfo {
     pub fn new(path: PathBuf, format: Format, disk: Option<DiskState>) -> Self {
-        Self { path, format, disk }
+        Self {
+            path,
+            format,
+            disk,
+            changed_on_disk: false,
+        }
     }
 }
 
@@ -73,6 +79,10 @@ impl Buffer {
 
     pub fn file(&self) -> Option<&FileInfo> {
         self.file.as_ref()
+    }
+
+    pub fn file_mut(&mut self) -> Option<&mut FileInfo> {
+        self.file.as_mut()
     }
 
     pub fn set_file(&mut self, file: FileInfo) {

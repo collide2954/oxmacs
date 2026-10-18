@@ -24,7 +24,7 @@ use std::{env, mem};
 use buffers::BufferList;
 
 use crate::command::Command;
-use crate::config::Config;
+use crate::config::{Config, OnDiskChange};
 use crate::display::{self, Viewport};
 use crate::files::LineEnding;
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
@@ -56,6 +56,7 @@ pub struct Editor {
     question: Option<Question>,
     viewport: Viewport,
     tab_width: usize,
+    on_disk_change: OnDiskChange,
     appearance: Appearance,
     configured_theme: Option<&'static Theme>,
     working_directory: PathBuf,
@@ -96,6 +97,7 @@ impl Editor {
             question: None,
             viewport: Viewport::new(DEFAULT_ROWS),
             tab_width: Config::default().tab_width,
+            on_disk_change: OnDiskChange::default(),
             appearance: Appearance::Light,
             configured_theme: None,
             working_directory: env::current_dir().unwrap_or_default(),
@@ -105,6 +107,7 @@ impl Editor {
 
     pub fn apply_config(&mut self, config: &Config) {
         self.tab_width = config.tab_width;
+        self.on_disk_change = config.on_disk_change;
         self.configured_theme = config.theme.as_deref().and_then(theme::find);
     }
 
