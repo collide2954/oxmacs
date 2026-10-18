@@ -1,3 +1,6 @@
+use std::path::Path;
+
+use crate::dired::Listing;
 use crate::display::Viewport;
 use crate::editor::minibuffer::Purpose;
 use crate::editor::{Choice, Completion, Editor};
@@ -7,9 +10,16 @@ use crate::text::Buffer;
 pub(super) const SCRATCH: &str = "*scratch*";
 
 #[derive(Debug)]
+pub(super) enum Mode {
+    Text,
+    Dired(Listing),
+}
+
+#[derive(Debug)]
 struct Entry {
     buffer: Buffer,
     top: usize,
+    mode: Mode,
 }
 
 #[derive(Debug)]
@@ -20,7 +30,34 @@ pub(super) struct BufferList {
 impl BufferList {
     pub(super) fn new(buffer: Buffer) -> Self {
         Self {
-            entries: vec![Entry { buffer, top: 0 }],
+            entries: vec![Entry {
+                buffer,
+                top: 0,
+                mode: Mode::Text,
+            }],
+        }
+    }
+
+    pub(super) fn listing(&self, index: usize) -> Option<&Listing> {
+        match &self.entries.get(index)?.mode {
+            Mode::Dired(listing) => Some(listing),
+            Mode::Text => None,
+        }
+    }
+
+    pub(super) fn dired_mut(&mut self, index: usize) -> Option<(&mut Buffer, &mut Listing)> {
+        let entry = self.entries.get_mut(index)?;
+        match &mut entry.mode {
+            Mode::Dired(listing) => Some((&mut entry.buffer, listing)),
+            Mode::Text => None,
+        }
+    }
+
+    pub(super) fn location(&self, index: usize) -> Option<(&Path, bool)> {
+        let entry = self.entries.get(index)?;
+        match &entry.mode {
+            Mode::Dired(listing) => Some((listing.directory(), true)),
+            Mode::Text => entry.buffer.file().map(|file| (file.path.as_path(), false)),
         }
     }
 
@@ -56,16 +93,23 @@ impl BufferList {
         self.entries.iter().map(|entry| &entry.buffer)
     }
 
-    pub(super) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Buffer> {
-        self.entries.iter_mut().map(|entry| &mut entry.buffer)
-    }
-
     pub(super) fn position(&self, predicate: impl Fn(&Buffer) -> bool) -> Option<usize> {
         self.iter().position(predicate)
     }
 
     pub(super) fn push_front(&mut self, buffer: Buffer) {
-        self.entries.insert(0, Entry { buffer, top: 0 });
+        self.push_front_with(buffer, Mode::Text);
+    }
+
+    pub(super) fn push_front_with(&mut self, buffer: Buffer, mode: Mode) {
+        self.entries.insert(
+            0,
+            Entry {
+                buffer,
+                top: 0,
+                mode,
+            },
+        );
     }
 
     pub(super) fn select(&mut self, index: usize) {
@@ -147,9 +191,10 @@ impl Editor {
                 let buffer = self.buffers.get(index)?;
                 matches(buffer.name()).then(|| Completion {
                     label: buffer.name().to_owned(),
-                    annotation: buffer
-                        .file()
-                        .map(|file| paths::abbreviate(&file.path, self.home.as_deref())),
+                    annotation: self
+                        .buffers
+                        .location(index)
+                        .map(|(path, _)| paths::abbreviate(path, self.home.as_deref())),
                     choice: Choice::Buffer(index),
                 })
             })
@@ -163,13 +208,17 @@ impl Editor {
     }
 
     pub(super) fn add_buffer(&mut self, buffer: Buffer) {
+        self.add_buffer_with(buffer, Mode::Text);
+    }
+
+    pub(super) fn add_buffer_with(&mut self, buffer: Buffer, mode: Mode) {
         self.buffers.set_top(self.viewport.top());
-        self.buffers.push_front(buffer);
+        self.buffers.push_front_with(buffer, mode);
         self.name_file_buffers();
         self.after_buffer_switch();
     }
 
-    fn after_buffer_switch(&mut self) {
+    pub(super) fn after_buffer_switch(&mut self) {
         self.viewport = Viewport::new(self.viewport.rows());
         self.viewport.set_top(self.buffers.top());
         self.viewport.reveal(self.point_line());

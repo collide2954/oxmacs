@@ -23,7 +23,7 @@ impl Editor {
         self.open_file_prompt("Write file: ", Purpose::WriteFile);
     }
 
-    fn open_file_prompt(&mut self, prompt: &str, purpose: Purpose) {
+    pub(super) fn open_file_prompt(&mut self, prompt: &str, purpose: Purpose) {
         if !self.open_minibuffer(prompt, purpose) {
             return;
         }
@@ -67,6 +67,12 @@ impl Editor {
         };
         let input = self.minibuffer_input();
         let (directory, name) = paths::split(&input);
+        if name.is_empty() && purpose == Purpose::Dired {
+            let directory = self.resolve_path(directory);
+            self.minibuffer = None;
+            self.dired(&directory);
+            return;
+        }
         if name.is_empty() {
             if let Some(minibuffer) = &mut self.minibuffer {
                 minibuffer.note = Some("[Directory]".to_owned());
@@ -82,10 +88,14 @@ impl Editor {
             None => self.resolve_path(&input),
         };
         self.minibuffer = None;
-        if purpose == Purpose::WriteFile {
-            self.write_file_to(path);
-        } else {
-            self.open_file(&path);
+        match purpose {
+            Purpose::WriteFile => self.write_file_to(path),
+            Purpose::Dired => {
+                self.dired(&path);
+            }
+            _ => {
+                self.open_file(&path);
+            }
         }
     }
 
@@ -111,16 +121,21 @@ impl Editor {
     }
 
     pub(super) fn name_file_buffers(&mut self) {
-        let paths: Vec<PathBuf> = self
-            .buffers
-            .iter()
-            .filter_map(|buffer| buffer.file().map(|file| file.path.clone()))
+        let located: Vec<(usize, PathBuf, bool)> = (0..self.buffers.len())
+            .filter_map(|index| {
+                let (path, directory) = self.buffers.location(index)?;
+                Some((index, path.to_owned(), directory))
+            })
             .collect();
-        let mut names = paths::unique_names(&paths).into_iter();
-        for buffer in self.buffers.iter_mut() {
-            if buffer.file().is_some()
-                && let Some(name) = names.next()
-            {
+        let paths: Vec<PathBuf> = located.iter().map(|(_, path, _)| path.clone()).collect();
+        for ((index, path, directory), name) in located.into_iter().zip(paths::unique_names(&paths))
+        {
+            let name = if directory {
+                directory_name(&path, &name)
+            } else {
+                name
+            };
+            if let Some(buffer) = self.buffers.get_mut(index) {
                 buffer.set_name(name);
             }
         }
@@ -184,6 +199,9 @@ impl Editor {
     }
 
     pub fn default_directory(&self) -> PathBuf {
+        if let Some(listing) = self.buffers.listing(0) {
+            return listing.directory().to_owned();
+        }
         self.buffers
             .current()
             .file()
@@ -270,6 +288,17 @@ impl Editor {
                 false
             }
         }
+    }
+}
+
+fn directory_name(path: &Path, unique: &str) -> String {
+    match path.file_name() {
+        Some(base) => {
+            let base = base.to_string_lossy();
+            let rest = unique.strip_prefix(&*base).unwrap_or_default();
+            format!("{base}{}{rest}", paths::SEPARATOR)
+        }
+        None => path.display().to_string(),
     }
 }
 

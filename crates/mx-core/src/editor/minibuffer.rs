@@ -17,11 +17,12 @@ pub(super) enum Purpose {
     WriteFile,
     SwitchBuffer,
     KillBuffer,
+    Dired,
 }
 
 impl Purpose {
     pub(super) fn takes_path(self) -> bool {
-        matches!(self, Self::FindFile | Self::WriteFile)
+        matches!(self, Self::FindFile | Self::WriteFile | Self::Dired)
     }
 
     fn takes_buffer(self) -> bool {
@@ -116,7 +117,7 @@ impl Editor {
                 })
                 .filter(|completion| matches(&completion.label))
                 .collect(),
-            Purpose::FindFile | Purpose::WriteFile => file_completions(minibuffer),
+            Purpose::FindFile | Purpose::WriteFile | Purpose::Dired => file_completions(minibuffer),
             Purpose::SwitchBuffer | Purpose::KillBuffer => {
                 self.buffer_completions(minibuffer.purpose, matches)
             }
@@ -291,6 +292,7 @@ fn file_completions(minibuffer: &Minibuffer) -> Vec<Completion> {
         .entries
         .iter()
         .enumerate()
+        .filter(|(_, entry)| entry.is_dir || minibuffer.purpose != Purpose::Dired)
         .filter(|(_, entry)| {
             let lower = entry.name.to_lowercase();
             typed.split_whitespace().all(|term| lower.contains(term))

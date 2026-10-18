@@ -1,5 +1,6 @@
 mod buffers;
 mod clipboard;
+mod dired;
 mod disk;
 mod editing;
 mod files;
@@ -336,6 +337,7 @@ impl Editor {
             Command::KillBuffer => self.kill_buffer(),
             Command::RevertBuffer => self.revert_buffer(),
             Command::ReadOnlyMode => self.toggle_read_only(),
+            Command::Dired => self.dired_prompt(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.save_some_buffers(true),
         }

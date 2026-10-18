@@ -59,6 +59,7 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-x b", Command::SwitchToBuffer),
     ("C-x k", Command::KillBuffer),
     ("C-x C-q", Command::ReadOnlyMode),
+    ("C-x d", Command::Dired),
     ("C-g", Command::KeyboardQuit),
     ("ESC ESC", Command::KeyboardQuit),
     ("C-x C-c", Command::SaveBuffersKillMx),

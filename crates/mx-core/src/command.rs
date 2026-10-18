@@ -44,6 +44,7 @@ pub enum Command {
     KillBuffer,
     RevertBuffer,
     ReadOnlyMode,
+    Dired,
     KeyboardQuit,
     SaveBuffersKillMx,
 }
