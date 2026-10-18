@@ -318,6 +318,7 @@ impl Editor {
             Command::SaveBuffer => self.save_buffer(),
             Command::WriteFile => self.write_file(),
             Command::SaveSomeBuffers => self.save_some_buffers(false),
+            Command::SwitchToBuffer => self.switch_to_buffer(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.save_some_buffers(true),
         }

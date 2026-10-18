@@ -40,6 +40,7 @@ pub enum Command {
     SaveBuffer,
     WriteFile,
     SaveSomeBuffers,
+    SwitchToBuffer,
     KeyboardQuit,
     SaveBuffersKillMx,
 }

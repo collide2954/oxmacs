@@ -26,6 +26,10 @@ impl Viewport {
         self.top..self.top + self.rows
     }
 
+    pub fn set_top(&mut self, top: usize) {
+        self.top = top;
+    }
+
     pub fn reveal(&mut self, line: usize) {
         if !self.lines().contains(&line) {
             self.top = line.saturating_sub(self.rows / 2);
@@ -107,6 +111,15 @@ mod tests {
 
         viewport.scroll_by(500, 100);
         assert_eq!(viewport.top(), 100);
+    }
+
+    #[test]
+    fn the_top_can_be_restored() {
+        let mut viewport = Viewport::new(10);
+
+        viewport.set_top(42);
+
+        assert_eq!(viewport.lines(), 42..52);
     }
 
     #[test]

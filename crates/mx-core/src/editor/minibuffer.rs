@@ -15,6 +15,7 @@ pub(super) enum Purpose {
     PasteFromHistory,
     FindFile,
     WriteFile,
+    SwitchBuffer,
 }
 
 impl Purpose {
@@ -44,6 +45,7 @@ pub enum Choice {
     Command(Command),
     Clip(usize),
     Entry(usize),
+    Buffer(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,6 +112,7 @@ impl Editor {
                 .filter(|completion| matches(&completion.label))
                 .collect(),
             Purpose::FindFile | Purpose::WriteFile => file_completions(minibuffer),
+            Purpose::SwitchBuffer => self.buffer_completions(matches),
         }
     }
 
@@ -179,11 +182,22 @@ impl Editor {
     }
 
     pub(super) fn exit_minibuffer_with_input(&mut self) {
-        if self.minibuffer_purpose().is_some_and(Purpose::takes_path) {
-            self.exit_file_prompt(true);
-        } else {
-            self.exit_minibuffer();
+        match self.minibuffer_purpose() {
+            Some(purpose) if purpose.takes_path() => self.exit_file_prompt(true),
+            Some(Purpose::SwitchBuffer) if !self.minibuffer_input().is_empty() => {
+                let name = self.minibuffer_input();
+                self.minibuffer = None;
+                self.switch_to_buffer_named(&name);
+            }
+            _ => self.exit_minibuffer(),
         }
+    }
+
+    pub(super) fn minibuffer_input(&self) -> String {
+        self.minibuffer
+            .as_ref()
+            .map(|minibuffer| minibuffer.input.contents())
+            .unwrap_or_default()
     }
 
     pub(super) fn exit_minibuffer(&mut self) {
@@ -196,7 +210,11 @@ impl Editor {
             return;
         };
         let Some(completion) = chosen else {
-            minibuffer.note = Some("[No match]".to_owned());
+            if minibuffer.purpose == Purpose::SwitchBuffer {
+                self.exit_minibuffer_with_input();
+            } else {
+                minibuffer.note = Some("[No match]".to_owned());
+            }
             return;
         };
         self.minibuffer = None;
@@ -210,6 +228,7 @@ impl Editor {
                 let text = self.clipboard_history.get(index).cloned();
                 self.paste(text);
             }
+            Choice::Buffer(index) => self.select_buffer(index),
             Choice::Entry(_) => {}
         }
     }

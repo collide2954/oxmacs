@@ -1,6 +1,5 @@
 use std::path::{self, Path, PathBuf};
 
-use crate::display::Viewport;
 use crate::editor::minibuffer::{Listing, Purpose};
 use crate::editor::{Choice, Editor};
 use crate::files::{self, paths};
@@ -173,13 +172,6 @@ impl Editor {
         ))
     }
 
-    fn minibuffer_input(&self) -> String {
-        self.minibuffer
-            .as_ref()
-            .map(|minibuffer| minibuffer.input.contents())
-            .unwrap_or_default()
-    }
-
     fn resolve_path(&self, input: &str) -> PathBuf {
         let path = paths::expand(input, self.home.as_deref());
         if path.is_absolute() {
@@ -219,9 +211,7 @@ impl Editor {
                     format: loaded.format,
                     disk: loaded.disk,
                 });
-                self.buffers.push_front(buffer);
-                self.name_file_buffers();
-                self.after_buffer_switch();
+                self.add_buffer(buffer);
                 if loaded.disk.is_none() {
                     self.show_message("(New file)");
                 }
@@ -269,19 +259,6 @@ impl Editor {
                 false
             }
         }
-    }
-
-    fn select_buffer(&mut self, index: usize) {
-        self.buffers.select(index);
-        self.after_buffer_switch();
-    }
-
-    fn after_buffer_switch(&mut self) {
-        self.viewport = Viewport::new(self.viewport.rows());
-        self.viewport.reveal(self.point_line());
-        self.goal_column = None;
-        self.shift_selection = false;
-        self.last_command = None;
     }
 }
 
