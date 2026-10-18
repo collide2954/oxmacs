@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use crate::editor::Editor;
+use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -14,7 +15,7 @@ impl Editor {
     }
 
     fn pairs(&self) -> bool {
-        self.minibuffer.is_none() && self.buffers.syntax(0).is_some()
+        self.minibuffer.is_none() && self.language().is_some_and(Language::auto_pairs)
     }
 
     pub(super) fn insert_pair(&mut self, typed: char) -> bool {

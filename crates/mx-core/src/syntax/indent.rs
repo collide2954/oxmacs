@@ -11,7 +11,7 @@ const LITERALS: &[&str] = &["string_literal", "raw_string_literal", "block_comme
 impl Language {
     pub fn indent_unit(self) -> usize {
         match self {
-            Self::Rust | Self::Toml => 4,
+            Self::Rust | Self::Toml | Self::Markdown => 4,
         }
     }
 }
@@ -40,7 +40,9 @@ impl Syntax {
                 Language::Rust => {
                     continuation(statement(node, tree.root_node()), line, &rest) * unit
                 }
-                Language::Toml => previous_indentation(buffer, line, tab_width),
+                Language::Toml | Language::Markdown => {
+                    previous_indentation(buffer, line, tab_width)
+                }
             });
         };
         let base = indentation_of(buffer, row(open), tab_width);
@@ -53,7 +55,7 @@ impl Syntax {
         }
         let continues = match self.language {
             Language::Rust => continuation(statement(node, container), line, &rest),
-            Language::Toml => 0,
+            Language::Toml | Language::Markdown => 0,
         };
         Some(base + unit + continues * unit)
     }

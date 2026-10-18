@@ -16,6 +16,7 @@ use crate::text::{Buffer, TextChange};
 pub enum Language {
     Rust,
     Toml,
+    Markdown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,12 +61,13 @@ impl Feature {
 }
 
 impl Language {
-    pub const ALL: [Self; 2] = [Self::Rust, Self::Toml];
+    pub const ALL: [Self; 3] = [Self::Rust, Self::Toml, Self::Markdown];
 
     pub fn extensions(self) -> &'static [&'static str] {
         match self {
             Self::Rust => &["rs"],
             Self::Toml => &["toml"],
+            Self::Markdown => &["md", "markdown"],
         }
     }
 
@@ -73,6 +75,7 @@ impl Language {
         match self {
             Self::Rust => Some("//"),
             Self::Toml => Some("#"),
+            Self::Markdown => None,
         }
     }
 
@@ -96,8 +99,12 @@ impl Language {
                     | Feature::Pairs
                     | Feature::Motion
                     | Feature::Items
-            )
+            ) | (Self::Markdown, Feature::Highlighting | Feature::Indentation)
         )
+    }
+
+    pub fn auto_pairs(self) -> bool {
+        matches!(self, Self::Rust | Self::Toml)
     }
 
     pub fn for_path(path: &Path) -> Option<Self> {
@@ -120,6 +127,7 @@ impl Language {
         match self {
             Self::Rust => "Rust",
             Self::Toml => "TOML",
+            Self::Markdown => "Markdown",
         }
     }
 
@@ -127,6 +135,7 @@ impl Language {
         match self {
             Self::Rust => tree_sitter_rust::LANGUAGE.into(),
             Self::Toml => tree_sitter_toml_ng::LANGUAGE.into(),
+            Self::Markdown => tree_sitter_md::LANGUAGE.into(),
         }
     }
 }
@@ -331,6 +340,10 @@ mod tests {
         assert_eq!(
             Language::for_path(Path::new("Cargo.lock")),
             Some(Language::Toml)
+        );
+        assert_eq!(
+            Language::for_path(Path::new("README.md")),
+            Some(Language::Markdown)
         );
         assert_eq!(Language::for_path(Path::new("notes.txt")), None);
         assert_eq!(Language::for_path(Path::new("Makefile")), None);

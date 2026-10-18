@@ -30,6 +30,7 @@ thiserror = "2.0.21"
 toml = "1.1.8"
 trash = { version = "5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }
 tree-sitter = "0.27.1"
+tree-sitter-md = "0.5.3"
 tree-sitter-rust = "0.24.2"
 tree-sitter-toml-ng = "0.7.0"
 ttf-parser = "0.25.1"

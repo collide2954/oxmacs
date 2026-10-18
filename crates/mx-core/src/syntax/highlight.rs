@@ -12,6 +12,7 @@ use crate::theme::Highlight;
 
 const RUST: &str = include_str!("../../queries/rust/highlights.scm");
 const TOML: &str = include_str!("../../queries/toml/highlights.scm");
+const MARKDOWN: &str = include_str!("../../queries/markdown/highlights.scm");
 
 struct Highlighter {
     query: Query,
@@ -22,6 +23,8 @@ static RUST_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
     LazyLock::new(|| Highlighter::new(Language::Rust, RUST));
 static TOML_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
     LazyLock::new(|| Highlighter::new(Language::Toml, TOML));
+static MARKDOWN_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
+    LazyLock::new(|| Highlighter::new(Language::Markdown, MARKDOWN));
 
 impl Highlighter {
     fn new(language: Language, source: &str) -> Option<Self> {
@@ -38,6 +41,7 @@ impl Highlighter {
         match language {
             Language::Rust => RUST_HIGHLIGHTER.as_ref(),
             Language::Toml => TOML_HIGHLIGHTER.as_ref(),
+            Language::Markdown => MARKDOWN_HIGHLIGHTER.as_ref(),
         }
     }
 }
@@ -54,6 +58,8 @@ fn face(capture: &str) -> Option<Highlight> {
         "constant" => Highlight::Constant,
         "attribute" => Highlight::Attribute,
         "lifetime" => Highlight::Lifetime,
+        "heading" => Highlight::Heading,
+        "link" => Highlight::Link,
         _ => return None,
     })
 }
@@ -235,6 +241,18 @@ mod tests {
             [(0..7, Highlight::Function), (10..11, Highlight::Constant)]
         );
         assert_eq!(toml(3), [(0..7, Highlight::Type)]);
+    }
+
+    #[test]
+    fn markdown_blocks_are_highlighted() {
+        let text = "# Title\n\n- item\n\n```\ncode\n```\n\n> quote\n";
+        let markdown = |line| faces_in(Language::Markdown, text, line);
+
+        assert_eq!(markdown(0), [(0..7, Highlight::Heading)]);
+        assert_eq!(markdown(2), [(0..2, Highlight::Keyword)]);
+        assert_eq!(markdown(4), [(0..3, Highlight::Comment)]);
+        assert_eq!(markdown(5), [(0..4, Highlight::String)]);
+        assert_eq!(markdown(8), [(0..7, Highlight::DocComment)]);
     }
 
     #[test]
