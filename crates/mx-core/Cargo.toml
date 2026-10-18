@@ -12,6 +12,7 @@ workspace = true
 bitflags.workspace = true
 dirs.workspace = true
 indexmap.workspace = true
+jiff.workspace = true
 ropey.workspace = true
 serde.workspace = true
 strum.workspace = true

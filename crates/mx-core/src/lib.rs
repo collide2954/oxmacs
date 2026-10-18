@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod command;
 pub mod config;
+pub mod dired;
 pub mod display;
 pub mod editor;
 pub mod files;

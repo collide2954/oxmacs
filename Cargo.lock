@@ -2076,6 +2076,7 @@ dependencies = [
  "bitflags 2.13.2",
  "dirs",
  "indexmap 2.14.2",
+ "jiff",
  "ropey",
  "serde",
  "strum",
