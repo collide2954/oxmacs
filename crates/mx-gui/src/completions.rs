@@ -39,7 +39,7 @@ pub fn view<'a, Message: 'a>(
                     .size(size)
                     .color(color(face.foreground)),
                 space::horizontal(),
-                text(completion.keys.clone().unwrap_or_default())
+                text(completion.annotation.clone().unwrap_or_default())
                     .font(font)
                     .size(size)
                     .color(color(faces.shadow)),

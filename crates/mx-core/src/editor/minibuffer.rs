@@ -49,7 +49,7 @@ pub enum Choice {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Completion {
     pub label: String,
-    pub keys: Option<String>,
+    pub annotation: Option<String>,
     pub choice: Choice,
 }
 
@@ -104,7 +104,7 @@ impl Editor {
                 .enumerate()
                 .map(|(index, text)| Completion {
                     label: clip_label(text),
-                    keys: None,
+                    annotation: None,
                     choice: Choice::Clip(index),
                 })
                 .filter(|completion| matches(&completion.label))
@@ -124,7 +124,7 @@ impl Editor {
             .into_iter()
             .map(|command| Completion {
                 label: command.name().to_owned(),
-                keys: self.keymap.where_is(command).map(|keys| keys.to_string()),
+                annotation: self.keymap.where_is(command).map(|keys| keys.to_string()),
                 choice: Choice::Command(command),
             })
             .collect()
@@ -271,7 +271,7 @@ fn file_completions(minibuffer: &Minibuffer) -> Vec<Completion> {
             }
             let completion = Completion {
                 label,
-                keys: None,
+                annotation: None,
                 choice: Choice::Entry(index),
             };
             (entry.name != name, completion)
@@ -472,7 +472,7 @@ mod tests {
 
         let completions = editor.completions();
 
-        assert_eq!(completions[0].keys.as_deref(), Some("C-x h"));
+        assert_eq!(completions[0].annotation.as_deref(), Some("C-x h"));
     }
 
     #[test]
