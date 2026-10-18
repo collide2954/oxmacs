@@ -21,6 +21,7 @@ mod replace;
 mod screen;
 mod selection;
 mod splash;
+mod structure;
 #[cfg(test)]
 mod test_support;
 mod themes;
@@ -447,6 +448,7 @@ impl Editor {
         self.reveal_point();
     }
 
+    #[expect(clippy::too_many_lines, reason = "one arm per command")]
     fn perform(&mut self, command: Command, goal_column: Option<usize>, previous: Option<Command>) {
         match command {
             Command::SelfInsertCommand => self.self_insert(),
@@ -470,6 +472,12 @@ impl Editor {
             Command::BackwardWord => self.move_point(motion::backward_word),
             Command::BeginningOfBuffer => self.move_point(|_, _| 0),
             Command::EndOfBuffer => self.move_point(|b, _| b.len_chars()),
+            Command::BeginningOfDefun => self.beginning_of_defun(),
+            Command::EndOfDefun => self.end_of_defun(),
+            Command::ForwardSexp => self.forward_sexp(),
+            Command::BackwardSexp => self.backward_sexp(),
+            Command::BackwardUpList => self.backward_up_list(),
+            Command::DownList => self.down_list(),
             Command::SetMarkCommand => self.set_mark_command(previous),
             Command::ExchangePointAndMark => self.exchange_point_and_mark(),
             Command::MarkWholeBuffer => self.mark_whole_buffer(),

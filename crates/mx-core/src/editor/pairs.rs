@@ -128,7 +128,7 @@ impl Editor {
     }
 }
 
-fn scan_partner(buffer: &Buffer, position: usize) -> Option<usize> {
+pub(super) fn scan_partner(buffer: &Buffer, position: usize) -> Option<usize> {
     let bracket = buffer.chars_after(position).next()?;
     let (partner, forward) = match bracket {
         '(' => (')', true),

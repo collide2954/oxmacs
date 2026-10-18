@@ -56,7 +56,7 @@ fn row(node: Node<'_>) -> usize {
     node.start_position().row
 }
 
-fn open_bracket(node: Node<'_>, byte: usize) -> Option<Node<'_>> {
+pub(super) fn open_bracket(node: Node<'_>, byte: usize) -> Option<Node<'_>> {
     let mut open = Vec::new();
     scan_brackets(node, byte, &mut open);
     open.pop()

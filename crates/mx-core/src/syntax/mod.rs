@@ -1,5 +1,6 @@
 mod highlight;
 mod indent;
+pub(crate) mod motion;
 
 use std::fmt;
 use std::path::Path;
@@ -79,6 +80,7 @@ impl Language {
                     | Feature::Comments
                     | Feature::Pairs
                     | Feature::Formatting
+                    | Feature::Motion
             )
         )
     }

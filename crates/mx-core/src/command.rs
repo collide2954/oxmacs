@@ -24,6 +24,12 @@ pub enum Command {
     BackwardWord,
     BeginningOfBuffer,
     EndOfBuffer,
+    BeginningOfDefun,
+    EndOfDefun,
+    ForwardSexp,
+    BackwardSexp,
+    BackwardUpList,
+    DownList,
     SetMarkCommand,
     ExchangePointAndMark,
     MarkWholeBuffer,
@@ -119,6 +125,12 @@ impl Command {
                 | Self::BackwardWord
                 | Self::BeginningOfBuffer
                 | Self::EndOfBuffer
+                | Self::BeginningOfDefun
+                | Self::EndOfDefun
+                | Self::ForwardSexp
+                | Self::BackwardSexp
+                | Self::BackwardUpList
+                | Self::DownList
         )
     }
 
