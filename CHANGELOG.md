@@ -4,21 +4,23 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-18
+
 ### Added
 
 - `find-file` (`C-x C-f`) with a vertical directory list: typing filters, `TAB`/`RET` descend into directories, `DEL` after a separator goes up, `M-RET` uses the exact input; `~` abbreviates home.
 - Files open in their own buffers; LF/CRLF and UTF-8 BOMs are preserved, and invalid UTF-8 is refused.
-- Buffers for files sharing a name show their directory, like `main.rs<src>`.
-- `switch-to-buffer` (`C-x b`) lists buffers most recent first with their file paths; `RET` on empty input returns to the previous buffer, an unknown name creates a buffer, and each buffer keeps its scroll position.
 - Command line `mx [+LINE[:COLUMN]] FILE...` opens each file, jumping to the position given before it.
-- `kill-buffer` (`C-x k`) defaults to the current buffer and asks before discarding unsaved file changes; killing the last buffer leaves an empty `*scratch*`.
 - Mode line shows `**` for unsaved changes, `--` otherwise, and `CRLF` for Windows line endings.
 - `save-buffer` (`C-x C-s`) writes atomically, keeping permissions and the original line endings.
 - `write-file` (`C-x C-w`) saves under a new name, asking before overwriting another file; `C-x C-s` in a buffer without a file asks where to write it.
+- `save-some-buffers` (`C-x s`) and the `C-x C-c` quit guard ask per modified file: `y`, `n`, `!` (save the rest) or `q`.
+- `switch-to-buffer` (`C-x b`) lists buffers most recent first with their file paths; `RET` on empty input returns to the previous buffer, an unknown name creates a buffer, and each buffer keeps its scroll position.
+- `kill-buffer` (`C-x k`) defaults to the current buffer and asks before discarding unsaved file changes; killing the last buffer leaves an empty `*scratch*`.
+- Buffers for files sharing a name show their directory, like `main.rs<src>`.
 - Files changed by other programs are noticed right away (and when the window regains focus): unmodified buffers reload, modified ones keep their edits with a warning. `on-disk-change = "revert" | "ask" | "ignore"` in `config.toml` picks the behavior.
 - `C-x C-s` asks before overwriting a file that changed on disk since it was read or saved.
 - `revert-buffer` rereads the file, asking first only when there are unsaved edits; reverting can be undone.
-- `save-some-buffers` (`C-x s`) and the `C-x C-c` quit guard ask per modified file: `y`, `n`, `!` (save the rest) or `q`.
 
 ## [0.6.0] - 2026-10-18
 
