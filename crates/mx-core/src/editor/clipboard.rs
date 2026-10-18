@@ -1,24 +1,8 @@
-use std::mem;
-use std::path::PathBuf;
-
-use crate::editor::Editor;
+use crate::editor::{Editor, Effect};
 
 const HISTORY_LIMIT: usize = 50;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Effect {
-    WriteClipboard(String),
-    ReadClipboard,
-    WritePrimary(String),
-    ReadPrimary,
-    OpenExternally(PathBuf),
-}
-
 impl Editor {
-    pub fn take_effects(&mut self) -> Vec<Effect> {
-        mem::take(&mut self.effects)
-    }
-
     pub fn clipboard_history(&self) -> &[String] {
         &self.clipboard_history
     }

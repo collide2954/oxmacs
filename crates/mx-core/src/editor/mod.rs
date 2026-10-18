@@ -3,6 +3,7 @@ mod clipboard;
 mod dired;
 mod disk;
 mod editing;
+mod effect;
 mod files;
 mod minibuffer;
 mod mouse;
@@ -16,7 +17,7 @@ mod test_support;
 mod transfer;
 mod undo;
 
-pub use clipboard::Effect;
+pub use effect::Effect;
 pub use minibuffer::{Choice, Completion, Minibuffer};
 pub use mouse::{Cell, Clicks};
 pub use question::Question;
