@@ -63,6 +63,24 @@ impl Editor {
         buffer.set_point(position);
     }
 
+    pub fn scroll_lines(&mut self, delta: isize) {
+        let last = self.buffer.len_lines() - 1;
+        self.viewport.scroll_by(delta, last);
+        let visible = self.viewport.lines();
+        let line = self.point_line();
+        let target = if line < visible.start {
+            visible.start
+        } else if line >= visible.end {
+            visible.end - 1
+        } else {
+            return;
+        };
+        let column = self.buffer.column(self.buffer.point());
+        let start = self.buffer.line_start(target);
+        let point = (start + column).min(self.buffer.line_end(target));
+        self.buffer.set_point(point);
+    }
+
     fn position_at(&self, cell: Cell) -> usize {
         let line = cell.line.min(self.buffer.len_lines() - 1);
         let text = self.buffer.line_text(line);
@@ -174,6 +192,45 @@ mod tests {
 
         editor.click(cell(0, 4), Clicks::Single, true);
         assert_eq!(editor.buffer().selection(), Some(2..4));
+    }
+
+    fn lines(count: usize) -> String {
+        vec!["abc"; count].join("\n")
+    }
+
+    #[test]
+    fn scrolling_moves_the_window_and_pulls_point_into_view() {
+        let mut editor = editor_with(&lines(50), 2);
+        editor.resize_window(10);
+
+        editor.scroll_lines(3);
+
+        assert_eq!(editor.viewport().top(), 3);
+        assert_eq!(editor.buffer().point(), 3 * 4 + 2);
+    }
+
+    #[test]
+    fn scrolling_up_pulls_point_to_the_last_visible_line() {
+        let mut editor = editor_with(&lines(50), 20 * 4);
+        editor.resize_window(10);
+        editor.scroll_lines(15 - editor.viewport().top().cast_signed());
+
+        editor.scroll_lines(-10);
+
+        assert_eq!(editor.viewport().top(), 5);
+        assert_eq!(editor.buffer().line_of(editor.buffer().point()), 14);
+    }
+
+    #[test]
+    fn scrolling_stops_at_the_ends() {
+        let mut editor = editor_with(&lines(50), 0);
+        editor.resize_window(10);
+
+        editor.scroll_lines(-5);
+        assert_eq!(editor.viewport().top(), 0);
+
+        editor.scroll_lines(1_000);
+        assert_eq!(editor.viewport().top(), 49);
     }
 
     #[test]

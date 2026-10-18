@@ -32,6 +32,10 @@ impl Viewport {
         }
     }
 
+    pub fn scroll_by(&mut self, delta: isize, last_line: usize) {
+        self.top = self.top.saturating_add_signed(delta).min(last_line);
+    }
+
     pub fn resize(&mut self, rows: usize, line: usize) {
         self.rows = rows.max(1);
         self.reveal(line);
@@ -89,6 +93,20 @@ mod tests {
         viewport.resize(4, 9);
 
         assert!(viewport.lines().contains(&9));
+    }
+
+    #[test]
+    fn scrolling_moves_the_top_within_the_text() {
+        let mut viewport = Viewport::new(10);
+
+        viewport.scroll_by(5, 100);
+        assert_eq!(viewport.top(), 5);
+
+        viewport.scroll_by(-50, 100);
+        assert_eq!(viewport.top(), 0);
+
+        viewport.scroll_by(500, 100);
+        assert_eq!(viewport.top(), 100);
     }
 
     #[test]
