@@ -3,7 +3,7 @@ use std::path::Path;
 
 use jiff::Zoned;
 
-use crate::dired::Listing;
+use crate::dired::{Listing, read_entries};
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::minibuffer::Purpose;
@@ -87,6 +87,25 @@ impl Editor {
         }
     }
 
+    pub(super) fn refresh_listing(&mut self, index: usize) {
+        let Some(listing) = self.buffers.listing(index) else {
+            return;
+        };
+        let directory = listing.directory().to_owned();
+        match read_entries(&directory) {
+            Ok(entries) => self.update_listing(index, |listing| listing.set_entries(entries)),
+            Err(error) => self.show_message(format!("{}: {error}", directory.display())),
+        }
+    }
+
+    pub(super) fn dired_cycle_sort(&mut self) {
+        self.update_listing(0, |listing| listing.set_sort(listing.sort().next()));
+    }
+
+    pub(super) fn dired_hide_details(&mut self) {
+        self.update_listing(0, |listing| listing.set_details(!listing.details()));
+    }
+
     fn dired_focus(&mut self, name: &OsStr) {
         if let Some((buffer, listing)) = self.buffers.dired_mut(0)
             && let Some(line) = listing.line_of(name)
@@ -115,12 +134,17 @@ impl Editor {
     }
 
     pub(super) fn redisplay_listing(&mut self, index: usize) {
+        self.update_listing(index, |_| {});
+    }
+
+    fn update_listing(&mut self, index: usize, change: impl FnOnce(&mut Listing)) {
         let home = self.home.clone();
         let Some((buffer, listing)) = self.buffers.dired_mut(index) else {
             return;
         };
         let line = buffer.line_of(buffer.point());
         let focus = listing.entry_at(line).map(|entry| entry.name.clone());
+        change(listing);
         buffer.set_text(&listing.render(&Zoned::now(), home.as_deref()));
         let last = buffer.len_lines() - 1;
         let line = focus
@@ -459,6 +483,90 @@ mod tests {
         press(&mut editor, "M-< RET");
 
         assert_eq!(editor.message(), Some("No file on this line"));
+    }
+
+    #[test]
+    fn g_rereads_the_directory_keeping_point_on_its_file() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+        press(&mut editor, "n");
+        fs::write(dir.path().join("0.txt"), "").unwrap();
+
+        press(&mut editor, "g");
+
+        assert!(lines(&editor)[3].ends_with(" 0.txt"));
+        assert_eq!(at_point(&editor), "a.txt");
+        assert!(!editor.buffer().is_modified());
+    }
+
+    #[test]
+    fn g_keeps_point_near_a_file_that_vanished() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+        press(&mut editor, "n n");
+        fs::remove_file(dir.path().join("b.txt")).unwrap();
+
+        press(&mut editor, "g");
+
+        assert_eq!(at_point(&editor), "a.txt");
+    }
+
+    #[test]
+    fn revert_buffer_refreshes_a_listing() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+        fs::write(dir.path().join("aa.txt"), "").unwrap();
+
+        editor.execute(crate::command::Command::RevertBuffer);
+
+        assert!(lines(&editor)[4].ends_with(" aa.txt"));
+    }
+
+    #[test]
+    fn s_cycles_the_sort_order_keeping_point() {
+        let (dir, mut editor) = workspace();
+        fs::write(dir.path().join("b.txt"), "a much larger file").unwrap();
+        listed(&mut editor, &dir);
+        press(&mut editor, "n");
+
+        press(&mut editor, "s");
+        assert!(lines(&editor)[0].ends_with(" (newest first):"));
+
+        press(&mut editor, "s");
+        assert!(lines(&editor)[0].ends_with(" (largest first):"));
+        assert!(lines(&editor)[3].ends_with(" b.txt"));
+        assert_eq!(at_point(&editor), "a.txt");
+
+        press(&mut editor, "s");
+        assert!(lines(&editor)[0].ends_with(':'));
+        assert!(!lines(&editor)[0].contains('('));
+    }
+
+    #[test]
+    fn parenthesis_hides_and_shows_details() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "(");
+        assert_eq!(lines(&editor)[2], format!("  sub{SEP}"));
+        assert_eq!(at_point(&editor), format!("sub{SEP}"));
+
+        press(&mut editor, "(");
+        assert!(lines(&editor)[2].len() > format!("  sub{SEP}").len());
+    }
+
+    #[test]
+    fn q_buries_the_listing() {
+        let (dir, mut editor) = workspace();
+        editor.open_file(&dir.path().join("a.txt"));
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "q");
+
+        assert_eq!(
+            editor.buffer_names(),
+            ["a.txt", "*scratch*", dir_name(dir.path()).as_str()]
+        );
     }
 
     #[test]

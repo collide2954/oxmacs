@@ -74,6 +74,10 @@ impl Editor {
     }
 
     pub(super) fn revert_buffer(&mut self) {
+        if self.buffers.listing(0).is_some() {
+            self.refresh_listing(0);
+            return;
+        }
         let buffer = self.buffers.current();
         let Some(file) = buffer.file() else {
             self.show_message("Buffer is not visiting a file");

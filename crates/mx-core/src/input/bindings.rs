@@ -89,6 +89,10 @@ const DIRED: &[(&str, Command)] = &[
     ("f", Command::DiredFindFile),
     ("e", Command::DiredFindFile),
     ("^", Command::DiredUpDirectory),
+    ("g", Command::RevertBuffer),
+    ("s", Command::DiredCycleSort),
+    ("(", Command::DiredHideDetailsMode),
+    ("q", Command::QuitWindow),
 ];
 
 pub fn global() -> Keymap {

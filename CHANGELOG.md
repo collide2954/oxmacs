@@ -9,6 +9,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 - `read-only-mode` (`C-x C-q`) toggles a buffer read-only; the mode line shows `%%` and edits are refused. Files without write permission open read-only.
 - `dired` (`C-x d`) lists a directory in a read-only buffer: size, modification time and name, directories first, a `..` line on top; the prompt offers only directories. In listings `n`/`SPC`/`C-n` and `p`/`C-p` move between names, and `M-x` offers dired commands only there.
 - In dired, `RET`/`f`/`e` visit the file at point or move the listing into the directory; `^` (or `RET` on `..`) goes up with point on the directory you left. One listing buffer is reused while navigating.
+- In dired, `g` (or `revert-buffer`) rereads the directory, `s` cycles name / newest / largest order (shown in the header), `(` hides details and `q` buries the listing; point stays on its file.
 
 ## [0.7.0] - 2026-10-18
 

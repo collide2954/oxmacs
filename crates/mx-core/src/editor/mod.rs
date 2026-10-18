@@ -370,6 +370,9 @@ impl Editor {
             Command::DiredPreviousLine => self.dired_next_line(-1),
             Command::DiredFindFile => self.dired_find_file(),
             Command::DiredUpDirectory => self.dired_up_directory(),
+            Command::DiredCycleSort => self.dired_cycle_sort(),
+            Command::DiredHideDetailsMode => self.dired_hide_details(),
+            Command::QuitWindow => self.quit_window(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.save_some_buffers(true),
         }

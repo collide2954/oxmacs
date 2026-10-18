@@ -127,6 +127,10 @@ impl BufferList {
         }
     }
 
+    pub(super) fn bury_current(&mut self) {
+        self.entries.rotate_left(1);
+    }
+
     pub(super) fn remove(&mut self, index: usize) {
         if index < self.entries.len() {
             self.entries.remove(index);
@@ -207,6 +211,12 @@ impl Editor {
                 })
             })
             .collect()
+    }
+
+    pub(super) fn quit_window(&mut self) {
+        self.buffers.set_top(self.viewport.top());
+        self.buffers.bury_current();
+        self.after_buffer_switch();
     }
 
     pub(super) fn select_buffer(&mut self, index: usize) {

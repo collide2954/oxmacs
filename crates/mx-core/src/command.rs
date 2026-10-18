@@ -49,6 +49,9 @@ pub enum Command {
     DiredPreviousLine,
     DiredFindFile,
     DiredUpDirectory,
+    DiredCycleSort,
+    DiredHideDetailsMode,
+    QuitWindow,
     KeyboardQuit,
     SaveBuffersKillMx,
 }
@@ -103,7 +106,9 @@ impl Command {
             Self::DiredNextLine
             | Self::DiredPreviousLine
             | Self::DiredFindFile
-            | Self::DiredUpDirectory => Scope::Dired,
+            | Self::DiredUpDirectory
+            | Self::DiredCycleSort
+            | Self::DiredHideDetailsMode => Scope::Dired,
             _ => Scope::Global,
         }
     }
