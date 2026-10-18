@@ -14,10 +14,12 @@ pub fn view<'a, Message: 'a>(
     faces: Faces,
     font: Font,
     size: f32,
+    opacity: f32,
 ) -> Element<'a, Message> {
     let Some(minibuffer) = editor.minibuffer() else {
         return Column::new().into();
     };
+    let color = |color| style::color(color).scale_alpha(opacity);
     let completions = editor.completions();
     let selected = minibuffer.selected();
     let range = visible_range(completions.len(), selected, ROWS);
@@ -35,18 +37,19 @@ pub fn view<'a, Message: 'a>(
                 text(completion.command.name())
                     .font(font)
                     .size(size)
-                    .color(style::color(face.foreground)),
+                    .color(color(face.foreground)),
                 space::horizontal(),
                 text(completion.keys.clone().unwrap_or_default())
                     .font(font)
                     .size(size)
-                    .color(style::color(faces.shadow)),
+                    .color(color(faces.shadow)),
             ];
+            let background = color(face.background);
             container(line)
                 .width(Length::Fill)
                 .padding([0, 4])
                 .style(move |_| container::Style {
-                    background: current.then(|| style::color(face.background).into()),
+                    background: current.then(|| background.into()),
                     ..container::Style::default()
                 })
                 .into()

@@ -12,6 +12,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 - Cursor glides on jumps and fade-blinks while idle (stops after 10 blinks); `animations = false` turns both off.
 - `cursor-blink-interval` setting (default 400ms, 0 disables) with a crisper 60ms fade.
 - Smooth scrolling; long jumps glide in from one screen away.
+- Theme changes crossfade and the `M-x` list fades in.
 - Minibuffer with `M-x` to run commands by name; `RET` runs, `C-g` aborts, `[No match]` on unknown names.
 - Vertical `M-x` completion: space-separated substring matching, recent commands first, key hints, `C-n`/`C-p` to select, `TAB` to insert.
 - Hollow cursor in the buffer while the minibuffer is active.

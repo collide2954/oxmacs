@@ -1,15 +1,16 @@
+use iced::animation::Easing;
 use iced::font::Family;
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
 use iced::widget::{column, container, text};
-use iced::{Element, Font, Length, Subscription, Task, Theme, keyboard, system};
+use iced::{Animation, Element, Font, Length, Subscription, Task, Theme, keyboard, system, window};
 use mx_core::config::{self, Config, ConfigError};
 use mx_core::editor::Editor;
 use mx_core::theme::{Appearance, Theme as Faces};
 
 use crate::buffer_view::{BufferView, Motion, ViewEvent};
 use crate::keys::{self, Platform};
-use crate::{completions, echo_area, fonts, style};
+use crate::{animation, completions, echo_area, fonts, style};
 
 #[derive(Debug)]
 pub struct App {
@@ -19,6 +20,9 @@ pub struct App {
     animations: bool,
     blink_interval: Duration,
     last_input: Instant,
+    now: Instant,
+    theme_fade: Option<(Faces, Animation<bool>)>,
+    reveal: Animation<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +30,7 @@ pub enum Message {
     Keyboard(keyboard::Event),
     View(ViewEvent),
     AppearanceChanged(Mode),
+    Tick(Instant),
 }
 
 impl Default for App {
@@ -52,6 +57,9 @@ impl App {
             animations: config.animations,
             blink_interval: Duration::from_millis(config.cursor_blink_interval),
             last_input: Instant::now(),
+            now: Instant::now(),
+            theme_fade: None,
+            reveal: transition(false, animation::REVEAL),
         }
     }
 
@@ -80,6 +88,50 @@ impl App {
         self.animations
     }
 
+    pub fn is_animating(&self) -> bool {
+        let fading = self
+            .theme_fade
+            .as_ref()
+            .is_some_and(|(_, fade)| fade.is_animating(self.now));
+        fading || self.reveal.is_animating(self.now)
+    }
+
+    pub fn completion_opacity(&self) -> f32 {
+        self.reveal.interpolate(0.0, 1.0, self.now)
+    }
+
+    fn set_appearance(&mut self, appearance: Appearance) {
+        let before = self.faces();
+        self.editor.set_appearance(appearance);
+        if self.animations && before.name != self.editor.theme().name {
+            let fade = transition(false, animation::THEME_FADE).go(true, self.now);
+            self.theme_fade = Some((before, fade));
+        }
+    }
+
+    fn sync_reveal(&mut self) {
+        let open = self.editor.minibuffer().is_some();
+        if open == self.reveal.value() {
+            return;
+        }
+        if open && self.animations {
+            self.reveal.go_mut(true, self.now);
+        } else {
+            self.reveal = transition(open, animation::REVEAL);
+        }
+    }
+
+    fn tick(&mut self, now: Instant) {
+        self.now = now;
+        if self
+            .theme_fade
+            .as_ref()
+            .is_some_and(|(_, fade)| !fade.is_animating(now))
+        {
+            self.theme_fade = None;
+        }
+    }
+
     fn reject_font(&mut self) {
         if self.font == fonts::EDITOR {
             return;
@@ -94,6 +146,9 @@ impl App {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        if !matches!(message, Message::Tick(_)) {
+            self.now = Instant::now();
+        }
         match message {
             Message::Keyboard(keyboard::Event::KeyPressed {
                 key,
@@ -104,8 +159,9 @@ impl App {
                 if let Some(key) =
                     keys::translate(&key, &modified_key, modifiers, Platform::current())
                 {
-                    self.last_input = Instant::now();
+                    self.last_input = self.now;
                     self.editor.handle_key(key);
+                    self.sync_reveal();
                 }
             }
             Message::Keyboard(_) => {}
@@ -113,9 +169,10 @@ impl App {
             Message::View(ViewEvent::FontNotMonospaced) => self.reject_font(),
             Message::AppearanceChanged(mode) => {
                 if let Some(appearance) = appearance(mode) {
-                    self.editor.set_appearance(appearance);
+                    self.set_appearance(appearance);
                 }
             }
+            Message::Tick(now) => self.tick(now),
         }
         if self.editor.should_quit() {
             iced::exit()
@@ -125,9 +182,15 @@ impl App {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
+        let frames = if self.is_animating() {
+            window::frames().map(Message::Tick)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
             keyboard::listen().map(Message::Keyboard),
             system::theme_changes().map(Message::AppearanceChanged),
+            frames,
         ])
     }
 
@@ -136,7 +199,11 @@ impl App {
     }
 
     pub fn faces(&self) -> Faces {
-        *self.editor.theme()
+        let target = self.editor.theme();
+        match &self.theme_fade {
+            Some((from, fade)) => from.mix(target, fade.interpolate(0.0, 1.0, self.now)),
+            None => *target,
+        }
     }
 
     pub fn theme(&self) -> Theme {
@@ -165,7 +232,13 @@ impl App {
                 .padding([1, 4])
                 .style(move |_| style::mode_line(&faces)),
             echo_area::view(&self.editor, faces, self.font, self.text_size),
-            completions::view(&self.editor, faces, self.font, self.text_size),
+            completions::view(
+                &self.editor,
+                faces,
+                self.font,
+                self.text_size,
+                self.completion_opacity()
+            ),
         ]
         .into()
     }
@@ -173,6 +246,12 @@ impl App {
 
 pub fn points_to_pixels(points: f32) -> f32 {
     points * 4.0 / 3.0
+}
+
+fn transition(state: bool, duration: Duration) -> Animation<bool> {
+    Animation::new(state)
+        .duration(duration)
+        .easing(Easing::EaseOutCubic)
 }
 
 fn appearance(mode: Mode) -> Option<Appearance> {
@@ -188,6 +267,7 @@ mod tests {
     use super::*;
     use iced::keyboard::key::{Code, Physical};
     use iced::keyboard::{Key, Location, Modifiers};
+    use mx_core::theme::{ADWAITA, ADWAITA_DARK};
 
     fn press(app: &mut App, c: &str, modifiers: Modifiers) {
         let _ = app.update(Message::Keyboard(keyboard::Event::KeyPressed {
@@ -259,6 +339,55 @@ mod tests {
 
         assert_eq!(app.font(), fonts::EDITOR);
         assert_eq!(app.editor().message(), None);
+    }
+
+    fn later() -> Instant {
+        Instant::now() + Duration::from_secs(1)
+    }
+
+    #[test]
+    fn theme_changes_crossfade_when_animated() {
+        let mut app = App::default();
+
+        let _ = app.update(Message::AppearanceChanged(Mode::Dark));
+        assert!(app.is_animating());
+        assert_eq!(app.faces().default.background, ADWAITA.default.background);
+
+        let _ = app.update(Message::Tick(later()));
+        assert_eq!(app.faces(), ADWAITA_DARK);
+        assert!(!app.is_animating());
+    }
+
+    #[test]
+    fn theme_changes_are_instant_without_animations() {
+        let config = Config::parse("animations = false").unwrap();
+        let mut app = App::new(Ok(config));
+
+        let _ = app.update(Message::AppearanceChanged(Mode::Dark));
+
+        assert_eq!(app.faces(), ADWAITA_DARK);
+        assert!(!app.is_animating());
+    }
+
+    #[test]
+    fn opening_the_minibuffer_fades_in_the_completions() {
+        let mut app = App::default();
+
+        press(&mut app, "x", Modifiers::ALT);
+        assert!(app.completion_opacity() < 0.01);
+
+        let _ = app.update(Message::Tick(later()));
+        assert!((app.completion_opacity() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn completions_appear_at_once_without_animations() {
+        let config = Config::parse("animations = false").unwrap();
+        let mut app = App::new(Ok(config));
+
+        press(&mut app, "x", Modifiers::ALT);
+
+        assert!((app.completion_opacity() - 1.0).abs() < f32::EPSILON);
     }
 
     #[test]
