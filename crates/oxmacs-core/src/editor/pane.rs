@@ -2,9 +2,9 @@ use std::ops::Range;
 
 use crate::diagnostics::Severity;
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
-use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::movement::display_column;
+use crate::editor::{Editor, Gutter};
 use crate::files::LineEnding;
 use crate::syntax::Language;
 use crate::text::Buffer;
@@ -73,6 +73,16 @@ impl<'a> Pane<'a> {
 
     pub fn is_selected(&self) -> bool {
         self.selected
+    }
+
+    pub fn gutter(&self) -> Option<Gutter> {
+        let style = self.editor.line_numbers_at(self.index)?;
+        let buffer = self.buffer();
+        Some(Gutter::new(
+            style,
+            buffer.line_of(self.point),
+            buffer.line_of(buffer.len_chars()) + 1,
+        ))
     }
 
     pub fn minibuffer_active(&self) -> bool {

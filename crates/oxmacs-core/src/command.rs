@@ -138,6 +138,7 @@ pub enum Command {
     CompilationPreviousError,
     CompileGotoError,
     Customize,
+    DisplayLineNumbersMode,
     WidgetForward,
     WidgetBackward,
     WidgetButtonPress,

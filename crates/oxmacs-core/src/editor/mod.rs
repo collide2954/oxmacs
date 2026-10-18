@@ -20,6 +20,7 @@ mod minibuffer;
 mod modes;
 mod mouse;
 mod movement;
+mod numbers;
 mod page;
 mod pairs;
 mod pane;
@@ -42,6 +43,7 @@ pub use effect::Effect;
 pub use isearch::Search;
 pub use minibuffer::{Choice, Completion, Minibuffer};
 pub use mouse::{Cell, Clicks};
+pub use numbers::Gutter;
 pub use pane::{Pane, ScreenRow};
 pub use question::Question;
 pub use replace::Replace;
@@ -57,7 +59,7 @@ use isearch::Direction as SearchDirection;
 use windows::Direction;
 
 use crate::command::{Command, Scope};
-use crate::config::{self, Config, OnDiskChange, RustLint};
+use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::dired::Mark;
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
@@ -73,6 +75,7 @@ struct Settings {
     delete_to_trash: bool,
     format_on_save: bool,
     rust_lint: RustLint,
+    line_numbers: LineNumbers,
 }
 
 impl From<&Config> for Settings {
@@ -81,6 +84,7 @@ impl From<&Config> for Settings {
             delete_to_trash: config.delete_to_trash,
             format_on_save: config.format_on_save,
             rust_lint: config.rust_lint,
+            line_numbers: config.line_numbers,
         }
     }
 }
@@ -609,6 +613,7 @@ impl Editor {
             Command::CompilationPreviousError => self.compilation_next_error(false),
             Command::CompileGotoError => self.compile_goto_error(),
             Command::Customize => self.customize(),
+            Command::DisplayLineNumbersMode => self.display_line_numbers_mode(),
             Command::WidgetForward => self.widget_forward(true),
             Command::WidgetBackward => self.widget_forward(false),
             Command::WidgetButtonPress => self.widget_button_press(),

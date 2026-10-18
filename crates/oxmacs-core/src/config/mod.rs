@@ -31,6 +31,7 @@ pub struct Config {
     pub clock_format: String,
     pub rust_lint: RustLint,
     pub auto_save: bool,
+    pub line_numbers: LineNumbers,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -40,6 +41,15 @@ pub enum OnDiskChange {
     Revert,
     Ask,
     Ignore,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LineNumbers {
+    #[default]
+    Absolute,
+    Relative,
+    Off,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -68,6 +78,7 @@ impl Default for Config {
             clock_format: "%H:%M".to_owned(),
             rust_lint: RustLint::default(),
             auto_save: true,
+            line_numbers: LineNumbers::default(),
         }
     }
 }
@@ -394,6 +405,18 @@ mod tests {
         assert_eq!(read("rust-lint = \"clippy\"").unwrap(), RustLint::Clippy);
         assert_eq!(read("rust-lint = \"off\"").unwrap(), RustLint::Off);
         assert!(read("rust-lint = \"miri\"").is_err());
+    }
+
+    #[test]
+    fn line_numbers_are_absolute_unless_configured() {
+        let read = |text| Config::parse(text).map(|config| config.line_numbers);
+
+        assert_eq!(Config::default().line_numbers, LineNumbers::Absolute);
+        assert_eq!(
+            read("line-numbers = \"relative\"").unwrap(),
+            LineNumbers::Relative
+        );
+        assert_eq!(read("line-numbers = \"off\"").unwrap(), LineNumbers::Off);
     }
 
     #[test]

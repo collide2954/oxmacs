@@ -65,6 +65,12 @@ pub const SETTINGS: &[Setting] = &[
     setting(APPEARANCE, "font-size", Kind::Number, "Font size in points"),
     setting(
         APPEARANCE,
+        "line-numbers",
+        Kind::Choice(&["absolute", "relative", "off"]),
+        "Line numbers beside buffers that visit files",
+    ),
+    setting(
+        APPEARANCE,
         "animations",
         Kind::Toggle,
         "Smooth scrolling, cursor glide and fades",

@@ -30,6 +30,7 @@ struct Entry {
     buffer: Buffer,
     top: ScreenLine,
     mode: Mode,
+    numbers: Option<bool>,
 }
 
 #[derive(Debug)]
@@ -44,6 +45,7 @@ impl BufferList {
                 buffer,
                 top: ScreenLine::default(),
                 mode: Mode::Text(None),
+                numbers: None,
             }],
         }
     }
@@ -54,6 +56,16 @@ impl BufferList {
 
     pub(super) fn mode_mut(&mut self, index: usize) -> Option<&mut Mode> {
         self.entries.get_mut(index).map(|entry| &mut entry.mode)
+    }
+
+    pub(super) fn numbers(&self, index: usize) -> Option<bool> {
+        self.entries.get(index).and_then(|entry| entry.numbers)
+    }
+
+    pub(super) fn set_numbers(&mut self, index: usize, shown: bool) {
+        if let Some(entry) = self.entries.get_mut(index) {
+            entry.numbers = Some(shown);
+        }
     }
 
     pub(super) fn is_special(&self, index: usize) -> bool {
@@ -199,6 +211,7 @@ impl BufferList {
                 buffer,
                 top: ScreenLine::default(),
                 mode,
+                numbers: None,
             },
         );
     }
@@ -214,6 +227,7 @@ impl BufferList {
             buffer,
             top: ScreenLine::default(),
             mode,
+            numbers: None,
         };
     }
 
