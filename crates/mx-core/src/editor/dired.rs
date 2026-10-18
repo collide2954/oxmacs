@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use jiff::Zoned;
 
-use crate::dired::{Listing, Mark, read_entries};
+use crate::dired::{Listing, Mark, read_entries, sort};
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::minibuffer::Purpose;
@@ -115,6 +115,31 @@ impl Editor {
         match read_entries(&directory) {
             Ok(entries) => self.update_listing(index, |listing| listing.set_entries(entries)),
             Err(error) => self.show_message(format!("{}: {error}", directory.display())),
+        }
+    }
+
+    pub fn watched_directories(&self) -> Vec<PathBuf> {
+        let mut directories: Vec<PathBuf> = (0..self.buffers.len())
+            .filter_map(|index| self.buffers.listing(index))
+            .map(|listing| listing.directory().to_owned())
+            .collect();
+        directories.sort();
+        directories.dedup();
+        directories
+    }
+
+    pub(super) fn refresh_changed_listings(&mut self) {
+        for index in 0..self.buffers.len() {
+            let Some(listing) = self.buffers.listing(index) else {
+                continue;
+            };
+            let Ok(mut entries) = read_entries(listing.directory()) else {
+                continue;
+            };
+            sort(&mut entries, listing.sort());
+            if entries != listing.entries() {
+                self.update_listing(index, |listing| listing.set_entries(entries));
+            }
         }
     }
 
@@ -1315,6 +1340,47 @@ mod tests {
         );
 
         assert_eq!(editor.default_directory(), dir.path().join("sub"));
+    }
+
+    #[test]
+    fn disk_checks_refresh_changed_listings() {
+        let (dir, mut editor) = workspace();
+        editor.open_file(&dir.path().join("a.txt"));
+        listed(&mut editor, &dir);
+        press(&mut editor, "n m");
+        fs::write(dir.path().join("0.txt"), "").unwrap();
+
+        editor.check_disk_changes();
+
+        assert!(lines(&editor)[3].ends_with(" 0.txt"));
+        assert_eq!(at_point(&editor), "b.txt");
+        assert_eq!(mark_column(&editor), "  * ");
+    }
+
+    #[test]
+    fn listings_refresh_even_when_file_changes_are_ignored() {
+        let (dir, mut editor) = workspace();
+        let config = crate::config::Config::parse("on-disk-change = \"ignore\"").unwrap();
+        editor.apply_config(&config);
+        listed(&mut editor, &dir);
+        fs::write(dir.path().join("0.txt"), "").unwrap();
+
+        editor.check_disk_changes();
+
+        assert!(lines(&editor)[3].ends_with(" 0.txt"));
+    }
+
+    #[test]
+    fn watched_directories_are_the_listed_ones() {
+        let (dir, mut editor) = workspace();
+        editor.dired(&dir.path().join("sub"));
+        listed(&mut editor, &dir);
+        editor.open_file(&dir.path().join("a.txt"));
+
+        assert_eq!(
+            editor.watched_directories(),
+            [dir.path().to_owned(), dir.path().join("sub")]
+        );
     }
 
     #[test]

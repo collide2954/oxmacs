@@ -18,6 +18,7 @@ impl Editor {
     }
 
     pub fn check_disk_changes(&mut self) {
+        self.refresh_changed_listings();
         if self.on_disk_change == OnDiskChange::Ignore {
             return;
         }
