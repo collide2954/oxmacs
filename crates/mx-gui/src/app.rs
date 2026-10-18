@@ -4,12 +4,13 @@ use iced::animation::Easing;
 use iced::font::Family;
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
-use iced::widget::{column, container, text};
+use iced::widget::{column, container, row, space, text};
 use iced::{
     Animation, Element, Event, Font, Length, Subscription, Task, Theme, clipboard, event, keyboard,
     system, window,
 };
 use mx_core::cli::Visit;
+use mx_core::clock;
 use mx_core::config::{self, Config, ConfigError};
 use mx_core::editor::{Editor, Effect};
 use mx_core::theme::{Appearance, Theme as Faces};
@@ -18,7 +19,7 @@ use native_theme::detect::prefers_reduced_motion;
 use crate::buffer_view::{BufferView, Motion, ViewEvent};
 use crate::keys::{self, Platform};
 use crate::watcher::Watched;
-use crate::{animation, completions, echo_area, fonts, style, watcher};
+use crate::{animation, completions, echo_area, fonts, style, ticker, watcher};
 
 #[derive(Debug)]
 pub struct App {
@@ -31,6 +32,7 @@ pub struct App {
     now: Instant,
     theme_fade: Option<(Faces, Animation<bool>)>,
     reveal: Animation<bool>,
+    clock: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +45,7 @@ pub enum Message {
     PastedPrimary(Option<String>),
     DiskChanged,
     Opened(Result<(), String>),
+    Clock,
 }
 
 impl Default for App {
@@ -78,6 +81,7 @@ impl App {
             now: Instant::now(),
             theme_fade: None,
             reveal: transition(false, animation::REVEAL),
+            clock: config.clock.then_some(config.clock_format),
         }
     }
 
@@ -110,6 +114,10 @@ impl App {
 
     pub fn font(&self) -> Font {
         self.font
+    }
+
+    pub fn clock_format(&self) -> Option<&str> {
+        self.clock.as_deref()
     }
 
     pub fn animations(&self) -> bool {
@@ -216,7 +224,7 @@ impl App {
                     self.sync_reveal();
                 }
             }
-            Message::Keyboard(_) | Message::Opened(Ok(())) => {}
+            Message::Keyboard(_) | Message::Opened(Ok(())) | Message::Clock => {}
             Message::View(event) => self.handle_view_event(event),
             Message::AppearanceChanged(mode) => {
                 if let Some(appearance) = appearance(mode) {
@@ -252,6 +260,14 @@ impl App {
             })
             .map(|()| Message::DiskChanged),
             event::listen_with(focus_gained),
+            ticker::ticks(self.clock.as_deref().map(|format| {
+                if clock::shows_seconds(format) {
+                    ticker::SECOND
+                } else {
+                    ticker::MINUTE
+                }
+            }))
+            .map(|()| Message::Clock),
             frames,
         ])
     }
@@ -289,10 +305,13 @@ impl App {
                 Message::View
             ))
             .padding([0, 4]),
-            container(line(self.editor.mode_line()))
-                .width(Length::Fill)
-                .padding([1, 4])
-                .style(move |_| style::mode_line(&faces)),
+            container(
+                row![line(self.editor.mode_line()), space::horizontal()]
+                    .push(self.clock.as_deref().map(|format| line(clock::now(format))))
+            )
+            .width(Length::Fill)
+            .padding([1, 4])
+            .style(move |_| style::mode_line(&faces)),
             echo_area::view(&self.editor, faces, self.font, self.text_size),
             completions::view(
                 &self.editor,
@@ -683,6 +702,23 @@ mod tests {
                 .contents()
                 .contains("Comic Sans MS is not monospaced; using JetBrains Mono")
         );
+    }
+
+    #[test]
+    fn the_clock_is_on_unless_turned_off() {
+        assert_eq!(App::default().clock_format(), Some("%H:%M"));
+
+        let config = Config::parse("clock = false").unwrap();
+        assert_eq!(App::new(Ok(config)).clock_format(), None);
+    }
+
+    #[test]
+    fn the_mode_line_shows_the_clock() {
+        let config = Config::parse("clock-format = \"teatime\"").unwrap();
+        let app = App::new(Ok(config));
+        let mut ui = iced_test::simulator(app.view());
+
+        assert!(ui.find("teatime").is_ok());
     }
 
     #[test]

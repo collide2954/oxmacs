@@ -6,6 +6,7 @@ pub mod echo_area;
 pub mod fonts;
 pub mod keys;
 pub mod style;
+pub mod ticker;
 mod units;
 pub mod watcher;
 
