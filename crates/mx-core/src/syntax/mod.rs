@@ -156,6 +156,52 @@ impl Syntax {
         Some(buffer.byte_to_char(byte) - start)
     }
 
+    pub fn bracket_partner(&self, buffer: &Buffer, position: usize) -> Option<usize> {
+        let tree = self.synced(buffer)?;
+        let byte = buffer.char_to_byte(position);
+        let node = tree.root_node().descendant_for_byte_range(byte, byte + 1)?;
+        if node.is_named() || node.start_byte() != byte {
+            return None;
+        }
+        let kind = node.kind();
+        let (partner, forward) = match kind {
+            "(" => (")", true),
+            "[" => ("]", true),
+            "{" => ("}", true),
+            ")" => ("(", false),
+            "]" => ("[", false),
+            "}" => ("{", false),
+            _ => return None,
+        };
+        let parent = node.parent()?;
+        let mut cursor = parent.walk();
+        let siblings: Vec<Node<'_>> = parent.children(&mut cursor).collect();
+        let index = siblings
+            .iter()
+            .position(|sibling| sibling.id() == node.id())?;
+        let mut depth = 0_usize;
+        let mut matches = |sibling: &&Node<'_>| {
+            if sibling.is_named() || sibling.is_missing() {
+                return false;
+            }
+            if sibling.kind() == kind {
+                depth += 1;
+            } else if sibling.kind() == partner {
+                if depth == 0 {
+                    return true;
+                }
+                depth -= 1;
+            }
+            false
+        };
+        let found = if forward {
+            siblings[index + 1..].iter().find(&mut matches)
+        } else {
+            siblings[..index].iter().rev().find(&mut matches)
+        }?;
+        Some(buffer.byte_to_char(found.start_byte()))
+    }
+
     pub fn sync(&mut self, buffer: &mut Buffer) {
         buffer.track_changes();
         let changes = buffer.take_changes();

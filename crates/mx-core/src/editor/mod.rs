@@ -13,6 +13,7 @@ mod minibuffer;
 mod modes;
 mod mouse;
 mod movement;
+mod pairs;
 mod question;
 mod read_only;
 mod replace;
@@ -93,6 +94,7 @@ pub struct Editor {
     probe: fn(&str) -> Probe,
     font_note: Option<String>,
     config_path: Option<PathBuf>,
+    paren_pair: Option<(usize, usize)>,
 }
 
 impl Default for Editor {
@@ -146,6 +148,7 @@ impl Editor {
             probe: tools::probe,
             font_note: None,
             config_path: config::default_path(),
+            paren_pair: None,
         }
     }
 
@@ -290,7 +293,7 @@ impl Editor {
             Lookup::Unbound => self.report_undefined(),
         }
         self.publish_primary();
-        self.sync_syntax();
+        self.prepare_display();
     }
 
     fn handle_unbound_key(&mut self, key: Key) {
@@ -384,7 +387,8 @@ impl Editor {
     }
 
     pub fn line_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
-        let mut marks = self.search_marks(line);
+        let mut marks = self.paren_marks(line);
+        marks.extend(self.search_marks(line));
         marks.extend(self.replace_marks(line));
         marks
     }

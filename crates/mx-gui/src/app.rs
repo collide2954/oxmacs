@@ -229,7 +229,7 @@ impl App {
             Message::DiskChanged => self.editor.check_disk_changes(),
             Message::Opened(Err(error)) => self.editor.show_message(error),
         }
-        self.editor.sync_syntax();
+        self.editor.prepare_display();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {
             return iced::exit();
