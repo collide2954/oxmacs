@@ -8,6 +8,8 @@ const HISTORY_LIMIT: usize = 50;
 pub enum Effect {
     WriteClipboard(String),
     ReadClipboard,
+    WritePrimary(String),
+    ReadPrimary,
 }
 
 impl Editor {
@@ -74,6 +76,25 @@ impl Editor {
         self.remember(text);
     }
 
+    pub fn paste_primary(&mut self, text: Option<String>) {
+        if let Some(text) = text.filter(|text| !text.is_empty()) {
+            self.buffer.insert(&text);
+            self.buffer.close_undo_step();
+        }
+    }
+
+    pub(super) fn publish_primary(&mut self) {
+        let selection = self.buffer.selection().filter(|range| !range.is_empty());
+        if selection == self.primary {
+            return;
+        }
+        self.primary.clone_from(&selection);
+        if let Some(range) = selection {
+            self.effects
+                .push(Effect::WritePrimary(self.buffer.text_in(range)));
+        }
+    }
+
     fn remember(&mut self, text: String) {
         self.clipboard_history.retain(|old| *old != text);
         self.clipboard_history.insert(0, text);
@@ -92,9 +113,69 @@ mod tests {
             .into_iter()
             .filter_map(|effect| match effect {
                 Effect::WriteClipboard(text) => Some(text),
-                Effect::ReadClipboard => None,
+                _ => None,
             })
             .collect()
+    }
+
+    fn primary_writes(editor: &mut Editor) -> Vec<String> {
+        editor
+            .take_effects()
+            .into_iter()
+            .filter_map(|effect| match effect {
+                Effect::WritePrimary(text) => Some(text),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn selections_are_published_as_the_primary_selection() {
+        let mut editor = editor_with("hello world", 0);
+
+        press(&mut editor, "C-SPC M-f");
+        assert_eq!(primary_writes(&mut editor), ["hello"]);
+
+        press(&mut editor, "C-x C-x");
+        assert_eq!(primary_writes(&mut editor), Vec::<String>::new());
+
+        press(&mut editor, "C-g");
+        assert_eq!(primary_writes(&mut editor), Vec::<String>::new());
+    }
+
+    #[test]
+    fn dragging_publishes_the_primary_selection() {
+        let mut editor = editor_with("hello world", 0);
+
+        editor.click(
+            crate::editor::Cell { line: 0, column: 0 },
+            crate::editor::Clicks::Single,
+            false,
+        );
+        editor.drag(crate::editor::Cell { line: 0, column: 5 });
+
+        assert_eq!(primary_writes(&mut editor), ["hello"]);
+    }
+
+    #[test]
+    fn middle_click_reads_the_primary_selection_at_the_mouse() {
+        let mut editor = editor_with("ab", 0);
+
+        editor.middle_click(crate::editor::Cell { line: 0, column: 1 });
+
+        assert_eq!(editor.take_effects(), [Effect::ReadPrimary]);
+        assert_eq!(editor.buffer().point(), 1);
+    }
+
+    #[test]
+    fn primary_text_is_inserted_at_point() {
+        let mut editor = editor_with("ab", 1);
+
+        editor.paste_primary(Some("X".to_owned()));
+        editor.paste_primary(None);
+
+        assert_eq!(editor.buffer().contents(), "aXb");
+        assert_eq!(editor.clipboard_history(), Vec::<String>::new());
     }
 
     #[test]

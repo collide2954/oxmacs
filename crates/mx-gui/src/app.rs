@@ -36,6 +36,7 @@ pub enum Message {
     AppearanceChanged(Mode),
     Tick(Instant),
     Pasted(Option<String>),
+    PastedPrimary(Option<String>),
 }
 
 impl Default for App {
@@ -178,6 +179,7 @@ impl App {
             }
             Message::Tick(now) => self.tick(now),
             Message::Pasted(text) => self.editor.paste(text),
+            Message::PastedPrimary(text) => self.editor.paste_primary(text),
         }
         if self.editor.should_quit() {
             return iced::exit();
@@ -256,10 +258,17 @@ pub fn animations_enabled(configured: bool, reduced_motion: bool) -> bool {
     configured && !reduced_motion
 }
 
+const HAS_PRIMARY_SELECTION: bool = cfg!(target_os = "linux");
+
 fn effect_task(effect: Effect) -> Task<Message> {
     match effect {
         Effect::WriteClipboard(text) => clipboard::write(text),
         Effect::ReadClipboard => clipboard::read().map(Message::Pasted),
+        Effect::WritePrimary(text) if HAS_PRIMARY_SELECTION => clipboard::write_primary(text),
+        Effect::ReadPrimary if HAS_PRIMARY_SELECTION => {
+            clipboard::read_primary().map(Message::PastedPrimary)
+        }
+        Effect::WritePrimary(_) | Effect::ReadPrimary => Task::none(),
     }
 }
 

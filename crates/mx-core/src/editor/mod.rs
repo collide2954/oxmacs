@@ -13,6 +13,7 @@ pub use minibuffer::{Choice, Completion, Minibuffer};
 pub use mouse::{Cell, Clicks};
 
 use std::mem;
+use std::ops::Range;
 
 use crate::command::Command;
 use crate::config::Config;
@@ -37,6 +38,7 @@ pub struct Editor {
     shift_selection: bool,
     typed_in_step: usize,
     drag_anchor: Option<usize>,
+    primary: Option<Range<usize>>,
     effects: Vec<Effect>,
     clipboard_history: Vec<String>,
     line_copy: Option<String>,
@@ -73,6 +75,7 @@ impl Editor {
             shift_selection: false,
             typed_in_step: 0,
             drag_anchor: None,
+            primary: None,
             effects: Vec::new(),
             clipboard_history: Vec::new(),
             line_copy: None,
@@ -177,6 +180,7 @@ impl Editor {
             Lookup::Unbound if self.pending.len() == 1 => self.handle_unbound_key(key),
             Lookup::Unbound => self.report_undefined(),
         }
+        self.publish_primary();
     }
 
     fn handle_unbound_key(&mut self, key: Key) {

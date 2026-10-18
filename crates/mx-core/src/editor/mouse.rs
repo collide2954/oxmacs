@@ -1,5 +1,5 @@
 use crate::display;
-use crate::editor::Editor;
+use crate::editor::{Editor, Effect};
 use crate::text::motion;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +49,7 @@ impl Editor {
                 .filter(|_| buffer.mark_active())
                 .unwrap_or(position),
         );
+        self.publish_primary();
     }
 
     pub fn drag(&mut self, cell: Cell) {
@@ -61,6 +62,15 @@ impl Editor {
             buffer.set_mark(anchor);
         }
         buffer.set_point(position);
+        self.publish_primary();
+    }
+
+    pub fn middle_click(&mut self, cell: Cell) {
+        self.end_command_chain();
+        let position = self.position_at(cell);
+        self.buffer.deactivate_mark();
+        self.buffer.set_point(position);
+        self.effects.push(Effect::ReadPrimary);
     }
 
     pub fn scroll_lines(&mut self, delta: isize) {

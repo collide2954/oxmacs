@@ -164,6 +164,12 @@ mod tests {
 
         assert_eq!(editor.buffer().contents(), "h world");
         assert_eq!(editor.buffer().selection(), None);
-        assert_eq!(editor.take_effects(), []);
+        let effects = editor.take_effects();
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, crate::editor::Effect::WriteClipboard(_))),
+            "{effects:?}"
+        );
     }
 }
