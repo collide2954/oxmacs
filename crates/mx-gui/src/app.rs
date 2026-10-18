@@ -59,6 +59,12 @@ impl App {
             Config::default()
         });
         editor.apply_config(&config);
+        editor.set_font_note(
+            config
+                .font_family
+                .clone()
+                .unwrap_or_else(|| format!("{} (bundled)", fonts::EDITOR_FAMILY)),
+        );
         let font = config
             .font_family
             .map_or(fonts::EDITOR, |family| Font::with_name(family.leak()));
@@ -180,6 +186,10 @@ impl App {
         if let Family::Name(name) = self.font.family {
             self.editor.show_message(format!(
                 "{name} is not a monospaced font; using {}",
+                fonts::EDITOR_FAMILY
+            ));
+            self.editor.set_font_note(format!(
+                "{name} is not monospaced; using {}",
                 fonts::EDITOR_FAMILY
             ));
         }
@@ -652,6 +662,26 @@ mod tests {
         assert_eq!(
             app.editor().line_style(0).spans[0],
             (0..2, mx_core::theme::Highlight::Keyword)
+        );
+    }
+
+    #[test]
+    fn the_doctor_names_the_font_in_use() {
+        let config = Config::parse("font-family = \"Comic Sans MS\"").unwrap();
+        let mut app = App::new(Ok(config));
+        let _ = app.update(Message::View(ViewEvent::FontNotMonospaced));
+
+        press(&mut app, "x", Modifiers::ALT);
+        for c in "mx-doctor".chars() {
+            press(&mut app, &c.to_string(), Modifiers::empty());
+        }
+        enter(&mut app);
+
+        assert!(
+            app.editor()
+                .buffer()
+                .contents()
+                .contains("Comic Sans MS is not monospaced; using JetBrains Mono")
         );
     }
 

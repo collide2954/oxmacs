@@ -2,6 +2,7 @@ mod buffers;
 mod clipboard;
 mod dired;
 mod disk;
+mod doctor;
 mod editing;
 mod effect;
 mod files;
@@ -38,7 +39,7 @@ use dired::Kind;
 use isearch::Direction;
 
 use crate::command::{Command, Scope};
-use crate::config::{Config, OnDiskChange};
+use crate::config::{self, Config, OnDiskChange};
 use crate::dired::Mark;
 use crate::display::{self, Layout, LineStyle, Viewport};
 use crate::files::LineEnding;
@@ -46,6 +47,7 @@ use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, binding
 use crate::syntax::Language;
 use crate::text::{Buffer, motion};
 use crate::theme::{self, Appearance, Highlight, Theme};
+use crate::tools::{self, Probe};
 
 const DEFAULT_ROWS: usize = 24;
 
@@ -61,6 +63,7 @@ pub struct Editor {
     minibuffer_keymap: Keymap,
     dired_keymap: Keymap,
     splash_keymap: Keymap,
+    doctor_keymap: Keymap,
     search_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
@@ -85,6 +88,9 @@ pub struct Editor {
     configured_theme: Option<&'static Theme>,
     working_directory: PathBuf,
     home: Option<PathBuf>,
+    probe: fn(&str) -> Probe,
+    font_note: Option<String>,
+    config_path: Option<PathBuf>,
 }
 
 impl Default for Editor {
@@ -110,6 +116,7 @@ impl Editor {
             minibuffer_keymap: bindings::minibuffer(),
             dired_keymap: bindings::dired(),
             splash_keymap: bindings::splash(),
+            doctor_keymap: bindings::doctor(),
             search_keymap: bindings::search(),
             pending: Vec::new(),
             last_key: None,
@@ -134,6 +141,9 @@ impl Editor {
             configured_theme: None,
             working_directory: env::current_dir().unwrap_or_default(),
             home: dirs::home_dir(),
+            probe: tools::probe,
+            font_note: None,
+            config_path: config::default_path(),
         }
     }
 
@@ -345,6 +355,7 @@ impl Editor {
         match self.buffer_scope() {
             Scope::Dired => Some(&self.dired_keymap),
             Scope::Splash => Some(&self.splash_keymap),
+            Scope::Doctor => Some(&self.doctor_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search => None,
         }
     }
@@ -353,6 +364,7 @@ impl Editor {
         match self.buffers.mode(0) {
             Some(Mode::Dired(_)) => Scope::Dired,
             Some(Mode::Splash(_)) => Scope::Splash,
+            Some(Mode::Doctor(_)) => Scope::Doctor,
             Some(Mode::Text(_)) | None => Scope::Global,
         }
     }
@@ -361,6 +373,7 @@ impl Editor {
         match self.buffers.mode(0) {
             Some(Mode::Dired(listing)) => listing.line_style(line),
             Some(Mode::Splash(splash)) => splash.line_style(line),
+            Some(Mode::Doctor(doctor)) => doctor.line_style(line),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,
                 spans: self.syntax_highlights(line),
@@ -495,6 +508,7 @@ impl Editor {
             Command::ToggleTheme => self.toggle_theme(),
             Command::RustMode => self.set_major_mode(Some(Language::Rust)),
             Command::TextMode => self.set_major_mode(None),
+            Command::MxDoctor => self.mx_doctor(),
             Command::ForwardButton => self.forward_button(true),
             Command::BackwardButton => self.forward_button(false),
             Command::PushButton => self.push_button(),

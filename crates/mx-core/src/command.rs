@@ -90,6 +90,7 @@ pub enum Command {
     ToggleTheme,
     RustMode,
     TextMode,
+    MxDoctor,
     ForwardButton,
     BackwardButton,
     PushButton,
@@ -188,6 +189,7 @@ pub enum Scope {
     Dired,
     Splash,
     Search,
+    Doctor,
 }
 
 #[cfg(test)]

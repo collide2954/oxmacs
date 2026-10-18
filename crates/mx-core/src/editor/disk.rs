@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use crate::config::OnDiskChange;
 use crate::editor::Editor;
+use crate::editor::buffers::Mode;
 use crate::files::{self, DiskState, paths};
 use crate::text::{Buffer, FileInfo};
 
@@ -75,6 +76,10 @@ impl Editor {
     }
 
     pub(super) fn revert_buffer(&mut self) {
+        if matches!(self.buffers.mode(0), Some(Mode::Doctor(_))) {
+            self.mx_doctor();
+            return;
+        }
         if self.buffers.listing(0).is_some() {
             self.refresh_listing(0);
             return;

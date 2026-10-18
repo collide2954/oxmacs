@@ -12,10 +12,67 @@ pub enum Language {
     Rust,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Feature {
+    Highlighting,
+    Indentation,
+    Comments,
+    Pairs,
+    Formatting,
+    Motion,
+    Items,
+    Folding,
+    Lsp,
+}
+
+impl Feature {
+    pub const ALL: [Self; 9] = [
+        Self::Highlighting,
+        Self::Indentation,
+        Self::Comments,
+        Self::Pairs,
+        Self::Formatting,
+        Self::Motion,
+        Self::Items,
+        Self::Folding,
+        Self::Lsp,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Highlighting => "Highlight",
+            Self::Indentation => "Indent",
+            Self::Comments => "Comment",
+            Self::Pairs => "Pairs",
+            Self::Formatting => "Format",
+            Self::Motion => "Motion",
+            Self::Items => "Items",
+            Self::Folding => "Fold",
+            Self::Lsp => "LSP",
+        }
+    }
+}
+
 impl Language {
+    pub const ALL: [Self; 1] = [Self::Rust];
+
+    pub fn extensions(self) -> &'static [&'static str] {
+        match self {
+            Self::Rust => &["rs"],
+        }
+    }
+
+    pub fn supports(self, feature: Feature) -> bool {
+        matches!((self, feature), (Self::Rust, Feature::Highlighting))
+    }
     pub fn for_path(path: &Path) -> Option<Self> {
         let extension = path.extension()?.to_str()?;
-        extension.eq_ignore_ascii_case("rs").then_some(Self::Rust)
+        Self::ALL.into_iter().find(|language| {
+            language
+                .extensions()
+                .iter()
+                .any(|known| extension.eq_ignore_ascii_case(known))
+        })
     }
 
     pub fn name(self) -> &'static str {

@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::dired::Listing;
 use crate::display::{ScreenLine, Viewport};
+use crate::editor::doctor::Doctor;
 use crate::editor::minibuffer::Purpose;
 use crate::editor::splash::Splash;
 use crate::editor::{Choice, Completion, Editor};
@@ -16,6 +17,7 @@ pub(super) enum Mode {
     Text(Option<Syntax>),
     Dired(Listing),
     Splash(Splash),
+    Doctor(Doctor),
 }
 
 #[derive(Debug)]
@@ -53,14 +55,14 @@ impl BufferList {
     pub(super) fn listing(&self, index: usize) -> Option<&Listing> {
         match self.mode(index)? {
             Mode::Dired(listing) => Some(listing),
-            Mode::Text(_) | Mode::Splash(_) => None,
+            Mode::Text(_) | Mode::Splash(_) | Mode::Doctor(_) => None,
         }
     }
 
     pub(super) fn splash(&self, index: usize) -> Option<&Splash> {
         match self.mode(index)? {
             Mode::Splash(splash) => Some(splash),
-            Mode::Text(_) | Mode::Dired(_) => None,
+            Mode::Text(_) | Mode::Dired(_) | Mode::Doctor(_) => None,
         }
     }
 
@@ -68,7 +70,7 @@ impl BufferList {
         let entry = self.entries.get_mut(index)?;
         match &mut entry.mode {
             Mode::Dired(listing) => Some((&mut entry.buffer, listing)),
-            Mode::Text(_) | Mode::Splash(_) => None,
+            Mode::Text(_) | Mode::Splash(_) | Mode::Doctor(_) => None,
         }
     }
 
@@ -77,21 +79,21 @@ impl BufferList {
         match &entry.mode {
             Mode::Dired(listing) => Some((listing.directory(), true)),
             Mode::Text(_) => entry.buffer.file().map(|file| (file.path.as_path(), false)),
-            Mode::Splash(_) => None,
+            Mode::Splash(_) | Mode::Doctor(_) => None,
         }
     }
 
     pub(super) fn language(&self, index: usize) -> Option<Language> {
         match self.mode(index)? {
             Mode::Text(syntax) => syntax.as_ref().map(Syntax::language),
-            Mode::Dired(_) | Mode::Splash(_) => None,
+            Mode::Dired(_) | Mode::Splash(_) | Mode::Doctor(_) => None,
         }
     }
 
     pub(super) fn syntax(&self, index: usize) -> Option<&Syntax> {
         match self.mode(index)? {
             Mode::Text(syntax) => syntax.as_ref(),
-            Mode::Dired(_) | Mode::Splash(_) => None,
+            Mode::Dired(_) | Mode::Splash(_) | Mode::Doctor(_) => None,
         }
     }
 
@@ -161,6 +163,12 @@ impl BufferList {
                 mode,
             },
         );
+    }
+
+    pub(super) fn set_mode(&mut self, index: usize, mode: Mode) {
+        if let Some(entry) = self.entries.get_mut(index) {
+            entry.mode = mode;
+        }
     }
 
     pub(super) fn replace_current(&mut self, buffer: Buffer, mode: Mode) {
