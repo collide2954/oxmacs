@@ -1,8 +1,11 @@
 mod editing;
+mod minibuffer;
 mod movement;
 mod selection;
 #[cfg(test)]
 mod test_support;
+
+pub use minibuffer::Minibuffer;
 
 use std::mem;
 
@@ -18,7 +21,9 @@ const DEFAULT_ROWS: usize = 24;
 #[derive(Debug)]
 pub struct Editor {
     buffer: Buffer,
+    minibuffer: Option<Minibuffer>,
     keymap: Keymap,
+    minibuffer_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
     last_command: Option<Command>,
@@ -45,7 +50,9 @@ impl Editor {
     pub fn with_buffer(buffer: Buffer) -> Self {
         Self {
             buffer,
+            minibuffer: None,
             keymap: bindings::global(),
+            minibuffer_keymap: bindings::minibuffer(),
             pending: Vec::new(),
             last_key: None,
             last_command: None,
@@ -101,6 +108,13 @@ impl Editor {
         self.buffer.line_of(self.buffer.point())
     }
 
+    fn current_mut(&mut self) -> &mut Buffer {
+        match &mut self.minibuffer {
+            Some(minibuffer) => &mut minibuffer.input,
+            None => &mut self.buffer,
+        }
+    }
+
     pub fn tab_width(&self) -> usize {
         self.tab_width
     }
@@ -122,12 +136,15 @@ impl Editor {
 
     pub fn handle_key(&mut self, key: Key) {
         self.message = None;
+        if let Some(minibuffer) = &mut self.minibuffer {
+            minibuffer.note = None;
+        }
         if !self.pending.is_empty() && is_keyboard_quit(key) {
             self.dispatch(key, Command::KeyboardQuit);
             return;
         }
         self.pending.push(key);
-        match self.keymap.lookup(&self.pending) {
+        match self.lookup() {
             Lookup::Prefix => {
                 let keys = KeySequence::from(self.pending.clone());
                 self.message = Some(format!("{keys}-"));
@@ -143,6 +160,16 @@ impl Editor {
         }
     }
 
+    fn lookup(&self) -> Lookup {
+        if self.minibuffer.is_some() {
+            match self.minibuffer_keymap.lookup(&self.pending) {
+                Lookup::Unbound => {}
+                found => return found,
+            }
+        }
+        self.keymap.lookup(&self.pending)
+    }
+
     fn dispatch(&mut self, key: Key, command: Command) {
         self.pending.clear();
         self.last_key = Some(key);
@@ -154,9 +181,9 @@ impl Editor {
         let previous = self.last_command.replace(command);
         match command {
             Command::SelfInsertCommand => self.self_insert(),
-            Command::Newline => self.buffer.insert("\n"),
-            Command::DeleteChar => self.buffer.delete_forward(1),
-            Command::DeleteBackwardChar => self.buffer.delete_backward(1),
+            Command::Newline => self.current_mut().insert("\n"),
+            Command::DeleteChar => self.current_mut().delete_forward(1),
+            Command::DeleteBackwardChar => self.current_mut().delete_backward(1),
             Command::ForwardChar => self.move_point(|b, p| motion::forward_char(b, p, 1)),
             Command::BackwardChar => self.move_point(|_, p| motion::backward_char(p, 1)),
             Command::NextLine => self.move_vertically(1, goal_column),
@@ -170,6 +197,8 @@ impl Editor {
             Command::SetMarkCommand => self.set_mark_command(previous),
             Command::ExchangePointAndMark => self.exchange_point_and_mark(),
             Command::MarkWholeBuffer => self.mark_whole_buffer(),
+            Command::ExecuteExtendedCommand => self.execute_extended_command(),
+            Command::ExitMinibuffer => self.exit_minibuffer(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.quit_requested = true,
         }

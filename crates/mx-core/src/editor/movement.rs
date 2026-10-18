@@ -3,15 +3,17 @@ use crate::text::{Buffer, motion};
 
 impl Editor {
     pub(super) fn move_point(&mut self, motion: impl FnOnce(&Buffer, usize) -> usize) {
-        let target = motion(&self.buffer, self.buffer.point());
-        self.buffer.set_point(target);
+        let buffer = self.current_mut();
+        let target = motion(buffer, buffer.point());
+        buffer.set_point(target);
     }
 
     pub(super) fn move_vertically(&mut self, lines: isize, goal_column: Option<usize>) {
-        let point = self.buffer.point();
-        let goal = goal_column.unwrap_or_else(|| self.buffer.column(point));
-        self.buffer
-            .set_point(motion::vertical(&self.buffer, point, lines, goal));
+        let buffer = self.current_mut();
+        let point = buffer.point();
+        let goal = goal_column.unwrap_or_else(|| buffer.column(point));
+        let target = motion::vertical(buffer, point, lines, goal);
+        buffer.set_point(target);
         self.goal_column = Some(goal);
     }
 }

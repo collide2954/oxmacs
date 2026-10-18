@@ -4,7 +4,7 @@ use crate::input::{Key, KeyCode};
 impl Editor {
     pub(super) fn self_insert(&mut self) {
         if let Some(KeyCode::Char(c)) = self.last_key.map(Key::code) {
-            self.buffer.insert(c.encode_utf8(&mut [0; 4]));
+            self.current_mut().insert(c.encode_utf8(&mut [0; 4]));
         }
     }
 }

@@ -31,13 +31,24 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-x C-x", Command::ExchangePointAndMark),
     ("C-x h", Command::MarkWholeBuffer),
     ("s-a", Command::MarkWholeBuffer),
+    ("M-x", Command::ExecuteExtendedCommand),
     ("C-g", Command::KeyboardQuit),
     ("C-x C-c", Command::SaveBuffersKillMx),
 ];
 
+const MINIBUFFER: &[(&str, Command)] = &[("RET", Command::ExitMinibuffer)];
+
 pub fn global() -> Keymap {
+    build(GLOBAL)
+}
+
+pub fn minibuffer() -> Keymap {
+    build(MINIBUFFER)
+}
+
+fn build(bindings: &[(&str, Command)]) -> Keymap {
     let mut keymap = Keymap::default();
-    for (notation, command) in GLOBAL {
+    for (notation, command) in bindings {
         let sequence: KeySequence = notation
             .parse()
             .unwrap_or_else(|error| panic!("invalid default binding `{notation}`: {error}"));
@@ -51,11 +62,8 @@ mod tests {
     use super::*;
     use crate::input::Lookup;
 
-    #[test]
-    fn every_global_binding_resolves_to_its_command() {
-        let keymap = global();
-
-        for (notation, command) in GLOBAL {
+    fn assert_resolves(keymap: &Keymap, bindings: &[(&str, Command)]) {
+        for (notation, command) in bindings {
             let sequence: KeySequence = notation.parse().unwrap();
             assert_eq!(
                 keymap.lookup(sequence.keys()),
@@ -63,5 +71,15 @@ mod tests {
                 "{notation}"
             );
         }
+    }
+
+    #[test]
+    fn every_global_binding_resolves_to_its_command() {
+        assert_resolves(&global(), GLOBAL);
+    }
+
+    #[test]
+    fn every_minibuffer_binding_resolves_to_its_command() {
+        assert_resolves(&minibuffer(), MINIBUFFER);
     }
 }

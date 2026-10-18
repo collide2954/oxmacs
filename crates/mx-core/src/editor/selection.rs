@@ -3,28 +3,32 @@ use crate::editor::Editor;
 
 impl Editor {
     pub(super) fn set_mark_command(&mut self, previous: Option<Command>) {
-        if previous == Some(Command::SetMarkCommand) && self.buffer.mark_active() {
-            self.buffer.deactivate_mark();
+        let buffer = self.current_mut();
+        if previous == Some(Command::SetMarkCommand) && buffer.mark_active() {
+            buffer.deactivate_mark();
             self.show_message("Mark deactivated");
         } else {
-            self.buffer.set_mark(self.buffer.point());
+            buffer.set_mark(buffer.point());
             self.show_message("Mark set");
         }
     }
 
     pub(super) fn exchange_point_and_mark(&mut self) {
-        if !self.buffer.exchange_point_and_mark() {
+        if !self.current_mut().exchange_point_and_mark() {
             self.show_message("No mark set in this buffer");
         }
     }
 
     pub(super) fn mark_whole_buffer(&mut self) {
-        self.buffer.set_mark(self.buffer.len_chars());
-        self.buffer.set_point(0);
+        let buffer = self.current_mut();
+        buffer.set_mark(buffer.len_chars());
+        buffer.set_point(0);
     }
 
     pub(super) fn keyboard_quit(&mut self) {
-        self.buffer.deactivate_mark();
+        if self.minibuffer.take().is_none() {
+            self.buffer.deactivate_mark();
+        }
         self.show_message("Quit");
     }
 }

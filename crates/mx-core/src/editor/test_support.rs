@@ -9,6 +9,17 @@ pub(super) fn press(editor: &mut Editor, notation: &str) {
     }
 }
 
+pub(super) fn type_text(editor: &mut Editor, text: &str) {
+    for c in text.chars() {
+        let notation = if c == ' ' {
+            "SPC".to_owned()
+        } else {
+            c.to_string()
+        };
+        press(editor, &notation);
+    }
+}
+
 pub(super) fn editor_with(text: &str, point: usize) -> Editor {
     let mut buffer = Buffer::with_text("t", text);
     buffer.set_point(point);
