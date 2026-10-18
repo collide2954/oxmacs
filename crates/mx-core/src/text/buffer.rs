@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::mem;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -27,6 +28,16 @@ impl FileInfo {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextChange {
+    pub start_byte: usize,
+    pub old_end_byte: usize,
+    pub new_end_byte: usize,
+    pub start: (usize, usize),
+    pub old_end: (usize, usize),
+    pub new_end: (usize, usize),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BufferId(u64);
 
@@ -38,6 +49,7 @@ pub struct Buffer {
     name: String,
     text: Rope,
     revision: u64,
+    changes: Option<Vec<TextChange>>,
     point: usize,
     mark: Option<usize>,
     mark_active: bool,
@@ -54,6 +66,7 @@ impl Buffer {
             name: name.into(),
             text: Rope::new(),
             revision: 0,
+            changes: None,
             point: 0,
             mark: None,
             mark_active: false,
@@ -114,6 +127,31 @@ impl Buffer {
 
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    pub fn track_changes(&mut self) {
+        self.changes.get_or_insert_with(Vec::new);
+    }
+
+    pub fn take_changes(&mut self) -> Vec<TextChange> {
+        self.changes.as_mut().map(mem::take).unwrap_or_default()
+    }
+
+    pub fn chunk_at_byte(&self, byte: usize) -> &str {
+        let byte = byte.min(self.text.len_bytes());
+        let (chunk, start, _, _) = self.text.chunk_at_byte(byte);
+        &chunk[byte - start..]
+    }
+
+    fn byte_position(&self, byte: usize) -> (usize, usize) {
+        let row = self.text.byte_to_line(byte);
+        (row, byte - self.text.line_to_byte(row))
+    }
+
+    fn record(&mut self, change: TextChange) {
+        if let Some(changes) = &mut self.changes {
+            changes.push(change);
+        }
     }
 
     pub fn len_chars(&self) -> usize {
@@ -282,8 +320,20 @@ impl Buffer {
 
     fn apply_insert(&mut self, at: usize, text: &str) {
         let inserted = text.chars().count();
+        let start_byte = self.text.char_to_byte(at);
+        let start = self.byte_position(start_byte);
         self.text.insert(at, text);
         self.revision += 1;
+        let new_end_byte = start_byte + text.len();
+        let new_end = self.byte_position(new_end_byte);
+        self.record(TextChange {
+            start_byte,
+            old_end_byte: start_byte,
+            new_end_byte,
+            start,
+            old_end: start,
+            new_end,
+        });
         self.point = position_after_insert(self.point, at, inserted);
         self.mark = self
             .mark
@@ -292,8 +342,20 @@ impl Buffer {
 
     fn apply_delete(&mut self, start: usize, end: usize) -> String {
         let removed = self.text_in(start..end);
+        let start_byte = self.text.char_to_byte(start);
+        let old_end_byte = self.text.char_to_byte(end);
+        let from = self.byte_position(start_byte);
+        let old_end = self.byte_position(old_end_byte);
         self.text.remove(start..end);
         self.revision += 1;
+        self.record(TextChange {
+            start_byte,
+            old_end_byte,
+            new_end_byte: start_byte,
+            start: from,
+            old_end,
+            new_end: from,
+        });
         self.point = position_after_removal(self.point, start, end);
         self.mark = self
             .mark
@@ -318,6 +380,9 @@ impl Buffer {
     pub fn set_text(&mut self, text: &str) {
         self.text = Rope::from_str(text);
         self.revision += 1;
+        if let Some(changes) = &mut self.changes {
+            changes.clear();
+        }
         self.history = History::default();
         self.saved = self.history.current();
         let len = self.len_chars();
@@ -633,6 +698,50 @@ mod tests {
         assert_eq!(buffer.column(1), 1);
         assert_eq!(buffer.column(3), 0);
         assert_eq!(buffer.column(5), 2);
+    }
+
+    #[test]
+    fn tracked_buffers_report_changes_in_bytes_and_rows() {
+        let mut buffer = Buffer::with_text("t", "ab\né");
+        buffer.insert("x");
+        assert_eq!(buffer.take_changes(), []);
+
+        buffer.track_changes();
+        buffer.set_point(5);
+        buffer.insert("y\nz");
+        buffer.delete_range(0..2);
+
+        assert_eq!(
+            buffer.take_changes(),
+            [
+                TextChange {
+                    start_byte: 6,
+                    old_end_byte: 6,
+                    new_end_byte: 9,
+                    start: (1, 2),
+                    old_end: (1, 2),
+                    new_end: (2, 1),
+                },
+                TextChange {
+                    start_byte: 0,
+                    old_end_byte: 2,
+                    new_end_byte: 0,
+                    start: (0, 0),
+                    old_end: (0, 2),
+                    new_end: (0, 0),
+                }
+            ]
+        );
+        assert_eq!(buffer.take_changes(), []);
+    }
+
+    #[test]
+    fn chunks_start_at_the_requested_byte() {
+        let buffer = Buffer::with_text("t", "héllo");
+
+        assert_eq!(buffer.chunk_at_byte(3), "llo");
+        assert_eq!(buffer.chunk_at_byte(6), "");
+        assert_eq!(buffer.chunk_at_byte(99), "");
     }
 
     #[test]
