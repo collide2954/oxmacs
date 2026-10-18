@@ -11,6 +11,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Markdown preview: `C-c C-c p` shows the rendered document beside its source and updates as you type; links open in the browser. Press it again to close the preview.
 - `M-x compile` runs a command, `cargo build` by default, in a `*compilation*` window that follows its output. `g` reruns it and `C-c C-k` stops it. In Rust buffers, `C-c C-c` then `C-k`, `C-b`, `C-t`, `C-r` or `C-l` runs cargo check, build, test, run or clippy.
 - `M-g n` and `M-g p` visit each compiler error and warning in turn. In `*compilation*`, `RET` or a click visits the one at point and `n`/`p` show the next or previous without leaving.
+- Lints: saving a Rust file runs `cargo check`, or clippy with `rust-lint = "clippy"`, and underlines errors in red and warnings in yellow. The message at point shows in the echo area and the mode line counts them. `C-c !` lists the project's problems in `*Diagnostics*`, and `M-g n`/`M-g p` step through whichever of the build or lint ran last.
+- Modified Rust buffers are saved after a second and a half without input so they are linted while you work; `auto-save = false` turns this off.
 - Line numbers beside buffers that visit files, with the current line's number brighter. `line-numbers = "relative"` counts from the current line and `"off"` hides them; `M-x display-line-numbers-mode` toggles them in one buffer, and `line-number-separator = true` draws a line beside them. Clicking a number selects its line, and dragging over numbers selects lines.
 - Settings: `M-x customize` lists every setting with its value. `RET` or a click changes one at once, `C-x C-s` writes the changes to `config.toml` keeping its comments, and `g` reverts.
 
