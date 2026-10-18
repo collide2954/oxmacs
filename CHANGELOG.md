@@ -4,6 +4,22 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-18
+
+### Added
+
+- Major modes: `.rs` files open in rust-mode, `.toml` files and `Cargo.lock` in toml-mode, and `.md` files in markdown-mode. The mode line shows the mode, and `rust-mode`, `toml-mode`, `markdown-mode` and `text-mode` switch it.
+- Syntax highlighting through tree-sitter, in colors from GNOME's Adwaita schemes. Markdown highlights inline markup, and fenced Rust and TOML code in their own colors.
+- Indentation: `TAB` indents the line or selection, `RET` indents the new line, closing brackets re-indent, and `C-M-\` indents the region. TOML and Markdown keep the previous line's level and indent inside arrays. In plain text, `TAB` inserts a tab.
+- Comments: `C-x C-;` and `s-/` toggle comments on the line or selected lines, and `M-;` adds a comment or moves to one.
+- Brackets: the bracket matching the one at point is highlighted. In Rust and TOML, brackets and quotes pair as you type, step over their closers and wrap the selection, `DEL` removes an empty pair, and `RET` between braces opens a block.
+- `rust-format-buffer` (`C-c C-f`) runs rustfmt with the project's edition; `format-on-save = true` formats Rust files when saving.
+- Structural motion: `C-M-a`/`C-M-e` move by item, TOML table or Markdown section, `C-M-f`/`C-M-b` move over balanced expressions, and `C-M-u`/`C-M-d` move out of and into brackets.
+- `imenu` (`M-g i`) jumps to a function, type, impl, TOML table or Markdown heading.
+- Markdown: `M-RET` continues lists, and `M-<left>`/`M-<right>` promote and demote headings and list items.
+- `mx-doctor` reports the environment, config, font, each language's features and the tools mx uses.
+- A clock at the right of the mode line. `clock = false` hides it, and `clock-format` takes a strftime format such as `"%a %H:%M"`.
+
 ## [0.10.0] - 2026-10-18
 
 ### Added
