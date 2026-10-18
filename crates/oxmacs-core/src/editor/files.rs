@@ -293,8 +293,11 @@ impl Editor {
     }
 
     pub(super) fn save_buffer_at(&mut self, index: usize) -> bool {
-        let formatting =
-            self.settings.format_on_save && self.buffers.language(index) == Some(Language::Rust);
+        self.write_buffer_at(index, self.settings.format_on_save)
+    }
+
+    pub(super) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {
+        let formatting = format && self.buffers.language(index) == Some(Language::Rust);
         let format_error = formatting
             .then(|| self.format_buffer_at(index).err())
             .flatten();

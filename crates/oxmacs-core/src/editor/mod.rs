@@ -1,3 +1,4 @@
+mod auto_save;
 mod buffers;
 mod clipboard;
 mod comments;
@@ -72,12 +73,17 @@ use crate::tools::{self, Probe};
 const DEFAULT_ROWS: usize = 24;
 
 #[derive(Debug, Clone, Copy)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag mirrors a config.toml setting"
+)]
 struct Settings {
     delete_to_trash: bool,
     format_on_save: bool,
     rust_lint: RustLint,
     line_numbers: LineNumbers,
     line_number_separator: bool,
+    auto_save: bool,
 }
 
 impl From<&Config> for Settings {
@@ -88,6 +94,7 @@ impl From<&Config> for Settings {
             rust_lint: config.rust_lint,
             line_numbers: config.line_numbers,
             line_number_separator: config.line_number_separator,
+            auto_save: config.auto_save,
         }
     }
 }
