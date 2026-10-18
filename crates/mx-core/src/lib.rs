@@ -10,3 +10,4 @@ pub mod search;
 pub mod syntax;
 pub mod text;
 pub mod theme;
+pub mod tools;
