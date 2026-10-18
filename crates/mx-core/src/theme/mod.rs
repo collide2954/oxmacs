@@ -38,6 +38,7 @@ pub struct Theme {
     pub flagged: Color,
     pub search_match: Color,
     pub search_current: Color,
+    pub paren_match: Color,
     pub success: Color,
     pub warning: Color,
     pub error: Color,
@@ -68,6 +69,7 @@ pub enum Highlight {
     Flagged,
     SearchMatch,
     SearchCurrent,
+    ParenMatch,
     Keyword,
     String,
     Comment,
@@ -134,6 +136,7 @@ impl Theme {
             flagged: self.flagged.mix(other.flagged, amount),
             search_match: self.search_match.mix(other.search_match, amount),
             search_current: self.search_current.mix(other.search_current, amount),
+            paren_match: self.paren_match.mix(other.paren_match, amount),
             success: self.success.mix(other.success, amount),
             warning: self.warning.mix(other.warning, amount),
             error: self.error.mix(other.error, amount),
@@ -150,6 +153,7 @@ impl Theme {
             Highlight::Flagged => self.flagged,
             Highlight::SearchMatch => self.search_match,
             Highlight::SearchCurrent => self.search_current,
+            Highlight::ParenMatch => self.paren_match,
             Highlight::Keyword => self.syntax.keyword,
             Highlight::String => self.syntax.string,
             Highlight::Comment => self.syntax.comment,
@@ -254,6 +258,7 @@ mod tests {
                 Highlight::Flagged,
                 Highlight::SearchMatch,
                 Highlight::SearchCurrent,
+                Highlight::ParenMatch,
             ] {
                 let ratio = theme
                     .default
