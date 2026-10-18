@@ -13,6 +13,7 @@ pub struct Editor {
     keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
+    goal_column: Option<usize>,
     message: Option<String>,
 }
 
@@ -33,6 +34,7 @@ impl Editor {
             keymap: bindings::global(),
             pending: Vec::new(),
             last_key: None,
+            goal_column: None,
             message: None,
         }
     }
@@ -68,14 +70,13 @@ impl Editor {
     }
 
     pub fn execute(&mut self, command: Command) {
+        let goal_column = self.goal_column.take();
         match command {
             Command::SelfInsertCommand => self.self_insert(),
             Command::ForwardChar => self.move_point(|b, p| motion::forward_char(b, p, 1)),
             Command::BackwardChar => self.move_point(|_, p| motion::backward_char(p, 1)),
-            Command::NextLine => self.move_point(|b, p| motion::vertical(b, p, 1, b.column(p))),
-            Command::PreviousLine => {
-                self.move_point(|b, p| motion::vertical(b, p, -1, b.column(p)));
-            }
+            Command::NextLine => self.move_vertically(1, goal_column),
+            Command::PreviousLine => self.move_vertically(-1, goal_column),
             Command::MoveBeginningOfLine => self.move_point(motion::beginning_of_line),
             Command::MoveEndOfLine => self.move_point(motion::end_of_line),
             Command::ForwardWord => self.move_point(motion::forward_word),
@@ -88,6 +89,14 @@ impl Editor {
     fn move_point(&mut self, motion: impl FnOnce(&Buffer, usize) -> usize) {
         let target = motion(&self.buffer, self.buffer.point());
         self.buffer.set_point(target);
+    }
+
+    fn move_vertically(&mut self, lines: isize, goal_column: Option<usize>) {
+        let point = self.buffer.point();
+        let goal = goal_column.unwrap_or_else(|| self.buffer.column(point));
+        self.buffer
+            .set_point(motion::vertical(&self.buffer, point, lines, goal));
+        self.goal_column = Some(goal);
     }
 
     fn self_insert(&mut self) {
@@ -181,6 +190,20 @@ mod tests {
         assert_eq!(point_after(text, 5, "<down>"), 9);
         assert_eq!(point_after(text, 5, "C-p"), 1);
         assert_eq!(point_after(text, 5, "<up>"), 1);
+    }
+
+    #[test]
+    fn consecutive_vertical_motions_keep_goal_column() {
+        let text = "abcdef\nab\nabcdef";
+        assert_eq!(point_after(text, 5, "C-n"), 9);
+        assert_eq!(point_after(text, 5, "C-n C-n"), 15);
+        assert_eq!(point_after(text, 15, "C-p C-p"), 5);
+    }
+
+    #[test]
+    fn other_commands_reset_goal_column() {
+        let text = "abcdef\nab\nabcdef";
+        assert_eq!(point_after(text, 5, "C-n C-b C-n"), 11);
     }
 
     #[test]
