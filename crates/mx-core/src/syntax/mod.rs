@@ -1,11 +1,14 @@
 mod highlight;
 mod indent;
+mod items;
 pub(crate) mod motion;
 
 use std::fmt;
 use std::path::Path;
 
 use tree_sitter::{InputEdit, Node, Parser, Point, Tree};
+
+pub use items::Item;
 
 use crate::text::{Buffer, TextChange};
 
@@ -231,6 +234,24 @@ impl Syntax {
             None,
         );
         self.revision = Some(revision);
+    }
+}
+
+fn preorder<'tree>(tree: &'tree Tree, mut visit: impl FnMut(Node<'tree>)) {
+    let mut cursor = tree.walk();
+    loop {
+        visit(cursor.node());
+        if cursor.goto_first_child() || cursor.goto_next_sibling() {
+            continue;
+        }
+        loop {
+            if !cursor.goto_parent() {
+                return;
+            }
+            if cursor.goto_next_sibling() {
+                break;
+            }
+        }
     }
 }
 

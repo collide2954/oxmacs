@@ -3,7 +3,7 @@ use std::ops::Range;
 use tree_sitter::{Node, Tree};
 
 use crate::syntax::indent::open_bracket;
-use crate::syntax::{Syntax, ancestors};
+use crate::syntax::{Syntax, ancestors, preorder};
 use crate::text::Buffer;
 
 pub const PREMATURE: &str = "Containing expression ends prematurely";
@@ -32,24 +32,12 @@ impl Syntax {
             return Vec::new();
         };
         let mut found = Vec::new();
-        let mut cursor = tree.walk();
-        loop {
-            let node = cursor.node();
+        preorder(tree, |node| {
             if DEFUNS.contains(&node.kind()) {
                 found.push(chars(buffer, node.byte_range()));
             }
-            if cursor.goto_first_child() || cursor.goto_next_sibling() {
-                continue;
-            }
-            loop {
-                if !cursor.goto_parent() {
-                    return found;
-                }
-                if cursor.goto_next_sibling() {
-                    break;
-                }
-            }
-        }
+        });
+        found
     }
 
     pub fn defun_start_before(&self, buffer: &Buffer, point: usize) -> Option<usize> {
