@@ -2,13 +2,18 @@ use iced::widget::text::Span;
 use iced::widget::{container, rich_text, span, text};
 use iced::{Element, Font, Length};
 use mx_core::editor::Editor;
+use mx_core::theme::Theme as Faces;
 
 use crate::style;
 
-pub fn view<'a, Message: 'a>(editor: &'a Editor, font: Font, size: f32) -> Element<'a, Message> {
+pub fn view<'a, Message: 'a>(
+    editor: &'a Editor,
+    faces: Faces,
+    font: Font,
+    size: f32,
+) -> Element<'a, Message> {
     let content: Element<'a, Message> = match editor.minibuffer() {
         Some(minibuffer) => {
-            let faces = editor.theme();
             let input = minibuffer.input().contents();
             let (before, at, after) = split_at_cursor(&input, minibuffer.input().point());
             let note = minibuffer

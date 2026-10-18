@@ -5,7 +5,7 @@ use iced::widget::{column, container, text};
 use iced::{Element, Font, Length, Subscription, Task, Theme, keyboard, system};
 use mx_core::config::{self, Config, ConfigError};
 use mx_core::editor::Editor;
-use mx_core::theme::Appearance;
+use mx_core::theme::{Appearance, Theme as Faces};
 
 use crate::buffer_view::{BufferView, Motion, ViewEvent};
 use crate::keys::{self, Platform};
@@ -135,16 +135,21 @@ impl App {
         format!("{} - mx", self.editor.buffer().name())
     }
 
+    pub fn faces(&self) -> Faces {
+        *self.editor.theme()
+    }
+
     pub fn theme(&self) -> Theme {
-        style::iced_theme(self.editor.theme())
+        style::iced_theme(&self.faces())
     }
 
     pub fn view(&self) -> Element<'_, Message> {
         let line = |content: String| text(content).font(self.font).size(self.text_size);
-        let faces = self.editor.theme();
+        let faces = self.faces();
         column![
             container(BufferView::new(
                 &self.editor,
+                faces,
                 self.font,
                 self.text_size,
                 Motion {
@@ -158,9 +163,9 @@ impl App {
             container(line(self.editor.mode_line()))
                 .width(Length::Fill)
                 .padding([1, 4])
-                .style(move |_| style::mode_line(faces)),
-            echo_area::view(&self.editor, self.font, self.text_size),
-            completions::view(&self.editor, self.font, self.text_size),
+                .style(move |_| style::mode_line(&faces)),
+            echo_area::view(&self.editor, faces, self.font, self.text_size),
+            completions::view(&self.editor, faces, self.font, self.text_size),
         ]
         .into()
     }

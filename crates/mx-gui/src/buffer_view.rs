@@ -13,6 +13,7 @@ use iced::{
 };
 use mx_core::display;
 use mx_core::editor::Editor;
+use mx_core::theme::Theme as Faces;
 
 use crate::animation::{self, Glide, Scroll};
 use crate::style;
@@ -37,6 +38,7 @@ pub struct Motion {
 #[derive(Debug)]
 pub struct BufferView<'a, Message> {
     editor: &'a Editor,
+    faces: Faces,
     font: Font,
     size: Pixels,
     motion: Motion,
@@ -71,6 +73,7 @@ impl State {
 impl<'a, Message> BufferView<'a, Message> {
     pub fn new(
         editor: &'a Editor,
+        faces: Faces,
         font: Font,
         size: impl Into<Pixels>,
         motion: Motion,
@@ -78,6 +81,7 @@ impl<'a, Message> BufferView<'a, Message> {
     ) -> Self {
         Self {
             editor,
+            faces,
             font,
             size: size.into(),
             motion,
@@ -171,7 +175,7 @@ impl<'a, Message> BufferView<'a, Message> {
             return;
         }
         let block = Rectangle::new(origin, cell);
-        let faces = self.editor.theme();
+        let faces = &self.faces;
         if self.editor.minibuffer().is_some() {
             let hollow = Quad {
                 bounds: block,
@@ -288,7 +292,7 @@ where
         let cell = state.metrics.cell;
         let bounds = layout.bounds();
         let buffer = self.editor.buffer();
-        let foreground = style::color(self.editor.theme().default.foreground);
+        let foreground = style::color(self.faces.default.foreground);
         let viewport = self.editor.viewport();
         let top = state.top(viewport.top());
         let first = floor_to_usize(top);
@@ -348,7 +352,7 @@ impl<Message> BufferView<'_, Message> {
                 ),
                 ..Quad::default()
             },
-            style::color(self.editor.theme().region),
+            style::color(self.faces.region),
         );
     }
 }

@@ -3,16 +3,21 @@ use std::ops::Range;
 use iced::widget::{Column, container, row, space, text};
 use iced::{Element, Font, Length};
 use mx_core::editor::Editor;
+use mx_core::theme::Theme as Faces;
 
 use crate::style;
 
 const ROWS: usize = 10;
 
-pub fn view<'a, Message: 'a>(editor: &'a Editor, font: Font, size: f32) -> Element<'a, Message> {
+pub fn view<'a, Message: 'a>(
+    editor: &'a Editor,
+    faces: Faces,
+    font: Font,
+    size: f32,
+) -> Element<'a, Message> {
     let Some(minibuffer) = editor.minibuffer() else {
         return Column::new().into();
     };
-    let faces = editor.theme();
     let completions = editor.completions();
     let selected = minibuffer.selected();
     let range = visible_range(completions.len(), selected, ROWS);
