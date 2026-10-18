@@ -4,7 +4,7 @@ mod indent;
 use std::fmt;
 use std::path::Path;
 
-use tree_sitter::{InputEdit, Parser, Point, Tree};
+use tree_sitter::{InputEdit, Node, Parser, Point, Tree};
 
 use crate::text::{Buffer, TextChange};
 
@@ -63,10 +63,19 @@ impl Language {
         }
     }
 
+    pub fn line_comment(self) -> Option<&'static str> {
+        match self {
+            Self::Rust => Some("//"),
+        }
+    }
+
     pub fn supports(self, feature: Feature) -> bool {
         matches!(
             (self, feature),
-            (Self::Rust, Feature::Highlighting | Feature::Indentation)
+            (
+                Self::Rust,
+                Feature::Highlighting | Feature::Indentation | Feature::Comments
+            )
         )
     }
     pub fn for_path(path: &Path) -> Option<Self> {
@@ -129,6 +138,24 @@ impl Syntax {
         self.tree.as_ref()
     }
 
+    fn synced(&self, buffer: &Buffer) -> Option<&Tree> {
+        self.tree
+            .as_ref()
+            .filter(|_| self.revision == Some(buffer.revision()))
+    }
+
+    pub fn comment_start(&self, buffer: &Buffer, line: usize) -> Option<usize> {
+        let tree = self.synced(buffer)?;
+        let start = buffer.line_start(line);
+        let end = buffer.line_end(line);
+        let last = buffer.char_to_byte(end.checked_sub(1).filter(|last| *last >= start)?);
+        let node = tree.root_node().descendant_for_byte_range(last, last)?;
+        let comment = ancestors(node)
+            .find(|ancestor| matches!(ancestor.kind(), "line_comment" | "block_comment"))?;
+        let byte = comment.start_byte().max(buffer.char_to_byte(start));
+        Some(buffer.byte_to_char(byte) - start)
+    }
+
     pub fn sync(&mut self, buffer: &mut Buffer) {
         buffer.track_changes();
         let changes = buffer.take_changes();
@@ -153,6 +180,10 @@ impl Syntax {
         );
         self.revision = Some(revision);
     }
+}
+
+fn ancestors(node: Node<'_>) -> impl Iterator<Item = Node<'_>> {
+    std::iter::successors(Some(node), Node::parent)
 }
 
 fn input_edit(change: &TextChange) -> InputEdit {
@@ -237,6 +268,15 @@ mod tests {
         syntax.sync(&mut buffer);
 
         assert_eq!(sexp(&syntax), fresh(&buffer));
+    }
+
+    #[test]
+    fn comments_are_found_where_they_start_on_a_line() {
+        let (buffer, syntax) = parsed("x(); // note\nlet s = \"// no\";\n/* a\nb */\n");
+
+        assert_eq!(syntax.comment_start(&buffer, 0), Some(5));
+        assert_eq!(syntax.comment_start(&buffer, 1), None);
+        assert_eq!(syntax.comment_start(&buffer, 3), Some(0));
     }
 
     #[test]

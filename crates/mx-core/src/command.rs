@@ -7,6 +7,8 @@ pub enum Command {
     Newline,
     IndentForTabCommand,
     IndentRegion,
+    CommentLine,
+    CommentDwim,
     DeleteChar,
     DeleteBackwardChar,
     DeleteLine,
@@ -126,6 +128,8 @@ impl Command {
                 | Self::Newline
                 | Self::IndentForTabCommand
                 | Self::IndentRegion
+                | Self::CommentLine
+                | Self::CommentDwim
                 | Self::DeleteChar
                 | Self::DeleteBackwardChar
                 | Self::DeleteLine

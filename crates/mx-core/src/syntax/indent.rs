@@ -1,7 +1,7 @@
 use tree_sitter::Node;
 
 use crate::display;
-use crate::syntax::{Language, Syntax};
+use crate::syntax::{Language, Syntax, ancestors};
 use crate::text::Buffer;
 
 const OPENERS: &[&str] = &["{", "(", "["];
@@ -18,10 +18,7 @@ impl Language {
 
 impl Syntax {
     pub fn indentation(&self, buffer: &Buffer, line: usize, tab_width: usize) -> Option<usize> {
-        let tree = self
-            .tree
-            .as_ref()
-            .filter(|_| self.revision == Some(buffer.revision()))?;
+        let tree = self.synced(buffer)?;
         let text = buffer.line_text(line);
         let leading = text.chars().take_while(|c| matches!(c, ' ' | '\t')).count();
         let rest: String = text.chars().skip(leading).collect();
@@ -53,10 +50,6 @@ impl Syntax {
         let inner = statement(node, container);
         Some(base + unit + continuation(inner, line, &rest) * unit)
     }
-}
-
-fn ancestors(node: Node<'_>) -> impl Iterator<Item = Node<'_>> {
-    std::iter::successors(Some(node), Node::parent)
 }
 
 fn row(node: Node<'_>) -> usize {

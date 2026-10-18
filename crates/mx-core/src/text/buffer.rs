@@ -281,6 +281,23 @@ impl Buffer {
         );
     }
 
+    pub fn insert_at(&mut self, at: usize, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        let at = at.min(self.len_chars());
+        let before = self.point;
+        self.apply_insert(at, text);
+        self.history.record(
+            Edit::Insert {
+                at,
+                text: text.to_owned(),
+            },
+            before,
+            self.point,
+        );
+    }
+
     pub fn close_undo_step(&mut self) {
         self.history.close();
     }
@@ -559,6 +576,22 @@ mod tests {
 
         assert_eq!(buffer.contents(), "hello, world");
         assert_eq!(buffer.point(), 12);
+    }
+
+    #[test]
+    fn inserting_elsewhere_shifts_point_only_when_it_follows() {
+        let mut buffer = Buffer::with_text("t", "abcd");
+        buffer.set_point(2);
+
+        buffer.insert_at(3, "x");
+        assert_eq!(buffer.point(), 2);
+
+        buffer.insert_at(0, "yy");
+        assert_eq!(buffer.point(), 4);
+        assert_eq!(buffer.contents(), "yyabcxd");
+
+        buffer.undo();
+        assert_eq!(buffer.contents(), "abcd");
     }
 
     #[test]

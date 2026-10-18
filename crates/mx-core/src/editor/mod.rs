@@ -1,5 +1,6 @@
 mod buffers;
 mod clipboard;
+mod comments;
 mod dired;
 mod disk;
 mod doctor;
@@ -426,6 +427,8 @@ impl Editor {
             Command::Newline => self.newline(),
             Command::IndentForTabCommand => self.indent_for_tab(),
             Command::IndentRegion => self.indent_region(),
+            Command::CommentLine => self.comment_line(),
+            Command::CommentDwim => self.comment_dwim(),
             Command::DeleteChar => self.delete_char(true),
             Command::DeleteBackwardChar => self.delete_char(false),
             Command::DeleteLine => self.delete_line(),
