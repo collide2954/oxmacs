@@ -47,6 +47,8 @@ pub enum Command {
     Dired,
     DiredNextLine,
     DiredPreviousLine,
+    DiredFindFile,
+    DiredUpDirectory,
     KeyboardQuit,
     SaveBuffersKillMx,
 }
@@ -98,7 +100,10 @@ impl Command {
             | Self::MinibufferComplete
             | Self::MinibufferDeleteBackward
             | Self::ExitMinibufferWithInput => Scope::Minibuffer,
-            Self::DiredNextLine | Self::DiredPreviousLine => Scope::Dired,
+            Self::DiredNextLine
+            | Self::DiredPreviousLine
+            | Self::DiredFindFile
+            | Self::DiredUpDirectory => Scope::Dired,
             _ => Scope::Global,
         }
     }

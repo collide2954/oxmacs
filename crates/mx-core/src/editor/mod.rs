@@ -368,6 +368,8 @@ impl Editor {
             Command::Dired => self.dired_prompt(),
             Command::DiredNextLine => self.dired_next_line(1),
             Command::DiredPreviousLine => self.dired_next_line(-1),
+            Command::DiredFindFile => self.dired_find_file(),
+            Command::DiredUpDirectory => self.dired_up_directory(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.save_some_buffers(true),
         }

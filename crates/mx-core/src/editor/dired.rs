@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::path::Path;
 
 use jiff::Zoned;
@@ -15,26 +16,102 @@ impl Editor {
 
     pub fn dired(&mut self, directory: &Path) -> bool {
         let directory = self.absolute(directory);
-        if let Some(index) = (0..self.buffers.len()).find(|index| {
-            self.buffers
-                .listing(*index)
-                .is_some_and(|listing| listing.directory() == directory)
-        }) {
+        if let Some(index) = self.listing_index(&directory) {
             self.select_buffer(index);
             return true;
         }
-        let listing = match Listing::read(directory.clone()) {
-            Ok(listing) => listing,
-            Err(error) => {
-                self.show_message(format!("{}: {error}", directory.display()));
-                return false;
-            }
+        let Some(listing) = self.read_listing(&directory) else {
+            return false;
         };
-        let mut buffer = Buffer::new(directory.display().to_string());
-        buffer.set_read_only(true);
-        self.add_buffer_with(buffer, Mode::Dired(listing));
+        self.add_buffer_with(listing_buffer(listing.directory()), Mode::Dired(listing));
         self.redisplay_listing(0);
         true
+    }
+
+    pub(super) fn dired_find_file(&mut self) {
+        let line = self.point_line();
+        let Some(listing) = self.buffers.listing(0) else {
+            return;
+        };
+        if Some(line) == listing.parent_line() {
+            self.dired_up_directory();
+            return;
+        }
+        let Some(entry) = listing.entry_at(line) else {
+            self.show_message("No file on this line");
+            return;
+        };
+        let path = listing.directory().join(&entry.name);
+        if entry.is_dir() {
+            self.dired_move_to(&path, None);
+        } else {
+            self.open_file(&path);
+        }
+    }
+
+    pub(super) fn dired_up_directory(&mut self) {
+        let Some(listing) = self.buffers.listing(0) else {
+            return;
+        };
+        let Some(parent) = listing.directory().parent() else {
+            return;
+        };
+        let parent = parent.to_owned();
+        let from = listing.directory().file_name().map(OsStr::to_owned);
+        self.dired_move_to(&parent, from.as_deref());
+    }
+
+    fn dired_move_to(&mut self, directory: &Path, focus: Option<&OsStr>) {
+        let directory = self.absolute(directory);
+        if let Some(index) = self.listing_index(&directory) {
+            self.select_buffer(index);
+            self.finish_kill(1);
+        } else {
+            let Some(current) = self.buffers.listing(0) else {
+                return;
+            };
+            let (sort, details) = (current.sort(), current.details());
+            let Some(mut listing) = self.read_listing(&directory) else {
+                return;
+            };
+            listing.set_sort(sort);
+            listing.set_details(details);
+            self.buffers
+                .replace_current(listing_buffer(listing.directory()), Mode::Dired(listing));
+            self.name_file_buffers();
+            self.after_buffer_switch();
+            self.redisplay_listing(0);
+        }
+        if let Some(name) = focus {
+            self.dired_focus(name);
+        }
+    }
+
+    fn dired_focus(&mut self, name: &OsStr) {
+        if let Some((buffer, listing)) = self.buffers.dired_mut(0)
+            && let Some(line) = listing.line_of(name)
+        {
+            place_point(buffer, listing, line);
+            self.viewport.reveal(self.point_line());
+        }
+    }
+
+    fn listing_index(&self, directory: &Path) -> Option<usize> {
+        (0..self.buffers.len()).find(|index| {
+            self.buffers
+                .listing(*index)
+                .is_some_and(|listing| listing.directory() == directory)
+        })
+    }
+
+    fn read_listing(&mut self, directory: &Path) -> Option<Listing> {
+        match Listing::read(directory.to_owned()) {
+            Ok(listing) => Some(listing),
+            Err(error) => {
+                self.show_message(format!("{}: {error}", directory.display()));
+                None
+            }
+        }
     }
 
     pub(super) fn redisplay_listing(&mut self, index: usize) {
@@ -72,6 +149,12 @@ impl Editor {
             .min(last);
         place_point(buffer, listing, line);
     }
+}
+
+fn listing_buffer(directory: &Path) -> Buffer {
+    let mut buffer = Buffer::new(directory.display().to_string());
+    buffer.set_read_only(true);
+    buffer
 }
 
 fn place_point(buffer: &mut Buffer, listing: &Listing, line: usize) {
@@ -295,6 +378,87 @@ mod tests {
         listed(&mut editor, &dir);
 
         assert!(command_names(&mut editor).contains(&"dired-next-line".to_owned()));
+    }
+
+    #[test]
+    fn return_f_and_e_open_the_file_at_point() {
+        for key in ["RET", "f", "e"] {
+            let (dir, mut editor) = workspace();
+            listed(&mut editor, &dir);
+
+            press(&mut editor, "n");
+            press(&mut editor, key);
+
+            assert_eq!(editor.buffer().name(), "a.txt", "{key}");
+            assert_eq!(editor.buffer().contents(), "hello", "{key}");
+            assert_eq!(editor.buffer_names().len(), 3, "{key}");
+        }
+    }
+
+    #[test]
+    fn return_on_a_directory_moves_the_listing_there() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "RET");
+
+        assert_eq!(editor.default_directory(), dir.path().join("sub"));
+        assert_eq!(
+            editor.buffer_names(),
+            [format!("sub{SEP}").as_str(), "*scratch*"]
+        );
+        assert_eq!(at_point(&editor), "c.txt");
+    }
+
+    #[test]
+    fn caret_goes_up_with_point_on_the_directory_left() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+        press(&mut editor, "RET");
+
+        press(&mut editor, "^");
+
+        assert_eq!(editor.default_directory(), dir.path());
+        assert_eq!(
+            editor.buffer_names(),
+            [dir_name(dir.path()).as_str(), "*scratch*"]
+        );
+        assert_eq!(at_point(&editor), format!("sub{SEP}"));
+    }
+
+    #[test]
+    fn return_on_the_parent_line_goes_up() {
+        let (dir, mut editor) = workspace();
+        editor.dired(&dir.path().join("sub"));
+
+        press(&mut editor, "p RET");
+
+        assert_eq!(editor.default_directory(), dir.path());
+        assert_eq!(at_point(&editor), format!("sub{SEP}"));
+    }
+
+    #[test]
+    fn moving_to_a_directory_listed_elsewhere_switches_to_that_listing() {
+        let (dir, mut editor) = workspace();
+        editor.dired(&dir.path().join("sub"));
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "RET");
+
+        assert_eq!(
+            editor.buffer_names(),
+            [format!("sub{SEP}").as_str(), "*scratch*"]
+        );
+    }
+
+    #[test]
+    fn return_on_the_header_reports_no_file() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "M-< RET");
+
+        assert_eq!(editor.message(), Some("No file on this line"));
     }
 
     #[test]

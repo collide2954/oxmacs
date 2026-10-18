@@ -112,6 +112,14 @@ impl BufferList {
         );
     }
 
+    pub(super) fn replace_current(&mut self, buffer: Buffer, mode: Mode) {
+        self.entries[0] = Entry {
+            buffer,
+            top: 0,
+            mode,
+        };
+    }
+
     pub(super) fn select(&mut self, index: usize) {
         if index < self.entries.len() {
             let entry = self.entries.remove(index);
