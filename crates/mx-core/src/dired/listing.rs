@@ -96,6 +96,24 @@ impl Listing {
         };
     }
 
+    pub fn clear_marks(&mut self) {
+        self.marks.clear();
+    }
+
+    pub fn toggle_marks(&mut self) {
+        for entry in &self.entries {
+            match self.marks.get(&entry.name) {
+                Some(Mark::Marked) => {
+                    self.marks.remove(&entry.name);
+                }
+                None => {
+                    self.marks.insert(entry.name.clone(), Mark::Marked);
+                }
+                Some(Mark::Flagged) => {}
+            }
+        }
+    }
+
     pub fn marked(&self, mark: Mark) -> Vec<&Entry> {
         self.entries
             .iter()
@@ -294,6 +312,23 @@ mod tests {
             .collect();
         assert_eq!(marked, ["Cargo.toml"]);
         assert_eq!(listing.mark("crates".as_ref()), Some(Mark::Flagged));
+    }
+
+    #[test]
+    fn marks_can_be_cleared_or_toggled() {
+        let mut listing = listing();
+        listing.set_mark("Cargo.toml".as_ref(), Some(Mark::Marked));
+        listing.set_mark("crates".as_ref(), Some(Mark::Flagged));
+
+        listing.toggle_marks();
+        assert_eq!(listing.mark("Cargo.toml".as_ref()), None);
+        assert_eq!(listing.mark("crates".as_ref()), Some(Mark::Flagged));
+        assert_eq!(listing.mark("CHANGELOG.md".as_ref()), Some(Mark::Marked));
+
+        listing.clear_marks();
+        for entry in listing.entries() {
+            assert_eq!(listing.mark(&entry.name), None);
+        }
     }
 
     #[test]
