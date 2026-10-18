@@ -212,6 +212,7 @@ impl Editor {
             Ok(loaded) => {
                 let mut buffer = Buffer::with_text(path.display().to_string(), &loaded.text);
                 buffer.set_file(FileInfo::new(path, loaded.format, loaded.disk));
+                buffer.set_read_only(loaded.read_only);
                 self.add_buffer(buffer);
                 if loaded.disk.is_none() {
                     self.show_message("(New file)");
@@ -301,6 +302,24 @@ mod tests {
         assert_eq!(visited(&editor), Some(dir.path().join("a.txt")));
         assert!(!editor.buffer().is_modified());
         assert_eq!(editor.buffer_names(), ["a.txt", "*scratch*"]);
+    }
+
+    #[test]
+    fn files_without_write_permission_open_read_only() {
+        let (dir, mut editor) = workspace();
+        let path = dir.path().join("a.txt");
+        let original = fs::metadata(&path).unwrap().permissions();
+        let mut locked = original.clone();
+        locked.set_readonly(true);
+        fs::set_permissions(&path, locked).unwrap();
+
+        editor.open_file(&path);
+        let read_only = editor.buffer().is_read_only();
+        fs::set_permissions(&path, original).unwrap();
+
+        assert!(read_only);
+        editor.open_file(&dir.path().join("b.txt"));
+        assert!(!editor.buffer().is_read_only());
     }
 
     #[test]

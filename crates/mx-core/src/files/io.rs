@@ -32,6 +32,7 @@ pub struct Loaded {
     pub text: String,
     pub format: Format,
     pub disk: Option<DiskState>,
+    pub read_only: bool,
 }
 
 #[derive(Debug, Error)]
@@ -66,6 +67,7 @@ pub fn load(path: &Path) -> Result<Loaded, FileError> {
                 text: String::new(),
                 format: Format::default(),
                 disk: None,
+                read_only: false,
             });
         }
         Err(error) => return Err(FileError::io(path)(error)),
@@ -78,6 +80,7 @@ pub fn load(path: &Path) -> Result<Loaded, FileError> {
         text: decoded.text,
         format: decoded.format,
         disk: DiskState::of(path).map_err(FileError::io(path))?,
+        read_only: fs::metadata(path).is_ok_and(|metadata| metadata.permissions().readonly()),
     })
 }
 
