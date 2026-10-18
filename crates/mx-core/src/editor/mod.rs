@@ -1,6 +1,7 @@
 mod clipboard;
 mod editing;
 mod minibuffer;
+mod mouse;
 mod movement;
 mod selection;
 #[cfg(test)]
@@ -9,6 +10,7 @@ mod undo;
 
 pub use clipboard::Effect;
 pub use minibuffer::{Choice, Completion, Minibuffer};
+pub use mouse::{Cell, Clicks};
 
 use std::mem;
 
@@ -34,6 +36,7 @@ pub struct Editor {
     goal_column: Option<usize>,
     shift_selection: bool,
     typed_in_step: usize,
+    drag_anchor: Option<usize>,
     effects: Vec<Effect>,
     clipboard_history: Vec<String>,
     line_copy: Option<String>,
@@ -69,6 +72,7 @@ impl Editor {
             goal_column: None,
             shift_selection: false,
             typed_in_step: 0,
+            drag_anchor: None,
             effects: Vec::new(),
             clipboard_history: Vec::new(),
             line_copy: None,

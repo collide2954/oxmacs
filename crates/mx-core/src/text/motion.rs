@@ -1,4 +1,5 @@
 use std::iter;
+use std::ops::Range;
 
 use crate::text::Buffer;
 
@@ -45,6 +46,40 @@ fn word_extent(chars: impl Iterator<Item = char>) -> usize {
 
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric()
+}
+
+#[derive(PartialEq, Eq)]
+enum CharClass {
+    Word,
+    Space,
+    Symbol,
+}
+
+fn char_class(c: char) -> CharClass {
+    if is_word_char(c) {
+        CharClass::Word
+    } else if c.is_whitespace() {
+        CharClass::Space
+    } else {
+        CharClass::Symbol
+    }
+}
+
+pub fn word_at(buffer: &Buffer, position: usize) -> Range<usize> {
+    let on_line = |c: &char| *c != '\n';
+    let Some(anchor) = buffer
+        .chars_after(position)
+        .next()
+        .filter(on_line)
+        .or_else(|| buffer.chars_before(position).next().filter(on_line))
+    else {
+        return position..position;
+    };
+    let class = char_class(anchor);
+    let same = |c: &char| on_line(c) && char_class(*c) == class;
+    let start = position - buffer.chars_before(position).take_while(same).count();
+    let end = position + buffer.chars_after(position).take_while(same).count();
+    start..end
 }
 
 #[cfg(test)]
