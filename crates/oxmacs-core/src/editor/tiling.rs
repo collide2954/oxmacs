@@ -176,6 +176,17 @@ impl Tiling {
         true
     }
 
+    pub fn boundary(&self, path: &[usize], index: usize) -> Option<f32> {
+        let Self::Split { parts, .. } = self else {
+            return None;
+        };
+        match path {
+            [first, rest @ ..] => parts.get(*first)?.1.boundary(rest, index),
+            [] => (index + 1 < parts.len())
+                .then(|| parts[..=index].iter().map(|(weight, _)| weight).sum()),
+        }
+    }
+
     pub(super) fn set_divider(&mut self, path: &[usize], index: usize, fraction: f32) {
         match (self, path) {
             (Self::Split { parts, .. }, [first, rest @ ..]) => {
@@ -306,6 +317,18 @@ mod tests {
         assert_eq!(tiling.share(C, Axis::Rows), Some(0.5));
         assert_eq!(tiling.share(C, Axis::Columns), Some(0.5));
         assert_eq!(Tiling::Window(A).share(A, Axis::Rows), None);
+    }
+
+    #[test]
+    fn boundaries_sum_the_weights_before_them() {
+        let mut tiling = Tiling::Window(A);
+        tiling.split(A, Axis::Columns, B);
+        tiling.split(B, Axis::Columns, C);
+
+        assert_eq!(tiling.boundary(&[], 0), Some(0.5));
+        assert_eq!(tiling.boundary(&[], 1), Some(0.75));
+        assert_eq!(tiling.boundary(&[], 2), None);
+        assert_eq!(tiling.boundary(&[0], 0), None);
     }
 
     #[test]
