@@ -7,7 +7,7 @@ mod selection;
 mod test_support;
 
 pub use clipboard::Effect;
-pub use minibuffer::{Completion, Minibuffer};
+pub use minibuffer::{Choice, Completion, Minibuffer};
 
 use std::mem;
 
@@ -264,6 +264,7 @@ impl Editor {
             Command::Copy => self.copy(false),
             Command::Cut => self.copy(true),
             Command::Paste => self.request_paste(),
+            Command::PasteFromHistory => self.paste_from_history(),
             Command::ExecuteExtendedCommand => self.execute_extended_command(),
             Command::ExitMinibuffer => self.exit_minibuffer(),
             Command::MinibufferNext => self.minibuffer_next(),

@@ -213,6 +213,72 @@ mod tests {
         assert_eq!(editor.message(), Some("Clipboard is empty"));
     }
 
+    fn labels(editor: &Editor) -> Vec<String> {
+        editor
+            .completions()
+            .into_iter()
+            .map(|completion| completion.label)
+            .collect()
+    }
+
+    fn copy_words(text: &str) -> Editor {
+        let mut editor = editor_with(text, 0);
+        for _ in text.split(' ') {
+            press(&mut editor, "C-SPC M-f M-w C-f");
+        }
+        editor
+    }
+
+    #[test]
+    fn paste_from_history_lists_recent_copies() {
+        let mut editor = copy_words("alpha beta");
+
+        press(&mut editor, "M-y");
+
+        assert_eq!(
+            editor.minibuffer().unwrap().prompt(),
+            "Paste from history: "
+        );
+        assert_eq!(labels(&editor), ["beta", "alpha"]);
+    }
+
+    #[test]
+    fn picking_from_history_pastes_the_choice() {
+        let mut editor = copy_words("alpha beta");
+
+        press(&mut editor, "M-> M-y C-n RET");
+
+        assert!(editor.minibuffer().is_none());
+        assert_eq!(editor.buffer().contents(), "alpha betaalpha");
+    }
+
+    #[test]
+    fn history_choices_filter_by_typed_text() {
+        let mut editor = copy_words("alpha beta");
+
+        press(&mut editor, "M-y b e");
+
+        assert_eq!(labels(&editor), ["beta"]);
+    }
+
+    #[test]
+    fn multi_line_copies_show_on_one_line() {
+        let mut editor = editor_with("a\nb", 0);
+        press(&mut editor, "C-x h M-w M-y");
+
+        assert_eq!(labels(&editor), ["a↵b"]);
+    }
+
+    #[test]
+    fn empty_history_is_reported_without_a_picker() {
+        let mut editor = editor_with("", 0);
+
+        press(&mut editor, "M-y");
+
+        assert!(editor.minibuffer().is_none());
+        assert_eq!(editor.message(), Some("Clipboard history is empty"));
+    }
+
     #[test]
     fn history_keeps_recent_unique_copies_first() {
         let mut editor = editor_with("a b", 0);

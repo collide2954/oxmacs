@@ -4,24 +4,41 @@ use crate::command::Command;
 use crate::editor::Editor;
 use crate::text::Buffer;
 
+const LABEL_LIMIT: usize = 80;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Purpose {
+    RunCommand,
+    PasteFromHistory,
+}
+
 #[derive(Debug)]
 pub struct Minibuffer {
     prompt: String,
+    purpose: Purpose,
     pub(super) input: Buffer,
     pub(super) note: Option<String>,
     pub(super) selected: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Choice {
+    Command(Command),
+    Clip(usize),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Completion {
-    pub command: Command,
+    pub label: String,
     pub keys: Option<String>,
+    pub choice: Choice,
 }
 
 impl Minibuffer {
-    fn new(prompt: impl Into<String>) -> Self {
+    fn new(prompt: impl Into<String>, purpose: Purpose) -> Self {
         Self {
             prompt: prompt.into(),
+            purpose,
             input: Buffer::new(" *Minibuf*"),
             note: None,
             selected: 0,
@@ -51,32 +68,45 @@ impl Editor {
     }
 
     pub fn completions(&self) -> Vec<Completion> {
-        self.candidates()
-            .into_iter()
-            .map(|command| Completion {
-                command,
-                keys: self.keymap.where_is(command).map(|keys| keys.to_string()),
-            })
-            .collect()
-    }
-
-    fn candidates(&self) -> Vec<Command> {
         let Some(minibuffer) = &self.minibuffer else {
             return Vec::new();
         };
         let input = minibuffer.input.contents().to_lowercase();
+        let matches = |label: &str| {
+            let label = label.to_lowercase();
+            input.split_whitespace().all(|term| label.contains(term))
+        };
+        match minibuffer.purpose {
+            Purpose::RunCommand => self.command_completions(matches),
+            Purpose::PasteFromHistory => self
+                .clipboard_history
+                .iter()
+                .enumerate()
+                .map(|(index, text)| Completion {
+                    label: clip_label(text),
+                    keys: None,
+                    choice: Choice::Clip(index),
+                })
+                .filter(|completion| matches(&completion.label))
+                .collect(),
+        }
+    }
+
+    fn command_completions(&self, matches: impl Fn(&str) -> bool) -> Vec<Completion> {
         let mut commands: Vec<Command> = Command::VARIANTS
             .iter()
             .copied()
-            .filter(|command| !command.is_minibuffer_only())
-            .filter(|command| {
-                input
-                    .split_whitespace()
-                    .all(|term| command.name().contains(term))
-            })
+            .filter(|command| !command.is_minibuffer_only() && matches(command.name()))
             .collect();
         commands.sort_by_key(|command| (self.recency(*command), command.name()));
         commands
+            .into_iter()
+            .map(|command| Completion {
+                label: command.name().to_owned(),
+                keys: self.keymap.where_is(command).map(|keys| keys.to_string()),
+                choice: Choice::Command(command),
+            })
+            .collect()
     }
 
     fn recency(&self, command: Command) -> usize {
@@ -87,37 +117,56 @@ impl Editor {
             .unwrap_or(usize::MAX)
     }
 
-    fn selected_candidate(&self) -> Option<Command> {
+    fn selected_completion(&self) -> Option<Completion> {
         let selected = self.minibuffer.as_ref()?.selected;
-        self.candidates().get(selected).copied()
+        self.completions().into_iter().nth(selected)
     }
 
-    pub(super) fn execute_extended_command(&mut self) {
+    fn open_minibuffer(&mut self, prompt: &str, purpose: Purpose) {
         if self.minibuffer.is_some() {
             self.show_message("Command attempted to use minibuffer while in minibuffer");
             return;
         }
-        self.minibuffer = Some(Minibuffer::new("M-x "));
+        self.minibuffer = Some(Minibuffer::new(prompt, purpose));
+    }
+
+    pub(super) fn execute_extended_command(&mut self) {
+        self.open_minibuffer("M-x ", Purpose::RunCommand);
+    }
+
+    pub(super) fn paste_from_history(&mut self) {
+        if self.clipboard_history.is_empty() {
+            self.show_message("Clipboard history is empty");
+            return;
+        }
+        self.open_minibuffer("Paste from history: ", Purpose::PasteFromHistory);
     }
 
     pub(super) fn exit_minibuffer(&mut self) {
-        let chosen = self.selected_candidate();
+        let chosen = self.selected_completion();
         let Some(minibuffer) = self.minibuffer.as_mut() else {
             return;
         };
-        match chosen {
-            Some(command) => {
-                self.minibuffer = None;
+        let Some(completion) = chosen else {
+            minibuffer.note = Some("[No match]".to_owned());
+            return;
+        };
+        self.minibuffer = None;
+        match completion.choice {
+            Choice::Command(command) => {
                 self.command_history.retain(|used| *used != command);
                 self.command_history.push(command);
                 self.execute(command);
             }
-            None => minibuffer.note = Some("[No match]".to_owned()),
+            Choice::Clip(index) => {
+                let text = self.clipboard_history.get(index).cloned();
+                self.paste(text);
+            }
         }
     }
 
     pub(super) fn minibuffer_next(&mut self) {
-        let last = self.candidates().len().saturating_sub(1);
+        let last = self.completions().len().saturating_sub(1);
         if let Some(minibuffer) = &mut self.minibuffer {
             minibuffer.selected = (minibuffer.selected + 1).min(last);
         }
@@ -130,11 +179,11 @@ impl Editor {
     }
 
     pub(super) fn minibuffer_complete(&mut self) {
-        let chosen = self.selected_candidate();
-        if let (Some(command), Some(minibuffer)) = (chosen, &mut self.minibuffer) {
+        let chosen = self.selected_completion();
+        if let (Some(completion), Some(minibuffer)) = (chosen, &mut self.minibuffer) {
             let input = &mut minibuffer.input;
             input.delete_range(0..input.len_chars());
-            input.insert(command.name());
+            input.insert(&completion.label);
         }
     }
 
@@ -148,6 +197,16 @@ impl Editor {
             minibuffer.selected = 0;
         }
     }
+}
+
+fn clip_label(text: &str) -> String {
+    let line: String = text.replace('\n', "↵");
+    if line.chars().count() <= LABEL_LIMIT {
+        return line;
+    }
+    let mut short: String = line.chars().take(LABEL_LIMIT - 1).collect();
+    short.push('…');
+    short
 }
 
 #[cfg(test)]
@@ -264,11 +323,11 @@ mod tests {
         );
     }
 
-    fn names(editor: &Editor) -> Vec<&'static str> {
+    fn names(editor: &Editor) -> Vec<String> {
         editor
             .completions()
-            .iter()
-            .map(|completion| completion.command.name())
+            .into_iter()
+            .map(|completion| completion.label)
             .collect()
     }
 
@@ -288,8 +347,8 @@ mod tests {
             names[..3],
             ["backward-char", "backward-word", "beginning-of-buffer"]
         );
-        assert!(!names.contains(&"exit-minibuffer"));
-        assert!(!names.contains(&"minibuffer-next"));
+        assert!(!names.iter().any(|name| name == "exit-minibuffer"));
+        assert!(!names.iter().any(|name| name == "minibuffer-next"));
     }
 
     #[test]

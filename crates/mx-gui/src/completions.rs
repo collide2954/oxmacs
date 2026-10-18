@@ -34,7 +34,7 @@ pub fn view<'a, Message: 'a>(
                 faces.default
             };
             let line = row![
-                text(completion.command.name())
+                text(completion.label.clone())
                     .font(font)
                     .size(size)
                     .color(color(face.foreground)),

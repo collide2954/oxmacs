@@ -7,6 +7,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 ### Added
 
 - System clipboard `copy` (`M-w`, `s-c`), `cut` (`C-w`, `s-x`) and `paste` (`C-y`, `s-v`); copy and cut act on the whole line without a selection, and pasting replaces the selection.
+- `paste-from-history` (`M-y`) picks from the last 50 copies in the minibuffer list.
 
 ## [0.4.0] - 2026-10-18
 
