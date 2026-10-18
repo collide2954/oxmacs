@@ -27,7 +27,9 @@ mod structure;
 #[cfg(test)]
 mod test_support;
 mod themes;
+mod tiling;
 mod undo;
+mod windows;
 
 pub use effect::Effect;
 pub use isearch::Search;
@@ -36,6 +38,7 @@ pub use mouse::{Cell, Clicks};
 pub use pane::{Pane, ScreenRow};
 pub use question::Question;
 pub use replace::Replace;
+pub use tiling::{Axis, Rect, Tiling, WindowId};
 
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -43,7 +46,8 @@ use std::{env, mem};
 
 use buffers::{BufferList, Mode};
 use dired::Kind;
-use isearch::Direction;
+use isearch::Direction as SearchDirection;
+use windows::Direction;
 
 use crate::command::{Command, Scope};
 use crate::config::{self, Config, OnDiskChange};
@@ -75,6 +79,7 @@ impl From<&Config> for Settings {
 #[derive(Debug)]
 pub struct Editor {
     buffers: BufferList,
+    windows: windows::Windows,
     minibuffer: Option<Minibuffer>,
     search: Option<Search>,
     replace: Option<Replace>,
@@ -132,6 +137,7 @@ impl Editor {
     pub fn with_buffer(buffer: Buffer) -> Self {
         Self {
             buffers: BufferList::new(buffer),
+            windows: windows::Windows::new(),
             minibuffer: None,
             search: None,
             replace: None,
@@ -477,12 +483,12 @@ impl Editor {
             Command::MinibufferComplete => self.minibuffer_complete(),
             Command::MinibufferDeleteBackward => self.minibuffer_delete_backward(),
             Command::ExitMinibufferWithInput => self.exit_minibuffer_with_input(),
-            Command::IsearchForward => self.isearch(Direction::Forward, false),
-            Command::IsearchBackward => self.isearch(Direction::Backward, false),
-            Command::IsearchForwardRegexp => self.isearch(Direction::Forward, true),
+            Command::IsearchForward => self.isearch(SearchDirection::Forward, false),
+            Command::IsearchBackward => self.isearch(SearchDirection::Backward, false),
+            Command::IsearchForwardRegexp => self.isearch(SearchDirection::Forward, true),
             Command::QueryReplace => self.query_replace(false),
             Command::QueryReplaceRegexp => self.query_replace(true),
-            Command::IsearchBackwardRegexp => self.isearch(Direction::Backward, true),
+            Command::IsearchBackwardRegexp => self.isearch(SearchDirection::Backward, true),
             Command::IsearchRepeatForward
             | Command::IsearchRepeatBackward
             | Command::IsearchPrintingChar
@@ -534,6 +540,19 @@ impl Editor {
             Command::MarkdownMode => self.set_major_mode(Some(Language::Markdown)),
             Command::TextMode => self.set_major_mode(None),
             Command::MxDoctor => self.mx_doctor(),
+            Command::SplitWindowBelow => self.split_window(Axis::Rows),
+            Command::SplitWindowRight => self.split_window(Axis::Columns),
+            Command::OtherWindow => self.other_window(),
+            Command::DeleteWindow => self.delete_window(),
+            Command::DeleteOtherWindows => self.delete_other_windows(),
+            Command::WindmoveLeft => self.windmove(Direction::Left),
+            Command::WindmoveRight => self.windmove(Direction::Right),
+            Command::WindmoveUp => self.windmove(Direction::Up),
+            Command::WindmoveDown => self.windmove(Direction::Down),
+            Command::BalanceWindows => self.balance_windows(),
+            Command::EnlargeWindow => self.enlarge_window(Axis::Rows, 1),
+            Command::EnlargeWindowHorizontally => self.enlarge_window(Axis::Columns, 1),
+            Command::ShrinkWindowHorizontally => self.enlarge_window(Axis::Columns, -1),
             Command::RustFormatBuffer => self.rust_format_buffer(),
             Command::Imenu => self.imenu(),
             Command::MarkdownInsertListItem => self.markdown_insert_list_item(),

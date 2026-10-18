@@ -26,6 +26,22 @@ pub struct Pane<'a> {
 }
 
 impl<'a> Pane<'a> {
+    pub(super) fn new(
+        editor: &'a Editor,
+        index: usize,
+        viewport: Viewport,
+        point: usize,
+        selected: bool,
+    ) -> Self {
+        Self {
+            editor,
+            index,
+            viewport,
+            point,
+            selected,
+        }
+    }
+
     pub fn buffer(&self) -> &'a Buffer {
         self.editor
             .buffers
@@ -153,13 +169,7 @@ impl<'a> Pane<'a> {
 
 impl Editor {
     pub fn pane(&self) -> Pane<'_> {
-        Pane {
-            editor: self,
-            index: 0,
-            viewport: self.viewport,
-            point: self.buffers.current().point(),
-            selected: true,
-        }
+        Pane::new(self, 0, self.viewport, self.buffers.current().point(), true)
     }
 }
 

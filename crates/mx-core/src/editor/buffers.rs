@@ -243,6 +243,7 @@ impl Editor {
 
     pub(super) fn finish_kill(&mut self, index: usize) {
         self.buffers.remove(index);
+        self.rehome_windows();
         self.name_file_buffers();
         if index == 0 {
             self.after_buffer_switch();

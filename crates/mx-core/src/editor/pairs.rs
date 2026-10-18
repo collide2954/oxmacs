@@ -11,6 +11,9 @@ const PAIRS: &[(char, char)] = &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"')]
 impl Editor {
     pub fn prepare_display(&mut self) {
         self.sync_syntax();
+        for index in self.visible_buffers() {
+            self.buffers.sync_syntax(index);
+        }
         self.paren_pair = self.find_paren_pair();
     }
 
