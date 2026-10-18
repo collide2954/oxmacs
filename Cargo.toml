@@ -9,6 +9,8 @@ rust-version = "1.99"
 publish = false
 
 [workspace.dependencies]
+mx-core = { path = "crates/mx-core" }
+ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
