@@ -6,7 +6,8 @@ use crate::display::ScreenLine;
 use crate::editor::{Editor, inserts_itself};
 use crate::input::{Key, KeyCode, Lookup};
 use crate::search::{Haystack, Pattern};
-use crate::text::motion;
+use crate::text::{Buffer, motion};
+use crate::theme::Highlight;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Direction {
@@ -24,6 +25,14 @@ struct Step {
     wrapped: bool,
 }
 
+#[derive(Debug, Default)]
+struct Lazy {
+    query: String,
+    regex: bool,
+    revision: u64,
+    matches: Vec<Range<usize>>,
+}
+
 #[derive(Debug)]
 pub struct Search {
     origin: usize,
@@ -31,6 +40,7 @@ pub struct Search {
     step: Step,
     previous: Vec<Step>,
     note: Option<&'static str>,
+    lazy: Lazy,
 }
 
 impl Search {
@@ -57,6 +67,20 @@ impl Search {
 
     pub fn query(&self) -> &str {
         &self.step.query
+    }
+
+    pub fn count(&self) -> Option<(usize, usize)> {
+        if self.step.query.is_empty() {
+            return None;
+        }
+        let matches = &self.lazy.matches;
+        let current = match &self.step.found {
+            Some(found) if self.step.success => {
+                (matches.partition_point(|other| other.start < found.start) + 1).min(matches.len())
+            }
+            _ => 0,
+        };
+        Some((current, matches.len()))
     }
 
     pub fn failing_from(&self) -> Option<usize> {
@@ -116,6 +140,7 @@ impl Editor {
             },
             previous: Vec::new(),
             note: None,
+            lazy: Lazy::default(),
         });
     }
 
@@ -264,12 +289,57 @@ impl Editor {
         if search.step.regex && Pattern::new(&search.step.query, true).is_err() {
             search.note = Some("[Invalid regexp]");
         }
+        let buffer = self.buffers.current();
+        let lazy = &search.lazy;
+        if lazy.query != search.step.query
+            || lazy.regex != search.step.regex
+            || lazy.revision != buffer.revision()
+        {
+            search.lazy = Lazy {
+                query: search.step.query.clone(),
+                regex: search.step.regex,
+                revision: buffer.revision(),
+                matches: all_matches(buffer, &search.step),
+            };
+        }
         let point = match (&search.step.found, search.step.direction) {
             (Some(found), Direction::Forward) => found.end,
             (Some(found), Direction::Backward) => found.start,
             (None, _) => search.origin,
         };
         self.buffers.current_mut().set_point(point);
+    }
+
+    pub(super) fn search_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
+        let Some(search) = &self.search else {
+            return Vec::new();
+        };
+        let buffer = self.buffers.current();
+        let start = buffer.line_start(line);
+        let end = buffer.line_end(line);
+        let visible =
+            |found: &&Range<usize>| !found.is_empty() && found.start <= end && found.end > start;
+        let relative = |found: &Range<usize>| found.start.saturating_sub(start)..found.end - start;
+        let current = search.step.found.as_ref();
+        let mut marks: Vec<(Range<usize>, Highlight)> = Vec::new();
+        if search.lazy.revision == buffer.revision() {
+            let matches = &search.lazy.matches;
+            let first = matches.partition_point(|found| found.end <= start);
+            marks.extend(
+                matches[first..]
+                    .iter()
+                    .take_while(|found| found.start <= end)
+                    .filter(visible)
+                    .filter(|found| Some(*found) != current)
+                    .map(|found| (relative(found), Highlight::SearchMatch)),
+            );
+        }
+        marks.extend(
+            current
+                .filter(visible)
+                .map(|found| (relative(found), Highlight::SearchCurrent)),
+        );
+        marks
     }
 
     pub(super) fn exit_search(&mut self) {
@@ -314,6 +384,15 @@ impl Editor {
     }
 }
 
+fn all_matches(buffer: &Buffer, step: &Step) -> Vec<Range<usize>> {
+    if step.query.is_empty() {
+        return Vec::new();
+    }
+    Pattern::new(&step.query, step.regex)
+        .map(|pattern| pattern.find_all(&Haystack::new(buffer), 0..buffer.len_chars()))
+        .unwrap_or_default()
+}
+
 fn capitalize(text: &str) -> String {
     let mut chars = text.chars();
     chars
@@ -326,6 +405,7 @@ fn capitalize(text: &str) -> String {
 mod tests {
     use crate::editor::test_support::{editor_with, press, type_text};
     use crate::editor::{Editor, Effect};
+    use crate::theme::Highlight;
 
     fn prompt(editor: &Editor) -> String {
         editor.search().unwrap().prompt()
@@ -614,6 +694,59 @@ mod tests {
         editor.paste(Some("bar".to_owned()));
         assert_eq!(editor.search().unwrap().query(), "bar");
         assert_eq!(point(&editor), 7);
+    }
+
+    #[test]
+    fn the_count_shows_which_match_is_current() {
+        let mut editor = editor_with("foo foo foo", 0);
+
+        press(&mut editor, "C-s");
+        assert_eq!(editor.search().unwrap().count(), None);
+
+        press(&mut editor, "f o o C-s");
+        assert_eq!(editor.search().unwrap().count(), Some((2, 3)));
+
+        press(&mut editor, "C-s C-s");
+        assert_eq!(editor.search().unwrap().count(), Some((0, 3)));
+    }
+
+    #[test]
+    fn matches_on_a_line_are_marked_with_the_current_one_last() {
+        let mut editor = editor_with("foo x foo\nfoo", 0);
+
+        press(&mut editor, "C-s f o o");
+        assert_eq!(
+            editor.line_marks(0),
+            [
+                (6..9, Highlight::SearchMatch),
+                (0..3, Highlight::SearchCurrent)
+            ]
+        );
+        assert_eq!(editor.line_marks(1), [(0..3, Highlight::SearchMatch)]);
+
+        press(&mut editor, "RET");
+        assert_eq!(editor.line_marks(0), []);
+    }
+
+    #[test]
+    fn matches_across_lines_are_marked_on_each() {
+        let mut editor = editor_with("ab\nab", 0);
+
+        press(&mut editor, "C-s");
+        editor.paste(Some("b\na".to_owned()));
+
+        assert_eq!(editor.line_marks(0), [(1..4, Highlight::SearchCurrent)]);
+        assert_eq!(editor.line_marks(1), [(0..1, Highlight::SearchCurrent)]);
+    }
+
+    #[test]
+    fn matches_from_older_text_are_not_marked() {
+        let mut editor = editor_with("foo foo", 0);
+        press(&mut editor, "C-s f o o");
+
+        editor.buffers.current_mut().set_text("foo foo!");
+
+        assert_eq!(editor.line_marks(0), [(0..3, Highlight::SearchCurrent)]);
     }
 
     #[test]

@@ -41,7 +41,7 @@ use crate::display::{self, Layout, LineStyle, Viewport};
 use crate::files::LineEnding;
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::text::{Buffer, motion};
-use crate::theme::{self, Appearance, Theme};
+use crate::theme::{self, Appearance, Highlight, Theme};
 
 const DEFAULT_ROWS: usize = 24;
 
@@ -350,6 +350,10 @@ impl Editor {
             Some(Mode::Splash(splash)) => splash.line_style(line),
             Some(Mode::Text) | None => LineStyle::default(),
         }
+    }
+
+    pub fn line_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
+        self.search_marks(line)
     }
 
     fn where_is(&self, command: Command) -> Option<KeySequence> {
