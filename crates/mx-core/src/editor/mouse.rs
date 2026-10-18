@@ -19,7 +19,7 @@ impl Editor {
     pub fn click(&mut self, cell: Cell, clicks: Clicks, extend: bool) {
         self.end_command_chain();
         let position = self.position_at(cell);
-        let buffer = &mut self.buffer;
+        let buffer = self.buffers.current_mut();
         match clicks {
             Clicks::Single if extend => {
                 if !buffer.mark_active() {
@@ -57,7 +57,7 @@ impl Editor {
             return;
         };
         let position = self.position_at(cell);
-        let buffer = &mut self.buffer;
+        let buffer = self.buffers.current_mut();
         if !buffer.mark_active() {
             buffer.set_mark(anchor);
         }
@@ -68,13 +68,13 @@ impl Editor {
     pub fn middle_click(&mut self, cell: Cell) {
         self.end_command_chain();
         let position = self.position_at(cell);
-        self.buffer.deactivate_mark();
-        self.buffer.set_point(position);
+        self.buffers.current_mut().deactivate_mark();
+        self.buffers.current_mut().set_point(position);
         self.effects.push(Effect::ReadPrimary);
     }
 
     pub fn scroll_lines(&mut self, delta: isize) {
-        let last = self.buffer.len_lines() - 1;
+        let last = self.buffers.current().len_lines() - 1;
         self.viewport.scroll_by(delta, last);
         let visible = self.viewport.lines();
         let line = self.point_line();
@@ -85,23 +85,27 @@ impl Editor {
         } else {
             return;
         };
-        let column = self.buffer.column(self.buffer.point());
-        let start = self.buffer.line_start(target);
-        let point = (start + column).min(self.buffer.line_end(target));
-        self.buffer.set_point(point);
+        let column = self
+            .buffers
+            .current()
+            .column(self.buffers.current().point());
+        let start = self.buffers.current().line_start(target);
+        let point = (start + column).min(self.buffers.current().line_end(target));
+        self.buffers.current_mut().set_point(point);
     }
 
     fn position_at(&self, cell: Cell) -> usize {
-        let line = cell.line.min(self.buffer.len_lines() - 1);
-        let text = self.buffer.line_text(line);
-        self.buffer.line_start(line) + display::char_at_column(&text, cell.column, self.tab_width)
+        let line = cell.line.min(self.buffers.current().len_lines() - 1);
+        let text = self.buffers.current().line_text(line);
+        self.buffers.current().line_start(line)
+            + display::char_at_column(&text, cell.column, self.tab_width)
     }
 
     fn end_command_chain(&mut self) {
         self.last_command = None;
         self.goal_column = None;
         self.shift_selection = false;
-        self.buffer.close_undo_step();
+        self.buffers.current_mut().close_undo_step();
     }
 }
 

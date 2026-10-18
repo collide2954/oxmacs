@@ -1,3 +1,4 @@
+mod buffers;
 mod clipboard;
 mod editing;
 mod minibuffer;
@@ -15,6 +16,8 @@ pub use mouse::{Cell, Clicks};
 use std::mem;
 use std::ops::Range;
 
+use buffers::BufferList;
+
 use crate::command::Command;
 use crate::config::Config;
 use crate::display::{self, Viewport};
@@ -26,7 +29,7 @@ const DEFAULT_ROWS: usize = 24;
 
 #[derive(Debug)]
 pub struct Editor {
-    buffer: Buffer,
+    buffers: BufferList,
     minibuffer: Option<Minibuffer>,
     keymap: Keymap,
     minibuffer_keymap: Keymap,
@@ -63,7 +66,7 @@ impl Editor {
 
     pub fn with_buffer(buffer: Buffer) -> Self {
         Self {
-            buffer,
+            buffers: BufferList::new(buffer),
             minibuffer: None,
             keymap: bindings::global(),
             minibuffer_keymap: bindings::minibuffer(),
@@ -107,7 +110,7 @@ impl Editor {
     }
 
     pub fn buffer(&self) -> &Buffer {
-        &self.buffer
+        self.buffers.current()
     }
 
     pub fn message(&self) -> Option<&str> {
@@ -127,13 +130,15 @@ impl Editor {
     }
 
     fn point_line(&self) -> usize {
-        self.buffer.line_of(self.buffer.point())
+        self.buffers
+            .current()
+            .line_of(self.buffers.current().point())
     }
 
     fn current_mut(&mut self) -> &mut Buffer {
         match &mut self.minibuffer {
             Some(minibuffer) => &mut minibuffer.input,
-            None => &mut self.buffer,
+            None => self.buffers.current_mut(),
         }
     }
 
@@ -142,15 +147,15 @@ impl Editor {
     }
 
     pub fn point_display_column(&self) -> usize {
-        let point = self.buffer.point();
-        let line = self.buffer.line_text(self.point_line());
-        display::display_column(&line, self.buffer.column(point), self.tab_width)
+        let point = self.buffers.current().point();
+        let line = self.buffers.current().line_text(self.point_line());
+        display::display_column(&line, self.buffers.current().column(point), self.tab_width)
     }
 
     pub fn mode_line(&self) -> String {
         format!(
             "{}   L{} C{}",
-            self.buffer.name(),
+            self.buffers.current().name(),
             self.point_line() + 1,
             self.point_display_column()
         )

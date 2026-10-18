@@ -78,20 +78,24 @@ impl Editor {
 
     pub fn paste_primary(&mut self, text: Option<String>) {
         if let Some(text) = text.filter(|text| !text.is_empty()) {
-            self.buffer.insert(&text);
-            self.buffer.close_undo_step();
+            self.buffers.current_mut().insert(&text);
+            self.buffers.current_mut().close_undo_step();
         }
     }
 
     pub(super) fn publish_primary(&mut self) {
-        let selection = self.buffer.selection().filter(|range| !range.is_empty());
+        let selection = self
+            .buffers
+            .current()
+            .selection()
+            .filter(|range| !range.is_empty());
         if selection == self.primary {
             return;
         }
         self.primary.clone_from(&selection);
         if let Some(range) = selection {
             self.effects
-                .push(Effect::WritePrimary(self.buffer.text_in(range)));
+                .push(Effect::WritePrimary(self.buffers.current().text_in(range)));
         }
     }
 

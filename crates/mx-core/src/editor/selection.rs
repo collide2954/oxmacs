@@ -41,7 +41,7 @@ impl Editor {
     pub(super) fn keyboard_quit(&mut self) {
         self.shift_selection = false;
         if self.minibuffer.take().is_none() {
-            self.buffer.deactivate_mark();
+            self.buffers.current_mut().deactivate_mark();
         }
         self.show_message("Quit");
     }
