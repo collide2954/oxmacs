@@ -13,6 +13,7 @@ mod format;
 mod imenu;
 mod indent;
 mod isearch;
+mod lint;
 mod markdown;
 mod minibuffer;
 mod modes;
@@ -54,7 +55,7 @@ use isearch::Direction as SearchDirection;
 use windows::Direction;
 
 use crate::command::{Command, Scope};
-use crate::config::{self, Config, OnDiskChange};
+use crate::config::{self, Config, OnDiskChange, RustLint};
 use crate::dired::Mark;
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
@@ -69,6 +70,7 @@ const DEFAULT_ROWS: usize = 24;
 struct Settings {
     delete_to_trash: bool,
     format_on_save: bool,
+    rust_lint: RustLint,
 }
 
 impl From<&Config> for Settings {
@@ -76,6 +78,7 @@ impl From<&Config> for Settings {
         Self {
             delete_to_trash: config.delete_to_trash,
             format_on_save: config.format_on_save,
+            rust_lint: config.rust_lint,
         }
     }
 }
@@ -128,6 +131,7 @@ pub struct Editor {
     paren_pair: Option<(usize, usize)>,
     next_job: u64,
     last_compile: Option<String>,
+    lints: lint::Lints,
 }
 
 impl Default for Editor {
@@ -189,6 +193,7 @@ impl Editor {
             paren_pair: None,
             next_job: 0,
             last_compile: None,
+            lints: lint::Lints::default(),
         }
     }
 

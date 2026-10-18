@@ -312,6 +312,9 @@ impl Editor {
                     .map(|error| format!("; {error}"))
                     .unwrap_or_default();
                 self.show_message(format!("Wrote {shown}{warning}"));
+                if self.buffers.language(index) == Some(Language::Rust) {
+                    self.request_lint(&path);
+                }
                 true
             }
             Err(error) => {

@@ -16,6 +16,7 @@ pub enum Effect {
 
 impl Editor {
     pub fn take_effects(&mut self) -> Vec<Effect> {
+        self.start_due_lint();
         mem::take(&mut self.effects)
     }
 }

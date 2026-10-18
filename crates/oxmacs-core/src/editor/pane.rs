@@ -5,6 +5,7 @@ use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::movement::display_column;
 use crate::files::LineEnding;
+use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -163,14 +164,18 @@ impl<'a> Pane<'a> {
         let crlf = buffer
             .file()
             .is_some_and(|file| file.format.line_ending == LineEnding::CrLf);
-        let mode = self
-            .editor
-            .buffers
-            .language(self.index)
+        let language = self.editor.buffers.language(self.index);
+        let mode = language
             .map(|language| format!("   ({})", language.name()))
             .unwrap_or_default();
+        let lint = buffer
+            .file()
+            .filter(|_| language == Some(Language::Rust))
+            .and_then(|file| self.editor.lint_status(&file.path))
+            .map(|status| format!("   {status}"))
+            .unwrap_or_default();
         format!(
-            "{state} {}   L{} C{}{}{mode}",
+            "{state} {}   L{} C{}{}{mode}{lint}",
             buffer.name(),
             buffer.line_of(self.point) + 1,
             display_column(buffer, self.point, self.editor.tab_width),

@@ -166,6 +166,9 @@ impl Editor {
     }
 
     pub fn job_output(&mut self, job: JobId, line: &str) {
+        if self.lint_output(job, line) {
+            return;
+        }
         let Some(index) = self.compilation_for(job) else {
             return;
         };
@@ -180,6 +183,9 @@ impl Editor {
     }
 
     pub fn job_finished(&mut self, job: JobId, outcome: &Outcome) {
+        if self.lint_finished(job, outcome) {
+            return;
+        }
         let Some(index) = self.compilation_for(job) else {
             return;
         };
