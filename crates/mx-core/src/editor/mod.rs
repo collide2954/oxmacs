@@ -278,6 +278,7 @@ impl Editor {
             Lookup::Unbound => self.report_undefined(),
         }
         self.publish_primary();
+        self.sync_syntax();
     }
 
     fn handle_unbound_key(&mut self, key: Key) {
@@ -360,7 +361,10 @@ impl Editor {
         match self.buffers.mode(0) {
             Some(Mode::Dired(listing)) => listing.line_style(line),
             Some(Mode::Splash(splash)) => splash.line_style(line),
-            Some(Mode::Text(_)) | None => LineStyle::default(),
+            Some(Mode::Text(_)) | None => LineStyle {
+                background: None,
+                spans: self.syntax_highlights(line),
+            },
         }
     }
 

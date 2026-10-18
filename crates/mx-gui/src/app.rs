@@ -219,6 +219,7 @@ impl App {
             Message::DiskChanged => self.editor.check_disk_changes(),
             Message::Opened(Err(error)) => self.editor.show_message(error),
         }
+        self.editor.sync_syntax();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {
             return iced::exit();
@@ -635,6 +636,23 @@ mod tests {
             Some(Message::DiskChanged)
         ));
         assert!(check(window::Event::Unfocused).is_none());
+    }
+
+    #[test]
+    fn pasted_rust_is_highlighted_at_once() {
+        let mut app = App::default();
+        press(&mut app, "x", Modifiers::ALT);
+        for c in "rust-mode".chars() {
+            press(&mut app, &c.to_string(), Modifiers::empty());
+        }
+        enter(&mut app);
+
+        let _ = app.update(Message::Pasted(Some("fn main() {}".to_owned())));
+
+        assert_eq!(
+            app.editor().line_style(0).spans[0],
+            (0..2, mx_core::theme::Highlight::Keyword)
+        );
     }
 
     #[test]

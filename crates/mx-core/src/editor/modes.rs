@@ -1,9 +1,23 @@
+use std::ops::Range;
+
 use crate::editor::Editor;
 use crate::syntax::Language;
+use crate::theme::Highlight;
 
 impl Editor {
     pub fn language(&self) -> Option<Language> {
         self.buffers.language(0)
+    }
+
+    pub fn sync_syntax(&mut self) {
+        self.buffers.sync_syntax(0);
+    }
+
+    pub(super) fn syntax_highlights(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
+        self.buffers
+            .syntax(0)
+            .map(|syntax| syntax.highlights(self.buffers.current(), line))
+            .unwrap_or_default()
     }
 
     pub(super) fn set_major_mode(&mut self, language: Option<Language>) {
@@ -22,6 +36,7 @@ mod tests {
     use crate::editor::Editor;
     use crate::editor::test_support::{press, type_text};
     use crate::syntax::Language;
+    use crate::theme::Highlight;
 
     fn run(editor: &mut Editor, command: &str) {
         press(editor, "M-x");
@@ -65,6 +80,19 @@ mod tests {
         editor.finish_write(dir.path().join("x.rs"));
 
         assert_eq!(editor.language(), Some(Language::Rust));
+    }
+
+    #[test]
+    fn rust_buffers_are_highlighted_as_you_type() {
+        let mut editor = Editor::new();
+        run(&mut editor, "rust-mode");
+
+        type_text(&mut editor, "fn main() {}");
+
+        assert_eq!(
+            editor.line_style(0).spans,
+            [(0..2, Highlight::Keyword), (3..7, Highlight::Function)]
+        );
     }
 
     #[test]

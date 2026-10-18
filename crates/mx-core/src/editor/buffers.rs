@@ -88,6 +88,21 @@ impl BufferList {
         }
     }
 
+    pub(super) fn syntax(&self, index: usize) -> Option<&Syntax> {
+        match self.mode(index)? {
+            Mode::Text(syntax) => syntax.as_ref(),
+            Mode::Dired(_) | Mode::Splash(_) => None,
+        }
+    }
+
+    pub(super) fn sync_syntax(&mut self, index: usize) {
+        if let Some(entry) = self.entries.get_mut(index)
+            && let Mode::Text(Some(syntax)) = &mut entry.mode
+        {
+            syntax.sync(&mut entry.buffer);
+        }
+    }
+
     pub(super) fn set_language(&mut self, index: usize, language: Option<Language>) {
         if let Some(entry) = self.entries.get_mut(index)
             && let Mode::Text(syntax) = &mut entry.mode
