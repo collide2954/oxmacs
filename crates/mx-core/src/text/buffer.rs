@@ -43,6 +43,7 @@ pub struct Buffer {
     history: History,
     saved: u64,
     file: Option<FileInfo>,
+    read_only: bool,
 }
 
 impl Buffer {
@@ -57,7 +58,16 @@ impl Buffer {
             history: History::default(),
             saved: 0,
             file: None,
+            read_only: false,
         }
+    }
+
+    pub fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+
+    pub fn set_read_only(&mut self, read_only: bool) {
+        self.read_only = read_only;
     }
 
     pub fn id(&self) -> BufferId {

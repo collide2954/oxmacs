@@ -43,6 +43,7 @@ pub enum Command {
     SwitchToBuffer,
     KillBuffer,
     RevertBuffer,
+    ReadOnlyMode,
     KeyboardQuit,
     SaveBuffersKillMx,
 }
@@ -65,6 +66,24 @@ impl Command {
                 | Self::BackwardWord
                 | Self::BeginningOfBuffer
                 | Self::EndOfBuffer
+        )
+    }
+
+    pub fn modifies_text(self) -> bool {
+        matches!(
+            self,
+            Self::SelfInsertCommand
+                | Self::Newline
+                | Self::DeleteChar
+                | Self::DeleteBackwardChar
+                | Self::DeleteLine
+                | Self::DeleteWord
+                | Self::BackwardDeleteWord
+                | Self::Cut
+                | Self::Paste
+                | Self::PasteFromHistory
+                | Self::Undo
+                | Self::Redo
         )
     }
 

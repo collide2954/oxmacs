@@ -48,6 +48,9 @@ impl Editor {
     }
 
     pub fn paste(&mut self, clipboard: Option<String>) {
+        if self.refuse_read_only() {
+            return;
+        }
         let Some(text) = clipboard
             .filter(|text| !text.is_empty())
             .or_else(|| self.clipboard_history.first().cloned())
@@ -77,6 +80,9 @@ impl Editor {
     }
 
     pub fn paste_primary(&mut self, text: Option<String>) {
+        if self.refuse_read_only() {
+            return;
+        }
         if let Some(text) = text.filter(|text| !text.is_empty()) {
             self.buffers.current_mut().insert(&text);
             self.buffers.current_mut().close_undo_step();

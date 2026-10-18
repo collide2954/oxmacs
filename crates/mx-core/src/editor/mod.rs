@@ -7,6 +7,7 @@ mod minibuffer;
 mod mouse;
 mod movement;
 mod question;
+mod read_only;
 mod selection;
 #[cfg(test)]
 mod test_support;
@@ -169,7 +170,13 @@ impl Editor {
 
     pub fn mode_line(&self) -> String {
         let buffer = self.buffers.current();
-        let state = if buffer.is_modified() { "**" } else { "--" };
+        let state = if buffer.is_read_only() {
+            "%%"
+        } else if buffer.is_modified() {
+            "**"
+        } else {
+            "--"
+        };
         let crlf = buffer
             .file()
             .is_some_and(|file| file.format.line_ending == LineEnding::CrLf);
@@ -278,6 +285,9 @@ impl Editor {
     }
 
     fn run(&mut self, command: Command, shifted: bool) {
+        if command.modifies_text() && self.refuse_read_only() {
+            return;
+        }
         let goal_column = self.goal_column.take();
         let previous = self.last_command.replace(command);
         self.close_undo_step(command, previous);
@@ -325,6 +335,7 @@ impl Editor {
             Command::SwitchToBuffer => self.switch_to_buffer(),
             Command::KillBuffer => self.kill_buffer(),
             Command::RevertBuffer => self.revert_buffer(),
+            Command::ReadOnlyMode => self.toggle_read_only(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.save_some_buffers(true),
         }

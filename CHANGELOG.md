@@ -4,6 +4,10 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 ## [Unreleased]
 
+### Added
+
+- `read-only-mode` (`C-x C-q`) toggles a buffer read-only; the mode line shows `%%` and edits are refused.
+
 ## [0.7.0] - 2026-10-18
 
 ### Added
