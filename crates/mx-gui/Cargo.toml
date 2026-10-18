@@ -13,6 +13,7 @@ iced.workspace = true
 mx-core.workspace = true
 native-theme.workspace = true
 notify.workspace = true
+open.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 native-theme = { workspace = true, features = ["windows"] }

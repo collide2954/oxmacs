@@ -1,4 +1,5 @@
 use std::mem;
+use std::path::PathBuf;
 
 use crate::editor::Editor;
 
@@ -10,6 +11,7 @@ pub enum Effect {
     ReadClipboard,
     WritePrimary(String),
     ReadPrimary,
+    OpenExternally(PathBuf),
 }
 
 impl Editor {

@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use jiff::Zoned;
 
 use crate::dired::{Listing, Mark, read_entries};
-use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::minibuffer::Purpose;
+use crate::editor::{Editor, Effect};
 use crate::files::{ops, paths};
 use crate::text::Buffer;
 
@@ -115,6 +115,26 @@ impl Editor {
             Ok(entries) => self.update_listing(index, |listing| listing.set_entries(entries)),
             Err(error) => self.show_message(format!("{}: {error}", directory.display())),
         }
+    }
+
+    pub(super) fn dired_do_open(&mut self) {
+        let line = self.point_line();
+        let Some(listing) = self.buffers.listing(0) else {
+            return;
+        };
+        let mut targets = listing.marked(Mark::Marked);
+        if targets.is_empty() {
+            targets.extend(listing.entry_at(line));
+        }
+        if targets.is_empty() {
+            self.show_message("No file on this line");
+            return;
+        }
+        let effects: Vec<Effect> = targets
+            .iter()
+            .map(|entry| Effect::OpenExternally(listing.directory().join(&entry.name)))
+            .collect();
+        self.effects.extend(effects);
     }
 
     pub(super) fn dired_create_directory(&mut self) {
@@ -352,8 +372,8 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use crate::editor::Editor;
     use crate::editor::test_support::{press, type_text};
+    use crate::editor::{Editor, Effect};
     use crate::files::paths::SEPARATOR as SEP;
 
     fn workspace() -> (tempfile::TempDir, Editor) {
@@ -1220,6 +1240,27 @@ mod tests {
         press(&mut editor, "M-RET");
 
         assert!(editor.message().unwrap().ends_with("already exists"));
+    }
+
+    #[test]
+    fn w_asks_the_system_to_open_files() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n W");
+        assert_eq!(
+            editor.take_effects(),
+            [Effect::OpenExternally(dir.path().join("a.txt"))]
+        );
+
+        press(&mut editor, "m m W");
+        assert_eq!(
+            editor.take_effects(),
+            [
+                Effect::OpenExternally(dir.path().join("a.txt")),
+                Effect::OpenExternally(dir.path().join("b.txt"))
+            ]
+        );
     }
 
     #[test]

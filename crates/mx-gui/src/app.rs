@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use iced::animation::Easing;
 use iced::font::Family;
 use iced::theme::Mode;
@@ -39,6 +41,7 @@ pub enum Message {
     Pasted(Option<String>),
     PastedPrimary(Option<String>),
     DiskChanged,
+    Opened(Result<(), String>),
 }
 
 impl Default for App {
@@ -199,7 +202,7 @@ impl App {
                     self.sync_reveal();
                 }
             }
-            Message::Keyboard(_) => {}
+            Message::Keyboard(_) | Message::Opened(Ok(())) => {}
             Message::View(event) => self.handle_view_event(event),
             Message::AppearanceChanged(mode) => {
                 if let Some(appearance) = appearance(mode) {
@@ -210,6 +213,7 @@ impl App {
             Message::Pasted(text) => self.editor.paste(text),
             Message::PastedPrimary(text) => self.editor.paste_primary(text),
             Message::DiskChanged => self.editor.check_disk_changes(),
+            Message::Opened(Err(error)) => self.editor.show_message(error),
         }
         if self.editor.should_quit() {
             return iced::exit();
@@ -292,6 +296,10 @@ pub fn animations_enabled(configured: bool, reduced_motion: bool) -> bool {
 
 const HAS_PRIMARY_SELECTION: bool = cfg!(target_os = "linux");
 
+fn open_externally(path: &Path) -> Result<(), String> {
+    open::that_detached(path).map_err(|error| format!("{}: {error}", path.display()))
+}
+
 fn effect_task(effect: Effect) -> Task<Message> {
     match effect {
         Effect::WriteClipboard(text) => clipboard::write(text),
@@ -301,6 +309,7 @@ fn effect_task(effect: Effect) -> Task<Message> {
             clipboard::read_primary().map(Message::PastedPrimary)
         }
         Effect::WritePrimary(_) | Effect::ReadPrimary => Task::none(),
+        Effect::OpenExternally(path) => Task::done(Message::Opened(open_externally(&path))),
     }
 }
 
@@ -529,6 +538,15 @@ mod tests {
         let _ = app.update(Message::DiskChanged);
 
         assert_eq!(app.editor().buffer().contents(), "new text");
+    }
+
+    #[test]
+    fn failing_to_open_a_file_externally_is_reported() {
+        let mut app = App::default();
+
+        let _ = app.update(Message::Opened(Err("a.txt: no handler".to_owned())));
+
+        assert_eq!(app.editor().message(), Some("a.txt: no handler"));
     }
 
     #[test]
