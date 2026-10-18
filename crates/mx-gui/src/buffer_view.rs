@@ -13,6 +13,7 @@ use mx_core::display;
 use mx_core::editor::Editor;
 
 use crate::style;
+use crate::units::to_f32;
 
 const WIDE_SAMPLE: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
 const NARROW_SAMPLE: &str = "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii";
@@ -290,14 +291,6 @@ pub fn rows_in(height: f32, line_height: f32) -> usize {
     } else {
         1
     }
-}
-
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "screen coordinates stay far below the f32 precision limit"
-)]
-fn to_f32(value: usize) -> f32 {
-    value as f32
 }
 
 #[cfg(test)]
