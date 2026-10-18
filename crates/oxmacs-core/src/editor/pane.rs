@@ -2,6 +2,7 @@ use std::ops::Range;
 
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
 use crate::editor::Editor;
+use crate::editor::buffers::Mode;
 use crate::editor::movement::display_column;
 use crate::files::LineEnding;
 use crate::text::Buffer;
@@ -55,6 +56,17 @@ impl<'a> Pane<'a> {
 
     pub fn point(&self) -> usize {
         self.point
+    }
+
+    pub fn preview_source(&self) -> Option<&'a Buffer> {
+        let Some(Mode::Preview(source)) = self.editor.buffers.mode(self.index) else {
+            return None;
+        };
+        let index = self
+            .editor
+            .buffers
+            .position(|buffer| buffer.id() == *source)?;
+        self.editor.buffers.get(index)
     }
 
     pub fn is_selected(&self) -> bool {

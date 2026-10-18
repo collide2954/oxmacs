@@ -121,6 +121,7 @@ pub enum Command {
     MarkdownInsertListItem,
     MarkdownPromote,
     MarkdownDemote,
+    MarkdownPreview,
     ForwardButton,
     BackwardButton,
     PushButton,
@@ -211,9 +212,10 @@ impl Command {
             | Self::DiredDoOpen => Scope::Dired,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
             Self::RustFormatBuffer => Scope::Rust,
-            Self::MarkdownInsertListItem | Self::MarkdownPromote | Self::MarkdownDemote => {
-                Scope::Markdown
-            }
+            Self::MarkdownInsertListItem
+            | Self::MarkdownPromote
+            | Self::MarkdownDemote
+            | Self::MarkdownPreview => Scope::Markdown,
             Self::IsearchRepeatForward
             | Self::IsearchRepeatBackward
             | Self::IsearchPrintingChar

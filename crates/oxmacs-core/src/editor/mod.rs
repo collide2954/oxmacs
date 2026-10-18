@@ -18,6 +18,7 @@ mod mouse;
 mod movement;
 mod pairs;
 mod pane;
+mod preview;
 mod question;
 mod read_only;
 mod replace;
@@ -378,7 +379,7 @@ impl Editor {
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
                 Scope::Markdown
             }
-            Some(Mode::Text(_)) | None => Scope::Global,
+            Some(Mode::Text(_) | Mode::Preview(_)) | None => Scope::Global,
         }
     }
 
@@ -391,6 +392,7 @@ impl Editor {
             Some(Mode::Dired(listing)) => listing.line_style(line),
             Some(Mode::Splash(splash)) => splash.line_style(line),
             Some(Mode::Doctor(doctor)) => doctor.line_style(line),
+            Some(Mode::Preview(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,
                 spans: self.syntax_highlights_at(index, line),
@@ -558,6 +560,7 @@ impl Editor {
             Command::MarkdownInsertListItem => self.markdown_insert_list_item(),
             Command::MarkdownPromote => self.markdown_shift(false),
             Command::MarkdownDemote => self.markdown_shift(true),
+            Command::MarkdownPreview => self.markdown_preview(),
             Command::ForwardButton => self.forward_button(true),
             Command::BackwardButton => self.forward_button(false),
             Command::PushButton => self.push_button(),

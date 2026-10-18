@@ -32,11 +32,12 @@ pub enum Feature {
     Motion,
     Items,
     Folding,
+    Preview,
     Lsp,
 }
 
 impl Feature {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Highlighting,
         Self::Indentation,
         Self::Comments,
@@ -45,6 +46,7 @@ impl Feature {
         Self::Motion,
         Self::Items,
         Self::Folding,
+        Self::Preview,
         Self::Lsp,
     ];
 
@@ -58,6 +60,7 @@ impl Feature {
             Self::Motion => "Motion",
             Self::Items => "Items",
             Self::Folding => "Fold",
+            Self::Preview => "Preview",
             Self::Lsp => "LSP",
         }
     }
@@ -104,7 +107,11 @@ impl Language {
                     | Feature::Items
             ) | (
                 Self::Markdown,
-                Feature::Highlighting | Feature::Indentation | Feature::Motion | Feature::Items
+                Feature::Highlighting
+                    | Feature::Indentation
+                    | Feature::Motion
+                    | Feature::Items
+                    | Feature::Preview
             )
         )
     }

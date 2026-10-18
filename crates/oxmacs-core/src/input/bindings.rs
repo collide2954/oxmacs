@@ -179,6 +179,7 @@ const MARKDOWN: &[(&str, Command)] = &[
     ("C-c C--", Command::MarkdownPromote),
     ("M-<right>", Command::MarkdownDemote),
     ("C-c C-=", Command::MarkdownDemote),
+    ("C-c C-c p", Command::MarkdownPreview),
 ];
 
 pub fn global() -> Keymap {
