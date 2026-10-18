@@ -2,4 +2,4 @@ mod buffer;
 mod history;
 pub mod motion;
 
-pub use buffer::Buffer;
+pub use buffer::{Buffer, FileInfo};

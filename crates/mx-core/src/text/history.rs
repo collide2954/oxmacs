@@ -6,6 +6,7 @@ pub enum Edit {
 
 #[derive(Debug, Clone)]
 pub struct Step {
+    pub id: u64,
     pub edits: Vec<Edit>,
     pub point_before: usize,
     pub point_after: usize,
@@ -16,6 +17,7 @@ pub struct History {
     done: Vec<Step>,
     undone: Vec<Step>,
     open: bool,
+    next_id: u64,
 }
 
 impl History {
@@ -27,7 +29,9 @@ impl History {
                 step.point_after = point_after;
             }
             _ => {
+                self.next_id += 1;
                 self.done.push(Step {
+                    id: self.next_id,
                     edits: vec![edit],
                     point_before,
                     point_after,
@@ -35,6 +39,10 @@ impl History {
                 self.open = true;
             }
         }
+    }
+
+    pub fn current(&self) -> u64 {
+        self.done.last().map_or(0, |step| step.id)
     }
 
     pub fn close(&mut self) {

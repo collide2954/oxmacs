@@ -1,9 +1,18 @@
 use std::borrow::Cow;
 use std::ops::Range;
+use std::path::PathBuf;
 
 use ropey::Rope;
 
+use crate::files::{DiskState, Format};
 use crate::text::history::{Edit, History};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileInfo {
+    pub path: PathBuf,
+    pub format: Format,
+    pub disk: Option<DiskState>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Buffer {
@@ -13,6 +22,8 @@ pub struct Buffer {
     mark: Option<usize>,
     mark_active: bool,
     history: History,
+    saved: u64,
+    file: Option<FileInfo>,
 }
 
 impl Buffer {
@@ -24,7 +35,26 @@ impl Buffer {
             mark: None,
             mark_active: false,
             history: History::default(),
+            saved: 0,
+            file: None,
         }
+    }
+
+    pub fn is_modified(&self) -> bool {
+        self.history.current() != self.saved
+    }
+
+    pub fn mark_saved(&mut self) {
+        self.history.close();
+        self.saved = self.history.current();
+    }
+
+    pub fn file(&self) -> Option<&FileInfo> {
+        self.file.as_ref()
+    }
+
+    pub fn set_file(&mut self, file: FileInfo) {
+        self.file = Some(file);
     }
 
     pub fn with_text(name: impl Into<String>, text: &str) -> Self {
@@ -439,6 +469,53 @@ mod tests {
 
         assert_eq!(buffer.chars_after(1).collect::<String>(), "bcd");
         assert_eq!(buffer.chars_before(3).collect::<String>(), "cba");
+    }
+
+    #[test]
+    fn edits_mark_a_buffer_modified_until_saved() {
+        let mut buffer = Buffer::with_text("t", "abc");
+        assert!(!buffer.is_modified());
+
+        buffer.insert("x");
+        assert!(buffer.is_modified());
+
+        buffer.mark_saved();
+        assert!(!buffer.is_modified());
+    }
+
+    #[test]
+    fn undoing_back_to_the_saved_state_is_unmodified() {
+        let mut buffer = Buffer::new("t");
+        buffer.insert("a");
+        buffer.mark_saved();
+
+        buffer.insert("b");
+        assert!(buffer.is_modified());
+
+        buffer.undo();
+        assert_eq!(buffer.contents(), "a");
+        assert!(!buffer.is_modified());
+
+        buffer.undo();
+        assert!(buffer.is_modified());
+
+        buffer.redo();
+        assert!(!buffer.is_modified());
+    }
+
+    #[test]
+    fn buffers_remember_their_file() {
+        let mut buffer = Buffer::new("a.txt");
+        assert_eq!(buffer.file(), None);
+
+        let info = FileInfo {
+            path: "dir/a.txt".into(),
+            format: Format::default(),
+            disk: None,
+        };
+        buffer.set_file(info.clone());
+
+        assert_eq!(buffer.file(), Some(&info));
     }
 
     #[test]
