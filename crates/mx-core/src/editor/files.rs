@@ -288,6 +288,11 @@ impl Editor {
     }
 
     pub(super) fn save_buffer_at(&mut self, index: usize) -> bool {
+        let formatting =
+            self.settings.format_on_save && self.buffers.language(index) == Some(Language::Rust);
+        let format_error = formatting
+            .then(|| self.format_buffer_at(index).err())
+            .flatten();
         let Some(buffer) = self.buffers.get(index) else {
             return false;
         };
@@ -303,7 +308,10 @@ impl Editor {
                     buffer.mark_saved();
                 }
                 let shown = paths::abbreviate(&path, self.home.as_deref());
-                self.show_message(format!("Wrote {shown}"));
+                let warning = format_error
+                    .map(|error| format!("; {error}"))
+                    .unwrap_or_default();
+                self.show_message(format!("Wrote {shown}{warning}"));
                 true
             }
             Err(error) => {

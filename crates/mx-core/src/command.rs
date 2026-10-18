@@ -95,6 +95,7 @@ pub enum Command {
     RustMode,
     TextMode,
     MxDoctor,
+    RustFormatBuffer,
     ForwardButton,
     BackwardButton,
     PushButton,
@@ -130,6 +131,7 @@ impl Command {
                 | Self::IndentRegion
                 | Self::CommentLine
                 | Self::CommentDwim
+                | Self::RustFormatBuffer
                 | Self::DeleteChar
                 | Self::DeleteBackwardChar
                 | Self::DeleteLine
@@ -174,6 +176,7 @@ impl Command {
             | Self::DiredCreateDirectory
             | Self::DiredDoOpen => Scope::Dired,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
+            Self::RustFormatBuffer => Scope::Rust,
             Self::IsearchRepeatForward
             | Self::IsearchRepeatBackward
             | Self::IsearchPrintingChar
@@ -198,6 +201,7 @@ pub enum Scope {
     Splash,
     Search,
     Doctor,
+    Rust,
 }
 
 #[cfg(test)]

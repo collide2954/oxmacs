@@ -65,17 +65,17 @@ impl Editor {
             return;
         }
         let (paths, names): (Vec<PathBuf>, Vec<String>) = targets.into_iter().unzip();
-        let verb = if self.delete_to_trash {
+        let verb = if self.settings.delete_to_trash {
             "Trash"
         } else {
             "Delete"
         };
-        let typed = !self.delete_to_trash;
+        let typed = !self.settings.delete_to_trash;
         self.ask_to_delete(&format!("{verb} {}?", describe(&names)), paths, typed);
     }
 
     pub(in crate::editor) fn delete_paths(&mut self, paths: &[PathBuf]) {
-        let result = if self.delete_to_trash {
+        let result = if self.settings.delete_to_trash {
             ops::trash(paths)
         } else {
             paths
@@ -86,7 +86,7 @@ impl Editor {
         self.refresh_listings();
         match result {
             Ok(()) => {
-                let verb = if self.delete_to_trash {
+                let verb = if self.settings.delete_to_trash {
                     "Trashed"
                 } else {
                     "Deleted"

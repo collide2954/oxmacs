@@ -7,6 +7,7 @@ mod doctor;
 mod editing;
 mod effect;
 mod files;
+mod format;
 mod indent;
 mod isearch;
 mod minibuffer;
@@ -34,7 +35,7 @@ pub use replace::Replace;
 pub use screen::ScreenRow;
 
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{env, mem};
 
 use buffers::{BufferList, Mode};
@@ -54,6 +55,21 @@ use crate::tools::{self, Probe};
 
 const DEFAULT_ROWS: usize = 24;
 
+#[derive(Debug, Clone, Copy)]
+struct Settings {
+    delete_to_trash: bool,
+    format_on_save: bool,
+}
+
+impl From<&Config> for Settings {
+    fn from(config: &Config) -> Self {
+        Self {
+            delete_to_trash: config.delete_to_trash,
+            format_on_save: config.format_on_save,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Editor {
     buffers: BufferList,
@@ -67,6 +83,7 @@ pub struct Editor {
     dired_keymap: Keymap,
     splash_keymap: Keymap,
     doctor_keymap: Keymap,
+    rust_keymap: Keymap,
     search_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
@@ -86,12 +103,13 @@ pub struct Editor {
     viewport: Viewport,
     tab_width: usize,
     on_disk_change: OnDiskChange,
-    delete_to_trash: bool,
+    settings: Settings,
     appearance: Appearance,
     configured_theme: Option<&'static Theme>,
     working_directory: PathBuf,
     home: Option<PathBuf>,
     probe: fn(&str) -> Probe,
+    formatter: fn(&str, &Path, &str) -> Result<String, String>,
     font_note: Option<String>,
     config_path: Option<PathBuf>,
     paren_pair: Option<(usize, usize)>,
@@ -121,6 +139,7 @@ impl Editor {
             dired_keymap: bindings::dired(),
             splash_keymap: bindings::splash(),
             doctor_keymap: bindings::doctor(),
+            rust_keymap: bindings::rust(),
             search_keymap: bindings::search(),
             pending: Vec::new(),
             last_key: None,
@@ -140,12 +159,13 @@ impl Editor {
             viewport: Viewport::new(DEFAULT_ROWS, 0),
             tab_width: Config::default().tab_width,
             on_disk_change: OnDiskChange::default(),
-            delete_to_trash: Config::default().delete_to_trash,
+            settings: Settings::from(&Config::default()),
             appearance: Appearance::Light,
             configured_theme: None,
             working_directory: env::current_dir().unwrap_or_default(),
             home: dirs::home_dir(),
             probe: tools::probe,
+            formatter: tools::rustfmt,
             font_note: None,
             config_path: config::default_path(),
             paren_pair: None,
@@ -155,7 +175,7 @@ impl Editor {
     pub fn apply_config(&mut self, config: &Config) {
         self.tab_width = config.tab_width;
         self.on_disk_change = config.on_disk_change;
-        self.delete_to_trash = config.delete_to_trash;
+        self.settings = Settings::from(config);
         self.configured_theme = config.theme.as_deref().and_then(theme::find);
     }
 
@@ -361,6 +381,7 @@ impl Editor {
             Scope::Dired => Some(&self.dired_keymap),
             Scope::Splash => Some(&self.splash_keymap),
             Scope::Doctor => Some(&self.doctor_keymap),
+            Scope::Rust => Some(&self.rust_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search => None,
         }
     }
@@ -370,6 +391,7 @@ impl Editor {
             Some(Mode::Dired(_)) => Scope::Dired,
             Some(Mode::Splash(_)) => Scope::Splash,
             Some(Mode::Doctor(_)) => Scope::Doctor,
+            Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
             Some(Mode::Text(_)) | None => Scope::Global,
         }
     }
@@ -519,6 +541,7 @@ impl Editor {
             Command::RustMode => self.set_major_mode(Some(Language::Rust)),
             Command::TextMode => self.set_major_mode(None),
             Command::MxDoctor => self.mx_doctor(),
+            Command::RustFormatBuffer => self.rust_format_buffer(),
             Command::ForwardButton => self.forward_button(true),
             Command::BackwardButton => self.forward_button(false),
             Command::PushButton => self.push_button(),

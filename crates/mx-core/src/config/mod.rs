@@ -8,6 +8,10 @@ use crate::theme;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is its own config.toml setting"
+)]
 pub struct Config {
     pub theme: Option<String>,
     pub font_family: Option<String>,
@@ -18,6 +22,7 @@ pub struct Config {
     pub on_disk_change: OnDiskChange,
     pub delete_to_trash: bool,
     pub splash: bool,
+    pub format_on_save: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
@@ -41,6 +46,7 @@ impl Default for Config {
             on_disk_change: OnDiskChange::default(),
             delete_to_trash: true,
             splash: true,
+            format_on_save: false,
         }
     }
 }
@@ -166,6 +172,16 @@ mod tests {
             !Config::parse("delete-to-trash = false")
                 .unwrap()
                 .delete_to_trash
+        );
+    }
+
+    #[test]
+    fn formatting_on_save_is_opt_in() {
+        assert!(!Config::default().format_on_save);
+        assert!(
+            Config::parse("format-on-save = true")
+                .unwrap()
+                .format_on_save
         );
     }
 

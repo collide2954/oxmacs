@@ -149,6 +149,8 @@ const SPLASH: &[(&str, Command)] = &[
 
 const DOCTOR: &[(&str, Command)] = &[("g", Command::RevertBuffer), ("q", Command::QuitWindow)];
 
+const RUST: &[(&str, Command)] = &[("C-c C-f", Command::RustFormatBuffer)];
+
 pub fn global() -> Keymap {
     build(GLOBAL)
 }
@@ -159,6 +161,10 @@ pub fn minibuffer() -> Keymap {
 
 pub fn doctor() -> Keymap {
     build(DOCTOR)
+}
+
+pub fn rust() -> Keymap {
+    build(RUST)
 }
 
 pub fn search() -> Keymap {
@@ -213,6 +219,11 @@ mod tests {
     #[test]
     fn every_doctor_binding_resolves_to_its_command() {
         assert_resolves(&doctor(), DOCTOR);
+    }
+
+    #[test]
+    fn every_rust_binding_resolves_to_its_command() {
+        assert_resolves(&rust(), RUST);
     }
 
     #[test]
