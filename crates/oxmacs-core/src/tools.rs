@@ -153,7 +153,7 @@ pub fn cargo_edition(directory: &Path) -> &'static str {
 }
 
 #[cfg(windows)]
-fn hide_console(command: &mut Command) {
+pub(crate) fn hide_console(command: &mut Command) {
     use std::os::windows::process::CommandExt;
 
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -161,7 +161,7 @@ fn hide_console(command: &mut Command) {
 }
 
 #[cfg(not(windows))]
-fn hide_console(_: &mut Command) {}
+pub(crate) fn hide_console(_: &mut Command) {}
 
 #[cfg(test)]
 mod tests {
