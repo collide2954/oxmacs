@@ -13,6 +13,15 @@ pub fn view<'a, Message: 'a>(
     size: f32,
 ) -> Element<'a, Message> {
     let content: Element<'a, Message> = match (editor.question(), editor.minibuffer()) {
+        (None, None) if let Some(replace) = editor.replacing() => {
+            let spans: [Span<'a, (), Font>; 2] = [
+                span(replace.prompt()).color(style::color(faces.minibuffer_prompt)),
+                span(" ")
+                    .color(style::color(faces.default.background))
+                    .background(style::color(faces.cursor)),
+            ];
+            rich_text(spans).font(font).size(size).into()
+        }
         (None, None) if let Some(search) = editor.search() => {
             rich_text(search_spans(search, faces))
                 .font(font)
@@ -48,8 +57,13 @@ pub fn view<'a, Message: 'a>(
             } else {
                 minibuffer.selected() + 1
             };
+            let count = if minibuffer.completes() {
+                format!("{position}/{total} ")
+            } else {
+                String::new()
+            };
             let spans: [Span<'a, (), Font>; 6] = [
-                span(format!("{position}/{total} ")).color(style::color(faces.shadow)),
+                span(count).color(style::color(faces.shadow)),
                 span(minibuffer.prompt()).color(style::color(faces.minibuffer_prompt)),
                 span(before.to_owned()),
                 span(at.to_owned())
