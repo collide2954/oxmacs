@@ -1,4 +1,5 @@
 mod highlight;
+mod indent;
 
 use std::fmt;
 use std::path::Path;

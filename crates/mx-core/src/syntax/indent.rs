@@ -1,0 +1,226 @@
+use tree_sitter::Node;
+
+use crate::display;
+use crate::syntax::{Language, Syntax};
+use crate::text::Buffer;
+
+const OPENERS: &[&str] = &["{", "(", "["];
+const CLOSERS: &[&str] = &["}", ")", "]"];
+const LITERALS: &[&str] = &["string_literal", "raw_string_literal", "block_comment"];
+
+impl Language {
+    pub fn indent_unit(self) -> usize {
+        match self {
+            Self::Rust => 4,
+        }
+    }
+}
+
+impl Syntax {
+    pub fn indentation(&self, buffer: &Buffer, line: usize, tab_width: usize) -> Option<usize> {
+        let tree = self
+            .tree
+            .as_ref()
+            .filter(|_| self.revision == Some(buffer.revision()))?;
+        let text = buffer.line_text(line);
+        let leading = text.chars().take_while(|c| matches!(c, ' ' | '\t')).count();
+        let rest: String = text.chars().skip(leading).collect();
+        let byte = buffer.char_to_byte(buffer.line_start(line) + leading);
+        let node = tree.root_node().descendant_for_byte_range(byte, byte)?;
+        if ancestors(node)
+            .any(|ancestor| LITERALS.contains(&ancestor.kind()) && row(ancestor) < line)
+        {
+            return None;
+        }
+        let container = ancestors(node).find_map(|ancestor| {
+            open_bracket(ancestor, byte)
+                .filter(|open| row(*open) < line)
+                .map(|open| (ancestor, open))
+        });
+        let unit = self.language.indent_unit();
+        let Some((container, open)) = container else {
+            let top = statement(node, tree.root_node());
+            return Some(continuation(top, line, &rest) * unit);
+        };
+        let base = indentation_of(buffer, row(open), tab_width);
+        let closes = !node.is_named()
+            && CLOSERS.contains(&node.kind())
+            && node.start_byte() == byte
+            && node.parent() == Some(container);
+        if closes {
+            return Some(base);
+        }
+        let inner = statement(node, container);
+        Some(base + unit + continuation(inner, line, &rest) * unit)
+    }
+}
+
+fn ancestors(node: Node<'_>) -> impl Iterator<Item = Node<'_>> {
+    std::iter::successors(Some(node), Node::parent)
+}
+
+fn row(node: Node<'_>) -> usize {
+    node.start_position().row
+}
+
+fn open_bracket(node: Node<'_>, byte: usize) -> Option<Node<'_>> {
+    let mut open = Vec::new();
+    scan_brackets(node, byte, &mut open);
+    open.pop()
+}
+
+fn scan_brackets<'tree>(node: Node<'tree>, byte: usize, open: &mut Vec<Node<'tree>>) {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.start_byte() >= byte {
+            break;
+        }
+        let token = !child.is_named();
+        if child.is_error() {
+            scan_brackets(child, byte, open);
+        } else if token && OPENERS.contains(&child.kind()) {
+            open.push(child);
+        } else if token && CLOSERS.contains(&child.kind()) {
+            open.pop();
+        }
+    }
+}
+
+fn statement<'tree>(node: Node<'tree>, container: Node<'tree>) -> Option<Node<'tree>> {
+    ancestors(node).find(|ancestor| ancestor.parent() == Some(container))
+}
+
+fn continuation(statement: Option<Node<'_>>, line: usize, rest: &str) -> usize {
+    let starts_fresh = rest.starts_with('{') || starts_with_word(rest, "where");
+    usize::from(statement.is_some_and(|statement| row(statement) < line) && !starts_fresh)
+}
+
+fn starts_with_word(text: &str, word: &str) -> bool {
+    text.strip_prefix(word)
+        .is_some_and(|rest| !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_'))
+}
+
+fn indentation_of(buffer: &Buffer, line: usize, tab_width: usize) -> usize {
+    let text = buffer.line_text(line);
+    let leading = text.chars().take_while(|c| matches!(c, ' ' | '\t')).count();
+    display::display_column(&text, leading, tab_width)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FORMATTED: &str = r#"use std::collections::{
+    HashMap,
+    HashSet,
+};
+
+/// Docs.
+#[derive(Debug)]
+pub struct Point {
+    x: i32,
+    // A comment.
+    y: i32,
+}
+
+enum Shape {
+    Circle { radius: f64 },
+    Square(f64),
+}
+
+impl Point {
+    pub fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+
+    fn long<T>(
+        first: T,
+        second: T,
+    ) -> Vec<T>
+    where
+        T: Clone,
+    {
+        let items = vec![
+            first.clone(),
+            second,
+        ];
+        let total = items
+            .iter()
+            .count();
+        match total {
+            0 => {
+                println!("none");
+            }
+            1 =>
+                println!("one"),
+            _ => println!(
+                "many: {}",
+                total
+            ),
+        }
+        if total > 1 {
+            items.into_iter().map(|item| {
+                item
+            }).collect()
+        } else {
+            Vec::new()
+        }
+    }
+}
+"#;
+
+    fn indentations(text: &str) -> (Buffer, Syntax) {
+        let mut buffer = Buffer::with_text("t", text);
+        let mut syntax = Syntax::new(Language::Rust);
+        syntax.sync(&mut buffer);
+        (buffer, syntax)
+    }
+
+    #[test]
+    fn formatted_code_keeps_its_indentation() {
+        let (buffer, syntax) = indentations(FORMATTED);
+
+        for (line, text) in FORMATTED.lines().enumerate() {
+            if text.trim().is_empty() {
+                continue;
+            }
+            let expected = text.len() - text.trim_start().len();
+            assert_eq!(
+                syntax.indentation(&buffer, line, 8),
+                Some(expected),
+                "line {}: {text}",
+                line + 1
+            );
+        }
+    }
+
+    #[test]
+    fn blank_lines_take_the_level_of_their_block() {
+        let (buffer, syntax) = indentations("fn a() {\n    let x = 1;\n\n}\n");
+
+        assert_eq!(syntax.indentation(&buffer, 2, 8), Some(4));
+    }
+
+    #[test]
+    fn unfinished_blocks_still_indent() {
+        let (buffer, syntax) = indentations("fn a() {\n\n");
+
+        assert_eq!(syntax.indentation(&buffer, 1, 8), Some(4));
+    }
+
+    #[test]
+    fn misindented_lines_get_their_proper_level() {
+        let (buffer, syntax) = indentations("fn a() {\nlet x = 1;\n        }\n");
+
+        assert_eq!(syntax.indentation(&buffer, 1, 8), Some(4));
+        assert_eq!(syntax.indentation(&buffer, 2, 8), Some(0));
+    }
+
+    #[test]
+    fn lines_inside_strings_and_comments_are_left_alone() {
+        let (buffer, syntax) = indentations("let s = \"a\n   b\";\n/* x\n  y */\n");
+
+        assert_eq!(syntax.indentation(&buffer, 1, 8), None);
+        assert_eq!(syntax.indentation(&buffer, 3, 8), None);
+    }
+}
