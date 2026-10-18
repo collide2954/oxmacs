@@ -101,6 +101,20 @@ pub fn find(name: &str) -> Option<&'static Theme> {
     builtin().into_iter().find(|theme| theme.name == name)
 }
 
+pub fn counterpart(theme: &Theme) -> &'static Theme {
+    let family = |name: &'static str| name.strip_suffix("-dark").unwrap_or(name);
+    let other = match theme.appearance {
+        Appearance::Light => Appearance::Dark,
+        Appearance::Dark => Appearance::Light,
+    };
+    builtin()
+        .into_iter()
+        .find(|candidate| {
+            candidate.appearance == other && family(candidate.name) == family(theme.name)
+        })
+        .unwrap_or_else(|| for_appearance(other))
+}
+
 pub fn for_appearance(appearance: Appearance) -> &'static Theme {
     match appearance {
         Appearance::Light => &ADWAITA,
@@ -175,6 +189,12 @@ mod tests {
             Some("adwaita-dark")
         );
         assert!(find("no-such-theme").is_none());
+    }
+
+    #[test]
+    fn each_theme_has_a_counterpart_of_the_other_appearance() {
+        assert_eq!(counterpart(&ADWAITA).name, "adwaita-dark");
+        assert_eq!(counterpart(&ADWAITA_DARK).name, "adwaita");
     }
 
     #[test]
