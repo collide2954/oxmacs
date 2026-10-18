@@ -30,7 +30,7 @@ use transfer::Kind;
 use crate::command::{Command, Scope};
 use crate::config::{Config, OnDiskChange};
 use crate::dired::Mark;
-use crate::display::{self, Viewport};
+use crate::display::Viewport;
 use crate::files::LineEnding;
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::text::{Buffer, motion};
@@ -172,9 +172,8 @@ impl Editor {
     }
 
     pub fn point_display_column(&self) -> usize {
-        let point = self.buffers.current().point();
-        let line = self.buffers.current().line_text(self.point_line());
-        display::display_column(&line, self.buffers.current().column(point), self.tab_width)
+        let buffer = self.buffers.current();
+        movement::display_column(buffer, buffer.point(), self.tab_width)
     }
 
     pub fn mode_line(&self) -> String {

@@ -1,6 +1,7 @@
 use std::iter;
 use std::ops::Range;
 
+use crate::display;
 use crate::text::Buffer;
 
 pub fn forward_char(buffer: &Buffer, from: usize, count: usize) -> usize {
@@ -19,14 +20,25 @@ pub fn end_of_line(buffer: &Buffer, from: usize) -> usize {
     buffer.line_end(buffer.line_of(from))
 }
 
-pub fn vertical(buffer: &Buffer, from: usize, lines: isize, goal_column: usize) -> usize {
+pub fn vertical(
+    buffer: &Buffer,
+    from: usize,
+    lines: isize,
+    goal_column: usize,
+    tab_width: usize,
+) -> usize {
     let Some(target) = buffer.line_of(from).checked_add_signed(lines) else {
         return 0;
     };
     if target >= buffer.len_lines() {
         return buffer.len_chars();
     }
-    (buffer.line_start(target) + goal_column).min(buffer.line_end(target))
+    at_column(buffer, target, goal_column, tab_width)
+}
+
+pub fn at_column(buffer: &Buffer, line: usize, column: usize, tab_width: usize) -> usize {
+    let text = buffer.line_text(line);
+    buffer.line_start(line) + display::char_at_column(&text, column, tab_width)
 }
 
 pub fn forward_word(buffer: &Buffer, from: usize) -> usize {
@@ -113,31 +125,39 @@ mod tests {
     fn vertical_keeps_goal_column() {
         let buffer = Buffer::with_text("t", "abc\nde\nfghi");
 
-        assert_eq!(vertical(&buffer, 2, 2, 2), 9);
-        assert_eq!(vertical(&buffer, 9, -2, 2), 2);
+        assert_eq!(vertical(&buffer, 2, 2, 2, 8), 9);
+        assert_eq!(vertical(&buffer, 9, -2, 2, 8), 2);
     }
 
     #[test]
     fn vertical_clamps_goal_column_to_line_end() {
         let buffer = Buffer::with_text("t", "abc\nde\nfghi");
 
-        assert_eq!(vertical(&buffer, 3, 1, 3), 6);
+        assert_eq!(vertical(&buffer, 3, 1, 3, 8), 6);
+    }
+
+    #[test]
+    fn vertical_goal_columns_are_display_columns() {
+        let buffer = Buffer::with_text("t", "abcdefghij\n\tx");
+
+        assert_eq!(vertical(&buffer, 8, 1, 8, 8), 12);
+        assert_eq!(vertical(&buffer, 12, -1, 8, 8), 8);
     }
 
     #[test]
     fn vertical_past_last_line_moves_to_end_of_buffer() {
         let buffer = Buffer::with_text("t", "abc\nde");
 
-        assert_eq!(vertical(&buffer, 4, 1, 0), 6);
-        assert_eq!(vertical(&buffer, 0, 5, 0), 6);
+        assert_eq!(vertical(&buffer, 4, 1, 0, 8), 6);
+        assert_eq!(vertical(&buffer, 0, 5, 0, 8), 6);
     }
 
     #[test]
     fn vertical_before_first_line_moves_to_start_of_buffer() {
         let buffer = Buffer::with_text("t", "abc\nde");
 
-        assert_eq!(vertical(&buffer, 2, -1, 2), 0);
-        assert_eq!(vertical(&buffer, 5, -3, 1), 0);
+        assert_eq!(vertical(&buffer, 2, -1, 2, 8), 0);
+        assert_eq!(vertical(&buffer, 5, -3, 1, 8), 0);
     }
 
     #[test]

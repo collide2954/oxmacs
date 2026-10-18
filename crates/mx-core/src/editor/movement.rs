@@ -1,5 +1,11 @@
+use crate::display;
 use crate::editor::Editor;
 use crate::text::{Buffer, motion};
+
+pub(super) fn display_column(buffer: &Buffer, point: usize, tab_width: usize) -> usize {
+    let line = buffer.line_text(buffer.line_of(point));
+    display::display_column(&line, buffer.column(point), tab_width)
+}
 
 impl Editor {
     pub(super) fn move_point(&mut self, motion: impl FnOnce(&Buffer, usize) -> usize) {
@@ -9,10 +15,11 @@ impl Editor {
     }
 
     pub(super) fn move_vertically(&mut self, lines: isize, goal_column: Option<usize>) {
+        let tab_width = self.tab_width;
         let buffer = self.current_mut();
         let point = buffer.point();
-        let goal = goal_column.unwrap_or_else(|| buffer.column(point));
-        let target = motion::vertical(buffer, point, lines, goal);
+        let goal = goal_column.unwrap_or_else(|| display_column(buffer, point, tab_width));
+        let target = motion::vertical(buffer, point, lines, goal, tab_width);
         buffer.set_point(target);
         self.goal_column = Some(goal);
     }

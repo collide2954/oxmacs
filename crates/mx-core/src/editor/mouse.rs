@@ -93,13 +93,12 @@ impl Editor {
         } else {
             return;
         };
-        let column = self
-            .buffers
-            .current()
-            .column(self.buffers.current().point());
-        let start = self.buffers.current().line_start(target);
-        let point = (start + column).min(self.buffers.current().line_end(target));
+        let goal = self
+            .goal_column
+            .unwrap_or_else(|| self.point_display_column());
+        let point = motion::at_column(self.buffers.current(), target, goal, self.tab_width);
         self.buffers.current_mut().set_point(point);
+        self.goal_column = Some(goal);
     }
 
     fn position_at(&self, cell: Cell) -> usize {
@@ -241,6 +240,50 @@ mod tests {
 
         assert_eq!(editor.viewport().top(), 5);
         assert_eq!(editor.buffer().line_of(editor.buffer().point()), 14);
+    }
+
+    fn ragged(count: usize) -> String {
+        (0..count)
+            .map(|line| if line % 2 == 0 { "abcdefghij" } else { "ab" })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn scrolling_past_short_lines_keeps_the_column() {
+        let mut editor = editor_with(&ragged(50), 8);
+        editor.resize_window(10);
+
+        editor.scroll_lines(3);
+        assert_eq!(editor.buffer().line_of(editor.buffer().point()), 3);
+        assert_eq!(editor.point_display_column(), 2);
+
+        editor.scroll_lines(1);
+        assert_eq!(editor.point_display_column(), 8);
+        assert_eq!(editor.buffer().line_of(editor.buffer().point()), 4);
+    }
+
+    #[test]
+    fn line_motion_after_scrolling_keeps_the_column() {
+        let mut editor = editor_with(&ragged(50), 8);
+        editor.resize_window(10);
+        editor.scroll_lines(3);
+
+        press(&mut editor, "C-n");
+
+        assert_eq!(editor.point_display_column(), 8);
+    }
+
+    #[test]
+    fn scrolling_lines_with_tabs_uses_display_columns() {
+        let text = format!("abcdefghij\n{}\n\tx", "\n".repeat(30));
+        let mut editor = editor_with(&text, 8);
+        editor.resize_window(5);
+
+        editor.scroll_lines(32);
+
+        assert_eq!(editor.buffer().line_of(editor.buffer().point()), 32);
+        assert_eq!(editor.point_display_column(), 8);
     }
 
     #[test]

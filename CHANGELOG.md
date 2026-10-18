@@ -8,6 +8,11 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 - `kill-mx` exits at once without offering to save, like Emacs's `kill-emacs`; `C-x C-c` still asks.
 
+### Fixed
+
+- Scrolling with the mouse wheel no longer drags point to the ends of short lines; it keeps its column across scrolls and into the next `C-n`/`C-p`.
+- Vertical motion keeps the screen column across lines with tabs and wide characters.
+
 ## [0.8.0] - 2026-10-18
 
 ### Added
