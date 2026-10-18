@@ -27,6 +27,8 @@ pub enum Command {
     Cut,
     Paste,
     PasteFromHistory,
+    Undo,
+    Redo,
     ExecuteExtendedCommand,
     ExitMinibuffer,
     MinibufferNext,

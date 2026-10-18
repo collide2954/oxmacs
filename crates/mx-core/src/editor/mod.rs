@@ -5,6 +5,7 @@ mod movement;
 mod selection;
 #[cfg(test)]
 mod test_support;
+mod undo;
 
 pub use clipboard::Effect;
 pub use minibuffer::{Choice, Completion, Minibuffer};
@@ -32,6 +33,7 @@ pub struct Editor {
     command_history: Vec<Command>,
     goal_column: Option<usize>,
     shift_selection: bool,
+    typed_in_step: usize,
     effects: Vec<Effect>,
     clipboard_history: Vec<String>,
     line_copy: Option<String>,
@@ -66,6 +68,7 @@ impl Editor {
             command_history: Vec::new(),
             goal_column: None,
             shift_selection: false,
+            typed_in_step: 0,
             effects: Vec::new(),
             clipboard_history: Vec::new(),
             line_copy: None,
@@ -240,6 +243,7 @@ impl Editor {
     fn run(&mut self, command: Command, shifted: bool) {
         let goal_column = self.goal_column.take();
         let previous = self.last_command.replace(command);
+        self.close_undo_step(command, previous);
         if command.is_motion() {
             self.prepare_motion_selection(shifted);
         }
@@ -268,6 +272,8 @@ impl Editor {
             Command::Cut => self.copy(true),
             Command::Paste => self.request_paste(),
             Command::PasteFromHistory => self.paste_from_history(),
+            Command::Undo => self.undo(),
+            Command::Redo => self.redo(),
             Command::ExecuteExtendedCommand => self.execute_extended_command(),
             Command::ExitMinibuffer => self.exit_minibuffer(),
             Command::MinibufferNext => self.minibuffer_next(),

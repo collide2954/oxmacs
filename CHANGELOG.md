@@ -10,6 +10,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 - `paste-from-history` (`M-y`) picks from the last 50 copies in the minibuffer list.
 - `delete-line` (`C-k`), `delete-word` (`M-d`, `C-<delete>`) and `backward-delete-word` (`M-DEL`, `C-DEL`); they never touch the clipboard.
 - Typing, `RET` and paste replace the selection; `DEL`, `C-d` and `<delete>` delete it.
+- `undo` (`C-/`, `C-_`, `C-x u`, `s-z`) and `redo` (`C-?`, `C-M-_`, `s-S-z`); typing groups into steps of 20 characters.
 
 ## [0.4.0] - 2026-10-18
 
