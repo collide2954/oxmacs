@@ -19,6 +19,9 @@ enum Pending {
     Kill {
         index: usize,
     },
+    Revert {
+        index: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -122,7 +125,21 @@ impl Editor {
                     self.finish_kill(index);
                 }
             }
+            Pending::Revert { index } => {
+                if answer == 'y' {
+                    self.revert_at(index);
+                }
+            }
         }
+    }
+
+    pub(super) fn ask_to_revert(&mut self, index: usize, path: &Path) {
+        let shown = paths::abbreviate(path, self.home.as_deref());
+        self.question = Some(Question {
+            prompt: format!("Revert buffer from file {shown}? (y or n) "),
+            choices: YES_NO,
+            pending: Pending::Revert { index },
+        });
     }
 
     pub(super) fn ask_to_kill(&mut self, index: usize, name: &str) {

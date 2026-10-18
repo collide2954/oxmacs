@@ -1,5 +1,6 @@
 mod buffers;
 mod clipboard;
+mod disk;
 mod editing;
 mod files;
 mod minibuffer;
@@ -320,6 +321,7 @@ impl Editor {
             Command::SaveSomeBuffers => self.save_some_buffers(false),
             Command::SwitchToBuffer => self.switch_to_buffer(),
             Command::KillBuffer => self.kill_buffer(),
+            Command::RevertBuffer => self.revert_buffer(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.save_some_buffers(true),
         }

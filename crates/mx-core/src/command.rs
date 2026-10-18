@@ -42,6 +42,7 @@ pub enum Command {
     SaveSomeBuffers,
     SwitchToBuffer,
     KillBuffer,
+    RevertBuffer,
     KeyboardQuit,
     SaveBuffersKillMx,
 }
