@@ -31,6 +31,11 @@ impl Buffer {
     pub fn contents(&self) -> String {
         self.text.to_string()
     }
+
+    pub fn insert(&mut self, text: &str) {
+        self.text.insert(self.point, text);
+        self.point += text.chars().count();
+    }
 }
 
 #[cfg(test)]
@@ -45,5 +50,25 @@ mod tests {
         assert_eq!(buffer.len_chars(), 0);
         assert_eq!(buffer.point(), 0);
         assert_eq!(buffer.contents(), "");
+    }
+
+    #[test]
+    fn insert_places_text_at_point_and_advances_point() {
+        let mut buffer = Buffer::new("t");
+
+        buffer.insert("hello");
+        buffer.insert(", world");
+
+        assert_eq!(buffer.contents(), "hello, world");
+        assert_eq!(buffer.point(), 12);
+    }
+
+    #[test]
+    fn insert_counts_point_in_chars_not_bytes() {
+        let mut buffer = Buffer::new("t");
+
+        buffer.insert("héllo→");
+
+        assert_eq!(buffer.point(), 6);
     }
 }
