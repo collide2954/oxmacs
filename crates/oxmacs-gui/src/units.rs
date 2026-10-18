@@ -51,9 +51,29 @@ pub fn trunc_to_isize(value: f32) -> isize {
     }
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the value is clamped to the u16 range before the cast"
+)]
+pub fn portion(weight: f32) -> u16 {
+    if weight.is_finite() {
+        (weight * 10_000.0).round().clamp(1.0, f32::from(u16::MAX)) as u16
+    } else {
+        1
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn weights_become_layout_portions() {
+        assert_eq!(portion(0.5), 5_000);
+        assert_eq!(portion(0.0), 1);
+        assert_eq!(portion(f32::NAN), 1);
+    }
 
     #[test]
     fn floor_rounds_down_to_whole_rows() {

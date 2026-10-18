@@ -14,7 +14,7 @@ use iced::{
     window,
 };
 use oxmacs_core::display::{self, LineStyle};
-use oxmacs_core::editor::{Cell, Clicks, Pane, ScreenRow};
+use oxmacs_core::editor::{Cell, Clicks, Pane, ScreenRow, WindowId};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Highlight, Theme as Faces};
 
@@ -54,11 +54,12 @@ pub struct Motion {
 #[derive(Debug)]
 pub struct BufferView<'a, Message> {
     pane: Pane<'a>,
+    window: WindowId,
     faces: Faces,
     font: Font,
     size: Pixels,
     motion: Motion,
-    on_event: fn(ViewEvent) -> Message,
+    on_event: fn(WindowId, ViewEvent) -> Message,
 }
 
 #[derive(Debug, Default)]
@@ -102,14 +103,16 @@ impl State {
 impl<'a, Message> BufferView<'a, Message> {
     pub fn new(
         pane: Pane<'a>,
+        window: WindowId,
         faces: Faces,
         font: Font,
         size: impl Into<Pixels>,
         motion: Motion,
-        on_event: fn(ViewEvent) -> Message,
+        on_event: fn(WindowId, ViewEvent) -> Message,
     ) -> Self {
         Self {
             pane,
+            window,
             faces,
             font,
             size: size.into(),
@@ -153,8 +156,12 @@ impl<'a, Message> BufferView<'a, Message> {
         (column, usize::try_from(row).unwrap_or(0))
     }
 
+    fn focused(&self) -> bool {
+        self.pane.is_selected() && !self.pane.minibuffer_active()
+    }
+
     fn blinking(&self) -> bool {
-        self.motion.enabled && !self.pane.minibuffer_active()
+        self.motion.enabled && self.focused()
     }
 
     fn animate<M>(&self, state: &mut State, now: Instant, shell: &mut Shell<'_, M>) {
@@ -234,7 +241,7 @@ impl<'a, Message> BufferView<'a, Message> {
             _ => return,
         };
         state.pointed = !matches!(view_event, ViewEvent::Scrolled(_));
-        shell.publish((self.on_event)(view_event));
+        shell.publish((self.on_event)(self.window, view_event));
         shell.capture_event();
     }
 
@@ -284,7 +291,7 @@ impl<'a, Message> BufferView<'a, Message> {
     {
         let color = style::color(self.faces.cursor);
         renderer.with_layer(bounds, |renderer| {
-            if self.pane.minibuffer_active() {
+            if !self.focused() {
                 let hollow = Quad {
                     bounds: cursor.bounds,
                     border: Border {
@@ -372,13 +379,16 @@ where
         let metrics = &mut state.metrics;
         if metrics.measured_for.is_some() && !metrics.monospaced && !metrics.font_reported {
             metrics.font_reported = true;
-            shell.publish((self.on_event)(ViewEvent::FontNotMonospaced));
+            shell.publish((self.on_event)(self.window, ViewEvent::FontNotMonospaced));
         }
         let rows = rows_in(layout.bounds().height, metrics.cell.height);
         let columns = columns_in(layout.bounds().width, metrics.cell.width);
         let viewport = self.pane.viewport();
         if (rows, columns) != (viewport.rows(), viewport.columns()) {
-            shell.publish((self.on_event)(ViewEvent::Resized { rows, columns }));
+            shell.publish((self.on_event)(
+                self.window,
+                ViewEvent::Resized { rows, columns },
+            ));
         }
     }
 
@@ -414,7 +424,7 @@ where
         let line_of = |number: usize| lines.iter().find(|line| line.number == number);
         let cursor = self.cursor_block(state, bounds);
         let opacity = self.cursor_opacity(state);
-        let behind = !self.pane.minibuffer_active();
+        let behind = self.focused();
         renderer.with_layer(bounds, |renderer| {
             for (row, rectangle) in &rows {
                 let Some(line) = line_of(row.line) else {

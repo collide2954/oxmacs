@@ -23,10 +23,15 @@ pub fn iced_theme(theme: &theme::Theme) -> Theme {
     )
 }
 
-pub fn mode_line(theme: &theme::Theme) -> container::Style {
+pub fn mode_line(theme: &theme::Theme, active: bool) -> container::Style {
+    let face = if active {
+        theme.mode_line
+    } else {
+        theme.mode_line_inactive
+    };
     container::Style {
-        background: Some(color(theme.mode_line.background).into()),
-        text_color: Some(color(theme.mode_line.foreground)),
+        background: Some(color(face.background).into()),
+        text_color: Some(color(face.foreground)),
         border: Border {
             color: color(theme.mode_line_border),
             width: 1.0,

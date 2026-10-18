@@ -4,7 +4,7 @@ use iced::animation::Easing;
 use iced::font::Family;
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
-use iced::widget::{column, container, row, space, text};
+use iced::widget::{Column, Row, column, container, responsive, row, space, text};
 use iced::{
     Animation, Element, Event, Font, Length, Subscription, Task, Theme, clipboard, event, keyboard,
     system, window,
@@ -13,13 +13,14 @@ use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{self, Config, ConfigError};
-use oxmacs_core::editor::{Editor, Effect};
+use oxmacs_core::editor::{Axis, Editor, Effect, Tiling, WindowId};
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
 use crate::buffer_view::{BufferView, Motion, ViewEvent};
+use crate::divider::Divider;
 use crate::keys::{self, Platform};
 use crate::watcher::Watched;
-use crate::{animation, completions, echo_area, fonts, style, ticker, watcher};
+use crate::{animation, completions, echo_area, fonts, style, ticker, units, watcher};
 
 #[derive(Debug)]
 pub struct App {
@@ -38,7 +39,12 @@ pub struct App {
 #[derive(Debug, Clone)]
 pub enum Message {
     Keyboard(keyboard::Event),
-    View(ViewEvent),
+    View(WindowId, ViewEvent),
+    Divider {
+        path: Vec<usize>,
+        index: usize,
+        delta: f32,
+    },
     AppearanceChanged(Mode),
     Tick(Instant),
     Pasted(Option<String>),
@@ -136,25 +142,42 @@ impl App {
         self.reveal.interpolate(0.0, 1.0, self.now)
     }
 
-    fn handle_view_event(&mut self, event: ViewEvent) {
+    fn handle_view_event(&mut self, window: WindowId, event: ViewEvent) {
+        let selected = window == self.editor.selected_window();
         match event {
-            ViewEvent::Resized { rows, columns } => self.editor.resize_window(rows, columns),
+            ViewEvent::Resized { rows, columns } => self.editor.resize_pane(window, rows, columns),
             ViewEvent::FontNotMonospaced => self.reject_font(),
             ViewEvent::Pressed {
                 cell,
                 clicks,
                 extend,
             } => {
-                self.last_input = self.now;
-                self.editor.click(cell, clicks, extend);
+                if self.focus(window) {
+                    self.last_input = self.now;
+                    self.editor.click(cell, clicks, extend);
+                }
             }
-            ViewEvent::Dragged(cell) => self.editor.drag(cell),
+            ViewEvent::Dragged(cell) if selected => self.editor.drag(cell),
+            ViewEvent::Dragged(_) => {}
             ViewEvent::MiddleClicked(cell) => {
-                self.last_input = self.now;
-                self.editor.middle_click(cell);
+                if self.focus(window) {
+                    self.last_input = self.now;
+                    self.editor.middle_click(cell);
+                }
             }
-            ViewEvent::Scrolled(rows) => self.editor.scroll_lines(rows),
+            ViewEvent::Scrolled(rows) => self.editor.scroll_window(window, rows),
         }
+    }
+
+    fn focus(&mut self, window: WindowId) -> bool {
+        if window == self.editor.selected_window() {
+            return true;
+        }
+        if self.editor.minibuffer().is_some() {
+            return false;
+        }
+        self.editor.select_window(window);
+        true
     }
 
     fn fade_theme_from(&mut self, shown: Faces) {
@@ -225,7 +248,12 @@ impl App {
                 }
             }
             Message::Keyboard(_) | Message::Opened(Ok(())) | Message::Clock => {}
-            Message::View(event) => self.handle_view_event(event),
+            Message::View(window, event) => self.handle_view_event(window, event),
+            Message::Divider { path, index, delta } => {
+                if let Some(at) = self.editor.tiling().boundary(&path, index) {
+                    self.editor.drag_divider(&path, index, at + delta);
+                }
+            }
             Message::AppearanceChanged(mode) => {
                 if let Some(appearance) = appearance(mode) {
                     self.editor.set_appearance(appearance);
@@ -289,11 +317,85 @@ impl App {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let line = |content: String| text(content).font(self.font).size(self.text_size);
         let faces = self.faces();
         column![
+            self.tile(self.editor.tiling(), Vec::new(), faces),
+            echo_area::view(&self.editor, faces, self.font, self.text_size),
+            completions::view(
+                &self.editor,
+                faces,
+                self.font,
+                self.text_size,
+                self.completion_opacity()
+            ),
+        ]
+        .into()
+    }
+
+    fn tile<'a>(
+        &'a self,
+        tiling: &'a Tiling,
+        path: Vec<usize>,
+        faces: Faces,
+    ) -> Element<'a, Message> {
+        let Tiling::Split { axis, parts } = tiling else {
+            let Tiling::Window(window) = tiling else {
+                return space().into();
+            };
+            return self.window(*window, faces);
+        };
+        let axis = *axis;
+        responsive(move |size| {
+            let extent = match axis {
+                Axis::Rows => size.height,
+                Axis::Columns => size.width,
+            };
+            let mut children: Vec<Element<'a, Message>> = Vec::new();
+            for (index, (weight, part)) in parts.iter().enumerate() {
+                if index > 0 {
+                    let at = path.clone();
+                    let border = style::color(faces.mode_line_border);
+                    children.push(
+                        Divider::new(axis, extent, border, move |delta| Message::Divider {
+                            path: at.clone(),
+                            index: index - 1,
+                            delta,
+                        })
+                        .into(),
+                    );
+                }
+                let mut inner = path.clone();
+                inner.push(index);
+                let share = Length::FillPortion(units::portion(*weight));
+                let part = container(self.tile(part, inner, faces));
+                children.push(match axis {
+                    Axis::Rows => part.width(Length::Fill).height(share).into(),
+                    Axis::Columns => part.width(share).height(Length::Fill).into(),
+                });
+            }
+            match axis {
+                Axis::Rows => Column::with_children(children).into(),
+                Axis::Columns => Row::with_children(children).into(),
+            }
+        })
+        .into()
+    }
+
+    fn window(&self, window: WindowId, faces: Faces) -> Element<'_, Message> {
+        let Some(pane) = self.editor.pane_of(window) else {
+            return space().into();
+        };
+        let line = |content: String| text(content).font(self.font).size(self.text_size);
+        let active = pane.is_selected();
+        let clock = self
+            .clock
+            .as_deref()
+            .filter(|_| self.editor.tiling().windows().last() == Some(&window))
+            .map(|format| line(clock::now(format)));
+        column![
             container(BufferView::new(
-                self.editor.pane(),
+                pane,
+                window,
                 faces,
                 self.font,
                 self.text_size,
@@ -304,22 +406,12 @@ impl App {
                 },
                 Message::View
             ))
-            .padding([0, 4]),
-            container(
-                row![line(self.editor.mode_line()), space::horizontal()]
-                    .push(self.clock.as_deref().map(|format| line(clock::now(format))))
-            )
-            .width(Length::Fill)
-            .padding([1, 4])
-            .style(move |_| style::mode_line(&faces)),
-            echo_area::view(&self.editor, faces, self.font, self.text_size),
-            completions::view(
-                &self.editor,
-                faces,
-                self.font,
-                self.text_size,
-                self.completion_opacity()
-            ),
+            .padding([0, 4])
+            .height(Length::Fill),
+            container(row![line(pane.mode_line()), space::horizontal()].push(clock))
+                .width(Length::Fill)
+                .padding([1, 4])
+                .style(move |_| style::mode_line(&faces, active)),
         ]
         .into()
     }
@@ -435,7 +527,10 @@ mod tests {
         let mut app = App::new(Ok(config));
         assert_ne!(app.font(), fonts::EDITOR);
 
-        let _ = app.update(Message::View(ViewEvent::FontNotMonospaced));
+        let _ = app.update(Message::View(
+            app.editor().selected_window(),
+            ViewEvent::FontNotMonospaced,
+        ));
 
         assert_eq!(app.font(), fonts::EDITOR);
         assert_eq!(
@@ -448,7 +543,10 @@ mod tests {
     fn the_bundled_font_is_never_replaced() {
         let mut app = App::default();
 
-        let _ = app.update(Message::View(ViewEvent::FontNotMonospaced));
+        let _ = app.update(Message::View(
+            app.editor().selected_window(),
+            ViewEvent::FontNotMonospaced,
+        ));
 
         assert_eq!(app.font(), fonts::EDITOR);
         assert_eq!(app.editor().message(), None);
@@ -688,7 +786,10 @@ mod tests {
     fn the_doctor_names_the_font_in_use() {
         let config = Config::parse("font-family = \"Comic Sans MS\"").unwrap();
         let mut app = App::new(Ok(config));
-        let _ = app.update(Message::View(ViewEvent::FontNotMonospaced));
+        let _ = app.update(Message::View(
+            app.editor().selected_window(),
+            ViewEvent::FontNotMonospaced,
+        ));
 
         press(&mut app, "x", Modifiers::ALT);
         for c in "oxmacs-doctor".chars() {
@@ -721,6 +822,65 @@ mod tests {
         assert!(ui.find("teatime").is_ok());
     }
 
+    fn split(app: &mut App) -> WindowId {
+        press(app, "x", Modifiers::CTRL);
+        press(app, "3", Modifiers::empty());
+        app.editor().tiling().windows()[1]
+    }
+
+    #[test]
+    fn clicking_another_window_selects_it() {
+        let mut app = App::default();
+        let other = split(&mut app);
+
+        let _ = app.update(Message::View(
+            other,
+            ViewEvent::Pressed {
+                cell: Cell { row: 0, column: 0 },
+                clicks: Clicks::Single,
+                extend: false,
+            },
+        ));
+
+        assert_eq!(app.editor().selected_window(), other);
+    }
+
+    #[test]
+    fn each_window_has_its_own_size_and_scroll() {
+        let mut app = App::default();
+        let _ = app.update(Message::Pasted(Some("x\n".repeat(100))));
+        press(&mut app, "<", Modifiers::ALT);
+        let other = split(&mut app);
+
+        let _ = app.update(Message::View(
+            other,
+            ViewEvent::Resized {
+                rows: 5,
+                columns: 40,
+            },
+        ));
+        let _ = app.update(Message::View(other, ViewEvent::Scrolled(3)));
+
+        let pane = app.editor().pane_of(other).unwrap();
+        assert_eq!(pane.viewport().rows(), 5);
+        assert_eq!(pane.viewport().top().line, 3);
+        assert_ne!(app.editor().selected_window(), other);
+    }
+
+    #[test]
+    fn dragging_a_divider_resizes_the_windows() {
+        let mut app = App::default();
+        split(&mut app);
+
+        let _ = app.update(Message::Divider {
+            path: Vec::new(),
+            index: 0,
+            delta: 0.1,
+        });
+
+        assert_eq!(app.editor().tiling().boundary(&[], 0), Some(0.6));
+    }
+
     #[test]
     fn title_names_the_current_buffer() {
         assert_eq!(App::default().title(), "*scratch* - oxmacs");
@@ -736,7 +896,8 @@ mod tests {
     }
 
     fn view_event(app: &mut App, event: ViewEvent) {
-        let _ = app.update(Message::View(event));
+        let window = app.editor().selected_window();
+        let _ = app.update(Message::View(window, event));
     }
 
     #[test]
@@ -805,10 +966,13 @@ mod tests {
     fn window_rows_resize_the_editor_viewport() {
         let mut app = App::default();
 
-        let _ = app.update(Message::View(ViewEvent::Resized {
-            rows: 7,
-            columns: 80,
-        }));
+        let _ = app.update(Message::View(
+            app.editor().selected_window(),
+            ViewEvent::Resized {
+                rows: 7,
+                columns: 80,
+            },
+        ));
 
         assert_eq!(app.editor().viewport().rows(), 7);
         assert_eq!(app.editor().viewport().columns(), 80);
