@@ -57,6 +57,43 @@ pub fn render_line(text: &str, tab_width: usize) -> String {
     rendered
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Segment<F> {
+    pub column: usize,
+    pub text: String,
+    pub face: Option<F>,
+}
+
+pub fn segments<F: Copy + PartialEq>(
+    text: &str,
+    spans: &[(Range<usize>, F)],
+    tab_width: usize,
+) -> Vec<Segment<F>> {
+    let mut segments: Vec<Segment<F>> = Vec::new();
+    let mut column = 0;
+    for (index, c) in text.chars().enumerate() {
+        let face = spans
+            .iter()
+            .find(|(range, _)| range.contains(&index))
+            .map(|(_, face)| *face);
+        let glyph = Glyph::of(c, column, tab_width);
+        match segments.last_mut() {
+            Some(segment) if segment.face == face => glyph.render(&mut segment.text),
+            _ => {
+                let mut segment = Segment {
+                    column,
+                    text: String::new(),
+                    face,
+                };
+                glyph.render(&mut segment.text);
+                segments.push(segment);
+            }
+        }
+        column += glyph.width();
+    }
+    segments
+}
+
 pub fn display_column(text: &str, chars: usize, tab_width: usize) -> usize {
     text.chars().take(chars).fold(0, |column, c| {
         column + Glyph::of(c, column, tab_width).width()
@@ -155,6 +192,48 @@ mod tests {
         assert_eq!(char_at_column("日本", 1, 8), 0);
         assert_eq!(char_at_column("日本", 2, 8), 1);
         assert_eq!(char_at_column("日本", 3, 8), 1);
+    }
+
+    fn segment(column: usize, text: &str, face: Option<char>) -> Segment<char> {
+        Segment {
+            column,
+            text: text.to_owned(),
+            face,
+        }
+    }
+
+    #[test]
+    fn unstyled_text_is_one_segment() {
+        assert_eq!(segments::<char>("abc", &[], 8), [segment(0, "abc", None)]);
+        assert_eq!(segments::<char>("", &[], 8), []);
+    }
+
+    #[test]
+    fn spans_split_the_line_into_segments() {
+        assert_eq!(
+            segments("abcdef", &[(2..4, 'x')], 8),
+            [
+                segment(0, "ab", None),
+                segment(2, "cd", Some('x')),
+                segment(4, "ef", None)
+            ]
+        );
+    }
+
+    #[test]
+    fn segments_start_at_display_columns() {
+        assert_eq!(
+            segments("\tab", &[(1..2, 'x')], 4),
+            [
+                segment(0, "    ", None),
+                segment(4, "a", Some('x')),
+                segment(5, "b", None)
+            ]
+        );
+        assert_eq!(
+            segments("日x", &[(1..2, 'x')], 8),
+            [segment(0, "日", None), segment(2, "x", Some('x'))]
+        );
     }
 
     #[test]
