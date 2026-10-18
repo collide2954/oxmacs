@@ -58,6 +58,8 @@ pub enum Command {
     DiredUnmarkBackward,
     DiredUnmarkAllMarks,
     DiredToggleMarks,
+    DiredDoFlaggedDelete,
+    DiredDoDelete,
     QuitWindow,
     KeyboardQuit,
     SaveBuffersKillMx,
@@ -121,7 +123,9 @@ impl Command {
             | Self::DiredUnmark
             | Self::DiredUnmarkBackward
             | Self::DiredUnmarkAllMarks
-            | Self::DiredToggleMarks => Scope::Dired,
+            | Self::DiredToggleMarks
+            | Self::DiredDoFlaggedDelete
+            | Self::DiredDoDelete => Scope::Dired,
             _ => Scope::Global,
         }
     }

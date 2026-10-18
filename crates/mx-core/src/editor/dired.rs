@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use jiff::Zoned;
 
@@ -7,6 +7,7 @@ use crate::dired::{Listing, Mark, read_entries};
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::minibuffer::Purpose;
+use crate::files::ops;
 use crate::text::Buffer;
 
 impl Editor {
@@ -115,6 +116,68 @@ impl Editor {
         }
     }
 
+    pub(super) fn dired_do_delete(&mut self, flagged: bool) {
+        let line = self.point_line();
+        let Some(listing) = self.buffers.listing(0) else {
+            return;
+        };
+        let mut targets = listing.marked(if flagged { Mark::Flagged } else { Mark::Marked });
+        if targets.is_empty() && !flagged {
+            targets.extend(listing.entry_at(line));
+        }
+        if targets.is_empty() {
+            self.show_message(if flagged {
+                "(No deletions requested)"
+            } else {
+                "No file on this line"
+            });
+            return;
+        }
+        let names: Vec<String> = targets
+            .iter()
+            .map(|entry| entry.display_name().into_owned())
+            .collect();
+        let paths: Vec<PathBuf> = targets
+            .iter()
+            .map(|entry| listing.directory().join(&entry.name))
+            .collect();
+        let verb = if self.delete_to_trash {
+            "Trash"
+        } else {
+            "Delete"
+        };
+        self.ask_to_delete(&format!("{verb} {}?", describe(&names)), paths);
+    }
+
+    pub(super) fn delete_paths(&mut self, paths: &[PathBuf]) {
+        let result = if self.delete_to_trash {
+            ops::trash(paths)
+        } else {
+            paths
+                .iter()
+                .try_for_each(|path| ops::remove(path))
+                .map_err(|error| error.to_string())
+        };
+        self.refresh_listings();
+        match result {
+            Ok(()) => {
+                let verb = if self.delete_to_trash {
+                    "Trashed"
+                } else {
+                    "Deleted"
+                };
+                self.show_message(format!("{verb} {}", files(paths.len())));
+            }
+            Err(error) => self.show_message(error),
+        }
+    }
+
+    pub(super) fn refresh_listings(&mut self) {
+        for index in 0..self.buffers.len() {
+            self.refresh_listing(index);
+        }
+    }
+
     pub(super) fn dired_mark(&mut self, mark: Option<Mark>) {
         self.mark_at_point(mark);
         self.dired_next_line(1);
@@ -220,6 +283,24 @@ impl Editor {
             .saturating_add_signed(lines)
             .min(last);
         place_point(buffer, listing, line);
+    }
+}
+
+fn describe(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [first, second] => format!("{first} and {second}"),
+        [first, second, third] => format!("{first}, {second} and {third}"),
+        [first, second, rest @ ..] => format!("{first}, {second} and {} more", rest.len()),
+    }
+}
+
+fn files(count: usize) -> String {
+    if count == 1 {
+        "1 file".to_owned()
+    } else {
+        format!("{count} files")
     }
 }
 
@@ -790,6 +871,97 @@ mod tests {
         press(&mut editor, "m g");
 
         assert_eq!(mark_column(&editor), "*  ");
+    }
+
+    fn question(editor: &Editor) -> Option<String> {
+        editor
+            .question()
+            .map(|question| question.prompt().to_owned())
+    }
+
+    fn trashed() -> Vec<std::path::PathBuf> {
+        crate::files::ops::TRASHED.with_borrow(Clone::clone)
+    }
+
+    #[test]
+    fn x_trashes_flagged_files_after_asking() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+        press(&mut editor, "n d d x");
+
+        assert_eq!(
+            question(&editor),
+            Some("Trash a.txt and b.txt? (y or n) ".to_owned())
+        );
+        press(&mut editor, "y");
+
+        assert!(!dir.path().join("a.txt").exists());
+        assert_eq!(
+            trashed(),
+            [dir.path().join("a.txt"), dir.path().join("b.txt")]
+        );
+        assert_eq!(lines(&editor).len(), 3);
+        assert_eq!(editor.message(), Some("Trashed 2 files"));
+    }
+
+    #[test]
+    fn declining_keeps_the_files_flagged() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n d x n");
+
+        assert!(dir.path().join("a.txt").exists());
+        assert_eq!(mark_column(&editor), " D ");
+    }
+
+    #[test]
+    fn x_without_flags_reports_it() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "x");
+
+        assert_eq!(question(&editor), None);
+        assert_eq!(editor.message(), Some("(No deletions requested)"));
+    }
+
+    #[test]
+    fn capital_d_deletes_marked_files_or_the_one_at_point() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n D");
+        assert_eq!(question(&editor), Some("Trash a.txt? (y or n) ".to_owned()));
+        press(&mut editor, "y");
+        assert!(!dir.path().join("a.txt").exists());
+        assert_eq!(editor.message(), Some("Trashed 1 file"));
+
+        press(&mut editor, "M-< n n m m D");
+        assert_eq!(
+            question(&editor),
+            Some("Trash sub and b.txt? (y or n) ".to_owned())
+        );
+    }
+
+    #[test]
+    fn the_question_names_at_most_three_files() {
+        let (dir, mut editor) = workspace();
+        for name in ["c.txt", "d.txt"] {
+            fs::write(dir.path().join(name), "").unwrap();
+        }
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n d d d x");
+        assert_eq!(
+            question(&editor),
+            Some("Trash a.txt, b.txt and c.txt? (y or n) ".to_owned())
+        );
+        press(&mut editor, "n d x");
+        assert_eq!(
+            question(&editor),
+            Some("Trash a.txt, b.txt and 2 more? (y or n) ".to_owned())
+        );
     }
 
     #[test]

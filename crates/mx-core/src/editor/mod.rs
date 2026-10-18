@@ -61,6 +61,7 @@ pub struct Editor {
     viewport: Viewport,
     tab_width: usize,
     on_disk_change: OnDiskChange,
+    delete_to_trash: bool,
     appearance: Appearance,
     configured_theme: Option<&'static Theme>,
     working_directory: PathBuf,
@@ -103,6 +104,7 @@ impl Editor {
             viewport: Viewport::new(DEFAULT_ROWS),
             tab_width: Config::default().tab_width,
             on_disk_change: OnDiskChange::default(),
+            delete_to_trash: Config::default().delete_to_trash,
             appearance: Appearance::Light,
             configured_theme: None,
             working_directory: env::current_dir().unwrap_or_default(),
@@ -113,6 +115,7 @@ impl Editor {
     pub fn apply_config(&mut self, config: &Config) {
         self.tab_width = config.tab_width;
         self.on_disk_change = config.on_disk_change;
+        self.delete_to_trash = config.delete_to_trash;
         self.configured_theme = config.theme.as_deref().and_then(theme::find);
     }
 
@@ -379,6 +382,8 @@ impl Editor {
             Command::DiredUnmarkBackward => self.dired_unmark_backward(),
             Command::DiredUnmarkAllMarks => self.dired_unmark_all(),
             Command::DiredToggleMarks => self.dired_toggle_marks(),
+            Command::DiredDoFlaggedDelete => self.dired_do_delete(true),
+            Command::DiredDoDelete => self.dired_do_delete(false),
             Command::DiredHideDetailsMode => self.dired_hide_details(),
             Command::QuitWindow => self.quit_window(),
             Command::KeyboardQuit => self.keyboard_quit(),

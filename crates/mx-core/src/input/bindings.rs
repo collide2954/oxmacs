@@ -100,6 +100,8 @@ const DIRED: &[(&str, Command)] = &[
     ("DEL", Command::DiredUnmarkBackward),
     ("U", Command::DiredUnmarkAllMarks),
     ("t", Command::DiredToggleMarks),
+    ("x", Command::DiredDoFlaggedDelete),
+    ("D", Command::DiredDoDelete),
 ];
 
 pub fn global() -> Keymap {

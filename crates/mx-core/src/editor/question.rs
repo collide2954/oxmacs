@@ -27,6 +27,9 @@ enum Pending {
         disk: Option<DiskState>,
     },
     SaveOver,
+    Delete {
+        paths: Vec<PathBuf>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,7 +151,20 @@ impl Editor {
                     self.save_buffer_at(0);
                 }
             }
+            Pending::Delete { paths } => {
+                if answer == 'y' {
+                    self.delete_paths(&paths);
+                }
+            }
         }
+    }
+
+    pub(super) fn ask_to_delete(&mut self, prompt: &str, paths: Vec<PathBuf>) {
+        self.question = Some(Question {
+            prompt: format!("{prompt} (y or n) "),
+            choices: YES_NO,
+            pending: Pending::Delete { paths },
+        });
     }
 
     pub(super) fn ask_to_save_over(&mut self, name: &str) {
