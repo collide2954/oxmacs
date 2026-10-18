@@ -1,4 +1,4 @@
-use std::path::{self, Path, PathBuf};
+use std::path::{self, Component, Path, PathBuf};
 use std::{fs, io};
 
 pub const SEPARATOR: char = path::MAIN_SEPARATOR;
@@ -35,6 +35,51 @@ pub fn abbreviate(path: &Path, home: Option<&Path>) -> String {
         Some(rest) => format!("~{SEPARATOR}{}", rest.display()),
         None => path.display().to_string(),
     }
+}
+
+pub fn unique_names(paths: &[PathBuf]) -> Vec<String> {
+    let parts: Vec<Vec<String>> = paths
+        .iter()
+        .map(|path| {
+            path.components()
+                .rev()
+                .filter_map(|component| match component {
+                    Component::Normal(part) => Some(part.to_string_lossy().into_owned()),
+                    _ => None,
+                })
+                .collect()
+        })
+        .collect();
+    let mut depths = vec![0; paths.len()];
+    loop {
+        let key = |index: usize| {
+            &parts[index][..=depths[index].min(parts[index].len().saturating_sub(1))]
+        };
+        let deeper: Vec<usize> = (0..paths.len())
+            .filter(|&index| {
+                depths[index] + 1 < parts[index].len()
+                    && (0..paths.len()).any(|other| other != index && key(other) == key(index))
+            })
+            .collect();
+        if deeper.is_empty() {
+            break;
+        }
+        for index in deeper {
+            depths[index] += 1;
+        }
+    }
+    parts
+        .iter()
+        .zip(depths)
+        .map(|(parts, depth)| {
+            let name = parts.first().cloned().unwrap_or_default();
+            if depth == 0 {
+                return name;
+            }
+            let parents: Vec<&str> = parts[1..=depth].iter().rev().map(String::as_str).collect();
+            format!("{name}<{}>", parents.join("/"))
+        })
+        .collect()
 }
 
 pub fn list_dir(dir: &Path) -> io::Result<Vec<DirEntry>> {
@@ -92,6 +137,32 @@ mod tests {
         assert_eq!(
             abbreviate(Path::new("/srv/x"), Some(home)),
             Path::new("/srv/x").display().to_string()
+        );
+    }
+
+    fn names(paths: &[&str]) -> Vec<String> {
+        let paths: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+        unique_names(&paths)
+    }
+
+    #[test]
+    fn distinct_file_names_stay_plain() {
+        assert_eq!(names(&["/a/x.rs", "/b/y.rs"]), ["x.rs", "y.rs"]);
+    }
+
+    #[test]
+    fn clashing_names_gain_their_parent_directory() {
+        assert_eq!(
+            names(&["/a/x/main.rs", "/b/y/main.rs", "/c/lib.rs"]),
+            ["main.rs<x>", "main.rs<y>", "lib.rs"]
+        );
+    }
+
+    #[test]
+    fn clashing_parents_add_more_directories() {
+        assert_eq!(
+            names(&["/a/src/main.rs", "/b/src/main.rs"]),
+            ["main.rs<a/src>", "main.rs<b/src>"]
         );
     }
 
