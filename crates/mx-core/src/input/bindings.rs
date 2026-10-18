@@ -77,12 +77,26 @@ const MINIBUFFER: &[(&str, Command)] = &[
     ("M-RET", Command::ExitMinibufferWithInput),
 ];
 
+const DIRED: &[(&str, Command)] = &[
+    ("n", Command::DiredNextLine),
+    ("SPC", Command::DiredNextLine),
+    ("C-n", Command::DiredNextLine),
+    ("<down>", Command::DiredNextLine),
+    ("p", Command::DiredPreviousLine),
+    ("C-p", Command::DiredPreviousLine),
+    ("<up>", Command::DiredPreviousLine),
+];
+
 pub fn global() -> Keymap {
     build(GLOBAL)
 }
 
 pub fn minibuffer() -> Keymap {
     build(MINIBUFFER)
+}
+
+pub fn dired() -> Keymap {
+    build(DIRED)
 }
 
 fn build(bindings: &[(&str, Command)]) -> Keymap {
@@ -120,5 +134,10 @@ mod tests {
     #[test]
     fn every_minibuffer_binding_resolves_to_its_command() {
         assert_resolves(&minibuffer(), MINIBUFFER);
+    }
+
+    #[test]
+    fn every_dired_binding_resolves_to_its_command() {
+        assert_resolves(&dired(), DIRED);
     }
 }

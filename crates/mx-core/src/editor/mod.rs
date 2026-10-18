@@ -25,7 +25,7 @@ use std::{env, mem};
 
 use buffers::BufferList;
 
-use crate::command::Command;
+use crate::command::{Command, Scope};
 use crate::config::{Config, OnDiskChange};
 use crate::display::{self, Viewport};
 use crate::files::LineEnding;
@@ -41,6 +41,7 @@ pub struct Editor {
     minibuffer: Option<Minibuffer>,
     keymap: Keymap,
     minibuffer_keymap: Keymap,
+    dired_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
     last_command: Option<Command>,
@@ -82,6 +83,7 @@ impl Editor {
             minibuffer: None,
             keymap: bindings::global(),
             minibuffer_keymap: bindings::minibuffer(),
+            dired_keymap: bindings::dired(),
             pending: Vec::new(),
             last_key: None,
             last_command: None,
@@ -266,13 +268,39 @@ impl Editor {
     }
 
     fn lookup(&self, keys: &[Key]) -> Lookup {
-        if self.minibuffer.is_some() {
-            match self.minibuffer_keymap.lookup(keys) {
+        let local = if self.minibuffer.is_some() {
+            Some(&self.minibuffer_keymap)
+        } else {
+            self.mode_keymap()
+        };
+        if let Some(keymap) = local {
+            match keymap.lookup(keys) {
                 Lookup::Unbound => {}
                 found => return found,
             }
         }
         self.keymap.lookup(keys)
+    }
+
+    fn mode_keymap(&self) -> Option<&Keymap> {
+        match self.buffer_scope() {
+            Scope::Dired => Some(&self.dired_keymap),
+            Scope::Global | Scope::Minibuffer => None,
+        }
+    }
+
+    fn buffer_scope(&self) -> Scope {
+        if self.buffers.listing(0).is_some() {
+            Scope::Dired
+        } else {
+            Scope::Global
+        }
+    }
+
+    fn where_is(&self, command: Command) -> Option<KeySequence> {
+        self.mode_keymap()
+            .and_then(|keymap| keymap.where_is(command))
+            .or_else(|| self.keymap.where_is(command))
     }
 
     fn dispatch(&mut self, key: Key, command: Command, shifted: bool) {
@@ -338,6 +366,8 @@ impl Editor {
             Command::RevertBuffer => self.revert_buffer(),
             Command::ReadOnlyMode => self.toggle_read_only(),
             Command::Dired => self.dired_prompt(),
+            Command::DiredNextLine => self.dired_next_line(1),
+            Command::DiredPreviousLine => self.dired_next_line(-1),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.save_some_buffers(true),
         }

@@ -55,13 +55,29 @@ impl Editor {
                     line.max(listing.first_entry_line()).min(last)
                 }
             });
-        let start = buffer.line_start(line);
-        let column = if line == 0 { 0 } else { listing.name_column() };
-        buffer.set_point((start + column).min(buffer.line_end(line)));
+        place_point(buffer, listing, line);
         if index == 0 {
             self.viewport.reveal(self.point_line());
         }
     }
+
+    pub(super) fn dired_next_line(&mut self, lines: isize) {
+        let Some((buffer, listing)) = self.buffers.dired_mut(0) else {
+            return;
+        };
+        let last = buffer.len_lines() - 1;
+        let line = buffer
+            .line_of(buffer.point())
+            .saturating_add_signed(lines)
+            .min(last);
+        place_point(buffer, listing, line);
+    }
+}
+
+fn place_point(buffer: &mut Buffer, listing: &Listing, line: usize) {
+    let start = buffer.line_start(line);
+    let column = if line == 0 { 0 } else { listing.name_column() };
+    buffer.set_point((start + column).min(buffer.line_end(line)));
 }
 
 #[cfg(test)]
@@ -195,6 +211,90 @@ mod tests {
 
         assert_eq!(editor.default_directory(), dir.path().join("sub"));
         assert_eq!(editor.buffer().name(), format!("sub{SEP}"));
+    }
+
+    fn listed(editor: &mut Editor, dir: &tempfile::TempDir) {
+        editor.dired(dir.path());
+    }
+
+    #[test]
+    fn n_and_p_move_between_names() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        for (keys, expected) in [
+            ("n", "a.txt".to_owned()),
+            ("SPC", "b.txt".to_owned()),
+            ("<down>", "b.txt".to_owned()),
+            ("p", "a.txt".to_owned()),
+            ("C-p", format!("sub{SEP}")),
+            ("<up>", "..".to_owned()),
+            ("C-n", format!("sub{SEP}")),
+        ] {
+            press(&mut editor, keys);
+            assert_eq!(at_point(&editor), expected, "{keys}");
+        }
+    }
+
+    #[test]
+    fn moving_up_from_the_parent_line_reaches_the_header() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "p p p");
+
+        assert_eq!(editor.buffer().point(), 0);
+    }
+
+    #[test]
+    fn typing_in_a_listing_is_refused() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "z");
+
+        assert_eq!(
+            editor.message(),
+            Some(format!("Buffer is read-only: {}", dir_name(dir.path())).as_str())
+        );
+    }
+
+    #[test]
+    fn the_minibuffer_ignores_listing_keys() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "C-x C-f n");
+
+        assert!(
+            editor
+                .minibuffer()
+                .unwrap()
+                .input()
+                .contents()
+                .ends_with('n')
+        );
+    }
+
+    fn command_names(editor: &mut Editor) -> Vec<String> {
+        press(editor, "M-x");
+        let names = editor
+            .completions()
+            .into_iter()
+            .map(|completion| completion.label)
+            .collect();
+        press(editor, "C-g");
+        names
+    }
+
+    #[test]
+    fn listing_commands_are_offered_only_in_listings() {
+        let (dir, mut editor) = workspace();
+        assert!(!command_names(&mut editor).contains(&"dired-next-line".to_owned()));
+
+        listed(&mut editor, &dir);
+
+        assert!(command_names(&mut editor).contains(&"dired-next-line".to_owned()));
     }
 
     #[test]

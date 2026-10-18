@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use strum::VariantArray;
 
-use crate::command::Command;
+use crate::command::{Command, Scope};
 use crate::editor::Editor;
 use crate::files::paths::DirEntry;
 use crate::text::Buffer;
@@ -128,14 +128,17 @@ impl Editor {
         let mut commands: Vec<Command> = Command::VARIANTS
             .iter()
             .copied()
-            .filter(|command| !command.is_minibuffer_only() && matches(command.name()))
+            .filter(|command| {
+                let scope = command.scope();
+                (scope == Scope::Global || scope == self.buffer_scope()) && matches(command.name())
+            })
             .collect();
         commands.sort_by_key(|command| (self.recency(*command), command.name()));
         commands
             .into_iter()
             .map(|command| Completion {
                 label: command.name().to_owned(),
-                annotation: self.keymap.where_is(command).map(|keys| keys.to_string()),
+                annotation: self.where_is(command).map(|keys| keys.to_string()),
                 choice: Choice::Command(command),
             })
             .collect()

@@ -45,6 +45,8 @@ pub enum Command {
     RevertBuffer,
     ReadOnlyMode,
     Dired,
+    DiredNextLine,
+    DiredPreviousLine,
     KeyboardQuit,
     SaveBuffersKillMx,
 }
@@ -88,17 +90,25 @@ impl Command {
         )
     }
 
-    pub fn is_minibuffer_only(self) -> bool {
-        matches!(
-            self,
+    pub fn scope(self) -> Scope {
+        match self {
             Self::ExitMinibuffer
-                | Self::MinibufferNext
-                | Self::MinibufferPrevious
-                | Self::MinibufferComplete
-                | Self::MinibufferDeleteBackward
-                | Self::ExitMinibufferWithInput
-        )
+            | Self::MinibufferNext
+            | Self::MinibufferPrevious
+            | Self::MinibufferComplete
+            | Self::MinibufferDeleteBackward
+            | Self::ExitMinibufferWithInput => Scope::Minibuffer,
+            Self::DiredNextLine | Self::DiredPreviousLine => Scope::Dired,
+            _ => Scope::Global,
+        }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scope {
+    Global,
+    Minibuffer,
+    Dired,
 }
 
 #[cfg(test)]
@@ -117,6 +127,13 @@ mod tests {
         assert!(Command::EndOfBuffer.is_motion());
         assert!(!Command::DeleteChar.is_motion());
         assert!(!Command::SetMarkCommand.is_motion());
+    }
+
+    #[test]
+    fn commands_belong_to_a_scope() {
+        assert_eq!(Command::ForwardChar.scope(), Scope::Global);
+        assert_eq!(Command::ExitMinibuffer.scope(), Scope::Minibuffer);
+        assert_eq!(Command::DiredNextLine.scope(), Scope::Dired);
     }
 
     #[test]

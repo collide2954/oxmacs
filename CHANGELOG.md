@@ -7,7 +7,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 ### Added
 
 - `read-only-mode` (`C-x C-q`) toggles a buffer read-only; the mode line shows `%%` and edits are refused. Files without write permission open read-only.
-- `dired` (`C-x d`) lists a directory in a read-only buffer: size, modification time and name, directories first, a `..` line on top; the prompt offers only directories.
+- `dired` (`C-x d`) lists a directory in a read-only buffer: size, modification time and name, directories first, a `..` line on top; the prompt offers only directories. In listings `n`/`SPC`/`C-n` and `p`/`C-p` move between names, and `M-x` offers dired commands only there.
 
 ## [0.7.0] - 2026-10-18
 
