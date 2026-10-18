@@ -118,6 +118,11 @@ pub enum Command {
     EnlargeWindowHorizontally,
     ShrinkWindowHorizontally,
     RustFormatBuffer,
+    RustCheck,
+    RustCompile,
+    RustTest,
+    RustRun,
+    RustRunClippy,
     MarkdownInsertListItem,
     MarkdownPromote,
     MarkdownDemote,
@@ -221,7 +226,12 @@ impl Command {
             | Self::DiredCreateDirectory
             | Self::DiredDoOpen => Scope::Dired,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
-            Self::RustFormatBuffer => Scope::Rust,
+            Self::RustFormatBuffer
+            | Self::RustCheck
+            | Self::RustCompile
+            | Self::RustTest
+            | Self::RustRun
+            | Self::RustRunClippy => Scope::Rust,
             Self::Recompile
             | Self::KillCompilation
             | Self::NextErrorNoSelect

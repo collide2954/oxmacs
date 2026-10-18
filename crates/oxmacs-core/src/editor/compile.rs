@@ -82,6 +82,11 @@ impl Editor {
         self.start_compile(command, directory);
     }
 
+    pub(super) fn cargo(&mut self, subcommand: &str) {
+        let directory = self.project_directory();
+        self.start_compile(format!("cargo {subcommand}"), directory);
+    }
+
     pub(super) fn project_directory(&self) -> PathBuf {
         let directory = self.default_directory();
         tools::cargo_root(&directory).unwrap_or(directory)
@@ -325,6 +330,31 @@ mod tests {
         assert_eq!(editor.take_effects(), [Effect::Kill(second.id)]);
         editor.job_finished(second.id, &Outcome::Exited(None));
         assert_eq!(editor.message(), Some("Compilation killed"));
+    }
+
+    #[test]
+    fn rust_buffers_run_cargo_subcommands_directly() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "[package]\n").unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&dir.path().join("main.rs"));
+
+        for (keys, subcommand) in [
+            ("C-c C-c C-k", "check"),
+            ("C-c C-c C-b", "build"),
+            ("C-c C-c C-t", "test"),
+            ("C-c C-c C-r", "run"),
+            ("C-c C-c C-l", "clippy"),
+        ] {
+            press(&mut editor, keys);
+            let job = spawned(&mut editor).pop().unwrap();
+            assert_eq!(
+                (job.program.as_str(), job.args),
+                ("cargo", vec![subcommand.to_owned()])
+            );
+            assert_eq!(job.directory, PathBuf::from(dir.path()));
+        }
+        assert_eq!(editor.last_compile.as_deref(), Some("cargo clippy"));
     }
 
     #[test]
