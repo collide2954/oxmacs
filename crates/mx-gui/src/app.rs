@@ -1,3 +1,4 @@
+use iced::font::Family;
 use iced::theme::Mode;
 use iced::widget::{column, container, text};
 use iced::{Element, Font, Length, Subscription, Task, Theme, keyboard, system};
@@ -5,7 +6,7 @@ use mx_core::config::{self, Config, ConfigError};
 use mx_core::editor::Editor;
 use mx_core::theme::Appearance;
 
-use crate::buffer_view::BufferView;
+use crate::buffer_view::{BufferView, ViewEvent};
 use crate::keys::{self, Platform};
 use crate::{fonts, style};
 
@@ -19,7 +20,7 @@ pub struct App {
 #[derive(Debug, Clone)]
 pub enum Message {
     Keyboard(keyboard::Event),
-    RowsChanged(usize),
+    View(ViewEvent),
     AppearanceChanged(Mode),
 }
 
@@ -64,6 +65,23 @@ impl App {
         self.text_size
     }
 
+    pub fn font(&self) -> Font {
+        self.font
+    }
+
+    fn reject_font(&mut self) {
+        if self.font == fonts::EDITOR {
+            return;
+        }
+        if let Family::Name(name) = self.font.family {
+            self.editor.show_message(format!(
+                "{name} is not a monospaced font; using {}",
+                fonts::EDITOR_FAMILY
+            ));
+        }
+        self.font = fonts::EDITOR;
+    }
+
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Keyboard(keyboard::Event::KeyPressed {
@@ -79,7 +97,8 @@ impl App {
                 }
             }
             Message::Keyboard(_) => {}
-            Message::RowsChanged(rows) => self.editor.resize_window(rows),
+            Message::View(ViewEvent::RowsChanged(rows)) => self.editor.resize_window(rows),
+            Message::View(ViewEvent::FontNotMonospaced) => self.reject_font(),
             Message::AppearanceChanged(mode) => {
                 if let Some(appearance) = appearance(mode) {
                     self.editor.set_appearance(appearance);
@@ -116,7 +135,7 @@ impl App {
                 &self.editor,
                 self.font,
                 self.text_size,
-                Message::RowsChanged
+                Message::View
             ))
             .padding([0, 4]),
             container(line(self.editor.mode_line()))
@@ -197,6 +216,31 @@ mod tests {
     }
 
     #[test]
+    fn proportional_fonts_fall_back_to_the_bundled_font() {
+        let config = Config::parse("font-family = \"Comic Sans MS\"").unwrap();
+        let mut app = App::new(Ok(config));
+        assert_ne!(app.font(), fonts::EDITOR);
+
+        let _ = app.update(Message::View(ViewEvent::FontNotMonospaced));
+
+        assert_eq!(app.font(), fonts::EDITOR);
+        assert_eq!(
+            app.editor().message(),
+            Some("Comic Sans MS is not a monospaced font; using JetBrains Mono")
+        );
+    }
+
+    #[test]
+    fn the_bundled_font_is_never_replaced() {
+        let mut app = App::default();
+
+        let _ = app.update(Message::View(ViewEvent::FontNotMonospaced));
+
+        assert_eq!(app.font(), fonts::EDITOR);
+        assert_eq!(app.editor().message(), None);
+    }
+
+    #[test]
     fn font_sizes_convert_from_points_to_logical_pixels() {
         assert!((points_to_pixels(12.0) - 16.0).abs() < f32::EPSILON);
         assert!((points_to_pixels(9.0) - 12.0).abs() < f32::EPSILON);
@@ -257,7 +301,7 @@ mod tests {
     fn window_rows_resize_the_editor_viewport() {
         let mut app = App::default();
 
-        let _ = app.update(Message::RowsChanged(7));
+        let _ = app.update(Message::View(ViewEvent::RowsChanged(7)));
 
         assert_eq!(app.editor().viewport().rows(), 7);
     }

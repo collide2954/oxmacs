@@ -10,20 +10,29 @@ use mx_core::editor::Editor;
 
 use crate::style;
 
-const MEASURE_SAMPLE: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+const WIDE_SAMPLE: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+const NARROW_SAMPLE: &str = "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewEvent {
+    RowsChanged(usize),
+    FontNotMonospaced,
+}
 
 #[derive(Debug)]
 pub struct BufferView<'a, Message> {
     editor: &'a Editor,
     font: Font,
     size: Pixels,
-    on_rows_changed: fn(usize) -> Message,
+    on_event: fn(ViewEvent) -> Message,
 }
 
 #[derive(Debug, Default)]
 struct Metrics {
     measured_for: Option<(Font, Pixels)>,
     cell: Size,
+    monospaced: bool,
+    font_reported: bool,
 }
 
 impl<'a, Message> BufferView<'a, Message> {
@@ -31,13 +40,13 @@ impl<'a, Message> BufferView<'a, Message> {
         editor: &'a Editor,
         font: Font,
         size: impl Into<Pixels>,
-        on_rows_changed: fn(usize) -> Message,
+        on_event: fn(ViewEvent) -> Message,
     ) -> Self {
         Self {
             editor,
             font,
             size: size.into(),
-            on_rows_changed,
+            on_event,
         }
     }
 
@@ -55,13 +64,20 @@ impl<'a, Message> BufferView<'a, Message> {
         }
     }
 
-    fn measure_cell<Renderer>(&self) -> Size
+    fn measure<Renderer>(&self) -> Metrics
     where
         Renderer: text::Renderer<Font = Font>,
     {
-        let sample = Renderer::Paragraph::with_text(self.text(MEASURE_SAMPLE, Size::INFINITE));
-        let bounds = sample.min_bounds();
-        Size::new(bounds.width / to_f32(MEASURE_SAMPLE.len()), bounds.height)
+        let bounds =
+            |sample| Renderer::Paragraph::with_text(self.text(sample, Size::INFINITE)).min_bounds();
+        let wide = bounds(WIDE_SAMPLE);
+        let narrow = bounds(NARROW_SAMPLE);
+        Metrics {
+            measured_for: Some((self.font, self.size)),
+            cell: Size::new(wide.width / to_f32(WIDE_SAMPLE.len()), wide.height),
+            monospaced: is_monospaced(narrow.width, wide.width),
+            font_reported: false,
+        }
     }
 
     fn draw_cursor<Renderer>(&self, renderer: &mut Renderer, bounds: Rectangle, cell: Size)
@@ -126,10 +142,8 @@ where
         limits: &layout::Limits,
     ) -> layout::Node {
         let metrics = tree.state.downcast_mut::<Metrics>();
-        let key = (self.font, self.size);
-        if metrics.measured_for != Some(key) {
-            metrics.cell = self.measure_cell::<Renderer>();
-            metrics.measured_for = Some(key);
+        if metrics.measured_for != Some((self.font, self.size)) {
+            *metrics = self.measure::<Renderer>();
         }
         layout::Node::new(limits.resolve(Length::Fill, Length::Fill, Size::ZERO))
     }
@@ -145,10 +159,14 @@ where
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
-        let cell = tree.state.downcast_ref::<Metrics>().cell;
-        let rows = rows_in(layout.bounds().height, cell.height);
+        let metrics = tree.state.downcast_mut::<Metrics>();
+        if metrics.measured_for.is_some() && !metrics.monospaced && !metrics.font_reported {
+            metrics.font_reported = true;
+            shell.publish((self.on_event)(ViewEvent::FontNotMonospaced));
+        }
+        let rows = rows_in(layout.bounds().height, metrics.cell.height);
         if rows != self.editor.viewport().rows() {
-            shell.publish((self.on_rows_changed)(rows));
+            shell.publish((self.on_event)(ViewEvent::RowsChanged(rows)));
         }
     }
 
@@ -194,6 +212,10 @@ where
     }
 }
 
+pub fn is_monospaced(narrow_width: f32, wide_width: f32) -> bool {
+    (narrow_width - wide_width).abs() <= wide_width * 0.01
+}
+
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
@@ -224,6 +246,18 @@ mod tests {
     fn rows_fit_whole_lines_into_the_height() {
         assert_eq!(rows_in(100.0, 20.0), 5);
         assert_eq!(rows_in(99.0, 20.0), 4);
+    }
+
+    #[test]
+    fn equal_narrow_and_wide_widths_mean_monospaced() {
+        assert!(is_monospaced(160.0, 160.0));
+        assert!(is_monospaced(159.9, 160.0));
+    }
+
+    #[test]
+    fn differing_narrow_and_wide_widths_mean_proportional() {
+        assert!(!is_monospaced(64.0, 160.0));
+        assert!(!is_monospaced(f32::NAN, 160.0));
     }
 
     #[test]
