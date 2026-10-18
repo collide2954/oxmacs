@@ -406,16 +406,32 @@ where
                     Point::new(bounds.x, bounds.y + to_f32(row) * cell.height - offset),
                     Size::new(bounds.width, cell.height),
                 );
+                let line_style = self.editor.line_style(line);
+                if let Some(background) = line_style.background {
+                    renderer.fill_quad(
+                        Quad {
+                            bounds: row,
+                            ..Quad::default()
+                        },
+                        style::color(self.faces.highlight(background)),
+                    );
+                }
                 if let Some(selection) = &selection {
                     self.draw_highlight(renderer, &text, line, selection, row, cell.width);
                 }
-                let content = display::render_line(&text, self.editor.tab_width());
-                renderer.fill_text(
-                    self.text(content, row.size()),
-                    row.position(),
-                    foreground,
-                    bounds,
-                );
+                for segment in display::segments(&text, &line_style.spans, self.editor.tab_width())
+                {
+                    let color = segment
+                        .face
+                        .map_or(foreground, |face| style::color(self.faces.highlight(face)));
+                    let x = to_f32(segment.column) * cell.width;
+                    renderer.fill_text(
+                        self.text(segment.text, Size::new(row.width - x, row.height)),
+                        Point::new(row.x + x, row.y),
+                        color,
+                        bounds,
+                    );
+                }
             }
         });
         self.draw_cursor(renderer, state, bounds);
