@@ -1,16 +1,10 @@
 use iced::widget::{column, container, text};
-use iced::{Element, Font, Length, Subscription, Task, Theme, keyboard};
+use iced::{Element, Length, Subscription, Task, Theme, keyboard};
 use mx_core::editor::Editor;
 
 use crate::buffer_view::BufferView;
+use crate::fonts::EDITOR as EDITOR_FONT;
 use crate::keys::{self, Platform};
-
-#[cfg(target_os = "windows")]
-pub const EDITOR_FONT: Font = Font::with_name("Consolas");
-#[cfg(target_os = "macos")]
-pub const EDITOR_FONT: Font = Font::with_name("Menlo");
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-pub const EDITOR_FONT: Font = Font::MONOSPACE;
 
 const TEXT_SIZE: f32 = 15.0;
 

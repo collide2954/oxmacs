@@ -1770,6 +1770,7 @@ dependencies = [
  "iced",
  "iced_test",
  "mx-core",
+ "ttf-parser",
 ]
 
 [[package]]
