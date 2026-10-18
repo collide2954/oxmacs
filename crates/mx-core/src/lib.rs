@@ -6,3 +6,4 @@ pub mod editor;
 pub mod key;
 pub mod keymap;
 pub mod motion;
+pub mod viewport;
