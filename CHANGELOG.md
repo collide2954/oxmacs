@@ -8,6 +8,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 - `find-file` (`C-x C-f`) with a vertical directory list: typing filters, `TAB`/`RET` descend into directories, `DEL` after a separator goes up, `M-RET` uses the exact input; `~` abbreviates home.
 - Files open in their own buffers; LF/CRLF and UTF-8 BOMs are preserved, and invalid UTF-8 is refused.
+- Buffers for files sharing a name show their directory, like `main.rs<src>`.
 - Mode line shows `**` for unsaved changes, `--` otherwise, and `CRLF` for Windows line endings.
 - `save-buffer` (`C-x C-s`) writes atomically, keeping permissions and the original line endings.
 - `write-file` (`C-x C-w`) saves under a new name, asking before overwriting another file; `C-x C-s` in a buffer without a file asks where to write it.

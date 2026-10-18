@@ -32,6 +32,10 @@ impl BufferList {
         self.buffers.iter()
     }
 
+    pub(super) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Buffer> {
+        self.buffers.iter_mut()
+    }
+
     pub(super) fn position(&self, predicate: impl Fn(&Buffer) -> bool) -> Option<usize> {
         self.buffers.iter().position(predicate)
     }

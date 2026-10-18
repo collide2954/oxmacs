@@ -105,15 +105,29 @@ impl Editor {
     pub(super) fn finish_write(&mut self, path: PathBuf) {
         let buffer = self.buffers.current_mut();
         let format = buffer.file().map(|file| file.format).unwrap_or_default();
-        if let Some(name) = path.file_name() {
-            buffer.set_name(name.to_string_lossy());
-        }
         buffer.set_file(FileInfo {
             path,
             format,
             disk: None,
         });
+        self.name_file_buffers();
         self.save_buffer_at(0);
+    }
+
+    pub(super) fn name_file_buffers(&mut self) {
+        let paths: Vec<PathBuf> = self
+            .buffers
+            .iter()
+            .filter_map(|buffer| buffer.file().map(|file| file.path.clone()))
+            .collect();
+        let mut names = paths::unique_names(&paths).into_iter();
+        for buffer in self.buffers.iter_mut() {
+            if buffer.file().is_some()
+                && let Some(name) = names.next()
+            {
+                buffer.set_name(name);
+            }
+        }
     }
 
     pub(super) fn complete_file_name(&mut self) {
@@ -199,17 +213,14 @@ impl Editor {
         }
         match files::load(&path) {
             Ok(loaded) => {
-                let name = path.file_name().map_or_else(
-                    || path.display().to_string(),
-                    |name| name.to_string_lossy().into_owned(),
-                );
-                let mut buffer = Buffer::with_text(name, &loaded.text);
+                let mut buffer = Buffer::with_text(path.display().to_string(), &loaded.text);
                 buffer.set_file(FileInfo {
                     path,
                     format: loaded.format,
                     disk: loaded.disk,
                 });
                 self.buffers.push_front(buffer);
+                self.name_file_buffers();
                 self.after_buffer_switch();
                 if loaded.disk.is_none() {
                     self.show_message("(New file)");
@@ -630,6 +641,48 @@ mod tests {
         assert_eq!(
             fs::read_to_string(dir.path().join("a.txt")).unwrap(),
             "xhello"
+        );
+    }
+
+    fn twin_mains(dir: &tempfile::TempDir) -> [PathBuf; 2] {
+        ["x", "y"].map(|sub| {
+            let path = dir.path().join(sub).join("main.rs");
+            fs::create_dir(dir.path().join(sub)).unwrap();
+            fs::write(&path, "").unwrap();
+            path
+        })
+    }
+
+    #[test]
+    fn files_sharing_a_name_show_their_directory() {
+        let (dir, mut editor) = workspace();
+        let [x, y] = twin_mains(&dir);
+
+        editor.open_file(&x);
+        assert_eq!(editor.buffer().name(), "main.rs");
+        editor.open_file(&y);
+
+        assert_eq!(
+            editor.buffer_names(),
+            ["main.rs<y>", "main.rs<x>", "*scratch*"]
+        );
+    }
+
+    #[test]
+    fn writing_to_a_shared_name_shows_the_directory() {
+        let (dir, _) = workspace();
+        let [x, _] = twin_mains(&dir);
+        let mut editor = opened(&dir, "a.txt");
+        editor.open_file(&x);
+        editor.open_file(&dir.path().join("a.txt"));
+
+        press(&mut editor, "C-x C-w");
+        type_text(&mut editor, &format!("y{SEP}main.rs"));
+        press(&mut editor, "M-RET y");
+
+        assert_eq!(
+            editor.buffer_names(),
+            ["main.rs<y>", "main.rs<x>", "*scratch*"]
         );
     }
 
