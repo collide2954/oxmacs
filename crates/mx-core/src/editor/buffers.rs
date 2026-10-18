@@ -6,13 +6,14 @@ use crate::editor::minibuffer::Purpose;
 use crate::editor::splash::Splash;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
+use crate::syntax::{Language, Syntax};
 use crate::text::Buffer;
 
 pub(super) const SCRATCH: &str = "*scratch*";
 
 #[derive(Debug)]
 pub(super) enum Mode {
-    Text,
+    Text(Option<Syntax>),
     Dired(Listing),
     Splash(Splash),
 }
@@ -35,7 +36,7 @@ impl BufferList {
             entries: vec![Entry {
                 buffer,
                 top: ScreenLine::default(),
-                mode: Mode::Text,
+                mode: Mode::Text(None),
             }],
         }
     }
@@ -46,20 +47,20 @@ impl BufferList {
 
     pub(super) fn is_special(&self, index: usize) -> bool {
         self.mode(index)
-            .is_some_and(|mode| !matches!(mode, Mode::Text))
+            .is_some_and(|mode| !matches!(mode, Mode::Text(_)))
     }
 
     pub(super) fn listing(&self, index: usize) -> Option<&Listing> {
         match self.mode(index)? {
             Mode::Dired(listing) => Some(listing),
-            Mode::Text | Mode::Splash(_) => None,
+            Mode::Text(_) | Mode::Splash(_) => None,
         }
     }
 
     pub(super) fn splash(&self, index: usize) -> Option<&Splash> {
         match self.mode(index)? {
             Mode::Splash(splash) => Some(splash),
-            Mode::Text | Mode::Dired(_) => None,
+            Mode::Text(_) | Mode::Dired(_) => None,
         }
     }
 
@@ -67,7 +68,7 @@ impl BufferList {
         let entry = self.entries.get_mut(index)?;
         match &mut entry.mode {
             Mode::Dired(listing) => Some((&mut entry.buffer, listing)),
-            Mode::Text | Mode::Splash(_) => None,
+            Mode::Text(_) | Mode::Splash(_) => None,
         }
     }
 
@@ -75,8 +76,24 @@ impl BufferList {
         let entry = self.entries.get(index)?;
         match &entry.mode {
             Mode::Dired(listing) => Some((listing.directory(), true)),
-            Mode::Text => entry.buffer.file().map(|file| (file.path.as_path(), false)),
+            Mode::Text(_) => entry.buffer.file().map(|file| (file.path.as_path(), false)),
             Mode::Splash(_) => None,
+        }
+    }
+
+    pub(super) fn language(&self, index: usize) -> Option<Language> {
+        match self.mode(index)? {
+            Mode::Text(syntax) => syntax.as_ref().map(Syntax::language),
+            Mode::Dired(_) | Mode::Splash(_) => None,
+        }
+    }
+
+    pub(super) fn set_language(&mut self, index: usize, language: Option<Language>) {
+        if let Some(entry) = self.entries.get_mut(index)
+            && let Mode::Text(syntax) = &mut entry.mode
+            && syntax.as_ref().map(Syntax::language) != language
+        {
+            *syntax = language.map(Syntax::new);
         }
     }
 
@@ -117,7 +134,7 @@ impl BufferList {
     }
 
     pub(super) fn push_front(&mut self, buffer: Buffer) {
-        self.push_front_with(buffer, Mode::Text);
+        self.push_front_with(buffer, Mode::Text(None));
     }
 
     pub(super) fn push_front_with(&mut self, buffer: Buffer, mode: Mode) {
@@ -245,7 +262,10 @@ impl Editor {
     }
 
     pub(super) fn add_buffer(&mut self, buffer: Buffer) {
-        self.add_buffer_with(buffer, Mode::Text);
+        let language = buffer
+            .file()
+            .and_then(|file| Language::for_path(&file.path));
+        self.add_buffer_with(buffer, Mode::Text(language.map(Syntax::new)));
     }
 
     pub(super) fn add_buffer_with(&mut self, buffer: Buffer, mode: Mode) {

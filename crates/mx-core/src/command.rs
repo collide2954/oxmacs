@@ -88,6 +88,8 @@ pub enum Command {
     AboutMx,
     LoadTheme,
     ToggleTheme,
+    RustMode,
+    TextMode,
     ForwardButton,
     BackwardButton,
     PushButton,

@@ -7,6 +7,7 @@ mod effect;
 mod files;
 mod isearch;
 mod minibuffer;
+mod modes;
 mod mouse;
 mod movement;
 mod question;
@@ -42,6 +43,7 @@ use crate::dired::Mark;
 use crate::display::{self, Layout, LineStyle, Viewport};
 use crate::files::LineEnding;
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
+use crate::syntax::Language;
 use crate::text::{Buffer, motion};
 use crate::theme::{self, Appearance, Highlight, Theme};
 
@@ -235,8 +237,12 @@ impl Editor {
         let crlf = buffer
             .file()
             .is_some_and(|file| file.format.line_ending == LineEnding::CrLf);
+        let mode = self
+            .language()
+            .map(|language| format!("   ({})", language.name()))
+            .unwrap_or_default();
         format!(
-            "{state} {}   L{} C{}{}",
+            "{state} {}   L{} C{}{}{mode}",
             buffer.name(),
             self.point_line() + 1,
             self.point_display_column(),
@@ -346,7 +352,7 @@ impl Editor {
         match self.buffers.mode(0) {
             Some(Mode::Dired(_)) => Scope::Dired,
             Some(Mode::Splash(_)) => Scope::Splash,
-            Some(Mode::Text) | None => Scope::Global,
+            Some(Mode::Text(_)) | None => Scope::Global,
         }
     }
 
@@ -354,7 +360,7 @@ impl Editor {
         match self.buffers.mode(0) {
             Some(Mode::Dired(listing)) => listing.line_style(line),
             Some(Mode::Splash(splash)) => splash.line_style(line),
-            Some(Mode::Text) | None => LineStyle::default(),
+            Some(Mode::Text(_)) | None => LineStyle::default(),
         }
     }
 
@@ -483,6 +489,8 @@ impl Editor {
             Command::AboutMx => self.about(),
             Command::LoadTheme => self.load_theme(),
             Command::ToggleTheme => self.toggle_theme(),
+            Command::RustMode => self.set_major_mode(Some(Language::Rust)),
+            Command::TextMode => self.set_major_mode(None),
             Command::ForwardButton => self.forward_button(true),
             Command::BackwardButton => self.forward_button(false),
             Command::PushButton => self.push_button(),
