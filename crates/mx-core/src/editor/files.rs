@@ -20,8 +20,8 @@ impl Editor {
     }
 
     pub(super) fn write_file(&mut self) {
-        if self.buffers.listing(0).is_some() {
-            self.show_message("Dired buffers can't be written to files");
+        if self.buffers.is_special(0) {
+            self.show_message("This buffer can't be written to a file");
             return;
         }
         self.open_file_prompt("Write file: ", Purpose::WriteFile);
@@ -262,7 +262,7 @@ impl Editor {
     }
 
     pub(super) fn save_buffer(&mut self) {
-        if self.buffers.listing(0).is_some() {
+        if self.buffers.is_special(0) {
             self.show_message("(No changes need to be saved)");
             return;
         }

@@ -68,6 +68,10 @@ pub enum Command {
     KeyboardQuit,
     SaveBuffersKillMx,
     KillMx,
+    AboutMx,
+    ForwardButton,
+    BackwardButton,
+    PushButton,
 }
 
 impl Command {
@@ -135,6 +139,7 @@ impl Command {
             | Self::DiredDoCopy
             | Self::DiredCreateDirectory
             | Self::DiredDoOpen => Scope::Dired,
+            Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
             _ => Scope::Global,
         }
     }
@@ -145,6 +150,7 @@ pub enum Scope {
     Global,
     Minibuffer,
     Dired,
+    Splash,
 }
 
 #[cfg(test)]

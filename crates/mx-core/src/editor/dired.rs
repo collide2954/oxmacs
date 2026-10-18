@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use jiff::Zoned;
 
 use crate::dired::{Listing, Mark, read_entries, sort};
-use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::minibuffer::Purpose;
 use crate::editor::{Editor, Effect};
@@ -141,13 +140,6 @@ impl Editor {
                 self.update_listing(index, |listing| listing.set_entries(entries));
             }
         }
-    }
-
-    pub fn line_style(&self, line: usize) -> LineStyle {
-        self.buffers
-            .listing(0)
-            .map(|listing| listing.line_style(line))
-            .unwrap_or_default()
     }
 
     pub(super) fn dired_targets(&self, mark: Mark, at_point: bool) -> Vec<(PathBuf, String)> {
@@ -873,7 +865,7 @@ mod tests {
         assert_eq!(editor.buffer().file(), None);
         assert_eq!(
             editor.message(),
-            Some("Dired buffers can't be written to files")
+            Some("This buffer can't be written to a file")
         );
     }
 
@@ -885,7 +877,7 @@ mod tests {
         press(&mut editor, "C-x C-q");
 
         assert!(editor.buffer().is_read_only());
-        assert_eq!(editor.message(), Some("Dired buffers are read-only"));
+        assert_eq!(editor.message(), Some("This buffer stays read-only"));
     }
 
     fn mark_column(editor: &Editor) -> String {

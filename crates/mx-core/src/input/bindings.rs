@@ -108,6 +108,18 @@ const DIRED: &[(&str, Command)] = &[
     ("W", Command::DiredDoOpen),
 ];
 
+const SPLASH: &[(&str, Command)] = &[
+    ("n", Command::ForwardButton),
+    ("TAB", Command::ForwardButton),
+    ("C-n", Command::ForwardButton),
+    ("<down>", Command::ForwardButton),
+    ("p", Command::BackwardButton),
+    ("C-p", Command::BackwardButton),
+    ("<up>", Command::BackwardButton),
+    ("RET", Command::PushButton),
+    ("q", Command::QuitWindow),
+];
+
 pub fn global() -> Keymap {
     build(GLOBAL)
 }
@@ -118,6 +130,10 @@ pub fn minibuffer() -> Keymap {
 
 pub fn dired() -> Keymap {
     build(DIRED)
+}
+
+pub fn splash() -> Keymap {
+    build(SPLASH)
 }
 
 fn build(bindings: &[(&str, Command)]) -> Keymap {
@@ -160,5 +176,10 @@ mod tests {
     #[test]
     fn every_dired_binding_resolves_to_its_command() {
         assert_resolves(&dired(), DIRED);
+    }
+
+    #[test]
+    fn every_splash_binding_resolves_to_its_command() {
+        assert_resolves(&splash(), SPLASH);
     }
 }

@@ -19,6 +19,20 @@ impl Editor {
     pub fn click(&mut self, cell: Cell, clicks: Clicks, extend: bool) {
         self.end_command_chain();
         let position = self.position_at(cell);
+        if clicks == Clicks::Single && !extend && self.buffers.splash(0).is_some() {
+            let buffer = self.buffers.current_mut();
+            buffer.deactivate_mark();
+            buffer.set_point(position);
+            self.drag_anchor = None;
+            if self
+                .buffers
+                .splash(0)
+                .is_some_and(|splash| splash.has_button(self.point_line()))
+            {
+                self.push_button();
+            }
+            return;
+        }
         if clicks == Clicks::Double && self.buffers.listing(0).is_some() {
             let buffer = self.buffers.current_mut();
             buffer.deactivate_mark();

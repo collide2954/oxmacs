@@ -2,8 +2,8 @@ use crate::editor::Editor;
 
 impl Editor {
     pub(super) fn toggle_read_only(&mut self) {
-        if self.buffers.listing(0).is_some() {
-            self.show_message("Dired buffers are read-only");
+        if self.buffers.is_special(0) {
+            self.show_message("This buffer stays read-only");
             return;
         }
         let buffer = self.buffers.current_mut();

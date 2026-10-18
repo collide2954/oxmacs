@@ -10,6 +10,7 @@ mod movement;
 mod question;
 mod read_only;
 mod selection;
+mod splash;
 #[cfg(test)]
 mod test_support;
 mod transfer;
@@ -24,13 +25,13 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::{env, mem};
 
-use buffers::BufferList;
+use buffers::{BufferList, Mode};
 use transfer::Kind;
 
 use crate::command::{Command, Scope};
 use crate::config::{Config, OnDiskChange};
 use crate::dired::Mark;
-use crate::display::{self, Viewport};
+use crate::display::{self, LineStyle, Viewport};
 use crate::files::LineEnding;
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::text::{Buffer, motion};
@@ -45,6 +46,7 @@ pub struct Editor {
     keymap: Keymap,
     minibuffer_keymap: Keymap,
     dired_keymap: Keymap,
+    splash_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
     last_command: Option<Command>,
@@ -88,6 +90,7 @@ impl Editor {
             keymap: bindings::global(),
             minibuffer_keymap: bindings::minibuffer(),
             dired_keymap: bindings::dired(),
+            splash_keymap: bindings::splash(),
             pending: Vec::new(),
             last_key: None,
             last_command: None,
@@ -297,15 +300,24 @@ impl Editor {
     fn mode_keymap(&self) -> Option<&Keymap> {
         match self.buffer_scope() {
             Scope::Dired => Some(&self.dired_keymap),
+            Scope::Splash => Some(&self.splash_keymap),
             Scope::Global | Scope::Minibuffer => None,
         }
     }
 
     fn buffer_scope(&self) -> Scope {
-        if self.buffers.listing(0).is_some() {
-            Scope::Dired
-        } else {
-            Scope::Global
+        match self.buffers.mode(0) {
+            Some(Mode::Dired(_)) => Scope::Dired,
+            Some(Mode::Splash(_)) => Scope::Splash,
+            Some(Mode::Text) | None => Scope::Global,
+        }
+    }
+
+    pub fn line_style(&self, line: usize) -> LineStyle {
+        match self.buffers.mode(0) {
+            Some(Mode::Dired(listing)) => listing.line_style(line),
+            Some(Mode::Splash(splash)) => splash.line_style(line),
+            Some(Mode::Text) | None => LineStyle::default(),
         }
     }
 
@@ -401,6 +413,10 @@ impl Editor {
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.save_some_buffers(true),
             Command::KillMx => self.quit_requested = true,
+            Command::AboutMx => self.about(),
+            Command::ForwardButton => self.forward_button(true),
+            Command::BackwardButton => self.forward_button(false),
+            Command::PushButton => self.push_button(),
         }
         self.reset_selection(command);
         self.refresh_minibuffer();

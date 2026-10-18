@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::dired::Listing;
 use crate::display::Viewport;
 use crate::editor::minibuffer::Purpose;
+use crate::editor::splash::Splash;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
 use crate::text::Buffer;
@@ -13,6 +14,7 @@ pub(super) const SCRATCH: &str = "*scratch*";
 pub(super) enum Mode {
     Text,
     Dired(Listing),
+    Splash(Splash),
 }
 
 #[derive(Debug)]
@@ -38,10 +40,26 @@ impl BufferList {
         }
     }
 
+    pub(super) fn mode(&self, index: usize) -> Option<&Mode> {
+        self.entries.get(index).map(|entry| &entry.mode)
+    }
+
+    pub(super) fn is_special(&self, index: usize) -> bool {
+        self.mode(index)
+            .is_some_and(|mode| !matches!(mode, Mode::Text))
+    }
+
     pub(super) fn listing(&self, index: usize) -> Option<&Listing> {
-        match &self.entries.get(index)?.mode {
+        match self.mode(index)? {
             Mode::Dired(listing) => Some(listing),
-            Mode::Text => None,
+            Mode::Text | Mode::Splash(_) => None,
+        }
+    }
+
+    pub(super) fn splash(&self, index: usize) -> Option<&Splash> {
+        match self.mode(index)? {
+            Mode::Splash(splash) => Some(splash),
+            Mode::Text | Mode::Dired(_) => None,
         }
     }
 
@@ -49,7 +67,7 @@ impl BufferList {
         let entry = self.entries.get_mut(index)?;
         match &mut entry.mode {
             Mode::Dired(listing) => Some((&mut entry.buffer, listing)),
-            Mode::Text => None,
+            Mode::Text | Mode::Splash(_) => None,
         }
     }
 
@@ -58,6 +76,7 @@ impl BufferList {
         match &entry.mode {
             Mode::Dired(listing) => Some((listing.directory(), true)),
             Mode::Text => entry.buffer.file().map(|file| (file.path.as_path(), false)),
+            Mode::Splash(_) => None,
         }
     }
 
