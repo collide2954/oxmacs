@@ -34,6 +34,22 @@ impl Command {
         self.into()
     }
 
+    pub fn is_motion(self) -> bool {
+        matches!(
+            self,
+            Self::ForwardChar
+                | Self::BackwardChar
+                | Self::NextLine
+                | Self::PreviousLine
+                | Self::MoveBeginningOfLine
+                | Self::MoveEndOfLine
+                | Self::ForwardWord
+                | Self::BackwardWord
+                | Self::BeginningOfBuffer
+                | Self::EndOfBuffer
+        )
+    }
+
     pub fn is_minibuffer_only(self) -> bool {
         matches!(
             self,
@@ -53,6 +69,14 @@ mod tests {
     fn commands_are_named_in_kebab_case() {
         assert_eq!(Command::ForwardChar.name(), "forward-char");
         assert_eq!(Command::BeginningOfBuffer.name(), "beginning-of-buffer");
+    }
+
+    #[test]
+    fn motions_are_identified() {
+        assert!(Command::ForwardWord.is_motion());
+        assert!(Command::EndOfBuffer.is_motion());
+        assert!(!Command::DeleteChar.is_motion());
+        assert!(!Command::SetMarkCommand.is_motion());
     }
 
     #[test]

@@ -61,6 +61,37 @@ impl Key {
     pub fn modifiers(self) -> Modifiers {
         self.modifiers
     }
+
+    pub fn unshifted(self) -> Option<Self> {
+        if self.modifiers.contains(Modifiers::SHIFT) {
+            return Some(Self {
+                modifiers: self.modifiers - Modifiers::SHIFT,
+                ..self
+            });
+        }
+        let chords = Modifiers::CONTROL | Modifiers::META | Modifiers::SUPER;
+        if let KeyCode::Char(c) = self.code
+            && self.modifiers.intersects(chords)
+            && let Some(lower) = single_lowercase(c)
+        {
+            return Some(Self {
+                code: KeyCode::Char(lower),
+                ..self
+            });
+        }
+        None
+    }
+}
+
+fn single_lowercase(c: char) -> Option<char> {
+    if !c.is_uppercase() {
+        return None;
+    }
+    let mut lower = c.to_lowercase();
+    match (lower.next(), lower.next()) {
+        (Some(l), None) => Some(l),
+        _ => None,
+    }
 }
 
 fn single_uppercase(c: char) -> Option<char> {
@@ -371,6 +402,33 @@ mod tests {
             ]
         );
         assert_eq!(sequence.to_string(), "C-x C-f");
+    }
+
+    fn unshifted(notation: &str) -> Option<String> {
+        notation
+            .parse::<Key>()
+            .unwrap()
+            .unshifted()
+            .map(|key| key.to_string())
+    }
+
+    #[test]
+    fn unshifting_removes_shift_from_named_keys() {
+        assert_eq!(unshifted("S-<left>").as_deref(), Some("<left>"));
+        assert_eq!(unshifted("C-S-<right>").as_deref(), Some("C-<right>"));
+    }
+
+    #[test]
+    fn unshifting_lowercases_chorded_letters() {
+        assert_eq!(unshifted("C-S-f").as_deref(), Some("C-f"));
+        assert_eq!(unshifted("M-S-f").as_deref(), Some("M-f"));
+    }
+
+    #[test]
+    fn unshifting_leaves_unshifted_and_typed_keys_alone() {
+        assert_eq!(unshifted("A"), None);
+        assert_eq!(unshifted("C-f"), None);
+        assert_eq!(unshifted("<left>"), None);
     }
 
     #[test]
