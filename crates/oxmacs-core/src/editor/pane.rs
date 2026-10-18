@@ -82,6 +82,7 @@ impl<'a> Pane<'a> {
             style,
             buffer.line_of(self.point),
             buffer.line_of(buffer.len_chars()) + 1,
+            self.editor.settings.line_number_separator,
         ))
     }
 

@@ -8,15 +8,21 @@ pub struct Gutter {
     style: LineNumbers,
     current: usize,
     width: usize,
+    separator: bool,
 }
 
 impl Gutter {
-    pub(super) fn new(style: LineNumbers, current: usize, lines: usize) -> Self {
+    pub(super) fn new(style: LineNumbers, current: usize, lines: usize, separator: bool) -> Self {
         Self {
             style,
             current,
             width: lines.to_string().len().max(MINIMUM_WIDTH),
+            separator,
         }
+    }
+
+    pub fn has_separator(&self) -> bool {
+        self.separator
     }
 
     pub fn width(&self) -> usize {
@@ -97,6 +103,15 @@ mod tests {
     }
 
     #[test]
+    fn the_separator_is_drawn_only_when_configured() {
+        let (_dir, editor) = visiting(3, "");
+        assert!(!editor.pane().gutter().unwrap().has_separator());
+
+        let (_dir, editor) = visiting(3, "line-number-separator = true");
+        assert!(editor.pane().gutter().unwrap().has_separator());
+    }
+
+    #[test]
     fn the_gutter_widens_with_the_line_count() {
         let (_dir, editor) = visiting(120, "");
 
@@ -143,7 +158,7 @@ mod tests {
         press(&mut editor, "RET");
         assert_eq!(
             editor.pane().gutter(),
-            Some(Gutter::new(LineNumbers::Absolute, 0, 1))
+            Some(Gutter::new(LineNumbers::Absolute, 0, 1, false))
         );
         assert_eq!(
             editor.message(),

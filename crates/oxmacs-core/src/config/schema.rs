@@ -71,6 +71,12 @@ pub const SETTINGS: &[Setting] = &[
     ),
     setting(
         APPEARANCE,
+        "line-number-separator",
+        Kind::Toggle,
+        "A thin line between the line numbers and the text",
+    ),
+    setting(
+        APPEARANCE,
         "animations",
         Kind::Toggle,
         "Smooth scrolling, cursor glide and fades",

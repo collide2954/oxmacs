@@ -76,6 +76,7 @@ struct Settings {
     format_on_save: bool,
     rust_lint: RustLint,
     line_numbers: LineNumbers,
+    line_number_separator: bool,
 }
 
 impl From<&Config> for Settings {
@@ -85,6 +86,7 @@ impl From<&Config> for Settings {
             format_on_save: config.format_on_save,
             rust_lint: config.rust_lint,
             line_numbers: config.line_numbers,
+            line_number_separator: config.line_number_separator,
         }
     }
 }

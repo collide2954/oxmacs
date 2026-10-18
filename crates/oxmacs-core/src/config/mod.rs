@@ -32,6 +32,7 @@ pub struct Config {
     pub rust_lint: RustLint,
     pub auto_save: bool,
     pub line_numbers: LineNumbers,
+    pub line_number_separator: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -79,6 +80,7 @@ impl Default for Config {
             rust_lint: RustLint::default(),
             auto_save: true,
             line_numbers: LineNumbers::default(),
+            line_number_separator: false,
         }
     }
 }
@@ -417,6 +419,16 @@ mod tests {
             LineNumbers::Relative
         );
         assert_eq!(read("line-numbers = \"off\"").unwrap(), LineNumbers::Off);
+    }
+
+    #[test]
+    fn the_line_number_separator_is_opt_in() {
+        assert!(!Config::default().line_number_separator);
+        assert!(
+            Config::parse("line-number-separator = true")
+                .unwrap()
+                .line_number_separator
+        );
     }
 
     #[test]

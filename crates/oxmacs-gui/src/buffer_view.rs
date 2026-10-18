@@ -159,7 +159,7 @@ impl<'a, Message> BufferView<'a, Message> {
 
     fn gutter_width(&self, cell_width: f32) -> f32 {
         self.pane.gutter().map_or(0.0, |gutter| {
-            to_f32(gutter_columns(gutter.width())) * cell_width
+            to_f32(gutter_columns(gutter.width(), gutter.has_separator())) * cell_width
         })
     }
 
@@ -196,6 +196,9 @@ impl<'a, Message> BufferView<'a, Message> {
                 style::color(face),
                 bounds,
             );
+        }
+        if !gutter.has_separator() {
+            return;
         }
         let x = (bounds.x + to_f32(gutter.width() + 1) * cell_width).round();
         renderer.fill_quad(
@@ -719,8 +722,8 @@ pub fn is_monospaced(narrow_width: f32, wide_width: f32) -> bool {
     (narrow_width - wide_width).abs() <= wide_width * 0.01
 }
 
-pub fn gutter_columns(digits: usize) -> usize {
-    digits + 2
+pub fn gutter_columns(digits: usize, separator: bool) -> usize {
+    digits + if separator { 2 } else { 1 }
 }
 
 pub fn columns_in(width: f32, cell_width: f32) -> usize {
@@ -845,8 +848,9 @@ mod tests {
     }
 
     #[test]
-    fn the_gutter_leaves_a_column_each_side_of_its_separator() {
-        assert_eq!(gutter_columns(2), 4);
-        assert_eq!(gutter_columns(5), 7);
+    fn the_gutter_leaves_a_column_after_the_numbers_and_each_side_of_a_separator() {
+        assert_eq!(gutter_columns(2, false), 3);
+        assert_eq!(gutter_columns(5, false), 6);
+        assert_eq!(gutter_columns(2, true), 4);
     }
 }
