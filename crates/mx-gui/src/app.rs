@@ -1,7 +1,18 @@
-use iced::{Subscription, Task, keyboard};
+use iced::widget::{column, container, text};
+use iced::{Element, Font, Length, Subscription, Task, Theme, keyboard};
 use mx_core::editor::Editor;
 
+use crate::buffer_view::BufferView;
 use crate::keys::{self, Platform};
+
+#[cfg(target_os = "windows")]
+pub const EDITOR_FONT: Font = Font::with_name("Consolas");
+#[cfg(target_os = "macos")]
+pub const EDITOR_FONT: Font = Font::with_name("Menlo");
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+pub const EDITOR_FONT: Font = Font::MONOSPACE;
+
+const TEXT_SIZE: f32 = 15.0;
 
 #[derive(Debug, Default)]
 pub struct App {
@@ -46,6 +57,34 @@ impl App {
     pub fn subscription(&self) -> Subscription<Message> {
         keyboard::listen().map(Message::Keyboard)
     }
+
+    pub fn title(&self) -> String {
+        format!("{} - mx", self.editor.buffer().name())
+    }
+
+    pub fn view(&self) -> Element<'_, Message> {
+        let line = |content: String| text(content).font(EDITOR_FONT).size(TEXT_SIZE);
+        column![
+            BufferView::new(&self.editor, EDITOR_FONT, TEXT_SIZE, Message::RowsChanged),
+            container(line(self.editor.mode_line()))
+                .width(Length::Fill)
+                .padding([1, 4])
+                .style(mode_line_style),
+            container(line(self.editor.message().unwrap_or(" ").to_owned()))
+                .width(Length::Fill)
+                .padding([1, 4]),
+        ]
+        .into()
+    }
+}
+
+fn mode_line_style(theme: &Theme) -> container::Style {
+    let strong = theme.extended_palette().background.strong;
+    container::Style {
+        background: Some(strong.color.into()),
+        text_color: Some(strong.text),
+        ..container::Style::default()
+    }
 }
 
 #[cfg(test)]
@@ -64,6 +103,11 @@ mod tests {
             text: Some(c.into()),
             repeat: false,
         }));
+    }
+
+    #[test]
+    fn title_names_the_current_buffer() {
+        assert_eq!(App::default().title(), "*scratch* - mx");
     }
 
     #[test]
