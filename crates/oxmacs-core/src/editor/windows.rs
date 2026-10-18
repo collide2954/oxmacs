@@ -244,6 +244,39 @@ impl Editor {
         }
     }
 
+    pub fn scroll_window(&mut self, window: WindowId, delta: isize) {
+        if window == self.windows.selected {
+            self.scroll_lines(delta);
+            return;
+        }
+        let tab_width = self.tab_width;
+        let Some((_, parked)) = self.windows.parked.iter_mut().find(|(id, _)| *id == window) else {
+            return;
+        };
+        let Some(index) = self.buffers.position(|buffer| buffer.id() == parked.buffer) else {
+            return;
+        };
+        let Some(buffer) = self.buffers.get(index) else {
+            return;
+        };
+        let layout = Layout::new(buffer, parked.viewport.wrap_width(), tab_width);
+        parked.viewport.scroll_by(delta, &layout);
+        let point = buffer.marker(parked.point).unwrap_or(0);
+        let spot = layout.screen_line(point);
+        let target = if spot < parked.viewport.top() {
+            parked.viewport.top()
+        } else if parked.viewport.shows(spot, &layout) {
+            return;
+        } else {
+            parked.viewport.bottom(&layout)
+        };
+        let position = layout.position_at(target, layout.column(point));
+        let marker = parked.point;
+        if let Some(buffer) = self.buffers.get_mut(index) {
+            buffer.set_marker(marker, position);
+        }
+    }
+
     pub fn drag_divider(&mut self, path: &[usize], index: usize, fraction: f32) {
         self.windows.tiling.set_divider(path, index, fraction);
     }
@@ -436,6 +469,27 @@ mod tests {
 
         press(&mut editor, "C-x ^");
         assert_eq!(editor.message(), Some("Cannot resize the selected window"));
+    }
+
+    #[test]
+    fn the_wheel_scrolls_an_unselected_window_without_selecting_it() {
+        let text = (0..30)
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut editor = editor_with(&text, 0);
+        editor.resize_window(10, 0);
+        press(&mut editor, "C-x 2");
+        let other = second(&editor);
+        editor.resize_pane(other, 10, 0);
+
+        editor.scroll_window(other, 5);
+
+        let pane = editor.pane_of(other).unwrap();
+        assert_eq!(pane.viewport().top().line, 5);
+        assert_eq!(pane.point(), 10);
+        assert_ne!(editor.selected_window(), other);
+        assert_eq!(editor.viewport().top().line, 0);
     }
 
     #[test]
