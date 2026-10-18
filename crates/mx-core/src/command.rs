@@ -69,6 +69,8 @@ pub enum Command {
     SaveBuffersKillMx,
     KillMx,
     AboutMx,
+    LoadTheme,
+    ToggleTheme,
     ForwardButton,
     BackwardButton,
     PushButton,

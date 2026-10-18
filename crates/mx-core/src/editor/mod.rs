@@ -14,6 +14,7 @@ mod selection;
 mod splash;
 #[cfg(test)]
 mod test_support;
+mod themes;
 mod undo;
 
 pub use effect::Effect;
@@ -414,6 +415,8 @@ impl Editor {
             Command::SaveBuffersKillMx => self.save_some_buffers(true),
             Command::KillMx => self.quit_requested = true,
             Command::AboutMx => self.about(),
+            Command::LoadTheme => self.load_theme(),
+            Command::ToggleTheme => self.toggle_theme(),
             Command::ForwardButton => self.forward_button(true),
             Command::BackwardButton => self.forward_button(false),
             Command::PushButton => self.push_button(),

@@ -7,6 +7,7 @@ use crate::editor::Editor;
 use crate::editor::dired::Kind;
 use crate::files::Entry;
 use crate::text::Buffer;
+use crate::theme::Theme;
 
 const LABEL_LIMIT: usize = 80;
 
@@ -21,6 +22,7 @@ pub(super) enum Purpose {
     Dired,
     Transfer(Kind),
     CreateDirectory,
+    LoadTheme,
 }
 
 impl Purpose {
@@ -67,6 +69,7 @@ pub enum Choice {
     Clip(usize),
     Entry(usize),
     Buffer(usize),
+    Theme(Option<&'static Theme>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,6 +144,7 @@ impl Editor {
             Purpose::SwitchBuffer | Purpose::KillBuffer => {
                 self.buffer_completions(minibuffer.purpose, matches)
             }
+            Purpose::LoadTheme => self.theme_completions(matches),
         }
     }
 
@@ -259,6 +263,7 @@ impl Editor {
                 self.paste(text);
             }
             Choice::Buffer(index) => self.choose_buffer(purpose, index),
+            Choice::Theme(theme) => self.configured_theme = theme,
             Choice::Entry(_) => {}
         }
     }
