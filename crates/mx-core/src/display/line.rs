@@ -83,6 +83,36 @@ pub fn segments<F: Copy + PartialEq>(
     segments
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Row {
+    pub chars: Range<usize>,
+    pub column: usize,
+}
+
+pub fn wrap(text: &str, width: usize, tab_width: usize) -> Vec<Row> {
+    let mut rows = vec![Row {
+        chars: 0..0,
+        column: 0,
+    }];
+    let mut column = 0;
+    for (index, c) in text.chars().enumerate() {
+        let glyph = Glyph::of(c, column, tab_width).width();
+        let start = rows.last().map_or(0, |row| row.column);
+        let filled = rows.last().is_some_and(|row| !row.chars.is_empty());
+        if width > 0 && filled && column - start + glyph > width {
+            rows.push(Row {
+                chars: index..index,
+                column,
+            });
+        }
+        if let Some(row) = rows.last_mut() {
+            row.chars.end = index + 1;
+        }
+        column += glyph;
+    }
+    rows
+}
+
 pub fn cursor_glyph(text: &str, index: usize, tab_width: usize) -> (String, usize) {
     match text.chars().nth(index) {
         None | Some('\t') => (String::new(), 1),
@@ -200,6 +230,38 @@ mod tests {
         assert_eq!(char_at_column("日本", 1, 8), 0);
         assert_eq!(char_at_column("日本", 2, 8), 1);
         assert_eq!(char_at_column("日本", 3, 8), 1);
+    }
+
+    fn row(chars: Range<usize>, column: usize) -> Row {
+        Row { chars, column }
+    }
+
+    #[test]
+    fn short_lines_are_one_row() {
+        assert_eq!(wrap("abc", 10, 8), [row(0..3, 0)]);
+        assert_eq!(wrap("", 10, 8), [row(0..0, 0)]);
+    }
+
+    #[test]
+    fn long_lines_wrap_at_the_width() {
+        assert_eq!(
+            wrap("abcdefgh", 3, 8),
+            [row(0..3, 0), row(3..6, 3), row(6..8, 6)]
+        );
+    }
+
+    #[test]
+    fn glyphs_that_do_not_fit_move_to_the_next_row() {
+        assert_eq!(wrap("ab日", 3, 8), [row(0..2, 0), row(2..3, 2)]);
+        assert_eq!(
+            wrap("a\tb", 4, 8),
+            [row(0..1, 0), row(1..2, 1), row(2..3, 8)]
+        );
+    }
+
+    #[test]
+    fn a_zero_width_never_wraps() {
+        assert_eq!(wrap("abcdef", 0, 8), [row(0..6, 0)]);
     }
 
     fn glyph(text: &str, width: usize) -> (String, usize) {
