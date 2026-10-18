@@ -14,8 +14,9 @@ pub fn view<'a, Message: 'a>(
 ) -> Element<'a, Message> {
     let content: Element<'a, Message> = match (editor.question(), editor.minibuffer()) {
         (Some(question), _) => {
-            let spans: [Span<'a, (), Font>; 3] = [
+            let spans: [Span<'a, (), Font>; 4] = [
                 span(question.prompt()).color(style::color(faces.minibuffer_prompt)),
+                span(question.answer()),
                 span(" ")
                     .color(style::color(faces.default.background))
                     .background(style::color(faces.cursor)),

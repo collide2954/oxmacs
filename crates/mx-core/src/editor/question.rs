@@ -36,12 +36,17 @@ enum Pending {
 pub struct Question {
     prompt: String,
     choices: &'static [char],
+    typed: Option<String>,
     pending: Pending,
 }
 
 impl Question {
     pub fn prompt(&self) -> &str {
         &self.prompt
+    }
+
+    pub fn answer(&self) -> &str {
+        self.typed.as_deref().unwrap_or_default()
     }
 }
 
@@ -51,11 +56,31 @@ impl Editor {
     }
 
     pub(super) fn answer_question(&mut self, key: Key) -> bool {
-        let Some(question) = self.question.take() else {
+        let Some(mut question) = self.question.take() else {
             return false;
         };
         if is_keyboard_quit(key) {
             self.show_message("Quit");
+            return true;
+        }
+        if let Some(answer) = &mut question.typed {
+            match key.code() {
+                KeyCode::Char(c) if key.modifiers().is_empty() => answer.push(c),
+                KeyCode::Backspace => {
+                    answer.pop();
+                }
+                KeyCode::Return if matches!(answer.as_str(), "yes" | "no") => {
+                    let choice = if answer == "yes" { 'y' } else { 'n' };
+                    self.resolve(question.pending, choice);
+                    return true;
+                }
+                KeyCode::Return => {
+                    self.show_message("Please answer yes or no");
+                    answer.clear();
+                }
+                _ => {}
+            }
+            self.question = Some(question);
             return true;
         }
         match key.code() {
@@ -93,6 +118,7 @@ impl Editor {
         self.question = Some(Question {
             prompt: format!("Save file {shown}? (y, n, !, q) "),
             choices: SAVE_CHOICES,
+            typed: None,
             pending: Pending::SaveSome {
                 remaining,
                 then_quit,
@@ -159,10 +185,12 @@ impl Editor {
         }
     }
 
-    pub(super) fn ask_to_delete(&mut self, prompt: &str, paths: Vec<PathBuf>) {
+    pub(super) fn ask_to_delete(&mut self, prompt: &str, paths: Vec<PathBuf>, typed: bool) {
+        let choices = if typed { "yes or no" } else { "y or n" };
         self.question = Some(Question {
-            prompt: format!("{prompt} (y or n) "),
+            prompt: format!("{prompt} ({choices}) "),
             choices: YES_NO,
+            typed: typed.then(String::new),
             pending: Pending::Delete { paths },
         });
     }
@@ -171,6 +199,7 @@ impl Editor {
         self.question = Some(Question {
             prompt: format!("{name} changed on disk; save anyway? (y or n) "),
             choices: YES_NO,
+            typed: None,
             pending: Pending::SaveOver,
         });
     }
@@ -179,6 +208,7 @@ impl Editor {
         self.question = Some(Question {
             prompt: format!("{name} changed on disk; reread it? (y or n) "),
             choices: YES_NO,
+            typed: None,
             pending: Pending::Reread { index, disk },
         });
     }
@@ -188,6 +218,7 @@ impl Editor {
         self.question = Some(Question {
             prompt: format!("Revert buffer from file {shown}? (y or n) "),
             choices: YES_NO,
+            typed: None,
             pending: Pending::Revert { index },
         });
     }
@@ -196,6 +227,7 @@ impl Editor {
         self.question = Some(Question {
             prompt: format!("Buffer {name} modified; kill anyway? (y or n) "),
             choices: YES_NO,
+            typed: None,
             pending: Pending::Kill { index },
         });
     }
@@ -205,6 +237,7 @@ impl Editor {
         self.question = Some(Question {
             prompt: format!("File {shown} exists; overwrite? (y or n) "),
             choices: YES_NO,
+            typed: None,
             pending: Pending::Overwrite { path },
         });
     }

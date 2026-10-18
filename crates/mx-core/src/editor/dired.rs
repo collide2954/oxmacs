@@ -146,7 +146,8 @@ impl Editor {
         } else {
             "Delete"
         };
-        self.ask_to_delete(&format!("{verb} {}?", describe(&names)), paths);
+        let typed = !self.delete_to_trash;
+        self.ask_to_delete(&format!("{verb} {}?", describe(&names)), paths, typed);
     }
 
     pub(super) fn delete_paths(&mut self, paths: &[PathBuf]) {
@@ -962,6 +963,49 @@ mod tests {
             question(&editor),
             Some("Trash a.txt, b.txt and 2 more? (y or n) ".to_owned())
         );
+    }
+
+    fn permanent(editor: &mut Editor, dir: &tempfile::TempDir) {
+        let config = crate::config::Config::parse("delete-to-trash = false").unwrap();
+        editor.apply_config(&config);
+        listed(editor, dir);
+    }
+
+    #[test]
+    fn permanent_deletion_needs_a_typed_yes() {
+        let (dir, mut editor) = workspace();
+        permanent(&mut editor, &dir);
+
+        press(&mut editor, "n D");
+        assert_eq!(
+            question(&editor),
+            Some("Delete a.txt? (yes or no) ".to_owned())
+        );
+        press(&mut editor, "y RET");
+        assert_eq!(editor.message(), Some("Please answer yes or no"));
+        assert!(dir.path().join("a.txt").exists());
+
+        type_text(&mut editor, "yez");
+        press(&mut editor, "DEL");
+        assert_eq!(editor.question().unwrap().answer(), "ye");
+        press(&mut editor, "s RET");
+
+        assert!(!dir.path().join("a.txt").exists());
+        assert_eq!(trashed(), Vec::<std::path::PathBuf>::new());
+        assert_eq!(editor.message(), Some("Deleted 1 file"));
+    }
+
+    #[test]
+    fn answering_no_keeps_the_file() {
+        let (dir, mut editor) = workspace();
+        permanent(&mut editor, &dir);
+
+        press(&mut editor, "n D");
+        type_text(&mut editor, "no");
+        press(&mut editor, "RET");
+
+        assert_eq!(question(&editor), None);
+        assert!(dir.path().join("a.txt").exists());
     }
 
     #[test]
