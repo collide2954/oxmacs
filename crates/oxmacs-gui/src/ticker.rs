@@ -3,6 +3,7 @@ use std::{future, thread};
 
 use iced::Subscription;
 use iced::futures::Stream;
+use iced::time::Instant;
 
 pub const MINUTE: Duration = Duration::from_secs(60);
 pub const SECOND: Duration = Duration::from_secs(1);
@@ -12,6 +13,21 @@ pub fn ticks(period: Option<Duration>) -> Subscription<()> {
         Some(period) => Subscription::run_with(period, tick),
         None => Subscription::none(),
     }
+}
+
+pub fn once_after(delay: Duration, since: Instant) -> Subscription<()> {
+    Subscription::run_with((delay, since), once)
+}
+
+fn once((delay, _): &(Duration, Instant)) -> impl Stream<Item = ()> + use<> {
+    let delay = *delay;
+    iced::stream::channel(1, async move |mut sender| {
+        thread::spawn(move || {
+            thread::sleep(delay);
+            let _ = sender.try_send(());
+        });
+        future::pending::<()>().await;
+    })
 }
 
 fn tick(period: &Duration) -> impl Stream<Item = ()> + use<> {

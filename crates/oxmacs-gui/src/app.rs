@@ -63,6 +63,7 @@ pub enum Message {
     Clock,
     OpenLink(markdown::Uri),
     Job(JobId, process::Event),
+    AutoSave,
 }
 
 impl Default for App {
@@ -332,6 +333,7 @@ impl App {
                     self.editor.show_message(format!("{uri}: {error}"));
                 }
             }
+            Message::AutoSave => self.editor.auto_save(),
             Message::Job(job, process::Event::Line(line)) => self.editor.job_output(job, &line),
             Message::Job(job, process::Event::Finished(outcome)) => {
                 self.jobs.retain(|(id, _)| *id != job);
@@ -394,6 +396,11 @@ impl App {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
+        let idle = if self.editor.wants_auto_save() {
+            ticker::once_after(AUTO_SAVE_DELAY, self.last_input).map(|()| Message::AutoSave)
+        } else {
+            Subscription::none()
+        };
         let frames = if self.is_animating() {
             window::frames().map(Message::Tick)
         } else {
@@ -416,6 +423,7 @@ impl App {
                 }
             }))
             .map(|()| Message::Clock),
+            idle,
             frames,
         ])
     }
@@ -565,6 +573,7 @@ pub fn animations_enabled(configured: bool, reduced_motion: bool) -> bool {
 }
 
 const HAS_PRIMARY_SELECTION: bool = cfg!(target_os = "linux");
+const AUTO_SAVE_DELAY: Duration = Duration::from_millis(1500);
 
 fn open_externally(path: &Path) -> Result<(), String> {
     open::that_detached(path).map_err(|error| format!("{}: {error}", path.display()))
@@ -810,6 +819,23 @@ mod tests {
 
         let config = Config::parse("animations = false").unwrap();
         assert!(!App::new(Ok(config)).animations());
+    }
+
+    #[test]
+    fn auto_save_messages_save_idle_rust_buffers() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Cargo.toml"), "[package]\n").unwrap();
+        let path = dir.path().join("main.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let mut app = App::default();
+        app.start(&[visit(&path)], false);
+        press(&mut app, "x", Modifiers::empty());
+        assert!(app.editor().wants_auto_save());
+
+        let _ = app.update(Message::AutoSave);
+
+        assert!(!app.editor().buffer().is_modified());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "xfn main() {}\n");
     }
 
     #[test]

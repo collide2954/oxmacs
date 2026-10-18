@@ -2,30 +2,33 @@ use crate::editor::Editor;
 use crate::syntax::Language;
 
 impl Editor {
-    fn auto_saved(&self) -> Vec<usize> {
-        if !self.settings.auto_save {
-            return Vec::new();
-        }
+    fn modified_rust_files(&self) -> impl Iterator<Item = usize> + '_ {
         (0..self.buffers.len())
+            .filter(|_| self.settings.auto_save)
             .filter(|index| self.buffers.language(*index) == Some(Language::Rust))
             .filter(|index| {
-                self.buffers.get(*index).is_some_and(|buffer| {
-                    buffer.is_modified()
-                        && buffer
-                            .file()
-                            .is_some_and(|file| !Self::differs_on_disk(file))
-                })
+                self.buffers
+                    .get(*index)
+                    .is_some_and(|buffer| buffer.is_modified() && buffer.file().is_some())
             })
-            .collect()
     }
 
     pub fn wants_auto_save(&self) -> bool {
-        !self.auto_saved().is_empty()
+        self.modified_rust_files().next().is_some()
     }
 
     pub fn auto_save(&mut self) {
         let message = self.message.clone();
-        for index in self.auto_saved() {
+        let due: Vec<usize> = self
+            .modified_rust_files()
+            .filter(|index| {
+                self.buffers
+                    .get(*index)
+                    .and_then(|buffer| buffer.file())
+                    .is_some_and(|file| !Self::differs_on_disk(file))
+            })
+            .collect();
+        for index in due {
             if self.write_buffer_at(index, false) {
                 self.message.clone_from(&message);
             }
