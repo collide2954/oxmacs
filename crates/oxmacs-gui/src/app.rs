@@ -497,7 +497,9 @@ fn effect_task(effect: Effect) -> Task<Message> {
         Effect::ReadPrimary if HAS_PRIMARY_SELECTION => {
             clipboard::read_primary().map(Message::PastedPrimary)
         }
-        Effect::WritePrimary(_) | Effect::ReadPrimary => Task::none(),
+        Effect::WritePrimary(_) | Effect::ReadPrimary | Effect::Spawn(_) | Effect::Kill(_) => {
+            Task::none()
+        }
         Effect::OpenExternally(path) => Task::done(Message::Opened(open_externally(&path))),
     }
 }

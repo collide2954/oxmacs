@@ -1,6 +1,7 @@
 mod buffers;
 mod clipboard;
 mod comments;
+mod compile;
 mod dired;
 mod disk;
 mod doctor;
@@ -32,6 +33,7 @@ mod tiling;
 mod undo;
 mod windows;
 
+pub use compile::{Job, JobId, Outcome};
 pub use effect::Effect;
 pub use isearch::Search;
 pub use minibuffer::{Choice, Completion, Minibuffer};
@@ -93,6 +95,7 @@ pub struct Editor {
     doctor_keymap: Keymap,
     rust_keymap: Keymap,
     markdown_keymap: Keymap,
+    compilation_keymap: Keymap,
     search_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
@@ -122,6 +125,8 @@ pub struct Editor {
     font_note: Option<String>,
     config_path: Option<PathBuf>,
     paren_pair: Option<(usize, usize)>,
+    next_job: u64,
+    last_compile: Option<String>,
 }
 
 impl Default for Editor {
@@ -151,6 +156,7 @@ impl Editor {
             doctor_keymap: bindings::doctor(),
             rust_keymap: bindings::rust(),
             markdown_keymap: bindings::markdown(),
+            compilation_keymap: bindings::compilation(),
             search_keymap: bindings::search(),
             pending: Vec::new(),
             last_key: None,
@@ -180,6 +186,8 @@ impl Editor {
             font_note: None,
             config_path: config::default_path(),
             paren_pair: None,
+            next_job: 0,
+            last_compile: None,
         }
     }
 
@@ -366,6 +374,7 @@ impl Editor {
             Scope::Doctor => Some(&self.doctor_keymap),
             Scope::Rust => Some(&self.rust_keymap),
             Scope::Markdown => Some(&self.markdown_keymap),
+            Scope::Compilation => Some(&self.compilation_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search => None,
         }
     }
@@ -375,6 +384,7 @@ impl Editor {
             Some(Mode::Dired(_)) => Scope::Dired,
             Some(Mode::Splash(_)) => Scope::Splash,
             Some(Mode::Doctor(_)) => Scope::Doctor,
+            Some(Mode::Compilation(_)) => Scope::Compilation,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
                 Scope::Markdown
@@ -392,7 +402,7 @@ impl Editor {
             Some(Mode::Dired(listing)) => listing.line_style(line),
             Some(Mode::Splash(splash)) => splash.line_style(line),
             Some(Mode::Doctor(doctor)) => doctor.line_style(line),
-            Some(Mode::Preview(_)) => LineStyle::default(),
+            Some(Mode::Preview(_) | Mode::Compilation(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,
                 spans: self.syntax_highlights_at(index, line),
@@ -561,6 +571,9 @@ impl Editor {
             Command::MarkdownPromote => self.markdown_shift(false),
             Command::MarkdownDemote => self.markdown_shift(true),
             Command::MarkdownPreview => self.markdown_preview(),
+            Command::Compile => self.compile(),
+            Command::Recompile => self.recompile(),
+            Command::KillCompilation => self.kill_compilation(),
             Command::ForwardButton => self.forward_button(true),
             Command::BackwardButton => self.forward_button(false),
             Command::PushButton => self.push_button(),

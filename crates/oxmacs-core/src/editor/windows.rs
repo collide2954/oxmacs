@@ -96,6 +96,35 @@ impl Editor {
         self.select_window(origin);
     }
 
+    pub(super) fn follow_end(&mut self, buffer: BufferId, old_end: usize) {
+        let current = self.buffers.current_mut();
+        if current.id() == buffer && current.point() == old_end {
+            let end = current.len_chars();
+            current.set_point(end);
+            self.reveal_point();
+        }
+        let tab_width = self.tab_width;
+        let Some(index) = self.buffers.position(|text| text.id() == buffer) else {
+            return;
+        };
+        for (_, parked) in &mut self.windows.parked {
+            let Some(text) = self
+                .buffers
+                .get_mut(index)
+                .filter(|_| parked.buffer == buffer)
+            else {
+                continue;
+            };
+            if text.marker(parked.point) != Some(old_end) {
+                continue;
+            }
+            let end = text.len_chars();
+            text.set_marker(parked.point, end);
+            let layout = Layout::new(text, parked.viewport.wrap_width(), tab_width);
+            parked.viewport.reveal(layout.screen_line(end), &layout);
+        }
+    }
+
     pub(super) fn window_showing(&self, buffer: BufferId) -> Option<WindowId> {
         if self.buffers.current().id() == buffer {
             return Some(self.windows.selected);

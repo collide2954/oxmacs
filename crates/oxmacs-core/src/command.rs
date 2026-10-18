@@ -122,6 +122,9 @@ pub enum Command {
     MarkdownPromote,
     MarkdownDemote,
     MarkdownPreview,
+    Compile,
+    Recompile,
+    KillCompilation,
     ForwardButton,
     BackwardButton,
     PushButton,
@@ -212,6 +215,7 @@ impl Command {
             | Self::DiredDoOpen => Scope::Dired,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
             Self::RustFormatBuffer => Scope::Rust,
+            Self::Recompile | Self::KillCompilation => Scope::Compilation,
             Self::MarkdownInsertListItem
             | Self::MarkdownPromote
             | Self::MarkdownDemote
@@ -242,6 +246,7 @@ pub enum Scope {
     Doctor,
     Rust,
     Markdown,
+    Compilation,
 }
 
 #[cfg(test)]

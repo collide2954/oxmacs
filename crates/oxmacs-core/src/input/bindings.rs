@@ -182,6 +182,12 @@ const MARKDOWN: &[(&str, Command)] = &[
     ("C-c C-c p", Command::MarkdownPreview),
 ];
 
+const COMPILATION: &[(&str, Command)] = &[
+    ("g", Command::Recompile),
+    ("q", Command::QuitWindow),
+    ("C-c C-k", Command::KillCompilation),
+];
+
 pub fn global() -> Keymap {
     build(GLOBAL)
 }
@@ -200,6 +206,10 @@ pub fn rust() -> Keymap {
 
 pub fn markdown() -> Keymap {
     build(MARKDOWN)
+}
+
+pub fn compilation() -> Keymap {
+    build(COMPILATION)
 }
 
 pub fn search() -> Keymap {
@@ -264,6 +274,11 @@ mod tests {
     #[test]
     fn every_markdown_binding_resolves_to_its_command() {
         assert_resolves(&markdown(), MARKDOWN);
+    }
+
+    #[test]
+    fn every_compilation_binding_resolves_to_its_command() {
+        assert_resolves(&compilation(), COMPILATION);
     }
 
     #[test]

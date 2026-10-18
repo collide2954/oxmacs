@@ -27,6 +27,7 @@ pub(super) enum Purpose {
     ReplaceFrom(bool),
     ReplaceTo(bool),
     Item,
+    Compile,
 }
 
 impl Purpose {
@@ -46,7 +47,10 @@ impl Purpose {
     }
 
     fn takes_text(self) -> bool {
-        matches!(self, Self::ReplaceFrom(_) | Self::ReplaceTo(_))
+        matches!(
+            self,
+            Self::ReplaceFrom(_) | Self::ReplaceTo(_) | Self::Compile
+        )
     }
 
     fn takes_buffer(self) -> bool {
@@ -162,7 +166,7 @@ impl Editor {
                 self.buffer_completions(minibuffer.purpose, matches)
             }
             Purpose::LoadTheme => self.theme_completions(matches),
-            Purpose::ReplaceFrom(_) | Purpose::ReplaceTo(_) => Vec::new(),
+            Purpose::ReplaceFrom(_) | Purpose::ReplaceTo(_) | Purpose::Compile => Vec::new(),
             Purpose::Item => self.item_completions(matches),
         }
     }
@@ -259,6 +263,13 @@ impl Editor {
         };
         if purpose.takes_path() {
             self.exit_file_prompt(false);
+            return;
+        }
+        if purpose == Purpose::Compile {
+            let command = self.minibuffer_input();
+            self.minibuffer = None;
+            let directory = self.project_directory();
+            self.start_compile(command, directory);
             return;
         }
         if purpose.takes_text() {

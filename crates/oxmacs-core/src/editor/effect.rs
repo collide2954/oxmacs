@@ -1,7 +1,7 @@
 use std::mem;
 use std::path::PathBuf;
 
-use crate::editor::Editor;
+use crate::editor::{Editor, Job, JobId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
@@ -10,6 +10,8 @@ pub enum Effect {
     WritePrimary(String),
     ReadPrimary,
     OpenExternally(PathBuf),
+    Spawn(Job),
+    Kill(JobId),
 }
 
 impl Editor {
