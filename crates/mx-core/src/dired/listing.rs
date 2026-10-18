@@ -56,6 +56,10 @@ impl Listing {
         &self.directory
     }
 
+    pub fn set_directory(&mut self, directory: PathBuf) {
+        self.directory = directory;
+    }
+
     pub fn entries(&self) -> &[Entry] {
         &self.entries
     }

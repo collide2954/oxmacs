@@ -12,6 +12,7 @@ mod read_only;
 mod selection;
 #[cfg(test)]
 mod test_support;
+mod transfer;
 mod undo;
 
 pub use clipboard::Effect;
@@ -24,6 +25,7 @@ use std::path::PathBuf;
 use std::{env, mem};
 
 use buffers::BufferList;
+use transfer::Kind;
 
 use crate::command::{Command, Scope};
 use crate::config::{Config, OnDiskChange};
@@ -384,6 +386,8 @@ impl Editor {
             Command::DiredToggleMarks => self.dired_toggle_marks(),
             Command::DiredDoFlaggedDelete => self.dired_do_delete(true),
             Command::DiredDoDelete => self.dired_do_delete(false),
+            Command::DiredDoRename => self.dired_do_transfer(Kind::Move),
+            Command::DiredDoCopy => self.dired_do_transfer(Kind::Copy),
             Command::DiredHideDetailsMode => self.dired_hide_details(),
             Command::QuitWindow => self.quit_window(),
             Command::KeyboardQuit => self.keyboard_quit(),

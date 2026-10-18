@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use crate::editor::transfer::Transfer;
 use crate::editor::{Editor, is_keyboard_quit};
 use crate::files::{DiskState, paths};
 use crate::input::{Key, KeyCode};
@@ -30,6 +31,7 @@ enum Pending {
     Delete {
         paths: Vec<PathBuf>,
     },
+    Transfer(Transfer),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -182,7 +184,18 @@ impl Editor {
                     self.delete_paths(&paths);
                 }
             }
+            Pending::Transfer(transfer) => self.answer_transfer(transfer, answer),
         }
+    }
+
+    pub(super) fn ask_to_overwrite_transfer(&mut self, path: &Path, transfer: Transfer) {
+        let shown = paths::abbreviate(path, self.home.as_deref());
+        self.question = Some(Question {
+            prompt: format!("Overwrite {shown}? (y, n, !, q) "),
+            choices: SAVE_CHOICES,
+            typed: None,
+            pending: Pending::Transfer(transfer),
+        });
     }
 
     pub(super) fn ask_to_delete(&mut self, prompt: &str, paths: Vec<PathBuf>, typed: bool) {

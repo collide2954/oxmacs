@@ -4,6 +4,7 @@ use strum::VariantArray;
 
 use crate::command::{Command, Scope};
 use crate::editor::Editor;
+use crate::editor::transfer::Kind;
 use crate::files::paths::DirEntry;
 use crate::text::Buffer;
 
@@ -18,11 +19,15 @@ pub(super) enum Purpose {
     SwitchBuffer,
     KillBuffer,
     Dired,
+    Transfer(Kind),
 }
 
 impl Purpose {
     pub(super) fn takes_path(self) -> bool {
-        matches!(self, Self::FindFile | Self::WriteFile | Self::Dired)
+        matches!(
+            self,
+            Self::FindFile | Self::WriteFile | Self::Dired | Self::Transfer(_)
+        )
     }
 
     fn takes_buffer(self) -> bool {
@@ -44,6 +49,7 @@ pub struct Minibuffer {
     pub(super) note: Option<String>,
     pub(super) selected: usize,
     pub(super) listing: Option<Listing>,
+    pub(super) sources: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,6 +76,7 @@ impl Minibuffer {
             note: None,
             selected: 0,
             listing: None,
+            sources: Vec::new(),
         }
     }
 
@@ -117,7 +124,9 @@ impl Editor {
                 })
                 .filter(|completion| matches(&completion.label))
                 .collect(),
-            Purpose::FindFile | Purpose::WriteFile | Purpose::Dired => file_completions(minibuffer),
+            Purpose::FindFile | Purpose::WriteFile | Purpose::Dired | Purpose::Transfer(_) => {
+                file_completions(minibuffer)
+            }
             Purpose::SwitchBuffer | Purpose::KillBuffer => {
                 self.buffer_completions(minibuffer.purpose, matches)
             }

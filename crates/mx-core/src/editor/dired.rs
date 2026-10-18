@@ -218,7 +218,7 @@ impl Editor {
         self.update_listing(0, |listing| listing.set_details(!listing.details()));
     }
 
-    fn dired_focus(&mut self, name: &OsStr) {
+    pub(super) fn dired_focus(&mut self, name: &OsStr) {
         if let Some((buffer, listing)) = self.buffers.dired_mut(0)
             && let Some(line) = listing.line_of(name)
         {
@@ -297,7 +297,7 @@ fn describe(names: &[String]) -> String {
     }
 }
 
-fn files(count: usize) -> String {
+pub(super) fn files(count: usize) -> String {
     if count == 1 {
         "1 file".to_owned()
     } else {
@@ -1006,6 +1006,151 @@ mod tests {
 
         assert_eq!(question(&editor), None);
         assert!(dir.path().join("a.txt").exists());
+    }
+
+    #[test]
+    fn r_renames_the_file_at_point() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n R");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Rename a.txt to: ");
+        type_text(&mut editor, "c.txt");
+        press(&mut editor, "RET");
+
+        assert!(!dir.path().join("a.txt").exists());
+        assert_eq!(
+            fs::read_to_string(dir.path().join("c.txt")).unwrap(),
+            "hello"
+        );
+        assert_eq!(at_point(&editor), "c.txt");
+        assert_eq!(editor.message(), Some("Moved 1 file"));
+    }
+
+    #[test]
+    fn r_into_a_directory_moves_the_file_there() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n R");
+        type_text(&mut editor, "sub");
+        press(&mut editor, "RET RET");
+
+        assert!(dir.path().join("sub").join("a.txt").exists());
+        assert!(!dir.path().join("a.txt").exists());
+    }
+
+    #[test]
+    fn r_moves_marked_files_into_a_directory() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n m m R");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Move 2 files to: ");
+        type_text(&mut editor, "sub");
+        press(&mut editor, "RET RET");
+
+        assert!(dir.path().join("sub").join("a.txt").exists());
+        assert!(dir.path().join("sub").join("b.txt").exists());
+        assert_eq!(editor.message(), Some("Moved 2 files"));
+    }
+
+    #[test]
+    fn moving_several_files_needs_a_directory() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n m m R");
+        type_text(&mut editor, "nowhere");
+        press(&mut editor, "M-RET");
+
+        assert!(
+            editor
+                .message()
+                .unwrap()
+                .starts_with("Target must be a directory")
+        );
+        assert!(dir.path().join("a.txt").exists());
+    }
+
+    #[test]
+    fn renaming_onto_an_existing_file_asks_first() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n R");
+        type_text(&mut editor, "b.txt");
+        press(&mut editor, "RET");
+        assert_eq!(
+            question(&editor),
+            Some(format!(
+                "Overwrite {}? (y, n, !, q) ",
+                dir.path().join("b.txt").display()
+            ))
+        );
+        press(&mut editor, "n");
+        assert_eq!(fs::read_to_string(dir.path().join("b.txt")).unwrap(), "bee");
+
+        press(&mut editor, "R");
+        type_text(&mut editor, "b.txt");
+        press(&mut editor, "RET y");
+        assert_eq!(
+            fs::read_to_string(dir.path().join("b.txt")).unwrap(),
+            "hello"
+        );
+        assert!(!dir.path().join("a.txt").exists());
+    }
+
+    #[test]
+    fn renaming_carries_buffers_visiting_the_file() {
+        let (dir, mut editor) = workspace();
+        editor.open_file(&dir.path().join("a.txt"));
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n R");
+        type_text(&mut editor, "c.txt");
+        press(&mut editor, "RET C-x b RET");
+
+        assert_eq!(editor.buffer().name(), "c.txt");
+        assert_eq!(
+            editor.buffer().file().map(|file| file.path.clone()),
+            Some(dir.path().join("c.txt"))
+        );
+    }
+
+    #[test]
+    fn c_copies_directories_recursively() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "C");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Copy sub to: ");
+        type_text(&mut editor, "dup");
+        press(&mut editor, "M-RET");
+
+        assert_eq!(
+            fs::read_to_string(dir.path().join("dup").join("c.txt")).unwrap(),
+            "sea"
+        );
+        assert!(dir.path().join("sub").join("c.txt").exists());
+        assert_eq!(editor.message(), Some("Copied 1 file"));
+    }
+
+    #[test]
+    fn bang_overwrites_every_remaining_conflict() {
+        let (dir, mut editor) = workspace();
+        let target = dir.path().join("sub");
+        fs::write(target.join("a.txt"), "old a").unwrap();
+        fs::write(target.join("b.txt"), "old b").unwrap();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n m m C");
+        type_text(&mut editor, "sub");
+        press(&mut editor, "RET RET !");
+
+        assert_eq!(fs::read_to_string(target.join("a.txt")).unwrap(), "hello");
+        assert_eq!(fs::read_to_string(target.join("b.txt")).unwrap(), "bee");
+        assert_eq!(editor.message(), Some("Copied 2 files"));
     }
 
     #[test]

@@ -23,9 +23,9 @@ impl Editor {
         self.open_file_prompt("Write file: ", Purpose::WriteFile);
     }
 
-    pub(super) fn open_file_prompt(&mut self, prompt: &str, purpose: Purpose) {
+    pub(super) fn open_file_prompt(&mut self, prompt: &str, purpose: Purpose) -> bool {
         if !self.open_minibuffer(prompt, purpose) {
-            return;
+            return false;
         }
         let mut start = paths::abbreviate(&self.default_directory(), self.home.as_deref());
         if !start.ends_with(paths::is_separator) {
@@ -33,6 +33,7 @@ impl Editor {
         }
         self.set_minibuffer_input(&start);
         self.refresh_minibuffer();
+        true
     }
 
     pub(super) fn refresh_minibuffer(&mut self) {
@@ -67,32 +68,35 @@ impl Editor {
         };
         let input = self.minibuffer_input();
         let (directory, name) = paths::split(&input);
-        if name.is_empty() && purpose != Purpose::WriteFile {
-            let directory = self.resolve_path(directory);
-            self.minibuffer = None;
-            self.dired(&directory);
-            return;
-        }
-        if name.is_empty() {
-            if let Some(minibuffer) = &mut self.minibuffer {
-                minibuffer.note = Some("[Directory]".to_owned());
-            }
-            return;
-        }
-        let path = match self.selected_entry().filter(|_| !exact) {
-            Some((label, _, true)) => {
-                self.set_minibuffer_input(&format!("{directory}{label}"));
+        let path = if name.is_empty() {
+            if purpose == Purpose::WriteFile {
+                if let Some(minibuffer) = &mut self.minibuffer {
+                    minibuffer.note = Some("[Directory]".to_owned());
+                }
                 return;
             }
-            Some((_, entry_path, false)) => entry_path,
-            None => self.resolve_path(&input),
+            self.resolve_path(directory)
+        } else {
+            match self.selected_entry().filter(|_| !exact) {
+                Some((label, _, true)) => {
+                    self.set_minibuffer_input(&format!("{directory}{label}"));
+                    return;
+                }
+                Some((_, entry_path, false)) => entry_path,
+                None => self.resolve_path(&input),
+            }
         };
-        self.minibuffer = None;
+        let sources = self
+            .minibuffer
+            .take()
+            .map(|minibuffer| minibuffer.sources)
+            .unwrap_or_default();
         match purpose {
             Purpose::WriteFile => self.write_file_to(path),
             Purpose::Dired => {
                 self.dired(&path);
             }
+            Purpose::Transfer(kind) => self.transfer_to(kind, sources, &path),
             _ => {
                 self.open_file(&path);
             }
