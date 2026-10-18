@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+use crate::diagnostics::Severity;
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
@@ -142,6 +143,10 @@ impl<'a> Pane<'a> {
 
     pub fn line_style(&self, line: usize) -> LineStyle {
         self.editor.line_style_at(self.index, line)
+    }
+
+    pub fn line_diagnostics(&self, line: usize) -> Vec<(Range<usize>, Severity)> {
+        self.editor.diagnostics_on_line(self.index, line)
     }
 
     pub fn line_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {

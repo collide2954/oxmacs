@@ -255,6 +255,7 @@ impl Editor {
                 buffer.set_file(FileInfo::new(path, loaded.format, loaded.disk));
                 buffer.set_read_only(loaded.read_only);
                 self.add_buffer(buffer);
+                self.mark_buffer(0);
                 if loaded.disk.is_none() {
                     self.show_message("(New file)");
                 }
