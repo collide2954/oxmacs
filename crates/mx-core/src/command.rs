@@ -38,6 +38,8 @@ pub enum Command {
     ExitMinibufferWithInput,
     IsearchForward,
     IsearchBackward,
+    IsearchRepeatForward,
+    IsearchRepeatBackward,
     IsearchPrintingChar,
     IsearchExit,
     IsearchAbort,
@@ -147,7 +149,11 @@ impl Command {
             | Self::DiredCreateDirectory
             | Self::DiredDoOpen => Scope::Dired,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
-            Self::IsearchPrintingChar | Self::IsearchExit | Self::IsearchAbort => Scope::Search,
+            Self::IsearchRepeatForward
+            | Self::IsearchRepeatBackward
+            | Self::IsearchPrintingChar
+            | Self::IsearchExit
+            | Self::IsearchAbort => Scope::Search,
             _ => Scope::Global,
         }
     }

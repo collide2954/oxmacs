@@ -29,6 +29,7 @@ pub struct Search {
     origin_top: ScreenLine,
     step: Step,
     previous: Vec<Step>,
+    note: Option<&'static str>,
 }
 
 impl Search {
@@ -56,6 +57,10 @@ impl Search {
     pub fn query(&self) -> &str {
         &self.step.query
     }
+
+    pub fn note(&self) -> Option<&str> {
+        self.note
+    }
 }
 
 impl Editor {
@@ -64,9 +69,10 @@ impl Editor {
     }
 
     pub(super) fn search_key(&mut self, key: Key) -> bool {
-        if self.search.is_none() || !self.pending.is_empty() {
+        let Some(search) = self.search.as_mut().filter(|_| self.pending.is_empty()) else {
             return false;
-        }
+        };
+        search.note = None;
         match self.search_keymap.lookup(&[key]) {
             Lookup::Command(command) => self.dispatch(key, command, false),
             _ if inserts_itself(key) => self.dispatch(key, Command::IsearchPrintingChar, false),
@@ -95,6 +101,7 @@ impl Editor {
                 wrapped: false,
             },
             previous: Vec::new(),
+            note: None,
         });
     }
 
@@ -122,6 +129,58 @@ impl Editor {
             next
         };
         self.push_step(next);
+    }
+
+    pub(super) fn isearch_repeat(&mut self, direction: Direction) {
+        let Some(search) = &self.search else {
+            return;
+        };
+        let step = &search.step;
+        let next = Step {
+            direction,
+            ..step.clone()
+        };
+        let next = if step.query.is_empty() {
+            let Some(query) = self.last_searches[usize::from(step.regex)].clone() else {
+                self.note_search("[No previous search string]");
+                return;
+            };
+            self.locate(Step { query, ..next }, search.origin, false)
+        } else if !step.success && direction == step.direction {
+            let anchor = match direction {
+                Direction::Forward => 0,
+                Direction::Backward => self.buffers.current().len_chars(),
+            };
+            self.locate(
+                Step {
+                    wrapped: true,
+                    ..next
+                },
+                anchor,
+                false,
+            )
+        } else {
+            match (&step.found, direction) {
+                (Some(found), Direction::Forward) => {
+                    self.locate(next, found.end + usize::from(found.is_empty()), false)
+                }
+                (Some(found), Direction::Backward) => self.locate(next, found.start, false),
+                (None, _) => self.locate(next, search.origin, false),
+            }
+        };
+        self.push_step(next);
+    }
+
+    fn note_search(&mut self, note: &'static str) {
+        if let Some(search) = &mut self.search {
+            search.note = Some(note);
+        }
+    }
+
+    fn remember_search(&mut self, step: &Step) {
+        if !step.query.is_empty() {
+            self.last_searches[usize::from(step.regex)] = Some(step.query.clone());
+        }
     }
 
     fn locate(&self, mut step: Step, anchor: usize, inclusive: bool) -> Step {
@@ -167,6 +226,7 @@ impl Editor {
         let Some(search) = self.search.take() else {
             return;
         };
+        self.remember_search(&search.step);
         let buffer = self.buffers.current_mut();
         if buffer.point() != search.origin && !buffer.mark_active() {
             buffer.set_mark(search.origin);
@@ -179,6 +239,7 @@ impl Editor {
         let Some(search) = self.search.take() else {
             return;
         };
+        self.remember_search(&search.step);
         self.buffers.current_mut().set_point(search.origin);
         self.viewport.set_top(search.origin_top);
         self.show_message("Quit");
@@ -281,6 +342,94 @@ mod tests {
 
         assert!(editor.search().is_none());
         assert_eq!(point(&editor), 4);
+    }
+
+    #[test]
+    fn repeating_moves_to_the_next_match() {
+        let mut editor = editor_with("foo foo foo", 0);
+
+        press(&mut editor, "C-s f o o C-s");
+        assert_eq!(point(&editor), 7);
+
+        press(&mut editor, "C-s");
+        assert_eq!(point(&editor), 11);
+    }
+
+    #[test]
+    fn repeating_backward_moves_to_the_previous_match() {
+        let mut editor = editor_with("foo foo foo", 11);
+
+        press(&mut editor, "C-r f o o C-r");
+
+        assert_eq!(point(&editor), 4);
+    }
+
+    #[test]
+    fn changing_direction_moves_to_the_previous_match_at_once() {
+        let mut editor = editor_with("foo foo foo", 0);
+
+        press(&mut editor, "C-s f o o C-s C-r");
+
+        assert_eq!(point(&editor), 0);
+        assert_eq!(prompt(&editor), "I-search backward: ");
+    }
+
+    #[test]
+    fn repeating_past_the_last_match_fails_then_wraps() {
+        let mut editor = editor_with("foo foo", 1);
+
+        press(&mut editor, "C-s f o o C-s");
+        assert_eq!(prompt(&editor), "Failing I-search: ");
+        assert_eq!(point(&editor), 7);
+
+        press(&mut editor, "C-s");
+        assert_eq!(prompt(&editor), "Wrapped I-search: ");
+        assert_eq!(point(&editor), 3);
+    }
+
+    #[test]
+    fn backward_searches_wrap_to_the_end() {
+        let mut editor = editor_with("foo foo", 2);
+
+        press(&mut editor, "C-r f o o C-r");
+        assert_eq!(prompt(&editor), "Failing I-search backward: ");
+
+        press(&mut editor, "C-r");
+        assert_eq!(point(&editor), 4);
+        assert_eq!(prompt(&editor), "Wrapped I-search backward: ");
+    }
+
+    #[test]
+    fn an_empty_query_repeats_the_last_search() {
+        let mut editor = editor_with("foo foo", 0);
+
+        press(&mut editor, "C-s f o o RET C-s C-s");
+
+        assert_eq!(editor.search().unwrap().query(), "foo");
+        assert_eq!(point(&editor), 7);
+    }
+
+    #[test]
+    fn aborted_searches_can_be_repeated_too() {
+        let mut editor = editor_with("foo foo", 0);
+
+        press(&mut editor, "C-s f o o C-g C-r C-r");
+
+        assert_eq!(editor.search().unwrap().query(), "foo");
+    }
+
+    #[test]
+    fn without_a_previous_search_there_is_nothing_to_repeat() {
+        let mut editor = editor_with("foo", 0);
+
+        press(&mut editor, "C-s C-s");
+        assert_eq!(
+            editor.search().unwrap().note(),
+            Some("[No previous search string]")
+        );
+
+        press(&mut editor, "f");
+        assert_eq!(editor.search().unwrap().note(), None);
     }
 
     #[test]
