@@ -392,7 +392,11 @@ impl Editor {
     }
 
     fn set_setting(&mut self, setting: &Setting, value: Option<Value>) {
-        match self.config.with(setting.key, value) {
+        self.change_config(setting.key, value);
+    }
+
+    pub(super) fn change_config(&mut self, key: &str, value: Option<Value>) {
+        match self.config.with(key, value) {
             Ok(config) => {
                 self.reconfigure(&config);
                 self.render_settings();
@@ -406,6 +410,7 @@ impl Editor {
 mod tests {
     use std::fs;
 
+    use crate::command::Command;
     use crate::config::Config;
     use crate::config::schema::SETTINGS;
     use crate::editor::test_support::{at_point, lines, minibuffer_input, press, type_text};
@@ -497,6 +502,42 @@ mod tests {
         press(&mut editor, "C-x C-s");
 
         assert_eq!(config_text(&dir), "tab-width = \n");
+        assert!(editor.mode_line().starts_with("%* *Settings*"));
+    }
+
+    #[test]
+    fn settings_changed_elsewhere_show_as_unsaved() {
+        let (dir, mut editor) = settings();
+        press(&mut editor, "q");
+
+        editor.execute(Command::ToggleTheme);
+
+        assert_eq!(editor.config().theme.as_deref(), Some("adwaita-dark"));
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "customize");
+        press(&mut editor, "RET");
+        assert!(row(&editor, "theme").starts_with("* theme"));
+        assert!(row(&editor, "theme").contains("[adwaita-dark]"));
+        assert!(editor.mode_line().starts_with("%* *Settings*"));
+        assert!(!dir.path().join("config.toml").exists());
+    }
+
+    #[test]
+    fn changes_made_before_customizing_are_unsaved_too() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut editor = Editor::new();
+        editor.config_path = Some(dir.path().join("config.toml"));
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "load-theme");
+        press(&mut editor, "RET");
+        type_text(&mut editor, "adwaita");
+        press(&mut editor, "M-RET");
+
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "customize");
+        press(&mut editor, "RET");
+
+        assert!(row(&editor, "theme").contains("[adwaita]"));
         assert!(editor.mode_line().starts_with("%* *Settings*"));
     }
 

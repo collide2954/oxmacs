@@ -1,6 +1,6 @@
 use crate::editor::minibuffer::Purpose;
 use crate::editor::{Choice, Completion, Editor};
-use crate::theme;
+use crate::theme::{self, Theme};
 
 const SYSTEM: &str = "system";
 
@@ -25,7 +25,12 @@ impl Editor {
     }
 
     pub(super) fn toggle_theme(&mut self) {
-        self.configured_theme = Some(theme::counterpart(self.theme()));
+        self.use_theme(Some(theme::counterpart(self.theme())));
+    }
+
+    pub(super) fn use_theme(&mut self, theme: Option<&'static Theme>) {
+        let name = theme.map(|theme| toml::Value::String(theme.name.to_owned()));
+        self.change_config("theme", name);
     }
 }
 

@@ -307,7 +307,7 @@ impl Editor {
                 self.paste(text);
             }
             Choice::Buffer(index) => self.choose_buffer(purpose, index),
-            Choice::Theme(theme) => self.configured_theme = theme,
+            Choice::Theme(theme) => self.use_theme(theme),
             Choice::Item(position) => self.jump_to_item(position),
             Choice::Entry(_) => {}
         }
