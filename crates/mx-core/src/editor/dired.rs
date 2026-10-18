@@ -117,24 +117,37 @@ impl Editor {
         }
     }
 
-    pub(super) fn dired_do_open(&mut self) {
+    pub(super) fn dired_targets(&self, mark: Mark, at_point: bool) -> Vec<(PathBuf, String)> {
         let line = self.point_line();
         let Some(listing) = self.buffers.listing(0) else {
-            return;
+            return Vec::new();
         };
-        let mut targets = listing.marked(Mark::Marked);
-        if targets.is_empty() {
-            targets.extend(listing.entry_at(line));
+        let mut entries = listing.marked(mark);
+        if entries.is_empty() && at_point {
+            entries.extend(listing.entry_at(line));
         }
+        entries
+            .iter()
+            .map(|entry| {
+                (
+                    listing.directory().join(&entry.name),
+                    entry.display_name().into_owned(),
+                )
+            })
+            .collect()
+    }
+
+    pub(super) fn dired_do_open(&mut self) {
+        let targets = self.dired_targets(Mark::Marked, true);
         if targets.is_empty() {
             self.show_message("No file on this line");
             return;
         }
-        let effects: Vec<Effect> = targets
-            .iter()
-            .map(|entry| Effect::OpenExternally(listing.directory().join(&entry.name)))
-            .collect();
-        self.effects.extend(effects);
+        self.effects.extend(
+            targets
+                .into_iter()
+                .map(|(path, _)| Effect::OpenExternally(path)),
+        );
     }
 
     pub(super) fn dired_create_directory(&mut self) {
@@ -167,14 +180,11 @@ impl Editor {
     }
 
     pub(super) fn dired_do_delete(&mut self, flagged: bool) {
-        let line = self.point_line();
-        let Some(listing) = self.buffers.listing(0) else {
-            return;
+        let targets = if flagged {
+            self.dired_targets(Mark::Flagged, false)
+        } else {
+            self.dired_targets(Mark::Marked, true)
         };
-        let mut targets = listing.marked(if flagged { Mark::Flagged } else { Mark::Marked });
-        if targets.is_empty() && !flagged {
-            targets.extend(listing.entry_at(line));
-        }
         if targets.is_empty() {
             self.show_message(if flagged {
                 "(No deletions requested)"
@@ -183,14 +193,7 @@ impl Editor {
             });
             return;
         }
-        let names: Vec<String> = targets
-            .iter()
-            .map(|entry| entry.display_name().into_owned())
-            .collect();
-        let paths: Vec<PathBuf> = targets
-            .iter()
-            .map(|entry| listing.directory().join(&entry.name))
-            .collect();
+        let (paths, names): (Vec<PathBuf>, Vec<String>) = targets.into_iter().unzip();
         let verb = if self.delete_to_trash {
             "Trash"
         } else {

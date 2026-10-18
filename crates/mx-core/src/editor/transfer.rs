@@ -25,28 +25,18 @@ pub(super) struct Transfer {
 
 impl Editor {
     pub(super) fn dired_do_transfer(&mut self, kind: Kind) {
-        let line = self.point_line();
-        let Some(listing) = self.buffers.listing(0) else {
-            return;
-        };
-        let mut targets = listing.marked(Mark::Marked);
-        if targets.is_empty() {
-            targets.extend(listing.entry_at(line));
-        }
-        let sources: Vec<PathBuf> = targets
-            .iter()
-            .map(|entry| listing.directory().join(&entry.name))
-            .collect();
+        let targets = self.dired_targets(Mark::Marked, true);
         let prompt = match (kind, targets.as_slice()) {
             (_, []) => {
                 self.show_message("No file on this line");
                 return;
             }
-            (Kind::Move, [one]) => format!("Rename {} to: ", one.display_name()),
-            (Kind::Copy, [one]) => format!("Copy {} to: ", one.display_name()),
+            (Kind::Move, [(_, name)]) => format!("Rename {name} to: "),
+            (Kind::Copy, [(_, name)]) => format!("Copy {name} to: "),
             (Kind::Move, many) => format!("Move {} to: ", files(many.len())),
             (Kind::Copy, many) => format!("Copy {} to: ", files(many.len())),
         };
+        let sources: Vec<PathBuf> = targets.into_iter().map(|(path, _)| path).collect();
         if self.open_file_prompt(&prompt, Purpose::Transfer(kind))
             && let Some(minibuffer) = &mut self.minibuffer
         {
