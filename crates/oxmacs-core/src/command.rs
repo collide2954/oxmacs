@@ -125,6 +125,13 @@ pub enum Command {
     Compile,
     Recompile,
     KillCompilation,
+    NextError,
+    PreviousError,
+    NextErrorNoSelect,
+    PreviousErrorNoSelect,
+    CompilationNextError,
+    CompilationPreviousError,
+    CompileGotoError,
     ForwardButton,
     BackwardButton,
     PushButton,
@@ -215,7 +222,13 @@ impl Command {
             | Self::DiredDoOpen => Scope::Dired,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
             Self::RustFormatBuffer => Scope::Rust,
-            Self::Recompile | Self::KillCompilation => Scope::Compilation,
+            Self::Recompile
+            | Self::KillCompilation
+            | Self::NextErrorNoSelect
+            | Self::PreviousErrorNoSelect
+            | Self::CompilationNextError
+            | Self::CompilationPreviousError
+            | Self::CompileGotoError => Scope::Compilation,
             Self::MarkdownInsertListItem
             | Self::MarkdownPromote
             | Self::MarkdownDemote

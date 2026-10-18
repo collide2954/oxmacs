@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::editor::buffers::Mode;
+use crate::editor::errors::Errors;
 use crate::editor::minibuffer::Purpose;
 use crate::editor::{Editor, Effect};
 use crate::files::paths;
@@ -8,6 +9,7 @@ use crate::text::Buffer;
 use crate::tools;
 
 pub(super) const NAME: &str = "*compilation*";
+pub(super) const FINISHED: &str = "Compilation finished";
 const DEFAULT_COMMAND: &str = "cargo build";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -33,22 +35,23 @@ pub(super) struct Compilation {
     directory: PathBuf,
     job: Option<JobId>,
     killed: bool,
+    pub(super) errors: Errors,
 }
 
 impl Editor {
-    fn compilation_index(&self) -> Option<usize> {
+    pub(super) fn compilation_index(&self) -> Option<usize> {
         (0..self.buffers.len())
             .find(|index| matches!(self.buffers.mode(*index), Some(Mode::Compilation(_))))
     }
 
-    fn compilation(&self) -> Option<&Compilation> {
+    pub(super) fn compilation(&self) -> Option<&Compilation> {
         match self.buffers.mode(self.compilation_index()?)? {
             Mode::Compilation(compilation) => Some(compilation),
             _ => None,
         }
     }
 
-    fn compilation_mut(&mut self) -> Option<&mut Compilation> {
+    pub(super) fn compilation_mut(&mut self) -> Option<&mut Compilation> {
         let index = self.compilation_index()?;
         match self.buffers.mode_mut(index)? {
             Mode::Compilation(compilation) => Some(compilation),
@@ -103,6 +106,7 @@ impl Editor {
             directory: directory.clone(),
             job: Some(id),
             killed: false,
+            errors: Errors::default(),
         };
         match self.compilation_index() {
             Some(index) => {
@@ -157,9 +161,17 @@ impl Editor {
     }
 
     pub fn job_output(&mut self, job: JobId, line: &str) {
-        if let Some(index) = self.compilation_for(job) {
-            self.append_output(index, &format!("{line}\n"));
+        let Some(index) = self.compilation_for(job) else {
+            return;
+        };
+        let at = self
+            .buffers
+            .get(index)
+            .map_or(0, |buffer| buffer.line_of(buffer.len_chars()));
+        if let Some(compilation) = self.compilation_mut() {
+            compilation.errors.scan(at, line, &compilation.directory);
         }
+        self.append_output(index, &format!("{line}\n"));
     }
 
     pub fn job_finished(&mut self, job: JobId, outcome: &Outcome) {
@@ -171,7 +183,7 @@ impl Editor {
             .is_some_and(|compilation| compilation.killed);
         let summary = match outcome {
             _ if killed => "Compilation killed".to_owned(),
-            Outcome::Exited(Some(0)) => "Compilation finished".to_owned(),
+            Outcome::Exited(Some(0)) => FINISHED.to_owned(),
             Outcome::Exited(Some(code)) => {
                 format!("Compilation exited abnormally with code {code}")
             }

@@ -7,6 +7,7 @@ mod disk;
 mod doctor;
 mod editing;
 mod effect;
+mod errors;
 mod files;
 mod format;
 mod imenu;
@@ -402,7 +403,13 @@ impl Editor {
             Some(Mode::Dired(listing)) => listing.line_style(line),
             Some(Mode::Splash(splash)) => splash.line_style(line),
             Some(Mode::Doctor(doctor)) => doctor.line_style(line),
-            Some(Mode::Preview(_) | Mode::Compilation(_)) => LineStyle::default(),
+            Some(Mode::Compilation(compilation)) => self
+                .buffers
+                .get(index)
+                .map_or_else(LineStyle::default, |buffer| {
+                    compilation.errors.line_style(line, &buffer.line_text(line))
+                }),
+            Some(Mode::Preview(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,
                 spans: self.syntax_highlights_at(index, line),
@@ -574,6 +581,13 @@ impl Editor {
             Command::Compile => self.compile(),
             Command::Recompile => self.recompile(),
             Command::KillCompilation => self.kill_compilation(),
+            Command::NextError => self.next_error(true),
+            Command::PreviousError => self.next_error(false),
+            Command::NextErrorNoSelect => self.next_error_no_select(true),
+            Command::PreviousErrorNoSelect => self.next_error_no_select(false),
+            Command::CompilationNextError => self.compilation_next_error(true),
+            Command::CompilationPreviousError => self.compilation_next_error(false),
+            Command::CompileGotoError => self.compile_goto_error(),
             Command::ForwardButton => self.forward_button(true),
             Command::BackwardButton => self.forward_button(false),
             Command::PushButton => self.push_button(),

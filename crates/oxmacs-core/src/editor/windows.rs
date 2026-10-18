@@ -97,10 +97,19 @@ impl Editor {
     }
 
     pub(super) fn follow_end(&mut self, buffer: BufferId, old_end: usize) {
+        self.move_windows(buffer, |point, end| (point == old_end).then_some(end));
+    }
+
+    pub(super) fn point_windows_at(&mut self, buffer: BufferId, position: usize) {
+        self.move_windows(buffer, |_, _| Some(position));
+    }
+
+    fn move_windows(&mut self, buffer: BufferId, to: impl Fn(usize, usize) -> Option<usize>) {
         let current = self.buffers.current_mut();
-        if current.id() == buffer && current.point() == old_end {
-            let end = current.len_chars();
-            current.set_point(end);
+        if current.id() == buffer
+            && let Some(point) = to(current.point(), current.len_chars())
+        {
+            current.set_point(point);
             self.reveal_point();
         }
         let tab_width = self.tab_width;
@@ -115,13 +124,15 @@ impl Editor {
             else {
                 continue;
             };
-            if text.marker(parked.point) != Some(old_end) {
+            let Some(point) = text
+                .marker(parked.point)
+                .and_then(|point| to(point, text.len_chars()))
+            else {
                 continue;
-            }
-            let end = text.len_chars();
-            text.set_marker(parked.point, end);
+            };
+            text.set_marker(parked.point, point);
             let layout = Layout::new(text, parked.viewport.wrap_width(), tab_width);
-            parked.viewport.reveal(layout.screen_line(end), &layout);
+            parked.viewport.reveal(layout.screen_line(point), &layout);
         }
     }
 

@@ -33,6 +33,18 @@ impl Editor {
             }
             return;
         }
+        let line = self.buffers.current().line_of(position);
+        if clicks == Clicks::Single
+            && !extend
+            && let Some(error) = self.error_on_line(line)
+        {
+            let buffer = self.buffers.current_mut();
+            buffer.deactivate_mark();
+            buffer.set_point(position);
+            self.drag_anchor = None;
+            self.visit_error(error);
+            return;
+        }
         if clicks == Clicks::Double && self.buffers.listing(0).is_some() {
             let buffer = self.buffers.current_mut();
             buffer.deactivate_mark();

@@ -46,6 +46,11 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-M-u", Command::BackwardUpList),
     ("C-M-d", Command::DownList),
     ("M-g i", Command::Imenu),
+    ("M-g n", Command::NextError),
+    ("M-g M-n", Command::NextError),
+    ("C-x `", Command::NextError),
+    ("M-g p", Command::PreviousError),
+    ("M-g M-p", Command::PreviousError),
     ("C-SPC", Command::SetMarkCommand),
     ("C-@", Command::SetMarkCommand),
     ("C-x C-x", Command::ExchangePointAndMark),
@@ -186,6 +191,11 @@ const COMPILATION: &[(&str, Command)] = &[
     ("g", Command::Recompile),
     ("q", Command::QuitWindow),
     ("C-c C-k", Command::KillCompilation),
+    ("n", Command::NextErrorNoSelect),
+    ("p", Command::PreviousErrorNoSelect),
+    ("M-n", Command::CompilationNextError),
+    ("M-p", Command::CompilationPreviousError),
+    ("RET", Command::CompileGotoError),
 ];
 
 pub fn global() -> Keymap {
