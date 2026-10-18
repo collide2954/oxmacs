@@ -3,12 +3,14 @@ use std::mem;
 use crate::bindings;
 use crate::buffer::Buffer;
 use crate::command::Command;
+use crate::display;
 use crate::key::{Key, KeyCode, KeySequence, Modifiers};
 use crate::keymap::{Keymap, Lookup};
 use crate::motion;
 use crate::viewport::Viewport;
 
 const DEFAULT_ROWS: usize = 24;
+const DEFAULT_TAB_WIDTH: usize = 8;
 
 #[derive(Debug)]
 pub struct Editor {
@@ -20,6 +22,7 @@ pub struct Editor {
     message: Option<String>,
     quit_requested: bool,
     viewport: Viewport,
+    tab_width: usize,
 }
 
 impl Default for Editor {
@@ -43,6 +46,7 @@ impl Editor {
             message: None,
             quit_requested: false,
             viewport: Viewport::new(DEFAULT_ROWS),
+            tab_width: DEFAULT_TAB_WIDTH,
         }
     }
 
@@ -68,6 +72,25 @@ impl Editor {
 
     fn point_line(&self) -> usize {
         self.buffer.line_of(self.buffer.point())
+    }
+
+    pub fn tab_width(&self) -> usize {
+        self.tab_width
+    }
+
+    pub fn point_display_column(&self) -> usize {
+        let point = self.buffer.point();
+        let line = self.buffer.line_text(self.point_line());
+        display::display_column(&line, self.buffer.column(point), self.tab_width)
+    }
+
+    pub fn mode_line(&self) -> String {
+        format!(
+            "{}   L{} C{}",
+            self.buffer.name(),
+            self.point_line() + 1,
+            self.point_display_column()
+        )
     }
 
     pub fn handle_key(&mut self, key: Key) {
@@ -304,6 +327,13 @@ mod tests {
         editor.resize_window(5);
 
         assert!(editor.viewport().lines().contains(&12));
+    }
+
+    #[test]
+    fn mode_line_shows_buffer_name_line_and_display_column() {
+        let editor = editor_with("ab\n\tcd", 5);
+
+        assert_eq!(editor.mode_line(), "t   L2 C9");
     }
 
     #[test]
