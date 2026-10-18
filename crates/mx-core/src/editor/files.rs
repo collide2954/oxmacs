@@ -20,6 +20,10 @@ impl Editor {
     }
 
     pub(super) fn write_file(&mut self) {
+        if self.buffers.listing(0).is_some() {
+            self.show_message("Dired buffers can't be written to files");
+            return;
+        }
         self.open_file_prompt("Write file: ", Purpose::WriteFile);
     }
 

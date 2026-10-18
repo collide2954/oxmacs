@@ -863,6 +863,21 @@ mod tests {
     }
 
     #[test]
+    fn listings_cannot_be_written_to_files() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "C-x C-w");
+
+        assert!(editor.minibuffer().is_none());
+        assert_eq!(editor.buffer().file(), None);
+        assert_eq!(
+            editor.message(),
+            Some("Dired buffers can't be written to files")
+        );
+    }
+
+    #[test]
     fn listings_stay_read_only() {
         let (dir, mut editor) = workspace();
         listed(&mut editor, &dir);
