@@ -74,7 +74,7 @@ impl Language {
             (self, feature),
             (
                 Self::Rust,
-                Feature::Highlighting | Feature::Indentation | Feature::Comments
+                Feature::Highlighting | Feature::Indentation | Feature::Comments | Feature::Pairs
             )
         )
     }

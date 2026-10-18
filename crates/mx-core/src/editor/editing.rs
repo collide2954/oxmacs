@@ -5,6 +5,9 @@ use crate::text::{Buffer, motion};
 impl Editor {
     pub(super) fn self_insert(&mut self) {
         if let Some(KeyCode::Char(c)) = self.last_key.map(Key::code) {
+            if self.insert_pair(c) {
+                return;
+            }
             self.insert_over_selection(c.encode_utf8(&mut [0; 4]));
             self.reindent_after(c);
         }
@@ -16,7 +19,7 @@ impl Editor {
     }
 
     pub(super) fn delete_char(&mut self, forward: bool) {
-        if self.delete_selection() {
+        if self.delete_selection() || !forward && self.delete_pair() {
             return;
         }
         let buffer = self.current_mut();

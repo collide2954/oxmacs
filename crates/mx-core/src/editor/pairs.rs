@@ -5,11 +5,76 @@ use crate::text::Buffer;
 use crate::theme::Highlight;
 
 const SCAN_LIMIT: usize = 100_000;
+const PAIRS: &[(char, char)] = &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"')];
 
 impl Editor {
     pub fn prepare_display(&mut self) {
         self.sync_syntax();
         self.paren_pair = self.find_paren_pair();
+    }
+
+    fn pairs(&self) -> bool {
+        self.minibuffer.is_none() && self.buffers.syntax(0).is_some()
+    }
+
+    pub(super) fn insert_pair(&mut self, typed: char) -> bool {
+        if !self.pairs() {
+            return false;
+        }
+        let closer = PAIRS
+            .iter()
+            .find(|(open, _)| *open == typed)
+            .map(|(_, close)| *close);
+        let buffer = self.buffers.current_mut();
+        if let (Some(closer), Some(selection)) = (closer, buffer.selection()) {
+            self.shift_selection = false;
+            buffer.deactivate_mark();
+            buffer.insert_at(selection.end, &closer.to_string());
+            buffer.insert_at(selection.start, &typed.to_string());
+            buffer.set_point(selection.end + 2);
+            return true;
+        }
+        let point = buffer.point();
+        let next = buffer.chars_after(point).next();
+        let steps_over = PAIRS.iter().any(|(_, close)| *close == typed) && next == Some(typed);
+        if steps_over {
+            buffer.set_point(point + 1);
+            return true;
+        }
+        let open_space =
+            next.is_none_or(|c| c.is_whitespace() || matches!(c, ')' | ']' | '}' | ',' | ';'));
+        let quote_allowed = typed != '"'
+            || buffer
+                .chars_before(point)
+                .next()
+                .is_none_or(|c| !c.is_alphanumeric() && c != '\\');
+        match closer {
+            Some(closer) if open_space && quote_allowed => {
+                buffer.insert(&format!("{typed}{closer}"));
+                buffer.set_point(point + 1);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub(super) fn delete_pair(&mut self) -> bool {
+        if !self.pairs() {
+            return false;
+        }
+        let buffer = self.buffers.current_mut();
+        let point = buffer.point();
+        let around = (
+            buffer.chars_before(point).next(),
+            buffer.chars_after(point).next(),
+        );
+        let empty = PAIRS
+            .iter()
+            .any(|(open, close)| around == (Some(*open), Some(*close)));
+        if empty {
+            buffer.delete_range(point - 1..point + 1);
+        }
+        empty
     }
 
     fn find_paren_pair(&self) -> Option<(usize, usize)> {
@@ -106,7 +171,7 @@ fn scan_partner(buffer: &Buffer, position: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::editor_with;
+    use crate::editor::test_support::{editor_with, press, type_text};
     use crate::syntax::Language;
     use crate::theme::Highlight;
 
@@ -119,6 +184,91 @@ mod tests {
 
     fn paren(range: std::ops::Range<usize>) -> (std::ops::Range<usize>, Highlight) {
         (range, Highlight::ParenMatch)
+    }
+
+    fn rust(text: &str, point: usize) -> Editor {
+        let mut editor = editor_with(text, point);
+        editor.set_major_mode(Some(Language::Rust));
+        editor
+    }
+
+    #[test]
+    fn openers_insert_their_closers() {
+        for (typed, expected) in [("(", "()"), ("[", "[]"), ("{", "{}"), ("\"", "\"\"")] {
+            let mut editor = rust("", 0);
+
+            type_text(&mut editor, typed);
+
+            assert_eq!(editor.buffer().contents(), expected, "{typed}");
+            assert_eq!(editor.buffer().point(), 1, "{typed}");
+        }
+    }
+
+    #[test]
+    fn closers_step_over_the_inserted_ones() {
+        let mut editor = rust("", 0);
+
+        type_text(&mut editor, "f(\"a\")");
+
+        assert_eq!(editor.buffer().contents(), "f(\"a\")");
+        assert_eq!(editor.buffer().point(), 6);
+    }
+
+    #[test]
+    fn openers_before_words_stay_single() {
+        let mut editor = rust("x", 0);
+
+        type_text(&mut editor, "(");
+
+        assert_eq!(editor.buffer().contents(), "(x");
+    }
+
+    #[test]
+    fn quotes_after_words_stay_single() {
+        let mut editor = rust("r", 1);
+
+        type_text(&mut editor, "\"");
+
+        assert_eq!(editor.buffer().contents(), "r\"");
+    }
+
+    #[test]
+    fn delete_removes_an_empty_pair() {
+        let mut editor = rust("", 0);
+
+        press(&mut editor, "( DEL");
+
+        assert_eq!(editor.buffer().contents(), "");
+    }
+
+    #[test]
+    fn return_between_braces_opens_a_block() {
+        let mut editor = rust("fn a() ", 7);
+
+        press(&mut editor, "{ RET");
+
+        assert_eq!(editor.buffer().contents(), "fn a() {\n    \n}");
+        assert_eq!(editor.buffer().point(), 13);
+    }
+
+    #[test]
+    fn openers_wrap_the_selection() {
+        let mut editor = rust("let x = a + b;", 8);
+
+        press(&mut editor, "C-SPC C-e C-b (");
+
+        assert_eq!(editor.buffer().contents(), "let x = (a + b);");
+        assert_eq!(editor.buffer().point(), 15);
+        assert_eq!(editor.buffer().selection(), None);
+    }
+
+    #[test]
+    fn plain_text_does_not_pair() {
+        let mut editor = editor_with("", 0);
+
+        type_text(&mut editor, "(\"");
+
+        assert_eq!(editor.buffer().contents(), "(\"");
     }
 
     #[test]

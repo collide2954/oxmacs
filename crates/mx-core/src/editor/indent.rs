@@ -52,7 +52,21 @@ impl Editor {
             .take_while(|c| matches!(c, ' ' | '\t'))
             .count();
         buffer.delete_range(point - spaces..point);
+        let point = point - spaces;
+        let around = (
+            buffer.chars_before(point).next(),
+            buffer.chars_after(point).next(),
+        );
         buffer.insert("\n");
+        if matches!(
+            around,
+            (Some('{'), Some('}')) | (Some('('), Some(')')) | (Some('['), Some(']'))
+        ) {
+            let middle = buffer.point();
+            buffer.insert("\n");
+            buffer.set_point(middle);
+            self.indent_line(line + 2);
+        }
         self.indent_line(line + 1);
     }
 
