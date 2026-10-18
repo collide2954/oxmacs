@@ -1,12 +1,13 @@
 use std::mem;
 
 use crate::command::Command;
+use crate::config::Config;
 use crate::display::{self, Viewport};
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::text::{Buffer, motion};
+use crate::theme::{self, Appearance, Theme};
 
 const DEFAULT_ROWS: usize = 24;
-const DEFAULT_TAB_WIDTH: usize = 8;
 
 #[derive(Debug)]
 pub struct Editor {
@@ -19,6 +20,8 @@ pub struct Editor {
     quit_requested: bool,
     viewport: Viewport,
     tab_width: usize,
+    appearance: Appearance,
+    configured_theme: Option<&'static Theme>,
 }
 
 impl Default for Editor {
@@ -42,8 +45,28 @@ impl Editor {
             message: None,
             quit_requested: false,
             viewport: Viewport::new(DEFAULT_ROWS),
-            tab_width: DEFAULT_TAB_WIDTH,
+            tab_width: Config::default().tab_width,
+            appearance: Appearance::Light,
+            configured_theme: None,
         }
+    }
+
+    pub fn apply_config(&mut self, config: &Config) {
+        self.tab_width = config.tab_width;
+        self.configured_theme = config.theme.as_deref().and_then(theme::find);
+    }
+
+    pub fn set_appearance(&mut self, appearance: Appearance) {
+        self.appearance = appearance;
+    }
+
+    pub fn theme(&self) -> &'static Theme {
+        self.configured_theme
+            .unwrap_or_else(|| theme::for_appearance(self.appearance))
+    }
+
+    pub fn show_message(&mut self, message: impl Into<String>) {
+        self.message = Some(message.into());
     }
 
     pub fn buffer(&self) -> &Buffer {
@@ -330,6 +353,45 @@ mod tests {
         let editor = editor_with("ab\n\tcd", 5);
 
         assert_eq!(editor.mode_line(), "t   L2 C9");
+    }
+
+    #[test]
+    fn theme_follows_os_appearance_when_not_configured() {
+        let mut editor = Editor::new();
+        assert_eq!(editor.theme().name, "adwaita");
+
+        editor.set_appearance(Appearance::Dark);
+
+        assert_eq!(editor.theme().name, "adwaita-dark");
+    }
+
+    #[test]
+    fn configured_theme_overrides_os_appearance() {
+        let mut editor = Editor::new();
+        editor.apply_config(&Config::parse("theme = \"adwaita\"").unwrap());
+
+        editor.set_appearance(Appearance::Dark);
+
+        assert_eq!(editor.theme().name, "adwaita");
+    }
+
+    #[test]
+    fn config_sets_tab_width() {
+        let mut editor = editor_with("\tx", 1);
+
+        editor.apply_config(&Config::parse("tab-width = 4").unwrap());
+
+        assert_eq!(editor.tab_width(), 4);
+        assert_eq!(editor.point_display_column(), 4);
+    }
+
+    #[test]
+    fn shown_messages_appear_in_the_echo_area() {
+        let mut editor = Editor::new();
+
+        editor.show_message("config.toml: line 2: oops");
+
+        assert_eq!(editor.message(), Some("config.toml: line 2: oops"));
     }
 
     #[test]
