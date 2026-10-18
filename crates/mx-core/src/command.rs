@@ -52,6 +52,12 @@ pub enum Command {
     DiredUpDirectory,
     DiredCycleSort,
     DiredHideDetailsMode,
+    DiredMark,
+    DiredFlagFileDeletion,
+    DiredUnmark,
+    DiredUnmarkBackward,
+    DiredUnmarkAllMarks,
+    DiredToggleMarks,
     QuitWindow,
     KeyboardQuit,
     SaveBuffersKillMx,
@@ -109,7 +115,13 @@ impl Command {
             | Self::DiredFindFile
             | Self::DiredUpDirectory
             | Self::DiredCycleSort
-            | Self::DiredHideDetailsMode => Scope::Dired,
+            | Self::DiredHideDetailsMode
+            | Self::DiredMark
+            | Self::DiredFlagFileDeletion
+            | Self::DiredUnmark
+            | Self::DiredUnmarkBackward
+            | Self::DiredUnmarkAllMarks
+            | Self::DiredToggleMarks => Scope::Dired,
             _ => Scope::Global,
         }
     }

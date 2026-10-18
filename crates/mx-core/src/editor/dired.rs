@@ -3,7 +3,7 @@ use std::path::Path;
 
 use jiff::Zoned;
 
-use crate::dired::{Listing, read_entries};
+use crate::dired::{Listing, Mark, read_entries};
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::minibuffer::Purpose;
@@ -115,6 +115,37 @@ impl Editor {
         }
     }
 
+    pub(super) fn dired_mark(&mut self, mark: Option<Mark>) {
+        self.mark_at_point(mark);
+        self.dired_next_line(1);
+    }
+
+    pub(super) fn dired_unmark_backward(&mut self) {
+        self.dired_next_line(-1);
+        self.mark_at_point(None);
+    }
+
+    pub(super) fn dired_unmark_all(&mut self) {
+        self.update_listing(0, Listing::clear_marks);
+    }
+
+    pub(super) fn dired_toggle_marks(&mut self) {
+        self.update_listing(0, Listing::toggle_marks);
+    }
+
+    fn mark_at_point(&mut self, mark: Option<Mark>) {
+        let line = self.point_line();
+        let Some(name) = self
+            .buffers
+            .listing(0)
+            .and_then(|listing| listing.entry_at(line))
+            .map(|entry| entry.name.clone())
+        else {
+            return;
+        };
+        self.update_listing(0, |listing| listing.set_mark(&name, mark));
+    }
+
     pub(super) fn dired_cycle_sort(&mut self) {
         self.update_listing(0, |listing| listing.set_sort(listing.sort().next()));
     }
@@ -163,14 +194,14 @@ impl Editor {
         let focus = listing.entry_at(line).map(|entry| entry.name.clone());
         change(listing);
         buffer.set_text(&listing.render(&Zoned::now(), home.as_deref()));
-        let last = buffer.len_lines() - 1;
         let line = focus
             .and_then(|name| listing.line_of(&name))
             .unwrap_or_else(|| {
                 if Some(line) == listing.parent_line() {
                     line
                 } else {
-                    line.max(listing.first_entry_line()).min(last)
+                    line.max(listing.first_entry_line())
+                        .min(listing.last_entry_line())
                 }
             });
         place_point(buffer, listing, line);
@@ -349,10 +380,12 @@ mod tests {
         for (keys, expected) in [
             ("n", "a.txt".to_owned()),
             ("SPC", "b.txt".to_owned()),
-            ("<down>", "b.txt".to_owned()),
-            ("p", "a.txt".to_owned()),
-            ("C-p", format!("sub{SEP}")),
-            ("<up>", "..".to_owned()),
+            ("<down>", String::new()),
+            ("C-n", String::new()),
+            ("p", "b.txt".to_owned()),
+            ("C-p", "a.txt".to_owned()),
+            ("<up>", format!("sub{SEP}")),
+            ("p", "..".to_owned()),
             ("C-n", format!("sub{SEP}")),
         ] {
             press(&mut editor, keys);
@@ -670,6 +703,93 @@ mod tests {
 
         assert!(editor.buffer().is_read_only());
         assert_eq!(editor.message(), Some("Dired buffers are read-only"));
+    }
+
+    fn mark_column(editor: &Editor) -> String {
+        lines(editor)[2..]
+            .iter()
+            .map(|line| line.chars().next().unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn m_marks_and_moves_down() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "m");
+        assert_eq!(mark_column(&editor), "*  ");
+        assert_eq!(at_point(&editor), "a.txt");
+
+        press(&mut editor, "m m m");
+        assert_eq!(mark_column(&editor), "***");
+        assert_eq!(at_point(&editor), "");
+    }
+
+    #[test]
+    fn d_flags_files_for_deletion() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "n d");
+
+        assert_eq!(mark_column(&editor), " D ");
+    }
+
+    #[test]
+    fn u_unmarks_forward_and_del_unmarks_backward() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+        press(&mut editor, "m m m");
+
+        press(&mut editor, "DEL");
+        assert_eq!(mark_column(&editor), "** ");
+        assert_eq!(at_point(&editor), "b.txt");
+
+        press(&mut editor, "p u");
+        assert_eq!(mark_column(&editor), "*  ");
+        assert_eq!(at_point(&editor), "b.txt");
+    }
+
+    #[test]
+    fn capital_u_removes_every_mark() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "m d m U");
+
+        assert_eq!(mark_column(&editor), "   ");
+    }
+
+    #[test]
+    fn t_toggles_marks_but_keeps_flags() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "m d t");
+
+        assert_eq!(mark_column(&editor), " D*");
+    }
+
+    #[test]
+    fn the_parent_line_cannot_be_marked() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "p m");
+
+        assert!(lines(&editor)[1].starts_with(' '));
+        assert_eq!(at_point(&editor), format!("sub{SEP}"));
+    }
+
+    #[test]
+    fn marks_survive_a_refresh() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "m g");
+
+        assert_eq!(mark_column(&editor), "*  ");
     }
 
     #[test]

@@ -94,6 +94,12 @@ const DIRED: &[(&str, Command)] = &[
     ("s", Command::DiredCycleSort),
     ("(", Command::DiredHideDetailsMode),
     ("q", Command::QuitWindow),
+    ("m", Command::DiredMark),
+    ("d", Command::DiredFlagFileDeletion),
+    ("u", Command::DiredUnmark),
+    ("DEL", Command::DiredUnmarkBackward),
+    ("U", Command::DiredUnmarkAllMarks),
+    ("t", Command::DiredToggleMarks),
 ];
 
 pub fn global() -> Keymap {

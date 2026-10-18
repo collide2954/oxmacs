@@ -166,7 +166,16 @@ impl Listing {
                 lines.push(format!("{mark} {name}"));
             }
         }
-        lines.join("\n")
+        let mut text = lines.join("\n");
+        text.push('\n');
+        text
+    }
+
+    pub fn last_entry_line(&self) -> usize {
+        match self.entries.len() {
+            0 => self.parent_line().unwrap_or(0),
+            count => self.first_entry_line() + count - 1,
+        }
     }
 
     fn header(&self, home: Option<&Path>) -> String {
@@ -368,6 +377,15 @@ mod tests {
 
         assert_eq!(listing.parent_line(), None);
         assert_eq!(listing.first_entry_line(), 1);
+        assert_eq!(listing.last_entry_line(), 0);
+    }
+
+    #[test]
+    fn listings_end_with_a_newline_after_the_last_entry() {
+        let listing = listing();
+
+        assert!(listing.render(&now(), None).ends_with("CHANGELOG.md\n"));
+        assert_eq!(listing.last_entry_line(), 4);
     }
 
     #[test]

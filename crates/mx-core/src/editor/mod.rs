@@ -27,6 +27,7 @@ use buffers::BufferList;
 
 use crate::command::{Command, Scope};
 use crate::config::{Config, OnDiskChange};
+use crate::dired::Mark;
 use crate::display::{self, Viewport};
 use crate::files::LineEnding;
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
@@ -372,6 +373,12 @@ impl Editor {
             Command::DiredFindFile => self.dired_find_file(),
             Command::DiredUpDirectory => self.dired_up_directory(),
             Command::DiredCycleSort => self.dired_cycle_sort(),
+            Command::DiredMark => self.dired_mark(Some(Mark::Marked)),
+            Command::DiredFlagFileDeletion => self.dired_mark(Some(Mark::Flagged)),
+            Command::DiredUnmark => self.dired_mark(None),
+            Command::DiredUnmarkBackward => self.dired_unmark_backward(),
+            Command::DiredUnmarkAllMarks => self.dired_unmark_all(),
+            Command::DiredToggleMarks => self.dired_toggle_marks(),
             Command::DiredHideDetailsMode => self.dired_hide_details(),
             Command::QuitWindow => self.quit_window(),
             Command::KeyboardQuit => self.keyboard_quit(),
