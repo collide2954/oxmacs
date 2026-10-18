@@ -41,6 +41,9 @@ pub struct TextChange {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BufferId(u64);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Marker(usize);
+
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone)]
@@ -53,6 +56,7 @@ pub struct Buffer {
     point: usize,
     mark: Option<usize>,
     mark_active: bool,
+    markers: Vec<Option<usize>>,
     history: History,
     saved: u64,
     file: Option<FileInfo>,
@@ -70,6 +74,7 @@ impl Buffer {
             point: 0,
             mark: None,
             mark_active: false,
+            markers: Vec::new(),
             history: History::default(),
             saved: 0,
             file: None,
@@ -232,6 +237,37 @@ impl Buffer {
         self.text.to_string()
     }
 
+    pub fn add_marker(&mut self, position: usize) -> Marker {
+        let position = Some(position.min(self.len_chars()));
+        let slot = self
+            .markers
+            .iter()
+            .position(Option::is_none)
+            .unwrap_or_else(|| {
+                self.markers.push(None);
+                self.markers.len() - 1
+            });
+        self.markers[slot] = position;
+        Marker(slot)
+    }
+
+    pub fn marker(&self, marker: Marker) -> Option<usize> {
+        self.markers.get(marker.0).copied().flatten()
+    }
+
+    pub fn set_marker(&mut self, marker: Marker, position: usize) {
+        let position = position.min(self.len_chars());
+        if let Some(slot) = self.markers.get_mut(marker.0) {
+            *slot = Some(position);
+        }
+    }
+
+    pub fn remove_marker(&mut self, marker: Marker) {
+        if let Some(slot) = self.markers.get_mut(marker.0) {
+            *slot = None;
+        }
+    }
+
     pub fn mark(&self) -> Option<usize> {
         self.mark
     }
@@ -361,6 +397,9 @@ impl Buffer {
         self.mark = self
             .mark
             .map(|mark| position_after_insert(mark, at, inserted));
+        for marker in self.markers.iter_mut().flatten() {
+            *marker = position_after_insert(*marker, at, inserted);
+        }
     }
 
     fn apply_delete(&mut self, start: usize, end: usize) -> String {
@@ -383,6 +422,9 @@ impl Buffer {
         self.mark = self
             .mark
             .map(|mark| position_after_removal(mark, start, end));
+        for marker in self.markers.iter_mut().flatten() {
+            *marker = position_after_removal(*marker, start, end);
+        }
         removed
     }
 
@@ -411,6 +453,9 @@ impl Buffer {
         let len = self.len_chars();
         self.point = self.point.min(len);
         self.mark = self.mark.map(|mark| mark.min(len));
+        for marker in self.markers.iter_mut().flatten() {
+            *marker = (*marker).min(len);
+        }
     }
 
     pub fn replace_text(&mut self, text: &str) {
@@ -988,6 +1033,37 @@ mod tests {
         assert_eq!(buffer.mark(), Some(2));
         assert!(!buffer.mark_active());
         assert_eq!(buffer.selection(), None);
+    }
+
+    #[test]
+    fn markers_follow_edits_around_them() {
+        let mut buffer = Buffer::with_text("t", "abcdef");
+        let before = buffer.add_marker(1);
+        let after = buffer.add_marker(4);
+
+        buffer.set_point(2);
+        buffer.insert("xy");
+        assert_eq!(buffer.marker(before), Some(1));
+        assert_eq!(buffer.marker(after), Some(6));
+
+        buffer.delete_range(0..3);
+        assert_eq!(buffer.marker(before), Some(0));
+        assert_eq!(buffer.marker(after), Some(3));
+
+        buffer.set_text("z");
+        assert_eq!(buffer.marker(after), Some(1));
+    }
+
+    #[test]
+    fn removed_markers_free_their_slot() {
+        let mut buffer = Buffer::with_text("t", "abc");
+        let first = buffer.add_marker(1);
+        buffer.remove_marker(first);
+
+        assert_eq!(buffer.marker(first), None);
+        let second = buffer.add_marker(2);
+        assert_eq!(second, first);
+        assert_eq!(buffer.marker(second), Some(2));
     }
 
     #[test]
