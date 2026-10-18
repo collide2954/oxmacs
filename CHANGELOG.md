@@ -4,6 +4,11 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 ## [Unreleased]
 
+### Added
+
+- `find-file` (`C-x C-f`) with a vertical directory list: typing filters, `TAB`/`RET` descend into directories, `DEL` after a separator goes up, `M-RET` uses the exact input; `~` abbreviates home.
+- Files open in their own buffers; LF/CRLF and UTF-8 BOMs are preserved, and invalid UTF-8 is refused.
+
 ## [0.6.0] - 2026-10-18
 
 ### Added

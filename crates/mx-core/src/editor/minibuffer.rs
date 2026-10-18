@@ -1,30 +1,42 @@
+use std::path::PathBuf;
+
 use strum::VariantArray;
 
 use crate::command::Command;
 use crate::editor::Editor;
+use crate::files::paths::DirEntry;
 use crate::text::Buffer;
 
 const LABEL_LIMIT: usize = 80;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Purpose {
+pub(super) enum Purpose {
     RunCommand,
     PasteFromHistory,
+    FindFile,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Listing {
+    pub(super) directory: PathBuf,
+    pub(super) entries: Vec<DirEntry>,
 }
 
 #[derive(Debug)]
 pub struct Minibuffer {
     prompt: String,
-    purpose: Purpose,
+    pub(super) purpose: Purpose,
     pub(super) input: Buffer,
     pub(super) note: Option<String>,
     pub(super) selected: usize,
+    pub(super) listing: Option<Listing>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Choice {
     Command(Command),
     Clip(usize),
+    Entry(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +54,7 @@ impl Minibuffer {
             input: Buffer::new(" *Minibuf*"),
             note: None,
             selected: 0,
+            listing: None,
         }
     }
 
@@ -89,6 +102,7 @@ impl Editor {
                 })
                 .filter(|completion| matches(&completion.label))
                 .collect(),
+            Purpose::FindFile => file_completions(minibuffer),
         }
     }
 
@@ -117,17 +131,32 @@ impl Editor {
             .unwrap_or(usize::MAX)
     }
 
-    fn selected_completion(&self) -> Option<Completion> {
+    pub(super) fn selected_completion(&self) -> Option<Completion> {
         let selected = self.minibuffer.as_ref()?.selected;
         self.completions().into_iter().nth(selected)
     }
 
-    fn open_minibuffer(&mut self, prompt: &str, purpose: Purpose) {
+    pub(super) fn open_minibuffer(&mut self, prompt: &str, purpose: Purpose) -> bool {
         if self.minibuffer.is_some() {
             self.show_message("Command attempted to use minibuffer while in minibuffer");
-            return;
+            return false;
         }
         self.minibuffer = Some(Minibuffer::new(prompt, purpose));
+        true
+    }
+
+    pub(super) fn set_minibuffer_input(&mut self, text: &str) {
+        if let Some(minibuffer) = &mut self.minibuffer {
+            let input = &mut minibuffer.input;
+            input.delete_range(0..input.len_chars());
+            input.insert(text);
+        }
+    }
+
+    fn minibuffer_purpose(&self) -> Option<Purpose> {
+        self.minibuffer
+            .as_ref()
+            .map(|minibuffer| minibuffer.purpose)
     }
 
     pub(super) fn execute_extended_command(&mut self) {
@@ -142,7 +171,19 @@ impl Editor {
         self.open_minibuffer("Paste from history: ", Purpose::PasteFromHistory);
     }
 
+    pub(super) fn exit_minibuffer_with_input(&mut self) {
+        if self.minibuffer_purpose() == Some(Purpose::FindFile) {
+            self.exit_find_file(true);
+        } else {
+            self.exit_minibuffer();
+        }
+    }
+
     pub(super) fn exit_minibuffer(&mut self) {
+        if self.minibuffer_purpose() == Some(Purpose::FindFile) {
+            self.exit_find_file(false);
+            return;
+        }
         let chosen = self.selected_completion();
         let Some(minibuffer) = self.minibuffer.as_mut() else {
             return;
@@ -162,6 +203,7 @@ impl Editor {
                 let text = self.clipboard_history.get(index).cloned();
                 self.paste(text);
             }
+            Choice::Entry(_) => {}
         }
     }
 
@@ -179,11 +221,12 @@ impl Editor {
     }
 
     pub(super) fn minibuffer_complete(&mut self) {
-        let chosen = self.selected_completion();
-        if let (Some(completion), Some(minibuffer)) = (chosen, &mut self.minibuffer) {
-            let input = &mut minibuffer.input;
-            input.delete_range(0..input.len_chars());
-            input.insert(&completion.label);
+        if self.minibuffer_purpose() == Some(Purpose::FindFile) {
+            self.complete_file_name();
+            return;
+        }
+        if let Some(completion) = self.selected_completion() {
+            self.set_minibuffer_input(&completion.label);
         }
     }
 
@@ -197,6 +240,41 @@ impl Editor {
             minibuffer.selected = 0;
         }
     }
+}
+
+fn file_completions(minibuffer: &Minibuffer) -> Vec<Completion> {
+    let Some(listing) = &minibuffer.listing else {
+        return Vec::new();
+    };
+    let input = minibuffer.input.contents();
+    let (_, name) = crate::files::paths::split(&input);
+    let typed = name.to_lowercase();
+    let mut completions: Vec<(bool, Completion)> = listing
+        .entries
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| {
+            let lower = entry.name.to_lowercase();
+            typed.split_whitespace().all(|term| lower.contains(term))
+        })
+        .map(|(index, entry)| {
+            let mut label = entry.name.clone();
+            if entry.is_dir {
+                label.push(crate::files::paths::SEPARATOR);
+            }
+            let completion = Completion {
+                label,
+                keys: None,
+                choice: Choice::Entry(index),
+            };
+            (entry.name != name, completion)
+        })
+        .collect();
+    completions.sort_by_key(|(inexact, _)| *inexact);
+    completions
+        .into_iter()
+        .map(|(_, completion)| completion)
+        .collect()
 }
 
 fn clip_label(text: &str) -> String {

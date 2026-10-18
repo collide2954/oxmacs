@@ -52,6 +52,7 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-M-_", Command::Redo),
     ("s-S-z", Command::Redo),
     ("M-x", Command::ExecuteExtendedCommand),
+    ("C-x C-f", Command::FindFile),
     ("C-g", Command::KeyboardQuit),
     ("ESC ESC", Command::KeyboardQuit),
     ("C-x C-c", Command::SaveBuffersKillMx),
@@ -65,6 +66,8 @@ const MINIBUFFER: &[(&str, Command)] = &[
     ("C-p", Command::MinibufferPrevious),
     ("<up>", Command::MinibufferPrevious),
     ("TAB", Command::MinibufferComplete),
+    ("DEL", Command::MinibufferDeleteBackward),
+    ("M-RET", Command::ExitMinibufferWithInput),
 ];
 
 pub fn global() -> Keymap {

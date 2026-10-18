@@ -34,6 +34,9 @@ pub enum Command {
     MinibufferNext,
     MinibufferPrevious,
     MinibufferComplete,
+    MinibufferDeleteBackward,
+    ExitMinibufferWithInput,
+    FindFile,
     KeyboardQuit,
     SaveBuffersKillMx,
 }
@@ -66,6 +69,8 @@ impl Command {
                 | Self::MinibufferNext
                 | Self::MinibufferPrevious
                 | Self::MinibufferComplete
+                | Self::MinibufferDeleteBackward
+                | Self::ExitMinibufferWithInput
         )
     }
 }

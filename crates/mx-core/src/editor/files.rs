@@ -1,13 +1,134 @@
 use std::path::{self, Path, PathBuf};
 
 use crate::display::Viewport;
-use crate::editor::Editor;
-use crate::files;
+use crate::editor::minibuffer::{Listing, Purpose};
+use crate::editor::{Choice, Editor};
+use crate::files::{self, paths};
 use crate::text::{Buffer, FileInfo};
 
 impl Editor {
     pub fn set_working_directory(&mut self, directory: PathBuf) {
         self.working_directory = directory;
+    }
+
+    pub fn set_home_directory(&mut self, home: Option<PathBuf>) {
+        self.home = home;
+    }
+
+    pub(super) fn find_file(&mut self) {
+        if !self.open_minibuffer("Find file: ", Purpose::FindFile) {
+            return;
+        }
+        let mut start = paths::abbreviate(&self.default_directory(), self.home.as_deref());
+        if !start.ends_with(paths::is_separator) {
+            start.push(paths::SEPARATOR);
+        }
+        self.set_minibuffer_input(&start);
+        self.refresh_minibuffer();
+    }
+
+    pub(super) fn refresh_minibuffer(&mut self) {
+        let Some(minibuffer) = &self.minibuffer else {
+            return;
+        };
+        if minibuffer.purpose != Purpose::FindFile {
+            return;
+        }
+        let input = minibuffer.input.contents();
+        let directory = self.resolve_path(paths::split(&input).0);
+        if minibuffer
+            .listing
+            .as_ref()
+            .is_some_and(|listing| listing.directory == directory)
+        {
+            return;
+        }
+        let entries = paths::list_dir(&directory).unwrap_or_default();
+        if let Some(minibuffer) = &mut self.minibuffer {
+            minibuffer.listing = Some(Listing { directory, entries });
+        }
+    }
+
+    pub(super) fn exit_find_file(&mut self, exact: bool) {
+        let input = self.minibuffer_input();
+        let (directory, name) = paths::split(&input);
+        if name.is_empty() {
+            if let Some(minibuffer) = &mut self.minibuffer {
+                minibuffer.note = Some("[Directory]".to_owned());
+            }
+            return;
+        }
+        if !exact && let Some((label, entry_path, is_dir)) = self.selected_entry() {
+            if is_dir {
+                self.set_minibuffer_input(&format!("{directory}{label}"));
+            } else {
+                self.minibuffer = None;
+                self.open_file(&entry_path);
+            }
+            return;
+        }
+        let path = self.resolve_path(&input);
+        self.minibuffer = None;
+        self.open_file(&path);
+    }
+
+    pub(super) fn complete_file_name(&mut self) {
+        if let Some((label, _, _)) = self.selected_entry() {
+            let input = self.minibuffer_input();
+            let (directory, _) = paths::split(&input);
+            self.set_minibuffer_input(&format!("{directory}{label}"));
+        }
+    }
+
+    pub(super) fn minibuffer_delete_backward(&mut self) {
+        match self.parent_input() {
+            Some(parent) => self.set_minibuffer_input(&parent),
+            None => self.delete_char(false),
+        }
+    }
+
+    fn parent_input(&self) -> Option<String> {
+        let minibuffer = self
+            .minibuffer
+            .as_ref()
+            .filter(|minibuffer| minibuffer.purpose == Purpose::FindFile)?;
+        if minibuffer.input.point() != minibuffer.input.len_chars() {
+            return None;
+        }
+        let input = minibuffer.input.contents();
+        let trimmed = input.strip_suffix(paths::is_separator)?;
+        let index = trimmed.rfind(paths::is_separator)?;
+        Some(trimmed[..=index].to_owned())
+    }
+
+    fn selected_entry(&self) -> Option<(String, PathBuf, bool)> {
+        let completion = self.selected_completion()?;
+        let Choice::Entry(index) = completion.choice else {
+            return None;
+        };
+        let listing = self.minibuffer.as_ref()?.listing.as_ref()?;
+        let entry = listing.entries.get(index)?;
+        Some((
+            completion.label,
+            listing.directory.join(&entry.name),
+            entry.is_dir,
+        ))
+    }
+
+    fn minibuffer_input(&self) -> String {
+        self.minibuffer
+            .as_ref()
+            .map(|minibuffer| minibuffer.input.contents())
+            .unwrap_or_default()
+    }
+
+    fn resolve_path(&self, input: &str) -> PathBuf {
+        let path = paths::expand(input, self.home.as_deref());
+        if path.is_absolute() {
+            path
+        } else {
+            self.default_directory().join(path)
+        }
     }
 
     pub fn default_directory(&self) -> PathBuf {
@@ -146,6 +267,137 @@ mod tests {
         editor.open_file(&sub.join("c.txt"));
 
         assert_eq!(editor.default_directory(), sub);
+    }
+
+    const SEP: char = crate::files::paths::SEPARATOR;
+
+    fn find_file_workspace() -> (tempfile::TempDir, Editor) {
+        let (dir, mut editor) = workspace();
+        fs::write(dir.path().join(".hidden"), "").unwrap();
+        fs::create_dir(dir.path().join("sub")).unwrap();
+        fs::write(dir.path().join("sub").join("c.txt"), "sea").unwrap();
+        editor.set_home_directory(None);
+        press(&mut editor, "C-x C-f");
+        (dir, editor)
+    }
+
+    fn input(editor: &Editor) -> String {
+        editor.minibuffer().unwrap().input().contents()
+    }
+
+    fn labels(editor: &Editor) -> Vec<String> {
+        editor
+            .completions()
+            .into_iter()
+            .map(|completion| completion.label)
+            .collect()
+    }
+
+    fn root(dir: &tempfile::TempDir) -> String {
+        format!("{}{SEP}", dir.path().display())
+    }
+
+    #[test]
+    fn find_file_starts_in_the_default_directory() {
+        let (dir, editor) = find_file_workspace();
+
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Find file: ");
+        assert_eq!(input(&editor), root(&dir));
+        assert_eq!(
+            labels(&editor),
+            [
+                format!("sub{SEP}"),
+                "a.txt".into(),
+                "b.txt".into(),
+                ".hidden".into()
+            ]
+        );
+    }
+
+    #[test]
+    fn typing_filters_the_directory_entries() {
+        let (_dir, mut editor) = find_file_workspace();
+
+        type_text(&mut editor, "txt");
+
+        assert_eq!(labels(&editor), ["a.txt", "b.txt"]);
+    }
+
+    #[test]
+    fn return_opens_the_selected_file() {
+        let (_dir, mut editor) = find_file_workspace();
+
+        type_text(&mut editor, "b.t");
+        press(&mut editor, "RET");
+
+        assert!(editor.minibuffer().is_none());
+        assert_eq!(editor.buffer().name(), "b.txt");
+        assert_eq!(editor.buffer().contents(), "bee");
+    }
+
+    #[test]
+    fn tab_and_return_descend_into_directories() {
+        for key in ["TAB", "RET"] {
+            let (dir, mut editor) = find_file_workspace();
+
+            type_text(&mut editor, "su");
+            press(&mut editor, key);
+
+            assert_eq!(input(&editor), format!("{}sub{SEP}", root(&dir)), "{key}");
+            assert_eq!(labels(&editor), ["c.txt"], "{key}");
+        }
+    }
+
+    #[test]
+    fn backspace_after_a_separator_goes_up_a_directory() {
+        let (dir, mut editor) = find_file_workspace();
+        type_text(&mut editor, "su");
+        press(&mut editor, "TAB");
+
+        press(&mut editor, "DEL");
+
+        assert_eq!(input(&editor), root(&dir));
+    }
+
+    #[test]
+    fn return_without_a_match_creates_a_new_file() {
+        let (_dir, mut editor) = find_file_workspace();
+
+        type_text(&mut editor, "new.md");
+        press(&mut editor, "RET");
+
+        assert_eq!(editor.buffer().name(), "new.md");
+        assert_eq!(editor.message(), Some("(New file)"));
+    }
+
+    #[test]
+    fn meta_return_uses_the_exact_input() {
+        let (_dir, mut editor) = find_file_workspace();
+
+        type_text(&mut editor, "a");
+        press(&mut editor, "M-RET");
+
+        assert_eq!(editor.buffer().name(), "a");
+    }
+
+    #[test]
+    fn return_on_a_bare_directory_keeps_the_prompt_open() {
+        let (_dir, mut editor) = find_file_workspace();
+
+        press(&mut editor, "RET");
+
+        assert_eq!(editor.minibuffer().unwrap().note(), Some("[Directory]"));
+    }
+
+    #[test]
+    fn the_prompt_abbreviates_the_home_directory() {
+        let (dir, mut editor) = workspace();
+        editor.set_home_directory(Some(dir.path().to_owned()));
+
+        press(&mut editor, "C-x C-f");
+
+        assert_eq!(input(&editor), format!("~{SEP}"));
+        assert!(labels(&editor).contains(&"a.txt".to_owned()));
     }
 
     #[test]

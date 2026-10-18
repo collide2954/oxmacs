@@ -54,6 +54,7 @@ pub struct Editor {
     appearance: Appearance,
     configured_theme: Option<&'static Theme>,
     working_directory: PathBuf,
+    home: Option<PathBuf>,
 }
 
 impl Default for Editor {
@@ -92,6 +93,7 @@ impl Editor {
             appearance: Appearance::Light,
             configured_theme: None,
             working_directory: env::current_dir().unwrap_or_default(),
+            home: dirs::home_dir(),
         }
     }
 
@@ -296,10 +298,14 @@ impl Editor {
             Command::MinibufferNext => self.minibuffer_next(),
             Command::MinibufferPrevious => self.minibuffer_previous(),
             Command::MinibufferComplete => self.minibuffer_complete(),
+            Command::MinibufferDeleteBackward => self.minibuffer_delete_backward(),
+            Command::ExitMinibufferWithInput => self.exit_minibuffer_with_input(),
+            Command::FindFile => self.find_file(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.quit_requested = true,
         }
         self.reset_selection(command);
+        self.refresh_minibuffer();
         self.viewport.reveal(self.point_line());
     }
 }
