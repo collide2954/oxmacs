@@ -77,7 +77,7 @@ impl Editor {
 
     pub(super) fn revert_buffer(&mut self) {
         if matches!(self.buffers.mode(0), Some(Mode::Doctor(_))) {
-            self.mx_doctor();
+            self.oxmacs_doctor();
             return;
         }
         if self.buffers.listing(0).is_some() {

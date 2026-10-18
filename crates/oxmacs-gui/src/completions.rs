@@ -2,8 +2,8 @@ use std::ops::Range;
 
 use iced::widget::{Column, container, row, space, text};
 use iced::{Element, Font, Length};
-use mx_core::editor::Editor;
-use mx_core::theme::Theme as Faces;
+use oxmacs_core::editor::Editor;
+use oxmacs_core::theme::Theme as Faces;
 
 use crate::style;
 

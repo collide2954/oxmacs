@@ -9,12 +9,12 @@ use iced::{
     Animation, Element, Event, Font, Length, Subscription, Task, Theme, clipboard, event, keyboard,
     system, window,
 };
-use mx_core::cli::Visit;
-use mx_core::clock;
-use mx_core::config::{self, Config, ConfigError};
-use mx_core::editor::{Editor, Effect};
-use mx_core::theme::{Appearance, Theme as Faces};
 use native_theme::detect::prefers_reduced_motion;
+use oxmacs_core::cli::Visit;
+use oxmacs_core::clock;
+use oxmacs_core::config::{self, Config, ConfigError};
+use oxmacs_core::editor::{Editor, Effect};
+use oxmacs_core::theme::{Appearance, Theme as Faces};
 
 use crate::buffer_view::{BufferView, Motion, ViewEvent};
 use crate::keys::{self, Platform};
@@ -273,7 +273,7 @@ impl App {
     }
 
     pub fn title(&self) -> String {
-        format!("{} - mx", self.editor.buffer().name())
+        format!("{} - oxmacs", self.editor.buffer().name())
     }
 
     pub fn faces(&self) -> Faces {
@@ -379,8 +379,8 @@ mod tests {
     use super::*;
     use iced::keyboard::key::{Code, Physical};
     use iced::keyboard::{Key, Location, Modifiers};
-    use mx_core::editor::{Cell, Clicks};
-    use mx_core::theme::{ADWAITA, ADWAITA_DARK};
+    use oxmacs_core::editor::{Cell, Clicks};
+    use oxmacs_core::theme::{ADWAITA, ADWAITA_DARK};
 
     fn press(app: &mut App, c: &str, modifiers: Modifiers) {
         let _ = app.update(Message::Keyboard(keyboard::Event::KeyPressed {
@@ -602,7 +602,7 @@ mod tests {
 
         app.start(&[], true);
 
-        assert_eq!(app.editor().buffer().name(), "*mx*");
+        assert_eq!(app.editor().buffer().name(), "*oxmacs*");
     }
 
     #[test]
@@ -633,7 +633,7 @@ mod tests {
         std::fs::write(&path, "old").unwrap();
         let mut app = App::default();
         app.start(&[visit(&path)], true);
-        assert_eq!(app.title(), "a.txt - mx");
+        assert_eq!(app.title(), "a.txt - oxmacs");
         std::fs::write(&path, "new text").unwrap();
 
         let _ = app.update(Message::DiskChanged);
@@ -680,7 +680,7 @@ mod tests {
 
         assert_eq!(
             app.editor().line_style(0).spans[0],
-            (0..2, mx_core::theme::Highlight::Keyword)
+            (0..2, oxmacs_core::theme::Highlight::Keyword)
         );
     }
 
@@ -691,7 +691,7 @@ mod tests {
         let _ = app.update(Message::View(ViewEvent::FontNotMonospaced));
 
         press(&mut app, "x", Modifiers::ALT);
-        for c in "mx-doctor".chars() {
+        for c in "oxmacs-doctor".chars() {
             press(&mut app, &c.to_string(), Modifiers::empty());
         }
         enter(&mut app);
@@ -723,7 +723,7 @@ mod tests {
 
     #[test]
     fn title_names_the_current_buffer() {
-        assert_eq!(App::default().title(), "*scratch* - mx");
+        assert_eq!(App::default().title(), "*scratch* - oxmacs");
     }
 
     #[test]

@@ -1,8 +1,8 @@
 use iced::widget::text::Span;
 use iced::widget::{container, rich_text, span, text};
 use iced::{Element, Font, Length};
-use mx_core::editor::{Editor, Search};
-use mx_core::theme::Theme as Faces;
+use oxmacs_core::editor::{Editor, Search};
+use oxmacs_core::theme::Theme as Faces;
 
 use crate::style;
 

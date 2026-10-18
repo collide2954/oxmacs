@@ -1,5 +1,5 @@
 [package]
-name = "mx-core"
+name = "oxmacs-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

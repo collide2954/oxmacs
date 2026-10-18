@@ -1,5 +1,5 @@
 [package]
-name = "mx-gui"
+name = "oxmacs-gui"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,7 +10,7 @@ workspace = true
 
 [dependencies]
 iced.workspace = true
-mx-core.workspace = true
+oxmacs-core.workspace = true
 native-theme.workspace = true
 notify.workspace = true
 open.workspace = true

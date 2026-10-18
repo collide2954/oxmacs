@@ -1,7 +1,7 @@
 use iced::theme::Palette;
 use iced::widget::container;
 use iced::{Border, Theme};
-use mx_core::theme::{self, Appearance};
+use oxmacs_core::theme::{self, Appearance};
 
 pub fn color(color: theme::Color) -> iced::Color {
     iced::Color::from_rgb8(color.r, color.g, color.b)

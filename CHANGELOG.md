@@ -1,8 +1,13 @@
 # Changelog
 
-Notable changes to mx. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
+Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+
+### Changed
+
+- The project is now called oxmacs: the binary, window title, `*oxmacs*` splash, `about-oxmacs`, `kill-oxmacs`, `save-buffers-kill-oxmacs` and `oxmacs-doctor`. Settings now live in the `oxmacs` folder of the platform config directory.
+- Animations are about a third quicker.
 
 ## [0.11.0] - 2026-10-18
 

@@ -2,7 +2,7 @@ use iced::Animation;
 use iced::animation::Easing;
 use iced::time::{Duration, Instant};
 
-use mx_core::display::ScreenLine;
+use oxmacs_core::display::ScreenLine;
 
 use crate::units::{signed_to_f32, to_f32};
 

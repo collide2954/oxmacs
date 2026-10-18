@@ -13,10 +13,10 @@ use iced::{
     Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, keyboard,
     window,
 };
-use mx_core::display::{self, LineStyle};
-use mx_core::editor::{Cell, Clicks, Pane, ScreenRow};
-use mx_core::text::BufferId;
-use mx_core::theme::{Highlight, Theme as Faces};
+use oxmacs_core::display::{self, LineStyle};
+use oxmacs_core::editor::{Cell, Clicks, Pane, ScreenRow};
+use oxmacs_core::text::BufferId;
+use oxmacs_core::theme::{Highlight, Theme as Faces};
 
 use crate::animation::{self, Glide, Scroll};
 use crate::style;
@@ -646,7 +646,7 @@ pub fn rows_in(height: f32, line_height: f32) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use mx_core::text::Buffer;
+    use oxmacs_core::text::Buffer;
 
     use super::*;
 

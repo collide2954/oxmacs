@@ -7,7 +7,7 @@ use crate::editor::buffers::Mode;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
-const NAME: &str = "*mx*";
+const NAME: &str = "*oxmacs*";
 const TAGLINE: &str = "An Emacs-inspired editor, written in Rust.";
 const INDENT: usize = 3;
 const TITLE_LINE: usize = 1;
@@ -19,7 +19,7 @@ const BUTTONS: &[(Command, &str)] = &[
     (Command::IsearchForward, "Search"),
     (Command::ExecuteExtendedCommand, "Run any command"),
     (Command::SaveBuffer, "Save"),
-    (Command::SaveBuffersKillMx, "Quit"),
+    (Command::SaveBuffersKillOxmacs, "Quit"),
 ];
 
 #[derive(Debug)]
@@ -87,7 +87,7 @@ impl Editor {
             .unwrap_or(0);
         let pad = " ".repeat(INDENT);
         let mut text = format!(
-            "\n{pad}mx {}\n{pad}{TAGLINE}\n\n",
+            "\n{pad}oxmacs {}\n{pad}{TAGLINE}\n\n",
             env!("CARGO_PKG_VERSION")
         );
         let mut buttons = Vec::new();
@@ -168,18 +168,18 @@ mod tests {
     }
 
     #[test]
-    fn about_mx_shows_a_read_only_splash() {
+    fn about_oxmacs_shows_a_read_only_splash() {
         let mut editor = Editor::new();
 
         press(&mut editor, "M-x");
-        type_text(&mut editor, "about-mx");
+        type_text(&mut editor, "about-oxmacs");
         press(&mut editor, "RET");
 
-        assert_eq!(editor.buffer().name(), "*mx*");
+        assert_eq!(editor.buffer().name(), "*oxmacs*");
         assert!(editor.buffer().is_read_only());
         assert!(!editor.buffer().is_modified());
         let lines = lines(&editor);
-        assert_eq!(lines[1], format!("   mx {}", env!("CARGO_PKG_VERSION")));
+        assert_eq!(lines[1], format!("   oxmacs {}", env!("CARGO_PKG_VERSION")));
         assert_eq!(lines[2], "   An Emacs-inspired editor, written in Rust.");
     }
 
@@ -194,7 +194,7 @@ mod tests {
             ("C-s", "isearch-forward", "Search"),
             ("M-x", "execute-extended-command", "Run any command"),
             ("C-x C-s", "save-buffer", "Save"),
-            ("C-x C-c", "save-buffers-kill-mx", "Quit"),
+            ("C-x C-c", "save-buffers-kill-oxmacs", "Quit"),
         ] {
             let line = lines
                 .iter()
@@ -269,7 +269,7 @@ mod tests {
 
         press(&mut editor, "q");
 
-        assert_eq!(editor.buffer_names(), ["*scratch*", "*mx*"]);
+        assert_eq!(editor.buffer_names(), ["*scratch*", "*oxmacs*"]);
     }
 
     #[test]
@@ -279,7 +279,7 @@ mod tests {
 
         editor.about();
 
-        assert_eq!(editor.buffer_names(), ["*mx*", "*scratch*"]);
+        assert_eq!(editor.buffer_names(), ["*oxmacs*", "*scratch*"]);
     }
 
     #[test]

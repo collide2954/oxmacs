@@ -96,7 +96,7 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-x C-j", Command::DiredJump),
     ("C-g", Command::KeyboardQuit),
     ("ESC ESC", Command::KeyboardQuit),
-    ("C-x C-c", Command::SaveBuffersKillMx),
+    ("C-x C-c", Command::SaveBuffersKillOxmacs),
 ];
 
 const MINIBUFFER: &[(&str, Command)] = &[

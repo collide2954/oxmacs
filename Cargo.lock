@@ -2090,52 +2090,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mx"
-version = "0.11.0"
-dependencies = [
- "mx-core",
- "mx-gui",
-]
-
-[[package]]
-name = "mx-core"
-version = "0.11.0"
-dependencies = [
- "bitflags 2.13.2",
- "dirs",
- "indexmap 2.14.2",
- "jiff",
- "regex",
- "ropey",
- "serde",
- "streaming-iterator",
- "strum",
- "tempfile",
- "thiserror 2.0.21",
- "toml",
- "trash",
- "tree-sitter",
- "tree-sitter-md",
- "tree-sitter-rust",
- "tree-sitter-toml-ng",
- "unicode-width",
-]
-
-[[package]]
-name = "mx-gui"
-version = "0.11.0"
-dependencies = [
- "iced",
- "iced_test",
- "mx-core",
- "native-theme",
- "notify",
- "open",
- "tempfile",
- "ttf-parser",
-]
-
-[[package]]
 name = "naga"
 version = "27.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2717,6 +2671,52 @@ version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36820e9051aca1014ddc75770aab4d68bc1e9e632f0f5627c4086bc216fb583b"
 dependencies = [
+ "ttf-parser",
+]
+
+[[package]]
+name = "oxmacs"
+version = "0.11.0"
+dependencies = [
+ "oxmacs-core",
+ "oxmacs-gui",
+]
+
+[[package]]
+name = "oxmacs-core"
+version = "0.11.0"
+dependencies = [
+ "bitflags 2.13.2",
+ "dirs",
+ "indexmap 2.14.2",
+ "jiff",
+ "regex",
+ "ropey",
+ "serde",
+ "streaming-iterator",
+ "strum",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml",
+ "trash",
+ "tree-sitter",
+ "tree-sitter-md",
+ "tree-sitter-rust",
+ "tree-sitter-toml-ng",
+ "unicode-width",
+]
+
+[[package]]
+name = "oxmacs-gui"
+version = "0.11.0"
+dependencies = [
+ "iced",
+ "iced_test",
+ "native-theme",
+ "notify",
+ "open",
+ "oxmacs-core",
+ "tempfile",
  "ttf-parser",
 ]
 

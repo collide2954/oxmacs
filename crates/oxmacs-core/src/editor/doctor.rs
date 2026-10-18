@@ -11,7 +11,7 @@ use crate::text::Buffer;
 use crate::theme::{Appearance, Highlight};
 use crate::tools::Probe;
 
-const NAME: &str = "*mx-doctor*";
+const NAME: &str = "*oxmacs-doctor*";
 const LABEL_WIDTH: usize = 16;
 const TOOLS: &[(&str, &str)] = &[
     ("rustfmt", "rustup component add rustfmt"),
@@ -67,7 +67,7 @@ impl Editor {
         self.font_note = Some(note.into());
     }
 
-    pub(super) fn mx_doctor(&mut self) {
+    pub(super) fn oxmacs_doctor(&mut self) {
         let page = self.examine();
         let doctor = Doctor {
             styles: page.styles,
@@ -89,7 +89,7 @@ impl Editor {
     fn examine(&self) -> Page {
         let mut page = Page::default();
         page.line(&[
-            ("mx doctor", Some(Highlight::Heading)),
+            ("oxmacs doctor", Some(Highlight::Heading)),
             ("   g refreshes, q quits", None),
         ]);
         page.line(&[]);
@@ -105,7 +105,7 @@ impl Editor {
         page.heading("Environment");
         page.field(
             "Version",
-            &format!("mx {}", env!("CARGO_PKG_VERSION")),
+            &format!("oxmacs {}", env!("CARGO_PKG_VERSION")),
             None,
         );
         page.field(
@@ -135,7 +135,7 @@ impl Editor {
             }
             None => page.field("Config", "no config directory", Some(Highlight::Warning)),
         }
-        let data = dirs::data_dir().map(|dir| dir.join("mx").display().to_string());
+        let data = dirs::data_dir().map(|dir| dir.join("oxmacs").display().to_string());
         page.field("Data", data.as_deref().unwrap_or("none"), None);
     }
 
@@ -256,7 +256,7 @@ mod tests {
         editor.config_path = Some(dir.path().join("config.toml"));
         editor.set_font_note("JetBrains Mono (bundled)");
         press(&mut editor, "M-x");
-        type_text(&mut editor, "mx-doctor");
+        type_text(&mut editor, "oxmacs-doctor");
         press(&mut editor, "RET");
         (dir, editor)
     }
@@ -269,10 +269,10 @@ mod tests {
     }
 
     #[test]
-    fn mx_doctor_opens_a_read_only_report() {
+    fn oxmacs_doctor_opens_a_read_only_report() {
         let (_dir, editor) = doctor();
 
-        assert_eq!(editor.buffer().name(), "*mx-doctor*");
+        assert_eq!(editor.buffer().name(), "*oxmacs-doctor*");
         assert!(editor.buffer().is_read_only());
         assert!(line_with(&editor, "Version").contains(env!("CARGO_PKG_VERSION")));
         assert!(line_with(&editor, "Font").contains("JetBrains Mono (bundled)"));

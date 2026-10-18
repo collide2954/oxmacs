@@ -119,7 +119,7 @@ impl Config {
 }
 
 pub fn default_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|dir| dir.join("mx").join("config.toml"))
+    dirs::config_dir().map(|dir| dir.join("oxmacs").join("config.toml"))
 }
 
 fn syntax_error(text: &str, error: &toml::de::Error) -> ConfigError {
@@ -303,9 +303,9 @@ mod tests {
     }
 
     #[test]
-    fn default_path_is_config_toml_in_an_mx_directory() {
+    fn default_path_is_config_toml_in_an_oxmacs_directory() {
         if let Some(path) = default_path() {
-            assert!(path.ends_with(Path::new("mx").join("config.toml")));
+            assert!(path.ends_with(Path::new("oxmacs").join("config.toml")));
         }
     }
 }

@@ -323,11 +323,11 @@ mod tests {
     }
 
     #[test]
-    fn kill_mx_quits_at_once_without_saving() {
+    fn kill_oxmacs_quits_at_once_without_saving() {
         let (dir, mut editor) = two_modified_files();
 
         press(&mut editor, "M-x");
-        type_text(&mut editor, "kill-mx");
+        type_text(&mut editor, "kill-oxmacs");
         press(&mut editor, "RET");
 
         assert!(editor.should_quit());

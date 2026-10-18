@@ -1,6 +1,6 @@
 use iced::keyboard::key::Named;
 use iced::keyboard::{Key as IcedKey, Modifiers as IcedModifiers};
-use mx_core::input::{Key, KeyCode, Modifiers};
+use oxmacs_core::input::{Key, KeyCode, Modifiers};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {

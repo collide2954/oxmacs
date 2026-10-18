@@ -1,5 +1,5 @@
 [package]
-name = "mx"
+name = "oxmacs"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,5 +9,5 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-mx-core.workspace = true
-mx-gui.workspace = true
+oxmacs-core.workspace = true
+oxmacs-gui.workspace = true

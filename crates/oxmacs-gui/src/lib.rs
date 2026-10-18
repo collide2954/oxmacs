@@ -13,7 +13,7 @@ pub mod watcher;
 pub use iced::Result;
 
 use app::App;
-use mx_core::cli::Visit;
+use oxmacs_core::cli::Visit;
 
 pub fn run(visits: Vec<Visit>) -> Result {
     iced::application(move || App::boot(&visits), App::update, App::view)
