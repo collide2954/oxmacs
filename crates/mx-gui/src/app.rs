@@ -7,6 +7,7 @@ use iced::{Animation, Element, Font, Length, Subscription, Task, Theme, keyboard
 use mx_core::config::{self, Config, ConfigError};
 use mx_core::editor::Editor;
 use mx_core::theme::{Appearance, Theme as Faces};
+use native_theme::detect::prefers_reduced_motion;
 
 use crate::buffer_view::{BufferView, Motion, ViewEvent};
 use crate::keys::{self, Platform};
@@ -66,10 +67,9 @@ impl App {
     pub fn boot() -> (Self, Task<Message>) {
         let config = config::default_path()
             .map_or_else(|| Ok(Config::default()), |path| Config::load(&path));
-        (
-            Self::new(config),
-            system::theme().map(Message::AppearanceChanged),
-        )
+        let mut app = Self::new(config);
+        app.animations = animations_enabled(app.animations, prefers_reduced_motion());
+        (app, system::theme().map(Message::AppearanceChanged))
     }
 
     pub fn editor(&self) -> &Editor {
@@ -248,6 +248,10 @@ pub fn points_to_pixels(points: f32) -> f32 {
     points * 4.0 / 3.0
 }
 
+pub fn animations_enabled(configured: bool, reduced_motion: bool) -> bool {
+    configured && !reduced_motion
+}
+
 fn transition(state: bool, duration: Duration) -> Animation<bool> {
     Animation::new(state)
         .duration(duration)
@@ -388,6 +392,14 @@ mod tests {
         press(&mut app, "x", Modifiers::ALT);
 
         assert!((app.completion_opacity() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn os_reduced_motion_turns_animations_off() {
+        assert!(animations_enabled(true, false));
+        assert!(!animations_enabled(true, true));
+        assert!(!animations_enabled(false, false));
+        assert!(!animations_enabled(false, true));
     }
 
     #[test]
