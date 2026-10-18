@@ -15,6 +15,16 @@ pub struct Config {
     pub tab_width: usize,
     pub animations: bool,
     pub cursor_blink_interval: u64,
+    pub on_disk_change: OnDiskChange,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OnDiskChange {
+    #[default]
+    Revert,
+    Ask,
+    Ignore,
 }
 
 impl Default for Config {
@@ -26,6 +36,7 @@ impl Default for Config {
             tab_width: 8,
             animations: true,
             cursor_blink_interval: 400,
+            on_disk_change: OnDiskChange::default(),
         }
     }
 }
@@ -129,6 +140,19 @@ mod tests {
                 .cursor_blink_interval,
             0
         );
+    }
+
+    #[test]
+    fn on_disk_change_defaults_to_revert() {
+        let read = |text| Config::parse(text).map(|config| config.on_disk_change);
+
+        assert_eq!(Config::default().on_disk_change, OnDiskChange::Revert);
+        assert_eq!(read("on-disk-change = \"ask\"").unwrap(), OnDiskChange::Ask);
+        assert_eq!(
+            read("on-disk-change = \"ignore\"").unwrap(),
+            OnDiskChange::Ignore
+        );
+        assert!(read("on-disk-change = \"panic\"").is_err());
     }
 
     #[test]
