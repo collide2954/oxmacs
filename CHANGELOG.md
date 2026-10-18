@@ -4,21 +4,26 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-18
+
 ### Added
 
-- `read-only-mode` (`C-x C-q`) toggles a buffer read-only; the mode line shows `%%` and edits are refused. Files without write permission open read-only.
-- `dired` (`C-x d`) lists a directory in a read-only buffer: size, modification time and name, directories first, a `..` line on top; the prompt offers only directories. In listings `n`/`SPC`/`C-n` and `p`/`C-p` move between names, and `M-x` offers dired commands only there.
-- In dired, `RET`/`f`/`e` visit the file at point or move the listing into the directory; `^` (or `RET` on `..`) goes up with point on the directory you left. One listing buffer is reused while navigating.
+- `dired` (`C-x d`) lists a directory in a read-only buffer: size, modification time and name, directories first, a `..` line on top; the prompt offers only directories.
+- Directories open in dired from `C-x C-f` (`RET` on a bare directory or a directory path), from `mx DIR`, and with `dired-jump` (`C-x C-j`), which lands on the current file (or goes up from a listing).
+- In dired, `n`/`SPC`/`C-n` and `p`/`C-p` move between names; `RET`/`f`/`e` (or a double-click) visit the file at point or move the listing into the directory; `^` (or `RET` on `..`) goes up with point on the directory you left. One listing buffer is reused while navigating, and `M-x` offers dired commands only in listings.
 - In dired, `g` (or `revert-buffer`) rereads the directory, `s` cycles name / newest / largest order (shown in the header), `(` hides details and `q` buries the listing; point stays on its file.
+- Dired listings refresh by themselves when their directory changes (and when the window regains focus), keeping marks and point.
 - Dired marks: `m` marks, `d` flags for deletion, `u` unmarks, `DEL` unmarks backward, `U` clears every mark and `t` toggles marks; marks survive refreshes.
 - Dired deletion: `x` deletes flagged files and `D` the marked files (or the one at point), after a y/n question naming them. Files go to the OS trash; `delete-to-trash = false` in `config.toml` deletes them for good, after you type `yes`.
 - Dired `R` renames or moves and `C` copies the marked files (or the one at point) through the path prompt; a directory target receives them, copies are recursive and keep modification times, each conflict asks `y`, `n`, `!` or `q`, and buffers visiting renamed files follow them.
 - Dired `+` creates a directory (and any missing parents) and moves point to it.
-- Double-clicking a dired entry opens it.
-- Dired listings refresh by themselves when their directory changes (and when the window regains focus), keeping marks and point.
-- Dired colors: the header, directory names and symlinks have their own colors, and marked and flagged lines are tinted.
 - Dired `W` opens the marked files (or the one at point) with the system's default application.
-- Directories open in dired from `C-x C-f` (`RET` on a bare directory or a directory path), from `mx DIR`, and with `dired-jump` (`C-x C-j`), which lands on the current file (or goes up from a listing).
+- Dired colors: the header, directory names and symlinks have their own colors, and marked and flagged lines are tinted.
+- `read-only-mode` (`C-x C-q`) toggles a buffer read-only; the mode line shows `%%` and edits are refused. Files without write permission open read-only.
+
+### Changed
+
+- `RET` on a bare directory in `C-x C-f` opens it in dired instead of showing `[Directory]`.
 
 ## [0.7.0] - 2026-10-18
 
