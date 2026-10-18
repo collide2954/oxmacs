@@ -4,6 +4,8 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-18
+
 ### Added
 
 - Mark and selection: `C-SPC`/`C-@` (twice deactivates), `C-x C-x`, `C-x h`/`s-a`; `C-g` deactivates.
