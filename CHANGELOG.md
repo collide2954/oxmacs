@@ -4,12 +4,18 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-18
+
 ### Added
 
 - Incremental search: `C-s`/`C-r` search as you type, and pressing them again moves to the next or previous match, wrapping around after a "Failing" stop. `RET` stays, `C-g` goes back, `DEL` steps back, and any other key ends the search and runs. All-lowercase queries ignore case.
 - Searches highlight every match and show a `3/17` count. `C-w` adds the next word, `C-y` pastes into the query, and `C-s C-s` repeats the last search.
 - Regexp search with `C-M-s`/`C-M-r` (Rust regex syntax); `M-r` switches a search between regexp and literal.
-- `query-replace` (`M-%`) and `query-replace-regexp` (`C-M-%`, with `\1` groups) work from point or within the selection. `y`/`SPC` replaces, `n`/`DEL` skips, `!` replaces the rest, `.` replaces one and stops, `^` goes back, and `q`/`RET` stops. One `C-/` undoes the whole replace, and `M-%` during a search replaces its query.
+- `query-replace` (`M-%`) and `query-replace-regexp` (`C-M-%`, with `\1` groups) work from point or within the selection. `y`/`SPC` replaces, `n`/`DEL` skips, `!` replaces the rest, `.` replaces one and stops, `^` goes back, and `q`/`RET` stops. One `C-/` undoes the whole replace, and `M-%` during a search replaces its query. Lowercase queries keep each match's case, so `Foo` becomes `Bar`.
+
+### Changed
+
+- The `*mx*` splash lists `C-s` for search.
 
 ## [0.9.0] - 2026-10-18
 
