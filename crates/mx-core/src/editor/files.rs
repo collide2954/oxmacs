@@ -178,6 +178,11 @@ impl Editor {
         }
     }
 
+    pub(super) fn absolute(&self, path: &Path) -> PathBuf {
+        let joined = self.default_directory().join(path);
+        paths::normalize(&path::absolute(&joined).unwrap_or(joined))
+    }
+
     pub fn default_directory(&self) -> PathBuf {
         self.buffers
             .current()
@@ -199,8 +204,7 @@ impl Editor {
     }
 
     pub fn open_file(&mut self, path: &Path) -> bool {
-        let joined = self.default_directory().join(path);
-        let path = path::absolute(&joined).unwrap_or(joined);
+        let path = self.absolute(path);
         if let Some(index) = self
             .buffers
             .position(|buffer| buffer.file().is_some_and(|file| file.path == path))
@@ -320,6 +324,16 @@ mod tests {
         assert!(read_only);
         editor.open_file(&dir.path().join("b.txt"));
         assert!(!editor.buffer().is_read_only());
+    }
+
+    #[test]
+    fn opened_paths_resolve_dot_dot() {
+        let (dir, mut editor) = workspace();
+
+        editor.open_file(&Path::new("nowhere").join("..").join("a.txt"));
+
+        assert_eq!(visited(&editor), Some(dir.path().join("a.txt")));
+        assert_eq!(editor.buffer().contents(), "hello");
     }
 
     #[test]

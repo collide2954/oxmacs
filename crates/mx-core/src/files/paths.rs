@@ -37,6 +37,27 @@ pub fn abbreviate(path: &Path, home: Option<&Path>) -> String {
     }
 }
 
+pub fn normalize(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if matches!(
+                    normalized.components().next_back(),
+                    Some(Component::Normal(_))
+                ) {
+                    normalized.pop();
+                } else if !normalized.has_root() {
+                    normalized.push(component);
+                }
+            }
+            _ => normalized.push(component),
+        }
+    }
+    normalized
+}
+
 pub fn unique_names(paths: &[PathBuf]) -> Vec<String> {
     let parts: Vec<Vec<String>> = paths
         .iter()
@@ -137,6 +158,23 @@ mod tests {
         assert_eq!(
             abbreviate(Path::new("/srv/x"), Some(home)),
             Path::new("/srv/x").display().to_string()
+        );
+    }
+
+    #[test]
+    fn normalizing_resolves_dots_lexically() {
+        let root = Path::new(path::MAIN_SEPARATOR_STR);
+        let path = root.join("a").join("b").join("..").join(".").join("c");
+
+        assert_eq!(normalize(&path), root.join("a").join("c"));
+        assert_eq!(normalize(&root.join("..").join("x")), root.join("x"));
+        assert_eq!(
+            normalize(Path::new(&format!(
+                "{}{SEPARATOR}",
+                root.join("d").display()
+            )))
+            .as_os_str(),
+            root.join("d").as_os_str()
         );
     }
 
