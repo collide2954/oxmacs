@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 use crate::command::Command;
-use crate::input::Key;
+use crate::input::{Key, KeySequence, Modifiers};
 
 #[derive(Debug, Clone, Default)]
 pub struct Keymap {
-    bindings: HashMap<Key, Binding>,
+    bindings: IndexMap<Key, Binding>,
 }
 
 #[derive(Debug, Clone)]
@@ -29,13 +29,38 @@ impl Keymap {
                 self.bindings.insert(*key, Binding::Command(command));
             }
             [key, rest @ ..] => {
-                let mut submap = match self.bindings.remove(key) {
-                    Some(Binding::Prefix(keymap)) => keymap,
-                    _ => Self::default(),
-                };
-                submap.bind(rest, command);
-                self.bindings.insert(*key, Binding::Prefix(submap));
+                let binding = self
+                    .bindings
+                    .entry(*key)
+                    .or_insert_with(|| Binding::Prefix(Self::default()));
+                if let Binding::Command(_) = binding {
+                    *binding = Binding::Prefix(Self::default());
+                }
+                if let Binding::Prefix(submap) = binding {
+                    submap.bind(rest, command);
+                }
             }
+        }
+    }
+
+    pub fn where_is(&self, command: Command) -> Option<KeySequence> {
+        let mut found = Vec::new();
+        self.collect(command, &mut Vec::new(), &mut found);
+        found
+            .into_iter()
+            .min_by_key(|keys| (uses_super(keys), keys.len()))
+            .map(KeySequence::from)
+    }
+
+    fn collect(&self, command: Command, prefix: &mut Vec<Key>, found: &mut Vec<Vec<Key>>) {
+        for (key, binding) in &self.bindings {
+            prefix.push(*key);
+            match binding {
+                Binding::Command(bound) if *bound == command => found.push(prefix.clone()),
+                Binding::Command(_) => {}
+                Binding::Prefix(keymap) => keymap.collect(command, prefix, found),
+            }
+            prefix.pop();
         }
     }
 
@@ -49,6 +74,11 @@ impl Keymap {
             _ => Lookup::Unbound,
         }
     }
+}
+
+fn uses_super(keys: &[Key]) -> bool {
+    keys.iter()
+        .any(|key| key.modifiers().contains(Modifiers::SUPER))
 }
 
 #[cfg(test)]
@@ -111,6 +141,68 @@ mod tests {
         assert_eq!(
             keymap.lookup(&keys("C-n")),
             Lookup::Command(Command::NextLine)
+        );
+    }
+
+    fn where_is(keymap: &Keymap, command: Command) -> Option<String> {
+        keymap
+            .where_is(command)
+            .map(|sequence| sequence.to_string())
+    }
+
+    #[test]
+    fn where_is_prefers_the_first_bound_of_equal_length() {
+        let mut keymap = Keymap::default();
+        keymap.bind(&keys("C-f"), Command::ForwardChar);
+        keymap.bind(&keys("<right>"), Command::ForwardChar);
+
+        assert_eq!(
+            where_is(&keymap, Command::ForwardChar).as_deref(),
+            Some("C-f")
+        );
+    }
+
+    #[test]
+    fn where_is_prefers_shorter_sequences() {
+        let mut keymap = Keymap::default();
+        keymap.bind(&keys("C-x C-f"), Command::ForwardChar);
+        keymap.bind(&keys("C-o"), Command::ForwardChar);
+
+        assert_eq!(
+            where_is(&keymap, Command::ForwardChar).as_deref(),
+            Some("C-o")
+        );
+    }
+
+    #[test]
+    fn where_is_shows_super_bindings_last() {
+        let mut keymap = Keymap::default();
+        keymap.bind(&keys("s-a"), Command::MarkWholeBuffer);
+        keymap.bind(&keys("C-x h"), Command::MarkWholeBuffer);
+
+        assert_eq!(
+            where_is(&keymap, Command::MarkWholeBuffer).as_deref(),
+            Some("C-x h")
+        );
+    }
+
+    #[test]
+    fn where_is_finds_nothing_for_unbound_commands() {
+        let mut keymap = Keymap::default();
+        keymap.bind(&keys("C-f"), Command::ForwardChar);
+
+        assert_eq!(where_is(&keymap, Command::BackwardChar), None);
+    }
+
+    #[test]
+    fn rebinding_inside_a_prefix_keeps_existing_bindings() {
+        let mut keymap = Keymap::default();
+        keymap.bind(&keys("C-x C-f"), Command::ForwardChar);
+        keymap.bind(&keys("C-x C-b"), Command::BackwardChar);
+
+        assert_eq!(
+            keymap.lookup(&keys("C-x C-f")),
+            Lookup::Command(Command::ForwardChar)
         );
     }
 }

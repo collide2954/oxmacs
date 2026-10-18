@@ -1779,6 +1779,7 @@ version = "0.3.0"
 dependencies = [
  "bitflags 2.13.2",
  "dirs",
+ "indexmap",
  "ropey",
  "serde",
  "strum",

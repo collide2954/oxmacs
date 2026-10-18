@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 bitflags.workspace = true
 dirs.workspace = true
+indexmap.workspace = true
 ropey.workspace = true
 serde.workspace = true
 strum.workspace = true
