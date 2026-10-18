@@ -105,6 +105,9 @@ pub enum Command {
     TextMode,
     MxDoctor,
     RustFormatBuffer,
+    MarkdownInsertListItem,
+    MarkdownPromote,
+    MarkdownDemote,
     ForwardButton,
     BackwardButton,
     PushButton,
@@ -147,6 +150,9 @@ impl Command {
                 | Self::CommentLine
                 | Self::CommentDwim
                 | Self::RustFormatBuffer
+                | Self::MarkdownInsertListItem
+                | Self::MarkdownPromote
+                | Self::MarkdownDemote
                 | Self::DeleteChar
                 | Self::DeleteBackwardChar
                 | Self::DeleteLine
@@ -192,6 +198,9 @@ impl Command {
             | Self::DiredDoOpen => Scope::Dired,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
             Self::RustFormatBuffer => Scope::Rust,
+            Self::MarkdownInsertListItem | Self::MarkdownPromote | Self::MarkdownDemote => {
+                Scope::Markdown
+            }
             Self::IsearchRepeatForward
             | Self::IsearchRepeatBackward
             | Self::IsearchPrintingChar
@@ -217,6 +226,7 @@ pub enum Scope {
     Search,
     Doctor,
     Rust,
+    Markdown,
 }
 
 #[cfg(test)]

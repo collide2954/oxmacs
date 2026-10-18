@@ -11,6 +11,7 @@ mod format;
 mod imenu;
 mod indent;
 mod isearch;
+mod markdown;
 mod minibuffer;
 mod modes;
 mod mouse;
@@ -86,6 +87,7 @@ pub struct Editor {
     splash_keymap: Keymap,
     doctor_keymap: Keymap,
     rust_keymap: Keymap,
+    markdown_keymap: Keymap,
     search_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
@@ -142,6 +144,7 @@ impl Editor {
             splash_keymap: bindings::splash(),
             doctor_keymap: bindings::doctor(),
             rust_keymap: bindings::rust(),
+            markdown_keymap: bindings::markdown(),
             search_keymap: bindings::search(),
             pending: Vec::new(),
             last_key: None,
@@ -384,6 +387,7 @@ impl Editor {
             Scope::Splash => Some(&self.splash_keymap),
             Scope::Doctor => Some(&self.doctor_keymap),
             Scope::Rust => Some(&self.rust_keymap),
+            Scope::Markdown => Some(&self.markdown_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search => None,
         }
     }
@@ -394,6 +398,9 @@ impl Editor {
             Some(Mode::Splash(_)) => Scope::Splash,
             Some(Mode::Doctor(_)) => Scope::Doctor,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
+            Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
+                Scope::Markdown
+            }
             Some(Mode::Text(_)) | None => Scope::Global,
         }
     }
@@ -554,6 +561,9 @@ impl Editor {
             Command::MxDoctor => self.mx_doctor(),
             Command::RustFormatBuffer => self.rust_format_buffer(),
             Command::Imenu => self.imenu(),
+            Command::MarkdownInsertListItem => self.markdown_insert_list_item(),
+            Command::MarkdownPromote => self.markdown_shift(false),
+            Command::MarkdownDemote => self.markdown_shift(true),
             Command::ForwardButton => self.forward_button(true),
             Command::BackwardButton => self.forward_button(false),
             Command::PushButton => self.push_button(),

@@ -160,6 +160,14 @@ const DOCTOR: &[(&str, Command)] = &[("g", Command::RevertBuffer), ("q", Command
 
 const RUST: &[(&str, Command)] = &[("C-c C-f", Command::RustFormatBuffer)];
 
+const MARKDOWN: &[(&str, Command)] = &[
+    ("M-RET", Command::MarkdownInsertListItem),
+    ("M-<left>", Command::MarkdownPromote),
+    ("C-c C--", Command::MarkdownPromote),
+    ("M-<right>", Command::MarkdownDemote),
+    ("C-c C-=", Command::MarkdownDemote),
+];
+
 pub fn global() -> Keymap {
     build(GLOBAL)
 }
@@ -174,6 +182,10 @@ pub fn doctor() -> Keymap {
 
 pub fn rust() -> Keymap {
     build(RUST)
+}
+
+pub fn markdown() -> Keymap {
+    build(MARKDOWN)
 }
 
 pub fn search() -> Keymap {
@@ -233,6 +245,11 @@ mod tests {
     #[test]
     fn every_rust_binding_resolves_to_its_command() {
         assert_resolves(&rust(), RUST);
+    }
+
+    #[test]
+    fn every_markdown_binding_resolves_to_its_command() {
+        assert_resolves(&markdown(), MARKDOWN);
     }
 
     #[test]
