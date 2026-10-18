@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ops::Range;
 
 use ropey::Rope;
@@ -31,6 +32,44 @@ impl Buffer {
 
     pub fn len_chars(&self) -> usize {
         self.text.len_chars()
+    }
+
+    pub fn len_lines(&self) -> usize {
+        self.text.len_lines()
+    }
+
+    pub fn line_of(&self, position: usize) -> usize {
+        self.text.char_to_line(position.min(self.len_chars()))
+    }
+
+    pub fn line_start(&self, line: usize) -> usize {
+        self.text.line_to_char(self.clamp_line(line))
+    }
+
+    pub fn line_end(&self, line: usize) -> usize {
+        let line = self.clamp_line(line);
+        let slice = self.text.line(line);
+        let len = slice.len_chars();
+        let content = if len > 0 && slice.char(len - 1) == '\n' {
+            len - 1
+        } else {
+            len
+        };
+        self.text.line_to_char(line) + content
+    }
+
+    pub fn line_text(&self, line: usize) -> Cow<'_, str> {
+        self.text
+            .slice(self.line_start(line)..self.line_end(line))
+            .into()
+    }
+
+    pub fn column(&self, position: usize) -> usize {
+        position - self.line_start(self.line_of(position))
+    }
+
+    fn clamp_line(&self, line: usize) -> usize {
+        line.min(self.len_lines() - 1)
     }
 
     pub fn point(&self) -> usize {
@@ -204,5 +243,45 @@ mod tests {
 
         assert_eq!(buffer.contents(), "hrld");
         assert_eq!(buffer.point(), 1);
+    }
+
+    #[test]
+    fn len_lines_counts_line_after_trailing_newline() {
+        assert_eq!(Buffer::new("t").len_lines(), 1);
+        assert_eq!(Buffer::with_text("t", "ab").len_lines(), 1);
+        assert_eq!(Buffer::with_text("t", "ab\n").len_lines(), 2);
+        assert_eq!(Buffer::with_text("t", "ab\ncd").len_lines(), 2);
+    }
+
+    #[test]
+    fn line_queries_locate_line_boundaries() {
+        let buffer = Buffer::with_text("t", "ab\ncde\n");
+
+        assert_eq!(buffer.line_of(0), 0);
+        assert_eq!(buffer.line_of(2), 0);
+        assert_eq!(buffer.line_of(3), 1);
+        assert_eq!(buffer.line_of(7), 2);
+        assert_eq!(buffer.line_start(1), 3);
+        assert_eq!(buffer.line_end(0), 2);
+        assert_eq!(buffer.line_end(1), 6);
+        assert_eq!(buffer.line_end(2), 7);
+    }
+
+    #[test]
+    fn line_text_excludes_line_break() {
+        let buffer = Buffer::with_text("t", "ab\ncde\n");
+
+        assert_eq!(buffer.line_text(0), "ab");
+        assert_eq!(buffer.line_text(1), "cde");
+        assert_eq!(buffer.line_text(2), "");
+    }
+
+    #[test]
+    fn column_is_char_offset_from_line_start() {
+        let buffer = Buffer::with_text("t", "ab\ncde");
+
+        assert_eq!(buffer.column(1), 1);
+        assert_eq!(buffer.column(3), 0);
+        assert_eq!(buffer.column(5), 2);
     }
 }
