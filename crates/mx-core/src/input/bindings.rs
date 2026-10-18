@@ -45,6 +45,7 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-M-<left>", Command::BackwardSexp),
     ("C-M-u", Command::BackwardUpList),
     ("C-M-d", Command::DownList),
+    ("M-g i", Command::Imenu),
     ("C-SPC", Command::SetMarkCommand),
     ("C-@", Command::SetMarkCommand),
     ("C-x C-x", Command::ExchangePointAndMark),

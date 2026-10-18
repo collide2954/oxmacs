@@ -8,6 +8,7 @@ mod editing;
 mod effect;
 mod files;
 mod format;
+mod imenu;
 mod indent;
 mod isearch;
 mod minibuffer;
@@ -550,6 +551,7 @@ impl Editor {
             Command::TextMode => self.set_major_mode(None),
             Command::MxDoctor => self.mx_doctor(),
             Command::RustFormatBuffer => self.rust_format_buffer(),
+            Command::Imenu => self.imenu(),
             Command::ForwardButton => self.forward_button(true),
             Command::BackwardButton => self.forward_button(false),
             Command::PushButton => self.push_button(),

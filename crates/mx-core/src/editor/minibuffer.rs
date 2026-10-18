@@ -6,6 +6,7 @@ use crate::command::{Command, Scope};
 use crate::editor::Editor;
 use crate::editor::dired::Kind;
 use crate::files::Entry;
+use crate::syntax::Item;
 use crate::text::Buffer;
 use crate::theme::Theme;
 
@@ -25,6 +26,7 @@ pub(super) enum Purpose {
     LoadTheme,
     ReplaceFrom(bool),
     ReplaceTo(bool),
+    Item,
 }
 
 impl Purpose {
@@ -68,6 +70,7 @@ pub struct Minibuffer {
     pub(super) listing: Option<PathListing>,
     pub(super) sources: Vec<PathBuf>,
     pub(super) from: String,
+    pub(super) items: Vec<Item>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +80,7 @@ pub enum Choice {
     Entry(usize),
     Buffer(usize),
     Theme(Option<&'static Theme>),
+    Item(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +101,7 @@ impl Minibuffer {
             listing: None,
             sources: Vec::new(),
             from: String::new(),
+            items: Vec::new(),
         }
     }
 
@@ -158,6 +163,7 @@ impl Editor {
             }
             Purpose::LoadTheme => self.theme_completions(matches),
             Purpose::ReplaceFrom(_) | Purpose::ReplaceTo(_) => Vec::new(),
+            Purpose::Item => self.item_completions(matches),
         }
     }
 
@@ -281,6 +287,7 @@ impl Editor {
             }
             Choice::Buffer(index) => self.choose_buffer(purpose, index),
             Choice::Theme(theme) => self.configured_theme = theme,
+            Choice::Item(position) => self.jump_to_item(position),
             Choice::Entry(_) => {}
         }
     }

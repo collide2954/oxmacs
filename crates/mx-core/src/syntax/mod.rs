@@ -84,6 +84,7 @@ impl Language {
                     | Feature::Pairs
                     | Feature::Formatting
                     | Feature::Motion
+                    | Feature::Items
             )
         )
     }

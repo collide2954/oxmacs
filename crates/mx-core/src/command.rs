@@ -30,6 +30,7 @@ pub enum Command {
     BackwardSexp,
     BackwardUpList,
     DownList,
+    Imenu,
     SetMarkCommand,
     ExchangePointAndMark,
     MarkWholeBuffer,
