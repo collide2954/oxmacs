@@ -4,6 +4,9 @@ use strum::{EnumString, IntoStaticStr};
 #[strum(serialize_all = "kebab-case")]
 pub enum Command {
     SelfInsertCommand,
+    Newline,
+    DeleteChar,
+    DeleteBackwardChar,
     ForwardChar,
     BackwardChar,
     NextLine,

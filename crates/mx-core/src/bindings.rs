@@ -3,6 +3,10 @@ use crate::key::KeySequence;
 use crate::keymap::Keymap;
 
 const GLOBAL: &[(&str, Command)] = &[
+    ("RET", Command::Newline),
+    ("C-d", Command::DeleteChar),
+    ("<delete>", Command::DeleteChar),
+    ("DEL", Command::DeleteBackwardChar),
     ("C-f", Command::ForwardChar),
     ("<right>", Command::ForwardChar),
     ("C-b", Command::BackwardChar),

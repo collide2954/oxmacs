@@ -86,6 +86,9 @@ impl Editor {
         let goal_column = self.goal_column.take();
         match command {
             Command::SelfInsertCommand => self.self_insert(),
+            Command::Newline => self.buffer.insert("\n"),
+            Command::DeleteChar => self.buffer.delete_forward(1),
+            Command::DeleteBackwardChar => self.buffer.delete_backward(1),
             Command::ForwardChar => self.move_point(|b, p| motion::forward_char(b, p, 1)),
             Command::BackwardChar => self.move_point(|_, p| motion::backward_char(p, 1)),
             Command::NextLine => self.move_vertically(1, goal_column),
@@ -227,6 +230,28 @@ mod tests {
         let mut editor = editor_with(text, point);
         press(&mut editor, notation);
         editor.buffer().point()
+    }
+
+    fn contents_after(text: &str, point: usize, notation: &str) -> (String, usize) {
+        let mut editor = editor_with(text, point);
+        press(&mut editor, notation);
+        (editor.buffer().contents(), editor.buffer().point())
+    }
+
+    #[test]
+    fn return_inserts_a_newline() {
+        assert_eq!(contents_after("ab", 1, "RET"), ("a\nb".to_owned(), 2));
+    }
+
+    #[test]
+    fn delete_char_removes_char_after_point() {
+        assert_eq!(contents_after("abc", 1, "C-d"), ("ac".to_owned(), 1));
+        assert_eq!(contents_after("abc", 1, "<delete>"), ("ac".to_owned(), 1));
+    }
+
+    #[test]
+    fn delete_backward_char_removes_char_before_point() {
+        assert_eq!(contents_after("abc", 1, "DEL"), ("bc".to_owned(), 0));
     }
 
     #[test]
