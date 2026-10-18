@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 use jiff::{Timestamp, Zoned};
 
 use crate::dired::{Entry, Kind, Sort, human_size, ls_time, read_entries, sort};
+use crate::display::LineStyle;
 use crate::files::paths;
+use crate::theme::Highlight;
 
 const TIME_WIDTH: usize = 12;
 
@@ -173,6 +175,38 @@ impl Listing {
         let mut text = lines.join("\n");
         text.push('\n');
         text
+    }
+
+    pub fn line_style(&self, line: usize) -> LineStyle {
+        let column = self.name_column();
+        if line == 0 {
+            return LineStyle {
+                background: None,
+                spans: vec![(0..usize::MAX, Highlight::Header)],
+            };
+        }
+        if Some(line) == self.parent_line() {
+            return LineStyle {
+                background: None,
+                spans: vec![(column..column + 2, Highlight::Directory)],
+            };
+        }
+        let Some(entry) = self.entry_at(line) else {
+            return LineStyle::default();
+        };
+        let name = entry.display_name().chars().count();
+        let span = match entry.kind {
+            Kind::Directory => Some((column..column + name + 1, Highlight::Directory)),
+            Kind::Symlink { .. } => Some((column..column + name, Highlight::Symlink)),
+            Kind::File => None,
+        };
+        LineStyle {
+            background: self.mark(&entry.name).map(|mark| match mark {
+                Mark::Marked => Highlight::Marked,
+                Mark::Flagged => Highlight::Flagged,
+            }),
+            spans: span.into_iter().collect(),
+        }
     }
 
     pub fn last_entry_line(&self) -> usize {
@@ -407,6 +441,59 @@ mod tests {
 
         assert_eq!(listing.mark("Cargo.toml".as_ref()), Some(Mark::Marked));
         assert_eq!(listing.mark("CHANGELOG.md".as_ref()), None);
+    }
+
+    #[test]
+    fn lines_are_styled_by_kind_and_mark() {
+        let mut listing = listing();
+        listing.set_mark("crates".as_ref(), Some(Mark::Marked));
+        listing.set_mark("Cargo.toml".as_ref(), Some(Mark::Flagged));
+
+        assert_eq!(
+            listing.line_style(0),
+            LineStyle {
+                background: None,
+                spans: vec![(0..usize::MAX, Highlight::Header)],
+            }
+        );
+        assert_eq!(
+            listing.line_style(1).spans,
+            [(22..24, Highlight::Directory)]
+        );
+        assert_eq!(
+            listing.line_style(2),
+            LineStyle {
+                background: Some(Highlight::Marked),
+                spans: vec![(22..29, Highlight::Directory)],
+            }
+        );
+        assert_eq!(
+            listing.line_style(3),
+            LineStyle {
+                background: Some(Highlight::Flagged),
+                spans: Vec::new(),
+            }
+        );
+        assert_eq!(listing.line_style(4), LineStyle::default());
+        assert_eq!(listing.line_style(9), LineStyle::default());
+    }
+
+    #[test]
+    fn symlink_names_are_highlighted_without_their_target() {
+        let listing = Listing::new(
+            PathBuf::from("/home/u/mx"),
+            vec![entry(
+                "link",
+                Kind::Symlink {
+                    target: "a.txt".into(),
+                    directory: false,
+                },
+                5,
+                "2026-10-18T13:55:00Z",
+            )],
+        );
+
+        assert_eq!(listing.line_style(2).spans, [(20..24, Highlight::Symlink)]);
     }
 
     #[test]

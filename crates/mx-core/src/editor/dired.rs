@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use jiff::Zoned;
 
 use crate::dired::{Listing, Mark, read_entries};
+use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::minibuffer::Purpose;
 use crate::editor::{Editor, Effect};
@@ -115,6 +116,13 @@ impl Editor {
             Ok(entries) => self.update_listing(index, |listing| listing.set_entries(entries)),
             Err(error) => self.show_message(format!("{}: {error}", directory.display())),
         }
+    }
+
+    pub fn line_style(&self, line: usize) -> LineStyle {
+        self.buffers
+            .listing(0)
+            .map(|listing| listing.line_style(line))
+            .unwrap_or_default()
     }
 
     pub(super) fn dired_targets(&self, mark: Mark, at_point: bool) -> Vec<(PathBuf, String)> {
@@ -1263,6 +1271,20 @@ mod tests {
                 Effect::OpenExternally(dir.path().join("a.txt")),
                 Effect::OpenExternally(dir.path().join("b.txt"))
             ]
+        );
+    }
+
+    #[test]
+    fn only_listing_lines_are_styled() {
+        let (dir, mut editor) = workspace();
+        assert_eq!(editor.line_style(0), crate::display::LineStyle::default());
+
+        listed(&mut editor, &dir);
+        press(&mut editor, "m");
+
+        assert_eq!(
+            editor.line_style(2).background,
+            Some(crate::theme::Highlight::Marked)
         );
     }
 
