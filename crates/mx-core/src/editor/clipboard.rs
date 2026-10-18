@@ -34,6 +34,12 @@ impl Editor {
     }
 
     pub fn paste(&mut self, clipboard: Option<String>) {
+        if self.search.is_some() {
+            if let Some(text) = clipboard.filter(|text| !text.is_empty()) {
+                self.extend_search(&text);
+            }
+            return;
+        }
         if self.refuse_read_only() {
             return;
         }

@@ -45,6 +45,8 @@ pub enum Command {
     IsearchPrintingChar,
     IsearchDeleteChar,
     IsearchToggleRegexp,
+    IsearchYankWordOrChar,
+    IsearchYankKill,
     IsearchExit,
     IsearchAbort,
     FindFile,
@@ -158,6 +160,8 @@ impl Command {
             | Self::IsearchPrintingChar
             | Self::IsearchDeleteChar
             | Self::IsearchToggleRegexp
+            | Self::IsearchYankWordOrChar
+            | Self::IsearchYankKill
             | Self::IsearchExit
             | Self::IsearchAbort => Scope::Search,
             _ => Scope::Global,

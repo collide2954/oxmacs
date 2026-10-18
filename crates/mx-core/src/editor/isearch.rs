@@ -6,6 +6,7 @@ use crate::display::ScreenLine;
 use crate::editor::{Editor, inserts_itself};
 use crate::input::{Key, KeyCode, Lookup};
 use crate::search::{Haystack, Pattern};
+use crate::text::motion;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Direction {
@@ -124,7 +125,23 @@ impl Editor {
         }
     }
 
-    fn extend_search(&mut self, text: &str) {
+    pub(super) fn isearch_yank_word(&mut self) {
+        let Some(search) = &self.search else {
+            return;
+        };
+        let buffer = self.buffers.current();
+        let start = search
+            .step
+            .found
+            .as_ref()
+            .map_or(buffer.point(), |found| found.end);
+        let word = buffer.text_in(start..motion::forward_word(buffer, start));
+        if !word.is_empty() {
+            self.extend_search(&word);
+        }
+    }
+
+    pub(super) fn extend_search(&mut self, text: &str) {
         let Some(search) = &self.search else {
             return;
         };
@@ -307,8 +324,8 @@ fn capitalize(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::Editor;
     use crate::editor::test_support::{editor_with, press, type_text};
+    use crate::editor::{Editor, Effect};
 
     fn prompt(editor: &Editor) -> String {
         editor.search().unwrap().prompt()
@@ -572,6 +589,31 @@ mod tests {
         press(&mut editor, "M-r");
         assert_eq!(prompt(&editor), "I-search: ");
         assert_eq!(point(&editor), 6);
+    }
+
+    #[test]
+    fn c_w_adds_the_next_word_to_the_query() {
+        let mut editor = editor_with("foo bar foo bar", 0);
+
+        press(&mut editor, "C-s f C-w");
+        assert_eq!(editor.search().unwrap().query(), "foo");
+
+        press(&mut editor, "C-w");
+        assert_eq!(editor.search().unwrap().query(), "foo bar");
+        assert_eq!(point(&editor), 7);
+    }
+
+    #[test]
+    fn pasting_adds_the_clipboard_to_the_query() {
+        let mut editor = editor_with("foo bar", 0);
+        editor.buffers.current_mut().set_read_only(true);
+
+        press(&mut editor, "C-s C-y");
+        assert!(editor.take_effects().contains(&Effect::ReadClipboard));
+
+        editor.paste(Some("bar".to_owned()));
+        assert_eq!(editor.search().unwrap().query(), "bar");
+        assert_eq!(point(&editor), 7);
     }
 
     #[test]
