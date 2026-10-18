@@ -149,10 +149,10 @@ impl Editor {
                     ("✓ ", Some(Highlight::Success)),
                     (&format!("{version}  {}", path.display()), None),
                 ]),
-                Probe::Broken { path, error } => page.line(&[
+                Probe::Broken { error, .. } => page.line(&[
                     (&label, None),
                     ("! ", Some(Highlight::Warning)),
-                    (&format!("{}: {error}", path.display()), None),
+                    (&format!("{error}; {hint}"), None),
                 ]),
                 Probe::Missing => page.line(&[
                     (&label, None),
@@ -288,7 +288,10 @@ mod tests {
         let (_dir, editor) = doctor();
 
         assert!(line_with(&editor, "rustfmt").contains("✓ rustfmt 1.0"));
-        assert!(line_with(&editor, "  cargo").contains("! "));
+        assert!(
+            line_with(&editor, "  cargo")
+                .contains("! no toolchain; install Rust from https://rustup.rs")
+        );
         assert!(
             line_with(&editor, "rust-analyzer")
                 .contains("✗ not found; rustup component add rust-analyzer")
