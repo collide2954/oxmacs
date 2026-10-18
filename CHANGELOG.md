@@ -15,6 +15,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 - Dired `R` renames or moves and `C` copies the marked files (or the one at point) through the path prompt; a directory target receives them, copies are recursive and keep modification times, each conflict asks `y`, `n`, `!` or `q`, and buffers visiting renamed files follow them.
 - Dired `+` creates a directory (and any missing parents) and moves point to it.
 - Double-clicking a dired entry opens it.
+- Dired listings refresh by themselves when their directory changes (and when the window regains focus), keeping marks and point.
 - Dired colors: the header, directory names and symlinks have their own colors, and marked and flagged lines are tinted.
 - Dired `W` opens the marked files (or the one at point) with the system's default application.
 - Directories open in dired from `C-x C-f` (`RET` on a bare directory or a directory path), from `mx DIR`, and with `dired-jump` (`C-x C-j`), which lands on the current file (or goes up from a listing).

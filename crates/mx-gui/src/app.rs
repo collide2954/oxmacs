@@ -17,6 +17,7 @@ use native_theme::detect::prefers_reduced_motion;
 
 use crate::buffer_view::{BufferView, Motion, ViewEvent};
 use crate::keys::{self, Platform};
+use crate::watcher::Watched;
 use crate::{animation, completions, echo_area, fonts, style, watcher};
 
 #[derive(Debug)]
@@ -230,7 +231,11 @@ impl App {
         Subscription::batch([
             keyboard::listen().map(Message::Keyboard),
             system::theme_changes().map(Message::AppearanceChanged),
-            watcher::changes(self.editor.visited_files()).map(|()| Message::DiskChanged),
+            watcher::changes(Watched {
+                files: self.editor.visited_files(),
+                directories: self.editor.watched_directories(),
+            })
+            .map(|()| Message::DiskChanged),
             event::listen_with(focus_gained),
             frames,
         ])
