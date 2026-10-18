@@ -394,6 +394,7 @@ impl Editor {
             Command::QuitWindow => self.quit_window(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.save_some_buffers(true),
+            Command::KillMx => self.quit_requested = true,
         }
         self.reset_selection(command);
         self.refresh_minibuffer();

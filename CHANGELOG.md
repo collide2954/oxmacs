@@ -4,6 +4,10 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 ## [Unreleased]
 
+### Added
+
+- `kill-mx` exits at once without offering to save, like Emacs's `kill-emacs`; `C-x C-c` still asks.
+
 ## [0.8.0] - 2026-10-18
 
 ### Added

@@ -67,6 +67,7 @@ pub enum Command {
     QuitWindow,
     KeyboardQuit,
     SaveBuffersKillMx,
+    KillMx,
 }
 
 impl Command {

@@ -329,6 +329,19 @@ mod tests {
     }
 
     #[test]
+    fn kill_mx_quits_at_once_without_saving() {
+        let (dir, mut editor) = two_modified_files();
+
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "kill-mx");
+        press(&mut editor, "RET");
+
+        assert!(editor.should_quit());
+        assert_eq!(question(&editor), None);
+        assert_eq!(on_disk(&dir, "a.txt"), "a");
+    }
+
+    #[test]
     fn bang_saves_every_remaining_file() {
         let (dir, mut editor) = two_modified_files();
 
