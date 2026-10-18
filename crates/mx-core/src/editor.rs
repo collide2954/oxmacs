@@ -6,6 +6,9 @@ use crate::command::Command;
 use crate::key::{Key, KeyCode, KeySequence, Modifiers};
 use crate::keymap::{Keymap, Lookup};
 use crate::motion;
+use crate::viewport::Viewport;
+
+const DEFAULT_ROWS: usize = 24;
 
 #[derive(Debug)]
 pub struct Editor {
@@ -16,6 +19,7 @@ pub struct Editor {
     goal_column: Option<usize>,
     message: Option<String>,
     quit_requested: bool,
+    viewport: Viewport,
 }
 
 impl Default for Editor {
@@ -38,6 +42,7 @@ impl Editor {
             goal_column: None,
             message: None,
             quit_requested: false,
+            viewport: Viewport::new(DEFAULT_ROWS),
         }
     }
 
@@ -51,6 +56,18 @@ impl Editor {
 
     pub fn should_quit(&self) -> bool {
         self.quit_requested
+    }
+
+    pub fn viewport(&self) -> &Viewport {
+        &self.viewport
+    }
+
+    pub fn resize_window(&mut self, rows: usize) {
+        self.viewport.resize(rows, self.point_line());
+    }
+
+    fn point_line(&self) -> usize {
+        self.buffer.line_of(self.buffer.point())
     }
 
     pub fn handle_key(&mut self, key: Key) {
@@ -102,6 +119,7 @@ impl Editor {
             Command::KeyboardQuit => self.message = Some("Quit".to_owned()),
             Command::SaveBuffersKillMx => self.quit_requested = true,
         }
+        self.viewport.reveal(self.point_line());
     }
 
     fn move_point(&mut self, motion: impl FnOnce(&Buffer, usize) -> usize) {
@@ -252,6 +270,40 @@ mod tests {
     #[test]
     fn delete_backward_char_removes_char_before_point() {
         assert_eq!(contents_after("abc", 1, "DEL"), ("bc".to_owned(), 0));
+    }
+
+    fn numbered_lines(count: usize) -> String {
+        (0..count)
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn moving_point_out_of_the_window_scrolls_it() {
+        let mut editor = editor_with(&numbered_lines(30), 0);
+        editor.resize_window(10);
+
+        press(&mut editor, "M->");
+        assert_eq!(editor.viewport().top(), 24);
+
+        press(&mut editor, "M-<");
+        assert_eq!(editor.viewport().top(), 0);
+    }
+
+    #[test]
+    fn resizing_the_window_keeps_point_visible() {
+        let mut editor = editor_with(&numbered_lines(30), 0);
+        editor.resize_window(20);
+        press(
+            &mut editor,
+            "C-n C-n C-n C-n C-n C-n C-n C-n C-n C-n C-n C-n",
+        );
+        assert_eq!(editor.viewport().top(), 0);
+
+        editor.resize_window(5);
+
+        assert!(editor.viewport().lines().contains(&12));
     }
 
     #[test]
