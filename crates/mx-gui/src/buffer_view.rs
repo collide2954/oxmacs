@@ -4,7 +4,9 @@ use iced::advanced::text::{self, Paragraph as _, Text};
 use iced::advanced::widget::tree::{self, Tree};
 use iced::advanced::{Clipboard, Shell, Widget};
 use iced::alignment::Vertical;
-use iced::{Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, mouse};
+use iced::{
+    Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, mouse,
+};
 use mx_core::display;
 use mx_core::editor::Editor;
 
@@ -99,6 +101,21 @@ impl<'a, Message> BufferView<'a, Message> {
         let block = Rectangle::new(origin, cell);
         let under_cursor = buffer.chars_after(point).next().filter(|c| !c.is_control());
         let faces = self.editor.theme();
+        if self.editor.minibuffer().is_some() {
+            let hollow = Quad {
+                bounds: block,
+                border: Border {
+                    color: style::color(faces.cursor),
+                    width: 1.0,
+                    radius: 0.0.into(),
+                },
+                ..Quad::default()
+            };
+            renderer.with_layer(bounds, |renderer| {
+                renderer.fill_quad(hollow, Color::TRANSPARENT);
+            });
+            return;
+        }
         renderer.with_layer(bounds, |renderer| {
             renderer.fill_quad(
                 Quad {

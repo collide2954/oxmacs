@@ -1,5 +1,6 @@
 pub mod app;
 pub mod buffer_view;
+pub mod echo_area;
 pub mod fonts;
 pub mod keys;
 pub mod style;

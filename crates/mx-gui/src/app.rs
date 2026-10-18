@@ -8,7 +8,7 @@ use mx_core::theme::Appearance;
 
 use crate::buffer_view::{BufferView, ViewEvent};
 use crate::keys::{self, Platform};
-use crate::{fonts, style};
+use crate::{echo_area, fonts, style};
 
 #[derive(Debug)]
 pub struct App {
@@ -142,9 +142,7 @@ impl App {
                 .width(Length::Fill)
                 .padding([1, 4])
                 .style(move |_| style::mode_line(faces)),
-            container(line(self.editor.message().unwrap_or(" ").to_owned()))
-                .width(Length::Fill)
-                .padding([1, 4]),
+            echo_area::view(&self.editor, self.font, self.text_size),
         ]
         .into()
     }
