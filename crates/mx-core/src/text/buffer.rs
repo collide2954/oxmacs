@@ -144,6 +144,14 @@ impl Buffer {
             .into()
     }
 
+    pub fn char_to_byte(&self, position: usize) -> usize {
+        self.text.char_to_byte(position.min(self.len_chars()))
+    }
+
+    pub fn byte_to_char(&self, byte: usize) -> usize {
+        self.text.byte_to_char(byte.min(self.text.len_bytes()))
+    }
+
     pub fn chars_after(&self, position: usize) -> impl Iterator<Item = char> {
         self.text.chars_at(position.min(self.len_chars()))
     }
@@ -616,6 +624,16 @@ mod tests {
         assert_eq!(buffer.column(1), 1);
         assert_eq!(buffer.column(3), 0);
         assert_eq!(buffer.column(5), 2);
+    }
+
+    #[test]
+    fn positions_convert_between_chars_and_bytes() {
+        let buffer = Buffer::with_text("t", "hé→x");
+
+        assert_eq!(buffer.char_to_byte(2), 3);
+        assert_eq!(buffer.char_to_byte(99), 7);
+        assert_eq!(buffer.byte_to_char(6), 3);
+        assert_eq!(buffer.byte_to_char(99), 4);
     }
 
     #[test]
