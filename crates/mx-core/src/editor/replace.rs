@@ -7,6 +7,12 @@ use crate::input::{Key, KeyCode};
 use crate::search::{Haystack, Pattern};
 use crate::theme::Highlight;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Visited {
+    range: Range<usize>,
+    replaced: bool,
+}
+
 #[derive(Debug)]
 pub struct Replace {
     pattern: Pattern,
@@ -15,6 +21,8 @@ pub struct Replace {
     to: String,
     end_gap: usize,
     current: Range<usize>,
+    revisited: bool,
+    visited: Vec<Visited>,
     count: usize,
     lazy: Vec<Range<usize>>,
     revision: u64,
@@ -37,11 +45,12 @@ impl Editor {
     }
 
     pub(super) fn query_replace(&mut self, regex: bool) {
-        let prompt = format!("Query replace {}", regexp_word(regex));
-        self.open_minibuffer(
-            &format!("{}: ", prompt.trim_end()),
-            Purpose::ReplaceFrom(regex),
-        );
+        let prompt = if regex {
+            "Query replace regexp: "
+        } else {
+            "Query replace: "
+        };
+        self.open_minibuffer(prompt, Purpose::ReplaceFrom(regex));
     }
 
     pub(super) fn exit_replace_prompt(&mut self, purpose: Purpose) {
@@ -92,6 +101,8 @@ impl Editor {
             to,
             end_gap: buffer.len_chars() - scope.end,
             current: scope.start..scope.start,
+            revisited: false,
+            visited: Vec::new(),
             count: 0,
             lazy: Vec::new(),
             revision: buffer.revision(),
@@ -100,24 +111,34 @@ impl Editor {
     }
 
     fn next_replacement(&mut self, from: usize) {
+        let Some(replace) = &self.replace else {
+            return;
+        };
+        let buffer = self.buffers.current();
+        let end = buffer.len_chars().saturating_sub(replace.end_gap);
+        let found = replace
+            .pattern
+            .find_forward(&Haystack::new(buffer), from)
+            .filter(|found| from <= end && found.end <= end);
+        match found {
+            Some(found) => self.show_replacement(found, false),
+            None => self.finish_replace(),
+        }
+    }
+
+    fn show_replacement(&mut self, found: Range<usize>, revisited: bool) {
         let Some(replace) = &mut self.replace else {
             return;
         };
         let buffer = self.buffers.current_mut();
         let end = buffer.len_chars().saturating_sub(replace.end_gap);
-        let haystack = Haystack::new(buffer);
-        let found = replace
+        replace.lazy = replace
             .pattern
-            .find_forward(&haystack, from)
-            .filter(|found| from <= end && found.end <= end);
-        let Some(found) = found else {
-            self.finish_replace();
-            return;
-        };
-        replace.lazy = replace.pattern.find_all(&haystack, found.start..end);
+            .find_all(&Haystack::new(buffer), found.start..end);
         replace.revision = buffer.revision();
-        replace.current = found.clone();
         buffer.set_point(found.end);
+        replace.current = found;
+        replace.revisited = revisited;
     }
 
     pub(super) fn answer_replace(&mut self, key: Key) -> bool {
@@ -127,16 +148,23 @@ impl Editor {
         let plain = key.modifiers().is_empty();
         match key.code() {
             KeyCode::Char('y' | ' ') if plain => {
-                let next = self.replace_current();
+                let next = self.act_on_replacement();
                 self.next_replacement(next);
             }
             KeyCode::Char('n') | KeyCode::Backspace if plain => {
-                let next = self
-                    .replace
-                    .as_ref()
-                    .map_or(0, |replace| after(&replace.current));
+                let next = self.skip_replacement();
                 self.next_replacement(next);
             }
+            KeyCode::Char('!') if plain => {
+                let next = self.act_on_replacement();
+                self.replace_rest(next);
+                self.finish_replace();
+            }
+            KeyCode::Char('.') if plain => {
+                self.act_on_replacement();
+                self.finish_replace();
+            }
+            KeyCode::Char('^') if plain => self.previous_replacement(),
             KeyCode::Char('q') | KeyCode::Return if plain => self.finish_replace(),
             _ if is_keyboard_quit(key) => {
                 self.finish_replace();
@@ -151,20 +179,87 @@ impl Editor {
         true
     }
 
-    fn replace_current(&mut self) -> usize {
+    fn act_on_replacement(&mut self) -> usize {
         let Some(replace) = &mut self.replace else {
             return 0;
         };
-        let buffer = self.buffers.current_mut();
         let current = replace.current.clone();
-        let text = replace
-            .pattern
-            .expand(&Haystack::new(buffer), current.clone(), &replace.to);
-        buffer.delete_range(current.clone());
-        buffer.set_point(current.start);
-        buffer.insert(&text);
-        replace.count += 1;
-        buffer.point() + usize::from(current.is_empty())
+        let range = if replace.revisited {
+            current.clone()
+        } else {
+            let buffer = self.buffers.current_mut();
+            let text = replace
+                .pattern
+                .expand(&Haystack::new(buffer), current.clone(), &replace.to);
+            buffer.delete_range(current.clone());
+            buffer.set_point(current.start);
+            buffer.insert(&text);
+            replace.count += 1;
+            current.start..buffer.point()
+        };
+        let next = range.end + usize::from(current.is_empty());
+        replace.visited.push(Visited {
+            range,
+            replaced: true,
+        });
+        next
+    }
+
+    fn skip_replacement(&mut self) -> usize {
+        let Some(replace) = &mut self.replace else {
+            return 0;
+        };
+        replace.visited.push(Visited {
+            range: replace.current.clone(),
+            replaced: replace.revisited,
+        });
+        after(&replace.current)
+    }
+
+    fn previous_replacement(&mut self) {
+        match self
+            .replace
+            .as_mut()
+            .and_then(|replace| replace.visited.pop())
+        {
+            Some(visited) => self.show_replacement(visited.range, visited.replaced),
+            None => self.show_message("No previous match"),
+        }
+    }
+
+    fn replace_rest(&mut self, from: usize) {
+        let Some(replace) = &mut self.replace else {
+            return;
+        };
+        let buffer = self.buffers.current_mut();
+        let end = buffer.len_chars().saturating_sub(replace.end_gap);
+        if from > end {
+            return;
+        }
+        let edits: Vec<(Range<usize>, String)> = {
+            let haystack = Haystack::new(buffer);
+            replace
+                .pattern
+                .find_all(&haystack, from..end)
+                .into_iter()
+                .map(|found| {
+                    let text = replace
+                        .pattern
+                        .expand(&haystack, found.clone(), &replace.to);
+                    (found, text)
+                })
+                .collect()
+        };
+        let (mut grown, mut shrunk) = (0, 0);
+        for (found, text) in edits {
+            let start = found.start + grown - shrunk;
+            buffer.delete_range(start..start + found.len());
+            buffer.set_point(start);
+            buffer.insert(&text);
+            grown += text.chars().count();
+            shrunk += found.len();
+            replace.count += 1;
+        }
     }
 
     fn finish_replace(&mut self) {
@@ -271,6 +366,59 @@ mod tests {
             assert!(editor.replacing().is_none(), "{key}");
             assert_eq!(editor.buffer().point(), 7, "{key}");
         }
+    }
+
+    #[test]
+    fn bang_replaces_all_the_rest() {
+        let mut editor = replacing("foo foo foo x", 0, "foo", "bar");
+
+        press(&mut editor, "n !");
+
+        assert_eq!(editor.buffer().contents(), "foo bar bar x");
+        assert_eq!(editor.message(), Some("Replaced 2 occurrences"));
+        assert_eq!(editor.buffer().point(), 11);
+    }
+
+    #[test]
+    fn dot_replaces_this_one_and_stops() {
+        let mut editor = replacing("foo foo", 0, "foo", "bar");
+
+        press(&mut editor, ".");
+
+        assert_eq!(editor.buffer().contents(), "bar foo");
+        assert!(editor.replacing().is_none());
+    }
+
+    #[test]
+    fn caret_goes_back_to_the_previous_match() {
+        let mut editor = replacing("foo foo foo", 0, "foo", "bar");
+
+        press(&mut editor, "n ^");
+        assert_eq!(editor.buffer().point(), 3);
+
+        press(&mut editor, "y");
+        assert_eq!(editor.buffer().contents(), "bar foo foo");
+        assert_eq!(editor.buffer().point(), 7);
+    }
+
+    #[test]
+    fn revisited_replacements_are_not_replaced_twice() {
+        let mut editor = replacing("foo foo", 0, "o", "oo");
+
+        press(&mut editor, "y ^ y");
+
+        assert_eq!(editor.buffer().contents(), "fooo foo");
+        assert_eq!(editor.buffer().point(), 4);
+    }
+
+    #[test]
+    fn caret_at_the_first_match_says_so() {
+        let mut editor = replacing("foo", 0, "foo", "bar");
+
+        press(&mut editor, "^");
+
+        assert_eq!(editor.message(), Some("No previous match"));
+        assert!(editor.replacing().is_some());
     }
 
     #[test]
