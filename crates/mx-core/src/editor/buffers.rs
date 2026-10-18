@@ -4,6 +4,8 @@ use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
 use crate::text::Buffer;
 
+pub(super) const SCRATCH: &str = "*scratch*";
+
 #[derive(Debug)]
 struct Entry {
     buffer: Buffer,
@@ -72,6 +74,15 @@ impl BufferList {
             self.entries.insert(0, entry);
         }
     }
+
+    pub(super) fn remove(&mut self, index: usize) {
+        if index < self.entries.len() {
+            self.entries.remove(index);
+        }
+        if self.entries.is_empty() {
+            self.push_front(Buffer::new(SCRATCH));
+        }
+    }
 }
 
 impl Editor {
@@ -79,9 +90,58 @@ impl Editor {
         self.open_minibuffer("Switch to buffer: ", Purpose::SwitchBuffer);
     }
 
-    pub(super) fn buffer_completions(&self, matches: impl Fn(&str) -> bool) -> Vec<Completion> {
+    pub(super) fn kill_buffer(&mut self) {
+        self.open_minibuffer("Kill buffer: ", Purpose::KillBuffer);
+    }
+
+    pub(super) fn exit_buffer_prompt(&mut self, purpose: Purpose, name: &str) {
+        match self.buffers.position(|buffer| buffer.name() == name) {
+            Some(index) => self.choose_buffer(purpose, index),
+            None if purpose == Purpose::SwitchBuffer => {
+                self.minibuffer = None;
+                self.add_buffer(Buffer::new(name));
+            }
+            None => self.note_no_match(),
+        }
+    }
+
+    pub(super) fn choose_buffer(&mut self, purpose: Purpose, index: usize) {
+        self.minibuffer = None;
+        if purpose == Purpose::KillBuffer {
+            self.kill_buffer_at(index);
+        } else {
+            self.select_buffer(index);
+        }
+    }
+
+    fn kill_buffer_at(&mut self, index: usize) {
+        let Some(buffer) = self.buffers.get(index) else {
+            return;
+        };
+        if buffer.is_modified() && buffer.file().is_some() {
+            let name = buffer.name().to_owned();
+            self.ask_to_kill(index, &name);
+        } else {
+            self.finish_kill(index);
+        }
+    }
+
+    pub(super) fn finish_kill(&mut self, index: usize) {
+        self.buffers.remove(index);
+        self.name_file_buffers();
+        if index == 0 {
+            self.after_buffer_switch();
+        }
+    }
+
+    pub(super) fn buffer_completions(
+        &self,
+        purpose: Purpose,
+        matches: impl Fn(&str) -> bool,
+    ) -> Vec<Completion> {
         let count = self.buffers.len();
-        (1..=count)
+        let start = usize::from(purpose == Purpose::SwitchBuffer);
+        (start..start + count)
             .map(|offset| offset % count)
             .filter_map(|index| {
                 let buffer = self.buffers.get(index)?;
@@ -94,13 +154,6 @@ impl Editor {
                 })
             })
             .collect()
-    }
-
-    pub(super) fn switch_to_buffer_named(&mut self, name: &str) {
-        match self.buffers.position(|buffer| buffer.name() == name) {
-            Some(index) => self.select_buffer(index),
-            None => self.add_buffer(Buffer::new(name)),
-        }
     }
 
     pub(super) fn select_buffer(&mut self, index: usize) {
@@ -244,5 +297,104 @@ mod tests {
 
         assert_eq!(editor.viewport().top(), top);
         assert_eq!(editor.buffer().line_of(editor.buffer().point()), 97);
+    }
+
+    #[test]
+    fn kill_buffer_offers_the_current_buffer_first() {
+        let mut editor = editor_with_buffers(&["c", "b", "a"]);
+
+        press(&mut editor, "C-x k");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Kill buffer: ");
+        assert_eq!(labels(&editor), ["c", "b", "a"]);
+        press(&mut editor, "RET");
+
+        assert_eq!(editor.buffer_names(), ["b", "a"]);
+    }
+
+    #[test]
+    fn killing_another_buffer_keeps_the_current_one() {
+        let mut editor = editor_with_buffers(&["c", "b", "a"]);
+
+        press(&mut editor, "C-x k");
+        type_text(&mut editor, "a");
+        press(&mut editor, "RET");
+
+        assert_eq!(editor.buffer_names(), ["c", "b"]);
+    }
+
+    #[test]
+    fn unknown_names_are_not_killed() {
+        let mut editor = editor_with_buffers(&["c", "b"]);
+
+        press(&mut editor, "C-x k");
+        type_text(&mut editor, "zzz");
+        press(&mut editor, "RET");
+
+        assert_eq!(editor.minibuffer().unwrap().note(), Some("[No match]"));
+        press(&mut editor, "M-RET");
+        assert_eq!(editor.minibuffer().unwrap().note(), Some("[No match]"));
+        assert_eq!(editor.buffer_names(), ["c", "b"]);
+    }
+
+    #[test]
+    fn killing_the_last_buffer_leaves_an_empty_scratch() {
+        let mut editor = editor_with_buffers(&["notes"]);
+        type_text(&mut editor, "x");
+
+        press(&mut editor, "C-x k RET");
+
+        assert_eq!(editor.buffer_names(), ["*scratch*"]);
+        assert_eq!(editor.buffer().contents(), "");
+    }
+
+    #[test]
+    fn killing_a_modified_file_buffer_asks_first() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.txt"), "").unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&dir.path().join("a.txt"));
+        type_text(&mut editor, "x");
+
+        press(&mut editor, "C-x k RET");
+        assert_eq!(
+            editor
+                .question()
+                .map(|question| question.prompt().to_owned()),
+            Some("Buffer a.txt modified; kill anyway? (y or n) ".to_owned())
+        );
+        press(&mut editor, "n");
+        assert_eq!(editor.buffer_names(), ["a.txt", "*scratch*"]);
+
+        press(&mut editor, "C-x k RET y");
+        assert_eq!(editor.buffer_names(), ["*scratch*"]);
+    }
+
+    #[test]
+    fn killing_a_twin_restores_the_plain_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut editor = Editor::new();
+        for sub in ["x", "y"] {
+            fs::create_dir(dir.path().join(sub)).unwrap();
+            editor.open_file(&dir.path().join(sub).join("main.rs"));
+        }
+
+        press(&mut editor, "C-x k RET");
+
+        assert_eq!(editor.buffer_names(), ["main.rs", "*scratch*"]);
+    }
+
+    #[test]
+    fn killing_the_current_buffer_restores_the_next_ones_view() {
+        let mut editor = editor_with_buffers(&["a", "b"]);
+        editor.resize_window(10);
+        editor.paste(Some("x\n".repeat(100)));
+        press(&mut editor, "C-p C-p C-p");
+        let top = editor.viewport().top();
+        press(&mut editor, "C-x b RET");
+
+        press(&mut editor, "C-x k RET");
+
+        assert_eq!(editor.buffer().name(), "a");
+        assert_eq!(editor.viewport().top(), top);
     }
 }

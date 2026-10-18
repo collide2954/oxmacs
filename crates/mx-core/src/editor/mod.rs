@@ -69,7 +69,7 @@ impl Default for Editor {
 
 impl Editor {
     pub fn new() -> Self {
-        Self::with_buffer(Buffer::new("*scratch*"))
+        Self::with_buffer(Buffer::new(buffers::SCRATCH))
     }
 
     pub fn with_buffer(buffer: Buffer) -> Self {
@@ -319,6 +319,7 @@ impl Editor {
             Command::WriteFile => self.write_file(),
             Command::SaveSomeBuffers => self.save_some_buffers(false),
             Command::SwitchToBuffer => self.switch_to_buffer(),
+            Command::KillBuffer => self.kill_buffer(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillMx => self.save_some_buffers(true),
         }

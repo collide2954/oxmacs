@@ -16,11 +16,16 @@ pub(super) enum Purpose {
     FindFile,
     WriteFile,
     SwitchBuffer,
+    KillBuffer,
 }
 
 impl Purpose {
     pub(super) fn takes_path(self) -> bool {
         matches!(self, Self::FindFile | Self::WriteFile)
+    }
+
+    fn takes_buffer(self) -> bool {
+        matches!(self, Self::SwitchBuffer | Self::KillBuffer)
     }
 }
 
@@ -112,7 +117,9 @@ impl Editor {
                 .filter(|completion| matches(&completion.label))
                 .collect(),
             Purpose::FindFile | Purpose::WriteFile => file_completions(minibuffer),
-            Purpose::SwitchBuffer => self.buffer_completions(matches),
+            Purpose::SwitchBuffer | Purpose::KillBuffer => {
+                self.buffer_completions(minibuffer.purpose, matches)
+            }
         }
     }
 
@@ -182,12 +189,11 @@ impl Editor {
     }
 
     pub(super) fn exit_minibuffer_with_input(&mut self) {
+        let input = self.minibuffer_input();
         match self.minibuffer_purpose() {
             Some(purpose) if purpose.takes_path() => self.exit_file_prompt(true),
-            Some(Purpose::SwitchBuffer) if !self.minibuffer_input().is_empty() => {
-                let name = self.minibuffer_input();
-                self.minibuffer = None;
-                self.switch_to_buffer_named(&name);
+            Some(purpose) if purpose.takes_buffer() && !input.is_empty() => {
+                self.exit_buffer_prompt(purpose, &input);
             }
             _ => self.exit_minibuffer(),
         }
@@ -201,19 +207,19 @@ impl Editor {
     }
 
     pub(super) fn exit_minibuffer(&mut self) {
-        if self.minibuffer_purpose().is_some_and(Purpose::takes_path) {
+        let Some(purpose) = self.minibuffer_purpose() else {
+            return;
+        };
+        if purpose.takes_path() {
             self.exit_file_prompt(false);
             return;
         }
-        let chosen = self.selected_completion();
-        let Some(minibuffer) = self.minibuffer.as_mut() else {
-            return;
-        };
-        let Some(completion) = chosen else {
-            if minibuffer.purpose == Purpose::SwitchBuffer {
-                self.exit_minibuffer_with_input();
+        let Some(completion) = self.selected_completion() else {
+            if purpose.takes_buffer() {
+                let input = self.minibuffer_input();
+                self.exit_buffer_prompt(purpose, &input);
             } else {
-                minibuffer.note = Some("[No match]".to_owned());
+                self.note_no_match();
             }
             return;
         };
@@ -228,8 +234,14 @@ impl Editor {
                 let text = self.clipboard_history.get(index).cloned();
                 self.paste(text);
             }
-            Choice::Buffer(index) => self.select_buffer(index),
+            Choice::Buffer(index) => self.choose_buffer(purpose, index),
             Choice::Entry(_) => {}
+        }
+    }
+
+    pub(super) fn note_no_match(&mut self) {
+        if let Some(minibuffer) = &mut self.minibuffer {
+            minibuffer.note = Some("[No match]".to_owned());
         }
     }
 

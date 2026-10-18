@@ -10,6 +10,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 - Files open in their own buffers; LF/CRLF and UTF-8 BOMs are preserved, and invalid UTF-8 is refused.
 - Buffers for files sharing a name show their directory, like `main.rs<src>`.
 - `switch-to-buffer` (`C-x b`) lists buffers most recent first with their file paths; `RET` on empty input returns to the previous buffer, an unknown name creates a buffer, and each buffer keeps its scroll position.
+- `kill-buffer` (`C-x k`) defaults to the current buffer and asks before discarding unsaved file changes; killing the last buffer leaves an empty `*scratch*`.
 - Mode line shows `**` for unsaved changes, `--` otherwise, and `CRLF` for Windows line endings.
 - `save-buffer` (`C-x C-s`) writes atomically, keeping permissions and the original line endings.
 - `write-file` (`C-x C-w`) saves under a new name, asking before overwriting another file; `C-x C-s` in a buffer without a file asks where to write it.

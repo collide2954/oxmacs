@@ -16,6 +16,9 @@ enum Pending {
     Overwrite {
         path: PathBuf,
     },
+    Kill {
+        index: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,7 +117,20 @@ impl Editor {
                     self.finish_write(path);
                 }
             }
+            Pending::Kill { index } => {
+                if answer == 'y' {
+                    self.finish_kill(index);
+                }
+            }
         }
+    }
+
+    pub(super) fn ask_to_kill(&mut self, index: usize, name: &str) {
+        self.question = Some(Question {
+            prompt: format!("Buffer {name} modified; kill anyway? (y or n) "),
+            choices: YES_NO,
+            pending: Pending::Kill { index },
+        });
     }
 
     pub(super) fn ask_to_overwrite(&mut self, path: PathBuf) {
