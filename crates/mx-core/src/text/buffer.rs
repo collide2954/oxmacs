@@ -37,6 +37,7 @@ pub struct Buffer {
     id: BufferId,
     name: String,
     text: Rope,
+    revision: u64,
     point: usize,
     mark: Option<usize>,
     mark_active: bool,
@@ -52,6 +53,7 @@ impl Buffer {
             id: BufferId(NEXT_ID.fetch_add(1, Ordering::Relaxed)),
             name: name.into(),
             text: Rope::new(),
+            revision: 0,
             point: 0,
             mark: None,
             mark_active: false,
@@ -108,6 +110,10 @@ impl Buffer {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     pub fn len_chars(&self) -> usize {
@@ -277,6 +283,7 @@ impl Buffer {
     fn apply_insert(&mut self, at: usize, text: &str) {
         let inserted = text.chars().count();
         self.text.insert(at, text);
+        self.revision += 1;
         self.point = position_after_insert(self.point, at, inserted);
         self.mark = self
             .mark
@@ -286,6 +293,7 @@ impl Buffer {
     fn apply_delete(&mut self, start: usize, end: usize) -> String {
         let removed = self.text_in(start..end);
         self.text.remove(start..end);
+        self.revision += 1;
         self.point = position_after_removal(self.point, start, end);
         self.mark = self
             .mark
@@ -309,6 +317,7 @@ impl Buffer {
 
     pub fn set_text(&mut self, text: &str) {
         self.text = Rope::from_str(text);
+        self.revision += 1;
         self.history = History::default();
         self.saved = self.history.current();
         let len = self.len_chars();
@@ -624,6 +633,27 @@ mod tests {
         assert_eq!(buffer.column(1), 1);
         assert_eq!(buffer.column(3), 0);
         assert_eq!(buffer.column(5), 2);
+    }
+
+    #[test]
+    fn every_text_change_bumps_the_revision() {
+        let mut buffer = Buffer::with_text("t", "abc");
+        let mut revisions = vec![buffer.revision()];
+
+        buffer.insert("x");
+        revisions.push(buffer.revision());
+        buffer.delete_backward(1);
+        revisions.push(buffer.revision());
+        buffer.undo();
+        revisions.push(buffer.revision());
+        buffer.set_text("new");
+        revisions.push(buffer.revision());
+        buffer.set_point(1);
+        buffer.set_mark(0);
+        revisions.push(buffer.revision());
+
+        assert!(revisions[..5].is_sorted_by(|a, b| a < b), "{revisions:?}");
+        assert_eq!(revisions[4], revisions[5]);
     }
 
     #[test]
