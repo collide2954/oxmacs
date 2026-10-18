@@ -78,15 +78,19 @@ impl App {
     pub fn boot(visits: &[Visit]) -> (Self, Task<Message>) {
         let config = config::default_path()
             .map_or_else(|| Ok(Config::default()), |path| Config::load(&path));
+        let splash = config.as_ref().map_or(true, |config| config.splash);
         let mut app = Self::new(config);
-        app.open(visits);
+        app.start(visits, splash);
         app.animations = animations_enabled(app.animations, prefers_reduced_motion());
         (app, system::theme().map(Message::AppearanceChanged))
     }
 
-    pub fn open(&mut self, visits: &[Visit]) {
+    pub fn start(&mut self, visits: &[Visit], splash: bool) {
         for visit in visits {
             self.editor.visit(visit);
+        }
+        if visits.is_empty() && splash {
+            self.editor.about();
         }
     }
 
@@ -526,17 +530,51 @@ mod tests {
         assert!(ui.find("M->").is_ok());
     }
 
+    fn visit(path: &Path) -> Visit {
+        Visit {
+            path: path.to_owned(),
+            line: None,
+            column: None,
+        }
+    }
+
+    #[test]
+    fn starting_without_files_shows_the_splash() {
+        let mut app = App::default();
+
+        app.start(&[], true);
+
+        assert_eq!(app.editor().buffer().name(), "*mx*");
+    }
+
+    #[test]
+    fn starting_with_files_skips_the_splash() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.txt");
+        std::fs::write(&path, "a").unwrap();
+        let mut app = App::default();
+
+        app.start(&[visit(&path)], true);
+
+        assert_eq!(app.editor().buffer_names(), ["a.txt", "*scratch*"]);
+    }
+
+    #[test]
+    fn the_splash_can_be_turned_off() {
+        let mut app = App::default();
+
+        app.start(&[], false);
+
+        assert_eq!(app.editor().buffer_names(), ["*scratch*"]);
+    }
+
     #[test]
     fn opened_files_follow_disk_changes() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a.txt");
         std::fs::write(&path, "old").unwrap();
         let mut app = App::default();
-        app.open(&[Visit {
-            path: path.clone(),
-            line: None,
-            column: None,
-        }]);
+        app.start(&[visit(&path)], true);
         assert_eq!(app.title(), "a.txt - mx");
         std::fs::write(&path, "new text").unwrap();
 
