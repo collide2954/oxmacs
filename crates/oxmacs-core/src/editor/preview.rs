@@ -1,6 +1,5 @@
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
-use crate::editor::tiling::Axis;
 use crate::text::{Buffer, BufferId};
 
 impl Editor {
@@ -23,16 +22,10 @@ impl Editor {
             self.select_window(origin);
             return;
         }
-        if self.tiling().windows().len() == 1 {
-            self.split_window(Axis::Columns);
-        }
-        self.other_window();
-        if let Some(index) = self.preview_index(source) {
-            self.select_buffer(index);
-        } else {
-            self.add_preview(source);
-        }
-        self.select_window(origin);
+        self.beside(|editor| match editor.preview_index(source) {
+            Some(index) => editor.select_buffer(index),
+            None => editor.add_preview(source),
+        });
     }
 
     fn add_preview(&mut self, source: BufferId) {

@@ -86,6 +86,16 @@ impl Editor {
         Some(Pane::new(self, index, parked.viewport, point, false))
     }
 
+    pub(super) fn beside(&mut self, place: impl FnOnce(&mut Self)) {
+        let origin = self.windows.selected;
+        if self.windows.tiling.windows().len() == 1 {
+            self.split_window(Axis::Columns);
+        }
+        self.other_window();
+        place(self);
+        self.select_window(origin);
+    }
+
     pub(super) fn window_showing(&self, buffer: BufferId) -> Option<WindowId> {
         if self.buffers.current().id() == buffer {
             return Some(self.windows.selected);
