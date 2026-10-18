@@ -315,31 +315,12 @@ impl Editor {
             return Vec::new();
         };
         let buffer = self.buffers.current();
-        let start = buffer.line_start(line);
-        let end = buffer.line_end(line);
-        let visible =
-            |found: &&Range<usize>| !found.is_empty() && found.start <= end && found.end > start;
-        let relative = |found: &Range<usize>| found.start.saturating_sub(start)..found.end - start;
-        let current = search.step.found.as_ref();
-        let mut marks: Vec<(Range<usize>, Highlight)> = Vec::new();
-        if search.lazy.revision == buffer.revision() {
-            let matches = &search.lazy.matches;
-            let first = matches.partition_point(|found| found.end <= start);
-            marks.extend(
-                matches[first..]
-                    .iter()
-                    .take_while(|found| found.start <= end)
-                    .filter(visible)
-                    .filter(|found| Some(*found) != current)
-                    .map(|found| (relative(found), Highlight::SearchMatch)),
-            );
-        }
-        marks.extend(
-            current
-                .filter(visible)
-                .map(|found| (relative(found), Highlight::SearchCurrent)),
-        );
-        marks
+        let lazy = if search.lazy.revision == buffer.revision() {
+            &search.lazy.matches[..]
+        } else {
+            &[]
+        };
+        match_marks(buffer, line, lazy, search.step.found.as_ref())
     }
 
     pub(super) fn exit_search(&mut self) {
@@ -382,6 +363,33 @@ impl Editor {
         self.viewport.set_top(search.origin_top);
         self.show_message("Quit");
     }
+}
+
+pub(super) fn match_marks(
+    buffer: &Buffer,
+    line: usize,
+    lazy: &[Range<usize>],
+    current: Option<&Range<usize>>,
+) -> Vec<(Range<usize>, Highlight)> {
+    let start = buffer.line_start(line);
+    let end = buffer.line_end(line);
+    let visible =
+        |found: &&Range<usize>| !found.is_empty() && found.start <= end && found.end > start;
+    let relative = |found: &Range<usize>| found.start.saturating_sub(start)..found.end - start;
+    let first = lazy.partition_point(|found| found.end <= start);
+    let mut marks: Vec<(Range<usize>, Highlight)> = lazy[first..]
+        .iter()
+        .take_while(|found| found.start <= end)
+        .filter(visible)
+        .filter(|found| Some(*found) != current)
+        .map(|found| (relative(found), Highlight::SearchMatch))
+        .collect();
+    marks.extend(
+        current
+            .filter(visible)
+            .map(|found| (relative(found), Highlight::SearchCurrent)),
+    );
+    marks
 }
 
 fn all_matches(buffer: &Buffer, step: &Step) -> Vec<Range<usize>> {
