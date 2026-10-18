@@ -136,7 +136,7 @@ impl Editor {
         )
     }
 
-    pub fn handle_key(&mut self, key: Key) {
+    pub fn handle_key(&mut self, mut key: Key) {
         self.message = None;
         if let Some(minibuffer) = &mut self.minibuffer {
             minibuffer.note = None;
@@ -146,7 +146,14 @@ impl Editor {
             return;
         }
         self.pending.push(key);
-        match self.lookup() {
+        let mut lookup = self.lookup();
+        if lookup == Lookup::Unbound
+            && let Some(meta) = self.fold_escape_into_meta()
+        {
+            key = meta;
+            lookup = self.lookup();
+        }
+        match lookup {
             Lookup::Prefix => self.echo_pending(),
             Lookup::Unbound if is_escape(key) => self.echo_pending(),
             Lookup::Command(command) => self.dispatch(key, command),
@@ -163,6 +170,19 @@ impl Editor {
     fn quits_pending_sequence(&self, key: Key) -> bool {
         let after_escape = self.pending.last().copied().is_some_and(is_escape);
         !self.pending.is_empty() && (is_keyboard_quit(key) || (is_escape(key) && after_escape))
+    }
+
+    fn fold_escape_into_meta(&mut self) -> Option<Key> {
+        let [.., escape, key] = self.pending[..] else {
+            return None;
+        };
+        if !is_escape(escape) || key.modifiers().contains(Modifiers::META) {
+            return None;
+        }
+        let meta = Key::new(key.code(), key.modifiers() | Modifiers::META);
+        self.pending.truncate(self.pending.len() - 2);
+        self.pending.push(meta);
+        Some(meta)
     }
 
     fn echo_pending(&mut self) {
@@ -325,6 +345,29 @@ mod tests {
 
         press(&mut editor, "a");
         assert_eq!(editor.buffer().contents(), "a");
+    }
+
+    #[test]
+    fn escape_acts_as_a_meta_prefix() {
+        let mut editor = editor_with("alpha beta", 0);
+
+        press(&mut editor, "ESC f");
+        assert_eq!(editor.buffer().point(), 5);
+
+        press(&mut editor, "ESC <");
+        assert_eq!(editor.buffer().point(), 0);
+
+        press(&mut editor, "ESC x");
+        assert!(editor.minibuffer().is_some());
+    }
+
+    #[test]
+    fn escape_with_an_unbound_key_reports_the_meta_key() {
+        let mut editor = Editor::new();
+
+        press(&mut editor, "ESC q");
+
+        assert_eq!(editor.message(), Some("M-q is undefined"));
     }
 
     #[test]

@@ -11,6 +11,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 - Vertical `M-x` completion: space-separated substring matching, recent commands first, key hints, `C-n`/`C-p` to select, `TAB` to insert.
 - Hollow cursor in the buffer while the minibuffer is active.
 - `ESC ESC` quits like `C-g`, including mid-sequence and in the minibuffer.
+- `ESC` acts as a Meta prefix (`ESC f` = `M-f`).
 
 ## [0.3.0] - 2026-10-17
 
