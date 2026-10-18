@@ -20,6 +20,39 @@ pub(super) fn type_text(editor: &mut Editor, text: &str) {
     }
 }
 
+pub(super) fn labels(editor: &Editor) -> Vec<String> {
+    editor
+        .completions()
+        .into_iter()
+        .map(|completion| completion.label)
+        .collect()
+}
+
+pub(super) fn question(editor: &Editor) -> Option<String> {
+    editor
+        .question()
+        .map(|question| question.prompt().to_owned())
+}
+
+pub(super) fn minibuffer_input(editor: &Editor) -> String {
+    editor.minibuffer().unwrap().input().contents()
+}
+
+pub(super) fn lines(editor: &Editor) -> Vec<String> {
+    editor
+        .buffer()
+        .contents()
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+pub(super) fn at_point(editor: &Editor) -> String {
+    let buffer = editor.buffer();
+    let line = buffer.line_of(buffer.point());
+    buffer.text_in(buffer.point()..buffer.line_end(line))
+}
+
 pub(super) fn editor_with(text: &str, point: usize) -> Editor {
     let mut buffer = Buffer::with_text("t", text);
     buffer.set_point(point);

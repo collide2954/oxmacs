@@ -326,7 +326,7 @@ mod tests {
 
     use crate::cli::Visit;
     use crate::editor::Editor;
-    use crate::editor::test_support::{press, type_text};
+    use crate::editor::test_support::{labels, minibuffer_input, press, type_text};
 
     fn workspace() -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();
@@ -441,18 +441,6 @@ mod tests {
         (dir, editor)
     }
 
-    fn input(editor: &Editor) -> String {
-        editor.minibuffer().unwrap().input().contents()
-    }
-
-    fn labels(editor: &Editor) -> Vec<String> {
-        editor
-            .completions()
-            .into_iter()
-            .map(|completion| completion.label)
-            .collect()
-    }
-
     fn root(dir: &tempfile::TempDir) -> String {
         format!("{}{SEP}", dir.path().display())
     }
@@ -462,7 +450,7 @@ mod tests {
         let (dir, editor) = find_file_workspace();
 
         assert_eq!(editor.minibuffer().unwrap().prompt(), "Find file: ");
-        assert_eq!(input(&editor), root(&dir));
+        assert_eq!(minibuffer_input(&editor), root(&dir));
         assert_eq!(
             labels(&editor),
             [
@@ -503,7 +491,11 @@ mod tests {
             type_text(&mut editor, "su");
             press(&mut editor, key);
 
-            assert_eq!(input(&editor), format!("{}sub{SEP}", root(&dir)), "{key}");
+            assert_eq!(
+                minibuffer_input(&editor),
+                format!("{}sub{SEP}", root(&dir)),
+                "{key}"
+            );
             assert_eq!(labels(&editor), ["c.txt"], "{key}");
         }
     }
@@ -516,7 +508,7 @@ mod tests {
 
         press(&mut editor, "DEL");
 
-        assert_eq!(input(&editor), root(&dir));
+        assert_eq!(minibuffer_input(&editor), root(&dir));
     }
 
     #[test]
@@ -556,7 +548,7 @@ mod tests {
 
         press(&mut editor, "C-x C-f");
 
-        assert_eq!(input(&editor), format!("~{SEP}"));
+        assert_eq!(minibuffer_input(&editor), format!("~{SEP}"));
         assert!(labels(&editor).contains(&"a.txt".to_owned()));
     }
 

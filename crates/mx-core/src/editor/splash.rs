@@ -149,7 +149,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::display::LineStyle;
-    use crate::editor::test_support::{press, type_text};
+    use crate::editor::test_support::{at_point, lines, press, type_text};
     use crate::editor::{Cell, Clicks, Editor};
     use crate::theme::Highlight;
 
@@ -157,21 +157,6 @@ mod tests {
         let mut editor = Editor::new();
         editor.about();
         editor
-    }
-
-    fn lines(editor: &Editor) -> Vec<String> {
-        editor
-            .buffer()
-            .contents()
-            .lines()
-            .map(str::to_owned)
-            .collect()
-    }
-
-    fn at_point(editor: &Editor) -> String {
-        let buffer = editor.buffer();
-        let line = buffer.line_of(buffer.point());
-        buffer.text_in(buffer.point()..buffer.line_end(line))
     }
 
     fn line_of(editor: &Editor, key: &str) -> usize {

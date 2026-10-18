@@ -400,7 +400,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use crate::editor::test_support::{press, type_text};
+    use crate::editor::test_support::{at_point, labels, lines, press, question, type_text};
     use crate::editor::{Editor, Effect};
     use crate::files::paths::SEPARATOR as SEP;
 
@@ -414,21 +414,6 @@ mod tests {
         editor.set_home_directory(None);
         editor.set_working_directory(dir.path().to_owned());
         (dir, editor)
-    }
-
-    fn lines(editor: &Editor) -> Vec<String> {
-        editor
-            .buffer()
-            .contents()
-            .lines()
-            .map(str::to_owned)
-            .collect()
-    }
-
-    fn at_point(editor: &Editor) -> String {
-        let buffer = editor.buffer();
-        let line = buffer.line_of(buffer.point());
-        buffer.text_in(buffer.point()..buffer.line_end(line))
     }
 
     fn dir_name(path: &Path) -> String {
@@ -505,12 +490,7 @@ mod tests {
             minibuffer.input().contents(),
             format!("{}{SEP}", dir.path().display())
         );
-        let labels: Vec<String> = editor
-            .completions()
-            .into_iter()
-            .map(|completion| completion.label)
-            .collect();
-        assert_eq!(labels, [format!("sub{SEP}")]);
+        assert_eq!(labels(&editor), [format!("sub{SEP}")]);
 
         press(&mut editor, "RET");
         assert_eq!(editor.buffer().name(), dir_name(dir.path()));
@@ -965,12 +945,6 @@ mod tests {
         press(&mut editor, "m g");
 
         assert_eq!(mark_column(&editor), "*  ");
-    }
-
-    fn question(editor: &Editor) -> Option<String> {
-        editor
-            .question()
-            .map(|question| question.prompt().to_owned())
     }
 
     fn trashed() -> Vec<std::path::PathBuf> {

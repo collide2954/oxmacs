@@ -353,11 +353,7 @@ fn clip_label(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, press, type_text};
-
-    fn input(editor: &Editor) -> String {
-        editor.minibuffer().unwrap().input().contents()
-    }
+    use crate::editor::test_support::{editor_with, labels, minibuffer_input, press, type_text};
 
     #[test]
     fn m_x_opens_the_minibuffer_with_a_prompt() {
@@ -377,7 +373,7 @@ mod tests {
         press(&mut editor, "M-x");
         type_text(&mut editor, "end");
 
-        assert_eq!(input(&editor), "end");
+        assert_eq!(minibuffer_input(&editor), "end");
         assert_eq!(editor.buffer().contents(), "");
     }
 
@@ -389,7 +385,7 @@ mod tests {
         type_text(&mut editor, "abc");
         press(&mut editor, "DEL C-a");
 
-        assert_eq!(input(&editor), "ab");
+        assert_eq!(minibuffer_input(&editor), "ab");
         assert_eq!(editor.minibuffer().unwrap().input().point(), 0);
     }
 
@@ -457,19 +453,11 @@ mod tests {
 
         press(&mut editor, "M-x a M-x");
 
-        assert_eq!(input(&editor), "a");
+        assert_eq!(minibuffer_input(&editor), "a");
         assert_eq!(
             editor.message(),
             Some("Command attempted to use minibuffer while in minibuffer")
         );
-    }
-
-    fn names(editor: &Editor) -> Vec<String> {
-        editor
-            .completions()
-            .into_iter()
-            .map(|completion| completion.label)
-            .collect()
     }
 
     fn open_with(editor: &mut Editor, text: &str) {
@@ -483,7 +471,7 @@ mod tests {
 
         press(&mut editor, "M-x");
 
-        let names = names(&editor);
+        let names = labels(&editor);
         assert!(names.is_sorted(), "{names:?}");
         assert!(names.iter().any(|name| name == "forward-char"));
         assert!(!names.iter().any(|name| name == "exit-minibuffer"));
@@ -496,7 +484,7 @@ mod tests {
 
         open_with(&mut editor, "buf end");
 
-        assert_eq!(names(&editor), ["end-of-buffer"]);
+        assert_eq!(labels(&editor), ["end-of-buffer"]);
     }
 
     #[test]
@@ -505,7 +493,7 @@ mod tests {
 
         open_with(&mut editor, "END-OF-B");
 
-        assert_eq!(names(&editor), ["end-of-buffer"]);
+        assert_eq!(labels(&editor), ["end-of-buffer"]);
     }
 
     #[test]
@@ -516,7 +504,7 @@ mod tests {
 
         press(&mut editor, "M-x");
 
-        let names = names(&editor);
+        let names = labels(&editor);
         assert_eq!(names[0], "end-of-buffer");
         assert!(names[1..].is_sorted(), "{names:?}");
     }

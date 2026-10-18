@@ -116,7 +116,7 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::test_support::{editor_with, press};
+    use crate::editor::test_support::{editor_with, labels, press};
     use crate::editor::{Editor, Effect};
 
     fn clipboard_writes(editor: &mut Editor) -> Vec<String> {
@@ -304,14 +304,6 @@ mod tests {
         editor.paste(Some(String::new()));
 
         assert_eq!(editor.message(), Some("Clipboard is empty"));
-    }
-
-    fn labels(editor: &Editor) -> Vec<String> {
-        editor
-            .completions()
-            .into_iter()
-            .map(|completion| completion.label)
-            .collect()
     }
 
     fn copy_words(text: &str) -> Editor {

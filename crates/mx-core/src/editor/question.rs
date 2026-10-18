@@ -280,7 +280,7 @@ mod tests {
     use std::path::Path;
 
     use crate::editor::Editor;
-    use crate::editor::test_support::{press, type_text};
+    use crate::editor::test_support::{press, question, type_text};
 
     fn two_modified_files() -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();
@@ -297,12 +297,6 @@ mod tests {
 
     fn on_disk(dir: &tempfile::TempDir, name: &str) -> String {
         fs::read_to_string(dir.path().join(name)).unwrap()
-    }
-
-    fn question(editor: &Editor) -> Option<String> {
-        editor
-            .question()
-            .map(|question| question.prompt().to_owned())
     }
 
     fn save_prompt(dir: &tempfile::TempDir, name: &str) -> String {

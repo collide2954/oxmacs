@@ -270,7 +270,7 @@ mod tests {
     use std::fs;
 
     use crate::editor::Editor;
-    use crate::editor::test_support::{press, type_text};
+    use crate::editor::test_support::{labels, press, type_text};
     use crate::text::Buffer;
 
     fn editor_with_buffers(names: &[&str]) -> Editor {
@@ -280,14 +280,6 @@ mod tests {
             editor.buffers.push_front(Buffer::new(*name));
         }
         editor
-    }
-
-    fn labels(editor: &Editor) -> Vec<String> {
-        editor
-            .completions()
-            .into_iter()
-            .map(|completion| completion.label)
-            .collect()
     }
 
     #[test]

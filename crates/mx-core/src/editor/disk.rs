@@ -135,7 +135,7 @@ mod tests {
     use crate::command::Command;
     use crate::config::Config;
     use crate::editor::Editor;
-    use crate::editor::test_support::{press, type_text};
+    use crate::editor::test_support::{press, question, type_text};
 
     fn opened(text: &str) -> (tempfile::TempDir, PathBuf, Editor) {
         let dir = tempfile::tempdir().unwrap();
@@ -145,12 +145,6 @@ mod tests {
         editor.set_home_directory(None);
         editor.open_file(&path);
         (dir, path, editor)
-    }
-
-    fn question(editor: &Editor) -> Option<String> {
-        editor
-            .question()
-            .map(|question| question.prompt().to_owned())
     }
 
     #[test]
