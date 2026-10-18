@@ -1,6 +1,6 @@
 use crate::display::Layout;
 use crate::editor::{Editor, Effect};
-use crate::text::motion;
+use crate::text::{Buffer, motion};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
@@ -107,6 +107,50 @@ impl Editor {
             buffer.set_mark(anchor);
         }
         buffer.set_point(position);
+        self.publish_primary();
+    }
+
+    pub fn click_line_number(&mut self, row: usize, extend: bool) {
+        self.end_command_chain();
+        let line = self.line_at_row(row);
+        let buffer = self.buffers.current();
+        let anchor = if extend {
+            buffer.line_of(
+                buffer
+                    .mark()
+                    .filter(|_| buffer.mark_active())
+                    .unwrap_or(buffer.point()),
+            )
+        } else {
+            line
+        };
+        self.drag_anchor = None;
+        self.line_anchor = Some(anchor);
+        self.select_lines(anchor, line);
+    }
+
+    pub fn drag_line_numbers(&mut self, row: usize) {
+        if let Some(anchor) = self.line_anchor {
+            let line = self.line_at_row(row);
+            self.select_lines(anchor, line);
+        }
+    }
+
+    fn line_at_row(&self, row: usize) -> usize {
+        let position = self.position_at(Cell { row, column: 0 });
+        self.buffers.current().line_of(position)
+    }
+
+    fn select_lines(&mut self, from: usize, to: usize) {
+        let buffer = self.buffers.current_mut();
+        let after = |buffer: &Buffer, line| (buffer.line_end(line) + 1).min(buffer.len_chars());
+        let (mark, point) = if to >= from {
+            (buffer.line_start(from), after(buffer, to))
+        } else {
+            (after(buffer, from), buffer.line_start(to))
+        };
+        buffer.set_mark(mark);
+        buffer.set_point(point);
         self.publish_primary();
     }
 
@@ -365,6 +409,39 @@ mod tests {
 
         editor.scroll_lines(1_000);
         assert_eq!(editor.viewport().top().line, 49);
+    }
+
+    #[test]
+    fn clicking_a_line_number_selects_the_line() {
+        let mut editor = editor_with("one\ntwo\nthree", 0);
+
+        editor.click_line_number(1, false);
+
+        assert_eq!(editor.buffer().selection(), Some(4..8));
+        assert_eq!(editor.buffer().point(), 8);
+    }
+
+    #[test]
+    fn dragging_over_line_numbers_selects_whole_lines() {
+        let mut editor = editor_with("one\ntwo\nthree", 0);
+
+        editor.click_line_number(0, false);
+        editor.drag_line_numbers(2);
+        assert_eq!(editor.buffer().selection(), Some(0..13));
+
+        editor.click_line_number(2, false);
+        editor.drag_line_numbers(1);
+        assert_eq!(editor.buffer().selection(), Some(4..13));
+        assert_eq!(editor.buffer().point(), 4);
+    }
+
+    #[test]
+    fn shift_clicking_a_line_number_extends_by_lines() {
+        let mut editor = editor_with("one\ntwo\nthree", 5);
+
+        editor.click_line_number(2, true);
+
+        assert_eq!(editor.buffer().selection(), Some(4..13));
     }
 
     #[test]
