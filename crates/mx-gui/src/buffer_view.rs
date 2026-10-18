@@ -237,10 +237,7 @@ impl<'a, Message> BufferView<'a, Message> {
         shell.capture_event();
     }
 
-    fn draw_cursor<Renderer>(&self, renderer: &mut Renderer, state: &State, bounds: Rectangle)
-    where
-        Renderer: text::Renderer<Font = Font>,
-    {
+    fn cursor_block(&self, state: &State, bounds: Rectangle) -> Option<CursorBlock> {
         let cell = state.metrics.cell;
         let target = self.cursor_cell();
         let (column, line, gliding) = match (&state.cursor, state.frame) {
@@ -256,55 +253,71 @@ impl<'a, Message> BufferView<'a, Message> {
             bounds.y + (line - top) * cell.height,
         );
         if origin.y + cell.height <= bounds.y || origin.y >= bounds.y + bounds.height {
-            return;
+            return None;
         }
-        let block = Rectangle::new(origin, cell);
-        let faces = &self.faces;
-        if self.editor.minibuffer().is_some() {
-            let hollow = Quad {
-                bounds: block,
-                border: Border {
-                    color: style::color(faces.cursor),
-                    width: 1.0,
-                    radius: 0.0.into(),
-                },
-                ..Quad::default()
-            };
-            renderer.with_layer(bounds, |renderer| {
-                renderer.fill_quad(hollow, Color::TRANSPARENT);
-            });
-            return;
-        }
-        let opacity = match state.frame {
+        let (glyph, width) = self.editor.cursor_glyph();
+        Some(CursorBlock {
+            bounds: Rectangle::new(origin, Size::new(cell.width * to_f32(width), cell.height)),
+            glyph,
+            gliding,
+        })
+    }
+
+    fn cursor_opacity(&self, state: &State) -> f32 {
+        match state.frame {
             Some(frame) if self.blinking() => animation::cursor_opacity(
                 frame.saturating_duration_since(self.motion.last_input),
                 self.motion.blink_interval,
             ),
             _ => 1.0,
-        };
-        let buffer = self.editor.buffer();
-        let under_cursor = buffer
-            .chars_after(buffer.point())
-            .next()
-            .filter(|c| !c.is_control() && !gliding);
+        }
+    }
+
+    fn draw_cursor<Renderer>(
+        &self,
+        renderer: &mut Renderer,
+        cursor: CursorBlock,
+        opacity: f32,
+        bounds: Rectangle,
+    ) where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        let color = style::color(self.faces.cursor);
         renderer.with_layer(bounds, |renderer| {
+            if self.editor.minibuffer().is_some() {
+                let hollow = Quad {
+                    bounds: cursor.bounds,
+                    border: Border {
+                        color,
+                        width: 1.0,
+                        radius: 0.0.into(),
+                    },
+                    ..Quad::default()
+                };
+                renderer.fill_quad(hollow, Color::TRANSPARENT);
+                return;
+            }
             renderer.fill_quad(
                 Quad {
-                    bounds: block,
+                    bounds: cursor.bounds,
                     ..Quad::default()
                 },
-                style::color(faces.cursor).scale_alpha(opacity),
+                color.scale_alpha(opacity),
             );
-            if let Some(c) = under_cursor {
-                renderer.fill_text(
-                    self.text(c.to_string(), Size::new(cell.width * 2.0, cell.height)),
-                    origin,
-                    style::color(faces.default.background).scale_alpha(opacity),
-                    block,
-                );
-            }
+            renderer.fill_text(
+                self.text(cursor.glyph, Size::new(f32::INFINITY, cursor.bounds.height)),
+                cursor.bounds.position(),
+                style::color(self.faces.default.background).scale_alpha(opacity),
+                cursor.bounds,
+            );
         });
     }
+}
+
+struct CursorBlock {
+    bounds: Rectangle,
+    glyph: String,
+    gliding: bool,
 }
 
 impl<Message, Renderer> Widget<Message, Theme, Renderer> for BufferView<'_, Message>
@@ -401,31 +414,52 @@ where
         let top = state.top(viewport.top());
         let first = floor_to_usize(top);
         let offset = (top - to_f32(first)) * cell.height;
-        let visible =
-            (first..=first + viewport.rows()).take_while(|line| *line < buffer.len_lines());
-        let selection = buffer.selection();
-        renderer.with_layer(bounds, |renderer| {
-            for (row, line) in visible.enumerate() {
-                let text = buffer.line_text(line);
+        let rows: Vec<_> = (first..=first + viewport.rows())
+            .take_while(|line| *line < buffer.len_lines())
+            .enumerate()
+            .map(|(row, line)| {
                 let row = Rectangle::new(
                     Point::new(bounds.x, bounds.y + to_f32(row) * cell.height - offset),
                     Size::new(bounds.width, cell.height),
                 );
-                let line_style = self.editor.line_style(line);
+                (
+                    line,
+                    row,
+                    buffer.line_text(line),
+                    self.editor.line_style(line),
+                )
+            })
+            .collect();
+        let selection = buffer.selection();
+        let cursor = self.cursor_block(state, bounds);
+        let opacity = self.cursor_opacity(state);
+        let behind = self.editor.minibuffer().is_none();
+        renderer.with_layer(bounds, |renderer| {
+            for (line, row, text, line_style) in &rows {
                 if let Some(background) = line_style.background {
                     renderer.fill_quad(
                         Quad {
-                            bounds: row,
+                            bounds: *row,
                             ..Quad::default()
                         },
                         style::color(self.faces.highlight(background)),
                     );
                 }
                 if let Some(selection) = &selection {
-                    self.draw_highlight(renderer, &text, line, selection, row, cell.width);
+                    self.draw_highlight(renderer, text, *line, selection, *row, cell.width);
                 }
-                for segment in display::segments(&text, &line_style.spans, self.editor.tab_width())
-                {
+            }
+            if let Some(cursor) = cursor.as_ref().filter(|cursor| cursor.gliding && behind) {
+                renderer.fill_quad(
+                    Quad {
+                        bounds: cursor.bounds,
+                        ..Quad::default()
+                    },
+                    style::color(self.faces.cursor).scale_alpha(opacity),
+                );
+            }
+            for (_, row, text, line_style) in &rows {
+                for segment in display::segments(text, &line_style.spans, self.editor.tab_width()) {
                     let color = segment
                         .face
                         .map_or(foreground, |face| style::color(self.faces.highlight(face)));
@@ -439,7 +473,9 @@ where
                 }
             }
         });
-        self.draw_cursor(renderer, state, bounds);
+        if let Some(cursor) = cursor.filter(|cursor| !cursor.gliding || !behind) {
+            self.draw_cursor(renderer, cursor, opacity, bounds);
+        }
     }
 }
 
