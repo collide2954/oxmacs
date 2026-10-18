@@ -12,6 +12,7 @@ workspace = true
 iced.workspace = true
 mx-core.workspace = true
 native-theme.workspace = true
+notify.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 native-theme = { workspace = true, features = ["windows"] }
@@ -21,4 +22,5 @@ native-theme = { workspace = true, features = ["macos"] }
 
 [dev-dependencies]
 iced_test.workspace = true
+tempfile.workspace = true
 ttf-parser.workspace = true

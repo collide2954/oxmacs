@@ -7,6 +7,7 @@ pub mod fonts;
 pub mod keys;
 pub mod style;
 mod units;
+pub mod watcher;
 
 pub use iced::Result;
 

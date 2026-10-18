@@ -17,6 +17,7 @@ indexmap = "2.14.2"
 mx-core = { path = "crates/mx-core" }
 mx-gui = { path = "crates/mx-gui" }
 native-theme = { version = "0.6.1", default-features = false }
+notify = "8.2.0"
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
 serde = { version = "1.0.229", features = ["derive"] }
 strum = { version = "0.28.0", features = ["derive"] }
