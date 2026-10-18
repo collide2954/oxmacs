@@ -426,7 +426,7 @@ where
                         .map_or(foreground, |face| style::color(self.faces.highlight(face)));
                     let x = to_f32(segment.column) * cell.width;
                     renderer.fill_text(
-                        self.text(segment.text, Size::new(row.width - x, row.height)),
+                        self.text(segment.text, Size::new(f32::INFINITY, row.height)),
                         Point::new(row.x + x, row.y),
                         color,
                         bounds,

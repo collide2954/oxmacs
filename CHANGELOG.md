@@ -12,6 +12,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 
 - Scrolling with the mouse wheel no longer drags point to the ends of short lines; it keeps its column across scrolls and into the next `C-n`/`C-p`.
 - Vertical motion keeps the screen column across lines with tabs and wide characters.
+- Lines wider than the window no longer spill over the lines below.
 
 ## [0.8.0] - 2026-10-18
 
