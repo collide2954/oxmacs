@@ -105,11 +105,7 @@ impl Editor {
     pub(super) fn finish_write(&mut self, path: PathBuf) {
         let buffer = self.buffers.current_mut();
         let format = buffer.file().map(|file| file.format).unwrap_or_default();
-        buffer.set_file(FileInfo {
-            path,
-            format,
-            disk: None,
-        });
+        buffer.set_file(FileInfo::new(path, format, None));
         self.name_file_buffers();
         self.save_buffer_at(0);
     }
@@ -215,11 +211,7 @@ impl Editor {
         match files::load(&path) {
             Ok(loaded) => {
                 let mut buffer = Buffer::with_text(path.display().to_string(), &loaded.text);
-                buffer.set_file(FileInfo {
-                    path,
-                    format: loaded.format,
-                    disk: loaded.disk,
-                });
+                buffer.set_file(FileInfo::new(path, loaded.format, loaded.disk));
                 self.add_buffer(buffer);
                 if loaded.disk.is_none() {
                     self.show_message("(New file)");
@@ -256,11 +248,7 @@ impl Editor {
         match files::save(&path, &buffer.contents(), format) {
             Ok(disk) => {
                 if let Some(buffer) = self.buffers.get_mut(index) {
-                    buffer.set_file(FileInfo {
-                        path: path.clone(),
-                        format,
-                        disk: Some(disk),
-                    });
+                    buffer.set_file(FileInfo::new(path.clone(), format, Some(disk)));
                     buffer.mark_saved();
                 }
                 let shown = paths::abbreviate(&path, self.home.as_deref());

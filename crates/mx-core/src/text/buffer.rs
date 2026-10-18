@@ -15,6 +15,12 @@ pub struct FileInfo {
     pub disk: Option<DiskState>,
 }
 
+impl FileInfo {
+    pub fn new(path: PathBuf, format: Format, disk: Option<DiskState>) -> Self {
+        Self { path, format, disk }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BufferId(u64);
 
@@ -612,11 +618,7 @@ mod tests {
         let mut buffer = Buffer::new("a.txt");
         assert_eq!(buffer.file(), None);
 
-        let info = FileInfo {
-            path: "dir/a.txt".into(),
-            format: Format::default(),
-            disk: None,
-        };
+        let info = FileInfo::new("dir/a.txt".into(), Format::default(), None);
         buffer.set_file(info.clone());
 
         assert_eq!(buffer.file(), Some(&info));
