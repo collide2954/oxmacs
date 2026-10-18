@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::editor::transfer::Transfer;
+use crate::editor::dired::Transfer;
 use crate::editor::{Editor, is_keyboard_quit};
 use crate::files::{DiskState, paths};
 use crate::input::{Key, KeyCode};

@@ -4,7 +4,7 @@ use strum::VariantArray;
 
 use crate::command::{Command, Scope};
 use crate::editor::Editor;
-use crate::editor::transfer::Kind;
+use crate::editor::dired::Kind;
 use crate::files::Entry;
 use crate::text::Buffer;
 

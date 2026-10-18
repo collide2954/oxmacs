@@ -14,7 +14,6 @@ mod selection;
 mod splash;
 #[cfg(test)]
 mod test_support;
-mod transfer;
 mod undo;
 
 pub use effect::Effect;
@@ -27,7 +26,7 @@ use std::path::PathBuf;
 use std::{env, mem};
 
 use buffers::{BufferList, Mode};
-use transfer::Kind;
+use dired::Kind;
 
 use crate::command::{Command, Scope};
 use crate::config::{Config, OnDiskChange};
