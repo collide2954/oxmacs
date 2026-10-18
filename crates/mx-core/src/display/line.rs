@@ -63,6 +63,22 @@ pub fn display_column(text: &str, chars: usize, tab_width: usize) -> usize {
     })
 }
 
+pub fn char_at_column(text: &str, column: usize, tab_width: usize) -> usize {
+    let mut start = 0;
+    for (index, c) in text.chars().enumerate() {
+        let end = start + Glyph::of(c, start, tab_width).width();
+        if column < end {
+            return if column - start <= end - column {
+                index
+            } else {
+                index + 1
+            };
+        }
+        start = end;
+    }
+    text.chars().count()
+}
+
 pub fn highlight_columns(
     text: &str,
     line: Range<usize>,
@@ -122,6 +138,23 @@ mod tests {
     #[test]
     fn wide_characters_take_two_cells() {
         assert_eq!(display_column("日本語", 2, 8), 4);
+    }
+
+    #[test]
+    fn columns_map_back_to_chars() {
+        assert_eq!(char_at_column("hello", 3, 8), 3);
+        assert_eq!(char_at_column("hi", 10, 8), 2);
+        assert_eq!(char_at_column("", 5, 8), 0);
+    }
+
+    #[test]
+    fn columns_inside_wide_glyphs_snap_to_the_nearest_boundary() {
+        assert_eq!(char_at_column("\tx", 3, 8), 0);
+        assert_eq!(char_at_column("\tx", 5, 8), 1);
+        assert_eq!(char_at_column("\tx", 9, 8), 2);
+        assert_eq!(char_at_column("日本", 1, 8), 0);
+        assert_eq!(char_at_column("日本", 2, 8), 1);
+        assert_eq!(char_at_column("日本", 3, 8), 1);
     }
 
     #[test]
