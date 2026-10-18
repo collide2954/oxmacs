@@ -7,11 +7,11 @@ use mx_core::display::ScreenLine;
 use crate::units::{signed_to_f32, to_f32};
 
 pub const BLINKS: u32 = 10;
-const FADE: Duration = Duration::from_millis(60);
-const GLIDE: Duration = Duration::from_millis(70);
-const SCROLL: Duration = Duration::from_millis(120);
-pub const THEME_FADE: Duration = Duration::from_millis(200);
-pub const REVEAL: Duration = Duration::from_millis(120);
+const FADE: Duration = Duration::from_millis(45);
+const GLIDE: Duration = Duration::from_millis(50);
+const SCROLL: Duration = Duration::from_millis(90);
+pub const THEME_FADE: Duration = Duration::from_millis(140);
+pub const REVEAL: Duration = Duration::from_millis(80);
 
 struct Phase {
     visible: bool,
@@ -324,6 +324,19 @@ mod tests {
         assert!(close(scroll.shift(start), 0.0));
         assert_eq!(scroll.target(), line(10));
     }
+    #[test]
+    fn glides_and_scrolls_settle_quickly() {
+        let start = Instant::now();
+        let mut glide = Glide::new((0, 0));
+        let mut scroll = Scroll::new(line(0));
+
+        glide.retarget((40, 20), start, true);
+        scroll.retarget(line(20), Some(20), 30, start, true);
+
+        assert!(!glide.is_animating(start + MS * 60));
+        assert!(!scroll.is_animating(start + MS * 100));
+    }
+
     #[test]
     fn disabled_animation_jumps_immediately() {
         let start = Instant::now();
