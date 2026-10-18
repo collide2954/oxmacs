@@ -1,12 +1,13 @@
 use iced::font::Family;
 use iced::theme::Mode;
+use iced::time::Instant;
 use iced::widget::{column, container, text};
 use iced::{Element, Font, Length, Subscription, Task, Theme, keyboard, system};
 use mx_core::config::{self, Config, ConfigError};
 use mx_core::editor::Editor;
 use mx_core::theme::Appearance;
 
-use crate::buffer_view::{BufferView, ViewEvent};
+use crate::buffer_view::{BufferView, Motion, ViewEvent};
 use crate::keys::{self, Platform};
 use crate::{completions, echo_area, fonts, style};
 
@@ -15,6 +16,8 @@ pub struct App {
     editor: Editor,
     font: Font,
     text_size: f32,
+    animations: bool,
+    last_input: Instant,
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +48,8 @@ impl App {
             editor,
             font,
             text_size: points_to_pixels(config.font_size),
+            animations: config.animations,
+            last_input: Instant::now(),
         }
     }
 
@@ -67,6 +72,10 @@ impl App {
 
     pub fn font(&self) -> Font {
         self.font
+    }
+
+    pub fn animations(&self) -> bool {
+        self.animations
     }
 
     fn reject_font(&mut self) {
@@ -93,6 +102,7 @@ impl App {
                 if let Some(key) =
                     keys::translate(&key, &modified_key, modifiers, Platform::current())
                 {
+                    self.last_input = Instant::now();
                     self.editor.handle_key(key);
                 }
             }
@@ -135,6 +145,10 @@ impl App {
                 &self.editor,
                 self.font,
                 self.text_size,
+                Motion {
+                    enabled: self.animations,
+                    last_input: self.last_input,
+                },
                 Message::View
             ))
             .padding([0, 4]),
@@ -237,6 +251,14 @@ mod tests {
 
         assert_eq!(app.font(), fonts::EDITOR);
         assert_eq!(app.editor().message(), None);
+    }
+
+    #[test]
+    fn animations_follow_the_config() {
+        assert!(App::default().animations());
+
+        let config = Config::parse("animations = false").unwrap();
+        assert!(!App::new(Ok(config)).animations());
     }
 
     #[test]

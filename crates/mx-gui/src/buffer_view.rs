@@ -6,12 +6,15 @@ use iced::advanced::text::{self, Paragraph as _, Text};
 use iced::advanced::widget::tree::{self, Tree};
 use iced::advanced::{Clipboard, Shell, Widget};
 use iced::alignment::Vertical;
+use iced::time::Instant;
 use iced::{
     Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, mouse,
+    window,
 };
 use mx_core::display;
 use mx_core::editor::Editor;
 
+use crate::animation::{self, Glide};
 use crate::style;
 use crate::units::to_f32;
 
@@ -24,11 +27,18 @@ pub enum ViewEvent {
     FontNotMonospaced,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Motion {
+    pub enabled: bool,
+    pub last_input: Instant,
+}
+
 #[derive(Debug)]
 pub struct BufferView<'a, Message> {
     editor: &'a Editor,
     font: Font,
     size: Pixels,
+    motion: Motion,
     on_event: fn(ViewEvent) -> Message,
 }
 
@@ -40,17 +50,26 @@ struct Metrics {
     font_reported: bool,
 }
 
+#[derive(Debug, Default)]
+struct State {
+    metrics: Metrics,
+    cursor: Option<Glide>,
+    frame: Option<Instant>,
+}
+
 impl<'a, Message> BufferView<'a, Message> {
     pub fn new(
         editor: &'a Editor,
         font: Font,
         size: impl Into<Pixels>,
+        motion: Motion,
         on_event: fn(ViewEvent) -> Message,
     ) -> Self {
         Self {
             editor,
             font,
             size: size.into(),
+            motion,
             on_event,
         }
     }
@@ -85,24 +104,57 @@ impl<'a, Message> BufferView<'a, Message> {
         }
     }
 
-    fn draw_cursor<Renderer>(&self, renderer: &mut Renderer, bounds: Rectangle, cell: Size)
+    fn cursor_cell(&self) -> (usize, usize) {
+        let buffer = self.editor.buffer();
+        (
+            self.editor.point_display_column(),
+            buffer.line_of(buffer.point()),
+        )
+    }
+
+    fn blinking(&self) -> bool {
+        self.motion.enabled && self.editor.minibuffer().is_none()
+    }
+
+    fn animate<M>(&self, state: &mut State, now: Instant, shell: &mut Shell<'_, M>) {
+        state.frame = Some(now);
+        let target = self.cursor_cell();
+        let cursor = state.cursor.get_or_insert_with(|| Glide::new(target));
+        cursor.retarget(target, now, self.motion.enabled);
+        if cursor.is_animating(now) {
+            shell.request_redraw();
+            return;
+        }
+        let idle = now.saturating_duration_since(self.motion.last_input);
+        if self.blinking()
+            && let Some(wait) = animation::next_blink_frame(idle)
+        {
+            shell.request_redraw_at(now + wait);
+        }
+    }
+
+    fn draw_cursor<Renderer>(&self, renderer: &mut Renderer, state: &State, bounds: Rectangle)
     where
         Renderer: text::Renderer<Font = Font>,
     {
-        let buffer = self.editor.buffer();
-        let point = buffer.point();
-        let Some(row) = buffer
-            .line_of(point)
-            .checked_sub(self.editor.viewport().top())
-        else {
-            return;
+        let cell = state.metrics.cell;
+        let target = self.cursor_cell();
+        let (column, line, gliding) = match (&state.cursor, state.frame) {
+            (Some(glide), Some(frame)) => {
+                let (column, line) = glide.position(frame);
+                (column, line, glide.is_animating(frame))
+            }
+            _ => (to_f32(target.0), to_f32(target.1), false),
         };
+        let top = to_f32(self.editor.viewport().top());
         let origin = Point::new(
-            bounds.x + to_f32(self.editor.point_display_column()) * cell.width,
-            bounds.y + to_f32(row) * cell.height,
+            bounds.x + column * cell.width,
+            bounds.y + (line - top) * cell.height,
         );
+        if origin.y < bounds.y || origin.y >= bounds.y + bounds.height {
+            return;
+        }
         let block = Rectangle::new(origin, cell);
-        let under_cursor = buffer.chars_after(point).next().filter(|c| !c.is_control());
         let faces = self.editor.theme();
         if self.editor.minibuffer().is_some() {
             let hollow = Quad {
@@ -119,19 +171,30 @@ impl<'a, Message> BufferView<'a, Message> {
             });
             return;
         }
+        let opacity = match state.frame {
+            Some(frame) if self.blinking() => {
+                animation::cursor_opacity(frame.saturating_duration_since(self.motion.last_input))
+            }
+            _ => 1.0,
+        };
+        let buffer = self.editor.buffer();
+        let under_cursor = buffer
+            .chars_after(buffer.point())
+            .next()
+            .filter(|c| !c.is_control() && !gliding);
         renderer.with_layer(bounds, |renderer| {
             renderer.fill_quad(
                 Quad {
                     bounds: block,
                     ..Quad::default()
                 },
-                style::color(faces.cursor),
+                style::color(faces.cursor).scale_alpha(opacity),
             );
             if let Some(c) = under_cursor {
                 renderer.fill_text(
                     self.text(c.to_string(), Size::new(cell.width * 2.0, cell.height)),
                     origin,
-                    style::color(faces.default.background),
+                    style::color(faces.default.background).scale_alpha(opacity),
                     block,
                 );
             }
@@ -144,11 +207,11 @@ where
     Renderer: text::Renderer<Font = Font>,
 {
     fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<Metrics>()
+        tree::Tag::of::<State>()
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(Metrics::default())
+        tree::State::new(State::default())
     }
 
     fn size(&self) -> Size<Length> {
@@ -161,9 +224,9 @@ where
         _renderer: &Renderer,
         limits: &layout::Limits,
     ) -> layout::Node {
-        let metrics = tree.state.downcast_mut::<Metrics>();
-        if metrics.measured_for != Some((self.font, self.size)) {
-            *metrics = self.measure::<Renderer>();
+        let state = tree.state.downcast_mut::<State>();
+        if state.metrics.measured_for != Some((self.font, self.size)) {
+            state.metrics = self.measure::<Renderer>();
         }
         layout::Node::new(limits.resolve(Length::Fill, Length::Fill, Size::ZERO))
     }
@@ -171,7 +234,7 @@ where
     fn update(
         &mut self,
         tree: &mut Tree,
-        _event: &Event,
+        event: &Event,
         layout: Layout<'_>,
         _cursor: mouse::Cursor,
         _renderer: &Renderer,
@@ -179,7 +242,11 @@ where
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
-        let metrics = tree.state.downcast_mut::<Metrics>();
+        let state = tree.state.downcast_mut::<State>();
+        if let Event::Window(window::Event::RedrawRequested(now)) = event {
+            self.animate(state, *now, shell);
+        }
+        let metrics = &mut state.metrics;
         if metrics.measured_for.is_some() && !metrics.monospaced && !metrics.font_reported {
             metrics.font_reported = true;
             shell.publish((self.on_event)(ViewEvent::FontNotMonospaced));
@@ -200,7 +267,8 @@ where
         _cursor: mouse::Cursor,
         _viewport: &Rectangle,
     ) {
-        let cell = tree.state.downcast_ref::<Metrics>().cell;
+        let state = tree.state.downcast_ref::<State>();
+        let cell = state.metrics.cell;
         let bounds = layout.bounds();
         let buffer = self.editor.buffer();
         let foreground = style::color(self.editor.theme().default.foreground);
@@ -227,7 +295,7 @@ where
                 bounds,
             );
         }
-        self.draw_cursor(renderer, bounds, cell);
+        self.draw_cursor(renderer, state, bounds);
     }
 }
 
