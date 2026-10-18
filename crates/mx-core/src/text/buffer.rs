@@ -8,6 +8,8 @@ pub struct Buffer {
     name: String,
     text: Rope,
     point: usize,
+    mark: Option<usize>,
+    mark_active: bool,
 }
 
 impl Buffer {
@@ -16,6 +18,8 @@ impl Buffer {
             name: name.into(),
             text: Rope::new(),
             point: 0,
+            mark: None,
+            mark_active: false,
         }
     }
 
@@ -94,9 +98,46 @@ impl Buffer {
         self.text.to_string()
     }
 
+    pub fn mark(&self) -> Option<usize> {
+        self.mark
+    }
+
+    pub fn mark_active(&self) -> bool {
+        self.mark_active && self.mark.is_some()
+    }
+
+    pub fn set_mark(&mut self, mark: usize) {
+        self.mark = Some(mark.min(self.len_chars()));
+        self.mark_active = true;
+    }
+
+    pub fn deactivate_mark(&mut self) {
+        self.mark_active = false;
+    }
+
+    pub fn selection(&self) -> Option<Range<usize>> {
+        let mark = self.mark.filter(|_| self.mark_active)?;
+        Some(mark.min(self.point)..mark.max(self.point))
+    }
+
+    pub fn exchange_point_and_mark(&mut self) -> bool {
+        let Some(mark) = self.mark else {
+            return false;
+        };
+        self.mark = Some(self.point);
+        self.point = mark;
+        self.mark_active = true;
+        true
+    }
+
     pub fn insert(&mut self, text: &str) {
-        self.text.insert(self.point, text);
-        self.point += text.chars().count();
+        let at = self.point;
+        let inserted = text.chars().count();
+        self.text.insert(at, text);
+        self.point += inserted;
+        self.mark = self
+            .mark
+            .map(|mark| if mark > at { mark + inserted } else { mark });
     }
 
     pub fn delete_forward(&mut self, count: usize) {
@@ -113,6 +154,9 @@ impl Buffer {
         let removed = self.text.slice(start..end).to_string();
         self.text.remove(start..end);
         self.point = position_after_removal(self.point, start, end);
+        self.mark = self
+            .mark
+            .map(|mark| position_after_removal(mark, start, end));
         removed
     }
 }
@@ -301,5 +345,95 @@ mod tests {
 
         assert_eq!(buffer.chars_after(1).collect::<String>(), "bcd");
         assert_eq!(buffer.chars_before(3).collect::<String>(), "cba");
+    }
+
+    #[test]
+    fn new_buffers_have_no_mark_or_selection() {
+        let buffer = Buffer::with_text("t", "abc");
+
+        assert_eq!(buffer.mark(), None);
+        assert!(!buffer.mark_active());
+        assert_eq!(buffer.selection(), None);
+    }
+
+    #[test]
+    fn active_mark_selects_between_mark_and_point() {
+        let mut buffer = Buffer::with_text("t", "hello world");
+        buffer.set_point(6);
+
+        buffer.set_mark(2);
+        assert_eq!(buffer.selection(), Some(2..6));
+
+        buffer.set_point(0);
+        assert_eq!(buffer.selection(), Some(0..2));
+    }
+
+    #[test]
+    fn deactivated_mark_is_kept_but_selects_nothing() {
+        let mut buffer = Buffer::with_text("t", "hello");
+        buffer.set_mark(2);
+
+        buffer.deactivate_mark();
+
+        assert_eq!(buffer.mark(), Some(2));
+        assert!(!buffer.mark_active());
+        assert_eq!(buffer.selection(), None);
+    }
+
+    #[test]
+    fn mark_is_clamped_to_the_buffer() {
+        let mut buffer = Buffer::with_text("t", "abc");
+
+        buffer.set_mark(10);
+
+        assert_eq!(buffer.mark(), Some(3));
+    }
+
+    #[test]
+    fn mark_follows_insertions_before_it_but_not_at_it() {
+        let mut buffer = Buffer::with_text("t", "abcd");
+        buffer.set_mark(2);
+
+        buffer.insert("xy");
+        assert_eq!(buffer.mark(), Some(4));
+
+        buffer.set_point(4);
+        buffer.insert("z");
+        assert_eq!(buffer.mark(), Some(4));
+    }
+
+    #[test]
+    fn mark_follows_deletions() {
+        let mut buffer = Buffer::with_text("t", "abcdef");
+        buffer.set_mark(4);
+
+        buffer.delete_range(0..2);
+        assert_eq!(buffer.mark(), Some(2));
+
+        buffer.delete_range(1..3);
+        assert_eq!(buffer.mark(), Some(1));
+    }
+
+    #[test]
+    fn exchange_point_and_mark_swaps_and_activates() {
+        let mut buffer = Buffer::with_text("t", "abcd");
+        buffer.set_mark(1);
+        buffer.deactivate_mark();
+        buffer.set_point(3);
+
+        assert!(buffer.exchange_point_and_mark());
+
+        assert_eq!(buffer.point(), 1);
+        assert_eq!(buffer.mark(), Some(3));
+        assert!(buffer.mark_active());
+    }
+
+    #[test]
+    fn exchange_point_and_mark_needs_a_mark() {
+        let mut buffer = Buffer::with_text("t", "abcd");
+        buffer.set_point(2);
+
+        assert!(!buffer.exchange_point_and_mark());
+        assert_eq!(buffer.point(), 2);
     }
 }
