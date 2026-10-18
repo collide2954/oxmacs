@@ -4,8 +4,8 @@ use iced::theme::Mode;
 use iced::time::{Duration, Instant};
 use iced::widget::{column, container, text};
 use iced::{
-    Animation, Element, Font, Length, Subscription, Task, Theme, clipboard, keyboard, system,
-    window,
+    Animation, Element, Event, Font, Length, Subscription, Task, Theme, clipboard, event, keyboard,
+    system, window,
 };
 use mx_core::cli::Visit;
 use mx_core::config::{self, Config, ConfigError};
@@ -15,7 +15,7 @@ use native_theme::detect::prefers_reduced_motion;
 
 use crate::buffer_view::{BufferView, Motion, ViewEvent};
 use crate::keys::{self, Platform};
-use crate::{animation, completions, echo_area, fonts, style};
+use crate::{animation, completions, echo_area, fonts, style, watcher};
 
 #[derive(Debug)]
 pub struct App {
@@ -38,6 +38,7 @@ pub enum Message {
     Tick(Instant),
     Pasted(Option<String>),
     PastedPrimary(Option<String>),
+    DiskChanged,
 }
 
 impl Default for App {
@@ -74,11 +75,15 @@ impl App {
         let config = config::default_path()
             .map_or_else(|| Ok(Config::default()), |path| Config::load(&path));
         let mut app = Self::new(config);
-        for visit in visits {
-            app.editor.visit(visit);
-        }
+        app.open(visits);
         app.animations = animations_enabled(app.animations, prefers_reduced_motion());
         (app, system::theme().map(Message::AppearanceChanged))
+    }
+
+    pub fn open(&mut self, visits: &[Visit]) {
+        for visit in visits {
+            self.editor.visit(visit);
+        }
     }
 
     pub fn editor(&self) -> &Editor {
@@ -204,6 +209,7 @@ impl App {
             Message::Tick(now) => self.tick(now),
             Message::Pasted(text) => self.editor.paste(text),
             Message::PastedPrimary(text) => self.editor.paste_primary(text),
+            Message::DiskChanged => self.editor.check_disk_changes(),
         }
         if self.editor.should_quit() {
             return iced::exit();
@@ -220,6 +226,8 @@ impl App {
         Subscription::batch([
             keyboard::listen().map(Message::Keyboard),
             system::theme_changes().map(Message::AppearanceChanged),
+            watcher::changes(self.editor.visited_files()).map(|()| Message::DiskChanged),
+            event::listen_with(focus_gained),
             frames,
         ])
     }
@@ -300,6 +308,14 @@ fn transition(state: bool, duration: Duration) -> Animation<bool> {
     Animation::new(state)
         .duration(duration)
         .easing(Easing::EaseOutCubic)
+}
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "event::listen_with requires this signature"
+)]
+fn focus_gained(event: Event, _: event::Status, _: window::Id) -> Option<Message> {
+    matches!(event, Event::Window(window::Event::Focused)).then_some(Message::DiskChanged)
 }
 
 fn appearance(mode: Mode) -> Option<Appearance> {
@@ -494,6 +510,42 @@ mod tests {
 
         assert!(ui.find("end-of-buffer").is_ok());
         assert!(ui.find("M->").is_ok());
+    }
+
+    #[test]
+    fn opened_files_follow_disk_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.txt");
+        std::fs::write(&path, "old").unwrap();
+        let mut app = App::default();
+        app.open(&[Visit {
+            path: path.clone(),
+            line: None,
+            column: None,
+        }]);
+        assert_eq!(app.title(), "a.txt - mx");
+        std::fs::write(&path, "new text").unwrap();
+
+        let _ = app.update(Message::DiskChanged);
+
+        assert_eq!(app.editor().buffer().contents(), "new text");
+    }
+
+    #[test]
+    fn regaining_focus_checks_the_disk() {
+        let check = |event| {
+            focus_gained(
+                Event::Window(event),
+                event::Status::Ignored,
+                window::Id::unique(),
+            )
+        };
+
+        assert!(matches!(
+            check(window::Event::Focused),
+            Some(Message::DiskChanged)
+        ));
+        assert!(check(window::Event::Unfocused).is_none());
     }
 
     #[test]
