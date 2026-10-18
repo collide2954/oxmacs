@@ -4,7 +4,9 @@ use iced::animation::Easing;
 use iced::font::Family;
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
-use iced::widget::{Column, Row, column, container, responsive, row, space, text};
+use iced::widget::{
+    Column, Row, column, container, markdown, responsive, row, scrollable, space, text,
+};
 use iced::{
     Animation, Element, Event, Font, Length, Subscription, Task, Theme, clipboard, event, keyboard,
     system, window,
@@ -14,6 +16,7 @@ use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{self, Config, ConfigError};
 use oxmacs_core::editor::{Axis, Editor, Effect, Tiling, WindowId};
+use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
 use crate::buffer_view::{BufferView, Motion, ViewEvent};
@@ -34,6 +37,7 @@ pub struct App {
     theme_fade: Option<(Faces, Animation<bool>)>,
     reveal: Animation<bool>,
     clock: Option<String>,
+    previews: Vec<(BufferId, u64, markdown::Content)>,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +56,7 @@ pub enum Message {
     DiskChanged,
     Opened(Result<(), String>),
     Clock,
+    OpenLink(markdown::Uri),
 }
 
 impl Default for App {
@@ -88,6 +93,7 @@ impl App {
             theme_fade: None,
             reveal: transition(false, animation::REVEAL),
             clock: config.clock.then_some(config.clock_format),
+            previews: Vec::new(),
         }
     }
 
@@ -180,6 +186,33 @@ impl App {
         true
     }
 
+    fn refresh_previews(&mut self) {
+        let mut fresh: Vec<(BufferId, u64, markdown::Content)> = Vec::new();
+        for window in self.editor.tiling().windows() {
+            let Some(source) = self
+                .editor
+                .pane_of(window)
+                .and_then(|pane| pane.preview_source())
+            else {
+                continue;
+            };
+            let (id, revision) = (source.id(), source.revision());
+            if fresh.iter().any(|(known, ..)| *known == id) {
+                continue;
+            }
+            let content = match self
+                .previews
+                .iter()
+                .position(|(known, seen, _)| *known == id && *seen == revision)
+            {
+                Some(index) => self.previews.swap_remove(index).2,
+                None => markdown::Content::parse(&source.contents()),
+            };
+            fresh.push((id, revision, content));
+        }
+        self.previews = fresh;
+    }
+
     fn fade_theme_from(&mut self, shown: Faces) {
         if self.animations && shown.name != self.editor.theme().name {
             let fade = transition(false, animation::THEME_FADE).go(true, self.now);
@@ -264,8 +297,14 @@ impl App {
             Message::PastedPrimary(text) => self.editor.paste_primary(text),
             Message::DiskChanged => self.editor.check_disk_changes(),
             Message::Opened(Err(error)) => self.editor.show_message(error),
+            Message::OpenLink(uri) => {
+                if let Err(error) = open::that_detached(&uri) {
+                    self.editor.show_message(format!("{uri}: {error}"));
+                }
+            }
         }
         self.editor.prepare_display();
+        self.refresh_previews();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {
             return iced::exit();
@@ -387,13 +426,23 @@ impl App {
         };
         let line = |content: String| text(content).font(self.font).size(self.text_size);
         let active = pane.is_selected();
-        let clock = self
-            .clock
-            .as_deref()
-            .filter(|_| self.editor.tiling().windows().last() == Some(&window))
-            .map(|format| line(clock::now(format)));
-        column![
-            container(BufferView::new(
+        let body: Element<'_, Message> = match pane
+            .preview_source()
+            .and_then(|source| self.previews.iter().find(|(id, ..)| *id == source.id()))
+        {
+            Some((_, _, content)) => {
+                let settings = markdown::Settings::with_text_size(
+                    self.text_size,
+                    markdown::Style::from_palette(self.theme().palette()),
+                );
+                scrollable(
+                    container(markdown::view(content.items(), settings).map(Message::OpenLink))
+                        .padding(12),
+                )
+                .height(Length::Fill)
+                .into()
+            }
+            None => container(BufferView::new(
                 pane,
                 window,
                 faces,
@@ -404,10 +453,19 @@ impl App {
                     last_input: self.last_input,
                     blink_interval: self.blink_interval,
                 },
-                Message::View
+                Message::View,
             ))
             .padding([0, 4])
-            .height(Length::Fill),
+            .height(Length::Fill)
+            .into(),
+        };
+        let clock = self
+            .clock
+            .as_deref()
+            .filter(|_| self.editor.tiling().windows().last() == Some(&window))
+            .map(|format| line(clock::now(format)));
+        column![
+            body,
             container(row![line(pane.mode_line()), space::horizontal()].push(clock))
                 .width(Length::Fill)
                 .padding([1, 4])
@@ -879,6 +937,27 @@ mod tests {
         });
 
         assert_eq!(app.editor().tiling().boundary(&[], 0), Some(0.6));
+    }
+
+    #[test]
+    fn previews_parse_their_source_again_after_edits() {
+        let mut app = App::default();
+        press(&mut app, "x", Modifiers::ALT);
+        for c in "markdown-mode".chars() {
+            press(&mut app, &c.to_string(), Modifiers::empty());
+        }
+        enter(&mut app);
+        let _ = app.update(Message::Pasted(Some("# Title\n".to_owned())));
+        press(&mut app, "c", Modifiers::CTRL);
+        press(&mut app, "c", Modifiers::CTRL);
+        press(&mut app, "p", Modifiers::empty());
+        assert_eq!(app.previews.len(), 1);
+        let first = app.previews[0].1;
+
+        press(&mut app, "x", Modifiers::empty());
+
+        assert_eq!(app.previews[0].1, app.editor().buffer().revision());
+        assert_ne!(app.previews[0].1, first);
     }
 
     #[test]
