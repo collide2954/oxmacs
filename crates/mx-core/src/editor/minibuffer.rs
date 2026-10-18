@@ -206,6 +206,18 @@ mod tests {
     }
 
     #[test]
+    fn c_j_also_runs_the_command() {
+        let mut editor = editor_with("hello", 0);
+
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "end-of-buffer");
+        press(&mut editor, "C-j");
+
+        assert!(editor.minibuffer().is_none());
+        assert_eq!(editor.buffer().point(), 5);
+    }
+
+    #[test]
     fn unknown_commands_keep_the_minibuffer_open() {
         let mut editor = Editor::new();
 

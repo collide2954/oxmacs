@@ -3,6 +3,7 @@ use crate::input::{KeySequence, Keymap};
 
 const GLOBAL: &[(&str, Command)] = &[
     ("RET", Command::Newline),
+    ("C-j", Command::Newline),
     ("C-d", Command::DeleteChar),
     ("<delete>", Command::DeleteChar),
     ("DEL", Command::DeleteBackwardChar),
@@ -39,6 +40,7 @@ const GLOBAL: &[(&str, Command)] = &[
 
 const MINIBUFFER: &[(&str, Command)] = &[
     ("RET", Command::ExitMinibuffer),
+    ("C-j", Command::ExitMinibuffer),
     ("C-n", Command::MinibufferNext),
     ("<down>", Command::MinibufferNext),
     ("C-p", Command::MinibufferPrevious),

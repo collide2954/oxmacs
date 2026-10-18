@@ -17,6 +17,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 - Hollow cursor in the buffer while the minibuffer is active.
 - `ESC ESC` quits like `C-g`, including mid-sequence and in the minibuffer.
 - `ESC` acts as a Meta prefix (`ESC f` = `M-f`).
+- `C-m`, `C-i` and `C-[` are `RET`, `TAB` and `ESC`; `C-j` inserts a newline (runs the command in the minibuffer).
 
 ## [0.3.0] - 2026-10-17
 

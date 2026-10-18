@@ -51,6 +51,15 @@ impl Key {
                 modifiers: modifiers - Modifiers::SHIFT,
             };
         }
+        if let KeyCode::Char(c) = code
+            && modifiers.contains(Modifiers::CONTROL)
+            && let Some(alias) = control_alias(c)
+        {
+            return Self {
+                code: alias,
+                modifiers: modifiers - Modifiers::CONTROL,
+            };
+        }
         Self { code, modifiers }
     }
 
@@ -90,6 +99,15 @@ fn single_lowercase(c: char) -> Option<char> {
     let mut lower = c.to_lowercase();
     match (lower.next(), lower.next()) {
         (Some(l), None) => Some(l),
+        _ => None,
+    }
+}
+
+fn control_alias(c: char) -> Option<KeyCode> {
+    match c {
+        'm' => Some(KeyCode::Return),
+        'i' => Some(KeyCode::Tab),
+        '[' => Some(KeyCode::Escape),
         _ => None,
     }
 }
@@ -402,6 +420,21 @@ mod tests {
             ]
         );
         assert_eq!(sequence.to_string(), "C-x C-f");
+    }
+
+    #[test]
+    fn ascii_control_aliases_are_the_named_keys() {
+        let same = |a: &str, b: &str| a.parse::<Key>().unwrap() == b.parse::<Key>().unwrap();
+        assert!(same("C-m", "RET"));
+        assert!(same("C-i", "TAB"));
+        assert!(same("C-[", "ESC"));
+        assert!(same("C-M-m", "M-RET"));
+        assert_eq!("C-m".parse::<Key>().unwrap().to_string(), "RET");
+    }
+
+    #[test]
+    fn shifted_control_letters_are_not_aliases() {
+        assert_eq!("C-S-m".parse::<Key>().unwrap().to_string(), "C-M");
     }
 
     fn unshifted(notation: &str) -> Option<String> {

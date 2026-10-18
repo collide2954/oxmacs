@@ -27,6 +27,8 @@ mod tests {
     #[test]
     fn return_inserts_a_newline() {
         assert_eq!(contents_after("ab", 1, "RET"), ("a\nb".to_owned(), 2));
+        assert_eq!(contents_after("ab", 1, "C-m"), ("a\nb".to_owned(), 2));
+        assert_eq!(contents_after("ab", 1, "C-j"), ("a\nb".to_owned(), 2));
     }
 
     #[test]
