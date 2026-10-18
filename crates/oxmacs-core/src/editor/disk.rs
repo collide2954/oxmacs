@@ -76,6 +76,10 @@ impl Editor {
     }
 
     pub(super) fn revert_buffer(&mut self) {
+        if self.customizing().is_some() {
+            self.revert_settings();
+            return;
+        }
         if matches!(self.buffers.mode(0), Some(Mode::Doctor(_))) {
             self.oxmacs_doctor();
             return;

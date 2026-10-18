@@ -211,6 +211,7 @@ const CUSTOMIZE: &[(&str, Command)] = &[
     ("p", Command::WidgetBackward),
     ("S-TAB", Command::WidgetBackward),
     ("RET", Command::WidgetButtonPress),
+    ("g", Command::RevertBuffer),
     ("q", Command::QuitWindow),
 ];
 

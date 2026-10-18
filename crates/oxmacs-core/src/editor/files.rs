@@ -269,6 +269,10 @@ impl Editor {
     }
 
     pub(super) fn save_buffer(&mut self) {
+        if self.customizing().is_some() {
+            self.save_settings();
+            return;
+        }
         if self.buffers.is_special(0) {
             self.show_message("(No changes need to be saved)");
             return;

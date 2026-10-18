@@ -1,13 +1,16 @@
+use std::fs;
+use std::path::PathBuf;
+
 use toml::Value;
 
-use crate::config::Config;
 use crate::config::schema::{Kind, SETTINGS, Setting};
+use crate::config::{self, Config};
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::minibuffer::Purpose;
 use crate::editor::page::Page;
 use crate::editor::{Editor, Effect};
-use crate::files::paths;
+use crate::files::{self, paths};
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -147,7 +150,7 @@ impl Editor {
             .find(|index| matches!(self.buffers.mode(*index), Some(Mode::Customize(_))))
     }
 
-    fn customizing(&self) -> Option<&Customize> {
+    pub(super) fn customizing(&self) -> Option<&Customize> {
         match self.buffers.mode(0)? {
             Mode::Customize(state) => Some(state),
             _ => None,
@@ -337,6 +340,57 @@ impl Editor {
         }
     }
 
+    pub(super) fn unsaved_config_path(&self) -> Option<PathBuf> {
+        self.settings_index()
+            .filter(|index| self.unsaved_settings(*index))
+            .and(self.config_path.clone())
+    }
+
+    pub(super) fn save_settings(&mut self) -> bool {
+        let Some(path) = self.unsaved_config_path() else {
+            self.show_message("(No changes need to be saved)");
+            return true;
+        };
+        let shown = paths::abbreviate(&path, self.home.as_deref());
+        let written = files::load(&path)
+            .map_err(|error| error.to_string())
+            .and_then(|loaded| {
+                let text = config::rewrite(&loaded.text, &self.config)
+                    .map_err(|error| format!("{shown}: {error}"))?;
+                if let Some(directory) = path.parent() {
+                    fs::create_dir_all(directory).map_err(|error| error.to_string())?;
+                }
+                files::save(&path, &text, loaded.format).map_err(|error| error.to_string())
+            });
+        if let Err(error) = written {
+            self.show_message(error);
+            return false;
+        }
+        if let Some(index) = self.settings_index()
+            && let Some(Mode::Customize(state)) = self.buffers.mode_mut(index)
+        {
+            state.saved = self.config.clone();
+            state.problem = None;
+        }
+        self.render_settings();
+        self.show_message(format!("Wrote {shown}"));
+        true
+    }
+
+    pub(super) fn revert_settings(&mut self) {
+        let (saved, problem) = self.saved_config();
+        if problem.is_none() {
+            self.reconfigure(&saved);
+        }
+        if let Some(index) = self.settings_index()
+            && let Some(Mode::Customize(state)) = self.buffers.mode_mut(index)
+        {
+            state.saved = saved;
+            state.problem = problem;
+        }
+        self.render_settings();
+    }
+
     fn set_setting(&mut self, setting: &Setting, value: Option<Value>) {
         match self.config.with(setting.key, value) {
             Ok(config) => {
@@ -350,19 +404,115 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use crate::config::Config;
     use crate::config::schema::SETTINGS;
     use crate::editor::test_support::{at_point, lines, minibuffer_input, press, type_text};
     use crate::editor::{Cell, Clicks, Editor, Effect};
 
     fn settings() -> (tempfile::TempDir, Editor) {
+        settings_from(None)
+    }
+
+    fn settings_from(text: Option<&str>) -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
         let mut editor = Editor::new();
-        editor.config_path = Some(dir.path().join("config.toml"));
+        if let Some(text) = text {
+            fs::write(&path, text).unwrap();
+            if let Ok(config) = Config::parse(text) {
+                editor.apply_config(&config);
+            }
+        }
+        editor.config_path = Some(path);
         press(&mut editor, "M-x");
         type_text(&mut editor, "customize");
         press(&mut editor, "RET");
         (dir, editor)
+    }
+
+    fn config_text(dir: &tempfile::TempDir) -> String {
+        fs::read_to_string(dir.path().join("config.toml")).unwrap()
+    }
+
+    #[test]
+    fn saving_writes_only_the_changes_to_config_toml() {
+        let (dir, mut editor) = settings_from(Some("# mine\ntab-width = 4\n"));
+        on(&mut editor, "clock");
+        press(&mut editor, "RET");
+
+        press(&mut editor, "C-x C-s");
+
+        assert_eq!(config_text(&dir), "# mine\ntab-width = 4\nclock = false\n");
+        let message = editor.message().unwrap();
+        assert!(
+            message.starts_with("Wrote ") && message.ends_with("config.toml"),
+            "{message}"
+        );
+        assert!(editor.mode_line().starts_with("%% *Settings*"));
+        assert!(row(&editor, "clock").starts_with("  clock"));
+    }
+
+    #[test]
+    fn saving_creates_the_config_directory() {
+        let (dir, mut editor) = settings();
+        let path = dir.path().join("oxmacs").join("config.toml");
+        editor.config_path = Some(path.clone());
+        on(&mut editor, "splash");
+        press(&mut editor, "RET C-x C-s");
+
+        assert_eq!(fs::read_to_string(path).unwrap(), "splash = false\n");
+    }
+
+    #[test]
+    fn saving_without_changes_says_so() {
+        let (_dir, mut editor) = settings();
+
+        press(&mut editor, "C-x C-s");
+
+        assert_eq!(editor.message(), Some("(No changes need to be saved)"));
+    }
+
+    #[test]
+    fn reverting_returns_to_the_saved_settings() {
+        let (_dir, mut editor) = settings_from(Some("tab-width = 4\n"));
+        on(&mut editor, "clock");
+        press(&mut editor, "RET");
+
+        press(&mut editor, "g");
+
+        assert!(editor.config().clock);
+        assert_eq!(editor.tab_width(), 4);
+        assert!(editor.mode_line().starts_with("%% *Settings*"));
+    }
+
+    #[test]
+    fn broken_config_files_are_reported_and_left_alone() {
+        let (dir, mut editor) = settings_from(Some("tab-width = \n"));
+        assert!(lines(&editor)[2].ends_with("; fix it before saving"));
+        on(&mut editor, "clock");
+        press(&mut editor, "RET");
+
+        press(&mut editor, "C-x C-s");
+
+        assert_eq!(config_text(&dir), "tab-width = \n");
+        assert!(editor.mode_line().starts_with("%* *Settings*"));
+    }
+
+    #[test]
+    fn quitting_offers_to_save_unsaved_settings() {
+        let (dir, mut editor) = settings();
+        on(&mut editor, "clock");
+        press(&mut editor, "RET");
+
+        press(&mut editor, "C-x C-c");
+        let prompt = editor.question().unwrap().prompt().to_owned();
+        assert!(prompt.starts_with("Save file "), "{prompt}");
+        press(&mut editor, "y");
+
+        assert_eq!(config_text(&dir), "clock = false\n");
+        assert!(editor.should_quit());
     }
 
     fn line_of(editor: &Editor, key: &str) -> usize {
