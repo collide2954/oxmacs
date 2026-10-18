@@ -4,7 +4,7 @@ use std::{fs, io};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::theme;
+use crate::{clock, theme};
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
@@ -23,6 +23,8 @@ pub struct Config {
     pub delete_to_trash: bool,
     pub splash: bool,
     pub format_on_save: bool,
+    pub clock: bool,
+    pub clock_format: String,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
@@ -47,6 +49,8 @@ impl Default for Config {
             delete_to_trash: true,
             splash: true,
             format_on_save: false,
+            clock: true,
+            clock_format: "%H:%M".to_owned(),
         }
     }
 }
@@ -61,6 +65,8 @@ pub enum ConfigError {
     TabWidth,
     #[error("font-size must be a positive number of points")]
     FontSize,
+    #[error("clock-format: {0}")]
+    ClockFormat(String),
     #[error("{}: {source}", path.display())]
     Read { path: PathBuf, source: io::Error },
     #[error("{}: {source}", path.display())]
@@ -106,6 +112,8 @@ impl Config {
         if !(self.font_size.is_finite() && self.font_size > 0.0) {
             return Err(ConfigError::FontSize);
         }
+        let sample = jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC);
+        clock::text(&self.clock_format, &sample).map_err(ConfigError::ClockFormat)?;
         Ok(())
     }
 }
@@ -173,6 +181,24 @@ mod tests {
                 .unwrap()
                 .delete_to_trash
         );
+    }
+
+    #[test]
+    fn the_clock_shows_hours_and_minutes_unless_configured() {
+        let config = Config::default();
+        assert!(config.clock);
+        assert_eq!(config.clock_format, "%H:%M");
+
+        let config = Config::parse("clock = false\nclock-format = \"%a %H:%M\"").unwrap();
+        assert!(!config.clock);
+        assert_eq!(config.clock_format, "%a %H:%M");
+    }
+
+    #[test]
+    fn invalid_clock_formats_are_rejected() {
+        let error = Config::parse("clock-format = \"%H %\"").unwrap_err();
+
+        assert!(error.to_string().starts_with("clock-format: "), "{error}");
     }
 
     #[test]
