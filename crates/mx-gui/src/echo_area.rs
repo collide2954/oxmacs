@@ -15,7 +15,14 @@ pub fn view<'a, Message: 'a>(editor: &'a Editor, font: Font, size: f32) -> Eleme
                 .note()
                 .map(|note| format!(" {note}"))
                 .unwrap_or_default();
-            let spans: [Span<'a, (), Font>; 5] = [
+            let total = editor.completions().len();
+            let position = if total == 0 {
+                0
+            } else {
+                minibuffer.selected() + 1
+            };
+            let spans: [Span<'a, (), Font>; 6] = [
+                span(format!("{position}/{total} ")).color(style::color(faces.shadow)),
                 span(minibuffer.prompt()).color(style::color(faces.minibuffer_prompt)),
                 span(before.to_owned()),
                 span(at.to_owned())

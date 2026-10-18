@@ -8,7 +8,7 @@ use mx_core::theme::Appearance;
 
 use crate::buffer_view::{BufferView, ViewEvent};
 use crate::keys::{self, Platform};
-use crate::{echo_area, fonts, style};
+use crate::{completions, echo_area, fonts, style};
 
 #[derive(Debug)]
 pub struct App {
@@ -143,6 +143,7 @@ impl App {
                 .padding([1, 4])
                 .style(move |_| style::mode_line(faces)),
             echo_area::view(&self.editor, self.font, self.text_size),
+            completions::view(&self.editor, self.font, self.text_size),
         ]
         .into()
     }
@@ -264,6 +265,16 @@ mod tests {
 
         assert_eq!(palette.background, iced::Color::from_rgb8(0xED, 0xED, 0xED));
         assert_eq!(palette.text, iced::Color::from_rgb8(0x2E, 0x34, 0x36));
+    }
+
+    #[test]
+    fn m_x_lists_commands_with_their_keys() {
+        let mut app = App::default();
+        press(&mut app, "x", Modifiers::ALT);
+        let mut ui = iced_test::simulator(app.view());
+
+        assert!(ui.find("end-of-buffer").is_ok());
+        assert!(ui.find("M->").is_ok());
     }
 
     #[test]

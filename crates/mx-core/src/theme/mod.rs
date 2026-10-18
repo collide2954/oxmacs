@@ -27,6 +27,8 @@ pub struct Theme {
     pub mode_line_inactive: Face,
     pub mode_line_border: Color,
     pub minibuffer_prompt: Color,
+    pub completion_current: Face,
+    pub shadow: Color,
 }
 
 pub fn builtin() -> [&'static Theme; 2] {

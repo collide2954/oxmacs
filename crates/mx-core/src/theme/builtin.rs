@@ -19,6 +19,11 @@ pub static ADWAITA: Theme = Theme {
     },
     mode_line_border: Color::hex(0xC6_C6_C6),
     minibuffer_prompt: Color::hex(0x00_84_C8),
+    completion_current: Face {
+        foreground: Color::hex(0xFF_FF_FF),
+        background: Color::hex(0x4A_90_D9),
+    },
+    shadow: Color::hex(0x7F_7F_7F),
 };
 
 pub static ADWAITA_DARK: Theme = Theme {
@@ -40,4 +45,9 @@ pub static ADWAITA_DARK: Theme = Theme {
     },
     mode_line_border: Color::hex(0x45_45_45),
     minibuffer_prompt: Color::hex(0xA5_A5_A5),
+    completion_current: Face {
+        foreground: Color::hex(0xDE_DD_DA),
+        background: Color::hex(0x30_30_30),
+    },
+    shadow: Color::hex(0x65_65_65),
 };
