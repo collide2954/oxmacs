@@ -1,3 +1,5 @@
+mod highlight;
+
 use std::fmt;
 use std::path::Path;
 

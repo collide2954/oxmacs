@@ -137,6 +137,12 @@ impl Buffer {
         self.changes.as_mut().map(mem::take).unwrap_or_default()
     }
 
+    pub fn text_in_bytes(&self, range: Range<usize>) -> String {
+        let end = range.end.min(self.text.len_bytes());
+        let start = range.start.min(end);
+        self.text.byte_slice(start..end).to_string()
+    }
+
     pub fn chunk_at_byte(&self, byte: usize) -> &str {
         let byte = byte.min(self.text.len_bytes());
         let (chunk, start, _, _) = self.text.chunk_at_byte(byte);
