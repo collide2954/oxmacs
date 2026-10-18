@@ -366,6 +366,7 @@ impl Editor {
             Command::RevertBuffer => self.revert_buffer(),
             Command::ReadOnlyMode => self.toggle_read_only(),
             Command::Dired => self.dired_prompt(),
+            Command::DiredJump => self.dired_jump(),
             Command::DiredNextLine => self.dired_next_line(1),
             Command::DiredPreviousLine => self.dired_next_line(-1),
             Command::DiredFindFile => self.dired_find_file(),

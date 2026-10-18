@@ -28,6 +28,23 @@ impl Editor {
         true
     }
 
+    pub(super) fn dired_jump(&mut self) {
+        if self.buffers.listing(0).is_some() {
+            self.dired_up_directory();
+            return;
+        }
+        let file = self.buffers.current().file().map(|file| file.path.clone());
+        let directory = file
+            .as_deref()
+            .and_then(Path::parent)
+            .map_or_else(|| self.default_directory(), Path::to_owned);
+        if self.dired(&directory)
+            && let Some(name) = file.as_deref().and_then(Path::file_name)
+        {
+            self.dired_focus(name);
+        }
+    }
+
     pub(super) fn dired_find_file(&mut self) {
         let line = self.point_line();
         let Some(listing) = self.buffers.listing(0) else {
@@ -567,6 +584,92 @@ mod tests {
             editor.buffer_names(),
             ["a.txt", "*scratch*", dir_name(dir.path()).as_str()]
         );
+    }
+
+    #[test]
+    fn opening_a_directory_lists_it() {
+        let (dir, mut editor) = workspace();
+
+        assert!(editor.open_file(&dir.path().join("sub")));
+
+        assert_eq!(editor.buffer().name(), format!("sub{SEP}"));
+        assert_eq!(at_point(&editor), "c.txt");
+    }
+
+    #[test]
+    fn find_file_on_a_bare_directory_lists_it() {
+        let (dir, mut editor) = workspace();
+
+        press(&mut editor, "C-x C-f RET");
+
+        assert!(editor.minibuffer().is_none());
+        assert_eq!(editor.buffer().name(), dir_name(dir.path()));
+    }
+
+    #[test]
+    fn visiting_a_directory_lists_it_and_ignores_the_line() {
+        let (dir, mut editor) = workspace();
+
+        editor.visit(&crate::cli::Visit {
+            path: dir.path().join("sub"),
+            line: Some(1),
+            column: None,
+        });
+
+        assert_eq!(at_point(&editor), "c.txt");
+    }
+
+    #[test]
+    fn c_x_c_j_lists_the_files_directory_with_point_on_it() {
+        let (dir, mut editor) = workspace();
+        editor.open_file(&dir.path().join("b.txt"));
+
+        press(&mut editor, "C-x C-j");
+
+        assert_eq!(editor.buffer().name(), dir_name(dir.path()));
+        assert_eq!(at_point(&editor), "b.txt");
+    }
+
+    #[test]
+    fn c_x_c_j_in_a_listing_goes_up() {
+        let (dir, mut editor) = workspace();
+        editor.dired(&dir.path().join("sub"));
+
+        press(&mut editor, "C-x C-j");
+
+        assert_eq!(editor.default_directory(), dir.path());
+        assert_eq!(at_point(&editor), format!("sub{SEP}"));
+    }
+
+    #[test]
+    fn c_x_c_j_without_a_file_lists_the_default_directory() {
+        let (dir, mut editor) = workspace();
+
+        press(&mut editor, "C-x C-j");
+
+        assert_eq!(editor.buffer().name(), dir_name(dir.path()));
+    }
+
+    #[test]
+    fn saving_a_listing_has_nothing_to_save() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "C-x C-s");
+
+        assert!(editor.minibuffer().is_none());
+        assert_eq!(editor.message(), Some("(No changes need to be saved)"));
+    }
+
+    #[test]
+    fn listings_stay_read_only() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "C-x C-q");
+
+        assert!(editor.buffer().is_read_only());
+        assert_eq!(editor.message(), Some("Dired buffers are read-only"));
     }
 
     #[test]

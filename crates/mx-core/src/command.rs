@@ -45,6 +45,7 @@ pub enum Command {
     RevertBuffer,
     ReadOnlyMode,
     Dired,
+    DiredJump,
     DiredNextLine,
     DiredPreviousLine,
     DiredFindFile,

@@ -67,7 +67,7 @@ impl Editor {
         };
         let input = self.minibuffer_input();
         let (directory, name) = paths::split(&input);
-        if name.is_empty() && purpose == Purpose::Dired {
+        if name.is_empty() && purpose != Purpose::WriteFile {
             let directory = self.resolve_path(directory);
             self.minibuffer = None;
             self.dired(&directory);
@@ -215,6 +215,7 @@ impl Editor {
 
     pub fn visit(&mut self, visit: &Visit) {
         if self.open_file(&visit.path)
+            && self.buffers.listing(0).is_none()
             && let Some(line) = visit.line
         {
             self.go_to_line(line, visit.column.unwrap_or(1));
@@ -223,6 +224,9 @@ impl Editor {
 
     pub fn open_file(&mut self, path: &Path) -> bool {
         let path = self.absolute(path);
+        if path.is_dir() {
+            return self.dired(&path);
+        }
         if let Some(index) = self
             .buffers
             .position(|buffer| buffer.file().is_some_and(|file| file.path == path))
@@ -249,6 +253,10 @@ impl Editor {
     }
 
     pub(super) fn save_buffer(&mut self) {
+        if self.buffers.listing(0).is_some() {
+            self.show_message("(No changes need to be saved)");
+            return;
+        }
         let buffer = self.buffers.current();
         let Some(file) = buffer.file() else {
             self.write_file();
@@ -392,10 +400,11 @@ mod tests {
     #[test]
     fn opening_errors_are_reported_without_a_new_buffer() {
         let (dir, mut editor) = workspace();
+        fs::write(dir.path().join("bin.dat"), b"ok\xFF").unwrap();
 
-        editor.open_file(dir.path());
+        assert!(!editor.open_file(&dir.path().join("bin.dat")));
 
-        assert!(editor.message().unwrap().ends_with("is a directory"));
+        assert!(editor.message().unwrap().contains("not valid UTF-8"));
         assert_eq!(editor.buffer_names(), ["*scratch*"]);
     }
 
@@ -523,10 +532,10 @@ mod tests {
     }
 
     #[test]
-    fn return_on_a_bare_directory_keeps_the_prompt_open() {
-        let (_dir, mut editor) = find_file_workspace();
+    fn writing_to_a_bare_directory_keeps_the_prompt_open() {
+        let (_dir, mut editor) = workspace();
 
-        press(&mut editor, "RET");
+        press(&mut editor, "C-x C-w RET");
 
         assert_eq!(editor.minibuffer().unwrap().note(), Some("[Directory]"));
     }
@@ -769,9 +778,10 @@ mod tests {
     #[test]
     fn a_failed_visit_leaves_point_alone() {
         let (dir, mut editor) = workspace();
+        fs::write(dir.path().join("bin.dat"), b"ok\xFF").unwrap();
         editor.paste(Some("a\nb".to_owned()));
 
-        editor.visit(&visit(dir.path().to_owned(), Some(1), None));
+        editor.visit(&visit(dir.path().join("bin.dat"), Some(1), None));
 
         assert_eq!(editor.buffer().point(), 3);
     }
