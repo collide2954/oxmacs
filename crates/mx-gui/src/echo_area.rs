@@ -12,8 +12,23 @@ pub fn view<'a, Message: 'a>(
     font: Font,
     size: f32,
 ) -> Element<'a, Message> {
-    let content: Element<'a, Message> = match editor.minibuffer() {
-        Some(minibuffer) => {
+    let content: Element<'a, Message> = match (editor.question(), editor.minibuffer()) {
+        (Some(question), _) => {
+            let spans: [Span<'a, (), Font>; 3] = [
+                span(question.prompt()).color(style::color(faces.minibuffer_prompt)),
+                span(" ")
+                    .color(style::color(faces.default.background))
+                    .background(style::color(faces.cursor)),
+                span(
+                    editor
+                        .message()
+                        .map(|message| format!("  {message}"))
+                        .unwrap_or_default(),
+                ),
+            ];
+            rich_text(spans).font(font).size(size).into()
+        }
+        (None, Some(minibuffer)) => {
             let input = minibuffer.input().contents();
             let (before, at, after) = split_at_cursor(&input, minibuffer.input().point());
             let note = minibuffer
@@ -38,7 +53,7 @@ pub fn view<'a, Message: 'a>(
             ];
             rich_text(spans).font(font).size(size).into()
         }
-        None => text(editor.message().unwrap_or(" ").to_owned())
+        (None, None) => text(editor.message().unwrap_or(" ").to_owned())
             .font(font)
             .size(size)
             .into(),

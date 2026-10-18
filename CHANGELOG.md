@@ -10,6 +10,7 @@ Notable changes to mx. The format follows [Keep a Changelog](https://keepachange
 - Files open in their own buffers; LF/CRLF and UTF-8 BOMs are preserved, and invalid UTF-8 is refused.
 - Mode line shows `**` for unsaved changes, `--` otherwise, and `CRLF` for Windows line endings.
 - `save-buffer` (`C-x C-s`) writes atomically, keeping permissions and the original line endings.
+- `save-some-buffers` (`C-x s`) and the `C-x C-c` quit guard ask per modified file: `y`, `n`, `!` (save the rest) or `q`.
 
 ## [0.6.0] - 2026-10-18
 

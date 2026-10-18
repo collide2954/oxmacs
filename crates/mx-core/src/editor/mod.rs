@@ -5,6 +5,7 @@ mod files;
 mod minibuffer;
 mod mouse;
 mod movement;
+mod question;
 mod selection;
 #[cfg(test)]
 mod test_support;
@@ -13,6 +14,7 @@ mod undo;
 pub use clipboard::Effect;
 pub use minibuffer::{Choice, Completion, Minibuffer};
 pub use mouse::{Cell, Clicks};
+pub use question::Question;
 
 use std::ops::Range;
 use std::path::PathBuf;
@@ -50,6 +52,7 @@ pub struct Editor {
     line_copy: Option<String>,
     message: Option<String>,
     quit_requested: bool,
+    question: Option<Question>,
     viewport: Viewport,
     tab_width: usize,
     appearance: Appearance,
@@ -89,6 +92,7 @@ impl Editor {
             line_copy: None,
             message: None,
             quit_requested: false,
+            question: None,
             viewport: Viewport::new(DEFAULT_ROWS),
             tab_width: Config::default().tab_width,
             appearance: Appearance::Light,
@@ -176,6 +180,9 @@ impl Editor {
 
     pub fn handle_key(&mut self, mut key: Key) {
         self.message = None;
+        if self.answer_question(key) {
+            return;
+        }
         if let Some(minibuffer) = &mut self.minibuffer {
             minibuffer.note = None;
         }
@@ -309,8 +316,9 @@ impl Editor {
             Command::ExitMinibufferWithInput => self.exit_minibuffer_with_input(),
             Command::FindFile => self.find_file(),
             Command::SaveBuffer => self.save_buffer(),
+            Command::SaveSomeBuffers => self.save_some_buffers(false),
             Command::KeyboardQuit => self.keyboard_quit(),
-            Command::SaveBuffersKillMx => self.quit_requested = true,
+            Command::SaveBuffersKillMx => self.save_some_buffers(true),
         }
         self.reset_selection(command);
         self.refresh_minibuffer();
