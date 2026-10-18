@@ -16,6 +16,7 @@ mx-gui = { path = "crates/mx-gui" }
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
 strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0.21"
+unicode-width = "0.2.2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
