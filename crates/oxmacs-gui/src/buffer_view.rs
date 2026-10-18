@@ -14,7 +14,7 @@ use iced::{
     window,
 };
 use oxmacs_core::display::{self, LineStyle};
-use oxmacs_core::editor::{Cell, Clicks, Pane, ScreenRow, WindowId};
+use oxmacs_core::editor::{Cell, Clicks, Gutter, Pane, ScreenRow, WindowId};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Highlight, Theme as Faces};
 
@@ -40,6 +40,11 @@ pub enum ViewEvent {
         extend: bool,
     },
     Dragged(Cell),
+    NumberPressed {
+        row: usize,
+        extend: bool,
+    },
+    NumbersDragged(usize),
     MiddleClicked(Cell),
     Scrolled(isize),
 }
@@ -78,6 +83,7 @@ struct State {
     frame: Option<Instant>,
     last_click: Option<Click>,
     dragging: bool,
+    numbering: bool,
     wheel_carry: f32,
     modifiers: keyboard::Modifiers,
     shown: Option<BufferId>,
@@ -151,6 +157,56 @@ impl<'a, Message> BufferView<'a, Message> {
         }
     }
 
+    fn gutter_width(&self, cell_width: f32) -> f32 {
+        self.pane.gutter().map_or(0.0, |gutter| {
+            to_f32(gutter_columns(gutter.width())) * cell_width
+        })
+    }
+
+    fn text_bounds(&self, bounds: Rectangle, cell_width: f32) -> Rectangle {
+        let gutter = self.gutter_width(cell_width).min(bounds.width);
+        Rectangle::new(
+            Point::new(bounds.x + gutter, bounds.y),
+            Size::new(bounds.width - gutter, bounds.height),
+        )
+    }
+
+    fn draw_gutter<Renderer>(
+        &self,
+        renderer: &mut Renderer,
+        gutter: Gutter,
+        rows: &[(ScreenRow, Rectangle)],
+        bounds: Rectangle,
+        cell_width: f32,
+    ) where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        for (row, rectangle) in rows.iter().filter(|(row, _)| row.column == 0) {
+            let face = if gutter.is_current(row.line) {
+                self.faces.default.foreground
+            } else {
+                self.faces.shadow
+            };
+            renderer.fill_text(
+                self.text(
+                    gutter.label(row.line),
+                    Size::new(f32::INFINITY, rectangle.height),
+                ),
+                Point::new(bounds.x, rectangle.y),
+                style::color(face),
+                bounds,
+            );
+        }
+        let x = (bounds.x + to_f32(gutter.width() + 1) * cell_width).round();
+        renderer.fill_quad(
+            Quad {
+                bounds: Rectangle::new(Point::new(x, bounds.y), Size::new(1.0, bounds.height)),
+                ..Quad::default()
+            },
+            style::color(self.faces.mode_line_border),
+        );
+    }
+
     fn cursor_cell(&self) -> (usize, usize) {
         let (column, row) = self.pane.cursor_screen();
         (column, usize::try_from(row).unwrap_or(0))
@@ -199,11 +255,28 @@ impl<'a, Message> BufferView<'a, Message> {
     ) {
         let cell_size = state.metrics.cell;
         let top = -state.shift();
+        let gutter = self.gutter_width(cell_size.width);
         let view_event = match event {
+            mouse::Event::ButtonPressed(mouse::Button::Left)
+                if cursor
+                    .position_in(bounds)
+                    .is_some_and(|position| position.x < gutter) =>
+            {
+                let Some(position) = cursor.position_in(bounds) else {
+                    return;
+                };
+                state.dragging = true;
+                state.numbering = true;
+                ViewEvent::NumberPressed {
+                    row: cell_at(position, cell_size, top).row,
+                    extend: state.modifiers.shift(),
+                }
+            }
             mouse::Event::ButtonPressed(button) => {
                 let Some(position) = cursor.position_in(bounds) else {
                     return;
                 };
+                let position = Point::new(position.x - gutter, position.y);
                 let cell = cell_at(position, cell_size, top);
                 match button {
                     mouse::Button::Left => {
@@ -224,10 +297,16 @@ impl<'a, Message> BufferView<'a, Message> {
                 let Some(position) = cursor.position_from(bounds.position()) else {
                     return;
                 };
-                ViewEvent::Dragged(cell_at(position, cell_size, top))
+                if state.numbering {
+                    ViewEvent::NumbersDragged(cell_at(position, cell_size, top).row)
+                } else {
+                    let position = Point::new(position.x - gutter, position.y);
+                    ViewEvent::Dragged(cell_at(position, cell_size, top))
+                }
             }
             mouse::Event::ButtonReleased(mouse::Button::Left) => {
                 state.dragging = false;
+                state.numbering = false;
                 return;
             }
             mouse::Event::WheelScrolled { delta } if cursor.is_over(bounds) => {
@@ -382,7 +461,8 @@ where
             shell.publish((self.on_event)(self.window, ViewEvent::FontNotMonospaced));
         }
         let rows = rows_in(layout.bounds().height, metrics.cell.height);
-        let columns = columns_in(layout.bounds().width, metrics.cell.width);
+        let text = self.text_bounds(layout.bounds(), metrics.cell.width);
+        let columns = columns_in(text.width, metrics.cell.width);
         let viewport = self.pane.viewport();
         if (rows, columns) != (viewport.rows(), viewport.columns()) {
             shell.publish((self.on_event)(
@@ -394,14 +474,17 @@ where
 
     fn mouse_interaction(
         &self,
-        _tree: &Tree,
+        tree: &Tree,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         _viewport: &Rectangle,
         _renderer: &Renderer,
     ) -> mouse::Interaction {
-        if cursor.is_over(layout.bounds()) {
+        let cell = tree.state.downcast_ref::<State>().metrics.cell;
+        if cursor.is_over(self.text_bounds(layout.bounds(), cell.width)) {
             mouse::Interaction::Text
+        } else if cursor.is_over(layout.bounds()) {
+            mouse::Interaction::Idle
         } else {
             mouse::Interaction::None
         }
@@ -420,12 +503,16 @@ where
         let state = tree.state.downcast_ref::<State>();
         let cell = state.metrics.cell;
         let bounds = layout.bounds();
-        let (lines, rows) = self.lay_out_rows(state, bounds);
+        let text_bounds = self.text_bounds(bounds, cell.width);
+        let (lines, rows) = self.lay_out_rows(state, text_bounds);
         let line_of = |number: usize| lines.iter().find(|line| line.number == number);
-        let cursor = self.cursor_block(state, bounds);
+        let cursor = self.cursor_block(state, text_bounds);
         let opacity = self.cursor_opacity(state);
         let behind = self.focused();
         renderer.with_layer(bounds, |renderer| {
+            if let Some(gutter) = self.pane.gutter() {
+                self.draw_gutter(renderer, gutter, &rows, bounds, cell.width);
+            }
             for (row, rectangle) in &rows {
                 let Some(line) = line_of(row.line) else {
                     continue;
@@ -465,12 +552,12 @@ where
             }
             for (row, rectangle) in &rows {
                 if let Some(line) = line_of(row.line) {
-                    self.draw_row_text(renderer, line, row, *rectangle, cell.width, bounds);
+                    self.draw_row_text(renderer, line, row, *rectangle, cell.width, text_bounds);
                 }
             }
         });
         if let Some(cursor) = cursor.filter(|cursor| !cursor.gliding || !behind) {
-            self.draw_cursor(renderer, cursor, opacity, bounds);
+            self.draw_cursor(renderer, cursor, opacity, text_bounds);
         }
     }
 }
@@ -632,6 +719,10 @@ pub fn is_monospaced(narrow_width: f32, wide_width: f32) -> bool {
     (narrow_width - wide_width).abs() <= wide_width * 0.01
 }
 
+pub fn gutter_columns(digits: usize) -> usize {
+    digits + 2
+}
+
 pub fn columns_in(width: f32, cell_width: f32) -> usize {
     if cell_width > 0.0 {
         floor_to_usize(width / cell_width)
@@ -751,5 +842,11 @@ mod tests {
         assert_eq!(rows_in(10.0, 20.0), 1);
         assert_eq!(rows_in(100.0, 0.0), 1);
         assert_eq!(rows_in(f32::NAN, 20.0), 1);
+    }
+
+    #[test]
+    fn the_gutter_leaves_a_column_each_side_of_its_separator() {
+        assert_eq!(gutter_columns(2), 4);
+        assert_eq!(gutter_columns(5), 7);
     }
 }

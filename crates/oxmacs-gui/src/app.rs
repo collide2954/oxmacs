@@ -187,7 +187,14 @@ impl App {
                 }
             }
             ViewEvent::Dragged(cell) if selected => self.editor.drag(cell),
-            ViewEvent::Dragged(_) => {}
+            ViewEvent::NumberPressed { row, extend } => {
+                if self.focus(window) {
+                    self.last_input = self.now;
+                    self.editor.click_line_number(row, extend);
+                }
+            }
+            ViewEvent::NumbersDragged(row) if selected => self.editor.drag_line_numbers(row),
+            ViewEvent::Dragged(_) | ViewEvent::NumbersDragged(_) => {}
             ViewEvent::MiddleClicked(cell) => {
                 if self.focus(window) {
                     self.last_input = self.now;
