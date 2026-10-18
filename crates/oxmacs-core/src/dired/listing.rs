@@ -290,7 +290,7 @@ mod tests {
 
     fn listing() -> Listing {
         Listing::new(
-            PathBuf::from("/home/u/mx"),
+            PathBuf::from("/home/u/oxmacs"),
             vec![
                 entry("Cargo.toml", Kind::File, 1124, "2026-10-18T13:55:00Z"),
                 entry("crates", Kind::Directory, 4096, "2026-10-18T14:02:00Z"),
@@ -312,7 +312,7 @@ mod tests {
         assert_eq!(
             render(&listing()),
             [
-                format!("  ~{SEP}mx:"),
+                format!("  ~{SEP}oxmacs:"),
                 format!("{}..", " ".repeat(22)),
                 format!("     -  Oct 18 14:02  crates{SEP}"),
                 "  1.1K  Oct 18 13:55  Cargo.toml".to_owned(),
@@ -331,7 +331,7 @@ mod tests {
         assert_eq!(
             render(&listing),
             [
-                format!("  ~{SEP}mx:"),
+                format!("  ~{SEP}oxmacs:"),
                 "  ..".to_owned(),
                 format!("  crates{SEP}"),
                 "  Cargo.toml".to_owned(),
@@ -385,7 +385,7 @@ mod tests {
         listing.set_sort(Sort::Largest);
 
         let lines = render(&listing);
-        assert_eq!(lines[0], format!("  ~{SEP}mx (largest first):"));
+        assert_eq!(lines[0], format!("  ~{SEP}oxmacs (largest first):"));
         assert!(lines[3].ends_with("CHANGELOG.md"), "{}", lines[3]);
     }
 
@@ -478,7 +478,7 @@ mod tests {
     #[test]
     fn symlink_names_are_highlighted_without_their_target() {
         let listing = Listing::new(
-            PathBuf::from("/home/u/mx"),
+            PathBuf::from("/home/u/oxmacs"),
             vec![entry(
                 "link",
                 Kind::Symlink {
@@ -496,7 +496,7 @@ mod tests {
     #[test]
     fn symlinks_show_their_target() {
         let listing = Listing::new(
-            PathBuf::from("/home/u/mx"),
+            PathBuf::from("/home/u/oxmacs"),
             vec![entry(
                 "link",
                 Kind::Symlink {

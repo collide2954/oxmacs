@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn toml_tables_keys_and_values_are_highlighted() {
-        let text = "[package]\nname = \"mx\" # c\nversion = 1\n[[bin]]\n";
+        let text = "[package]\nname = \"oxmacs\" # c\nversion = 1\n[[bin]]\n";
         let toml = |line| faces_in(Language::Toml, text, line);
 
         assert_eq!(toml(0), [(0..9, Highlight::Type)]);
@@ -265,8 +265,8 @@ mod tests {
             toml(1),
             [
                 (0..4, Highlight::Function),
-                (7..11, Highlight::String),
-                (12..15, Highlight::Comment)
+                (7..15, Highlight::String),
+                (16..19, Highlight::Comment)
             ]
         );
         assert_eq!(

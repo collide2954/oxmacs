@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn missing_programs_are_reported() {
-        assert_eq!(probe("mx-no-such-tool"), Probe::Missing);
+        assert_eq!(probe("oxmacs-no-such-tool"), Probe::Missing);
     }
 
     #[test]

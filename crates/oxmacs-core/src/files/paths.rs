@@ -104,7 +104,7 @@ mod tests {
 
     #[test]
     fn input_splits_at_the_last_separator() {
-        assert_eq!(split("~/mx/cr"), ("~/mx/", "cr"));
+        assert_eq!(split("~/oxmacs/cr"), ("~/oxmacs/", "cr"));
         assert_eq!(split("dir/"), ("dir/", ""));
         assert_eq!(split("abc"), ("", "abc"));
     }
@@ -125,8 +125,8 @@ mod tests {
         let home = Path::new("/home/u");
 
         assert_eq!(
-            abbreviate(&home.join("mx"), Some(home)),
-            format!("~{SEPARATOR}mx")
+            abbreviate(&home.join("oxmacs"), Some(home)),
+            format!("~{SEPARATOR}oxmacs")
         );
         assert_eq!(abbreviate(home, Some(home)), "~");
         assert_eq!(

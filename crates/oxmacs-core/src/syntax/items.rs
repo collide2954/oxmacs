@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn toml_tables_are_items() {
-        let text = "[package]\nname = \"mx\"\n\n[[bin]]\nname = \"mx\"\n";
+        let text = "[package]\nname = \"oxmacs\"\n\n[[bin]]\nname = \"oxmacs\"\n";
         let mut buffer = Buffer::with_text("t", text);
         let mut syntax = Syntax::new(Language::Toml);
         syntax.sync(&mut buffer);
