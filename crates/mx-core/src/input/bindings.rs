@@ -104,6 +104,7 @@ const DIRED: &[(&str, Command)] = &[
     ("D", Command::DiredDoDelete),
     ("R", Command::DiredDoRename),
     ("C", Command::DiredDoCopy),
+    ("+", Command::DiredCreateDirectory),
 ];
 
 pub fn global() -> Keymap {

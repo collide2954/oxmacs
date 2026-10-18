@@ -97,6 +97,7 @@ impl Editor {
                 self.dired(&path);
             }
             Purpose::Transfer(kind) => self.transfer_to(kind, sources, &path),
+            Purpose::CreateDirectory => self.create_directory(&path),
             _ => {
                 self.open_file(&path);
             }

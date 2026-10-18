@@ -388,6 +388,7 @@ impl Editor {
             Command::DiredDoDelete => self.dired_do_delete(false),
             Command::DiredDoRename => self.dired_do_transfer(Kind::Move),
             Command::DiredDoCopy => self.dired_do_transfer(Kind::Copy),
+            Command::DiredCreateDirectory => self.dired_create_directory(),
             Command::DiredHideDetailsMode => self.dired_hide_details(),
             Command::QuitWindow => self.quit_window(),
             Command::KeyboardQuit => self.keyboard_quit(),

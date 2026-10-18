@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use jiff::Zoned;
@@ -7,7 +8,7 @@ use crate::dired::{Listing, Mark, read_entries};
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::minibuffer::Purpose;
-use crate::files::ops;
+use crate::files::{ops, paths};
 use crate::text::Buffer;
 
 impl Editor {
@@ -113,6 +114,35 @@ impl Editor {
         match read_entries(&directory) {
             Ok(entries) => self.update_listing(index, |listing| listing.set_entries(entries)),
             Err(error) => self.show_message(format!("{}: {error}", directory.display())),
+        }
+    }
+
+    pub(super) fn dired_create_directory(&mut self) {
+        if self.buffers.listing(0).is_some() {
+            self.open_file_prompt("Create directory: ", Purpose::CreateDirectory);
+        }
+    }
+
+    pub(super) fn create_directory(&mut self, path: &Path) {
+        let path = self.absolute(path);
+        let shown = paths::abbreviate(&path, self.home.as_deref());
+        if path.exists() {
+            self.show_message(format!("{shown} already exists"));
+            return;
+        }
+        if let Err(error) = fs::create_dir_all(&path) {
+            self.show_message(format!("{shown}: {error}"));
+            return;
+        }
+        self.refresh_listings();
+        let created = self
+            .buffers
+            .listing(0)
+            .and_then(|listing| path.strip_prefix(listing.directory()).ok())
+            .and_then(|rest| rest.iter().next())
+            .map(OsStr::to_owned);
+        if let Some(name) = created {
+            self.dired_focus(&name);
         }
     }
 
@@ -1151,6 +1181,45 @@ mod tests {
         assert_eq!(fs::read_to_string(target.join("a.txt")).unwrap(), "hello");
         assert_eq!(fs::read_to_string(target.join("b.txt")).unwrap(), "bee");
         assert_eq!(editor.message(), Some("Copied 2 files"));
+    }
+
+    #[test]
+    fn plus_creates_a_directory_with_point_on_it() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "+");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Create directory: ");
+        type_text(&mut editor, "new");
+        press(&mut editor, "RET");
+
+        assert!(dir.path().join("new").is_dir());
+        assert_eq!(at_point(&editor), format!("new{SEP}"));
+    }
+
+    #[test]
+    fn plus_creates_missing_parents() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "+");
+        type_text(&mut editor, &format!("deep{SEP}er"));
+        press(&mut editor, "M-RET");
+
+        assert!(dir.path().join("deep").join("er").is_dir());
+        assert_eq!(at_point(&editor), format!("deep{SEP}"));
+    }
+
+    #[test]
+    fn creating_an_existing_directory_is_reported() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        press(&mut editor, "+");
+        type_text(&mut editor, "sub");
+        press(&mut editor, "M-RET");
+
+        assert!(editor.message().unwrap().ends_with("already exists"));
     }
 
     #[test]

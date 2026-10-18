@@ -62,6 +62,7 @@ pub enum Command {
     DiredDoDelete,
     DiredDoRename,
     DiredDoCopy,
+    DiredCreateDirectory,
     QuitWindow,
     KeyboardQuit,
     SaveBuffersKillMx,
@@ -129,7 +130,8 @@ impl Command {
             | Self::DiredDoFlaggedDelete
             | Self::DiredDoDelete
             | Self::DiredDoRename
-            | Self::DiredDoCopy => Scope::Dired,
+            | Self::DiredDoCopy
+            | Self::DiredCreateDirectory => Scope::Dired,
             _ => Scope::Global,
         }
     }
