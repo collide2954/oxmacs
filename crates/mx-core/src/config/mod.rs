@@ -13,6 +13,7 @@ pub struct Config {
     pub font_family: Option<String>,
     pub font_size: f32,
     pub tab_width: usize,
+    pub animations: bool,
 }
 
 impl Default for Config {
@@ -22,6 +23,7 @@ impl Default for Config {
             font_family: None,
             font_size: 11.0,
             tab_width: 8,
+            animations: true,
         }
     }
 }
@@ -113,6 +115,12 @@ mod tests {
         assert_eq!(config.font_family, None);
         assert!((config.font_size - 11.0).abs() < f32::EPSILON);
         assert_eq!(config.tab_width, 8);
+        assert!(config.animations);
+    }
+
+    #[test]
+    fn animations_can_be_turned_off() {
+        assert!(!Config::parse("animations = false").unwrap().animations);
     }
 
     #[test]
