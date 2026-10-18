@@ -3,9 +3,12 @@ use iced::font::Family;
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
 use iced::widget::{column, container, text};
-use iced::{Animation, Element, Font, Length, Subscription, Task, Theme, keyboard, system, window};
+use iced::{
+    Animation, Element, Font, Length, Subscription, Task, Theme, clipboard, keyboard, system,
+    window,
+};
 use mx_core::config::{self, Config, ConfigError};
-use mx_core::editor::Editor;
+use mx_core::editor::{Editor, Effect};
 use mx_core::theme::{Appearance, Theme as Faces};
 use native_theme::detect::prefers_reduced_motion;
 
@@ -32,6 +35,7 @@ pub enum Message {
     View(ViewEvent),
     AppearanceChanged(Mode),
     Tick(Instant),
+    Pasted(Option<String>),
 }
 
 impl Default for App {
@@ -173,12 +177,12 @@ impl App {
                 }
             }
             Message::Tick(now) => self.tick(now),
+            Message::Pasted(text) => self.editor.paste(text),
         }
         if self.editor.should_quit() {
-            iced::exit()
-        } else {
-            Task::none()
+            return iced::exit();
         }
+        Task::batch(self.editor.take_effects().into_iter().map(effect_task))
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -250,6 +254,13 @@ pub fn points_to_pixels(points: f32) -> f32 {
 
 pub fn animations_enabled(configured: bool, reduced_motion: bool) -> bool {
     configured && !reduced_motion
+}
+
+fn effect_task(effect: Effect) -> Task<Message> {
+    match effect {
+        Effect::WriteClipboard(text) => clipboard::write(text),
+        Effect::ReadClipboard => clipboard::read().map(Message::Pasted),
+    }
 }
 
 fn transition(state: bool, duration: Duration) -> Animation<bool> {
@@ -460,6 +471,15 @@ mod tests {
         press(&mut app, "a", Modifiers::empty());
 
         assert_eq!(app.editor().buffer().contents(), "a");
+    }
+
+    #[test]
+    fn clipboard_contents_are_pasted_into_the_editor() {
+        let mut app = App::default();
+
+        let _ = app.update(Message::Pasted(Some("from the os".to_owned())));
+
+        assert_eq!(app.editor().buffer().contents(), "from the os");
     }
 
     #[test]
