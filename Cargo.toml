@@ -12,6 +12,7 @@ publish = false
 bitflags = "2.13.2"
 mx-core = { path = "crates/mx-core" }
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
+strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0.21"
 
 [workspace.lints.rust]
