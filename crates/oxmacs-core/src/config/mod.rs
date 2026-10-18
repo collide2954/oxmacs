@@ -1,19 +1,23 @@
+pub mod schema;
+
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{clock, theme};
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 #[expect(
     clippy::struct_excessive_bools,
     reason = "each flag is its own config.toml setting"
 )]
 pub struct Config {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub font_family: Option<String>,
     pub font_size: f32,
     pub tab_width: usize,
@@ -29,7 +33,7 @@ pub struct Config {
     pub auto_save: bool,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum OnDiskChange {
     #[default]
@@ -38,7 +42,7 @@ pub enum OnDiskChange {
     Ignore,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RustLint {
     #[default]
@@ -111,6 +115,28 @@ impl Config {
             path: path.to_owned(),
             source: Box::new(source),
         })
+    }
+
+    pub fn get(&self, key: &str) -> Option<toml::Value> {
+        match toml::Value::try_from(self) {
+            Ok(toml::Value::Table(mut table)) => table.remove(key),
+            _ => None,
+        }
+    }
+
+    pub fn with(&self, key: &str, value: Option<toml::Value>) -> Result<Self, ConfigError> {
+        let Ok(toml::Value::Table(mut table)) = toml::Value::try_from(self) else {
+            return Err(ConfigError::Syntax(format!("cannot change {key}")));
+        };
+        match value {
+            Some(value) => table.insert(key.to_owned(), value),
+            None => table.remove(key),
+        };
+        let config: Self = toml::Value::Table(table)
+            .try_into()
+            .map_err(|error: toml::de::Error| ConfigError::Syntax(error.message().to_owned()))?;
+        config.validate()?;
+        Ok(config)
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
@@ -221,6 +247,73 @@ mod tests {
             Config::parse("format-on-save = true")
                 .unwrap()
                 .format_on_save
+        );
+    }
+
+    #[test]
+    fn every_setting_in_the_schema_is_a_config_key() {
+        let full = Config {
+            theme: Some("adwaita".to_owned()),
+            font_family: Some("Iosevka".to_owned()),
+            ..Config::default()
+        };
+        let toml::Value::Table(table) = toml::Value::try_from(&full).unwrap() else {
+            panic!("config is not a table");
+        };
+        let mut keys: Vec<&str> = table.keys().map(String::as_str).collect();
+        let mut schema: Vec<&str> = schema::SETTINGS.iter().map(|setting| setting.key).collect();
+        keys.sort_unstable();
+        schema.sort_unstable();
+
+        assert_eq!(keys, schema);
+    }
+
+    #[test]
+    fn theme_choices_are_the_builtin_themes() {
+        let names: Vec<&str> = theme::builtin().iter().map(|theme| theme.name).collect();
+
+        assert_eq!(
+            schema::find("theme").map(|setting| setting.kind),
+            Some(schema::Kind::Choice(&["adwaita", "adwaita-dark"]))
+        );
+        assert_eq!(names, ["adwaita", "adwaita-dark"]);
+    }
+
+    #[test]
+    fn settings_are_read_and_changed_by_key() {
+        let config = Config::default();
+        assert_eq!(config.get("tab-width"), Some(toml::Value::Integer(8)));
+        assert_eq!(config.get("theme"), None);
+
+        let config = config
+            .with("tab-width", Some(toml::Value::Integer(4)))
+            .unwrap()
+            .with(
+                "theme",
+                Some(toml::Value::String("adwaita-dark".to_owned())),
+            )
+            .unwrap();
+        assert_eq!(config.tab_width, 4);
+        assert_eq!(config.theme.as_deref(), Some("adwaita-dark"));
+
+        assert_eq!(config.with("theme", None).unwrap().theme, None);
+    }
+
+    #[test]
+    fn invalid_changes_are_refused() {
+        let config = Config::default();
+
+        assert_eq!(
+            config
+                .with("tab-width", Some(toml::Value::Integer(0)))
+                .unwrap_err()
+                .to_string(),
+            "tab-width must be at least 1"
+        );
+        assert!(
+            config
+                .with("rust-lint", Some(toml::Value::String("miri".to_owned())))
+                .is_err()
         );
     }
 
