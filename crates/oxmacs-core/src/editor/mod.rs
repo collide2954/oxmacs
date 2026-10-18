@@ -102,6 +102,7 @@ pub struct Editor {
     rust_keymap: Keymap,
     markdown_keymap: Keymap,
     compilation_keymap: Keymap,
+    customize_keymap: Keymap,
     search_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
@@ -165,6 +166,7 @@ impl Editor {
             rust_keymap: bindings::rust(),
             markdown_keymap: bindings::markdown(),
             compilation_keymap: bindings::compilation(),
+            customize_keymap: bindings::customize(),
             search_keymap: bindings::search(),
             pending: Vec::new(),
             last_key: None,
@@ -386,6 +388,7 @@ impl Editor {
             Scope::Rust => Some(&self.rust_keymap),
             Scope::Markdown => Some(&self.markdown_keymap),
             Scope::Compilation => Some(&self.compilation_keymap),
+            Scope::Customize => Some(&self.customize_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search => None,
         }
     }
@@ -396,6 +399,7 @@ impl Editor {
             Some(Mode::Splash(_)) => Scope::Splash,
             Some(Mode::Doctor(_)) => Scope::Doctor,
             Some(Mode::Compilation(_)) => Scope::Compilation,
+            Some(Mode::Customize(_)) => Scope::Customize,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
                 Scope::Markdown
@@ -419,6 +423,7 @@ impl Editor {
                 .map_or_else(LineStyle::default, |buffer| {
                     compilation.errors.line_style(line, &buffer.line_text(line))
                 }),
+            Some(Mode::Customize(state)) => state.line_style(line),
             Some(Mode::Preview(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,
@@ -603,6 +608,10 @@ impl Editor {
             Command::CompilationNextError => self.compilation_next_error(true),
             Command::CompilationPreviousError => self.compilation_next_error(false),
             Command::CompileGotoError => self.compile_goto_error(),
+            Command::Customize => self.customize(),
+            Command::WidgetForward => self.widget_forward(true),
+            Command::WidgetBackward => self.widget_forward(false),
+            Command::WidgetButtonPress => self.widget_button_press(),
             Command::ForwardButton => self.forward_button(true),
             Command::BackwardButton => self.forward_button(false),
             Command::PushButton => self.push_button(),

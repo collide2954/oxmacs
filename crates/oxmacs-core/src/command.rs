@@ -137,6 +137,10 @@ pub enum Command {
     CompilationNextError,
     CompilationPreviousError,
     CompileGotoError,
+    Customize,
+    WidgetForward,
+    WidgetBackward,
+    WidgetButtonPress,
     ForwardButton,
     BackwardButton,
     PushButton,
@@ -226,6 +230,9 @@ impl Command {
             | Self::DiredCreateDirectory
             | Self::DiredDoOpen => Scope::Dired,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
+            Self::WidgetForward | Self::WidgetBackward | Self::WidgetButtonPress => {
+                Scope::Customize
+            }
             Self::RustFormatBuffer
             | Self::RustCheck
             | Self::RustCompile
@@ -270,6 +277,7 @@ pub enum Scope {
     Rust,
     Markdown,
     Compilation,
+    Customize,
 }
 
 #[cfg(test)]

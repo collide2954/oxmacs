@@ -205,6 +205,15 @@ const COMPILATION: &[(&str, Command)] = &[
     ("RET", Command::CompileGotoError),
 ];
 
+const CUSTOMIZE: &[(&str, Command)] = &[
+    ("n", Command::WidgetForward),
+    ("TAB", Command::WidgetForward),
+    ("p", Command::WidgetBackward),
+    ("S-TAB", Command::WidgetBackward),
+    ("RET", Command::WidgetButtonPress),
+    ("q", Command::QuitWindow),
+];
+
 pub fn global() -> Keymap {
     build(GLOBAL)
 }
@@ -227,6 +236,10 @@ pub fn markdown() -> Keymap {
 
 pub fn compilation() -> Keymap {
     build(COMPILATION)
+}
+
+pub fn customize() -> Keymap {
+    build(CUSTOMIZE)
 }
 
 pub fn search() -> Keymap {
@@ -296,6 +309,11 @@ mod tests {
     #[test]
     fn every_compilation_binding_resolves_to_its_command() {
         assert_resolves(&compilation(), COMPILATION);
+    }
+
+    #[test]
+    fn every_customize_binding_resolves_to_its_command() {
+        assert_resolves(&customize(), CUSTOMIZE);
     }
 
     #[test]

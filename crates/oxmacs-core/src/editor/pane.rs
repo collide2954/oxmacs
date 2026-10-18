@@ -159,7 +159,9 @@ impl<'a> Pane<'a> {
 
     pub fn mode_line(&self) -> String {
         let buffer = self.buffer();
-        let state = if buffer.is_read_only() {
+        let state = if self.editor.unsaved_settings(self.index) {
+            "%*"
+        } else if buffer.is_read_only() {
             "%%"
         } else if buffer.is_modified() {
             "**"

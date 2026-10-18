@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::dired::Listing;
 use crate::display::{ScreenLine, Viewport};
 use crate::editor::compile::Compilation;
+use crate::editor::customize::Customize;
 use crate::editor::doctor::Doctor;
 use crate::editor::minibuffer::Purpose;
 use crate::editor::splash::Splash;
@@ -21,6 +22,7 @@ pub(super) enum Mode {
     Doctor(Doctor),
     Preview(BufferId),
     Compilation(Compilation),
+    Customize(Customize),
 }
 
 #[derive(Debug)]
@@ -66,7 +68,8 @@ impl BufferList {
             | Mode::Splash(_)
             | Mode::Doctor(_)
             | Mode::Preview(_)
-            | Mode::Compilation(_) => None,
+            | Mode::Compilation(_)
+            | Mode::Customize(_) => None,
         }
     }
 
@@ -77,7 +80,8 @@ impl BufferList {
             | Mode::Dired(_)
             | Mode::Doctor(_)
             | Mode::Preview(_)
-            | Mode::Compilation(_) => None,
+            | Mode::Compilation(_)
+            | Mode::Customize(_) => None,
         }
     }
 
@@ -89,7 +93,8 @@ impl BufferList {
             | Mode::Splash(_)
             | Mode::Doctor(_)
             | Mode::Preview(_)
-            | Mode::Compilation(_) => None,
+            | Mode::Compilation(_)
+            | Mode::Customize(_) => None,
         }
     }
 
@@ -98,7 +103,11 @@ impl BufferList {
         match &entry.mode {
             Mode::Dired(listing) => Some((listing.directory(), true)),
             Mode::Text(_) => entry.buffer.file().map(|file| (file.path.as_path(), false)),
-            Mode::Splash(_) | Mode::Doctor(_) | Mode::Preview(_) | Mode::Compilation(_) => None,
+            Mode::Splash(_)
+            | Mode::Doctor(_)
+            | Mode::Preview(_)
+            | Mode::Compilation(_)
+            | Mode::Customize(_) => None,
         }
     }
 
@@ -109,7 +118,8 @@ impl BufferList {
             | Mode::Splash(_)
             | Mode::Doctor(_)
             | Mode::Preview(_)
-            | Mode::Compilation(_) => None,
+            | Mode::Compilation(_)
+            | Mode::Customize(_) => None,
         }
     }
 
@@ -120,7 +130,8 @@ impl BufferList {
             | Mode::Splash(_)
             | Mode::Doctor(_)
             | Mode::Preview(_)
-            | Mode::Compilation(_) => None,
+            | Mode::Compilation(_)
+            | Mode::Customize(_) => None,
         }
     }
 

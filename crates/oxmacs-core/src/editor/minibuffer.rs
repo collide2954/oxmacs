@@ -28,6 +28,7 @@ pub(super) enum Purpose {
     ReplaceTo(bool),
     Item,
     Compile,
+    Setting(usize),
 }
 
 impl Purpose {
@@ -49,7 +50,7 @@ impl Purpose {
     fn takes_text(self) -> bool {
         matches!(
             self,
-            Self::ReplaceFrom(_) | Self::ReplaceTo(_) | Self::Compile
+            Self::ReplaceFrom(_) | Self::ReplaceTo(_) | Self::Compile | Self::Setting(_)
         )
     }
 
@@ -166,7 +167,10 @@ impl Editor {
                 self.buffer_completions(minibuffer.purpose, matches)
             }
             Purpose::LoadTheme => self.theme_completions(matches),
-            Purpose::ReplaceFrom(_) | Purpose::ReplaceTo(_) | Purpose::Compile => Vec::new(),
+            Purpose::ReplaceFrom(_)
+            | Purpose::ReplaceTo(_)
+            | Purpose::Compile
+            | Purpose::Setting(_) => Vec::new(),
             Purpose::Item => self.item_completions(matches),
         }
     }
@@ -270,6 +274,12 @@ impl Editor {
             self.minibuffer = None;
             let directory = self.project_directory();
             self.start_compile(command, directory);
+            return;
+        }
+        if let Purpose::Setting(index) = purpose {
+            let input = self.minibuffer_input();
+            self.minibuffer = None;
+            self.set_setting_from(index, &input);
             return;
         }
         if purpose.takes_text() {
