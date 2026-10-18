@@ -143,12 +143,10 @@ impl App {
         }
     }
 
-    fn set_appearance(&mut self, appearance: Appearance) {
-        let before = self.faces();
-        self.editor.set_appearance(appearance);
-        if self.animations && before.name != self.editor.theme().name {
+    fn fade_theme_from(&mut self, shown: Faces) {
+        if self.animations && shown.name != self.editor.theme().name {
             let fade = transition(false, animation::THEME_FADE).go(true, self.now);
-            self.theme_fade = Some((before, fade));
+            self.theme_fade = Some((shown, fade));
         }
     }
 
@@ -192,6 +190,7 @@ impl App {
         if !matches!(message, Message::Tick(_)) {
             self.now = Instant::now();
         }
+        let shown = self.faces();
         match message {
             Message::Keyboard(keyboard::Event::KeyPressed {
                 key,
@@ -211,7 +210,7 @@ impl App {
             Message::View(event) => self.handle_view_event(event),
             Message::AppearanceChanged(mode) => {
                 if let Some(appearance) = appearance(mode) {
-                    self.set_appearance(appearance);
+                    self.editor.set_appearance(appearance);
                 }
             }
             Message::Tick(now) => self.tick(now),
@@ -220,6 +219,7 @@ impl App {
             Message::DiskChanged => self.editor.check_disk_changes(),
             Message::Opened(Err(error)) => self.editor.show_message(error),
         }
+        self.fade_theme_from(shown);
         if self.editor.should_quit() {
             return iced::exit();
         }
@@ -439,6 +439,34 @@ mod tests {
         let _ = app.update(Message::Tick(later()));
         assert_eq!(app.faces(), ADWAITA_DARK);
         assert!(!app.is_animating());
+    }
+
+    fn enter(app: &mut App) {
+        let _ = app.update(Message::Keyboard(keyboard::Event::KeyPressed {
+            key: Key::Named(keyboard::key::Named::Enter),
+            modified_key: Key::Named(keyboard::key::Named::Enter),
+            physical_key: Physical::Code(Code::Enter),
+            location: Location::Standard,
+            modifiers: Modifiers::empty(),
+            text: None,
+            repeat: false,
+        }));
+    }
+
+    #[test]
+    fn theme_commands_crossfade_too() {
+        let mut app = App::default();
+
+        press(&mut app, "x", Modifiers::ALT);
+        for c in "toggle-theme".chars() {
+            press(&mut app, &c.to_string(), Modifiers::empty());
+        }
+        enter(&mut app);
+        assert!(app.is_animating());
+        assert_eq!(app.faces().default.background, ADWAITA.default.background);
+
+        let _ = app.update(Message::Tick(later()));
+        assert_eq!(app.faces(), ADWAITA_DARK);
     }
 
     #[test]
