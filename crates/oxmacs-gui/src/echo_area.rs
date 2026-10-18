@@ -74,7 +74,7 @@ pub fn view<'a, Message: 'a>(
             ];
             rich_text(spans).font(font).size(size).into()
         }
-        (None, None) => text(editor.message().unwrap_or(" ").to_owned())
+        (None, None) => text(editor.echo().unwrap_or(" ").to_owned())
             .font(font)
             .size(size)
             .into(),

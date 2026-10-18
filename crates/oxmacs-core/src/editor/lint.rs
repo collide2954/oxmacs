@@ -211,6 +211,10 @@ impl Editor {
             .collect()
     }
 
+    pub fn echo(&self) -> Option<&str> {
+        self.message().or_else(|| self.diagnostic_at_point())
+    }
+
     pub fn diagnostic_at_point(&self) -> Option<&str> {
         let buffer = self.buffers.current();
         let point = buffer.point();
@@ -496,5 +500,18 @@ mod tests {
 
         press(&mut editor, "C-f C-f C-f C-f C-f");
         assert_eq!(editor.diagnostic_at_point(), None);
+    }
+
+    #[test]
+    fn the_echo_area_falls_back_to_the_diagnostic_at_point() {
+        let (_dir, mut editor) = project();
+        reported(&mut editor);
+
+        press(&mut editor, "C-a");
+        assert_eq!(editor.message(), None);
+        assert_eq!(editor.echo(), Some("bad"));
+
+        press(&mut editor, "C-x C-q");
+        assert_eq!(editor.echo(), editor.message());
     }
 }

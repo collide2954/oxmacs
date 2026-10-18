@@ -13,6 +13,7 @@ use iced::{
     Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, keyboard,
     window,
 };
+use oxmacs_core::diagnostics::Severity;
 use oxmacs_core::display::{self, LineStyle};
 use oxmacs_core::editor::{Cell, Clicks, Gutter, Pane, ScreenRow, WindowId};
 use oxmacs_core::text::BufferId;
@@ -556,6 +557,23 @@ where
             for (row, rectangle) in &rows {
                 if let Some(line) = line_of(row.line) {
                     self.draw_row_text(renderer, line, row, *rectangle, cell.width, text_bounds);
+                    for (columns, severity) in &line.diagnostics {
+                        if let Some(columns) =
+                            display::row_highlight(*columns, row.column, row.end_column)
+                        {
+                            let color = match severity {
+                                Severity::Error => self.faces.error,
+                                Severity::Warning => self.faces.warning,
+                            };
+                            draw_wave(
+                                renderer,
+                                columns,
+                                *rectangle,
+                                cell.width,
+                                style::color(color),
+                            );
+                        }
+                    }
                 }
             }
         });
@@ -571,6 +589,7 @@ struct DrawnLine<'a> {
     style: LineStyle,
     highlight: Option<(usize, Option<usize>)>,
     marks: Vec<((usize, Option<usize>), Highlight)>,
+    diagnostics: Vec<((usize, Option<usize>), Severity)>,
 }
 
 impl<'a, Message> BufferView<'a, Message> {
@@ -603,8 +622,19 @@ impl<'a, Message> BufferView<'a, Message> {
                         Some((columns, mark))
                     })
                     .collect();
+                let diagnostics = self
+                    .pane
+                    .line_diagnostics(row.line)
+                    .into_iter()
+                    .map(|(range, severity)| {
+                        let from = display::display_column(&text, range.start, tab_width);
+                        let to = display::display_column(&text, range.end, tab_width);
+                        ((from, Some(to.max(from + 1))), severity)
+                    })
+                    .collect();
                 lines.push(DrawnLine {
                     number: row.line,
+                    diagnostics,
                     highlight: selection.as_ref().and_then(|selection| {
                         display::highlight_columns(&text, span, selection, tab_width)
                     }),
@@ -691,6 +721,40 @@ fn draw_highlight<Renderer>(
         },
         color,
     );
+}
+
+fn draw_wave<Renderer>(
+    renderer: &mut Renderer,
+    (start, end): (usize, Option<usize>),
+    row: Rectangle,
+    cell_width: f32,
+    color: Color,
+) where
+    Renderer: text::Renderer<Font = Font>,
+{
+    let left = (row.x + to_f32(start) * cell_width).round();
+    let right = end.map_or(row.x + row.width, |end| row.x + to_f32(end) * cell_width);
+    let base = (row.y + row.height).round() - 1.0;
+    for (step, x) in (0..).map(|step| (step, left + to_f32(step))) {
+        if x >= right {
+            break;
+        }
+        renderer.fill_quad(
+            Quad {
+                bounds: Rectangle::new(Point::new(x, base - wave_rise(step)), Size::new(1.0, 1.0)),
+                ..Quad::default()
+            },
+            color,
+        );
+    }
+}
+
+pub fn wave_rise(step: usize) -> f32 {
+    match step % 4 {
+        1 | 3 => 1.0,
+        2 => 2.0,
+        _ => 0.0,
+    }
 }
 
 pub fn cell_at(position: Point, cell: Size, top: f32) -> Cell {
@@ -845,6 +909,13 @@ mod tests {
         assert_eq!(rows_in(10.0, 20.0), 1);
         assert_eq!(rows_in(100.0, 0.0), 1);
         assert_eq!(rows_in(f32::NAN, 20.0), 1);
+    }
+
+    #[test]
+    fn waves_rise_and_fall_every_four_pixels() {
+        let rises: Vec<f32> = (0..8).map(wave_rise).collect();
+
+        assert_eq!(rises, [0.0, 1.0, 2.0, 1.0, 0.0, 1.0, 2.0, 1.0]);
     }
 
     #[test]
