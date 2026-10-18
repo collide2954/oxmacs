@@ -94,6 +94,18 @@ pub fn segments<F: Copy + PartialEq>(
     segments
 }
 
+pub fn cursor_glyph(text: &str, index: usize, tab_width: usize) -> (String, usize) {
+    match text.chars().nth(index) {
+        None | Some('\t') => (String::new(), 1),
+        Some(c) => {
+            let glyph = Glyph::of(c, display_column(text, index, tab_width), tab_width);
+            let mut rendered = String::new();
+            glyph.render(&mut rendered);
+            (rendered, glyph.width().max(1))
+        }
+    }
+}
+
 pub fn display_column(text: &str, chars: usize, tab_width: usize) -> usize {
     text.chars().take(chars).fold(0, |column, c| {
         column + Glyph::of(c, column, tab_width).width()
@@ -192,6 +204,23 @@ mod tests {
         assert_eq!(char_at_column("日本", 1, 8), 0);
         assert_eq!(char_at_column("日本", 2, 8), 1);
         assert_eq!(char_at_column("日本", 3, 8), 1);
+    }
+
+    fn glyph(text: &str, width: usize) -> (String, usize) {
+        (text.to_owned(), width)
+    }
+
+    #[test]
+    fn the_cursor_covers_the_whole_glyph_under_it() {
+        assert_eq!(cursor_glyph("abc", 1, 8), glyph("b", 1));
+        assert_eq!(cursor_glyph("日本", 1, 8), glyph("本", 2));
+        assert_eq!(cursor_glyph("a\rb", 1, 8), glyph("^M", 2));
+    }
+
+    #[test]
+    fn the_cursor_is_one_empty_cell_on_tabs_and_line_ends() {
+        assert_eq!(cursor_glyph("\tx", 0, 8), glyph("", 1));
+        assert_eq!(cursor_glyph("ab", 2, 8), glyph("", 1));
     }
 
     fn segment(column: usize, text: &str, face: Option<char>) -> Segment<char> {

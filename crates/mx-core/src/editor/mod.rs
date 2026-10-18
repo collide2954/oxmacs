@@ -30,7 +30,7 @@ use transfer::Kind;
 use crate::command::{Command, Scope};
 use crate::config::{Config, OnDiskChange};
 use crate::dired::Mark;
-use crate::display::Viewport;
+use crate::display::{self, Viewport};
 use crate::files::LineEnding;
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::text::{Buffer, motion};
@@ -169,6 +169,13 @@ impl Editor {
 
     pub fn tab_width(&self) -> usize {
         self.tab_width
+    }
+
+    pub fn cursor_glyph(&self) -> (String, usize) {
+        let buffer = self.buffers.current();
+        let point = buffer.point();
+        let line = buffer.line_text(buffer.line_of(point));
+        display::cursor_glyph(&line, buffer.column(point), self.tab_width)
     }
 
     pub fn point_display_column(&self) -> usize {
@@ -573,6 +580,13 @@ mod tests {
         editor.resize_window(5);
 
         assert!(editor.viewport().lines().contains(&12));
+    }
+
+    #[test]
+    fn the_cursor_glyph_is_the_one_at_point() {
+        let editor = editor_with("a日b", 1);
+
+        assert_eq!(editor.cursor_glyph(), ("日".to_owned(), 2));
     }
 
     #[test]
