@@ -1,27 +1,67 @@
+use iced::theme::Mode;
 use iced::widget::{column, container, text};
-use iced::{Element, Length, Subscription, Task, Theme, keyboard};
+use iced::{Element, Font, Length, Subscription, Task, Theme, keyboard, system};
+use mx_core::config::{self, Config, ConfigError};
 use mx_core::editor::Editor;
+use mx_core::theme::Appearance;
 
 use crate::buffer_view::BufferView;
-use crate::fonts::EDITOR as EDITOR_FONT;
 use crate::keys::{self, Platform};
+use crate::{fonts, style};
 
-const TEXT_SIZE: f32 = 15.0;
-
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct App {
     editor: Editor,
+    font: Font,
+    text_size: f32,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     Keyboard(keyboard::Event),
     RowsChanged(usize),
+    AppearanceChanged(Mode),
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self::new(Ok(Config::default()))
+    }
 }
 
 impl App {
+    pub fn new(config: Result<Config, ConfigError>) -> Self {
+        let mut editor = Editor::new();
+        let config = config.unwrap_or_else(|error| {
+            editor.show_message(error.to_string());
+            Config::default()
+        });
+        editor.apply_config(&config);
+        let font = config
+            .font_family
+            .map_or(fonts::EDITOR, |family| Font::with_name(family.leak()));
+        Self {
+            editor,
+            font,
+            text_size: points_to_pixels(config.font_size),
+        }
+    }
+
+    pub fn boot() -> (Self, Task<Message>) {
+        let config = config::default_path()
+            .map_or_else(|| Ok(Config::default()), |path| Config::load(&path));
+        (
+            Self::new(config),
+            system::theme().map(Message::AppearanceChanged),
+        )
+    }
+
     pub fn editor(&self) -> &Editor {
         &self.editor
+    }
+
+    pub fn text_size(&self) -> f32 {
+        self.text_size
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -40,6 +80,11 @@ impl App {
             }
             Message::Keyboard(_) => {}
             Message::RowsChanged(rows) => self.editor.resize_window(rows),
+            Message::AppearanceChanged(mode) => {
+                if let Some(appearance) = appearance(mode) {
+                    self.editor.set_appearance(appearance);
+                }
+            }
         }
         if self.editor.should_quit() {
             iced::exit()
@@ -49,27 +94,35 @@ impl App {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        keyboard::listen().map(Message::Keyboard)
+        Subscription::batch([
+            keyboard::listen().map(Message::Keyboard),
+            system::theme_changes().map(Message::AppearanceChanged),
+        ])
     }
 
     pub fn title(&self) -> String {
         format!("{} - mx", self.editor.buffer().name())
     }
 
+    pub fn theme(&self) -> Theme {
+        style::iced_theme(self.editor.theme())
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
-        let line = |content: String| text(content).font(EDITOR_FONT).size(TEXT_SIZE);
+        let line = |content: String| text(content).font(self.font).size(self.text_size);
+        let faces = self.editor.theme();
         column![
             container(BufferView::new(
                 &self.editor,
-                EDITOR_FONT,
-                TEXT_SIZE,
+                self.font,
+                self.text_size,
                 Message::RowsChanged
             ))
             .padding([0, 4]),
             container(line(self.editor.mode_line()))
                 .width(Length::Fill)
                 .padding([1, 4])
-                .style(mode_line_style),
+                .style(move |_| style::mode_line(faces)),
             container(line(self.editor.message().unwrap_or(" ").to_owned()))
                 .width(Length::Fill)
                 .padding([1, 4]),
@@ -78,12 +131,15 @@ impl App {
     }
 }
 
-fn mode_line_style(theme: &Theme) -> container::Style {
-    let strong = theme.extended_palette().background.strong;
-    container::Style {
-        background: Some(strong.color.into()),
-        text_color: Some(strong.text),
-        ..container::Style::default()
+pub fn points_to_pixels(points: f32) -> f32 {
+    points * 4.0 / 3.0
+}
+
+fn appearance(mode: Mode) -> Option<Appearance> {
+    match mode {
+        Mode::Light => Some(Appearance::Light),
+        Mode::Dark => Some(Appearance::Dark),
+        Mode::None => None,
     }
 }
 
@@ -120,6 +176,52 @@ mod tests {
         let mut ui = iced_test::simulator(app.view());
 
         assert!(ui.find("C-q is undefined").is_ok());
+    }
+
+    #[test]
+    fn config_errors_fall_back_to_defaults_and_are_reported() {
+        let app = App::new(Err(ConfigError::TabWidth));
+
+        assert_eq!(app.editor().message(), Some("tab-width must be at least 1"));
+        assert_eq!(app.editor().tab_width(), 8);
+    }
+
+    #[test]
+    fn config_sets_theme_and_font_size() {
+        let config = Config::parse("theme = \"adwaita-dark\"\nfont-size = 12").unwrap();
+
+        let app = App::new(Ok(config));
+
+        assert_eq!(app.editor().theme().name, "adwaita-dark");
+        assert!((app.text_size() - 16.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn font_sizes_convert_from_points_to_logical_pixels() {
+        assert!((points_to_pixels(12.0) - 16.0).abs() < f32::EPSILON);
+        assert!((points_to_pixels(9.0) - 12.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn os_appearance_changes_switch_the_theme() {
+        let mut app = App::default();
+
+        let _ = app.update(Message::AppearanceChanged(Mode::Dark));
+        assert_eq!(app.editor().theme().name, "adwaita-dark");
+
+        let _ = app.update(Message::AppearanceChanged(Mode::None));
+        assert_eq!(app.editor().theme().name, "adwaita-dark");
+
+        let _ = app.update(Message::AppearanceChanged(Mode::Light));
+        assert_eq!(app.editor().theme().name, "adwaita");
+    }
+
+    #[test]
+    fn iced_theme_is_built_from_the_editor_theme() {
+        let palette = App::default().theme().palette();
+
+        assert_eq!(palette.background, iced::Color::from_rgb8(0xED, 0xED, 0xED));
+        assert_eq!(palette.text, iced::Color::from_rgb8(0x2E, 0x34, 0x36));
     }
 
     #[test]

@@ -8,6 +8,8 @@ use iced::{Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, 
 use mx_core::display;
 use mx_core::editor::Editor;
 
+use crate::style;
+
 const MEASURE_SAMPLE: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
 
 #[derive(Debug)]
@@ -62,14 +64,8 @@ impl<'a, Message> BufferView<'a, Message> {
         Size::new(bounds.width / to_f32(MEASURE_SAMPLE.len()), bounds.height)
     }
 
-    fn draw_cursor<Renderer>(
-        &self,
-        renderer: &mut Renderer,
-        theme: &Theme,
-        style: &renderer::Style,
-        bounds: Rectangle,
-        cell: Size,
-    ) where
+    fn draw_cursor<Renderer>(&self, renderer: &mut Renderer, bounds: Rectangle, cell: Size)
+    where
         Renderer: text::Renderer<Font = Font>,
     {
         let buffer = self.editor.buffer();
@@ -86,19 +82,20 @@ impl<'a, Message> BufferView<'a, Message> {
         );
         let block = Rectangle::new(origin, cell);
         let under_cursor = buffer.chars_after(point).next().filter(|c| !c.is_control());
+        let faces = self.editor.theme();
         renderer.with_layer(bounds, |renderer| {
             renderer.fill_quad(
                 Quad {
                     bounds: block,
                     ..Quad::default()
                 },
-                style.text_color,
+                style::color(faces.cursor),
             );
             if let Some(c) = under_cursor {
                 renderer.fill_text(
                     self.text(c.to_string(), Size::new(cell.width * 2.0, cell.height)),
                     origin,
-                    theme.palette().background,
+                    style::color(faces.default.background),
                     block,
                 );
             }
@@ -159,8 +156,8 @@ where
         &self,
         tree: &Tree,
         renderer: &mut Renderer,
-        theme: &Theme,
-        style: &renderer::Style,
+        _theme: &Theme,
+        _style: &renderer::Style,
         layout: Layout<'_>,
         _cursor: mouse::Cursor,
         _viewport: &Rectangle,
@@ -168,6 +165,7 @@ where
         let cell = tree.state.downcast_ref::<Metrics>().cell;
         let bounds = layout.bounds();
         let buffer = self.editor.buffer();
+        let foreground = style::color(self.editor.theme().default.foreground);
         let visible = self
             .editor
             .viewport()
@@ -178,11 +176,11 @@ where
             renderer.fill_text(
                 self.text(content, Size::new(bounds.width, cell.height)),
                 Point::new(bounds.x, bounds.y + to_f32(row) * cell.height),
-                style.text_color,
+                foreground,
                 bounds,
             );
         }
-        self.draw_cursor(renderer, theme, style, bounds, cell);
+        self.draw_cursor(renderer, bounds, cell);
     }
 }
 
