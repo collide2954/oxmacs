@@ -56,6 +56,8 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-r", Command::IsearchBackward),
     ("C-M-s", Command::IsearchForwardRegexp),
     ("C-M-r", Command::IsearchBackwardRegexp),
+    ("M-%", Command::QueryReplace),
+    ("C-M-%", Command::QueryReplaceRegexp),
     ("C-x C-f", Command::FindFile),
     ("C-x C-s", Command::SaveBuffer),
     ("C-x s", Command::SaveSomeBuffers),

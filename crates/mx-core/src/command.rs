@@ -38,6 +38,8 @@ pub enum Command {
     ExitMinibufferWithInput,
     IsearchForward,
     IsearchBackward,
+    QueryReplace,
+    QueryReplaceRegexp,
     IsearchForwardRegexp,
     IsearchBackwardRegexp,
     IsearchRepeatForward,
@@ -125,6 +127,8 @@ impl Command {
                 | Self::PasteFromHistory
                 | Self::Undo
                 | Self::Redo
+                | Self::QueryReplace
+                | Self::QueryReplaceRegexp
         )
     }
 

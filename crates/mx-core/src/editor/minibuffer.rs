@@ -23,6 +23,8 @@ pub(super) enum Purpose {
     Transfer(Kind),
     CreateDirectory,
     LoadTheme,
+    ReplaceFrom(bool),
+    ReplaceTo(bool),
 }
 
 impl Purpose {
@@ -39,6 +41,10 @@ impl Purpose {
 
     fn lists_only_directories(self) -> bool {
         matches!(self, Self::Dired | Self::CreateDirectory)
+    }
+
+    fn takes_text(self) -> bool {
+        matches!(self, Self::ReplaceFrom(_) | Self::ReplaceTo(_))
     }
 
     fn takes_buffer(self) -> bool {
@@ -61,6 +67,7 @@ pub struct Minibuffer {
     pub(super) selected: usize,
     pub(super) listing: Option<PathListing>,
     pub(super) sources: Vec<PathBuf>,
+    pub(super) from: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,6 +96,7 @@ impl Minibuffer {
             selected: 0,
             listing: None,
             sources: Vec::new(),
+            from: String::new(),
         }
     }
 
@@ -106,6 +114,10 @@ impl Minibuffer {
 
     pub fn selected(&self) -> usize {
         self.selected
+    }
+
+    pub fn completes(&self) -> bool {
+        !self.purpose.takes_text()
     }
 }
 
@@ -145,6 +157,7 @@ impl Editor {
                 self.buffer_completions(minibuffer.purpose, matches)
             }
             Purpose::LoadTheme => self.theme_completions(matches),
+            Purpose::ReplaceFrom(_) | Purpose::ReplaceTo(_) => Vec::new(),
         }
     }
 
@@ -240,6 +253,10 @@ impl Editor {
         };
         if purpose.takes_path() {
             self.exit_file_prompt(false);
+            return;
+        }
+        if purpose.takes_text() {
+            self.exit_replace_prompt(purpose);
             return;
         }
         let Some(completion) = self.selected_completion() else {

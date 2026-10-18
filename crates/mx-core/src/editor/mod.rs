@@ -11,6 +11,7 @@ mod mouse;
 mod movement;
 mod question;
 mod read_only;
+mod replace;
 mod screen;
 mod selection;
 mod splash;
@@ -24,6 +25,7 @@ pub use isearch::Search;
 pub use minibuffer::{Choice, Completion, Minibuffer};
 pub use mouse::{Cell, Clicks};
 pub use question::Question;
+pub use replace::Replace;
 pub use screen::ScreenRow;
 
 use std::ops::Range;
@@ -50,6 +52,7 @@ pub struct Editor {
     buffers: BufferList,
     minibuffer: Option<Minibuffer>,
     search: Option<Search>,
+    replace: Option<Replace>,
     last_searches: [Option<String>; 2],
     keymap: Keymap,
     minibuffer_keymap: Keymap,
@@ -97,6 +100,7 @@ impl Editor {
             buffers: BufferList::new(buffer),
             minibuffer: None,
             search: None,
+            replace: None,
             last_searches: [None, None],
             keymap: bindings::global(),
             minibuffer_keymap: bindings::minibuffer(),
@@ -240,7 +244,7 @@ impl Editor {
 
     pub fn handle_key(&mut self, mut key: Key) {
         self.message = None;
-        if self.answer_question(key) || self.search_key(key) {
+        if self.answer_question(key) || self.answer_replace(key) || self.search_key(key) {
             return;
         }
         if let Some(minibuffer) = &mut self.minibuffer {
@@ -353,7 +357,9 @@ impl Editor {
     }
 
     pub fn line_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
-        self.search_marks(line)
+        let mut marks = self.search_marks(line);
+        marks.extend(self.replace_marks(line));
+        marks
     }
 
     fn where_is(&self, command: Command) -> Option<KeySequence> {
@@ -419,6 +425,8 @@ impl Editor {
             Command::IsearchForward => self.isearch(Direction::Forward, false),
             Command::IsearchBackward => self.isearch(Direction::Backward, false),
             Command::IsearchForwardRegexp => self.isearch(Direction::Forward, true),
+            Command::QueryReplace => self.query_replace(false),
+            Command::QueryReplaceRegexp => self.query_replace(true),
             Command::IsearchBackwardRegexp => self.isearch(Direction::Backward, true),
             Command::IsearchRepeatForward => self.isearch_repeat(Direction::Forward),
             Command::IsearchRepeatBackward => self.isearch_repeat(Direction::Backward),
