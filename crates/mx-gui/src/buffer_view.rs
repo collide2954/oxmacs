@@ -1,3 +1,4 @@
+use std::mem;
 use std::ops::Range;
 
 use iced::advanced::layout::{self, Layout};
@@ -75,6 +76,7 @@ struct State {
     wheel_carry: f32,
     modifiers: keyboard::Modifiers,
     shown: Option<BufferId>,
+    pointed: bool,
 }
 
 impl State {
@@ -161,11 +163,13 @@ impl<'a, Message> BufferView<'a, Message> {
         let scroll = state
             .scroll
             .get_or_insert_with(|| Scroll::new(viewport.top()));
-        scroll.retarget(viewport.top(), viewport.rows(), now, self.motion.enabled);
+        let scrolled = scroll.retarget(viewport.top(), viewport.rows(), now, self.motion.enabled);
+        let scrolling = scroll.is_animating(now);
+        let pointed = mem::take(&mut state.pointed);
         let target = self.cursor_cell();
         let cursor = state.cursor.get_or_insert_with(|| Glide::new(target));
-        cursor.retarget(target, now, self.motion.enabled);
-        if cursor.is_animating(now) || scroll.is_animating(now) {
+        cursor.retarget(target, now, self.motion.enabled && !scrolled && !pointed);
+        if cursor.is_animating(now) || scrolling {
             shell.request_redraw();
             return;
         }
@@ -228,6 +232,7 @@ impl<'a, Message> BufferView<'a, Message> {
             }
             _ => return,
         };
+        state.pointed = !matches!(view_event, ViewEvent::Scrolled(_));
         shell.publish((self.on_event)(view_event));
         shell.capture_event();
     }

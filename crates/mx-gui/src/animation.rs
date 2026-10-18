@@ -72,12 +72,13 @@ impl Glide {
         }
     }
 
-    pub fn retarget(&mut self, target: (usize, usize), now: Instant, enabled: bool) {
+    pub fn retarget(&mut self, target: (usize, usize), now: Instant, glide: bool) {
         if target == self.target {
             return;
         }
-        let single_step = target.1 == self.target.1 && target.0.abs_diff(self.target.0) <= 1;
-        if !enabled || single_step {
+        let lines = target.1.abs_diff(self.target.1);
+        let step = lines == 1 || (lines == 0 && target.0.abs_diff(self.target.0) <= 1);
+        if !glide || step || self.is_animating(now) {
             *self = Self::new(target);
             return;
         }
@@ -118,13 +119,13 @@ impl Scroll {
         }
     }
 
-    pub fn retarget(&mut self, target: usize, rows: usize, now: Instant, enabled: bool) {
+    pub fn retarget(&mut self, target: usize, rows: usize, now: Instant, enabled: bool) -> bool {
         if target == self.target {
-            return;
+            return false;
         }
         if !enabled {
             *self = Self::new(target);
-            return;
+            return true;
         }
         let current = self.position(now);
         let goal = to_f32(target);
@@ -139,6 +140,7 @@ impl Scroll {
         }
         self.animation.go_mut(goal, now);
         self.target = target;
+        true
     }
 
     pub fn position(&self, now: Instant) -> f32 {
@@ -242,6 +244,38 @@ mod tests {
 
         assert!(at(&glide, start, (4.0, 2.0)));
         assert!(!glide.is_animating(start));
+    }
+
+    #[test]
+    fn single_line_steps_jump_without_gliding() {
+        let start = Instant::now();
+        let mut glide = Glide::new((30, 2));
+
+        glide.retarget((0, 3), start, true);
+
+        assert!(at(&glide, start, (0.0, 3.0)));
+        assert!(!glide.is_animating(start));
+    }
+
+    #[test]
+    fn a_new_target_during_a_glide_jumps_there() {
+        let start = Instant::now();
+        let mut glide = Glide::new((0, 0));
+        glide.retarget((10, 0), start, true);
+
+        glide.retarget((20, 0), start + MS * 10, true);
+
+        assert!(at(&glide, start + MS * 10, (20.0, 0.0)));
+        assert!(!glide.is_animating(start + MS * 10));
+    }
+
+    #[test]
+    fn scrolling_reports_when_its_target_changes() {
+        let start = Instant::now();
+        let mut scroll = Scroll::new(0);
+
+        assert!(!scroll.retarget(0, 30, start, true));
+        assert!(scroll.retarget(5, 30, start, true));
     }
 
     #[test]
