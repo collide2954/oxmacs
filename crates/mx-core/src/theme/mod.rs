@@ -11,12 +11,14 @@ pub enum Appearance {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[must_use]
 pub struct Face {
     pub foreground: Color,
     pub background: Color,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[must_use]
 pub struct Theme {
     pub name: &'static str,
     pub appearance: Appearance,
@@ -29,6 +31,37 @@ pub struct Theme {
     pub minibuffer_prompt: Color,
     pub completion_current: Face,
     pub shadow: Color,
+}
+
+impl Face {
+    pub fn mix(self, other: Self, amount: f32) -> Self {
+        Self {
+            foreground: self.foreground.mix(other.foreground, amount),
+            background: self.background.mix(other.background, amount),
+        }
+    }
+}
+
+impl Theme {
+    pub fn mix(&self, other: &Self, amount: f32) -> Self {
+        Self {
+            name: other.name,
+            appearance: other.appearance,
+            default: self.default.mix(other.default, amount),
+            cursor: self.cursor.mix(other.cursor, amount),
+            region: self.region.mix(other.region, amount),
+            mode_line: self.mode_line.mix(other.mode_line, amount),
+            mode_line_inactive: self
+                .mode_line_inactive
+                .mix(other.mode_line_inactive, amount),
+            mode_line_border: self.mode_line_border.mix(other.mode_line_border, amount),
+            minibuffer_prompt: self.minibuffer_prompt.mix(other.minibuffer_prompt, amount),
+            completion_current: self
+                .completion_current
+                .mix(other.completion_current, amount),
+            shadow: self.shadow.mix(other.shadow, amount),
+        }
+    }
 }
 
 pub fn builtin() -> [&'static Theme; 2] {
@@ -49,6 +82,29 @@ pub fn for_appearance(appearance: Appearance) -> &'static Theme {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mixing_themes_blends_every_face_and_takes_the_target_identity() {
+        let halfway = ADWAITA.mix(&ADWAITA_DARK, 0.5);
+
+        assert_eq!(halfway.name, "adwaita-dark");
+        assert_eq!(halfway.appearance, Appearance::Dark);
+        assert_eq!(
+            halfway.default.background,
+            ADWAITA
+                .default
+                .background
+                .mix(ADWAITA_DARK.default.background, 0.5)
+        );
+        assert_eq!(
+            halfway.completion_current.foreground,
+            ADWAITA
+                .completion_current
+                .foreground
+                .mix(ADWAITA_DARK.completion_current.foreground, 0.5)
+        );
+        assert_eq!(ADWAITA.mix(&ADWAITA_DARK, 1.0), ADWAITA_DARK);
+    }
 
     #[test]
     fn builtin_themes_are_found_by_name() {
