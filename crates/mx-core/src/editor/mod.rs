@@ -23,6 +23,7 @@ use buffers::BufferList;
 use crate::command::Command;
 use crate::config::Config;
 use crate::display::{self, Viewport};
+use crate::files::LineEnding;
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::text::{Buffer, motion};
 use crate::theme::{self, Appearance, Theme};
@@ -159,11 +160,17 @@ impl Editor {
     }
 
     pub fn mode_line(&self) -> String {
+        let buffer = self.buffers.current();
+        let state = if buffer.is_modified() { "**" } else { "--" };
+        let crlf = buffer
+            .file()
+            .is_some_and(|file| file.format.line_ending == LineEnding::CrLf);
         format!(
-            "{}   L{} C{}",
-            self.buffers.current().name(),
+            "{state} {}   L{} C{}{}",
+            buffer.name(),
             self.point_line() + 1,
-            self.point_display_column()
+            self.point_display_column(),
+            if crlf { "   CRLF" } else { "" }
         )
     }
 
@@ -488,7 +495,27 @@ mod tests {
     fn mode_line_shows_buffer_name_line_and_display_column() {
         let editor = editor_with("ab\n\tcd", 5);
 
-        assert_eq!(editor.mode_line(), "t   L2 C9");
+        assert_eq!(editor.mode_line(), "-- t   L2 C9");
+    }
+
+    #[test]
+    fn mode_line_marks_modified_buffers() {
+        let mut editor = editor_with("ab", 0);
+
+        press(&mut editor, "x");
+
+        assert_eq!(editor.mode_line(), "** t   L1 C1");
+    }
+
+    #[test]
+    fn mode_line_shows_crlf_files() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("w.txt"), "one\r\n").unwrap();
+        let mut editor = Editor::new();
+
+        editor.open_file(&dir.path().join("w.txt"));
+
+        assert_eq!(editor.mode_line(), "-- w.txt   L1 C0   CRLF");
     }
 
     #[test]

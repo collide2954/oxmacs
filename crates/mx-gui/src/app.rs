@@ -331,7 +331,7 @@ mod tests {
         let app = App::default();
         let mut ui = iced_test::simulator(app.view());
 
-        assert!(ui.find("*scratch*   L1 C0").is_ok());
+        assert!(ui.find("-- *scratch*   L1 C0").is_ok());
     }
 
     #[test]
