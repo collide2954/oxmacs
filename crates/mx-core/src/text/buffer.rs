@@ -273,6 +273,44 @@ impl Buffer {
         self.text.slice(start..end).to_string()
     }
 
+    pub fn replace_text(&mut self, text: &str) {
+        let old = self.contents();
+        let prefix = old
+            .chars()
+            .zip(text.chars())
+            .take_while(|(a, b)| a == b)
+            .count();
+        let old_len = self.len_chars();
+        let new_len = text.chars().count();
+        let suffix = old
+            .chars()
+            .rev()
+            .zip(text.chars().rev())
+            .take_while(|(a, b)| a == b)
+            .count()
+            .min(old_len.min(new_len) - prefix);
+        self.history.close();
+        self.delete_range(prefix..old_len - suffix);
+        let middle: String = text
+            .chars()
+            .skip(prefix)
+            .take(new_len - prefix - suffix)
+            .collect();
+        if !middle.is_empty() {
+            let before = self.point;
+            self.apply_insert(prefix, &middle);
+            self.history.record(
+                Edit::Insert {
+                    at: prefix,
+                    text: middle,
+                },
+                before,
+                self.point,
+            );
+        }
+        self.history.close();
+    }
+
     pub fn delete_range(&mut self, range: Range<usize>) -> String {
         let end = range.end.min(self.len_chars());
         let start = range.start.min(end);
@@ -312,6 +350,48 @@ fn position_after_removal(position: usize, start: usize, end: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replacing_text_changes_only_the_differing_middle() {
+        let mut buffer = Buffer::with_text("t", "one two three");
+        buffer.set_point(12);
+
+        buffer.replace_text("one 2 three");
+
+        assert_eq!(buffer.contents(), "one 2 three");
+        assert_eq!(buffer.point(), 10);
+    }
+
+    #[test]
+    fn point_inside_the_replaced_part_moves_to_its_start() {
+        let mut buffer = Buffer::with_text("t", "abcdef");
+        buffer.set_point(3);
+
+        buffer.replace_text("abXYZef");
+
+        assert_eq!(buffer.point(), 2);
+    }
+
+    #[test]
+    fn a_replacement_is_one_undo_step() {
+        let mut buffer = Buffer::with_text("t", "abc");
+        buffer.insert("x");
+
+        buffer.replace_text("xyz");
+        assert!(buffer.undo());
+
+        assert_eq!(buffer.contents(), "xabc");
+    }
+
+    #[test]
+    fn replacing_with_the_same_text_records_nothing() {
+        let mut buffer = Buffer::with_text("t", "abc");
+
+        buffer.replace_text("abc");
+
+        assert!(!buffer.is_modified());
+        assert!(!buffer.undo());
+    }
 
     #[test]
     fn every_buffer_has_its_own_id() {
