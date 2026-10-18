@@ -1,3 +1,4 @@
+use std::fmt;
 use std::str::FromStr;
 
 use bitflags::bitflags;
@@ -151,6 +152,84 @@ fn single_char(name: &str) -> Option<KeyCode> {
     chars.next().is_none().then_some(KeyCode::Char(c))
 }
 
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let prefixes = [
+            (Modifiers::CONTROL, "C-"),
+            (Modifiers::META, "M-"),
+            (Modifiers::SHIFT, "S-"),
+            (Modifiers::SUPER, "s-"),
+        ];
+        for (modifier, prefix) in prefixes {
+            if self.modifiers.contains(modifier) {
+                f.write_str(prefix)?;
+            }
+        }
+        self.code.fmt(f)
+    }
+}
+
+impl fmt::Display for KeyCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Self::Char(' ') => "SPC",
+            Self::Char(c) => return write!(f, "{c}"),
+            Self::F(number) => return write!(f, "<f{number}>"),
+            Self::Return => "RET",
+            Self::Tab => "TAB",
+            Self::Backspace => "DEL",
+            Self::Escape => "ESC",
+            Self::Delete => "<delete>",
+            Self::Insert => "<insert>",
+            Self::Left => "<left>",
+            Self::Right => "<right>",
+            Self::Up => "<up>",
+            Self::Down => "<down>",
+            Self::Home => "<home>",
+            Self::End => "<end>",
+            Self::PageUp => "<prior>",
+            Self::PageDown => "<next>",
+        };
+        f.write_str(name)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct KeySequence(Vec<Key>);
+
+impl KeySequence {
+    pub fn keys(&self) -> &[Key] {
+        &self.0
+    }
+}
+
+impl FromStr for KeySequence {
+    type Err = KeyParseError;
+
+    fn from_str(notation: &str) -> Result<Self, Self::Err> {
+        let keys = notation
+            .split_whitespace()
+            .map(str::parse)
+            .collect::<Result<Vec<Key>, _>>()?;
+        if keys.is_empty() {
+            return Err(KeyParseError::Empty);
+        }
+        Ok(Self(keys))
+    }
+}
+
+impl fmt::Display for KeySequence {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (index, key) in self.0.iter().enumerate() {
+            if index > 0 {
+                f.write_str(" ")?;
+            }
+            key.fmt(f)?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -243,6 +322,57 @@ mod tests {
         assert_eq!(
             "C-".parse::<Key>(),
             Err(KeyParseError::UnknownKey("C-".to_owned()))
+        );
+    }
+
+    #[test]
+    fn display_round_trips_canonical_notation() {
+        let notations = [
+            "a",
+            "C-x",
+            "C-M-%",
+            "s-a",
+            "S-<left>",
+            "C-M-S-s-<f5>",
+            "RET",
+            "TAB",
+            "DEL",
+            "ESC",
+            "SPC",
+            "C-SPC",
+            "C--",
+            "<delete>",
+            "<prior>",
+            "<next>",
+            "<home>",
+            "M-<",
+        ];
+        for notation in notations {
+            let key: Key = notation.parse().unwrap();
+            assert_eq!(key.to_string(), notation);
+        }
+    }
+
+    #[test]
+    fn key_sequence_parses_space_separated_keys() {
+        let sequence: KeySequence = "C-x  C-f".parse().unwrap();
+
+        assert_eq!(
+            sequence.keys(),
+            [
+                key(KeyCode::Char('x'), Modifiers::CONTROL),
+                key(KeyCode::Char('f'), Modifiers::CONTROL),
+            ]
+        );
+        assert_eq!(sequence.to_string(), "C-x C-f");
+    }
+
+    #[test]
+    fn key_sequence_rejects_empty_and_invalid_input() {
+        assert_eq!("  ".parse::<KeySequence>(), Err(KeyParseError::Empty));
+        assert_eq!(
+            "C-x <nope>".parse::<KeySequence>(),
+            Err(KeyParseError::UnknownKey("<nope>".to_owned()))
         );
     }
 }
