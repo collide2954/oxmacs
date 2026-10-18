@@ -96,6 +96,14 @@ impl Search {
         Some(matched.min(self.step.query.chars().count()))
     }
 
+    pub fn is_regex(&self) -> bool {
+        self.step.regex
+    }
+
+    pub(super) fn found(&self) -> Option<&Range<usize>> {
+        self.step.found.as_ref()
+    }
+
     pub fn note(&self) -> Option<&str> {
         self.note
     }
@@ -122,6 +130,23 @@ impl Editor {
         true
     }
 
+    pub(super) fn run_in_search(&mut self, command: Command) {
+        match command {
+            Command::IsearchRepeatForward => self.isearch_repeat(Direction::Forward),
+            Command::IsearchRepeatBackward => self.isearch_repeat(Direction::Backward),
+            Command::IsearchPrintingChar => self.isearch_printing_char(),
+            Command::IsearchDeleteChar => self.isearch_delete_char(),
+            Command::IsearchToggleRegexp => self.isearch_toggle_regexp(),
+            Command::IsearchYankWordOrChar => self.isearch_yank_word(),
+            Command::IsearchYankKill => self.request_paste(),
+            Command::IsearchQueryReplace => self.isearch_query_replace(false),
+            Command::IsearchQueryReplaceRegexp => self.isearch_query_replace(true),
+            Command::IsearchExit => self.exit_search(),
+            Command::IsearchAbort => self.isearch_abort(),
+            _ => {}
+        }
+    }
+
     pub(super) fn isearch(&mut self, direction: Direction, regex: bool) {
         if self.minibuffer.is_some() {
             self.show_message("Command attempted to use minibuffer while in minibuffer");
@@ -144,13 +169,13 @@ impl Editor {
         });
     }
 
-    pub(super) fn isearch_printing_char(&mut self) {
+    fn isearch_printing_char(&mut self) {
         if let Some(KeyCode::Char(c)) = self.last_key.map(Key::code) {
             self.extend_search(c.encode_utf8(&mut [0; 4]));
         }
     }
 
-    pub(super) fn isearch_yank_word(&mut self) {
+    fn isearch_yank_word(&mut self) {
         let Some(search) = &self.search else {
             return;
         };
@@ -186,7 +211,7 @@ impl Editor {
         self.push_step(next);
     }
 
-    pub(super) fn isearch_repeat(&mut self, direction: Direction) {
+    fn isearch_repeat(&mut self, direction: Direction) {
         let Some(search) = &self.search else {
             return;
         };
@@ -226,7 +251,7 @@ impl Editor {
         self.push_step(next);
     }
 
-    pub(super) fn isearch_toggle_regexp(&mut self) {
+    fn isearch_toggle_regexp(&mut self) {
         let Some(search) = &self.search else {
             return;
         };
@@ -336,7 +361,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn isearch_delete_char(&mut self) {
+    fn isearch_delete_char(&mut self) {
         if let Some(search) = &mut self.search
             && let Some(previous) = search.previous.pop()
         {
@@ -345,7 +370,7 @@ impl Editor {
         self.refresh_search();
     }
 
-    pub(super) fn isearch_abort(&mut self) {
+    fn isearch_abort(&mut self) {
         if let Some(search) = self.search.as_mut().filter(|search| !search.step.success) {
             while !search.step.success
                 && let Some(previous) = search.previous.pop()

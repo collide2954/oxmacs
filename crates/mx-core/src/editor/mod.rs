@@ -390,6 +390,13 @@ impl Editor {
         if command.is_motion() {
             self.prepare_motion_selection(shifted);
         }
+        self.perform(command, goal_column, previous);
+        self.reset_selection(command);
+        self.refresh_minibuffer();
+        self.reveal_point();
+    }
+
+    fn perform(&mut self, command: Command, goal_column: Option<usize>, previous: Option<Command>) {
         match command {
             Command::SelfInsertCommand => self.self_insert(),
             Command::Newline => self.insert_over_selection("\n"),
@@ -413,7 +420,7 @@ impl Editor {
             Command::MarkWholeBuffer => self.mark_whole_buffer(),
             Command::Copy => self.copy(false),
             Command::Cut => self.copy(true),
-            Command::Paste | Command::IsearchYankKill => self.request_paste(),
+            Command::Paste => self.request_paste(),
             Command::PasteFromHistory => self.paste_from_history(),
             Command::Undo => self.undo(),
             Command::Redo => self.redo(),
@@ -430,14 +437,17 @@ impl Editor {
             Command::QueryReplace => self.query_replace(false),
             Command::QueryReplaceRegexp => self.query_replace(true),
             Command::IsearchBackwardRegexp => self.isearch(Direction::Backward, true),
-            Command::IsearchRepeatForward => self.isearch_repeat(Direction::Forward),
-            Command::IsearchRepeatBackward => self.isearch_repeat(Direction::Backward),
-            Command::IsearchPrintingChar => self.isearch_printing_char(),
-            Command::IsearchDeleteChar => self.isearch_delete_char(),
-            Command::IsearchToggleRegexp => self.isearch_toggle_regexp(),
-            Command::IsearchYankWordOrChar => self.isearch_yank_word(),
-            Command::IsearchExit => self.exit_search(),
-            Command::IsearchAbort => self.isearch_abort(),
+            Command::IsearchRepeatForward
+            | Command::IsearchRepeatBackward
+            | Command::IsearchPrintingChar
+            | Command::IsearchDeleteChar
+            | Command::IsearchToggleRegexp
+            | Command::IsearchYankWordOrChar
+            | Command::IsearchYankKill
+            | Command::IsearchQueryReplace
+            | Command::IsearchQueryReplaceRegexp
+            | Command::IsearchExit
+            | Command::IsearchAbort => self.run_in_search(command),
             Command::FindFile => self.find_file(),
             Command::SaveBuffer => self.save_buffer(),
             Command::WriteFile => self.write_file(),
@@ -477,9 +487,6 @@ impl Editor {
             Command::BackwardButton => self.forward_button(false),
             Command::PushButton => self.push_button(),
         }
-        self.reset_selection(command);
-        self.refresh_minibuffer();
-        self.reveal_point();
     }
 }
 

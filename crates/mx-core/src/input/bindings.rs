@@ -94,6 +94,8 @@ const SEARCH: &[(&str, Command)] = &[
     ("C-w", Command::IsearchYankWordOrChar),
     ("C-y", Command::IsearchYankKill),
     ("s-v", Command::IsearchYankKill),
+    ("M-%", Command::IsearchQueryReplace),
+    ("C-M-%", Command::IsearchQueryReplaceRegexp),
     ("RET", Command::IsearchExit),
     ("C-g", Command::IsearchAbort),
 ];

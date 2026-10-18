@@ -49,6 +49,8 @@ pub enum Command {
     IsearchToggleRegexp,
     IsearchYankWordOrChar,
     IsearchYankKill,
+    IsearchQueryReplace,
+    IsearchQueryReplaceRegexp,
     IsearchExit,
     IsearchAbort,
     FindFile,
@@ -129,6 +131,8 @@ impl Command {
                 | Self::Redo
                 | Self::QueryReplace
                 | Self::QueryReplaceRegexp
+                | Self::IsearchQueryReplace
+                | Self::IsearchQueryReplaceRegexp
         )
     }
 
@@ -166,6 +170,8 @@ impl Command {
             | Self::IsearchToggleRegexp
             | Self::IsearchYankWordOrChar
             | Self::IsearchYankKill
+            | Self::IsearchQueryReplace
+            | Self::IsearchQueryReplaceRegexp
             | Self::IsearchExit
             | Self::IsearchAbort => Scope::Search,
             _ => Scope::Global,

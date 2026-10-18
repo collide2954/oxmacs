@@ -56,6 +56,24 @@ impl Editor {
         );
     }
 
+    pub(super) fn isearch_query_replace(&mut self, regex: bool) {
+        let Some(search) = self.search() else {
+            return;
+        };
+        let query = search.query().to_owned();
+        let regex = regex || search.is_regex();
+        let start = search.found().map(|found| found.start);
+        self.exit_search();
+        if let Some(start) = start {
+            self.buffers.current_mut().set_point(start);
+        }
+        if query.is_empty() {
+            self.query_replace(regex);
+        } else {
+            self.ask_replacement(query, regex);
+        }
+    }
+
     pub(super) fn exit_replace_prompt(&mut self, purpose: Purpose) {
         let input = self.minibuffer_input();
         match purpose {
@@ -517,6 +535,30 @@ mod tests {
             editor.replacing().unwrap().prompt(),
             "Query replacing foo with bar: (y, n, !, ., ^, q) "
         );
+    }
+
+    #[test]
+    fn m_percent_in_a_search_replaces_its_query_from_the_match() {
+        let mut editor = editor_with("foo x foo foo", 0);
+
+        press(&mut editor, "C-s f o o C-s M-%");
+        assert!(editor.search().is_none());
+        assert_eq!(prompt(&editor), "Query replace foo with: ");
+
+        type_text(&mut editor, "bar");
+        press(&mut editor, "RET !");
+        assert_eq!(editor.buffer().contents(), "foo x bar bar");
+    }
+
+    #[test]
+    fn regexp_searches_hand_over_a_regexp() {
+        for keys in ["C-M-s a . C-M-%", "C-M-s a . M-%", "C-s a . C-M-%"] {
+            let mut editor = editor_with("a1 a2", 0);
+
+            press(&mut editor, keys);
+
+            assert_eq!(prompt(&editor), "Query replace regexp a. with: ", "{keys}");
+        }
     }
 
     #[test]
