@@ -138,6 +138,9 @@ pub enum Command {
     CompilationPreviousError,
     CompileGotoError,
     Customize,
+    ListDiagnostics,
+    GotoDiagnostic,
+    ShowDiagnostic,
     DisplayLineNumbersMode,
     WidgetForward,
     WidgetBackward,
@@ -279,6 +282,7 @@ pub enum Scope {
     Markdown,
     Compilation,
     Customize,
+    Diagnostics,
 }
 
 #[cfg(test)]

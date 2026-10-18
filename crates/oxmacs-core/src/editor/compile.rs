@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::editor::buffers::Mode;
-use crate::editor::errors::Errors;
+use crate::editor::errors::{ErrorSource, Errors};
 use crate::editor::minibuffer::Purpose;
 use crate::editor::{Editor, Effect};
 use crate::files::paths;
@@ -103,6 +103,7 @@ impl Editor {
         }
         let id = JobId(self.next_job);
         self.next_job += 1;
+        self.errors_from = ErrorSource::Compilation;
         self.last_compile = Some(command.clone());
         let shown = paths::abbreviate(&directory, self.home.as_deref());
         let header = format!("Directory: {shown}\n$ {command}\n\n");

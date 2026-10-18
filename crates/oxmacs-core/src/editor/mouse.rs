@@ -45,6 +45,14 @@ impl Editor {
             return;
         }
         let line = self.buffers.current().line_of(position);
+        if clicks == Clicks::Single && !extend && self.diagnostic_on_line(line).is_some() {
+            let buffer = self.buffers.current_mut();
+            buffer.deactivate_mark();
+            buffer.set_point(position);
+            self.drag_anchor = None;
+            self.goto_diagnostic();
+            return;
+        }
         if clicks == Clicks::Single
             && !extend
             && let Some(error) = self.error_on_line(line)

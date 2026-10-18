@@ -210,18 +210,12 @@ impl Editor {
             return;
         };
         let (page, rows) = page(&self.config, state, &location);
+        if let Some(buffer) = self.buffers.get_mut(index) {
+            page.fill(buffer);
+        }
         if let Some(Mode::Customize(state)) = self.buffers.mode_mut(index) {
             state.rows = rows;
             state.styles = page.styles;
-        }
-        if let Some(buffer) = self.buffers.get_mut(index) {
-            let point = buffer.point();
-            let line = buffer.line_of(point);
-            let column = point - buffer.line_start(line);
-            buffer.set_text(&page.text);
-            buffer.mark_saved();
-            let line = line.min(buffer.line_of(buffer.len_chars()));
-            buffer.set_point((buffer.line_start(line) + column).min(buffer.line_end(line)));
         }
     }
 

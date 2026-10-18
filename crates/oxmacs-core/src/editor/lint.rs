@@ -4,16 +4,19 @@ use std::path::{Path, PathBuf};
 
 use crate::config::RustLint;
 use crate::diagnostics::{self, Diagnostic, Output, Severity};
+use crate::editor::errors::ErrorSource;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::text::{Buffer, BufferId, Marker};
 use crate::tools;
 
 #[derive(Debug, Default)]
 pub(super) struct Lints {
-    due: Option<PathBuf>,
+    pub(super) due: Option<PathBuf>,
     run: Option<Run>,
-    diagnostics: Vec<Diagnostic>,
+    pub(super) diagnostics: Vec<Diagnostic>,
     marks: Vec<Mark>,
+    pub(super) root: Option<PathBuf>,
+    pub(super) current: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -133,7 +136,11 @@ impl Editor {
                     .retain(|diagnostic| !diagnostic.path.starts_with(&run.root));
                 self.lints.diagnostics.extend(run.found);
                 self.lints.diagnostics.sort();
+                self.lints.root = Some(run.root);
+                self.lints.current = None;
+                self.errors_from = ErrorSource::Lint;
                 self.mark_diagnostics();
+                self.render_diagnostics_list();
             }
             Outcome::Exited(_) => {
                 let reason = run.failure.unwrap_or_else(|| "failed".to_owned());
@@ -209,6 +216,15 @@ impl Editor {
                 (from..to.max(from + 1), diagnostic.severity)
             })
             .collect()
+    }
+
+    pub(super) fn diagnostic_start(&self, diagnostic: usize) -> Option<usize> {
+        let buffer = self.buffers.current();
+        self.lints
+            .marks
+            .iter()
+            .find(|mark| mark.buffer == buffer.id() && mark.diagnostic == diagnostic)
+            .and_then(|mark| buffer.marker(mark.start))
     }
 
     pub fn echo(&self) -> Option<&str> {

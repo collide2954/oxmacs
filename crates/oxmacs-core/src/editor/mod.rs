@@ -3,6 +3,7 @@ mod clipboard;
 mod comments;
 mod compile;
 mod customize;
+mod diagnostics_list;
 mod dired;
 mod disk;
 mod doctor;
@@ -109,6 +110,7 @@ pub struct Editor {
     markdown_keymap: Keymap,
     compilation_keymap: Keymap,
     customize_keymap: Keymap,
+    diagnostics_keymap: Keymap,
     search_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
@@ -142,6 +144,7 @@ pub struct Editor {
     next_job: u64,
     last_compile: Option<String>,
     lints: lint::Lints,
+    errors_from: errors::ErrorSource,
     config: Config,
 }
 
@@ -174,6 +177,7 @@ impl Editor {
             markdown_keymap: bindings::markdown(),
             compilation_keymap: bindings::compilation(),
             customize_keymap: bindings::customize(),
+            diagnostics_keymap: bindings::diagnostics(),
             search_keymap: bindings::search(),
             pending: Vec::new(),
             last_key: None,
@@ -207,6 +211,7 @@ impl Editor {
             next_job: 0,
             last_compile: None,
             lints: lint::Lints::default(),
+            errors_from: errors::ErrorSource::default(),
             config: Config::default(),
         }
     }
@@ -397,6 +402,7 @@ impl Editor {
             Scope::Markdown => Some(&self.markdown_keymap),
             Scope::Compilation => Some(&self.compilation_keymap),
             Scope::Customize => Some(&self.customize_keymap),
+            Scope::Diagnostics => Some(&self.diagnostics_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search => None,
         }
     }
@@ -408,6 +414,7 @@ impl Editor {
             Some(Mode::Doctor(_)) => Scope::Doctor,
             Some(Mode::Compilation(_)) => Scope::Compilation,
             Some(Mode::Customize(_)) => Scope::Customize,
+            Some(Mode::Diagnostics(_)) => Scope::Diagnostics,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
                 Scope::Markdown
@@ -432,6 +439,7 @@ impl Editor {
                     compilation.errors.line_style(line, &buffer.line_text(line))
                 }),
             Some(Mode::Customize(state)) => state.line_style(line),
+            Some(Mode::Diagnostics(list)) => list.line_style(line),
             Some(Mode::Preview(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,
@@ -617,6 +625,9 @@ impl Editor {
             Command::CompilationPreviousError => self.compilation_next_error(false),
             Command::CompileGotoError => self.compile_goto_error(),
             Command::Customize => self.customize(),
+            Command::ListDiagnostics => self.list_diagnostics(),
+            Command::GotoDiagnostic => self.goto_diagnostic(),
+            Command::ShowDiagnostic => self.show_diagnostic(),
             Command::DisplayLineNumbersMode => self.display_line_numbers_mode(),
             Command::WidgetForward => self.widget_forward(true),
             Command::WidgetBackward => self.widget_forward(false),

@@ -5,6 +5,7 @@ use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::compile::FINISHED;
 use crate::editor::tiling::Axis;
+use crate::text::BufferId;
 use crate::theme::Highlight;
 
 const PANICKED: &str = "panicked at ";
@@ -91,12 +92,7 @@ impl Errors {
     }
 
     fn step(&self, forward: bool) -> Option<usize> {
-        match (self.current, forward) {
-            (None, true) => (!self.locations.is_empty()).then_some(0),
-            (None, false) => None,
-            (Some(index), true) => Some(index + 1).filter(|next| *next < self.locations.len()),
-            (Some(index), false) => index.checked_sub(1),
-        }
+        step(self.current, forward, self.locations.len())
     }
 
     fn beyond(&self, line: usize, forward: bool) -> Option<usize> {
@@ -115,6 +111,22 @@ impl Errors {
         self.locations
             .iter()
             .position(|location| (location.start..=location.end).contains(&line))
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum ErrorSource {
+    #[default]
+    Compilation,
+    Lint,
+}
+
+pub(super) fn step(current: Option<usize>, forward: bool, count: usize) -> Option<usize> {
+    match (current, forward) {
+        (None, true) => (count > 0).then_some(0),
+        (None, false) => None,
+        (Some(index), true) => Some(index + 1).filter(|next| *next < count),
+        (Some(index), false) => index.checked_sub(1),
     }
 }
 
@@ -185,6 +197,10 @@ impl Editor {
     }
 
     pub(super) fn next_error(&mut self, forward: bool) {
+        if self.errors_from == ErrorSource::Lint && !self.in_compilation() {
+            self.next_lint(forward);
+            return;
+        }
         let Some(errors) = self.errors() else {
             self.show_message("No error locations");
             return;
@@ -224,7 +240,7 @@ impl Editor {
         }
     }
 
-    fn report_no_more_errors(&mut self, forward: bool) {
+    pub(super) fn report_no_more_errors(&mut self, forward: bool) {
         self.show_message(if forward {
             "Moved past last error"
         } else {
@@ -252,6 +268,15 @@ impl Editor {
             .position(|location| location.line == line)
     }
 
+    pub(super) fn leave_window_showing(&mut self, output: BufferId) {
+        if self.buffers.current().id() == output {
+            if self.tiling().windows().len() == 1 {
+                self.split_window(Axis::Columns);
+            }
+            self.other_window();
+        }
+    }
+
     pub(super) fn visit_error(&mut self, index: usize) {
         let Some(compilation) = self.compilation_mut() else {
             return;
@@ -265,12 +290,7 @@ impl Editor {
         };
         let (output, start) = (output.id(), output.line_start(location.start));
         self.point_windows_at(output, start);
-        if self.buffers.current().id() == output {
-            if self.tiling().windows().len() == 1 {
-                self.split_window(Axis::Columns);
-            }
-            self.other_window();
-        }
+        self.leave_window_showing(output);
         if !location.path.is_file() {
             self.show_message(format!("No such file: {}", location.path.display()));
             return;

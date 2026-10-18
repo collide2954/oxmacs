@@ -1,4 +1,5 @@
 use crate::display::LineStyle;
+use crate::text::Buffer;
 use crate::theme::Highlight;
 
 #[derive(Debug, Default)]
@@ -26,6 +27,16 @@ impl Page {
     pub(super) fn heading(&mut self, title: &str) {
         self.line(&[(title, Some(Highlight::Heading))]);
     }
+
+    pub(super) fn fill(&self, buffer: &mut Buffer) {
+        let point = buffer.point();
+        let line = buffer.line_of(point);
+        let column = point - buffer.line_start(line);
+        buffer.set_text(&self.text);
+        buffer.mark_saved();
+        let line = line.min(buffer.line_of(buffer.len_chars()));
+        buffer.set_point((buffer.line_start(line) + column).min(buffer.line_end(line)));
+    }
 }
 
 #[cfg(test)]
@@ -42,5 +53,20 @@ mod tests {
         assert_eq!(page.text, "Title\nkey value\n");
         assert_eq!(page.styles[0].spans, [(0..5, Highlight::Heading)]);
         assert_eq!(page.styles[1].spans, [(4..9, Highlight::Link)]);
+    }
+
+    #[test]
+    fn filling_a_buffer_keeps_point_on_its_line_and_column() {
+        let mut page = Page::default();
+        page.line(&[("first line", None)]);
+        page.line(&[("second", None)]);
+        let mut buffer = Buffer::with_text("t", "old\nsecond line here\n");
+        buffer.set_point(4 + 8);
+
+        page.fill(&mut buffer);
+
+        assert_eq!(buffer.contents(), "first line\nsecond\n");
+        assert_eq!(buffer.point(), 11 + 6);
+        assert!(!buffer.is_modified());
     }
 }

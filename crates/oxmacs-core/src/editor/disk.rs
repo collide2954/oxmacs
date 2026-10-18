@@ -80,6 +80,10 @@ impl Editor {
             self.revert_settings();
             return;
         }
+        if self.in_diagnostics_list() {
+            self.recheck();
+            return;
+        }
         if matches!(self.buffers.mode(0), Some(Mode::Doctor(_))) {
             self.oxmacs_doctor();
             return;

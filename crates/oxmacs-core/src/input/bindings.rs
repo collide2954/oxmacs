@@ -183,6 +183,7 @@ const RUST: &[(&str, Command)] = &[
     ("C-c C-c C-t", Command::RustTest),
     ("C-c C-c C-r", Command::RustRun),
     ("C-c C-c C-l", Command::RustRunClippy),
+    ("C-c !", Command::ListDiagnostics),
 ];
 
 const MARKDOWN: &[(&str, Command)] = &[
@@ -215,6 +216,15 @@ const CUSTOMIZE: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
+const DIAGNOSTICS: &[(&str, Command)] = &[
+    ("RET", Command::GotoDiagnostic),
+    ("SPC", Command::ShowDiagnostic),
+    ("n", Command::NextLine),
+    ("p", Command::PreviousLine),
+    ("g", Command::RevertBuffer),
+    ("q", Command::QuitWindow),
+];
+
 pub fn global() -> Keymap {
     build(GLOBAL)
 }
@@ -241,6 +251,10 @@ pub fn compilation() -> Keymap {
 
 pub fn customize() -> Keymap {
     build(CUSTOMIZE)
+}
+
+pub fn diagnostics() -> Keymap {
+    build(DIAGNOSTICS)
 }
 
 pub fn search() -> Keymap {
@@ -315,6 +329,11 @@ mod tests {
     #[test]
     fn every_customize_binding_resolves_to_its_command() {
         assert_resolves(&customize(), CUSTOMIZE);
+    }
+
+    #[test]
+    fn every_diagnostics_binding_resolves_to_its_command() {
+        assert_resolves(&diagnostics(), DIAGNOSTICS);
     }
 
     #[test]
