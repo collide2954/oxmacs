@@ -404,7 +404,7 @@ fn capitalize(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use crate::editor::test_support::{editor_with, press, type_text};
-    use crate::editor::{Editor, Effect};
+    use crate::editor::{Cell, Clicks, Editor, Effect};
     use crate::theme::Highlight;
 
     fn prompt(editor: &Editor) -> String {
@@ -747,6 +747,23 @@ mod tests {
         editor.buffers.current_mut().set_text("foo foo!");
 
         assert_eq!(editor.line_marks(0), [(0..3, Highlight::SearchCurrent)]);
+    }
+
+    #[test]
+    fn the_mouse_ends_the_search_where_it_is() {
+        for scroll in [false, true] {
+            let mut editor = editor_with("foo bar", 0);
+            press(&mut editor, "C-s b a r");
+
+            if scroll {
+                editor.scroll_lines(1);
+            } else {
+                editor.click(Cell { row: 0, column: 1 }, Clicks::Single, false);
+            }
+
+            assert!(editor.search().is_none());
+            assert_eq!(editor.buffer().mark(), Some(0));
+        }
     }
 
     #[test]

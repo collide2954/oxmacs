@@ -96,6 +96,7 @@ impl Editor {
     }
 
     pub fn scroll_lines(&mut self, delta: isize) {
+        self.exit_search();
         let layout = Layout::new(
             self.buffers.current(),
             self.viewport.wrap_width(),
@@ -124,6 +125,7 @@ impl Editor {
     }
 
     fn end_command_chain(&mut self) {
+        self.exit_search();
         self.last_command = None;
         self.goal_column = None;
         self.shift_selection = false;
