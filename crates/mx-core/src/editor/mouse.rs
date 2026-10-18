@@ -19,6 +19,14 @@ impl Editor {
     pub fn click(&mut self, cell: Cell, clicks: Clicks, extend: bool) {
         self.end_command_chain();
         let position = self.position_at(cell);
+        if clicks == Clicks::Double && self.buffers.listing(0).is_some() {
+            let buffer = self.buffers.current_mut();
+            buffer.deactivate_mark();
+            buffer.set_point(position);
+            self.drag_anchor = None;
+            self.dired_find_file();
+            return;
+        }
         let buffer = self.buffers.current_mut();
         match clicks {
             Clicks::Single if extend => {

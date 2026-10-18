@@ -1289,6 +1289,35 @@ mod tests {
     }
 
     #[test]
+    fn double_clicking_an_entry_opens_it() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+        let cell = |line| crate::editor::Cell { line, column: 30 };
+
+        editor.click(cell(3), crate::editor::Clicks::Single, false);
+        assert_eq!(editor.buffer().line_of(editor.buffer().point()), 3);
+        assert_eq!(editor.buffer().name(), dir_name(dir.path()));
+
+        editor.click(cell(3), crate::editor::Clicks::Double, false);
+        assert_eq!(editor.buffer().name(), "a.txt");
+        assert_eq!(editor.buffer().selection(), None);
+    }
+
+    #[test]
+    fn double_clicking_a_directory_enters_it() {
+        let (dir, mut editor) = workspace();
+        listed(&mut editor, &dir);
+
+        editor.click(
+            crate::editor::Cell { line: 2, column: 0 },
+            crate::editor::Clicks::Double,
+            false,
+        );
+
+        assert_eq!(editor.default_directory(), dir.path().join("sub"));
+    }
+
+    #[test]
     fn listings_of_directories_sharing_a_name_show_their_parent() {
         let (dir, mut editor) = workspace();
         for parent in ["x", "y"] {
