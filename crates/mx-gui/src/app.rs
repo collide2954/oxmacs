@@ -65,7 +65,13 @@ impl App {
     pub fn view(&self) -> Element<'_, Message> {
         let line = |content: String| text(content).font(EDITOR_FONT).size(TEXT_SIZE);
         column![
-            BufferView::new(&self.editor, EDITOR_FONT, TEXT_SIZE, Message::RowsChanged),
+            container(BufferView::new(
+                &self.editor,
+                EDITOR_FONT,
+                TEXT_SIZE,
+                Message::RowsChanged
+            ))
+            .padding([0, 4]),
             container(line(self.editor.mode_line()))
                 .width(Length::Fill)
                 .padding([1, 4])
@@ -103,6 +109,23 @@ mod tests {
             text: Some(c.into()),
             repeat: false,
         }));
+    }
+
+    #[test]
+    fn view_shows_the_mode_line() {
+        let app = App::default();
+        let mut ui = iced_test::simulator(app.view());
+
+        assert!(ui.find("*scratch*   L1 C0").is_ok());
+    }
+
+    #[test]
+    fn view_echoes_the_editor_message() {
+        let mut app = App::default();
+        press(&mut app, "q", Modifiers::CTRL);
+        let mut ui = iced_test::simulator(app.view());
+
+        assert!(ui.find("C-q is undefined").is_ok());
     }
 
     #[test]

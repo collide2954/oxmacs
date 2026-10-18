@@ -11,3 +11,6 @@ workspace = true
 [dependencies]
 iced.workspace = true
 mx-core.workspace = true
+
+[dev-dependencies]
+iced_test.workspace = true
