@@ -1,3 +1,8 @@
+mod editing;
+mod movement;
+#[cfg(test)]
+mod test_support;
+
 use std::mem;
 
 use crate::command::Command;
@@ -163,25 +168,6 @@ impl Editor {
         }
         self.viewport.reveal(self.point_line());
     }
-
-    fn move_point(&mut self, motion: impl FnOnce(&Buffer, usize) -> usize) {
-        let target = motion(&self.buffer, self.buffer.point());
-        self.buffer.set_point(target);
-    }
-
-    fn move_vertically(&mut self, lines: isize, goal_column: Option<usize>) {
-        let point = self.buffer.point();
-        let goal = goal_column.unwrap_or_else(|| self.buffer.column(point));
-        self.buffer
-            .set_point(motion::vertical(&self.buffer, point, lines, goal));
-        self.goal_column = Some(goal);
-    }
-
-    fn self_insert(&mut self) {
-        if let Some(KeyCode::Char(c)) = self.last_key.map(Key::code) {
-            self.buffer.insert(c.encode_utf8(&mut [0; 4]));
-        }
-    }
 }
 
 fn is_keyboard_quit(key: Key) -> bool {
@@ -195,14 +181,8 @@ fn inserts_itself(key: Key) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::test_support::{editor_with, press};
     use super::*;
-
-    fn press(editor: &mut Editor, notation: &str) {
-        let sequence: KeySequence = notation.parse().unwrap();
-        for key in sequence.keys() {
-            editor.handle_key(*key);
-        }
-    }
 
     #[test]
     fn starts_with_empty_scratch_buffer() {
@@ -210,16 +190,6 @@ mod tests {
 
         assert_eq!(editor.buffer().name(), "*scratch*");
         assert_eq!(editor.buffer().contents(), "");
-    }
-
-    #[test]
-    fn printable_keys_insert_themselves() {
-        let mut editor = Editor::new();
-
-        press(&mut editor, "h i SPC A");
-
-        assert_eq!(editor.buffer().contents(), "hi A");
-        assert_eq!(editor.buffer().point(), 4);
     }
 
     #[test]
@@ -278,40 +248,6 @@ mod tests {
         press(&mut editor, "C-x C-c");
 
         assert!(editor.should_quit());
-    }
-
-    fn editor_with(text: &str, point: usize) -> Editor {
-        let mut buffer = Buffer::with_text("t", text);
-        buffer.set_point(point);
-        Editor::with_buffer(buffer)
-    }
-
-    fn point_after(text: &str, point: usize, notation: &str) -> usize {
-        let mut editor = editor_with(text, point);
-        press(&mut editor, notation);
-        editor.buffer().point()
-    }
-
-    fn contents_after(text: &str, point: usize, notation: &str) -> (String, usize) {
-        let mut editor = editor_with(text, point);
-        press(&mut editor, notation);
-        (editor.buffer().contents(), editor.buffer().point())
-    }
-
-    #[test]
-    fn return_inserts_a_newline() {
-        assert_eq!(contents_after("ab", 1, "RET"), ("a\nb".to_owned(), 2));
-    }
-
-    #[test]
-    fn delete_char_removes_char_after_point() {
-        assert_eq!(contents_after("abc", 1, "C-d"), ("ac".to_owned(), 1));
-        assert_eq!(contents_after("abc", 1, "<delete>"), ("ac".to_owned(), 1));
-    }
-
-    #[test]
-    fn delete_backward_char_removes_char_before_point() {
-        assert_eq!(contents_after("abc", 1, "DEL"), ("bc".to_owned(), 0));
     }
 
     fn numbered_lines(count: usize) -> String {
@@ -392,58 +328,5 @@ mod tests {
         editor.show_message("config.toml: line 2: oops");
 
         assert_eq!(editor.message(), Some("config.toml: line 2: oops"));
-    }
-
-    #[test]
-    fn char_motions() {
-        assert_eq!(point_after("hello", 2, "C-f"), 3);
-        assert_eq!(point_after("hello", 2, "<right>"), 3);
-        assert_eq!(point_after("hello", 2, "C-b"), 1);
-        assert_eq!(point_after("hello", 2, "<left>"), 1);
-    }
-
-    #[test]
-    fn line_motions() {
-        let text = "one\ntwo\nthree";
-        assert_eq!(point_after(text, 5, "C-a"), 4);
-        assert_eq!(point_after(text, 5, "<home>"), 4);
-        assert_eq!(point_after(text, 5, "C-e"), 7);
-        assert_eq!(point_after(text, 5, "<end>"), 7);
-        assert_eq!(point_after(text, 5, "C-n"), 9);
-        assert_eq!(point_after(text, 5, "<down>"), 9);
-        assert_eq!(point_after(text, 5, "C-p"), 1);
-        assert_eq!(point_after(text, 5, "<up>"), 1);
-    }
-
-    #[test]
-    fn consecutive_vertical_motions_keep_goal_column() {
-        let text = "abcdef\nab\nabcdef";
-        assert_eq!(point_after(text, 5, "C-n"), 9);
-        assert_eq!(point_after(text, 5, "C-n C-n"), 15);
-        assert_eq!(point_after(text, 15, "C-p C-p"), 5);
-    }
-
-    #[test]
-    fn other_commands_reset_goal_column() {
-        let text = "abcdef\nab\nabcdef";
-        assert_eq!(point_after(text, 5, "C-n C-b C-n"), 11);
-    }
-
-    #[test]
-    fn word_motions() {
-        let text = "alpha beta gamma";
-        assert_eq!(point_after(text, 0, "M-f"), 5);
-        assert_eq!(point_after(text, 0, "C-<right>"), 5);
-        assert_eq!(point_after(text, 16, "M-b"), 11);
-        assert_eq!(point_after(text, 16, "C-<left>"), 11);
-    }
-
-    #[test]
-    fn buffer_motions() {
-        let text = "one\ntwo";
-        assert_eq!(point_after(text, 5, "M-<"), 0);
-        assert_eq!(point_after(text, 5, "C-<home>"), 0);
-        assert_eq!(point_after(text, 1, "M->"), 7);
-        assert_eq!(point_after(text, 1, "C-<end>"), 7);
     }
 }
