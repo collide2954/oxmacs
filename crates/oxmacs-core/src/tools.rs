@@ -93,6 +93,51 @@ pub fn rustfmt(text: &str, directory: &Path, edition: &str) -> Result<String, St
         .map_or_else(|| output.status.to_string(), |line| line.trim().to_owned()))
 }
 
+pub fn cargo_root(directory: &Path) -> Option<PathBuf> {
+    let manifests: Vec<(PathBuf, String)> = directory
+        .ancestors()
+        .filter_map(|ancestor| {
+            let manifest = fs::read_to_string(ancestor.join("Cargo.toml")).ok()?;
+            Some((ancestor.to_owned(), manifest))
+        })
+        .collect();
+    manifests
+        .iter()
+        .rev()
+        .find(|(_, manifest)| manifest.lines().any(|line| line.trim() == "[workspace]"))
+        .or_else(|| manifests.first())
+        .map(|(root, _)| root.clone())
+}
+
+pub fn split_command(line: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut quoted = false;
+    let mut started = false;
+    for c in line.chars() {
+        match c {
+            '"' => {
+                quoted = !quoted;
+                started = true;
+            }
+            c if c.is_whitespace() && !quoted => {
+                if started {
+                    words.push(std::mem::take(&mut word));
+                    started = false;
+                }
+            }
+            c => {
+                word.push(c);
+                started = true;
+            }
+        }
+    }
+    if started {
+        words.push(word);
+    }
+    words
+}
+
 pub fn cargo_edition(directory: &Path) -> &'static str {
     directory
         .ancestors()
@@ -169,6 +214,31 @@ mod tests {
 
         fs::write(member.join("Cargo.toml"), "[package]\nedition = \"2021\"\n").unwrap();
         assert_eq!(cargo_edition(&member.join("src")), "2021");
+    }
+
+    #[test]
+    fn cargo_roots_prefer_the_workspace() {
+        let root = tempfile::tempdir().unwrap();
+        let member = root.path().join("crates").join("a");
+        fs::create_dir_all(member.join("src")).unwrap();
+        fs::write(member.join("Cargo.toml"), "[package]\n").unwrap();
+        assert_eq!(cargo_root(&member.join("src")), Some(member.clone()));
+
+        fs::write(root.path().join("Cargo.toml"), "[workspace]\n").unwrap();
+        assert_eq!(
+            cargo_root(&member.join("src")),
+            Some(root.path().to_owned())
+        );
+    }
+
+    #[test]
+    fn command_lines_split_on_spaces_outside_quotes() {
+        assert_eq!(split_command("cargo  build"), ["cargo", "build"]);
+        assert_eq!(
+            split_command("cargo test \"two words\" \"\""),
+            ["cargo", "test", "two words", ""]
+        );
+        assert_eq!(split_command("   "), Vec::<String>::new());
     }
 
     #[test]
