@@ -49,6 +49,7 @@ pub use minibuffer::{Choice, Completion, Minibuffer};
 pub use mouse::{Cell, Clicks};
 pub use numbers::Gutter;
 pub use pane::{Pane, ScreenRow};
+pub use preview::PreviewScroll;
 pub use question::Question;
 pub use replace::Replace;
 pub use tiling::{Axis, Rect, Tiling, WindowId};
@@ -68,7 +69,7 @@ use crate::dired::Mark;
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::syntax::Language;
-use crate::text::{Buffer, motion};
+use crate::text::{Buffer, BufferId, motion};
 use crate::theme::{self, Appearance, Highlight, Theme};
 use crate::tools::{self, Probe};
 
@@ -118,6 +119,7 @@ pub struct Editor {
     rust_keymap: Keymap,
     r_keymap: Keymap,
     markdown_keymap: Keymap,
+    preview_keymap: Keymap,
     compilation_keymap: Keymap,
     customize_keymap: Keymap,
     diagnostics_keymap: Keymap,
@@ -131,6 +133,7 @@ pub struct Editor {
     typed_in_step: usize,
     drag_anchor: Option<usize>,
     line_anchor: Option<usize>,
+    preview_followed: Option<(BufferId, usize)>,
     primary: Option<Range<usize>>,
     effects: Vec<Effect>,
     clipboard_history: Vec<String>,
@@ -187,6 +190,7 @@ impl Editor {
             rust_keymap: bindings::rust(),
             r_keymap: bindings::r(),
             markdown_keymap: bindings::markdown(),
+            preview_keymap: bindings::preview(),
             compilation_keymap: bindings::compilation(),
             customize_keymap: bindings::customize(),
             diagnostics_keymap: bindings::diagnostics(),
@@ -200,6 +204,7 @@ impl Editor {
             typed_in_step: 0,
             drag_anchor: None,
             line_anchor: None,
+            preview_followed: None,
             primary: None,
             effects: Vec::new(),
             clipboard_history: Vec::new(),
@@ -414,6 +419,7 @@ impl Editor {
             Scope::Rust => Some(&self.rust_keymap),
             Scope::R => Some(&self.r_keymap),
             Scope::Markdown => Some(&self.markdown_keymap),
+            Scope::Preview => Some(&self.preview_keymap),
             Scope::Compilation => Some(&self.compilation_keymap),
             Scope::Customize => Some(&self.customize_keymap),
             Scope::Diagnostics => Some(&self.diagnostics_keymap),
@@ -434,7 +440,8 @@ impl Editor {
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
                 Scope::Markdown
             }
-            Some(Mode::Text(_) | Mode::Preview(_)) | None => Scope::Global,
+            Some(Mode::Preview(_)) => Scope::Preview,
+            Some(Mode::Text(_)) | None => Scope::Global,
         }
     }
 
@@ -504,6 +511,9 @@ impl Editor {
 
     #[expect(clippy::too_many_lines, reason = "one arm per command")]
     fn perform(&mut self, command: Command, goal_column: Option<usize>, previous: Option<Command>) {
+        if self.scroll_preview(command) {
+            return;
+        }
         match command {
             Command::SelfInsertCommand => self.self_insert(),
             Command::Newline => self.newline(),
@@ -605,6 +615,8 @@ impl Editor {
             Command::MarkdownMode => self.set_major_mode(Some(Language::Markdown)),
             Command::RMode => self.set_major_mode(Some(Language::R)),
             Command::RInsertAssignment => self.insert_operator("<-"),
+            Command::ScrollUpCommand => self.scroll_page(true),
+            Command::ScrollDownCommand => self.scroll_page(false),
             Command::RInsertPipe => self.insert_operator("|>"),
             Command::TextMode => self.set_major_mode(None),
             Command::OxmacsDoctor => self.oxmacs_doctor(),

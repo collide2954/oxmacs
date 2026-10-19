@@ -37,6 +37,10 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-<home>", Command::BeginningOfBuffer),
     ("M->", Command::EndOfBuffer),
     ("C-<end>", Command::EndOfBuffer),
+    ("C-v", Command::ScrollUpCommand),
+    ("<next>", Command::ScrollUpCommand),
+    ("M-v", Command::ScrollDownCommand),
+    ("<prior>", Command::ScrollDownCommand),
     ("C-M-a", Command::BeginningOfDefun),
     ("C-M-e", Command::EndOfDefun),
     ("C-M-f", Command::ForwardSexp),
@@ -191,6 +195,12 @@ const R: &[(&str, Command)] = &[
     ("C-S-m", Command::RInsertPipe),
 ];
 
+const PREVIEW: &[(&str, Command)] = &[
+    ("SPC", Command::ScrollUpCommand),
+    ("DEL", Command::ScrollDownCommand),
+    ("q", Command::QuitWindow),
+];
+
 const MARKDOWN: &[(&str, Command)] = &[
     ("M-RET", Command::MarkdownInsertListItem),
     ("M-<left>", Command::MarkdownPromote),
@@ -248,6 +258,10 @@ pub fn rust() -> Keymap {
 
 pub fn r() -> Keymap {
     build(R)
+}
+
+pub fn preview() -> Keymap {
+    build(PREVIEW)
 }
 
 pub fn markdown() -> Keymap {
@@ -328,6 +342,11 @@ mod tests {
     #[test]
     fn every_r_binding_resolves_to_its_command() {
         assert_resolves(&r(), R);
+    }
+
+    #[test]
+    fn every_preview_binding_resolves_to_its_command() {
+        assert_resolves(&preview(), PREVIEW);
     }
 
     #[test]

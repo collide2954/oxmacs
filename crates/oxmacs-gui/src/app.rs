@@ -5,8 +5,10 @@ use iced::font::Family;
 use iced::futures::channel::mpsc;
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
+use iced::widget::scrollable::{AbsoluteOffset, RelativeOffset};
 use iced::widget::{
-    Column, Row, column, container, markdown, responsive, row, scrollable, space, text,
+    self, Column, Row, column, container, markdown, mouse_area, operation, responsive, row,
+    scrollable, sensor, space, text,
 };
 use iced::{
     Animation, Element, Event, Font, Length, Subscription, Task, Theme, clipboard, event, keyboard,
@@ -16,7 +18,9 @@ use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{self, Config, ConfigError};
-use oxmacs_core::editor::{Axis, Editor, Effect, Job, JobId, Outcome, Tiling, WindowId};
+use oxmacs_core::editor::{
+    Axis, Editor, Effect, Job, JobId, Outcome, PreviewScroll, Tiling, WindowId,
+};
 use oxmacs_core::process::{self, Handle};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
@@ -43,6 +47,7 @@ pub struct App {
     clock: Option<String>,
     previews: Vec<(BufferId, u64, markdown::Content)>,
     jobs: Vec<(JobId, Handle)>,
+    preview_heights: Vec<(WindowId, f32)>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +69,8 @@ pub enum Message {
     OpenLink(markdown::Uri),
     Job(JobId, process::Event),
     AutoSave,
+    FocusWindow(WindowId),
+    PreviewSized(WindowId, f32),
 }
 
 impl Default for App {
@@ -95,6 +102,7 @@ impl App {
             clock: None,
             previews: Vec::new(),
             jobs: Vec::new(),
+            preview_heights: Vec::new(),
         };
         app.configure(&config);
         app
@@ -337,6 +345,15 @@ impl App {
                 }
             }
             Message::AutoSave => self.editor.auto_save(),
+            Message::FocusWindow(window) => {
+                if self.focus(window) {
+                    self.last_input = self.now;
+                }
+            }
+            Message::PreviewSized(window, height) => {
+                self.preview_heights.retain(|(known, _)| *known != window);
+                self.preview_heights.push((window, height));
+            }
             Message::Job(job, process::Event::Line(line)) => self.editor.job_output(job, &line),
             Message::Job(job, process::Event::Finished(outcome)) => {
                 self.jobs.retain(|(id, _)| *id != job);
@@ -373,11 +390,32 @@ impl App {
                 }
                 Task::none()
             }
+            Effect::ScrollPreview(window, scroll) => self.scroll_preview(window, scroll),
             Effect::Reconfigure => {
                 let config = self.editor.config().clone();
                 self.configure(&config);
                 Task::none()
             }
+        }
+    }
+
+    fn scroll_preview(&self, window: WindowId, scroll: PreviewScroll) -> Task<Message> {
+        let line = self.text_size * 1.6;
+        let page = self
+            .preview_heights
+            .iter()
+            .find(|(known, _)| *known == window)
+            .map_or(line * 20.0, |(_, height)| height * 0.9);
+        let id = preview_id(window);
+        match preview_move(scroll, line, page) {
+            PreviewMove::By(y) => operation::scroll_by(id, AbsoluteOffset { x: 0.0, y }),
+            PreviewMove::To(y) => operation::snap_to(
+                id,
+                RelativeOffset {
+                    x: None,
+                    y: Some(y),
+                },
+            ),
         }
     }
 
@@ -527,12 +565,18 @@ impl App {
                     self.text_size,
                     markdown::Style::from_palette(self.theme().palette()),
                 );
-                scrollable(
+                let rendered = scrollable(
                     container(markdown::view(content.items(), settings).map(Message::OpenLink))
                         .padding(12),
                 )
-                .height(Length::Fill)
-                .into()
+                .id(preview_id(window))
+                .height(Length::Fill);
+                let sized = sensor(rendered)
+                    .on_show(move |size| Message::PreviewSized(window, size.height))
+                    .on_resize(move |size| Message::PreviewSized(window, size.height));
+                mouse_area(sized)
+                    .on_press(Message::FocusWindow(window))
+                    .into()
             }
             None => container(BufferView::new(
                 pane,
@@ -587,6 +631,28 @@ const AUTO_SAVE_DELAY: Duration = Duration::from_millis(1500);
 
 fn open_externally(path: &Path) -> Result<(), String> {
     open::that_detached(path).map_err(|error| format!("{}: {error}", path.display()))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PreviewMove {
+    By(f32),
+    To(f32),
+}
+
+fn preview_move(scroll: PreviewScroll, line: f32, page: f32) -> PreviewMove {
+    match scroll {
+        PreviewScroll::Lines(count) => PreviewMove::By(units::signed_to_f32(count) * line),
+        PreviewScroll::Pages(count) => PreviewMove::By(units::signed_to_f32(count) * page),
+        PreviewScroll::Top => PreviewMove::To(0.0),
+        PreviewScroll::Bottom => PreviewMove::To(1.0),
+        PreviewScroll::Follow { line, lines } => {
+            PreviewMove::To(units::to_f32(line) / units::to_f32(lines.saturating_sub(1).max(1)))
+        }
+    }
+}
+
+fn preview_id(window: WindowId) -> widget::Id {
+    widget::Id::from(format!("preview-{window:?}"))
 }
 
 fn transition(state: bool, duration: Duration) -> Animation<bool> {
@@ -846,6 +912,53 @@ mod tests {
 
         assert!(!app.editor().buffer().is_modified());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "xfn main() {}\n");
+    }
+
+    #[test]
+    fn preview_scrolls_move_by_lines_and_pages_or_snap() {
+        assert_eq!(
+            preview_move(PreviewScroll::Lines(2), 10.0, 100.0),
+            PreviewMove::By(20.0)
+        );
+        assert_eq!(
+            preview_move(PreviewScroll::Pages(-1), 10.0, 100.0),
+            PreviewMove::By(-100.0)
+        );
+        assert_eq!(
+            preview_move(PreviewScroll::Top, 10.0, 100.0),
+            PreviewMove::To(0.0)
+        );
+        assert_eq!(
+            preview_move(PreviewScroll::Bottom, 10.0, 100.0),
+            PreviewMove::To(1.0)
+        );
+        assert_eq!(
+            preview_move(PreviewScroll::Follow { line: 1, lines: 3 }, 10.0, 100.0),
+            PreviewMove::To(0.5)
+        );
+    }
+
+    #[test]
+    fn clicking_a_window_without_text_selects_it() {
+        let mut app = App::default();
+        press(&mut app, "x", Modifiers::CTRL);
+        press(&mut app, "3", Modifiers::empty());
+        let other = app.editor().tiling().windows()[1];
+
+        let _ = app.update(Message::FocusWindow(other));
+
+        assert_eq!(app.editor().selected_window(), other);
+    }
+
+    #[test]
+    fn preview_sizes_are_remembered_per_window() {
+        let mut app = App::default();
+        let window = app.editor().selected_window();
+
+        let _ = app.update(Message::PreviewSized(window, 300.0));
+        let _ = app.update(Message::PreviewSized(window, 400.0));
+
+        assert_eq!(app.preview_heights, [(window, 400.0)]);
     }
 
     #[test]

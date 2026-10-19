@@ -1,8 +1,66 @@
-use crate::editor::Editor;
+use crate::command::Command;
 use crate::editor::buffers::Mode;
+use crate::editor::{Editor, Effect, WindowId};
 use crate::text::{Buffer, BufferId};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreviewScroll {
+    Lines(isize),
+    Pages(isize),
+    Top,
+    Bottom,
+    Follow { line: usize, lines: usize },
+}
+
 impl Editor {
+    pub(super) fn scroll_preview(&mut self, command: Command) -> bool {
+        if !matches!(self.buffers.mode(0), Some(Mode::Preview(_))) {
+            return false;
+        }
+        let scroll = match command {
+            Command::NextLine => PreviewScroll::Lines(1),
+            Command::PreviousLine => PreviewScroll::Lines(-1),
+            Command::ScrollUpCommand => PreviewScroll::Pages(1),
+            Command::ScrollDownCommand => PreviewScroll::Pages(-1),
+            Command::BeginningOfBuffer => PreviewScroll::Top,
+            Command::EndOfBuffer => PreviewScroll::Bottom,
+            _ => return false,
+        };
+        self.effects
+            .push(Effect::ScrollPreview(self.selected_window(), scroll));
+        true
+    }
+
+    pub(super) fn follow_source(&mut self) {
+        let buffer = self.buffers.current();
+        let id = buffer.id();
+        let line = buffer.line_of(buffer.point());
+        let lines = buffer.line_of(buffer.len_chars()) + 1;
+        if self.preview_followed == Some((id, line)) {
+            return;
+        }
+        let windows: Vec<WindowId> = self
+            .tiling()
+            .windows()
+            .into_iter()
+            .filter(|window| {
+                self.pane_of(*window)
+                    .and_then(|pane| pane.preview_source())
+                    .is_some_and(|source| source.id() == id)
+            })
+            .collect();
+        if windows.is_empty() {
+            return;
+        }
+        self.preview_followed = Some((id, line));
+        for window in windows {
+            self.effects.push(Effect::ScrollPreview(
+                window,
+                PreviewScroll::Follow { line, lines },
+            ));
+        }
+    }
+
     fn preview_index(&self, source: BufferId) -> Option<usize> {
         (0..self.buffers.len()).find(
             |index| matches!(self.buffers.mode(*index), Some(Mode::Preview(id)) if *id == source),
@@ -42,8 +100,8 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::Editor;
     use crate::editor::test_support::{editor_with, press};
+    use crate::editor::{Editor, Effect, PreviewScroll};
     use crate::syntax::Language;
 
     fn markdown() -> Editor {
@@ -85,6 +143,66 @@ mod tests {
         press(&mut editor, "C-c C-c p C-c C-c p");
 
         assert_eq!(editor.tiling().windows(), [origin]);
+    }
+
+    fn previewed(text: &str) -> Editor {
+        let mut editor = editor_with(text, 0);
+        editor.set_major_mode(Some(Language::Markdown));
+        press(&mut editor, "C-c C-c p");
+        editor.take_effects();
+        editor
+    }
+
+    #[test]
+    fn keys_in_the_preview_scroll_it() {
+        let mut editor = previewed("# Title\n\ntext\n");
+        press(&mut editor, "C-x o");
+        let preview = editor.selected_window();
+        editor.take_effects();
+
+        for (keys, scroll) in [
+            ("C-n", PreviewScroll::Lines(1)),
+            ("<up>", PreviewScroll::Lines(-1)),
+            ("C-v", PreviewScroll::Pages(1)),
+            ("M-v", PreviewScroll::Pages(-1)),
+            ("SPC", PreviewScroll::Pages(1)),
+            ("DEL", PreviewScroll::Pages(-1)),
+            ("M->", PreviewScroll::Bottom),
+            ("M-<", PreviewScroll::Top),
+        ] {
+            press(&mut editor, keys);
+            assert_eq!(
+                editor.take_effects(),
+                [Effect::ScrollPreview(preview, scroll)],
+                "{keys}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_preview_follows_the_source_cursor() {
+        let mut editor = previewed("# A\n\nb\n\nc\n");
+        let window = editor.tiling().windows()[1];
+
+        press(&mut editor, "C-n C-n C-f");
+
+        assert_eq!(
+            editor.take_effects(),
+            [
+                Effect::ScrollPreview(window, PreviewScroll::Follow { line: 1, lines: 6 }),
+                Effect::ScrollPreview(window, PreviewScroll::Follow { line: 2, lines: 6 }),
+            ]
+        );
+    }
+
+    #[test]
+    fn q_closes_the_preview_window_view() {
+        let mut editor = previewed("# A\n");
+        press(&mut editor, "C-x o");
+
+        press(&mut editor, "q");
+
+        assert_ne!(editor.buffer().name(), "*Preview: t*");
     }
 
     #[test]

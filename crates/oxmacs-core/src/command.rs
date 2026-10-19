@@ -24,6 +24,8 @@ pub enum Command {
     BackwardWord,
     BeginningOfBuffer,
     EndOfBuffer,
+    ScrollUpCommand,
+    ScrollDownCommand,
     BeginningOfDefun,
     EndOfDefun,
     ForwardSexp,
@@ -171,6 +173,8 @@ impl Command {
                 | Self::BackwardWord
                 | Self::BeginningOfBuffer
                 | Self::EndOfBuffer
+                | Self::ScrollUpCommand
+                | Self::ScrollDownCommand
                 | Self::BeginningOfDefun
                 | Self::EndOfDefun
                 | Self::ForwardSexp
@@ -287,6 +291,7 @@ pub enum Scope {
     Rust,
     R,
     Markdown,
+    Preview,
     Compilation,
     Customize,
     Diagnostics,

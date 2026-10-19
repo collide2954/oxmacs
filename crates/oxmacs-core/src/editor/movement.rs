@@ -36,6 +36,16 @@ impl Editor {
         self.goal_column = Some(goal);
     }
 
+    pub(super) fn scroll_page(&mut self, forward: bool) {
+        let page = isize::try_from(self.viewport.rows().saturating_sub(2).max(1)).unwrap_or(1);
+        let top = self.viewport.top();
+        self.scroll_lines(if forward { page } else { -page });
+        if self.viewport.top() == top {
+            let buffer = self.buffers.current_mut();
+            buffer.set_point(if forward { buffer.len_chars() } else { 0 });
+        }
+    }
+
     pub(super) fn go_to_line(&mut self, line: usize, column: usize) {
         let buffer = self.buffers.current_mut();
         let line = line.saturating_sub(1);
@@ -47,15 +57,43 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::test_support::point_after;
+    use crate::editor::test_support::{editor_with, point_after, press};
+
+    #[test]
+    fn page_keys_scroll_a_screen_less_two_lines() {
+        let text: Vec<String> = (0..50).map(|line| line.to_string()).collect();
+        let text = text.join("\n");
+        let mut editor = editor_with(&text, 0);
+        editor.resize_window(10, 0);
+        let line =
+            |editor: &crate::editor::Editor| editor.buffer().line_of(editor.buffer().point());
+
+        press(&mut editor, "C-v");
+        assert_eq!(editor.viewport().top().line, 8);
+        assert_eq!(line(&editor), 8);
+
+        press(&mut editor, "M-v");
+        assert_eq!(editor.viewport().top().line, 0);
+
+        press(&mut editor, "M-v");
+        assert_eq!(editor.buffer().point(), 0);
+
+        for _ in 0..8 {
+            press(&mut editor, "<next>");
+        }
+        assert_eq!(editor.buffer().point(), text.chars().count());
+
+        press(&mut editor, "<prior>");
+        assert_eq!(editor.viewport().top().line, 41);
+    }
 
     #[test]
     fn line_motion_moves_by_screen_rows_on_wrapped_lines() {
-        let mut editor = crate::editor::test_support::editor_with("abcdefghij\nxy", 1);
+        let mut editor = editor_with("abcdefghij\nxy", 1);
         editor.resize_window(10, 5);
 
         for (keys, expected) in [("C-n", 5), ("C-n", 9), ("C-n", 12), ("C-p", 9), ("C-p", 5)] {
-            crate::editor::test_support::press(&mut editor, keys);
+            press(&mut editor, keys);
             assert_eq!(editor.buffer().point(), expected, "{keys}");
         }
     }

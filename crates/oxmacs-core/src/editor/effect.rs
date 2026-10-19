@@ -1,7 +1,7 @@
 use std::mem;
 use std::path::PathBuf;
 
-use crate::editor::{Editor, Job, JobId};
+use crate::editor::{Editor, Job, JobId, PreviewScroll, WindowId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
@@ -13,6 +13,7 @@ pub enum Effect {
     Spawn(Job),
     Kill(JobId),
     Reconfigure,
+    ScrollPreview(WindowId, PreviewScroll),
 }
 
 impl Editor {
