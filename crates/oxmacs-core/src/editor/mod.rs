@@ -19,6 +19,7 @@ mod windows;
 pub use effect::{ConnectionId, Effect, FetchId};
 pub use job::{Job, JobId, Outcome};
 pub use languages::preview::PreviewScroll;
+pub use languages::r_plots::PlotView;
 pub use motion::mouse::{Cell, Clicks};
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
 pub use prompts::popup::PopupView;
@@ -103,6 +104,7 @@ pub struct Editor {
     chat_keymap: Keymap,
     search_keymap: Keymap,
     popup_keymap: Keymap,
+    plots_keymap: Keymap,
     popup: Option<prompts::popup::Popup>,
     pending: Vec<Key>,
     last_key: Option<Key>,
@@ -182,6 +184,7 @@ impl Editor {
             chat_keymap: bindings::chat(),
             search_keymap: bindings::search(),
             popup_keymap: bindings::popup(),
+            plots_keymap: bindings::plots(),
             popup: None,
             pending: Vec::new(),
             last_key: None,
@@ -423,11 +426,12 @@ impl Editor {
             Scope::Help => Some(&self.help_keymap),
             Scope::Weather => Some(&self.weather_keymap),
             Scope::Chat => Some(&self.chat_keymap),
+            Scope::Plots => Some(&self.plots_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search | Scope::Popup => None,
         }
     }
 
-    fn keymaps(&self) -> [(Scope, &Keymap); 18] {
+    fn keymaps(&self) -> [(Scope, &Keymap); 19] {
         [
             (Scope::Global, &self.keymap),
             (Scope::Minibuffer, &self.minibuffer_keymap),
@@ -447,6 +451,7 @@ impl Editor {
             (Scope::Weather, &self.weather_keymap),
             (Scope::Chat, &self.chat_keymap),
             (Scope::Popup, &self.popup_keymap),
+            (Scope::Plots, &self.plots_keymap),
         ]
     }
 
@@ -461,6 +466,7 @@ impl Editor {
             Some(Mode::Help(_)) => Scope::Help,
             Some(Mode::Weather(_)) => Scope::Weather,
             Some(Mode::Chat(_)) => Scope::Chat,
+            Some(Mode::Plots(_)) => Scope::Plots,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::R => Scope::R,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
@@ -492,7 +498,7 @@ impl Editor {
             Some(Mode::Help(help)) => help.line_style(line),
             Some(Mode::Weather(view)) => view.line_style(line),
             Some(Mode::Chat(view)) => view.line_style(line),
-            Some(Mode::Preview(_) | Mode::Console(_)) => LineStyle::default(),
+            Some(Mode::Preview(_) | Mode::Console(_) | Mode::Plots(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,
                 spans: self.syntax_highlights_at(index, line),

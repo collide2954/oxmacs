@@ -131,6 +131,8 @@ impl Editor {
             Command::CompletionPrevious => self.popup_step(false),
             Command::CompletionAccept => self.popup_accept(),
             Command::CompletionQuit => self.popup_quit(),
+            Command::RPlotNext => self.r_plot_step(true),
+            Command::RPlotPrevious => self.r_plot_step(false),
             Command::CompletionAtPoint => self.completion_at_point(),
             Command::IndentOrComplete => self.indent_or_complete(),
             Command::ComintSendInput => self.console_send_input(),

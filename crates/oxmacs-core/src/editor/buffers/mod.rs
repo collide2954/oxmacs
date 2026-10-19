@@ -12,6 +12,7 @@ use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
 use crate::editor::chat::ChatView;
 use crate::editor::languages::r_console::Console;
+use crate::editor::languages::r_plots::Plots;
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::special::customize::Customize;
 use crate::editor::special::doctor::Doctor;
@@ -39,6 +40,7 @@ pub(super) enum Mode {
     Help(Help),
     Weather(WeatherView),
     Chat(ChatView),
+    Plots(Plots),
 }
 
 #[derive(Debug)]
@@ -112,7 +114,8 @@ impl BufferList {
             | Mode::Console(_)
             | Mode::Help(_)
             | Mode::Weather(_)
-            | Mode::Chat(_) => None,
+            | Mode::Chat(_)
+            | Mode::Plots(_) => None,
         }
     }
 
@@ -129,7 +132,8 @@ impl BufferList {
             | Mode::Console(_)
             | Mode::Help(_)
             | Mode::Weather(_)
-            | Mode::Chat(_) => None,
+            | Mode::Chat(_)
+            | Mode::Plots(_) => None,
         }
     }
 
@@ -147,7 +151,8 @@ impl BufferList {
             | Mode::Console(_)
             | Mode::Help(_)
             | Mode::Weather(_)
-            | Mode::Chat(_) => None,
+            | Mode::Chat(_)
+            | Mode::Plots(_) => None,
         }
     }
 
@@ -165,7 +170,8 @@ impl BufferList {
             | Mode::Console(_)
             | Mode::Help(_)
             | Mode::Weather(_)
-            | Mode::Chat(_) => None,
+            | Mode::Chat(_)
+            | Mode::Plots(_) => None,
         }
     }
 
@@ -182,7 +188,8 @@ impl BufferList {
             | Mode::Console(_)
             | Mode::Help(_)
             | Mode::Weather(_)
-            | Mode::Chat(_) => None,
+            | Mode::Chat(_)
+            | Mode::Plots(_) => None,
         }
     }
 
@@ -199,7 +206,8 @@ impl BufferList {
             | Mode::Console(_)
             | Mode::Help(_)
             | Mode::Weather(_)
-            | Mode::Chat(_) => None,
+            | Mode::Chat(_)
+            | Mode::Plots(_) => None,
         }
     }
 

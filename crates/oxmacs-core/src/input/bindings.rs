@@ -333,6 +333,18 @@ const POPUP: &[(&str, Command)] = &[
     ("ESC", Command::CompletionQuit),
 ];
 
+const PLOTS: &[(&str, Command)] = &[
+    ("n", Command::RPlotNext),
+    ("<right>", Command::RPlotNext),
+    ("p", Command::RPlotPrevious),
+    ("<left>", Command::RPlotPrevious),
+    ("q", Command::QuitWindow),
+];
+
+pub fn plots() -> Keymap {
+    build(PLOTS)
+}
+
 pub fn popup() -> Keymap {
     build(POPUP)
 }

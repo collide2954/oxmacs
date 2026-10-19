@@ -6,6 +6,7 @@ const END: char = '\u{3}';
 
 pub const PROFILE_VARIABLE: &str = "R_PROFILE_USER";
 pub const ORIGINAL_PROFILE_VARIABLE: &str = "OXMACS_R_PROFILE_USER";
+pub const PLOTS_VARIABLE: &str = "OXMACS_R_PLOTS";
 
 pub const HELPER: &str = r#"local({
   original <- Sys.getenv("OXMACS_R_PROFILE_USER")
@@ -61,6 +62,57 @@ local({
     tools::Rd2txt_options(width = width)
     last()
   }
+  plots <- new.env()
+  plots$history <- list()
+  plots$fresh <- FALSE
+  plots$device <- 0L
+  plots$count <- 0L
+  plots$size <- c(672L, 480L)
+  plots$directory <- Sys.getenv("OXMACS_R_PLOTS", file.path(tempdir(), "oxmacs-plots"))
+  Sys.unsetenv("OXMACS_R_PLOTS")
+  dir.create(plots$directory, showWarnings = FALSE, recursive = TRUE)
+  options(device = function(...) {
+    grDevices::pdf(NULL, width = plots$size[1] / 96, height = plots$size[2] / 96)
+    grDevices::dev.control("enable")
+    plots$device <- grDevices::dev.cur()
+  })
+  setHook("plot.new", function() plots$fresh <- TRUE)
+  setHook("grid.newpage", function() plots$fresh <- TRUE)
+  bitmap <- function(file, width, height, scale) {
+    arguments <- list(file, width = width * scale, height = height * scale, res = 96 * scale)
+    if (capabilities("cairo")) arguments$type <- "cairo"
+    do.call(grDevices::png, arguments)
+  }
+  render <- function(why, index) {
+    plots$count <- plots$count + 1L
+    file <- file.path(plots$directory, sprintf("plot-%d.png", plots$count))
+    current <- grDevices::dev.cur()
+    bitmap(file, plots$size[1], plots$size[2], 2)
+    tryCatch(grDevices::replayPlot(plots$history[[index]]), error = function(e) NULL)
+    grDevices::dev.off()
+    if (current > 1) grDevices::dev.set(current)
+    plots$fresh <- FALSE
+    marker("plot", paste(why, index, length(plots$history),
+      plots$size[1], plots$size[2], normalizePath(file, winslash = "/"), sep = "\t"))
+  }
+  oxmacs$plot <- function(index, width, height) {
+    plots$size <- c(width, height)
+    if (index >= 1 && index <= length(plots$history)) render("asked", index)
+    last()
+  }
+  invisible(addTaskCallback(function(...) {
+    if (grDevices::dev.cur() == plots$device) {
+      shown <- tryCatch(grDevices::recordPlot(), error = function(e) NULL)
+      if (!is.null(shown) && !identical(shown, plots$last)) {
+        index <- length(plots$history)
+        if (plots$fresh || index == 0L) index <- index + 1L
+        plots$history[[index]] <- shown
+        plots$last <- shown
+        render("new", index)
+      }
+    }
+    TRUE
+  }, name = "oxmacs-plots"))
   utils::rc.settings(ipck = TRUE)
   options(
     oxmacs = oxmacs,

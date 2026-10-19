@@ -467,6 +467,10 @@ pub enum Command {
     CompletionAccept,
     #[strum(message = "Close the completion popup")]
     CompletionQuit,
+    #[strum(message = "Show the next R plot")]
+    RPlotNext,
+    #[strum(message = "Show the previous R plot")]
+    RPlotPrevious,
     #[strum(
         message = "Complete the code before point",
         detailed_message = "In R scripts and *R*, asks the running R session how the code before point could go on: objects, functions, arguments, columns after $ and packages. Several answers appear in a popup at point; a single answer is inserted at once."
@@ -622,6 +626,7 @@ impl Command {
             | Self::CompletionPrevious
             | Self::CompletionAccept
             | Self::CompletionQuit => Scope::Popup,
+            Self::RPlotNext | Self::RPlotPrevious => Scope::Plots,
             _ => Scope::Global,
         }
     }
@@ -647,6 +652,7 @@ pub enum Scope {
     Weather,
     Chat,
     Popup,
+    Plots,
 }
 
 impl Scope {
@@ -670,6 +676,7 @@ impl Scope {
             Self::Weather => Some("*Weather*"),
             Self::Chat => Some("IRC buffers"),
             Self::Popup => Some("the completion popup"),
+            Self::Plots => Some("*R plots*"),
         }
     }
 }

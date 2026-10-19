@@ -101,6 +101,18 @@ impl Editor {
         self.select_window(origin);
     }
 
+    pub(super) fn below(&mut self, window: WindowId, place: impl FnOnce(&mut Self)) {
+        let origin = self.windows.selected;
+        self.select_window(window);
+        let before = self.windows.next;
+        self.split_window(Axis::Rows);
+        if self.windows.next != before {
+            self.select_window(WindowId(before));
+        }
+        place(self);
+        self.select_window(origin);
+    }
+
     pub(super) fn show_beside(&mut self, find: impl Fn(&Self) -> Option<usize>) {
         let Some(id) = find(self)
             .and_then(|index| self.buffers.get(index))

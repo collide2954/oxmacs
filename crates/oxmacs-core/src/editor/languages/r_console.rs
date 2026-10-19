@@ -46,7 +46,7 @@ fn without_prompt(line: &str) -> &str {
 }
 
 impl Editor {
-    fn console_index(&self) -> Option<usize> {
+    pub(super) fn console_index(&self) -> Option<usize> {
         self.buffers
             .find_mode(|mode| matches!(mode, Mode::Console(_)))
     }
@@ -145,14 +145,21 @@ impl Editor {
                 return false;
             }
         };
-        let mut variables = vec![(r::PROFILE_VARIABLE.to_owned(), helper.display().to_string())];
+        let job = JobId(self.next_job);
+        let plots =
+            env::temp_dir()
+                .join("oxmacs")
+                .join(format!("plots-{}-{}", process::id(), job.0));
+        let mut variables = vec![
+            (r::PROFILE_VARIABLE.to_owned(), helper.display().to_string()),
+            (r::PLOTS_VARIABLE.to_owned(), plots.display().to_string()),
+        ];
         if let Some(original) = env::var_os(r::PROFILE_VARIABLE) {
             variables.push((
                 r::ORIGINAL_PROFILE_VARIABLE.to_owned(),
                 original.to_string_lossy().into_owned(),
             ));
         }
-        let job = JobId(self.next_job);
         self.next_job += 1;
         self.effects.push(Effect::StartSession(Job {
             id: job,
@@ -390,6 +397,7 @@ impl Editor {
             "message" => self.show_message(payload),
             "help" => self.show_r_help(payload),
             "complete" => self.r_completions(payload),
+            "plot" => self.r_plot(payload),
             _ => {}
         }
     }
