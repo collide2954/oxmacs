@@ -1,7 +1,7 @@
 const SMALLEST: f32 = 0.05;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct WindowId(pub(super) u64);
+pub struct WindowId(pub(in crate::editor) u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Axis {
@@ -52,7 +52,7 @@ impl Tiling {
         }
     }
 
-    pub(super) fn split(&mut self, target: WindowId, axis: Axis, new: WindowId) -> bool {
+    pub(in crate::editor) fn split(&mut self, target: WindowId, axis: Axis, new: WindowId) -> bool {
         match self {
             Self::Window(id) if *id == target => {
                 *self = Self::Split {
@@ -80,7 +80,7 @@ impl Tiling {
         }
     }
 
-    pub(super) fn remove(&mut self, target: WindowId) -> Option<WindowId> {
+    pub(in crate::editor) fn remove(&mut self, target: WindowId) -> Option<WindowId> {
         let Self::Split { parts, .. } = self else {
             return None;
         };
@@ -131,7 +131,7 @@ impl Tiling {
         }
     }
 
-    pub(super) fn balance(&mut self) {
+    pub(in crate::editor) fn balance(&mut self) {
         if let Self::Split { parts, .. } = self {
             let share = 1.0 / count_as_f32(parts.len());
             for (weight, part) in parts {
@@ -141,7 +141,7 @@ impl Tiling {
         }
     }
 
-    pub(super) fn share(&self, target: WindowId, axis: Axis) -> Option<f32> {
+    pub(in crate::editor) fn share(&self, target: WindowId, axis: Axis) -> Option<f32> {
         let Self::Split { axis: own, parts } = self else {
             return None;
         };
@@ -150,7 +150,7 @@ impl Tiling {
             .or_else(|| (*own == axis).then_some(*weight))
     }
 
-    pub(super) fn resize(&mut self, target: WindowId, axis: Axis, delta: f32) -> bool {
+    pub(in crate::editor) fn resize(&mut self, target: WindowId, axis: Axis, delta: f32) -> bool {
         let Self::Split { axis: own, parts } = self else {
             return false;
         };
@@ -187,7 +187,7 @@ impl Tiling {
         }
     }
 
-    pub(super) fn set_divider(&mut self, path: &[usize], index: usize, fraction: f32) {
+    pub(in crate::editor) fn set_divider(&mut self, path: &[usize], index: usize, fraction: f32) {
         match (self, path) {
             (Self::Split { parts, .. }, [first, rest @ ..]) => {
                 if let Some((_, part)) = parts.get_mut(*first) {

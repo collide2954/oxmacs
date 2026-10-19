@@ -4,7 +4,7 @@ use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::build::compile::FINISHED;
-use crate::editor::tiling::Axis;
+use crate::editor::windows::tiling::Axis;
 use crate::text::BufferId;
 use crate::theme::Highlight;
 

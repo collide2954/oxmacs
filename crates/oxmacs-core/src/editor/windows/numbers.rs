@@ -12,7 +12,12 @@ pub struct Gutter {
 }
 
 impl Gutter {
-    pub(super) fn new(style: LineNumbers, current: usize, lines: usize, separator: bool) -> Self {
+    pub(in crate::editor) fn new(
+        style: LineNumbers,
+        current: usize,
+        lines: usize,
+        separator: bool,
+    ) -> Self {
         Self {
             style,
             current,
@@ -43,7 +48,7 @@ impl Gutter {
 }
 
 impl Editor {
-    pub(super) fn line_numbers_at(&self, index: usize) -> Option<LineNumbers> {
+    pub(in crate::editor) fn line_numbers_at(&self, index: usize) -> Option<LineNumbers> {
         let configured = self.settings.line_numbers;
         let visiting = !self.buffers.is_special(index)
             && self
@@ -60,7 +65,7 @@ impl Editor {
         })
     }
 
-    pub(super) fn display_line_numbers_mode(&mut self) {
+    pub(in crate::editor) fn display_line_numbers_mode(&mut self) {
         let on = self.line_numbers_at(0).is_none();
         self.buffers.set_numbers(0, on);
         self.show_message(if on {

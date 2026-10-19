@@ -29,7 +29,7 @@ pub struct Pane<'a> {
 }
 
 impl<'a> Pane<'a> {
-    pub(super) fn new(
+    pub(in crate::editor) fn new(
         editor: &'a Editor,
         index: usize,
         viewport: Viewport,

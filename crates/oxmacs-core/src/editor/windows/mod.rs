@@ -1,7 +1,11 @@
+pub(super) mod numbers;
+pub(super) mod pane;
+pub(super) mod tiling;
+
 use crate::display::{Layout, Viewport};
 use crate::editor::Editor;
-use crate::editor::pane::Pane;
-use crate::editor::tiling::{Axis, Tiling, WindowId};
+use crate::editor::windows::pane::Pane;
+use crate::editor::windows::tiling::{Axis, Tiling, WindowId};
 use crate::text::{BufferId, Marker};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
