@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use crate::editor::Editor;
+use crate::external::tools;
 use crate::syntax::Language;
-use crate::tools;
 
 impl Editor {
     pub(in crate::editor) fn rust_format_buffer(&mut self) {

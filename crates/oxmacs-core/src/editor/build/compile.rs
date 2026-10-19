@@ -4,9 +4,9 @@ use crate::editor::buffers::Mode;
 use crate::editor::build::errors::{ErrorSource, Errors};
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
+use crate::external::tools;
 use crate::files::paths;
 use crate::text::Buffer;
-use crate::tools;
 
 pub(in crate::editor) const NAME: &str = "*compilation*";
 pub(in crate::editor) const FINISHED: &str = "Compilation finished";

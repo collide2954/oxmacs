@@ -6,7 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::editor::{Job, Outcome};
-use crate::tools;
+use crate::external::tools;
 
 const POLL: Duration = Duration::from_millis(50);
 const LINGER: Duration = Duration::from_millis(250);

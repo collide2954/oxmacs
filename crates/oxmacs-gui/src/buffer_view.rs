@@ -13,9 +13,9 @@ use iced::{
     Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, keyboard,
     window,
 };
-use oxmacs_core::diagnostics::Severity;
 use oxmacs_core::display::{self, LineStyle};
 use oxmacs_core::editor::{Cell, Clicks, Gutter, Pane, ScreenRow, WindowId};
+use oxmacs_core::external::diagnostics::Severity;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Highlight, Theme as Faces};
 

@@ -1,11 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use crate::diagnostics::{Diagnostic, Severity};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::build::errors;
 use crate::editor::page::Page;
+use crate::external::diagnostics::{Diagnostic, Severity};
 use crate::files::paths;
 use crate::text::Buffer;
 use crate::theme::Highlight;
@@ -242,12 +242,12 @@ impl Editor {
 mod tests {
     use std::path::Path;
 
-    use crate::diagnostics::sample;
     use crate::editor::build::lint::fixtures::{
         FINISHED, linting, project, report, reported, spawned,
     };
     use crate::editor::test_support::{lines, press, type_text};
     use crate::editor::{Cell, Clicks, Editor, Effect, Outcome};
+    use crate::external::diagnostics::sample;
 
     fn listed() -> (tempfile::TempDir, Editor) {
         let (dir, mut editor) = project();

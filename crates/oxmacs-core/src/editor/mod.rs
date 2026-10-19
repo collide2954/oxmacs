@@ -36,11 +36,11 @@ use buffers::{BufferList, Mode};
 use crate::command::{Command, Scope};
 use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
+use crate::external::tools::{self, Probe};
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::{self, Appearance, Highlight, Theme};
-use crate::tools::{self, Probe};
 
 const DEFAULT_ROWS: usize = 24;
 

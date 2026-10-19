@@ -4,9 +4,9 @@ use std::{env, fs, io, process};
 
 use crate::editor::buffers::Mode;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
-use crate::r::{self, Piece, Stream};
+use crate::external::r::{self, Piece, Stream};
+use crate::external::tools::{self, Probe};
 use crate::text::{Buffer, Marker};
-use crate::tools::{self, Probe};
 
 const NAME: &str = "*R*";
 const MISSING: &str = "R not found; install it from https://cran.r-project.org or set r-program";
@@ -309,8 +309,8 @@ mod tests {
 
     use crate::editor::test_support::{lines, press, type_text};
     use crate::editor::{Editor, Effect, Job, JobId, Outcome};
-    use crate::r;
-    use crate::tools::{self, Probe};
+    use crate::external::r;
+    use crate::external::tools::{self, Probe};
 
     const PROMPT: &str = "\u{1}>\u{2}\u{3}";
 

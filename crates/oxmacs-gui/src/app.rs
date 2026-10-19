@@ -21,7 +21,7 @@ use oxmacs_core::config::{self, Config, ConfigError};
 use oxmacs_core::editor::{
     Axis, Editor, Effect, Job, JobId, Outcome, PreviewScroll, Tiling, WindowId,
 };
-use oxmacs_core::process::{self, Handle};
+use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 

@@ -1,10 +1,10 @@
 use std::ops::Range;
 
-use crate::diagnostics::Severity;
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
 use crate::editor::buffers::Mode;
 use crate::editor::motion::movement::display_column;
 use crate::editor::{Editor, Gutter};
+use crate::external::diagnostics::Severity;
 use crate::files::LineEnding;
 use crate::syntax::Language;
 use crate::text::Buffer;

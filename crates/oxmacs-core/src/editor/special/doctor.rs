@@ -7,10 +7,10 @@ use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
+use crate::external::tools::Probe;
 use crate::syntax::{Feature, Language};
 use crate::text::Buffer;
 use crate::theme::{Appearance, Highlight};
-use crate::tools::Probe;
 
 const NAME: &str = "*oxmacs-doctor*";
 const LABEL_WIDTH: usize = 16;
@@ -224,8 +224,8 @@ mod tests {
 
     use crate::editor::Editor;
     use crate::editor::test_support::{lines, press, type_text};
+    use crate::external::tools::Probe;
     use crate::theme::Highlight;
-    use crate::tools::Probe;
 
     fn fake_probe(program: &str) -> Probe {
         match program {
