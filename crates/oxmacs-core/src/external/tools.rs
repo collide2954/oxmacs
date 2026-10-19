@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::{env, fs, thread};
 
+use crate::external::managed::Managed;
+
 const EDITIONS: &[&str] = &["2015", "2018", "2021", "2024"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +19,11 @@ pub enum Probe {
 pub enum Tool {
     Program(&'static str),
     R(Option<String>),
+    Managed {
+        tool: Managed,
+        configured: Option<String>,
+        root: Option<PathBuf>,
+    },
 }
 
 pub fn probe_all(tools: Vec<Tool>) -> Vec<(Tool, Probe)> {
@@ -28,6 +35,11 @@ pub fn probe_all(tools: Vec<Tool>) -> Vec<(Tool, Probe)> {
                     let probe = match &tool {
                         Tool::Program(name) => probe(name),
                         Tool::R(configured) => probe_r(configured.as_deref()),
+                        Tool::Managed {
+                            tool,
+                            configured,
+                            root,
+                        } => probe_managed(*tool, configured.as_deref(), root.as_deref()),
                     };
                     (tool, probe)
                 })
@@ -38,6 +50,17 @@ pub fn probe_all(tools: Vec<Tool>) -> Vec<(Tool, Probe)> {
             .filter_map(|probe| probe.join().ok())
             .collect()
     })
+}
+
+fn probe_managed(tool: Managed, configured: Option<&str>, root: Option<&Path>) -> Probe {
+    let search = env::var_os("PATH");
+    let Some((path, _)) = tool.locate(configured, root, search.as_deref()) else {
+        return Probe::Missing;
+    };
+    match version(&path) {
+        Ok(version) => Probe::Found { path, version },
+        Err(error) => Probe::Broken { path, error },
+    }
 }
 
 pub fn probe(program: &str) -> Probe {

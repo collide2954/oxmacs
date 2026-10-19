@@ -118,15 +118,17 @@ impl Language {
                     | Feature::Pairs
                     | Feature::Motion
                     | Feature::Items
-            ) | (Self::R, Feature::Completion | Feature::Repl)
-                | (
-                    Self::Markdown,
-                    Feature::Highlighting
-                        | Feature::Indentation
-                        | Feature::Motion
-                        | Feature::Items
-                        | Feature::Preview
-                )
+            ) | (
+                Self::R,
+                Feature::Completion | Feature::Repl | Feature::Formatting
+            ) | (
+                Self::Markdown,
+                Feature::Highlighting
+                    | Feature::Indentation
+                    | Feature::Motion
+                    | Feature::Items
+                    | Feature::Preview
+            )
         )
     }
 

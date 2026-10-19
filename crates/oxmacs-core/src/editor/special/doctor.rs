@@ -7,6 +7,7 @@ use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::editor::{Editor, Effect};
+use crate::external::managed::AIR;
 use crate::external::tools::{Probe, Tool};
 use crate::syntax::{Feature, Language};
 use crate::text::Buffer;
@@ -80,6 +81,11 @@ impl Editor {
     fn check_tools(&mut self) {
         let mut tools: Vec<Tool> = TOOLS.iter().map(|(name, _)| Tool::Program(name)).collect();
         tools.push(Tool::R(self.config.r_program.clone()));
+        tools.push(Tool::Managed {
+            tool: AIR,
+            configured: self.config.air_program.clone(),
+            root: self.tools_root.clone(),
+        });
         self.tool_report.pending += 1;
         self.effects.push(Effect::ProbeTools(tools));
     }
@@ -184,6 +190,12 @@ impl Editor {
             report.find(|tool| matches!(tool, Tool::R(_))),
             R_HINT,
         );
+        tool(
+            page,
+            AIR.name,
+            report.find(|tool| matches!(tool, Tool::Managed { tool, .. } if *tool == AIR)),
+            "M-x list-tools installs it, or set air-program",
+        );
     }
 }
 
@@ -280,6 +292,7 @@ mod tests {
 
     use crate::editor::test_support::{lines, press, type_text};
     use crate::editor::{Editor, Effect};
+    use crate::external::managed::AIR;
     use crate::external::tools::{Probe, Tool};
     use crate::theme::Highlight;
 
@@ -301,6 +314,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut editor = Editor::new();
         editor.config_path = Some(dir.path().join("config.toml"));
+        editor.tools_root = Some(dir.path().join("tools"));
         editor.set_font_note("JetBrains Mono (bundled)");
         press(&mut editor, "M-x");
         type_text(&mut editor, "oxmacs-doctor");
@@ -327,6 +341,10 @@ mod tests {
                 let probe = match &tool {
                     Tool::Program(name) => fake_probe(name),
                     Tool::R(_) => Probe::Missing,
+                    Tool::Managed { .. } => Probe::Found {
+                        path: PathBuf::from("/oxmacs/air"),
+                        version: "air 0.12.0".to_owned(),
+                    },
                 };
                 (tool, probe)
             })
@@ -342,10 +360,11 @@ mod tests {
 
     #[test]
     fn the_report_opens_at_once_and_checks_tools_in_the_background() {
-        let (_dir, mut editor) = opened();
+        let (dir, mut editor) = opened();
 
         assert!(line_with(&editor, "rustfmt").ends_with("checking…"));
         assert!(line_with(&editor, "  R  ").ends_with("checking…"));
+        assert!(line_with(&editor, "  air  ").ends_with("checking…"));
         assert_eq!(
             asked(&mut editor),
             [
@@ -354,6 +373,11 @@ mod tests {
                 Tool::Program("cargo-clippy"),
                 Tool::Program("rust-analyzer"),
                 Tool::R(None),
+                Tool::Managed {
+                    tool: AIR,
+                    configured: None,
+                    root: Some(dir.path().join("tools")),
+                },
             ]
         );
     }
@@ -381,7 +405,7 @@ mod tests {
         press(&mut editor, "RET");
 
         assert!(line_with(&editor, "rustfmt").contains("✓ rustfmt 1.0"));
-        assert_eq!(asked(&mut editor).len(), 5);
+        assert_eq!(asked(&mut editor).len(), 6);
     }
 
     #[test]
@@ -427,7 +451,7 @@ mod tests {
         assert_eq!(mark("Markdown (", "Lint"), '–');
         assert_eq!(mark("R (.R .r)", "Indent"), '✓');
         assert_eq!(mark("R (.R .r)", "Items"), '✓');
-        assert_eq!(mark("R (.R .r)", "Format"), '–');
+        assert_eq!(mark("R (.R .r)", "Format"), '✓');
         assert_eq!(mark("R (.R .r)", "Complete"), '✓');
         assert_eq!(mark("R (.R .r)", "REPL"), '✓');
         assert_eq!(mark("Rust (.rs)", "REPL"), '–');
@@ -440,6 +464,7 @@ mod tests {
         let (_dir, editor) = doctor();
 
         assert!(line_with(&editor, "rustfmt").contains("✓ rustfmt 1.0"));
+        assert!(line_with(&editor, "  air  ").contains("✓ air 0.12.0"));
         assert!(
             line_with(&editor, "  cargo")
                 .contains("! no toolchain; install Rust from https://rustup.rs")
