@@ -264,6 +264,17 @@ local({
     marker("object", paste(c(name, text), collapse = "\n"))
     last()
   }
+  oxmacs$signature <- function(name) {
+    value <- tryCatch(eval(str2lang(name), globalenv()), error = function(e) NULL)
+    shown <- if (is.function(value)) args(value) else NULL
+    text <- ""
+    if (!is.null(shown)) {
+      lines <- utils::head(deparse(shown), -1)
+      text <- paste0(name, sub("^function\\s*", "", gsub("\\s+", " ", paste(lines, collapse = " "))))
+    }
+    marker("signature", paste(name, trimws(flat(text)), sep = "\t"))
+    last()
+  }
   utils::rc.settings(ipck = TRUE)
   options(
     oxmacs = oxmacs,

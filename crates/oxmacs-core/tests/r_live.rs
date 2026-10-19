@@ -201,6 +201,26 @@ fn the_environment_tables_and_objects_are_described() {
 
 #[test]
 #[ignore = "runs the R installed on this machine"]
+fn signatures_name_the_arguments_of_functions_only() {
+    let (output, _directory) = session(
+        "add <- function(a, b = 2) a + b\ngetOption(\"oxmacs\")$signature(\"add\")\ngetOption(\"oxmacs\")$signature(\"stats::sd\")\ngetOption(\"oxmacs\")$signature(\"sum\")\ngetOption(\"oxmacs\")$signature(\"mtcars\")\ngetOption(\"oxmacs\")$signature(\"nothing.here\")\n.Last.value\nq()\n",
+    );
+
+    assert_eq!(
+        marked(&output, "signature"),
+        [
+            "add\tadd(a, b = 2)",
+            "stats::sd\tstats::sd(x, na.rm = FALSE)",
+            "sum\tsum(..., na.rm = FALSE)",
+            "mtcars\t",
+            "nothing.here\t",
+        ],
+        "{output:?}"
+    );
+}
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
 fn output_and_help_fit_the_width_r_is_given() {
     let (output, _directory) = session(
         "getOption(\"oxmacs\")$width(40L)\n1:30\ngetOption(\"oxmacs\")$help(\"mean\")\nq()\n",
