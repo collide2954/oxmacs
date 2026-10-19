@@ -169,11 +169,11 @@ fn lay_out(
     };
     let last = shown.last().map_or(first, |(column, _)| *column);
     let info = format!(
-        "{name}: {} rows × {} columns{}   columns {}–{} shown, ← → for more",
+        "{name}  {} × {}{}  columns {}–{}  ← →",
         table.rows,
         table.columns,
         if table.rows > table.cells.len() {
-            format!(", first {}", table.cells.len())
+            format!(" (first {})", table.cells.len())
         } else {
             String::new()
         },
@@ -387,7 +387,7 @@ mod tests {
         assert_eq!(editor.buffer().name(), "*R:analysis cars*");
         let header = header(&editor);
         assert!(
-            header[0].starts_with("cars: 32 rows × 11 columns"),
+            header[0].starts_with("cars  32 × 11 (first 2)  columns 1–4"),
             "{header:?}"
         );
         assert_eq!(header[1], "              mpg    cyl   disp  name");

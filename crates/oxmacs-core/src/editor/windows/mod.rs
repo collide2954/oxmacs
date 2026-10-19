@@ -398,6 +398,7 @@ impl Editor {
         self.fit_r_widths();
         self.render_processes();
         self.render_tables();
+        self.render_environments();
     }
 
     pub(super) fn width_showing(&self, buffer: BufferId) -> Option<usize> {

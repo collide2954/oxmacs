@@ -13,6 +13,8 @@ const GROUPS: [(&str, &str); 3] = [
 ];
 const HELP: &str = "RET opens   g refreshes   q quits";
 const VALUE_WIDTH: usize = 60;
+const MIN_VALUE: usize = 8;
+const ROOM: usize = 100;
 pub(in crate::editor) const VIEW_ROWS: usize = 1000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,6 +39,7 @@ impl Entry {
 pub(in crate::editor) struct EnvironmentView {
     session: Option<BufferId>,
     entries: Vec<Entry>,
+    width: usize,
     rows: Vec<(usize, usize)>,
     styles: Vec<LineStyle>,
 }
@@ -76,7 +79,7 @@ fn clip(text: &str, width: usize) -> String {
     clipped
 }
 
-fn page(entries: &[Entry]) -> (Page, Vec<(usize, usize)>) {
+fn page(entries: &[Entry], room: usize) -> (Page, Vec<(usize, usize)>) {
     let mut page = Page::default();
     page.line(&[(HELP, Some(Highlight::Comment))]);
     let mut rows = Vec::new();
@@ -97,6 +100,8 @@ fn page(entries: &[Entry]) -> (Page, Vec<(usize, usize)>) {
         width(|entry| &entry.class),
         width(|entry| &entry.size),
     );
+    let fixed = 2 + names + 2 + classes + 2 + sizes + 2;
+    let value_width = room.saturating_sub(fixed).min(VALUE_WIDTH);
     for (group, title) in GROUPS {
         let members: Vec<(usize, &Entry)> = entries
             .iter()
@@ -113,7 +118,11 @@ fn page(entries: &[Entry]) -> (Page, Vec<(usize, usize)>) {
             let name = format!("  {:<names$}  ", entry.name);
             let class = format!("{:<classes$}  ", entry.class);
             let size = format!("{:>sizes$}  ", entry.size);
-            let value = clip(&entry.value, VALUE_WIDTH);
+            let value = if value_width >= MIN_VALUE {
+                clip(&entry.value, value_width)
+            } else {
+                String::new()
+            };
             page.line(&[
                 (&name, Some(Highlight::Link)),
                 (&class, Some(Highlight::Comment)),
@@ -194,15 +203,32 @@ impl Editor {
         let Some(index) = self.environment_index() else {
             return;
         };
-        let found = entries(payload);
-        let (page, rows) = page(&found);
-        if let Some(buffer) = self.buffers.get_mut(index) {
-            page.fill(buffer);
-        }
         if let Some(Mode::Environment(view)) = self.buffers.mode_mut(index) {
-            view.entries = found;
+            view.entries = entries(payload);
+            view.width = 0;
+        }
+        self.render_environments();
+    }
+
+    pub(in crate::editor) fn render_environments(&mut self) {
+        for index in 0..self.buffers.len() {
+            let room = self
+                .buffers
+                .get(index)
+                .and_then(|buffer| self.width_showing(buffer.id()))
+                .filter(|width| *width > 0)
+                .unwrap_or(ROOM);
+            let Some((buffer, Mode::Environment(view))) = self.buffers.entry_mut(index) else {
+                continue;
+            };
+            if view.width == room {
+                continue;
+            }
+            let (page, rows) = page(&view.entries, room);
+            page.fill(buffer);
             view.rows = rows;
             view.styles = page.styles;
+            view.width = room;
         }
     }
 

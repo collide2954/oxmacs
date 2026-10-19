@@ -29,6 +29,7 @@ const WIDE_SAMPLE: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
 const NARROW_SAMPLE: &str = "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii";
 const WHEEL_ROWS: f32 = 3.0;
 const CONTINUATION: &str = "\\";
+const HEADER_RAISE: f32 = 0.06;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewEvent {
@@ -164,6 +165,57 @@ impl<'a, Message> BufferView<'a, Message> {
         self.pane.gutter().map_or(0.0, |gutter| {
             to_f32(gutter_columns(gutter.width(), gutter.has_separator())) * cell_width
         })
+    }
+
+    fn body(&self, bounds: Rectangle, cell_height: f32) -> Rectangle {
+        let header = (to_f32(self.pane.header_lines().len()) * cell_height).min(bounds.height);
+        Rectangle::new(
+            Point::new(bounds.x, bounds.y + header),
+            Size::new(bounds.width, bounds.height - header),
+        )
+    }
+
+    fn draw_header<Renderer>(&self, renderer: &mut Renderer, bounds: Rectangle, cell: Size)
+    where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        let lines = self.pane.header_lines();
+        if lines.is_empty() {
+            return;
+        }
+        let strip = Rectangle::new(
+            bounds.position(),
+            Size::new(bounds.width, to_f32(lines.len()) * cell.height),
+        );
+        let surface = self
+            .faces
+            .default
+            .background
+            .mix(self.faces.default.foreground, HEADER_RAISE);
+        renderer.fill_quad(
+            Quad {
+                bounds: strip,
+                ..Quad::default()
+            },
+            style::color(surface),
+        );
+        let foreground = style::color(self.faces.default.foreground);
+        let tab_width = self.pane.tab_width();
+        let left = self.text_bounds(bounds, cell.width).x;
+        for (row, (text, line_style)) in lines.iter().enumerate() {
+            let y = strip.y + to_f32(row) * cell.height;
+            for segment in display::segments(text, &line_style.spans, tab_width) {
+                let color = segment
+                    .face
+                    .map_or(foreground, |face| style::color(self.faces.highlight(face)));
+                renderer.fill_text(
+                    self.text(segment.text, Size::new(f32::INFINITY, cell.height)),
+                    Point::new(left + to_f32(segment.column) * cell.width, y),
+                    color,
+                    strip,
+                );
+            }
+        }
     }
 
     fn text_bounds(&self, bounds: Rectangle, cell_width: f32) -> Rectangle {
@@ -458,7 +510,10 @@ where
             Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
                 state.modifiers = *modifiers;
             }
-            Event::Mouse(event) => self.handle_mouse(state, *event, layout.bounds(), cursor, shell),
+            Event::Mouse(event) => {
+                let body = self.body(layout.bounds(), state.metrics.cell.height);
+                self.handle_mouse(state, *event, body, cursor, shell);
+            }
             _ => {}
         }
         let metrics = &mut state.metrics;
@@ -466,8 +521,9 @@ where
             metrics.font_reported = true;
             shell.publish((self.on_event)(self.window, ViewEvent::FontNotMonospaced));
         }
-        let rows = rows_in(layout.bounds().height, metrics.cell.height);
-        let text = self.text_bounds(layout.bounds(), metrics.cell.width);
+        let body = self.body(layout.bounds(), metrics.cell.height);
+        let rows = rows_in(body.height, metrics.cell.height);
+        let text = self.text_bounds(body, metrics.cell.width);
         let columns = columns_in(text.width, metrics.cell.width);
         let viewport = self.pane.viewport();
         if (rows, columns) != (viewport.rows(), viewport.columns()) {
@@ -487,7 +543,8 @@ where
         _renderer: &Renderer,
     ) -> mouse::Interaction {
         let cell = tree.state.downcast_ref::<State>().metrics.cell;
-        if cursor.is_over(self.text_bounds(layout.bounds(), cell.width)) {
+        let body = self.body(layout.bounds(), cell.height);
+        if cursor.is_over(self.text_bounds(body, cell.width)) {
             mouse::Interaction::Text
         } else if cursor.is_over(layout.bounds()) {
             mouse::Interaction::Idle
@@ -508,7 +565,8 @@ where
     ) {
         let state = tree.state.downcast_ref::<State>();
         let cell = state.metrics.cell;
-        let bounds = layout.bounds();
+        self.draw_header(renderer, layout.bounds(), cell);
+        let bounds = self.body(layout.bounds(), cell.height);
         let text_bounds = self.text_bounds(bounds, cell.width);
         let (lines, rows) = self.lay_out_rows(state, text_bounds);
         let line_of = |number: usize| lines.iter().find(|line| line.number == number);
@@ -595,7 +653,7 @@ where
         let view = self.pane.popup()?;
         let state = tree.state.downcast_ref::<State>();
         let cell = state.metrics.cell;
-        let text = self.text_bounds(layout.bounds(), cell.width);
+        let text = self.text_bounds(self.body(layout.bounds(), cell.height), cell.width);
         let anchor = Point::new(
             text.x + to_f32(view.column) * cell.width,
             text.y + (signed_to_f32(view.row) + state.shift()) * cell.height,
