@@ -84,7 +84,10 @@ pub enum Highlight {
     Success,
     Warning,
     Error,
+    Nick(u8),
 }
+
+pub const NICK_COLORS: u8 = 8;
 
 impl Face {
     pub fn mix(self, other: Self, amount: f32) -> Self {
@@ -169,7 +172,22 @@ impl Theme {
             Highlight::Success => self.success,
             Highlight::Warning => self.warning,
             Highlight::Error => self.error,
+            Highlight::Nick(index) => self.nick(index),
         }
+    }
+
+    fn nick(&self, index: u8) -> Color {
+        let palette = [
+            self.syntax.keyword,
+            self.syntax.string,
+            self.syntax.function,
+            self.syntax.type_name,
+            self.syntax.constant,
+            self.syntax.macro_name,
+            self.syntax.attribute,
+            self.syntax.lifetime,
+        ];
+        palette[usize::from(index) % palette.len()]
     }
 }
 
@@ -249,7 +267,10 @@ mod tests {
                 Highlight::Success,
                 Highlight::Warning,
                 Highlight::Error,
-            ] {
+            ]
+            .into_iter()
+            .chain((0..NICK_COLORS).map(Highlight::Nick))
+            {
                 let ratio = theme
                     .highlight(highlight)
                     .contrast_ratio(theme.default.background);
@@ -277,6 +298,18 @@ mod tests {
                 .contrast_ratio(theme.highlight(Highlight::Region));
             assert!(ratio >= 4.5, "{} Region: {ratio:.2}", theme.name);
         }
+    }
+
+    #[test]
+    fn nick_colors_cycle_through_distinct_colors() {
+        let colors: Vec<Color> = (0..NICK_COLORS)
+            .map(|index| ADWAITA.highlight(Highlight::Nick(index)))
+            .collect();
+
+        for (index, color) in colors.iter().enumerate() {
+            assert!(!colors[..index].contains(color), "{index}");
+        }
+        assert_eq!(ADWAITA.highlight(Highlight::Nick(NICK_COLORS)), colors[0]);
     }
 
     #[test]
