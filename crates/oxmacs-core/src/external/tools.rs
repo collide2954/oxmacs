@@ -13,6 +13,33 @@ pub enum Probe {
     Missing,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Tool {
+    Program(&'static str),
+    R(Option<String>),
+}
+
+pub fn probe_all(tools: Vec<Tool>) -> Vec<(Tool, Probe)> {
+    thread::scope(|scope| {
+        let probes: Vec<_> = tools
+            .into_iter()
+            .map(|tool| {
+                scope.spawn(move || {
+                    let probe = match &tool {
+                        Tool::Program(name) => probe(name),
+                        Tool::R(configured) => probe_r(configured.as_deref()),
+                    };
+                    (tool, probe)
+                })
+            })
+            .collect();
+        probes
+            .into_iter()
+            .filter_map(|probe| probe.join().ok())
+            .collect()
+    })
+}
+
 pub fn probe(program: &str) -> Probe {
     let Some(path) = find(program, env::var_os("PATH").as_deref()) else {
         return Probe::Missing;
@@ -314,6 +341,23 @@ mod tests {
     #[test]
     fn missing_programs_are_reported() {
         assert_eq!(probe("oxmacs-no-such-tool"), Probe::Missing);
+    }
+
+    #[test]
+    fn tools_are_probed_together_and_answered_in_order() {
+        let tools = vec![
+            Tool::Program("oxmacs-no-such-tool"),
+            Tool::R(Some("oxmacs-no-such-r".to_owned())),
+            Tool::Program("oxmacs-other-missing-tool"),
+        ];
+
+        assert_eq!(
+            probe_all(tools.clone()),
+            tools
+                .into_iter()
+                .map(|tool| (tool, Probe::Missing))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
