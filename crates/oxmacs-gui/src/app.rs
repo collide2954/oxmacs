@@ -555,10 +555,17 @@ impl App {
             .map(|format| line(clock::now(format)));
         column![
             body,
-            container(row![line(pane.mode_line()), space::horizontal()].push(clock))
-                .width(Length::Fill)
-                .padding([1, 4])
-                .style(move |_| style::mode_line(&faces, active)),
+            container(
+                row![
+                    container(line(pane.mode_line()).wrapping(text::Wrapping::None))
+                        .width(Length::Fill)
+                        .clip(true)
+                ]
+                .push(clock)
+            )
+            .width(Length::Fill)
+            .padding([1, 4])
+            .style(move |_| style::mode_line(&faces, active)),
         ]
         .into()
     }
