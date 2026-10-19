@@ -7,7 +7,7 @@ use jiff::civil::Date;
 use crate::atlas::agenda::{Entry, Kind};
 use crate::atlas::calendar;
 use crate::editor::Editor;
-use crate::editor::atlas::agenda::{clip, color, lead};
+use crate::editor::atlas::agenda::{color, fit, lead};
 use crate::editor::atlas::list::{ListKind, Month};
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
@@ -80,11 +80,11 @@ impl Grid<'_> {
         let blank = || (" ".repeat(self.cell), None);
         if entries.len() > ENTRY_LINES && row == ENTRY_LINES - 1 {
             let more = format!(" +{} more", entries.len() - row);
-            return (clip(&more, self.cell), Some(Highlight::Comment));
+            return (fit(&more, self.cell), Some(Highlight::Comment));
         }
         match entries.get(row) {
             Some(entry) => (
-                format!(" {}", clip(&short(entry), width)),
+                format!(" {}", fit(&short(entry), width)),
                 Some(entry_face(entry)),
             ),
             None => blank(),
@@ -277,7 +277,7 @@ impl Editor {
                 .max(10);
             page.line(&[
                 (&format!("  {lead:<12}"), Some(face)),
-                (&format!("{} ", clip(&entry.title, width)), None),
+                (&format!("{} ", fit(&entry.title, width)), None),
                 (&entry.vault, Some(vault_face)),
             ]);
         }
@@ -364,7 +364,7 @@ fn week_view(page: &mut Page, grid: &Grid<'_>, week: &[Date; 7]) -> (usize, usiz
             .iter()
             .map(|day| match untimed(*day).get(row) {
                 Some(entry) => (
-                    format!(" {}", clip(&short(entry), grid.cell - 1)),
+                    format!(" {}", fit(&short(entry), grid.cell - 1)),
                     Some(entry_face(entry)),
                 ),
                 None => (" ".repeat(grid.cell), None),
@@ -401,7 +401,7 @@ fn hour_cell(grid: &Grid<'_>, day: Date, hour: i8) -> (String, Option<Highlight>
         };
         if start.hour() == hour {
             return (
-                format!(" {}", clip(&short(entry), grid.cell - 1)),
+                format!(" {}", fit(&short(entry), grid.cell - 1)),
                 Some(entry_face(entry)),
             );
         }

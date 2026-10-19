@@ -4,7 +4,7 @@ use jiff::{SignedDuration, Timestamp};
 
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
-use crate::editor::page::Page;
+use crate::editor::page::{Page, clip};
 use crate::editor::{ConnectionId, Editor, Effect, Job, JobId, Outcome};
 use crate::text::{Buffer, BufferId};
 use crate::theme::Highlight;
@@ -183,15 +183,6 @@ fn fit(widths: &[usize; 8], room: usize) -> (Vec<usize>, usize) {
         }
     }
     (shown, details)
-}
-
-fn clip(text: &str, width: usize) -> String {
-    if text.chars().count() <= width {
-        return text.to_owned();
-    }
-    let mut clipped: String = text.chars().take(width.saturating_sub(1)).collect();
-    clipped.push('…');
-    clipped
 }
 
 fn page(tracked: &[Tracked], now: Timestamp, room: usize) -> (Page, Vec<(usize, Source)>) {

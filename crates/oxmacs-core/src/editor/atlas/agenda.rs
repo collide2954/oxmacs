@@ -10,7 +10,7 @@ use crate::editor::Editor;
 use crate::editor::atlas::list::ListKind;
 use crate::editor::atlas::{cycled_message, face};
 use crate::editor::buffers::Mode;
-use crate::editor::page::Page;
+use crate::editor::page::{self, Page};
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::files;
 use crate::theme::Highlight;
@@ -102,13 +102,8 @@ pub(super) fn lead(entry: &Entry) -> (String, Highlight) {
     }
 }
 
-pub(super) fn clip(text: &str, width: usize) -> String {
-    if text.chars().count() <= width {
-        return format!("{text:<width$}");
-    }
-    let mut clipped: String = text.chars().take(width.saturating_sub(1)).collect();
-    clipped.push('…');
-    clipped
+pub(super) fn fit(text: &str, width: usize) -> String {
+    format!("{:<width$}", page::clip(text, width))
 }
 
 impl Editor {
@@ -185,7 +180,7 @@ impl Editor {
                 page.line(&[
                     (&format!("  {lead:<LEAD$}"), Some(lead_face)),
                     (
-                        &format!("{} ", clip(&entry.title, title_width)),
+                        &format!("{} ", fit(&entry.title, title_width)),
                         waiting.then_some(Highlight::Comment),
                     ),
                     (&format!("{when:<WHEN$} "), when_face),

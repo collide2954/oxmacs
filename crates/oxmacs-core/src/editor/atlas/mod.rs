@@ -4,6 +4,7 @@ use jiff::civil::Date;
 
 use crate::atlas::edit::{self, Cycled};
 use crate::atlas::note::{self, Note, State, Style};
+use crate::display::runs;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::text::{Buffer, BufferId};
@@ -43,20 +44,6 @@ fn face(style: Style) -> Highlight {
         Style::Link => Highlight::Link,
         Style::When => Highlight::Attribute,
     }
-}
-
-fn runs(faces: &[Option<Highlight>]) -> Vec<(Range<usize>, Highlight)> {
-    let mut found: Vec<(Range<usize>, Highlight)> = Vec::new();
-    for (column, face) in faces.iter().enumerate() {
-        let Some(face) = face else {
-            continue;
-        };
-        match found.last_mut() {
-            Some((range, last)) if range.end == column && last == face => range.end += 1,
-            _ => found.push((column..column + 1, *face)),
-        }
-    }
-    found
 }
 
 pub(in crate::editor) fn cycled_message(cycled: &Cycled) -> Option<String> {

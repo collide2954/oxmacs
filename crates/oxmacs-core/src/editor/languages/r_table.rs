@@ -4,7 +4,7 @@ use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::languages::r_environment::VIEW_ROWS;
-use crate::editor::page::Page;
+use crate::editor::page::{Page, clip};
 use crate::external::r;
 use crate::text::{Buffer, BufferId};
 use crate::theme::Highlight;
@@ -84,15 +84,6 @@ fn table(payload: &str) -> Option<Table> {
         types,
         cells,
     })
-}
-
-fn clip(text: &str, width: usize) -> String {
-    if text.chars().count() <= width {
-        return text.to_owned();
-    }
-    let mut clipped: String = text.chars().take(width.saturating_sub(1)).collect();
-    clipped.push('…');
-    clipped
 }
 
 fn width_of(cells: impl Iterator<Item = usize>) -> usize {

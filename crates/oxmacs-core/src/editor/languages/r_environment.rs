@@ -1,7 +1,7 @@
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
-use crate::editor::page::Page;
+use crate::editor::page::{Page, clip};
 use crate::external::r;
 use crate::text::{Buffer, BufferId};
 use crate::theme::Highlight;
@@ -68,15 +68,6 @@ fn entries(payload: &str) -> Vec<Entry> {
             })
         })
         .collect()
-}
-
-fn clip(text: &str, width: usize) -> String {
-    if text.chars().count() <= width {
-        return text.to_owned();
-    }
-    let mut clipped: String = text.chars().take(width.saturating_sub(1)).collect();
-    clipped.push('…');
-    clipped
 }
 
 fn page(entries: &[Entry], room: usize) -> (Page, Vec<(usize, usize)>) {

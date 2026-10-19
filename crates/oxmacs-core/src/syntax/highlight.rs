@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{Node, Query, QueryCursor, Tree};
 
+use crate::display::runs;
 use crate::syntax::{Grammar, Syntax};
 use crate::text::Buffer;
 use crate::theme::Highlight;
@@ -149,20 +150,6 @@ impl Span<'_> {
             faces[chars].fill(Some(highlight));
         }
     }
-}
-
-fn runs(faces: &[Option<Highlight>]) -> Vec<(Range<usize>, Highlight)> {
-    let mut runs: Vec<(Range<usize>, Highlight)> = Vec::new();
-    for (index, face) in faces.iter().enumerate() {
-        let Some(face) = face else {
-            continue;
-        };
-        match runs.last_mut() {
-            Some((range, last)) if range.end == index && last == face => range.end = index + 1,
-            _ => runs.push((index..index + 1, *face)),
-        }
-    }
-    runs
 }
 
 #[cfg(test)]
