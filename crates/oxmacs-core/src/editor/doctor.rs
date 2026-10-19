@@ -124,25 +124,35 @@ impl Editor {
     fn examine_tools(&self, page: &mut Page) {
         page.heading("Tools");
         for (name, hint) in TOOLS {
-            let label = format!("  {name:<LABEL_WIDTH$}");
-            match (self.probe)(name) {
-                Probe::Found { path, version } => page.line(&[
-                    (&label, None),
-                    ("✓ ", Some(Highlight::Success)),
-                    (&format!("{version}  {}", path.display()), None),
-                ]),
-                Probe::Broken { error, .. } => page.line(&[
-                    (&label, None),
-                    ("! ", Some(Highlight::Warning)),
-                    (&format!("{}; {hint}", error.trim_end_matches('.')), None),
-                ]),
-                Probe::Missing => page.line(&[
-                    (&label, None),
-                    ("✗ ", Some(Highlight::Error)),
-                    (&format!("not found; {hint}"), None),
-                ]),
-            }
+            tool(page, name, (self.probe)(name), hint);
         }
+        tool(
+            page,
+            "R",
+            (self.probe_r)(self.config.r_program.as_deref()),
+            "install R from https://cran.r-project.org or set r-program",
+        );
+    }
+}
+
+fn tool(page: &mut Page, name: &str, probe: Probe, hint: &str) {
+    let label = format!("  {name:<LABEL_WIDTH$}");
+    match probe {
+        Probe::Found { path, version } => page.line(&[
+            (&label, None),
+            ("✓ ", Some(Highlight::Success)),
+            (&format!("{version}  {}", path.display()), None),
+        ]),
+        Probe::Broken { error, .. } => page.line(&[
+            (&label, None),
+            ("! ", Some(Highlight::Warning)),
+            (&format!("{}; {hint}", error.trim_end_matches('.')), None),
+        ]),
+        Probe::Missing => page.line(&[
+            (&label, None),
+            ("✗ ", Some(Highlight::Error)),
+            (&format!("not found; {hint}"), None),
+        ]),
     }
 }
 
@@ -235,6 +245,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut editor = Editor::new();
         editor.probe = fake_probe;
+        editor.probe_r = |_| Probe::Missing;
         editor.config_path = Some(dir.path().join("config.toml"));
         editor.set_font_note("JetBrains Mono (bundled)");
         press(&mut editor, "M-x");
@@ -289,6 +300,11 @@ mod tests {
         assert!(
             line_with(&editor, "  cargo")
                 .contains("! no toolchain; install Rust from https://rustup.rs")
+        );
+        assert!(
+            line_with(&editor, "  R  ").contains(
+                "✗ not found; install R from https://cran.r-project.org or set r-program"
+            )
         );
         assert!(
             line_with(&editor, "cargo-clippy").contains("✗ not found; rustup component add clippy")

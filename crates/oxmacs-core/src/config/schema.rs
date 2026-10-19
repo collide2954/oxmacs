@@ -42,6 +42,7 @@ const APPEARANCE: &str = "Appearance";
 const EDITING: &str = "Editing";
 const FILES: &str = "Files";
 const RUST: &str = "Rust";
+const R: &str = "R";
 
 pub const SETTINGS: &[Setting] = &[
     optional(
@@ -140,6 +141,15 @@ pub const SETTINGS: &[Setting] = &[
         "auto-save",
         Kind::Toggle,
         "Save modified Rust buffers when idle so they are linted",
+    ),
+    optional(
+        setting(
+            R,
+            "r-program",
+            Kind::Text,
+            "R executable for the console; Rterm on Windows",
+        ),
+        "auto-detect",
     ),
 ];
 

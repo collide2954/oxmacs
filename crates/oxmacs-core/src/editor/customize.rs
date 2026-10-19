@@ -606,16 +606,16 @@ mod tests {
         );
 
         press(&mut editor, "p p");
-        assert!(at_point(&editor).starts_with("[x]"));
+        assert!(at_point(&editor).starts_with("(auto-detect)"));
         assert_eq!(
             editor.buffer().line_of(editor.buffer().point()),
-            line_of(&editor, "auto-save")
+            line_of(&editor, "r-program")
         );
 
         press(&mut editor, "TAB S-TAB");
         assert_eq!(
             editor.buffer().line_of(editor.buffer().point()),
-            line_of(&editor, "auto-save")
+            line_of(&editor, "r-program")
         );
     }
 

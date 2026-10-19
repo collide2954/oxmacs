@@ -33,6 +33,8 @@ pub struct Config {
     pub auto_save: bool,
     pub line_numbers: LineNumbers,
     pub line_number_separator: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r_program: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -81,6 +83,7 @@ impl Default for Config {
             auto_save: true,
             line_numbers: LineNumbers::default(),
             line_number_separator: false,
+            r_program: None,
         }
     }
 }
@@ -300,6 +303,7 @@ mod tests {
         let full = Config {
             theme: Some("adwaita".to_owned()),
             font_family: Some("Iosevka".to_owned()),
+            r_program: Some("R".to_owned()),
             ..Config::default()
         };
         let toml::Value::Table(table) = toml::Value::try_from(&full).unwrap() else {
