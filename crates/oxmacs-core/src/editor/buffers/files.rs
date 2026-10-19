@@ -299,6 +299,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {
+        self.exact_atlas_dates(index);
         let formatting = format
             && matches!(
                 self.buffers.language(index),

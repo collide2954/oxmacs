@@ -126,6 +126,7 @@ impl Editor {
             Command::ListProcesses => self.list_processes(),
             Command::ListTools => self.list_tools(),
             Command::IrcSetup => self.irc_setup(),
+            Command::AtlasCycleTask => self.atlas_cycle_task(),
             Command::IrcSetupNextField => self.irc_setup_next_field(true),
             Command::IrcSetupPreviousField => self.irc_setup_next_field(false),
             Command::IrcSetupChange => self.irc_setup_change(),

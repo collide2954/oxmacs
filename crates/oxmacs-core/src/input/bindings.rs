@@ -374,6 +374,8 @@ const TOOLS: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
+const ATLAS: &[(&str, Command)] = &[("C-c C-c", Command::AtlasCycleTask)];
+
 const IRC_SETUP: &[(&str, Command)] = &[
     ("TAB", Command::IrcSetupNextField),
     ("n", Command::IrcSetupNextField),
@@ -423,6 +425,10 @@ pub fn tools() -> Keymap {
 
 pub fn irc_setup() -> Keymap {
     build(IRC_SETUP)
+}
+
+pub fn atlas() -> Keymap {
+    build(ATLAS)
 }
 
 pub fn plots() -> Keymap {

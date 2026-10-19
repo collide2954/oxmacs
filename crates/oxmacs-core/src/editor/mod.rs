@@ -112,12 +112,14 @@ pub struct Editor {
     r_sessions: languages::r_console::Sessions,
     xref: Vec<(crate::text::BufferId, usize)>,
     atlas_notes: Vec<(crate::text::BufferId, u64, crate::atlas::note::Note)>,
+    atlas_line: Option<(crate::text::BufferId, usize)>,
     today: fn() -> jiff::civil::Date,
     processes: special::processes::Processes,
     processes_keymap: Keymap,
     toolbox: special::toolbox::Toolbox,
     tools_keymap: Keymap,
     irc_setup_keymap: Keymap,
+    atlas_keymap: Keymap,
     environment_keymap: Keymap,
     table_keymap: Keymap,
     pending: Vec<Key>,
@@ -205,12 +207,14 @@ impl Editor {
             r_sessions: languages::r_console::Sessions::default(),
             xref: Vec::new(),
             atlas_notes: Vec::new(),
+            atlas_line: None,
             today: atlas::today,
             processes: special::processes::Processes::default(),
             processes_keymap: bindings::processes(),
             toolbox: special::toolbox::Toolbox::default(),
             tools_keymap: bindings::tools(),
             irc_setup_keymap: bindings::irc_setup(),
+            atlas_keymap: bindings::atlas(),
             environment_keymap: bindings::environment(),
             table_keymap: bindings::table(),
             pending: Vec::new(),
@@ -460,13 +464,14 @@ impl Editor {
             Scope::Processes => Some(&self.processes_keymap),
             Scope::Tools => Some(&self.tools_keymap),
             Scope::IrcSetup => Some(&self.irc_setup_keymap),
+            Scope::Atlas => Some(&self.atlas_keymap),
             Scope::Environment => Some(&self.environment_keymap),
             Scope::Table => Some(&self.table_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search | Scope::Popup => None,
         }
     }
 
-    fn keymaps(&self) -> [(Scope, &Keymap); 24] {
+    fn keymaps(&self) -> [(Scope, &Keymap); 25] {
         [
             (Scope::Global, &self.keymap),
             (Scope::Minibuffer, &self.minibuffer_keymap),
@@ -490,6 +495,7 @@ impl Editor {
             (Scope::Processes, &self.processes_keymap),
             (Scope::Tools, &self.tools_keymap),
             (Scope::IrcSetup, &self.irc_setup_keymap),
+            (Scope::Atlas, &self.atlas_keymap),
             (Scope::Environment, &self.environment_keymap),
             (Scope::Table, &self.table_keymap),
         ]
@@ -510,6 +516,7 @@ impl Editor {
             Some(Mode::Processes(_)) => Scope::Processes,
             Some(Mode::Tools(_)) => Scope::Tools,
             Some(Mode::IrcSetup(_)) => Scope::IrcSetup,
+            Some(Mode::Text(None)) if self.is_atlas(0) => Scope::Atlas,
             Some(Mode::Environment(_)) => Scope::Environment,
             Some(Mode::Table(_)) => Scope::Table,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
@@ -594,6 +601,7 @@ impl Editor {
             self.prepare_motion_selection(shifted);
         }
         self.perform(command, goal_column, previous);
+        self.after_atlas_command();
         self.reset_selection(command);
         self.refresh_minibuffer();
         self.refresh_popup(command);

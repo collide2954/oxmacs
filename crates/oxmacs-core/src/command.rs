@@ -501,6 +501,11 @@ pub enum Command {
     #[strum(message = "Show the previous columns of the table")]
     RTablePreviousColumn,
     #[strum(
+        message = "Cycle the task on this line: todo, doing, done",
+        detailed_message = "Turns [ ] into [/] and [/] into [x], stamping done: with today's date; done, waiting and dropped tasks go back to [ ]. A task that repeats with every: is moved to its next date instead, with a done line logged under it."
+    )]
+    AtlasCycleTask,
+    #[strum(
         message = "Add an IRC server with a short form",
         detailed_message = "Opens *IRC Setup*: pick Libera.Chat, OFTC, EFnet or another server, then your nick, an optional account to sign in with, where the password is kept (the OS keychain, asked each time, or an environment variable), channels to join, and whether the built-in bouncer keeps you connected when oxmacs closes. TAB moves between fields and RET changes one; C-c C-c adds the server to config.toml and offers to connect, C-c C-k cancels."
     )]
@@ -722,6 +727,7 @@ impl Command {
             | Self::CompletionQuit => Scope::Popup,
             Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
             Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => Scope::Tools,
+            Self::AtlasCycleTask => Scope::Atlas,
             Self::IrcSetupNextField
             | Self::IrcSetupPreviousField
             | Self::IrcSetupChange
@@ -768,6 +774,7 @@ pub enum Scope {
     Processes,
     Tools,
     IrcSetup,
+    Atlas,
     Environment,
     Table,
 }
@@ -797,6 +804,7 @@ impl Scope {
             Self::Processes => Some("*Processes*"),
             Self::Tools => Some("*Tools*"),
             Self::IrcSetup => Some("*IRC Setup*"),
+            Self::Atlas => Some("Atlas notes"),
             Self::Environment => Some("R environments"),
             Self::Table => Some("R tables"),
         }

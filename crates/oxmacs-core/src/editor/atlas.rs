@@ -1,11 +1,14 @@
 use std::ops::Range;
+use std::sync::LazyLock;
 
 use jiff::civil::Date;
+use regex::Regex;
 
+use crate::atlas::date::{self, Every};
 use crate::atlas::note::{self, Note, State, Style};
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
-use crate::text::BufferId;
+use crate::text::{Buffer, BufferId};
 use crate::theme::Highlight;
 
 pub(in crate::editor) const EXTENSION: &str = "atlas";
@@ -48,7 +51,150 @@ fn runs(faces: &[Option<Highlight>]) -> Vec<(Range<usize>, Highlight)> {
     found
 }
 
+static DONE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\s+done:\S+").unwrap_or_else(|_| unreachable!("a valid pattern"))
+});
+static DATED: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\b(on|due):(\d{4}-\d{2}-\d{2})")
+        .unwrap_or_else(|_| unreachable!("a valid pattern"))
+});
+
+fn marked(text: &str, depth: usize, state: State) -> String {
+    text.chars()
+        .enumerate()
+        .map(|(column, c)| if column == depth + 1 { state.mark() } else { c })
+        .collect()
+}
+
+fn exact(text: &str, today: Date) -> Option<String> {
+    let parsed = note::parse(text, today);
+    let spans = parsed.spans.first()?;
+    let chars: Vec<char> = text.chars().collect();
+    let mut changed = chars.clone();
+    let mut any = false;
+    for span in spans.iter().rev().filter(|span| span.style == Style::Loose) {
+        let word: String = chars[span.columns.clone()].iter().collect();
+        let Some((key, value)) = word.split_once(':') else {
+            continue;
+        };
+        if key.eq_ignore_ascii_case("every") {
+            continue;
+        }
+        if let Some(date) = date::resolve(value, today) {
+            let replacement: Vec<char> = format!("{key}:{date}").chars().collect();
+            changed.splice(span.columns.clone(), replacement);
+            any = true;
+        }
+    }
+    any.then(|| changed.into_iter().collect())
+}
+
 impl Editor {
+    fn replace_line(&mut self, index: usize, line: usize, text: &str) {
+        let Some(buffer) = self.buffers.get_mut(index) else {
+            return;
+        };
+        let start = buffer.line_start(line);
+        let end = buffer.line_end(line);
+        let point = buffer.point();
+        buffer.delete_range(start..end);
+        buffer.insert_at(start, text);
+        if (start..=end).contains(&point) {
+            let column = point - start;
+            buffer.set_point(start + column.min(text.chars().count()));
+        }
+    }
+
+    fn exact_dates_on(&mut self, index: usize, line: usize) {
+        let today = (self.today)();
+        let Some(buffer) = self.buffers.get(index) else {
+            return;
+        };
+        if line >= buffer.len_lines() {
+            return;
+        }
+        let text = buffer.line_text(line).to_string();
+        if let Some(text) = exact(&text, today) {
+            self.replace_line(index, line, &text);
+        }
+    }
+
+    pub(in crate::editor) fn exact_atlas_dates(&mut self, index: usize) {
+        if !self.is_atlas(index) {
+            return;
+        }
+        let lines = self.buffers.get(index).map_or(0, Buffer::len_lines);
+        for line in 0..lines {
+            self.exact_dates_on(index, line);
+        }
+    }
+
+    pub(in crate::editor) fn after_atlas_command(&mut self) {
+        let here = self.is_atlas(0).then(|| {
+            let buffer = self.buffers.current();
+            (buffer.id(), buffer.line_of(buffer.point()))
+        });
+        let left = std::mem::replace(&mut self.atlas_line, here);
+        if let Some((id, line)) = left
+            && left != here
+            && let Some(index) = self.buffers.position(|buffer| buffer.id() == id)
+            && self.is_atlas(index)
+        {
+            self.exact_dates_on(index, line);
+        }
+    }
+
+    pub(in crate::editor) fn atlas_cycle_task(&mut self) {
+        let today = (self.today)();
+        let buffer = self.buffers.current();
+        let line = buffer.line_of(buffer.point());
+        let text = buffer.line_text(line).to_string();
+        let parsed = note::parse(&text, today);
+        let Some(task) = parsed.tasks.first() else {
+            self.show_message("No task on this line");
+            return;
+        };
+        let next = task.state.cycled();
+        if next == State::Done
+            && let Some(every) = task.every
+        {
+            self.repeat_task(line, &text, task.depth, every, today);
+            return;
+        }
+        let mut changed = marked(&text, task.depth, next);
+        if task.state == State::Done {
+            changed = DONE.replace_all(&changed, "").into_owned();
+        }
+        if next == State::Done && task.done.is_none() {
+            changed = format!("{}  done:{today}", changed.trim_end());
+        }
+        self.replace_line(0, line, &changed);
+    }
+
+    fn repeat_task(&mut self, line: usize, text: &str, depth: usize, every: Every, today: Date) {
+        let mut first = None;
+        let moved = DATED.replace_all(text, |captures: &regex::Captures<'_>| {
+            let next = captures[2]
+                .parse::<Date>()
+                .ok()
+                .and_then(|date| every.next(date, today));
+            match next {
+                Some(next) => {
+                    first.get_or_insert(next);
+                    format!("{}:{next}", &captures[1])
+                }
+                None => captures[0].to_owned(),
+            }
+        });
+        let changed = marked(&moved, depth, State::Todo);
+        let log = format!("\n{}- done {today}", " ".repeat(depth + 4));
+        self.replace_line(0, line, &format!("{changed}{log}"));
+        match first {
+            Some(next) => self.show_message(format!("Next: {next}")),
+            None => self.show_message("Logged; the task has no date to move"),
+        }
+    }
+
     pub(in crate::editor) fn is_atlas(&self, index: usize) -> bool {
         matches!(self.buffers.mode(index), Some(Mode::Text(None)))
             && self
@@ -123,6 +269,7 @@ mod tests {
     use jiff::civil::date;
 
     use crate::editor::Editor;
+    use crate::editor::test_support::press;
     use crate::theme::Highlight;
 
     fn note(text: &str) -> (tempfile::TempDir, Editor) {
@@ -159,6 +306,75 @@ mod tests {
         assert_eq!(
             editor.line_style(0).spans,
             [(0..3, Highlight::Success), (3..33, Highlight::Comment)]
+        );
+    }
+
+    fn first_line(editor: &Editor) -> String {
+        crate::editor::test_support::lines(editor)[0].clone()
+    }
+
+    #[test]
+    fn c_c_c_c_cycles_a_task_and_stamps_when_it_was_done() {
+        let (_dir, mut editor) = note("[ ] Buy seeds  #home\n");
+
+        press(&mut editor, "C-c C-c");
+        assert_eq!(first_line(&editor), "[/] Buy seeds  #home");
+        press(&mut editor, "C-c C-c");
+        assert_eq!(first_line(&editor), "[x] Buy seeds  #home  done:2026-10-19");
+        press(&mut editor, "C-c C-c");
+        assert_eq!(first_line(&editor), "[ ] Buy seeds  #home");
+    }
+
+    #[test]
+    fn finishing_a_repeating_task_moves_it_on_and_logs_it() {
+        let (_dir, mut editor) = note("  [/] Water plants  on:2026-10-21  every:3d\nnext\n");
+
+        press(&mut editor, "C-c C-c");
+
+        assert_eq!(
+            crate::editor::test_support::lines(&editor)[..3],
+            [
+                "  [ ] Water plants  on:2026-10-24  every:3d",
+                "      - done 2026-10-19",
+                "next"
+            ]
+        );
+        assert_eq!(editor.message(), Some("Next: 2026-10-24"));
+    }
+
+    #[test]
+    fn c_c_c_c_off_a_task_says_so() {
+        let (_dir, mut editor) = note("Just text\n");
+
+        press(&mut editor, "C-c C-c");
+
+        assert_eq!(editor.message(), Some("No task on this line"));
+    }
+
+    #[test]
+    fn loose_dates_become_exact_when_point_leaves_the_line() {
+        let (_dir, mut editor) = note("");
+        crate::editor::test_support::type_text(&mut editor, "[ ] Call Ana  due:fri on:tomorrow");
+        assert_eq!(first_line(&editor), "[ ] Call Ana  due:fri on:tomorrow");
+
+        press(&mut editor, "RET");
+
+        assert_eq!(
+            first_line(&editor),
+            "[ ] Call Ana  due:2026-10-23 on:2026-10-20"
+        );
+    }
+
+    #[test]
+    fn saving_makes_every_loose_date_exact() {
+        let (dir, mut editor) = note("[ ] One  due:+1w\n[ ] Two  due:someday\n");
+        press(&mut editor, "C-e SPC");
+
+        press(&mut editor, "C-x C-s");
+
+        assert_eq!(
+            fs::read_to_string(dir.path().join("Garden plan.atlas")).unwrap(),
+            "[ ] One  due:2026-10-26 \n[ ] Two  due:someday\n"
         );
     }
 
