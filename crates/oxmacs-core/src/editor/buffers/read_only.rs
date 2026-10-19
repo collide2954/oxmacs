@@ -1,7 +1,7 @@
 use crate::editor::Editor;
 
 impl Editor {
-    pub(super) fn toggle_read_only(&mut self) {
+    pub(in crate::editor) fn toggle_read_only(&mut self) {
         if self.buffers.is_special(0) {
             self.show_message("This buffer stays read-only");
             return;
@@ -13,7 +13,7 @@ impl Editor {
         self.show_message(format!("Read-Only mode {state} in current buffer"));
     }
 
-    pub(super) fn refuse_read_only(&mut self) -> bool {
+    pub(in crate::editor) fn refuse_read_only(&mut self) -> bool {
         let buffer = self.buffers.current();
         if self.minibuffer.is_some() || !buffer.is_read_only() {
             return false;

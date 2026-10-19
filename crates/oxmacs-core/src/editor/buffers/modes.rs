@@ -13,7 +13,7 @@ impl Editor {
         self.buffers.sync_syntax(0);
     }
 
-    pub(super) fn syntax_highlights_at(
+    pub(in crate::editor) fn syntax_highlights_at(
         &self,
         index: usize,
         line: usize,
@@ -24,7 +24,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn set_major_mode(&mut self, language: Option<Language>) {
+    pub(in crate::editor) fn set_major_mode(&mut self, language: Option<Language>) {
         if self.buffers.is_special(0) {
             self.show_message("This buffer keeps its own mode");
             return;

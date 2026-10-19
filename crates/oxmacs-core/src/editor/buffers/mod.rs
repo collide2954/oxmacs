@@ -1,3 +1,9 @@
+pub(super) mod auto_save;
+pub(super) mod disk;
+pub(super) mod files;
+pub(super) mod modes;
+pub(super) mod read_only;
+
 use std::path::Path;
 
 use crate::dired::Listing;

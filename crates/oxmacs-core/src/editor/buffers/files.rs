@@ -16,11 +16,11 @@ impl Editor {
         self.home = home;
     }
 
-    pub(super) fn find_file(&mut self) {
+    pub(in crate::editor) fn find_file(&mut self) {
         self.open_file_prompt("Find file: ", Purpose::FindFile);
     }
 
-    pub(super) fn write_file(&mut self) {
+    pub(in crate::editor) fn write_file(&mut self) {
         if self.buffers.is_special(0) {
             self.show_message("This buffer can't be written to a file");
             return;
@@ -28,7 +28,7 @@ impl Editor {
         self.open_file_prompt("Write file: ", Purpose::WriteFile);
     }
 
-    pub(super) fn open_file_prompt(&mut self, prompt: &str, purpose: Purpose) -> bool {
+    pub(in crate::editor) fn open_file_prompt(&mut self, prompt: &str, purpose: Purpose) -> bool {
         if !self.open_minibuffer(prompt, purpose) {
             return false;
         }
@@ -41,7 +41,7 @@ impl Editor {
         true
     }
 
-    pub(super) fn refresh_minibuffer(&mut self) {
+    pub(in crate::editor) fn refresh_minibuffer(&mut self) {
         let Some(minibuffer) = &self.minibuffer else {
             return;
         };
@@ -64,7 +64,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn exit_file_prompt(&mut self, exact: bool) {
+    pub(in crate::editor) fn exit_file_prompt(&mut self, exact: bool) {
         let Some(purpose) = self
             .minibuffer
             .as_ref()
@@ -123,7 +123,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn finish_write(&mut self, path: PathBuf) {
+    pub(in crate::editor) fn finish_write(&mut self, path: PathBuf) {
         let buffer = self.buffers.current_mut();
         let format = buffer.file().map(|file| file.format).unwrap_or_default();
         let language = Language::for_path(&path);
@@ -135,7 +135,7 @@ impl Editor {
         self.save_buffer_at(0);
     }
 
-    pub(super) fn name_file_buffers(&mut self) {
+    pub(in crate::editor) fn name_file_buffers(&mut self) {
         let located: Vec<(usize, PathBuf, bool)> = (0..self.buffers.len())
             .filter_map(|index| {
                 let (path, directory) = self.buffers.location(index)?;
@@ -156,7 +156,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn complete_file_name(&mut self) {
+    pub(in crate::editor) fn complete_file_name(&mut self) {
         if let Some((label, _, _)) = self.selected_entry() {
             let input = self.minibuffer_input();
             let (directory, _) = paths::split(&input);
@@ -164,7 +164,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn minibuffer_delete_backward(&mut self) {
+    pub(in crate::editor) fn minibuffer_delete_backward(&mut self) {
         match self.parent_input() {
             Some(parent) => self.set_minibuffer_input(&parent),
             None => self.delete_char(false),
@@ -208,7 +208,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn absolute(&self, path: &Path) -> PathBuf {
+    pub(in crate::editor) fn absolute(&self, path: &Path) -> PathBuf {
         let joined = self.default_directory().join(path);
         paths::normalize(&path::absolute(&joined).unwrap_or(joined))
     }
@@ -268,7 +268,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn save_buffer(&mut self) {
+    pub(in crate::editor) fn save_buffer(&mut self) {
         if self.customizing().is_some() {
             self.save_settings();
             return;
@@ -292,11 +292,11 @@ impl Editor {
         }
     }
 
-    pub(super) fn save_buffer_at(&mut self, index: usize) -> bool {
+    pub(in crate::editor) fn save_buffer_at(&mut self, index: usize) -> bool {
         self.write_buffer_at(index, self.settings.format_on_save)
     }
 
-    pub(super) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {
+    pub(in crate::editor) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {
         let formatting = format && self.buffers.language(index) == Some(Language::Rust);
         let format_error = formatting
             .then(|| self.format_buffer_at(index).err())

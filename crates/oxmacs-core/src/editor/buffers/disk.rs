@@ -60,7 +60,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn differs_on_disk(file: &FileInfo) -> bool {
+    pub(in crate::editor) fn differs_on_disk(file: &FileInfo) -> bool {
         file.changed_on_disk
             || DiskState::of(&file.path)
                 .ok()
@@ -68,14 +68,19 @@ impl Editor {
                 .is_some_and(|now| Some(now) != file.disk)
     }
 
-    pub(super) fn note_disk_state(&mut self, index: usize, disk: Option<DiskState>, changed: bool) {
+    pub(in crate::editor) fn note_disk_state(
+        &mut self,
+        index: usize,
+        disk: Option<DiskState>,
+        changed: bool,
+    ) {
         if let Some(file) = self.buffers.get_mut(index).and_then(Buffer::file_mut) {
             file.disk = disk;
             file.changed_on_disk = changed;
         }
     }
 
-    pub(super) fn revert_buffer(&mut self) {
+    pub(in crate::editor) fn revert_buffer(&mut self) {
         if self.customizing().is_some() {
             self.revert_settings();
             return;
@@ -105,7 +110,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn revert_at(&mut self, index: usize) {
+    pub(in crate::editor) fn revert_at(&mut self, index: usize) {
         let Some(path) = self
             .buffers
             .get(index)
