@@ -17,6 +17,7 @@ pub(in crate::editor) enum Purpose {
     RunCommand,
     DescribeCommand,
     IrcServer,
+    IrcBuffer,
     PasteFromHistory,
     FindFile,
     WriteFile,
@@ -174,6 +175,7 @@ impl Editor {
             }
             Purpose::LoadTheme => self.theme_completions(matches),
             Purpose::IrcServer => self.irc_server_completions(matches),
+            Purpose::IrcBuffer => self.irc_buffer_completions(matches),
             Purpose::ReplaceFrom(_)
             | Purpose::ReplaceTo(_)
             | Purpose::Compile

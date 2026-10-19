@@ -340,6 +340,11 @@ pub enum Command {
     IrcSendInput,
     #[strum(message = "Complete the nick before the cursor; again cycles")]
     IrcCompleteNick,
+    #[strum(
+        message = "Switch to an IRC buffer, busiest first",
+        detailed_message = "Lists every IRC server, channel and private chat with its unread messages and mentions; chats that mention you come first."
+    )]
+    IrcSwitch,
     #[strum(message = "Bring back the previous input")]
     ComintPreviousInput,
     #[strum(message = "Bring back the next input")]

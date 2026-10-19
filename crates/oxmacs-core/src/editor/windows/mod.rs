@@ -377,6 +377,7 @@ impl Editor {
             self.resize_parked(window, rows, columns);
         }
         self.render_help();
+        self.refill_chats();
     }
 
     pub(super) fn width_showing(&self, buffer: BufferId) -> Option<usize> {

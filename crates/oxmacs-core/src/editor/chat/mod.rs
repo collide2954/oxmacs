@@ -13,7 +13,7 @@ use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Choice, Completion, ConnectionId, Editor, Effect};
 use crate::external::net::{Endpoint, Event as NetEvent};
 use crate::irc::message::Message;
-use crate::irc::network::{Network, Target, Update};
+use crate::irc::network::{Kind, LineEvent, Network, Target, Update};
 use crate::irc::session::{Event, Identity, Sasl, Session};
 use crate::text::Buffer;
 use crate::theme::Highlight;
@@ -57,6 +57,7 @@ pub(in crate::editor) struct ChatView {
     pub(in crate::editor) input: InputLine,
     styles: Vec<LineStyle>,
     cycle: Option<Cycle>,
+    width: usize,
 }
 
 impl ChatView {
@@ -297,8 +298,9 @@ impl Editor {
             .map(|chat| chat.target.clone())
             .collect();
         for target in targets {
-            self.ensure_chat_buffer(&name, &target);
+            let buffer = self.ensure_chat_buffer(&name, &target);
             self.render_chat(&name, &target);
+            self.announce(index, &target, buffer);
             let focused = self
                 .irc
                 .focus
@@ -309,6 +311,136 @@ impl Editor {
                 self.show_chat(&name, &target);
             }
         }
+    }
+
+    fn announce(&mut self, index: usize, target: &Target, buffer: usize) {
+        let visible = self
+            .buffers
+            .get(buffer)
+            .is_some_and(|buffer| self.window_showing(buffer.id()).is_some());
+        let network = &self.irc.links[index].network;
+        let Some(line) = network
+            .find(target)
+            .and_then(|chat| network.chats().get(chat))
+            .and_then(|chat| chat.lines.last())
+            .filter(|line| !visible && !line.history)
+        else {
+            return;
+        };
+        let LineEvent::Chat {
+            nick,
+            text,
+            kind,
+            own: false,
+            mention,
+        } = &line.event
+        else {
+            return;
+        };
+        let announcement = match target {
+            Target::Query(_) if *kind != Kind::Notice => format!("{nick}: {text}"),
+            Target::Channel(channel) if *mention => {
+                format!("{nick} mentioned you in {channel}: {text}")
+            }
+            _ => return,
+        };
+        self.show_message(announcement);
+    }
+
+    pub(in crate::editor) fn read_visible_chats(&mut self) {
+        let mut visible = self.visible_buffers();
+        visible.push(0);
+        for index in visible {
+            let Some(Mode::Chat(view)) = self.buffers.mode(index) else {
+                continue;
+            };
+            let Some(link) = self
+                .irc
+                .links
+                .iter_mut()
+                .find(|link| link.server.name == view.server)
+            else {
+                continue;
+            };
+            if let Some(chat) = link.network.find(&view.target) {
+                link.network.mark_read(chat);
+            }
+        }
+    }
+
+    pub(in crate::editor) fn refill_chats(&mut self) {
+        let mut stale = Vec::new();
+        for index in 0..self.buffers.len() {
+            let (Some(Mode::Chat(view)), Some(buffer)) =
+                (self.buffers.mode(index), self.buffers.get(index))
+            else {
+                continue;
+            };
+            let width = self.width_showing(buffer.id()).filter(|width| *width > 0);
+            if width.is_some_and(|width| width != view.width) {
+                stale.push((view.server.clone(), view.target.clone()));
+            }
+        }
+        for (server, target) in stale {
+            self.render_chat(&server, &target);
+        }
+    }
+
+    pub(in crate::editor) fn irc_switch(&mut self) {
+        self.open_minibuffer("IRC buffer: ", Purpose::IrcBuffer);
+    }
+
+    pub(in crate::editor) fn irc_buffer_completions(
+        &self,
+        matches: impl Fn(&str) -> bool,
+    ) -> Vec<Completion> {
+        let mut found: Vec<(usize, usize, Completion)> = Vec::new();
+        for index in 0..self.buffers.len() {
+            let (Some(Mode::Chat(view)), Some(buffer)) =
+                (self.buffers.mode(index), self.buffers.get(index))
+            else {
+                continue;
+            };
+            if !matches(buffer.name()) {
+                continue;
+            }
+            let (unread, mentions) = self
+                .irc
+                .links
+                .iter()
+                .find(|link| link.server.name == view.server)
+                .and_then(|link| {
+                    let chat = link.network.find(&view.target)?;
+                    link.network.chats().get(chat)
+                })
+                .map_or((0, 0), |chat| (chat.unread, chat.mentions));
+            let mut counts = Vec::new();
+            if unread > 0 {
+                counts.push(format!("{unread} new"));
+            }
+            match mentions {
+                0 => {}
+                1 => counts.push("1 mention".to_owned()),
+                many => counts.push(format!("{many} mentions")),
+            }
+            found.push((
+                mentions,
+                unread,
+                Completion {
+                    label: buffer.name().to_owned(),
+                    annotation: (!counts.is_empty()).then(|| counts.join(" · ")),
+                    summary: None,
+                    choice: Choice::Buffer(index),
+                },
+            ));
+        }
+        found.sort_by_key(|(mentions, unread, _)| {
+            (std::cmp::Reverse(*mentions), std::cmp::Reverse(*unread))
+        });
+        found
+            .into_iter()
+            .map(|(_, _, completion)| completion)
+            .collect()
     }
 
     fn irc_note(&mut self, server: &str, text: &str, error: bool) {
@@ -362,6 +494,7 @@ impl Editor {
                 input,
                 styles: Vec::new(),
                 cycle: None,
+                width: 0,
             }),
         )
     }
@@ -425,6 +558,7 @@ impl Editor {
             spans: vec![(0..name.chars().count(), Highlight::Heading)],
         });
         view.styles = styles;
+        view.width = width;
         let id = buffer.id();
         self.move_windows(id, |point, _| {
             (point == prefix && prefix < start).then_some(start)
@@ -743,6 +877,97 @@ mod tests {
 
         assert_eq!(connections(&mut editor), []);
         assert_eq!(editor.buffer().name(), "libera");
+    }
+
+    #[test]
+    fn chats_rewrap_when_their_window_is_resized() {
+        let (mut editor, id) = connected();
+        feed(
+            &mut editor,
+            id,
+            &[
+                ":alice!a@h PRIVMSG #oxmacs-test :one two three four five six seven eight nine ten eleven",
+            ],
+        );
+        visit(&mut editor, "#oxmacs-test");
+
+        editor.resize_pane(editor.selected_window(), 20, 41);
+
+        let shown = lines(&editor);
+        assert!(
+            shown.iter().all(|line| line.chars().count() <= 40),
+            "{shown:?}"
+        );
+        assert!(shown.iter().filter(|line| line.contains(" │ ")).count() > 1);
+    }
+
+    #[test]
+    fn mentions_elsewhere_are_announced() {
+        let (mut editor, id) = connected();
+
+        feed(
+            &mut editor,
+            id,
+            &[":alice!a@h PRIVMSG #oxmacs-test :oxtest: ping"],
+        );
+        assert_eq!(
+            editor.message(),
+            Some("alice mentioned you in #oxmacs-test: oxtest: ping")
+        );
+
+        feed(&mut editor, id, &[":bob!b@h PRIVMSG oxtest :psst"]);
+        assert_eq!(editor.message(), Some("bob: psst"));
+    }
+
+    #[test]
+    fn mentions_in_view_are_not_announced_and_count_as_read() {
+        let (mut editor, id) = connected();
+        visit(&mut editor, "#oxmacs-test");
+        editor.show_message("quiet");
+
+        feed(
+            &mut editor,
+            id,
+            &[":alice!a@h PRIVMSG #oxmacs-test :oxtest: ping"],
+        );
+        editor.prepare_display();
+
+        assert_eq!(editor.message(), Some("quiet"));
+        press(&mut editor, "C-c C-b");
+        let completions = editor.completions();
+        let channel = completions
+            .iter()
+            .find(|completion| completion.label == "#oxmacs-test")
+            .unwrap();
+        assert_eq!(channel.annotation, None);
+    }
+
+    #[test]
+    fn the_switcher_puts_busy_chats_first() {
+        let (mut editor, id) = connected();
+        feed(
+            &mut editor,
+            id,
+            &[
+                ":oxtest!o@h JOIN #quiet",
+                ":alice!a@h PRIVMSG #oxmacs-test :hello",
+                ":alice!a@h PRIVMSG #oxmacs-test :oxtest: you there?",
+            ],
+        );
+        visit(&mut editor, "libera");
+
+        press(&mut editor, "C-c C-b");
+
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "IRC buffer: ");
+        let completions = editor.completions();
+        assert_eq!(completions[0].label, "#oxmacs-test");
+        assert_eq!(
+            completions[0].annotation.as_deref(),
+            Some("2 new · 1 mention")
+        );
+        type_text(&mut editor, "#oxm");
+        press(&mut editor, "RET");
+        assert_eq!(editor.buffer().name(), "#oxmacs-test");
     }
 
     #[test]
