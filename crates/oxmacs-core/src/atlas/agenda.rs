@@ -43,7 +43,7 @@ pub struct Section {
     pub entries: Vec<Entry>,
 }
 
-fn order(entry: &Entry) -> (u8, Option<Time>, u8, String) {
+pub(crate) fn order(entry: &Entry) -> (u8, Option<Time>, u8, String) {
     match &entry.kind {
         Kind::Event { start, .. } => (0, *start, 0, entry.title.to_lowercase()),
         Kind::Task {
