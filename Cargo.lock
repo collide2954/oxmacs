@@ -2686,7 +2686,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "oxmacs-core",
  "oxmacs-gui",
@@ -2694,7 +2694,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-core"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "bitflags 2.13.2",
  "dirs",
@@ -2720,7 +2720,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-gui"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "iced",
  "iced_test",

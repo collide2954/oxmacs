@@ -4,6 +4,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-18
+
 ### Added
 
 - Windows: `C-x 2` and `C-x 3` split the selected window, `C-x o` and `C-c <arrow>` move between windows, and `C-x 0` and `C-x 1` close them. Each window keeps its own point and scroll and has its own mode line, dimmed when inactive.
@@ -20,6 +22,12 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 - The project is now called oxmacs: the binary, window title, `*oxmacs*` splash, `about-oxmacs`, `kill-oxmacs`, `save-buffers-kill-oxmacs` and `oxmacs-doctor`. Settings now live in the `oxmacs` folder of the platform config directory.
 - Animations are about a third quicker.
+- `load-theme` and `toggle-theme` count as setting changes: `*Settings*` shows them unsaved and `C-x C-s` there keeps them.
+- `*oxmacs-doctor*` lists lint support and clippy.
+
+### Fixed
+
+- Long mode lines are cut off instead of running into the clock.
 
 ## [0.11.0] - 2026-10-18
 
