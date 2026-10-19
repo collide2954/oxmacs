@@ -47,6 +47,26 @@ pub struct Config {
     pub r_program: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub air_program: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub atlas_vault: Vec<AtlasVault>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct AtlasVault {
+    pub name: String,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+impl AtlasVault {
+    pub fn directory(&self, home: Option<&Path>) -> PathBuf {
+        match (self.path.strip_prefix("~"), home) {
+            (Some(rest), Some(home)) => home.join(rest.trim_start_matches(['/', '\\'])),
+            _ => PathBuf::from(&self.path),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -226,6 +246,7 @@ impl Default for Config {
             irc_bouncer: IrcBouncer::default(),
             r_program: None,
             air_program: None,
+            atlas_vault: Vec::new(),
         }
     }
 }
@@ -246,6 +267,8 @@ pub enum ConfigError {
     IrcServer(String),
     #[error("irc-bouncer: {0}")]
     IrcBouncer(String),
+    #[error("atlas-vault: {0}")]
+    AtlasVault(String),
     #[error("{}: {source}", path.display())]
     Read { path: PathBuf, source: io::Error },
     #[error("{}: {source}", path.display())]
@@ -337,6 +360,23 @@ impl Config {
                 )));
             }
         }
+        for (index, vault) in self.atlas_vault.iter().enumerate() {
+            if vault.path.trim().is_empty() {
+                return Err(ConfigError::AtlasVault(format!(
+                    "{} needs a path",
+                    vault.name
+                )));
+            }
+            if self.atlas_vault[..index]
+                .iter()
+                .any(|earlier| earlier.name == vault.name)
+            {
+                return Err(ConfigError::AtlasVault(format!(
+                    "two vaults are named {}",
+                    vault.name
+                )));
+            }
+        }
         Ok(())
     }
 }
@@ -377,16 +417,43 @@ pub fn rewrite(text: &str, config: &Config) -> Result<String, ConfigError> {
     Ok(document.to_string())
 }
 
+fn edit_error(error: &toml_edit::TomlError) -> ConfigError {
+    ConfigError::Syntax(error.message().to_owned())
+}
+
+fn table_of(value: &impl Serialize) -> Result<toml_edit::Table, ConfigError> {
+    let fields = toml::to_string(value).map_err(|error| ConfigError::Syntax(error.to_string()))?;
+    let parsed: toml_edit::DocumentMut = fields.parse().map_err(|error| edit_error(&error))?;
+    let mut table = parsed.as_table().clone();
+    table.set_implicit(false);
+    Ok(table)
+}
+
+fn push_table(document: &mut toml_edit::DocumentMut, key: &str, table: toml_edit::Table) {
+    if let Some(toml_edit::Item::ArrayOfTables(tables)) = document.get_mut(key) {
+        tables.push(table);
+    } else {
+        let mut tables = toml_edit::ArrayOfTables::new();
+        tables.push(table);
+        document.insert(key, toml_edit::Item::ArrayOfTables(tables));
+    }
+}
+
+pub fn add_atlas_vault(text: &str, vault: &AtlasVault) -> Result<String, ConfigError> {
+    let mut document: toml_edit::DocumentMut = text.parse().map_err(|error| edit_error(&error))?;
+    push_table(&mut document, "atlas-vault", table_of(vault)?);
+    let rewritten = document.to_string();
+    Config::parse(&rewritten)?;
+    Ok(rewritten)
+}
+
 pub fn add_irc_server(
     text: &str,
     server: &IrcServer,
     keep_alive: bool,
 ) -> Result<String, ConfigError> {
-    let edit_error = |error: toml_edit::TomlError| ConfigError::Syntax(error.message().to_owned());
-    let mut document: toml_edit::DocumentMut = text.parse().map_err(edit_error)?;
-    let fields = toml::to_string(server).map_err(|error| ConfigError::Syntax(error.to_string()))?;
-    let parsed: toml_edit::DocumentMut = fields.parse().map_err(edit_error)?;
-    let mut table = parsed.as_table().clone();
+    let mut document: toml_edit::DocumentMut = text.parse().map_err(|error| edit_error(&error))?;
+    let mut table = table_of(server)?;
     if let Some(password) = table.remove("password") {
         let value = match password {
             toml_edit::Item::Table(inner) => {
@@ -398,14 +465,7 @@ pub fn add_irc_server(
         };
         table.insert("password", toml_edit::Item::Value(value));
     }
-    table.set_implicit(false);
-    if let Some(toml_edit::Item::ArrayOfTables(servers)) = document.get_mut("irc-server") {
-        servers.push(table);
-    } else {
-        let mut servers = toml_edit::ArrayOfTables::new();
-        servers.push(table);
-        document.insert("irc-server", toml_edit::Item::ArrayOfTables(servers));
-    }
+    push_table(&mut document, "irc-server", table);
     if keep_alive {
         if !document.contains_table("irc-bouncer") {
             document.insert("irc-bouncer", toml_edit::table());
@@ -568,6 +628,57 @@ mod tests {
                 .to_string(),
             "irc-server: two servers are named libera"
         );
+    }
+
+    #[test]
+    fn atlas_vaults_are_named_folders() {
+        let config = Config::parse(
+            "[[atlas-vault]]\nname = \"personal\"\npath = \"~/Atlas\"\n\n[[atlas-vault]]\nname = \"work\"\npath = \"C:/Work/notes\"\ncolor = \"blue\"\n",
+        )
+        .unwrap();
+
+        let [personal, work] = &config.atlas_vault[..] else {
+            panic!("{:?}", config.atlas_vault);
+        };
+        assert_eq!(personal.name, "personal");
+        assert_eq!(personal.color, None);
+        assert_eq!(work.color.as_deref(), Some("blue"));
+        let home = Path::new("/home/brett");
+        assert_eq!(personal.directory(Some(home)), home.join("Atlas"));
+        assert_eq!(work.directory(Some(home)), PathBuf::from("C:/Work/notes"));
+    }
+
+    #[test]
+    fn atlas_vaults_need_unique_names_and_a_path() {
+        let twice = "[[atlas-vault]]\nname = \"a\"\npath = \"x\"\n[[atlas-vault]]\nname = \"a\"\npath = \"y\"\n";
+        assert_eq!(
+            Config::parse(twice).unwrap_err().to_string(),
+            "atlas-vault: two vaults are named a"
+        );
+        assert_eq!(
+            Config::parse("[[atlas-vault]]\nname = \"a\"\npath = \"\"\n")
+                .unwrap_err()
+                .to_string(),
+            "atlas-vault: a needs a path"
+        );
+    }
+
+    #[test]
+    fn atlas_vaults_are_added_in_place() {
+        let text = "theme = \"adwaita\"\n";
+        let vault = AtlasVault {
+            name: "personal".to_owned(),
+            path: "~/Atlas".to_owned(),
+            color: None,
+        };
+
+        let added = add_atlas_vault(text, &vault).unwrap();
+
+        assert_eq!(
+            added,
+            "theme = \"adwaita\"\n\n[[atlas-vault]]\nname = \"personal\"\npath = \"~/Atlas\"\n"
+        );
+        assert_eq!(Config::parse(&added).unwrap().atlas_vault, [vault]);
     }
 
     #[test]
