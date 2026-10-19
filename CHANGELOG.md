@@ -22,6 +22,11 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `C-c C-e` lists the session's objects; `RET` opens a data frame as a table whose header stays put, or anything else with `str()`.
 - `M-x list-processes` lists the processes and connections oxmacs runs, with their CPU and memory; `RET` visits one and `k` stops it.
 
+### Changed
+
+- `M-x load-theme` starts on the theme in use and previews the selected theme across the whole editor; `C-g` puts the old one back.
+- Switching themes fades 20% faster.
+
 ### Fixed
 
 - Markdown previews scroll with the keyboard and can be selected with a click.
