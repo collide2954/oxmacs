@@ -1,6 +1,7 @@
 use jiff::Timestamp;
 
 use crate::irc::message::Message;
+use crate::irc::plain;
 use crate::irc::session::Session;
 
 const CTCP: char = '\u{1}';
@@ -434,7 +435,7 @@ impl Network {
         let Some(index) = self.channel(channel) else {
             return;
         };
-        self.chats[index].topic = Some(text.to_owned());
+        self.chats[index].topic = Some(plain(text));
         if !reply {
             let event = LineEvent::Topic {
                 nick: message.nick().unwrap_or_default().to_owned(),
@@ -538,6 +539,8 @@ impl Network {
             self.ensure(Target::Query(target.to_owned()), updates)
         } else if from_server {
             0
+        } else if kind == Kind::Notice {
+            self.notice_home(nick, &text)
         } else {
             self.ensure(Target::Query(nick.to_owned()), updates)
         };
@@ -553,7 +556,8 @@ impl Network {
                 mention,
             }
         };
-        if !own && !stamp.history && index != 0 {
+        let private = matches!(self.chats[index].target, Target::Query(_));
+        if !own && !stamp.history && index != 0 && (kind != Kind::Notice || private) {
             let chat = &mut self.chats[index];
             chat.unread += 1;
             chat.mentions += usize::from(mention);
@@ -561,6 +565,14 @@ impl Network {
         self.push(index, stamp.line(event), updates);
     }
 
+    fn notice_home(&self, nick: &str, text: &str) -> usize {
+        let query = self.find(&Target::Query(nick.to_owned()));
+        let channel = text
+            .strip_prefix('[')
+            .and_then(|rest| rest.split_once(']'))
+            .and_then(|(channel, _)| self.channel(channel));
+        query.or(channel).unwrap_or(0)
+    }
     fn mode(
         &mut self,
         session: &Session,
@@ -653,8 +665,56 @@ impl Stamp {
     fn line(self, event: LineEvent) -> Line {
         Line {
             time: self.time,
-            event,
+            event: event.plain(),
             history: self.history,
+        }
+    }
+}
+
+impl LineEvent {
+    fn plain(self) -> Self {
+        let clean = |text: String| plain(&text);
+        let reason = |reason: Option<String>| reason.map(clean);
+        match self {
+            Self::Chat {
+                nick,
+                text,
+                kind,
+                own,
+                mention,
+            } => Self::Chat {
+                nick,
+                text: clean(text),
+                kind,
+                own,
+                mention,
+            },
+            Self::Left { nick, reason: why } => Self::Left {
+                nick,
+                reason: reason(why),
+            },
+            Self::Quit { nick, reason: why } => Self::Quit {
+                nick,
+                reason: reason(why),
+            },
+            Self::Kicked {
+                nick,
+                by,
+                reason: why,
+            } => Self::Kicked {
+                nick,
+                by,
+                reason: reason(why),
+            },
+            Self::Topic { nick, text } => Self::Topic {
+                nick,
+                text: clean(text),
+            },
+            Self::Info { text, error } => Self::Info {
+                text: clean(text),
+                error,
+            },
+            other => other,
         }
     }
 }
@@ -818,6 +878,62 @@ mod tests {
 
         assert_eq!(rust(&network).mentions, 1);
         assert_eq!(rust(&network).unread, 2);
+    }
+
+    #[test]
+    fn private_notices_do_not_open_chats() {
+        let (mut network, session) = joined();
+
+        let updates = apply(
+            &mut network,
+            &session,
+            ":ChanServ!C@services NOTICE oxtest :[#rust] Welcome to #rust!",
+        );
+        assert!(
+            !updates
+                .iter()
+                .any(|update| matches!(update, Update::Created(_)))
+        );
+        assert!(matches!(
+            last(&network),
+            LineEvent::Chat { kind: Kind::Notice, nick, .. } if nick == "ChanServ"
+        ));
+        assert_eq!(rust(&network).unread, 0);
+
+        apply(
+            &mut network,
+            &session,
+            ":NickServ!N@services NOTICE oxtest :Hello",
+        );
+        assert!(matches!(
+            &network.chats()[0].lines.last().unwrap().event,
+            LineEvent::Chat { kind: Kind::Notice, text, .. } if text == "Hello"
+        ));
+
+        apply(&mut network, &session, ":alice!a@h PRIVMSG oxtest :hi");
+        apply(
+            &mut network,
+            &session,
+            ":alice!a@h NOTICE oxtest :also this",
+        );
+        let query = network.find(&Target::Query("alice".to_owned())).unwrap();
+        assert_eq!(network.chats()[query].lines.len(), 2);
+    }
+
+    #[test]
+    fn formatting_codes_and_invisible_characters_are_dropped() {
+        let (mut network, session) = joined();
+
+        apply(
+            &mut network,
+            &session,
+            ":alice!a@h PRIVMSG #rust :\u{2}bold\u{2} \u{3}04,12red\u{3} \u{1d}it\u{f}\u{200b}\u{feff}",
+        );
+
+        assert!(matches!(
+            last(&network),
+            LineEvent::Chat { text, .. } if text == "bold red it"
+        ));
     }
 
     #[test]
