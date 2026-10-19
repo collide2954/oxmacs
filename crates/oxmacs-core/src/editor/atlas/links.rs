@@ -7,10 +7,27 @@ use crate::editor::Editor;
 use crate::editor::atlas::list::ListKind;
 use crate::editor::atlas::vaults::note_template;
 use crate::editor::buffers::Mode;
-use crate::editor::page::Page;
+use crate::editor::page::{Page, clip};
 use crate::theme::Highlight;
 
 const HELP: &str = "RET visits · g refreshes · q quits";
+const ROOM: usize = 80;
+const LABEL: usize = 8;
+
+fn excerpt(line: &str, wanted: &str, room: usize) -> String {
+    let length = line.chars().count();
+    let lower = line.to_lowercase();
+    let at = lower
+        .find(wanted)
+        .map_or(0, |byte| lower[..byte].chars().count());
+    let end = at + wanted.chars().count();
+    if length <= room || end < room {
+        return clip(line, room);
+    }
+    let start = (end + 2).saturating_sub(room).min(at);
+    let rest: String = line.chars().skip(start).collect();
+    format!("…{}", clip(&rest, room.saturating_sub(1)))
+}
 
 impl Editor {
     fn link_at_point(&self) -> Option<String> {
@@ -92,7 +109,7 @@ impl Editor {
         self.show_atlas_list(&ListKind::Backlinks(title));
     }
 
-    pub(super) fn render_backlinks(&mut self) {
+    pub(in crate::editor) fn render_backlinks(&mut self) {
         let kind = ListKind::Backlinks(String::new());
         let Some(index) = self.atlas_list_index(&kind) else {
             return;
@@ -106,6 +123,13 @@ impl Editor {
             .iter()
             .map(|page| (page.title.clone(), page.path.clone()))
             .collect();
+        let room = self
+            .buffers
+            .get(index)
+            .and_then(|buffer| self.width_showing(buffer.id()))
+            .filter(|width| *width > 0)
+            .unwrap_or(ROOM)
+            .saturating_sub(LABEL);
         let mut page = Page::default();
         page.line(&[
             ("Backlinks to ", Some(Highlight::Heading)),
@@ -128,7 +152,10 @@ impl Editor {
                 }
                 rows.push((page.styles.len(), path.clone(), number));
                 let label = format!("  {:>4}  ", number + 1);
-                page.line(&[(&label, Some(Highlight::Comment)), (line.trim(), None)]);
+                page.line(&[
+                    (&label, Some(Highlight::Comment)),
+                    (&excerpt(line.trim(), &wanted, room), None),
+                ]);
             }
         }
         if let Some((buffer, Mode::AtlasList(list))) = self.buffers.entry_mut(index) {
@@ -233,6 +260,34 @@ mod tests {
             "{shown:?}"
         );
         assert!(!shown.iter().any(|line| line.contains("nothing here")));
+    }
+
+    #[test]
+    fn backlinks_fit_the_window_and_keep_the_link_in_view() {
+        let (dir, mut editor) = vault();
+        fs::write(
+            dir.path().join("Long.atlas"),
+            "title: Long\n---\nshort start [Garden plan] then a great deal more text after it\nplenty of words written well before we finally mention [Garden plan]\n",
+        )
+        .unwrap();
+        press(&mut editor, "C-c n b");
+        let window = editor.selected_window();
+
+        editor.resize_pane(window, 30, 40);
+
+        let shown = lines(&editor);
+        assert!(
+            shown.iter().all(|line| line.chars().count() <= 39),
+            "{shown:?}"
+        );
+        assert!(
+            shown.contains(&"     3  short start [Garden plan] then…".to_owned()),
+            "{shown:?}"
+        );
+        assert!(
+            shown.contains(&"     4  …finally mention [Garden plan]".to_owned()),
+            "{shown:?}"
+        );
     }
 
     #[test]

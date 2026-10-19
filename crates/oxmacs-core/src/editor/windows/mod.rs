@@ -400,6 +400,7 @@ impl Editor {
         self.render_tools();
         self.render_agenda();
         self.render_calendar();
+        self.render_backlinks();
         self.render_tables();
         self.render_environments();
     }
