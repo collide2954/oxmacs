@@ -4,10 +4,10 @@ use std::path::Path;
 
 use crate::config::Config;
 use crate::display::LineStyle;
-use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
-use crate::external::tools::Probe;
+use crate::editor::{Editor, Effect};
+use crate::external::tools::{Probe, Tool};
 use crate::syntax::{Feature, Language};
 use crate::text::Buffer;
 use crate::theme::{Appearance, Highlight};
@@ -21,7 +21,9 @@ const TOOLS: &[(&str, &str)] = &[
     ("rust-analyzer", "rustup component add rust-analyzer"),
 ];
 
-#[derive(Debug)]
+const R_HINT: &str = "install R from https://cran.r-project.org or set r-program";
+
+#[derive(Debug, Default)]
 pub(in crate::editor) struct Doctor {
     styles: Vec<LineStyle>,
 }
@@ -29,6 +31,21 @@ pub(in crate::editor) struct Doctor {
 impl Doctor {
     pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
+    }
+}
+
+#[derive(Debug, Default)]
+pub(in crate::editor) struct ToolReport {
+    probes: Vec<(Tool, Probe)>,
+    pending: usize,
+}
+
+impl ToolReport {
+    fn find(&self, wanted: impl Fn(&Tool) -> bool) -> Option<&Probe> {
+        self.probes
+            .iter()
+            .find(|(tool, _)| wanted(tool))
+            .map(|(_, probe)| probe)
     }
 }
 
@@ -43,22 +60,44 @@ impl Editor {
     }
 
     pub(in crate::editor) fn oxmacs_doctor(&mut self) {
-        let page = self.examine();
-        let doctor = Doctor {
-            styles: page.styles,
-        };
-        let Some(index) = self.buffers.position(|buffer| buffer.name() == NAME) else {
-            let mut buffer = Buffer::with_text(NAME, &page.text);
+        self.check_tools();
+        if let Some(index) = self.doctor_index() {
+            self.select_buffer(index);
+        } else {
+            let mut buffer = Buffer::new(NAME);
             buffer.set_read_only(true);
-            self.add_buffer_with(buffer, Mode::Doctor(doctor));
+            self.add_buffer_with(buffer, Mode::Doctor(Doctor::default()));
+        }
+        self.render_doctor();
+    }
+
+    pub fn tools_probed(&mut self, probes: Vec<(Tool, Probe)>) {
+        self.tool_report.pending = self.tool_report.pending.saturating_sub(1);
+        self.tool_report.probes = probes;
+        self.render_doctor();
+    }
+
+    fn check_tools(&mut self) {
+        let mut tools: Vec<Tool> = TOOLS.iter().map(|(name, _)| Tool::Program(name)).collect();
+        tools.push(Tool::R(self.config.r_program.clone()));
+        self.tool_report.pending += 1;
+        self.effects.push(Effect::ProbeTools(tools));
+    }
+
+    fn doctor_index(&self) -> Option<usize> {
+        self.buffers
+            .find_mode(|mode| matches!(mode, Mode::Doctor(_)))
+    }
+
+    fn render_doctor(&mut self) {
+        let Some(index) = self.doctor_index() else {
             return;
         };
-        self.select_buffer(index);
-        let buffer = self.buffers.current_mut();
-        let point = buffer.point();
-        buffer.set_text(&page.text);
-        buffer.set_point(point);
-        self.buffers.set_mode(0, Mode::Doctor(doctor));
+        let page = self.examine();
+        if let Some((buffer, Mode::Doctor(doctor))) = self.buffers.entry_mut(index) {
+            page.fill(buffer);
+            doctor.styles = page.styles;
+        }
     }
 
     fn examine(&self) -> Page {
@@ -122,21 +161,38 @@ impl Editor {
     }
 
     fn examine_tools(&self, page: &mut Page) {
-        page.heading("Tools");
+        let report = &self.tool_report;
+        if report.pending > 0 && !report.probes.is_empty() {
+            page.line(&[
+                ("Tools", Some(Highlight::Heading)),
+                ("   checking again…", Some(Highlight::Comment)),
+            ]);
+        } else {
+            page.heading("Tools");
+        }
         for (name, hint) in TOOLS {
-            tool(page, name, (self.probe)(name), hint);
+            tool(
+                page,
+                name,
+                report.find(|tool| *tool == Tool::Program(name)),
+                hint,
+            );
         }
         tool(
             page,
             "R",
-            (self.probe_r)(self.config.r_program.as_deref()),
-            "install R from https://cran.r-project.org or set r-program",
+            report.find(|tool| matches!(tool, Tool::R(_))),
+            R_HINT,
         );
     }
 }
 
-fn tool(page: &mut Page, name: &str, probe: Probe, hint: &str) {
+fn tool(page: &mut Page, name: &str, probe: Option<&Probe>, hint: &str) {
     let label = format!("  {name:<LABEL_WIDTH$}");
+    let Some(probe) = probe else {
+        page.line(&[(&label, None), ("checking…", Some(Highlight::Comment))]);
+        return;
+    };
     match probe {
         Probe::Found { path, version } => page.line(&[
             (&label, None),
@@ -222,9 +278,9 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use crate::editor::Editor;
     use crate::editor::test_support::{lines, press, type_text};
-    use crate::external::tools::Probe;
+    use crate::editor::{Editor, Effect};
+    use crate::external::tools::{Probe, Tool};
     use crate::theme::Highlight;
 
     fn fake_probe(program: &str) -> Probe {
@@ -241,17 +297,101 @@ mod tests {
         }
     }
 
-    fn doctor() -> (tempfile::TempDir, Editor) {
+    fn opened() -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();
         let mut editor = Editor::new();
-        editor.probe = fake_probe;
-        editor.probe_r = |_| Probe::Missing;
         editor.config_path = Some(dir.path().join("config.toml"));
         editor.set_font_note("JetBrains Mono (bundled)");
         press(&mut editor, "M-x");
         type_text(&mut editor, "oxmacs-doctor");
         press(&mut editor, "RET");
         (dir, editor)
+    }
+
+    fn asked(editor: &mut Editor) -> Vec<Tool> {
+        editor
+            .take_effects()
+            .into_iter()
+            .filter_map(|effect| match effect {
+                Effect::ProbeTools(tools) => Some(tools),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    fn answer(editor: &mut Editor) {
+        let probes = asked(editor)
+            .into_iter()
+            .map(|tool| {
+                let probe = match &tool {
+                    Tool::Program(name) => fake_probe(name),
+                    Tool::R(_) => Probe::Missing,
+                };
+                (tool, probe)
+            })
+            .collect();
+        editor.tools_probed(probes);
+    }
+
+    fn doctor() -> (tempfile::TempDir, Editor) {
+        let (dir, mut editor) = opened();
+        answer(&mut editor);
+        (dir, editor)
+    }
+
+    #[test]
+    fn the_report_opens_at_once_and_checks_tools_in_the_background() {
+        let (_dir, mut editor) = opened();
+
+        assert!(line_with(&editor, "rustfmt").ends_with("checking…"));
+        assert!(line_with(&editor, "  R  ").ends_with("checking…"));
+        assert_eq!(
+            asked(&mut editor),
+            [
+                Tool::Program("rustfmt"),
+                Tool::Program("cargo"),
+                Tool::Program("cargo-clippy"),
+                Tool::Program("rust-analyzer"),
+                Tool::R(None),
+            ]
+        );
+    }
+
+    #[test]
+    fn refreshing_keeps_the_last_results_while_checking_again() {
+        let (_dir, mut editor) = doctor();
+        assert_eq!(line_with(&editor, "Tools").trim_end(), "Tools");
+
+        press(&mut editor, "g");
+
+        assert!(line_with(&editor, "Tools").ends_with("checking again…"));
+        assert!(line_with(&editor, "rustfmt").contains("✓ rustfmt 1.0"));
+        answer(&mut editor);
+        assert_eq!(line_with(&editor, "Tools").trim_end(), "Tools");
+    }
+
+    #[test]
+    fn results_are_kept_for_the_next_report() {
+        let (_dir, mut editor) = doctor();
+        press(&mut editor, "C-x k RET");
+
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "oxmacs-doctor");
+        press(&mut editor, "RET");
+
+        assert!(line_with(&editor, "rustfmt").contains("✓ rustfmt 1.0"));
+        assert_eq!(asked(&mut editor).len(), 5);
+    }
+
+    #[test]
+    fn results_for_a_closed_report_change_nothing_else() {
+        let (_dir, mut editor) = opened();
+        press(&mut editor, "C-x k RET");
+
+        answer(&mut editor);
+
+        assert_eq!(editor.buffer().name(), "*scratch*");
     }
 
     fn line_with(editor: &Editor, text: &str) -> String {

@@ -13,6 +13,7 @@ use oxmacs_core::bouncer::daemon;
 use oxmacs_core::editor::{ConnectionId, Effect, Job, Outcome, PreviewScroll, WindowId};
 use oxmacs_core::external::net::{self, Endpoint};
 use oxmacs_core::external::process;
+use oxmacs_core::external::tools::{self, Probe, Tool};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
@@ -210,6 +211,7 @@ impl App {
             }
             Message::Fetched(id, result) => self.editor.fetched(id, result),
             Message::DaemonReady(ready) => self.editor.irc_daemon_ready(ready),
+            Message::ToolsProbed(probes) => self.editor.tools_probed(probes),
             Message::Irc(id, event) => {
                 if matches!(event, net::Event::Closed(_)) {
                     self.connections.retain(|(known, _)| *known != id);
@@ -339,6 +341,7 @@ impl App {
                 Task::none()
             }
             Effect::LaunchDaemon => Task::perform(start_daemon(), Message::DaemonReady),
+            Effect::ProbeTools(tools) => Task::perform(probe_tools(tools), Message::ToolsProbed),
             Effect::Disconnect(id) => {
                 if let Some((_, connection)) =
                     self.connections.iter().find(|(known, _)| *known == id)
@@ -425,6 +428,12 @@ async fn start_daemon() -> bool {
         let _ = sender.send(ready);
     });
     receiver.await.unwrap_or(false)
+}
+
+async fn probe_tools(tools: Vec<Tool>) -> Vec<(Tool, Probe)> {
+    let (sender, receiver) = oneshot::channel();
+    thread::spawn(move || sender.send(tools::probe_all(tools)));
+    receiver.await.unwrap_or_default()
 }
 
 fn open_externally(path: &Path) -> Result<(), String> {

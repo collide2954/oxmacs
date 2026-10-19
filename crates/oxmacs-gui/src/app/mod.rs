@@ -16,6 +16,7 @@ use oxmacs_core::config::{self, Config, ConfigError, ModeLineStyle};
 use oxmacs_core::editor::{ConnectionId, Editor, FetchId, JobId, WindowId};
 use oxmacs_core::external::net::{self, Connection};
 use oxmacs_core::external::process::{self, Handle};
+use oxmacs_core::external::tools::{Probe, Tool};
 use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
@@ -77,6 +78,7 @@ pub enum Message {
     Fetched(FetchId, Result<String, String>),
     Irc(ConnectionId, net::Event),
     DaemonReady(bool),
+    ToolsProbed(Vec<(Tool, Probe)>),
     WeatherTick,
 }
 

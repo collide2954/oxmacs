@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use crate::editor::{Editor, Job, JobId, PreviewScroll, WindowId};
 use crate::external::net::Endpoint;
+use crate::external::tools::Tool;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FetchId(pub u64);
@@ -28,6 +29,7 @@ pub enum Effect {
     Transmit(ConnectionId, Vec<String>),
     Disconnect(ConnectionId),
     LaunchDaemon,
+    ProbeTools(Vec<Tool>),
 }
 
 impl Editor {
