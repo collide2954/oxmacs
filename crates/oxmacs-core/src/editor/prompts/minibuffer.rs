@@ -36,6 +36,7 @@ pub(in crate::editor) enum Purpose {
     Compile,
     Setting(usize),
     IrcSetup(Field),
+    KeepIrcPassword(usize),
     RHelp,
     SavePlot,
 }
@@ -65,6 +66,7 @@ impl Purpose {
                 | Self::Compile
                 | Self::Setting(_)
                 | Self::IrcSetup(_)
+                | Self::KeepIrcPassword(_)
                 | Self::IrcPassword(..)
         )
     }
@@ -150,7 +152,10 @@ impl Minibuffer {
     }
 
     pub fn is_secret(&self) -> bool {
-        matches!(self.purpose, Purpose::IrcPassword(..))
+        matches!(
+            self.purpose,
+            Purpose::IrcPassword(..) | Purpose::KeepIrcPassword(_)
+        )
     }
 }
 
@@ -201,6 +206,7 @@ impl Editor {
             | Purpose::RHelp
             | Purpose::Setting(_)
             | Purpose::IrcSetup(_)
+            | Purpose::KeepIrcPassword(_)
             | Purpose::IrcPassword(..) => Vec::new(),
             Purpose::Item => self.item_completions(matches),
         }
@@ -351,6 +357,12 @@ impl Editor {
             let input = self.minibuffer_input();
             self.minibuffer = None;
             self.set_setup_field(field, &input);
+            return;
+        }
+        if let Purpose::KeepIrcPassword(index) = purpose {
+            let input = self.minibuffer_input();
+            self.minibuffer = None;
+            self.keep_irc_password(index, &input);
             return;
         }
         if purpose.takes_text() {

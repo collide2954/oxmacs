@@ -426,7 +426,7 @@ impl Editor {
         }
     }
 
-    fn setup_problem(&self, server: &IrcServer) -> Option<String> {
+    fn setup_problem(&self, server: &IrcServer, keep_alive: bool) -> Option<String> {
         if server.name.is_empty() {
             return Some("The server needs a name".to_owned());
         }
@@ -447,6 +447,12 @@ impl Editor {
         if server.password == PasswordSource::Env(String::new()) {
             return Some("Name the environment variable that holds the password".to_owned());
         }
+        if keep_alive && server.sasl.is_some() && server.password == PasswordSource::Ask {
+            return Some(
+                "The bouncer cannot ask for a password; keep it in the keychain or a variable"
+                    .to_owned(),
+            );
+        }
         None
     }
 
@@ -457,7 +463,7 @@ impl Editor {
         else {
             return;
         };
-        if let Some(problem) = self.setup_problem(&server) {
+        if let Some(problem) = self.setup_problem(&server, keep_alive) {
             self.show_message(problem);
             return;
         }
@@ -492,6 +498,35 @@ impl Editor {
         self.note_saved_settings(add);
         if let Some(index) = self.setup_index() {
             self.finish_kill(index);
+        }
+        let index = self
+            .config
+            .irc_server
+            .iter()
+            .position(|known| known.name == server.name);
+        match (&server.sasl, index) {
+            (Some(account), Some(index))
+                if keep_alive && server.password == PasswordSource::Keychain =>
+            {
+                let prompt = format!(
+                    "Password for {account} on {}, kept in the keychain for the bouncer: ",
+                    server.name
+                );
+                self.open_minibuffer(&prompt, Purpose::KeepIrcPassword(index));
+            }
+            _ => self.ask_to_connect(&server.name),
+        }
+    }
+
+    pub(in crate::editor) fn keep_irc_password(&mut self, index: usize, password: &str) {
+        let Some(server) = self.config.irc_server.get(index).cloned() else {
+            return;
+        };
+        if let Some(account) = &server.sasl
+            && let Err(problem) = (self.irc.keychain.write)(&server.name, account, password)
+        {
+            self.show_message(format!("Keychain: {problem}"));
+            return;
         }
         self.ask_to_connect(&server.name);
     }
@@ -678,6 +713,59 @@ mod tests {
             BouncerMode::Local
         );
         assert_eq!(editor.config().irc_bouncer.mode, BouncerMode::Local);
+    }
+
+    std::thread_local! {
+        static KEPT: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    #[test]
+    fn keeping_alive_with_an_account_takes_the_password_now() {
+        let (_dir, path, mut editor) = opened("");
+        editor.irc.keychain.write = |server, account, password| {
+            KEPT.with(|kept| {
+                kept.borrow_mut()
+                    .push(format!("{account}@{server}={password}"));
+            });
+            Ok(())
+        };
+        edit(&mut editor, "Nick", "brett");
+        edit(&mut editor, "Account", "brett");
+        go_to(&mut editor, "Keep alive");
+        press(&mut editor, "RET C-c C-c");
+
+        assert_eq!(Config::load(&path).unwrap().irc_server.len(), 1);
+        let minibuffer = editor.minibuffer().unwrap();
+        assert_eq!(
+            minibuffer.prompt(),
+            "Password for brett on libera, kept in the keychain for the bouncer: "
+        );
+        assert!(minibuffer.is_secret());
+        type_text(&mut editor, "hunter2");
+        press(&mut editor, "RET");
+
+        KEPT.with(|kept| assert_eq!(*kept.borrow(), ["brett@libera=hunter2"]));
+        assert_eq!(
+            question(&editor).as_deref(),
+            Some("Connect to libera now? (y or n) ")
+        );
+    }
+
+    #[test]
+    fn the_bouncer_cannot_ask_for_passwords() {
+        let (_dir, path, mut editor) = opened("");
+        edit(&mut editor, "Nick", "brett");
+        edit(&mut editor, "Account", "brett");
+        go_to(&mut editor, "Password");
+        press(&mut editor, "RET");
+        go_to(&mut editor, "Keep alive");
+        press(&mut editor, "RET C-c C-c");
+
+        assert_eq!(
+            editor.message(),
+            Some("The bouncer cannot ask for a password; keep it in the keychain or a variable")
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), "");
     }
 
     #[test]
