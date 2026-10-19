@@ -78,7 +78,7 @@ impl Language {
             Self::Rust => &["rs"],
             Self::Toml => &["toml"],
             Self::Markdown => &["md", "markdown"],
-            Self::R => &["r"],
+            Self::R => &["R", "r"],
         }
     }
 
@@ -397,6 +397,7 @@ mod tests {
             Language::for_path(Path::new("analysis.R")),
             Some(Language::R)
         );
+        assert_eq!(Language::for_path(Path::new("plot.r")), Some(Language::R));
         assert_eq!(
             Language::for_path(Path::new(".Rprofile")),
             Some(Language::R)
