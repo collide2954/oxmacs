@@ -299,7 +299,7 @@ impl Network {
             "INVITE" | "ERROR" | "FAIL" | "WARN" | "NOTE" => {
                 self.server_notice(message, stamp, &mut updates);
             }
-            "005" | "333" => {}
+            "004" | "005" | "333" => {}
             command if command.len() == 3 && command.chars().all(|c| c.is_ascii_digit()) => {
                 self.numeric(message, stamp, &mut updates);
             }
@@ -622,8 +622,16 @@ impl Network {
             .filter(|_| last >= 1)
             .cloned()
             .unwrap_or_default();
-        let text = if middle.is_empty() {
+        let counts = !middle.is_empty()
+            && middle
+                .split(' ')
+                .all(|token| token.chars().all(|c| c.is_ascii_digit()));
+        let text = if middle.is_empty()
+            || (counts && tail.contains(middle.split(' ').next().unwrap_or_default()))
+        {
             tail
+        } else if counts {
+            format!("{middle} {tail}")
         } else {
             format!("{middle}: {tail}")
         };
@@ -968,6 +976,37 @@ mod tests {
                     text: "- Be nice".to_owned(),
                     error: false
                 }
+            ]
+        );
+    }
+
+    #[test]
+    fn numeric_counts_read_naturally() {
+        let session = session();
+        let mut network = Network::new("libera");
+        for line in [
+            ":srv 004 oxtest srv solanum-1.0 DGIM CFIL bklov",
+            ":srv 252 oxtest 32 :IRC Operators online",
+            ":srv 265 oxtest 1795 1845 :Current local users 1795, max 1845",
+            ":srv 433 * oxtest :Nickname is already in use",
+        ] {
+            apply(&mut network, &session, line);
+        }
+
+        let texts: Vec<&str> = network.chats()[0]
+            .lines
+            .iter()
+            .filter_map(|line| match &line.event {
+                LineEvent::Info { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                "32 IRC Operators online",
+                "Current local users 1795, max 1845",
+                "oxtest: Nickname is already in use"
             ]
         );
     }
