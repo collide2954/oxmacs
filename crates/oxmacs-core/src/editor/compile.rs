@@ -125,6 +125,7 @@ impl Editor {
             program: program.clone(),
             args: args.to_vec(),
             directory,
+            env: Vec::new(),
         }));
     }
 

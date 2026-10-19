@@ -9,6 +9,7 @@ pub struct Job {
     pub program: String,
     pub args: Vec<String>,
     pub directory: PathBuf,
+    pub env: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

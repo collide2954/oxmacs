@@ -78,6 +78,7 @@ fn command(job: &Job, output: PipeWriter, interactive: bool) -> io::Result<Comma
     let mut command = Command::new(&job.program);
     command
         .args(&job.args)
+        .envs(job.env.iter().map(|(key, value)| (key, value)))
         .current_dir(&job.directory)
         .stdin(if interactive {
             Stdio::piped()
@@ -164,6 +165,7 @@ mod tests {
             program: program.to_owned(),
             args: args.iter().map(|arg| (*arg).to_owned()).collect(),
             directory: env::temp_dir(),
+            env: Vec::new(),
         }
     }
 
@@ -290,6 +292,23 @@ mod tests {
 
         assert!(handle.send("x").is_err());
         collect(&events);
+    }
+
+    #[test]
+    fn jobs_get_their_environment() {
+        let (program, args): (&str, &[&str]) = if cfg!(windows) {
+            ("cmd", &["/C", "echo %OXMACS_TEST%"])
+        } else {
+            ("sh", &["-c", "echo $OXMACS_TEST"])
+        };
+        let mut job = job(program, args);
+        job.env = vec![("OXMACS_TEST".to_owned(), "hello".to_owned())];
+        let (_, events) = started(&job);
+
+        assert_eq!(
+            collect(&events).first(),
+            Some(&Event::Line("hello".to_owned()))
+        );
     }
 
     #[test]

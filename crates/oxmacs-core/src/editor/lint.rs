@@ -93,6 +93,7 @@ impl Editor {
             .map(str::to_owned)
             .to_vec(),
             directory: root.clone(),
+            env: Vec::new(),
         }));
         self.lints.run = Some(Run {
             job,
