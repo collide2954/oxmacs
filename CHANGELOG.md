@@ -12,6 +12,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `mode-line-style` picks a classic, modern, minimal, powerline or boxed mode line.
 - `M-x` shows each command's key and what it does, and `C-h f` explains a command in *Help*.
 - `M-x weather` shows the forecast for `weather-location` from Open-Meteo, and `mode-line-weather` puts it beside the clock.
+- `M-x irc`: an IRCv3 client for the `[[irc-server]]` entries in config.toml, with a buffer per server, channel and private chat, a member list, slash commands, nick completion, `C-c C-b` to jump to busy chats, and SASL passwords asked for, read from the environment or kept in the OS keychain.
 
 ### Fixed
 
