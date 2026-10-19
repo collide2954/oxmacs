@@ -39,6 +39,8 @@ pub struct Config {
     pub weather_location: Option<String>,
     pub weather_units: WeatherUnits,
     pub mode_line_weather: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub irc_server: Vec<IrcServer>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r_program: Option<String>,
 }
@@ -79,6 +81,56 @@ pub enum ModeLineStyle {
     Minimal,
     Powerline,
     Boxed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct IrcServer {
+    pub name: String,
+    pub host: String,
+    #[serde(default = "irc_port")]
+    pub port: u16,
+    #[serde(default = "enabled")]
+    pub tls: bool,
+    pub nick: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub realname: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub channels: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sasl: Option<String>,
+    #[serde(default)]
+    pub password: PasswordSource,
+}
+
+impl IrcServer {
+    pub fn username(&self) -> &str {
+        self.username.as_deref().unwrap_or(&self.nick)
+    }
+
+    pub fn realname(&self) -> &str {
+        self.realname.as_deref().unwrap_or("oxmacs")
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PasswordSource {
+    #[default]
+    Keychain,
+    Ask,
+    Env(String),
+    Text(String),
+}
+
+fn irc_port() -> u16 {
+    6697
+}
+
+fn enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -122,6 +174,7 @@ impl Default for Config {
             weather_location: None,
             weather_units: WeatherUnits::default(),
             mode_line_weather: false,
+            irc_server: Vec::new(),
             r_program: None,
         }
     }
@@ -139,6 +192,8 @@ pub enum ConfigError {
     FontSize,
     #[error("clock-format: {0}")]
     ClockFormat(String),
+    #[error("irc-server: {0}")]
+    IrcServer(String),
     #[error("{}: {source}", path.display())]
     Read { path: PathBuf, source: io::Error },
     #[error("{}: {source}", path.display())]
@@ -208,6 +263,23 @@ impl Config {
         }
         let sample = jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC);
         clock::text(&self.clock_format, &sample).map_err(ConfigError::ClockFormat)?;
+        for (index, server) in self.irc_server.iter().enumerate() {
+            if server.nick.trim().is_empty() {
+                return Err(ConfigError::IrcServer(format!(
+                    "{} needs a nick",
+                    server.name
+                )));
+            }
+            if self.irc_server[..index]
+                .iter()
+                .any(|earlier| earlier.name == server.name)
+            {
+                return Err(ConfigError::IrcServer(format!(
+                    "two servers are named {}",
+                    server.name
+                )));
+            }
+        }
         Ok(())
     }
 }
@@ -524,6 +596,73 @@ mod tests {
         assert_eq!(config.weather_location.as_deref(), Some("Berlin"));
         assert_eq!(config.weather_units, WeatherUnits::Imperial);
         assert!(config.mode_line_weather);
+    }
+
+    #[test]
+    fn irc_servers_are_tables_with_sensible_defaults() {
+        let config = Config::parse(
+            r##"
+[[irc-server]]
+name = "libera"
+host = "irc.libera.chat"
+nick = "oxtest"
+channels = ["#oxmacs-test"]
+sasl = "oxtest"
+
+[[irc-server]]
+name = "local"
+host = "localhost"
+port = 6667
+tls = false
+nick = "me"
+password = { env = "LOCAL_IRC" }
+"##,
+        )
+        .unwrap();
+
+        let libera = &config.irc_server[0];
+        assert_eq!(libera.port, 6697);
+        assert!(libera.tls);
+        assert_eq!(libera.username(), "oxtest");
+        assert_eq!(libera.realname(), "oxmacs");
+        assert_eq!(libera.channels, ["#oxmacs-test"]);
+        assert_eq!(libera.password, PasswordSource::Keychain);
+
+        let local = &config.irc_server[1];
+        assert_eq!((local.port, local.tls), (6667, false));
+        assert_eq!(local.password, PasswordSource::Env("LOCAL_IRC".to_owned()));
+        assert_eq!(local.sasl, None);
+    }
+
+    #[test]
+    fn irc_password_sources_are_spelled_plainly() {
+        let read = |password: &str| {
+            Config::parse(&format!(
+                "[[irc-server]]\nname = \"n\"\nhost = \"h\"\nnick = \"x\"\npassword = {password}\n"
+            ))
+            .map(|config| config.irc_server[0].password.clone())
+        };
+
+        assert_eq!(read("\"ask\"").unwrap(), PasswordSource::Ask);
+        assert_eq!(read("\"keychain\"").unwrap(), PasswordSource::Keychain);
+        assert_eq!(
+            read("{ text = \"hunter2\" }").unwrap(),
+            PasswordSource::Text("hunter2".to_owned())
+        );
+        assert!(read("\"sometimes\"").is_err());
+    }
+
+    #[test]
+    fn irc_servers_need_distinct_names_and_a_nick() {
+        let error = Config::parse(
+            "[[irc-server]]\nname = \"a\"\nhost = \"h\"\nnick = \"x\"\n[[irc-server]]\nname = \"a\"\nhost = \"h\"\nnick = \"y\"\n",
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "irc-server: two servers are named a");
+
+        let error =
+            Config::parse("[[irc-server]]\nname = \"a\"\nhost = \"h\"\nnick = \"\"\n").unwrap_err();
+        assert_eq!(error.to_string(), "irc-server: a needs a nick");
     }
 
     #[test]
