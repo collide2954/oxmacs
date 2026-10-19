@@ -2,9 +2,9 @@ use std::path::Path;
 
 use crate::dired::Listing;
 use crate::display::{ScreenLine, Viewport};
-use crate::editor::compile::Compilation;
+use crate::editor::build::compile::Compilation;
+use crate::editor::build::diagnostics_list::DiagnosticsList;
 use crate::editor::customize::Customize;
-use crate::editor::diagnostics_list::DiagnosticsList;
 use crate::editor::doctor::Doctor;
 use crate::editor::minibuffer::Purpose;
 use crate::editor::r_console::Console;

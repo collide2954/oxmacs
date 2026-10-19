@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
-use crate::editor::compile::FINISHED;
+use crate::editor::build::compile::FINISHED;
 use crate::editor::tiling::Axis;
 use crate::text::BufferId;
 use crate::theme::Highlight;
@@ -39,7 +39,7 @@ struct Location {
 }
 
 #[derive(Debug, Default)]
-pub(super) struct Errors {
+pub(in crate::editor) struct Errors {
     locations: Vec<Location>,
     current: Option<usize>,
     header: Option<(usize, String)>,
@@ -47,7 +47,7 @@ pub(super) struct Errors {
 }
 
 impl Errors {
-    pub(super) fn scan(&mut self, line: usize, text: &str, directory: &Path) {
+    pub(in crate::editor) fn scan(&mut self, line: usize, text: &str, directory: &Path) {
         if text.trim().is_empty() {
             self.header = None;
             self.open = false;
@@ -83,7 +83,7 @@ impl Errors {
         self.open = true;
     }
 
-    pub(super) fn line_style(&self, line: usize, text: &str) -> LineStyle {
+    pub(in crate::editor) fn line_style(&self, line: usize, text: &str) -> LineStyle {
         let current = self
             .current
             .and_then(|current| self.locations.get(current))
@@ -115,13 +115,17 @@ impl Errors {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(super) enum ErrorSource {
+pub(in crate::editor) enum ErrorSource {
     #[default]
     Compilation,
     Lint,
 }
 
-pub(super) fn step(current: Option<usize>, forward: bool, count: usize) -> Option<usize> {
+pub(in crate::editor) fn step(
+    current: Option<usize>,
+    forward: bool,
+    count: usize,
+) -> Option<usize> {
     match (current, forward) {
         (None, true) => (count > 0).then_some(0),
         (None, false) => None,
@@ -196,7 +200,7 @@ impl Editor {
         matches!(self.buffers.mode(0), Some(Mode::Compilation(_)))
     }
 
-    pub(super) fn next_error(&mut self, forward: bool) {
+    pub(in crate::editor) fn next_error(&mut self, forward: bool) {
         if self.errors_from == ErrorSource::Lint && !self.in_compilation() {
             self.next_lint(forward);
             return;
@@ -216,13 +220,13 @@ impl Editor {
         }
     }
 
-    pub(super) fn next_error_no_select(&mut self, forward: bool) {
+    pub(in crate::editor) fn next_error_no_select(&mut self, forward: bool) {
         let origin = self.selected_window();
         self.next_error(forward);
         self.select_window(origin);
     }
 
-    pub(super) fn compilation_next_error(&mut self, forward: bool) {
+    pub(in crate::editor) fn compilation_next_error(&mut self, forward: bool) {
         let line = self.point_line();
         let Some(errors) = self.errors() else {
             return;
@@ -240,7 +244,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn report_no_more_errors(&mut self, forward: bool) {
+    pub(in crate::editor) fn report_no_more_errors(&mut self, forward: bool) {
         self.show_message(if forward {
             "Moved past last error"
         } else {
@@ -248,7 +252,7 @@ impl Editor {
         });
     }
 
-    pub(super) fn compile_goto_error(&mut self) {
+    pub(in crate::editor) fn compile_goto_error(&mut self) {
         match self
             .errors()
             .and_then(|errors| errors.covering(self.point_line()))
@@ -258,7 +262,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn error_on_line(&self, line: usize) -> Option<usize> {
+    pub(in crate::editor) fn error_on_line(&self, line: usize) -> Option<usize> {
         if !self.in_compilation() {
             return None;
         }
@@ -268,7 +272,7 @@ impl Editor {
             .position(|location| location.line == line)
     }
 
-    pub(super) fn leave_window_showing(&mut self, output: BufferId) {
+    pub(in crate::editor) fn leave_window_showing(&mut self, output: BufferId) {
         if self.buffers.current().id() == output {
             if self.tiling().windows().len() == 1 {
                 self.split_window(Axis::Columns);
@@ -277,7 +281,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn visit_error(&mut self, index: usize) {
+    pub(in crate::editor) fn visit_error(&mut self, index: usize) {
         let Some(compilation) = self.compilation_mut() else {
             return;
         };

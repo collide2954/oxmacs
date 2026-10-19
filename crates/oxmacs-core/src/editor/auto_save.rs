@@ -42,7 +42,7 @@ mod tests {
 
     use crate::config::Config;
     use crate::editor::Editor;
-    use crate::editor::lint::fixtures::{project, spawned};
+    use crate::editor::build::lint::fixtures::{project, spawned};
     use crate::editor::test_support::type_text;
 
     fn edited(editor: &mut Editor) {

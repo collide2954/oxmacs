@@ -4,19 +4,19 @@ use std::path::{Path, PathBuf};
 
 use crate::config::RustLint;
 use crate::diagnostics::{self, Diagnostic, Output, Severity};
-use crate::editor::errors::ErrorSource;
+use crate::editor::build::errors::ErrorSource;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::text::{Buffer, BufferId, Marker};
 use crate::tools;
 
 #[derive(Debug, Default)]
-pub(super) struct Lints {
-    pub(super) due: Option<PathBuf>,
+pub(in crate::editor) struct Lints {
+    pub(in crate::editor) due: Option<PathBuf>,
     run: Option<Run>,
-    pub(super) diagnostics: Vec<Diagnostic>,
+    pub(in crate::editor) diagnostics: Vec<Diagnostic>,
     marks: Vec<Mark>,
-    pub(super) root: Option<PathBuf>,
-    pub(super) current: Option<usize>,
+    pub(in crate::editor) root: Option<PathBuf>,
+    pub(in crate::editor) current: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -60,7 +60,7 @@ fn running(tool: RustLint) -> &'static str {
 }
 
 impl Editor {
-    pub(super) fn request_lint(&mut self, path: &Path) {
+    pub(in crate::editor) fn request_lint(&mut self, path: &Path) {
         if subcommand(self.settings.rust_lint).is_some()
             && let Some(root) = path.parent().and_then(tools::cargo_root)
         {
@@ -68,7 +68,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn start_due_lint(&mut self) {
+    pub(in crate::editor) fn start_due_lint(&mut self) {
         let Some(root) = self.lints.due.take() else {
             return;
         };
@@ -105,7 +105,7 @@ impl Editor {
         });
     }
 
-    pub(super) fn lint_output(&mut self, job: JobId, line: &str) -> bool {
+    pub(in crate::editor) fn lint_output(&mut self, job: JobId, line: &str) -> bool {
         let Some(run) = self.lints.run.as_mut().filter(|run| run.job == job) else {
             return false;
         };
@@ -125,7 +125,7 @@ impl Editor {
         true
     }
 
-    pub(super) fn lint_finished(&mut self, job: JobId, outcome: &Outcome) -> bool {
+    pub(in crate::editor) fn lint_finished(&mut self, job: JobId, outcome: &Outcome) -> bool {
         let Some(run) = self.lints.run.take_if(|run| run.job == job) else {
             return false;
         };
@@ -166,7 +166,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn mark_buffer(&mut self, index: usize) {
+    pub(in crate::editor) fn mark_buffer(&mut self, index: usize) {
         let Some(buffer) = self.buffers.get_mut(index) else {
             return;
         };
@@ -200,7 +200,7 @@ impl Editor {
             })
     }
 
-    pub(super) fn diagnostics_on_line(
+    pub(in crate::editor) fn diagnostics_on_line(
         &self,
         index: usize,
         line: usize,
@@ -219,7 +219,7 @@ impl Editor {
             .collect()
     }
 
-    pub(super) fn diagnostic_start(&self, diagnostic: usize) -> Option<usize> {
+    pub(in crate::editor) fn diagnostic_start(&self, diagnostic: usize) -> Option<usize> {
         let buffer = self.buffers.current();
         self.lints
             .marks
@@ -242,7 +242,7 @@ impl Editor {
             .map(|diagnostic| diagnostic.message.as_str())
     }
 
-    pub(super) fn lint_status(&self, path: &Path) -> Option<String> {
+    pub(in crate::editor) fn lint_status(&self, path: &Path) -> Option<String> {
         if let Some(run) = self
             .lints
             .run

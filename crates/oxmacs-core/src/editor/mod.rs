@@ -1,23 +1,20 @@
 mod auto_save;
 mod buffers;
+mod build;
 mod clipboard;
 mod comments;
-mod compile;
 mod customize;
-mod diagnostics_list;
 mod dired;
 mod disk;
 mod doctor;
 mod editing;
 mod effect;
-mod errors;
 mod files;
 mod format;
 mod imenu;
 mod indent;
 mod isearch;
 mod job;
-mod lint;
 mod markdown;
 mod minibuffer;
 mod modes;
@@ -158,8 +155,8 @@ pub struct Editor {
     paren_pair: Option<(usize, usize)>,
     next_job: u64,
     last_compile: Option<String>,
-    lints: lint::Lints,
-    errors_from: errors::ErrorSource,
+    lints: build::lint::Lints,
+    errors_from: build::errors::ErrorSource,
     config: Config,
 }
 
@@ -229,8 +226,8 @@ impl Editor {
             paren_pair: None,
             next_job: 0,
             last_compile: None,
-            lints: lint::Lints::default(),
-            errors_from: errors::ErrorSource::default(),
+            lints: build::lint::Lints::default(),
+            errors_from: build::errors::ErrorSource::default(),
             config: Config::default(),
         }
     }

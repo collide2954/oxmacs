@@ -1,40 +1,40 @@
 use std::path::PathBuf;
 
 use crate::editor::buffers::Mode;
-use crate::editor::errors::{ErrorSource, Errors};
+use crate::editor::build::errors::{ErrorSource, Errors};
 use crate::editor::minibuffer::Purpose;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::files::paths;
 use crate::text::Buffer;
 use crate::tools;
 
-pub(super) const NAME: &str = "*compilation*";
-pub(super) const FINISHED: &str = "Compilation finished";
+pub(in crate::editor) const NAME: &str = "*compilation*";
+pub(in crate::editor) const FINISHED: &str = "Compilation finished";
 const DEFAULT_COMMAND: &str = "cargo build";
 
 #[derive(Debug)]
-pub(super) struct Compilation {
+pub(in crate::editor) struct Compilation {
     command: String,
     directory: PathBuf,
     job: Option<JobId>,
     killed: bool,
-    pub(super) errors: Errors,
+    pub(in crate::editor) errors: Errors,
 }
 
 impl Editor {
-    pub(super) fn compilation_index(&self) -> Option<usize> {
+    pub(in crate::editor) fn compilation_index(&self) -> Option<usize> {
         self.buffers
             .find_mode(|mode| matches!(mode, Mode::Compilation(_)))
     }
 
-    pub(super) fn compilation(&self) -> Option<&Compilation> {
+    pub(in crate::editor) fn compilation(&self) -> Option<&Compilation> {
         match self.buffers.mode(self.compilation_index()?)? {
             Mode::Compilation(compilation) => Some(compilation),
             _ => None,
         }
     }
 
-    pub(super) fn compilation_mut(&mut self) -> Option<&mut Compilation> {
+    pub(in crate::editor) fn compilation_mut(&mut self) -> Option<&mut Compilation> {
         let index = self.compilation_index()?;
         match self.buffers.mode_mut(index)? {
             Mode::Compilation(compilation) => Some(compilation),
@@ -42,7 +42,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn compile(&mut self) {
+    pub(in crate::editor) fn compile(&mut self) {
         if self.open_minibuffer("Compile command: ", Purpose::Compile) {
             let command = self
                 .last_compile
@@ -52,7 +52,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn recompile(&mut self) {
+    pub(in crate::editor) fn recompile(&mut self) {
         let (command, directory) = match self.compilation() {
             Some(compilation) => (compilation.command.clone(), compilation.directory.clone()),
             None => (
@@ -65,17 +65,17 @@ impl Editor {
         self.start_compile(command, directory);
     }
 
-    pub(super) fn cargo(&mut self, subcommand: &str) {
+    pub(in crate::editor) fn cargo(&mut self, subcommand: &str) {
         let directory = self.project_directory();
         self.start_compile(format!("cargo {subcommand}"), directory);
     }
 
-    pub(super) fn project_directory(&self) -> PathBuf {
+    pub(in crate::editor) fn project_directory(&self) -> PathBuf {
         let directory = self.default_directory();
         tools::cargo_root(&directory).unwrap_or(directory)
     }
 
-    pub(super) fn start_compile(&mut self, command: String, directory: PathBuf) {
+    pub(in crate::editor) fn start_compile(&mut self, command: String, directory: PathBuf) {
         let words = tools::split_command(&command);
         let Some((program, args)) = words.split_first() else {
             self.show_message("No command to run");
@@ -129,7 +129,7 @@ impl Editor {
         }));
     }
 
-    pub(super) fn kill_compilation(&mut self) {
+    pub(in crate::editor) fn kill_compilation(&mut self) {
         let Some(compilation) = self
             .compilation_mut()
             .filter(|compilation| compilation.job.is_some())

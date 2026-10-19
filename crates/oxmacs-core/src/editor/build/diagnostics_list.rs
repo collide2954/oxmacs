@@ -4,7 +4,7 @@ use crate::diagnostics::{Diagnostic, Severity};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
-use crate::editor::errors;
+use crate::editor::build::errors;
 use crate::editor::page::Page;
 use crate::files::paths;
 use crate::text::Buffer;
@@ -14,13 +14,13 @@ const NAME: &str = "*Diagnostics*";
 const HELP: &str = "RET visits   SPC shows   g checks again   q quits";
 
 #[derive(Debug, Default)]
-pub(super) struct DiagnosticsList {
+pub(in crate::editor) struct DiagnosticsList {
     rows: Vec<(usize, usize)>,
     styles: Vec<LineStyle>,
 }
 
 impl DiagnosticsList {
-    pub(super) fn line_style(&self, line: usize) -> LineStyle {
+    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
 
@@ -118,11 +118,11 @@ impl Editor {
         }
     }
 
-    pub(super) fn in_diagnostics_list(&self) -> bool {
+    pub(in crate::editor) fn in_diagnostics_list(&self) -> bool {
         self.diagnostics_list().is_some()
     }
 
-    pub(super) fn list_diagnostics(&mut self) {
+    pub(in crate::editor) fn list_diagnostics(&mut self) {
         if self.diagnostics_index().is_none() {
             self.beside(|editor| {
                 let mut buffer = Buffer::with_text(NAME, "");
@@ -150,7 +150,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn render_diagnostics_list(&mut self) {
+    pub(in crate::editor) fn render_diagnostics_list(&mut self) {
         let Some(index) = self.diagnostics_index() else {
             return;
         };
@@ -168,7 +168,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn goto_diagnostic(&mut self) {
+    pub(in crate::editor) fn goto_diagnostic(&mut self) {
         let line = self.point_line();
         match self.diagnostics_list().and_then(|list| list.row(line)) {
             Some(index) => self.visit_diagnostic(index),
@@ -176,24 +176,24 @@ impl Editor {
         }
     }
 
-    pub(super) fn show_diagnostic(&mut self) {
+    pub(in crate::editor) fn show_diagnostic(&mut self) {
         let origin = self.selected_window();
         self.goto_diagnostic();
         self.select_window(origin);
     }
 
-    pub(super) fn diagnostic_on_line(&self, line: usize) -> Option<usize> {
+    pub(in crate::editor) fn diagnostic_on_line(&self, line: usize) -> Option<usize> {
         self.diagnostics_list()?.row(line)
     }
 
-    pub(super) fn recheck(&mut self) {
+    pub(in crate::editor) fn recheck(&mut self) {
         match self.lints.root.clone() {
             Some(root) => self.lints.due = Some(root),
             None => self.show_message("Nothing has been checked yet"),
         }
     }
 
-    pub(super) fn next_lint(&mut self, forward: bool) {
+    pub(in crate::editor) fn next_lint(&mut self, forward: bool) {
         let line = self.point_line();
         let target = match self.diagnostics_list() {
             Some(list) => list.beyond(line, forward),
@@ -243,7 +243,9 @@ mod tests {
     use std::path::Path;
 
     use crate::diagnostics::sample;
-    use crate::editor::lint::fixtures::{FINISHED, linting, project, report, reported, spawned};
+    use crate::editor::build::lint::fixtures::{
+        FINISHED, linting, project, report, reported, spawned,
+    };
     use crate::editor::test_support::{lines, press, type_text};
     use crate::editor::{Cell, Clicks, Editor, Effect, Outcome};
 
