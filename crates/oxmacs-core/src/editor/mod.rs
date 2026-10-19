@@ -9,13 +9,11 @@ mod editing;
 mod effect;
 mod files;
 mod format;
-mod imenu;
 mod indent;
 mod job;
 mod languages;
 mod modes;
-mod mouse;
-mod movement;
+mod motion;
 mod numbers;
 mod page;
 mod pairs;
@@ -25,7 +23,6 @@ mod read_only;
 mod search;
 mod selection;
 mod special;
-mod structure;
 #[cfg(test)]
 mod test_support;
 mod tiling;
@@ -35,7 +32,7 @@ mod windows;
 pub use effect::Effect;
 pub use job::{Job, JobId, Outcome};
 pub use languages::preview::PreviewScroll;
-pub use mouse::{Cell, Clicks};
+pub use motion::mouse::{Cell, Clicks};
 pub use numbers::Gutter;
 pub use pane::{Pane, ScreenRow};
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
@@ -59,7 +56,7 @@ use crate::dired::Mark;
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::syntax::Language;
-use crate::text::{Buffer, motion};
+use crate::text::{self, Buffer};
 use crate::theme::{self, Appearance, Highlight, Theme};
 use crate::tools::{self, Probe};
 
@@ -303,7 +300,7 @@ impl Editor {
 
     pub fn point_display_column(&self) -> usize {
         let buffer = self.buffers.current();
-        movement::display_column(buffer, buffer.point(), self.tab_width)
+        motion::movement::display_column(buffer, buffer.point(), self.tab_width)
     }
 
     pub fn mode_line(&self) -> String {
@@ -516,16 +513,16 @@ impl Editor {
             Command::DeleteChar => self.delete_char(true),
             Command::DeleteBackwardChar => self.delete_char(false),
             Command::DeleteLine => self.delete_line(),
-            Command::DeleteWord => self.delete_to(motion::forward_word),
-            Command::BackwardDeleteWord => self.delete_to(motion::backward_word),
-            Command::ForwardChar => self.move_point(|b, p| motion::forward_char(b, p, 1)),
-            Command::BackwardChar => self.move_point(|_, p| motion::backward_char(p, 1)),
+            Command::DeleteWord => self.delete_to(text::motion::forward_word),
+            Command::BackwardDeleteWord => self.delete_to(text::motion::backward_word),
+            Command::ForwardChar => self.move_point(|b, p| text::motion::forward_char(b, p, 1)),
+            Command::BackwardChar => self.move_point(|_, p| text::motion::backward_char(p, 1)),
             Command::NextLine => self.move_vertically(1, goal_column),
             Command::PreviousLine => self.move_vertically(-1, goal_column),
-            Command::MoveBeginningOfLine => self.move_point(motion::beginning_of_line),
-            Command::MoveEndOfLine => self.move_point(motion::end_of_line),
-            Command::ForwardWord => self.move_point(motion::forward_word),
-            Command::BackwardWord => self.move_point(motion::backward_word),
+            Command::MoveBeginningOfLine => self.move_point(text::motion::beginning_of_line),
+            Command::MoveEndOfLine => self.move_point(text::motion::end_of_line),
+            Command::ForwardWord => self.move_point(text::motion::forward_word),
+            Command::BackwardWord => self.move_point(text::motion::backward_word),
             Command::BeginningOfBuffer => self.move_point(|_, _| 0),
             Command::EndOfBuffer => self.move_point(|b, _| b.len_chars()),
             Command::BeginningOfDefun => self.beginning_of_defun(),

@@ -11,7 +11,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn beginning_of_defun(&mut self) {
+    pub(in crate::editor) fn beginning_of_defun(&mut self) {
         self.sync_syntax();
         let buffer = self.buffers.current();
         let target = self
@@ -22,7 +22,7 @@ impl Editor {
         self.buffers.current_mut().set_point(target);
     }
 
-    pub(super) fn end_of_defun(&mut self) {
+    pub(in crate::editor) fn end_of_defun(&mut self) {
         self.sync_syntax();
         let buffer = self.buffers.current();
         let target = self
@@ -43,7 +43,7 @@ impl Editor {
         self.buffers.current_mut().set_point(target);
     }
 
-    pub(super) fn forward_sexp(&mut self) {
+    pub(in crate::editor) fn forward_sexp(&mut self) {
         self.sync_syntax();
         let buffer = self.buffers.current();
         let point = buffer.point();
@@ -54,7 +54,7 @@ impl Editor {
         self.go_to(target);
     }
 
-    pub(super) fn backward_sexp(&mut self) {
+    pub(in crate::editor) fn backward_sexp(&mut self) {
         self.sync_syntax();
         let buffer = self.buffers.current();
         let point = buffer.point();
@@ -65,7 +65,7 @@ impl Editor {
         self.go_to(target);
     }
 
-    pub(super) fn backward_up_list(&mut self) {
+    pub(in crate::editor) fn backward_up_list(&mut self) {
         self.sync_syntax();
         let buffer = self.buffers.current();
         let point = buffer.point();
@@ -76,7 +76,7 @@ impl Editor {
         self.go_to(target.ok_or("At top level"));
     }
 
-    pub(super) fn down_list(&mut self) {
+    pub(in crate::editor) fn down_list(&mut self) {
         self.sync_syntax();
         let buffer = self.buffers.current();
         let point = buffer.point();

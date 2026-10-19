@@ -2,7 +2,7 @@ use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Choice, Completion, Editor};
 
 impl Editor {
-    pub(super) fn imenu(&mut self) {
+    pub(in crate::editor) fn imenu(&mut self) {
         self.sync_syntax();
         let items = self
             .buffers
@@ -20,7 +20,10 @@ impl Editor {
         }
     }
 
-    pub(super) fn item_completions(&self, matches: impl Fn(&str) -> bool) -> Vec<Completion> {
+    pub(in crate::editor) fn item_completions(
+        &self,
+        matches: impl Fn(&str) -> bool,
+    ) -> Vec<Completion> {
         let Some(minibuffer) = &self.minibuffer else {
             return Vec::new();
         };
@@ -43,7 +46,7 @@ impl Editor {
             .collect()
     }
 
-    pub(super) fn jump_to_item(&mut self, position: usize) {
+    pub(in crate::editor) fn jump_to_item(&mut self, position: usize) {
         let buffer = self.buffers.current_mut();
         buffer.set_mark(buffer.point());
         buffer.deactivate_mark();

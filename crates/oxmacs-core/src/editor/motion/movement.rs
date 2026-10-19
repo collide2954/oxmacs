@@ -2,19 +2,19 @@ use crate::display::{self, Layout};
 use crate::editor::Editor;
 use crate::text::Buffer;
 
-pub(super) fn display_column(buffer: &Buffer, point: usize, tab_width: usize) -> usize {
+pub(in crate::editor) fn display_column(buffer: &Buffer, point: usize, tab_width: usize) -> usize {
     let line = buffer.line_text(buffer.line_of(point));
     display::display_column(&line, buffer.column(point), tab_width)
 }
 
 impl Editor {
-    pub(super) fn move_point(&mut self, motion: impl FnOnce(&Buffer, usize) -> usize) {
+    pub(in crate::editor) fn move_point(&mut self, motion: impl FnOnce(&Buffer, usize) -> usize) {
         let buffer = self.current_mut();
         let target = motion(buffer, buffer.point());
         buffer.set_point(target);
     }
 
-    pub(super) fn move_vertically(&mut self, lines: isize, goal_column: Option<usize>) {
+    pub(in crate::editor) fn move_vertically(&mut self, lines: isize, goal_column: Option<usize>) {
         let width = if self.minibuffer.is_some() {
             0
         } else {
@@ -36,7 +36,7 @@ impl Editor {
         self.goal_column = Some(goal);
     }
 
-    pub(super) fn scroll_page(&mut self, forward: bool) {
+    pub(in crate::editor) fn scroll_page(&mut self, forward: bool) {
         let page = isize::try_from(self.viewport.rows().saturating_sub(2).max(1)).unwrap_or(1);
         let top = self.viewport.top();
         self.scroll_lines(if forward { page } else { -page });
@@ -46,7 +46,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn go_to_line(&mut self, line: usize, column: usize) {
+    pub(in crate::editor) fn go_to_line(&mut self, line: usize, column: usize) {
         let buffer = self.buffers.current_mut();
         let line = line.saturating_sub(1);
         let target = buffer.line_start(line) + column.saturating_sub(1);
