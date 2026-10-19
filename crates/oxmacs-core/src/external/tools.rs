@@ -201,7 +201,7 @@ pub fn find_r(configured: Option<&str>) -> Option<PathBuf> {
         configured,
         env::var_os("PATH").as_deref(),
         r_home.as_deref(),
-        &r_installs(),
+        r_installs,
     )
 }
 
@@ -209,7 +209,7 @@ pub fn find_r_in(
     configured: Option<&str>,
     search_path: Option<&OsStr>,
     r_home: Option<&Path>,
-    installs: &[PathBuf],
+    installs: impl FnOnce() -> Vec<PathBuf>,
 ) -> Option<PathBuf> {
     if let Some(configured) = configured {
         let path = Path::new(configured);
@@ -222,7 +222,7 @@ pub fn find_r_in(
     find(R_PROGRAM, search_path)
         .or_else(|| r_home.and_then(r_binary))
         .or_else(|| {
-            installs
+            installs()
                 .iter()
                 .filter_map(|install| Some((r_version(install), r_binary(install)?)))
                 .max_by(|a, b| a.0.cmp(&b.0))
@@ -437,10 +437,26 @@ mod tests {
         let search = env::join_paths([bin.parent().unwrap()]).unwrap();
 
         assert_eq!(
-            find_r_in(configured.to_str(), Some(&search), None, &[]),
+            find_r_in(configured.to_str(), Some(&search), None, Vec::new),
             Some(configured)
         );
-        assert_eq!(find_r_in(None, Some(&search), None, &[]), Some(bin));
+        assert_eq!(find_r_in(None, Some(&search), None, Vec::new), Some(bin));
+    }
+
+    #[test]
+    fn installs_are_only_listed_when_r_is_not_on_the_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = r_binary(&r_home_in(dir.path(), "path")).unwrap();
+        let search = env::join_paths([bin.parent().unwrap()]).unwrap();
+
+        let listed = std::cell::Cell::new(false);
+        let installs = || {
+            listed.set(true);
+            Vec::new()
+        };
+
+        assert_eq!(find_r_in(None, Some(&search), None, installs), Some(bin));
+        assert!(!listed.get());
     }
 
     #[test]
@@ -450,12 +466,15 @@ mod tests {
         let old = r_home_in(dir.path(), "R-4.9.2");
         let new = r_home_in(dir.path(), "R-4.10.0");
 
-        assert_eq!(find_r_in(None, None, Some(&home), &[]), r_binary(&home));
         assert_eq!(
-            find_r_in(None, None, None, &[old, new.clone()]),
+            find_r_in(None, None, Some(&home), Vec::new),
+            r_binary(&home)
+        );
+        assert_eq!(
+            find_r_in(None, None, None, || vec![old, new.clone()]),
             r_binary(&new)
         );
-        assert_eq!(find_r_in(None, None, None, &[]), None);
+        assert_eq!(find_r_in(None, None, None, Vec::new), None);
     }
 
     #[test]
