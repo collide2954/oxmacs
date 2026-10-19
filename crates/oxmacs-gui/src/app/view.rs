@@ -124,7 +124,14 @@ impl App {
             .into(),
         };
         let body = match pane.members() {
-            Some(members) => row![body, nick_list::view(&members, faces, self.text_size)].into(),
+            Some(members) => {
+                let own = pane.own_nick();
+                row![
+                    body,
+                    nick_list::view(&members, own.as_deref(), faces, self.text_size)
+                ]
+                .into()
+            }
             None => body,
         };
         let last = self.editor.tiling().windows().last() == Some(&window);

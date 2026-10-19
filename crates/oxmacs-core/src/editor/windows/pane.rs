@@ -174,6 +174,10 @@ impl<'a> Pane<'a> {
         self.editor.chat_members(self.index)
     }
 
+    pub fn own_nick(&self) -> Option<String> {
+        self.editor.chat_nick(self.index)
+    }
+
     pub fn mode_line(&self) -> String {
         self.status().to_string()
     }
@@ -184,7 +188,7 @@ impl<'a> Pane<'a> {
             BufferState::UnsavedSettings
         } else if buffer.is_read_only() {
             BufferState::ReadOnly
-        } else if buffer.is_modified() {
+        } else if buffer.is_modified() && !self.editor.buffers.is_special(self.index) {
             BufferState::Modified
         } else {
             BufferState::Unmodified

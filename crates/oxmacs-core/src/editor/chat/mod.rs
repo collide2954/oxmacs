@@ -404,6 +404,17 @@ impl Editor {
         Some(link.network.chats().get(chat)?.members(&link.session))
     }
 
+    pub(in crate::editor) fn chat_nick(&self, index: usize) -> Option<String> {
+        let Some(Mode::Chat(view)) = self.buffers.mode(index) else {
+            return None;
+        };
+        self.irc
+            .links
+            .iter()
+            .find(|link| link.server.name == view.server)
+            .map(|link| link.session.nick().to_owned())
+    }
+
     pub(in crate::editor) fn irc_toggle_members(&mut self) {
         self.irc.hide_members = !self.irc.hide_members;
     }
@@ -1019,6 +1030,20 @@ mod tests {
         press(&mut editor, "C-c C-n");
         visit(&mut editor, "libera");
         assert_eq!(editor.pane().members(), None);
+    }
+
+    #[test]
+    fn drafts_do_not_mark_chats_modified() {
+        let (mut editor, _) = connected();
+        visit(&mut editor, "#oxmacs-test");
+
+        type_text(&mut editor, "draft");
+
+        assert_eq!(
+            editor.pane().status().state,
+            crate::editor::BufferState::Unmodified
+        );
+        assert_eq!(editor.pane().own_nick().as_deref(), Some("oxtest"));
     }
 
     #[test]

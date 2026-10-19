@@ -18,7 +18,12 @@ const PADDING: u16 = 8;
 const SPACING: f32 = 2.0;
 const TINT: f32 = 0.04;
 
-pub fn view<'a, Message: 'a>(members: &[Member], faces: Faces, size: f32) -> Element<'a, Message> {
+pub fn view<'a, Message: 'a>(
+    members: &[Member],
+    own: Option<&str>,
+    faces: Faces,
+    size: f32,
+) -> Element<'a, Message> {
     let background = faces.default.background;
     let label = |content: String, color: Color| {
         text(content)
@@ -33,7 +38,12 @@ pub fn view<'a, Message: 'a>(members: &[Member], faces: Faces, size: f32) -> Ele
     );
     let rows = members.iter().map(|member| {
         let rank = member.prefixes.chars().next().unwrap_or(' ');
-        let color = faces.highlight(Highlight::Nick(nick_color(&member.nick)));
+        let highlight = if own.is_some_and(|own| own.eq_ignore_ascii_case(&member.nick)) {
+            Highlight::Heading
+        } else {
+            Highlight::Nick(nick_color(&member.nick))
+        };
+        let color = faces.highlight(highlight);
         let color = if member.away {
             color.mix(background, AWAY_FADE)
         } else {
