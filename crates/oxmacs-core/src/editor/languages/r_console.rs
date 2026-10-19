@@ -98,6 +98,8 @@ impl Editor {
         let own = match self.buffers.mode(0) {
             Some(Mode::Console(_)) => Some(current),
             Some(Mode::Plots(plots)) => plots.session(),
+            Some(Mode::Environment(view)) => view.session(),
+            Some(Mode::Table(view)) => view.session(),
             _ => self.linked_session(current),
         };
         own.filter(known).or_else(|| consoles.first().copied())
@@ -354,6 +356,7 @@ impl Editor {
         let Some(console) = self.console_mut() else {
             return;
         };
+        let mut idle = false;
         for piece in console.stream.feed(chunk) {
             match piece {
                 Piece::Text(text) => {
@@ -376,12 +379,16 @@ impl Editor {
                         }
                         None => {
                             console.waiting = true;
+                            idle = true;
                             self.console_insert(&format!("{prompt} "));
                         }
                     }
                 }
                 Piece::Marker { kind, payload } => self.r_marker(&kind, &payload),
             }
+        }
+        if idle {
+            self.r_environment_due();
         }
         self.fit_r_width();
     }
@@ -549,6 +556,9 @@ impl Editor {
             "plot" => self.r_plot(payload),
             "zoom" => self.r_plot_zoomed(payload),
             "gallery" => self.r_plot_thumbnails(payload),
+            "environment" => self.r_environment_arrived(payload),
+            "table" => self.r_table_arrived(payload),
+            "object" => self.r_object_arrived(payload),
             _ => {}
         }
     }

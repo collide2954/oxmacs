@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::num::NonZero;
 use std::thread;
 
@@ -14,6 +15,24 @@ impl Default for Usage {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn total<K: Copy + Eq + Hash>(
+    root: K,
+    children: &HashMap<K, Vec<K>>,
+    usage: impl Fn(K) -> Option<(f32, u64)>,
+) -> (f32, u64) {
+    let mut cpu = 0.0;
+    let mut memory = 0;
+    let mut pending = vec![root];
+    while let Some(next) = pending.pop() {
+        if let Some((used, bytes)) = usage(next) {
+            cpu += used;
+            memory += bytes;
+        }
+        pending.extend(children.get(&next).into_iter().flatten().copied());
+    }
+    (cpu, memory)
 }
 
 impl Usage {
@@ -40,20 +59,16 @@ impl Usage {
                 children.entry(parent).or_default().push(*pid);
             }
         }
+        let usage = |pid: Pid| {
+            self.system
+                .process(pid)
+                .map(|process| (process.cpu_usage(), process.memory()))
+        };
         pids.iter()
             .filter_map(|pid| {
                 let root = Pid::from_u32(*pid);
                 self.system.process(root)?;
-                let mut cpu = 0.0;
-                let mut memory = 0;
-                let mut pending = vec![root];
-                while let Some(next) = pending.pop() {
-                    if let Some(process) = self.system.process(next) {
-                        cpu += process.cpu_usage();
-                        memory += process.memory();
-                    }
-                    pending.extend(children.get(&next).into_iter().flatten().copied());
-                }
+                let (cpu, memory) = total(root, &children, usage);
                 Some((*pid, cpu / self.cores, memory))
             })
             .collect()
@@ -62,8 +77,6 @@ impl Usage {
 
 #[cfg(test)]
 mod tests {
-    use std::process::{Command, Stdio};
-
     use super::*;
 
     #[test]
@@ -81,26 +94,12 @@ mod tests {
     }
 
     #[test]
-    fn children_count_towards_their_parent() {
-        let mut usage = Usage::new();
-        let own = std::process::id();
-        let alone = usage.sample(&[own])[0].2;
-        let program = if cfg!(windows) { "cmd" } else { "sleep" };
-        let args: &[&str] = if cfg!(windows) {
-            &["/C", "ping -n 3 127.0.0.1 >NUL"]
-        } else {
-            &["2"]
-        };
-        let mut child = Command::new(program)
-            .args(args)
-            .stdout(Stdio::null())
-            .spawn()
-            .unwrap();
+    fn descendants_count_towards_their_ancestor() {
+        let children = HashMap::from([(1, vec![2, 3]), (3, vec![4]), (9, vec![10])]);
+        let usage = |pid: u32| Some((f32::from(u8::try_from(pid).unwrap()), u64::from(pid) * 100));
 
-        let together = usage.sample(&[own])[0].2;
-        let _ = child.kill();
-        let _ = child.wait();
-
-        assert!(together > alone, "{together} <= {alone}");
+        assert_eq!(total(1, &children, usage), (10.0, 1000));
+        assert_eq!(total(3, &children, usage), (7.0, 700));
+        assert_eq!(total(5, &children, usage), (5.0, 500));
     }
 }

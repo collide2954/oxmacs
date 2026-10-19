@@ -12,7 +12,9 @@ use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
 use crate::editor::chat::ChatView;
 use crate::editor::languages::r_console::Console;
+use crate::editor::languages::r_environment::EnvironmentView;
 use crate::editor::languages::r_plots::Plots;
+use crate::editor::languages::r_table::TableView;
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::special::customize::Customize;
 use crate::editor::special::doctor::Doctor;
@@ -43,6 +45,8 @@ pub(super) enum Mode {
     Chat(ChatView),
     Plots(Plots),
     Processes(ProcessList),
+    Environment(EnvironmentView),
+    Table(TableView),
 }
 
 #[derive(Debug)]
@@ -118,7 +122,9 @@ impl BufferList {
             | Mode::Weather(_)
             | Mode::Chat(_)
             | Mode::Plots(_)
-            | Mode::Processes(_) => None,
+            | Mode::Processes(_)
+            | Mode::Environment(_)
+            | Mode::Table(_) => None,
         }
     }
 
@@ -137,7 +143,9 @@ impl BufferList {
             | Mode::Weather(_)
             | Mode::Chat(_)
             | Mode::Plots(_)
-            | Mode::Processes(_) => None,
+            | Mode::Processes(_)
+            | Mode::Environment(_)
+            | Mode::Table(_) => None,
         }
     }
 
@@ -157,7 +165,9 @@ impl BufferList {
             | Mode::Weather(_)
             | Mode::Chat(_)
             | Mode::Plots(_)
-            | Mode::Processes(_) => None,
+            | Mode::Processes(_)
+            | Mode::Environment(_)
+            | Mode::Table(_) => None,
         }
     }
 
@@ -177,7 +187,9 @@ impl BufferList {
             | Mode::Weather(_)
             | Mode::Chat(_)
             | Mode::Plots(_)
-            | Mode::Processes(_) => None,
+            | Mode::Processes(_)
+            | Mode::Environment(_)
+            | Mode::Table(_) => None,
         }
     }
 
@@ -196,7 +208,9 @@ impl BufferList {
             | Mode::Weather(_)
             | Mode::Chat(_)
             | Mode::Plots(_)
-            | Mode::Processes(_) => None,
+            | Mode::Processes(_)
+            | Mode::Environment(_)
+            | Mode::Table(_) => None,
         }
     }
 
@@ -215,7 +229,9 @@ impl BufferList {
             | Mode::Weather(_)
             | Mode::Chat(_)
             | Mode::Plots(_)
-            | Mode::Processes(_) => None,
+            | Mode::Processes(_)
+            | Mode::Environment(_)
+            | Mode::Table(_) => None,
         }
     }
 

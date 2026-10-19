@@ -397,6 +397,7 @@ impl Editor {
         self.refill_chats();
         self.fit_r_widths();
         self.render_processes();
+        self.render_tables();
     }
 
     pub(super) fn width_showing(&self, buffer: BufferId) -> Option<usize> {

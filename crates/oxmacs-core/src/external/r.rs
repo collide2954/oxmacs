@@ -203,6 +203,67 @@ local({
     }
     TRUE
   }, name = "oxmacs-plots"))
+  flat <- function(text) gsub("[\t\n\r]", " ", text)
+  short <- function(value) {
+    text <- tryCatch({
+      if (is.function(value)) {
+        paste(utils::head(deparse(args(value)), 1), collapse = "")
+      } else if (is.data.frame(value)) {
+        sprintf("%d obs. of %d variables", nrow(value), ncol(value))
+      } else if (is.list(value)) {
+        sprintf("List of %d", length(value))
+      } else if (is.character(value)) {
+        paste(encodeString(utils::head(value, 10), quote = "\""), collapse = " ")
+      } else {
+        paste(format(utils::head(value, 10), trim = TRUE), collapse = " ")
+      }
+    }, error = function(e) "")
+    substr(flat(text), 1, 80)
+  }
+  oxmacs$environment <- function() {
+    names <- sort(ls(globalenv()))
+    rows <- vapply(names, function(name) {
+      value <- get(name, envir = globalenv())
+      group <- if (is.function(value)) {
+        "functions"
+      } else if (is.data.frame(value) || is.matrix(value) || is.array(value) || is.list(value)) {
+        "data"
+      } else {
+        "values"
+      }
+      size <- if (is.null(dim(value))) length(value) else paste(dim(value), collapse = " x ")
+      paste(group, name, class(value)[1], size, short(value), sep = "\t")
+    }, character(1))
+    marker("environment", paste(rows, collapse = "\n"))
+    last()
+  }
+  oxmacs$view <- function(name, rows) {
+    value <- tryCatch(get(name, envir = globalenv()), error = function(e) NULL)
+    if (!is.data.frame(value) && !is.matrix(value)) {
+      marker("message", paste(name, "is not a table"))
+      return(last())
+    }
+    value <- as.data.frame(value)
+    shown <- utils::head(value, rows)
+    types <- vapply(value, function(column) class(column)[1], character(1))
+    cells <- lapply(shown, function(column) flat(format(column, trim = TRUE)))
+    lines <- c(
+      paste(name, nrow(value), ncol(value), sep = "\t"),
+      paste(c("", names(value)), collapse = "\t"),
+      paste(c("", types), collapse = "\t"),
+      do.call(paste, c(list(flat(rownames(shown))), cells, sep = "\t"))
+    )
+    marker("table", paste(lines, collapse = "\n"))
+    last()
+  }
+  oxmacs$inspect <- function(name) {
+    text <- tryCatch(
+      utils::capture.output(utils::str(get(name, envir = globalenv()))),
+      error = function(e) conditionMessage(e)
+    )
+    marker("object", paste(c(name, text), collapse = "\n"))
+    last()
+  }
   utils::rc.settings(ipck = TRUE)
   options(
     oxmacs = oxmacs,

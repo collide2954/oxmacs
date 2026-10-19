@@ -198,6 +198,7 @@ const R: &[(&str, Command)] = &[
     ("C-c C-c", Command::RSendFunction),
     ("C-c C-z", Command::RSwitchToConsole),
     ("C-c C-v", Command::RHelp),
+    ("C-c C-e", Command::REnvironment),
     ("TAB", Command::IndentOrComplete),
     ("C-M-i", Command::CompletionAtPoint),
 ];
@@ -208,6 +209,7 @@ const CONSOLE: &[(&str, Command)] = &[
     ("M-n", Command::ComintNextInput),
     ("C-c C-z", Command::RSwitchToConsole),
     ("C-c C-v", Command::RHelp),
+    ("C-c C-e", Command::REnvironment),
     ("TAB", Command::CompletionAtPoint),
     ("C-M-i", Command::CompletionAtPoint),
 ];
@@ -357,6 +359,35 @@ const PROCESSES: &[(&str, Command)] = &[
     ("g", Command::RevertBuffer),
     ("q", Command::QuitWindow),
 ];
+
+const ENVIRONMENT: &[(&str, Command)] = &[
+    ("RET", Command::REnvironmentVisit),
+    ("n", Command::NextLine),
+    ("p", Command::PreviousLine),
+    ("g", Command::RevertBuffer),
+    ("q", Command::QuitWindow),
+];
+
+pub fn environment() -> Keymap {
+    build(ENVIRONMENT)
+}
+
+const TABLE: &[(&str, Command)] = &[
+    ("<right>", Command::RTableNextColumn),
+    ("f", Command::RTableNextColumn),
+    ("<left>", Command::RTablePreviousColumn),
+    ("b", Command::RTablePreviousColumn),
+    ("n", Command::NextLine),
+    ("p", Command::PreviousLine),
+    ("SPC", Command::ScrollUpCommand),
+    ("DEL", Command::ScrollDownCommand),
+    ("g", Command::RevertBuffer),
+    ("q", Command::QuitWindow),
+];
+
+pub fn table() -> Keymap {
+    build(TABLE)
+}
 
 pub fn processes() -> Keymap {
     build(PROCESSES)

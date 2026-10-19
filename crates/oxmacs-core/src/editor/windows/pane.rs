@@ -155,6 +155,13 @@ impl<'a> Pane<'a> {
         }
     }
 
+    pub fn header_lines(&self) -> Vec<(String, LineStyle)> {
+        match self.editor.buffers.mode(self.index) {
+            Some(Mode::Table(view)) => view.header().to_vec(),
+            _ => Vec::new(),
+        }
+    }
+
     pub fn plot_session(&self) -> Option<crate::text::BufferId> {
         match self.editor.buffers.mode(self.index) {
             Some(Mode::Plots(plots)) => plots.session(),

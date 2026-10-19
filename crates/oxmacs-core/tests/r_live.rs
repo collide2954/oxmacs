@@ -161,6 +161,44 @@ fn plots_are_saved_zoomed_and_deleted() {
     );
 }
 
+fn marked<'a>(output: &'a str, kind: &str) -> Vec<&'a str> {
+    output
+        .split(&format!("\u{1}{kind}\u{2}"))
+        .skip(1)
+        .filter_map(|rest| rest.split_once('\u{3}'))
+        .map(|(payload, _)| payload)
+        .collect()
+}
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
+fn the_environment_tables_and_objects_are_described() {
+    let (output, _directory) = session(
+        "x <- 1:10\ns <- \"hello world\"\ncars <- mtcars\nadd <- function(a, b = 2) a + b\ngetOption(\"oxmacs\")$environment()\ngetOption(\"oxmacs\")$view(\"cars\", 2L)\ngetOption(\"oxmacs\")$view(\"x\", 2L)\ngetOption(\"oxmacs\")$inspect(\"add\")\nq()\n",
+    );
+
+    let environment = marked(&output, "environment");
+    let rows: Vec<&str> = environment[0].lines().collect();
+    assert_eq!(
+        rows,
+        [
+            "functions\tadd\tfunction\t1\tfunction (a, b = 2) ",
+            "data\tcars\tdata.frame\t32 x 11\t32 obs. of 11 variables",
+            "values\ts\tcharacter\t1\t\"hello world\"",
+            "values\tx\tinteger\t10\t1 2 3 4 5 6 7 8 9 10",
+        ],
+        "{output:?}"
+    );
+    let table: Vec<&str> = marked(&output, "table")[0].lines().collect();
+    assert_eq!(table[0], "cars\t32\t11");
+    assert!(table[1].starts_with("\tmpg\tcyl\tdisp"), "{table:?}");
+    assert!(table[2].starts_with("\tnumeric\tnumeric"), "{table:?}");
+    assert!(table[3].starts_with("Mazda RX4\t21\t6\t160"), "{table:?}");
+    assert_eq!(table.len(), 5);
+    assert_eq!(marked(&output, "message"), ["x is not a table"]);
+    assert!(marked(&output, "object")[0].starts_with("add\nfunction (a, b = 2)"));
+}
+
 #[test]
 #[ignore = "runs the R installed on this machine"]
 fn output_and_help_fit_the_width_r_is_given() {

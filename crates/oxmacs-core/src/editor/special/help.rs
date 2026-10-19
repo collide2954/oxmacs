@@ -236,7 +236,7 @@ mod tests {
             "{shown:?}"
         );
         assert!(
-            shown.contains(&"          SPC in previews and *Help*".to_owned()),
+            shown.contains(&"          SPC in previews, *Help* and R tables".to_owned()),
             "{shown:?}"
         );
 

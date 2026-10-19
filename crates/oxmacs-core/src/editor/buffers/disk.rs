@@ -89,6 +89,14 @@ impl Editor {
             self.recheck();
             return;
         }
+        if matches!(self.buffers.mode(0), Some(Mode::Environment(_))) {
+            self.refresh_environment();
+            return;
+        }
+        if matches!(self.buffers.mode(0), Some(Mode::Table(_))) {
+            self.r_table_reload();
+            return;
+        }
         if matches!(self.buffers.mode(0), Some(Mode::Processes(_))) {
             self.render_processes();
             return;

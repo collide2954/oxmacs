@@ -477,6 +477,17 @@ pub enum Command {
         detailed_message = "Opens *Processes*: every R session, compile, lint, IRC connection and bouncer oxmacs started or controls, with its status, process id, running time, CPU and memory. It updates as things change; RET visits an entry's buffer and k stops it."
     )]
     ListProcesses,
+    #[strum(
+        message = "List the objects in the R session",
+        detailed_message = "Opens the session's environment between its console and its plots: data, values and functions with their class, size and a short value. It refreshes after each command you run while it is shown; RET opens a data frame as a table and anything else with str()."
+    )]
+    REnvironment,
+    #[strum(message = "Open the object on this line")]
+    REnvironmentVisit,
+    #[strum(message = "Show the next columns of the table")]
+    RTableNextColumn,
+    #[strum(message = "Show the previous columns of the table")]
+    RTablePreviousColumn,
     #[strum(message = "Visit the buffer of the process on this line")]
     ProcessVisit,
     #[strum(message = "Stop the process on this line")]
@@ -669,6 +680,8 @@ impl Command {
             | Self::CompletionAccept
             | Self::CompletionQuit => Scope::Popup,
             Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
+            Self::REnvironmentVisit => Scope::Environment,
+            Self::RTableNextColumn | Self::RTablePreviousColumn => Scope::Table,
             Self::RPlotNext
             | Self::RPlotPrevious
             | Self::RPlotSave
@@ -706,6 +719,8 @@ pub enum Scope {
     Popup,
     Plots,
     Processes,
+    Environment,
+    Table,
 }
 
 impl Scope {
@@ -731,6 +746,8 @@ impl Scope {
             Self::Popup => Some("the completion popup"),
             Self::Plots => Some("R plot windows"),
             Self::Processes => Some("*Processes*"),
+            Self::Environment => Some("R environments"),
+            Self::Table => Some("R tables"),
         }
     }
 }
