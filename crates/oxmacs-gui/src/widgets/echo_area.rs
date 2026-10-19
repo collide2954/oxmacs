@@ -46,6 +46,11 @@ pub fn view<'a, Message: 'a>(
         }
         (None, Some(minibuffer)) => {
             let input = minibuffer.input().contents();
+            let input = if minibuffer.is_secret() {
+                masked(&input)
+            } else {
+                input
+            };
             let (before, at, after) = split_at_cursor(&input, minibuffer.input().point());
             let note = minibuffer
                 .note()
@@ -111,6 +116,10 @@ pub fn split_failing(query: &str, failing_from: Option<usize>) -> (&str, &str) {
     query.split_at(at)
 }
 
+fn masked(secret: &str) -> String {
+    "•".repeat(secret.chars().count())
+}
+
 pub fn split_at_cursor(text: &str, point: usize) -> (&str, &str, &str) {
     let start = text
         .char_indices()
@@ -141,6 +150,12 @@ mod tests {
         assert_eq!(split_failing("héllo", Some(2)), ("hé", "llo"));
         assert_eq!(split_failing("foo", Some(3)), ("foo", ""));
         assert_eq!(split_failing("foo", None), ("foo", ""));
+    }
+
+    #[test]
+    fn secrets_show_one_dot_per_character() {
+        assert_eq!(masked("hünter2"), "•••••••");
+        assert_eq!(masked(""), "");
     }
 
     #[test]

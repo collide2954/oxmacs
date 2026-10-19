@@ -11,6 +11,7 @@ use crate::editor::chat::commands::Cycle;
 use crate::editor::prompts::input_line::InputLine;
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Choice, Completion, ConnectionId, Editor, Effect};
+use crate::external::keychain;
 use crate::external::net::{Endpoint, Event as NetEvent};
 use crate::irc::message::Message;
 use crate::irc::network::{Kind, LineEvent, Member, Network, Target, Update};
@@ -29,6 +30,13 @@ pub(in crate::editor) struct Irc {
     focus: Option<(String, Target)>,
     hide_members: bool,
     pub(in crate::editor) zone: TimeZone,
+    pub(in crate::editor) keychain: Keychain,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(in crate::editor) struct Keychain {
+    pub(in crate::editor) read: fn(&str, &str) -> Result<Option<String>, String>,
+    pub(in crate::editor) write: fn(&str, &str, &str) -> Result<(), String>,
 }
 
 impl Default for Irc {
@@ -39,6 +47,10 @@ impl Default for Irc {
             focus: None,
             hide_members: false,
             zone: TimeZone::system(),
+            keychain: Keychain {
+                read: keychain::read,
+                write: keychain::write,
+            },
         }
     }
 }
@@ -111,22 +123,77 @@ impl Editor {
     }
 
     fn connect_irc(&mut self, server: &IrcServer) {
+        let open = self
+            .irc
+            .links
+            .iter()
+            .any(|link| link.server.name == server.name && link.open);
+        if open {
+            self.show_chat(&server.name, &Target::Server);
+            return;
+        }
+        let Some(account) = server.sasl.clone() else {
+            self.start_irc(server, None);
+            return;
+        };
+        match &server.password {
+            PasswordSource::Text(text) => self.start_irc(server, Some(text.clone())),
+            PasswordSource::Env(variable) => match std::env::var(variable) {
+                Ok(password) => self.start_irc(server, Some(password)),
+                Err(_) => self.show_message(format!(
+                    "Set {variable} to the password for {}",
+                    server.name
+                )),
+            },
+            PasswordSource::Ask => self.ask_irc_password(server, &account, false),
+            PasswordSource::Keychain => match (self.irc.keychain.read)(&server.name, &account) {
+                Ok(Some(password)) => self.start_irc(server, Some(password)),
+                Ok(None) => self.ask_irc_password(server, &account, true),
+                Err(problem) => {
+                    self.show_message(format!("Keychain: {problem}"));
+                    self.ask_irc_password(server, &account, false);
+                }
+            },
+        }
+    }
+
+    fn ask_irc_password(&mut self, server: &IrcServer, account: &str, remember: bool) {
+        let Some(index) = self
+            .config
+            .irc_server
+            .iter()
+            .position(|known| known.name == server.name)
+        else {
+            return;
+        };
+        let prompt = format!("Password for {account} on {}: ", server.name);
+        self.open_minibuffer(&prompt, Purpose::IrcPassword(index, remember));
+    }
+
+    pub(in crate::editor) fn irc_password_entered(
+        &mut self,
+        index: usize,
+        remember: bool,
+        password: String,
+    ) {
+        let Some(server) = self.config.irc_server.get(index).cloned() else {
+            return;
+        };
+        if remember
+            && let Some(account) = &server.sasl
+            && let Err(problem) = (self.irc.keychain.write)(&server.name, account, &password)
+        {
+            self.show_message(format!("Keychain: {problem}"));
+        }
+        self.start_irc(&server, Some(password));
+    }
+
+    fn start_irc(&mut self, server: &IrcServer, password: Option<String>) {
         let existing = self
             .irc
             .links
             .iter()
             .position(|link| link.server.name == server.name);
-        if existing.is_some_and(|index| self.irc.links[index].open) {
-            self.show_chat(&server.name, &Target::Server);
-            return;
-        }
-        let password = match irc_password(server) {
-            Ok(password) => password,
-            Err(problem) => {
-                self.show_message(problem);
-                return;
-            }
-        };
         let identity = Identity {
             nick: server.nick.clone(),
             username: server.username().to_owned(),
@@ -652,21 +719,6 @@ impl Editor {
     }
 }
 
-fn irc_password(server: &IrcServer) -> Result<Option<String>, String> {
-    if server.sasl.is_none() {
-        return Ok(None);
-    }
-    match &server.password {
-        PasswordSource::Text(text) => Ok(Some(text.clone())),
-        PasswordSource::Env(variable) => std::env::var(variable)
-            .map(Some)
-            .map_err(|_| format!("Set {variable} to the password for {}", server.name)),
-        PasswordSource::Ask | PasswordSource::Keychain => Err(format!(
-            "{}: asking for passwords and the keychain are not ready yet; use password = {{ env = \"NAME\" }}",
-            server.name
-        )),
-    }
-}
 #[cfg(test)]
 mod tests {
     use jiff::tz::TimeZone;
@@ -1044,6 +1096,102 @@ mod tests {
             crate::editor::BufferState::Unmodified
         );
         assert_eq!(editor.pane().own_nick().as_deref(), Some("oxtest"));
+    }
+
+    fn with_sasl(password: &str) -> Editor {
+        configured(&format!(
+            "[[irc-server]]\nname = \"libera\"\nhost = \"irc.libera.chat\"\nnick = \"oxtest\"\nsasl = \"oxtest\"\npassword = {password}\n"
+        ))
+    }
+
+    fn authenticates_with(editor: &mut Editor, id: ConnectionId) -> Vec<String> {
+        editor.irc_event(id, Event::Connected);
+        feed(
+            editor,
+            id,
+            &[
+                ":srv CAP * LS :sasl",
+                ":srv CAP oxtest ACK :sasl",
+                "AUTHENTICATE +",
+            ],
+        );
+        sent(editor)
+    }
+
+    #[test]
+    fn asked_passwords_are_typed_unseen_then_used() {
+        let mut editor = with_sasl("\"ask\"");
+
+        irc(&mut editor);
+        assert_eq!(connections(&mut editor), []);
+        let minibuffer = editor.minibuffer().unwrap();
+        assert_eq!(minibuffer.prompt(), "Password for oxtest on libera: ");
+        assert!(minibuffer.is_secret());
+        type_text(&mut editor, "hunter2");
+        press(&mut editor, "RET");
+
+        let id = connections(&mut editor)[0].0;
+        assert!(
+            authenticates_with(&mut editor, id)
+                .contains(&"AUTHENTICATE b3h0ZXN0AG94dGVzdABodW50ZXIy".to_owned())
+        );
+    }
+
+    #[test]
+    fn keychain_passwords_connect_at_once() {
+        let mut editor = with_sasl("\"keychain\"");
+        editor.irc.keychain.read = |server, account| {
+            assert_eq!((server, account), ("libera", "oxtest"));
+            Ok(Some("hunter2".to_owned()))
+        };
+
+        irc(&mut editor);
+
+        assert!(editor.minibuffer().is_none());
+        let id = connections(&mut editor)[0].0;
+        assert!(
+            authenticates_with(&mut editor, id)
+                .contains(&"AUTHENTICATE b3h0ZXN0AG94dGVzdABodW50ZXIy".to_owned())
+        );
+    }
+
+    std::thread_local! {
+        static STORED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    #[test]
+    fn missing_keychain_passwords_are_asked_for_and_kept() {
+        let mut editor = with_sasl("\"keychain\"");
+        editor.irc.keychain.read = |_, _| Ok(None);
+        editor.irc.keychain.write = |server, account, password| {
+            STORED.with(|stored| {
+                stored
+                    .borrow_mut()
+                    .push(format!("{account}@{server}={password}"));
+            });
+            Ok(())
+        };
+
+        irc(&mut editor);
+        assert!(editor.minibuffer().unwrap().is_secret());
+        type_text(&mut editor, "hunter2");
+        press(&mut editor, "RET");
+
+        assert_eq!(connections(&mut editor).len(), 1);
+        STORED.with(|stored| assert_eq!(*stored.borrow(), ["oxtest@libera=hunter2"]));
+    }
+
+    #[test]
+    fn missing_environment_passwords_are_explained() {
+        let mut editor = with_sasl("{ env = \"OXMACS_TEST_NO_SUCH_VARIABLE\" }");
+
+        irc(&mut editor);
+
+        assert_eq!(
+            editor.message(),
+            Some("Set OXMACS_TEST_NO_SUCH_VARIABLE to the password for libera")
+        );
+        assert_eq!(connections(&mut editor), []);
     }
 
     #[test]

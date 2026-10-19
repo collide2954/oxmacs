@@ -18,6 +18,7 @@ pub(in crate::editor) enum Purpose {
     DescribeCommand,
     IrcServer,
     IrcBuffer,
+    IrcPassword(usize, bool),
     PasteFromHistory,
     FindFile,
     WriteFile,
@@ -53,7 +54,11 @@ impl Purpose {
     fn takes_text(self) -> bool {
         matches!(
             self,
-            Self::ReplaceFrom(_) | Self::ReplaceTo(_) | Self::Compile | Self::Setting(_)
+            Self::ReplaceFrom(_)
+                | Self::ReplaceTo(_)
+                | Self::Compile
+                | Self::Setting(_)
+                | Self::IrcPassword(..)
         )
     }
 
@@ -134,6 +139,10 @@ impl Minibuffer {
     pub fn completes(&self) -> bool {
         !self.purpose.takes_text()
     }
+
+    pub fn is_secret(&self) -> bool {
+        matches!(self.purpose, Purpose::IrcPassword(..))
+    }
 }
 
 impl Editor {
@@ -179,7 +188,8 @@ impl Editor {
             Purpose::ReplaceFrom(_)
             | Purpose::ReplaceTo(_)
             | Purpose::Compile
-            | Purpose::Setting(_) => Vec::new(),
+            | Purpose::Setting(_)
+            | Purpose::IrcPassword(..) => Vec::new(),
             Purpose::Item => self.item_completions(matches),
         }
     }
@@ -302,6 +312,12 @@ impl Editor {
             self.minibuffer = None;
             let directory = self.project_directory();
             self.start_compile(command, directory);
+            return;
+        }
+        if let Purpose::IrcPassword(index, remember) = purpose {
+            let input = self.minibuffer_input();
+            self.minibuffer = None;
+            self.irc_password_entered(index, remember, input);
             return;
         }
         if let Purpose::Setting(index) = purpose {
