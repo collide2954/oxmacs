@@ -36,6 +36,10 @@ pub struct Config {
     pub window_mode: WindowMode,
     pub mode_line_style: ModeLineStyle,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub weather_location: Option<String>,
+    pub weather_units: WeatherUnits,
+    pub mode_line_weather: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub r_program: Option<String>,
 }
 
@@ -79,6 +83,14 @@ pub enum ModeLineStyle {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum WeatherUnits {
+    #[default]
+    Metric,
+    Imperial,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum RustLint {
     #[default]
     Check,
@@ -107,6 +119,9 @@ impl Default for Config {
             line_number_separator: false,
             window_mode: WindowMode::default(),
             mode_line_style: ModeLineStyle::default(),
+            weather_location: None,
+            weather_units: WeatherUnits::default(),
+            mode_line_weather: false,
             r_program: None,
         }
     }
@@ -328,6 +343,7 @@ mod tests {
             theme: Some("adwaita".to_owned()),
             font_family: Some("Iosevka".to_owned()),
             r_program: Some("R".to_owned()),
+            weather_location: Some("Berlin".to_owned()),
             ..Config::default()
         };
         let toml::Value::Table(table) = toml::Value::try_from(&full).unwrap() else {
@@ -492,6 +508,22 @@ mod tests {
             );
         }
         assert!(read("mode-line-style = \"fancy\"").is_err());
+    }
+
+    #[test]
+    fn weather_is_metric_and_off_the_mode_line_unless_configured() {
+        let config = Config::default();
+        assert_eq!(config.weather_location, None);
+        assert_eq!(config.weather_units, WeatherUnits::Metric);
+        assert!(!config.mode_line_weather);
+
+        let config = Config::parse(
+            "weather-location = \"Berlin\"\nweather-units = \"imperial\"\nmode-line-weather = true",
+        )
+        .unwrap();
+        assert_eq!(config.weather_location.as_deref(), Some("Berlin"));
+        assert_eq!(config.weather_units, WeatherUnits::Imperial);
+        assert!(config.mode_line_weather);
     }
 
     #[test]

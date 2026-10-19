@@ -624,17 +624,20 @@ mod tests {
             Some("Monospaced font name; leave empty for the bundled JetBrains Mono")
         );
 
+        let last = SETTINGS
+            .last()
+            .map(|setting| setting.key)
+            .unwrap_or_default();
         press(&mut editor, "p p");
-        assert!(at_point(&editor).starts_with("(auto-detect)"));
         assert_eq!(
             editor.buffer().line_of(editor.buffer().point()),
-            line_of(&editor, "r-program")
+            line_of(&editor, last)
         );
 
         press(&mut editor, "TAB S-TAB");
         assert_eq!(
             editor.buffer().line_of(editor.buffer().point()),
-            line_of(&editor, "r-program")
+            line_of(&editor, last)
         );
     }
 

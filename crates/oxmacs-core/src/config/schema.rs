@@ -43,6 +43,7 @@ const EDITING: &str = "Editing";
 const FILES: &str = "Files";
 const RUST: &str = "Rust";
 const R: &str = "R";
+const WEATHER: &str = "Weather";
 
 pub const SETTINGS: &[Setting] = &[
     optional(
@@ -162,6 +163,27 @@ pub const SETTINGS: &[Setting] = &[
             "R executable for the console; Rterm on Windows",
         ),
         "auto-detect",
+    ),
+    optional(
+        setting(
+            WEATHER,
+            "weather-location",
+            Kind::Text,
+            "City for M-x weather and the mode line, such as Berlin",
+        ),
+        "not set",
+    ),
+    setting(
+        WEATHER,
+        "weather-units",
+        Kind::Choice(&["metric", "imperial"]),
+        "Celsius and km/h, or Fahrenheit and mph",
+    ),
+    setting(
+        WEATHER,
+        "mode-line-weather",
+        Kind::Toggle,
+        "Current weather beside the clock",
     ),
 ];
 
