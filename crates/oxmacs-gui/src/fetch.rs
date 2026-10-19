@@ -78,4 +78,34 @@ mod tests {
         assert!(blocking_get("not a url").is_err());
         assert!(download("not a url").is_err());
     }
+
+    #[test]
+    #[ignore = "downloads air from GitHub; set OXMACS_TOOLS_ROOT to keep it"]
+    fn air_installs_from_its_latest_release() {
+        let air = managed::AIR;
+        let release = managed::parse_release(&blocking_get(&air.latest_url()).unwrap()).unwrap();
+        let name = air.archive_here().unwrap();
+        let kept = std::env::var_os("OXMACS_TOOLS_ROOT").map(PathBuf::from);
+        let scratch = tempfile::tempdir().unwrap();
+        let root = kept.unwrap_or_else(|| scratch.path().to_owned());
+
+        let installed = blocking_install(&Install {
+            tool: air,
+            version: release.version.clone(),
+            archive: release.asset(&name).unwrap().clone(),
+            checksum: release.asset(&format!("{name}.sha256")).unwrap().clone(),
+            root: root.clone(),
+        })
+        .unwrap();
+
+        assert_eq!(
+            air.installed(&root),
+            Some((release.version.clone(), installed.clone()))
+        );
+        let version = oxmacs_core::external::tools::version(&installed).unwrap();
+        assert!(version.contains(&release.version), "{version}");
+        let formatted =
+            oxmacs_core::external::tools::air_format(&installed, "x<-c(1,2)", &root.join("a.R"));
+        assert_eq!(formatted, Ok("x <- c(1, 2)\n".to_owned()));
+    }
 }
