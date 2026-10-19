@@ -185,6 +185,7 @@ const SPLASH: &[(&str, Command)] = &[
     ("C-p", Command::BackwardButton),
     ("<up>", Command::BackwardButton),
     ("RET", Command::PushButton),
+    ("a", Command::CycleSplashAnimation),
     ("q", Command::QuitWindow),
 ];
 

@@ -255,6 +255,20 @@ pub enum Command {
     #[strum(message = "Show the oxmacs start screen")]
     AboutOxmacs,
     #[strum(
+        message = "Turn on experimental features for this session",
+        detailed_message = "Experimental features are still taking shape and may change or go away: M-x experimental-splash-screen for now. They stay hidden from M-x until this command turns them on. The change shows as unsaved in *Settings*; save it there with C-x C-s to keep it."
+    )]
+    EnableExperimentalFeatures,
+    #[strum(message = "Turn experimental features off again")]
+    DisableExperimentalFeatures,
+    #[strum(
+        message = "Show the start screen with an animated logo",
+        detailed_message = "An experimental start screen: the oxmacs logo in block letters, animated above the usual keys. a cycles the animation between a drifting plasma field with a shimmer, a color wave through the letters, and the logo assembling from scattered pixels before it twinkles. The animation holds still when animations are off. Needs M-x enable-experimental-features."
+    )]
+    ExperimentalSplashScreen,
+    #[strum(message = "Switch the start screen's logo animation")]
+    CycleSplashAnimation,
+    #[strum(
         message = "Switch to a color theme by name",
         detailed_message = "The list starts on the theme in use, and the whole editor previews whichever theme is selected as you move or type. RET keeps it and C-g puts the old one back. The new theme shows as an unsaved change in *Settings*; save it there with C-x C-s to keep it."
     )]
@@ -715,6 +729,13 @@ impl Command {
         )
     }
 
+    pub fn is_experimental(self) -> bool {
+        matches!(
+            self,
+            Self::ExperimentalSplashScreen | Self::CycleSplashAnimation
+        )
+    }
+
     fn atlas_scope(self) -> Option<Scope> {
         Some(match self {
             Self::AtlasCycleTask | Self::AtlasFollowLink => Scope::Atlas,
@@ -765,7 +786,10 @@ impl Command {
             | Self::DiredDoCopy
             | Self::DiredCreateDirectory
             | Self::DiredDoOpen => Scope::Dired,
-            Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
+            Self::ForwardButton
+            | Self::BackwardButton
+            | Self::PushButton
+            | Self::CycleSplashAnimation => Scope::Splash,
             Self::WidgetForward | Self::WidgetBackward | Self::WidgetButtonPress => {
                 Scope::Customize
             }

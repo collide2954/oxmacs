@@ -4,7 +4,7 @@ use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
 use crate::editor::buffers::Mode;
 use crate::editor::motion::movement::display_column;
 use crate::editor::windows::status::{BufferState, Status};
-use crate::editor::{Editor, GalleryView, Gutter, PlotView, PopupView};
+use crate::editor::{Editor, GalleryView, Gutter, PlotView, PopupView, SplashAnimation};
 use crate::external::diagnostics::Severity;
 use crate::files::LineEnding;
 use crate::irc::network::Member;
@@ -151,6 +151,13 @@ impl<'a> Pane<'a> {
     pub fn plot(&self) -> Option<PlotView> {
         match self.editor.buffers.mode(self.index) {
             Some(Mode::Plots(plots)) => plots.view(),
+            _ => None,
+        }
+    }
+
+    pub fn splash_art(&self) -> Option<SplashAnimation> {
+        match self.editor.buffers.mode(self.index) {
+            Some(Mode::Splash(splash)) if self.editor.config.experimental_features => splash.art(),
             _ => None,
         }
     }
