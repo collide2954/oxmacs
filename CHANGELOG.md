@@ -14,10 +14,19 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `M-x weather` shows the forecast for `weather-location` from Open-Meteo, and `mode-line-weather` puts it beside the clock.
 - `M-x irc`: an IRCv3 client for the `[[irc-server]]` entries in config.toml, with a buffer per server, channel and private chat, a member list, slash commands, nick completion, `C-c C-b` to jump to busy chats, and SASL passwords asked for, read from the environment or kept in the OS keychain.
 - IRC can outlive the editor: `[irc-bouncer] mode = "local"` keeps a built-in bouncer running in the background, and `mode = "remote"` uses one started with `oxmacs irc-daemon` on another machine. Messages you missed are replayed when you come back.
+- R scripts send code to R: `C-RET` sends the statement around point or the selection and moves on, `C-c C-c` sends the function or paragraph, and `C-c C-z` switches between a script and its session. Sent code shows in the console as R reads it, and R starts when needed.
+- R completion: `TAB` or `C-M-i` asks the running session, and a popup also appears after three typed characters.
+- `C-c C-v` shows R help in *R help*, as does `?topic` in the console.
+- R plots appear in a window below the console, redrawn at its size: `n` and `p` browse them, `s` saves, `d` deletes, `z` opens a large copy, `v` shows them all, and `k` pins one in its own window.
+- Several R sessions can run at once with `M-x r-new-session`, each named after its folder; a script sends to the session it last used.
+- `C-c C-e` lists the session's objects; `RET` opens a data frame as a table whose header stays put, or anything else with `str()`.
+- `M-x list-processes` lists the processes and connections oxmacs runs, with their CPU and memory; `RET` visits one and `k` stops it.
 
 ### Fixed
 
 - Markdown previews scroll with the keyboard and can be selected with a click.
+- Private IRC notices show in the server buffer instead of opening chats, and IRC formatting codes no longer show as text.
+- Wide characters such as CJK and emoji wrap inside their column.
 
 ## [0.12.0] - 2026-10-18
 
