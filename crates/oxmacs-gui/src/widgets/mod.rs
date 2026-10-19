@@ -4,4 +4,5 @@ pub mod divider;
 pub mod echo_area;
 pub mod mode_line;
 pub mod nick_list;
+pub mod popup;
 pub mod powerline;

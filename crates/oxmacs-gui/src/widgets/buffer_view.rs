@@ -3,6 +3,7 @@ use std::mem;
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::mouse::{self, Click, ScrollDelta, click};
+use iced::advanced::overlay;
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::text::{self, Paragraph as _, Text};
 use iced::advanced::widget::tree::{self, Tree};
@@ -10,8 +11,8 @@ use iced::advanced::{Clipboard, Shell, Widget};
 use iced::alignment::Vertical;
 use iced::time::{Duration, Instant};
 use iced::{
-    Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, keyboard,
-    window,
+    Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, Vector,
+    keyboard, window,
 };
 use oxmacs_core::display::{self, LineStyle};
 use oxmacs_core::editor::{Cell, Clicks, Gutter, Pane, ScreenRow, WindowId};
@@ -22,6 +23,7 @@ use oxmacs_core::theme::{Highlight, Theme as Faces};
 use crate::animation::{self, Glide, Scroll};
 use crate::style;
 use crate::units::{floor_to_isize, floor_to_usize, signed_to_f32, to_f32, trunc_to_isize};
+use crate::widgets::popup::Popup;
 
 const WIDE_SAMPLE: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
 const NARROW_SAMPLE: &str = "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii";
@@ -580,6 +582,27 @@ where
         if let Some(cursor) = cursor.filter(|cursor| !cursor.gliding || !behind) {
             self.draw_cursor(renderer, cursor, opacity, text_bounds);
         }
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        _renderer: &Renderer,
+        _viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
+        let view = self.pane.popup()?;
+        let state = tree.state.downcast_ref::<State>();
+        let cell = state.metrics.cell;
+        let text = self.text_bounds(layout.bounds(), cell.width);
+        let anchor = Point::new(
+            text.x + to_f32(view.column) * cell.width,
+            text.y + (signed_to_f32(view.row) + state.shift()) * cell.height,
+        ) + translation;
+        Some(overlay::Element::new(Box::new(Popup::new(
+            view, anchor, cell, self.faces, self.font, self.size,
+        ))))
     }
 }
 
