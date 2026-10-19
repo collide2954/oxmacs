@@ -21,6 +21,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Several R sessions can run at once with `M-x r-new-session`, each named after its folder; a script sends to the session it last used.
 - `C-c C-e` lists the session's objects; `RET` opens a data frame as a table whose header stays put, or anything else with `str()`.
 - `M-x list-processes` lists the processes and connections oxmacs runs, with their CPU and memory; `RET` visits one and `k` stops it.
+- R formatting with air: `C-c C-f` formats the buffer, or only the selected lines, and `format-on-save` covers R too. The `air-program` setting picks the program; otherwise oxmacs's own copy, then the one on your PATH.
+- `M-x list-tools` lists the tools oxmacs can install itself, air for now, with the installed and latest versions. `i` installs, `u` updates and `d` removes; downloads are checked against their published SHA-256. It only goes online when opened or on `g`.
 
 ### Changed
 
