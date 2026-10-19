@@ -4,6 +4,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-19
+
 ### Added
 
 - `C-v` and `M-v`, or Page Down and Page Up, scroll by a screen.
