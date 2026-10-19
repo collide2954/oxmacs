@@ -61,6 +61,7 @@ pub enum Message {
     OpenLink(markdown::Uri),
     Job(JobId, process::Event),
     AutoSave,
+    AutoComplete,
     FocusWindow(WindowId),
     PreviewSized(WindowId, f32),
     Fetched(FetchId, Result<String, String>),
@@ -192,6 +193,11 @@ impl App {
         } else {
             Subscription::none()
         };
+        let completing = if self.editor.wants_auto_complete() {
+            ticker::once_after(AUTO_COMPLETE_DELAY, self.last_input).map(|()| Message::AutoComplete)
+        } else {
+            Subscription::none()
+        };
         let weather = if self.editor.config().mode_line_weather {
             ticker::ticks(Some(ticker::MINUTE)).map(|()| Message::WeatherTick)
         } else {
@@ -220,6 +226,7 @@ impl App {
             }))
             .map(|()| Message::Clock),
             idle,
+            completing,
             weather,
             frames,
         ])
@@ -251,6 +258,7 @@ pub fn animations_enabled(configured: bool, reduced_motion: bool) -> bool {
 }
 
 const AUTO_SAVE_DELAY: Duration = Duration::from_millis(1500);
+const AUTO_COMPLETE_DELAY: Duration = Duration::from_millis(250);
 
 fn preview_id(window: WindowId) -> widget::Id {
     widget::Id::from(format!("preview-{window:?}"))

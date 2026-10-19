@@ -183,6 +183,7 @@ impl App {
                 }
             }
             Message::AutoSave => self.editor.auto_save(),
+            Message::AutoComplete => self.editor.auto_complete(),
             Message::FocusWindow(window) => {
                 if self.focus(window) {
                     self.last_input = self.now;

@@ -9,7 +9,7 @@ use crate::editor::prompts::input_line::InputLine;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::external::r::{self, Piece, Stream};
 use crate::external::tools::{self, Probe};
-use crate::text::Buffer;
+use crate::text::{Buffer, BufferId};
 
 const NAME: &str = "*R*";
 const MIN_WIDTH: usize = 10;
@@ -25,6 +25,7 @@ pub(in crate::editor) struct Console {
     waiting: bool,
     asked: Option<Asked>,
     width: Option<usize>,
+    auto: Option<(BufferId, u64)>,
 }
 
 static HELPERS: AtomicU64 = AtomicU64::new(0);
@@ -83,6 +84,21 @@ impl Editor {
     pub(super) fn set_r_asked(&mut self, asked: Option<Asked>) {
         if let Some(console) = self.console_mut() {
             console.asked = asked;
+        }
+    }
+
+    pub(super) fn r_asking(&self) -> bool {
+        self.console()
+            .is_some_and(|console| console.asked.is_some())
+    }
+
+    pub(super) fn r_auto_mark(&self) -> Option<(BufferId, u64)> {
+        self.console().and_then(|console| console.auto)
+    }
+
+    pub(super) fn set_r_auto_mark(&mut self, mark: (BufferId, u64)) {
+        if let Some(console) = self.console_mut() {
+            console.auto = Some(mark);
         }
     }
 
@@ -152,6 +168,7 @@ impl Editor {
             console.expected.clear();
             console.asked = None;
             console.width = None;
+            console.auto = None;
             console.waiting = false;
             return true;
         }
@@ -169,6 +186,7 @@ impl Editor {
                     waiting: false,
                     asked: None,
                     width: None,
+                    auto: None,
                 }),
             );
         });
