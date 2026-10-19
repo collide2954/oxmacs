@@ -25,11 +25,12 @@ use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
-use crate::buffer_view::{BufferView, Motion, ViewEvent};
-use crate::divider::Divider;
 use crate::keys::{self, Platform};
 use crate::watcher::Watched;
-use crate::{animation, completions, echo_area, fonts, style, ticker, units, watcher};
+use crate::widgets::buffer_view::{BufferView, Motion, ViewEvent};
+use crate::widgets::divider::Divider;
+use crate::widgets::{completions, echo_area};
+use crate::{animation, fonts, style, ticker, units, watcher};
 
 #[derive(Debug)]
 pub struct App {

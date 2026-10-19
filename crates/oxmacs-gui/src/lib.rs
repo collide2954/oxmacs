@@ -1,15 +1,12 @@
 pub mod animation;
 pub mod app;
-pub mod buffer_view;
-pub mod completions;
-pub mod divider;
-pub mod echo_area;
 pub mod fonts;
 pub mod keys;
 pub mod style;
 pub mod ticker;
 mod units;
 pub mod watcher;
+pub mod widgets;
 
 pub use iced::Result;
 
