@@ -124,6 +124,8 @@ pub enum Command {
     RustTest,
     RustRun,
     RustRunClippy,
+    RInsertAssignment,
+    RInsertPipe,
     MarkdownInsertListItem,
     MarkdownPromote,
     MarkdownDemote,
@@ -188,6 +190,8 @@ impl Command {
                 | Self::CommentLine
                 | Self::CommentDwim
                 | Self::RustFormatBuffer
+                | Self::RInsertAssignment
+                | Self::RInsertPipe
                 | Self::MarkdownInsertListItem
                 | Self::MarkdownPromote
                 | Self::MarkdownDemote
@@ -244,6 +248,7 @@ impl Command {
             | Self::RustTest
             | Self::RustRun
             | Self::RustRunClippy => Scope::Rust,
+            Self::RInsertAssignment | Self::RInsertPipe => Scope::R,
             Self::Recompile
             | Self::KillCompilation
             | Self::NextErrorNoSelect
@@ -280,6 +285,7 @@ pub enum Scope {
     Search,
     Doctor,
     Rust,
+    R,
     Markdown,
     Compilation,
     Customize,

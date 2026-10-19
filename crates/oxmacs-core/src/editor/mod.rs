@@ -29,6 +29,7 @@ mod pairs;
 mod pane;
 mod preview;
 mod question;
+mod r_mode;
 mod read_only;
 mod replace;
 mod selection;
@@ -115,6 +116,7 @@ pub struct Editor {
     splash_keymap: Keymap,
     doctor_keymap: Keymap,
     rust_keymap: Keymap,
+    r_keymap: Keymap,
     markdown_keymap: Keymap,
     compilation_keymap: Keymap,
     customize_keymap: Keymap,
@@ -182,6 +184,7 @@ impl Editor {
             splash_keymap: bindings::splash(),
             doctor_keymap: bindings::doctor(),
             rust_keymap: bindings::rust(),
+            r_keymap: bindings::r(),
             markdown_keymap: bindings::markdown(),
             compilation_keymap: bindings::compilation(),
             customize_keymap: bindings::customize(),
@@ -407,6 +410,7 @@ impl Editor {
             Scope::Splash => Some(&self.splash_keymap),
             Scope::Doctor => Some(&self.doctor_keymap),
             Scope::Rust => Some(&self.rust_keymap),
+            Scope::R => Some(&self.r_keymap),
             Scope::Markdown => Some(&self.markdown_keymap),
             Scope::Compilation => Some(&self.compilation_keymap),
             Scope::Customize => Some(&self.customize_keymap),
@@ -424,6 +428,7 @@ impl Editor {
             Some(Mode::Customize(_)) => Scope::Customize,
             Some(Mode::Diagnostics(_)) => Scope::Diagnostics,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
+            Some(Mode::Text(Some(syntax))) if syntax.language() == Language::R => Scope::R,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
                 Scope::Markdown
             }
@@ -597,6 +602,8 @@ impl Editor {
             Command::TomlMode => self.set_major_mode(Some(Language::Toml)),
             Command::MarkdownMode => self.set_major_mode(Some(Language::Markdown)),
             Command::RMode => self.set_major_mode(Some(Language::R)),
+            Command::RInsertAssignment => self.insert_operator("<-"),
+            Command::RInsertPipe => self.insert_operator("|>"),
             Command::TextMode => self.set_major_mode(None),
             Command::OxmacsDoctor => self.oxmacs_doctor(),
             Command::SplitWindowBelow => self.split_window(Axis::Rows),

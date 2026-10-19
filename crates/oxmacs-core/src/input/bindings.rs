@@ -186,6 +186,11 @@ const RUST: &[(&str, Command)] = &[
     ("C-c !", Command::ListDiagnostics),
 ];
 
+const R: &[(&str, Command)] = &[
+    ("M--", Command::RInsertAssignment),
+    ("C-S-m", Command::RInsertPipe),
+];
+
 const MARKDOWN: &[(&str, Command)] = &[
     ("M-RET", Command::MarkdownInsertListItem),
     ("M-<left>", Command::MarkdownPromote),
@@ -239,6 +244,10 @@ pub fn doctor() -> Keymap {
 
 pub fn rust() -> Keymap {
     build(RUST)
+}
+
+pub fn r() -> Keymap {
+    build(R)
 }
 
 pub fn markdown() -> Keymap {
@@ -314,6 +323,11 @@ mod tests {
     #[test]
     fn every_rust_binding_resolves_to_its_command() {
         assert_resolves(&rust(), RUST);
+    }
+
+    #[test]
+    fn every_r_binding_resolves_to_its_command() {
+        assert_resolves(&r(), R);
     }
 
     #[test]
