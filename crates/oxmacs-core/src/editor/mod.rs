@@ -8,6 +8,8 @@ mod effect;
 mod job;
 mod languages;
 mod motion;
+#[cfg(test)]
+mod opening;
 mod page;
 mod prompts;
 mod search;
