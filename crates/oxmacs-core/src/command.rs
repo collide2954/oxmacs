@@ -472,6 +472,18 @@ pub enum Command {
     #[strum(message = "Show the previous R plot")]
     RPlotPrevious,
     #[strum(
+        message = "Save the shown R plot to a file",
+        detailed_message = "Asks for a file name and saves the plot shown in *R plots* at the window's size: as PDF when the name ends in .pdf, as SVG for .svg, and as PNG otherwise."
+    )]
+    RPlotSave,
+    #[strum(message = "Delete the shown R plot from the history")]
+    RPlotDelete,
+    #[strum(
+        message = "Open a large copy of the shown R plot",
+        detailed_message = "Has R draw the shown plot at twice the window's size, at least 1200 pixels wide, and opens it in the system's image viewer."
+    )]
+    RPlotZoom,
+    #[strum(
         message = "Complete the code before point",
         detailed_message = "In R scripts and *R*, asks the running R session how the code before point could go on: objects, functions, arguments, columns after $ and packages. Several answers appear in a popup at point; a single answer is inserted at once."
     )]
@@ -626,7 +638,11 @@ impl Command {
             | Self::CompletionPrevious
             | Self::CompletionAccept
             | Self::CompletionQuit => Scope::Popup,
-            Self::RPlotNext | Self::RPlotPrevious => Scope::Plots,
+            Self::RPlotNext
+            | Self::RPlotPrevious
+            | Self::RPlotSave
+            | Self::RPlotDelete
+            | Self::RPlotZoom => Scope::Plots,
             _ => Scope::Global,
         }
     }

@@ -84,15 +84,26 @@ local({
     if (capabilities("cairo")) arguments$type <- "cairo"
     do.call(grDevices::png, arguments)
   }
-  render <- function(why, index) {
-    plots$count <- plots$count + 1L
-    file <- file.path(plots$directory, sprintf("plot-%d.png", plots$count))
+  draw <- function(open, index) {
     current <- grDevices::dev.cur()
-    bitmap(file, plots$size[1], plots$size[2], 2)
-    tryCatch(grDevices::replayPlot(plots$history[[index]]), error = function(e) NULL)
-    grDevices::dev.off()
-    if (current > 1) grDevices::dev.set(current)
-    plots$fresh <- FALSE
+    open()
+    on.exit({
+      grDevices::dev.off()
+      if (current > 1) grDevices::dev.set(current)
+      plots$fresh <- FALSE
+    })
+    grDevices::replayPlot(plots$history[[index]])
+  }
+  numbered <- function(prefix) {
+    plots$count <- plots$count + 1L
+    file.path(plots$directory, sprintf("%s-%d.png", prefix, plots$count))
+  }
+  render <- function(why, index) {
+    file <- numbered("plot")
+    tryCatch(
+      draw(function() bitmap(file, plots$size[1], plots$size[2], 2), index),
+      error = function(e) NULL
+    )
     marker("plot", paste(why, index, length(plots$history),
       plots$size[1], plots$size[2], normalizePath(file, winslash = "/"), sep = "\t"))
   }
@@ -101,12 +112,47 @@ local({
     if (index >= 1 && index <= length(plots$history)) render("asked", index)
     last()
   }
+  oxmacs$plot_save <- function(index, file, width, height) {
+    open <- switch(tolower(tools::file_ext(file)),
+      pdf = function() grDevices::pdf(file, width = width / 96, height = height / 96),
+      svg = function() grDevices::svg(file, width = width / 96, height = height / 96),
+      function() bitmap(file, width, height, 2)
+    )
+    saved <- tryCatch({
+      draw(open, index)
+      TRUE
+    }, error = function(e) conditionMessage(e))
+    marker("message", if (isTRUE(saved)) {
+      paste("Saved plot to", file)
+    } else {
+      paste("Cannot save the plot:", saved)
+    })
+    last()
+  }
+  oxmacs$plot_delete <- function(index, width, height) {
+    count <- length(plots$history)
+    if (index >= 1 && index <= count) {
+      plots$history[[index]] <- NULL
+      if (index == count) plots$detached <- TRUE
+    }
+    plots$size <- c(width, height)
+    count <- length(plots$history)
+    if (count == 0L) marker("plot", "none") else render("deleted", min(index, count))
+    last()
+  }
+  oxmacs$plot_zoom <- function(index, width, height) {
+    file <- numbered("zoom")
+    tryCatch(draw(function() bitmap(file, width, height, 1), index), error = function(e) NULL)
+    marker("zoom", normalizePath(file, winslash = "/"))
+    last()
+  }
   invisible(addTaskCallback(function(...) {
     if (grDevices::dev.cur() == plots$device) {
       shown <- tryCatch(grDevices::recordPlot(), error = function(e) NULL)
       if (!is.null(shown) && !identical(shown, plots$last)) {
         index <- length(plots$history)
-        if (plots$fresh || index == 0L) index <- index + 1L
+        if (plots$fresh || isTRUE(plots$detached) || index == 0L) index <- index + 1L
+        plots$detached <- FALSE
         plots$history[[index]] <- shown
         plots$last <- shown
         render("new", index)

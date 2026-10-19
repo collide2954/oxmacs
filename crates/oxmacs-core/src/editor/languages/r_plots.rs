@@ -1,11 +1,16 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use crate::editor::Editor;
 use crate::editor::buffers::Mode;
+use crate::editor::prompts::minibuffer::Purpose;
+use crate::editor::{Editor, Effect};
+use crate::external::r;
 use crate::text::Buffer;
 
 const NAME: &str = "*R plots*";
 const SIZE: (u32, u32) = (672, 480);
+const ZOOM_WIDTH: u32 = 1200;
+const NONE: &str = "none";
+const EMPTY: &str = "No plots";
 
 type Render = (usize, (u32, u32));
 
@@ -38,8 +43,15 @@ impl Plots {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Why {
+    New,
+    Asked,
+    Deleted,
+}
+
 struct Arrival {
-    asked: bool,
+    why: Why,
     index: usize,
     count: usize,
     size: (u32, u32),
@@ -48,14 +60,19 @@ struct Arrival {
 
 fn arrival(payload: &str) -> Option<Arrival> {
     let mut fields = payload.splitn(6, '\t');
-    let why = fields.next()?;
+    let why = match fields.next()? {
+        "new" => Why::New,
+        "asked" => Why::Asked,
+        "deleted" => Why::Deleted,
+        _ => return None,
+    };
     let index = fields.next()?.parse().ok()?;
     let count = fields.next()?.parse().ok()?;
     let width = fields.next()?.parse().ok()?;
     let height = fields.next()?.parse().ok()?;
     let path = PathBuf::from(fields.next()?);
     Some(Arrival {
-        asked: why == "asked",
+        why,
         index,
         count,
         size: (width, height),
@@ -105,6 +122,10 @@ impl Editor {
     }
 
     pub(in crate::editor) fn r_plot(&mut self, payload: &str) {
+        if payload == NONE {
+            self.r_plots_emptied();
+            return;
+        }
         let Some(arrival) = arrival(payload) else {
             return;
         };
@@ -112,9 +133,10 @@ impl Editor {
         let Some(plots) = self.plots_mut() else {
             return;
         };
-        if arrival.asked {
+        if arrival.why != Why::New {
             plots.asked = None;
-        } else {
+        }
+        if arrival.why != Why::Asked {
             plots.wanted = Some(arrival.index);
         }
         plots.rendered = Some((arrival.index, arrival.size));
@@ -175,6 +197,81 @@ impl Editor {
         };
         plots.wanted = Some(next);
         self.r_plot_refresh();
+    }
+
+    fn r_plots_emptied(&mut self) {
+        let Some(index) = self.plots_index() else {
+            return;
+        };
+        if let Some((buffer, Mode::Plots(plots))) = self.buffers.entry_mut(index) {
+            *plots = Plots {
+                size: plots.size,
+                ..Plots::default()
+            };
+            buffer.set_text(EMPTY);
+        }
+    }
+
+    fn shown_plot(&mut self, action: &str) -> Option<(usize, (u32, u32))> {
+        let shown = self.plots_mut().and_then(|plots| {
+            let index = plots.shown.as_ref()?.index;
+            Some((index, plots.size.unwrap_or(SIZE)))
+        });
+        if shown.is_none() {
+            self.show_message(format!("No plot to {action}"));
+        }
+        shown
+    }
+
+    pub(in crate::editor) fn r_plot_save(&mut self) {
+        let Some((index, _)) = self.shown_plot("save") else {
+            return;
+        };
+        if self.open_file_prompt("Save plot as: ", Purpose::SavePlot) {
+            let input = self.minibuffer_input();
+            self.set_minibuffer_input(&format!("{input}plot-{index}.png"));
+        }
+    }
+
+    pub(in crate::editor) fn save_plot_to(&mut self, path: &Path) {
+        let Some((index, (width, height))) = self.shown_plot("save") else {
+            return;
+        };
+        let file = r::string(&path.display().to_string());
+        self.r_request(&format!(
+            "getOption(\"oxmacs\")$plot_save({index}L, {file}, {width}L, {height}L)"
+        ));
+    }
+
+    pub(in crate::editor) fn r_plot_delete(&mut self) {
+        let Some(shown) = self.shown_plot("delete") else {
+            return;
+        };
+        let (index, (width, height)) = shown;
+        let call = format!("getOption(\"oxmacs\")$plot_delete({index}L, {width}L, {height}L)");
+        if self.r_request(&call)
+            && let Some(plots) = self.plots_mut()
+        {
+            plots.asked = Some(shown);
+            plots.wanted = None;
+        }
+    }
+
+    pub(in crate::editor) fn r_plot_zoom(&mut self) {
+        let Some((index, (width, height))) = self.shown_plot("zoom") else {
+            return;
+        };
+        let wide = width.saturating_mul(2).max(ZOOM_WIDTH);
+        let tall = u32::try_from(u64::from(wide) * u64::from(height) / u64::from(width.max(1)))
+            .unwrap_or(u32::MAX);
+        self.r_request(&format!(
+            "getOption(\"oxmacs\")$plot_zoom({index}L, {wide}L, {tall}L)"
+        ));
+    }
+
+    pub(in crate::editor) fn r_plot_zoomed(&mut self, path: &str) {
+        self.effects
+            .push(Effect::OpenExternally(PathBuf::from(path)));
     }
 }
 
@@ -309,6 +406,86 @@ mod tests {
         assert_eq!(
             r_sent(&mut editor),
             ["getOption(\"oxmacs\")$plot(2L, 672L, 480L)\n"]
+        );
+    }
+
+    fn in_plots(editor: &mut Editor, job: JobId, count: usize) {
+        for index in 1..=count {
+            plot(
+                editor,
+                job,
+                &format!("new\t{index}\t{count}\t672\t480\tC:/plots/plot-{index}.png"),
+            );
+        }
+        editor.take_effects();
+        press(editor, "C-x o C-x o");
+        assert_eq!(editor.buffer().name(), "*R plots*");
+    }
+
+    #[test]
+    fn s_saves_the_shown_plot_under_a_chosen_name() {
+        let (mut editor, job) = started();
+        in_plots(&mut editor, job, 1);
+
+        press(&mut editor, "s");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Save plot as: ");
+        let input = editor.minibuffer().unwrap().input().contents();
+        assert!(input.ends_with("plot-1.png"), "{input}");
+        press(&mut editor, "RET");
+
+        let sent = r_sent(&mut editor);
+        assert_eq!(sent.len(), 1);
+        assert!(sent[0].starts_with("getOption(\"oxmacs\")$plot_save(1L, \""));
+        assert!(
+            sent[0].ends_with("plot-1.png\", 672L, 480L)\n"),
+            "{}",
+            sent[0]
+        );
+    }
+
+    #[test]
+    fn d_deletes_the_shown_plot_and_shows_its_neighbour() {
+        let (mut editor, job) = started();
+        in_plots(&mut editor, job, 2);
+
+        press(&mut editor, "d");
+        assert_eq!(
+            r_sent(&mut editor),
+            ["getOption(\"oxmacs\")$plot_delete(2L, 672L, 480L)\n"]
+        );
+        plot(
+            &mut editor,
+            job,
+            "deleted\t1\t1\t672\t480\tC:/plots/plot-3.png",
+        );
+        assert_eq!(shown(&editor), Some(view(1, 1, "C:/plots/plot-3.png")));
+
+        press(&mut editor, "d");
+        plot(&mut editor, job, "none");
+        assert_eq!(shown(&editor), None);
+        assert_eq!(editor.buffer().contents(), "No plots");
+        press(&mut editor, "d");
+        assert_eq!(editor.message(), Some("No plot to delete"));
+    }
+
+    #[test]
+    fn z_opens_a_large_copy_in_the_system_viewer() {
+        let (mut editor, job) = started();
+        in_plots(&mut editor, job, 1);
+
+        press(&mut editor, "z");
+        assert_eq!(
+            r_sent(&mut editor),
+            ["getOption(\"oxmacs\")$plot_zoom(1L, 1344L, 960L)\n"]
+        );
+        editor.session_output(
+            job,
+            &format!("\u{1}zoom\u{2}C:/plots/zoom-1.png\u{3}{R_PROMPT}"),
+        );
+
+        assert_eq!(
+            editor.take_effects(),
+            [Effect::OpenExternally("C:/plots/zoom-1.png".into())]
         );
     }
 

@@ -86,6 +86,79 @@ fn plots_are_rendered_when_made_changed_or_asked_for() {
 
 #[test]
 #[ignore = "runs the R installed on this machine"]
+fn plots_are_saved_zoomed_and_deleted() {
+    let out = tempfile::tempdir().unwrap();
+    let at = |name: &str| {
+        out.path()
+            .join(name)
+            .display()
+            .to_string()
+            .replace('\\', "/")
+    };
+    let call = |function: &str, arguments: &str| {
+        format!("getOption(\"oxmacs\")${function}({arguments})\n")
+    };
+    let input = [
+        "plot(1:3)\n".to_owned(),
+        "hist(1:5)\n".to_owned(),
+        call(
+            "plot_save",
+            &format!("1L, \"{}\", 400L, 300L", at("one.pdf")),
+        ),
+        call(
+            "plot_save",
+            &format!("2L, \"{}\", 400L, 300L", at("two.png")),
+        ),
+        call(
+            "plot_save",
+            &format!("1L, \"{}\", 400L, 300L", at("one.svg")),
+        ),
+        call("plot_zoom", "1L, 1200L, 900L"),
+        call("plot_delete", "2L, 400L, 300L"),
+        "abline(h = 2)\n".to_owned(),
+        call("plot_delete", "2L, 400L, 300L"),
+        call("plot_delete", "1L, 400L, 300L"),
+        "q()\n".to_owned(),
+    ]
+    .concat();
+    let (output, _directory) = session(&input);
+
+    for name in ["one.pdf", "two.png", "one.svg"] {
+        let saved = std::fs::metadata(out.path().join(name)).unwrap();
+        assert!(saved.len() > 500, "{name}");
+        assert!(
+            output.contains(&format!("Saved plot to {}", at(name))),
+            "{output:?}"
+        );
+    }
+    let zoom = output
+        .split_once("\u{1}zoom\u{2}")
+        .and_then(|(_, rest)| rest.split_once('\u{3}'))
+        .map(|(path, _)| path.to_owned())
+        .unwrap();
+    assert!(std::fs::metadata(zoom).unwrap().len() > 1000);
+    let plots: Vec<String> = output
+        .split("\u{1}plot\u{2}")
+        .skip(1)
+        .filter_map(|rest| rest.split_once('\u{3}'))
+        .map(|(plot, _)| plot.split('\t').take(3).collect::<Vec<_>>().join(" "))
+        .collect();
+    assert_eq!(
+        plots,
+        [
+            "new 1 1",
+            "new 2 2",
+            "deleted 1 1",
+            "new 2 2",
+            "deleted 1 1",
+            "none"
+        ],
+        "{output:?}"
+    );
+}
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
 fn output_and_help_fit_the_width_r_is_given() {
     let (output, _directory) = session(
         "getOption(\"oxmacs\")$width(40L)\n1:30\ngetOption(\"oxmacs\")$help(\"mean\")\nq()\n",

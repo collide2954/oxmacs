@@ -76,7 +76,7 @@ impl Editor {
         let input = self.minibuffer_input();
         let (directory, name) = paths::split(&input);
         let path = if name.is_empty() {
-            if purpose == Purpose::WriteFile {
+            if matches!(purpose, Purpose::WriteFile | Purpose::SavePlot) {
                 if let Some(minibuffer) = &mut self.minibuffer {
                     minibuffer.note = Some("[Directory]".to_owned());
                 }
@@ -100,6 +100,7 @@ impl Editor {
             .unwrap_or_default();
         match purpose {
             Purpose::WriteFile => self.write_file_to(path),
+            Purpose::SavePlot => self.save_plot_to(&path),
             Purpose::Dired => {
                 self.dired(&path);
             }

@@ -398,6 +398,7 @@ impl Editor {
             "help" => self.show_r_help(payload),
             "complete" => self.r_completions(payload),
             "plot" => self.r_plot(payload),
+            "zoom" => self.r_plot_zoomed(payload),
             _ => {}
         }
     }

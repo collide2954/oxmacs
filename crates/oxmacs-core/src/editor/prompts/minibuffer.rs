@@ -35,6 +35,7 @@ pub(in crate::editor) enum Purpose {
     Compile,
     Setting(usize),
     RHelp,
+    SavePlot,
 }
 
 impl Purpose {
@@ -43,6 +44,7 @@ impl Purpose {
             self,
             Self::FindFile
                 | Self::WriteFile
+                | Self::SavePlot
                 | Self::Dired
                 | Self::Transfer(_)
                 | Self::CreateDirectory
@@ -180,6 +182,7 @@ impl Editor {
                 .collect(),
             Purpose::FindFile
             | Purpose::WriteFile
+            | Purpose::SavePlot
             | Purpose::Dired
             | Purpose::Transfer(_)
             | Purpose::CreateDirectory => file_completions(minibuffer),
