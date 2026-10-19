@@ -116,48 +116,14 @@ impl BufferList {
     pub(super) fn listing(&self, index: usize) -> Option<&Listing> {
         match self.mode(index)? {
             Mode::Dired(listing) => Some(listing),
-            Mode::Text(_)
-            | Mode::Splash(_)
-            | Mode::Doctor(_)
-            | Mode::Preview(_)
-            | Mode::Compilation(_)
-            | Mode::Customize(_)
-            | Mode::Diagnostics(_)
-            | Mode::Console(_)
-            | Mode::Help(_)
-            | Mode::Weather(_)
-            | Mode::Chat(_)
-            | Mode::Plots(_)
-            | Mode::Processes(_)
-            | Mode::Tools(_)
-            | Mode::IrcSetup(_)
-            | Mode::AtlasList(_)
-            | Mode::Environment(_)
-            | Mode::Table(_) => None,
+            _ => None,
         }
     }
 
     pub(super) fn splash(&self, index: usize) -> Option<&Splash> {
         match self.mode(index)? {
             Mode::Splash(splash) => Some(splash),
-            Mode::Text(_)
-            | Mode::Dired(_)
-            | Mode::Doctor(_)
-            | Mode::Preview(_)
-            | Mode::Compilation(_)
-            | Mode::Customize(_)
-            | Mode::Diagnostics(_)
-            | Mode::Console(_)
-            | Mode::Help(_)
-            | Mode::Weather(_)
-            | Mode::Chat(_)
-            | Mode::Plots(_)
-            | Mode::Processes(_)
-            | Mode::Tools(_)
-            | Mode::IrcSetup(_)
-            | Mode::AtlasList(_)
-            | Mode::Environment(_)
-            | Mode::Table(_) => None,
+            _ => None,
         }
     }
 
@@ -165,24 +131,7 @@ impl BufferList {
         let entry = self.entries.get_mut(index)?;
         match &mut entry.mode {
             Mode::Dired(listing) => Some((&mut entry.buffer, listing)),
-            Mode::Text(_)
-            | Mode::Splash(_)
-            | Mode::Doctor(_)
-            | Mode::Preview(_)
-            | Mode::Compilation(_)
-            | Mode::Customize(_)
-            | Mode::Diagnostics(_)
-            | Mode::Console(_)
-            | Mode::Help(_)
-            | Mode::Weather(_)
-            | Mode::Chat(_)
-            | Mode::Plots(_)
-            | Mode::Processes(_)
-            | Mode::Tools(_)
-            | Mode::IrcSetup(_)
-            | Mode::AtlasList(_)
-            | Mode::Environment(_)
-            | Mode::Table(_) => None,
+            _ => None,
         }
     }
 
@@ -191,71 +140,21 @@ impl BufferList {
         match &entry.mode {
             Mode::Dired(listing) => Some((listing.directory(), true)),
             Mode::Text(_) => entry.buffer.file().map(|file| (file.path.as_path(), false)),
-            Mode::Splash(_)
-            | Mode::Doctor(_)
-            | Mode::Preview(_)
-            | Mode::Compilation(_)
-            | Mode::Customize(_)
-            | Mode::Diagnostics(_)
-            | Mode::Console(_)
-            | Mode::Help(_)
-            | Mode::Weather(_)
-            | Mode::Chat(_)
-            | Mode::Plots(_)
-            | Mode::Processes(_)
-            | Mode::Tools(_)
-            | Mode::IrcSetup(_)
-            | Mode::AtlasList(_)
-            | Mode::Environment(_)
-            | Mode::Table(_) => None,
+            _ => None,
         }
     }
 
     pub(super) fn language(&self, index: usize) -> Option<Language> {
         match self.mode(index)? {
             Mode::Text(syntax) => syntax.as_ref().map(Syntax::language),
-            Mode::Dired(_)
-            | Mode::Splash(_)
-            | Mode::Doctor(_)
-            | Mode::Preview(_)
-            | Mode::Compilation(_)
-            | Mode::Customize(_)
-            | Mode::Diagnostics(_)
-            | Mode::Console(_)
-            | Mode::Help(_)
-            | Mode::Weather(_)
-            | Mode::Chat(_)
-            | Mode::Plots(_)
-            | Mode::Processes(_)
-            | Mode::Tools(_)
-            | Mode::IrcSetup(_)
-            | Mode::AtlasList(_)
-            | Mode::Environment(_)
-            | Mode::Table(_) => None,
+            _ => None,
         }
     }
 
     pub(super) fn syntax(&self, index: usize) -> Option<&Syntax> {
         match self.mode(index)? {
             Mode::Text(syntax) => syntax.as_ref(),
-            Mode::Dired(_)
-            | Mode::Splash(_)
-            | Mode::Doctor(_)
-            | Mode::Preview(_)
-            | Mode::Compilation(_)
-            | Mode::Customize(_)
-            | Mode::Diagnostics(_)
-            | Mode::Console(_)
-            | Mode::Help(_)
-            | Mode::Weather(_)
-            | Mode::Chat(_)
-            | Mode::Plots(_)
-            | Mode::Processes(_)
-            | Mode::Tools(_)
-            | Mode::IrcSetup(_)
-            | Mode::AtlasList(_)
-            | Mode::Environment(_)
-            | Mode::Table(_) => None,
+            _ => None,
         }
     }
 
