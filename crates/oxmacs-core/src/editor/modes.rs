@@ -87,6 +87,20 @@ mod tests {
     }
 
     #[test]
+    fn r_scripts_open_in_r_mode_and_r_mode_is_a_command() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("analysis.R"), "x <- 1\n").unwrap();
+        let mut editor = Editor::new();
+
+        editor.open_file(&dir.path().join("analysis.R"));
+        assert_eq!(editor.mode_line(), "-- analysis.R   L1 C0   (R)");
+
+        let mut scratch = Editor::new();
+        run(&mut scratch, "r-mode");
+        assert_eq!(scratch.language(), Some(Language::R));
+    }
+
+    #[test]
     fn toml_comments_use_hashes() {
         let mut editor = Editor::new();
         run(&mut editor, "toml-mode");

@@ -20,6 +20,7 @@ pub enum Language {
     Rust,
     Toml,
     Markdown,
+    R,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,20 +71,21 @@ impl Feature {
 }
 
 impl Language {
-    pub const ALL: [Self; 3] = [Self::Rust, Self::Toml, Self::Markdown];
+    pub const ALL: [Self; 4] = [Self::Rust, Self::Toml, Self::Markdown, Self::R];
 
     pub fn extensions(self) -> &'static [&'static str] {
         match self {
             Self::Rust => &["rs"],
             Self::Toml => &["toml"],
             Self::Markdown => &["md", "markdown"],
+            Self::R => &["r"],
         }
     }
 
     pub fn line_comment(self) -> Option<&'static str> {
         match self {
             Self::Rust => Some("//"),
-            Self::Toml => Some("#"),
+            Self::Toml | Self::R => Some("#"),
             Self::Markdown => None,
         }
     }
@@ -116,7 +118,7 @@ impl Language {
                     | Feature::Motion
                     | Feature::Items
                     | Feature::Preview
-            )
+            ) | (Self::R, Feature::Highlighting)
         )
     }
 
@@ -130,6 +132,12 @@ impl Language {
             .is_some_and(|name| name.eq_ignore_ascii_case("Cargo.lock"))
         {
             return Some(Self::Toml);
+        }
+        if path
+            .file_name()
+            .is_some_and(|name| name.eq_ignore_ascii_case(".Rprofile"))
+        {
+            return Some(Self::R);
         }
         let extension = path.extension()?.to_str()?;
         Self::ALL.into_iter().find(|language| {
@@ -145,6 +153,7 @@ impl Language {
             Self::Rust => "Rust",
             Self::Toml => "TOML",
             Self::Markdown => "Markdown",
+            Self::R => "R",
         }
     }
 }
@@ -358,6 +367,14 @@ mod tests {
         assert_eq!(
             Language::for_path(Path::new("README.md")),
             Some(Language::Markdown)
+        );
+        assert_eq!(
+            Language::for_path(Path::new("analysis.R")),
+            Some(Language::R)
+        );
+        assert_eq!(
+            Language::for_path(Path::new(".Rprofile")),
+            Some(Language::R)
         );
         assert_eq!(Language::for_path(Path::new("notes.txt")), None);
         assert_eq!(Language::for_path(Path::new("Makefile")), None);

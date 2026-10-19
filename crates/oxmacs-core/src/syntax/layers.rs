@@ -11,6 +11,7 @@ pub(super) enum Grammar {
     Toml,
     Markdown,
     MarkdownInline,
+    R,
 }
 
 impl Grammar {
@@ -20,6 +21,7 @@ impl Grammar {
             Self::Toml => tree_sitter_toml_ng::LANGUAGE.into(),
             Self::Markdown => tree_sitter_md::LANGUAGE.into(),
             Self::MarkdownInline => tree_sitter_md::INLINE_LANGUAGE.into(),
+            Self::R => tree_sitter_r::LANGUAGE.into(),
         }
     }
 
@@ -27,6 +29,7 @@ impl Grammar {
         match name.to_ascii_lowercase().as_str() {
             "rust" | "rs" => Some(Self::Rust),
             "toml" => Some(Self::Toml),
+            "r" => Some(Self::R),
             _ => None,
         }
     }
@@ -38,6 +41,7 @@ impl Language {
             Self::Rust => Grammar::Rust,
             Self::Toml => Grammar::Toml,
             Self::Markdown => Grammar::Markdown,
+            Self::R => Grammar::R,
         }
     }
 }

@@ -14,6 +14,7 @@ const RUST: &str = include_str!("../../queries/rust/highlights.scm");
 const TOML: &str = include_str!("../../queries/toml/highlights.scm");
 const MARKDOWN: &str = include_str!("../../queries/markdown/highlights.scm");
 const MARKDOWN_INLINE: &str = include_str!("../../queries/markdown/inline.scm");
+const R: &str = include_str!("../../queries/r/highlights.scm");
 
 struct Highlighter {
     query: Query,
@@ -28,6 +29,8 @@ static MARKDOWN_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
     LazyLock::new(|| Highlighter::new(Grammar::Markdown, MARKDOWN));
 static MARKDOWN_INLINE_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
     LazyLock::new(|| Highlighter::new(Grammar::MarkdownInline, MARKDOWN_INLINE));
+static R_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
+    LazyLock::new(|| Highlighter::new(Grammar::R, R));
 
 impl Highlighter {
     fn new(grammar: Grammar, source: &str) -> Option<Self> {
@@ -46,6 +49,7 @@ impl Highlighter {
             Grammar::Toml => TOML_HIGHLIGHTER.as_ref(),
             Grammar::Markdown => MARKDOWN_HIGHLIGHTER.as_ref(),
             Grammar::MarkdownInline => MARKDOWN_INLINE_HIGHLIGHTER.as_ref(),
+            Grammar::R => R_HIGHLIGHTER.as_ref(),
         }
     }
 }
@@ -319,6 +323,64 @@ mod tests {
             [(0..2, Highlight::Keyword), (3..4, Highlight::Function)]
         );
         assert_eq!(markdown(5), [(0..5, Highlight::String)]);
+    }
+
+    #[test]
+    fn r_definitions_calls_and_literals_are_highlighted() {
+        let text = "#' Adds one\nadd <- function(x = 1L) {\n  if (is.na(x)) return(NULL)\n  stats::median(x) + 2 # two\n}\n";
+        let r = |line| faces_in(Language::R, text, line);
+
+        assert_eq!(r(0), [(0..11, Highlight::DocComment)]);
+        assert_eq!(
+            r(1),
+            [
+                (0..3, Highlight::Function),
+                (7..15, Highlight::Keyword),
+                (20..22, Highlight::Constant)
+            ]
+        );
+        assert_eq!(
+            r(2),
+            [
+                (2..4, Highlight::Keyword),
+                (6..11, Highlight::Function),
+                (16..22, Highlight::Keyword),
+                (23..27, Highlight::Constant)
+            ]
+        );
+        assert_eq!(
+            r(3),
+            [
+                (2..7, Highlight::Type),
+                (9..15, Highlight::Function),
+                (21..22, Highlight::Constant),
+                (23..28, Highlight::Comment)
+            ]
+        );
+    }
+
+    #[test]
+    fn r_strings_are_highlighted_whole() {
+        let text = "x <- \"a # b\" # c\n";
+
+        assert_eq!(
+            faces_in(Language::R, text, 0),
+            [(5..12, Highlight::String), (13..16, Highlight::Comment)]
+        );
+    }
+
+    #[test]
+    fn fenced_r_code_is_highlighted_as_r() {
+        let text = "```r\nf <- function() NULL\n```\n";
+
+        assert_eq!(
+            faces_in(Language::Markdown, text, 1),
+            [
+                (0..1, Highlight::Function),
+                (5..13, Highlight::Keyword),
+                (16..20, Highlight::Constant)
+            ]
+        );
     }
 
     #[test]

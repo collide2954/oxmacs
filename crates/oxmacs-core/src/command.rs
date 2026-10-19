@@ -102,6 +102,7 @@ pub enum Command {
     RustMode,
     TomlMode,
     MarkdownMode,
+    RMode,
     TextMode,
     OxmacsDoctor,
     SplitWindowBelow,

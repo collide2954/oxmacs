@@ -12,6 +12,7 @@ impl Language {
     pub fn indent_unit(self) -> usize {
         match self {
             Self::Rust | Self::Toml | Self::Markdown => 4,
+            Self::R => 2,
         }
     }
 }
@@ -40,7 +41,7 @@ impl Syntax {
                 Language::Rust => {
                     continuation(statement(node, tree.root_node()), line, &rest) * unit
                 }
-                Language::Toml | Language::Markdown => {
+                Language::Toml | Language::Markdown | Language::R => {
                     previous_indentation(buffer, line, tab_width)
                 }
             });
@@ -55,7 +56,7 @@ impl Syntax {
         }
         let continues = match self.language {
             Language::Rust => continuation(statement(node, container), line, &rest),
-            Language::Toml | Language::Markdown => 0,
+            Language::Toml | Language::Markdown | Language::R => 0,
         };
         Some(base + unit + continues * unit)
     }
