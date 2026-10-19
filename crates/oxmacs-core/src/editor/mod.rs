@@ -1,3 +1,4 @@
+mod atlas;
 mod buffers;
 mod build;
 mod chat;
@@ -110,6 +111,8 @@ pub struct Editor {
     popup: Option<prompts::popup::Popup>,
     r_sessions: languages::r_console::Sessions,
     xref: Vec<(crate::text::BufferId, usize)>,
+    atlas_notes: Vec<(crate::text::BufferId, u64, crate::atlas::note::Note)>,
+    today: fn() -> jiff::civil::Date,
     processes: special::processes::Processes,
     processes_keymap: Keymap,
     toolbox: special::toolbox::Toolbox,
@@ -201,6 +204,8 @@ impl Editor {
             popup: None,
             r_sessions: languages::r_console::Sessions::default(),
             xref: Vec::new(),
+            atlas_notes: Vec::new(),
+            today: atlas::today,
             processes: special::processes::Processes::default(),
             processes_keymap: bindings::processes(),
             toolbox: special::toolbox::Toolbox::default(),
@@ -544,6 +549,10 @@ impl Editor {
             Some(Mode::Environment(view)) => view.line_style(line),
             Some(Mode::Table(view)) => view.line_style(line),
             Some(Mode::Preview(_) | Mode::Console(_) | Mode::Plots(_)) => LineStyle::default(),
+            Some(Mode::Text(_)) | None if self.is_atlas(index) => LineStyle {
+                background: None,
+                spans: self.atlas_highlights(index, line),
+            },
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,
                 spans: self.syntax_highlights_at(index, line),

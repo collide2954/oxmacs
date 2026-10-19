@@ -9,8 +9,10 @@ const SCAN_LIMIT: usize = 100_000;
 impl Editor {
     pub fn prepare_display(&mut self) {
         self.sync_syntax();
+        self.sync_atlas(0);
         for index in self.visible_buffers() {
             self.buffers.sync_syntax(index);
+            self.sync_atlas(index);
         }
         self.paren_pair = self.find_paren_pair();
         self.read_visible_chats();

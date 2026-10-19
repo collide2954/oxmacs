@@ -242,7 +242,9 @@ impl<'a> Pane<'a> {
             crlf: buffer
                 .file()
                 .is_some_and(|file| file.format.line_ending == LineEnding::CrLf),
-            mode: language.map(Language::name),
+            mode: language
+                .map(Language::name)
+                .or_else(|| self.editor.is_atlas(self.index).then_some("Atlas")),
             lint: buffer
                 .file()
                 .filter(|_| language == Some(Language::Rust))
