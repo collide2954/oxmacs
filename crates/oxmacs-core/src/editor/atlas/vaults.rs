@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 
 use jiff::civil::Date;
 
+use crate::atlas::edit::exact;
 use crate::atlas::note;
 use crate::atlas::vault::{self, Index};
 use crate::command::Command;
 use crate::config::{self, AtlasVault};
-use crate::editor::atlas::exact;
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::{self, paths};

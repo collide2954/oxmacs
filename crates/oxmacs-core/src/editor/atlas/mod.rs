@@ -1,10 +1,8 @@
 use std::ops::Range;
-use std::sync::LazyLock;
 
 use jiff::civil::Date;
-use regex::Regex;
 
-use crate::atlas::date::{self, Every};
+use crate::atlas::edit::{self, Cycled};
 use crate::atlas::note::{self, Note, State, Style};
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
@@ -58,42 +56,12 @@ fn runs(faces: &[Option<Highlight>]) -> Vec<(Range<usize>, Highlight)> {
     found
 }
 
-static DONE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\s+done:\S+").unwrap_or_else(|_| unreachable!("a valid pattern"))
-});
-static DATED: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\b(on|due):(\d{4}-\d{2}-\d{2})")
-        .unwrap_or_else(|_| unreachable!("a valid pattern"))
-});
-
-fn marked(text: &str, depth: usize, state: State) -> String {
-    text.chars()
-        .enumerate()
-        .map(|(column, c)| if column == depth + 1 { state.mark() } else { c })
-        .collect()
-}
-
-fn exact(text: &str, today: Date) -> Option<String> {
-    let parsed = note::parse(text, today);
-    let spans = parsed.spans.first()?;
-    let chars: Vec<char> = text.chars().collect();
-    let mut changed = chars.clone();
-    let mut any = false;
-    for span in spans.iter().rev().filter(|span| span.style == Style::Loose) {
-        let word: String = chars[span.columns.clone()].iter().collect();
-        let Some((key, value)) = word.split_once(':') else {
-            continue;
-        };
-        if key.eq_ignore_ascii_case("every") {
-            continue;
-        }
-        if let Some(date) = date::resolve(value, today) {
-            let replacement: Vec<char> = format!("{key}:{date}").chars().collect();
-            changed.splice(span.columns.clone(), replacement);
-            any = true;
-        }
+pub(in crate::editor) fn cycled_message(cycled: &Cycled) -> Option<String> {
+    match cycled.repeated {
+        Some(Some(next)) => Some(format!("Next: {next}")),
+        Some(None) => Some("Logged; the task has no date to move".to_owned()),
+        None => None,
     }
-    any.then(|| changed.into_iter().collect())
 }
 
 impl Editor {
@@ -121,7 +89,7 @@ impl Editor {
             return;
         }
         let text = buffer.line_text(line).to_string();
-        if let Some(text) = exact(&text, today) {
+        if let Some(text) = edit::exact(&text, today) {
             self.replace_line(index, line, &text);
         }
     }
@@ -152,53 +120,16 @@ impl Editor {
     }
 
     pub(in crate::editor) fn atlas_cycle_task(&mut self) {
-        let today = (self.today)();
         let buffer = self.buffers.current();
         let line = buffer.line_of(buffer.point());
         let text = buffer.line_text(line).to_string();
-        let parsed = note::parse(&text, today);
-        let Some(task) = parsed.tasks.first() else {
+        let Some(cycled) = edit::cycle(&text, (self.today)()) else {
             self.show_message("No task on this line");
             return;
         };
-        let next = task.state.cycled();
-        if next == State::Done
-            && let Some(every) = task.every
-        {
-            self.repeat_task(line, &text, task.depth, every, today);
-            return;
-        }
-        let mut changed = marked(&text, task.depth, next);
-        if task.state == State::Done {
-            changed = DONE.replace_all(&changed, "").into_owned();
-        }
-        if next == State::Done && task.done.is_none() {
-            changed = format!("{}  done:{today}", changed.trim_end());
-        }
-        self.replace_line(0, line, &changed);
-    }
-
-    fn repeat_task(&mut self, line: usize, text: &str, depth: usize, every: Every, today: Date) {
-        let mut first = None;
-        let moved = DATED.replace_all(text, |captures: &regex::Captures<'_>| {
-            let next = captures[2]
-                .parse::<Date>()
-                .ok()
-                .and_then(|date| every.next(date, today));
-            match next {
-                Some(next) => {
-                    first.get_or_insert(next);
-                    format!("{}:{next}", &captures[1])
-                }
-                None => captures[0].to_owned(),
-            }
-        });
-        let changed = marked(&moved, depth, State::Todo);
-        let log = format!("\n{}- done {today}", " ".repeat(depth + 4));
-        self.replace_line(0, line, &format!("{changed}{log}"));
-        match first {
-            Some(next) => self.show_message(format!("Next: {next}")),
-            None => self.show_message("Logged; the task has no date to move"),
+        self.replace_line(0, line, &cycled.text);
+        if let Some(message) = cycled_message(&cycled) {
+            self.show_message(message);
         }
     }
 
