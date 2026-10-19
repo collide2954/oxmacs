@@ -1,12 +1,10 @@
 use std::ops::Range;
 
 use crate::editor::Editor;
-use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
 const SCAN_LIMIT: usize = 100_000;
-const PAIRS: &[(char, char)] = &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"')];
 
 impl Editor {
     pub fn prepare_display(&mut self) {
@@ -17,15 +15,19 @@ impl Editor {
         self.paren_pair = self.find_paren_pair();
     }
 
-    fn pairs(&self) -> bool {
-        self.minibuffer.is_none() && self.language().is_some_and(Language::auto_pairs)
+    fn pairs(&self) -> &'static [(char, char)] {
+        match self.language() {
+            Some(language) if self.minibuffer.is_none() => language.pairs(),
+            _ => &[],
+        }
     }
 
     pub(super) fn insert_pair(&mut self, typed: char) -> bool {
-        if !self.pairs() {
+        let pairs = self.pairs();
+        if pairs.is_empty() {
             return false;
         }
-        let closer = PAIRS
+        let closer = pairs
             .iter()
             .find(|(open, _)| *open == typed)
             .map(|(_, close)| *close);
@@ -40,14 +42,14 @@ impl Editor {
         }
         let point = buffer.point();
         let next = buffer.chars_after(point).next();
-        let steps_over = PAIRS.iter().any(|(_, close)| *close == typed) && next == Some(typed);
+        let steps_over = pairs.iter().any(|(_, close)| *close == typed) && next == Some(typed);
         if steps_over {
             buffer.set_point(point + 1);
             return true;
         }
         let open_space =
             next.is_none_or(|c| c.is_whitespace() || matches!(c, ')' | ']' | '}' | ',' | ';'));
-        let quote_allowed = typed != '"'
+        let quote_allowed = closer != Some(typed)
             || buffer
                 .chars_before(point)
                 .next()
@@ -63,7 +65,8 @@ impl Editor {
     }
 
     pub(super) fn delete_pair(&mut self) -> bool {
-        if !self.pairs() {
+        let pairs = self.pairs();
+        if pairs.is_empty() {
             return false;
         }
         let buffer = self.buffers.current_mut();
@@ -72,7 +75,7 @@ impl Editor {
             buffer.chars_before(point).next(),
             buffer.chars_after(point).next(),
         );
-        let empty = PAIRS
+        let empty = pairs
             .iter()
             .any(|(open, close)| around == (Some(*open), Some(*close)));
         if empty {
@@ -264,6 +267,49 @@ mod tests {
         assert_eq!(editor.buffer().contents(), "let x = (a + b);");
         assert_eq!(editor.buffer().point(), 15);
         assert_eq!(editor.buffer().selection(), None);
+    }
+
+    fn r(text: &str, point: usize) -> Editor {
+        let mut editor = editor_with(text, point);
+        editor.set_major_mode(Some(Language::R));
+        editor
+    }
+
+    #[test]
+    fn r_pairs_single_quotes_and_backticks_too() {
+        let mut editor = r("", 0);
+
+        type_text(&mut editor, "x <- 'a' + `b`");
+
+        assert_eq!(editor.buffer().contents(), "x <- 'a' + `b`");
+        assert_eq!(editor.buffer().point(), 14);
+    }
+
+    #[test]
+    fn r_quotes_after_words_stay_single() {
+        let mut editor = r("# don", 5);
+
+        type_text(&mut editor, "'");
+
+        assert_eq!(editor.buffer().contents(), "# don'");
+    }
+
+    #[test]
+    fn rust_leaves_single_quotes_alone() {
+        let mut editor = rust("fn f<", 5);
+
+        type_text(&mut editor, "'");
+
+        assert_eq!(editor.buffer().contents(), "fn f<'");
+    }
+
+    #[test]
+    fn return_between_r_braces_opens_a_two_space_block() {
+        let mut editor = r("f <- function() ", 16);
+
+        press(&mut editor, "{ RET");
+
+        assert_eq!(editor.buffer().contents(), "f <- function() {\n  \n}");
     }
 
     #[test]

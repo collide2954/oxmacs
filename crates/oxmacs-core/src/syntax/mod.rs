@@ -122,8 +122,19 @@ impl Language {
         )
     }
 
-    pub fn auto_pairs(self) -> bool {
-        matches!(self, Self::Rust | Self::Toml)
+    pub fn pairs(self) -> &'static [(char, char)] {
+        match self {
+            Self::Rust | Self::Toml => &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"')],
+            Self::R => &[
+                ('(', ')'),
+                ('[', ']'),
+                ('{', '}'),
+                ('"', '"'),
+                ('\'', '\''),
+                ('`', '`'),
+            ],
+            Self::Markdown => &[],
+        }
     }
 
     pub fn for_path(path: &Path) -> Option<Self> {
