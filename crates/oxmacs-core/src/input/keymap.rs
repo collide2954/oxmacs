@@ -44,12 +44,14 @@ impl Keymap {
     }
 
     pub fn where_is(&self, command: Command) -> Option<KeySequence> {
+        self.bindings(command).into_iter().next()
+    }
+
+    pub fn bindings(&self, command: Command) -> Vec<KeySequence> {
         let mut found = Vec::new();
         self.collect(command, &mut Vec::new(), &mut found);
-        found
-            .into_iter()
-            .min_by_key(|keys| (uses_super(keys), keys.len()))
-            .map(KeySequence::from)
+        found.sort_by_key(|keys| (uses_super(keys), keys.len()));
+        found.into_iter().map(KeySequence::from).collect()
     }
 
     fn collect(&self, command: Command, prefix: &mut Vec<Key>, found: &mut Vec<Vec<Key>>) {
@@ -183,6 +185,26 @@ mod tests {
         assert_eq!(
             where_is(&keymap, Command::MarkWholeBuffer).as_deref(),
             Some("C-x h")
+        );
+    }
+
+    #[test]
+    fn bindings_lists_every_sequence_in_order_of_preference() {
+        let mut keymap = Keymap::default();
+        keymap.bind(&keys("s-a"), Command::MarkWholeBuffer);
+        keymap.bind(&keys("C-x h"), Command::MarkWholeBuffer);
+        keymap.bind(&keys("C-a"), Command::MarkWholeBuffer);
+
+        let found: Vec<String> = keymap
+            .bindings(Command::MarkWholeBuffer)
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+
+        assert_eq!(found, ["C-a", "C-x h", "s-a"]);
+        assert_eq!(
+            keymap.bindings(Command::BackwardChar),
+            Vec::<KeySequence>::new()
         );
     }
 
