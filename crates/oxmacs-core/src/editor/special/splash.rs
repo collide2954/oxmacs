@@ -23,7 +23,7 @@ const BUTTONS: &[(Command, &str)] = &[
 ];
 
 #[derive(Debug)]
-pub(super) struct Splash {
+pub(in crate::editor) struct Splash {
     buttons: Vec<Button>,
 }
 
@@ -39,11 +39,11 @@ impl Splash {
         self.buttons.iter().find(|button| button.line == line)
     }
 
-    pub(super) fn has_button(&self, line: usize) -> bool {
+    pub(in crate::editor) fn has_button(&self, line: usize) -> bool {
         self.button(line).is_some()
     }
 
-    pub(super) fn line_style(&self, line: usize) -> LineStyle {
+    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
         let spans = if line == TITLE_LINE {
             vec![(INDENT..usize::MAX, Highlight::Heading)]
         } else if let Some(button) = self.button(line) {
@@ -110,7 +110,7 @@ impl Editor {
         self.add_buffer_with(buffer, Mode::Splash(Splash { buttons }));
     }
 
-    pub(super) fn forward_button(&mut self, forward: bool) {
+    pub(in crate::editor) fn forward_button(&mut self, forward: bool) {
         let line = self.point_line();
         let Some(splash) = self.buffers.splash(0) else {
             return;
@@ -134,7 +134,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn push_button(&mut self) {
+    pub(in crate::editor) fn push_button(&mut self) {
         let line = self.point_line();
         let command = self
             .buffers

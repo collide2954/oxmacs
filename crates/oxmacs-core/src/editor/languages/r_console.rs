@@ -11,7 +11,7 @@ const NAME: &str = "*R*";
 const MISSING: &str = "R not found; install it from https://cran.r-project.org or set r-program";
 
 #[derive(Debug)]
-pub(super) struct Console {
+pub(in crate::editor) struct Console {
     job: Option<JobId>,
     mark: Marker,
     stream: Stream,
@@ -60,7 +60,7 @@ impl Editor {
         self.console().is_some_and(|console| console.job.is_some())
     }
 
-    pub(super) fn run_r(&mut self) {
+    pub(in crate::editor) fn run_r(&mut self) {
         if !self.r_running() && !self.start_r() {
             return;
         }
@@ -179,7 +179,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn console_finished(&mut self, job: JobId, outcome: &Outcome) -> bool {
+    pub(in crate::editor) fn console_finished(&mut self, job: JobId, outcome: &Outcome) -> bool {
         let Some(index) = self.console_job(job) else {
             return false;
         };
@@ -227,7 +227,7 @@ impl Editor {
         buffer.set_point(buffer.len_chars());
     }
 
-    pub(super) fn console_send_input(&mut self) {
+    pub(in crate::editor) fn console_send_input(&mut self) {
         let Some((start, input)) = self.console_input() else {
             return;
         };
@@ -268,7 +268,7 @@ impl Editor {
         self.effects.push(Effect::Send(job, code.to_owned()));
     }
 
-    pub(super) fn console_history(&mut self, older: bool) {
+    pub(in crate::editor) fn console_history(&mut self, older: bool) {
         let Some(console) = self.console_mut() else {
             return;
         };

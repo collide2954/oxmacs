@@ -21,7 +21,7 @@ const GAP: usize = 2;
 const HINT_INDENT: &str = "    ";
 
 #[derive(Debug)]
-pub(super) struct Customize {
+pub(in crate::editor) struct Customize {
     saved: Config,
     problem: Option<String>,
     rows: Vec<Row>,
@@ -36,7 +36,7 @@ struct Row {
 }
 
 impl Customize {
-    pub(super) fn line_style(&self, line: usize) -> LineStyle {
+    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
 
@@ -145,18 +145,18 @@ impl Editor {
             .find_mode(|mode| matches!(mode, Mode::Customize(_)))
     }
 
-    pub(super) fn customizing(&self) -> Option<&Customize> {
+    pub(in crate::editor) fn customizing(&self) -> Option<&Customize> {
         match self.buffers.mode(0)? {
             Mode::Customize(state) => Some(state),
             _ => None,
         }
     }
 
-    pub(super) fn unsaved_settings(&self, index: usize) -> bool {
+    pub(in crate::editor) fn unsaved_settings(&self, index: usize) -> bool {
         matches!(self.buffers.mode(index), Some(Mode::Customize(state)) if state.saved != self.config)
     }
 
-    pub(super) fn customize(&mut self) {
+    pub(in crate::editor) fn customize(&mut self) {
         if let Some(index) = self.settings_index() {
             self.select_buffer(index);
             return;
@@ -214,7 +214,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn widget_forward(&mut self, forward: bool) {
+    pub(in crate::editor) fn widget_forward(&mut self, forward: bool) {
         let line = self.point_line();
         let Some(state) = self.customizing() else {
             return;
@@ -248,7 +248,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn widget_button_press(&mut self) {
+    pub(in crate::editor) fn widget_button_press(&mut self) {
         let line = self.point_line();
         match self
             .customizing()
@@ -260,7 +260,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn setting_at(&self, position: usize) -> Option<usize> {
+    pub(in crate::editor) fn setting_at(&self, position: usize) -> Option<usize> {
         let buffer = self.buffers.current();
         let line = buffer.line_of(position);
         let column = position - buffer.line_start(line);
@@ -270,7 +270,7 @@ impl Editor {
             .map(|row| row.setting)
     }
 
-    pub(super) fn change_setting(&mut self, index: usize) {
+    pub(in crate::editor) fn change_setting(&mut self, index: usize) {
         let Some(setting) = SETTINGS.get(index) else {
             return;
         };
@@ -303,7 +303,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn set_setting_from(&mut self, index: usize, input: &str) {
+    pub(in crate::editor) fn set_setting_from(&mut self, index: usize, input: &str) {
         let Some(setting) = SETTINGS.get(index) else {
             return;
         };
@@ -329,13 +329,13 @@ impl Editor {
         }
     }
 
-    pub(super) fn unsaved_config_path(&self) -> Option<PathBuf> {
+    pub(in crate::editor) fn unsaved_config_path(&self) -> Option<PathBuf> {
         self.settings_index()
             .filter(|index| self.unsaved_settings(*index))
             .and(self.config_path.clone())
     }
 
-    pub(super) fn save_settings(&mut self) -> bool {
+    pub(in crate::editor) fn save_settings(&mut self) -> bool {
         let Some(path) = self.unsaved_config_path() else {
             self.show_message("(No changes need to be saved)");
             return true;
@@ -366,7 +366,7 @@ impl Editor {
         true
     }
 
-    pub(super) fn revert_settings(&mut self) {
+    pub(in crate::editor) fn revert_settings(&mut self) {
         let (saved, problem) = self.saved_config();
         if problem.is_none() {
             self.reconfigure(&saved);
@@ -384,7 +384,7 @@ impl Editor {
         self.change_config(setting.key, value);
     }
 
-    pub(super) fn change_config(&mut self, key: &str, value: Option<Value>) {
+    pub(in crate::editor) fn change_config(&mut self, key: &str, value: Option<Value>) {
         match self.config.with(key, value) {
             Ok(config) => {
                 self.reconfigure(&config);

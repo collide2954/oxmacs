@@ -22,12 +22,12 @@ const TOOLS: &[(&str, &str)] = &[
 ];
 
 #[derive(Debug)]
-pub(super) struct Doctor {
+pub(in crate::editor) struct Doctor {
     styles: Vec<LineStyle>,
 }
 
 impl Doctor {
-    pub(super) fn line_style(&self, line: usize) -> LineStyle {
+    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
 }
@@ -42,7 +42,7 @@ impl Editor {
         self.font_note = Some(note.into());
     }
 
-    pub(super) fn oxmacs_doctor(&mut self) {
+    pub(in crate::editor) fn oxmacs_doctor(&mut self) {
         let page = self.examine();
         let doctor = Doctor {
             styles: page.styles,

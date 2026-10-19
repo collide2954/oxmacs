@@ -5,11 +5,14 @@ use crate::theme::{self, Theme};
 const SYSTEM: &str = "system";
 
 impl Editor {
-    pub(super) fn load_theme(&mut self) {
+    pub(in crate::editor) fn load_theme(&mut self) {
         self.open_minibuffer("Load theme: ", Purpose::LoadTheme);
     }
 
-    pub(super) fn theme_completions(&self, matches: impl Fn(&str) -> bool) -> Vec<Completion> {
+    pub(in crate::editor) fn theme_completions(
+        &self,
+        matches: impl Fn(&str) -> bool,
+    ) -> Vec<Completion> {
         let current = self.configured_theme.map_or(SYSTEM, |theme| theme.name);
         theme::builtin()
             .into_iter()
@@ -24,11 +27,11 @@ impl Editor {
             .collect()
     }
 
-    pub(super) fn toggle_theme(&mut self) {
+    pub(in crate::editor) fn toggle_theme(&mut self) {
         self.use_theme(Some(theme::counterpart(self.theme())));
     }
 
-    pub(super) fn use_theme(&mut self, theme: Option<&'static Theme>) {
+    pub(in crate::editor) fn use_theme(&mut self, theme: Option<&'static Theme>) {
         let name = theme.map(|theme| toml::Value::String(theme.name.to_owned()));
         self.change_config("theme", name);
     }

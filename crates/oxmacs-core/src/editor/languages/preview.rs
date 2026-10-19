@@ -12,7 +12,7 @@ pub enum PreviewScroll {
 }
 
 impl Editor {
-    pub(super) fn scroll_preview(&mut self, command: Command) -> bool {
+    pub(in crate::editor) fn scroll_preview(&mut self, command: Command) -> bool {
         if !matches!(self.buffers.mode(0), Some(Mode::Preview(_))) {
             return false;
         }
@@ -36,7 +36,7 @@ impl Editor {
         )
     }
 
-    pub(super) fn markdown_preview(&mut self) {
+    pub(in crate::editor) fn markdown_preview(&mut self) {
         let source = self.buffers.current().id();
         let origin = self.selected_window();
         if let Some(preview) = self

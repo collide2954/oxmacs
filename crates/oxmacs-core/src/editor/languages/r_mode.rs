@@ -1,7 +1,7 @@
 use crate::editor::Editor;
 
 impl Editor {
-    pub(super) fn insert_operator(&mut self, operator: &str) {
+    pub(in crate::editor) fn insert_operator(&mut self, operator: &str) {
         let buffer = self.current_mut();
         let point = buffer.point();
         let spaced_before = buffer

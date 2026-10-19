@@ -45,7 +45,7 @@ impl ListItem {
 }
 
 impl Editor {
-    pub(super) fn markdown_insert_list_item(&mut self) {
+    pub(in crate::editor) fn markdown_insert_list_item(&mut self) {
         let buffer = self.buffers.current_mut();
         let line = buffer.line_of(buffer.point());
         let text = buffer.line_text(line).into_owned();
@@ -60,7 +60,7 @@ impl Editor {
         buffer.insert(&prefix);
     }
 
-    pub(super) fn markdown_shift(&mut self, deeper: bool) {
+    pub(in crate::editor) fn markdown_shift(&mut self, deeper: bool) {
         let buffer = self.buffers.current_mut();
         let line = buffer.line_of(buffer.point());
         let start = buffer.line_start(line);
