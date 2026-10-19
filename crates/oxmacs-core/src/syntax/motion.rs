@@ -66,6 +66,13 @@ impl Syntax {
         })
     }
 
+    pub fn defun_around(&self, buffer: &Buffer, point: usize) -> Option<Range<usize>> {
+        self.defuns(buffer)
+            .into_iter()
+            .filter(|defun| defun.start <= point && point <= defun.end)
+            .max_by_key(ExactSizeIterator::len)
+    }
+
     pub fn sexp_end(&self, buffer: &Buffer, point: usize) -> Result<usize, &'static str> {
         let tree = self.synced(buffer).ok_or(PREMATURE)?;
         let mut from = point;

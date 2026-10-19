@@ -326,6 +326,21 @@ pub enum Command {
         detailed_message = "Starts R in *R*, using the r-program setting or the R found on your system. Type after the prompt and press RET to run it; M-p and M-n bring back earlier input."
     )]
     RunR,
+    #[strum(
+        message = "Send the statement or selection to R and step",
+        detailed_message = "Sends the selection, or else the whole statement around point even when it spans several lines, to *R* and moves to the next statement. R starts first when it isn't running, and the code shows in *R* as R reads it."
+    )]
+    RSendStatement,
+    #[strum(
+        message = "Send the function or paragraph to R and step",
+        detailed_message = "Sends the selection, or else the function definition around point, or else the paragraph around point, to *R* and moves past it. R starts first when it isn't running."
+    )]
+    RSendFunction,
+    #[strum(
+        message = "Switch between the R script and *R*",
+        detailed_message = "From an R script, shows *R* beside it and moves there, starting R when it isn't running. From *R*, goes back to the R script used most recently."
+    )]
+    RSwitchToConsole,
     #[strum(message = "Send the input after the prompt")]
     ComintSendInput,
     #[strum(
@@ -547,7 +562,10 @@ impl Command {
             | Self::RustTest
             | Self::RustRun
             | Self::RustRunClippy => Scope::Rust,
-            Self::RInsertAssignment | Self::RInsertPipe => Scope::R,
+            Self::RInsertAssignment
+            | Self::RInsertPipe
+            | Self::RSendStatement
+            | Self::RSendFunction => Scope::R,
             Self::ComintSendInput | Self::ComintPreviousInput | Self::ComintNextInput => {
                 Scope::Console
             }

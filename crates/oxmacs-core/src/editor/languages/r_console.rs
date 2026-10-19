@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{env, fs, io, process};
@@ -18,7 +19,7 @@ pub(in crate::editor) struct Console {
     helper: Option<PathBuf>,
     input: InputLine,
     stream: Stream,
-    queued: usize,
+    expected: VecDeque<Option<String>>,
     waiting: bool,
 }
 
@@ -60,7 +61,7 @@ impl Editor {
         }
     }
 
-    fn r_running(&self) -> bool {
+    pub(super) fn r_running(&self) -> bool {
         self.console().is_some_and(|console| console.job.is_some())
     }
 
@@ -71,7 +72,7 @@ impl Editor {
         self.show_console(true);
     }
 
-    fn show_console(&mut self, select: bool) {
+    pub(super) fn show_console(&mut self, select: bool) {
         let Some(id) = self
             .console_index()
             .and_then(|index| self.buffers.get(index))
@@ -91,7 +92,7 @@ impl Editor {
         }
     }
 
-    fn start_r(&mut self) -> bool {
+    pub(super) fn start_r(&mut self) -> bool {
         let Probe::Found { path, .. } = (self.probe_r)(self.config.r_program.as_deref()) else {
             self.show_message(MISSING);
             return false;
@@ -123,7 +124,7 @@ impl Editor {
             console.job = Some(job);
             console.helper = Some(helper);
             console.stream = Stream::default();
-            console.queued = 0;
+            console.expected.clear();
             console.waiting = false;
             return true;
         }
@@ -137,7 +138,7 @@ impl Editor {
                     helper: Some(helper),
                     input,
                     stream: Stream::default(),
-                    queued: 0,
+                    expected: VecDeque::new(),
                     waiting: false,
                 }),
             );
@@ -174,11 +175,15 @@ impl Editor {
                     if let Some(helper) = console.helper.take() {
                         let _ = fs::remove_file(helper);
                     }
-                    if console.queued > 0 {
-                        console.queued -= 1;
-                    } else {
-                        console.waiting = true;
-                        self.console_insert(index, &format!("{prompt} "));
+                    match console.expected.pop_front() {
+                        Some(None) => {}
+                        Some(Some(line)) => {
+                            self.console_insert(index, &format!("{prompt} {line}\n"));
+                        }
+                        None => {
+                            console.waiting = true;
+                            self.console_insert(index, &format!("{prompt} "));
+                        }
                     }
                 }
                 Piece::Marker { .. } => {}
@@ -265,9 +270,36 @@ impl Editor {
             return;
         };
         let lines = code.lines().count().max(1);
-        console.queued += lines - usize::from(console.waiting);
+        let unseen = lines - usize::from(console.waiting);
+        console.expected.extend(std::iter::repeat_n(None, unseen));
         console.waiting = false;
         self.effects.push(Effect::Send(job, code.to_owned()));
+    }
+
+    pub(in crate::editor) fn r_evaluate(&mut self, code: &str) {
+        let code = code.trim_end();
+        if code.is_empty() {
+            return;
+        }
+        let Some(index) = self.console_index() else {
+            return;
+        };
+        let Some(console) = self.console_mut() else {
+            return;
+        };
+        let Some(job) = console.job else {
+            return;
+        };
+        let mut lines = code.lines();
+        let first = if console.waiting { lines.next() } else { None };
+        console
+            .expected
+            .extend(lines.map(|line| Some(line.to_owned())));
+        console.waiting = false;
+        if let Some(first) = first {
+            self.console_insert(index, &format!("{first}\n"));
+        }
+        self.effects.push(Effect::Send(job, format!("{code}\n")));
     }
 
     pub(in crate::editor) fn recall_input(&mut self, older: bool) {
@@ -297,6 +329,7 @@ mod tests {
     use crate::external::tools::{self, Probe};
 
     const PROMPT: &str = "\u{1}>\u{2}\u{3}";
+    const CONTINUE: &str = "\u{1}+\u{2}\u{3}";
 
     fn found(_: Option<&str>) -> Probe {
         Probe::Found {
@@ -469,6 +502,34 @@ mod tests {
         editor.session_output(job, &format!("\u{1}+\u{2}\u{3}{PROMPT}"));
 
         assert_eq!(contents(&editor), "> f <- function() {\n}\n> ");
+    }
+
+    #[test]
+    fn code_from_a_script_is_echoed_line_by_line_as_r_reads_it() {
+        let (mut editor, job) = started();
+        editor.session_output(job, PROMPT);
+
+        editor.r_evaluate("x <- 1\nf <- function() {\n1\n}");
+
+        assert_eq!(sent(&mut editor), ["x <- 1\nf <- function() {\n1\n}\n"]);
+        assert_eq!(contents(&editor), "> x <- 1\n");
+        editor.session_output(job, &format!("{PROMPT}{CONTINUE}{CONTINUE}{PROMPT}"));
+        assert_eq!(
+            contents(&editor),
+            "> x <- 1\n> f <- function() {\n+ 1\n+ }\n> "
+        );
+    }
+
+    #[test]
+    fn code_sent_while_r_is_busy_waits_for_its_prompt() {
+        let (mut editor, job) = started();
+
+        editor.r_evaluate("1 + 1");
+        editor.session_output(job, "R version 4.6.1\n");
+        editor.session_output(job, PROMPT);
+        editor.session_output(job, &format!("[1] 2\n{PROMPT}"));
+
+        assert_eq!(contents(&editor), "R version 4.6.1\n> 1 + 1\n[1] 2\n> ");
     }
 
     #[test]

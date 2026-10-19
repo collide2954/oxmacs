@@ -194,12 +194,16 @@ const RUST: &[(&str, Command)] = &[
 const R: &[(&str, Command)] = &[
     ("M--", Command::RInsertAssignment),
     ("C-S-m", Command::RInsertPipe),
+    ("C-RET", Command::RSendStatement),
+    ("C-c C-c", Command::RSendFunction),
+    ("C-c C-z", Command::RSwitchToConsole),
 ];
 
 const CONSOLE: &[(&str, Command)] = &[
     ("RET", Command::ComintSendInput),
     ("M-p", Command::ComintPreviousInput),
     ("M-n", Command::ComintNextInput),
+    ("C-c C-z", Command::RSwitchToConsole),
 ];
 
 const PREVIEW: &[(&str, Command)] = &[
