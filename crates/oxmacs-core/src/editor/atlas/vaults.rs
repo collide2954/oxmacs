@@ -270,6 +270,7 @@ mod tests {
     use crate::config::Config;
     use crate::editor::Editor;
     use crate::editor::test_support::{lines, press, question, type_text};
+    use crate::theme::Highlight;
 
     struct Setup {
         _home: tempfile::TempDir,
@@ -408,6 +409,28 @@ mod tests {
             fs::read_to_string(journal(&setup.root)).unwrap(),
             "title: 2026-10-19\n---\n= Monday, 19 October 2026\n\n- 09:30  Call Ana about seeds\n[ ] Buy seeds due:2026-10-23\n"
         );
+    }
+
+    #[test]
+    fn capture_input_is_highlighted_like_a_note() {
+        let mut setup = with_vault(true);
+        assert_eq!(setup.editor.minibuffer_highlights(), []);
+
+        press(&mut setup.editor, "C-c n c");
+        type_text(&mut setup.editor, "[ ] Buy seeds  due:fri  #home");
+
+        let highlights = setup.editor.minibuffer_highlights();
+        assert_eq!(highlights[0], (0..3, Highlight::Function));
+        assert!(
+            highlights.contains(&(15..22, Highlight::Warning)),
+            "{highlights:?}"
+        );
+        assert!(
+            highlights.contains(&(24..29, Highlight::Type)),
+            "{highlights:?}"
+        );
+        press(&mut setup.editor, "C-g C-c n f");
+        assert_eq!(setup.editor.minibuffer_highlights(), []);
     }
 
     #[test]

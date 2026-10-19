@@ -7,6 +7,7 @@ use crate::atlas::note::{self, Note, State, Style};
 use crate::display::runs;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
+use crate::editor::prompts::minibuffer::Purpose;
 use crate::text::{Buffer, BufferId};
 use crate::theme::Highlight;
 
@@ -177,17 +178,34 @@ impl Editor {
         else {
             return Vec::new();
         };
-        let width = buffer.line_end(line) - buffer.line_start(line);
-        let mut faces = vec![None; width];
-        let (finished, others): (Vec<_>, Vec<_>) =
-            spans.iter().partition(|span| span.style == Style::Finished);
-        for span in others.into_iter().chain(finished) {
-            let end = span.columns.end.min(width);
-            let start = span.columns.start.min(end);
-            faces[start..end].fill(Some(face(span.style)));
-        }
-        runs(&faces)
+        line_faces(spans, buffer.line_end(line) - buffer.line_start(line))
     }
+
+    pub fn minibuffer_highlights(&self) -> Vec<(Range<usize>, Highlight)> {
+        let Some(minibuffer) = &self.minibuffer else {
+            return Vec::new();
+        };
+        if minibuffer.purpose != Purpose::AtlasCapture {
+            return Vec::new();
+        }
+        let text = minibuffer.input().contents();
+        let note = note::parse(&text, (self.today)());
+        note.spans
+            .first()
+            .map_or_else(Vec::new, |spans| line_faces(spans, text.chars().count()))
+    }
+}
+
+fn line_faces(spans: &[note::Span], width: usize) -> Vec<(Range<usize>, Highlight)> {
+    let mut faces = vec![None; width];
+    let (finished, others): (Vec<_>, Vec<_>) =
+        spans.iter().partition(|span| span.style == Style::Finished);
+    for span in others.into_iter().chain(finished) {
+        let end = span.columns.end.min(width);
+        let start = span.columns.start.min(end);
+        faces[start..end].fill(Some(face(span.style)));
+    }
+    runs(&faces)
 }
 
 #[cfg(test)]
