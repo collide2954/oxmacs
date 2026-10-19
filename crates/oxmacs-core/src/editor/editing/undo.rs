@@ -4,7 +4,11 @@ use crate::editor::Editor;
 const TYPING_STEP: usize = 20;
 
 impl Editor {
-    pub(super) fn close_undo_step(&mut self, command: Command, previous: Option<Command>) {
+    pub(in crate::editor) fn close_undo_step(
+        &mut self,
+        command: Command,
+        previous: Option<Command>,
+    ) {
         let typing = command == Command::SelfInsertCommand;
         if typing && previous == Some(command) && self.typed_in_step < TYPING_STEP {
             self.typed_in_step += 1;
@@ -14,7 +18,7 @@ impl Editor {
         self.typed_in_step = usize::from(typing);
     }
 
-    pub(super) fn undo(&mut self) {
+    pub(in crate::editor) fn undo(&mut self) {
         self.shift_selection = false;
         if self.current_mut().undo() {
             self.show_message("Undo");
@@ -23,7 +27,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn redo(&mut self) {
+    pub(in crate::editor) fn redo(&mut self) {
         self.shift_selection = false;
         if self.current_mut().redo() {
             self.show_message("Redo");

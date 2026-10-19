@@ -5,13 +5,13 @@ use crate::syntax::Language;
 use crate::tools;
 
 impl Editor {
-    pub(super) fn rust_format_buffer(&mut self) {
+    pub(in crate::editor) fn rust_format_buffer(&mut self) {
         if let Err(error) = self.format_buffer_at(0) {
             self.show_message(error);
         }
     }
 
-    pub(super) fn format_buffer_at(&mut self, index: usize) -> Result<(), String> {
+    pub(in crate::editor) fn format_buffer_at(&mut self, index: usize) -> Result<(), String> {
         if self.buffers.language(index) != Some(Language::Rust) {
             return Err("No formatter for this buffer".to_owned());
         }

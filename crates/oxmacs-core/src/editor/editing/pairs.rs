@@ -22,7 +22,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn insert_pair(&mut self, typed: char) -> bool {
+    pub(in crate::editor) fn insert_pair(&mut self, typed: char) -> bool {
         let pairs = self.pairs();
         if pairs.is_empty() {
             return false;
@@ -64,7 +64,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn delete_pair(&mut self) -> bool {
+    pub(in crate::editor) fn delete_pair(&mut self) -> bool {
         let pairs = self.pairs();
         if pairs.is_empty() {
             return false;
@@ -119,7 +119,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn paren_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
+    pub(in crate::editor) fn paren_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
         let Some((open, close)) = self.paren_pair else {
             return Vec::new();
         };
@@ -135,7 +135,7 @@ impl Editor {
     }
 }
 
-pub(super) fn scan_partner(buffer: &Buffer, position: usize) -> Option<usize> {
+pub(in crate::editor) fn scan_partner(buffer: &Buffer, position: usize) -> Option<usize> {
     let bracket = buffer.chars_after(position).next()?;
     let (partner, forward) = match bracket {
         '(' => (')', true),

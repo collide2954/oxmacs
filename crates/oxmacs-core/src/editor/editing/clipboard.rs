@@ -7,7 +7,7 @@ impl Editor {
         &self.clipboard_history
     }
 
-    pub(super) fn copy(&mut self, cut: bool) {
+    pub(in crate::editor) fn copy(&mut self, cut: bool) {
         self.shift_selection = false;
         let buffer = self.current_mut();
         let range = buffer.selection().unwrap_or_else(|| {
@@ -29,7 +29,7 @@ impl Editor {
         self.effects.push(Effect::WriteClipboard(text));
     }
 
-    pub(super) fn request_paste(&mut self) {
+    pub(in crate::editor) fn request_paste(&mut self) {
         self.effects.push(Effect::ReadClipboard);
     }
 
@@ -81,7 +81,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn publish_primary(&mut self) {
+    pub(in crate::editor) fn publish_primary(&mut self) {
         let selection = self
             .buffers
             .current()

@@ -7,7 +7,7 @@ impl Editor {
         self.minibuffer.is_none() && self.buffers.syntax(0).is_some()
     }
 
-    pub(super) fn indent_for_tab(&mut self) {
+    pub(in crate::editor) fn indent_for_tab(&mut self) {
         if !self.indents() {
             self.insert_over_selection("\t");
             return;
@@ -20,7 +20,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn indent_region(&mut self) {
+    pub(in crate::editor) fn indent_region(&mut self) {
         let buffer = self.buffers.current();
         let Some(selection) = buffer.selection() else {
             self.show_message("The mark is not active now");
@@ -36,7 +36,7 @@ impl Editor {
         self.buffers.current_mut().deactivate_mark();
     }
 
-    pub(super) fn newline(&mut self) {
+    pub(in crate::editor) fn newline(&mut self) {
         if !self.indents() {
             self.insert_over_selection("\n");
             return;
@@ -70,7 +70,7 @@ impl Editor {
         self.indent_line(line + 1);
     }
 
-    pub(super) fn reindent_after(&mut self, typed: char) {
+    pub(in crate::editor) fn reindent_after(&mut self, typed: char) {
         if !self.indents() || !ELECTRIC.contains(&typed) {
             return;
         }

@@ -2,7 +2,7 @@ use crate::command::Command;
 use crate::editor::Editor;
 
 impl Editor {
-    pub(super) fn prepare_motion_selection(&mut self, shifted: bool) {
+    pub(in crate::editor) fn prepare_motion_selection(&mut self, shifted: bool) {
         if shifted && !self.current_mut().mark_active() {
             let buffer = self.current_mut();
             buffer.set_mark(buffer.point());
@@ -13,7 +13,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn set_mark_command(&mut self, previous: Option<Command>) {
+    pub(in crate::editor) fn set_mark_command(&mut self, previous: Option<Command>) {
         self.shift_selection = false;
         let buffer = self.current_mut();
         if previous == Some(Command::SetMarkCommand) && buffer.mark_active() {
@@ -25,20 +25,20 @@ impl Editor {
         }
     }
 
-    pub(super) fn exchange_point_and_mark(&mut self) {
+    pub(in crate::editor) fn exchange_point_and_mark(&mut self) {
         if !self.current_mut().exchange_point_and_mark() {
             self.show_message("No mark set in this buffer");
         }
     }
 
-    pub(super) fn mark_whole_buffer(&mut self) {
+    pub(in crate::editor) fn mark_whole_buffer(&mut self) {
         self.shift_selection = false;
         let buffer = self.current_mut();
         buffer.set_mark(buffer.len_chars());
         buffer.set_point(0);
     }
 
-    pub(super) fn keyboard_quit(&mut self) {
+    pub(in crate::editor) fn keyboard_quit(&mut self) {
         self.shift_selection = false;
         if self.minibuffer.take().is_none() {
             self.buffers.current_mut().deactivate_mark();

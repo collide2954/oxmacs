@@ -1,3 +1,11 @@
+pub(super) mod clipboard;
+pub(super) mod comments;
+pub(super) mod format;
+pub(super) mod indent;
+pub(super) mod pairs;
+pub(super) mod selection;
+pub(super) mod undo;
+
 use crate::editor::Editor;
 use crate::input::{Key, KeyCode};
 use crate::text::{Buffer, motion};

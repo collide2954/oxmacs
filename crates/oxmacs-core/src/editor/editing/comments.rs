@@ -23,7 +23,7 @@ impl Editor {
         Some(first..=last)
     }
 
-    pub(super) fn comment_line(&mut self) {
+    pub(in crate::editor) fn comment_line(&mut self) {
         let Some(prefix) = self.comment_prefix() else {
             return;
         };
@@ -37,7 +37,7 @@ impl Editor {
         buffer.set_point(buffer.line_start(line + 1));
     }
 
-    pub(super) fn comment_dwim(&mut self) {
+    pub(in crate::editor) fn comment_dwim(&mut self) {
         let Some(prefix) = self.comment_prefix() else {
             return;
         };

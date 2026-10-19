@@ -1,5 +1,5 @@
 use crate::editor::Editor;
-use crate::editor::pairs::scan_partner;
+use crate::editor::editing::pairs::scan_partner;
 use crate::syntax::motion::PREMATURE;
 use crate::text::{Buffer, motion};
 

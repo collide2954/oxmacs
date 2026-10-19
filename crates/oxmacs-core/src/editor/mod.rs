@@ -1,24 +1,17 @@
 mod buffers;
 mod build;
-mod clipboard;
-mod comments;
 mod dired;
 mod editing;
 mod effect;
-mod format;
-mod indent;
 mod job;
 mod languages;
 mod motion;
 mod page;
-mod pairs;
 mod prompts;
 mod search;
-mod selection;
 mod special;
 #[cfg(test)]
 mod test_support;
-mod undo;
 mod windows;
 
 pub use effect::Effect;
