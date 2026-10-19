@@ -129,7 +129,7 @@ pub const SETTINGS: &[Setting] = &[
         EDITING,
         "format-on-save",
         Kind::Toggle,
-        "Run rustfmt on Rust buffers when saving",
+        "Format Rust with rustfmt and R with air when saving",
     ),
     setting(
         FILES,
@@ -161,6 +161,15 @@ pub const SETTINGS: &[Setting] = &[
             "r-program",
             Kind::Text,
             "R executable for the console; Rterm on Windows",
+        ),
+        "auto-detect",
+    ),
+    optional(
+        setting(
+            R,
+            "air-program",
+            Kind::Text,
+            "air executable that formats R; M-x list-tools installs one",
         ),
         "auto-detect",
     ),

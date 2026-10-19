@@ -45,6 +45,8 @@ pub struct Config {
     pub irc_bouncer: IrcBouncer,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r_program: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub air_program: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -223,6 +225,7 @@ impl Default for Config {
             irc_server: Vec::new(),
             irc_bouncer: IrcBouncer::default(),
             r_program: None,
+            air_program: None,
         }
     }
 }
@@ -464,11 +467,24 @@ mod tests {
     }
 
     #[test]
+    fn the_air_program_is_found_unless_set() {
+        assert_eq!(Config::default().air_program, None);
+        assert_eq!(
+            Config::parse("air-program = \"C:/tools/air.exe\"")
+                .unwrap()
+                .air_program
+                .as_deref(),
+            Some("C:/tools/air.exe")
+        );
+    }
+
+    #[test]
     fn every_setting_in_the_schema_is_a_config_key() {
         let full = Config {
             theme: Some("adwaita".to_owned()),
             font_family: Some("Iosevka".to_owned()),
             r_program: Some("R".to_owned()),
+            air_program: Some("air".to_owned()),
             weather_location: Some("Berlin".to_owned()),
             ..Config::default()
         };
