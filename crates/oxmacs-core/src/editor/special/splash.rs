@@ -18,6 +18,7 @@ const BUTTONS: &[(Command, &str)] = &[
     (Command::SwitchToBuffer, "Switch buffers"),
     (Command::IsearchForward, "Search"),
     (Command::ExecuteExtendedCommand, "Run any command"),
+    (Command::DescribeCommand, "Explain a command"),
     (Command::SaveBuffer, "Save"),
     (Command::SaveBuffersKillOxmacs, "Quit"),
 ];
@@ -159,6 +160,17 @@ mod tests {
         let mut editor = Editor::new();
         editor.about();
         editor
+    }
+
+    #[test]
+    fn the_start_screen_points_to_command_help() {
+        let editor = shown();
+
+        assert!(
+            lines(&editor)
+                .iter()
+                .any(|line| line.contains("C-h f") && line.contains("Explain a command"))
+        );
     }
 
     fn line_of(editor: &Editor, key: &str) -> usize {
