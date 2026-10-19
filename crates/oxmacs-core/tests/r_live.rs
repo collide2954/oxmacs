@@ -201,6 +201,33 @@ fn the_environment_tables_and_objects_are_described() {
 
 #[test]
 #[ignore = "runs the R installed on this machine"]
+fn definitions_point_at_sourced_files_or_show_the_source() {
+    let directory = tempfile::tempdir().unwrap();
+    let script = directory.path().join("helpers.R");
+    std::fs::write(&script, "\n\nhelper <- function(x) {\n  x * 2\n}\n").unwrap();
+    let path = script.display().to_string().replace('\\', "/");
+    let (output, _directory) = session(&format!(
+        "source(\"{path}\", keep.source = TRUE)\ngetOption(\"oxmacs\")$definition(\"helper\")\ngetOption(\"oxmacs\")$definition(\"stats::sd\")\ngetOption(\"oxmacs\")$definition(\"mtcars\")\nq()\n"
+    ));
+
+    let definitions = marked(&output, "definition");
+    let (name, place) = definitions[0].split_once("\tfile\t").unwrap();
+    assert_eq!(name, "helper");
+    let (file, line) = place.rsplit_once('\t').unwrap();
+    assert_eq!(
+        std::path::Path::new(file).canonicalize().unwrap(),
+        script.canonicalize().unwrap()
+    );
+    assert_eq!(line, "3");
+    assert!(
+        definitions[1].starts_with("stats::sd\tsource\tfunction (x, na.rm = FALSE)"),
+        "{definitions:?}"
+    );
+    assert_eq!(definitions[2], "mtcars\t");
+}
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
 fn signatures_name_the_arguments_of_functions_only() {
     let (output, _directory) = session(
         "add <- function(a, b = 2) a + b\ngetOption(\"oxmacs\")$signature(\"add\")\ngetOption(\"oxmacs\")$signature(\"stats::sd\")\ngetOption(\"oxmacs\")$signature(\"sum\")\ngetOption(\"oxmacs\")$signature(\"mtcars\")\ngetOption(\"oxmacs\")$signature(\"nothing.here\")\n.Last.value\nq()\n",

@@ -264,6 +264,19 @@ local({
     marker("object", paste(c(name, text), collapse = "\n"))
     last()
   }
+  oxmacs$definition <- function(name) {
+    value <- tryCatch(eval(str2lang(name), globalenv()), error = function(e) NULL)
+    file <- if (is.function(value)) utils::getSrcFilename(value, full.names = TRUE) else character()
+    payload <- if (length(file) == 1 && nzchar(file) && file.exists(file)) {
+      paste(name, "file", normalizePath(file), utils::getSrcLocation(value, "line")[1], sep = "\t")
+    } else if (is.function(value)) {
+      paste(name, "source", paste(deparse(value), collapse = "\n"), sep = "\t")
+    } else {
+      paste0(name, "\t")
+    }
+    marker("definition", payload)
+    last()
+  }
   oxmacs$signature <- function(name) {
     value <- tryCatch(eval(str2lang(name), globalenv()), error = function(e) NULL)
     shown <- if (is.function(value)) args(value) else NULL
