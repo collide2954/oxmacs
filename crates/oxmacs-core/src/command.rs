@@ -528,6 +528,19 @@ pub enum Command {
     #[strum(message = "Visit the note line on this row")]
     AtlasVisit,
     #[strum(
+        message = "Show the Atlas agenda across vaults",
+        detailed_message = "Opens *Agenda*: overdue work, today's events and tasks, each of the next seven days, then tasks waiting on others, from every vault with its name in its color. RET visits a task, t cycles it, s plans it and d sets its due date (fri, tomorrow, +3d), each written back to its note; v filters by vault, g refreshes and q quits."
+    )]
+    AtlasAgenda,
+    #[strum(message = "Cycle the task on this row in its note")]
+    AtlasAgendaCycle,
+    #[strum(message = "Plan the task on this row for a day")]
+    AtlasAgendaPlan,
+    #[strum(message = "Set the due date of the task on this row")]
+    AtlasAgendaDue,
+    #[strum(message = "Show the next vault's agenda, or all of them")]
+    AtlasAgendaVault,
+    #[strum(
         message = "Cycle the task on this line: todo, doing, done",
         detailed_message = "Turns [ ] into [/] and [/] into [x], stamping done: with today's date; done, waiting and dropped tasks go back to [ ]. A task that repeats with every: is moved to its next date instead, with a done line logged under it."
     )]
@@ -755,7 +768,11 @@ impl Command {
             Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
             Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => Scope::Tools,
             Self::AtlasCycleTask | Self::AtlasFollowLink => Scope::Atlas,
-            Self::AtlasVisit => Scope::AtlasList,
+            Self::AtlasVisit
+            | Self::AtlasAgendaCycle
+            | Self::AtlasAgendaPlan
+            | Self::AtlasAgendaDue
+            | Self::AtlasAgendaVault => Scope::AtlasList,
             Self::IrcSetupNextField
             | Self::IrcSetupPreviousField
             | Self::IrcSetupChange

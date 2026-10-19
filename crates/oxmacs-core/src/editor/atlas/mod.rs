@@ -9,7 +9,9 @@ use crate::editor::buffers::Mode;
 use crate::text::{Buffer, BufferId};
 use crate::theme::Highlight;
 
-pub(in crate::editor) mod links;
+mod agenda;
+mod links;
+pub(in crate::editor) mod list;
 mod vaults;
 
 pub(in crate::editor) const EXTENSION: &str = "atlas";

@@ -54,6 +54,7 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-c n t", Command::AtlasToday),
     ("C-c n c", Command::AtlasCapture),
     ("C-c n b", Command::AtlasBacklinks),
+    ("C-c n a", Command::AtlasAgenda),
     ("M-,", Command::XrefGoBack),
     ("M-g n", Command::NextError),
     ("M-g M-n", Command::NextError),
@@ -385,6 +386,11 @@ const ATLAS: &[(&str, Command)] = &[
 
 const ATLAS_LIST: &[(&str, Command)] = &[
     ("RET", Command::AtlasVisit),
+    ("t", Command::AtlasAgendaCycle),
+    ("C-c C-c", Command::AtlasAgendaCycle),
+    ("s", Command::AtlasAgendaPlan),
+    ("d", Command::AtlasAgendaDue),
+    ("v", Command::AtlasAgendaVault),
     ("n", Command::NextLine),
     ("p", Command::PreviousLine),
     ("g", Command::RevertBuffer),

@@ -8,7 +8,7 @@ use std::path::Path;
 
 use crate::dired::Listing;
 use crate::display::{ScreenLine, Viewport};
-use crate::editor::atlas::links::AtlasList;
+use crate::editor::atlas::list::AtlasList;
 use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
 use crate::editor::chat::ChatView;

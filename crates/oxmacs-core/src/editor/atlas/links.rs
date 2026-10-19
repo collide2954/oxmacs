@@ -3,29 +3,14 @@ use std::path::PathBuf;
 
 use crate::atlas::note::{self, Style};
 use crate::atlas::vault;
-use crate::display::LineStyle;
 use crate::editor::Editor;
+use crate::editor::atlas::list::ListKind;
 use crate::editor::atlas::vaults::note_template;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
-use crate::text::Buffer;
 use crate::theme::Highlight;
 
-const BACKLINKS: &str = "*Backlinks*";
 const HELP: &str = "RET visits · g refreshes · q quits";
-
-#[derive(Debug)]
-pub(in crate::editor) struct AtlasList {
-    subject: String,
-    rows: Vec<(usize, PathBuf, usize)>,
-    styles: Vec<LineStyle>,
-}
-
-impl AtlasList {
-    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
-        self.styles.get(line).cloned().unwrap_or_default()
-    }
-}
 
 impl Editor {
     fn link_at_point(&self) -> Option<String> {
@@ -94,11 +79,6 @@ impl Editor {
         Some(path)
     }
 
-    fn atlas_list_index(&self) -> Option<usize> {
-        self.buffers
-            .find_mode(|mode| matches!(mode, Mode::AtlasList(_)))
-    }
-
     pub(in crate::editor) fn atlas_backlinks(&mut self) {
         let title = self.buffers.current().file().and_then(|file| {
             let text = self.buffers.current().contents();
@@ -109,36 +89,17 @@ impl Editor {
             self.show_message("Backlinks are for Atlas notes");
             return;
         };
-        if self.atlas_list_index().is_none() {
-            let mut buffer = Buffer::with_text(BACKLINKS, "");
-            buffer.set_read_only(true);
-            self.beside(|editor| {
-                editor.add_buffer_with(
-                    buffer,
-                    Mode::AtlasList(Box::new(AtlasList {
-                        subject: title.clone(),
-                        rows: Vec::new(),
-                        styles: Vec::new(),
-                    })),
-                );
-            });
-        } else if let Some(index) = self.atlas_list_index()
-            && let Some(Mode::AtlasList(list)) = self.buffers.mode_mut(index)
-        {
-            list.subject.clone_from(&title);
-        }
-        self.render_backlinks();
-        self.show_beside(Self::atlas_list_index);
+        self.show_atlas_list(&ListKind::Backlinks(title));
     }
 
-    pub(in crate::editor) fn render_backlinks(&mut self) {
-        let Some(index) = self.atlas_list_index() else {
+    pub(super) fn render_backlinks(&mut self) {
+        let kind = ListKind::Backlinks(String::new());
+        let Some(index) = self.atlas_list_index(&kind) else {
             return;
         };
-        let Some(Mode::AtlasList(list)) = self.buffers.mode(index) else {
+        let Some(ListKind::Backlinks(subject)) = self.atlas_list_kind(index) else {
             return;
         };
-        let subject = list.subject.clone();
         let linking: Vec<(String, PathBuf)> = self
             .atlas_index()
             .backlinks(&subject)
@@ -174,27 +135,6 @@ impl Editor {
             page.fill(buffer);
             list.rows = rows;
             list.styles = page.styles;
-        }
-    }
-
-    pub(in crate::editor) fn atlas_visit(&mut self) {
-        let line = self.point_line();
-        let target = match self.buffers.mode(0) {
-            Some(Mode::AtlasList(list)) => list
-                .rows
-                .iter()
-                .find(|(row, ..)| *row == line)
-                .map(|(_, path, target)| (path.clone(), *target)),
-            _ => None,
-        };
-        let Some((path, target)) = target else {
-            self.show_message("Nothing to visit on this line");
-            return;
-        };
-        let origin = self.current_location();
-        if self.open_file(&path) {
-            self.remember_location(origin);
-            self.go_to_line(target + 1, 1);
         }
     }
 }

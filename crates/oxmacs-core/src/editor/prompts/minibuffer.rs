@@ -39,6 +39,7 @@ pub(in crate::editor) enum Purpose {
     KeepIrcPassword(usize),
     AtlasNote,
     AtlasCapture,
+    AtlasDate(bool),
     RHelp,
     SavePlot,
 }
@@ -70,6 +71,7 @@ impl Purpose {
                 | Self::IrcSetup(_)
                 | Self::KeepIrcPassword(_)
                 | Self::AtlasCapture
+                | Self::AtlasDate(_)
                 | Self::IrcPassword(..)
         )
     }
@@ -212,6 +214,7 @@ impl Editor {
             | Purpose::IrcSetup(_)
             | Purpose::KeepIrcPassword(_)
             | Purpose::AtlasCapture
+            | Purpose::AtlasDate(_)
             | Purpose::IrcPassword(..) => Vec::new(),
             Purpose::AtlasNote => self.atlas_note_completions(matches),
             Purpose::Item => self.item_completions(matches),
@@ -351,34 +354,7 @@ impl Editor {
             self.r_help_on(&input, default);
             return;
         }
-        if let Purpose::IrcPassword(index, secret, remember) = purpose {
-            let input = self.minibuffer_input();
-            self.minibuffer = None;
-            self.irc_password_entered(index, secret, remember, input);
-            return;
-        }
-        if let Purpose::Setting(index) = purpose {
-            let input = self.minibuffer_input();
-            self.minibuffer = None;
-            self.set_setting_from(index, &input);
-            return;
-        }
-        if let Purpose::IrcSetup(field) = purpose {
-            let input = self.minibuffer_input();
-            self.minibuffer = None;
-            self.set_setup_field(field, &input);
-            return;
-        }
-        if let Purpose::KeepIrcPassword(index) = purpose {
-            let input = self.minibuffer_input();
-            self.minibuffer = None;
-            self.keep_irc_password(index, &input);
-            return;
-        }
-        if purpose == Purpose::AtlasCapture {
-            let input = self.minibuffer_input();
-            self.minibuffer = None;
-            self.captured(&input);
+        if self.exit_entry_prompt(purpose) {
             return;
         }
         if purpose == Purpose::AtlasNote {
@@ -426,6 +402,38 @@ impl Editor {
             Choice::Item(position) => self.jump_to_item(position),
             Choice::Entry(_) | Choice::Page(_) => {}
         }
+    }
+
+    fn exit_entry_prompt(&mut self, purpose: Purpose) -> bool {
+        let input = self.minibuffer_input();
+        match purpose {
+            Purpose::IrcPassword(index, secret, remember) => {
+                self.minibuffer = None;
+                self.irc_password_entered(index, secret, remember, input);
+            }
+            Purpose::Setting(index) => {
+                self.minibuffer = None;
+                self.set_setting_from(index, &input);
+            }
+            Purpose::IrcSetup(field) => {
+                self.minibuffer = None;
+                self.set_setup_field(field, &input);
+            }
+            Purpose::KeepIrcPassword(index) => {
+                self.minibuffer = None;
+                self.keep_irc_password(index, &input);
+            }
+            Purpose::AtlasCapture => {
+                self.minibuffer = None;
+                self.captured(&input);
+            }
+            Purpose::AtlasDate(due) => {
+                self.minibuffer = None;
+                self.atlas_date_entered(due, &input);
+            }
+            _ => return false,
+        }
+        true
     }
 
     pub(in crate::editor) fn note_no_match(&mut self) {

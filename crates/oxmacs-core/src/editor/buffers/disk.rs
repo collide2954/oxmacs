@@ -106,7 +106,7 @@ impl Editor {
             return;
         }
         if matches!(self.buffers.mode(0), Some(Mode::AtlasList(_))) {
-            self.render_backlinks();
+            self.refresh_atlas_list();
             return;
         }
         if matches!(self.buffers.mode(0), Some(Mode::Weather(_))) {
