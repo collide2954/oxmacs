@@ -87,21 +87,30 @@ impl Editor {
     ) {
         match source {
             PasswordSource::Text(text) => self.continue_irc(server, secret, text.clone()),
-            PasswordSource::Env(variable) => match std::env::var(variable) {
-                Ok(password) => self.continue_irc(server, secret, password),
-                Err(_) => {
-                    self.show_message(format!("Set {variable} to the password for {name}"));
+            PasswordSource::Env(variable) => {
+                if let Ok(password) = std::env::var(variable) {
+                    self.continue_irc(server, secret, password);
+                } else {
+                    let prompt =
+                        format!("{variable} is not set; password for {account} on {name}: ");
+                    self.ask_irc_password(server, secret, &prompt, false);
                 }
-            },
-            PasswordSource::Ask => self.ask_irc_password(server, secret, name, account, false),
-            PasswordSource::Keychain => match (self.irc.keychain.read)(name, account) {
-                Ok(Some(password)) => self.continue_irc(server, secret, password),
-                Ok(None) => self.ask_irc_password(server, secret, name, account, true),
-                Err(problem) => {
-                    self.show_message(format!("Keychain: {problem}"));
-                    self.ask_irc_password(server, secret, name, account, false);
+            }
+            PasswordSource::Ask => {
+                let prompt = format!("Password for {account} on {name}: ");
+                self.ask_irc_password(server, secret, &prompt, false);
+            }
+            PasswordSource::Keychain => {
+                let prompt = format!("Password for {account} on {name}: ");
+                match (self.irc.keychain.read)(name, account) {
+                    Ok(Some(password)) => self.continue_irc(server, secret, password),
+                    Ok(None) => self.ask_irc_password(server, secret, &prompt, true),
+                    Err(problem) => {
+                        self.show_message(format!("Keychain: {problem}"));
+                        self.ask_irc_password(server, secret, &prompt, false);
+                    }
                 }
-            },
+            }
         }
     }
 
@@ -109,8 +118,7 @@ impl Editor {
         &mut self,
         server: &IrcServer,
         secret: Secret,
-        name: &str,
-        account: &str,
+        prompt: &str,
         remember: bool,
     ) {
         let Some(index) = self
@@ -121,8 +129,7 @@ impl Editor {
         else {
             return;
         };
-        let prompt = format!("Password for {account} on {name}: ");
-        self.open_minibuffer(&prompt, Purpose::IrcPassword(index, secret, remember));
+        self.open_minibuffer(prompt, Purpose::IrcPassword(index, secret, remember));
     }
 
     pub(in crate::editor) fn irc_password_entered(

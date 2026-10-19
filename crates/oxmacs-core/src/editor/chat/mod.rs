@@ -1118,16 +1118,31 @@ mod tests {
     }
 
     #[test]
-    fn missing_environment_passwords_are_explained() {
+    fn missing_environment_passwords_are_asked_for_instead() {
         let mut editor = with_sasl("{ env = \"OXMACS_TEST_NO_SUCH_VARIABLE\" }");
+        editor.irc.keychain.write = |server, account, password| {
+            STORED.with(|stored| {
+                stored
+                    .borrow_mut()
+                    .push(format!("{account}@{server}={password}"));
+            });
+            Ok(())
+        };
 
         irc(&mut editor);
 
+        let prompt = editor
+            .minibuffer()
+            .map(|minibuffer| minibuffer.prompt().to_owned());
         assert_eq!(
-            editor.message(),
-            Some("Set OXMACS_TEST_NO_SUCH_VARIABLE to the password for libera")
+            prompt.as_deref(),
+            Some("OXMACS_TEST_NO_SUCH_VARIABLE is not set; password for oxtest on libera: ")
         );
         assert_eq!(connections(&mut editor), []);
+        type_text(&mut editor, "hunter2");
+        press(&mut editor, "RET");
+        assert_eq!(connections(&mut editor).len(), 1);
+        STORED.with(|stored| assert!(stored.borrow().is_empty()));
     }
 
     fn local(address: &str) -> LocalDaemon {
