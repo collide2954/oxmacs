@@ -1,5 +1,6 @@
 use std::path::PathBuf;
-use std::{env, fs, io};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::{env, fs, io, process};
 
 use crate::editor::buffers::Mode;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
@@ -13,6 +14,7 @@ const MISSING: &str = "R not found; install it from https://cran.r-project.org o
 #[derive(Debug)]
 pub(in crate::editor) struct Console {
     job: Option<JobId>,
+    helper: Option<PathBuf>,
     mark: Marker,
     stream: Stream,
     queued: usize,
@@ -21,10 +23,13 @@ pub(in crate::editor) struct Console {
     recall: Option<usize>,
 }
 
+static HELPERS: AtomicU64 = AtomicU64::new(0);
+
 fn write_helper() -> io::Result<PathBuf> {
     let directory = env::temp_dir().join("oxmacs");
     fs::create_dir_all(&directory)?;
-    let path = directory.join("oxmacs.R");
+    let count = HELPERS.fetch_add(1, Ordering::Relaxed);
+    let path = directory.join(format!("r-{}-{count}.R", process::id()));
     fs::write(&path, r::HELPER)?;
     Ok(path)
 }
@@ -117,6 +122,7 @@ impl Editor {
         }));
         if let Some(console) = self.console_mut() {
             console.job = Some(job);
+            console.helper = Some(helper);
             console.stream = Stream::default();
             console.queued = 0;
             console.waiting = false;
@@ -129,6 +135,7 @@ impl Editor {
                 buffer,
                 Mode::Console(Console {
                     job: Some(job),
+                    helper: Some(helper),
                     mark,
                     stream: Stream::default(),
                     queued: 0,
@@ -167,6 +174,9 @@ impl Editor {
                     let Some(console) = self.console_mut() else {
                         return;
                     };
+                    if let Some(helper) = console.helper.take() {
+                        let _ = fs::remove_file(helper);
+                    }
                     if console.queued > 0 {
                         console.queued -= 1;
                     } else {
@@ -367,6 +377,36 @@ mod tests {
         assert_eq!(fs::read_to_string(profile).unwrap(), r::HELPER);
         assert_eq!(editor.buffer().name(), "*R*");
         assert_eq!(editor.tiling().windows().len(), 2);
+    }
+
+    #[test]
+    fn each_session_gets_its_own_helper() {
+        let first = super::write_helper().unwrap();
+        let second = super::write_helper().unwrap();
+
+        assert_ne!(first, second);
+        for path in [first, second] {
+            assert_eq!(fs::read_to_string(path).unwrap(), r::HELPER);
+        }
+    }
+
+    #[test]
+    fn the_helper_is_removed_once_r_is_ready() {
+        let mut editor = Editor::new();
+        editor.probe_r = found;
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "run-r");
+        press(&mut editor, "RET");
+        let job = sessions(&mut editor).pop().unwrap();
+        let (_, profile) = job
+            .env
+            .iter()
+            .find(|(name, _)| name == r::PROFILE_VARIABLE)
+            .unwrap();
+
+        editor.session_output(job.id, PROMPT);
+
+        assert!(!std::path::Path::new(profile).exists());
     }
 
     #[test]

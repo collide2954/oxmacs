@@ -6,8 +6,15 @@ pub const PROFILE_VARIABLE: &str = "R_PROFILE_USER";
 pub const ORIGINAL_PROFILE_VARIABLE: &str = "OXMACS_R_PROFILE_USER";
 
 pub const HELPER: &str = r#"local({
+  original <- Sys.getenv("OXMACS_R_PROFILE_USER")
+  if (nzchar(original)) {
+    Sys.setenv(R_PROFILE_USER = original)
+  } else {
+    Sys.unsetenv("R_PROFILE_USER")
+  }
+  Sys.unsetenv("OXMACS_R_PROFILE_USER")
   candidates <- c(
-    Sys.getenv("OXMACS_R_PROFILE_USER"),
+    original,
     ".Rprofile",
     path.expand("~/.Rprofile")
   )
