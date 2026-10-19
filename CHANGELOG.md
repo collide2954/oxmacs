@@ -4,6 +4,14 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- `C-v` and `M-v`, or Page Down and Page Up, scroll by a screen.
+
+### Fixed
+
+- Markdown previews scroll with the keyboard, follow the cursor in their source, and can be selected with a click.
+
 ## [0.12.0] - 2026-10-18
 
 ### Added
