@@ -34,6 +34,7 @@ pub(in crate::editor) enum Purpose {
     Item,
     Compile,
     Setting(usize),
+    RHelp,
 }
 
 impl Purpose {
@@ -85,6 +86,7 @@ pub struct Minibuffer {
     pub(in crate::editor) sources: Vec<PathBuf>,
     pub(in crate::editor) from: String,
     pub(in crate::editor) items: Vec<Item>,
+    pub(in crate::editor) default: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -118,6 +120,7 @@ impl Minibuffer {
             sources: Vec::new(),
             from: String::new(),
             items: Vec::new(),
+            default: None,
         }
     }
 
@@ -189,6 +192,7 @@ impl Editor {
             Purpose::ReplaceFrom(_)
             | Purpose::ReplaceTo(_)
             | Purpose::Compile
+            | Purpose::RHelp
             | Purpose::Setting(_)
             | Purpose::IrcPassword(..) => Vec::new(),
             Purpose::Item => self.item_completions(matches),
@@ -313,6 +317,15 @@ impl Editor {
             self.minibuffer = None;
             let directory = self.project_directory();
             self.start_compile(command, directory);
+            return;
+        }
+        if purpose == Purpose::RHelp {
+            let input = self.minibuffer_input();
+            let default = self
+                .minibuffer
+                .take()
+                .and_then(|minibuffer| minibuffer.default);
+            self.r_help_on(&input, default);
             return;
         }
         if let Purpose::IrcPassword(index, secret, remember) = purpose {

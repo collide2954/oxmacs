@@ -18,9 +18,26 @@ pub(in crate::editor) struct Help {
     command: Option<Command>,
     width: usize,
     styles: Vec<LineStyle>,
+    r: bool,
 }
 
 impl Help {
+    pub(in crate::editor) fn r(styles: Vec<LineStyle>) -> Self {
+        Self {
+            styles,
+            r: true,
+            ..Self::default()
+        }
+    }
+
+    pub(in crate::editor) fn is_r(&self) -> bool {
+        self.r
+    }
+
+    pub(in crate::editor) fn set_styles(&mut self, styles: Vec<LineStyle>) {
+        self.styles = styles;
+    }
+
     pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
@@ -89,7 +106,8 @@ impl Editor {
     }
 
     fn help_index(&self) -> Option<usize> {
-        self.buffers.find_mode(|mode| matches!(mode, Mode::Help(_)))
+        self.buffers
+            .find_mode(|mode| matches!(mode, Mode::Help(help) if !help.r))
     }
 
     pub(in crate::editor) fn describe(&mut self, command: Command) {

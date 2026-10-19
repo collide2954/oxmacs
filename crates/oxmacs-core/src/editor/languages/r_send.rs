@@ -111,62 +111,12 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
-    use crate::editor::test_support::{editor_with, press};
-    use crate::editor::{Editor, Effect, JobId};
-    use crate::external::tools::Probe;
-    use crate::syntax::Language;
-
-    const PROMPT: &str = "\u{1}>\u{2}\u{3}";
-
-    fn found(_: Option<&str>) -> Probe {
-        Probe::Found {
-            path: PathBuf::from("R-bin"),
-            version: "R version 4.6.1".to_owned(),
-        }
-    }
-
-    fn script(text: &str, point: usize) -> Editor {
-        let mut editor = editor_with(text, point);
-        editor.set_major_mode(Some(Language::R));
-        editor.probe_r = found;
-        editor
-    }
-
-    fn started(editor: &mut Editor) -> Vec<JobId> {
-        editor
-            .take_effects()
-            .into_iter()
-            .filter_map(|effect| match effect {
-                Effect::StartSession(job) => Some(job.id),
-                _ => None,
-            })
-            .collect()
-    }
-
-    fn sent(editor: &mut Editor) -> Vec<String> {
-        editor
-            .take_effects()
-            .into_iter()
-            .filter_map(|effect| match effect {
-                Effect::Send(_, text) => Some(text),
-                _ => None,
-            })
-            .collect()
-    }
-
-    fn running(editor: &mut Editor) -> JobId {
-        press(editor, "C-c C-z");
-        let job = started(editor)[0];
-        editor.session_output(job, PROMPT);
-        press(editor, "C-c C-z");
-        job
-    }
+    use crate::editor::Effect;
+    use crate::editor::test_support::{press, r_running, r_script, r_sent, r_sessions};
 
     #[test]
     fn control_return_starts_r_sends_the_statement_and_steps() {
-        let mut editor = script("x <- 1\n\ny <- df |>\n  head()\n", 2);
+        let mut editor = r_script("x <- 1\n\ny <- df |>\n  head()\n", 2);
 
         press(&mut editor, "C-RET");
 
@@ -179,63 +129,61 @@ mod tests {
 
         press(&mut editor, "C-RET");
 
-        assert_eq!(sent(&mut editor), ["y <- df |>\n  head()\n"]);
+        assert_eq!(r_sent(&mut editor), ["y <- df |>\n  head()\n"]);
         assert_eq!(editor.buffer().point(), editor.buffer().len_chars());
     }
 
     #[test]
     fn r_is_started_only_once() {
-        let mut editor = script("a\nb\n", 0);
+        let mut editor = r_script("a\nb\n", 0);
 
         press(&mut editor, "C-RET");
-        assert_eq!(started(&mut editor).len(), 1);
+        assert_eq!(r_sessions(&mut editor).len(), 1);
         press(&mut editor, "C-RET");
 
-        assert_eq!(started(&mut editor), Vec::new());
+        assert_eq!(r_sessions(&mut editor), Vec::new());
     }
 
     #[test]
     fn a_selection_is_sent_as_it_is_and_point_stays() {
-        let mut editor = script("a <- 1\nb <- 2\n", 0);
-        running(&mut editor);
-        editor.take_effects();
+        let mut editor = r_script("a <- 1\nb <- 2\n", 0);
+        r_running(&mut editor);
         press(&mut editor, "C-SPC C-e");
 
         press(&mut editor, "C-RET");
 
-        assert_eq!(sent(&mut editor), ["a <- 1\n"]);
+        assert_eq!(r_sent(&mut editor), ["a <- 1\n"]);
         assert_eq!(editor.buffer().point(), 6);
     }
 
     #[test]
     fn control_c_control_c_sends_the_function_or_the_paragraph() {
         let text = "f <- function(x) {\n  x + 1\n}\n\na <- 1\nb <- 2\n\nc <- 3\n";
-        let mut editor = script(text, 22);
-        running(&mut editor);
-        editor.take_effects();
+        let mut editor = r_script(text, 22);
+        r_running(&mut editor);
 
         press(&mut editor, "C-c C-c");
-        assert_eq!(sent(&mut editor), ["f <- function(x) {\n  x + 1\n}\n"]);
+        assert_eq!(r_sent(&mut editor), ["f <- function(x) {\n  x + 1\n}\n"]);
         assert_eq!(editor.buffer().point(), 30);
 
         press(&mut editor, "C-n C-c C-c");
-        assert_eq!(sent(&mut editor), ["a <- 1\nb <- 2\n"]);
+        assert_eq!(r_sent(&mut editor), ["a <- 1\nb <- 2\n"]);
         assert_eq!(editor.buffer().point(), 45);
     }
 
     #[test]
     fn control_c_control_z_moves_between_script_and_console() {
-        let mut editor = script("x\n", 0);
+        let mut editor = r_script("x\n", 0);
 
         press(&mut editor, "C-c C-z");
         assert_eq!(editor.buffer().name(), "*R*");
-        assert_eq!(started(&mut editor).len(), 1);
+        assert_eq!(r_sessions(&mut editor).len(), 1);
 
         press(&mut editor, "C-c C-z");
         assert_eq!(editor.buffer().name(), "t");
 
         press(&mut editor, "C-c C-z");
         assert_eq!(editor.buffer().name(), "*R*");
-        assert_eq!(started(&mut editor), Vec::new());
+        assert_eq!(r_sessions(&mut editor), Vec::new());
     }
 }

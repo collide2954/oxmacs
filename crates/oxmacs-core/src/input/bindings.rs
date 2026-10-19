@@ -197,6 +197,7 @@ const R: &[(&str, Command)] = &[
     ("C-RET", Command::RSendStatement),
     ("C-c C-c", Command::RSendFunction),
     ("C-c C-z", Command::RSwitchToConsole),
+    ("C-c C-v", Command::RHelp),
 ];
 
 const CONSOLE: &[(&str, Command)] = &[
@@ -204,6 +205,7 @@ const CONSOLE: &[(&str, Command)] = &[
     ("M-p", Command::ComintPreviousInput),
     ("M-n", Command::ComintNextInput),
     ("C-c C-z", Command::RSwitchToConsole),
+    ("C-c C-v", Command::RHelp),
 ];
 
 const PREVIEW: &[(&str, Command)] = &[

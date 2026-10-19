@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 const START: char = '\u{1}';
 const SEPARATOR: char = '\u{2}';
 const END: char = '\u{3}';
@@ -25,8 +27,56 @@ pub const HELPER: &str = r#"local({
     }
   }
 })
+local({
+  marker <- function(kind, payload) {
+    cat("\001", kind, "\002", payload, "\003", sep = "")
+  }
+  last <- function() invisible(get(".Last.value", envir = baseenv()))
+  oxmacs <- new.env()
+  oxmacs$help <- function(topic) {
+    found <- tryCatch(
+      utils::help(topic, help_type = "text"),
+      error = function(e) character()
+    )
+    if (length(found) == 0) {
+      marker("message", paste0("No R help for ", topic))
+    } else {
+      print(found)
+    }
+    last()
+  }
+  options(
+    oxmacs = oxmacs,
+    help_type = "text",
+    pager = function(files, header, title, delete.file) {
+      text <- unlist(lapply(files, readLines, warn = FALSE))
+      if (isTRUE(delete.file)) unlink(files)
+      marker("help", paste(text, collapse = "\n"))
+    }
+  )
+})
 options(prompt = "\001>\002\003", continue = "\001+\002\003")
 "#;
+
+pub fn string(text: &str) -> String {
+    let mut literal = String::with_capacity(text.len() + 2);
+    literal.push('"');
+    for c in text.chars() {
+        match c {
+            '"' => literal.push_str("\\\""),
+            '\\' => literal.push_str("\\\\"),
+            '\n' => literal.push_str("\\n"),
+            '\r' => literal.push_str("\\r"),
+            '\t' => literal.push_str("\\t"),
+            c if c.is_control() => {
+                let _ = write!(literal, "\\u{{{:x}}}", u32::from(c));
+            }
+            c => literal.push(c),
+        }
+    }
+    literal.push('"');
+    literal
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Piece {
@@ -125,6 +175,21 @@ mod tests {
                 text("b")
             ]
         );
+    }
+
+    #[test]
+    fn strings_are_quoted_for_r() {
+        assert_eq!(string("mean"), "\"mean\"");
+        assert_eq!(string("a\"b\\c"), "\"a\\\"b\\\\c\"");
+        assert_eq!(string("x\ny\u{1}"), "\"x\\ny\\u{1}\"");
+        assert_eq!(string("é"), "\"é\"");
+    }
+
+    #[test]
+    fn the_helper_answers_help_through_markers() {
+        assert!(HELPER.contains("oxmacs$help <- function(topic)"));
+        assert!(HELPER.contains("pager = function(files, header, title, delete.file)"));
+        assert!(HELPER.contains("help_type = \"text\""));
     }
 
     #[test]

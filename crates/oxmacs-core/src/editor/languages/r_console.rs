@@ -186,7 +186,7 @@ impl Editor {
                         }
                     }
                 }
-                Piece::Marker { .. } => {}
+                Piece::Marker { kind, payload } => self.r_marker(&kind, &payload),
             }
         }
     }
@@ -300,6 +300,26 @@ impl Editor {
             self.console_insert(index, &format!("{first}\n"));
         }
         self.effects.push(Effect::Send(job, format!("{code}\n")));
+    }
+
+    pub(in crate::editor) fn r_request(&mut self, call: &str) -> bool {
+        let Some(console) = self.console_mut() else {
+            return false;
+        };
+        let Some(job) = console.job else {
+            return false;
+        };
+        console.expected.push_back(None);
+        self.effects.push(Effect::Send(job, format!("{call}\n")));
+        true
+    }
+
+    fn r_marker(&mut self, kind: &str, payload: &str) {
+        match kind {
+            "message" => self.show_message(payload),
+            "help" => self.show_r_help(payload),
+            _ => {}
+        }
     }
 
     pub(in crate::editor) fn recall_input(&mut self, older: bool) {

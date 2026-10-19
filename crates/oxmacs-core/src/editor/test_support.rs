@@ -1,6 +1,12 @@
-use crate::editor::Editor;
+use std::path::PathBuf;
+
+use crate::editor::{Editor, Effect, JobId};
+use crate::external::tools::Probe;
 use crate::input::KeySequence;
+use crate::syntax::Language;
 use crate::text::Buffer;
+
+pub(super) const R_PROMPT: &str = "\u{1}>\u{2}\u{3}";
 
 pub(super) fn press(editor: &mut Editor, notation: &str) {
     let sequence: KeySequence = notation.parse().unwrap();
@@ -69,4 +75,49 @@ pub(super) fn contents_after(text: &str, point: usize, notation: &str) -> (Strin
     let mut editor = editor_with(text, point);
     press(&mut editor, notation);
     (editor.buffer().contents(), editor.buffer().point())
+}
+
+pub(super) fn r_found(_: Option<&str>) -> Probe {
+    Probe::Found {
+        path: PathBuf::from("R-bin"),
+        version: "R version 4.6.1".to_owned(),
+    }
+}
+
+pub(super) fn r_script(text: &str, point: usize) -> Editor {
+    let mut editor = editor_with(text, point);
+    editor.set_major_mode(Some(Language::R));
+    editor.probe_r = r_found;
+    editor
+}
+
+pub(super) fn r_sessions(editor: &mut Editor) -> Vec<JobId> {
+    editor
+        .take_effects()
+        .into_iter()
+        .filter_map(|effect| match effect {
+            Effect::StartSession(job) => Some(job.id),
+            _ => None,
+        })
+        .collect()
+}
+
+pub(super) fn r_sent(editor: &mut Editor) -> Vec<String> {
+    editor
+        .take_effects()
+        .into_iter()
+        .filter_map(|effect| match effect {
+            Effect::Send(_, text) => Some(text),
+            _ => None,
+        })
+        .collect()
+}
+
+pub(super) fn r_running(editor: &mut Editor) -> JobId {
+    press(editor, "C-c C-z");
+    let job = r_sessions(editor)[0];
+    editor.session_output(job, R_PROMPT);
+    press(editor, "C-c C-z");
+    editor.take_effects();
+    job
 }

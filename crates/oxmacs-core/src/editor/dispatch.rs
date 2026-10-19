@@ -126,6 +126,7 @@ impl Editor {
             Command::RSendStatement => self.r_send_statement(),
             Command::RSendFunction => self.r_send_function(),
             Command::RSwitchToConsole => self.r_switch_to_console(),
+            Command::RHelp => self.r_help(),
             Command::ComintSendInput => self.console_send_input(),
             Command::ComintPreviousInput => self.recall_input(true),
             Command::ComintNextInput => self.recall_input(false),

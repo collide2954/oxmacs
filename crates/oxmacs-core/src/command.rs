@@ -341,6 +341,11 @@ pub enum Command {
         detailed_message = "From an R script, shows *R* beside it and moves there, starting R when it isn't running. From *R*, goes back to the R script used most recently."
     )]
     RSwitchToConsole,
+    #[strum(
+        message = "Show R's help on a topic in *R help*",
+        detailed_message = "Asks for a topic, offering the symbol at point, and shows R's help for it in *R help* beside the current window. Typing ?topic in *R* shows it there too. R starts first when it isn't running."
+    )]
+    RHelp,
     #[strum(message = "Send the input after the prompt")]
     ComintSendInput,
     #[strum(
