@@ -3,10 +3,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::{env, fs, io, process};
 
 use crate::editor::buffers::Mode;
+use crate::editor::prompts::input_line::InputLine;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::external::r::{self, Piece, Stream};
 use crate::external::tools::{self, Probe};
-use crate::text::{Buffer, Marker};
+use crate::text::Buffer;
 
 const NAME: &str = "*R*";
 const MISSING: &str = "R not found; install it from https://cran.r-project.org or set r-program";
@@ -15,12 +16,10 @@ const MISSING: &str = "R not found; install it from https://cran.r-project.org o
 pub(in crate::editor) struct Console {
     job: Option<JobId>,
     helper: Option<PathBuf>,
-    mark: Marker,
+    input: InputLine,
     stream: Stream,
     queued: usize,
     waiting: bool,
-    history: Vec<String>,
-    recall: Option<usize>,
 }
 
 static HELPERS: AtomicU64 = AtomicU64::new(0);
@@ -129,19 +128,17 @@ impl Editor {
             return true;
         }
         let mut buffer = Buffer::new(NAME);
-        let mark = buffer.add_marker(0);
+        let input = InputLine::new(&mut buffer);
         self.beside(|editor| {
             editor.add_buffer_with(
                 buffer,
                 Mode::Console(Console {
                     job: Some(job),
                     helper: Some(helper),
-                    mark,
+                    input,
                     stream: Stream::default(),
                     queued: 0,
                     waiting: false,
-                    history: Vec::new(),
-                    recall: None,
                 }),
             );
         });
@@ -206,7 +203,7 @@ impl Editor {
     }
 
     fn console_insert(&mut self, index: usize, text: &str) {
-        let Some(mark) = self.console().map(|console| console.mark) else {
+        let Some(mark) = self.console().map(|console| console.input.mark()) else {
             return;
         };
         let Some(buffer) = self.buffers.get_mut(index) else {
@@ -221,20 +218,18 @@ impl Editor {
     }
 
     fn console_input(&self) -> Option<(usize, String)> {
-        let console = self.console()?;
+        let input = &self.console()?.input;
         let buffer = self.buffers.current();
-        let start = buffer.marker(console.mark)?;
-        Some((start, buffer.text_in(start..buffer.len_chars())))
+        Some((input.start(buffer)?, input.text(buffer)?))
     }
 
     fn replace_console_input(&mut self, text: &str) {
-        let Some((start, _)) = self.console_input() else {
+        let Some(index) = self.console_index() else {
             return;
         };
-        let buffer = self.buffers.current_mut();
-        buffer.delete_range(start..buffer.len_chars());
-        buffer.insert_at(start, text);
-        buffer.set_point(buffer.len_chars());
+        if let Some((buffer, Mode::Console(console))) = self.buffers.entry_mut(index) {
+            console.input.replace(buffer, text);
+        }
     }
 
     pub(in crate::editor) fn console_send_input(&mut self) {
@@ -255,11 +250,8 @@ impl Editor {
             return;
         };
         let after = end + 1;
-        let mark = console.mark;
-        if !input.trim().is_empty() && console.history.last() != Some(&input) {
-            console.history.push(input.clone());
-        }
-        console.recall = None;
+        let mark = console.input.mark();
+        console.input.remember(&input);
         self.buffers.current_mut().set_marker(mark, after);
         self.send_to_r(&format!("{input}\n"));
     }
@@ -282,23 +274,10 @@ impl Editor {
         let Some(console) = self.console_mut() else {
             return;
         };
-        if console.history.is_empty() {
-            self.show_message("No history");
-            return;
+        match console.input.recall(older) {
+            Some(text) => self.replace_console_input(&text),
+            None => self.show_message("No history"),
         }
-        let last = console.history.len() - 1;
-        let next = match (console.recall, older) {
-            (None, true) => Some(last),
-            (None, false) => None,
-            (Some(index), true) => Some(index.saturating_sub(1)),
-            (Some(index), false) => (index < last).then_some(index + 1),
-        };
-        console.recall = next;
-        let text = next
-            .and_then(|index| console.history.get(index))
-            .cloned()
-            .unwrap_or_default();
-        self.replace_console_input(&text);
     }
 }
 

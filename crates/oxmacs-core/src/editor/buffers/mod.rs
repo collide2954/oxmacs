@@ -72,6 +72,12 @@ impl BufferList {
         self.entries.iter().position(|entry| matches(&entry.mode))
     }
 
+    pub(super) fn entry_mut(&mut self, index: usize) -> Option<(&mut Buffer, &mut Mode)> {
+        self.entries
+            .get_mut(index)
+            .map(|entry| (&mut entry.buffer, &mut entry.mode))
+    }
+
     pub(super) fn mode_mut(&mut self, index: usize) -> Option<&mut Mode> {
         self.entries.get_mut(index).map(|entry| &mut entry.mode)
     }
