@@ -1,3 +1,5 @@
+use unicode_width::UnicodeWidthStr;
+
 use crate::display::LineStyle;
 use crate::text::Buffer;
 use crate::theme::Highlight;
@@ -49,7 +51,7 @@ pub(super) fn fill(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
     for word in text.split_whitespace() {
-        let needed = line.chars().count() + 1 + word.chars().count();
+        let needed = line.width() + 1 + word.width();
         if !line.is_empty() && needed > width {
             lines.push(std::mem::take(&mut line));
         }
@@ -88,6 +90,11 @@ mod tests {
 
         assert_eq!(page.text, "one two\nthree\nfourteen\nsixteen-letters\nx\n");
         assert_eq!(page.styles.len(), 5);
+    }
+
+    #[test]
+    fn wide_characters_fill_by_their_display_width() {
+        assert_eq!(fill("日本 語", 5), ["日本", "語"]);
     }
 
     #[test]
