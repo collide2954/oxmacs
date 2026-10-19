@@ -254,18 +254,13 @@ pub enum Command {
     KillOxmacs,
     #[strum(message = "Show the oxmacs start screen")]
     AboutOxmacs,
-    #[strum(
-        message = "Turn on experimental features for this session",
-        detailed_message = "Experimental features are still taking shape and may change or go away: M-x experimental-splash-screen for now. They stay hidden from M-x until this command turns them on. The change shows as unsaved in *Settings*; save it there with C-x C-s to keep it."
-    )]
-    EnableExperimentalFeatures,
-    #[strum(message = "Turn experimental features off again")]
-    DisableExperimentalFeatures,
+    #[cfg(feature = "animated-splash")]
     #[strum(
         message = "Show the start screen with an animated logo",
-        detailed_message = "An experimental start screen: the oxmacs logo in block letters, animated above the usual keys. a cycles the animation between a drifting plasma field with a shimmer, a color wave through the letters, and the logo assembling from scattered pixels before it twinkles. The animation holds still when animations are off. Needs M-x enable-experimental-features."
+        detailed_message = "The experimental start screen, built with the animated-splash cargo feature, where it also replaces *oxmacs* at startup and for about-oxmacs: the oxmacs logo in block letters, animated above the usual keys. a cycles between a drifting plasma field with a shimmer, a color wave through the letters, and the logo assembling from scattered pixels before it twinkles. The animation holds still when animations are off."
     )]
     ExperimentalSplashScreen,
+    #[cfg(feature = "animated-splash")]
     #[strum(message = "Switch the start screen's logo animation")]
     CycleSplashAnimation,
     #[strum(
@@ -729,13 +724,6 @@ impl Command {
         )
     }
 
-    pub fn is_experimental(self) -> bool {
-        matches!(
-            self,
-            Self::ExperimentalSplashScreen | Self::CycleSplashAnimation
-        )
-    }
-
     fn atlas_scope(self) -> Option<Scope> {
         Some(match self {
             Self::AtlasCycleTask | Self::AtlasFollowLink => Scope::Atlas,
@@ -786,10 +774,9 @@ impl Command {
             | Self::DiredDoCopy
             | Self::DiredCreateDirectory
             | Self::DiredDoOpen => Scope::Dired,
-            Self::ForwardButton
-            | Self::BackwardButton
-            | Self::PushButton
-            | Self::CycleSplashAnimation => Scope::Splash,
+            Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
+            #[cfg(feature = "animated-splash")]
+            Self::CycleSplashAnimation => Scope::Splash,
             Self::WidgetForward | Self::WidgetBackward | Self::WidgetButtonPress => {
                 Scope::Customize
             }

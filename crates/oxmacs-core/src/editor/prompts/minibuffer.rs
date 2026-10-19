@@ -233,8 +233,7 @@ impl Editor {
                 let scope = command.scope();
                 let available =
                     everywhere || scope == Scope::Global || scope == self.buffer_scope();
-                let allowed = !command.is_experimental() || self.config.experimental_features;
-                available && allowed && matches(command.name())
+                available && matches(command.name())
             })
             .collect();
         let typed = self

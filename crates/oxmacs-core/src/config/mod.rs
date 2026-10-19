@@ -49,7 +49,6 @@ pub struct Config {
     pub air_program: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub atlas_vault: Vec<AtlasVault>,
-    pub experimental_features: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -248,7 +247,6 @@ impl Default for Config {
             r_program: None,
             air_program: None,
             atlas_vault: Vec::new(),
-            experimental_features: false,
         }
     }
 }
@@ -993,16 +991,6 @@ password = { env = "LOCAL_IRC" }
     fn auto_save_is_on_unless_turned_off() {
         assert!(Config::default().auto_save);
         assert!(!Config::parse("auto-save = false").unwrap().auto_save);
-    }
-
-    #[test]
-    fn experimental_features_are_opt_in() {
-        assert!(!Config::default().experimental_features);
-        assert!(
-            Config::parse("experimental-features = true")
-                .unwrap()
-                .experimental_features
-        );
     }
 
     #[test]

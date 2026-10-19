@@ -44,7 +44,6 @@ const FILES: &str = "Files";
 const RUST: &str = "Rust";
 const R: &str = "R";
 const WEATHER: &str = "Weather";
-const EXPERIMENTAL: &str = "Experimental";
 
 pub const SETTINGS: &[Setting] = &[
     optional(
@@ -194,12 +193,6 @@ pub const SETTINGS: &[Setting] = &[
         "mode-line-weather",
         Kind::Toggle,
         "Current weather beside the clock",
-    ),
-    setting(
-        EXPERIMENTAL,
-        "experimental-features",
-        Kind::Toggle,
-        "Features still taking shape, such as M-x experimental-splash-screen",
     ),
 ];
 

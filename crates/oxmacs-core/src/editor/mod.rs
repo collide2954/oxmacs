@@ -29,7 +29,8 @@ pub use prompts::popup::PopupView;
 pub use prompts::question::Question;
 pub use search::isearch::Search;
 pub use search::replace::Replace;
-pub use special::splash::SplashAnimation;
+#[cfg(feature = "animated-splash")]
+pub use special::splash_art::SplashAnimation;
 pub use windows::numbers::Gutter;
 pub use windows::pane::{Pane, ScreenRow};
 pub use windows::status::{BufferState, Status};
@@ -506,13 +507,6 @@ impl Editor {
 
     fn run(&mut self, command: Command, shifted: bool) {
         if command.modifies_text() && self.refuse_read_only() {
-            return;
-        }
-        if command.is_experimental() && !self.config.experimental_features {
-            self.show_message(format!(
-                "{} is experimental; M-x enable-experimental-features turns it on",
-                command.name()
-            ));
             return;
         }
         let goal_column = self.goal_column.take();

@@ -1,17 +1,19 @@
 use std::fmt::Write;
 
-use toml::Value;
-
 use crate::command::{Command, Scope};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
-use crate::editor::page::Page;
+#[cfg(feature = "animated-splash")]
+use crate::editor::special::splash_art::{self, SplashAnimation};
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
 const NAME: &str = "*oxmacs*";
-const EXPERIMENTAL_NAME: &str = "*oxmacs experimental*";
+#[cfg(feature = "animated-splash")]
+const EDITION: &str = " · experimental";
+#[cfg(not(feature = "animated-splash"))]
+const EDITION: &str = "";
 const TAGLINE: &str = "An Emacs-inspired editor, written in Rust.";
 const INDENT: usize = 3;
 const TITLE_LINE: usize = 1;
@@ -27,49 +29,21 @@ const BUTTONS: &[(Command, &str)] = &[
     (Command::SaveBuffersKillOxmacs, "Quit"),
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SplashAnimation {
-    Plasma,
-    Wave,
-    Assemble,
-}
-
-impl SplashAnimation {
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Plasma => "plasma",
-            Self::Wave => "color wave",
-            Self::Assemble => "assemble",
-        }
-    }
-
-    fn next(self) -> Self {
-        match self {
-            Self::Plasma => Self::Wave,
-            Self::Wave => Self::Assemble,
-            Self::Assemble => Self::Plasma,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub(in crate::editor) struct Splash {
-    buttons: Vec<Button>,
-    art: Option<SplashAnimation>,
+    pub(super) buttons: Vec<Button>,
+    #[cfg(feature = "animated-splash")]
+    pub(in crate::editor) art: SplashAnimation,
 }
 
 #[derive(Debug)]
-struct Button {
+pub(super) struct Button {
     line: usize,
     command: Command,
     key_width: usize,
 }
 
 impl Splash {
-    pub(in crate::editor) fn art(&self) -> Option<SplashAnimation> {
-        self.art
-    }
-
     fn button(&self, line: usize) -> Option<&Button> {
         self.buttons.iter().find(|button| button.line == line)
     }
@@ -95,61 +69,35 @@ impl Splash {
 
 impl Editor {
     pub fn about(&mut self) {
-        self.show_splash(None);
-    }
-
-    pub(in crate::editor) fn experimental_splash(&mut self) {
-        self.show_splash(Some(SplashAnimation::Plasma));
-    }
-
-    pub(in crate::editor) fn experimental_features(&mut self, on: bool) {
-        self.change_config("experimental-features", Some(Value::Boolean(on)));
-        self.show_message(if on {
-            "Experimental features are on; keep them with C-x C-s in M-x customize"
-        } else {
-            "Experimental features are off"
-        });
-    }
-
-    pub fn splash_animation(&self) -> Option<SplashAnimation> {
-        self.tiling()
-            .windows()
-            .into_iter()
-            .filter_map(|window| self.pane_of(window))
-            .find_map(|pane| pane.splash_art())
-    }
-
-    fn show_splash(&mut self, art: Option<SplashAnimation>) {
-        let experimental = art.is_some();
-        if let Some(index) = self.buffers.find_mode(
-            |mode| matches!(mode, Mode::Splash(splash) if splash.art.is_some() == experimental),
-        ) {
+        if let Some(index) = self
+            .buffers
+            .find_mode(|mode| matches!(mode, Mode::Splash(_)))
+        {
             self.select_buffer(index);
             return;
         }
-        let (text, buttons) = self.splash_text(art);
-        let name = if experimental {
-            EXPERIMENTAL_NAME
-        } else {
-            NAME
-        };
-        let mut buffer = Buffer::with_text(name, &text);
+        #[cfg(feature = "animated-splash")]
+        let extras = splash_art::extras(SplashAnimation::default());
+        #[cfg(not(feature = "animated-splash"))]
+        let extras = Vec::new();
+        let (text, buttons) = self.splash_text(extras);
+        let mut buffer = Buffer::with_text(NAME, &text);
         buffer.set_read_only(true);
         buffer.set_point(buffer.line_start(FIRST_BUTTON_LINE) + INDENT);
-        self.add_buffer_with(buffer, Mode::Splash(Splash { buttons, art }));
+        let splash = Splash {
+            buttons,
+            #[cfg(feature = "animated-splash")]
+            art: SplashAnimation::default(),
+        };
+        self.add_buffer_with(buffer, Mode::Splash(splash));
     }
 
-    fn splash_text(&self, art: Option<SplashAnimation>) -> (String, Vec<Button>) {
+    pub(super) fn splash_text(&self, extras: Vec<(Command, String)>) -> (String, Vec<Button>) {
         let mut entries: Vec<(Command, String)> = BUTTONS
             .iter()
             .map(|(command, description)| (*command, (*description).to_owned()))
             .collect();
-        if let Some(art) = art {
-            entries.push((
-                Command::CycleSplashAnimation,
-                format!("Animation: {}", art.name()),
-            ));
-        }
+        entries.extend(extras);
         let keys: Vec<String> = entries
             .iter()
             .map(|(command, _)| {
@@ -172,13 +120,10 @@ impl Editor {
             .max()
             .unwrap_or(0);
         let pad = " ".repeat(INDENT);
-        let version = env!("CARGO_PKG_VERSION");
-        let title = if art.is_some() {
-            format!("oxmacs {version} · experimental")
-        } else {
-            format!("oxmacs {version}")
-        };
-        let mut text = format!("\n{pad}{title}\n{pad}{TAGLINE}\n\n");
+        let mut text = format!(
+            "\n{pad}oxmacs {}{EDITION}\n{pad}{TAGLINE}\n\n",
+            env!("CARGO_PKG_VERSION")
+        );
         let mut buttons = Vec::new();
         for (index, ((command, description), key)) in entries.iter().zip(&keys).enumerate() {
             let name = command.name();
@@ -193,25 +138,6 @@ impl Editor {
             });
         }
         (text, buttons)
-    }
-
-    pub(in crate::editor) fn cycle_splash_animation(&mut self) {
-        let Some(art) = self.buffers.splash(0).and_then(Splash::art) else {
-            self.show_message("Only the experimental start screen animates");
-            return;
-        };
-        let next = art.next();
-        let (text, buttons) = self.splash_text(Some(next));
-        if let Some((buffer, Mode::Splash(splash))) = self.buffers.entry_mut(0) {
-            Page {
-                text,
-                styles: Vec::new(),
-            }
-            .fill(buffer);
-            splash.art = Some(next);
-            splash.buttons = buttons;
-        }
-        self.show_message(format!("Animation: {}", next.name()));
     }
 
     pub(in crate::editor) fn forward_button(&mut self, forward: bool) {
@@ -254,8 +180,6 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use super::SplashAnimation;
-    use crate::command::Command;
     use crate::display::LineStyle;
     use crate::editor::test_support::{at_point, lines, press, type_text};
     use crate::editor::{Cell, Clicks, Editor};
@@ -265,128 +189,6 @@ mod tests {
         let mut editor = Editor::new();
         editor.about();
         editor
-    }
-
-    fn run(editor: &mut Editor, name: &str) {
-        press(editor, "M-x");
-        type_text(editor, name);
-        press(editor, "RET");
-    }
-
-    fn experimental() -> Editor {
-        let mut editor = Editor::new();
-        run(&mut editor, "enable-experimental-features");
-        run(&mut editor, "experimental-splash-screen");
-        editor
-    }
-
-    #[test]
-    fn experimental_commands_wait_until_they_are_enabled() {
-        let mut editor = Editor::new();
-        press(&mut editor, "M-x");
-        type_text(&mut editor, "experimental-splash");
-        assert!(
-            editor
-                .completions()
-                .iter()
-                .all(|completion| completion.label != "experimental-splash-screen")
-        );
-        press(&mut editor, "C-g");
-
-        editor.execute(Command::ExperimentalSplashScreen);
-
-        assert_eq!(editor.buffer().name(), "*scratch*");
-        assert_eq!(
-            editor.message(),
-            Some(
-                "experimental-splash-screen is experimental; M-x enable-experimental-features turns it on"
-            )
-        );
-    }
-
-    #[test]
-    fn experimental_features_stay_on_for_the_session() {
-        let mut editor = Editor::new();
-
-        run(&mut editor, "enable-experimental-features");
-        assert!(editor.config().experimental_features);
-        assert_eq!(
-            editor.message(),
-            Some("Experimental features are on; keep them with C-x C-s in M-x customize")
-        );
-
-        run(&mut editor, "disable-experimental-features");
-        assert!(!editor.config().experimental_features);
-    }
-
-    #[test]
-    fn the_experimental_splash_animates_a_logo_above_the_keys() {
-        let editor = experimental();
-
-        assert_eq!(editor.buffer().name(), "*oxmacs experimental*");
-        assert!(editor.buffer().is_read_only());
-        assert_eq!(editor.pane().splash_art(), Some(SplashAnimation::Plasma));
-        assert_eq!(editor.splash_animation(), Some(SplashAnimation::Plasma));
-        let lines = lines(&editor);
-        assert_eq!(
-            lines[1],
-            format!("   oxmacs {} · experimental", env!("CARGO_PKG_VERSION"))
-        );
-        assert!(at_point(&editor).starts_with("C-x C-f"));
-        let cycle = lines
-            .iter()
-            .find(|line| line.trim_start().starts_with("a "))
-            .unwrap();
-        assert!(cycle.contains("cycle-splash-animation"), "{cycle}");
-        assert!(cycle.ends_with("Animation: plasma"), "{cycle}");
-    }
-
-    #[test]
-    fn a_cycles_through_the_three_animations() {
-        let mut editor = experimental();
-
-        for expected in [
-            SplashAnimation::Wave,
-            SplashAnimation::Assemble,
-            SplashAnimation::Plasma,
-            SplashAnimation::Wave,
-        ] {
-            press(&mut editor, "a");
-            assert_eq!(editor.pane().splash_art(), Some(expected));
-        }
-        assert!(
-            lines(&editor)
-                .iter()
-                .any(|line| line.ends_with("Animation: color wave"))
-        );
-        assert!(at_point(&editor).starts_with("C-x C-f"));
-    }
-
-    #[test]
-    fn the_plain_splash_stays_separate_and_still() {
-        let mut editor = experimental();
-
-        editor.about();
-
-        assert_eq!(editor.buffer().name(), "*oxmacs*");
-        assert_eq!(editor.pane().splash_art(), None);
-        press(&mut editor, "a");
-        assert_eq!(
-            editor.message(),
-            Some("Only the experimental start screen animates")
-        );
-    }
-
-    #[test]
-    fn turning_experiments_off_stills_the_logo() {
-        let mut editor = experimental();
-
-        run(&mut editor, "disable-experimental-features");
-
-        assert_eq!(editor.pane().splash_art(), None);
-        assert_eq!(editor.splash_animation(), None);
-        press(&mut editor, "a");
-        assert!(editor.message().unwrap().contains("is experimental"));
     }
 
     #[test]
@@ -419,7 +221,10 @@ mod tests {
         assert!(editor.buffer().is_read_only());
         assert!(!editor.buffer().is_modified());
         let lines = lines(&editor);
-        assert_eq!(lines[1], format!("   oxmacs {}", env!("CARGO_PKG_VERSION")));
+        assert_eq!(
+            lines[1],
+            format!("   oxmacs {}{}", env!("CARGO_PKG_VERSION"), super::EDITION)
+        );
         assert_eq!(lines[2], "   An Emacs-inspired editor, written in Rust.");
     }
 
@@ -461,7 +266,12 @@ mod tests {
         assert!(at_point(&editor).starts_with("C-x d"));
 
         press(&mut editor, "p p");
-        assert!(at_point(&editor).starts_with("C-x C-c"));
+        let last = if cfg!(feature = "animated-splash") {
+            "a "
+        } else {
+            "C-x C-c"
+        };
+        assert!(at_point(&editor).starts_with(last));
 
         press(&mut editor, "TAB");
         assert!(at_point(&editor).starts_with("C-x C-f"));

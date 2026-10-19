@@ -1,10 +1,12 @@
 use std::ops::Range;
 
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
+#[cfg(feature = "animated-splash")]
+use crate::editor::SplashAnimation;
 use crate::editor::buffers::Mode;
 use crate::editor::motion::movement::display_column;
 use crate::editor::windows::status::{BufferState, Status};
-use crate::editor::{Editor, GalleryView, Gutter, PlotView, PopupView, SplashAnimation};
+use crate::editor::{Editor, GalleryView, Gutter, PlotView, PopupView};
 use crate::external::diagnostics::Severity;
 use crate::files::LineEnding;
 use crate::irc::network::Member;
@@ -155,9 +157,10 @@ impl<'a> Pane<'a> {
         }
     }
 
+    #[cfg(feature = "animated-splash")]
     pub fn splash_art(&self) -> Option<SplashAnimation> {
         match self.editor.buffers.mode(self.index) {
-            Some(Mode::Splash(splash)) if self.editor.config.experimental_features => splash.art(),
+            Some(Mode::Splash(splash)) => Some(splash.art),
             _ => None,
         }
     }

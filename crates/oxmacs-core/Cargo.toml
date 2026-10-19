@@ -35,3 +35,6 @@ tree-sitter-rust.workspace = true
 tree-sitter-toml-ng.workspace = true
 unicode-width.workspace = true
 webpki-roots.workspace = true
+
+[features]
+animated-splash = []

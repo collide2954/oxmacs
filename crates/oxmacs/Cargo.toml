@@ -8,6 +8,9 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+animated-splash = ["oxmacs-gui/animated-splash"]
+
 [dependencies]
 oxmacs-core.workspace = true
 oxmacs-gui.workspace = true
