@@ -13,6 +13,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `M-x` shows each command's key and what it does, and `C-h f` explains a command in *Help*.
 - `M-x weather` shows the forecast for `weather-location` from Open-Meteo, and `mode-line-weather` puts it beside the clock.
 - `M-x irc`: an IRCv3 client for the `[[irc-server]]` entries in config.toml, with a buffer per server, channel and private chat, a member list, slash commands, nick completion, `C-c C-b` to jump to busy chats, and SASL passwords asked for, read from the environment or kept in the OS keychain.
+- `M-x irc-setup` adds an IRC server from a short form: Libera.Chat, OFTC, EFnet or any other server, your nick, an optional account, where the password is kept, channels, and whether the bouncer keeps you connected. `C-c C-c` writes it to config.toml and offers to connect; `M-x irc` offers it when no servers exist.
 - IRC can outlive the editor: `[irc-bouncer] mode = "local"` keeps a built-in bouncer running in the background, and `mode = "remote"` uses one started with `oxmacs irc-daemon` on another machine. Messages you missed are replayed when you come back.
 - R scripts send code to R: `C-RET` sends the statement around point or the selection and moves on, `C-c C-c` sends the function or paragraph, and `C-c C-z` switches between a script and its session. Sent code shows in the console as R reads it, and R starts when needed.
 - R completion: `TAB` or `C-M-i` asks the running session, and a popup also appears after three typed characters.
