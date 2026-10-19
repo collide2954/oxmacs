@@ -377,6 +377,46 @@ pub fn rewrite(text: &str, config: &Config) -> Result<String, ConfigError> {
     Ok(document.to_string())
 }
 
+pub fn add_irc_server(
+    text: &str,
+    server: &IrcServer,
+    keep_alive: bool,
+) -> Result<String, ConfigError> {
+    let edit_error = |error: toml_edit::TomlError| ConfigError::Syntax(error.message().to_owned());
+    let mut document: toml_edit::DocumentMut = text.parse().map_err(edit_error)?;
+    let fields = toml::to_string(server).map_err(|error| ConfigError::Syntax(error.to_string()))?;
+    let parsed: toml_edit::DocumentMut = fields.parse().map_err(edit_error)?;
+    let mut table = parsed.as_table().clone();
+    if let Some(password) = table.remove("password") {
+        let value = match password {
+            toml_edit::Item::Table(inner) => {
+                toml_edit::Value::InlineTable(inner.into_inline_table())
+            }
+            other => other
+                .into_value()
+                .map_err(|_| ConfigError::Syntax("password".to_owned()))?,
+        };
+        table.insert("password", toml_edit::Item::Value(value));
+    }
+    table.set_implicit(false);
+    if let Some(toml_edit::Item::ArrayOfTables(servers)) = document.get_mut("irc-server") {
+        servers.push(table);
+    } else {
+        let mut servers = toml_edit::ArrayOfTables::new();
+        servers.push(table);
+        document.insert("irc-server", toml_edit::Item::ArrayOfTables(servers));
+    }
+    if keep_alive {
+        if !document.contains_table("irc-bouncer") {
+            document.insert("irc-bouncer", toml_edit::table());
+        }
+        document["irc-bouncer"]["mode"] = toml_edit::value("local");
+    }
+    let rewritten = document.to_string();
+    Config::parse(&rewritten)?;
+    Ok(rewritten)
+}
+
 fn syntax_error(text: &str, error: &toml::de::Error) -> ConfigError {
     let line = error
         .span()
@@ -463,6 +503,70 @@ mod tests {
             Config::parse("format-on-save = true")
                 .unwrap()
                 .format_on_save
+        );
+    }
+
+    fn libera(password: PasswordSource) -> IrcServer {
+        IrcServer {
+            name: "libera".to_owned(),
+            host: "irc.libera.chat".to_owned(),
+            port: 6697,
+            tls: true,
+            nick: "brett".to_owned(),
+            username: None,
+            realname: None,
+            channels: vec!["#emacs".to_owned(), "#rust".to_owned()],
+            sasl: Some("brett".to_owned()),
+            password,
+        }
+    }
+
+    #[test]
+    fn irc_servers_are_added_without_disturbing_the_file() {
+        let text = "# my settings\ntheme = \"adwaita\" # light\n";
+
+        let added = add_irc_server(text, &libera(PasswordSource::Keychain), false).unwrap();
+
+        assert_eq!(
+            added,
+            "# my settings\ntheme = \"adwaita\" # light\n\n[[irc-server]]\nname = \"libera\"\nhost = \"irc.libera.chat\"\nport = 6697\ntls = true\nnick = \"brett\"\nchannels = [\"#emacs\", \"#rust\"]\nsasl = \"brett\"\npassword = \"keychain\"\n"
+        );
+        let config = Config::parse(&added).unwrap();
+        assert_eq!(config.theme.as_deref(), Some("adwaita"));
+        assert_eq!(config.irc_server, [libera(PasswordSource::Keychain)]);
+        assert_eq!(config.irc_bouncer, IrcBouncer::default());
+    }
+
+    #[test]
+    fn added_servers_can_turn_on_the_local_bouncer_and_read_env_passwords() {
+        let text = "[irc-bouncer]\ntls = true\n";
+        let server = libera(PasswordSource::Env("LIBERA_PASSWORD".to_owned()));
+
+        let added = add_irc_server(text, &server, true).unwrap();
+
+        let config = Config::parse(&added).unwrap();
+        assert_eq!(config.irc_bouncer.mode, BouncerMode::Local);
+        assert_eq!(config.irc_server, [server]);
+        assert!(
+            added.contains("password = { env = \"LIBERA_PASSWORD\" }"),
+            "{added}"
+        );
+        let again = add_irc_server(
+            &added,
+            &IrcServer {
+                name: "oftc".to_owned(),
+                host: "irc.oftc.net".to_owned(),
+                ..libera(PasswordSource::Ask)
+            },
+            false,
+        )
+        .unwrap();
+        assert_eq!(Config::parse(&again).unwrap().irc_server.len(), 2);
+        assert_eq!(
+            add_irc_server(&again, &libera(PasswordSource::Ask), false)
+                .unwrap_err()
+                .to_string(),
+            "irc-server: two servers are named libera"
         );
     }
 
