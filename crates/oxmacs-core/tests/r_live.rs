@@ -65,7 +65,7 @@ fn plots_are_rendered_when_made_changed_or_asked_for() {
         .collect();
     let summary: Vec<(&str, &str, &str, &str, &str)> = plots
         .iter()
-        .map(|fields| (fields[0], fields[1], fields[2], fields[3], fields[4]))
+        .map(|fields| (fields[0], fields[1], fields[2], fields[4], fields[5]))
         .collect();
     assert_eq!(
         summary,
@@ -78,7 +78,7 @@ fn plots_are_rendered_when_made_changed_or_asked_for() {
         "{output:?}"
     );
     for fields in &plots {
-        let png = std::fs::metadata(fields[5]).unwrap();
+        let png = std::fs::metadata(fields[6]).unwrap();
         assert!(png.len() > 1000);
     }
     assert!(!output.contains("oxmacs-plots"), "{output:?}");
@@ -116,7 +116,9 @@ fn plots_are_saved_zoomed_and_deleted() {
         call("plot_zoom", "1L, 1200L, 900L"),
         call("plot_delete", "2L, 400L, 300L"),
         "abline(h = 2)\n".to_owned(),
-        call("plot_delete", "2L, 400L, 300L"),
+        call("plot_pinned", "1L, 300L, 200L"),
+        call("plot_pinned", "99L, 300L, 200L"),
+        call("plot_delete", "3L, 400L, 300L"),
         call("plot_delete", "1L, 400L, 300L"),
         "q()\n".to_owned(),
     ]
@@ -150,6 +152,8 @@ fn plots_are_saved_zoomed_and_deleted() {
             "new 2 2",
             "deleted 1 1",
             "new 2 2",
+            "pinned 1 2",
+            "gone 99",
             "deleted 1 1",
             "none"
         ],

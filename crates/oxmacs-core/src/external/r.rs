@@ -64,6 +64,8 @@ local({
   }
   plots <- new.env()
   plots$history <- list()
+  plots$ids <- integer()
+  plots$next_id <- 1L
   plots$fresh <- FALSE
   plots$device <- 0L
   plots$count <- 0L
@@ -104,15 +106,34 @@ local({
       draw(function() bitmap(file, plots$size[1], plots$size[2], 2), index),
       error = function(e) NULL
     )
-    marker("plot", paste(why, index, length(plots$history),
+    marker("plot", paste(why, index, length(plots$history), plots$ids[index],
       plots$size[1], plots$size[2], normalizePath(file, winslash = "/"), sep = "\t"))
   }
+  find <- function(id) match(id, plots$ids)
+  gone <- function() marker("message", "That plot is no longer in the history")
   oxmacs$plot <- function(index, width, height) {
     plots$size <- c(width, height)
     if (index >= 1 && index <= length(plots$history)) render("asked", index)
     last()
   }
-  oxmacs$plot_save <- function(index, file, width, height) {
+  oxmacs$plot_pinned <- function(id, width, height) {
+    index <- find(id)
+    if (is.na(index)) {
+      marker("plot", paste("gone", id, sep = "\t"))
+    } else {
+      size <- plots$size
+      plots$size <- c(width, height)
+      render("pinned", index)
+      plots$size <- size
+    }
+    last()
+  }
+  oxmacs$plot_save <- function(id, file, width, height) {
+    index <- find(id)
+    if (is.na(index)) {
+      gone()
+      return(last())
+    }
     open <- switch(tolower(tools::file_ext(file)),
       pdf = function() grDevices::pdf(file, width = width / 96, height = height / 96),
       svg = function() grDevices::svg(file, width = width / 96, height = height / 96),
@@ -129,10 +150,14 @@ local({
     })
     last()
   }
-  oxmacs$plot_delete <- function(index, width, height) {
+  oxmacs$plot_delete <- function(id, width, height) {
+    index <- find(id)
     count <- length(plots$history)
-    if (index >= 1 && index <= count) {
+    if (is.na(index)) {
+      index <- count
+    } else {
       plots$history[[index]] <- NULL
+      plots$ids <- plots$ids[-index]
       if (index == count) plots$detached <- TRUE
     }
     plots$size <- c(width, height)
@@ -149,7 +174,12 @@ local({
     marker("gallery", paste(files, collapse = "\t"))
     last()
   }
-  oxmacs$plot_zoom <- function(index, width, height) {
+  oxmacs$plot_zoom <- function(id, width, height) {
+    index <- find(id)
+    if (is.na(index)) {
+      gone()
+      return(last())
+    }
     file <- numbered("zoom")
     tryCatch(draw(function() bitmap(file, width, height, 1), index), error = function(e) NULL)
     marker("zoom", normalizePath(file, winslash = "/"))
@@ -162,6 +192,10 @@ local({
         index <- length(plots$history)
         if (plots$fresh || isTRUE(plots$detached) || index == 0L) index <- index + 1L
         plots$detached <- FALSE
+        if (index > length(plots$ids)) {
+          plots$ids[index] <- plots$next_id
+          plots$next_id <- plots$next_id + 1L
+        }
         plots$history[[index]] <- shown
         plots$last <- shown
         render("new", index)

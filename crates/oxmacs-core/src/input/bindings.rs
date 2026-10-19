@@ -342,6 +342,7 @@ const PLOTS: &[(&str, Command)] = &[
     ("d", Command::RPlotDelete),
     ("z", Command::RPlotZoom),
     ("v", Command::RPlotGallery),
+    ("k", Command::RPlotPin),
     ("RET", Command::RPlotOpen),
     ("<up>", Command::RPlotAbove),
     ("<down>", Command::RPlotBelow),

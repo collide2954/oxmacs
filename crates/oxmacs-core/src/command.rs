@@ -493,6 +493,11 @@ pub enum Command {
         detailed_message = "Switches an R plots window between the shown plot and a gallery of every plot in the history. In the gallery the arrows, n and p move the selection, and RET or a click opens the selected plot."
     )]
     RPlotGallery,
+    #[strum(
+        message = "Keep the shown R plot in its own window",
+        detailed_message = "Pins the shown plot: its window, renamed after the plot, keeps showing it while new plots open in a fresh plots window beside it. A pinned plot still redraws at its window's size and can be saved with s or zoomed with z."
+    )]
+    RPlotPin,
     #[strum(message = "Open the plot selected in the gallery")]
     RPlotOpen,
     #[strum(message = "Select the plot above in the gallery")]
@@ -660,6 +665,7 @@ impl Command {
             | Self::RPlotDelete
             | Self::RPlotZoom
             | Self::RPlotGallery
+            | Self::RPlotPin
             | Self::RPlotOpen
             | Self::RPlotAbove
             | Self::RPlotBelow => Scope::Plots,

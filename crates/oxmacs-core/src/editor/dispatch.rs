@@ -138,6 +138,7 @@ impl Editor {
             Command::RPlotDelete => self.r_plot_delete(),
             Command::RPlotZoom => self.r_plot_zoom(),
             Command::RPlotGallery => self.r_plot_gallery(),
+            Command::RPlotPin => self.r_plot_pin(),
             Command::RPlotOpen => self.r_plot_open(),
             Command::RPlotAbove => self.r_plot_row(false),
             Command::RPlotBelow => self.r_plot_row(true),

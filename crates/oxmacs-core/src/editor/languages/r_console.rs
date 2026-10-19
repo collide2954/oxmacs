@@ -75,6 +75,7 @@ impl Console {
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Sessions {
     focus: Option<BufferId>,
+    plots: Option<BufferId>,
     links: Vec<(BufferId, BufferId)>,
 }
 
@@ -107,6 +108,17 @@ impl Editor {
             .iter()
             .find(|(linked, _)| *linked == script)
             .map(|(_, console)| *console)
+    }
+
+    pub(super) fn r_plots_focus(&self) -> Option<BufferId> {
+        self.r_sessions.plots
+    }
+
+    pub(super) fn with_plots<T>(&mut self, id: BufferId, act: impl FnOnce(&mut Self) -> T) -> T {
+        let previous = self.r_sessions.plots.replace(id);
+        let result = act(self);
+        self.r_sessions.plots = previous;
+        result
     }
 
     pub(super) fn r_focused(&self) -> bool {
@@ -850,7 +862,7 @@ mod tests {
         editor.session_output(second, "two\n");
         editor.session_output(
             second,
-            &format!("\u{1}plot\u{2}new\t1\t1\t672\t480\tC:/p.png\u{3}{PROMPT}"),
+            &format!("\u{1}plot\u{2}new\t1\t1\t1\t672\t480\tC:/p.png\u{3}{PROMPT}"),
         );
 
         assert_eq!(contents(&editor), "two\n> ");

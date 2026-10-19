@@ -101,11 +101,16 @@ impl Editor {
         self.select_window(origin);
     }
 
-    pub(super) fn below(&mut self, window: WindowId, place: impl FnOnce(&mut Self)) {
+    pub(super) fn split_off(
+        &mut self,
+        window: WindowId,
+        axis: Axis,
+        place: impl FnOnce(&mut Self),
+    ) {
         let origin = self.windows.selected;
         self.select_window(window);
         let before = self.windows.next;
-        self.split_window(Axis::Rows);
+        self.split_window(axis);
         if self.windows.next != before {
             self.select_window(WindowId(before));
         }

@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use crate::editor::WindowId;
 use crate::editor::buffers::Mode;
 use crate::editor::prompts::minibuffer::Purpose;
+use crate::editor::{Axis, WindowId};
 use crate::editor::{Editor, Effect};
 use crate::external::r;
 use crate::text::{Buffer, BufferId};
@@ -11,6 +11,8 @@ const SIZE: (u32, u32) = (672, 480);
 const ZOOM_WIDTH: u32 = 1200;
 const NONE: &str = "none";
 const EMPTY: &str = "No plots";
+const GONE: &str = "gone\t";
+const PINNED: &str = "This plot is pinned; s saves it, z zooms and q closes it";
 
 type Render = (usize, (u32, u32));
 
@@ -19,6 +21,7 @@ pub struct PlotView {
     pub path: PathBuf,
     pub index: usize,
     pub count: usize,
+    pub id: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,6 +40,7 @@ fn columns(count: usize) -> usize {
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Plots {
     session: Option<BufferId>,
+    pinned: bool,
     gallery: Option<GalleryView>,
     shown: Option<PlotView>,
     size: Option<(u32, u32)>,
@@ -85,26 +89,30 @@ enum Why {
     New,
     Asked,
     Deleted,
+    Pinned,
 }
 
 struct Arrival {
     why: Why,
     index: usize,
     count: usize,
+    id: usize,
     size: (u32, u32),
     path: PathBuf,
 }
 
 fn arrival(payload: &str) -> Option<Arrival> {
-    let mut fields = payload.splitn(6, '\t');
+    let mut fields = payload.splitn(7, '\t');
     let why = match fields.next()? {
         "new" => Why::New,
         "asked" => Why::Asked,
         "deleted" => Why::Deleted,
+        "pinned" => Why::Pinned,
         _ => return None,
     };
     let index = fields.next()?.parse().ok()?;
     let count = fields.next()?.parse().ok()?;
+    let id = fields.next()?.parse().ok()?;
     let width = fields.next()?.parse().ok()?;
     let height = fields.next()?.parse().ok()?;
     let path = PathBuf::from(fields.next()?);
@@ -112,6 +120,7 @@ fn arrival(payload: &str) -> Option<Arrival> {
         why,
         index,
         count,
+        id,
         size: (width, height),
         path,
     })
@@ -119,13 +128,26 @@ fn arrival(payload: &str) -> Option<Arrival> {
 
 impl Editor {
     fn plots_index(&self) -> Option<usize> {
+        if let Some(id) = self.r_plots_focus() {
+            return self.buffers.position(|buffer| buffer.id() == id);
+        }
         let in_plots = matches!(self.buffers.mode(0), Some(Mode::Plots(_)));
         if in_plots && !self.r_focused() {
             return Some(0);
         }
         let session = self.session_id();
-        self.buffers
-            .find_mode(|mode| matches!(mode, Mode::Plots(plots) if plots.session == session))
+        self.buffers.find_mode(
+            |mode| matches!(mode, Mode::Plots(plots) if plots.session == session && !plots.pinned),
+        )
+    }
+
+    fn pinned_index(&self, id: usize) -> Option<usize> {
+        let session = self.session_id();
+        self.buffers.find_mode(|mode| {
+            matches!(mode, Mode::Plots(plots) if plots.session == session
+                && plots.pinned
+                && plots.shown.as_ref().is_some_and(|shown| shown.id == id))
+        })
     }
 
     fn plots_in(&mut self, window: WindowId) -> Option<BufferId> {
@@ -148,7 +170,7 @@ impl Editor {
         let Some(session) = plots.session else {
             return;
         };
-        self.with_session(session, act);
+        self.with_session(session, |editor| editor.with_plots(buffer, act));
     }
 
     fn plots_mut(&mut self) -> Option<&mut Plots> {
@@ -186,13 +208,21 @@ impl Editor {
             };
             editor.add_buffer_with(buffer, Mode::Plots(plots));
         };
+        let session = self.session_id();
+        let pinned = (0..self.buffers.len())
+            .filter(|index| {
+                matches!(self.buffers.mode(*index), Some(Mode::Plots(plots)) if plots.pinned && plots.session == session)
+            })
+            .filter_map(|index| self.buffers.get(index))
+            .find_map(|buffer| self.window_showing(buffer.id()));
         let console = self
             .console_index()
             .and_then(|index| self.buffers.get(index))
             .and_then(|buffer| self.window_showing(buffer.id()));
-        match console {
-            Some(window) => self.below(window, place),
-            None => self.beside(place),
+        match (pinned, console) {
+            (Some(window), _) => self.split_off(window, Axis::Columns, place),
+            (None, Some(window)) => self.split_off(window, Axis::Rows, place),
+            (None, None) => self.beside(place),
         }
     }
 
@@ -201,10 +231,28 @@ impl Editor {
             self.r_plots_emptied();
             return;
         }
+        if let Some(id) = payload.strip_prefix(GONE).and_then(|id| id.parse().ok()) {
+            self.r_plot_gone(id);
+            return;
+        }
         let Some(arrival) = arrival(payload) else {
             return;
         };
+        if arrival.why == Why::Pinned {
+            if let Some(buffer) = self
+                .pinned_index(arrival.id)
+                .and_then(|index| self.buffers.get(index))
+                .map(Buffer::id)
+            {
+                self.with_plots(buffer, |editor| editor.r_plot_arrived(arrival));
+            }
+            return;
+        }
         self.show_plots();
+        self.r_plot_arrived(arrival);
+    }
+
+    fn r_plot_arrived(&mut self, arrival: Arrival) {
         let Some(plots) = self.plots_mut() else {
             return;
         };
@@ -219,6 +267,7 @@ impl Editor {
             path: arrival.path,
             index: arrival.index,
             count: arrival.count,
+            id: arrival.id,
         });
         self.r_plot_refresh();
     }
@@ -234,7 +283,13 @@ impl Editor {
             return;
         }
         let (index, (width, height)) = want;
-        let call = format!("getOption(\"oxmacs\")$plot({index}L, {width}L, {height}L)");
+        let call = match plots.shown.as_ref().filter(|_| plots.pinned) {
+            Some(shown) => format!(
+                "getOption(\"oxmacs\")$plot_pinned({}L, {width}L, {height}L)",
+                shown.id
+            ),
+            None => format!("getOption(\"oxmacs\")$plot({index}L, {width}L, {height}L)"),
+        };
         if self.r_request(&call)
             && let Some(plots) = self.plots_mut()
         {
@@ -252,6 +307,9 @@ impl Editor {
     }
 
     pub(in crate::editor) fn r_plot_step(&mut self, forward: bool) {
+        if self.refuse_pinned() {
+            return;
+        }
         let Some(plots) = self.plots_mut() else {
             return;
         };
@@ -292,10 +350,10 @@ impl Editor {
         }
     }
 
-    fn shown_plot(&mut self, action: &str) -> Option<(usize, (u32, u32))> {
+    fn shown_plot(&mut self, action: &str) -> Option<(usize, usize, (u32, u32))> {
         let shown = self.plots_mut().and_then(|plots| {
-            let index = plots.shown.as_ref()?.index;
-            Some((index, plots.size.unwrap_or(SIZE)))
+            let shown = plots.shown.as_ref()?;
+            Some((shown.index, shown.id, plots.size.unwrap_or(SIZE)))
         });
         if shown.is_none() {
             self.show_message(format!("No plot to {action}"));
@@ -304,7 +362,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn r_plot_save(&mut self) {
-        let Some((index, _)) = self.shown_plot("save") else {
+        let Some((index, _, _)) = self.shown_plot("save") else {
             return;
         };
         if self.open_file_prompt("Save plot as: ", Purpose::SavePlot) {
@@ -314,38 +372,41 @@ impl Editor {
     }
 
     pub(in crate::editor) fn save_plot_to(&mut self, path: &Path) {
-        let Some((index, (width, height))) = self.shown_plot("save") else {
+        let Some((_, id, (width, height))) = self.shown_plot("save") else {
             return;
         };
         let file = r::string(&path.display().to_string());
         self.r_request(&format!(
-            "getOption(\"oxmacs\")$plot_save({index}L, {file}, {width}L, {height}L)"
+            "getOption(\"oxmacs\")$plot_save({id}L, {file}, {width}L, {height}L)"
         ));
     }
 
     pub(in crate::editor) fn r_plot_delete(&mut self) {
-        let Some(shown) = self.shown_plot("delete") else {
+        if self.refuse_pinned() {
+            return;
+        }
+        let Some((index, id, size)) = self.shown_plot("delete") else {
             return;
         };
-        let (index, (width, height)) = shown;
-        let call = format!("getOption(\"oxmacs\")$plot_delete({index}L, {width}L, {height}L)");
+        let (width, height) = size;
+        let call = format!("getOption(\"oxmacs\")$plot_delete({id}L, {width}L, {height}L)");
         if self.r_request(&call)
             && let Some(plots) = self.plots_mut()
         {
-            plots.asked = Some(shown);
+            plots.asked = Some((index, size));
             plots.wanted = None;
         }
     }
 
     pub(in crate::editor) fn r_plot_zoom(&mut self) {
-        let Some((index, (width, height))) = self.shown_plot("zoom") else {
+        let Some((_, id, (width, height))) = self.shown_plot("zoom") else {
             return;
         };
         let wide = width.saturating_mul(2).max(ZOOM_WIDTH);
         let tall = u32::try_from(u64::from(wide) * u64::from(height) / u64::from(width.max(1)))
             .unwrap_or(u32::MAX);
         self.r_request(&format!(
-            "getOption(\"oxmacs\")$plot_zoom({index}L, {wide}L, {tall}L)"
+            "getOption(\"oxmacs\")$plot_zoom({id}L, {wide}L, {tall}L)"
         ));
     }
 
@@ -362,6 +423,9 @@ impl Editor {
     }
 
     pub(in crate::editor) fn r_plot_gallery(&mut self) {
+        if self.refuse_pinned() {
+            return;
+        }
         if let Some(plots) = self.plots_mut()
             && plots.gallery.take().is_some()
         {
@@ -374,7 +438,7 @@ impl Editor {
             self.show_message("No plots");
             return;
         };
-        let Some((_, (width, height))) = self.shown_plot("show") else {
+        let Some((_, _, (width, height))) = self.shown_plot("show") else {
             return;
         };
         let across = columns(count);
@@ -431,6 +495,46 @@ impl Editor {
         self.r_plot_refresh();
     }
 
+    fn refuse_pinned(&mut self) -> bool {
+        let pinned = self.plots_mut().is_some_and(|plots| plots.pinned);
+        if pinned {
+            self.show_message(PINNED);
+        }
+        pinned
+    }
+
+    pub(in crate::editor) fn r_plot_pin(&mut self) {
+        if self.refuse_pinned() {
+            return;
+        }
+        let Some(index) = self.plots_index() else {
+            return;
+        };
+        let Some((buffer, Mode::Plots(plots))) = self.buffers.entry_mut(index) else {
+            return;
+        };
+        let Some(shown) = plots.shown.as_ref().map(|shown| shown.index) else {
+            self.show_message("No plot to pin");
+            return;
+        };
+        plots.pinned = true;
+        plots.gallery = None;
+        let name = buffer.name().trim_end_matches("plots*").to_owned();
+        buffer.set_name(format!("{name}plot {shown}*"));
+        self.show_message("Pinned; new plots will open beside it");
+    }
+
+    fn r_plot_gone(&mut self, id: usize) {
+        let Some(index) = self.pinned_index(id) else {
+            return;
+        };
+        if let Some((buffer, Mode::Plots(plots))) = self.buffers.entry_mut(index) {
+            plots.shown = None;
+            plots.asked = None;
+            buffer.set_text("This plot is no longer in R's history");
+        }
+    }
+
     pub(in crate::editor) fn r_plot_zoomed(&mut self, path: &str) {
         self.effects
             .push(Effect::OpenExternally(PathBuf::from(path)));
@@ -479,6 +583,7 @@ mod tests {
             path: path.into(),
             index,
             count,
+            id: index,
         }
     }
 
@@ -492,7 +597,11 @@ mod tests {
     fn a_new_plot_opens_below_the_console() {
         let (mut editor, job) = started();
 
-        plot(&mut editor, job, "new\t1\t1\t672\t480\tC:/plots/plot-1.png");
+        plot(
+            &mut editor,
+            job,
+            "new\t1\t1\t1\t672\t480\tC:/plots/plot-1.png",
+        );
 
         assert_eq!(shown(&editor), Some(view(1, 1, "C:/plots/plot-1.png")));
         assert_eq!(editor.buffer().name(), "t");
@@ -517,9 +626,17 @@ mod tests {
     #[test]
     fn later_plots_reuse_the_plots_window() {
         let (mut editor, job) = started();
-        plot(&mut editor, job, "new\t1\t1\t672\t480\tC:/plots/plot-1.png");
+        plot(
+            &mut editor,
+            job,
+            "new\t1\t1\t1\t672\t480\tC:/plots/plot-1.png",
+        );
 
-        plot(&mut editor, job, "new\t2\t2\t672\t480\tC:/plots/plot-2.png");
+        plot(
+            &mut editor,
+            job,
+            "new\t2\t2\t2\t672\t480\tC:/plots/plot-2.png",
+        );
 
         assert_eq!(shown(&editor), Some(view(2, 2, "C:/plots/plot-2.png")));
         assert_eq!(editor.tiling().windows().len(), 3);
@@ -528,7 +645,11 @@ mod tests {
     #[test]
     fn the_plots_window_has_r_redraw_at_its_size_one_request_at_a_time() {
         let (mut editor, job) = started();
-        plot(&mut editor, job, "new\t1\t1\t672\t480\tC:/plots/plot-1.png");
+        plot(
+            &mut editor,
+            job,
+            "new\t1\t1\t1\t672\t480\tC:/plots/plot-1.png",
+        );
         editor.take_effects();
 
         editor.plots_sized(plots_window(&editor), 800, 600);
@@ -542,7 +663,7 @@ mod tests {
         plot(
             &mut editor,
             job,
-            "asked\t1\t1\t800\t600\tC:/plots/plot-2.png",
+            "asked\t1\t1\t1\t800\t600\tC:/plots/plot-2.png",
         );
         assert_eq!(shown(&editor), Some(view(1, 1, "C:/plots/plot-2.png")));
         assert_eq!(
@@ -552,7 +673,7 @@ mod tests {
         plot(
             &mut editor,
             job,
-            "asked\t1\t1\t900\t600\tC:/plots/plot-3.png",
+            "asked\t1\t1\t1\t900\t600\tC:/plots/plot-3.png",
         );
         editor.plots_sized(plots_window(&editor), 900, 600);
         assert_eq!(r_sent(&mut editor), Vec::<String>::new());
@@ -561,8 +682,16 @@ mod tests {
     #[test]
     fn n_and_p_step_through_earlier_plots() {
         let (mut editor, job) = started();
-        plot(&mut editor, job, "new\t1\t2\t672\t480\tC:/plots/plot-1.png");
-        plot(&mut editor, job, "new\t2\t2\t672\t480\tC:/plots/plot-2.png");
+        plot(
+            &mut editor,
+            job,
+            "new\t1\t2\t1\t672\t480\tC:/plots/plot-1.png",
+        );
+        plot(
+            &mut editor,
+            job,
+            "new\t2\t2\t2\t672\t480\tC:/plots/plot-2.png",
+        );
         editor.take_effects();
         press(&mut editor, "C-x o C-x o");
         assert_eq!(editor.buffer().name(), R_PLOTS);
@@ -575,7 +704,7 @@ mod tests {
         plot(
             &mut editor,
             job,
-            "asked\t1\t2\t672\t480\tC:/plots/plot-3.png",
+            "asked\t1\t2\t1\t672\t480\tC:/plots/plot-3.png",
         );
         assert_eq!(shown(&editor), Some(view(1, 2, "C:/plots/plot-3.png")));
 
@@ -593,7 +722,7 @@ mod tests {
             plot(
                 editor,
                 job,
-                &format!("new\t{index}\t{count}\t672\t480\tC:/plots/plot-{index}.png"),
+                &format!("new\t{index}\t{count}\t{index}\t672\t480\tC:/plots/plot-{index}.png"),
             );
         }
         editor.take_effects();
@@ -635,7 +764,7 @@ mod tests {
         plot(
             &mut editor,
             job,
-            "deleted\t1\t1\t672\t480\tC:/plots/plot-3.png",
+            "deleted\t1\t1\t1\t672\t480\tC:/plots/plot-3.png",
         );
         assert_eq!(shown(&editor), Some(view(1, 1, "C:/plots/plot-3.png")));
 
@@ -765,7 +894,11 @@ mod tests {
 
         press(&mut editor, "C-RET");
         editor.take_effects();
-        plot(&mut editor, job, "new\t1\t1\t672\t480\tC:/plots/plot-1.png");
+        plot(
+            &mut editor,
+            job,
+            "new\t1\t1\t1\t672\t480\tC:/plots/plot-1.png",
+        );
         assert_eq!(r_sent(&mut editor), Vec::<String>::new());
         press(&mut editor, "C-RET");
         editor.session_output(job, R_PROMPT);
@@ -776,6 +909,75 @@ mod tests {
         assert_eq!(
             editor.buffer().contents(),
             "> plot(1:3)\n> abline(h = 2)\n> "
+        );
+    }
+
+    fn pane_named(editor: &Editor, name: &str) -> Option<WindowId> {
+        editor.tiling().windows().into_iter().find(|window| {
+            editor
+                .pane_of(*window)
+                .is_some_and(|pane| pane.buffer().name() == name)
+        })
+    }
+
+    #[test]
+    fn k_pins_the_plot_and_new_plots_open_beside_it() {
+        let (mut editor, job) = started();
+        in_plots(&mut editor, job, 1);
+
+        press(&mut editor, "k");
+        assert_eq!(editor.buffer().name(), "*R:analysis plot 1*");
+        plot(
+            &mut editor,
+            job,
+            "new\t2\t2\t2\t672\t480\tC:/plots/plot-2.png",
+        );
+
+        let pinned = pane_named(&editor, "*R:analysis plot 1*").unwrap();
+        let fresh = pane_named(&editor, R_PLOTS).unwrap();
+        assert_eq!(
+            editor.pane_of(pinned).unwrap().plot(),
+            Some(view(1, 1, "C:/plots/plot-1.png"))
+        );
+        assert_eq!(
+            editor.pane_of(fresh).unwrap().plot(),
+            Some(view(2, 2, "C:/plots/plot-2.png"))
+        );
+        assert_eq!(editor.tiling().windows().len(), 4);
+    }
+
+    #[test]
+    fn a_pinned_plot_redraws_by_id_and_cannot_be_browsed() {
+        let (mut editor, job) = started();
+        in_plots(&mut editor, job, 2);
+        press(&mut editor, "k");
+
+        press(&mut editor, "p");
+        assert_eq!(
+            editor.message(),
+            Some("This plot is pinned; s saves it, z zooms and q closes it")
+        );
+        let pinned = pane_named(&editor, "*R:analysis plot 2*").unwrap();
+        editor.plots_sized(pinned, 500, 400);
+        assert_eq!(
+            r_sent(&mut editor),
+            ["getOption(\"oxmacs\")$plot_pinned(2L, 500L, 400L)\n"]
+        );
+        plot(
+            &mut editor,
+            job,
+            "pinned\t2\t2\t2\t500\t400\tC:/plots/plot-9.png",
+        );
+        assert_eq!(
+            editor.pane_of(pinned).unwrap().plot(),
+            Some(view(2, 2, "C:/plots/plot-9.png"))
+        );
+
+        editor.session_output(job, &format!("\u{1}plot\u{2}gone\t2\u{3}{R_PROMPT}"));
+        assert_eq!(editor.pane_of(pinned).unwrap().plot(), None);
+        assert_eq!(
+            editor.buffer().contents(),
+            "This plot is no longer in R's history"
         );
     }
 
