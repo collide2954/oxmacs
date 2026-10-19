@@ -257,7 +257,11 @@ impl Editor {
         self.effects.push(Effect::Fetch(id, url));
     }
 
-    pub fn fetched(&mut self, id: FetchId, result: Result<String, String>) {
+    pub(in crate::editor) fn weather_fetched(
+        &mut self,
+        id: FetchId,
+        result: Result<String, String>,
+    ) {
         let request = match self.weather.pending.take() {
             Some((pending, request)) if pending == id => request,
             other => {

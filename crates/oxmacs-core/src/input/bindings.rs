@@ -361,6 +361,16 @@ const PROCESSES: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
+const TOOLS: &[(&str, Command)] = &[
+    ("i", Command::ToolInstall),
+    ("u", Command::ToolUpdate),
+    ("d", Command::ToolRemove),
+    ("n", Command::NextLine),
+    ("p", Command::PreviousLine),
+    ("g", Command::RevertBuffer),
+    ("q", Command::QuitWindow),
+];
+
 const ENVIRONMENT: &[(&str, Command)] = &[
     ("RET", Command::REnvironmentVisit),
     ("n", Command::NextLine),
@@ -392,6 +402,10 @@ pub fn table() -> Keymap {
 
 pub fn processes() -> Keymap {
     build(PROCESSES)
+}
+
+pub fn tools() -> Keymap {
+    build(TOOLS)
 }
 
 pub fn plots() -> Keymap {

@@ -101,6 +101,10 @@ impl Editor {
             self.render_processes();
             return;
         }
+        if matches!(self.buffers.mode(0), Some(Mode::Tools(_))) {
+            self.check_tool_releases();
+            return;
+        }
         if matches!(self.buffers.mode(0), Some(Mode::Weather(_))) {
             self.refresh_weather();
             return;

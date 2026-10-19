@@ -43,6 +43,15 @@ impl Release {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Install {
+    pub tool: Managed,
+    pub version: String,
+    pub archive: Asset,
+    pub checksum: Asset,
+    pub root: PathBuf,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Origin {
     Setting,

@@ -212,6 +212,7 @@ impl App {
             Message::Fetched(id, result) => self.editor.fetched(id, result),
             Message::DaemonReady(ready) => self.editor.irc_daemon_ready(ready),
             Message::ToolsProbed(probes) => self.editor.tools_probed(probes),
+            Message::ToolInstalled(tool, result) => self.editor.tool_installed(tool, result),
             Message::Irc(id, event) => {
                 if matches!(event, net::Event::Closed(_)) {
                     self.connections.retain(|(known, _)| *known != id);
@@ -342,6 +343,12 @@ impl App {
             }
             Effect::LaunchDaemon => Task::perform(start_daemon(), Message::DaemonReady),
             Effect::ProbeTools(tools) => Task::perform(probe_tools(tools), Message::ToolsProbed),
+            Effect::InstallTool(install) => {
+                let tool = install.tool;
+                Task::perform(fetch::install(install), move |result| {
+                    Message::ToolInstalled(tool, result)
+                })
+            }
             Effect::Disconnect(id) => {
                 if let Some((_, connection)) =
                     self.connections.iter().find(|(known, _)| *known == id)

@@ -493,6 +493,17 @@ pub enum Command {
     RTableNextColumn,
     #[strum(message = "Show the previous columns of the table")]
     RTablePreviousColumn,
+    #[strum(
+        message = "List the tools oxmacs can install and update",
+        detailed_message = "Opens *Tools*: each tool oxmacs can install itself, such as air for formatting R, with the version installed, the latest release, and which program runs. Opening it, or g, asks GitHub for the latest releases; nothing is downloaded until you press i to install or u to update, and d removes oxmacs's copy."
+    )]
+    ListTools,
+    #[strum(message = "Install the tool on this line")]
+    ToolInstall,
+    #[strum(message = "Update the tool on this line to its latest release")]
+    ToolUpdate,
+    #[strum(message = "Remove oxmacs's copy of the tool on this line")]
+    ToolRemove,
     #[strum(message = "Visit the buffer of the process on this line")]
     ProcessVisit,
     #[strum(message = "Stop the process on this line")]
@@ -687,6 +698,7 @@ impl Command {
             | Self::CompletionAccept
             | Self::CompletionQuit => Scope::Popup,
             Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
+            Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => Scope::Tools,
             Self::REnvironmentVisit => Scope::Environment,
             Self::RTableNextColumn | Self::RTablePreviousColumn => Scope::Table,
             Self::RPlotNext
@@ -726,6 +738,7 @@ pub enum Scope {
     Popup,
     Plots,
     Processes,
+    Tools,
     Environment,
     Table,
 }
@@ -753,6 +766,7 @@ impl Scope {
             Self::Popup => Some("the completion popup"),
             Self::Plots => Some("R plot windows"),
             Self::Processes => Some("*Processes*"),
+            Self::Tools => Some("*Tools*"),
             Self::Environment => Some("R environments"),
             Self::Table => Some("R tables"),
         }

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::editor::dired::Transfer;
 use crate::editor::special::processes::Source;
 use crate::editor::{Editor, is_keyboard_quit};
+use crate::external::managed::Managed;
 use crate::files::{DiskState, paths};
 use crate::input::{Key, KeyCode};
 
@@ -34,6 +35,7 @@ enum Pending {
     },
     Transfer(Transfer),
     StopProcess(Source),
+    RemoveTool(Managed),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,6 +199,11 @@ impl Editor {
                     self.finish_stop(source);
                 }
             }
+            Pending::RemoveTool(tool) => {
+                if answer == 'y' {
+                    self.finish_tool_removal(tool);
+                }
+            }
         }
     }
 
@@ -264,6 +271,15 @@ impl Editor {
             choices: YES_NO,
             typed: None,
             pending: Pending::StopProcess(source),
+        });
+    }
+
+    pub(in crate::editor) fn ask_to_remove_tool(&mut self, tool: Managed, version: &str) {
+        self.question = Some(Question {
+            prompt: format!("Remove {} {version}? (y or n) ", tool.name),
+            choices: YES_NO,
+            typed: None,
+            pending: Pending::RemoveTool(tool),
         });
     }
 

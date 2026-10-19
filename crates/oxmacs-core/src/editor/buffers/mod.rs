@@ -21,6 +21,7 @@ use crate::editor::special::doctor::Doctor;
 use crate::editor::special::help::Help;
 use crate::editor::special::processes::ProcessList;
 use crate::editor::special::splash::Splash;
+use crate::editor::special::toolbox::ToolList;
 use crate::editor::special::weather::WeatherView;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
@@ -45,6 +46,7 @@ pub(super) enum Mode {
     Chat(ChatView),
     Plots(Plots),
     Processes(ProcessList),
+    Tools(ToolList),
     Environment(EnvironmentView),
     Table(TableView),
 }
@@ -123,6 +125,7 @@ impl BufferList {
             | Mode::Chat(_)
             | Mode::Plots(_)
             | Mode::Processes(_)
+            | Mode::Tools(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -144,6 +147,7 @@ impl BufferList {
             | Mode::Chat(_)
             | Mode::Plots(_)
             | Mode::Processes(_)
+            | Mode::Tools(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -166,6 +170,7 @@ impl BufferList {
             | Mode::Chat(_)
             | Mode::Plots(_)
             | Mode::Processes(_)
+            | Mode::Tools(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -188,6 +193,7 @@ impl BufferList {
             | Mode::Chat(_)
             | Mode::Plots(_)
             | Mode::Processes(_)
+            | Mode::Tools(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -209,6 +215,7 @@ impl BufferList {
             | Mode::Chat(_)
             | Mode::Plots(_)
             | Mode::Processes(_)
+            | Mode::Tools(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -230,6 +237,7 @@ impl BufferList {
             | Mode::Chat(_)
             | Mode::Plots(_)
             | Mode::Processes(_)
+            | Mode::Tools(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }

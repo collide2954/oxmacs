@@ -14,6 +14,7 @@ use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{self, Config, ConfigError, ModeLineStyle};
 use oxmacs_core::editor::{ConnectionId, Editor, FetchId, JobId, WindowId};
+use oxmacs_core::external::managed::Managed;
 use oxmacs_core::external::net::{self, Connection};
 use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::external::tools::{Probe, Tool};
@@ -79,6 +80,7 @@ pub enum Message {
     Irc(ConnectionId, net::Event),
     DaemonReady(bool),
     ToolsProbed(Vec<(Tool, Probe)>),
+    ToolInstalled(Managed, Result<PathBuf, String>),
     WeatherTick,
 }
 
