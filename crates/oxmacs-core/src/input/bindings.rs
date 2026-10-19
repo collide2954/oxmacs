@@ -255,6 +255,12 @@ const HELP: &[(&str, Command)] = &[
 
 const WEATHER: &[(&str, Command)] = &[("g", Command::RevertBuffer), ("q", Command::QuitWindow)];
 
+const CHAT: &[(&str, Command)] = &[
+    ("RET", Command::IrcSendInput),
+    ("M-p", Command::ComintPreviousInput),
+    ("M-n", Command::ComintNextInput),
+];
+
 pub fn global() -> Keymap {
     build(GLOBAL)
 }
@@ -301,6 +307,10 @@ pub fn diagnostics() -> Keymap {
 
 pub fn help() -> Keymap {
     build(HELP)
+}
+
+pub fn chat() -> Keymap {
+    build(CHAT)
 }
 
 pub fn weather() -> Keymap {
@@ -404,6 +414,11 @@ mod tests {
     #[test]
     fn every_help_binding_resolves_to_its_command() {
         assert_resolves(&help(), HELP);
+    }
+
+    #[test]
+    fn every_chat_binding_resolves_to_its_command() {
+        assert_resolves(&chat(), CHAT);
     }
 
     #[test]

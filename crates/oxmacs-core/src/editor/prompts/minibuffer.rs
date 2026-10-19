@@ -16,6 +16,7 @@ const LABEL_LIMIT: usize = 80;
 pub(in crate::editor) enum Purpose {
     RunCommand,
     DescribeCommand,
+    IrcServer,
     PasteFromHistory,
     FindFile,
     WriteFile,
@@ -86,6 +87,7 @@ pub enum Choice {
     Entry(usize),
     Buffer(usize),
     Theme(Option<&'static Theme>),
+    IrcServer(usize),
     Item(usize),
 }
 
@@ -171,6 +173,7 @@ impl Editor {
                 self.buffer_completions(minibuffer.purpose, matches)
             }
             Purpose::LoadTheme => self.theme_completions(matches),
+            Purpose::IrcServer => self.irc_server_completions(matches),
             Purpose::ReplaceFrom(_)
             | Purpose::ReplaceTo(_)
             | Purpose::Compile
@@ -334,6 +337,7 @@ impl Editor {
             }
             Choice::Buffer(index) => self.choose_buffer(purpose, index),
             Choice::Theme(theme) => self.use_theme(theme),
+            Choice::IrcServer(index) => self.choose_irc_server(index),
             Choice::Item(position) => self.jump_to_item(position),
             Choice::Entry(_) => {}
         }

@@ -328,6 +328,13 @@ pub enum Command {
     RunR,
     #[strum(message = "Send the input after the prompt")]
     ComintSendInput,
+    #[strum(
+        message = "Connect to an IRC server from config.toml",
+        detailed_message = "Connects to the [[irc-server]] in config.toml, asking which one when there are several, and joins its channels. Each server, channel and private chat gets its own buffer; type after the prompt and press RET to send. Already connected, it shows the server buffer."
+    )]
+    Irc,
+    #[strum(message = "Send the message or /command after the prompt")]
+    IrcSendInput,
     #[strum(message = "Bring back the previous input")]
     ComintPreviousInput,
     #[strum(message = "Bring back the next input")]
@@ -527,6 +534,7 @@ impl Command {
             Self::ComintSendInput | Self::ComintPreviousInput | Self::ComintNextInput => {
                 Scope::Console
             }
+            Self::IrcSendInput => Scope::Chat,
             Self::Recompile
             | Self::KillCompilation
             | Self::NextErrorNoSelect
@@ -572,6 +580,7 @@ pub enum Scope {
     Diagnostics,
     Help,
     Weather,
+    Chat,
 }
 
 impl Scope {
@@ -593,6 +602,7 @@ impl Scope {
             Self::Diagnostics => Some("*Diagnostics*"),
             Self::Help => Some("*Help*"),
             Self::Weather => Some("*Weather*"),
+            Self::Chat => Some("IRC buffers"),
         }
     }
 }

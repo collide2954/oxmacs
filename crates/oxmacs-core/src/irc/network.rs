@@ -20,7 +20,7 @@ impl Target {
         }
     }
 
-    fn same(&self, other: &Self) -> bool {
+    pub fn same(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Server, Self::Server) => true,
             (Self::Channel(a), Self::Channel(b)) | (Self::Query(a), Self::Query(b)) => same(a, b),
@@ -228,6 +228,28 @@ impl Network {
 
     pub fn find(&self, target: &Target) -> Option<usize> {
         self.chats.iter().position(|chat| chat.target.same(target))
+    }
+
+    pub fn note(&mut self, index: usize, text: &str, error: bool, time: Timestamp) -> Update {
+        let line = Line {
+            time,
+            event: LineEvent::Info {
+                text: text.to_owned(),
+                error,
+            },
+            history: false,
+        };
+        if let Some(chat) = self.chats.get_mut(index) {
+            chat.lines.push(line);
+        }
+        Update::Line(index)
+    }
+
+    pub fn disconnected(&mut self) {
+        for chat in &mut self.chats {
+            chat.joined = false;
+            chat.members.clear();
+        }
     }
 
     pub fn mark_read(&mut self, index: usize) {
@@ -1004,6 +1026,28 @@ mod tests {
                 .members(&session)
                 .iter()
                 .all(|member| !member.away)
+        );
+    }
+
+    #[test]
+    fn notes_and_disconnection_are_recorded() {
+        let (mut network, session) = joined();
+        let index = network.find(&Target::Channel("#rust".to_owned())).unwrap();
+
+        assert_eq!(
+            network.note(index, "Connected", false, now()),
+            Update::Line(index)
+        );
+        network.disconnected();
+
+        assert!(!rust(&network).joined);
+        assert_eq!(rust(&network).members(&session), Vec::<Member>::new());
+        assert_eq!(
+            *last(&network),
+            LineEvent::Info {
+                text: "Connected".to_owned(),
+                error: false
+            }
         );
     }
 

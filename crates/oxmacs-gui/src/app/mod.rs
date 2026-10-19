@@ -11,7 +11,8 @@ use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{self, Config, ConfigError, ModeLineStyle};
-use oxmacs_core::editor::{Editor, FetchId, JobId, WindowId};
+use oxmacs_core::editor::{ConnectionId, Editor, FetchId, JobId, WindowId};
+use oxmacs_core::external::net::{self, Connection};
 use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
@@ -37,6 +38,7 @@ pub struct App {
     mode_line_style: ModeLineStyle,
     previews: Vec<(BufferId, u64, markdown::Content)>,
     jobs: Vec<(JobId, Handle)>,
+    connections: Vec<(ConnectionId, Connection)>,
     preview_heights: Vec<(WindowId, f32)>,
 }
 
@@ -62,6 +64,7 @@ pub enum Message {
     FocusWindow(WindowId),
     PreviewSized(WindowId, f32),
     Fetched(FetchId, Result<String, String>),
+    Irc(ConnectionId, net::Event),
     WeatherTick,
 }
 
@@ -99,6 +102,7 @@ impl App {
             mode_line_style: config.mode_line_style,
             previews: Vec::new(),
             jobs: Vec::new(),
+            connections: Vec::new(),
             preview_heights: Vec::new(),
         };
         app.configure(&config);

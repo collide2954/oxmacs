@@ -428,6 +428,17 @@ impl Buffer {
         removed
     }
 
+    pub fn splice(&mut self, range: Range<usize>, text: &str) {
+        let end = range.end.min(self.len_chars());
+        let start = range.start.min(end);
+        if start < end {
+            self.apply_delete(start, end);
+        }
+        if !text.is_empty() {
+            self.apply_insert(start, text);
+        }
+    }
+
     pub fn delete_forward(&mut self, count: usize) {
         self.delete_range(self.point..self.point.saturating_add(count));
     }
@@ -1121,5 +1132,18 @@ mod tests {
 
         assert!(!buffer.exchange_point_and_mark());
         assert_eq!(buffer.point(), 2);
+    }
+    #[test]
+    fn splicing_replaces_text_outside_the_undo_history() {
+        let mut buffer = Buffer::with_text("t", "abc|input");
+        let marker = buffer.add_marker(4);
+        buffer.set_point(9);
+
+        buffer.splice(1..3, "XYZ");
+
+        assert_eq!(buffer.contents(), "aXYZ|input");
+        assert_eq!(buffer.marker(marker), Some(5));
+        assert_eq!(buffer.point(), 10);
+        assert!(!buffer.undo());
     }
 }

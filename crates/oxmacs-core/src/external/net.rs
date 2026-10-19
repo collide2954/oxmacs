@@ -1,9 +1,9 @@
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
-use std::thread;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use rustls::pki_types::ServerName;
@@ -38,6 +38,7 @@ enum Command {
 #[derive(Debug, Clone)]
 pub struct Connection {
     commands: Sender<Command>,
+    worker: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl Connection {
@@ -47,6 +48,25 @@ impl Connection {
 
     pub fn close(&self) {
         let _ = self.commands.send(Command::Close);
+    }
+
+    pub fn wait(&self, patience: Duration) -> bool {
+        let deadline = Instant::now() + patience;
+        loop {
+            let finished = self
+                .worker
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .as_ref()
+                .is_none_or(JoinHandle::is_finished);
+            if finished {
+                return true;
+            }
+            if Instant::now() >= deadline {
+                return false;
+            }
+            thread::sleep(POLL);
+        }
     }
 }
 
@@ -91,7 +111,7 @@ impl<T: Read + Write + Send> Wire for T {}
 pub fn connect(endpoint: &Endpoint, mut report: impl FnMut(Event) + Send + 'static) -> Connection {
     let (commands, received) = mpsc::channel();
     let endpoint = endpoint.clone();
-    thread::spawn(move || {
+    let worker = thread::spawn(move || {
         let closed = match open(&endpoint) {
             Ok(stream) => {
                 report(Event::Connected);
@@ -101,7 +121,10 @@ pub fn connect(endpoint: &Endpoint, mut report: impl FnMut(Event) + Send + 'stat
         };
         report(Event::Closed(closed));
     });
-    Connection { commands }
+    Connection {
+        commands,
+        worker: Arc::new(Mutex::new(Some(worker))),
+    }
 }
 
 fn open(endpoint: &Endpoint) -> io::Result<Box<dyn Wire>> {
@@ -291,6 +314,18 @@ mod tests {
         }
         assert_eq!(lines, ["QUIT :bye"]);
         assert_eq!(next(&events), Event::Closed(None));
+    }
+
+    #[test]
+    fn waiting_returns_once_the_connection_has_closed() {
+        let (listener, endpoint) = listening();
+        let (connection, events) = connected(&endpoint);
+        let _stream = listener.accept().unwrap();
+        assert_eq!(next(&events), Event::Connected);
+
+        connection.close();
+
+        assert!(connection.wait(PATIENCE));
     }
 
     #[test]

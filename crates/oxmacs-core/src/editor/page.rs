@@ -25,19 +25,7 @@ impl Page {
     }
 
     pub(super) fn paragraph(&mut self, text: &str, width: usize) {
-        let mut line = String::new();
-        for word in text.split_whitespace() {
-            let needed = line.chars().count() + 1 + word.chars().count();
-            if !line.is_empty() && needed > width {
-                self.line(&[(&line, None)]);
-                line.clear();
-            }
-            if !line.is_empty() {
-                line.push(' ');
-            }
-            line.push_str(word);
-        }
-        if !line.is_empty() {
+        for line in fill(text, width) {
             self.line(&[(&line, None)]);
         }
     }
@@ -55,6 +43,25 @@ impl Page {
         let line = line.min(buffer.line_of(buffer.len_chars()));
         buffer.set_point((buffer.line_start(line) + column).min(buffer.line_end(line)));
     }
+}
+
+pub(super) fn fill(text: &str, width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for word in text.split_whitespace() {
+        let needed = line.chars().count() + 1 + word.chars().count();
+        if !line.is_empty() && needed > width {
+            lines.push(std::mem::take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(word);
+    }
+    if !line.is_empty() || lines.is_empty() {
+        lines.push(line);
+    }
+    lines
 }
 
 #[cfg(test)]

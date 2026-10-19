@@ -270,12 +270,17 @@ impl Editor {
         self.effects.push(Effect::Send(job, code.to_owned()));
     }
 
-    pub(in crate::editor) fn console_history(&mut self, older: bool) {
-        let Some(console) = self.console_mut() else {
+    pub(in crate::editor) fn recall_input(&mut self, older: bool) {
+        let input = match self.buffers.entry_mut(0) {
+            Some((buffer, Mode::Console(console))) => Some((buffer, &mut console.input)),
+            Some((buffer, Mode::Chat(view))) => Some((buffer, &mut view.input)),
+            _ => None,
+        };
+        let Some((buffer, input)) = input else {
             return;
         };
-        match console.input.recall(older) {
-            Some(text) => self.replace_console_input(&text),
+        match input.recall(older) {
+            Some(text) => input.replace(buffer, &text),
             None => self.show_message("No history"),
         }
     }

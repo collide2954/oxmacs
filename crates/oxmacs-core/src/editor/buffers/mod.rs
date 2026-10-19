@@ -10,6 +10,7 @@ use crate::dired::Listing;
 use crate::display::{ScreenLine, Viewport};
 use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
+use crate::editor::chat::ChatView;
 use crate::editor::languages::r_console::Console;
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::special::customize::Customize;
@@ -37,6 +38,7 @@ pub(super) enum Mode {
     Console(Console),
     Help(Help),
     Weather(WeatherView),
+    Chat(ChatView),
 }
 
 #[derive(Debug)]
@@ -109,7 +111,8 @@ impl BufferList {
             | Mode::Diagnostics(_)
             | Mode::Console(_)
             | Mode::Help(_)
-            | Mode::Weather(_) => None,
+            | Mode::Weather(_)
+            | Mode::Chat(_) => None,
         }
     }
 
@@ -125,7 +128,8 @@ impl BufferList {
             | Mode::Diagnostics(_)
             | Mode::Console(_)
             | Mode::Help(_)
-            | Mode::Weather(_) => None,
+            | Mode::Weather(_)
+            | Mode::Chat(_) => None,
         }
     }
 
@@ -142,7 +146,8 @@ impl BufferList {
             | Mode::Diagnostics(_)
             | Mode::Console(_)
             | Mode::Help(_)
-            | Mode::Weather(_) => None,
+            | Mode::Weather(_)
+            | Mode::Chat(_) => None,
         }
     }
 
@@ -159,7 +164,8 @@ impl BufferList {
             | Mode::Diagnostics(_)
             | Mode::Console(_)
             | Mode::Help(_)
-            | Mode::Weather(_) => None,
+            | Mode::Weather(_)
+            | Mode::Chat(_) => None,
         }
     }
 
@@ -175,7 +181,8 @@ impl BufferList {
             | Mode::Diagnostics(_)
             | Mode::Console(_)
             | Mode::Help(_)
-            | Mode::Weather(_) => None,
+            | Mode::Weather(_)
+            | Mode::Chat(_) => None,
         }
     }
 
@@ -191,7 +198,8 @@ impl BufferList {
             | Mode::Diagnostics(_)
             | Mode::Console(_)
             | Mode::Help(_)
-            | Mode::Weather(_) => None,
+            | Mode::Weather(_)
+            | Mode::Chat(_) => None,
         }
     }
 
@@ -262,6 +270,16 @@ impl BufferList {
                 numbers: None,
             },
         );
+    }
+
+    pub(super) fn push_back_with(&mut self, buffer: Buffer, mode: Mode) -> usize {
+        self.entries.push(Entry {
+            buffer,
+            top: ScreenLine::default(),
+            mode,
+            numbers: None,
+        });
+        self.entries.len() - 1
     }
 
     pub(super) fn set_mode(&mut self, index: usize, mode: Mode) {

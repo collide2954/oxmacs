@@ -3,12 +3,13 @@ use std::path::Path;
 use iced::font::Family;
 use iced::futures::channel::mpsc;
 use iced::theme::Mode;
-use iced::time::Instant;
+use iced::time::{Duration, Instant};
 use iced::widget::scrollable::{AbsoluteOffset, RelativeOffset};
 use iced::widget::{markdown, operation};
 use iced::{Task, clipboard, keyboard};
 use jiff::Timestamp;
-use oxmacs_core::editor::{Effect, Job, Outcome, PreviewScroll, WindowId};
+use oxmacs_core::editor::{ConnectionId, Effect, Job, Outcome, PreviewScroll, WindowId};
+use oxmacs_core::external::net::{self, Endpoint};
 use oxmacs_core::external::process;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
@@ -198,12 +199,23 @@ impl App {
                 self.editor.job_finished(job, &outcome);
             }
             Message::Fetched(id, result) => self.editor.fetched(id, result),
+            Message::Irc(id, event) => {
+                if matches!(event, net::Event::Closed(_)) {
+                    self.connections.retain(|(known, _)| *known != id);
+                }
+                self.editor.irc_event(id, event);
+            }
             Message::WeatherTick => self.editor.weather_tick(Timestamp::now()),
         }
         self.editor.prepare_display();
         self.refresh_previews();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {
+            self.editor.irc_farewell();
+            let _ = self.pending_effects();
+            for (_, connection) in self.connections.drain(..) {
+                connection.wait(FAREWELL);
+            }
             for (_, killer) in self.jobs.drain(..) {
                 killer.kill();
             }
@@ -256,6 +268,25 @@ impl App {
             Effect::Fetch(id, url) => {
                 Task::perform(fetch::get(url), move |result| Message::Fetched(id, result))
             }
+            Effect::Connect(id, endpoint) => self.connect(id, &endpoint),
+            Effect::Transmit(id, lines) => {
+                if let Some((_, connection)) =
+                    self.connections.iter().find(|(known, _)| *known == id)
+                {
+                    for line in lines {
+                        connection.send(&line);
+                    }
+                }
+                Task::none()
+            }
+            Effect::Disconnect(id) => {
+                if let Some((_, connection)) =
+                    self.connections.iter().find(|(known, _)| *known == id)
+                {
+                    connection.close();
+                }
+                Task::none()
+            }
         }
     }
 
@@ -277,6 +308,15 @@ impl App {
                 },
             ),
         }
+    }
+
+    fn connect(&mut self, id: ConnectionId, endpoint: &Endpoint) -> Task<Message> {
+        let (sender, events) = mpsc::unbounded();
+        let connection = net::connect(endpoint, move |event| {
+            let _ = sender.unbounded_send(event);
+        });
+        self.connections.push((id, connection));
+        Task::run(events, move |event| Message::Irc(id, event))
     }
 
     fn spawn(&mut self, job: &Job, session: bool) -> Task<Message> {
@@ -304,6 +344,7 @@ impl App {
 }
 
 const HAS_PRIMARY_SELECTION: bool = cfg!(target_os = "linux");
+const FAREWELL: Duration = Duration::from_secs(1);
 
 fn open_externally(path: &Path) -> Result<(), String> {
     open::that_detached(path).map_err(|error| format!("{}: {error}", path.display()))

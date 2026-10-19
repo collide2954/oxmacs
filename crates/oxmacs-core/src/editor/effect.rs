@@ -2,9 +2,13 @@ use std::mem;
 use std::path::PathBuf;
 
 use crate::editor::{Editor, Job, JobId, PreviewScroll, WindowId};
+use crate::external::net::Endpoint;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FetchId(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ConnectionId(pub u64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
@@ -20,6 +24,9 @@ pub enum Effect {
     Reconfigure,
     ScrollPreview(WindowId, PreviewScroll),
     Fetch(FetchId, String),
+    Connect(ConnectionId, Endpoint),
+    Transmit(ConnectionId, Vec<String>),
+    Disconnect(ConnectionId),
 }
 
 impl Editor {
