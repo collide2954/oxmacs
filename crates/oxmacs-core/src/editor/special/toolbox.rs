@@ -1,9 +1,10 @@
 use std::env;
+use std::ops::Range;
 use std::path::PathBuf;
 
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
-use crate::editor::page::Page;
+use crate::editor::page::{self, Page};
 use crate::editor::{Editor, Effect, FetchId};
 use crate::external::managed::{self, Install, MANAGED, Managed, Origin, Release};
 use crate::files::paths;
@@ -11,8 +12,10 @@ use crate::text::Buffer;
 use crate::theme::Highlight;
 
 const NAME: &str = "*Tools*";
-const HELP: &str = "i install  u update  d remove  g check again  q quit";
-const COLUMNS: [&str; 5] = ["Name", "Installed", "Latest", "Status", "Runs from"];
+const HELP: &str = "i install · u update · d remove · g check again · q quit";
+const INDENT: &str = "  ";
+const LABEL: usize = 11;
+const ROOM: usize = 100;
 const MEGABYTE: u64 = 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,7 +55,7 @@ impl Toolbox {
 
 #[derive(Debug, Default)]
 pub(in crate::editor) struct ToolList {
-    rows: Vec<(usize, Managed)>,
+    rows: Vec<(Range<usize>, Managed)>,
     styles: Vec<LineStyle>,
 }
 
@@ -64,7 +67,7 @@ impl ToolList {
     fn row(&self, line: usize) -> Option<Managed> {
         self.rows
             .iter()
-            .find(|(row, _)| *row == line)
+            .find(|(lines, _)| lines.contains(&line))
             .map(|(_, tool)| *tool)
     }
 }
@@ -138,9 +141,9 @@ impl Editor {
         self.show_beside(Self::tools_index);
         if created
             && let Some(Mode::Tools(list)) = self.buffers.mode(0)
-            && let Some((line, _)) = list.rows.first()
+            && let Some((lines, _)) = list.rows.first()
         {
-            let line = *line;
+            let line = lines.start;
             let buffer = self.buffers.current_mut();
             let start = buffer.line_start(line);
             buffer.set_point(start);
@@ -318,93 +321,94 @@ impl Editor {
         self.render_tools();
     }
 
+    fn tool_card(&self, page: &mut Page, tool: Managed) {
+        let installed = self.installed_tool(tool).map(|(version, _)| version);
+        let latest = self.toolbox.latest(tool);
+        let (status, highlight) =
+            status(installed.as_deref(), latest, self.toolbox.installing(tool));
+        let search = env::var_os("PATH");
+        let runs = tool
+            .locate(
+                self.tool_setting(tool),
+                self.tools_root.as_deref(),
+                search.as_deref(),
+            )
+            .map_or_else(
+                || "nothing yet".to_owned(),
+                |(path, origin)| {
+                    let from = match origin {
+                        Origin::Setting => "air-program",
+                        Origin::Managed => "oxmacs",
+                        Origin::Path => "PATH",
+                    };
+                    format!(
+                        "{} ({from})",
+                        paths::abbreviate(&path, self.home.as_deref())
+                    )
+                },
+            );
+        page.line(&[
+            (tool.name, Some(Highlight::Heading)),
+            ("  ", None),
+            (&status, Some(highlight)),
+        ]);
+        page.line(&[(
+            &format!("{INDENT}{}", tool.summary),
+            Some(Highlight::Comment),
+        )]);
+        let field = |page: &mut Page, label: &str, value: &str| {
+            let label = format!("{INDENT}{label:<LABEL$}");
+            page.line(&[(&label, Some(Highlight::Comment)), (value, None)]);
+        };
+        field(
+            page,
+            "Installed",
+            installed.as_deref().unwrap_or("not by oxmacs"),
+        );
+        field(page, "Latest", &latest_cell(latest, tool));
+        field(page, "Runs from", &runs);
+        field(page, "Source", &format!("github.com/{}", tool.repository));
+    }
+
     pub(in crate::editor) fn render_tools(&mut self) {
         let Some(index) = self.tools_index() else {
             return;
         };
-        let search = env::var_os("PATH");
-        let cells: Vec<([String; 5], Highlight)> = MANAGED
-            .iter()
-            .map(|tool| {
-                let installed = self.installed_tool(*tool).map(|(version, _)| version);
-                let latest = self.toolbox.latest(*tool);
-                let (status, highlight) =
-                    status(installed.as_deref(), latest, self.toolbox.installing(*tool));
-                let runs = tool
-                    .locate(
-                        self.tool_setting(*tool),
-                        self.tools_root.as_deref(),
-                        search.as_deref(),
-                    )
-                    .map_or_else(
-                        || "–".to_owned(),
-                        |(path, origin)| {
-                            let from = match origin {
-                                Origin::Setting => "air-program",
-                                Origin::Managed => "oxmacs",
-                                Origin::Path => "PATH",
-                            };
-                            format!(
-                                "{} ({from})",
-                                paths::abbreviate(&path, self.home.as_deref())
-                            )
-                        },
-                    );
-                (
-                    [
-                        tool.name.to_owned(),
-                        installed.unwrap_or_else(|| "–".to_owned()),
-                        latest_cell(latest, *tool),
-                        status,
-                        runs,
-                    ],
-                    highlight,
-                )
-            })
-            .collect();
-        let header = COLUMNS.map(str::to_owned);
-        let widths: [usize; 5] = std::array::from_fn(|column| {
-            cells
-                .iter()
-                .map(|(row, _)| row)
-                .chain(std::iter::once(&header))
-                .map(|row| row[column].chars().count())
-                .max()
-                .unwrap_or(0)
-        });
-        let layout = |row: &[String; 5]| -> [String; 5] {
-            std::array::from_fn(|column| {
-                if column + 1 == row.len() {
-                    row[column].clone()
-                } else {
-                    format!("{:<width$}  ", row[column], width = widths[column])
-                }
-            })
-        };
+        let room = self
+            .buffers
+            .get(index)
+            .and_then(|buffer| self.width_showing(buffer.id()))
+            .filter(|width| *width > 0)
+            .unwrap_or(ROOM);
         let mut page = Page::default();
         page.heading("Tools");
-        page.line(&[(HELP, Some(Highlight::Comment))]);
-        page.line(&[]);
-        let titles: String = layout(&header).concat();
-        page.line(&[(titles.trim_end(), Some(Highlight::Comment))]);
+        for line in page::fill(HELP, room) {
+            page.line(&[(&line, Some(Highlight::Comment))]);
+        }
         let mut rows = Vec::new();
-        for (tool, (row, highlight)) in MANAGED.iter().zip(&cells) {
-            let [name, installed, latest, status, runs] = layout(row);
-            rows.push((page.styles.len(), *tool));
-            page.line(&[
-                (&name, Some(Highlight::Link)),
-                (&installed, None),
-                (&latest, None),
-                (&status, Some(*highlight)),
-                (&runs, Some(Highlight::Comment)),
-            ]);
-            page.line(&[(
-                &format!("  {} · github.com/{}", tool.summary, tool.repository),
-                Some(Highlight::Comment),
-            )]);
+        for tool in MANAGED {
+            page.line(&[]);
+            let start = page.styles.len();
+            self.tool_card(&mut page, tool);
+            rows.push((start..page.styles.len(), tool));
         }
         if let Some((buffer, Mode::Tools(list))) = self.buffers.entry_mut(index) {
+            let point = buffer.point();
+            let line = buffer.line_of(point);
+            let column = point - buffer.line_start(line);
+            let on_card = list.rows.iter().find_map(|(lines, tool)| {
+                lines.contains(&line).then(|| (*tool, line - lines.start))
+            });
             page.fill(buffer);
+            let moved = on_card.and_then(|(tool, offset)| {
+                rows.iter()
+                    .find(|(_, known)| *known == tool)
+                    .map(|(lines, _)| lines.start + offset)
+            });
+            if let Some(line) = moved {
+                let start = buffer.line_start(line);
+                buffer.set_point((start + column).min(buffer.line_end(line)));
+            }
             list.rows = rows;
             list.styles = page.styles;
         }
@@ -474,11 +478,16 @@ mod tests {
         editor
     }
 
-    fn air_line(editor: &Editor) -> String {
+    fn card(editor: &Editor) -> Vec<String> {
         lines(editor)
             .into_iter()
-            .find(|line| line.starts_with("air "))
-            .unwrap()
+            .skip_while(|line| !line.starts_with("air  "))
+            .take(6)
+            .collect()
+    }
+
+    fn air_line(editor: &Editor) -> String {
+        card(editor).join("\n")
     }
 
     #[test]
@@ -487,12 +496,17 @@ mod tests {
         let mut editor = opened(root.path());
 
         assert_eq!(editor.buffer().name(), "*Tools*");
-        assert!(
-            air_line(&editor).contains("checking…"),
-            "{:?}",
-            lines(&editor)
+        assert_eq!(
+            card(&editor)[..4],
+            [
+                "air  not installed",
+                "  R formatter",
+                "  Installed  not by oxmacs",
+                "  Latest     checking…",
+            ]
         );
-        assert!(air_line(&editor).contains("not installed"));
+        assert!(card(&editor)[4].starts_with("  Runs from  "));
+        assert_eq!(card(&editor)[5], "  Source     github.com/posit-dev/air");
         assert_eq!(
             checks(&mut editor)
                 .into_iter()
@@ -500,7 +514,8 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["https://api.github.com/repos/posit-dev/air/releases/latest"]
         );
-        assert_eq!(editor.buffer().line_of(editor.buffer().point()), 4);
+        let line = editor.buffer().line_of(editor.buffer().point());
+        assert_eq!(lines(&editor)[line], "air  not installed");
     }
 
     #[test]
@@ -510,14 +525,37 @@ mod tests {
 
         let editor = answered(root.path(), "0.12.0");
 
-        let line = air_line(&editor);
-        assert!(line.contains("0.11.0"), "{line}");
-        assert!(line.contains("0.12.0 (5.1 MB)"), "{line}");
-        assert!(line.contains("update available"), "{line}");
+        let card = card(&editor);
+        assert_eq!(card[0], "air  update available");
+        assert_eq!(card[2], "  Installed  0.11.0");
+        assert_eq!(card[3], "  Latest     0.12.0 (5.1 MB)");
         assert!(
-            line.contains("0.11.0") && line.ends_with("(oxmacs)"),
-            "{line}"
+            card[4].contains("0.11.0") && card[4].ends_with("(oxmacs)"),
+            "{card:?}"
         );
+    }
+
+    #[test]
+    fn point_stays_on_its_card_when_the_window_narrows() {
+        let root = tempfile::tempdir().unwrap();
+        let mut editor = answered(root.path(), "0.12.0");
+        press(&mut editor, "C-n");
+
+        editor.resize_pane(editor.selected_window(), 20, 30);
+
+        let line = editor.buffer().line_of(editor.buffer().point());
+        assert_eq!(lines(&editor)[line], "  R formatter");
+    }
+
+    #[test]
+    fn keys_work_anywhere_on_a_card() {
+        let root = tempfile::tempdir().unwrap();
+        place(root.path(), "0.12.0");
+        let mut editor = answered(root.path(), "0.12.0");
+
+        press(&mut editor, "C-n C-n C-n u");
+
+        assert_eq!(editor.message(), Some("air 0.12.0 is up to date"));
     }
 
     #[test]
