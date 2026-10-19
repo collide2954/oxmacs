@@ -10,7 +10,7 @@ use crate::theme::Highlight;
 const NAME: &str = "*R help*";
 const BACKSPACE: char = '\u{8}';
 
-fn symbol_at(buffer: &Buffer, point: usize) -> Option<String> {
+pub(super) fn symbol_at(buffer: &Buffer, point: usize) -> Option<String> {
     let part = |c: &char| c.is_alphanumeric() || matches!(c, '.' | '_');
     let before: Vec<char> = buffer.chars_before(point).take_while(part).collect();
     let mut symbol: String = before.into_iter().rev().collect();

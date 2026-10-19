@@ -2,6 +2,7 @@ pub(super) mod markdown;
 pub(super) mod preview;
 pub(super) mod r_complete;
 pub(super) mod r_console;
+pub(super) mod r_definition;
 pub(super) mod r_environment;
 pub(super) mod r_help;
 pub(super) mod r_mode;

@@ -50,6 +50,7 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-M-u", Command::BackwardUpList),
     ("C-M-d", Command::DownList),
     ("M-g i", Command::Imenu),
+    ("M-,", Command::XrefGoBack),
     ("M-g n", Command::NextError),
     ("M-g M-n", Command::NextError),
     ("C-x `", Command::NextError),
@@ -200,6 +201,7 @@ const R: &[(&str, Command)] = &[
     ("C-c C-v", Command::RHelp),
     ("C-c C-e", Command::REnvironment),
     ("C-c C-f", Command::RFormatBuffer),
+    ("M-.", Command::RFindDefinition),
     ("TAB", Command::IndentOrComplete),
     ("C-M-i", Command::CompletionAtPoint),
 ];
@@ -211,6 +213,7 @@ const CONSOLE: &[(&str, Command)] = &[
     ("C-c C-z", Command::RSwitchToConsole),
     ("C-c C-v", Command::RHelp),
     ("C-c C-e", Command::REnvironment),
+    ("M-.", Command::RFindDefinition),
     ("TAB", Command::CompletionAtPoint),
     ("C-M-i", Command::CompletionAtPoint),
 ];

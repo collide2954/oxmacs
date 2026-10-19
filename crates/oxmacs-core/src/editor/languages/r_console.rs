@@ -83,6 +83,7 @@ pub(in crate::editor) struct Sessions {
     plots: Option<BufferId>,
     links: Vec<(BufferId, BufferId)>,
     pub(super) signature_shown: Option<Call>,
+    pub(super) definition: Option<(String, (BufferId, usize))>,
 }
 
 impl Editor {
@@ -580,6 +581,7 @@ impl Editor {
             "table" => self.r_table_arrived(payload),
             "object" => self.r_object_arrived(payload),
             "signature" => self.r_signature_arrived(payload),
+            "definition" => self.r_definition_arrived(payload),
             _ => {}
         }
     }

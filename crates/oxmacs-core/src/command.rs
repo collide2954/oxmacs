@@ -308,6 +308,13 @@ pub enum Command {
     #[strum(message = "Format the buffer with rustfmt")]
     RustFormatBuffer,
     #[strum(
+        message = "Jump to the definition of the R name at point",
+        detailed_message = "Looks for an assignment to the name, first in open R buffers, then in the project's R files (the folder with .git, DESCRIPTION or an .Rproj file). Otherwise the running session supplies it: the file a function was sourced from, or its source in *R source: name*. M-, goes back."
+    )]
+    RFindDefinition,
+    #[strum(message = "Go back to where the last jump started")]
+    XrefGoBack,
+    #[strum(
         message = "Format the buffer or the selection with air",
         detailed_message = "Formats the R buffer with air, or only the lines of the selection when one is active, keeping their indentation. air.toml settings apply. The air-program setting picks the program; otherwise oxmacs's own copy from M-x list-tools, then the one on your PATH."
     )]
@@ -662,6 +669,7 @@ impl Command {
             | Self::RustRun
             | Self::RustRunClippy => Scope::Rust,
             Self::RInsertAssignment
+            | Self::RFindDefinition
             | Self::RFormatBuffer
             | Self::RInsertPipe
             | Self::RSendStatement

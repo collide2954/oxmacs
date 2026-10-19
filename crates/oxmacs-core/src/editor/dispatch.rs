@@ -183,6 +183,8 @@ impl Editor {
             Command::ShrinkWindowHorizontally => self.enlarge_window(Axis::Columns, -1),
             Command::RustFormatBuffer => self.rust_format_buffer(),
             Command::RFormatBuffer => self.r_format_buffer(),
+            Command::RFindDefinition => self.r_find_definition(),
+            Command::XrefGoBack => self.xref_go_back(),
             Command::RustCheck => self.cargo("check"),
             Command::RustCompile => self.cargo("build"),
             Command::RustTest => self.cargo("test"),
