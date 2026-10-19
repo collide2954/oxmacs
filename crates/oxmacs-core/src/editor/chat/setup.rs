@@ -535,7 +535,7 @@ impl Editor {
         if let Some(index) = self.setup_index() {
             self.finish_kill(index);
         }
-        self.show_message("IRC setup cancelled");
+        self.show_message("IRC setup canceled");
     }
 
     pub(in crate::editor) fn connect_named_irc(&mut self, name: &str) {
@@ -808,12 +808,12 @@ mod tests {
     }
 
     #[test]
-    fn cancelling_leaves_config_toml_alone() {
+    fn canceling_leaves_config_toml_alone() {
         let (_dir, path, mut editor) = opened("");
 
         press(&mut editor, "C-c C-k");
 
-        assert_eq!(editor.message(), Some("IRC setup cancelled"));
+        assert_eq!(editor.message(), Some("IRC setup canceled"));
         assert_eq!(fs::read_to_string(&path).unwrap(), "");
         assert!(
             editor

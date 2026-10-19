@@ -752,7 +752,7 @@ mod tests {
     }
 
     #[test]
-    fn d_deletes_the_shown_plot_and_shows_its_neighbour() {
+    fn d_deletes_the_shown_plot_and_shows_its_neighbor() {
         let (mut editor, job) = started();
         in_plots(&mut editor, job, 2);
 

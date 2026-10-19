@@ -280,8 +280,8 @@ impl Point {
 
     const TIDY_R: &str = r#"library(dplyr)
 
-#' Summarise a data frame.
-summarise_by <- function(data, group,
+#' Summarize a data frame.
+summarize_by <- function(data, group,
                          value = "x") {
   if (nrow(data) == 0) {
     return(NULL)
@@ -290,7 +290,7 @@ summarise_by <- function(data, group,
   }
   result <- data |>
     group_by({{ group }}) |>
-    summarise(
+    summarize(
       mean = mean(.data[[value]]),
       n = n()
     )

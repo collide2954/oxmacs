@@ -138,10 +138,10 @@ mod tests {
         assert!(!interest.concerns(&event(MODIFY, "/e/new.txt")));
     }
 
-    fn assert_signalled(receiver: &mut mpsc::Receiver<()>) {
+    fn assert_signaled(receiver: &mut mpsc::Receiver<()>) {
         let deadline = Instant::now() + Duration::from_secs(5);
         while receiver.try_recv().is_err() {
-            assert!(Instant::now() < deadline, "no change was signalled");
+            assert!(Instant::now() < deadline, "no change was signaled");
             thread::sleep(Duration::from_millis(20));
         }
     }
@@ -160,7 +160,7 @@ mod tests {
 
         fs::write(&path, "new text").unwrap();
 
-        assert_signalled(&mut receiver);
+        assert_signaled(&mut receiver);
     }
 
     #[test]
@@ -175,6 +175,6 @@ mod tests {
 
         fs::write(dir.path().join("new.txt"), "").unwrap();
 
-        assert_signalled(&mut receiver);
+        assert_signaled(&mut receiver);
     }
 }

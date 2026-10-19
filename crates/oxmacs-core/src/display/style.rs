@@ -27,7 +27,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn neighbouring_columns_with_the_same_face_become_one_span() {
+    fn neighboring_columns_with_the_same_face_become_one_span() {
         let faces = [
             Some(Highlight::Keyword),
             Some(Highlight::Keyword),

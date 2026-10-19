@@ -390,7 +390,7 @@ mod tests {
     }
 
     #[test]
-    fn prompts_are_recognised_anywhere() {
+    fn prompts_are_recognized_anywhere() {
         let mut stream = Stream::default();
 
         assert_eq!(
