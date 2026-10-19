@@ -10,7 +10,7 @@ use crate::text::{Buffer, motion};
 use crate::theme::Highlight;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Direction {
+pub(in crate::editor) enum Direction {
     Forward,
     Backward,
 }
@@ -100,7 +100,7 @@ impl Search {
         self.step.regex
     }
 
-    pub(super) fn found(&self) -> Option<&Range<usize>> {
+    pub(in crate::editor) fn found(&self) -> Option<&Range<usize>> {
         self.step.found.as_ref()
     }
 
@@ -114,7 +114,7 @@ impl Editor {
         self.search.as_ref()
     }
 
-    pub(super) fn search_key(&mut self, key: Key) -> bool {
+    pub(in crate::editor) fn search_key(&mut self, key: Key) -> bool {
         let Some(search) = self.search.as_mut().filter(|_| self.pending.is_empty()) else {
             return false;
         };
@@ -130,7 +130,7 @@ impl Editor {
         true
     }
 
-    pub(super) fn run_in_search(&mut self, command: Command) {
+    pub(in crate::editor) fn run_in_search(&mut self, command: Command) {
         match command {
             Command::IsearchRepeatForward => self.isearch_repeat(Direction::Forward),
             Command::IsearchRepeatBackward => self.isearch_repeat(Direction::Backward),
@@ -147,7 +147,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn isearch(&mut self, direction: Direction, regex: bool) {
+    pub(in crate::editor) fn isearch(&mut self, direction: Direction, regex: bool) {
         if self.minibuffer.is_some() {
             self.show_message("Command attempted to use minibuffer while in minibuffer");
             return;
@@ -191,7 +191,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn extend_search(&mut self, text: &str) {
+    pub(in crate::editor) fn extend_search(&mut self, text: &str) {
         let Some(search) = &self.search else {
             return;
         };
@@ -335,7 +335,7 @@ impl Editor {
         self.buffers.current_mut().set_point(point);
     }
 
-    pub(super) fn search_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
+    pub(in crate::editor) fn search_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
         let Some(search) = &self.search else {
             return Vec::new();
         };
@@ -348,7 +348,7 @@ impl Editor {
         match_marks(buffer, line, lazy, search.step.found.as_ref())
     }
 
-    pub(super) fn exit_search(&mut self) {
+    pub(in crate::editor) fn exit_search(&mut self) {
         let Some(search) = self.search.take() else {
             return;
         };
@@ -390,7 +390,7 @@ impl Editor {
     }
 }
 
-pub(super) fn match_marks(
+pub(in crate::editor) fn match_marks(
     buffer: &Buffer,
     line: usize,
     lazy: &[Range<usize>],

@@ -1,7 +1,7 @@
 use std::ops::Range;
 
-use crate::editor::isearch::match_marks;
 use crate::editor::prompts::minibuffer::Purpose;
+use crate::editor::search::isearch::match_marks;
 use crate::editor::{Editor, is_keyboard_quit};
 use crate::input::{Key, KeyCode};
 use crate::search::{Haystack, Pattern};
@@ -44,7 +44,7 @@ impl Editor {
         self.replace.as_ref()
     }
 
-    pub(super) fn query_replace(&mut self, regex: bool) {
+    pub(in crate::editor) fn query_replace(&mut self, regex: bool) {
         let default = self.last_replacements[usize::from(regex)]
             .as_ref()
             .map(|(from, to)| format!(" (default {from} → {to})"))
@@ -56,7 +56,7 @@ impl Editor {
         );
     }
 
-    pub(super) fn isearch_query_replace(&mut self, regex: bool) {
+    pub(in crate::editor) fn isearch_query_replace(&mut self, regex: bool) {
         let Some(search) = self.search() else {
             return;
         };
@@ -74,7 +74,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn exit_replace_prompt(&mut self, purpose: Purpose) {
+    pub(in crate::editor) fn exit_replace_prompt(&mut self, purpose: Purpose) {
         let input = self.minibuffer_input();
         match purpose {
             Purpose::ReplaceFrom(regex) if input.is_empty() => {
@@ -104,7 +104,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn ask_replacement(&mut self, from: String, regex: bool) {
+    pub(in crate::editor) fn ask_replacement(&mut self, from: String, regex: bool) {
         let prompt = format!("Query replace {}{from} with: ", regexp_word(regex));
         if self.open_minibuffer(&prompt, Purpose::ReplaceTo(regex))
             && let Some(minibuffer) = &mut self.minibuffer
@@ -172,7 +172,7 @@ impl Editor {
         replace.revisited = revisited;
     }
 
-    pub(super) fn answer_replace(&mut self, key: Key) -> bool {
+    pub(in crate::editor) fn answer_replace(&mut self, key: Key) -> bool {
         if self.replace.is_none() {
             return false;
         }
@@ -302,7 +302,7 @@ impl Editor {
         self.show_message(format!("Replaced {} occurrence{plural}", replace.count));
     }
 
-    pub(super) fn replace_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
+    pub(in crate::editor) fn replace_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
         let Some(replace) = &self.replace else {
             return Vec::new();
         };

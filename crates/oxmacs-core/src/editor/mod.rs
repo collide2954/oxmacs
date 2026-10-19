@@ -11,7 +11,6 @@ mod files;
 mod format;
 mod imenu;
 mod indent;
-mod isearch;
 mod job;
 mod languages;
 mod modes;
@@ -23,7 +22,7 @@ mod pairs;
 mod pane;
 mod prompts;
 mod read_only;
-mod replace;
+mod search;
 mod selection;
 mod special;
 mod structure;
@@ -34,7 +33,6 @@ mod undo;
 mod windows;
 
 pub use effect::Effect;
-pub use isearch::Search;
 pub use job::{Job, JobId, Outcome};
 pub use languages::preview::PreviewScroll;
 pub use mouse::{Cell, Clicks};
@@ -42,7 +40,8 @@ pub use numbers::Gutter;
 pub use pane::{Pane, ScreenRow};
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
 pub use prompts::question::Question;
-pub use replace::Replace;
+pub use search::isearch::Search;
+pub use search::replace::Replace;
 pub use tiling::{Axis, Rect, Tiling, WindowId};
 
 use std::ops::Range;
@@ -51,7 +50,7 @@ use std::{env, mem};
 
 use buffers::{BufferList, Mode};
 use dired::Kind;
-use isearch::Direction as SearchDirection;
+use search::isearch::Direction as SearchDirection;
 use windows::Direction;
 
 use crate::command::{Command, Scope};
