@@ -27,6 +27,7 @@ pub enum Effect {
     Connect(ConnectionId, Endpoint),
     Transmit(ConnectionId, Vec<String>),
     Disconnect(ConnectionId),
+    LaunchDaemon,
 }
 
 impl Editor {

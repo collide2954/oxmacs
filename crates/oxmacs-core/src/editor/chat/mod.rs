@@ -1,10 +1,12 @@
 pub(super) mod commands;
+pub(super) mod connect;
 pub(super) mod render;
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 
-use crate::config::{IrcServer, PasswordSource};
+use crate::bouncer::daemon::LocalDaemon;
+use crate::config::{BouncerMode, IrcServer};
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::chat::commands::Cycle;
@@ -12,10 +14,10 @@ use crate::editor::prompts::input_line::InputLine;
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Choice, Completion, ConnectionId, Editor, Effect};
 use crate::external::keychain;
-use crate::external::net::{Endpoint, Event as NetEvent};
+use crate::external::net::Event as NetEvent;
 use crate::irc::message::Message;
 use crate::irc::network::{Kind, LineEvent, Member, Network, Target, Update};
-use crate::irc::session::{Event, Identity, Sasl, Session};
+use crate::irc::session::{Event, Session};
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -31,6 +33,10 @@ pub(in crate::editor) struct Irc {
     hide_members: bool,
     pub(in crate::editor) zone: TimeZone,
     pub(in crate::editor) keychain: Keychain,
+    pub(in crate::editor) local_daemon: fn() -> Option<LocalDaemon>,
+    waiting: Vec<String>,
+    launching: bool,
+    relaunched: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -51,6 +57,10 @@ impl Default for Irc {
                 read: keychain::read,
                 write: keychain::write,
             },
+            local_daemon: || LocalDaemon::file().and_then(|file| LocalDaemon::read(&file)),
+            waiting: Vec::new(),
+            launching: false,
+            relaunched: false,
         }
     }
 }
@@ -62,6 +72,8 @@ struct Link {
     session: Session,
     network: Network,
     open: bool,
+    connected: bool,
+    via_bouncer: bool,
 }
 
 #[derive(Debug)]
@@ -122,120 +134,6 @@ impl Editor {
         }
     }
 
-    fn connect_irc(&mut self, server: &IrcServer) {
-        let open = self
-            .irc
-            .links
-            .iter()
-            .any(|link| link.server.name == server.name && link.open);
-        if open {
-            self.show_chat(&server.name, &Target::Server);
-            return;
-        }
-        let Some(account) = server.sasl.clone() else {
-            self.start_irc(server, None);
-            return;
-        };
-        match &server.password {
-            PasswordSource::Text(text) => self.start_irc(server, Some(text.clone())),
-            PasswordSource::Env(variable) => match std::env::var(variable) {
-                Ok(password) => self.start_irc(server, Some(password)),
-                Err(_) => self.show_message(format!(
-                    "Set {variable} to the password for {}",
-                    server.name
-                )),
-            },
-            PasswordSource::Ask => self.ask_irc_password(server, &account, false),
-            PasswordSource::Keychain => match (self.irc.keychain.read)(&server.name, &account) {
-                Ok(Some(password)) => self.start_irc(server, Some(password)),
-                Ok(None) => self.ask_irc_password(server, &account, true),
-                Err(problem) => {
-                    self.show_message(format!("Keychain: {problem}"));
-                    self.ask_irc_password(server, &account, false);
-                }
-            },
-        }
-    }
-
-    fn ask_irc_password(&mut self, server: &IrcServer, account: &str, remember: bool) {
-        let Some(index) = self
-            .config
-            .irc_server
-            .iter()
-            .position(|known| known.name == server.name)
-        else {
-            return;
-        };
-        let prompt = format!("Password for {account} on {}: ", server.name);
-        self.open_minibuffer(&prompt, Purpose::IrcPassword(index, remember));
-    }
-
-    pub(in crate::editor) fn irc_password_entered(
-        &mut self,
-        index: usize,
-        remember: bool,
-        password: String,
-    ) {
-        let Some(server) = self.config.irc_server.get(index).cloned() else {
-            return;
-        };
-        if remember
-            && let Some(account) = &server.sasl
-            && let Err(problem) = (self.irc.keychain.write)(&server.name, account, &password)
-        {
-            self.show_message(format!("Keychain: {problem}"));
-        }
-        self.start_irc(&server, Some(password));
-    }
-
-    fn start_irc(&mut self, server: &IrcServer, password: Option<String>) {
-        let existing = self
-            .irc
-            .links
-            .iter()
-            .position(|link| link.server.name == server.name);
-        let identity = Identity {
-            nick: server.nick.clone(),
-            username: server.username().to_owned(),
-            realname: server.realname().to_owned(),
-            password: None,
-            sasl: server
-                .sasl
-                .clone()
-                .zip(password)
-                .map(|(account, password)| Sasl { account, password }),
-        };
-        let id = ConnectionId(self.irc.next);
-        self.irc.next += 1;
-        let session = Session::new(identity);
-        if let Some(index) = existing {
-            let link = &mut self.irc.links[index];
-            link.id = id;
-            link.session = session;
-            link.server = server.clone();
-            link.open = true;
-        } else {
-            self.irc.links.push(Link {
-                id,
-                server: server.clone(),
-                session,
-                network: Network::new(&server.name),
-                open: true,
-            });
-        }
-        self.effects.push(Effect::Connect(
-            id,
-            Endpoint {
-                host: server.host.clone(),
-                port: server.port,
-                tls: server.tls,
-            },
-        ));
-        let note = format!("Connecting to {}:{}…", server.host, server.port);
-        self.irc_note(&server.name, &note, false);
-        self.show_chat(&server.name, &Target::Server);
-    }
-
     pub fn irc_event(&mut self, id: ConnectionId, event: NetEvent) {
         let Some(index) = self.irc.links.iter().position(|link| link.id == id) else {
             return;
@@ -243,7 +141,10 @@ impl Editor {
         let name = self.irc.links[index].server.name.clone();
         match event {
             NetEvent::Connected => {
-                self.irc.links[index].session.start();
+                let link = &mut self.irc.links[index];
+                link.connected = true;
+                link.session.start();
+                self.irc.relaunched = false;
                 self.irc_note(&name, "Connected", false);
             }
             NetEvent::Line(received) => {
@@ -257,6 +158,16 @@ impl Editor {
                 let link = &mut self.irc.links[index];
                 link.open = false;
                 link.network.disconnected();
+                let stale = link.via_bouncer
+                    && !link.connected
+                    && self.config.irc_bouncer.mode == BouncerMode::Local
+                    && !self.irc.relaunched;
+                if stale {
+                    self.irc.relaunched = true;
+                    let server = self.irc.links[index].server.clone();
+                    self.launch_daemon(&server);
+                    return;
+                }
                 let text = problem.map_or_else(
                     || "Disconnected".to_owned(),
                     |problem| format!("Disconnected: {problem}"),
@@ -724,6 +635,7 @@ impl Editor {
 mod tests {
     use jiff::tz::TimeZone;
 
+    use crate::bouncer::daemon::LocalDaemon;
     use crate::config::Config;
     use crate::editor::test_support::{labels, lines, press, type_text};
     use crate::editor::{ConnectionId, Editor, Effect};
@@ -1193,6 +1105,93 @@ mod tests {
             Some("Set OXMACS_TEST_NO_SUCH_VARIABLE to the password for libera")
         );
         assert_eq!(connections(&mut editor), []);
+    }
+
+    fn local(address: &str) -> LocalDaemon {
+        LocalDaemon {
+            address: address.to_owned(),
+            token: "tok".to_owned(),
+            pid: 1,
+        }
+    }
+
+    #[test]
+    fn a_remote_bouncer_carries_every_server() {
+        let mut editor = configured(&format!(
+            "[irc-bouncer]\nmode = \"remote\"\naddress = \"bnc.example.org:6697\"\npassword = {{ text = \"pw\" }}\n\n{LIBERA}"
+        ));
+
+        irc(&mut editor);
+
+        let (id, endpoint) = connections(&mut editor).remove(0);
+        assert_eq!(
+            endpoint,
+            Endpoint {
+                host: "bnc.example.org".to_owned(),
+                port: 6697,
+                tls: true
+            }
+        );
+        editor.irc_event(id, Event::Connected);
+        assert_eq!(
+            sent(&mut editor),
+            [
+                "CAP LS 302",
+                "PASS pw",
+                "NICK oxtest",
+                "USER oxtest/libera 0 * oxmacs"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_running_local_bouncer_is_used_with_its_token() {
+        let mut editor = configured(&format!("[irc-bouncer]\nmode = \"local\"\n\n{LIBERA}"));
+        editor.irc.local_daemon = || Some(local("127.0.0.1:4321"));
+
+        irc(&mut editor);
+
+        let (id, endpoint) = connections(&mut editor).remove(0);
+        assert_eq!(
+            endpoint,
+            Endpoint {
+                host: "127.0.0.1".to_owned(),
+                port: 4321,
+                tls: false
+            }
+        );
+        editor.irc_event(id, Event::Connected);
+        assert!(sent(&mut editor).contains(&"PASS tok".to_owned()));
+    }
+
+    #[test]
+    fn a_missing_local_bouncer_is_started_first() {
+        let mut editor = configured(&format!("[irc-bouncer]\nmode = \"local\"\n\n{LIBERA}"));
+        editor.irc.local_daemon = || None;
+
+        irc(&mut editor);
+
+        assert!(editor.take_effects().contains(&Effect::LaunchDaemon));
+        assert_eq!(editor.message(), Some("Starting the oxmacs bouncer…"));
+        editor.irc.local_daemon = || Some(local("127.0.0.1:4321"));
+        editor.irc_daemon_ready(true);
+        assert_eq!(connections(&mut editor)[0].1.port, 4321);
+    }
+
+    #[test]
+    fn stopping_the_daemon_asks_the_bouncer_to_quit() {
+        let mut editor = configured(&format!("[irc-bouncer]\nmode = \"local\"\n\n{LIBERA}"));
+        editor.irc.local_daemon = || Some(local("127.0.0.1:4321"));
+        irc(&mut editor);
+        let id = connections(&mut editor)[0].0;
+        editor.irc_event(id, Event::Connected);
+        sent(&mut editor);
+
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "irc-stop-daemon");
+        press(&mut editor, "RET");
+
+        assert_eq!(sent(&mut editor), ["OXMACS STOP"]);
     }
 
     #[test]

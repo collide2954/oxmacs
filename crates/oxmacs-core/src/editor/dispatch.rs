@@ -130,6 +130,7 @@ impl Editor {
             Command::IrcSendInput => self.irc_send_input(),
             Command::IrcSwitch => self.irc_switch(),
             Command::IrcToggleNickList => self.irc_toggle_members(),
+            Command::IrcStopDaemon => self.irc_stop_daemon(),
             Command::IrcCompleteNick => {
                 self.irc_complete_nick(previous == Some(Command::IrcCompleteNick));
             }

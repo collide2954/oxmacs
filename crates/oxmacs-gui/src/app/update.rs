@@ -1,13 +1,15 @@
 use std::path::Path;
+use std::thread;
 
 use iced::font::Family;
-use iced::futures::channel::mpsc;
+use iced::futures::channel::{mpsc, oneshot};
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
 use iced::widget::scrollable::{AbsoluteOffset, RelativeOffset};
 use iced::widget::{markdown, operation};
 use iced::{Task, clipboard, keyboard};
 use jiff::Timestamp;
+use oxmacs_core::bouncer::daemon;
 use oxmacs_core::editor::{ConnectionId, Effect, Job, Outcome, PreviewScroll, WindowId};
 use oxmacs_core::external::net::{self, Endpoint};
 use oxmacs_core::external::process;
@@ -199,6 +201,7 @@ impl App {
                 self.editor.job_finished(job, &outcome);
             }
             Message::Fetched(id, result) => self.editor.fetched(id, result),
+            Message::DaemonReady(ready) => self.editor.irc_daemon_ready(ready),
             Message::Irc(id, event) => {
                 if matches!(event, net::Event::Closed(_)) {
                     self.connections.retain(|(known, _)| *known != id);
@@ -279,6 +282,7 @@ impl App {
                 }
                 Task::none()
             }
+            Effect::LaunchDaemon => Task::perform(start_daemon(), Message::DaemonReady),
             Effect::Disconnect(id) => {
                 if let Some((_, connection)) =
                     self.connections.iter().find(|(known, _)| *known == id)
@@ -345,6 +349,16 @@ impl App {
 
 const HAS_PRIMARY_SELECTION: bool = cfg!(target_os = "linux");
 const FAREWELL: Duration = Duration::from_secs(1);
+const DAEMON_PATIENCE: Duration = Duration::from_secs(10);
+
+async fn start_daemon() -> bool {
+    let (sender, receiver) = oneshot::channel();
+    thread::spawn(move || {
+        let ready = daemon::launch().is_ok() && daemon::wait_until_running(DAEMON_PATIENCE);
+        let _ = sender.send(ready);
+    });
+    receiver.await.unwrap_or(false)
+}
 
 fn open_externally(path: &Path) -> Result<(), String> {
     open::that_detached(path).map_err(|error| format!("{}: {error}", path.display()))

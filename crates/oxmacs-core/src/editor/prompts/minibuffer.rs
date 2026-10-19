@@ -4,6 +4,7 @@ use strum::VariantArray;
 
 use crate::command::{Command, Scope};
 use crate::editor::Editor;
+use crate::editor::chat::connect::Secret;
 use crate::editor::dired::Kind;
 use crate::files::Entry;
 use crate::syntax::Item;
@@ -18,7 +19,7 @@ pub(in crate::editor) enum Purpose {
     DescribeCommand,
     IrcServer,
     IrcBuffer,
-    IrcPassword(usize, bool),
+    IrcPassword(usize, Secret, bool),
     PasteFromHistory,
     FindFile,
     WriteFile,
@@ -314,10 +315,10 @@ impl Editor {
             self.start_compile(command, directory);
             return;
         }
-        if let Purpose::IrcPassword(index, remember) = purpose {
+        if let Purpose::IrcPassword(index, secret, remember) = purpose {
             let input = self.minibuffer_input();
             self.minibuffer = None;
-            self.irc_password_entered(index, remember, input);
+            self.irc_password_entered(index, secret, remember, input);
             return;
         }
         if let Purpose::Setting(index) = purpose {

@@ -347,6 +347,11 @@ pub enum Command {
     IrcSwitch,
     #[strum(message = "Show or hide the member list beside channels")]
     IrcToggleNickList,
+    #[strum(
+        message = "Stop the IRC bouncer and its server connections",
+        detailed_message = "Asks the bouncer you are connected through to leave every IRC server and exit. A local bouncer starts again the next time you use M-x irc."
+    )]
+    IrcStopDaemon,
     #[strum(message = "Bring back the previous input")]
     ComintPreviousInput,
     #[strum(message = "Bring back the next input")]

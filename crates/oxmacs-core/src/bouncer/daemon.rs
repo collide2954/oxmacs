@@ -1,7 +1,10 @@
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
-use std::net::TcpListener;
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
@@ -12,6 +15,7 @@ use crate::config::{self, BouncerMode, Config, PasswordSource};
 use crate::external::{keychain, net};
 
 const TOKEN_BYTES: usize = 32;
+const KNOCK: Duration = Duration::from_millis(100);
 const HEX: &[u8; 16] = b"0123456789abcdef";
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -54,6 +58,52 @@ fn private_file(path: &Path) -> io::Result<fs::File> {
         options.mode(0o600);
     }
     options.open(path)
+}
+
+pub fn launch() -> Result<(), String> {
+    let program = std::env::current_exe().map_err(|error| error.to_string())?;
+    let mut command = Command::new(program);
+    command
+        .arg("irc-daemon")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    detach(&mut command);
+    command.spawn().map(drop).map_err(|error| error.to_string())
+}
+
+#[cfg(unix)]
+fn detach(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+    command.process_group(0);
+}
+
+#[cfg(windows)]
+fn detach(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const DETACHED_PROCESS: u32 = 0x0000_0008;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+}
+
+pub fn wait_until_running(patience: Duration) -> bool {
+    LocalDaemon::file().is_some_and(|file| wait_for(&file, patience))
+}
+
+fn wait_for(file: &Path, patience: Duration) -> bool {
+    let deadline = Instant::now() + patience;
+    loop {
+        let answering = LocalDaemon::read(file)
+            .and_then(|daemon| daemon.address.parse::<SocketAddr>().ok())
+            .is_some_and(|address| TcpStream::connect_timeout(&address, KNOCK).is_ok());
+        if answering {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(KNOCK);
+    }
 }
 
 pub fn token() -> Result<String, String> {
@@ -187,6 +237,24 @@ mod tests {
 
         assert_eq!(LocalDaemon::read(&path), Some(daemon));
         assert_eq!(LocalDaemon::read(&dir.path().join("missing.toml")), None);
+    }
+
+    #[test]
+    fn waiting_succeeds_once_the_daemon_answers() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("irc-daemon.toml");
+        assert!(!wait_for(&path, Duration::from_millis(300)));
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        LocalDaemon {
+            address: listener.local_addr().unwrap().to_string(),
+            token: "t".to_owned(),
+            pid: 1,
+        }
+        .write(&path)
+        .unwrap();
+
+        assert!(wait_for(&path, Duration::from_secs(5)));
     }
 
     #[test]

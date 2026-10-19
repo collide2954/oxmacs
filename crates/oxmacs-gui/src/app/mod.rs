@@ -65,6 +65,7 @@ pub enum Message {
     PreviewSized(WindowId, f32),
     Fetched(FetchId, Result<String, String>),
     Irc(ConnectionId, net::Event),
+    DaemonReady(bool),
     WeatherTick,
 }
 
