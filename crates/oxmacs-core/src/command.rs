@@ -380,6 +380,11 @@ pub enum Command {
     )]
     FindConfigFile,
     #[strum(
+        message = "Explain a command, its keys and where it works",
+        detailed_message = "Lists every command with its key and what it does. RET opens *Help* beside the current window with the full description; q closes it."
+    )]
+    DescribeCommand,
+    #[strum(
         message = "List the project's errors and warnings",
         detailed_message = "Opens *Diagnostics* with every error and warning from the last lint, grouped by file. RET visits one, SPC shows it while staying in the list and g refreshes."
     )]
@@ -560,6 +565,29 @@ pub enum Scope {
     Compilation,
     Customize,
     Diagnostics,
+    Help,
+}
+
+impl Scope {
+    pub fn label(self) -> Option<&'static str> {
+        match self {
+            Self::Global => None,
+            Self::Minibuffer => Some("the minibuffer"),
+            Self::Search => Some("searches"),
+            Self::Dired => Some("dired"),
+            Self::Splash => Some("the start screen"),
+            Self::Doctor => Some("*oxmacs-doctor*"),
+            Self::Rust => Some("Rust buffers"),
+            Self::R => Some("R buffers"),
+            Self::Markdown => Some("Markdown buffers"),
+            Self::Preview => Some("previews"),
+            Self::Console => Some("consoles"),
+            Self::Compilation => Some("*compilation*"),
+            Self::Customize => Some("*Settings*"),
+            Self::Diagnostics => Some("*Diagnostics*"),
+            Self::Help => Some("*Help*"),
+        }
+    }
 }
 
 #[cfg(test)]

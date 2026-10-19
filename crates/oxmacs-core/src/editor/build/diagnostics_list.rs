@@ -131,23 +131,7 @@ impl Editor {
             });
         }
         self.render_diagnostics_list();
-        let Some(id) = self
-            .diagnostics_index()
-            .and_then(|index| self.buffers.get(index))
-            .map(Buffer::id)
-        else {
-            return;
-        };
-        if self.window_showing(id).is_none() {
-            self.beside(|editor| {
-                if let Some(index) = editor.diagnostics_index() {
-                    editor.select_buffer(index);
-                }
-            });
-        }
-        if let Some(window) = self.window_showing(id) {
-            self.select_window(window);
-        }
+        self.show_beside(Self::diagnostics_index);
     }
 
     pub(in crate::editor) fn render_diagnostics_list(&mut self) {

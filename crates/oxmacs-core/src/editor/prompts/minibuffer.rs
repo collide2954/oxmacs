@@ -15,6 +15,7 @@ const LABEL_LIMIT: usize = 80;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::editor) enum Purpose {
     RunCommand,
+    DescribeCommand,
     PasteFromHistory,
     FindFile,
     WriteFile,
@@ -147,7 +148,8 @@ impl Editor {
             input.split_whitespace().all(|term| label.contains(term))
         };
         match minibuffer.purpose {
-            Purpose::RunCommand => self.command_completions(matches),
+            Purpose::RunCommand => self.command_completions(matches, false),
+            Purpose::DescribeCommand => self.command_completions(matches, true),
             Purpose::PasteFromHistory => self
                 .clipboard_history
                 .iter()
@@ -177,16 +179,34 @@ impl Editor {
         }
     }
 
-    fn command_completions(&self, matches: impl Fn(&str) -> bool) -> Vec<Completion> {
+    fn command_completions(
+        &self,
+        matches: impl Fn(&str) -> bool,
+        everywhere: bool,
+    ) -> Vec<Completion> {
         let mut commands: Vec<Command> = Command::VARIANTS
             .iter()
             .copied()
             .filter(|command| {
                 let scope = command.scope();
-                (scope == Scope::Global || scope == self.buffer_scope()) && matches(command.name())
+                let available =
+                    everywhere || scope == Scope::Global || scope == self.buffer_scope();
+                available && matches(command.name())
             })
             .collect();
-        commands.sort_by_key(|command| (self.recency(*command), command.name()));
+        let typed = self
+            .minibuffer
+            .as_ref()
+            .map(|minibuffer| minibuffer.input.contents())
+            .unwrap_or_default();
+        let typed = typed.trim();
+        commands.sort_by_key(|command| {
+            (
+                command.name() != typed,
+                self.recency(*command),
+                command.name(),
+            )
+        });
         commands
             .into_iter()
             .map(|command| Completion {
@@ -300,6 +320,9 @@ impl Editor {
         };
         self.minibuffer = None;
         match completion.choice {
+            Choice::Command(command) if purpose == Purpose::DescribeCommand => {
+                self.describe(command);
+            }
             Choice::Command(command) => {
                 self.command_history.retain(|used| *used != command);
                 self.command_history.push(command);
@@ -571,6 +594,16 @@ mod tests {
         let completions = editor.completions();
 
         assert_eq!(completions[0].annotation.as_deref(), Some("C-x h"));
+    }
+
+    #[test]
+    fn an_exact_name_comes_first() {
+        let mut editor = Editor::new();
+        open_with(&mut editor, "dired-jump");
+        press(&mut editor, "RET");
+        open_with(&mut editor, "dired");
+
+        assert_eq!(labels(&editor)[0], "dired");
     }
 
     #[test]

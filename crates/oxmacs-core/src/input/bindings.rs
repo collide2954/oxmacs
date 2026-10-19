@@ -75,6 +75,7 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-M-_", Command::Redo),
     ("s-S-z", Command::Redo),
     ("M-x", Command::ExecuteExtendedCommand),
+    ("C-h f", Command::DescribeCommand),
     ("C-s", Command::IsearchForward),
     ("C-r", Command::IsearchBackward),
     ("C-M-s", Command::IsearchForwardRegexp),
@@ -246,6 +247,12 @@ const DIAGNOSTICS: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
+const HELP: &[(&str, Command)] = &[
+    ("SPC", Command::ScrollUpCommand),
+    ("DEL", Command::ScrollDownCommand),
+    ("q", Command::QuitWindow),
+];
+
 pub fn global() -> Keymap {
     build(GLOBAL)
 }
@@ -288,6 +295,10 @@ pub fn customize() -> Keymap {
 
 pub fn diagnostics() -> Keymap {
     build(DIAGNOSTICS)
+}
+
+pub fn help() -> Keymap {
+    build(HELP)
 }
 
 pub fn search() -> Keymap {
@@ -382,6 +393,11 @@ mod tests {
     #[test]
     fn every_diagnostics_binding_resolves_to_its_command() {
         assert_resolves(&diagnostics(), DIAGNOSTICS);
+    }
+
+    #[test]
+    fn every_help_binding_resolves_to_its_command() {
+        assert_resolves(&help(), HELP);
     }
 
     #[test]

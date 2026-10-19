@@ -7,7 +7,7 @@ use crate::display::{Layout, Viewport};
 use crate::editor::Editor;
 use crate::editor::windows::pane::Pane;
 use crate::editor::windows::tiling::{Axis, Tiling, WindowId};
-use crate::text::{BufferId, Marker};
+use crate::text::{Buffer, BufferId, Marker};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Direction {
@@ -99,6 +99,25 @@ impl Editor {
         self.other_window();
         place(self);
         self.select_window(origin);
+    }
+
+    pub(super) fn show_beside(&mut self, find: impl Fn(&Self) -> Option<usize>) {
+        let Some(id) = find(self)
+            .and_then(|index| self.buffers.get(index))
+            .map(Buffer::id)
+        else {
+            return;
+        };
+        if self.window_showing(id).is_none() {
+            self.beside(|editor| {
+                if let Some(index) = find(editor) {
+                    editor.select_buffer(index);
+                }
+            });
+        }
+        if let Some(window) = self.window_showing(id) {
+            self.select_window(window);
+        }
     }
 
     pub(super) fn follow_end(&mut self, buffer: BufferId, old_end: usize) {

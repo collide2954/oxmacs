@@ -94,6 +94,7 @@ pub struct Editor {
     compilation_keymap: Keymap,
     customize_keymap: Keymap,
     diagnostics_keymap: Keymap,
+    help_keymap: Keymap,
     search_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
@@ -165,6 +166,7 @@ impl Editor {
             compilation_keymap: bindings::compilation(),
             customize_keymap: bindings::customize(),
             diagnostics_keymap: bindings::diagnostics(),
+            help_keymap: bindings::help(),
             search_keymap: bindings::search(),
             pending: Vec::new(),
             last_key: None,
@@ -394,8 +396,29 @@ impl Editor {
             Scope::Compilation => Some(&self.compilation_keymap),
             Scope::Customize => Some(&self.customize_keymap),
             Scope::Diagnostics => Some(&self.diagnostics_keymap),
+            Scope::Help => Some(&self.help_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search => None,
         }
+    }
+
+    fn keymaps(&self) -> [(Scope, &Keymap); 15] {
+        [
+            (Scope::Global, &self.keymap),
+            (Scope::Minibuffer, &self.minibuffer_keymap),
+            (Scope::Search, &self.search_keymap),
+            (Scope::Dired, &self.dired_keymap),
+            (Scope::Splash, &self.splash_keymap),
+            (Scope::Doctor, &self.doctor_keymap),
+            (Scope::Rust, &self.rust_keymap),
+            (Scope::R, &self.r_keymap),
+            (Scope::Markdown, &self.markdown_keymap),
+            (Scope::Preview, &self.preview_keymap),
+            (Scope::Console, &self.console_keymap),
+            (Scope::Compilation, &self.compilation_keymap),
+            (Scope::Customize, &self.customize_keymap),
+            (Scope::Diagnostics, &self.diagnostics_keymap),
+            (Scope::Help, &self.help_keymap),
+        ]
     }
 
     fn buffer_scope(&self) -> Scope {
@@ -406,6 +429,7 @@ impl Editor {
             Some(Mode::Compilation(_)) => Scope::Compilation,
             Some(Mode::Customize(_)) => Scope::Customize,
             Some(Mode::Diagnostics(_)) => Scope::Diagnostics,
+            Some(Mode::Help(_)) => Scope::Help,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::R => Scope::R,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
@@ -434,6 +458,7 @@ impl Editor {
                 }),
             Some(Mode::Customize(state)) => state.line_style(line),
             Some(Mode::Diagnostics(list)) => list.line_style(line),
+            Some(Mode::Help(help)) => help.line_style(line),
             Some(Mode::Preview(_) | Mode::Console(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,

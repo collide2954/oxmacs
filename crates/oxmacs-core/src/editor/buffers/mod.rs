@@ -14,6 +14,7 @@ use crate::editor::languages::r_console::Console;
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::special::customize::Customize;
 use crate::editor::special::doctor::Doctor;
+use crate::editor::special::help::Help;
 use crate::editor::special::splash::Splash;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
@@ -33,6 +34,7 @@ pub(super) enum Mode {
     Customize(Customize),
     Diagnostics(DiagnosticsList),
     Console(Console),
+    Help(Help),
 }
 
 #[derive(Debug)]
@@ -97,7 +99,8 @@ impl BufferList {
             | Mode::Compilation(_)
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
-            | Mode::Console(_) => None,
+            | Mode::Console(_)
+            | Mode::Help(_) => None,
         }
     }
 
@@ -111,7 +114,8 @@ impl BufferList {
             | Mode::Compilation(_)
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
-            | Mode::Console(_) => None,
+            | Mode::Console(_)
+            | Mode::Help(_) => None,
         }
     }
 
@@ -126,7 +130,8 @@ impl BufferList {
             | Mode::Compilation(_)
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
-            | Mode::Console(_) => None,
+            | Mode::Console(_)
+            | Mode::Help(_) => None,
         }
     }
 
@@ -141,7 +146,8 @@ impl BufferList {
             | Mode::Compilation(_)
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
-            | Mode::Console(_) => None,
+            | Mode::Console(_)
+            | Mode::Help(_) => None,
         }
     }
 
@@ -155,7 +161,8 @@ impl BufferList {
             | Mode::Compilation(_)
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
-            | Mode::Console(_) => None,
+            | Mode::Console(_)
+            | Mode::Help(_) => None,
         }
     }
 
@@ -169,7 +176,8 @@ impl BufferList {
             | Mode::Compilation(_)
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
-            | Mode::Console(_) => None,
+            | Mode::Console(_)
+            | Mode::Help(_) => None,
         }
     }
 
