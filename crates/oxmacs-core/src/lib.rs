@@ -9,6 +9,7 @@ pub mod editor;
 pub mod files;
 pub mod input;
 pub mod process;
+pub mod r;
 pub mod search;
 pub mod syntax;
 pub mod text;
