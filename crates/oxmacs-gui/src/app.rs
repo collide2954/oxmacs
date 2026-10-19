@@ -319,10 +319,7 @@ impl App {
                     self.sync_reveal();
                 }
             }
-            Message::Keyboard(_)
-            | Message::Opened(Ok(()))
-            | Message::Clock
-            | Message::Job(_, process::Event::Output(_)) => {}
+            Message::Keyboard(_) | Message::Opened(Ok(())) | Message::Clock => {}
             Message::View(window, event) => self.handle_view_event(window, event),
             Message::Divider { path, index, delta } => {
                 if let Some(at) = self.editor.tiling().boundary(&path, index) {
@@ -355,6 +352,9 @@ impl App {
                 self.preview_heights.push((window, height));
             }
             Message::Job(job, process::Event::Line(line)) => self.editor.job_output(job, &line),
+            Message::Job(job, process::Event::Output(text)) => {
+                self.editor.session_output(job, &text);
+            }
             Message::Job(job, process::Event::Finished(outcome)) => {
                 self.jobs.retain(|(id, _)| *id != job);
                 self.editor.job_finished(job, &outcome);
@@ -383,7 +383,19 @@ impl App {
             }
             Effect::WritePrimary(_) | Effect::ReadPrimary => Task::none(),
             Effect::OpenExternally(path) => Task::done(Message::Opened(open_externally(&path))),
-            Effect::Spawn(job) => self.spawn(&job),
+            Effect::Spawn(job) => self.spawn(&job, false),
+            Effect::StartSession(job) => self.spawn(&job, true),
+            Effect::Send(job, text) => {
+                let sent = self
+                    .jobs
+                    .iter()
+                    .find(|(id, _)| *id == job)
+                    .is_some_and(|(_, handle)| handle.send(&text).is_ok());
+                if !sent {
+                    self.editor.show_message("The process is not running");
+                }
+                Task::none()
+            }
             Effect::Kill(job) => {
                 if let Some((_, killer)) = self.jobs.iter().find(|(id, _)| *id == job) {
                     killer.kill();
@@ -419,12 +431,18 @@ impl App {
         }
     }
 
-    fn spawn(&mut self, job: &Job) -> Task<Message> {
+    fn spawn(&mut self, job: &Job, session: bool) -> Task<Message> {
         let id = job.id;
         let (sender, events) = mpsc::unbounded();
-        match process::spawn(job, move |event| {
+        let report = move |event| {
             let _ = sender.unbounded_send(event);
-        }) {
+        };
+        let started = if session {
+            process::start_session(job, report)
+        } else {
+            process::spawn(job, report)
+        };
+        match started {
             Ok(killer) => {
                 self.jobs.push((id, killer));
                 Task::run(events, move |event| Message::Job(id, event))

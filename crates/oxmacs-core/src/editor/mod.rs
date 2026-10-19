@@ -29,6 +29,7 @@ mod pairs;
 mod pane;
 mod preview;
 mod question;
+mod r_console;
 mod r_mode;
 mod read_only;
 mod replace;
@@ -120,6 +121,7 @@ pub struct Editor {
     r_keymap: Keymap,
     markdown_keymap: Keymap,
     preview_keymap: Keymap,
+    console_keymap: Keymap,
     compilation_keymap: Keymap,
     customize_keymap: Keymap,
     diagnostics_keymap: Keymap,
@@ -191,6 +193,7 @@ impl Editor {
             r_keymap: bindings::r(),
             markdown_keymap: bindings::markdown(),
             preview_keymap: bindings::preview(),
+            console_keymap: bindings::console(),
             compilation_keymap: bindings::compilation(),
             customize_keymap: bindings::customize(),
             diagnostics_keymap: bindings::diagnostics(),
@@ -420,6 +423,7 @@ impl Editor {
             Scope::R => Some(&self.r_keymap),
             Scope::Markdown => Some(&self.markdown_keymap),
             Scope::Preview => Some(&self.preview_keymap),
+            Scope::Console => Some(&self.console_keymap),
             Scope::Compilation => Some(&self.compilation_keymap),
             Scope::Customize => Some(&self.customize_keymap),
             Scope::Diagnostics => Some(&self.diagnostics_keymap),
@@ -441,6 +445,7 @@ impl Editor {
                 Scope::Markdown
             }
             Some(Mode::Preview(_)) => Scope::Preview,
+            Some(Mode::Console(_)) => Scope::Console,
             Some(Mode::Text(_)) | None => Scope::Global,
         }
     }
@@ -462,7 +467,7 @@ impl Editor {
                 }),
             Some(Mode::Customize(state)) => state.line_style(line),
             Some(Mode::Diagnostics(list)) => list.line_style(line),
-            Some(Mode::Preview(_)) => LineStyle::default(),
+            Some(Mode::Preview(_) | Mode::Console(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,
                 spans: self.syntax_highlights_at(index, line),
@@ -616,6 +621,10 @@ impl Editor {
             Command::RMode => self.set_major_mode(Some(Language::R)),
             Command::RInsertAssignment => self.insert_operator("<-"),
             Command::ScrollUpCommand => self.scroll_page(true),
+            Command::RunR => self.run_r(),
+            Command::ComintSendInput => self.console_send_input(),
+            Command::ComintPreviousInput => self.console_history(true),
+            Command::ComintNextInput => self.console_history(false),
             Command::ScrollDownCommand => self.scroll_page(false),
             Command::RInsertPipe => self.insert_operator("|>"),
             Command::TextMode => self.set_major_mode(None),

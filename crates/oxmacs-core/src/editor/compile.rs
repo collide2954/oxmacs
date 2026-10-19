@@ -168,7 +168,7 @@ impl Editor {
     }
 
     pub fn job_finished(&mut self, job: JobId, outcome: &Outcome) {
-        if self.lint_finished(job, outcome) {
+        if self.lint_finished(job, outcome) || self.console_finished(job, outcome) {
             return;
         }
         let Some(index) = self.compilation_for(job) else {

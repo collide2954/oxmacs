@@ -7,6 +7,7 @@ use crate::editor::customize::Customize;
 use crate::editor::diagnostics_list::DiagnosticsList;
 use crate::editor::doctor::Doctor;
 use crate::editor::minibuffer::Purpose;
+use crate::editor::r_console::Console;
 use crate::editor::splash::Splash;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
@@ -25,6 +26,7 @@ pub(super) enum Mode {
     Compilation(Compilation),
     Customize(Customize),
     Diagnostics(DiagnosticsList),
+    Console(Console),
 }
 
 #[derive(Debug)]
@@ -88,7 +90,8 @@ impl BufferList {
             | Mode::Preview(_)
             | Mode::Compilation(_)
             | Mode::Customize(_)
-            | Mode::Diagnostics(_) => None,
+            | Mode::Diagnostics(_)
+            | Mode::Console(_) => None,
         }
     }
 
@@ -101,7 +104,8 @@ impl BufferList {
             | Mode::Preview(_)
             | Mode::Compilation(_)
             | Mode::Customize(_)
-            | Mode::Diagnostics(_) => None,
+            | Mode::Diagnostics(_)
+            | Mode::Console(_) => None,
         }
     }
 
@@ -115,7 +119,8 @@ impl BufferList {
             | Mode::Preview(_)
             | Mode::Compilation(_)
             | Mode::Customize(_)
-            | Mode::Diagnostics(_) => None,
+            | Mode::Diagnostics(_)
+            | Mode::Console(_) => None,
         }
     }
 
@@ -129,7 +134,8 @@ impl BufferList {
             | Mode::Preview(_)
             | Mode::Compilation(_)
             | Mode::Customize(_)
-            | Mode::Diagnostics(_) => None,
+            | Mode::Diagnostics(_)
+            | Mode::Console(_) => None,
         }
     }
 
@@ -142,7 +148,8 @@ impl BufferList {
             | Mode::Preview(_)
             | Mode::Compilation(_)
             | Mode::Customize(_)
-            | Mode::Diagnostics(_) => None,
+            | Mode::Diagnostics(_)
+            | Mode::Console(_) => None,
         }
     }
 
@@ -155,7 +162,8 @@ impl BufferList {
             | Mode::Preview(_)
             | Mode::Compilation(_)
             | Mode::Customize(_)
-            | Mode::Diagnostics(_) => None,
+            | Mode::Diagnostics(_)
+            | Mode::Console(_) => None,
         }
     }
 

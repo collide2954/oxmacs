@@ -11,6 +11,8 @@ pub enum Effect {
     ReadPrimary,
     OpenExternally(PathBuf),
     Spawn(Job),
+    StartSession(Job),
+    Send(JobId, String),
     Kill(JobId),
     Reconfigure,
     ScrollPreview(WindowId, PreviewScroll),

@@ -195,6 +195,12 @@ const R: &[(&str, Command)] = &[
     ("C-S-m", Command::RInsertPipe),
 ];
 
+const CONSOLE: &[(&str, Command)] = &[
+    ("RET", Command::ComintSendInput),
+    ("M-p", Command::ComintPreviousInput),
+    ("M-n", Command::ComintNextInput),
+];
+
 const PREVIEW: &[(&str, Command)] = &[
     ("SPC", Command::ScrollUpCommand),
     ("DEL", Command::ScrollDownCommand),
@@ -258,6 +264,10 @@ pub fn rust() -> Keymap {
 
 pub fn r() -> Keymap {
     build(R)
+}
+
+pub fn console() -> Keymap {
+    build(CONSOLE)
 }
 
 pub fn preview() -> Keymap {
@@ -342,6 +352,11 @@ mod tests {
     #[test]
     fn every_r_binding_resolves_to_its_command() {
         assert_resolves(&r(), R);
+    }
+
+    #[test]
+    fn every_console_binding_resolves_to_its_command() {
+        assert_resolves(&console(), CONSOLE);
     }
 
     #[test]

@@ -128,6 +128,10 @@ pub enum Command {
     RustRunClippy,
     RInsertAssignment,
     RInsertPipe,
+    RunR,
+    ComintSendInput,
+    ComintPreviousInput,
+    ComintNextInput,
     MarkdownInsertListItem,
     MarkdownPromote,
     MarkdownDemote,
@@ -253,6 +257,9 @@ impl Command {
             | Self::RustRun
             | Self::RustRunClippy => Scope::Rust,
             Self::RInsertAssignment | Self::RInsertPipe => Scope::R,
+            Self::ComintSendInput | Self::ComintPreviousInput | Self::ComintNextInput => {
+                Scope::Console
+            }
             Self::Recompile
             | Self::KillCompilation
             | Self::NextErrorNoSelect
@@ -292,6 +299,7 @@ pub enum Scope {
     R,
     Markdown,
     Preview,
+    Console,
     Compilation,
     Customize,
     Diagnostics,

@@ -104,7 +104,11 @@ impl Editor {
         self.move_windows(buffer, |_, _| Some(position));
     }
 
-    fn move_windows(&mut self, buffer: BufferId, to: impl Fn(usize, usize) -> Option<usize>) {
+    pub(super) fn move_windows(
+        &mut self,
+        buffer: BufferId,
+        to: impl Fn(usize, usize) -> Option<usize>,
+    ) {
         let current = self.buffers.current_mut();
         if current.id() == buffer
             && let Some(point) = to(current.point(), current.len_chars())
