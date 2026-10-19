@@ -22,6 +22,7 @@ impl Editor {
             .map(|(name, theme)| Completion {
                 label: name.to_owned(),
                 annotation: (name == current).then(|| "current".to_owned()),
+                summary: None,
                 choice: Choice::Theme(theme),
             })
             .collect()

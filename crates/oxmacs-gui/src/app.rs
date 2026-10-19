@@ -741,6 +741,21 @@ mod tests {
     }
 
     #[test]
+    fn command_completions_say_what_each_command_does() {
+        let mut app = App::default();
+        press(&mut app, "x", Modifiers::ALT);
+        for c in ["w", "h", "o", "l", "e"] {
+            press(&mut app, c, Modifiers::empty());
+        }
+
+        let mut ui = iced_test::simulator(app.view());
+
+        assert!(ui.find("mark-whole-buffer").is_ok());
+        assert!(ui.find("C-x h").is_ok());
+        assert!(ui.find("Select the whole buffer").is_ok());
+    }
+
+    #[test]
     fn view_echoes_the_editor_message() {
         let mut app = App::default();
         press(&mut app, "q", Modifiers::CTRL);

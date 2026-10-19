@@ -92,6 +92,7 @@ pub enum Choice {
 pub struct Completion {
     pub label: String,
     pub annotation: Option<String>,
+    pub summary: Option<&'static str>,
     pub choice: Choice,
 }
 
@@ -154,6 +155,7 @@ impl Editor {
                 .map(|(index, text)| Completion {
                     label: clip_label(text),
                     annotation: None,
+                    summary: None,
                     choice: Choice::Clip(index),
                 })
                 .filter(|completion| matches(&completion.label))
@@ -190,6 +192,7 @@ impl Editor {
             .map(|command| Completion {
                 label: command.name().to_owned(),
                 annotation: self.where_is(command).map(|keys| keys.to_string()),
+                summary: Some(command.summary()),
                 choice: Choice::Command(command),
             })
             .collect()
@@ -378,6 +381,7 @@ fn file_completions(minibuffer: &Minibuffer) -> Vec<Completion> {
             let completion = Completion {
                 label,
                 annotation: None,
+                summary: None,
                 choice: Choice::Entry(index),
             };
             (entry.display_name() != name, completion)
@@ -567,6 +571,16 @@ mod tests {
         let completions = editor.completions();
 
         assert_eq!(completions[0].annotation.as_deref(), Some("C-x h"));
+    }
+
+    #[test]
+    fn command_completions_say_what_each_command_does() {
+        let mut editor = Editor::new();
+        open_with(&mut editor, "whole");
+
+        let completions = editor.completions();
+
+        assert_eq!(completions[0].summary, Some("Select the whole buffer"));
     }
 
     #[test]

@@ -345,6 +345,7 @@ impl Editor {
                         .buffers
                         .location(index)
                         .map(|(path, _)| paths::abbreviate(path, self.home.as_deref())),
+                    summary: None,
                     choice: Choice::Buffer(index),
                 })
             })

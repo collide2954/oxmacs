@@ -40,6 +40,7 @@ impl Editor {
                         Some(context) => format!("{context}  L{line}"),
                         None => format!("L{line}"),
                     }),
+                    summary: None,
                     choice: Choice::Item(item.position),
                 }
             })
