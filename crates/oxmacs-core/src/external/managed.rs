@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -42,6 +43,13 @@ impl Release {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
+    Setting,
+    Managed,
+    Path,
+}
+
 #[derive(Deserialize)]
 struct Latest {
     tag_name: String,
@@ -83,6 +91,26 @@ impl Managed {
             _ => return None,
         };
         Some(format!("{}-{arch}-{target}.{extension}", self.name))
+    }
+
+    pub fn locate(
+        self,
+        configured: Option<&str>,
+        root: Option<&Path>,
+        search_path: Option<&OsStr>,
+    ) -> Option<(PathBuf, Origin)> {
+        if let Some(configured) = configured {
+            let path = Path::new(configured);
+            let found = if path.is_file() {
+                Some(path.to_owned())
+            } else {
+                tools::find(configured, search_path)
+            };
+            return found.map(|path| (path, Origin::Setting));
+        }
+        root.and_then(|root| self.installed(root))
+            .map(|(_, path)| (path, Origin::Managed))
+            .or_else(|| tools::find(self.name, search_path).map(|path| (path, Origin::Path)))
     }
 
     pub fn archive_here(self) -> Option<String> {
@@ -439,6 +467,33 @@ mod tests {
             Err("air.tar.gz does not match its published checksum".to_owned())
         );
         assert_eq!(AIR.installed(root.path()), Some(("0.11.0".to_owned(), old)));
+    }
+
+    #[test]
+    fn the_setting_wins_then_the_managed_copy_then_the_path() {
+        let root = tempfile::tempdir().unwrap();
+        let on_path = tempfile::tempdir().unwrap();
+        let path_air = on_path.path().join(AIR.binary());
+        fs::write(&path_air, "binary").unwrap();
+        let search = env::join_paths([on_path.path()]).unwrap();
+        let configured = root.path().join("my-air");
+        fs::write(&configured, "binary").unwrap();
+
+        assert_eq!(
+            AIR.locate(None, Some(root.path()), Some(&search)),
+            Some((path_air.clone(), Origin::Path))
+        );
+        let managed = place(root.path(), "0.12.0");
+        assert_eq!(
+            AIR.locate(None, Some(root.path()), Some(&search)),
+            Some((managed, Origin::Managed))
+        );
+        assert_eq!(
+            AIR.locate(configured.to_str(), Some(root.path()), Some(&search)),
+            Some((configured, Origin::Setting))
+        );
+        assert_eq!(AIR.locate(Some("missing-air"), None, None), None);
+        assert_eq!(AIR.locate(None, None, None), None);
     }
 
     #[test]
