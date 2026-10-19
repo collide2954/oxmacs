@@ -15,7 +15,7 @@ pub(in crate::editor) struct Asked {
 }
 
 impl Editor {
-    fn in_r(&self) -> bool {
+    pub(super) fn in_r(&self) -> bool {
         matches!(self.buffers.mode(0), Some(Mode::Console(_)))
             || self.buffers.language(0) == Some(Language::R)
     }

@@ -70,6 +70,7 @@ pub enum Message {
     Job(JobId, process::Event),
     AutoSave,
     AutoComplete,
+    Signature,
     ProcessTick,
     FocusWindow(WindowId),
     PreviewSized(WindowId, f32),
@@ -215,6 +216,11 @@ impl App {
         } else {
             Subscription::none()
         };
+        let signature = if self.editor.wants_signature() {
+            ticker::once_after(SIGNATURE_DELAY, self.last_input).map(|()| Message::Signature)
+        } else {
+            Subscription::none()
+        };
         let processes = if self.editor.wants_process_usage() {
             ticker::ticks(Some(ticker::SECOND)).map(|()| Message::ProcessTick)
         } else {
@@ -249,6 +255,7 @@ impl App {
             .map(|()| Message::Clock),
             idle,
             completing,
+            signature,
             processes,
             weather,
             frames,
@@ -282,6 +289,7 @@ pub fn animations_enabled(configured: bool, reduced_motion: bool) -> bool {
 
 const AUTO_SAVE_DELAY: Duration = Duration::from_millis(1500);
 const AUTO_COMPLETE_DELAY: Duration = Duration::from_millis(250);
+const SIGNATURE_DELAY: Duration = Duration::from_millis(400);
 
 fn preview_id(window: WindowId) -> widget::Id {
     widget::Id::from(format!("preview-{window:?}"))

@@ -185,6 +185,7 @@ impl App {
             }
             Message::AutoSave => self.editor.auto_save(),
             Message::AutoComplete => self.editor.auto_complete(),
+            Message::Signature => self.editor.show_signature(),
             Message::ProcessTick => self.sample_processes(),
             Message::FocusWindow(window) => {
                 if self.focus(window) {

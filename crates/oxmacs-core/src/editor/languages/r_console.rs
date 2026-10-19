@@ -1,10 +1,11 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{env, fs, io, process};
 
 use crate::editor::buffers::Mode;
 use crate::editor::languages::r_complete::Asked;
+use crate::editor::languages::r_signature::Call;
 use crate::editor::prompts::input_line::InputLine;
 use crate::editor::special::processes::Kind;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
@@ -27,6 +28,7 @@ pub(in crate::editor) struct Console {
     asked: Option<Asked>,
     width: Option<usize>,
     auto: Option<(BufferId, u64)>,
+    signatures: HashMap<String, String>,
 }
 
 static HELPERS: AtomicU64 = AtomicU64::new(0);
@@ -58,6 +60,7 @@ impl Console {
             asked: None,
             width: None,
             auto: None,
+            signatures: HashMap::new(),
         }
     }
 
@@ -70,6 +73,7 @@ impl Console {
         self.asked = None;
         self.width = None;
         self.auto = None;
+        self.signatures.clear();
     }
 }
 
@@ -78,6 +82,7 @@ pub(in crate::editor) struct Sessions {
     focus: Option<BufferId>,
     plots: Option<BufferId>,
     links: Vec<(BufferId, BufferId)>,
+    pub(super) signature_shown: Option<Call>,
 }
 
 impl Editor {
@@ -217,6 +222,17 @@ impl Editor {
     pub(super) fn set_r_asked(&mut self, asked: Option<Asked>) {
         if let Some(console) = self.console_mut() {
             console.asked = asked;
+        }
+    }
+
+    pub(super) fn cached_signature(&self, name: &str) -> Option<String> {
+        self.console()
+            .and_then(|console| console.signatures.get(name).cloned())
+    }
+
+    pub(super) fn cache_signature(&mut self, name: &str, text: &str) {
+        if let Some(console) = self.console_mut() {
+            console.signatures.insert(name.to_owned(), text.to_owned());
         }
     }
 
@@ -388,6 +404,10 @@ impl Editor {
             }
         }
         if idle {
+            if let Some(console) = self.console_mut() {
+                console.signatures.clear();
+            }
+            self.r_sessions.signature_shown = None;
             self.r_environment_due();
         }
         self.fit_r_width();
@@ -559,6 +579,7 @@ impl Editor {
             "environment" => self.r_environment_arrived(payload),
             "table" => self.r_table_arrived(payload),
             "object" => self.r_object_arrived(payload),
+            "signature" => self.r_signature_arrived(payload),
             _ => {}
         }
     }
