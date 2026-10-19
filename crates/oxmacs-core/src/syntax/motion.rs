@@ -27,7 +27,7 @@ const DEFUNS: &[&str] = &[
 ];
 const OPENERS: &[&str] = &["(", "[", "{", "[["];
 const CLOSERS: &[&str] = &[")", "]", "}", "]]"];
-const COMMENTS: &[&str] = &["line_comment", "block_comment", "comment"];
+pub(super) const COMMENTS: &[&str] = &["line_comment", "block_comment", "comment"];
 
 impl Syntax {
     fn defuns(&self, buffer: &Buffer) -> Vec<Range<usize>> {
@@ -149,12 +149,16 @@ impl Syntax {
     }
 }
 
-fn leaf_at<'tree>(tree: &'tree Tree, buffer: &Buffer, position: usize) -> Option<Node<'tree>> {
+pub(super) fn leaf_at<'tree>(
+    tree: &'tree Tree,
+    buffer: &Buffer,
+    position: usize,
+) -> Option<Node<'tree>> {
     let start = buffer.char_to_byte(position);
     let end = buffer.char_to_byte(position + 1);
     tree.root_node().descendant_for_byte_range(start, end)
 }
 
-fn chars(buffer: &Buffer, bytes: Range<usize>) -> Range<usize> {
+pub(super) fn chars(buffer: &Buffer, bytes: Range<usize>) -> Range<usize> {
     buffer.byte_to_char(bytes.start)..buffer.byte_to_char(bytes.end)
 }
