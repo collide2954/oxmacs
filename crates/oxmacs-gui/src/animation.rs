@@ -10,7 +10,7 @@ pub const BLINKS: u32 = 10;
 const FADE: Duration = Duration::from_millis(45);
 const GLIDE: Duration = Duration::from_millis(50);
 const SCROLL: Duration = Duration::from_millis(90);
-pub const THEME_FADE: Duration = Duration::from_millis(140);
+pub const THEME_FADE: Duration = Duration::from_millis(112);
 pub const REVEAL: Duration = Duration::from_millis(80);
 
 struct Phase {
