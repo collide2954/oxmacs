@@ -15,6 +15,7 @@ indexmap.workspace = true
 jiff.workspace = true
 keyring.workspace = true
 regex.workspace = true
+ring.workspace = true
 ropey.workspace = true
 rustls.workspace = true
 serde.workspace = true

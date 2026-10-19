@@ -3032,6 +3032,7 @@ dependencies = [
  "jiff",
  "keyring",
  "regex",
+ "ring",
  "ropey",
  "rustls",
  "serde",
