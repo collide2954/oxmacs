@@ -141,8 +141,8 @@ impl Editor {
     }
 
     fn settings_index(&self) -> Option<usize> {
-        (0..self.buffers.len())
-            .find(|index| matches!(self.buffers.mode(*index), Some(Mode::Customize(_))))
+        self.buffers
+            .find_mode(|mode| matches!(mode, Mode::Customize(_)))
     }
 
     pub(super) fn customizing(&self) -> Option<&Customize> {

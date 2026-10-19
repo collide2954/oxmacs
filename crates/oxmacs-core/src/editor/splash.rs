@@ -60,8 +60,9 @@ impl Splash {
 
 impl Editor {
     pub fn about(&mut self) {
-        if let Some(index) =
-            (0..self.buffers.len()).find(|index| self.buffers.splash(*index).is_some())
+        if let Some(index) = self
+            .buffers
+            .find_mode(|mode| matches!(mode, Mode::Splash(_)))
         {
             self.select_buffer(index);
             return;

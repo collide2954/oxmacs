@@ -23,8 +23,8 @@ pub(super) struct Compilation {
 
 impl Editor {
     pub(super) fn compilation_index(&self) -> Option<usize> {
-        (0..self.buffers.len())
-            .find(|index| matches!(self.buffers.mode(*index), Some(Mode::Compilation(_))))
+        self.buffers
+            .find_mode(|mode| matches!(mode, Mode::Compilation(_)))
     }
 
     pub(super) fn compilation(&self) -> Option<&Compilation> {

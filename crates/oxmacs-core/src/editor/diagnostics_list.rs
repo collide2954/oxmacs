@@ -107,8 +107,8 @@ fn page(
 
 impl Editor {
     fn diagnostics_index(&self) -> Option<usize> {
-        (0..self.buffers.len())
-            .find(|index| matches!(self.buffers.mode(*index), Some(Mode::Diagnostics(_))))
+        self.buffers
+            .find_mode(|mode| matches!(mode, Mode::Diagnostics(_)))
     }
 
     fn diagnostics_list(&self) -> Option<&DiagnosticsList> {
