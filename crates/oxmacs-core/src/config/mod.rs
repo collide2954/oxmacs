@@ -33,6 +33,7 @@ pub struct Config {
     pub auto_save: bool,
     pub line_numbers: LineNumbers,
     pub line_number_separator: bool,
+    pub window_mode: WindowMode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r_program: Option<String>,
 }
@@ -53,6 +54,15 @@ pub enum LineNumbers {
     Absolute,
     Relative,
     Off,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WindowMode {
+    #[default]
+    Windowed,
+    Maximized,
+    Fullscreen,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -83,6 +93,7 @@ impl Default for Config {
             auto_save: true,
             line_numbers: LineNumbers::default(),
             line_number_separator: false,
+            window_mode: WindowMode::default(),
             r_program: None,
         }
     }
@@ -433,6 +444,22 @@ mod tests {
                 .unwrap()
                 .line_number_separator
         );
+    }
+
+    #[test]
+    fn the_window_opens_windowed_unless_configured() {
+        let read = |text| Config::parse(text).map(|config| config.window_mode);
+
+        assert_eq!(Config::default().window_mode, WindowMode::Windowed);
+        assert_eq!(
+            read("window-mode = \"maximized\"").unwrap(),
+            WindowMode::Maximized
+        );
+        assert_eq!(
+            read("window-mode = \"fullscreen\"").unwrap(),
+            WindowMode::Fullscreen
+        );
+        assert!(read("window-mode = \"minimized\"").is_err());
     }
 
     #[test]

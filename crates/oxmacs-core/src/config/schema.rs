@@ -78,6 +78,12 @@ pub const SETTINGS: &[Setting] = &[
     ),
     setting(
         APPEARANCE,
+        "window-mode",
+        Kind::Choice(&["windowed", "maximized", "fullscreen"]),
+        "How the window opens at startup",
+    ),
+    setting(
+        APPEARANCE,
         "animations",
         Kind::Toggle,
         "Smooth scrolling, cursor glide and fades",
