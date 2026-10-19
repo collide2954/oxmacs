@@ -7,6 +7,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 ### Added
 
 - `C-v` and `M-v`, or Page Down and Page Up, scroll by a screen.
+- `window-mode` opens the window windowed, maximized or fullscreen.
 
 ### Fixed
 

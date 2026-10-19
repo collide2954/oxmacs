@@ -74,16 +74,20 @@ pub enum Message {
     PreviewSized(WindowId, f32),
 }
 
+pub fn load_config() -> Result<Config, ConfigError> {
+    config::default_path().map_or_else(|| Ok(Config::default()), |path| Config::load(&path))
+}
+
 impl Default for App {
     fn default() -> Self {
-        Self::new(Ok(Config::default()))
+        Self::new(Ok(&Config::default()))
     }
 }
 
 impl App {
-    pub fn new(config: Result<Config, ConfigError>) -> Self {
+    pub fn new(config: Result<&Config, &ConfigError>) -> Self {
         let mut editor = Editor::new();
-        let config = config.unwrap_or_else(|error| {
+        let config = config.cloned().unwrap_or_else(|error| {
             editor.show_message(error.to_string());
             Config::default()
         });
@@ -109,11 +113,9 @@ impl App {
         app
     }
 
-    pub fn boot(visits: &[Visit]) -> (Self, Task<Message>) {
-        let config = config::default_path()
-            .map_or_else(|| Ok(Config::default()), |path| Config::load(&path));
+    pub fn boot(config: &Result<Config, ConfigError>, visits: &[Visit]) -> (Self, Task<Message>) {
         let splash = config.as_ref().map_or(true, |config| config.splash);
-        let mut app = Self::new(config);
+        let mut app = Self::new(config.as_ref());
         app.start(visits, splash);
         app.reduced_motion = prefers_reduced_motion();
         app.configure(&app.editor.config().clone());
@@ -732,7 +734,7 @@ mod tests {
 
     #[test]
     fn config_errors_fall_back_to_defaults_and_are_reported() {
-        let app = App::new(Err(ConfigError::TabWidth));
+        let app = App::new(Err(&ConfigError::TabWidth));
 
         assert_eq!(app.editor().message(), Some("tab-width must be at least 1"));
         assert_eq!(app.editor().tab_width(), 8);
@@ -742,7 +744,7 @@ mod tests {
     fn config_sets_theme_and_font_size() {
         let config = Config::parse("theme = \"adwaita-dark\"\nfont-size = 12").unwrap();
 
-        let app = App::new(Ok(config));
+        let app = App::new(Ok(&config));
 
         assert_eq!(app.editor().theme().name, "adwaita-dark");
         assert!((app.text_size() - 16.0).abs() < f32::EPSILON);
@@ -751,7 +753,7 @@ mod tests {
     #[test]
     fn proportional_fonts_fall_back_to_the_bundled_font() {
         let config = Config::parse("font-family = \"Comic Sans MS\"").unwrap();
-        let mut app = App::new(Ok(config));
+        let mut app = App::new(Ok(&config));
         assert_ne!(app.font(), fonts::EDITOR);
 
         let _ = app.update(Message::View(
@@ -868,7 +870,7 @@ mod tests {
     #[test]
     fn theme_changes_are_instant_without_animations() {
         let config = Config::parse("animations = false").unwrap();
-        let mut app = App::new(Ok(config));
+        let mut app = App::new(Ok(&config));
 
         let _ = app.update(Message::AppearanceChanged(Mode::Dark));
 
@@ -890,7 +892,7 @@ mod tests {
     #[test]
     fn completions_appear_at_once_without_animations() {
         let config = Config::parse("animations = false").unwrap();
-        let mut app = App::new(Ok(config));
+        let mut app = App::new(Ok(&config));
 
         press(&mut app, "x", Modifiers::ALT);
 
@@ -910,7 +912,7 @@ mod tests {
         assert!(App::default().animations());
 
         let config = Config::parse("animations = false").unwrap();
-        assert!(!App::new(Ok(config)).animations());
+        assert!(!App::new(Ok(&config)).animations());
     }
 
     #[test]
@@ -1136,7 +1138,7 @@ mod tests {
     #[test]
     fn the_doctor_names_the_font_in_use() {
         let config = Config::parse("font-family = \"Comic Sans MS\"").unwrap();
-        let mut app = App::new(Ok(config));
+        let mut app = App::new(Ok(&config));
         let _ = app.update(Message::View(
             app.editor().selected_window(),
             ViewEvent::FontNotMonospaced,
@@ -1161,13 +1163,13 @@ mod tests {
         assert_eq!(App::default().clock_format(), Some("%H:%M"));
 
         let config = Config::parse("clock = false").unwrap();
-        assert_eq!(App::new(Ok(config)).clock_format(), None);
+        assert_eq!(App::new(Ok(&config)).clock_format(), None);
     }
 
     #[test]
     fn the_mode_line_shows_the_clock() {
         let config = Config::parse("clock-format = \"teatime\"").unwrap();
-        let app = App::new(Ok(config));
+        let app = App::new(Ok(&config));
         let mut ui = iced_test::simulator(app.view());
 
         assert!(ui.find("teatime").is_ok());
