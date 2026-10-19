@@ -56,6 +56,7 @@ pub struct Session {
     prefix_modes: String,
     prefix_symbols: String,
     channel_types: String,
+    channel_modes: [String; 4],
     network: Option<String>,
     outgoing: Vec<String>,
     events: Vec<Event>,
@@ -74,6 +75,12 @@ impl Session {
             prefix_modes: "ov".to_owned(),
             prefix_symbols: "@+".to_owned(),
             channel_types: "#&".to_owned(),
+            channel_modes: [
+                "beI".to_owned(),
+                "k".to_owned(),
+                "l".to_owned(),
+                "imnpst".to_owned(),
+            ],
             network: None,
             outgoing: Vec::new(),
             events: Vec::new(),
@@ -136,6 +143,14 @@ impl Session {
 
     pub fn prefix_symbols(&self) -> &str {
         &self.prefix_symbols
+    }
+
+    pub fn mode_takes_param(&self, mode: char, adding: bool) -> bool {
+        let [list, always, when_set, _] = &self.channel_modes;
+        self.prefix_modes.contains(mode)
+            || list.contains(mode)
+            || always.contains(mode)
+            || (adding && when_set.contains(mode))
     }
 
     pub fn is_channel(&self, target: &str) -> bool {
@@ -310,6 +325,11 @@ impl Session {
                     }
                 }
                 "CHANTYPES" => value.clone_into(&mut self.channel_types),
+                "CHANMODES" => {
+                    for (kind, modes) in self.channel_modes.iter_mut().zip(value.split(',')) {
+                        modes.clone_into(kind);
+                    }
+                }
                 "NETWORK" => self.network = Some(value.to_owned()),
                 _ => {}
             }
@@ -581,6 +601,22 @@ mod tests {
         assert_eq!(session.prefix_rank('+'), Some(4));
         assert!(session.is_channel("#rust"));
         assert!(!session.is_channel("alice"));
+    }
+
+    #[test]
+    fn mode_parameters_follow_chanmodes() {
+        let mut session = started(false);
+        feed(
+            &mut session,
+            &[":srv 005 oxtest CHANMODES=beI,k,l,imnst PREFIX=(ov)@+ :are supported"],
+        );
+
+        assert!(session.mode_takes_param('o', true));
+        assert!(session.mode_takes_param('b', false));
+        assert!(session.mode_takes_param('k', false));
+        assert!(session.mode_takes_param('l', true));
+        assert!(!session.mode_takes_param('l', false));
+        assert!(!session.mode_takes_param('m', true));
     }
 
     #[test]
