@@ -307,6 +307,11 @@ pub enum Command {
     ShrinkWindowHorizontally,
     #[strum(message = "Format the buffer with rustfmt")]
     RustFormatBuffer,
+    #[strum(
+        message = "Format the buffer or the selection with air",
+        detailed_message = "Formats the R buffer with air, or only the lines of the selection when one is active, keeping their indentation. air.toml settings apply. The air-program setting picks the program; otherwise oxmacs's own copy from M-x list-tools, then the one on your PATH."
+    )]
+    RFormatBuffer,
     #[strum(message = "Run cargo check in *compilation*")]
     RustCheck,
     #[strum(message = "Run cargo build in *compilation*")]
@@ -584,6 +589,7 @@ impl Command {
                 | Self::CommentLine
                 | Self::CommentDwim
                 | Self::RustFormatBuffer
+                | Self::RFormatBuffer
                 | Self::RInsertAssignment
                 | Self::RInsertPipe
                 | Self::CompletionAccept
@@ -645,6 +651,7 @@ impl Command {
             | Self::RustRun
             | Self::RustRunClippy => Scope::Rust,
             Self::RInsertAssignment
+            | Self::RFormatBuffer
             | Self::RInsertPipe
             | Self::RSendStatement
             | Self::RSendFunction

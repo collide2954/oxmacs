@@ -299,7 +299,11 @@ impl Editor {
     }
 
     pub(in crate::editor) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {
-        let formatting = format && self.buffers.language(index) == Some(Language::Rust);
+        let formatting = format
+            && matches!(
+                self.buffers.language(index),
+                Some(Language::Rust | Language::R)
+            );
         let format_error = formatting
             .then(|| self.format_buffer_at(index).err())
             .flatten();

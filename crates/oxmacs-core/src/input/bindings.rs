@@ -199,6 +199,7 @@ const R: &[(&str, Command)] = &[
     ("C-c C-z", Command::RSwitchToConsole),
     ("C-c C-v", Command::RHelp),
     ("C-c C-e", Command::REnvironment),
+    ("C-c C-f", Command::RFormatBuffer),
     ("TAB", Command::IndentOrComplete),
     ("C-M-i", Command::CompletionAtPoint),
 ];
