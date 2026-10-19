@@ -345,6 +345,8 @@ pub enum Command {
         detailed_message = "Lists every IRC server, channel and private chat with its unread messages and mentions; chats that mention you come first."
     )]
     IrcSwitch,
+    #[strum(message = "Show or hide the member list beside channels")]
+    IrcToggleNickList,
     #[strum(message = "Bring back the previous input")]
     ComintPreviousInput,
     #[strum(message = "Bring back the next input")]
@@ -544,7 +546,7 @@ impl Command {
             Self::ComintSendInput | Self::ComintPreviousInput | Self::ComintNextInput => {
                 Scope::Console
             }
-            Self::IrcSendInput | Self::IrcCompleteNick => Scope::Chat,
+            Self::IrcSendInput | Self::IrcCompleteNick | Self::IrcToggleNickList => Scope::Chat,
             Self::Recompile
             | Self::KillCompilation
             | Self::NextErrorNoSelect

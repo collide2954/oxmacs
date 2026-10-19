@@ -3,20 +3,14 @@ use jiff::tz::TimeZone;
 
 use crate::editor::page::{Page, fill};
 use crate::irc::network::{Chat, Kind, Line, LineEvent, Target};
-use crate::theme::{Highlight, NICK_COLORS};
+use crate::irc::nick_color;
+use crate::theme::Highlight;
 
 const TIME: usize = 5;
 const MIN_NICK: usize = 4;
 const MAX_NICK: usize = 12;
 const MIN_TEXT: usize = 10;
 const BAR: &str = " │ ";
-
-pub(in crate::editor) fn nick_color(nick: &str) -> u8 {
-    let hash = nick.to_ascii_lowercase().bytes().fold(0u32, |hash, byte| {
-        hash.wrapping_mul(31).wrapping_add(u32::from(byte))
-    });
-    u8::try_from(hash % u32::from(NICK_COLORS)).unwrap_or_default()
-}
 
 fn nick_style(nick: &str, own: bool) -> Highlight {
     if own {
@@ -417,12 +411,5 @@ mod tests {
         );
         assert_eq!(page.styles[2].background, None);
         assert_eq!(page.styles[2].spans[1].1, Highlight::Heading);
-    }
-
-    #[test]
-    fn nick_colors_are_stable() {
-        assert_eq!(nick_color("alice"), nick_color("alice"));
-        assert_eq!(nick_color("Alice"), nick_color("alice"));
-        assert!(nick_color("alice") < NICK_COLORS);
     }
 }

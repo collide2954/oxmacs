@@ -1,5 +1,6 @@
 use iced::widget::{
-    Column, Row, column, container, markdown, mouse_area, responsive, scrollable, sensor, space,
+    Column, Row, column, container, markdown, mouse_area, responsive, row, scrollable, sensor,
+    space,
 };
 use iced::{Element, Length};
 use oxmacs_core::clock;
@@ -10,7 +11,7 @@ use super::{App, Message, preview_id};
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
 use crate::widgets::mode_line::{self, Look};
-use crate::widgets::{completions, echo_area};
+use crate::widgets::{completions, echo_area, nick_list};
 use crate::{style, units};
 impl App {
     pub fn view(&self) -> Element<'_, Message> {
@@ -121,6 +122,10 @@ impl App {
             .padding([0, 4])
             .height(Length::Fill)
             .into(),
+        };
+        let body = match pane.members() {
+            Some(members) => row![body, nick_list::view(&members, faces, self.text_size)].into(),
+            None => body,
         };
         let last = self.editor.tiling().windows().last() == Some(&window);
         let weather = self

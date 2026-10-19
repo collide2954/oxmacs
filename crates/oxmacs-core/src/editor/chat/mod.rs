@@ -13,7 +13,7 @@ use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Choice, Completion, ConnectionId, Editor, Effect};
 use crate::external::net::{Endpoint, Event as NetEvent};
 use crate::irc::message::Message;
-use crate::irc::network::{Kind, LineEvent, Network, Target, Update};
+use crate::irc::network::{Kind, LineEvent, Member, Network, Target, Update};
 use crate::irc::session::{Event, Identity, Sasl, Session};
 use crate::text::Buffer;
 use crate::theme::Highlight;
@@ -27,6 +27,7 @@ pub(in crate::editor) struct Irc {
     links: Vec<Link>,
     next: u64,
     focus: Option<(String, Target)>,
+    hide_members: bool,
     pub(in crate::editor) zone: TimeZone,
 }
 
@@ -36,6 +37,7 @@ impl Default for Irc {
             links: Vec::new(),
             next: 0,
             focus: None,
+            hide_members: false,
             zone: TimeZone::system(),
         }
     }
@@ -384,6 +386,26 @@ impl Editor {
         for (server, target) in stale {
             self.render_chat(&server, &target);
         }
+    }
+
+    pub(in crate::editor) fn chat_members(&self, index: usize) -> Option<Vec<Member>> {
+        let Some(Mode::Chat(view)) = self.buffers.mode(index) else {
+            return None;
+        };
+        if self.irc.hide_members || !matches!(view.target, Target::Channel(_)) {
+            return None;
+        }
+        let link = self
+            .irc
+            .links
+            .iter()
+            .find(|link| link.server.name == view.server)?;
+        let chat = link.network.find(&view.target)?;
+        Some(link.network.chats().get(chat)?.members(&link.session))
+    }
+
+    pub(in crate::editor) fn irc_toggle_members(&mut self) {
+        self.irc.hide_members = !self.irc.hide_members;
     }
 
     pub(in crate::editor) fn irc_switch(&mut self) {
@@ -968,6 +990,35 @@ mod tests {
         type_text(&mut editor, "#oxm");
         press(&mut editor, "RET");
         assert_eq!(editor.buffer().name(), "#oxmacs-test");
+    }
+
+    #[test]
+    fn channel_panes_list_their_members_until_toggled_off() {
+        let (mut editor, id) = connected();
+        feed(
+            &mut editor,
+            id,
+            &[
+                ":srv 353 oxtest = #oxmacs-test :alice @bob oxtest",
+                ":srv 366 oxtest #oxmacs-test :End",
+            ],
+        );
+        visit(&mut editor, "#oxmacs-test");
+
+        let members: Vec<String> = editor
+            .pane()
+            .members()
+            .unwrap()
+            .iter()
+            .map(|member| format!("{}{}", member.prefixes, member.nick))
+            .collect();
+        assert_eq!(members, ["@bob", "alice", "oxtest"]);
+
+        press(&mut editor, "C-c C-n");
+        assert_eq!(editor.pane().members(), None);
+        press(&mut editor, "C-c C-n");
+        visit(&mut editor, "libera");
+        assert_eq!(editor.pane().members(), None);
     }
 
     #[test]

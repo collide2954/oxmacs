@@ -259,6 +259,7 @@ const CHAT: &[(&str, Command)] = &[
     ("RET", Command::IrcSendInput),
     ("TAB", Command::IrcCompleteNick),
     ("C-c C-b", Command::IrcSwitch),
+    ("C-c C-n", Command::IrcToggleNickList),
     ("M-p", Command::ComintPreviousInput),
     ("M-n", Command::ComintNextInput),
 ];
