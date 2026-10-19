@@ -57,7 +57,7 @@ impl Editor {
         self.question.as_ref()
     }
 
-    pub(super) fn answer_question(&mut self, key: Key) -> bool {
+    pub(in crate::editor) fn answer_question(&mut self, key: Key) -> bool {
         let Some(mut question) = self.question.take() else {
             return false;
         };
@@ -97,7 +97,7 @@ impl Editor {
         true
     }
 
-    pub(super) fn save_some_buffers(&mut self, then_quit: bool) {
+    pub(in crate::editor) fn save_some_buffers(&mut self, then_quit: bool) {
         let mut remaining: Vec<PathBuf> = self
             .buffers
             .iter()
@@ -193,7 +193,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn ask_to_overwrite_transfer(&mut self, path: &Path, transfer: Transfer) {
+    pub(in crate::editor) fn ask_to_overwrite_transfer(&mut self, path: &Path, transfer: Transfer) {
         let shown = paths::abbreviate(path, self.home.as_deref());
         self.question = Some(Question {
             prompt: format!("Overwrite {shown}? (y, n, !, q) "),
@@ -203,7 +203,12 @@ impl Editor {
         });
     }
 
-    pub(super) fn ask_to_delete(&mut self, prompt: &str, paths: Vec<PathBuf>, typed: bool) {
+    pub(in crate::editor) fn ask_to_delete(
+        &mut self,
+        prompt: &str,
+        paths: Vec<PathBuf>,
+        typed: bool,
+    ) {
         let choices = if typed { "yes or no" } else { "y or n" };
         self.question = Some(Question {
             prompt: format!("{prompt} ({choices}) "),
@@ -213,7 +218,7 @@ impl Editor {
         });
     }
 
-    pub(super) fn ask_to_save_over(&mut self, name: &str) {
+    pub(in crate::editor) fn ask_to_save_over(&mut self, name: &str) {
         self.question = Some(Question {
             prompt: format!("{name} changed on disk; save anyway? (y or n) "),
             choices: YES_NO,
@@ -222,7 +227,12 @@ impl Editor {
         });
     }
 
-    pub(super) fn ask_to_reread(&mut self, index: usize, name: &str, disk: Option<DiskState>) {
+    pub(in crate::editor) fn ask_to_reread(
+        &mut self,
+        index: usize,
+        name: &str,
+        disk: Option<DiskState>,
+    ) {
         self.question = Some(Question {
             prompt: format!("{name} changed on disk; reread it? (y or n) "),
             choices: YES_NO,
@@ -231,7 +241,7 @@ impl Editor {
         });
     }
 
-    pub(super) fn ask_to_revert(&mut self, index: usize, path: &Path) {
+    pub(in crate::editor) fn ask_to_revert(&mut self, index: usize, path: &Path) {
         let shown = paths::abbreviate(path, self.home.as_deref());
         self.question = Some(Question {
             prompt: format!("Revert buffer from file {shown}? (y or n) "),
@@ -241,7 +251,7 @@ impl Editor {
         });
     }
 
-    pub(super) fn ask_to_kill(&mut self, index: usize, name: &str) {
+    pub(in crate::editor) fn ask_to_kill(&mut self, index: usize, name: &str) {
         self.question = Some(Question {
             prompt: format!("Buffer {name} modified; kill anyway? (y or n) "),
             choices: YES_NO,
@@ -250,7 +260,7 @@ impl Editor {
         });
     }
 
-    pub(super) fn ask_to_overwrite(&mut self, path: PathBuf) {
+    pub(in crate::editor) fn ask_to_overwrite(&mut self, path: PathBuf) {
         let shown = paths::abbreviate(&path, self.home.as_deref());
         self.question = Some(Question {
             prompt: format!("File {shown} exists; overwrite? (y or n) "),

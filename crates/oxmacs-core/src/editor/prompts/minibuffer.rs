@@ -13,7 +13,7 @@ use crate::theme::Theme;
 const LABEL_LIMIT: usize = 80;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Purpose {
+pub(in crate::editor) enum Purpose {
     RunCommand,
     PasteFromHistory,
     FindFile,
@@ -32,7 +32,7 @@ pub(super) enum Purpose {
 }
 
 impl Purpose {
-    pub(super) fn takes_path(self) -> bool {
+    pub(in crate::editor) fn takes_path(self) -> bool {
         matches!(
             self,
             Self::FindFile
@@ -60,22 +60,22 @@ impl Purpose {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct PathListing {
-    pub(super) directory: PathBuf,
-    pub(super) entries: Vec<Entry>,
+pub(in crate::editor) struct PathListing {
+    pub(in crate::editor) directory: PathBuf,
+    pub(in crate::editor) entries: Vec<Entry>,
 }
 
 #[derive(Debug)]
 pub struct Minibuffer {
     prompt: String,
-    pub(super) purpose: Purpose,
-    pub(super) input: Buffer,
-    pub(super) note: Option<String>,
-    pub(super) selected: usize,
-    pub(super) listing: Option<PathListing>,
-    pub(super) sources: Vec<PathBuf>,
-    pub(super) from: String,
-    pub(super) items: Vec<Item>,
+    pub(in crate::editor) purpose: Purpose,
+    pub(in crate::editor) input: Buffer,
+    pub(in crate::editor) note: Option<String>,
+    pub(in crate::editor) selected: usize,
+    pub(in crate::editor) listing: Option<PathListing>,
+    pub(in crate::editor) sources: Vec<PathBuf>,
+    pub(in crate::editor) from: String,
+    pub(in crate::editor) items: Vec<Item>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -203,12 +203,12 @@ impl Editor {
             .unwrap_or(usize::MAX)
     }
 
-    pub(super) fn selected_completion(&self) -> Option<Completion> {
+    pub(in crate::editor) fn selected_completion(&self) -> Option<Completion> {
         let selected = self.minibuffer.as_ref()?.selected;
         self.completions().into_iter().nth(selected)
     }
 
-    pub(super) fn open_minibuffer(&mut self, prompt: &str, purpose: Purpose) -> bool {
+    pub(in crate::editor) fn open_minibuffer(&mut self, prompt: &str, purpose: Purpose) -> bool {
         if self.minibuffer.is_some() {
             self.show_message("Command attempted to use minibuffer while in minibuffer");
             return false;
@@ -217,7 +217,7 @@ impl Editor {
         true
     }
 
-    pub(super) fn set_minibuffer_input(&mut self, text: &str) {
+    pub(in crate::editor) fn set_minibuffer_input(&mut self, text: &str) {
         if let Some(minibuffer) = &mut self.minibuffer {
             let input = &mut minibuffer.input;
             input.delete_range(0..input.len_chars());
@@ -231,11 +231,11 @@ impl Editor {
             .map(|minibuffer| minibuffer.purpose)
     }
 
-    pub(super) fn execute_extended_command(&mut self) {
+    pub(in crate::editor) fn execute_extended_command(&mut self) {
         self.open_minibuffer("M-x ", Purpose::RunCommand);
     }
 
-    pub(super) fn paste_from_history(&mut self) {
+    pub(in crate::editor) fn paste_from_history(&mut self) {
         if self.clipboard_history.is_empty() {
             self.show_message("Clipboard history is empty");
             return;
@@ -243,7 +243,7 @@ impl Editor {
         self.open_minibuffer("Paste from history: ", Purpose::PasteFromHistory);
     }
 
-    pub(super) fn exit_minibuffer_with_input(&mut self) {
+    pub(in crate::editor) fn exit_minibuffer_with_input(&mut self) {
         let input = self.minibuffer_input();
         match self.minibuffer_purpose() {
             Some(purpose) if purpose.takes_path() => self.exit_file_prompt(true),
@@ -254,14 +254,14 @@ impl Editor {
         }
     }
 
-    pub(super) fn minibuffer_input(&self) -> String {
+    pub(in crate::editor) fn minibuffer_input(&self) -> String {
         self.minibuffer
             .as_ref()
             .map(|minibuffer| minibuffer.input.contents())
             .unwrap_or_default()
     }
 
-    pub(super) fn exit_minibuffer(&mut self) {
+    pub(in crate::editor) fn exit_minibuffer(&mut self) {
         let Some(purpose) = self.minibuffer_purpose() else {
             return;
         };
@@ -313,26 +313,26 @@ impl Editor {
         }
     }
 
-    pub(super) fn note_no_match(&mut self) {
+    pub(in crate::editor) fn note_no_match(&mut self) {
         if let Some(minibuffer) = &mut self.minibuffer {
             minibuffer.note = Some("[No match]".to_owned());
         }
     }
 
-    pub(super) fn minibuffer_next(&mut self) {
+    pub(in crate::editor) fn minibuffer_next(&mut self) {
         let last = self.completions().len().saturating_sub(1);
         if let Some(minibuffer) = &mut self.minibuffer {
             minibuffer.selected = (minibuffer.selected + 1).min(last);
         }
     }
 
-    pub(super) fn minibuffer_previous(&mut self) {
+    pub(in crate::editor) fn minibuffer_previous(&mut self) {
         if let Some(minibuffer) = &mut self.minibuffer {
             minibuffer.selected = minibuffer.selected.saturating_sub(1);
         }
     }
 
-    pub(super) fn minibuffer_complete(&mut self) {
+    pub(in crate::editor) fn minibuffer_complete(&mut self) {
         if self.minibuffer_purpose().is_some_and(Purpose::takes_path) {
             self.complete_file_name();
             return;
@@ -342,7 +342,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn reset_selection(&mut self, command: Command) {
+    pub(in crate::editor) fn reset_selection(&mut self, command: Command) {
         if let Some(minibuffer) = &mut self.minibuffer
             && !matches!(
                 command,

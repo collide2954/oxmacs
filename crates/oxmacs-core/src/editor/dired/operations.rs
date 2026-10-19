@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::dired::Mark;
-use crate::editor::minibuffer::Purpose;
+use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Editor, Effect};
 use crate::files::{ops, paths};
 

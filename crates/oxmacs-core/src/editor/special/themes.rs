@@ -1,4 +1,4 @@
-use crate::editor::minibuffer::Purpose;
+use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Choice, Completion, Editor};
 use crate::theme::{self, Theme};
 

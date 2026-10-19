@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use crate::editor::isearch::match_marks;
-use crate::editor::minibuffer::Purpose;
+use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Editor, is_keyboard_quit};
 use crate::input::{Key, KeyCode};
 use crate::search::{Haystack, Pattern};

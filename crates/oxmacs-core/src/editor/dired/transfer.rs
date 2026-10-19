@@ -5,7 +5,7 @@ use std::{fs, io};
 use crate::dired::Mark;
 use crate::editor::Editor;
 use crate::editor::dired::operations::files;
-use crate::editor::minibuffer::Purpose;
+use crate::editor::prompts::minibuffer::Purpose;
 use crate::files::{ops, paths};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,7 +1,7 @@
 use std::path::{self, Path, PathBuf};
 
 use crate::cli::Visit;
-use crate::editor::minibuffer::{PathListing, Purpose};
+use crate::editor::prompts::minibuffer::{PathListing, Purpose};
 use crate::editor::{Choice, Editor};
 use crate::files::{self, Sort, paths};
 use crate::syntax::Language;

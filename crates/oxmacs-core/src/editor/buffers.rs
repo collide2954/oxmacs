@@ -5,7 +5,7 @@ use crate::display::{ScreenLine, Viewport};
 use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
 use crate::editor::languages::r_console::Console;
-use crate::editor::minibuffer::Purpose;
+use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::special::customize::Customize;
 use crate::editor::special::doctor::Doctor;
 use crate::editor::special::splash::Splash;

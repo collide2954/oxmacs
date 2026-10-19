@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::editor::buffers::Mode;
 use crate::editor::build::errors::{ErrorSource, Errors};
-use crate::editor::minibuffer::Purpose;
+use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::files::paths;
 use crate::text::Buffer;

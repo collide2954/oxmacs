@@ -14,7 +14,7 @@ use jiff::Zoned;
 use crate::dired::Listing;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
-use crate::editor::minibuffer::Purpose;
+use crate::editor::prompts::minibuffer::Purpose;
 use crate::files::{read_entries, sort};
 use crate::text::Buffer;
 
