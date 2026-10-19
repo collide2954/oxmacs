@@ -117,7 +117,7 @@ fn now_section(page: &mut Page, forecast: &Forecast) {
             &format!("Sunrise {}   Sunset {}", clock(sunrise), clock(sunset)),
         );
     }
-    row(page, "", &format!("Updated {}", clock(now.time)));
+    row(page, "", &format!("As of {} local time", clock(now.time)));
 }
 
 fn hours_section(page: &mut Page, forecast: &Forecast) {
