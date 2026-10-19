@@ -383,13 +383,10 @@ pub fn sparkline(values: &[Option<f64>]) -> String {
         .collect()
 }
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::WeatherUnits;
+pub(crate) mod fixtures {
+    pub(crate) const PLACES: &str = r#"{"results":[{"id":2950159,"name":"Berlin","latitude":52.52437,"longitude":13.41053,"country_code":"DE","timezone":"Europe/Berlin","country":"Germany","admin1":"Land Berlin"}],"generationtime_ms":0.9}"#;
 
-    const PLACES: &str = r#"{"results":[{"id":2950159,"name":"Berlin","latitude":52.52437,"longitude":13.41053,"country_code":"DE","timezone":"Europe/Berlin","country":"Germany","admin1":"Land Berlin"}],"generationtime_ms":0.9}"#;
-
-    const FORECAST: &str = r#"{
+    pub(crate) const FORECAST: &str = r#"{
         "latitude": 52.52, "longitude": 13.42, "timezone": "Europe/Berlin",
         "current_units": {"temperature_2m": "°C", "wind_speed_10m": "km/h"},
         "current": {"time": "2026-10-19T14:15", "temperature_2m": 13.2, "apparent_temperature": 11.04,
@@ -407,6 +404,13 @@ mod tests {
                   "sunrise": ["2026-10-19T07:32", "2026-10-20T07:34"],
                   "sunset": ["2026-10-19T18:09", "2026-10-20T18:07"]}
     }"#;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fixtures::{FORECAST, PLACES};
+    use super::*;
+    use crate::config::WeatherUnits;
 
     #[test]
     fn places_are_looked_up_by_name() {

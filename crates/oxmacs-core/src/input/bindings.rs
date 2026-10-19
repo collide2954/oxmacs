@@ -253,6 +253,8 @@ const HELP: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
+const WEATHER: &[(&str, Command)] = &[("g", Command::RevertBuffer), ("q", Command::QuitWindow)];
+
 pub fn global() -> Keymap {
     build(GLOBAL)
 }
@@ -299,6 +301,10 @@ pub fn diagnostics() -> Keymap {
 
 pub fn help() -> Keymap {
     build(HELP)
+}
+
+pub fn weather() -> Keymap {
+    build(WEATHER)
 }
 
 pub fn search() -> Keymap {
@@ -398,6 +404,11 @@ mod tests {
     #[test]
     fn every_help_binding_resolves_to_its_command() {
         assert_resolves(&help(), HELP);
+    }
+
+    #[test]
+    fn every_weather_binding_resolves_to_its_command() {
+        assert_resolves(&weather(), WEATHER);
     }
 
     #[test]

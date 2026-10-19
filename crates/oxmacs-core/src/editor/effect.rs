@@ -3,6 +3,9 @@ use std::path::PathBuf;
 
 use crate::editor::{Editor, Job, JobId, PreviewScroll, WindowId};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FetchId(pub u64);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     WriteClipboard(String),
@@ -16,6 +19,7 @@ pub enum Effect {
     Kill(JobId),
     Reconfigure,
     ScrollPreview(WindowId, PreviewScroll),
+    Fetch(FetchId, String),
 }
 
 impl Editor {

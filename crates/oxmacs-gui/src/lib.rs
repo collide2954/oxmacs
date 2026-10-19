@@ -1,5 +1,6 @@
 pub mod animation;
 pub mod app;
+mod fetch;
 pub mod fonts;
 pub mod keys;
 pub mod style;

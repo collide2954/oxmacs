@@ -385,6 +385,11 @@ pub enum Command {
     )]
     DescribeCommand,
     #[strum(
+        message = "Show the weather for weather-location",
+        detailed_message = "Opens *Weather* with the current conditions, the next 24 hours and the next 7 days from Open-Meteo. Set the city with the weather-location setting and choose units with weather-units; g refreshes and q quits. mode-line-weather adds the current weather beside the clock."
+    )]
+    Weather,
+    #[strum(
         message = "List the project's errors and warnings",
         detailed_message = "Opens *Diagnostics* with every error and warning from the last lint, grouped by file. RET visits one, SPC shows it while staying in the list and g refreshes."
     )]
@@ -566,6 +571,7 @@ pub enum Scope {
     Customize,
     Diagnostics,
     Help,
+    Weather,
 }
 
 impl Scope {
@@ -586,6 +592,7 @@ impl Scope {
             Self::Customize => Some("*Settings*"),
             Self::Diagnostics => Some("*Diagnostics*"),
             Self::Help => Some("*Help*"),
+            Self::Weather => Some("*Weather*"),
         }
     }
 }

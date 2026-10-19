@@ -16,6 +16,7 @@ use crate::editor::special::customize::Customize;
 use crate::editor::special::doctor::Doctor;
 use crate::editor::special::help::Help;
 use crate::editor::special::splash::Splash;
+use crate::editor::special::weather::WeatherView;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
 use crate::syntax::{Language, Syntax};
@@ -35,6 +36,7 @@ pub(super) enum Mode {
     Diagnostics(DiagnosticsList),
     Console(Console),
     Help(Help),
+    Weather(WeatherView),
 }
 
 #[derive(Debug)]
@@ -100,7 +102,8 @@ impl BufferList {
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
             | Mode::Console(_)
-            | Mode::Help(_) => None,
+            | Mode::Help(_)
+            | Mode::Weather(_) => None,
         }
     }
 
@@ -115,7 +118,8 @@ impl BufferList {
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
             | Mode::Console(_)
-            | Mode::Help(_) => None,
+            | Mode::Help(_)
+            | Mode::Weather(_) => None,
         }
     }
 
@@ -131,7 +135,8 @@ impl BufferList {
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
             | Mode::Console(_)
-            | Mode::Help(_) => None,
+            | Mode::Help(_)
+            | Mode::Weather(_) => None,
         }
     }
 
@@ -147,7 +152,8 @@ impl BufferList {
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
             | Mode::Console(_)
-            | Mode::Help(_) => None,
+            | Mode::Help(_)
+            | Mode::Weather(_) => None,
         }
     }
 
@@ -162,7 +168,8 @@ impl BufferList {
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
             | Mode::Console(_)
-            | Mode::Help(_) => None,
+            | Mode::Help(_)
+            | Mode::Weather(_) => None,
         }
     }
 
@@ -177,7 +184,8 @@ impl BufferList {
             | Mode::Customize(_)
             | Mode::Diagnostics(_)
             | Mode::Console(_)
-            | Mode::Help(_) => None,
+            | Mode::Help(_)
+            | Mode::Weather(_) => None,
         }
     }
 

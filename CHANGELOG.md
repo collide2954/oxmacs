@@ -11,6 +11,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `M-x find-config-file` opens config.toml; saving it applies the settings at once.
 - `mode-line-style` picks a classic, modern, minimal, powerline or boxed mode line.
 - `M-x` shows each command's key and what it does, and `C-h f` explains a command in *Help*.
+- `M-x weather` shows the forecast for `weather-location` from Open-Meteo, and `mode-line-weather` puts it beside the clock.
 
 ### Fixed
 

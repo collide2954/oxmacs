@@ -15,7 +15,7 @@ mod special;
 mod test_support;
 mod windows;
 
-pub use effect::Effect;
+pub use effect::{Effect, FetchId};
 pub use job::{Job, JobId, Outcome};
 pub use languages::preview::PreviewScroll;
 pub use motion::mouse::{Cell, Clicks};
@@ -37,6 +37,7 @@ use buffers::{BufferList, Mode};
 use crate::command::{Command, Scope};
 use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
+use crate::editor::special::weather::WeatherState;
 use crate::external::tools::{self, Probe};
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::syntax::Language;
@@ -95,6 +96,7 @@ pub struct Editor {
     customize_keymap: Keymap,
     diagnostics_keymap: Keymap,
     help_keymap: Keymap,
+    weather_keymap: Keymap,
     search_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
@@ -125,6 +127,8 @@ pub struct Editor {
     formatter: fn(&str, &Path, &str) -> Result<String, String>,
     font_note: Option<String>,
     config_path: Option<PathBuf>,
+    weather: WeatherState,
+    next_fetch: u64,
     paren_pair: Option<(usize, usize)>,
     next_job: u64,
     last_compile: Option<String>,
@@ -167,6 +171,7 @@ impl Editor {
             customize_keymap: bindings::customize(),
             diagnostics_keymap: bindings::diagnostics(),
             help_keymap: bindings::help(),
+            weather_keymap: bindings::weather(),
             search_keymap: bindings::search(),
             pending: Vec::new(),
             last_key: None,
@@ -197,6 +202,8 @@ impl Editor {
             formatter: tools::rustfmt,
             font_note: None,
             config_path: config::default_path(),
+            weather: WeatherState::default(),
+            next_fetch: 0,
             paren_pair: None,
             next_job: 0,
             last_compile: None,
@@ -397,11 +404,12 @@ impl Editor {
             Scope::Customize => Some(&self.customize_keymap),
             Scope::Diagnostics => Some(&self.diagnostics_keymap),
             Scope::Help => Some(&self.help_keymap),
+            Scope::Weather => Some(&self.weather_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search => None,
         }
     }
 
-    fn keymaps(&self) -> [(Scope, &Keymap); 15] {
+    fn keymaps(&self) -> [(Scope, &Keymap); 16] {
         [
             (Scope::Global, &self.keymap),
             (Scope::Minibuffer, &self.minibuffer_keymap),
@@ -418,6 +426,7 @@ impl Editor {
             (Scope::Customize, &self.customize_keymap),
             (Scope::Diagnostics, &self.diagnostics_keymap),
             (Scope::Help, &self.help_keymap),
+            (Scope::Weather, &self.weather_keymap),
         ]
     }
 
@@ -430,6 +439,7 @@ impl Editor {
             Some(Mode::Customize(_)) => Scope::Customize,
             Some(Mode::Diagnostics(_)) => Scope::Diagnostics,
             Some(Mode::Help(_)) => Scope::Help,
+            Some(Mode::Weather(_)) => Scope::Weather,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::R => Scope::R,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
@@ -459,6 +469,7 @@ impl Editor {
             Some(Mode::Customize(state)) => state.line_style(line),
             Some(Mode::Diagnostics(list)) => list.line_style(line),
             Some(Mode::Help(help)) => help.line_style(line),
+            Some(Mode::Weather(view)) => view.line_style(line),
             Some(Mode::Preview(_) | Mode::Console(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,

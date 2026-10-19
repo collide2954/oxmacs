@@ -10,10 +10,12 @@ workspace = true
 
 [dependencies]
 iced.workspace = true
+jiff.workspace = true
 oxmacs-core.workspace = true
 native-theme.workspace = true
 notify.workspace = true
 open.workspace = true
+ureq.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 native-theme = { workspace = true, features = ["windows"] }

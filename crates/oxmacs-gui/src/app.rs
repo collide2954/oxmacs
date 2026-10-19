@@ -14,12 +14,13 @@ use iced::{
     Animation, Element, Event, Font, Length, Subscription, Task, Theme, clipboard, event, keyboard,
     system, window,
 };
+use jiff::Timestamp;
 use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{self, Config, ConfigError, ModeLineStyle};
 use oxmacs_core::editor::{
-    Axis, Editor, Effect, Job, JobId, Outcome, PreviewScroll, Tiling, WindowId,
+    Axis, Editor, Effect, FetchId, Job, JobId, Outcome, PreviewScroll, Tiling, WindowId,
 };
 use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::text::BufferId;
@@ -31,7 +32,7 @@ use crate::widgets::buffer_view::{BufferView, Motion, ViewEvent};
 use crate::widgets::divider::Divider;
 use crate::widgets::mode_line::{self, Look};
 use crate::widgets::{completions, echo_area};
-use crate::{animation, fonts, style, ticker, units, watcher};
+use crate::{animation, fetch, fonts, style, ticker, units, watcher};
 
 #[derive(Debug)]
 pub struct App {
@@ -74,6 +75,8 @@ pub enum Message {
     AutoSave,
     FocusWindow(WindowId),
     PreviewSized(WindowId, f32),
+    Fetched(FetchId, Result<String, String>),
+    WeatherTick,
 }
 
 pub fn load_config() -> Result<Config, ConfigError> {
@@ -122,7 +125,12 @@ impl App {
         app.start(visits, splash);
         app.reduced_motion = prefers_reduced_motion();
         app.configure(&app.editor.config().clone());
-        (app, system::theme().map(Message::AppearanceChanged))
+        app.editor.weather_tick(Timestamp::now());
+        let effects = app.pending_effects();
+        (
+            app,
+            Task::batch([system::theme().map(Message::AppearanceChanged), effects]),
+        )
     }
 
     fn configure(&mut self, config: &Config) {
@@ -366,6 +374,8 @@ impl App {
                 self.jobs.retain(|(id, _)| *id != job);
                 self.editor.job_finished(job, &outcome);
             }
+            Message::Fetched(id, result) => self.editor.fetched(id, result),
+            Message::WeatherTick => self.editor.weather_tick(Timestamp::now()),
         }
         self.editor.prepare_display();
         self.refresh_previews();
@@ -376,6 +386,10 @@ impl App {
             }
             return iced::exit();
         }
+        self.pending_effects()
+    }
+
+    fn pending_effects(&mut self) -> Task<Message> {
         let effects = self.editor.take_effects();
         Task::batch(effects.into_iter().map(|effect| self.perform(effect)))
     }
@@ -413,7 +427,11 @@ impl App {
             Effect::Reconfigure => {
                 let config = self.editor.config().clone();
                 self.configure(&config);
-                Task::none()
+                self.editor.weather_tick(Timestamp::now());
+                self.pending_effects()
+            }
+            Effect::Fetch(id, url) => {
+                Task::perform(fetch::get(url), move |result| Message::Fetched(id, result))
             }
         }
     }
@@ -467,6 +485,11 @@ impl App {
         } else {
             Subscription::none()
         };
+        let weather = if self.editor.config().mode_line_weather {
+            ticker::ticks(Some(ticker::MINUTE)).map(|()| Message::WeatherTick)
+        } else {
+            Subscription::none()
+        };
         let frames = if self.is_animating() {
             window::frames().map(Message::Tick)
         } else {
@@ -490,6 +513,7 @@ impl App {
             }))
             .map(|()| Message::Clock),
             idle,
+            weather,
             frames,
         ])
     }
@@ -619,13 +643,13 @@ impl App {
             .height(Length::Fill)
             .into(),
         };
-        let extras: Vec<String> = self
-            .clock
-            .as_deref()
-            .filter(|_| self.editor.tiling().windows().last() == Some(&window))
-            .map(clock::now)
-            .into_iter()
-            .collect();
+        let last = self.editor.tiling().windows().last() == Some(&window);
+        let weather = self
+            .editor
+            .weather_brief()
+            .filter(|_| last && self.editor.config().mode_line_weather);
+        let time = self.clock.as_deref().filter(|_| last).map(clock::now);
+        let extras: Vec<String> = weather.into_iter().chain(time).collect();
         let look = Look {
             faces,
             active,
@@ -753,6 +777,28 @@ mod tests {
         assert!(ui.find("mark-whole-buffer").is_ok());
         assert!(ui.find("C-x h").is_ok());
         assert!(ui.find("Select the whole buffer").is_ok());
+    }
+
+    #[test]
+    fn the_mode_line_shows_the_weather_when_asked() {
+        let config =
+            Config::parse("weather-location = \"Berlin\"\nmode-line-weather = true").unwrap();
+        let mut app = App::new(Ok(&config));
+        let place = r#"{"results":[{"name":"Berlin","latitude":52.5,"longitude":13.4}]}"#;
+        let forecast = r#"{"current_units":{"temperature_2m":"°C","wind_speed_10m":"km/h"},
+            "current":{"time":"2026-10-19T14:15","temperature_2m":13.2,"apparent_temperature":11.0,
+                "relative_humidity_2m":71,"is_day":1,"weather_code":3,"wind_speed_10m":11.5,
+                "wind_direction_10m":250},
+            "hourly":{"time":[],"temperature_2m":[],"precipitation_probability":[],"weather_code":[]},
+            "daily":{"time":[],"weather_code":[],"temperature_2m_max":[],"temperature_2m_min":[],
+                "precipitation_probability_max":[],"sunrise":[],"sunset":[]}}"#;
+
+        let _ = app.update(Message::WeatherTick);
+        let _ = app.update(Message::Fetched(FetchId(0), Ok(place.to_owned())));
+        let _ = app.update(Message::Fetched(FetchId(1), Ok(forecast.to_owned())));
+
+        let mut ui = iced_test::simulator(app.view());
+        assert!(ui.find("☁ 13°").is_ok());
     }
 
     #[test]
