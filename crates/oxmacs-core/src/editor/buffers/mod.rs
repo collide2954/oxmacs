@@ -33,7 +33,7 @@ pub(super) enum Mode {
     Doctor(Doctor),
     Preview(BufferId),
     Compilation(Compilation),
-    Customize(Customize),
+    Customize(Box<Customize>),
     Diagnostics(DiagnosticsList),
     Console(Console),
     Help(Help),

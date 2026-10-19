@@ -41,6 +41,8 @@ pub struct Config {
     pub mode_line_weather: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub irc_server: Vec<IrcServer>,
+    #[serde(skip_serializing_if = "IrcBouncer::is_default")]
+    pub irc_bouncer: IrcBouncer,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r_program: Option<String>,
 }
@@ -115,6 +117,50 @@ impl IrcServer {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
+pub struct IrcBouncer {
+    pub mode: BouncerMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    pub tls: bool,
+    pub password: PasswordSource,
+    pub listen: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub certificate: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<PathBuf>,
+}
+
+impl Default for IrcBouncer {
+    fn default() -> Self {
+        Self {
+            mode: BouncerMode::Off,
+            address: None,
+            tls: true,
+            password: PasswordSource::Keychain,
+            listen: "127.0.0.1:0".to_owned(),
+            certificate: None,
+            key: None,
+        }
+    }
+}
+
+impl IrcBouncer {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BouncerMode {
+    #[default]
+    Off,
+    Local,
+    Remote,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PasswordSource {
@@ -175,6 +221,7 @@ impl Default for Config {
             weather_units: WeatherUnits::default(),
             mode_line_weather: false,
             irc_server: Vec::new(),
+            irc_bouncer: IrcBouncer::default(),
             r_program: None,
         }
     }
@@ -194,6 +241,8 @@ pub enum ConfigError {
     ClockFormat(String),
     #[error("irc-server: {0}")]
     IrcServer(String),
+    #[error("irc-bouncer: {0}")]
+    IrcBouncer(String),
     #[error("{}: {source}", path.display())]
     Read { path: PathBuf, source: io::Error },
     #[error("{}: {source}", path.display())]
@@ -263,6 +312,11 @@ impl Config {
         }
         let sample = jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC);
         clock::text(&self.clock_format, &sample).map_err(ConfigError::ClockFormat)?;
+        if self.irc_bouncer.mode == BouncerMode::Remote && self.irc_bouncer.address.is_none() {
+            return Err(ConfigError::IrcBouncer(
+                "mode = \"remote\" needs an address".to_owned(),
+            ));
+        }
         for (index, server) in self.irc_server.iter().enumerate() {
             if server.nick.trim().is_empty() {
                 return Err(ConfigError::IrcServer(format!(
@@ -650,6 +704,43 @@ password = { env = "LOCAL_IRC" }
             PasswordSource::Text("hunter2".to_owned())
         );
         assert!(read("\"sometimes\"").is_err());
+    }
+
+    #[test]
+    fn the_irc_bouncer_is_off_unless_configured() {
+        let bouncer = Config::default().irc_bouncer;
+        assert_eq!(bouncer.mode, BouncerMode::Off);
+        assert_eq!(bouncer.listen, "127.0.0.1:0");
+
+        let config = Config::parse(
+            "[irc-bouncer]\nmode = \"remote\"\naddress = \"bnc.example.org:6697\"\npassword = \"ask\"\n",
+        )
+        .unwrap();
+        assert_eq!(config.irc_bouncer.mode, BouncerMode::Remote);
+        assert_eq!(
+            config.irc_bouncer.address.as_deref(),
+            Some("bnc.example.org:6697")
+        );
+        assert!(config.irc_bouncer.tls);
+        assert_eq!(config.irc_bouncer.password, PasswordSource::Ask);
+
+        let daemon = Config::parse(
+            "[irc-bouncer]\nlisten = \"0.0.0.0:6697\"\ncertificate = \"cert.pem\"\nkey = \"key.pem\"\n",
+        )
+        .unwrap()
+        .irc_bouncer;
+        assert_eq!(daemon.listen, "0.0.0.0:6697");
+        assert_eq!(daemon.certificate.as_deref(), Some(Path::new("cert.pem")));
+    }
+
+    #[test]
+    fn remote_bouncers_need_an_address() {
+        let error = Config::parse("[irc-bouncer]\nmode = \"remote\"\n").unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "irc-bouncer: mode = \"remote\" needs an address"
+        );
     }
 
     #[test]

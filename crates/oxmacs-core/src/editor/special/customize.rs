@@ -166,12 +166,12 @@ impl Editor {
         buffer.set_read_only(true);
         self.add_buffer_with(
             buffer,
-            Mode::Customize(Customize {
+            Mode::Customize(Box::new(Customize {
                 saved,
                 problem,
                 rows: Vec::new(),
                 styles: Vec::new(),
-            }),
+            })),
         );
         self.render_settings();
         self.widget_forward(true);
