@@ -1,6 +1,7 @@
 mod buffers;
 mod build;
 mod dired;
+mod dispatch;
 mod editing;
 mod effect;
 mod job;
@@ -31,17 +32,13 @@ use std::path::{Path, PathBuf};
 use std::{env, mem};
 
 use buffers::{BufferList, Mode};
-use dired::Kind;
-use search::isearch::Direction as SearchDirection;
-use windows::Direction;
 
 use crate::command::{Command, Scope};
 use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
-use crate::dired::Mark;
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::syntax::Language;
-use crate::text::{self, Buffer};
+use crate::text::Buffer;
 use crate::theme::{self, Appearance, Highlight, Theme};
 use crate::tools::{self, Probe};
 
@@ -481,169 +478,6 @@ impl Editor {
         self.reset_selection(command);
         self.refresh_minibuffer();
         self.reveal_point();
-    }
-
-    #[expect(clippy::too_many_lines, reason = "one arm per command")]
-    fn perform(&mut self, command: Command, goal_column: Option<usize>, previous: Option<Command>) {
-        if self.scroll_preview(command) {
-            return;
-        }
-        match command {
-            Command::SelfInsertCommand => self.self_insert(),
-            Command::Newline => self.newline(),
-            Command::IndentForTabCommand => self.indent_for_tab(),
-            Command::IndentRegion => self.indent_region(),
-            Command::CommentLine => self.comment_line(),
-            Command::CommentDwim => self.comment_dwim(),
-            Command::DeleteChar => self.delete_char(true),
-            Command::DeleteBackwardChar => self.delete_char(false),
-            Command::DeleteLine => self.delete_line(),
-            Command::DeleteWord => self.delete_to(text::motion::forward_word),
-            Command::BackwardDeleteWord => self.delete_to(text::motion::backward_word),
-            Command::ForwardChar => self.move_point(|b, p| text::motion::forward_char(b, p, 1)),
-            Command::BackwardChar => self.move_point(|_, p| text::motion::backward_char(p, 1)),
-            Command::NextLine => self.move_vertically(1, goal_column),
-            Command::PreviousLine => self.move_vertically(-1, goal_column),
-            Command::MoveBeginningOfLine => self.move_point(text::motion::beginning_of_line),
-            Command::MoveEndOfLine => self.move_point(text::motion::end_of_line),
-            Command::ForwardWord => self.move_point(text::motion::forward_word),
-            Command::BackwardWord => self.move_point(text::motion::backward_word),
-            Command::BeginningOfBuffer => self.move_point(|_, _| 0),
-            Command::EndOfBuffer => self.move_point(|b, _| b.len_chars()),
-            Command::BeginningOfDefun => self.beginning_of_defun(),
-            Command::EndOfDefun => self.end_of_defun(),
-            Command::ForwardSexp => self.forward_sexp(),
-            Command::BackwardSexp => self.backward_sexp(),
-            Command::BackwardUpList => self.backward_up_list(),
-            Command::DownList => self.down_list(),
-            Command::SetMarkCommand => self.set_mark_command(previous),
-            Command::ExchangePointAndMark => self.exchange_point_and_mark(),
-            Command::MarkWholeBuffer => self.mark_whole_buffer(),
-            Command::Copy => self.copy(false),
-            Command::Cut => self.copy(true),
-            Command::Paste => self.request_paste(),
-            Command::PasteFromHistory => self.paste_from_history(),
-            Command::Undo => self.undo(),
-            Command::Redo => self.redo(),
-            Command::ExecuteExtendedCommand => self.execute_extended_command(),
-            Command::ExitMinibuffer => self.exit_minibuffer(),
-            Command::MinibufferNext => self.minibuffer_next(),
-            Command::MinibufferPrevious => self.minibuffer_previous(),
-            Command::MinibufferComplete => self.minibuffer_complete(),
-            Command::MinibufferDeleteBackward => self.minibuffer_delete_backward(),
-            Command::ExitMinibufferWithInput => self.exit_minibuffer_with_input(),
-            Command::IsearchForward => self.isearch(SearchDirection::Forward, false),
-            Command::IsearchBackward => self.isearch(SearchDirection::Backward, false),
-            Command::IsearchForwardRegexp => self.isearch(SearchDirection::Forward, true),
-            Command::QueryReplace => self.query_replace(false),
-            Command::QueryReplaceRegexp => self.query_replace(true),
-            Command::IsearchBackwardRegexp => self.isearch(SearchDirection::Backward, true),
-            Command::IsearchRepeatForward
-            | Command::IsearchRepeatBackward
-            | Command::IsearchPrintingChar
-            | Command::IsearchDeleteChar
-            | Command::IsearchToggleRegexp
-            | Command::IsearchYankWordOrChar
-            | Command::IsearchYankKill
-            | Command::IsearchQueryReplace
-            | Command::IsearchQueryReplaceRegexp
-            | Command::IsearchExit
-            | Command::IsearchAbort => self.run_in_search(command),
-            Command::FindFile => self.find_file(),
-            Command::SaveBuffer => self.save_buffer(),
-            Command::WriteFile => self.write_file(),
-            Command::SaveSomeBuffers => self.save_some_buffers(false),
-            Command::SwitchToBuffer => self.switch_to_buffer(),
-            Command::KillBuffer => self.kill_buffer(),
-            Command::RevertBuffer => self.revert_buffer(),
-            Command::ReadOnlyMode => self.toggle_read_only(),
-            Command::Dired => self.dired_prompt(),
-            Command::DiredJump => self.dired_jump(),
-            Command::DiredNextLine => self.dired_next_line(1),
-            Command::DiredPreviousLine => self.dired_next_line(-1),
-            Command::DiredFindFile => self.dired_find_file(),
-            Command::DiredUpDirectory => self.dired_up_directory(),
-            Command::DiredCycleSort => self.dired_cycle_sort(),
-            Command::DiredMark => self.dired_mark(Some(Mark::Marked)),
-            Command::DiredFlagFileDeletion => self.dired_mark(Some(Mark::Flagged)),
-            Command::DiredUnmark => self.dired_mark(None),
-            Command::DiredUnmarkBackward => self.dired_unmark_backward(),
-            Command::DiredUnmarkAllMarks => self.dired_unmark_all(),
-            Command::DiredToggleMarks => self.dired_toggle_marks(),
-            Command::DiredDoFlaggedDelete => self.dired_do_delete(true),
-            Command::DiredDoDelete => self.dired_do_delete(false),
-            Command::DiredDoRename => self.dired_do_transfer(Kind::Move),
-            Command::DiredDoCopy => self.dired_do_transfer(Kind::Copy),
-            Command::DiredCreateDirectory => self.dired_create_directory(),
-            Command::DiredDoOpen => self.dired_do_open(),
-            Command::DiredHideDetailsMode => self.dired_hide_details(),
-            Command::QuitWindow => self.quit_window(),
-            Command::KeyboardQuit => self.keyboard_quit(),
-            Command::SaveBuffersKillOxmacs => self.save_some_buffers(true),
-            Command::KillOxmacs => self.quit_requested = true,
-            Command::AboutOxmacs => self.about(),
-            Command::LoadTheme => self.load_theme(),
-            Command::ToggleTheme => self.toggle_theme(),
-            Command::RustMode => self.set_major_mode(Some(Language::Rust)),
-            Command::TomlMode => self.set_major_mode(Some(Language::Toml)),
-            Command::MarkdownMode => self.set_major_mode(Some(Language::Markdown)),
-            Command::RMode => self.set_major_mode(Some(Language::R)),
-            Command::RInsertAssignment => self.insert_operator("<-"),
-            Command::ScrollUpCommand => self.scroll_page(true),
-            Command::RunR => self.run_r(),
-            Command::ComintSendInput => self.console_send_input(),
-            Command::ComintPreviousInput => self.console_history(true),
-            Command::ComintNextInput => self.console_history(false),
-            Command::ScrollDownCommand => self.scroll_page(false),
-            Command::RInsertPipe => self.insert_operator("|>"),
-            Command::TextMode => self.set_major_mode(None),
-            Command::OxmacsDoctor => self.oxmacs_doctor(),
-            Command::SplitWindowBelow => self.split_window(Axis::Rows),
-            Command::SplitWindowRight => self.split_window(Axis::Columns),
-            Command::OtherWindow => self.other_window(),
-            Command::DeleteWindow => self.delete_window(),
-            Command::DeleteOtherWindows => self.delete_other_windows(),
-            Command::WindmoveLeft => self.windmove(Direction::Left),
-            Command::WindmoveRight => self.windmove(Direction::Right),
-            Command::WindmoveUp => self.windmove(Direction::Up),
-            Command::WindmoveDown => self.windmove(Direction::Down),
-            Command::BalanceWindows => self.balance_windows(),
-            Command::EnlargeWindow => self.enlarge_window(Axis::Rows, 1),
-            Command::EnlargeWindowHorizontally => self.enlarge_window(Axis::Columns, 1),
-            Command::ShrinkWindowHorizontally => self.enlarge_window(Axis::Columns, -1),
-            Command::RustFormatBuffer => self.rust_format_buffer(),
-            Command::RustCheck => self.cargo("check"),
-            Command::RustCompile => self.cargo("build"),
-            Command::RustTest => self.cargo("test"),
-            Command::RustRun => self.cargo("run"),
-            Command::RustRunClippy => self.cargo("clippy"),
-            Command::Imenu => self.imenu(),
-            Command::MarkdownInsertListItem => self.markdown_insert_list_item(),
-            Command::MarkdownPromote => self.markdown_shift(false),
-            Command::MarkdownDemote => self.markdown_shift(true),
-            Command::MarkdownPreview => self.markdown_preview(),
-            Command::Compile => self.compile(),
-            Command::Recompile => self.recompile(),
-            Command::KillCompilation => self.kill_compilation(),
-            Command::NextError => self.next_error(true),
-            Command::PreviousError => self.next_error(false),
-            Command::NextErrorNoSelect => self.next_error_no_select(true),
-            Command::PreviousErrorNoSelect => self.next_error_no_select(false),
-            Command::CompilationNextError => self.compilation_next_error(true),
-            Command::CompilationPreviousError => self.compilation_next_error(false),
-            Command::CompileGotoError => self.compile_goto_error(),
-            Command::Customize => self.customize(),
-            Command::ListDiagnostics => self.list_diagnostics(),
-            Command::GotoDiagnostic => self.goto_diagnostic(),
-            Command::ShowDiagnostic => self.show_diagnostic(),
-            Command::DisplayLineNumbersMode => self.display_line_numbers_mode(),
-            Command::WidgetForward => self.widget_forward(true),
-            Command::WidgetBackward => self.widget_forward(false),
-            Command::WidgetButtonPress => self.widget_button_press(),
-            Command::ForwardButton => self.forward_button(true),
-            Command::BackwardButton => self.forward_button(false),
-            Command::PushButton => self.push_button(),
-        }
     }
 }
 
