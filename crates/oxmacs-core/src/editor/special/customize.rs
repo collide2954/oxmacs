@@ -355,13 +355,7 @@ impl Editor {
             self.show_message(error);
             return false;
         }
-        if let Some(index) = self.settings_index()
-            && let Some(Mode::Customize(state)) = self.buffers.mode_mut(index)
-        {
-            state.saved = self.config.clone();
-            state.problem = None;
-        }
-        self.render_settings();
+        self.set_saved_settings(self.config.clone(), None);
         self.show_message(format!("Wrote {shown}"));
         true
     }
@@ -371,6 +365,10 @@ impl Editor {
         if problem.is_none() {
             self.reconfigure(&saved);
         }
+        self.set_saved_settings(saved, problem);
+    }
+
+    fn set_saved_settings(&mut self, saved: Config, problem: Option<String>) {
         if let Some(index) = self.settings_index()
             && let Some(Mode::Customize(state)) = self.buffers.mode_mut(index)
         {
@@ -378,6 +376,27 @@ impl Editor {
             state.problem = problem;
         }
         self.render_settings();
+    }
+
+    pub(in crate::editor) fn find_config_file(&mut self) {
+        match self.config_path.clone() {
+            Some(path) => {
+                self.open_file(&path);
+            }
+            None => self.show_message("No config directory"),
+        }
+    }
+
+    pub(in crate::editor) fn apply_config_file(&mut self, text: &str, shown: &str) {
+        match Config::parse(text) {
+            Ok(config) => {
+                self.reconfigure(&config);
+                self.set_saved_settings(config, None);
+            }
+            Err(error) => {
+                self.show_message(format!("Wrote {shown}, but {error}; settings unchanged"));
+            }
+        }
     }
 
     fn set_setting(&mut self, setting: &Setting, value: Option<Value>) {
@@ -714,6 +733,64 @@ mod tests {
         );
 
         assert!(!editor.config().splash);
+    }
+
+    fn find_config_file(editor: &mut Editor) {
+        press(editor, "M-x");
+        type_text(editor, "find-config-file");
+        press(editor, "RET");
+    }
+
+    #[test]
+    fn find_config_file_visits_config_toml() {
+        let (dir, mut editor) = settings_from(Some("tab-width = 4\n"));
+
+        find_config_file(&mut editor);
+
+        assert_eq!(
+            editor.buffer().file().map(|file| file.path.clone()),
+            Some(dir.path().join("config.toml"))
+        );
+        assert_eq!(editor.buffer().contents(), "tab-width = 4\n");
+        assert!(editor.mode_line().ends_with("(TOML)"));
+    }
+
+    #[test]
+    fn saving_config_toml_applies_it() {
+        let (dir, mut editor) = settings();
+        let path = dir.path().join("oxmacs").join("config.toml");
+        editor.config_path = Some(path.clone());
+        find_config_file(&mut editor);
+        editor.take_effects();
+
+        type_text(&mut editor, "tab-width = 2");
+        press(&mut editor, "C-x C-s");
+
+        assert_eq!(fs::read_to_string(path).unwrap(), "tab-width = 2");
+        assert_eq!(editor.tab_width(), 2);
+        assert_eq!(editor.take_effects(), [Effect::Reconfigure]);
+        press(&mut editor, "C-x b");
+        type_text(&mut editor, "*Settings*");
+        press(&mut editor, "RET");
+        assert!(row(&editor, "tab-width").ends_with(" 2"));
+        assert!(editor.mode_line().starts_with("%% *Settings*"));
+    }
+
+    #[test]
+    fn broken_config_toml_is_saved_but_not_applied() {
+        let (_dir, mut editor) = settings_from(Some("tab-width = 4\n"));
+        find_config_file(&mut editor);
+
+        press(&mut editor, "M-> C-p C-e DEL");
+        type_text(&mut editor, "0");
+        press(&mut editor, "C-x C-s");
+
+        assert_eq!(editor.tab_width(), 4);
+        let message = editor.message().unwrap();
+        assert!(
+            message.ends_with("tab-width must be at least 1; settings unchanged"),
+            "{message}"
+        );
     }
 
     #[test]

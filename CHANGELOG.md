@@ -8,6 +8,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 - `C-v` and `M-v`, or Page Down and Page Up, scroll by a screen.
 - `window-mode` opens the window windowed, maximized or fullscreen.
+- `M-x find-config-file` opens config.toml; saving it applies the settings at once.
 
 ### Fixed
 

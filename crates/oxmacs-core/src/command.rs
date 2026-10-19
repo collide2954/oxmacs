@@ -147,6 +147,7 @@ pub enum Command {
     CompilationPreviousError,
     CompileGotoError,
     Customize,
+    FindConfigFile,
     ListDiagnostics,
     GotoDiagnostic,
     ShowDiagnostic,

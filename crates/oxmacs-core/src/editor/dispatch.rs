@@ -163,6 +163,7 @@ impl Editor {
             Command::CompilationPreviousError => self.compilation_next_error(false),
             Command::CompileGotoError => self.compile_goto_error(),
             Command::Customize => self.customize(),
+            Command::FindConfigFile => self.find_config_file(),
             Command::ListDiagnostics => self.list_diagnostics(),
             Command::GotoDiagnostic => self.goto_diagnostic(),
             Command::ShowDiagnostic => self.show_diagnostic(),

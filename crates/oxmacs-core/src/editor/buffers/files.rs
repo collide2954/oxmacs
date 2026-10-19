@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{self, Path, PathBuf};
 
 use crate::cli::Visit;
@@ -309,7 +310,16 @@ impl Editor {
         };
         let path = file.path.clone();
         let format = file.format;
-        match files::save(&path, &buffer.contents(), format) {
+        let text = buffer.contents();
+        let configuring = self.config_path.as_ref() == Some(&path);
+        if configuring
+            && let Some(directory) = path.parent()
+            && let Err(error) = fs::create_dir_all(directory)
+        {
+            self.show_message(error.to_string());
+            return false;
+        }
+        match files::save(&path, &text, format) {
             Ok(disk) => {
                 if let Some(buffer) = self.buffers.get_mut(index) {
                     buffer.set_file(FileInfo::new(path.clone(), format, Some(disk)));
@@ -320,6 +330,9 @@ impl Editor {
                     .map(|error| format!("; {error}"))
                     .unwrap_or_default();
                 self.show_message(format!("Wrote {shown}{warning}"));
+                if configuring {
+                    self.apply_config_file(&text, &shown);
+                }
                 if self.buffers.language(index) == Some(Language::Rust) {
                     self.request_lint(&path);
                 }
