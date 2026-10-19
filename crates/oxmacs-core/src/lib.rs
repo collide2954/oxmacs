@@ -1,3 +1,4 @@
+pub mod atlas;
 pub mod bouncer;
 pub mod cli;
 pub mod clock;
