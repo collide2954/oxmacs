@@ -26,7 +26,7 @@ fn excerpt(line: &str, wanted: &str, room: usize) -> String {
     }
     let start = (end + 2).saturating_sub(room).min(at);
     let rest: String = line.chars().skip(start).collect();
-    format!("…{}", clip(&rest, room.saturating_sub(1)))
+    format!("…{}", clip(rest.trim_start(), room.saturating_sub(1)))
 }
 
 impl Editor {
@@ -267,7 +267,7 @@ mod tests {
         let (dir, mut editor) = vault();
         fs::write(
             dir.path().join("Long.atlas"),
-            "title: Long\n---\nshort start [Garden plan] then a great deal more text after it\nplenty of words written well before we finally mention [Garden plan]\n",
+            "title: Long\n---\nshort start [Garden plan] then a great deal more text after it\nplenty of words written well before we finally mention [Garden plan]\naaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbb [Garden plan]\n",
         )
         .unwrap();
         press(&mut editor, "C-c n b");
@@ -286,6 +286,10 @@ mod tests {
         );
         assert!(
             shown.contains(&"     4  …finally mention [Garden plan]".to_owned()),
+            "{shown:?}"
+        );
+        assert!(
+            shown.contains(&"     5  …bbbbbbbbbbbbbb [Garden plan]".to_owned()),
             "{shown:?}"
         );
     }
