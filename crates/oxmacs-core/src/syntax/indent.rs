@@ -4,9 +4,14 @@ use crate::display;
 use crate::syntax::{Language, Syntax, ancestors};
 use crate::text::Buffer;
 
-const OPENERS: &[&str] = &["{", "(", "["];
-const CLOSERS: &[&str] = &["}", ")", "]"];
-const LITERALS: &[&str] = &["string_literal", "raw_string_literal", "block_comment"];
+const OPENERS: &[&str] = &["{", "(", "[", "[["];
+const CLOSERS: &[&str] = &["}", ")", "]", "]]"];
+const LITERALS: &[&str] = &[
+    "string_literal",
+    "raw_string_literal",
+    "block_comment",
+    "string",
+];
 
 impl Language {
     pub fn indent_unit(self) -> usize {
@@ -36,17 +41,23 @@ impl Syntax {
                 .map(|open| (ancestor, open))
         });
         let unit = self.language.indent_unit();
+        let language = self.language;
         let Some((container, open)) = container else {
-            return Some(match self.language {
-                Language::Rust => {
-                    continuation(statement(node, tree.root_node()), line, &rest) * unit
+            return Some(match language {
+                Language::Rust | Language::R => {
+                    continuation(language, statement(node, tree.root_node()), line, &rest) * unit
                 }
-                Language::Toml | Language::Markdown | Language::R => {
+                Language::Toml | Language::Markdown => {
                     previous_indentation(buffer, line, tab_width)
                 }
             });
         };
-        let base = indentation_of(buffer, row(open), tab_width);
+        let base = match language {
+            Language::R => indentation_of(buffer, row(owner(container, open)), tab_width),
+            Language::Rust | Language::Toml | Language::Markdown => {
+                indentation_of(buffer, row(open), tab_width)
+            }
+        };
         let closes = !node.is_named()
             && CLOSERS.contains(&node.kind())
             && node.start_byte() == byte
@@ -54,12 +65,38 @@ impl Syntax {
         if closes {
             return Some(base);
         }
-        let continues = match self.language {
-            Language::Rust => continuation(statement(node, container), line, &rest),
-            Language::Toml | Language::Markdown | Language::R => 0,
+        let continues = match language {
+            Language::Rust | Language::R => {
+                continuation(language, statement(node, container), line, &rest)
+            }
+            Language::Toml | Language::Markdown => 0,
         };
-        Some(base + unit + continues * unit)
+        let hanging = (language == Language::R && open.kind() != "{")
+            .then(|| hanging_column(buffer, open, tab_width))
+            .flatten();
+        Some(hanging.unwrap_or(base + unit) + continues * unit)
     }
+}
+
+fn owner<'tree>(container: Node<'tree>, open: Node<'tree>) -> Node<'tree> {
+    if container.start_byte() < open.start_byte() {
+        return container;
+    }
+    container
+        .parent()
+        .filter(|parent| !matches!(parent.kind(), "program" | "braced_expression"))
+        .unwrap_or(container)
+}
+
+fn hanging_column(buffer: &Buffer, open: Node<'_>, tab_width: usize) -> Option<usize> {
+    let after = buffer.byte_to_char(open.end_byte());
+    let line = buffer.line_of(after);
+    let start = buffer.line_start(line);
+    let text = buffer.line_text(line);
+    let rest: String = text.chars().skip(after - start).collect();
+    let skipped = rest.chars().take_while(|c| matches!(c, ' ' | '\t')).count();
+    let first = rest.chars().nth(skipped)?;
+    (first != '#').then(|| display::display_column(&text, after - start + skipped, tab_width))
 }
 
 fn row(node: Node<'_>) -> usize {
@@ -93,8 +130,9 @@ fn statement<'tree>(node: Node<'tree>, container: Node<'tree>) -> Option<Node<'t
     ancestors(node).find(|ancestor| ancestor.parent() == Some(container))
 }
 
-fn continuation(statement: Option<Node<'_>>, line: usize, rest: &str) -> usize {
-    let starts_fresh = rest.starts_with('{') || starts_with_word(rest, "where");
+fn continuation(language: Language, statement: Option<Node<'_>>, line: usize, rest: &str) -> usize {
+    let starts_fresh =
+        rest.starts_with('{') || (language == Language::Rust && starts_with_word(rest, "where"));
     usize::from(statement.is_some_and(|statement| row(statement) < line) && !starts_fresh)
 }
 
@@ -238,6 +276,82 @@ impl Point {
         assert_eq!(indent(2), Some(2));
         assert_eq!(indent(3), Some(6));
         assert_eq!(indent(4), Some(2));
+    }
+
+    const TIDY_R: &str = r#"library(dplyr)
+
+#' Summarise a data frame.
+summarise_by <- function(data, group,
+                         value = "x") {
+  if (nrow(data) == 0) {
+    return(NULL)
+  } else if (is.null(group)) {
+    stop("no group")
+  }
+  result <- data |>
+    group_by({{ group }}) |>
+    summarise(
+      mean = mean(.data[[value]]),
+      n = n()
+    )
+  for (i in seq_len(3)) {
+    message(i)
+  }
+  result
+}
+
+plot <- ggplot(df, aes(x, y)) +
+  geom_point()
+
+if (interactive())
+  print(plot)
+
+values <- c(1, 2,
+            3)
+lookup <- list(
+  a = 1,
+  b = list(
+    c = 2
+  )
+)
+x[[
+  "key"
+]] <- 1
+"#;
+
+    #[test]
+    fn tidyverse_r_keeps_its_indentation() {
+        let (buffer, syntax) = parsed(Language::R, TIDY_R);
+
+        for (line, text) in TIDY_R.lines().enumerate() {
+            if text.trim().is_empty() {
+                continue;
+            }
+            let expected = text.len() - text.trim_start().len();
+            assert_eq!(
+                syntax.indentation(&buffer, line, 8),
+                Some(expected),
+                "line {}: {text}",
+                line + 1
+            );
+        }
+    }
+
+    #[test]
+    fn r_indents_new_lines_two_spaces_into_blocks_and_pipes() {
+        let (buffer, syntax) = parsed(Language::R, "f <- function(x) {\nx |>\nsum()\n}\n");
+        let indent = |line| syntax.indentation(&buffer, line, 8);
+
+        assert_eq!(indent(1), Some(2));
+        assert_eq!(indent(2), Some(4));
+        assert_eq!(indent(3), Some(0));
+    }
+
+    #[test]
+    fn r_multiline_strings_are_left_alone() {
+        let (buffer, syntax) = parsed(Language::R, "x <- \"a\n   b\"\n");
+
+        assert_eq!(syntax.indentation(&buffer, 1, 8), None);
     }
 
     #[test]
