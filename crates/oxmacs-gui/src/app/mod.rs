@@ -68,7 +68,7 @@ pub enum Message {
     AutoComplete,
     FocusWindow(WindowId),
     PreviewSized(WindowId, f32),
-    PlotSized(iced::Size),
+    PlotSized(WindowId, iced::Size),
     PickPlot(WindowId, usize),
     PlotLoaded(PathBuf, Option<widget::image::Allocation>),
     Fetched(FetchId, Result<String, String>),

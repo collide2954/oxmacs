@@ -7,6 +7,12 @@ use crate::syntax::Language;
 use crate::text::Buffer;
 
 pub(super) const R_PROMPT: &str = "\u{1}>\u{2}\u{3}";
+pub(super) const R_CONSOLE: &str = "*R:analysis*";
+pub(super) const R_PLOTS: &str = "*R:analysis plots*";
+
+pub(super) fn r_folder() -> PathBuf {
+    std::env::temp_dir().join("analysis")
+}
 
 pub(super) fn press(editor: &mut Editor, notation: &str) {
     let sequence: KeySequence = notation.parse().unwrap();
@@ -88,6 +94,7 @@ pub(super) fn r_script(text: &str, point: usize) -> Editor {
     let mut editor = editor_with(text, point);
     editor.set_major_mode(Some(Language::R));
     editor.probe_r = r_found;
+    editor.set_working_directory(r_folder());
     editor
 }
 

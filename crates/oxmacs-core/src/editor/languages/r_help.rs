@@ -116,7 +116,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::editor::test_support::{
-        R_PROMPT, lines, press, r_running, r_script, r_sent, type_text,
+        R_CONSOLE, R_PROMPT, lines, press, r_running, r_script, r_sent, type_text,
     };
     use crate::theme::Highlight;
 
@@ -192,10 +192,10 @@ mod tests {
 
         editor.session_output(job, &format!("{HELP}{R_PROMPT}"));
         press(&mut editor, "C-x b");
-        type_text(&mut editor, "*R*");
+        type_text(&mut editor, R_CONSOLE);
         press(&mut editor, "RET");
 
-        assert_eq!(editor.buffer().name(), "*R*");
+        assert_eq!(editor.buffer().name(), R_CONSOLE);
         assert_eq!(editor.buffer().contents(), "> ");
     }
 

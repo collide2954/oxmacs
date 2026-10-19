@@ -155,6 +155,13 @@ impl<'a> Pane<'a> {
         }
     }
 
+    pub fn plot_session(&self) -> Option<crate::text::BufferId> {
+        match self.editor.buffers.mode(self.index) {
+            Some(Mode::Plots(plots)) => plots.session(),
+            _ => None,
+        }
+    }
+
     pub fn plot_gallery(&self) -> Option<GalleryView> {
         match self.editor.buffers.mode(self.index) {
             Some(Mode::Plots(plots)) => plots.gallery(),

@@ -186,8 +186,8 @@ impl App {
         .padding([4, 8])
         .align_right(Length::Fill);
         let sized = sensor(stack![picture, counter])
-            .on_show(Message::PlotSized)
-            .on_resize(Message::PlotSized);
+            .on_show(move |size| Message::PlotSized(window, size))
+            .on_resize(move |size| Message::PlotSized(window, size));
         mouse_area(sized)
             .on_press(Message::FocusWindow(window))
             .into()

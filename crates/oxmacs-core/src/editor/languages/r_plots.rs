@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 
+use crate::editor::WindowId;
 use crate::editor::buffers::Mode;
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Editor, Effect};
 use crate::external::r;
-use crate::text::Buffer;
+use crate::text::{Buffer, BufferId};
 
-const NAME: &str = "*R plots*";
 const SIZE: (u32, u32) = (672, 480);
 const ZOOM_WIDTH: u32 = 1200;
 const NONE: &str = "none";
@@ -36,6 +36,7 @@ fn columns(count: usize) -> usize {
 
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Plots {
+    session: Option<BufferId>,
     gallery: Option<GalleryView>,
     shown: Option<PlotView>,
     size: Option<(u32, u32)>,
@@ -47,6 +48,10 @@ pub(in crate::editor) struct Plots {
 impl Plots {
     pub(in crate::editor) fn view(&self) -> Option<PlotView> {
         self.shown.clone()
+    }
+
+    pub(in crate::editor) fn session(&self) -> Option<BufferId> {
+        self.session
     }
 
     pub(in crate::editor) fn gallery(&self) -> Option<GalleryView> {
@@ -114,8 +119,36 @@ fn arrival(payload: &str) -> Option<Arrival> {
 
 impl Editor {
     fn plots_index(&self) -> Option<usize> {
+        let in_plots = matches!(self.buffers.mode(0), Some(Mode::Plots(_)));
+        if in_plots && !self.r_focused() {
+            return Some(0);
+        }
+        let session = self.session_id();
         self.buffers
-            .find_mode(|mode| matches!(mode, Mode::Plots(_)))
+            .find_mode(|mode| matches!(mode, Mode::Plots(plots) if plots.session == session))
+    }
+
+    fn plots_in(&mut self, window: WindowId) -> Option<BufferId> {
+        let pane = self.pane_of(window)?;
+        let buffer = pane.buffer().id();
+        pane.plot_session()?;
+        Some(buffer)
+    }
+
+    fn in_plots_window(&mut self, window: WindowId, act: impl FnOnce(&mut Self)) {
+        let Some(buffer) = self.plots_in(window) else {
+            return;
+        };
+        let Some(index) = self.buffers.position(|known| known.id() == buffer) else {
+            return;
+        };
+        let Some(Mode::Plots(plots)) = self.buffers.mode(index) else {
+            return;
+        };
+        let Some(session) = plots.session else {
+            return;
+        };
+        self.with_session(session, act);
     }
 
     fn plots_mut(&mut self) -> Option<&mut Plots> {
@@ -139,9 +172,19 @@ impl Editor {
                 editor.select_buffer(index);
                 return;
             }
-            let mut buffer = Buffer::with_text(NAME, "");
+            let session = editor.session_id();
+            let console = session
+                .and_then(|id| editor.buffers.position(|known| known.id() == id))
+                .and_then(|index| editor.buffers.get(index))
+                .map_or("*R*", Buffer::name);
+            let name = format!("{} plots*", console.trim_end_matches('*'));
+            let mut buffer = Buffer::with_text(&name, "");
             buffer.set_read_only(true);
-            editor.add_buffer_with(buffer, Mode::Plots(Plots::default()));
+            let plots = Plots {
+                session,
+                ..Plots::default()
+            };
+            editor.add_buffer_with(buffer, Mode::Plots(plots));
         };
         let console = self
             .console_index()
@@ -199,11 +242,13 @@ impl Editor {
         }
     }
 
-    pub fn plots_sized(&mut self, width: u32, height: u32) {
-        if let Some(plots) = self.plots_mut() {
-            plots.size = Some((width, height));
-        }
-        self.r_plot_refresh();
+    pub fn plots_sized(&mut self, window: WindowId, width: u32, height: u32) {
+        self.in_plots_window(window, |editor| {
+            if let Some(plots) = editor.plots_mut() {
+                plots.size = Some((width, height));
+            }
+            editor.r_plot_refresh();
+        });
     }
 
     pub(in crate::editor) fn r_plot_step(&mut self, forward: bool) {
@@ -373,7 +418,11 @@ impl Editor {
         }
     }
 
-    pub fn pick_plot(&mut self, position: usize) {
+    pub fn pick_plot_in(&mut self, window: WindowId, position: usize) {
+        self.in_plots_window(window, |editor| editor.pick_plot(position));
+    }
+
+    fn pick_plot(&mut self, position: usize) {
         let Some(plots) = self.plots_mut() else {
             return;
         };
@@ -391,9 +440,9 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::editor::test_support::{
-        R_PROMPT, press, r_running, r_script, r_sent, r_sessions, type_text,
+        R_CONSOLE, R_PLOTS, R_PROMPT, press, r_running, r_script, r_sent, r_sessions, type_text,
     };
-    use crate::editor::{Axis, Editor, Effect, JobId, Tiling};
+    use crate::editor::{Axis, Editor, Effect, JobId, Tiling, WindowId};
     use crate::external::r::PLOTS_VARIABLE;
 
     use std::path::PathBuf;
@@ -402,6 +451,19 @@ mod tests {
 
     fn plot(editor: &mut Editor, job: JobId, fields: &str) {
         editor.session_output(job, &format!("\u{1}plot\u{2}{fields}\u{3}{R_PROMPT}"));
+    }
+
+    fn plots_window(editor: &Editor) -> WindowId {
+        editor
+            .tiling()
+            .windows()
+            .into_iter()
+            .find(|window| {
+                editor
+                    .pane_of(*window)
+                    .is_some_and(|pane| pane.plot().is_some())
+            })
+            .unwrap()
     }
 
     fn shown(editor: &Editor) -> Option<PlotView> {
@@ -449,7 +511,7 @@ mod tests {
             })
             .map(|pane| pane.buffer().name().to_owned())
             .collect();
-        assert_eq!(names, ["*R*", "*R plots*"]);
+        assert_eq!(names, [R_CONSOLE, R_PLOTS]);
     }
 
     #[test]
@@ -469,12 +531,12 @@ mod tests {
         plot(&mut editor, job, "new\t1\t1\t672\t480\tC:/plots/plot-1.png");
         editor.take_effects();
 
-        editor.plots_sized(800, 600);
+        editor.plots_sized(plots_window(&editor), 800, 600);
         assert_eq!(
             r_sent(&mut editor),
             ["getOption(\"oxmacs\")$plot(1L, 800L, 600L)\n"]
         );
-        editor.plots_sized(900, 600);
+        editor.plots_sized(plots_window(&editor), 900, 600);
         assert_eq!(r_sent(&mut editor), Vec::<String>::new());
 
         plot(
@@ -492,7 +554,7 @@ mod tests {
             job,
             "asked\t1\t1\t900\t600\tC:/plots/plot-3.png",
         );
-        editor.plots_sized(900, 600);
+        editor.plots_sized(plots_window(&editor), 900, 600);
         assert_eq!(r_sent(&mut editor), Vec::<String>::new());
     }
 
@@ -503,7 +565,7 @@ mod tests {
         plot(&mut editor, job, "new\t2\t2\t672\t480\tC:/plots/plot-2.png");
         editor.take_effects();
         press(&mut editor, "C-x o C-x o");
-        assert_eq!(editor.buffer().name(), "*R plots*");
+        assert_eq!(editor.buffer().name(), R_PLOTS);
 
         press(&mut editor, "p");
         assert_eq!(
@@ -536,7 +598,7 @@ mod tests {
         }
         editor.take_effects();
         press(editor, "C-x o C-x o");
-        assert_eq!(editor.buffer().name(), "*R plots*");
+        assert_eq!(editor.buffer().name(), R_PLOTS);
     }
 
     #[test]
@@ -676,7 +738,7 @@ mod tests {
         thumbnails(&mut editor, job, 2);
         editor.take_effects();
 
-        editor.pick_plot(0);
+        editor.pick_plot_in(plots_window(&editor), 0);
         assert_eq!(gallery(&editor), None);
         assert_eq!(
             r_sent(&mut editor),
@@ -709,7 +771,7 @@ mod tests {
         editor.session_output(job, R_PROMPT);
 
         press(&mut editor, "C-x b");
-        type_text(&mut editor, "*R*");
+        type_text(&mut editor, R_CONSOLE);
         press(&mut editor, "RET");
         assert_eq!(
             editor.buffer().contents(),

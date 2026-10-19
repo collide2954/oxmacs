@@ -123,6 +123,7 @@ impl Editor {
             Command::RInsertAssignment => self.insert_operator("<-"),
             Command::RInsertPipe => self.insert_operator("|>"),
             Command::RunR => self.run_r(),
+            Command::RNewSession => self.r_new_session(),
             Command::RSendStatement => self.r_send_statement(),
             Command::RSendFunction => self.r_send_function(),
             Command::RSwitchToConsole => self.r_switch_to_console(),

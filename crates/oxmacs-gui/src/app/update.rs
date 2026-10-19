@@ -192,13 +192,13 @@ impl App {
             Message::PlotLoaded(path, allocation) => self.plot_loaded(path, allocation),
             Message::PickPlot(window, position) => {
                 self.focus(window);
-                self.editor.pick_plot(position);
+                self.editor.pick_plot_in(window, position);
             }
-            Message::PlotSized(size) => {
+            Message::PlotSized(window, size) => {
                 let pixels =
                     |extent: f32| u32::try_from(units::floor_to_usize(extent)).unwrap_or(u32::MAX);
                 self.editor
-                    .plots_sized(pixels(size.width), pixels(size.height));
+                    .plots_sized(window, pixels(size.width), pixels(size.height));
             }
             Message::PreviewSized(window, height) => {
                 self.preview_heights.retain(|(known, _)| *known != window);

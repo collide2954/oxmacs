@@ -29,6 +29,7 @@ impl Editor {
         if !self.r_running() && !self.start_r() {
             return;
         }
+        self.link_script();
         self.show_console(false);
         self.r_evaluate(code);
     }
@@ -90,10 +91,19 @@ impl Editor {
 
     pub(in crate::editor) fn r_switch_to_console(&mut self) {
         if matches!(self.buffers.mode(0), Some(Mode::Console(_))) {
-            let script = |editor: &Self| {
-                editor.buffers.find_mode(|mode| {
-                    matches!(mode, Mode::Text(Some(syntax)) if syntax.language() == Language::R)
-                })
+            let console = self.buffers.current().id();
+            let script = move |editor: &Self| {
+                let scripts: Vec<usize> = (0..editor.buffers.len())
+                    .filter(|index| editor.buffers.language(*index) == Some(Language::R))
+                    .collect();
+                let linked = scripts.iter().copied().find(|index| {
+                    editor
+                        .buffers
+                        .get(*index)
+                        .and_then(|buffer| editor.linked_session(buffer.id()))
+                        == Some(console)
+                });
+                linked.or_else(|| scripts.first().copied())
             };
             if script(self).is_none() {
                 self.show_message("No R script to go back to");
@@ -105,6 +115,7 @@ impl Editor {
         if !self.r_running() && !self.start_r() {
             return;
         }
+        self.link_script();
         self.show_console(true);
     }
 }
@@ -112,7 +123,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::editor::Effect;
-    use crate::editor::test_support::{press, r_running, r_script, r_sent, r_sessions};
+    use crate::editor::test_support::{R_CONSOLE, press, r_running, r_script, r_sent, r_sessions};
 
     #[test]
     fn control_return_starts_r_sends_the_statement_and_steps() {
@@ -176,14 +187,14 @@ mod tests {
         let mut editor = r_script("x\n", 0);
 
         press(&mut editor, "C-c C-z");
-        assert_eq!(editor.buffer().name(), "*R*");
+        assert_eq!(editor.buffer().name(), R_CONSOLE);
         assert_eq!(r_sessions(&mut editor).len(), 1);
 
         press(&mut editor, "C-c C-z");
         assert_eq!(editor.buffer().name(), "t");
 
         press(&mut editor, "C-c C-z");
-        assert_eq!(editor.buffer().name(), "*R*");
+        assert_eq!(editor.buffer().name(), R_CONSOLE);
         assert_eq!(r_sessions(&mut editor), Vec::new());
     }
 }

@@ -323,27 +323,32 @@ pub enum Command {
     RInsertPipe,
     #[strum(
         message = "Start an R console beside the script",
-        detailed_message = "Starts R in *R*, using the r-program setting or the R found on your system. Type after the prompt and press RET to run it; M-p and M-n bring back earlier input."
+        detailed_message = "Starts R in a console named after its folder, such as *R:analysis*, using the r-program setting or the R found on your system. Type after the prompt and press RET to run it; M-p and M-n bring back earlier input."
     )]
     RunR,
     #[strum(
+        message = "Start another R session beside the current one",
+        detailed_message = "Starts a new R session named after the folder it runs in, such as *R:analysis:2*, and shows it beside the current window. The R script you start it from sends its code there from then on; other scripts keep their own sessions."
+    )]
+    RNewSession,
+    #[strum(
         message = "Send the statement or selection to R and step",
-        detailed_message = "Sends the selection, or else the whole statement around point even when it spans several lines, to *R* and moves to the next statement. R starts first when it isn't running, and the code shows in *R* as R reads it."
+        detailed_message = "Sends the selection, or else the whole statement around point even when it spans several lines, to the script's R session and moves to the next statement. R starts first when it isn't running, and the code shows in the console as R reads it."
     )]
     RSendStatement,
     #[strum(
         message = "Send the function or paragraph to R and step",
-        detailed_message = "Sends the selection, or else the function definition around point, or else the paragraph around point, to *R* and moves past it. R starts first when it isn't running."
+        detailed_message = "Sends the selection, or else the function definition around point, or else the paragraph around point, to the script's R session and moves past it. R starts first when it isn't running."
     )]
     RSendFunction,
     #[strum(
-        message = "Switch between the R script and *R*",
-        detailed_message = "From an R script, shows *R* beside it and moves there, starting R when it isn't running. From *R*, goes back to the R script used most recently."
+        message = "Switch between the R script and its R session",
+        detailed_message = "From an R script, shows its R session beside it and moves there, starting R when it isn't running. From an R session, goes back to the script that last used it."
     )]
     RSwitchToConsole,
     #[strum(
         message = "Show R's help on a topic in *R help*",
-        detailed_message = "Asks for a topic, offering the symbol at point, and shows R's help for it in *R help* beside the current window. Typing ?topic in *R* shows it there too. R starts first when it isn't running."
+        detailed_message = "Asks for a topic, offering the symbol at point, and shows R's help for it in *R help* beside the current window. Typing ?topic in an R session shows it there too. R starts first when it isn't running."
     )]
     RHelp,
     #[strum(message = "Send the input after the prompt")]
@@ -473,7 +478,7 @@ pub enum Command {
     RPlotPrevious,
     #[strum(
         message = "Save the shown R plot to a file",
-        detailed_message = "Asks for a file name and saves the plot shown in *R plots* at the window's size: as PDF when the name ends in .pdf, as SVG for .svg, and as PNG otherwise."
+        detailed_message = "Asks for a file name and saves the shown plot at the window's size: as PDF when the name ends in .pdf, as SVG for .svg, and as PNG otherwise."
     )]
     RPlotSave,
     #[strum(message = "Delete the shown R plot from the history")]
@@ -485,7 +490,7 @@ pub enum Command {
     RPlotZoom,
     #[strum(
         message = "Show all R plots side by side, or the shown one again",
-        detailed_message = "Switches *R plots* between the shown plot and a gallery of every plot in the history. In the gallery the arrows, n and p move the selection, and RET or a click opens the selected plot."
+        detailed_message = "Switches an R plots window between the shown plot and a gallery of every plot in the history. In the gallery the arrows, n and p move the selection, and RET or a click opens the selected plot."
     )]
     RPlotGallery,
     #[strum(message = "Open the plot selected in the gallery")]
@@ -496,7 +501,7 @@ pub enum Command {
     RPlotBelow,
     #[strum(
         message = "Complete the code before point",
-        detailed_message = "In R scripts and *R*, asks the running R session how the code before point could go on: objects, functions, arguments, columns after $ and packages. Several answers appear in a popup at point; a single answer is inserted at once."
+        detailed_message = "In R scripts and R sessions, asks the running R session how the code before point could go on: objects, functions, arguments, columns after $ and packages. Several answers appear in a popup at point; a single answer is inserted at once."
     )]
     CompletionAtPoint,
     #[strum(
@@ -707,7 +712,7 @@ impl Scope {
             Self::Weather => Some("*Weather*"),
             Self::Chat => Some("IRC buffers"),
             Self::Popup => Some("the completion popup"),
-            Self::Plots => Some("*R plots*"),
+            Self::Plots => Some("R plot windows"),
         }
     }
 }

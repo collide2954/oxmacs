@@ -9,9 +9,9 @@ use crate::editor::prompts::input_line::InputLine;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::external::r::{self, Piece, Stream};
 use crate::external::tools::{self, Probe};
+use crate::syntax::Language;
 use crate::text::{Buffer, BufferId};
 
-const NAME: &str = "*R*";
 const MIN_WIDTH: usize = 10;
 const MISSING: &str = "R not found; install it from https://cran.r-project.org or set r-program";
 
@@ -45,10 +45,129 @@ fn without_prompt(line: &str) -> &str {
         .unwrap_or(line)
 }
 
+impl Console {
+    fn new(job: JobId, helper: PathBuf, input: InputLine) -> Self {
+        Self {
+            job: Some(job),
+            helper: Some(helper),
+            input,
+            stream: Stream::default(),
+            expected: VecDeque::new(),
+            waiting: false,
+            asked: None,
+            width: None,
+            auto: None,
+        }
+    }
+
+    fn restart(&mut self, job: JobId, helper: PathBuf) {
+        self.job = Some(job);
+        self.helper = Some(helper);
+        self.stream = Stream::default();
+        self.expected.clear();
+        self.waiting = false;
+        self.asked = None;
+        self.width = None;
+        self.auto = None;
+    }
+}
+
+#[derive(Debug, Default)]
+pub(in crate::editor) struct Sessions {
+    focus: Option<BufferId>,
+    links: Vec<(BufferId, BufferId)>,
+}
+
 impl Editor {
+    fn consoles(&self) -> Vec<BufferId> {
+        (0..self.buffers.len())
+            .filter(|index| matches!(self.buffers.mode(*index), Some(Mode::Console(_))))
+            .filter_map(|index| self.buffers.get(index).map(Buffer::id))
+            .collect()
+    }
+
+    pub(super) fn session_id(&self) -> Option<BufferId> {
+        let consoles = self.consoles();
+        let known = |id: &BufferId| consoles.contains(id);
+        if let Some(focus) = self.r_sessions.focus.filter(known) {
+            return Some(focus);
+        }
+        let current = self.buffers.current().id();
+        let own = match self.buffers.mode(0) {
+            Some(Mode::Console(_)) => Some(current),
+            Some(Mode::Plots(plots)) => plots.session(),
+            _ => self.linked_session(current),
+        };
+        own.filter(known).or_else(|| consoles.first().copied())
+    }
+
+    pub(super) fn linked_session(&self, script: BufferId) -> Option<BufferId> {
+        self.r_sessions
+            .links
+            .iter()
+            .find(|(linked, _)| *linked == script)
+            .map(|(_, console)| *console)
+    }
+
+    pub(super) fn r_focused(&self) -> bool {
+        self.r_sessions.focus.is_some()
+    }
+
     pub(super) fn console_index(&self) -> Option<usize> {
-        self.buffers
-            .find_mode(|mode| matches!(mode, Mode::Console(_)))
+        let id = self.session_id()?;
+        self.buffers.position(|buffer| buffer.id() == id)
+    }
+
+    pub(super) fn with_session<T>(&mut self, id: BufferId, act: impl FnOnce(&mut Self) -> T) -> T {
+        let previous = self.r_sessions.focus.replace(id);
+        let result = act(self);
+        self.r_sessions.focus = previous;
+        result
+    }
+
+    fn console_of_job(&self, job: JobId) -> Option<BufferId> {
+        (0..self.buffers.len()).find_map(|index| match self.buffers.mode(index) {
+            Some(Mode::Console(console)) if console.job == Some(job) => {
+                self.buffers.get(index).map(Buffer::id)
+            }
+            _ => None,
+        })
+    }
+
+    fn link_to(&mut self, console: BufferId) {
+        if self.buffers.language(0) != Some(Language::R) {
+            return;
+        }
+        let script = self.buffers.current().id();
+        self.r_sessions
+            .links
+            .retain(|(linked, _)| *linked != script);
+        self.r_sessions.links.push((script, console));
+    }
+
+    pub(super) fn link_script(&mut self) {
+        if let Some(console) = self.session_id() {
+            self.link_to(console);
+        }
+    }
+
+    fn session_name(&self) -> String {
+        let directory = self.default_directory();
+        let folder = directory.file_name().map_or_else(
+            || "R".to_owned(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        let names = self.buffer_names();
+        (1..=names.len() + 1)
+            .map(|number| {
+                if number == 1 {
+                    format!("*R:{folder}*")
+                } else {
+                    format!("*R:{folder}:{number}*")
+                }
+            })
+            .find(|name| !names.contains(&name.as_str()))
+            .unwrap_or_default()
     }
 
     fn console_mut(&mut self) -> Option<&mut Console> {
@@ -65,7 +184,6 @@ impl Editor {
             _ => None,
         }
     }
-
     pub(super) fn r_running(&self) -> bool {
         self.console().is_some_and(|console| console.job.is_some())
     }
@@ -134,18 +252,36 @@ impl Editor {
     }
 
     pub(super) fn start_r(&mut self) -> bool {
+        let existing = self.session_id();
+        let Some(console) = self.launch_r(existing) else {
+            return false;
+        };
+        self.link_to(console);
+        true
+    }
+
+    pub(in crate::editor) fn r_new_session(&mut self) {
+        let Some(console) = self.launch_r(None) else {
+            return;
+        };
+        self.link_to(console);
+        self.with_session(console, |editor| editor.show_console(true));
+    }
+
+    fn launch_r(&mut self, existing: Option<BufferId>) -> Option<BufferId> {
         let Probe::Found { path, .. } = (self.probe_r)(self.config.r_program.as_deref()) else {
             self.show_message(MISSING);
-            return false;
+            return None;
         };
         let helper = match write_helper() {
             Ok(helper) => helper,
             Err(error) => {
                 self.show_message(format!("Cannot prepare R: {error}"));
-                return false;
+                return None;
             }
         };
         let job = JobId(self.next_job);
+        self.next_job += 1;
         let plots =
             env::temp_dir()
                 .join("oxmacs")
@@ -160,7 +296,6 @@ impl Editor {
                 original.to_string_lossy().into_owned(),
             ));
         }
-        self.next_job += 1;
         self.effects.push(Effect::StartSession(Job {
             id: job,
             program: path.display().to_string(),
@@ -168,49 +303,29 @@ impl Editor {
             directory: self.default_directory(),
             env: variables,
         }));
-        if let Some(console) = self.console_mut() {
-            console.job = Some(job);
-            console.helper = Some(helper);
-            console.stream = Stream::default();
-            console.expected.clear();
-            console.asked = None;
-            console.width = None;
-            console.auto = None;
-            console.waiting = false;
-            return true;
+        if let Some(id) = existing
+            && let Some(index) = self.buffers.position(|buffer| buffer.id() == id)
+            && let Some(Mode::Console(console)) = self.buffers.mode_mut(index)
+        {
+            console.restart(job, helper);
+            return Some(id);
         }
-        let mut buffer = Buffer::new(NAME);
+        let mut buffer = Buffer::new(self.session_name());
+        let id = buffer.id();
         let input = InputLine::new(&mut buffer);
         self.beside(|editor| {
-            editor.add_buffer_with(
-                buffer,
-                Mode::Console(Console {
-                    job: Some(job),
-                    helper: Some(helper),
-                    input,
-                    stream: Stream::default(),
-                    expected: VecDeque::new(),
-                    waiting: false,
-                    asked: None,
-                    width: None,
-                    auto: None,
-                }),
-            );
+            editor.add_buffer_with(buffer, Mode::Console(Console::new(job, helper, input)));
         });
-        true
-    }
-
-    fn console_job(&self, job: JobId) -> Option<usize> {
-        self.console_index().filter(|_| {
-            self.console()
-                .is_some_and(|console| console.job == Some(job))
-        })
+        Some(id)
     }
 
     pub fn session_output(&mut self, job: JobId, chunk: &str) {
-        if self.console_job(job).is_none() {
-            return;
+        if let Some(console) = self.console_of_job(job) {
+            self.with_session(console, |editor| editor.process_output(chunk));
         }
+    }
+
+    fn process_output(&mut self, chunk: &str) {
         let Some(console) = self.console_mut() else {
             return;
         };
@@ -246,7 +361,12 @@ impl Editor {
         self.fit_r_width();
     }
 
-    pub(in crate::editor) fn fit_r_width(&mut self) {
+    pub(in crate::editor) fn fit_r_widths(&mut self) {
+        for console in self.consoles() {
+            self.with_session(console, Self::fit_r_width);
+        }
+    }
+    fn fit_r_width(&mut self) {
         let Some(console) = self.console() else {
             return;
         };
@@ -270,9 +390,14 @@ impl Editor {
     }
 
     pub(in crate::editor) fn console_finished(&mut self, job: JobId, outcome: &Outcome) -> bool {
-        if self.console_job(job).is_none() {
+        let Some(console) = self.console_of_job(job) else {
             return false;
-        }
+        };
+        self.with_session(console, |editor| editor.report_end(outcome));
+        true
+    }
+
+    fn report_end(&mut self, outcome: &Outcome) {
         let summary = match outcome {
             Outcome::Exited(_) => "Process R finished".to_owned(),
             Outcome::Failed(error) => format!("Process R failed to start: {error}"),
@@ -282,7 +407,6 @@ impl Editor {
             console.job = None;
         }
         self.show_message(summary);
-        true
     }
 
     fn console_insert(&mut self, text: &str) {
@@ -425,7 +549,9 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use crate::editor::test_support::{lines, press, type_text};
+    use crate::editor::test_support::{
+        R_CONSOLE, R_PLOTS, lines, press, r_folder, r_script, r_sessions, type_text,
+    };
     use crate::editor::{Editor, Effect, Job, JobId, Outcome};
     use crate::external::r;
     use crate::external::tools::{self, Probe};
@@ -443,6 +569,7 @@ mod tests {
     fn started() -> (Editor, JobId) {
         let mut editor = Editor::new();
         editor.probe_r = found;
+        editor.set_working_directory(r_folder());
         press(&mut editor, "M-x");
         type_text(&mut editor, "run-r");
         press(&mut editor, "RET");
@@ -480,6 +607,7 @@ mod tests {
     fn run_r_starts_r_with_the_helper_as_its_profile() {
         let mut editor = Editor::new();
         editor.probe_r = found;
+        editor.set_working_directory(r_folder());
 
         press(&mut editor, "M-x");
         type_text(&mut editor, "run-r");
@@ -494,7 +622,7 @@ mod tests {
             .find(|(name, _)| name == r::PROFILE_VARIABLE)
             .unwrap();
         assert_eq!(fs::read_to_string(profile).unwrap(), r::HELPER);
-        assert_eq!(editor.buffer().name(), "*R*");
+        assert_eq!(editor.buffer().name(), R_CONSOLE);
         assert_eq!(editor.tiling().windows().len(), 2);
     }
 
@@ -649,6 +777,87 @@ mod tests {
         assert_eq!(sent(&mut editor), ["getOption(\"oxmacs\")$width(70L)\n"]);
         editor.resize_pane(editor.selected_window(), 30, 71);
         assert_eq!(sent(&mut editor), Vec::<String>::new());
+    }
+
+    fn sends(editor: &mut Editor) -> Vec<(JobId, String)> {
+        editor
+            .take_effects()
+            .into_iter()
+            .filter_map(|effect| match effect {
+                Effect::Send(job, text) => Some((job, text)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn new_session(editor: &mut Editor) -> JobId {
+        press(editor, "M-x");
+        type_text(editor, "r-new-session");
+        press(editor, "RET");
+        r_sessions(editor)[0]
+    }
+
+    fn visit(editor: &mut Editor, name: &str) {
+        press(editor, "C-x b");
+        type_text(editor, name);
+        press(editor, "RET");
+    }
+
+    #[test]
+    fn sessions_are_named_after_their_folder_and_numbered_when_they_clash() {
+        let mut editor = r_script("x\n", 0);
+        press(&mut editor, "C-c C-z");
+        assert_eq!(editor.buffer().name(), R_CONSOLE);
+        press(&mut editor, "C-c C-z");
+
+        new_session(&mut editor);
+
+        assert_eq!(editor.buffer().name(), "*R:analysis:2*");
+    }
+
+    #[test]
+    fn each_script_sends_to_the_session_it_last_used() {
+        let mut editor = r_script("a <- 1\n", 0);
+        press(&mut editor, "C-RET");
+        let first = r_sessions(&mut editor)[0];
+        visit(&mut editor, "b");
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "r-mode");
+        press(&mut editor, "RET");
+        type_text(&mut editor, "b");
+        press(&mut editor, "C-RET");
+        assert_eq!(sends(&mut editor), [(first, "b\n".to_owned())]);
+
+        let second = new_session(&mut editor);
+        visit(&mut editor, "b");
+        press(&mut editor, "M-< C-RET");
+        assert_eq!(sends(&mut editor), [(second, "b\n".to_owned())]);
+
+        visit(&mut editor, "t");
+        press(&mut editor, "M-< C-RET");
+        assert_eq!(sends(&mut editor), [(first, "a <- 1\n".to_owned())]);
+    }
+
+    #[test]
+    fn output_and_plots_go_to_the_session_that_made_them() {
+        let mut editor = r_script("x\n", 0);
+        press(&mut editor, "C-c C-z");
+        let first = r_sessions(&mut editor)[0];
+        press(&mut editor, "C-c C-z");
+        let second = new_session(&mut editor);
+
+        editor.session_output(first, PROMPT);
+        editor.session_output(second, "two\n");
+        editor.session_output(
+            second,
+            &format!("\u{1}plot\u{2}new\t1\t1\t672\t480\tC:/p.png\u{3}{PROMPT}"),
+        );
+
+        assert_eq!(contents(&editor), "two\n> ");
+        assert!(editor.buffer_names().contains(&"*R:analysis:2 plots*"));
+        assert!(!editor.buffer_names().contains(&R_PLOTS));
+        visit(&mut editor, R_CONSOLE);
+        assert_eq!(contents(&editor), "> ");
     }
 
     #[test]
