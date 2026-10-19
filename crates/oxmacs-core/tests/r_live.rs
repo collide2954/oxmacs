@@ -48,6 +48,26 @@ fn help_comes_back_as_markers_and_leaves_the_last_value_alone() {
 
 #[test]
 #[ignore = "runs the R installed on this machine"]
+fn output_and_help_fit_the_width_r_is_given() {
+    let output = session(
+        "getOption(\"oxmacs\")$width(40L)\n1:30\ngetOption(\"oxmacs\")$help(\"mean\")\nq()\n",
+    );
+
+    assert!(
+        output.contains("\n[13]") || output.contains("\n[12]"),
+        "{output:?}"
+    );
+    let help = output
+        .split_once("\u{1}help\u{2}")
+        .and_then(|(_, rest)| rest.split_once('\u{3}'))
+        .map(|(help, _)| help.replace("_\u{8}", ""))
+        .unwrap();
+    let widest = help.lines().map(|line| line.chars().count()).max().unwrap();
+    assert!(widest <= 42, "{widest}: {help}");
+}
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
 fn completions_come_back_with_where_they_start() {
     let output = session(
         "mydata <- data.frame(alpha = 1, beta = 2)\ngetOption(\"oxmacs\")$complete(\"mydata$a\", 8L)\ngetOption(\"oxmacs\")$complete(\"x <- pri\", 8L)\ngetOption(\"oxmacs\")$complete(\"library(stat\", 12L)\nq()\n",

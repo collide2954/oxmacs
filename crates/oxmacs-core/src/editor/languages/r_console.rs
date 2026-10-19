@@ -12,6 +12,7 @@ use crate::external::tools::{self, Probe};
 use crate::text::Buffer;
 
 const NAME: &str = "*R*";
+const MIN_WIDTH: usize = 10;
 const MISSING: &str = "R not found; install it from https://cran.r-project.org or set r-program";
 
 #[derive(Debug)]
@@ -23,6 +24,7 @@ pub(in crate::editor) struct Console {
     expected: VecDeque<Option<String>>,
     waiting: bool,
     asked: Option<Asked>,
+    width: Option<usize>,
 }
 
 static HELPERS: AtomicU64 = AtomicU64::new(0);
@@ -149,6 +151,7 @@ impl Editor {
             console.stream = Stream::default();
             console.expected.clear();
             console.asked = None;
+            console.width = None;
             console.waiting = false;
             return true;
         }
@@ -165,6 +168,7 @@ impl Editor {
                     expected: VecDeque::new(),
                     waiting: false,
                     asked: None,
+                    width: None,
                 }),
             );
         });
@@ -213,6 +217,30 @@ impl Editor {
                 }
                 Piece::Marker { kind, payload } => self.r_marker(&kind, &payload),
             }
+        }
+        self.fit_r_width();
+    }
+
+    pub(in crate::editor) fn fit_r_width(&mut self) {
+        let Some(console) = self.console() else {
+            return;
+        };
+        if console.job.is_none() || console.helper.is_some() {
+            return;
+        }
+        let known = console.width;
+        let Some(width) = self
+            .console_index()
+            .and_then(|index| self.buffers.get(index))
+            .and_then(|buffer| self.width_showing(buffer.id()))
+            .filter(|width| *width >= MIN_WIDTH && Some(*width) != known)
+        else {
+            return;
+        };
+        if self.r_request(&format!("getOption(\"oxmacs\")$width({width}L)"))
+            && let Some(console) = self.console_mut()
+        {
+            console.width = Some(width);
         }
     }
 
@@ -576,6 +604,23 @@ mod tests {
         editor.session_output(job, &format!("[1] 2\n{PROMPT}"));
 
         assert_eq!(contents(&editor), "R version 4.6.1\n> 1 + 1\n[1] 2\n> ");
+    }
+
+    #[test]
+    fn r_learns_the_console_width_when_ready_and_when_it_changes() {
+        let (mut editor, job) = started();
+        editor.resize_pane(editor.selected_window(), 20, 61);
+        editor.take_effects();
+
+        editor.session_output(job, PROMPT);
+        assert_eq!(sent(&mut editor), ["getOption(\"oxmacs\")$width(60L)\n"]);
+        editor.session_output(job, PROMPT);
+        assert_eq!(contents(&editor), "> ");
+
+        editor.resize_pane(editor.selected_window(), 20, 71);
+        assert_eq!(sent(&mut editor), ["getOption(\"oxmacs\")$width(70L)\n"]);
+        editor.resize_pane(editor.selected_window(), 30, 71);
+        assert_eq!(sent(&mut editor), Vec::<String>::new());
     }
 
     #[test]

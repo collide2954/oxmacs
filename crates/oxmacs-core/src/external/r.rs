@@ -56,6 +56,11 @@ local({
     marker("complete", paste(found, collapse = "\t"))
     last()
   }
+  oxmacs$width <- function(width) {
+    options(width = width)
+    tools::Rd2txt_options(width = width)
+    last()
+  }
   utils::rc.settings(ipck = TRUE)
   options(
     oxmacs = oxmacs,
@@ -208,6 +213,12 @@ mod tests {
     fn the_helper_completes_through_markers() {
         assert!(HELPER.contains("oxmacs$complete <- function(line, cursor)"));
         assert!(HELPER.contains("marker(\"complete\""));
+    }
+
+    #[test]
+    fn the_helper_sets_the_width_of_output_and_help() {
+        assert!(HELPER.contains("options(width = width)"));
+        assert!(HELPER.contains("tools::Rd2txt_options(width = width)"));
     }
 
     #[test]
