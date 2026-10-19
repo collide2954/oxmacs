@@ -9,7 +9,7 @@ use crate::editor::prompts::input_line::InputLine;
 use crate::editor::special::processes::Kind;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::external::r::{self, Piece, Stream};
-use crate::external::tools::{self, Probe};
+use crate::external::tools;
 use crate::syntax::Language;
 use crate::text::{Buffer, BufferId};
 
@@ -284,7 +284,7 @@ impl Editor {
     }
 
     fn launch_r(&mut self, existing: Option<BufferId>) -> Option<BufferId> {
-        let Probe::Found { path, .. } = (self.probe_r)(self.config.r_program.as_deref()) else {
+        let Some(path) = (self.find_r)(self.config.r_program.as_deref()) else {
             self.show_message(MISSING);
             return None;
         };
@@ -582,28 +582,20 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
 
     use crate::editor::test_support::{
-        R_CONSOLE, R_PLOTS, lines, press, r_folder, r_script, r_sessions, type_text,
+        R_CONSOLE, R_FOUND, R_PLOTS, lines, press, r_folder, r_script, r_sessions, type_text,
     };
     use crate::editor::{Editor, Effect, Job, JobId, Outcome};
     use crate::external::r;
-    use crate::external::tools::{self, Probe};
+    use crate::external::tools;
 
     const PROMPT: &str = "\u{1}>\u{2}\u{3}";
     const CONTINUE: &str = "\u{1}+\u{2}\u{3}";
 
-    fn found(_: Option<&str>) -> Probe {
-        Probe::Found {
-            path: PathBuf::from("R-bin"),
-            version: "R version 4.6.1".to_owned(),
-        }
-    }
-
     fn started() -> (Editor, JobId) {
         let mut editor = Editor::new();
-        editor.probe_r = found;
+        editor.find_r = R_FOUND;
         editor.set_working_directory(r_folder());
         press(&mut editor, "M-x");
         type_text(&mut editor, "run-r");
@@ -641,7 +633,7 @@ mod tests {
     #[test]
     fn run_r_starts_r_with_the_helper_as_its_profile() {
         let mut editor = Editor::new();
-        editor.probe_r = found;
+        editor.find_r = R_FOUND;
         editor.set_working_directory(r_folder());
 
         press(&mut editor, "M-x");
@@ -675,7 +667,7 @@ mod tests {
     #[test]
     fn the_helper_is_removed_once_r_is_ready() {
         let mut editor = Editor::new();
-        editor.probe_r = found;
+        editor.find_r = R_FOUND;
         press(&mut editor, "M-x");
         type_text(&mut editor, "run-r");
         press(&mut editor, "RET");
@@ -694,7 +686,7 @@ mod tests {
     #[test]
     fn missing_r_is_reported() {
         let mut editor = Editor::new();
-        editor.probe_r = |_| Probe::Missing;
+        editor.find_r = |_| None;
 
         press(&mut editor, "M-x");
         type_text(&mut editor, "run-r");

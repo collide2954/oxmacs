@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use crate::editor::{Editor, Effect, JobId};
-use crate::external::tools::Probe;
 use crate::input::KeySequence;
 use crate::syntax::Language;
 use crate::text::Buffer;
@@ -83,17 +82,12 @@ pub(super) fn contents_after(text: &str, point: usize, notation: &str) -> (Strin
     (editor.buffer().contents(), editor.buffer().point())
 }
 
-pub(super) fn r_found(_: Option<&str>) -> Probe {
-    Probe::Found {
-        path: PathBuf::from("R-bin"),
-        version: "R version 4.6.1".to_owned(),
-    }
-}
+pub(super) const R_FOUND: fn(Option<&str>) -> Option<PathBuf> = |_| Some(PathBuf::from("R-bin"));
 
 pub(super) fn r_script(text: &str, point: usize) -> Editor {
     let mut editor = editor_with(text, point);
     editor.set_major_mode(Some(Language::R));
-    editor.probe_r = r_found;
+    editor.find_r = R_FOUND;
     editor.set_working_directory(r_folder());
     editor
 }

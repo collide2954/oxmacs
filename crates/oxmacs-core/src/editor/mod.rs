@@ -42,7 +42,7 @@ use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::editor::chat::Irc;
 use crate::editor::special::weather::WeatherState;
-use crate::external::tools::{self, Probe};
+use crate::external::tools;
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::syntax::Language;
 use crate::text::Buffer;
@@ -136,7 +136,7 @@ pub struct Editor {
     working_directory: PathBuf,
     home: Option<PathBuf>,
     tool_report: special::doctor::ToolReport,
-    probe_r: fn(Option<&str>) -> Probe,
+    find_r: fn(Option<&str>) -> Option<PathBuf>,
     formatter: fn(&str, &Path, &str) -> Result<String, String>,
     font_note: Option<String>,
     config_path: Option<PathBuf>,
@@ -221,7 +221,7 @@ impl Editor {
             working_directory: env::current_dir().unwrap_or_default(),
             home: dirs::home_dir(),
             tool_report: special::doctor::ToolReport::default(),
-            probe_r: tools::probe_r,
+            find_r: tools::find_r,
             formatter: tools::rustfmt,
             font_note: None,
             config_path: config::default_path(),
