@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use jiff::{SignedDuration, Timestamp};
 
 use crate::display::LineStyle;
@@ -8,7 +10,7 @@ use crate::text::{Buffer, BufferId};
 use crate::theme::Highlight;
 
 const NAME: &str = "*Processes*";
-const HELP: &str = "RET visits   k stops   g refreshes   q quits";
+const HELP: &str = "RET visit  k stop  g refresh  q quit";
 const KEPT: usize = 10;
 const MEBIBYTE: u64 = 1024 * 1024;
 
@@ -124,7 +126,16 @@ fn memory(bytes: u64) -> String {
     format!("{} MB", bytes.div_ceil(MEBIBYTE))
 }
 
-fn cells(entry: &Tracked, now: Timestamp) -> [String; 7] {
+const COLUMNS: [&str; 8] = [
+    "Name", "Kind", "Status", "PID", "Time", "CPU", "Memory", "Details",
+];
+const DROPPED: [usize; 6] = [7, 1, 4, 3, 6, 5];
+const DETAILS: usize = 7;
+const GAP: usize = 2;
+const MIN_DETAILS: usize = 12;
+const ROOM: usize = 120;
+
+fn cells(entry: &Tracked, now: Timestamp) -> [String; 8] {
     let live = !entry.status.finished();
     let usage = |value: Option<String>| value.filter(|_| live).unwrap_or_else(|| "-".to_owned());
     [
@@ -137,10 +148,53 @@ fn cells(entry: &Tracked, now: Timestamp) -> [String; 7] {
         runtime(entry.ended.unwrap_or(now).duration_since(entry.started)),
         usage(entry.cpu.map(|cpu| format!("{cpu:.1}%"))),
         usage(entry.memory.map(memory)),
+        entry.detail.clone(),
     ]
 }
 
-fn page(tracked: &[Tracked], now: Timestamp) -> (Page, Vec<(usize, Source)>) {
+fn fit(widths: &[usize; 8], room: usize) -> (Vec<usize>, usize) {
+    let total = |shown: &[usize], details: usize| {
+        let cells: usize = shown
+            .iter()
+            .map(|column| {
+                if *column == DETAILS {
+                    details
+                } else {
+                    widths[*column]
+                }
+            })
+            .sum();
+        cells + GAP * shown.len().saturating_sub(1)
+    };
+    let mut shown: Vec<usize> = (0..COLUMNS.len()).collect();
+    let mut details = widths[DETAILS];
+    for dropped in DROPPED {
+        if total(&shown, details) <= room {
+            break;
+        }
+        shown.retain(|column| *column != dropped);
+        if dropped == DETAILS {
+            let spare = room.saturating_sub(total(&shown, 0) + GAP);
+            if spare >= MIN_DETAILS {
+                details = spare;
+                shown.push(DETAILS);
+                break;
+            }
+        }
+    }
+    (shown, details)
+}
+
+fn clip(text: &str, width: usize) -> String {
+    if text.chars().count() <= width {
+        return text.to_owned();
+    }
+    let mut clipped: String = text.chars().take(width.saturating_sub(1)).collect();
+    clipped.push('…');
+    clipped
+}
+
+fn page(tracked: &[Tracked], now: Timestamp, room: usize) -> (Page, Vec<(usize, Source)>) {
     let mut page = Page::default();
     page.heading("Processes");
     page.line(&[(HELP, Some(Highlight::Comment))]);
@@ -150,52 +204,56 @@ fn page(tracked: &[Tracked], now: Timestamp) -> (Page, Vec<(usize, Source)>) {
         page.line(&[("Nothing running", Some(Highlight::Comment))]);
         return (page, rows);
     }
-    let header = ["Name", "Kind", "Status", "PID", "Time", "CPU", "Memory"].map(str::to_owned);
-    let table: Vec<[String; 7]> = tracked.iter().map(|entry| cells(entry, now)).collect();
-    let widths: Vec<usize> = (0..header.len())
-        .map(|column| {
-            table
-                .iter()
-                .chain(std::iter::once(&header))
-                .map(|row| row[column].chars().count())
-                .max()
-                .unwrap_or(0)
-        })
-        .collect();
-    let pad = |row: &[String; 7]| -> Vec<String> {
-        row.iter()
-            .zip(&widths)
+    let header = COLUMNS.map(str::to_owned);
+    let table: Vec<[String; 8]> = tracked.iter().map(|entry| cells(entry, now)).collect();
+    let widths: [usize; 8] = std::array::from_fn(|column| {
+        table
+            .iter()
+            .chain(std::iter::once(&header))
+            .map(|row| row[column].chars().count())
+            .max()
+            .unwrap_or(0)
+    });
+    let (shown, details) = fit(&widths, room);
+    let layout = |row: &[String; 8]| -> Vec<(usize, String)> {
+        shown
+            .iter()
             .enumerate()
-            .map(|(column, (cell, width))| {
-                if (3..7).contains(&column) {
-                    format!("{cell:>width$}  ")
-                } else {
-                    format!("{cell:<width$}  ")
-                }
+            .map(|(place, column)| {
+                let gap = if place + 1 < shown.len() { "  " } else { "" };
+                let cell = &row[*column];
+                let text = match *column {
+                    DETAILS => clip(cell, details),
+                    3..=6 => format!("{cell:>width$}", width = widths[*column]),
+                    _ => format!("{cell:<width$}", width = widths[*column]),
+                };
+                (*column, format!("{text}{gap}"))
             })
             .collect()
     };
-    let titles = pad(&header).concat();
-    page.line(&[
-        (titles.trim_end(), Some(Highlight::Comment)),
-        ("  Details", Some(Highlight::Comment)),
-    ]);
+    let titles: String = layout(&header).into_iter().map(|(_, text)| text).collect();
+    page.line(&[(titles.trim_end(), Some(Highlight::Comment))]);
     for (entry, row) in tracked.iter().zip(&table) {
-        let cells = pad(row);
         let (_, status) = entry.status.shown();
         let quiet = entry.status.finished().then_some(Highlight::Comment);
+        let parts: Vec<(usize, String)> = layout(row);
+        let styled: Vec<(&str, Option<Highlight>)> = parts
+            .iter()
+            .map(|(column, text)| {
+                let style = match *column {
+                    0 => quiet.or(Some(Highlight::Link)),
+                    2 => Some(status),
+                    DETAILS => Some(Highlight::Comment),
+                    _ => quiet,
+                };
+                (text.as_str(), style)
+            })
+            .collect();
         rows.push((page.styles.len(), entry.source));
-        page.line(&[
-            (&cells[0], quiet.or(Some(Highlight::Link))),
-            (&cells[1], quiet),
-            (&cells[2], Some(status)),
-            (&cells[3..].concat(), quiet),
-            (&entry.detail, Some(Highlight::Comment)),
-        ]);
+        page.line(&styled);
     }
     (page, rows)
 }
-
 impl Editor {
     fn track(&mut self, entry: Tracked) {
         let tracked = &mut self.processes.tracked;
@@ -226,7 +284,11 @@ impl Editor {
         name: String,
         buffer: Option<BufferId>,
     ) {
-        let detail = std::iter::once(job.program.as_str())
+        let program = Path::new(&job.program).file_stem().map_or_else(
+            || job.program.clone(),
+            |stem| stem.to_string_lossy().into_owned(),
+        );
+        let detail = std::iter::once(program.as_str())
             .chain(job.args.iter().map(String::as_str))
             .collect::<Vec<_>>()
             .join(" ");
@@ -397,7 +459,13 @@ impl Editor {
             return;
         };
         let now = self.processes.now.unwrap_or_else(Timestamp::now);
-        let (page, rows) = page(&self.processes.tracked, now);
+        let room = self
+            .buffers
+            .get(index)
+            .and_then(|buffer| self.width_showing(buffer.id()))
+            .filter(|width| *width > 0)
+            .unwrap_or(ROOM);
+        let (page, rows) = page(&self.processes.tracked, now, room);
         if let Some(buffer) = self.buffers.get_mut(index) {
             page.fill(buffer);
         }
@@ -545,6 +613,36 @@ mod tests {
         for part in ["lint", "exit 101", "4343", "cargo check"] {
             assert!(lint.contains(part), "{part} in {lint}");
         }
+    }
+
+    #[test]
+    fn narrow_windows_keep_the_most_useful_columns() {
+        let mut editor = Editor::new();
+        editor.track_job(
+            &job(0, "Rterm", &["--ess"]),
+            Kind::RSession,
+            "*R:analysis*".to_owned(),
+            None,
+        );
+        editor.job_started(JobId(0), 4242);
+        listed(&mut editor);
+
+        editor.resize_pane(editor.selected_window(), 20, 41);
+
+        let shown = lines(&editor);
+        assert!(
+            shown.iter().all(|line| line.chars().count() <= 40),
+            "{shown:?}"
+        );
+        assert!(shown[3].starts_with("Name"), "{shown:?}");
+        assert!(
+            shown[3].contains("Status") && shown[3].contains("CPU"),
+            "{shown:?}"
+        );
+        assert!(
+            !shown[3].contains("Details") && !shown[3].contains("Kind"),
+            "{shown:?}"
+        );
     }
 
     #[test]
