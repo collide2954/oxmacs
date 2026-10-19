@@ -17,7 +17,7 @@ use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{self, Config, ConfigError};
 use oxmacs_core::editor::{Axis, Editor, Effect, Job, JobId, Outcome, Tiling, WindowId};
-use oxmacs_core::process::{self, Killer};
+use oxmacs_core::process::{self, Handle};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
@@ -42,7 +42,7 @@ pub struct App {
     reveal: Animation<bool>,
     clock: Option<String>,
     previews: Vec<(BufferId, u64, markdown::Content)>,
-    jobs: Vec<(JobId, Killer)>,
+    jobs: Vec<(JobId, Handle)>,
 }
 
 #[derive(Debug, Clone)]
@@ -311,7 +311,10 @@ impl App {
                     self.sync_reveal();
                 }
             }
-            Message::Keyboard(_) | Message::Opened(Ok(())) | Message::Clock => {}
+            Message::Keyboard(_)
+            | Message::Opened(Ok(()))
+            | Message::Clock
+            | Message::Job(_, process::Event::Output(_)) => {}
             Message::View(window, event) => self.handle_view_event(window, event),
             Message::Divider { path, index, delta } => {
                 if let Some(at) = self.editor.tiling().boundary(&path, index) {
