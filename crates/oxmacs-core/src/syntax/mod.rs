@@ -29,6 +29,7 @@ pub enum Feature {
     Comments,
     Pairs,
     Formatting,
+    Lint,
     Motion,
     Items,
     Folding,
@@ -37,12 +38,13 @@ pub enum Feature {
 }
 
 impl Feature {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Highlighting,
         Self::Indentation,
         Self::Comments,
         Self::Pairs,
         Self::Formatting,
+        Self::Lint,
         Self::Motion,
         Self::Items,
         Self::Folding,
@@ -57,6 +59,7 @@ impl Feature {
             Self::Comments => "Comment",
             Self::Pairs => "Pairs",
             Self::Formatting => "Format",
+            Self::Lint => "Lint",
             Self::Motion => "Motion",
             Self::Items => "Items",
             Self::Folding => "Fold",
@@ -95,6 +98,7 @@ impl Language {
                     | Feature::Comments
                     | Feature::Pairs
                     | Feature::Formatting
+                    | Feature::Lint
                     | Feature::Motion
                     | Feature::Items
             ) | (

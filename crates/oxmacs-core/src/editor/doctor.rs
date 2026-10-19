@@ -17,6 +17,7 @@ const LABEL_WIDTH: usize = 16;
 const TOOLS: &[(&str, &str)] = &[
     ("rustfmt", "rustup component add rustfmt"),
     ("cargo", "install Rust from https://rustup.rs"),
+    ("cargo-clippy", "rustup component add clippy"),
     ("rust-analyzer", "rustup component add rust-analyzer"),
 ];
 
@@ -271,6 +272,8 @@ mod tests {
 
         assert_eq!(mark("Rust (.rs)", "Highlight"), '✓');
         assert_eq!(mark("Rust (.rs)", "LSP"), '–');
+        assert_eq!(mark("Rust (.rs)", "Lint"), '✓');
+        assert_eq!(mark("Markdown (", "Lint"), '–');
         assert_eq!(mark("Markdown (", "Items"), '✓');
         assert_eq!(mark("Markdown (", "Comment"), '–');
     }
@@ -283,6 +286,9 @@ mod tests {
         assert!(
             line_with(&editor, "  cargo")
                 .contains("! no toolchain; install Rust from https://rustup.rs")
+        );
+        assert!(
+            line_with(&editor, "cargo-clippy").contains("✗ not found; rustup component add clippy")
         );
         assert!(
             line_with(&editor, "rust-analyzer")
