@@ -105,6 +105,10 @@ impl Editor {
             self.check_tool_releases();
             return;
         }
+        if matches!(self.buffers.mode(0), Some(Mode::AtlasList(_))) {
+            self.render_backlinks();
+            return;
+        }
         if matches!(self.buffers.mode(0), Some(Mode::Weather(_))) {
             self.refresh_weather();
             return;

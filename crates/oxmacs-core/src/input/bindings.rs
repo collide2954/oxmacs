@@ -53,6 +53,7 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-c n f", Command::AtlasFindNote),
     ("C-c n t", Command::AtlasToday),
     ("C-c n c", Command::AtlasCapture),
+    ("C-c n b", Command::AtlasBacklinks),
     ("M-,", Command::XrefGoBack),
     ("M-g n", Command::NextError),
     ("M-g M-n", Command::NextError),
@@ -377,7 +378,18 @@ const TOOLS: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
-const ATLAS: &[(&str, Command)] = &[("C-c C-c", Command::AtlasCycleTask)];
+const ATLAS: &[(&str, Command)] = &[
+    ("C-c C-c", Command::AtlasCycleTask),
+    ("C-c C-o", Command::AtlasFollowLink),
+];
+
+const ATLAS_LIST: &[(&str, Command)] = &[
+    ("RET", Command::AtlasVisit),
+    ("n", Command::NextLine),
+    ("p", Command::PreviousLine),
+    ("g", Command::RevertBuffer),
+    ("q", Command::QuitWindow),
+];
 
 const IRC_SETUP: &[(&str, Command)] = &[
     ("TAB", Command::IrcSetupNextField),
@@ -432,6 +444,10 @@ pub fn irc_setup() -> Keymap {
 
 pub fn atlas() -> Keymap {
     build(ATLAS)
+}
+
+pub fn atlas_list() -> Keymap {
+    build(ATLAS_LIST)
 }
 
 pub fn plots() -> Keymap {

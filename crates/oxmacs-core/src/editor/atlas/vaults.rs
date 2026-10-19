@@ -15,7 +15,7 @@ use crate::files::{self, paths};
 const FIRST_VAULT: &str = "personal";
 const FIRST_PATH: &str = "~/Atlas";
 
-fn note_template(title: &str) -> String {
+pub(super) fn note_template(title: &str) -> String {
     format!("title: {title}\n---\n= {title}\n\n")
 }
 
@@ -24,7 +24,7 @@ fn journal_template(day: Date) -> String {
 }
 
 impl Editor {
-    fn vaults(&self) -> Vec<(String, PathBuf)> {
+    pub(super) fn vaults(&self) -> Vec<(String, PathBuf)> {
         self.config
             .atlas_vault
             .iter()
@@ -32,7 +32,7 @@ impl Editor {
             .collect()
     }
 
-    fn atlas_index(&mut self) -> &Index {
+    pub(super) fn atlas_index(&mut self) -> &Index {
         let today = (self.today)();
         let vaults = self.vaults();
         self.atlas_index

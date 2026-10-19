@@ -516,6 +516,18 @@ pub enum Command {
     )]
     AtlasCapture,
     #[strum(
+        message = "Open the Atlas note named by the link at point",
+        detailed_message = "Follows a [Title] link to the note with that title in any vault, starting the note in the same vault when it does not exist yet. M-, comes back."
+    )]
+    AtlasFollowLink,
+    #[strum(
+        message = "List the Atlas notes that link to this one",
+        detailed_message = "Opens *Backlinks* beside the note: each note that links here, with the lines that hold the link. RET visits a line, g refreshes and q quits."
+    )]
+    AtlasBacklinks,
+    #[strum(message = "Visit the note line on this row")]
+    AtlasVisit,
+    #[strum(
         message = "Cycle the task on this line: todo, doing, done",
         detailed_message = "Turns [ ] into [/] and [/] into [x], stamping done: with today's date; done, waiting and dropped tasks go back to [ ]. A task that repeats with every: is moved to its next date instead, with a done line logged under it."
     )]
@@ -742,7 +754,8 @@ impl Command {
             | Self::CompletionQuit => Scope::Popup,
             Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
             Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => Scope::Tools,
-            Self::AtlasCycleTask => Scope::Atlas,
+            Self::AtlasCycleTask | Self::AtlasFollowLink => Scope::Atlas,
+            Self::AtlasVisit => Scope::AtlasList,
             Self::IrcSetupNextField
             | Self::IrcSetupPreviousField
             | Self::IrcSetupChange
@@ -790,6 +803,7 @@ pub enum Scope {
     Tools,
     IrcSetup,
     Atlas,
+    AtlasList,
     Environment,
     Table,
 }
@@ -820,6 +834,7 @@ impl Scope {
             Self::Tools => Some("*Tools*"),
             Self::IrcSetup => Some("*IRC Setup*"),
             Self::Atlas => Some("Atlas notes"),
+            Self::AtlasList => Some("Atlas lists"),
             Self::Environment => Some("R environments"),
             Self::Table => Some("R tables"),
         }

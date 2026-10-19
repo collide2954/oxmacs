@@ -8,6 +8,7 @@ use std::path::Path;
 
 use crate::dired::Listing;
 use crate::display::{ScreenLine, Viewport};
+use crate::editor::atlas::links::AtlasList;
 use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
 use crate::editor::chat::ChatView;
@@ -49,6 +50,7 @@ pub(super) enum Mode {
     Processes(ProcessList),
     Tools(ToolList),
     IrcSetup(Box<SetupForm>),
+    AtlasList(Box<AtlasList>),
     Environment(EnvironmentView),
     Table(TableView),
 }
@@ -129,6 +131,7 @@ impl BufferList {
             | Mode::Processes(_)
             | Mode::Tools(_)
             | Mode::IrcSetup(_)
+            | Mode::AtlasList(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -152,6 +155,7 @@ impl BufferList {
             | Mode::Processes(_)
             | Mode::Tools(_)
             | Mode::IrcSetup(_)
+            | Mode::AtlasList(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -176,6 +180,7 @@ impl BufferList {
             | Mode::Processes(_)
             | Mode::Tools(_)
             | Mode::IrcSetup(_)
+            | Mode::AtlasList(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -200,6 +205,7 @@ impl BufferList {
             | Mode::Processes(_)
             | Mode::Tools(_)
             | Mode::IrcSetup(_)
+            | Mode::AtlasList(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -223,6 +229,7 @@ impl BufferList {
             | Mode::Processes(_)
             | Mode::Tools(_)
             | Mode::IrcSetup(_)
+            | Mode::AtlasList(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -246,6 +253,7 @@ impl BufferList {
             | Mode::Processes(_)
             | Mode::Tools(_)
             | Mode::IrcSetup(_)
+            | Mode::AtlasList(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
