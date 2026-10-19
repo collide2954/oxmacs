@@ -55,6 +55,7 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-c n c", Command::AtlasCapture),
     ("C-c n b", Command::AtlasBacklinks),
     ("C-c n a", Command::AtlasAgenda),
+    ("C-c n m", Command::AtlasCalendar),
     ("M-,", Command::XrefGoBack),
     ("M-g n", Command::NextError),
     ("M-g M-n", Command::NextError),
@@ -384,13 +385,28 @@ const ATLAS: &[(&str, Command)] = &[
     ("C-c C-o", Command::AtlasFollowLink),
 ];
 
+const ATLAS_CALENDAR: &[(&str, Command)] = &[
+    ("<left>", Command::AtlasCalendarBackDay),
+    ("<right>", Command::AtlasCalendarForwardDay),
+    ("<up>", Command::AtlasCalendarBackWeek),
+    ("<down>", Command::AtlasCalendarForwardWeek),
+    ("n", Command::AtlasCalendarNext),
+    ("p", Command::AtlasCalendarPrevious),
+    ("w", Command::AtlasCalendarWeekView),
+    (".", Command::AtlasCalendarToday),
+    ("v", Command::AtlasFilterVault),
+    ("RET", Command::AtlasCalendarSelect),
+    ("g", Command::RevertBuffer),
+    ("q", Command::QuitWindow),
+];
+
 const ATLAS_LIST: &[(&str, Command)] = &[
     ("RET", Command::AtlasVisit),
     ("t", Command::AtlasAgendaCycle),
     ("C-c C-c", Command::AtlasAgendaCycle),
     ("s", Command::AtlasAgendaPlan),
     ("d", Command::AtlasAgendaDue),
-    ("v", Command::AtlasAgendaVault),
+    ("v", Command::AtlasFilterVault),
     ("n", Command::NextLine),
     ("p", Command::PreviousLine),
     ("g", Command::RevertBuffer),
@@ -450,6 +466,10 @@ pub fn irc_setup() -> Keymap {
 
 pub fn atlas() -> Keymap {
     build(ATLAS)
+}
+
+pub fn atlas_calendar() -> Keymap {
+    build(ATLAS_CALENDAR)
 }
 
 pub fn atlas_list() -> Keymap {

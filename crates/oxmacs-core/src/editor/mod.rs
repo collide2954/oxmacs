@@ -123,6 +123,7 @@ pub struct Editor {
     irc_setup_keymap: Keymap,
     atlas_keymap: Keymap,
     atlas_list_keymap: Keymap,
+    atlas_calendar_keymap: Keymap,
     environment_keymap: Keymap,
     table_keymap: Keymap,
     pending: Vec<Key>,
@@ -221,6 +222,7 @@ impl Editor {
             irc_setup_keymap: bindings::irc_setup(),
             atlas_keymap: bindings::atlas(),
             atlas_list_keymap: bindings::atlas_list(),
+            atlas_calendar_keymap: bindings::atlas_calendar(),
             environment_keymap: bindings::environment(),
             table_keymap: bindings::table(),
             pending: Vec::new(),
@@ -475,13 +477,14 @@ impl Editor {
             Scope::IrcSetup => Some(&self.irc_setup_keymap),
             Scope::Atlas => Some(&self.atlas_keymap),
             Scope::AtlasList => Some(&self.atlas_list_keymap),
+            Scope::AtlasCalendar => Some(&self.atlas_calendar_keymap),
             Scope::Environment => Some(&self.environment_keymap),
             Scope::Table => Some(&self.table_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search | Scope::Popup => None,
         }
     }
 
-    fn keymaps(&self) -> [(Scope, &Keymap); 26] {
+    fn keymaps(&self) -> [(Scope, &Keymap); 27] {
         [
             (Scope::Global, &self.keymap),
             (Scope::Minibuffer, &self.minibuffer_keymap),
@@ -507,6 +510,7 @@ impl Editor {
             (Scope::IrcSetup, &self.irc_setup_keymap),
             (Scope::Atlas, &self.atlas_keymap),
             (Scope::AtlasList, &self.atlas_list_keymap),
+            (Scope::AtlasCalendar, &self.atlas_calendar_keymap),
             (Scope::Environment, &self.environment_keymap),
             (Scope::Table, &self.table_keymap),
         ]
@@ -528,6 +532,7 @@ impl Editor {
             Some(Mode::Tools(_)) => Scope::Tools,
             Some(Mode::IrcSetup(_)) => Scope::IrcSetup,
             Some(Mode::Text(None)) if self.is_atlas(0) => Scope::Atlas,
+            Some(Mode::AtlasList(list)) if list.is_calendar() => Scope::AtlasCalendar,
             Some(Mode::AtlasList(_)) => Scope::AtlasList,
             Some(Mode::Environment(_)) => Scope::Environment,
             Some(Mode::Table(_)) => Scope::Table,

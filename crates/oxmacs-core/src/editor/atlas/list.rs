@@ -6,9 +6,17 @@ use crate::editor::buffers::Mode;
 use crate::text::Buffer;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::editor) struct Month {
+    pub(super) selected: jiff::civil::Date,
+    pub(super) week: bool,
+    pub(super) filter: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::editor) enum ListKind {
     Backlinks(String),
     Agenda(Option<String>),
+    Calendar(Month),
 }
 
 impl ListKind {
@@ -16,7 +24,12 @@ impl ListKind {
         match self {
             Self::Backlinks(_) => "*Backlinks*",
             Self::Agenda(_) => "*Agenda*",
+            Self::Calendar(_) => "*Calendar*",
         }
+    }
+
+    pub(in crate::editor) fn is_calendar(&self) -> bool {
+        matches!(self, Self::Calendar(_))
     }
 
     fn same(&self, other: &Self) -> bool {
@@ -34,6 +47,10 @@ pub(in crate::editor) struct AtlasList {
 impl AtlasList {
     pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
+    }
+
+    pub(in crate::editor) fn is_calendar(&self) -> bool {
+        self.kind.is_calendar()
     }
 }
 
@@ -67,8 +84,8 @@ impl Editor {
                 editor.add_buffer_with(buffer, Mode::AtlasList(Box::new(list)));
             });
         }
-        self.render_atlas_list(kind);
         self.show_beside(|editor| editor.atlas_list_index(kind));
+        self.render_atlas_list(kind);
     }
 
     pub(in crate::editor) fn refresh_atlas_list(&mut self) {
@@ -81,6 +98,7 @@ impl Editor {
         match kind {
             ListKind::Backlinks(_) => self.render_backlinks(),
             ListKind::Agenda(_) => self.render_agenda(),
+            ListKind::Calendar(_) => self.render_calendar(),
         }
     }
 

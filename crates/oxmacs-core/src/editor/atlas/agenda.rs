@@ -21,7 +21,7 @@ const LEAD: usize = 12;
 const ROOM: usize = 80;
 const WHEN: usize = 14;
 
-fn color(name: Option<&str>, position: usize) -> Highlight {
+pub(super) fn color(name: Option<&str>, position: usize) -> Highlight {
     match name.map(str::to_lowercase).as_deref() {
         Some("red") => Highlight::Error,
         Some("orange" | "yellow") => Highlight::Warning,
@@ -73,7 +73,7 @@ fn when(entry: &Entry, section: Heading, today: Date) -> (String, Option<Highlig
     }
 }
 
-fn lead(entry: &Entry) -> (String, Highlight) {
+pub(super) fn lead(entry: &Entry) -> (String, Highlight) {
     match &entry.kind {
         Kind::Event { start, end } => {
             let time = |time: Option<jiff::civil::Time>| {
@@ -102,7 +102,7 @@ fn lead(entry: &Entry) -> (String, Highlight) {
     }
 }
 
-fn clip(text: &str, width: usize) -> String {
+pub(super) fn clip(text: &str, width: usize) -> String {
     if text.chars().count() <= width {
         return format!("{text:<width$}");
     }
@@ -122,7 +122,7 @@ impl Editor {
             .and_then(|index| self.atlas_list_kind(index))
             .and_then(|kind| match kind {
                 ListKind::Agenda(filter) => filter,
-                ListKind::Backlinks(_) => None,
+                ListKind::Backlinks(_) | ListKind::Calendar(_) => None,
             });
         self.show_atlas_list(&ListKind::Agenda(filter));
     }
@@ -293,11 +293,8 @@ impl Editor {
         self.after_note_change(changed, Some(format!("{key}:{day}")));
     }
 
-    pub(in crate::editor) fn atlas_agenda_vault(&mut self) {
-        let Some(index) = self.atlas_list_index(&ListKind::Agenda(None)) else {
-            return;
-        };
-        let Some(ListKind::Agenda(filter)) = self.atlas_list_kind(index) else {
+    pub(in crate::editor) fn atlas_list_vault(&mut self) {
+        let Some(kind) = self.atlas_list_kind(0) else {
             return;
         };
         let names: Vec<String> = self
@@ -306,17 +303,25 @@ impl Editor {
             .iter()
             .map(|vault| vault.name.clone())
             .collect();
-        let next = match filter {
+        let next = |filter: Option<String>| match filter {
             None => names.first().cloned(),
             Some(name) => names
                 .iter()
                 .position(|known| *known == name)
                 .and_then(|at| names.get(at + 1).cloned()),
         };
-        if let Some(Mode::AtlasList(list)) = self.buffers.mode_mut(index) {
-            list.kind = ListKind::Agenda(next);
+        let kind = match kind {
+            ListKind::Agenda(filter) => ListKind::Agenda(next(filter)),
+            ListKind::Calendar(mut month) => {
+                month.filter = next(month.filter);
+                ListKind::Calendar(month)
+            }
+            ListKind::Backlinks(_) => return,
+        };
+        if let Some(Mode::AtlasList(list)) = self.buffers.mode_mut(0) {
+            list.kind = kind.clone();
         }
-        self.render_agenda();
+        self.render_atlas_list(&kind);
     }
 }
 

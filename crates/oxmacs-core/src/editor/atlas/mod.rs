@@ -10,6 +10,7 @@ use crate::text::{Buffer, BufferId};
 use crate::theme::Highlight;
 
 mod agenda;
+mod calendar;
 mod links;
 pub(in crate::editor) mod list;
 mod vaults;

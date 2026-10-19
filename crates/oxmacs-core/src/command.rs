@@ -538,8 +538,31 @@ pub enum Command {
     AtlasAgendaPlan,
     #[strum(message = "Set the due date of the task on this row")]
     AtlasAgendaDue,
-    #[strum(message = "Show the next vault's agenda, or all of them")]
-    AtlasAgendaVault,
+    #[strum(message = "Show the next vault, or all of them again")]
+    AtlasFilterVault,
+    #[strum(
+        message = "Show the Atlas calendar",
+        detailed_message = "Opens *Calendar* on this month: each day with its events and tasks from every vault, and the selected day listed below. The arrows move the day, n and p the month, w switches to the week by hour, . returns to today and v filters by vault; RET steps into the day's list and visits an entry."
+    )]
+    AtlasCalendar,
+    #[strum(message = "Select the day before")]
+    AtlasCalendarBackDay,
+    #[strum(message = "Select the day after")]
+    AtlasCalendarForwardDay,
+    #[strum(message = "Select the same day a week earlier")]
+    AtlasCalendarBackWeek,
+    #[strum(message = "Select the same day a week later")]
+    AtlasCalendarForwardWeek,
+    #[strum(message = "Show the next month, or week")]
+    AtlasCalendarNext,
+    #[strum(message = "Show the previous month, or week")]
+    AtlasCalendarPrevious,
+    #[strum(message = "Switch between the month and the week by hour")]
+    AtlasCalendarWeekView,
+    #[strum(message = "Select today")]
+    AtlasCalendarToday,
+    #[strum(message = "Step into the selected day or visit the entry at point")]
+    AtlasCalendarSelect,
     #[strum(
         message = "Cycle the task on this line: todo, doing, done",
         detailed_message = "Turns [ ] into [/] and [/] into [x], stamping done: with today's date; done, waiting and dropped tasks go back to [ ]. A task that repeats with every: is moved to its next date instead, with a done line logged under it."
@@ -692,7 +715,31 @@ impl Command {
         )
     }
 
+    fn atlas_scope(self) -> Option<Scope> {
+        Some(match self {
+            Self::AtlasCycleTask | Self::AtlasFollowLink => Scope::Atlas,
+            Self::AtlasVisit
+            | Self::AtlasAgendaCycle
+            | Self::AtlasAgendaPlan
+            | Self::AtlasAgendaDue
+            | Self::AtlasFilterVault => Scope::AtlasList,
+            Self::AtlasCalendarBackDay
+            | Self::AtlasCalendarForwardDay
+            | Self::AtlasCalendarBackWeek
+            | Self::AtlasCalendarForwardWeek
+            | Self::AtlasCalendarNext
+            | Self::AtlasCalendarPrevious
+            | Self::AtlasCalendarWeekView
+            | Self::AtlasCalendarToday
+            | Self::AtlasCalendarSelect => Scope::AtlasCalendar,
+            _ => return None,
+        })
+    }
+
     pub fn scope(self) -> Scope {
+        if let Some(scope) = self.atlas_scope() {
+            return scope;
+        }
         match self {
             Self::ExitMinibuffer
             | Self::MinibufferNext
@@ -767,12 +814,6 @@ impl Command {
             | Self::CompletionQuit => Scope::Popup,
             Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
             Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => Scope::Tools,
-            Self::AtlasCycleTask | Self::AtlasFollowLink => Scope::Atlas,
-            Self::AtlasVisit
-            | Self::AtlasAgendaCycle
-            | Self::AtlasAgendaPlan
-            | Self::AtlasAgendaDue
-            | Self::AtlasAgendaVault => Scope::AtlasList,
             Self::IrcSetupNextField
             | Self::IrcSetupPreviousField
             | Self::IrcSetupChange
@@ -821,6 +862,7 @@ pub enum Scope {
     IrcSetup,
     Atlas,
     AtlasList,
+    AtlasCalendar,
     Environment,
     Table,
 }
@@ -852,6 +894,7 @@ impl Scope {
             Self::IrcSetup => Some("*IRC Setup*"),
             Self::Atlas => Some("Atlas notes"),
             Self::AtlasList => Some("Atlas lists"),
+            Self::AtlasCalendar => Some("*Calendar*"),
             Self::Environment => Some("R environments"),
             Self::Table => Some("R tables"),
         }
