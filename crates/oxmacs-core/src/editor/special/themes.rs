@@ -28,6 +28,25 @@ impl Editor {
             .collect()
     }
 
+    pub(in crate::editor) fn previewed_theme(&self) -> Option<&'static Theme> {
+        if self.minibuffer.as_ref()?.purpose != Purpose::LoadTheme {
+            return None;
+        }
+        match self.selected_completion()?.choice {
+            Choice::Theme(theme) => {
+                Some(theme.unwrap_or_else(|| theme::for_appearance(self.appearance)))
+            }
+            _ => None,
+        }
+    }
+
+    pub(in crate::editor) fn theme_in_use_position(&self) -> usize {
+        self.theme_completions(|_| true)
+            .iter()
+            .position(|completion| completion.annotation.is_some())
+            .unwrap_or(0)
+    }
+
     pub(in crate::editor) fn toggle_theme(&mut self) {
         self.use_theme(Some(theme::counterpart(self.theme())));
     }
@@ -101,6 +120,91 @@ mod tests {
 
         assert_eq!(editor.minibuffer().unwrap().note(), Some("[No match]"));
         assert_eq!(editor.theme().name, "adwaita");
+    }
+
+    fn open(editor: &mut Editor) {
+        press(editor, "M-x");
+        type_text(editor, "load-theme");
+        press(editor, "RET");
+    }
+
+    fn selected(editor: &Editor) -> usize {
+        editor.minibuffer().unwrap().selected()
+    }
+
+    #[test]
+    fn the_list_starts_on_the_theme_in_use() {
+        let mut editor = Editor::new();
+        load(&mut editor, "adwaita-dark");
+
+        open(&mut editor);
+        assert_eq!(selected(&editor), 1);
+
+        type_text(&mut editor, "a");
+        assert_eq!(selected(&editor), 0);
+        press(&mut editor, "DEL");
+        assert_eq!(selected(&editor), 1);
+    }
+
+    #[test]
+    fn moving_through_the_list_previews_each_theme_without_choosing_it() {
+        let mut editor = Editor::new();
+        open(&mut editor);
+        assert_eq!(editor.theme().name, "adwaita");
+
+        press(&mut editor, "C-p");
+        assert_eq!(editor.theme().name, "adwaita-dark");
+        assert_eq!(editor.config().theme, None);
+
+        press(&mut editor, "C-p");
+        assert_eq!(editor.theme().name, "adwaita");
+    }
+
+    #[test]
+    fn quitting_puts_the_theme_in_use_back() {
+        let mut editor = Editor::new();
+        open(&mut editor);
+
+        press(&mut editor, "C-p C-g");
+
+        assert_eq!(editor.theme().name, "adwaita");
+        assert_eq!(editor.config().theme, None);
+    }
+
+    #[test]
+    fn return_keeps_the_previewed_theme() {
+        let mut editor = Editor::new();
+        open(&mut editor);
+
+        press(&mut editor, "C-p RET");
+
+        assert_eq!(editor.theme().name, "adwaita-dark");
+        assert_eq!(editor.config().theme.as_deref(), Some("adwaita-dark"));
+    }
+
+    #[test]
+    fn typing_previews_the_first_match_and_no_match_previews_nothing() {
+        let mut editor = Editor::new();
+        open(&mut editor);
+
+        type_text(&mut editor, "dark");
+        assert_eq!(editor.theme().name, "adwaita-dark");
+
+        type_text(&mut editor, "x");
+        assert_eq!(editor.theme().name, "adwaita");
+    }
+
+    #[test]
+    fn system_previews_the_os_appearance() {
+        let mut editor = Editor::new();
+        load(&mut editor, "adwaita");
+        editor.set_appearance(Appearance::Dark);
+        open(&mut editor);
+        assert_eq!(editor.theme().name, "adwaita");
+
+        press(&mut editor, "C-n C-n");
+
+        assert_eq!(editor.theme().name, "adwaita-dark");
     }
 
     #[test]

@@ -250,7 +250,8 @@ impl Editor {
     }
 
     pub fn theme(&self) -> &'static Theme {
-        self.configured_theme
+        self.previewed_theme()
+            .or(self.configured_theme)
             .unwrap_or_else(|| theme::for_appearance(self.appearance))
     }
 

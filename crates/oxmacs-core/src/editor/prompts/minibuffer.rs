@@ -408,13 +408,27 @@ impl Editor {
     }
 
     pub(in crate::editor) fn reset_selection(&mut self, command: Command) {
-        if let Some(minibuffer) = &mut self.minibuffer
-            && !matches!(
-                command,
-                Command::MinibufferNext | Command::MinibufferPrevious
-            )
-        {
-            minibuffer.selected = 0;
+        if matches!(
+            command,
+            Command::MinibufferNext | Command::MinibufferPrevious
+        ) {
+            return;
+        }
+        let start = self.starting_selection();
+        if let Some(minibuffer) = &mut self.minibuffer {
+            minibuffer.selected = start;
+        }
+    }
+
+    fn starting_selection(&self) -> usize {
+        match &self.minibuffer {
+            Some(minibuffer)
+                if minibuffer.purpose == Purpose::LoadTheme
+                    && minibuffer.input.len_chars() == 0 =>
+            {
+                self.theme_in_use_position()
+            }
+            _ => 0,
         }
     }
 }

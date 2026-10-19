@@ -256,7 +256,7 @@ pub enum Command {
     AboutOxmacs,
     #[strum(
         message = "Switch to a color theme by name",
-        detailed_message = "The new theme shows as an unsaved change in *Settings*; save it there with C-x C-s to keep it."
+        detailed_message = "The list starts on the theme in use, and the whole editor previews whichever theme is selected as you move or type. RET keeps it and C-g puts the old one back. The new theme shows as an unsaved change in *Settings*; save it there with C-x C-s to keep it."
     )]
     LoadTheme,
     #[strum(
