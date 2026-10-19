@@ -15,7 +15,7 @@ impl Editor {
         goal_column: Option<usize>,
         previous: Option<Command>,
     ) {
-        if self.scroll_preview(command) {
+        if self.scroll_preview(command) || self.guard_chat_input(command) {
             return;
         }
         match command {
@@ -128,6 +128,9 @@ impl Editor {
             Command::ComintNextInput => self.recall_input(false),
             Command::Irc => self.irc(),
             Command::IrcSendInput => self.irc_send_input(),
+            Command::IrcCompleteNick => {
+                self.irc_complete_nick(previous == Some(Command::IrcCompleteNick));
+            }
             Command::TextMode => self.set_major_mode(None),
             Command::OxmacsDoctor => self.oxmacs_doctor(),
             Command::SplitWindowBelow => self.split_window(Axis::Rows),

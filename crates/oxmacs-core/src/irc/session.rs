@@ -106,6 +106,13 @@ impl Session {
         self.outgoing.push(message.to_line());
     }
 
+    pub fn send_raw(&mut self, line: &str) {
+        let line = line.replace(['\r', '\n'], " ");
+        if !line.trim().is_empty() {
+            self.outgoing.push(line);
+        }
+    }
+
     pub fn take_outgoing(&mut self) -> Vec<String> {
         std::mem::take(&mut self.outgoing)
     }
@@ -552,6 +559,16 @@ mod tests {
             &[":srv 433 * oxtest_ :Nickname is already in use"],
         );
         assert_eq!(sent, ["NICK oxtest__"]);
+    }
+
+    #[test]
+    fn raw_lines_are_sent_on_one_line() {
+        let mut session = started(false);
+
+        session.send_raw("MODE #c +i\r\nQUIT");
+        session.send_raw("  ");
+
+        assert_eq!(session.take_outgoing(), ["MODE #c +i  QUIT"]);
     }
 
     #[test]

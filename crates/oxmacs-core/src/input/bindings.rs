@@ -257,6 +257,7 @@ const WEATHER: &[(&str, Command)] = &[("g", Command::RevertBuffer), ("q", Comman
 
 const CHAT: &[(&str, Command)] = &[
     ("RET", Command::IrcSendInput),
+    ("TAB", Command::IrcCompleteNick),
     ("M-p", Command::ComintPreviousInput),
     ("M-n", Command::ComintNextInput),
 ];

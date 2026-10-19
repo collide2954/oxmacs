@@ -333,8 +333,13 @@ pub enum Command {
         detailed_message = "Connects to the [[irc-server]] in config.toml, asking which one when there are several, and joins its channels. Each server, channel and private chat gets its own buffer; type after the prompt and press RET to send. Already connected, it shows the server buffer."
     )]
     Irc,
-    #[strum(message = "Send the message or /command after the prompt")]
+    #[strum(
+        message = "Send the message or /command after the prompt",
+        detailed_message = "Text is sent to the channel or person of this buffer. A line starting with / is a command, such as /join #channel, /msg nick text, /me waves or /quit; /help lists them all, and // sends text that starts with a slash."
+    )]
     IrcSendInput,
+    #[strum(message = "Complete the nick before the cursor; again cycles")]
+    IrcCompleteNick,
     #[strum(message = "Bring back the previous input")]
     ComintPreviousInput,
     #[strum(message = "Bring back the next input")]
@@ -534,7 +539,7 @@ impl Command {
             Self::ComintSendInput | Self::ComintPreviousInput | Self::ComintNextInput => {
                 Scope::Console
             }
-            Self::IrcSendInput => Scope::Chat,
+            Self::IrcSendInput | Self::IrcCompleteNick => Scope::Chat,
             Self::Recompile
             | Self::KillCompilation
             | Self::NextErrorNoSelect

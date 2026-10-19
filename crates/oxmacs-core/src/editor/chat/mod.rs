@@ -1,3 +1,4 @@
+pub(super) mod commands;
 pub(super) mod render;
 
 use jiff::Timestamp;
@@ -6,6 +7,7 @@ use jiff::tz::TimeZone;
 use crate::config::{IrcServer, PasswordSource};
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
+use crate::editor::chat::commands::Cycle;
 use crate::editor::prompts::input_line::InputLine;
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Choice, Completion, ConnectionId, Editor, Effect};
@@ -24,6 +26,7 @@ const PROMPT: &str = " › ";
 pub(in crate::editor) struct Irc {
     links: Vec<Link>,
     next: u64,
+    focus: Option<(String, Target)>,
     pub(in crate::editor) zone: TimeZone,
 }
 
@@ -32,6 +35,7 @@ impl Default for Irc {
         Self {
             links: Vec::new(),
             next: 0,
+            focus: None,
             zone: TimeZone::system(),
         }
     }
@@ -52,6 +56,7 @@ pub(in crate::editor) struct ChatView {
     target: Target,
     pub(in crate::editor) input: InputLine,
     styles: Vec<LineStyle>,
+    cycle: Option<Cycle>,
 }
 
 impl ChatView {
@@ -193,16 +198,60 @@ impl Editor {
 
     pub fn irc_farewell(&mut self) {
         for index in 0..self.irc.links.len() {
-            let link = &mut self.irc.links[index];
-            if !link.open {
-                continue;
+            if self.irc.links[index].open {
+                self.irc_quit(index, "oxmacs");
             }
-            link.open = false;
-            link.session.send(&Message::new("QUIT", ["oxmacs"]));
-            let id = link.id;
-            self.irc_flush(index);
-            self.effects.push(Effect::Disconnect(id));
         }
+    }
+
+    fn irc_quit(&mut self, index: usize, reason: &str) {
+        let link = &mut self.irc.links[index];
+        link.open = false;
+        link.session.send(&Message::new("QUIT", [reason]));
+        let id = link.id;
+        self.irc_flush(index);
+        self.effects.push(Effect::Disconnect(id));
+    }
+
+    fn irc_open(&mut self, index: usize, target: &Target) {
+        let link = &mut self.irc.links[index];
+        let mut updates = Vec::new();
+        link.network.ensure(target.clone(), &mut updates);
+        let name = link.server.name.clone();
+        self.irc_updates(index, &updates);
+        self.show_chat(&name, target);
+    }
+
+    fn irc_help(&mut self, index: usize, target: &Target) {
+        let link = &mut self.irc.links[index];
+        if let Some(chat) = link.network.find(target) {
+            link.network
+                .note(chat, commands::HELP, false, Timestamp::now());
+        }
+        let name = link.server.name.clone();
+        self.render_chat(&name, target);
+    }
+
+    fn irc_members(&self, server: &str, target: &Target) -> Vec<String> {
+        let Some(link) = self
+            .irc
+            .links
+            .iter()
+            .find(|link| link.server.name == server)
+        else {
+            return Vec::new();
+        };
+        link.network
+            .find(target)
+            .and_then(|chat| link.network.chats().get(chat))
+            .map(|chat| {
+                chat.members(&link.session)
+                    .into_iter()
+                    .map(|member| member.nick)
+                    .filter(|nick| !nick.eq_ignore_ascii_case(link.session.nick()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn irc_session_event(&mut self, index: usize, event: Event) {
@@ -250,6 +299,15 @@ impl Editor {
         for target in targets {
             self.ensure_chat_buffer(&name, &target);
             self.render_chat(&name, &target);
+            let focused = self
+                .irc
+                .focus
+                .as_ref()
+                .is_some_and(|(server, wanted)| *server == name && wanted.same(&target));
+            if focused {
+                self.irc.focus = None;
+                self.show_chat(&name, &target);
+            }
         }
     }
 
@@ -303,6 +361,7 @@ impl Editor {
                 target: target.clone(),
                 input,
                 styles: Vec::new(),
+                cycle: None,
             }),
         )
     }
@@ -394,6 +453,12 @@ impl Editor {
             self.show_message(format!("Not connected to {server}; M-x irc reconnects"));
             return;
         };
+        if let Some(command) = text.strip_prefix('/').filter(|rest| !rest.starts_with('/')) {
+            self.irc_command(index, &target, command.trim());
+            self.irc_flush(index);
+            return;
+        }
+        let text = text.strip_prefix('/').unwrap_or(&text);
         let Some(name) = target.name().map(str::to_owned) else {
             self.show_message("Type a /command here, such as /join #channel");
             return;
