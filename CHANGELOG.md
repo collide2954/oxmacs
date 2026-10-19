@@ -10,7 +10,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
-- Markdown previews scroll with the keyboard, follow the cursor in their source, and can be selected with a click.
+- Markdown previews scroll with the keyboard and can be selected with a click.
 
 ## [0.12.0] - 2026-10-18
 

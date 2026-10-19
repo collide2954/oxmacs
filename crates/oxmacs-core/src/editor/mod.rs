@@ -70,7 +70,7 @@ use crate::dired::Mark;
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
 use crate::syntax::Language;
-use crate::text::{Buffer, BufferId, motion};
+use crate::text::{Buffer, motion};
 use crate::theme::{self, Appearance, Highlight, Theme};
 use crate::tools::{self, Probe};
 
@@ -135,7 +135,6 @@ pub struct Editor {
     typed_in_step: usize,
     drag_anchor: Option<usize>,
     line_anchor: Option<usize>,
-    preview_followed: Option<(BufferId, usize)>,
     primary: Option<Range<usize>>,
     effects: Vec<Effect>,
     clipboard_history: Vec<String>,
@@ -207,7 +206,6 @@ impl Editor {
             typed_in_step: 0,
             drag_anchor: None,
             line_anchor: None,
-            preview_followed: None,
             primary: None,
             effects: Vec::new(),
             clipboard_history: Vec::new(),

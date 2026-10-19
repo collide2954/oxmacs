@@ -663,9 +663,6 @@ fn preview_move(scroll: PreviewScroll, line: f32, page: f32) -> PreviewMove {
         PreviewScroll::Pages(count) => PreviewMove::By(units::signed_to_f32(count) * page),
         PreviewScroll::Top => PreviewMove::To(0.0),
         PreviewScroll::Bottom => PreviewMove::To(1.0),
-        PreviewScroll::Follow { line, lines } => {
-            PreviewMove::To(units::to_f32(line) / units::to_f32(lines.saturating_sub(1).max(1)))
-        }
     }
 }
 
@@ -949,10 +946,6 @@ mod tests {
         assert_eq!(
             preview_move(PreviewScroll::Bottom, 10.0, 100.0),
             PreviewMove::To(1.0)
-        );
-        assert_eq!(
-            preview_move(PreviewScroll::Follow { line: 1, lines: 3 }, 10.0, 100.0),
-            PreviewMove::To(0.5)
         );
     }
 

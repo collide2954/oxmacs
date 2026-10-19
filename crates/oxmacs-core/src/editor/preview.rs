@@ -1,6 +1,6 @@
 use crate::command::Command;
 use crate::editor::buffers::Mode;
-use crate::editor::{Editor, Effect, WindowId};
+use crate::editor::{Editor, Effect};
 use crate::text::{Buffer, BufferId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -9,7 +9,6 @@ pub enum PreviewScroll {
     Pages(isize),
     Top,
     Bottom,
-    Follow { line: usize, lines: usize },
 }
 
 impl Editor {
@@ -29,36 +28,6 @@ impl Editor {
         self.effects
             .push(Effect::ScrollPreview(self.selected_window(), scroll));
         true
-    }
-
-    pub(super) fn follow_source(&mut self) {
-        let buffer = self.buffers.current();
-        let id = buffer.id();
-        let line = buffer.line_of(buffer.point());
-        let lines = buffer.line_of(buffer.len_chars()) + 1;
-        if self.preview_followed == Some((id, line)) {
-            return;
-        }
-        let windows: Vec<WindowId> = self
-            .tiling()
-            .windows()
-            .into_iter()
-            .filter(|window| {
-                self.pane_of(*window)
-                    .and_then(|pane| pane.preview_source())
-                    .is_some_and(|source| source.id() == id)
-            })
-            .collect();
-        if windows.is_empty() {
-            return;
-        }
-        self.preview_followed = Some((id, line));
-        for window in windows {
-            self.effects.push(Effect::ScrollPreview(
-                window,
-                PreviewScroll::Follow { line, lines },
-            ));
-        }
     }
 
     fn preview_index(&self, source: BufferId) -> Option<usize> {
@@ -177,22 +146,6 @@ mod tests {
                 "{keys}"
             );
         }
-    }
-
-    #[test]
-    fn the_preview_follows_the_source_cursor() {
-        let mut editor = previewed("# A\n\nb\n\nc\n");
-        let window = editor.tiling().windows()[1];
-
-        press(&mut editor, "C-n C-n C-f");
-
-        assert_eq!(
-            editor.take_effects(),
-            [
-                Effect::ScrollPreview(window, PreviewScroll::Follow { line: 1, lines: 6 }),
-                Effect::ScrollPreview(window, PreviewScroll::Follow { line: 2, lines: 6 }),
-            ]
-        );
     }
 
     #[test]
