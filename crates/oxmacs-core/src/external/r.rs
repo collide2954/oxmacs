@@ -140,6 +140,15 @@ local({
     if (count == 0L) marker("plot", "none") else render("deleted", min(index, count))
     last()
   }
+  oxmacs$plot_gallery <- function(width, height) {
+    files <- vapply(seq_along(plots$history), function(index) {
+      file <- numbered("thumb")
+      tryCatch(draw(function() bitmap(file, width, height, 1), index), error = function(e) NULL)
+      normalizePath(file, winslash = "/")
+    }, character(1))
+    marker("gallery", paste(files, collapse = "\t"))
+    last()
+  }
   oxmacs$plot_zoom <- function(index, width, height) {
     file <- numbered("zoom")
     tryCatch(draw(function() bitmap(file, width, height, 1), index), error = function(e) NULL)

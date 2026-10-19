@@ -484,6 +484,17 @@ pub enum Command {
     )]
     RPlotZoom,
     #[strum(
+        message = "Show all R plots side by side, or the shown one again",
+        detailed_message = "Switches *R plots* between the shown plot and a gallery of every plot in the history. In the gallery the arrows, n and p move the selection, and RET or a click opens the selected plot."
+    )]
+    RPlotGallery,
+    #[strum(message = "Open the plot selected in the gallery")]
+    RPlotOpen,
+    #[strum(message = "Select the plot above in the gallery")]
+    RPlotAbove,
+    #[strum(message = "Select the plot below in the gallery")]
+    RPlotBelow,
+    #[strum(
         message = "Complete the code before point",
         detailed_message = "In R scripts and *R*, asks the running R session how the code before point could go on: objects, functions, arguments, columns after $ and packages. Several answers appear in a popup at point; a single answer is inserted at once."
     )]
@@ -642,7 +653,11 @@ impl Command {
             | Self::RPlotPrevious
             | Self::RPlotSave
             | Self::RPlotDelete
-            | Self::RPlotZoom => Scope::Plots,
+            | Self::RPlotZoom
+            | Self::RPlotGallery
+            | Self::RPlotOpen
+            | Self::RPlotAbove
+            | Self::RPlotBelow => Scope::Plots,
             _ => Scope::Global,
         }
     }

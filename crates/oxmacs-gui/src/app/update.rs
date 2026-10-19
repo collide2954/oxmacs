@@ -190,6 +190,10 @@ impl App {
                 }
             }
             Message::PlotLoaded(path, allocation) => self.plot_loaded(path, allocation),
+            Message::PickPlot(window, position) => {
+                self.focus(window);
+                self.editor.pick_plot(position);
+            }
             Message::PlotSized(size) => {
                 let pixels =
                     |extent: f32| u32::try_from(units::floor_to_usize(extent)).unwrap_or(u32::MAX);

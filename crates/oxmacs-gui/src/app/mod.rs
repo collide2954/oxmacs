@@ -69,6 +69,7 @@ pub enum Message {
     FocusWindow(WindowId),
     PreviewSized(WindowId, f32),
     PlotSized(iced::Size),
+    PickPlot(WindowId, usize),
     PlotLoaded(PathBuf, Option<widget::image::Allocation>),
     Fetched(FetchId, Result<String, String>),
     Irc(ConnectionId, net::Event),

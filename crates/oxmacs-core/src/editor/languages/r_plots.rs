@@ -21,8 +21,22 @@ pub struct PlotView {
     pub count: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GalleryView {
+    pub paths: Vec<PathBuf>,
+    pub selected: usize,
+    pub columns: usize,
+}
+
+fn columns(count: usize) -> usize {
+    (1..=count.max(1))
+        .find(|columns| columns * columns >= count)
+        .unwrap_or(1)
+}
+
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Plots {
+    gallery: Option<GalleryView>,
     shown: Option<PlotView>,
     size: Option<(u32, u32)>,
     wanted: Option<usize>,
@@ -33,6 +47,24 @@ pub(in crate::editor) struct Plots {
 impl Plots {
     pub(in crate::editor) fn view(&self) -> Option<PlotView> {
         self.shown.clone()
+    }
+
+    pub(in crate::editor) fn gallery(&self) -> Option<GalleryView> {
+        self.gallery.clone()
+    }
+
+    fn move_selection(&mut self, step: isize) -> bool {
+        let Some(gallery) = &mut self.gallery else {
+            return false;
+        };
+        if let Some(next) = gallery
+            .selected
+            .checked_add_signed(step)
+            .filter(|next| *next < gallery.paths.len())
+        {
+            gallery.selected = next;
+        }
+        true
     }
 
     fn want(&self) -> Option<Render> {
@@ -178,6 +210,9 @@ impl Editor {
         let Some(plots) = self.plots_mut() else {
             return;
         };
+        if plots.move_selection(if forward { 1 } else { -1 }) {
+            return;
+        }
         let Some((current, count)) = plots
             .want()
             .zip(plots.shown.as_ref())
@@ -269,6 +304,84 @@ impl Editor {
         ));
     }
 
+    pub(in crate::editor) fn r_plot_row(&mut self, down: bool) {
+        let Some(plots) = self.plots_mut() else {
+            return;
+        };
+        let Some(columns) = plots.gallery.as_ref().map(|gallery| gallery.columns) else {
+            self.r_plot_step(down);
+            return;
+        };
+        let columns = isize::try_from(columns).unwrap_or(1);
+        plots.move_selection(if down { columns } else { -columns });
+    }
+
+    pub(in crate::editor) fn r_plot_gallery(&mut self) {
+        if let Some(plots) = self.plots_mut()
+            && plots.gallery.take().is_some()
+        {
+            return;
+        }
+        let Some(count) = self
+            .plots_mut()
+            .and_then(|plots| plots.shown.as_ref().map(|shown| shown.count))
+        else {
+            self.show_message("No plots");
+            return;
+        };
+        let Some((_, (width, height))) = self.shown_plot("show") else {
+            return;
+        };
+        let across = columns(count);
+        let down = count.div_ceil(across);
+        let tile = |extent: u32, parts: usize| extent / u32::try_from(parts).unwrap_or(1).max(1);
+        self.r_request(&format!(
+            "getOption(\"oxmacs\")$plot_gallery({}L, {}L)",
+            tile(width, across),
+            tile(height, down)
+        ));
+    }
+
+    pub(in crate::editor) fn r_plot_thumbnails(&mut self, payload: &str) {
+        let paths: Vec<PathBuf> = payload
+            .split('\t')
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from)
+            .collect();
+        let Some(plots) = self.plots_mut() else {
+            return;
+        };
+        if paths.is_empty() {
+            plots.gallery = None;
+            return;
+        }
+        let shown = plots.shown.as_ref().map_or(1, |shown| shown.index);
+        plots.gallery = Some(GalleryView {
+            selected: shown.saturating_sub(1).min(paths.len() - 1),
+            columns: columns(paths.len()),
+            paths,
+        });
+    }
+
+    pub(in crate::editor) fn r_plot_open(&mut self) {
+        let selected = self
+            .plots_mut()
+            .and_then(|plots| plots.gallery.as_ref())
+            .map(|gallery| gallery.selected);
+        if let Some(selected) = selected {
+            self.pick_plot(selected);
+        }
+    }
+
+    pub fn pick_plot(&mut self, position: usize) {
+        let Some(plots) = self.plots_mut() else {
+            return;
+        };
+        plots.gallery = None;
+        plots.wanted = Some(position + 1);
+        self.r_plot_refresh();
+    }
+
     pub(in crate::editor) fn r_plot_zoomed(&mut self, path: &str) {
         self.effects
             .push(Effect::OpenExternally(PathBuf::from(path)));
@@ -277,11 +390,15 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::test_support::{R_PROMPT, press, r_running, r_script, r_sent};
+    use crate::editor::test_support::{
+        R_PROMPT, press, r_running, r_script, r_sent, r_sessions, type_text,
+    };
     use crate::editor::{Axis, Editor, Effect, JobId, Tiling};
     use crate::external::r::PLOTS_VARIABLE;
 
-    use super::PlotView;
+    use std::path::PathBuf;
+
+    use super::{GalleryView, PlotView};
 
     fn plot(editor: &mut Editor, job: JobId, fields: &str) {
         editor.session_output(job, &format!("\u{1}plot\u{2}{fields}\u{3}{R_PROMPT}"));
@@ -486,6 +603,117 @@ mod tests {
         assert_eq!(
             editor.take_effects(),
             [Effect::OpenExternally("C:/plots/zoom-1.png".into())]
+        );
+    }
+
+    fn gallery(editor: &Editor) -> Option<GalleryView> {
+        editor
+            .tiling()
+            .windows()
+            .into_iter()
+            .find_map(|window| editor.pane_of(window)?.plot_gallery())
+    }
+
+    fn thumbnails(editor: &mut Editor, job: JobId, count: usize) {
+        let paths: Vec<String> = (1..=count)
+            .map(|index| format!("C:/plots/thumb-{index}.png"))
+            .collect();
+        editor.session_output(
+            job,
+            &format!("\u{1}gallery\u{2}{}\u{3}{R_PROMPT}", paths.join("\t")),
+        );
+    }
+
+    #[test]
+    fn v_asks_r_for_a_grid_of_thumbnails() {
+        let (mut editor, job) = started();
+        in_plots(&mut editor, job, 4);
+
+        press(&mut editor, "v");
+        assert_eq!(
+            r_sent(&mut editor),
+            ["getOption(\"oxmacs\")$plot_gallery(336L, 240L)\n"]
+        );
+        thumbnails(&mut editor, job, 4);
+
+        let shown = gallery(&editor).unwrap();
+        assert_eq!(shown.columns, 2);
+        assert_eq!(shown.selected, 3);
+        assert_eq!(shown.paths[0], PathBuf::from("C:/plots/thumb-1.png"));
+        assert_eq!(shown.paths.len(), 4);
+    }
+
+    #[test]
+    fn keys_move_through_the_gallery_and_return_opens_a_plot() {
+        let (mut editor, job) = started();
+        in_plots(&mut editor, job, 4);
+        press(&mut editor, "v");
+        thumbnails(&mut editor, job, 4);
+        editor.take_effects();
+
+        press(&mut editor, "<up>");
+        assert_eq!(gallery(&editor).unwrap().selected, 1);
+        press(&mut editor, "p");
+        assert_eq!(gallery(&editor).unwrap().selected, 0);
+        press(&mut editor, "<down> <right>");
+        assert_eq!(gallery(&editor).unwrap().selected, 3);
+        press(&mut editor, "<left>");
+        assert_eq!(r_sent(&mut editor), Vec::<String>::new());
+
+        press(&mut editor, "RET");
+        assert_eq!(gallery(&editor), None);
+        assert_eq!(
+            r_sent(&mut editor),
+            ["getOption(\"oxmacs\")$plot(3L, 672L, 480L)\n"]
+        );
+    }
+
+    #[test]
+    fn a_click_opens_a_thumbnail_and_v_leaves_the_gallery() {
+        let (mut editor, job) = started();
+        in_plots(&mut editor, job, 2);
+        press(&mut editor, "v");
+        thumbnails(&mut editor, job, 2);
+        editor.take_effects();
+
+        editor.pick_plot(0);
+        assert_eq!(gallery(&editor), None);
+        assert_eq!(
+            r_sent(&mut editor),
+            ["getOption(\"oxmacs\")$plot(1L, 672L, 480L)\n"]
+        );
+
+        press(&mut editor, "v");
+        thumbnails(&mut editor, job, 2);
+        press(&mut editor, "v");
+        assert_eq!(gallery(&editor), None);
+    }
+
+    #[test]
+    fn a_new_plot_keeps_the_console_prompts_in_step() {
+        let mut editor = r_script("plot(1:3)\nabline(h = 2)\n", 0);
+        press(&mut editor, "C-c C-z");
+        editor.resize_pane(editor.selected_window(), 20, 61);
+        let job = r_sessions(&mut editor)[0];
+        editor.session_output(job, R_PROMPT);
+        let width = r_sent(&mut editor);
+        editor.session_output(job, R_PROMPT);
+        press(&mut editor, "C-c C-z");
+        assert_eq!(width, ["getOption(\"oxmacs\")$width(60L)\n"]);
+
+        press(&mut editor, "C-RET");
+        editor.take_effects();
+        plot(&mut editor, job, "new\t1\t1\t672\t480\tC:/plots/plot-1.png");
+        assert_eq!(r_sent(&mut editor), Vec::<String>::new());
+        press(&mut editor, "C-RET");
+        editor.session_output(job, R_PROMPT);
+
+        press(&mut editor, "C-x b");
+        type_text(&mut editor, "*R*");
+        press(&mut editor, "RET");
+        assert_eq!(
+            editor.buffer().contents(),
+            "> plot(1:3)\n> abline(h = 2)\n> "
         );
     }
 

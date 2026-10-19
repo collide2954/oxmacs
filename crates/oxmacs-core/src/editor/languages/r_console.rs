@@ -208,16 +208,16 @@ impl Editor {
     }
 
     pub fn session_output(&mut self, job: JobId, chunk: &str) {
-        let Some(index) = self.console_job(job) else {
+        if self.console_job(job).is_none() {
             return;
-        };
+        }
         let Some(console) = self.console_mut() else {
             return;
         };
         for piece in console.stream.feed(chunk) {
             match piece {
                 Piece::Text(text) => {
-                    self.console_insert(index, &text);
+                    self.console_insert(&text);
                     if let Some(console) = self.console_mut() {
                         console.waiting = false;
                     }
@@ -232,11 +232,11 @@ impl Editor {
                     match console.expected.pop_front() {
                         Some(None) => {}
                         Some(Some(line)) => {
-                            self.console_insert(index, &format!("{prompt} {line}\n"));
+                            self.console_insert(&format!("{prompt} {line}\n"));
                         }
                         None => {
                             console.waiting = true;
-                            self.console_insert(index, &format!("{prompt} "));
+                            self.console_insert(&format!("{prompt} "));
                         }
                     }
                 }
@@ -270,14 +270,14 @@ impl Editor {
     }
 
     pub(in crate::editor) fn console_finished(&mut self, job: JobId, outcome: &Outcome) -> bool {
-        let Some(index) = self.console_job(job) else {
+        if self.console_job(job).is_none() {
             return false;
-        };
+        }
         let summary = match outcome {
             Outcome::Exited(_) => "Process R finished".to_owned(),
             Outcome::Failed(error) => format!("Process R failed to start: {error}"),
         };
-        self.console_insert(index, &format!("\n{summary}\n"));
+        self.console_insert(&format!("\n{summary}\n"));
         if let Some(console) = self.console_mut() {
             console.job = None;
         }
@@ -285,11 +285,14 @@ impl Editor {
         true
     }
 
-    fn console_insert(&mut self, index: usize, text: &str) {
+    fn console_insert(&mut self, text: &str) {
         let Some(mark) = self.console().map(|console| console.input.mark()) else {
             return;
         };
-        let Some(buffer) = self.buffers.get_mut(index) else {
+        let Some(buffer) = self
+            .console_index()
+            .and_then(|index| self.buffers.get_mut(index))
+        else {
             return;
         };
         let at = buffer.marker(mark).unwrap_or_else(|| buffer.len_chars());
@@ -359,9 +362,6 @@ impl Editor {
         if code.is_empty() {
             return;
         }
-        let Some(index) = self.console_index() else {
-            return;
-        };
         let Some(console) = self.console_mut() else {
             return;
         };
@@ -375,7 +375,7 @@ impl Editor {
             .extend(lines.map(|line| Some(line.to_owned())));
         console.waiting = false;
         if let Some(first) = first {
-            self.console_insert(index, &format!("{first}\n"));
+            self.console_insert(&format!("{first}\n"));
         }
         self.effects.push(Effect::Send(job, format!("{code}\n")));
     }
@@ -399,6 +399,7 @@ impl Editor {
             "complete" => self.r_completions(payload),
             "plot" => self.r_plot(payload),
             "zoom" => self.r_plot_zoomed(payload),
+            "gallery" => self.r_plot_thumbnails(payload),
             _ => {}
         }
     }
