@@ -2789,6 +2789,7 @@ dependencies = [
  "jiff",
  "regex",
  "ropey",
+ "rustls",
  "serde",
  "serde_json",
  "streaming-iterator",
@@ -2804,6 +2805,7 @@ dependencies = [
  "tree-sitter-rust",
  "tree-sitter-toml-ng",
  "unicode-width",
+ "webpki-roots",
 ]
 
 [[package]]
