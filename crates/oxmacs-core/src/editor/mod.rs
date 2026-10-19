@@ -46,7 +46,8 @@ use crate::display::{Layout, LineStyle, Viewport};
 use crate::editor::chat::Irc;
 use crate::editor::special::weather::WeatherState;
 use crate::external::tools;
-use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers, bindings};
+use crate::input::bindings::Keymaps;
+use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers};
 use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::{self, Appearance, Highlight, Theme};
@@ -89,25 +90,7 @@ pub struct Editor {
     replace: Option<Replace>,
     last_searches: [Option<String>; 2],
     last_replacements: [Option<(String, String)>; 2],
-    keymap: Keymap,
-    minibuffer_keymap: Keymap,
-    dired_keymap: Keymap,
-    splash_keymap: Keymap,
-    doctor_keymap: Keymap,
-    rust_keymap: Keymap,
-    r_keymap: Keymap,
-    markdown_keymap: Keymap,
-    preview_keymap: Keymap,
-    console_keymap: Keymap,
-    compilation_keymap: Keymap,
-    customize_keymap: Keymap,
-    diagnostics_keymap: Keymap,
-    help_keymap: Keymap,
-    weather_keymap: Keymap,
-    chat_keymap: Keymap,
-    search_keymap: Keymap,
-    popup_keymap: Keymap,
-    plots_keymap: Keymap,
+    keymaps: Keymaps,
     popup: Option<prompts::popup::Popup>,
     r_sessions: languages::r_console::Sessions,
     xref: Vec<(crate::text::BufferId, usize)>,
@@ -117,15 +100,7 @@ pub struct Editor {
     time_now: fn() -> jiff::civil::Time,
     atlas_index: Option<crate::atlas::vault::Index>,
     processes: special::processes::Processes,
-    processes_keymap: Keymap,
     toolbox: special::toolbox::Toolbox,
-    tools_keymap: Keymap,
-    irc_setup_keymap: Keymap,
-    atlas_keymap: Keymap,
-    atlas_list_keymap: Keymap,
-    atlas_calendar_keymap: Keymap,
-    environment_keymap: Keymap,
-    table_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
     last_command: Option<Command>,
@@ -188,25 +163,7 @@ impl Editor {
             replace: None,
             last_searches: [None, None],
             last_replacements: [None, None],
-            keymap: bindings::global(),
-            minibuffer_keymap: bindings::minibuffer(),
-            dired_keymap: bindings::dired(),
-            splash_keymap: bindings::splash(),
-            doctor_keymap: bindings::doctor(),
-            rust_keymap: bindings::rust(),
-            r_keymap: bindings::r(),
-            markdown_keymap: bindings::markdown(),
-            preview_keymap: bindings::preview(),
-            console_keymap: bindings::console(),
-            compilation_keymap: bindings::compilation(),
-            customize_keymap: bindings::customize(),
-            diagnostics_keymap: bindings::diagnostics(),
-            help_keymap: bindings::help(),
-            weather_keymap: bindings::weather(),
-            chat_keymap: bindings::chat(),
-            search_keymap: bindings::search(),
-            popup_keymap: bindings::popup(),
-            plots_keymap: bindings::plots(),
+            keymaps: Keymaps::default(),
             popup: None,
             r_sessions: languages::r_console::Sessions::default(),
             xref: Vec::new(),
@@ -216,15 +173,7 @@ impl Editor {
             time_now: atlas::time_now,
             atlas_index: None,
             processes: special::processes::Processes::default(),
-            processes_keymap: bindings::processes(),
             toolbox: special::toolbox::Toolbox::default(),
-            tools_keymap: bindings::tools(),
-            irc_setup_keymap: bindings::irc_setup(),
-            atlas_keymap: bindings::atlas(),
-            atlas_list_keymap: bindings::atlas_list(),
-            atlas_calendar_keymap: bindings::atlas_calendar(),
-            environment_keymap: bindings::environment(),
-            table_keymap: bindings::table(),
             pending: Vec::new(),
             last_key: None,
             last_command: None,
@@ -437,12 +386,12 @@ impl Editor {
     fn lookup(&self, keys: &[Key]) -> Lookup {
         if self.popup.is_some()
             && keys.len() == 1
-            && let found @ Lookup::Command(_) = self.popup_keymap.lookup(keys)
+            && let found @ Lookup::Command(_) = self.keymaps.get(Scope::Popup).lookup(keys)
         {
             return found;
         }
         let local = if self.minibuffer.is_some() {
-            Some(&self.minibuffer_keymap)
+            Some(self.keymaps.get(Scope::Minibuffer))
         } else {
             self.mode_keymap()
         };
@@ -452,68 +401,14 @@ impl Editor {
                 found => return found,
             }
         }
-        self.keymap.lookup(keys)
+        self.keymaps.get(Scope::Global).lookup(keys)
     }
 
     fn mode_keymap(&self) -> Option<&Keymap> {
         match self.buffer_scope() {
-            Scope::Dired => Some(&self.dired_keymap),
-            Scope::Splash => Some(&self.splash_keymap),
-            Scope::Doctor => Some(&self.doctor_keymap),
-            Scope::Rust => Some(&self.rust_keymap),
-            Scope::R => Some(&self.r_keymap),
-            Scope::Markdown => Some(&self.markdown_keymap),
-            Scope::Preview => Some(&self.preview_keymap),
-            Scope::Console => Some(&self.console_keymap),
-            Scope::Compilation => Some(&self.compilation_keymap),
-            Scope::Customize => Some(&self.customize_keymap),
-            Scope::Diagnostics => Some(&self.diagnostics_keymap),
-            Scope::Help => Some(&self.help_keymap),
-            Scope::Weather => Some(&self.weather_keymap),
-            Scope::Chat => Some(&self.chat_keymap),
-            Scope::Plots => Some(&self.plots_keymap),
-            Scope::Processes => Some(&self.processes_keymap),
-            Scope::Tools => Some(&self.tools_keymap),
-            Scope::IrcSetup => Some(&self.irc_setup_keymap),
-            Scope::Atlas => Some(&self.atlas_keymap),
-            Scope::AtlasList => Some(&self.atlas_list_keymap),
-            Scope::AtlasCalendar => Some(&self.atlas_calendar_keymap),
-            Scope::Environment => Some(&self.environment_keymap),
-            Scope::Table => Some(&self.table_keymap),
-            Scope::Global | Scope::Minibuffer | Scope::Search | Scope::Popup => None,
+            Scope::Global => None,
+            scope => Some(self.keymaps.get(scope)),
         }
-    }
-
-    fn keymaps(&self) -> [(Scope, &Keymap); 27] {
-        [
-            (Scope::Global, &self.keymap),
-            (Scope::Minibuffer, &self.minibuffer_keymap),
-            (Scope::Search, &self.search_keymap),
-            (Scope::Dired, &self.dired_keymap),
-            (Scope::Splash, &self.splash_keymap),
-            (Scope::Doctor, &self.doctor_keymap),
-            (Scope::Rust, &self.rust_keymap),
-            (Scope::R, &self.r_keymap),
-            (Scope::Markdown, &self.markdown_keymap),
-            (Scope::Preview, &self.preview_keymap),
-            (Scope::Console, &self.console_keymap),
-            (Scope::Compilation, &self.compilation_keymap),
-            (Scope::Customize, &self.customize_keymap),
-            (Scope::Diagnostics, &self.diagnostics_keymap),
-            (Scope::Help, &self.help_keymap),
-            (Scope::Weather, &self.weather_keymap),
-            (Scope::Chat, &self.chat_keymap),
-            (Scope::Popup, &self.popup_keymap),
-            (Scope::Plots, &self.plots_keymap),
-            (Scope::Processes, &self.processes_keymap),
-            (Scope::Tools, &self.tools_keymap),
-            (Scope::IrcSetup, &self.irc_setup_keymap),
-            (Scope::Atlas, &self.atlas_keymap),
-            (Scope::AtlasList, &self.atlas_list_keymap),
-            (Scope::AtlasCalendar, &self.atlas_calendar_keymap),
-            (Scope::Environment, &self.environment_keymap),
-            (Scope::Table, &self.table_keymap),
-        ]
     }
 
     fn buffer_scope(&self) -> Scope {
@@ -595,7 +490,7 @@ impl Editor {
     fn where_is(&self, command: Command) -> Option<KeySequence> {
         self.mode_keymap()
             .and_then(|keymap| keymap.where_is(command))
-            .or_else(|| self.keymap.where_is(command))
+            .or_else(|| self.keymaps.get(Scope::Global).where_is(command))
     }
 
     fn dispatch(&mut self, key: Key, command: Command, shifted: bool) {

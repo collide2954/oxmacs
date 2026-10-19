@@ -1,7 +1,7 @@
 use std::mem;
 use std::ops::Range;
 
-use crate::command::Command;
+use crate::command::{Command, Scope};
 use crate::display::ScreenLine;
 use crate::editor::{Editor, inserts_itself};
 use crate::input::{Key, KeyCode, Lookup};
@@ -119,7 +119,7 @@ impl Editor {
             return false;
         };
         search.note = None;
-        match self.search_keymap.lookup(&[key]) {
+        match self.keymaps.get(Scope::Search).lookup(&[key]) {
             Lookup::Command(command) => self.dispatch(key, command, false),
             _ if inserts_itself(key) => self.dispatch(key, Command::IsearchPrintingChar, false),
             _ => {

@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use crate::command::Command;
+use crate::command::{Command, Scope};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
@@ -71,7 +71,8 @@ impl Editor {
         let keys: Vec<String> = BUTTONS
             .iter()
             .map(|(command, _)| {
-                self.keymap
+                self.keymaps
+                    .get(Scope::Global)
                     .where_is(*command)
                     .map(|keys| keys.to_string())
                     .unwrap_or_default()

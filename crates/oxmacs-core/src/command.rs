@@ -836,13 +836,13 @@ impl Command {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, VariantArray)]
 pub enum Scope {
     Global,
     Minibuffer,
+    Search,
     Dired,
     Splash,
-    Search,
     Doctor,
     Rust,
     R,

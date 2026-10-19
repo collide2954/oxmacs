@@ -1,4 +1,6 @@
-use crate::command::Command;
+use strum::VariantArray;
+
+use crate::command::{Command, Scope};
 use crate::input::{KeySequence, Keymap};
 
 const GLOBAL: &[(&str, Command)] = &[
@@ -286,54 +288,6 @@ const CHAT: &[(&str, Command)] = &[
     ("M-n", Command::ComintNextInput),
 ];
 
-pub fn global() -> Keymap {
-    build(GLOBAL)
-}
-
-pub fn minibuffer() -> Keymap {
-    build(MINIBUFFER)
-}
-
-pub fn doctor() -> Keymap {
-    build(DOCTOR)
-}
-
-pub fn rust() -> Keymap {
-    build(RUST)
-}
-
-pub fn r() -> Keymap {
-    build(R)
-}
-
-pub fn console() -> Keymap {
-    build(CONSOLE)
-}
-
-pub fn preview() -> Keymap {
-    build(PREVIEW)
-}
-
-pub fn markdown() -> Keymap {
-    build(MARKDOWN)
-}
-
-pub fn compilation() -> Keymap {
-    build(COMPILATION)
-}
-
-pub fn customize() -> Keymap {
-    build(CUSTOMIZE)
-}
-
-pub fn diagnostics() -> Keymap {
-    build(DIAGNOSTICS)
-}
-
-pub fn help() -> Keymap {
-    build(HELP)
-}
-
 const POPUP: &[(&str, Command)] = &[
     ("C-n", Command::CompletionNext),
     ("<down>", Command::CompletionNext),
@@ -431,10 +385,6 @@ const ENVIRONMENT: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
-pub fn environment() -> Keymap {
-    build(ENVIRONMENT)
-}
-
 const TABLE: &[(&str, Command)] = &[
     ("<right>", Command::RTableNextColumn),
     ("f", Command::RTableNextColumn),
@@ -448,60 +398,60 @@ const TABLE: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
-pub fn table() -> Keymap {
-    build(TABLE)
+#[derive(Debug)]
+pub struct Keymaps(Vec<Keymap>);
+
+impl Default for Keymaps {
+    fn default() -> Self {
+        Self(
+            Scope::VARIANTS
+                .iter()
+                .map(|scope| build(table(*scope)))
+                .collect(),
+        )
+    }
 }
 
-pub fn processes() -> Keymap {
-    build(PROCESSES)
+impl Keymaps {
+    pub fn get(&self, scope: Scope) -> &Keymap {
+        &self.0[scope as usize]
+    }
+
+    pub fn all(&self) -> impl Iterator<Item = (Scope, &Keymap)> {
+        Scope::VARIANTS.iter().copied().zip(&self.0)
+    }
 }
 
-pub fn tools() -> Keymap {
-    build(TOOLS)
-}
-
-pub fn irc_setup() -> Keymap {
-    build(IRC_SETUP)
-}
-
-pub fn atlas() -> Keymap {
-    build(ATLAS)
-}
-
-pub fn atlas_calendar() -> Keymap {
-    build(ATLAS_CALENDAR)
-}
-
-pub fn atlas_list() -> Keymap {
-    build(ATLAS_LIST)
-}
-
-pub fn plots() -> Keymap {
-    build(PLOTS)
-}
-
-pub fn popup() -> Keymap {
-    build(POPUP)
-}
-
-pub fn chat() -> Keymap {
-    build(CHAT)
-}
-
-pub fn weather() -> Keymap {
-    build(WEATHER)
-}
-
-pub fn search() -> Keymap {
-    build(SEARCH)
-}
-
-pub fn dired() -> Keymap {
-    build(DIRED)
-}
-
-pub fn splash() -> Keymap {
-    build(SPLASH)
+fn table(scope: Scope) -> &'static [(&'static str, Command)] {
+    match scope {
+        Scope::Global => GLOBAL,
+        Scope::Minibuffer => MINIBUFFER,
+        Scope::Search => SEARCH,
+        Scope::Dired => DIRED,
+        Scope::Splash => SPLASH,
+        Scope::Doctor => DOCTOR,
+        Scope::Rust => RUST,
+        Scope::R => R,
+        Scope::Markdown => MARKDOWN,
+        Scope::Preview => PREVIEW,
+        Scope::Console => CONSOLE,
+        Scope::Compilation => COMPILATION,
+        Scope::Customize => CUSTOMIZE,
+        Scope::Diagnostics => DIAGNOSTICS,
+        Scope::Help => HELP,
+        Scope::Weather => WEATHER,
+        Scope::Chat => CHAT,
+        Scope::Popup => POPUP,
+        Scope::Plots => PLOTS,
+        Scope::Processes => PROCESSES,
+        Scope::Tools => TOOLS,
+        Scope::IrcSetup => IRC_SETUP,
+        Scope::Atlas => ATLAS,
+        Scope::AtlasList => ATLAS_LIST,
+        Scope::AtlasCalendar => ATLAS_CALENDAR,
+        Scope::Environment => ENVIRONMENT,
+        Scope::Table => TABLE,
+    }
 }
 
 fn build(bindings: &[(&str, Command)]) -> Keymap {
@@ -532,87 +482,22 @@ mod tests {
     }
 
     #[test]
-    fn every_global_binding_resolves_to_its_command() {
-        assert_resolves(&global(), GLOBAL);
+    fn every_binding_in_every_scope_resolves_to_its_command() {
+        let keymaps = Keymaps::default();
+        for scope in Scope::VARIANTS {
+            assert_resolves(keymaps.get(*scope), table(*scope));
+        }
     }
 
     #[test]
-    fn every_minibuffer_binding_resolves_to_its_command() {
-        assert_resolves(&minibuffer(), MINIBUFFER);
-    }
-
-    #[test]
-    fn every_doctor_binding_resolves_to_its_command() {
-        assert_resolves(&doctor(), DOCTOR);
-    }
-
-    #[test]
-    fn every_rust_binding_resolves_to_its_command() {
-        assert_resolves(&rust(), RUST);
-    }
-
-    #[test]
-    fn every_r_binding_resolves_to_its_command() {
-        assert_resolves(&r(), R);
-    }
-
-    #[test]
-    fn every_console_binding_resolves_to_its_command() {
-        assert_resolves(&console(), CONSOLE);
-    }
-
-    #[test]
-    fn every_preview_binding_resolves_to_its_command() {
-        assert_resolves(&preview(), PREVIEW);
-    }
-
-    #[test]
-    fn every_markdown_binding_resolves_to_its_command() {
-        assert_resolves(&markdown(), MARKDOWN);
-    }
-
-    #[test]
-    fn every_compilation_binding_resolves_to_its_command() {
-        assert_resolves(&compilation(), COMPILATION);
-    }
-
-    #[test]
-    fn every_customize_binding_resolves_to_its_command() {
-        assert_resolves(&customize(), CUSTOMIZE);
-    }
-
-    #[test]
-    fn every_diagnostics_binding_resolves_to_its_command() {
-        assert_resolves(&diagnostics(), DIAGNOSTICS);
-    }
-
-    #[test]
-    fn every_help_binding_resolves_to_its_command() {
-        assert_resolves(&help(), HELP);
-    }
-
-    #[test]
-    fn every_chat_binding_resolves_to_its_command() {
-        assert_resolves(&chat(), CHAT);
-    }
-
-    #[test]
-    fn every_weather_binding_resolves_to_its_command() {
-        assert_resolves(&weather(), WEATHER);
-    }
-
-    #[test]
-    fn every_search_binding_resolves_to_its_command() {
-        assert_resolves(&search(), SEARCH);
-    }
-
-    #[test]
-    fn every_dired_binding_resolves_to_its_command() {
-        assert_resolves(&dired(), DIRED);
-    }
-
-    #[test]
-    fn every_splash_binding_resolves_to_its_command() {
-        assert_resolves(&splash(), SPLASH);
+    fn every_scope_lists_its_own_keymap() {
+        let keymaps = Keymaps::default();
+        let scopes: Vec<Scope> = keymaps.all().map(|(scope, _)| scope).collect();
+        assert_eq!(scopes, Scope::VARIANTS);
+        let sequence: KeySequence = "i".parse().unwrap();
+        assert_eq!(
+            keymaps.get(Scope::Tools).lookup(sequence.keys()),
+            Lookup::Command(Command::ToolInstall)
+        );
     }
 }

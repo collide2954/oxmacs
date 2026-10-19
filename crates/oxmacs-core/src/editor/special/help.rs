@@ -150,8 +150,8 @@ impl Editor {
             return;
         }
         let places: Vec<(Scope, Vec<String>)> = self
-            .keymaps()
-            .into_iter()
+            .keymaps
+            .all()
             .map(|(scope, keymap)| {
                 let keys = keymap
                     .bindings(command)
