@@ -1,6 +1,7 @@
 use std::ops::Range;
 
-use jiff::civil::{Date, Time};
+use jiff::Unit;
+use jiff::civil::{Date, DateTime, Time};
 
 use crate::atlas::date::{self, Every};
 
@@ -58,6 +59,32 @@ pub enum Priority {
     Low,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Clock {
+    pub line: usize,
+    pub date: Date,
+    pub start: Time,
+    pub end: Option<Time>,
+}
+
+impl Clock {
+    pub fn minutes(&self, now: DateTime) -> i64 {
+        let start = self.date.to_datetime(self.start);
+        let end = match self.end {
+            Some(end) if end >= self.start => self.date.to_datetime(end),
+            Some(end) => self
+                .date
+                .tomorrow()
+                .map_or(start, |next| next.to_datetime(end)),
+            None => now,
+        };
+        start
+            .until((Unit::Minute, end))
+            .map_or(0, |span| span.get_minutes())
+            .max(0)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Task {
     pub line: usize,
@@ -72,6 +99,15 @@ pub struct Task {
     pub priority: Option<Priority>,
     pub tags: Vec<String>,
     pub links: Vec<String>,
+    pub clocks: Vec<Clock>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Heading {
+    pub line: usize,
+    pub level: usize,
+    pub title: String,
+    pub due: Option<Date>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,7 +154,7 @@ pub struct Span {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Note {
     pub header: Vec<(String, String)>,
-    pub headings: Vec<(usize, usize, String)>,
+    pub headings: Vec<Heading>,
     pub tasks: Vec<Task>,
     pub events: Vec<Event>,
     pub links: Vec<String>,
@@ -297,13 +333,19 @@ fn field(word: &str, today: Date, task: &mut Task) -> Option<Style> {
         "done" => &mut task.done,
         _ => return None,
     };
+    let (found, style) = dated(value, today);
+    *slot = found;
+    Some(style)
+}
+
+fn dated(value: &str, today: Date) -> (Option<Date>, Style) {
     let exact = value.parse::<Date>().ok();
-    *slot = exact.or_else(|| date::resolve(value, today));
-    Some(if exact.is_some() {
+    let style = if exact.is_some() {
         Style::Field
     } else {
         Style::Loose
-    })
+    };
+    (exact.or_else(|| date::resolve(value, today)), style)
 }
 
 fn task(line: usize, text: &str, today: Date, note: &mut Note) -> Option<(Task, Vec<Span>)> {
@@ -333,6 +375,7 @@ fn task(line: usize, text: &str, today: Date, note: &mut Note) -> Option<(Task, 
         priority: None,
         tags: Vec::new(),
         links: Vec::new(),
+        clocks: Vec::new(),
     };
     if state.finished() {
         spans.push(Span {
@@ -410,11 +453,75 @@ fn event(line: usize, text: &str) -> Option<(Event, Span)> {
     Some((found, span))
 }
 
-fn heading(text: &str) -> Option<(usize, String)> {
+fn heading_level(text: &str) -> Option<usize> {
     let level = text.chars().take_while(|c| *c == '=').count();
     let rest = &text[level..];
-    (level > 0 && (rest.is_empty() || rest.starts_with(' ')))
-        .then(|| (level, rest.trim().to_owned()))
+    (level > 0 && (rest.is_empty() || rest.starts_with(' '))).then_some(level)
+}
+
+fn heading(number: usize, line: &str, level: usize, today: Date, note: &mut Note) -> Vec<Span> {
+    inline(line, number, &mut Vec::new(), note);
+    let mut spans = whole(line, Style::Heading(level));
+    let mut due = None;
+    let mut title = Vec::new();
+    for (columns, word) in words(line).into_iter().skip(1) {
+        let lower = word.to_lowercase();
+        match lower.strip_prefix("due:").filter(|value| !value.is_empty()) {
+            Some(value) if due.is_none() => {
+                let (found, style) = dated(value, today);
+                due = found;
+                spans.push(Span { columns, style });
+            }
+            _ => title.push(word),
+        }
+    }
+    note.headings.push(Heading {
+        line: number,
+        level,
+        title: title.join(" "),
+        due,
+    });
+    spans
+}
+
+fn clock(number: usize, line: &str, note: &mut Note) -> Option<Vec<Span>> {
+    let depth = indent(line);
+    let rest: String = line.chars().skip(depth).collect();
+    let body = rest.strip_prefix("clock:").filter(|_| depth > 0)?;
+    let all = words(body);
+    let [(day_columns, day), (range_columns, range)] = all.as_slice() else {
+        return None;
+    };
+    let (start, end) = range.split_once('-').unwrap_or((range, ""));
+    let found = Clock {
+        line: number,
+        date: day.parse().ok()?,
+        start: time(start)?,
+        end: if end.is_empty() {
+            None
+        } else {
+            Some(time(end)?)
+        },
+    };
+    let after = note.headings.last().map(|heading| heading.line);
+    let owner = note
+        .tasks
+        .iter_mut()
+        .rev()
+        .take_while(|task| after.is_none_or(|after| task.line > after))
+        .find(|task| task.depth < depth)?;
+    owner.clocks.push(found);
+    let key = depth + "clock:".len();
+    Some(vec![
+        Span {
+            columns: depth..key,
+            style: Style::Key,
+        },
+        Span {
+            columns: key + day_columns.start..key + range_columns.end,
+            style: Style::Field,
+        },
+    ])
 }
 
 fn thread(line: usize, text: &str, threads: &mut Vec<Thread>) {
@@ -450,13 +557,14 @@ fn body_line(number: usize, line: &str, today: Date, note: &mut Note) -> Vec<Spa
     if line.trim_end() == "---" {
         return whole(line, Style::Separator);
     }
-    if let Some((level, title)) = heading(line) {
-        inline(line, number, &mut Vec::new(), note);
-        note.headings.push((number, level, title));
-        return whole(line, Style::Heading(level));
+    if let Some(level) = heading_level(line) {
+        return heading(number, line, level, today, note);
     }
     if let Some((found, spans)) = task(number, line, today, note) {
         note.tasks.push(found);
+        return spans;
+    }
+    if let Some(spans) = clock(number, line, note) {
         return spans;
     }
     let mut spans = Vec::new();
@@ -562,15 +670,105 @@ c1 2026-10-19 14:02  Check the soil depth first
         assert_eq!(parse("note: no rule\nmore text\n", TODAY).header, []);
     }
 
+    fn heading_at(line: usize, level: usize, title: &str, due: Option<Date>) -> Heading {
+        Heading {
+            line,
+            level,
+            title: title.to_owned(),
+            due,
+        }
+    }
+
     #[test]
     fn headings_have_levels() {
         let note = garden();
 
         assert_eq!(
             note.headings,
-            [(4, 1, "Garden plan".to_owned()), (14, 2, "Log".to_owned())]
+            [
+                heading_at(4, 1, "Garden plan", None),
+                heading_at(14, 2, "Log", None)
+            ]
         );
         assert_eq!(styles(&note, 14), [(0..6, Style::Heading(2))]);
+    }
+
+    #[test]
+    fn headings_with_a_due_date_are_milestones() {
+        let note = parse(
+            "== Beds ready  due:2026-11-01\n== Later  due:fri\n= Plain\n",
+            TODAY,
+        );
+
+        assert_eq!(
+            note.headings,
+            [
+                heading_at(0, 2, "Beds ready", Some(date(2026, 11, 1))),
+                heading_at(1, 2, "Later", Some(date(2026, 10, 23))),
+                heading_at(2, 1, "Plain", None)
+            ]
+        );
+        assert_eq!(
+            styles(&note, 0),
+            [(0..29, Style::Heading(2)), (15..29, Style::Field)]
+        );
+        assert_eq!(
+            styles(&note, 1),
+            [(0..17, Style::Heading(2)), (10..17, Style::Loose)]
+        );
+    }
+
+    #[test]
+    fn clock_lines_belong_to_the_task_above_them() {
+        let note = parse(
+            "[/] Order soil\n    clock: 2026-10-19 14:02-15:30\n    [ ] Child\n    clock: 2026-10-20 23:10-\n== Next\n    clock: 2026-10-21 08:00-09:00\n",
+            TODAY,
+        );
+
+        assert_eq!(
+            note.tasks[0].clocks,
+            [
+                Clock {
+                    line: 1,
+                    date: date(2026, 10, 19),
+                    start: time(14, 2, 0, 0),
+                    end: Some(time(15, 30, 0, 0)),
+                },
+                Clock {
+                    line: 3,
+                    date: date(2026, 10, 20),
+                    start: time(23, 10, 0, 0),
+                    end: None,
+                }
+            ]
+        );
+        assert_eq!(note.tasks[1].clocks, []);
+        assert_eq!(
+            styles(&note, 1),
+            [(4..10, Style::Key), (11..33, Style::Field)]
+        );
+        assert_eq!(styles(&note, 5), []);
+    }
+
+    #[test]
+    fn clocks_count_minutes_across_midnight_and_while_running() {
+        let clock = |start, end| Clock {
+            line: 0,
+            date: TODAY,
+            start,
+            end,
+        };
+        let now = TODAY.tomorrow().unwrap().at(0, 30, 0, 0);
+
+        assert_eq!(
+            clock(time(14, 2, 0, 0), Some(time(15, 30, 0, 0))).minutes(now),
+            88
+        );
+        assert_eq!(
+            clock(time(23, 10, 0, 0), Some(time(0, 20, 0, 0))).minutes(now),
+            70
+        );
+        assert_eq!(clock(time(23, 10, 0, 0), None).minutes(now), 80);
     }
 
     #[test]
