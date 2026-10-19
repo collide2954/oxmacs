@@ -15,9 +15,10 @@ use crate::text::Buffer;
 use crate::theme::Highlight;
 
 const NAME: &str = "*Settings*";
-const HELP: &str = "RET changes   C-x C-s saves   g reverts   q quits";
+const HELP: &str = "RET change  C-x C-s save  g revert  q quit";
 const MARGIN: usize = 2;
 const GAP: usize = 2;
+const HINT_INDENT: &str = "    ";
 
 #[derive(Debug)]
 pub(super) struct Customize {
@@ -40,7 +41,9 @@ impl Customize {
     }
 
     fn row(&self, line: usize) -> Option<&Row> {
-        self.rows.iter().find(|row| row.line == line)
+        self.rows
+            .iter()
+            .find(|row| row.line == line || row.line + 1 == line)
     }
 }
 
@@ -87,15 +90,6 @@ fn page(config: &Config, state: &Customize, location: &str) -> (Page, Vec<Row>) 
         .map(|setting| setting.key.len())
         .max()
         .unwrap_or(0);
-    let values: Vec<String> = SETTINGS
-        .iter()
-        .map(|setting| shown(setting, config.get(setting.key).as_ref()))
-        .collect();
-    let value_width = values
-        .iter()
-        .map(|value| value.chars().count())
-        .max()
-        .unwrap_or(0);
     let mut page = Page::default();
     page.line(&[
         ("Settings", Some(Highlight::Heading)),
@@ -107,28 +101,29 @@ fn page(config: &Config, state: &Customize, location: &str) -> (Page, Vec<Row>) 
     }
     let mut rows = Vec::new();
     let mut group = "";
-    for (index, (setting, value)) in SETTINGS.iter().zip(&values).enumerate() {
+    for (index, setting) in SETTINGS.iter().enumerate() {
         if setting.group != group {
             group = setting.group;
             page.line(&[]);
             page.heading(group);
         }
+        let value = shown(setting, config.get(setting.key).as_ref());
         let changed = config.get(setting.key) != state.saved.get(setting.key);
         let marker = format!("{:<MARGIN$}", if changed { "*" } else { "" });
         let name = format!("{:<width$}", setting.key, width = key_width + GAP);
-        let width = value.chars().count();
-        let padding = " ".repeat(value_width - width + GAP);
         let start = MARGIN + key_width + GAP;
         rows.push(Row {
             line: page.styles.len(),
             setting: index,
-            value: (start, start + width),
+            value: (start, start + value.chars().count()),
         });
         page.line(&[
             (&marker, changed.then_some(Highlight::Warning)),
             (&name, None),
-            (value, Some(Highlight::Link)),
-            (&padding, None),
+            (&value, Some(Highlight::Link)),
+        ]);
+        page.line(&[
+            (HINT_INDENT, None),
             (&hint(setting), Some(Highlight::Comment)),
         ]);
     }
@@ -584,15 +579,18 @@ mod tests {
         for setting in SETTINGS {
             line_of(&editor, setting.key);
         }
-        let theme = row(&editor, "theme");
-        assert!(theme.contains("[follow OS]"), "{theme}");
-        assert!(
-            theme.ends_with("follow OS | adwaita | adwaita-dark"),
-            "{theme}"
+        assert!(row(&editor, "theme").ends_with(" [follow OS]"));
+        assert_eq!(
+            lines[line_of(&editor, "theme") + 1],
+            "    follow OS | adwaita | adwaita-dark"
         );
-        assert!(row(&editor, "animations").contains("[x]"));
-        assert!(row(&editor, "tab-width").contains(" 8 "));
-        assert!(row(&editor, "font-size").contains(" 11 "));
+        assert_eq!(
+            lines[line_of(&editor, "tab-width") + 1],
+            "    Columns per tab character"
+        );
+        assert!(row(&editor, "animations").ends_with(" [x]"));
+        assert!(row(&editor, "tab-width").ends_with(" 8"));
+        assert!(row(&editor, "font-size").ends_with(" 11"));
     }
 
     #[test]
@@ -677,6 +675,16 @@ mod tests {
         press(&mut editor, "RET C-a C-k RET");
         assert_eq!(editor.config().font_family, None);
         assert!(row(&editor, "font-family").contains("(bundled)"));
+    }
+
+    #[test]
+    fn return_on_a_hint_changes_the_setting_above_it() {
+        let (_dir, mut editor) = settings();
+        on(&mut editor, "clock");
+
+        press(&mut editor, "C-n RET");
+
+        assert!(!editor.config().clock);
     }
 
     #[test]
