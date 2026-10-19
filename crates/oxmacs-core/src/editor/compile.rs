@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use crate::editor::buffers::Mode;
 use crate::editor::errors::{ErrorSource, Errors};
 use crate::editor::minibuffer::Purpose;
-use crate::editor::{Editor, Effect};
+use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::files::paths;
 use crate::text::Buffer;
 use crate::tools;
@@ -11,23 +11,6 @@ use crate::tools;
 pub(super) const NAME: &str = "*compilation*";
 pub(super) const FINISHED: &str = "Compilation finished";
 const DEFAULT_COMMAND: &str = "cargo build";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct JobId(pub u64);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Job {
-    pub id: JobId,
-    pub program: String,
-    pub args: Vec<String>,
-    pub directory: PathBuf,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Outcome {
-    Exited(Option<i32>),
-    Failed(String),
-}
 
 #[derive(Debug)]
 pub(super) struct Compilation {
@@ -225,9 +208,8 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use super::{Job, JobId, Outcome};
     use crate::editor::test_support::{press, type_text};
-    use crate::editor::{Editor, Effect};
+    use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 
     fn spawned(editor: &mut Editor) -> Vec<Job> {
         editor

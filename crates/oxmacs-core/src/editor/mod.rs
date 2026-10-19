@@ -16,6 +16,7 @@ mod format;
 mod imenu;
 mod indent;
 mod isearch;
+mod job;
 mod lint;
 mod markdown;
 mod minibuffer;
@@ -40,9 +41,9 @@ mod tiling;
 mod undo;
 mod windows;
 
-pub use compile::{Job, JobId, Outcome};
 pub use effect::Effect;
 pub use isearch::Search;
+pub use job::{Job, JobId, Outcome};
 pub use minibuffer::{Choice, Completion, Minibuffer};
 pub use mouse::{Cell, Clicks};
 pub use numbers::Gutter;
