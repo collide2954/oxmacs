@@ -24,6 +24,7 @@ regex = "1.13.1"
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+skrifa = "0.48.0"
 streaming-iterator = "0.1.9"
 strum = { version = "0.28.0", features = ["derive"] }
 tempfile = "3.27.0"
@@ -35,7 +36,6 @@ tree-sitter = "0.27.1"
 tree-sitter-md = "0.5.3"
 tree-sitter-rust = "0.24.2"
 tree-sitter-toml-ng = "0.7.0"
-ttf-parser = "0.25.1"
 unicode-width = "0.2.2"
 
 [workspace.lints.rust]

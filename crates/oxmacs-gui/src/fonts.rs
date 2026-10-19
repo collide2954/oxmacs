@@ -6,25 +6,30 @@ pub const EDITOR: Font = Font::with_name(EDITOR_FAMILY);
 
 #[cfg(test)]
 mod tests {
+    use skrifa::instance::{LocationRef, Size};
+    use skrifa::string::StringId;
+    use skrifa::{FontRef, MetadataProvider};
+
     use super::*;
-    use ttf_parser::{Face, name_id};
+
+    fn bundled() -> FontRef<'static> {
+        FontRef::new(JETBRAINS_MONO_REGULAR).unwrap()
+    }
 
     #[test]
     fn bundled_font_family_matches_the_requested_editor_font() {
-        let face = Face::parse(JETBRAINS_MONO_REGULAR, 0).unwrap();
-        let family = face
-            .names()
-            .into_iter()
-            .filter(|name| name.name_id == name_id::FAMILY)
-            .find_map(|name| name.to_string());
+        let family = bundled()
+            .localized_strings(StringId::FAMILY_NAME)
+            .english_or_first()
+            .map(|name| name.to_string());
 
         assert_eq!(family.as_deref(), Some(EDITOR_FAMILY));
     }
 
     #[test]
     fn bundled_font_is_monospaced() {
-        let face = Face::parse(JETBRAINS_MONO_REGULAR, 0).unwrap();
+        let metrics = bundled().metrics(Size::unscaled(), LocationRef::default());
 
-        assert!(face.is_monospaced());
+        assert!(metrics.is_monospace);
     }
 }

@@ -23,5 +23,5 @@ native-theme = { workspace = true, features = ["macos"] }
 
 [dev-dependencies]
 iced_test.workspace = true
+skrifa.workspace = true
 tempfile.workspace = true
-ttf-parser.workspace = true
