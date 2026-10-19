@@ -7,8 +7,8 @@ use iced::theme::Mode;
 use iced::time::{Duration, Instant};
 use iced::widget::scrollable::{AbsoluteOffset, RelativeOffset};
 use iced::widget::{
-    self, Column, Row, column, container, markdown, mouse_area, operation, responsive, row,
-    scrollable, sensor, space, text,
+    self, Column, Row, column, container, markdown, mouse_area, operation, responsive, scrollable,
+    sensor, space,
 };
 use iced::{
     Animation, Element, Event, Font, Length, Subscription, Task, Theme, clipboard, event, keyboard,
@@ -17,7 +17,7 @@ use iced::{
 use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
-use oxmacs_core::config::{self, Config, ConfigError};
+use oxmacs_core::config::{self, Config, ConfigError, ModeLineStyle};
 use oxmacs_core::editor::{
     Axis, Editor, Effect, Job, JobId, Outcome, PreviewScroll, Tiling, WindowId,
 };
@@ -29,6 +29,7 @@ use crate::keys::{self, Platform};
 use crate::watcher::Watched;
 use crate::widgets::buffer_view::{BufferView, Motion, ViewEvent};
 use crate::widgets::divider::Divider;
+use crate::widgets::mode_line::{self, Look};
 use crate::widgets::{completions, echo_area};
 use crate::{animation, fonts, style, ticker, units, watcher};
 
@@ -46,6 +47,7 @@ pub struct App {
     theme_fade: Option<(Faces, Animation<bool>)>,
     reveal: Animation<bool>,
     clock: Option<String>,
+    mode_line_style: ModeLineStyle,
     previews: Vec<(BufferId, u64, markdown::Content)>,
     jobs: Vec<(JobId, Handle)>,
     preview_heights: Vec<(WindowId, f32)>,
@@ -105,6 +107,7 @@ impl App {
             theme_fade: None,
             reveal: transition(false, animation::REVEAL),
             clock: None,
+            mode_line_style: config.mode_line_style,
             previews: Vec::new(),
             jobs: Vec::new(),
             preview_heights: Vec::new(),
@@ -140,6 +143,7 @@ impl App {
         self.animations = animations_enabled(config.animations, self.reduced_motion);
         self.blink_interval = Duration::from_millis(config.cursor_blink_interval);
         self.clock = config.clock.then(|| config.clock_format.clone());
+        self.mode_line_style = config.mode_line_style;
     }
 
     pub fn start(&mut self, visits: &[Visit], splash: bool) {
@@ -575,7 +579,6 @@ impl App {
         let Some(pane) = self.editor.pane_of(window) else {
             return space().into();
         };
-        let line = |content: String| text(content).font(self.font).size(self.text_size);
         let active = pane.is_selected();
         let body: Element<'_, Message> = match pane
             .preview_source()
@@ -616,24 +619,22 @@ impl App {
             .height(Length::Fill)
             .into(),
         };
-        let clock = self
+        let extras: Vec<String> = self
             .clock
             .as_deref()
             .filter(|_| self.editor.tiling().windows().last() == Some(&window))
-            .map(|format| line(clock::now(format)));
+            .map(clock::now)
+            .into_iter()
+            .collect();
+        let look = Look {
+            faces,
+            active,
+            font: self.font,
+            size: self.text_size,
+        };
         column![
             body,
-            container(
-                row![
-                    container(line(pane.mode_line()).wrapping(text::Wrapping::None))
-                        .width(Length::Fill)
-                        .clip(true)
-                ]
-                .push(clock)
-            )
-            .width(Length::Fill)
-            .padding([1, 4])
-            .style(move |_| style::mode_line(&faces, active)),
+            mode_line::view(&pane.status(), &extras, self.mode_line_style, look)
         ]
         .into()
     }
@@ -720,6 +721,22 @@ mod tests {
         let app = App::default();
         let mut ui = iced_test::simulator(app.view());
 
+        assert!(ui.find("-- *scratch*   L1 C0").is_ok());
+    }
+
+    #[test]
+    fn the_mode_line_follows_the_configured_style() {
+        let config = Config::parse("mode-line-style = \"minimal\"").unwrap();
+        let mut app = App::new(Ok(&config));
+        {
+            let mut ui = iced_test::simulator(app.view());
+            assert!(ui.find("*scratch*").is_ok());
+            assert!(ui.find("1:0").is_ok());
+        }
+
+        app.configure(&Config::default());
+
+        let mut ui = iced_test::simulator(app.view());
         assert!(ui.find("-- *scratch*   L1 C0").is_ok());
     }
 

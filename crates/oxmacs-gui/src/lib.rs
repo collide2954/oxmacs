@@ -28,6 +28,7 @@ pub fn run(visits: Vec<Visit>) -> Result {
         .font(fonts::JETBRAINS_MONO_REGULAR)
         .default_font(fonts::EDITOR)
         .window(window_settings(mode))
+        .antialiasing(true)
         .run()
 }
 
