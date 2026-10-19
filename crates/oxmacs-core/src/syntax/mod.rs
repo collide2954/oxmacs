@@ -211,8 +211,12 @@ impl Syntax {
         let end = buffer.line_end(line);
         let last = buffer.char_to_byte(end.checked_sub(1).filter(|last| *last >= start)?);
         let node = tree.root_node().descendant_for_byte_range(last, last)?;
-        let comment = ancestors(node)
-            .find(|ancestor| matches!(ancestor.kind(), "line_comment" | "block_comment"))?;
+        let comment = ancestors(node).find(|ancestor| {
+            matches!(
+                ancestor.kind(),
+                "line_comment" | "block_comment" | "comment"
+            )
+        })?;
         let byte = comment.start_byte().max(buffer.char_to_byte(start));
         Some(buffer.byte_to_char(byte) - start)
     }

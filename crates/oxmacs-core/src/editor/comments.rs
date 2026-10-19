@@ -182,6 +182,29 @@ mod tests {
     }
 
     #[test]
+    fn meta_semicolon_finds_hash_comments_in_r_and_toml() {
+        for language in [Language::R, Language::Toml] {
+            let mut editor = editor_with("x = 1 # one", 0);
+            editor.set_major_mode(Some(language));
+
+            press(&mut editor, "M-;");
+
+            assert_eq!(editor.buffer().point(), 8, "{language:?}");
+            assert!(!editor.buffer().is_modified(), "{language:?}");
+        }
+    }
+
+    #[test]
+    fn r_comments_toggle_with_hashes() {
+        let mut editor = editor_with("f <- function() {\n  x\n}\n", 20);
+        editor.set_major_mode(Some(Language::R));
+
+        press(&mut editor, "C-x C-;");
+
+        assert_eq!(lines(&editor), ["f <- function() {", "  # x", "}"]);
+    }
+
+    #[test]
     fn plain_text_has_no_comment_syntax() {
         let mut editor = editor_with("a", 0);
 
