@@ -114,6 +114,8 @@ pub struct Editor {
     atlas_notes: Vec<(crate::text::BufferId, u64, crate::atlas::note::Note)>,
     atlas_line: Option<(crate::text::BufferId, usize)>,
     today: fn() -> jiff::civil::Date,
+    time_now: fn() -> jiff::civil::Time,
+    atlas_index: Option<crate::atlas::vault::Index>,
     processes: special::processes::Processes,
     processes_keymap: Keymap,
     toolbox: special::toolbox::Toolbox,
@@ -209,6 +211,8 @@ impl Editor {
             atlas_notes: Vec::new(),
             atlas_line: None,
             today: atlas::today,
+            time_now: atlas::time_now,
+            atlas_index: None,
             processes: special::processes::Processes::default(),
             processes_keymap: bindings::processes(),
             toolbox: special::toolbox::Toolbox::default(),
@@ -265,6 +269,9 @@ impl Editor {
         self.on_disk_change = config.on_disk_change;
         self.settings = Settings::from(config);
         self.configured_theme = config.theme.as_deref().and_then(theme::find);
+        if config.atlas_vault != self.config.atlas_vault {
+            self.atlas_index = None;
+        }
         self.config = config.clone();
     }
 

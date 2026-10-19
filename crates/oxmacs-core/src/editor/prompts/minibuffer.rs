@@ -37,6 +37,8 @@ pub(in crate::editor) enum Purpose {
     Setting(usize),
     IrcSetup(Field),
     KeepIrcPassword(usize),
+    AtlasNote,
+    AtlasCapture,
     RHelp,
     SavePlot,
 }
@@ -67,6 +69,7 @@ impl Purpose {
                 | Self::Setting(_)
                 | Self::IrcSetup(_)
                 | Self::KeepIrcPassword(_)
+                | Self::AtlasCapture
                 | Self::IrcPassword(..)
         )
     }
@@ -105,6 +108,7 @@ pub enum Choice {
     Theme(Option<&'static Theme>),
     IrcServer(usize),
     Item(usize),
+    Page(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -207,7 +211,9 @@ impl Editor {
             | Purpose::Setting(_)
             | Purpose::IrcSetup(_)
             | Purpose::KeepIrcPassword(_)
+            | Purpose::AtlasCapture
             | Purpose::IrcPassword(..) => Vec::new(),
+            Purpose::AtlasNote => self.atlas_note_completions(matches),
             Purpose::Item => self.item_completions(matches),
         }
     }
@@ -302,6 +308,10 @@ impl Editor {
     pub(in crate::editor) fn exit_minibuffer_with_input(&mut self) {
         let input = self.minibuffer_input();
         match self.minibuffer_purpose() {
+            Some(Purpose::AtlasNote) if !input.trim().is_empty() => {
+                self.minibuffer = None;
+                self.atlas_note_chosen(None, &input);
+            }
             Some(purpose) if purpose.takes_path() => self.exit_file_prompt(true),
             Some(purpose) if purpose.takes_buffer() && !input.is_empty() => {
                 self.exit_buffer_prompt(purpose, &input);
@@ -365,6 +375,24 @@ impl Editor {
             self.keep_irc_password(index, &input);
             return;
         }
+        if purpose == Purpose::AtlasCapture {
+            let input = self.minibuffer_input();
+            self.minibuffer = None;
+            self.captured(&input);
+            return;
+        }
+        if purpose == Purpose::AtlasNote {
+            let input = self.minibuffer_input();
+            let page = self
+                .selected_completion()
+                .and_then(|completion| match completion.choice {
+                    Choice::Page(at) => Some(at),
+                    _ => None,
+                });
+            self.minibuffer = None;
+            self.atlas_note_chosen(page, &input);
+            return;
+        }
         if purpose.takes_text() {
             self.exit_replace_prompt(purpose);
             return;
@@ -396,7 +424,7 @@ impl Editor {
             Choice::Theme(theme) => self.use_theme(theme),
             Choice::IrcServer(index) => self.choose_irc_server(index),
             Choice::Item(position) => self.jump_to_item(position),
-            Choice::Entry(_) => {}
+            Choice::Entry(_) | Choice::Page(_) => {}
         }
     }
 

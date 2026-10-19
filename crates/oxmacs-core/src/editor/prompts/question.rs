@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use crate::command::Command;
 use crate::editor::dired::Transfer;
 use crate::editor::special::processes::Source;
 use crate::editor::{Editor, is_keyboard_quit};
@@ -38,6 +39,7 @@ enum Pending {
     RemoveTool(Managed),
     ConnectIrc(String),
     IrcSetup,
+    CreateVault(Command),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -216,6 +218,11 @@ impl Editor {
                     self.irc_setup();
                 }
             }
+            Pending::CreateVault(then) => {
+                if answer == 'y' {
+                    self.create_first_vault(then);
+                }
+            }
         }
     }
 
@@ -292,6 +299,15 @@ impl Editor {
             choices: YES_NO,
             typed: None,
             pending: Pending::ConnectIrc(name.to_owned()),
+        });
+    }
+
+    pub(in crate::editor) fn ask_to_create_vault(&mut self, name: &str, path: &str, then: Command) {
+        self.question = Some(Question {
+            prompt: format!("No Atlas vault yet; create {name} at {path}? (y or n) "),
+            choices: YES_NO,
+            typed: None,
+            pending: Pending::CreateVault(then),
         });
     }
 

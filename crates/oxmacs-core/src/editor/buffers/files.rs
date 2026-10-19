@@ -342,6 +342,9 @@ impl Editor {
                 if self.buffers.language(index) == Some(Language::Rust) {
                     self.request_lint(&path);
                 }
+                if self.is_atlas(index) {
+                    self.note_atlas_saved(&path, &text);
+                }
                 true
             }
             Err(error) => {

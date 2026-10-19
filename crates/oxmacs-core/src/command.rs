@@ -501,6 +501,21 @@ pub enum Command {
     #[strum(message = "Show the previous columns of the table")]
     RTablePreviousColumn,
     #[strum(
+        message = "Open an Atlas note by title, or start a new one",
+        detailed_message = "Lists the notes of every Atlas vault by title. RET opens the selected note; a title nothing matches, or M-RET, starts a new note with that title in your first vault. Offers to create a vault the first time."
+    )]
+    AtlasFindNote,
+    #[strum(
+        message = "Open today's Atlas journal page",
+        detailed_message = "Opens journal/YYYY-MM-DD.atlas in your first vault, creating it with today's date as its heading."
+    )]
+    AtlasToday,
+    #[strum(
+        message = "Capture a line into today's Atlas journal",
+        detailed_message = "Asks for a line and adds it to today's journal page without leaving what you are doing: tasks such as [ ] Buy seeds due:fri keep their form with exact dates, anything else is stamped with the time."
+    )]
+    AtlasCapture,
+    #[strum(
         message = "Cycle the task on this line: todo, doing, done",
         detailed_message = "Turns [ ] into [/] and [/] into [x], stamping done: with today's date; done, waiting and dropped tasks go back to [ ]. A task that repeats with every: is moved to its next date instead, with a done line logged under it."
     )]

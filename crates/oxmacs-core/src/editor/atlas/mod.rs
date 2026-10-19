@@ -11,10 +11,16 @@ use crate::editor::buffers::Mode;
 use crate::text::{Buffer, BufferId};
 use crate::theme::Highlight;
 
+mod vaults;
+
 pub(in crate::editor) const EXTENSION: &str = "atlas";
 
 pub(in crate::editor) fn today() -> Date {
     jiff::Zoned::now().date()
+}
+
+pub(in crate::editor) fn time_now() -> jiff::civil::Time {
+    jiff::Zoned::now().time()
 }
 
 fn face(style: Style) -> Highlight {
