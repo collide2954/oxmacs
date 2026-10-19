@@ -368,6 +368,15 @@ impl Editor {
         self.set_saved_settings(saved, problem);
     }
 
+    pub(in crate::editor) fn note_saved_settings(&mut self, change: impl FnOnce(&mut Config)) {
+        if let Some(index) = self.settings_index()
+            && let Some(Mode::Customize(state)) = self.buffers.mode_mut(index)
+        {
+            change(&mut state.saved);
+        }
+        self.render_settings();
+    }
+
     fn set_saved_settings(&mut self, saved: Config, problem: Option<String>) {
         if let Some(index) = self.settings_index()
             && let Some(Mode::Customize(state)) = self.buffers.mode_mut(index)

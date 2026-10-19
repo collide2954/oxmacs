@@ -5,6 +5,7 @@ use strum::VariantArray;
 use crate::command::{Command, Scope};
 use crate::editor::Editor;
 use crate::editor::chat::connect::Secret;
+use crate::editor::chat::setup::Field;
 use crate::editor::dired::Kind;
 use crate::files::Entry;
 use crate::syntax::Item;
@@ -34,6 +35,7 @@ pub(in crate::editor) enum Purpose {
     Item,
     Compile,
     Setting(usize),
+    IrcSetup(Field),
     RHelp,
     SavePlot,
 }
@@ -62,6 +64,7 @@ impl Purpose {
                 | Self::ReplaceTo(_)
                 | Self::Compile
                 | Self::Setting(_)
+                | Self::IrcSetup(_)
                 | Self::IrcPassword(..)
         )
     }
@@ -197,6 +200,7 @@ impl Editor {
             | Purpose::Compile
             | Purpose::RHelp
             | Purpose::Setting(_)
+            | Purpose::IrcSetup(_)
             | Purpose::IrcPassword(..) => Vec::new(),
             Purpose::Item => self.item_completions(matches),
         }
@@ -341,6 +345,12 @@ impl Editor {
             let input = self.minibuffer_input();
             self.minibuffer = None;
             self.set_setting_from(index, &input);
+            return;
+        }
+        if let Purpose::IrcSetup(field) = purpose {
+            let input = self.minibuffer_input();
+            self.minibuffer = None;
+            self.set_setup_field(field, &input);
             return;
         }
         if purpose.takes_text() {

@@ -11,6 +11,7 @@ use crate::display::{ScreenLine, Viewport};
 use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
 use crate::editor::chat::ChatView;
+use crate::editor::chat::setup::SetupForm;
 use crate::editor::languages::r_console::Console;
 use crate::editor::languages::r_environment::EnvironmentView;
 use crate::editor::languages::r_plots::Plots;
@@ -47,6 +48,7 @@ pub(super) enum Mode {
     Plots(Plots),
     Processes(ProcessList),
     Tools(ToolList),
+    IrcSetup(Box<SetupForm>),
     Environment(EnvironmentView),
     Table(TableView),
 }
@@ -126,6 +128,7 @@ impl BufferList {
             | Mode::Plots(_)
             | Mode::Processes(_)
             | Mode::Tools(_)
+            | Mode::IrcSetup(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -148,6 +151,7 @@ impl BufferList {
             | Mode::Plots(_)
             | Mode::Processes(_)
             | Mode::Tools(_)
+            | Mode::IrcSetup(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -171,6 +175,7 @@ impl BufferList {
             | Mode::Plots(_)
             | Mode::Processes(_)
             | Mode::Tools(_)
+            | Mode::IrcSetup(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -194,6 +199,7 @@ impl BufferList {
             | Mode::Plots(_)
             | Mode::Processes(_)
             | Mode::Tools(_)
+            | Mode::IrcSetup(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -216,6 +222,7 @@ impl BufferList {
             | Mode::Plots(_)
             | Mode::Processes(_)
             | Mode::Tools(_)
+            | Mode::IrcSetup(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }
@@ -238,6 +245,7 @@ impl BufferList {
             | Mode::Plots(_)
             | Mode::Processes(_)
             | Mode::Tools(_)
+            | Mode::IrcSetup(_)
             | Mode::Environment(_)
             | Mode::Table(_) => None,
         }

@@ -1,6 +1,7 @@
 pub(super) mod commands;
 pub(super) mod connect;
 pub(super) mod render;
+pub(super) mod setup;
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -21,7 +22,6 @@ use crate::irc::session::{Event, Session};
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
-const NO_SERVERS: &str = "Add an [[irc-server]] to config.toml with M-x find-config-file";
 const DEFAULT_WIDTH: usize = 80;
 const PROMPT: &str = " › ";
 
@@ -99,7 +99,7 @@ fn label(server: &str, target: &Target) -> String {
 impl Editor {
     pub(in crate::editor) fn irc(&mut self) {
         match self.config.irc_server.as_slice() {
-            [] => self.show_message(NO_SERVERS),
+            [] => self.ask_to_set_up_irc(),
             [server] => {
                 let server = server.clone();
                 self.connect_irc(&server);
@@ -758,16 +758,20 @@ mod tests {
     }
 
     #[test]
-    fn without_servers_m_x_irc_explains_how_to_add_one() {
+    fn without_servers_m_x_irc_offers_the_setup() {
         let mut editor = configured("");
 
         irc(&mut editor);
 
         assert_eq!(
-            editor.message(),
-            Some("Add an [[irc-server]] to config.toml with M-x find-config-file")
+            editor
+                .question()
+                .map(|question| question.prompt().to_owned()),
+            Some("No IRC servers yet; set one up? (y or n) ".to_owned())
         );
         assert_eq!(connections(&mut editor), []);
+        press(&mut editor, "y");
+        assert_eq!(editor.buffer().name(), "*IRC Setup*");
     }
 
     #[test]

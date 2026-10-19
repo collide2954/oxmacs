@@ -501,6 +501,21 @@ pub enum Command {
     #[strum(message = "Show the previous columns of the table")]
     RTablePreviousColumn,
     #[strum(
+        message = "Add an IRC server with a short form",
+        detailed_message = "Opens *IRC Setup*: pick Libera.Chat, OFTC, EFnet or another server, then your nick, an optional account to sign in with, where the password is kept (the OS keychain, asked each time, or an environment variable), channels to join, and whether the built-in bouncer keeps you connected when oxmacs closes. TAB moves between fields and RET changes one; C-c C-c adds the server to config.toml and offers to connect, C-c C-k cancels."
+    )]
+    IrcSetup,
+    #[strum(message = "Move to the next field of the IRC setup")]
+    IrcSetupNextField,
+    #[strum(message = "Move to the previous field of the IRC setup")]
+    IrcSetupPreviousField,
+    #[strum(message = "Change the IRC setup field at point")]
+    IrcSetupChange,
+    #[strum(message = "Save the IRC server to config.toml")]
+    IrcSetupSave,
+    #[strum(message = "Close the IRC setup without saving")]
+    IrcSetupCancel,
+    #[strum(
         message = "List the tools oxmacs can install and update",
         detailed_message = "Opens *Tools*: each tool oxmacs can install itself, such as air for formatting R, with the version installed, the latest release, and which program runs. Opening it, or g, asks GitHub for the latest releases; nothing is downloaded until you press i to install or u to update, and d removes oxmacs's copy."
     )]
@@ -707,6 +722,11 @@ impl Command {
             | Self::CompletionQuit => Scope::Popup,
             Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
             Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => Scope::Tools,
+            Self::IrcSetupNextField
+            | Self::IrcSetupPreviousField
+            | Self::IrcSetupChange
+            | Self::IrcSetupSave
+            | Self::IrcSetupCancel => Scope::IrcSetup,
             Self::REnvironmentVisit => Scope::Environment,
             Self::RTableNextColumn | Self::RTablePreviousColumn => Scope::Table,
             Self::RPlotNext
@@ -747,6 +767,7 @@ pub enum Scope {
     Plots,
     Processes,
     Tools,
+    IrcSetup,
     Environment,
     Table,
 }
@@ -775,6 +796,7 @@ impl Scope {
             Self::Plots => Some("R plot windows"),
             Self::Processes => Some("*Processes*"),
             Self::Tools => Some("*Tools*"),
+            Self::IrcSetup => Some("*IRC Setup*"),
             Self::Environment => Some("R environments"),
             Self::Table => Some("R tables"),
         }

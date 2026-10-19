@@ -114,6 +114,7 @@ pub struct Editor {
     processes_keymap: Keymap,
     toolbox: special::toolbox::Toolbox,
     tools_keymap: Keymap,
+    irc_setup_keymap: Keymap,
     environment_keymap: Keymap,
     table_keymap: Keymap,
     pending: Vec<Key>,
@@ -204,6 +205,7 @@ impl Editor {
             processes_keymap: bindings::processes(),
             toolbox: special::toolbox::Toolbox::default(),
             tools_keymap: bindings::tools(),
+            irc_setup_keymap: bindings::irc_setup(),
             environment_keymap: bindings::environment(),
             table_keymap: bindings::table(),
             pending: Vec::new(),
@@ -452,13 +454,14 @@ impl Editor {
             Scope::Plots => Some(&self.plots_keymap),
             Scope::Processes => Some(&self.processes_keymap),
             Scope::Tools => Some(&self.tools_keymap),
+            Scope::IrcSetup => Some(&self.irc_setup_keymap),
             Scope::Environment => Some(&self.environment_keymap),
             Scope::Table => Some(&self.table_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search | Scope::Popup => None,
         }
     }
 
-    fn keymaps(&self) -> [(Scope, &Keymap); 23] {
+    fn keymaps(&self) -> [(Scope, &Keymap); 24] {
         [
             (Scope::Global, &self.keymap),
             (Scope::Minibuffer, &self.minibuffer_keymap),
@@ -481,6 +484,7 @@ impl Editor {
             (Scope::Plots, &self.plots_keymap),
             (Scope::Processes, &self.processes_keymap),
             (Scope::Tools, &self.tools_keymap),
+            (Scope::IrcSetup, &self.irc_setup_keymap),
             (Scope::Environment, &self.environment_keymap),
             (Scope::Table, &self.table_keymap),
         ]
@@ -500,6 +504,7 @@ impl Editor {
             Some(Mode::Plots(_)) => Scope::Plots,
             Some(Mode::Processes(_)) => Scope::Processes,
             Some(Mode::Tools(_)) => Scope::Tools,
+            Some(Mode::IrcSetup(_)) => Scope::IrcSetup,
             Some(Mode::Environment(_)) => Scope::Environment,
             Some(Mode::Table(_)) => Scope::Table,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
@@ -535,6 +540,7 @@ impl Editor {
             Some(Mode::Chat(view)) => view.line_style(line),
             Some(Mode::Processes(list)) => list.line_style(line),
             Some(Mode::Tools(list)) => list.line_style(line),
+            Some(Mode::IrcSetup(form)) => form.line_style(line),
             Some(Mode::Environment(view)) => view.line_style(line),
             Some(Mode::Table(view)) => view.line_style(line),
             Some(Mode::Preview(_) | Mode::Console(_) | Mode::Plots(_)) => LineStyle::default(),

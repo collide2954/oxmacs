@@ -36,6 +36,8 @@ enum Pending {
     Transfer(Transfer),
     StopProcess(Source),
     RemoveTool(Managed),
+    ConnectIrc(String),
+    IrcSetup,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,6 +206,16 @@ impl Editor {
                     self.finish_tool_removal(tool);
                 }
             }
+            Pending::ConnectIrc(name) => {
+                if answer == 'y' {
+                    self.connect_named_irc(&name);
+                }
+            }
+            Pending::IrcSetup => {
+                if answer == 'y' {
+                    self.irc_setup();
+                }
+            }
         }
     }
 
@@ -271,6 +283,24 @@ impl Editor {
             choices: YES_NO,
             typed: None,
             pending: Pending::StopProcess(source),
+        });
+    }
+
+    pub(in crate::editor) fn ask_to_connect(&mut self, name: &str) {
+        self.question = Some(Question {
+            prompt: format!("Connect to {name} now? (y or n) "),
+            choices: YES_NO,
+            typed: None,
+            pending: Pending::ConnectIrc(name.to_owned()),
+        });
+    }
+
+    pub(in crate::editor) fn ask_to_set_up_irc(&mut self) {
+        self.question = Some(Question {
+            prompt: "No IRC servers yet; set one up? (y or n) ".to_owned(),
+            choices: YES_NO,
+            typed: None,
+            pending: Pending::IrcSetup,
         });
     }
 

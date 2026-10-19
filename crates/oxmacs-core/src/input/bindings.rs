@@ -374,6 +374,16 @@ const TOOLS: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
+const IRC_SETUP: &[(&str, Command)] = &[
+    ("TAB", Command::IrcSetupNextField),
+    ("n", Command::IrcSetupNextField),
+    ("S-TAB", Command::IrcSetupPreviousField),
+    ("p", Command::IrcSetupPreviousField),
+    ("RET", Command::IrcSetupChange),
+    ("C-c C-c", Command::IrcSetupSave),
+    ("C-c C-k", Command::IrcSetupCancel),
+];
+
 const ENVIRONMENT: &[(&str, Command)] = &[
     ("RET", Command::REnvironmentVisit),
     ("n", Command::NextLine),
@@ -409,6 +419,10 @@ pub fn processes() -> Keymap {
 
 pub fn tools() -> Keymap {
     build(TOOLS)
+}
+
+pub fn irc_setup() -> Keymap {
+    build(IRC_SETUP)
 }
 
 pub fn plots() -> Keymap {
