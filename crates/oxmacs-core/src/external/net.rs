@@ -1,13 +1,17 @@
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
+use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use rustls::pki_types::ServerName;
-use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use rustls::{
+    ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
+};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const POLL: Duration = Duration::from_millis(50);
@@ -108,14 +112,38 @@ trait Wire: Read + Write + Send {}
 
 impl<T: Read + Write + Send> Wire for T {}
 
-pub fn connect(endpoint: &Endpoint, mut report: impl FnMut(Event) + Send + 'static) -> Connection {
-    let (commands, received) = mpsc::channel();
+pub fn connect(endpoint: &Endpoint, report: impl FnMut(Event) + Send + 'static) -> Connection {
     let endpoint = endpoint.clone();
+    spawn(
+        move || open(&endpoint),
+        Throttle::new(BURST, PACE, Instant::now()),
+        report,
+    )
+}
+
+pub fn accept(
+    stream: TcpStream,
+    tls: Option<Arc<ServerConfig>>,
+    report: impl FnMut(Event) + Send + 'static,
+) -> Connection {
+    spawn(
+        move || serve(stream, tls),
+        Throttle::new(u32::MAX, Duration::ZERO, Instant::now()),
+        report,
+    )
+}
+
+fn spawn(
+    open: impl FnOnce() -> io::Result<Box<dyn Wire>> + Send + 'static,
+    throttle: Throttle,
+    mut report: impl FnMut(Event) + Send + 'static,
+) -> Connection {
+    let (commands, received) = mpsc::channel();
     let worker = thread::spawn(move || {
-        let closed = match open(&endpoint) {
+        let closed = match open() {
             Ok(stream) => {
                 report(Event::Connected);
-                run(stream, &received, &mut report)
+                run(stream, throttle, &received, &mut report)
             }
             Err(error) => Some(error.to_string()),
         };
@@ -125,6 +153,38 @@ pub fn connect(endpoint: &Endpoint, mut report: impl FnMut(Event) + Send + 'stat
         commands,
         worker: Arc::new(Mutex::new(Some(worker))),
     }
+}
+
+fn serve(stream: TcpStream, tls: Option<Arc<ServerConfig>>) -> io::Result<Box<dyn Wire>> {
+    stream.set_nodelay(true)?;
+    let Some(config) = tls else {
+        stream.set_read_timeout(Some(POLL))?;
+        return Ok(Box::new(stream));
+    };
+    let connection = ServerConnection::new(config).map_err(io::Error::other)?;
+    let mut secure = StreamOwned::new(connection, stream);
+    secure.sock.set_read_timeout(Some(CONNECT_TIMEOUT))?;
+    while secure.conn.is_handshaking() {
+        secure.conn.complete_io(&mut secure.sock)?;
+    }
+    secure.sock.set_read_timeout(Some(POLL))?;
+    Ok(Box::new(secure))
+}
+
+pub fn server_tls(certificate: &Path, key: &Path) -> io::Result<Arc<ServerConfig>> {
+    let chain = CertificateDer::pem_file_iter(certificate)
+        .map_err(io::Error::other)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(io::Error::other)?;
+    let key = PrivateKeyDer::from_pem_file(key).map_err(io::Error::other)?;
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let config = ServerConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(io::Error::other)?
+        .with_no_client_auth()
+        .with_single_cert(chain, key)
+        .map_err(io::Error::other)?;
+    Ok(Arc::new(config))
 }
 
 fn open(endpoint: &Endpoint) -> io::Result<Box<dyn Wire>> {
@@ -172,11 +232,11 @@ fn tls_config() -> io::Result<Arc<ClientConfig>> {
 
 fn run(
     mut stream: Box<dyn Wire>,
+    mut throttle: Throttle,
     commands: &Receiver<Command>,
     report: &mut impl FnMut(Event),
 ) -> Option<String> {
     let mut queue = VecDeque::new();
-    let mut throttle = Throttle::new(BURST, PACE, Instant::now());
     let mut pending = Vec::new();
     let mut buffer = [0; CHUNK];
     loop {
@@ -335,6 +395,33 @@ mod tests {
         let (_connection, events) = connected(&endpoint);
 
         assert!(matches!(next(&events), Event::Closed(Some(_))));
+    }
+
+    #[test]
+    fn accepted_streams_carry_lines_too() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut client = TcpStream::connect(address).unwrap();
+        let (stream, _) = listener.accept().unwrap();
+        let (sender, events) = mpsc::channel();
+        let connection = accept(stream, None, move |event| {
+            let _ = sender.send(event);
+        });
+        assert_eq!(next(&events), Event::Connected);
+
+        client.write_all(b"NICK me\r\n").unwrap();
+        assert_eq!(next(&events), Event::Line("NICK me".to_owned()));
+        for _ in 0..10 {
+            connection.send(":oxmacs NOTICE me :fast");
+        }
+        let mut reader = BufReader::new(client);
+        let start = Instant::now();
+        for _ in 0..10 {
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert_eq!(line, ":oxmacs NOTICE me :fast\r\n");
+        }
+        assert!(start.elapsed() < Duration::from_secs(2));
     }
 
     #[test]
