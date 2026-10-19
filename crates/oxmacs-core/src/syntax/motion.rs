@@ -3,7 +3,7 @@ use std::ops::Range;
 use tree_sitter::{Node, Tree};
 
 use crate::syntax::indent::open_bracket;
-use crate::syntax::{Syntax, ancestors, preorder};
+use crate::syntax::{Syntax, ancestors, is_function_assignment, preorder};
 use crate::text::Buffer;
 
 pub const PREMATURE: &str = "Containing expression ends prematurely";
@@ -25,9 +25,9 @@ const DEFUNS: &[&str] = &[
     "table_array_element",
     "section",
 ];
-const OPENERS: &[&str] = &["(", "[", "{"];
-const CLOSERS: &[&str] = &[")", "]", "}"];
-const COMMENTS: &[&str] = &["line_comment", "block_comment"];
+const OPENERS: &[&str] = &["(", "[", "{", "[["];
+const CLOSERS: &[&str] = &[")", "]", "}", "]]"];
+const COMMENTS: &[&str] = &["line_comment", "block_comment", "comment"];
 
 impl Syntax {
     fn defuns(&self, buffer: &Buffer) -> Vec<Range<usize>> {
@@ -36,7 +36,7 @@ impl Syntax {
         };
         let mut found = Vec::new();
         preorder(tree, |node| {
-            if DEFUNS.contains(&node.kind()) {
+            if DEFUNS.contains(&node.kind()) || is_function_assignment(node) {
                 found.push(chars(buffer, node.byte_range()));
             }
         });

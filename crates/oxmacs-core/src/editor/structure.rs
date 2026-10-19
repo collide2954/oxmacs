@@ -209,6 +209,33 @@ mod tests {
         assert_eq!(after(&mut editor, "C-M-d"), 5);
     }
 
+    const R_SOURCE: &str = "f <- function(x) {\n  g(x, \"a b\")\n}\n\nh <- function() NULL\n";
+
+    fn r(point: usize) -> Editor {
+        let mut editor = editor_with(R_SOURCE, point);
+        editor.set_major_mode(Some(Language::R));
+        editor
+    }
+
+    #[test]
+    fn r_defun_motions_move_between_function_assignments() {
+        let mut editor = r(25);
+
+        assert_eq!(after(&mut editor, "C-M-a"), 0);
+        assert_eq!(after(&mut editor, "C-M-e"), 35);
+        assert_eq!(after(&mut editor, "C-M-e"), 57);
+        assert_eq!(after(&mut editor, "C-M-a"), 36);
+        assert_eq!(after(&mut editor, "C-M-a"), 0);
+    }
+
+    #[test]
+    fn r_sexp_motions_skip_hash_comments() {
+        let mut editor = editor_with("# note\nfoo", 0);
+        editor.set_major_mode(Some(Language::R));
+
+        assert_eq!(after(&mut editor, "C-M-f"), 10);
+    }
+
     #[test]
     fn plain_text_moves_by_brackets_and_words() {
         let mut editor = editor_with("(a b) c", 0);

@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use crate::syntax::{Syntax, ancestors, preorder};
+use crate::syntax::{Language, Syntax, ancestors, is_function_assignment, preorder};
 use crate::text::Buffer;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,15 +17,23 @@ impl Syntax {
         let Some(tree) = self.synced(buffer) else {
             return Vec::new();
         };
+        let sections = self.language == Language::R;
         let mut items = Vec::new();
         preorder(tree, |node| {
-            let Some(label) = item_label(node, buffer) else {
+            let label = if sections && node.kind() == "comment" {
+                section_title(&buffer.text_in_bytes(node.byte_range()))
+            } else {
+                item_label(node, buffer)
+            };
+            let Some(label) = label else {
                 return;
             };
             let context = node
                 .parent()
                 .and_then(|parent| {
-                    ancestors(parent).find(|ancestor| CONTAINERS.contains(&ancestor.kind()))
+                    ancestors(parent).find(|ancestor| {
+                        CONTAINERS.contains(&ancestor.kind()) || is_function_assignment(*ancestor)
+                    })
                 })
                 .and_then(|container| item_label(container, buffer));
             items.push(Item {
@@ -38,11 +46,26 @@ impl Syntax {
     }
 }
 
+fn section_title(comment: &str) -> Option<String> {
+    let text = comment.trim_end();
+    let marker = text
+        .chars()
+        .last()
+        .filter(|c| matches!(c, '-' | '=' | '#'))?;
+    let run = text.chars().rev().take_while(|c| *c == marker).count();
+    let title = text[..text.len() - run].trim_end();
+    (run >= 4 && title.chars().any(char::is_alphanumeric)).then(|| title.to_owned())
+}
+
 fn item_label(node: Node<'_>, buffer: &Buffer) -> Option<String> {
     let field = |name: &str| {
         node.child_by_field_name(name)
             .map(|child| buffer.text_in_bytes(child.byte_range()))
     };
+    if is_function_assignment(node) {
+        return field("lhs")
+            .map(|name| format!("function {}", name.trim_matches(['"', '\'', '`'])));
+    }
     let keyword = match node.kind() {
         "function_item" | "function_signature_item" => "fn",
         "struct_item" => "struct",
@@ -85,7 +108,6 @@ fn item_label(node: Node<'_>, buffer: &Buffer) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::syntax::Language;
 
     #[test]
     fn markdown_headings_are_items() {
@@ -117,6 +139,31 @@ mod tests {
             .collect();
 
         assert_eq!(labels, ["[package]", "[[bin]]"]);
+    }
+
+    #[test]
+    fn r_functions_and_rstudio_sections_are_items() {
+        let text = "# Load data ----\nread <- function(path) readRDS(path)\n\n## Model ====\nfit <- function(data) {\n  inner <- function() 1\n}\nx <- 1\n# just a comment\n";
+        let mut buffer = Buffer::with_text("t", text);
+        let mut syntax = Syntax::new(Language::R);
+        syntax.sync(&mut buffer);
+
+        let items: Vec<(String, Option<String>)> = syntax
+            .items(&buffer)
+            .into_iter()
+            .map(|item| (item.label, item.context))
+            .collect();
+
+        assert_eq!(
+            items,
+            [
+                ("# Load data".to_owned(), None),
+                ("function read".to_owned(), None),
+                ("## Model".to_owned(), None),
+                ("function fit".to_owned(), None),
+                ("function inner".to_owned(), Some("function fit".to_owned())),
+            ]
+        );
     }
 
     #[test]

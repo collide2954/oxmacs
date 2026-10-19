@@ -104,7 +104,7 @@ impl Language {
                     | Feature::Motion
                     | Feature::Items
             ) | (
-                Self::Toml,
+                Self::Toml | Self::R,
                 Feature::Highlighting
                     | Feature::Indentation
                     | Feature::Comments
@@ -118,7 +118,7 @@ impl Language {
                     | Feature::Motion
                     | Feature::Items
                     | Feature::Preview
-            ) | (Self::R, Feature::Highlighting)
+            )
         )
     }
 
@@ -321,6 +321,16 @@ fn preorder<'tree>(tree: &'tree Tree, mut visit: impl FnMut(Node<'tree>)) {
             }
         }
     }
+}
+
+fn is_function_assignment(node: Node<'_>) -> bool {
+    node.kind() == "binary_operator"
+        && node
+            .child_by_field_name("rhs")
+            .is_some_and(|rhs| rhs.kind() == "function_definition")
+        && node
+            .child_by_field_name("operator")
+            .is_some_and(|operator| matches!(operator.kind(), "<-" | "=" | "<<-"))
 }
 
 fn ancestors(node: Node<'_>) -> impl Iterator<Item = Node<'_>> {
