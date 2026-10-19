@@ -349,6 +349,19 @@ const PLOTS: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
+const PROCESSES: &[(&str, Command)] = &[
+    ("RET", Command::ProcessVisit),
+    ("k", Command::ProcessStop),
+    ("n", Command::NextLine),
+    ("p", Command::PreviousLine),
+    ("g", Command::RevertBuffer),
+    ("q", Command::QuitWindow),
+];
+
+pub fn processes() -> Keymap {
+    build(PROCESSES)
+}
+
 pub fn plots() -> Keymap {
     build(PLOTS)
 }

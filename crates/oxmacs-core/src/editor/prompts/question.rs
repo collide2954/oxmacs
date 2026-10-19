@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::editor::dired::Transfer;
+use crate::editor::special::processes::Source;
 use crate::editor::{Editor, is_keyboard_quit};
 use crate::files::{DiskState, paths};
 use crate::input::{Key, KeyCode};
@@ -32,6 +33,7 @@ enum Pending {
         paths: Vec<PathBuf>,
     },
     Transfer(Transfer),
+    StopProcess(Source),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -190,6 +192,11 @@ impl Editor {
                 }
             }
             Pending::Transfer(transfer) => self.answer_transfer(transfer, answer),
+            Pending::StopProcess(source) => {
+                if answer == 'y' {
+                    self.finish_stop(source);
+                }
+            }
         }
     }
 
@@ -248,6 +255,15 @@ impl Editor {
             choices: YES_NO,
             typed: None,
             pending: Pending::Revert { index },
+        });
+    }
+
+    pub(in crate::editor) fn ask_to_stop(&mut self, name: &str, source: Source) {
+        self.question = Some(Question {
+            prompt: format!("Stop {name}? (y or n) "),
+            choices: YES_NO,
+            typed: None,
+            pending: Pending::StopProcess(source),
         });
     }
 

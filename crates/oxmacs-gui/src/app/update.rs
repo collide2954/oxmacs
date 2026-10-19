@@ -184,6 +184,7 @@ impl App {
             }
             Message::AutoSave => self.editor.auto_save(),
             Message::AutoComplete => self.editor.auto_complete(),
+            Message::ProcessTick => self.sample_processes(),
             Message::FocusWindow(window) => {
                 if self.focus(window) {
                     self.last_input = self.now;
@@ -194,12 +195,7 @@ impl App {
                 self.focus(window);
                 self.editor.pick_plot_in(window, position);
             }
-            Message::PlotSized(window, size) => {
-                let pixels =
-                    |extent: f32| u32::try_from(units::floor_to_usize(extent)).unwrap_or(u32::MAX);
-                self.editor
-                    .plots_sized(window, pixels(size.width), pixels(size.height));
-            }
+            Message::PlotSized(window, size) => self.plot_sized(window, size),
             Message::PreviewSized(window, height) => {
                 self.preview_heights.retain(|(known, _)| *known != window);
                 self.preview_heights.push((window, height));
@@ -238,6 +234,17 @@ impl App {
             return iced::exit();
         }
         Task::batch([self.pending_effects(), plots])
+    }
+
+    fn sample_processes(&mut self) {
+        let samples = self.usage.sample(&self.editor.process_pids());
+        self.editor.processes_tick(Timestamp::now(), &samples);
+    }
+
+    fn plot_sized(&mut self, window: WindowId, size: iced::Size) {
+        let pixels = |extent: f32| u32::try_from(units::floor_to_usize(extent)).unwrap_or(u32::MAX);
+        self.editor
+            .plots_sized(window, pixels(size.width), pixels(size.height));
     }
 
     fn load_plots(&mut self) -> Task<Message> {
@@ -385,6 +392,7 @@ impl App {
         };
         match started {
             Ok(killer) => {
+                self.editor.job_started(id, killer.pid());
                 self.jobs.push((id, killer));
                 Task::run(events, move |event| Message::Job(id, event))
             }

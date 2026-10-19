@@ -89,6 +89,10 @@ impl Editor {
             self.recheck();
             return;
         }
+        if matches!(self.buffers.mode(0), Some(Mode::Processes(_))) {
+            self.render_processes();
+            return;
+        }
         if matches!(self.buffers.mode(0), Some(Mode::Weather(_))) {
             self.refresh_weather();
             return;

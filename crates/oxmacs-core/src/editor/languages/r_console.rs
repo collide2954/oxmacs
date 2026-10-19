@@ -6,6 +6,7 @@ use std::{env, fs, io, process};
 use crate::editor::buffers::Mode;
 use crate::editor::languages::r_complete::Asked;
 use crate::editor::prompts::input_line::InputLine;
+use crate::editor::special::processes::Kind;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::external::r::{self, Piece, Stream};
 use crate::external::tools::{self, Probe};
@@ -308,18 +309,19 @@ impl Editor {
                 original.to_string_lossy().into_owned(),
             ));
         }
-        self.effects.push(Effect::StartSession(Job {
+        let session = Job {
             id: job,
             program: path.display().to_string(),
             args: tools::r_arguments(),
             directory: self.default_directory(),
             env: variables,
-        }));
+        };
         if let Some(id) = existing
             && let Some(index) = self.buffers.position(|buffer| buffer.id() == id)
             && let Some(Mode::Console(console)) = self.buffers.mode_mut(index)
         {
             console.restart(job, helper);
+            self.start_tracked_session(session, id);
             return Some(id);
         }
         let mut buffer = Buffer::new(self.session_name());
@@ -328,7 +330,18 @@ impl Editor {
         self.beside(|editor| {
             editor.add_buffer_with(buffer, Mode::Console(Console::new(job, helper, input)));
         });
+        self.start_tracked_session(session, id);
         Some(id)
+    }
+
+    fn start_tracked_session(&mut self, session: Job, console: BufferId) {
+        let name = self
+            .buffers
+            .position(|buffer| buffer.id() == console)
+            .and_then(|index| self.buffers.get(index))
+            .map_or_else(|| "R".to_owned(), |buffer| buffer.name().to_owned());
+        self.track_job(&session, Kind::RSession, name, Some(console));
+        self.effects.push(Effect::StartSession(session));
     }
 
     pub fn session_output(&mut self, job: JobId, chunk: &str) {

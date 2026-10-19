@@ -472,6 +472,15 @@ pub enum Command {
     CompletionAccept,
     #[strum(message = "Close the completion popup")]
     CompletionQuit,
+    #[strum(
+        message = "List the processes and connections oxmacs runs",
+        detailed_message = "Opens *Processes*: every R session, compile, lint, IRC connection and bouncer oxmacs started or controls, with its status, process id, running time, CPU and memory. It updates as things change; RET visits an entry's buffer and k stops it."
+    )]
+    ListProcesses,
+    #[strum(message = "Visit the buffer of the process on this line")]
+    ProcessVisit,
+    #[strum(message = "Stop the process on this line")]
+    ProcessStop,
     #[strum(message = "Show the next R plot")]
     RPlotNext,
     #[strum(message = "Show the previous R plot")]
@@ -659,6 +668,7 @@ impl Command {
             | Self::CompletionPrevious
             | Self::CompletionAccept
             | Self::CompletionQuit => Scope::Popup,
+            Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
             Self::RPlotNext
             | Self::RPlotPrevious
             | Self::RPlotSave
@@ -695,6 +705,7 @@ pub enum Scope {
     Chat,
     Popup,
     Plots,
+    Processes,
 }
 
 impl Scope {
@@ -719,6 +730,7 @@ impl Scope {
             Self::Chat => Some("IRC buffers"),
             Self::Popup => Some("the completion popup"),
             Self::Plots => Some("R plot windows"),
+            Self::Processes => Some("*Processes*"),
         }
     }
 }

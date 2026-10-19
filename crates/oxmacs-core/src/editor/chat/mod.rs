@@ -141,6 +141,7 @@ impl Editor {
         let name = self.irc.links[index].server.name.clone();
         match event {
             NetEvent::Connected => {
+                self.connection_changed(id, true);
                 let link = &mut self.irc.links[index];
                 link.connected = true;
                 link.session.start();
@@ -155,6 +156,7 @@ impl Editor {
                 }
             }
             NetEvent::Closed(problem) => {
+                self.connection_changed(id, false);
                 let link = &mut self.irc.links[index];
                 link.open = false;
                 link.network.disconnected();
@@ -184,6 +186,23 @@ impl Editor {
                 self.irc_quit(index, "oxmacs");
             }
         }
+    }
+
+    pub(in crate::editor) fn irc_disconnect(&mut self, id: ConnectionId) {
+        if let Some(index) = self
+            .irc
+            .links
+            .iter()
+            .position(|link| link.id == id && link.open)
+        {
+            self.irc_quit(index, "oxmacs");
+        }
+    }
+
+    pub(in crate::editor) fn show_irc_server(&mut self, name: &str) {
+        let name = name.to_owned();
+        self.ensure_chat_buffer(&name, &Target::Server);
+        self.show_beside(move |editor| editor.chat_buffer(&name, &Target::Server));
     }
 
     fn irc_quit(&mut self, index: usize, reason: &str) {

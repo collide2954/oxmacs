@@ -39,6 +39,10 @@ impl Handle {
         stdin.flush()
     }
 
+    pub fn pid(&self) -> u32 {
+        lock(&self.child).id()
+    }
+
     pub fn close_input(&self) {
         lock(&self.input).take();
     }

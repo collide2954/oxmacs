@@ -16,6 +16,7 @@ use oxmacs_core::config::{self, Config, ConfigError, ModeLineStyle};
 use oxmacs_core::editor::{ConnectionId, Editor, FetchId, JobId, WindowId};
 use oxmacs_core::external::net::{self, Connection};
 use oxmacs_core::external::process::{self, Handle};
+use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
 
@@ -41,6 +42,7 @@ pub struct App {
     previews: Vec<(BufferId, u64, markdown::Content)>,
     plot_images: Vec<(PathBuf, widget::image::Allocation)>,
     plot_loading: Vec<PathBuf>,
+    usage: Usage,
     jobs: Vec<(JobId, Handle)>,
     connections: Vec<(ConnectionId, Connection)>,
     preview_heights: Vec<(WindowId, f32)>,
@@ -66,6 +68,7 @@ pub enum Message {
     Job(JobId, process::Event),
     AutoSave,
     AutoComplete,
+    ProcessTick,
     FocusWindow(WindowId),
     PreviewSized(WindowId, f32),
     PlotSized(WindowId, iced::Size),
@@ -112,6 +115,7 @@ impl App {
             previews: Vec::new(),
             plot_images: Vec::new(),
             plot_loading: Vec::new(),
+            usage: Usage::new(),
             jobs: Vec::new(),
             connections: Vec::new(),
             preview_heights: Vec::new(),
@@ -207,6 +211,11 @@ impl App {
         } else {
             Subscription::none()
         };
+        let processes = if self.editor.wants_process_usage() {
+            ticker::ticks(Some(ticker::SECOND)).map(|()| Message::ProcessTick)
+        } else {
+            Subscription::none()
+        };
         let weather = if self.editor.config().mode_line_weather {
             ticker::ticks(Some(ticker::MINUTE)).map(|()| Message::WeatherTick)
         } else {
@@ -236,6 +245,7 @@ impl App {
             .map(|()| Message::Clock),
             idle,
             completing,
+            processes,
             weather,
             frames,
         ])

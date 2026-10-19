@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::editor::buffers::Mode;
 use crate::editor::build::errors::{ErrorSource, Errors};
 use crate::editor::prompts::minibuffer::Purpose;
+use crate::editor::special::processes::Kind;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::external::tools;
 use crate::files::paths;
@@ -120,13 +121,24 @@ impl Editor {
                 editor.add_buffer_with(buffer, Mode::Compilation(compilation));
             }),
         }
-        self.effects.push(Effect::Spawn(Job {
+        let job = Job {
             id,
             program: program.clone(),
             args: args.to_vec(),
             directory,
             env: Vec::new(),
-        }));
+        };
+        let buffer = self
+            .compilation_index()
+            .and_then(|index| self.buffers.get(index))
+            .map(Buffer::id);
+        let name = std::iter::once(program.as_str())
+            .chain(args.iter().map(String::as_str))
+            .take(2)
+            .collect::<Vec<_>>()
+            .join(" ");
+        self.track_job(&job, Kind::Compile, name, buffer);
+        self.effects.push(Effect::Spawn(job));
     }
 
     pub(in crate::editor) fn kill_compilation(&mut self) {
@@ -168,6 +180,7 @@ impl Editor {
     }
 
     pub fn job_finished(&mut self, job: JobId, outcome: &Outcome) {
+        self.job_ended(job, outcome);
         if self.lint_finished(job, outcome) || self.console_finished(job, outcome) {
             return;
         }

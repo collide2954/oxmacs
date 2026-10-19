@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::RustLint;
 use crate::editor::build::errors::ErrorSource;
+use crate::editor::special::processes::Kind;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::external::diagnostics::{self, Diagnostic, Output, Severity};
 use crate::external::tools;
@@ -81,7 +82,7 @@ impl Editor {
         }
         let job = JobId(self.next_job);
         self.next_job += 1;
-        self.effects.push(Effect::Spawn(Job {
+        let spawned = Job {
             id: job,
             program: "cargo".to_owned(),
             args: [
@@ -94,7 +95,9 @@ impl Editor {
             .to_vec(),
             directory: root.clone(),
             env: Vec::new(),
-        }));
+        };
+        self.track_job(&spawned, Kind::Lint, format!("cargo {subcommand}"), None);
+        self.effects.push(Effect::Spawn(spawned));
         self.lints.run = Some(Run {
             job,
             root,

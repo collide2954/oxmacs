@@ -17,6 +17,7 @@ use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::special::customize::Customize;
 use crate::editor::special::doctor::Doctor;
 use crate::editor::special::help::Help;
+use crate::editor::special::processes::ProcessList;
 use crate::editor::special::splash::Splash;
 use crate::editor::special::weather::WeatherView;
 use crate::editor::{Choice, Completion, Editor};
@@ -41,6 +42,7 @@ pub(super) enum Mode {
     Weather(WeatherView),
     Chat(ChatView),
     Plots(Plots),
+    Processes(ProcessList),
 }
 
 #[derive(Debug)]
@@ -115,7 +117,8 @@ impl BufferList {
             | Mode::Help(_)
             | Mode::Weather(_)
             | Mode::Chat(_)
-            | Mode::Plots(_) => None,
+            | Mode::Plots(_)
+            | Mode::Processes(_) => None,
         }
     }
 
@@ -133,7 +136,8 @@ impl BufferList {
             | Mode::Help(_)
             | Mode::Weather(_)
             | Mode::Chat(_)
-            | Mode::Plots(_) => None,
+            | Mode::Plots(_)
+            | Mode::Processes(_) => None,
         }
     }
 
@@ -152,7 +156,8 @@ impl BufferList {
             | Mode::Help(_)
             | Mode::Weather(_)
             | Mode::Chat(_)
-            | Mode::Plots(_) => None,
+            | Mode::Plots(_)
+            | Mode::Processes(_) => None,
         }
     }
 
@@ -171,7 +176,8 @@ impl BufferList {
             | Mode::Help(_)
             | Mode::Weather(_)
             | Mode::Chat(_)
-            | Mode::Plots(_) => None,
+            | Mode::Plots(_)
+            | Mode::Processes(_) => None,
         }
     }
 
@@ -189,7 +195,8 @@ impl BufferList {
             | Mode::Help(_)
             | Mode::Weather(_)
             | Mode::Chat(_)
-            | Mode::Plots(_) => None,
+            | Mode::Plots(_)
+            | Mode::Processes(_) => None,
         }
     }
 
@@ -207,7 +214,8 @@ impl BufferList {
             | Mode::Help(_)
             | Mode::Weather(_)
             | Mode::Chat(_)
-            | Mode::Plots(_) => None,
+            | Mode::Plots(_)
+            | Mode::Processes(_) => None,
         }
     }
 

@@ -230,6 +230,16 @@ impl Editor {
         } else {
             format!("Connecting to {}:{}…", endpoint.host, endpoint.port)
         };
+        let route = if via_bouncer { " via the bouncer" } else { "" };
+        self.track_connection(
+            id,
+            &server.name,
+            format!("{}:{}{route}", endpoint.host, endpoint.port),
+        );
+        if via_bouncer && self.config.irc_bouncer.mode == BouncerMode::Local {
+            let pid = (self.irc.local_daemon)().map(|daemon| daemon.pid);
+            self.track_daemon(pid, "oxmacs irc-daemon".to_owned());
+        }
         self.effects.push(Effect::Connect(id, endpoint));
         self.irc_note(&server.name, &note, false);
         self.show_chat(&server.name, &Target::Server);
@@ -253,6 +263,8 @@ impl Editor {
             self.show_message(NOT_STARTED);
             return;
         }
+        let pid = (self.irc.local_daemon)().map(|daemon| daemon.pid);
+        self.track_daemon(pid, "oxmacs irc-daemon".to_owned());
         for name in waiting {
             let server = self
                 .config

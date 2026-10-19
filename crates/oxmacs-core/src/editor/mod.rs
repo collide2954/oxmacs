@@ -107,6 +107,8 @@ pub struct Editor {
     plots_keymap: Keymap,
     popup: Option<prompts::popup::Popup>,
     r_sessions: languages::r_console::Sessions,
+    processes: special::processes::Processes,
+    processes_keymap: Keymap,
     pending: Vec<Key>,
     last_key: Option<Key>,
     last_command: Option<Command>,
@@ -188,6 +190,8 @@ impl Editor {
             plots_keymap: bindings::plots(),
             popup: None,
             r_sessions: languages::r_console::Sessions::default(),
+            processes: special::processes::Processes::default(),
+            processes_keymap: bindings::processes(),
             pending: Vec::new(),
             last_key: None,
             last_command: None,
@@ -429,11 +433,12 @@ impl Editor {
             Scope::Weather => Some(&self.weather_keymap),
             Scope::Chat => Some(&self.chat_keymap),
             Scope::Plots => Some(&self.plots_keymap),
+            Scope::Processes => Some(&self.processes_keymap),
             Scope::Global | Scope::Minibuffer | Scope::Search | Scope::Popup => None,
         }
     }
 
-    fn keymaps(&self) -> [(Scope, &Keymap); 19] {
+    fn keymaps(&self) -> [(Scope, &Keymap); 20] {
         [
             (Scope::Global, &self.keymap),
             (Scope::Minibuffer, &self.minibuffer_keymap),
@@ -454,6 +459,7 @@ impl Editor {
             (Scope::Chat, &self.chat_keymap),
             (Scope::Popup, &self.popup_keymap),
             (Scope::Plots, &self.plots_keymap),
+            (Scope::Processes, &self.processes_keymap),
         ]
     }
 
@@ -469,6 +475,7 @@ impl Editor {
             Some(Mode::Weather(_)) => Scope::Weather,
             Some(Mode::Chat(_)) => Scope::Chat,
             Some(Mode::Plots(_)) => Scope::Plots,
+            Some(Mode::Processes(_)) => Scope::Processes,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::R => Scope::R,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
@@ -500,6 +507,7 @@ impl Editor {
             Some(Mode::Help(help)) => help.line_style(line),
             Some(Mode::Weather(view)) => view.line_style(line),
             Some(Mode::Chat(view)) => view.line_style(line),
+            Some(Mode::Processes(list)) => list.line_style(line),
             Some(Mode::Preview(_) | Mode::Console(_) | Mode::Plots(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None => LineStyle {
                 background: None,
