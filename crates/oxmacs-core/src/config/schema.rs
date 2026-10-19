@@ -96,6 +96,12 @@ pub const SETTINGS: &[Setting] = &[
     ),
     setting(
         APPEARANCE,
+        "mode-line-style",
+        Kind::Choice(&["classic", "modern", "minimal", "powerline", "boxed"]),
+        "How the mode line under each window looks",
+    ),
+    setting(
+        APPEARANCE,
         "clock",
         Kind::Toggle,
         "Clock at the right of the mode line",

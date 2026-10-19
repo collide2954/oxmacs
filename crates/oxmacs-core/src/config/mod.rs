@@ -34,6 +34,7 @@ pub struct Config {
     pub line_numbers: LineNumbers,
     pub line_number_separator: bool,
     pub window_mode: WindowMode,
+    pub mode_line_style: ModeLineStyle,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r_program: Option<String>,
 }
@@ -67,6 +68,17 @@ pub enum WindowMode {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum ModeLineStyle {
+    #[default]
+    Classic,
+    Modern,
+    Minimal,
+    Powerline,
+    Boxed,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum RustLint {
     #[default]
     Check,
@@ -94,6 +106,7 @@ impl Default for Config {
             line_numbers: LineNumbers::default(),
             line_number_separator: false,
             window_mode: WindowMode::default(),
+            mode_line_style: ModeLineStyle::default(),
             r_program: None,
         }
     }
@@ -460,6 +473,25 @@ mod tests {
             WindowMode::Fullscreen
         );
         assert!(read("window-mode = \"minimized\"").is_err());
+    }
+
+    #[test]
+    fn the_mode_line_is_classic_unless_configured() {
+        let read = |text: &str| Config::parse(text).map(|config| config.mode_line_style);
+
+        assert_eq!(Config::default().mode_line_style, ModeLineStyle::Classic);
+        for (name, style) in [
+            ("modern", ModeLineStyle::Modern),
+            ("minimal", ModeLineStyle::Minimal),
+            ("powerline", ModeLineStyle::Powerline),
+            ("boxed", ModeLineStyle::Boxed),
+        ] {
+            assert_eq!(
+                read(&format!("mode-line-style = \"{name}\"")).unwrap(),
+                style
+            );
+        }
+        assert!(read("mode-line-style = \"fancy\"").is_err());
     }
 
     #[test]
