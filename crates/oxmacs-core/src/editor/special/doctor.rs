@@ -288,6 +288,9 @@ mod tests {
         assert_eq!(mark("R (.R .r)", "Indent"), '✓');
         assert_eq!(mark("R (.R .r)", "Items"), '✓');
         assert_eq!(mark("R (.R .r)", "Format"), '–');
+        assert_eq!(mark("R (.R .r)", "Complete"), '✓');
+        assert_eq!(mark("R (.R .r)", "REPL"), '✓');
+        assert_eq!(mark("Rust (.rs)", "REPL"), '–');
         assert_eq!(mark("Markdown (", "Items"), '✓');
         assert_eq!(mark("Markdown (", "Comment"), '–');
     }
