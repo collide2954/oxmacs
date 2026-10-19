@@ -127,7 +127,7 @@ impl Editor {
         self.show_atlas_list(&ListKind::Agenda(filter));
     }
 
-    pub(super) fn render_agenda(&mut self) {
+    pub(in crate::editor) fn render_agenda(&mut self) {
         let Some(index) = self.atlas_list_index(&ListKind::Agenda(None)) else {
             return;
         };
@@ -393,6 +393,22 @@ mod tests {
         assert!(shown[at("Send invoice")].trim_end().ends_with("work"));
         assert!(shown[at("Visit nursery")].starts_with("  10:00-11:00"));
         assert!(shown[at("Buy seeds")].starts_with("  [ ] !"));
+    }
+
+    #[test]
+    fn rows_fit_inside_the_window() {
+        let (_dir, _garden, mut editor) = agenda();
+        let window = editor.selected_window();
+
+        editor.resize_pane(window, 30, 60);
+
+        let widest = lines(&editor)
+            .iter()
+            .skip(2)
+            .map(|line| line.chars().count())
+            .max()
+            .unwrap();
+        assert_eq!(widest, 59);
     }
 
     #[test]
