@@ -1,10 +1,10 @@
 use iced::widget::{
-    Column, Row, column, container, markdown, mouse_area, responsive, row, scrollable, sensor,
-    space,
+    Column, Row, column, container, image, markdown, mouse_area, responsive, row, scrollable,
+    sensor, space, stack, text,
 };
-use iced::{Element, Length};
+use iced::{ContentFit, Element, Length};
 use oxmacs_core::clock;
-use oxmacs_core::editor::{Axis, Tiling, WindowId};
+use oxmacs_core::editor::{Axis, PlotView, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
 
 use super::{App, Message, preview_id};
@@ -84,6 +84,20 @@ impl App {
             return space().into();
         };
         let active = pane.is_selected();
+        if let Some(plot) = pane.plot() {
+            let body = self.plot(window, &plot, faces);
+            let look = Look {
+                faces,
+                active,
+                font: self.font,
+                size: self.text_size,
+            };
+            return column![
+                body,
+                mode_line::view(&pane.status(), &[], self.mode_line_style, look)
+            ]
+            .into();
+        }
         let body: Element<'_, Message> = match pane
             .preview_source()
             .and_then(|source| self.previews.iter().find(|(id, ..)| *id == source.id()))
@@ -153,4 +167,27 @@ impl App {
         ]
         .into()
     }
+
+    fn plot(&self, window: WindowId, plot: &PlotView, faces: Faces) -> Element<'_, Message> {
+        let picture = image(self.plot_image(&plot.path))
+            .content_fit(ContentFit::Contain)
+            .width(Length::Fill)
+            .height(Length::Fill);
+        let counter = container(
+            text(format!("{} / {}", plot.index, plot.count))
+                .font(self.font)
+                .size(self.text_size * COUNTER_SCALE)
+                .color(style::color(faces.shadow)),
+        )
+        .padding([4, 8])
+        .align_right(Length::Fill);
+        let sized = sensor(stack![picture, counter])
+            .on_show(Message::PlotSized)
+            .on_resize(Message::PlotSized);
+        mouse_area(sized)
+            .on_press(Message::FocusWindow(window))
+            .into()
+    }
 }
+
+const COUNTER_SCALE: f32 = 0.85;

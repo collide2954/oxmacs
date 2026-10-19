@@ -72,14 +72,15 @@ local({
   Sys.unsetenv("OXMACS_R_PLOTS")
   dir.create(plots$directory, showWarnings = FALSE, recursive = TRUE)
   options(device = function(...) {
-    grDevices::pdf(NULL, width = plots$size[1] / 96, height = plots$size[2] / 96)
+    grDevices::pdf(NULL, width = plots$size[1] / 96, height = plots$size[2] / 96, bg = "white")
     grDevices::dev.control("enable")
     plots$device <- grDevices::dev.cur()
   })
   setHook("plot.new", function() plots$fresh <- TRUE)
   setHook("grid.newpage", function() plots$fresh <- TRUE)
   bitmap <- function(file, width, height, scale) {
-    arguments <- list(file, width = width * scale, height = height * scale, res = 96 * scale)
+    arguments <- list(file, width = width * scale, height = height * scale,
+      res = 96 * scale, bg = "white")
     if (capabilities("cairo")) arguments$type <- "cairo"
     do.call(grDevices::png, arguments)
   }

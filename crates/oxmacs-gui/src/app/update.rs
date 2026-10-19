@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::thread;
 
 use iced::font::Family;
@@ -6,7 +6,7 @@ use iced::futures::channel::{mpsc, oneshot};
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
 use iced::widget::scrollable::{AbsoluteOffset, RelativeOffset};
-use iced::widget::{markdown, operation};
+use iced::widget::{image, markdown, operation};
 use iced::{Task, clipboard, keyboard};
 use jiff::Timestamp;
 use oxmacs_core::bouncer::daemon;
@@ -189,6 +189,13 @@ impl App {
                     self.last_input = self.now;
                 }
             }
+            Message::PlotLoaded(path, allocation) => self.plot_loaded(path, allocation),
+            Message::PlotSized(size) => {
+                let pixels =
+                    |extent: f32| u32::try_from(units::floor_to_usize(extent)).unwrap_or(u32::MAX);
+                self.editor
+                    .plots_sized(pixels(size.width), pixels(size.height));
+            }
             Message::PreviewSized(window, height) => {
                 self.preview_heights.retain(|(known, _)| *known != window);
                 self.preview_heights.push((window, height));
@@ -213,6 +220,7 @@ impl App {
         }
         self.editor.prepare_display();
         self.refresh_previews();
+        let plots = self.load_plots();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {
             self.editor.irc_farewell();
@@ -225,7 +233,43 @@ impl App {
             }
             return iced::exit();
         }
-        self.pending_effects()
+        Task::batch([self.pending_effects(), plots])
+    }
+
+    fn load_plots(&mut self) -> Task<Message> {
+        let fresh: Vec<PathBuf> = self
+            .editor
+            .tiling()
+            .windows()
+            .into_iter()
+            .filter_map(|window| self.editor.pane_of(window)?.plot())
+            .map(|plot| plot.path)
+            .filter(|path| {
+                !self.plot_loading.contains(path)
+                    && !self.plot_images.iter().any(|(known, _)| known == path)
+            })
+            .collect();
+        self.plot_loading.extend(fresh.iter().cloned());
+        Task::batch(fresh.into_iter().map(|path| {
+            image::allocate(image::Handle::from_path(&path))
+                .map(move |allocation| Message::PlotLoaded(path.clone(), allocation.ok()))
+        }))
+    }
+
+    fn plot_loaded(&mut self, path: PathBuf, allocation: Option<image::Allocation>) {
+        self.plot_loading.retain(|known| *known != path);
+        if let Some(allocation) = allocation {
+            self.plot_images.push((path, allocation));
+        }
+        let excess = self.plot_images.len().saturating_sub(KEPT_PLOTS);
+        self.plot_images.drain(..excess);
+    }
+
+    pub(super) fn plot_image(&self, path: &Path) -> image::Handle {
+        shown_plot(&self.plot_images, path).map_or_else(
+            || image::Handle::from_path(path),
+            |allocation| allocation.handle().clone(),
+        )
     }
 
     pub(super) fn pending_effects(&mut self) -> Task<Message> {
@@ -349,6 +393,16 @@ impl App {
 }
 
 const HAS_PRIMARY_SELECTION: bool = cfg!(target_os = "linux");
+const KEPT_PLOTS: usize = 8;
+
+pub fn shown_plot<'a, T>(loaded: &'a [(PathBuf, T)], path: &Path) -> Option<&'a T> {
+    loaded
+        .iter()
+        .rev()
+        .find(|(known, _)| known == path)
+        .or_else(|| loaded.last())
+        .map(|(_, item)| item)
+}
 const FAREWELL: Duration = Duration::from_secs(1);
 const DAEMON_PATIENCE: Duration = Duration::from_secs(10);
 

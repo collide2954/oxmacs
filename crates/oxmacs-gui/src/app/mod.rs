@@ -1,6 +1,8 @@
 mod update;
 mod view;
 
+use std::path::PathBuf;
+
 use iced::animation::Easing;
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
@@ -37,6 +39,8 @@ pub struct App {
     clock: Option<String>,
     mode_line_style: ModeLineStyle,
     previews: Vec<(BufferId, u64, markdown::Content)>,
+    plot_images: Vec<(PathBuf, widget::image::Allocation)>,
+    plot_loading: Vec<PathBuf>,
     jobs: Vec<(JobId, Handle)>,
     connections: Vec<(ConnectionId, Connection)>,
     preview_heights: Vec<(WindowId, f32)>,
@@ -64,6 +68,8 @@ pub enum Message {
     AutoComplete,
     FocusWindow(WindowId),
     PreviewSized(WindowId, f32),
+    PlotSized(iced::Size),
+    PlotLoaded(PathBuf, Option<widget::image::Allocation>),
     Fetched(FetchId, Result<String, String>),
     Irc(ConnectionId, net::Event),
     DaemonReady(bool),
@@ -103,6 +109,8 @@ impl App {
             clock: None,
             mode_line_style: config.mode_line_style,
             previews: Vec::new(),
+            plot_images: Vec::new(),
+            plot_loading: Vec::new(),
             jobs: Vec::new(),
             connections: Vec::new(),
             preview_heights: Vec::new(),
@@ -298,6 +306,27 @@ mod tests {
             text: Some(c.into()),
             repeat: false,
         }));
+    }
+
+    #[test]
+    fn a_plot_still_loading_leaves_the_previous_one_shown() {
+        let loaded = [
+            (PathBuf::from("plot-1.png"), "one"),
+            (PathBuf::from("plot-2.png"), "two"),
+        ];
+
+        assert_eq!(
+            update::shown_plot(&loaded, Path::new("plot-1.png")),
+            Some(&"one")
+        );
+        assert_eq!(
+            update::shown_plot(&loaded, Path::new("plot-3.png")),
+            Some(&"two")
+        );
+        assert_eq!(
+            update::shown_plot::<&str>(&[], Path::new("plot-1.png")),
+            None
+        );
     }
 
     #[test]
