@@ -1,19 +1,31 @@
 use iced::alignment::Vertical;
-use iced::widget::{Row, Text, container, row, text};
-use iced::{Border, Element, Font, Length, Padding, font};
+use iced::font::{Family, Weight};
+use iced::widget::{Row, Text, column, container, row, space, text};
+use iced::{Border, Element, Font, Length, Padding};
 use oxmacs_core::config::ModeLineStyle;
 use oxmacs_core::editor::{BufferState, Status};
 use oxmacs_core::theme::{Color, Theme as Faces};
 
 use crate::style;
-use crate::widgets::arrow::{Direction, arrow};
+use crate::widgets::powerline::{Direction, Powerline};
 
+const UI_FONT: Font = Font {
+    family: Family::SansSerif,
+    ..Font::DEFAULT
+};
+const LINE_HEIGHT: f32 = 1.3;
+const BREATH: f32 = 4.0;
+const EDGE: f32 = 1.0;
+const SIDE: f32 = 8.0;
 const GAP: f32 = 8.0;
 const PILL_GAP: f32 = 4.0;
-const PILL_PADDING: [u16; 2] = [0, 8];
-const BLOCK_PADDING: [u16; 2] = [0, 10];
-const LINE_HEIGHT: f32 = 1.3;
-const FRAME: f32 = 1.0;
+const PILL_PADDING: [f32; 2] = [1.0, 9.0];
+const BLOCK_SIDE: f32 = 10.0;
+const SECONDARY: f32 = 0.9;
+const TINT: f32 = 0.12;
+const BLOCK_TINT: f32 = 0.25;
+const DIM: f32 = 0.35;
+const FADE: f32 = 0.55;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Look {
@@ -23,41 +35,88 @@ pub struct Look {
     pub size: f32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Colors {
     text: Color,
     dim: Color,
     background: Color,
     accent: Color,
     on_accent: Color,
-    pill: Color,
-    modified: Color,
+    tint: Color,
+    block: Color,
+    edge: Color,
 }
 
 impl Colors {
     fn new(faces: &Faces, active: bool) -> Self {
-        let face = if active {
-            faces.mode_line
-        } else {
-            faces.mode_line_inactive
-        };
-        Self {
+        let face = faces.mode_line;
+        let colors = Self {
             text: face.foreground,
-            dim: face.foreground.mix(face.background, 0.3),
+            dim: face.foreground.mix(face.background, DIM),
             background: face.background,
-            accent: if active {
-                faces.link
-            } else {
-                face.background.mix(face.foreground, 0.25)
-            },
-            on_accent: if active {
-                faces.default.background
-            } else {
-                face.foreground
-            },
-            pill: face.background.mix(face.foreground, 0.12),
-            modified: faces.warning,
+            accent: faces.link,
+            on_accent: faces.default.background,
+            tint: face.background.mix(faces.link, TINT),
+            block: face.background.mix(faces.link, BLOCK_TINT),
+            edge: faces.mode_line_border,
+        };
+        if active {
+            colors
+        } else {
+            colors.faded(faces.mode_line_inactive.background)
         }
+    }
+
+    fn faded(self, background: Color) -> Self {
+        let fade = |color: Color| color.mix(background, FADE);
+        Self {
+            text: fade(self.text),
+            dim: fade(self.dim),
+            background,
+            accent: fade(self.accent),
+            on_accent: fade(self.on_accent),
+            tint: fade(self.tint),
+            block: fade(self.block),
+            edge: self.edge,
+        }
+    }
+}
+
+struct Paint {
+    look: Look,
+    colors: Colors,
+}
+
+impl Paint {
+    fn label<'a>(&self, content: String, color: Color) -> Text<'a> {
+        text(content)
+            .font(UI_FONT)
+            .size(self.look.size)
+            .color(style::color(color))
+            .wrapping(text::Wrapping::None)
+    }
+
+    fn bold<'a>(&self, content: String, color: Color) -> Text<'a> {
+        self.label(content, color).font(Font {
+            weight: Weight::Bold,
+            ..UI_FONT
+        })
+    }
+
+    fn small<'a>(&self, content: String, color: Color) -> Text<'a> {
+        self.label(content, color).size(self.look.size * SECONDARY)
+    }
+
+    fn digits<'a>(&self, content: String, color: Color) -> Text<'a> {
+        self.small(content, color).font(self.look.font)
+    }
+
+    fn text_height(&self) -> f32 {
+        self.look.size * LINE_HEIGHT
+    }
+
+    fn bar_height(&self) -> f32 {
+        self.text_height() + 2.0 * BREATH
     }
 }
 
@@ -67,54 +126,93 @@ pub fn view<'a, Message: 'a>(
     style: ModeLineStyle,
     look: Look,
 ) -> Element<'a, Message> {
-    let colors = Colors::new(&look.faces, look.active);
-    let (left, right) = match style {
-        ModeLineStyle::Classic => (
-            look.label(status.to_string(), colors.text).into(),
-            spaced(
-                extras
-                    .iter()
-                    .map(|extra| look.label(extra.clone(), colors.text).into()),
-                GAP,
-            ),
-        ),
-        ModeLineStyle::Modern => modern(status, extras, &look, &colors),
-        ModeLineStyle::Minimal => minimal(status, extras, &look, &colors),
-        ModeLineStyle::Boxed => boxed(status, extras, &look, &colors),
-        ModeLineStyle::Powerline => powerline(status, extras, &look, &colors),
+    let paint = Paint {
+        look,
+        colors: Colors::new(&look.faces, look.active),
     };
-    let padding = if style == ModeLineStyle::Powerline {
-        Padding::ZERO
-    } else {
-        Padding::from([FRAME, 4.0])
+    match style {
+        ModeLineStyle::Classic => classic(status, extras, look),
+        ModeLineStyle::Modern => framed(modern(status, extras, &paint), &paint, SIDE),
+        ModeLineStyle::Minimal => framed(minimal(status, extras, &paint), &paint, SIDE),
+        ModeLineStyle::Boxed => framed(boxed(status, extras, &paint), &paint, SIDE / 2.0),
+        ModeLineStyle::Powerline => framed(powerline(status, extras, &paint), &paint, 0.0),
+    }
+}
+
+fn classic<'a, Message: 'a>(
+    status: &Status,
+    extras: &[String],
+    look: Look,
+) -> Element<'a, Message> {
+    let line = |content: String| {
+        text(content)
+            .font(look.font)
+            .size(look.size)
+            .wrapping(text::Wrapping::None)
     };
+    let right = extras.iter().map(|extra| line(extra.clone()).into());
     let Look { faces, active, .. } = look;
-    container(row![container(left).width(Length::Fill).clip(true), right].align_y(Vertical::Center))
+    container(
+        row![
+            container(line(status.to_string()))
+                .width(Length::Fill)
+                .clip(true),
+            spaced(right, GAP)
+        ]
+        .align_y(Vertical::Center),
+    )
+    .width(Length::Fill)
+    .padding([1, 4])
+    .style(move |_| style::mode_line(&faces, active))
+    .into()
+}
+
+fn filled(color: Color) -> impl Fn(&iced::Theme) -> container::Style {
+    let color = style::color(color);
+    move |_| container::Style {
+        background: Some(color.into()),
+        ..container::Style::default()
+    }
+}
+
+fn framed<'a, Message: 'a>(
+    (left, right): (Element<'a, Message>, Element<'a, Message>),
+    paint: &Paint,
+    side: f32,
+) -> Element<'a, Message> {
+    column![
+        container(space())
+            .width(Length::Fill)
+            .height(Length::Fixed(EDGE))
+            .style(filled(paint.colors.edge)),
+        container(
+            row![container(left).width(Length::Fill).clip(true), right].align_y(Vertical::Center)
+        )
         .width(Length::Fill)
-        .padding(padding)
-        .style(move |_| style::mode_line(&faces, active))
+        .height(Length::Fixed(paint.bar_height()))
+        .padding(Padding::from([0.0, side]))
+        .align_y(Vertical::Center)
+        .style(filled(paint.colors.background)),
+    ]
+    .into()
+}
+
+fn spaced<'a, Message: 'a>(
+    items: impl IntoIterator<Item = Element<'a, Message>>,
+    gap: f32,
+) -> Element<'a, Message> {
+    Row::with_children(items)
+        .spacing(gap)
+        .align_y(Vertical::Center)
         .into()
 }
 
-impl Look {
-    fn label<'a>(&self, content: String, color: Color) -> Text<'a> {
-        text(content)
-            .font(self.font)
-            .size(self.size)
-            .color(style::color(color))
-            .wrapping(text::Wrapping::None)
-    }
-
-    fn bold<'a>(&self, content: String, color: Color) -> Text<'a> {
-        self.label(content, color).font(Font {
-            weight: font::Weight::Bold,
-            ..self.font
-        })
-    }
-
-    fn height(&self) -> f32 {
-        self.size * LINE_HEIGHT + 2.0 * FRAME
-    }
+fn divider<'a, Message: 'a>(paint: &Paint) -> Element<'a, Message> {
+    container(space())
+        .width(Length::Fixed(EDGE))
+        .height(Length::Fixed(paint.look.size))
+        .style(filled(paint.colors.edge))
+        .into()
 }
 
 fn position(status: &Status) -> String {
@@ -129,102 +227,83 @@ fn marker(state: BufferState) -> Option<&'static str> {
     }
 }
 
-fn marker_color(state: BufferState, colors: &Colors) -> Color {
-    if state == BufferState::ReadOnly {
-        colors.dim
-    } else {
-        colors.modified
-    }
-}
-
-fn details(status: &Status) -> Vec<String> {
-    let mut details: Vec<String> = status.lint.iter().cloned().collect();
-    if status.crlf {
-        details.push("CRLF".to_owned());
-    }
-    details.extend(status.mode.map(str::to_owned));
-    details.push(position(status));
-    details
-}
-
-fn spaced<'a, Message: 'a>(
-    items: impl IntoIterator<Item = Element<'a, Message>>,
-    gap: f32,
-) -> Element<'a, Message> {
-    Row::with_children(items)
-        .spacing(gap)
-        .align_y(Vertical::Center)
-        .into()
-}
-
-fn name<'a, Message: 'a>(status: &Status, look: &Look, colors: &Colors) -> Element<'a, Message> {
-    titled(
-        status,
-        look,
-        colors.text,
-        marker_color(status.state, colors),
-    )
-}
-
 fn titled<'a, Message: 'a>(
     status: &Status,
-    look: &Look,
+    paint: &Paint,
     color: Color,
     marker_color: Color,
 ) -> Element<'a, Message> {
-    let marker =
-        marker(status.state).map(|marker| look.label(marker.to_owned(), marker_color).into());
+    let marker = marker(status.state).map(|marker| {
+        let color = if status.state == BufferState::ReadOnly {
+            color
+        } else {
+            marker_color
+        };
+        paint.small(marker.to_owned(), color).into()
+    });
     spaced(
         marker
             .into_iter()
-            .chain([look.bold(status.name.clone(), color).into()]),
+            .chain([paint.bold(status.name.clone(), color).into()]),
         PILL_GAP + 2.0,
     )
 }
 
-fn extras_labels<'a, Message: 'a>(
+fn name<'a, Message: 'a>(status: &Status, paint: &Paint) -> Element<'a, Message> {
+    titled(status, paint, paint.colors.text, paint.colors.accent)
+}
+
+fn extras_after<'a, Message: 'a>(
+    mut items: Vec<Element<'a, Message>>,
     extras: &[String],
-    look: &Look,
-    color: Color,
-) -> impl Iterator<Item = Element<'a, Message>> {
-    extras
-        .iter()
-        .map(move |extra| look.label(extra.clone(), color).into())
-        .collect::<Vec<_>>()
-        .into_iter()
+    paint: &Paint,
+) -> Element<'a, Message> {
+    if !extras.is_empty() {
+        items.push(divider(paint));
+        items.extend(
+            extras
+                .iter()
+                .map(|extra| paint.digits(extra.clone(), paint.colors.text).into()),
+        );
+    }
+    spaced(items, GAP)
 }
 
 fn modern<'a, Message: 'a>(
     status: &Status,
     extras: &[String],
-    look: &Look,
-    colors: &Colors,
+    paint: &Paint,
 ) -> (Element<'a, Message>, Element<'a, Message>) {
-    let mut right: Vec<Element<'a, Message>> = Vec::new();
-    for (index, detail) in details(status).into_iter().enumerate() {
-        if index > 0 {
-            right.push(look.label("·".to_owned(), colors.dim).into());
-        }
-        right.push(look.label(detail, colors.dim).into());
+    let colors = paint.colors;
+    let words = status
+        .lint
+        .iter()
+        .cloned()
+        .chain(status.crlf.then(|| "CRLF".to_owned()))
+        .chain(status.mode.map(str::to_owned));
+    let mut details: Vec<Element<'a, Message>> = Vec::new();
+    for word in words {
+        details.push(paint.small(word, colors.dim).into());
+        details.push(paint.small("·".to_owned(), colors.dim).into());
     }
-    right.extend(extras_labels(extras, look, colors.text));
-    (name(status, look, colors), spaced(right, GAP))
+    details.push(paint.digits(position(status), colors.dim).into());
+    (name(status, paint), extras_after(details, extras, paint))
 }
 
 fn minimal<'a, Message: 'a>(
     status: &Status,
     extras: &[String],
-    look: &Look,
-    colors: &Colors,
+    paint: &Paint,
 ) -> (Element<'a, Message>, Element<'a, Message>) {
-    let right = [look.label(position(status), colors.dim).into()]
-        .into_iter()
-        .chain(extras_labels(extras, look, colors.text));
-    (name(status, look, colors), spaced(right, GAP))
+    let details = vec![paint.digits(position(status), paint.colors.dim).into()];
+    (name(status, paint), extras_after(details, extras, paint))
 }
 
-fn pill<'a, Message: 'a>(content: Element<'a, Message>, colors: &Colors) -> Element<'a, Message> {
-    let fill = style::color(colors.pill);
+fn pill<'a, Message: 'a>(
+    content: impl Into<Element<'a, Message>>,
+    paint: &Paint,
+) -> Element<'a, Message> {
+    let fill = style::color(paint.colors.tint);
     container(content)
         .padding(PILL_PADDING)
         .style(move |_| container::Style {
@@ -241,94 +320,82 @@ fn pill<'a, Message: 'a>(content: Element<'a, Message>, colors: &Colors) -> Elem
 fn boxed<'a, Message: 'a>(
     status: &Status,
     extras: &[String],
-    look: &Look,
-    colors: &Colors,
+    paint: &Paint,
 ) -> (Element<'a, Message>, Element<'a, Message>) {
+    let colors = paint.colors;
     let mut left = vec![
-        pill(name(status, look, colors), colors),
-        pill(look.label(position(status), colors.text).into(), colors),
+        pill(name(status, paint), paint),
+        pill(paint.digits(position(status), colors.text), paint),
     ];
-    let rest = status
+    let words = status
         .mode
         .map(str::to_owned)
         .into_iter()
         .chain(status.lint.clone())
         .chain(status.crlf.then(|| "CRLF".to_owned()));
-    left.extend(rest.map(|detail| pill(look.label(detail, colors.text).into(), colors)));
-    let right = extras_labels(extras, look, colors.text).map(|extra| pill(extra, colors));
+    left.extend(words.map(|word| pill(paint.small(word, colors.text), paint)));
+    let right = extras
+        .iter()
+        .map(|extra| pill(paint.digits(extra.clone(), colors.text), paint));
     (spaced(left, PILL_GAP), spaced(right, PILL_GAP))
-}
-
-fn block<'a, Message: 'a>(
-    content: Element<'a, Message>,
-    background: Color,
-    look: &Look,
-) -> Element<'a, Message> {
-    let fill = style::color(background);
-    container(content)
-        .padding(BLOCK_PADDING)
-        .height(Length::Fixed(look.height()))
-        .align_y(Vertical::Center)
-        .style(move |_| container::Style {
-            background: Some(fill.into()),
-            ..container::Style::default()
-        })
-        .into()
 }
 
 fn powerline<'a, Message: 'a>(
     status: &Status,
     extras: &[String],
-    look: &Look,
-    colors: &Colors,
+    paint: &Paint,
 ) -> (Element<'a, Message>, Element<'a, Message>) {
-    let height = look.height();
-    let edge = |direction, color, behind| {
-        arrow(direction, style::color(color), style::color(behind), height)
-    };
-    let title = titled(status, look, colors.on_accent, colors.on_accent);
-    let mut left = vec![block(title, colors.accent, look)];
-    match status.mode {
-        Some(mode) => {
-            left.push(edge(Direction::Right, colors.accent, colors.pill));
-            left.push(block(
-                look.label(mode.to_owned(), colors.text).into(),
-                colors.pill,
-                look,
-            ));
-            left.push(edge(Direction::Right, colors.pill, colors.background));
-        }
-        None => left.push(edge(Direction::Right, colors.accent, colors.background)),
-    }
-    left.extend(
-        status
-            .lint
-            .iter()
-            .chain(status.crlf.then(|| "CRLF".to_owned()).as_ref())
-            .map(|detail| {
-                container(look.label(detail.clone(), colors.dim))
-                    .padding([0.0, GAP])
-                    .into()
-            }),
+    let colors = paint.colors;
+    let height = paint.bar_height();
+    let mut blocks = Powerline::new(
+        Direction::Right,
+        style::color(colors.background),
+        height,
+        BLOCK_SIDE,
+    )
+    .push(
+        titled(status, paint, colors.on_accent, colors.on_accent),
+        style::color(colors.accent),
     );
-    let mut right = Vec::new();
-    let mut behind = colors.background;
-    if !extras.is_empty() {
-        right.push(edge(Direction::Left, colors.pill, behind));
-        right.push(block(
-            spaced(extras_labels(extras, look, colors.text), GAP),
-            colors.pill,
-            look,
-        ));
-        behind = colors.pill;
+    if let Some(mode) = status.mode {
+        blocks = blocks.push(
+            paint.small(mode.to_owned(), colors.text),
+            style::color(colors.block),
+        );
     }
-    right.push(edge(Direction::Left, colors.accent, behind));
-    right.push(block(
-        look.label(position(status), colors.on_accent).into(),
-        colors.accent,
-        look,
-    ));
-    (spaced(left, 0.0), spaced(right, 0.0))
+    let words = status
+        .lint
+        .iter()
+        .cloned()
+        .chain(status.crlf.then(|| "CRLF".to_owned()))
+        .map(|word| {
+            container(paint.small(word, colors.dim))
+                .padding([0.0, GAP])
+                .into()
+        });
+    let left = spaced([blocks.into()].into_iter().chain(words), 0.0);
+    let mut right = Powerline::new(
+        Direction::Left,
+        style::color(colors.background),
+        height,
+        BLOCK_SIDE,
+    );
+    if !extras.is_empty() {
+        right = right.push(
+            spaced(
+                extras
+                    .iter()
+                    .map(|extra| paint.small(extra.clone(), colors.text).into()),
+                GAP,
+            ),
+            style::color(colors.block),
+        );
+    }
+    right = right.push(
+        paint.small(position(status), colors.on_accent),
+        style::color(colors.accent),
+    );
+    (left, right.into())
 }
 #[cfg(test)]
 mod tests {
@@ -418,28 +485,27 @@ mod tests {
     fn derived_colors_stay_readable() {
         for faces in [ADWAITA, ADWAITA_DARK] {
             let colors = Colors::new(&faces, true);
-            let background = faces.mode_line.background;
+            let readable = |a: Color, b: Color, ratio| {
+                assert!(a.contrast_ratio(b) >= ratio, "{}", faces.name);
+            };
 
-            assert!(
-                colors.dim.contrast_ratio(background) >= 3.0,
-                "{}",
-                faces.name
-            );
-            assert!(
-                colors.modified.contrast_ratio(background) >= 3.0,
-                "{}",
-                faces.name
-            );
-            assert!(
-                colors.text.contrast_ratio(colors.pill) >= 4.5,
-                "{}",
-                faces.name
-            );
-            assert!(
-                colors.on_accent.contrast_ratio(colors.accent) >= 4.5,
-                "{}",
-                faces.name
-            );
+            readable(colors.dim, colors.background, 3.0);
+            readable(colors.accent, colors.background, 3.0);
+            readable(colors.text, colors.tint, 4.5);
+            readable(colors.text, colors.block, 4.5);
+            readable(colors.on_accent, colors.accent, 4.5);
         }
+    }
+
+    #[test]
+    fn inactive_windows_fade_every_color_but_the_edge() {
+        let active = Colors::new(&ADWAITA_DARK, true);
+        let inactive = Colors::new(&ADWAITA_DARK, false);
+        let background = ADWAITA_DARK.mode_line_inactive.background;
+
+        assert_eq!(inactive.background, background);
+        assert_eq!(inactive.text, active.text.mix(background, FADE));
+        assert_eq!(inactive.accent, active.accent.mix(background, FADE));
+        assert_eq!(inactive.edge, active.edge);
     }
 }
