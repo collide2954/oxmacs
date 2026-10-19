@@ -24,6 +24,24 @@ impl Page {
         self.styles.push(style);
     }
 
+    pub(super) fn paragraph(&mut self, text: &str, width: usize) {
+        let mut line = String::new();
+        for word in text.split_whitespace() {
+            let needed = line.chars().count() + 1 + word.chars().count();
+            if !line.is_empty() && needed > width {
+                self.line(&[(&line, None)]);
+                line.clear();
+            }
+            if !line.is_empty() {
+                line.push(' ');
+            }
+            line.push_str(word);
+        }
+        if !line.is_empty() {
+            self.line(&[(&line, None)]);
+        }
+    }
+
     pub(super) fn heading(&mut self, title: &str) {
         self.line(&[(title, Some(Highlight::Heading))]);
     }
@@ -53,6 +71,16 @@ mod tests {
         assert_eq!(page.text, "Title\nkey value\n");
         assert_eq!(page.styles[0].spans, [(0..5, Highlight::Heading)]);
         assert_eq!(page.styles[1].spans, [(4..9, Highlight::Link)]);
+    }
+
+    #[test]
+    fn paragraphs_break_between_words_to_fit_the_width() {
+        let mut page = Page::default();
+
+        page.paragraph("one two three fourteen sixteen-letters x", 9);
+
+        assert_eq!(page.text, "one two\nthree\nfourteen\nsixteen-letters\nx\n");
+        assert_eq!(page.styles.len(), 5);
     }
 
     #[test]

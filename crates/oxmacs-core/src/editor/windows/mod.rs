@@ -373,8 +373,24 @@ impl Editor {
     pub fn resize_pane(&mut self, window: WindowId, rows: usize, columns: usize) {
         if window == self.windows.selected {
             self.resize_window(rows, columns);
-            return;
+        } else {
+            self.resize_parked(window, rows, columns);
         }
+        self.render_help();
+    }
+
+    pub(super) fn width_showing(&self, buffer: BufferId) -> Option<usize> {
+        if self.buffers.current().id() == buffer {
+            return Some(self.viewport.wrap_width());
+        }
+        self.windows
+            .parked
+            .iter()
+            .find(|(_, parked)| parked.buffer == buffer)
+            .map(|(_, parked)| parked.viewport.wrap_width())
+    }
+
+    fn resize_parked(&mut self, window: WindowId, rows: usize, columns: usize) {
         let tab_width = self.tab_width;
         let Some((_, parked)) = self.windows.parked.iter_mut().find(|(id, _)| *id == window) else {
             return;

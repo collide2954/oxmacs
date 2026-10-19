@@ -11,9 +11,12 @@ const NAME: &str = "*Help*";
 const KEYS: &str = "Keys      ";
 const WORKS_IN: &str = "Works in  ";
 const INDENT: &str = "          ";
+const FILL_COLUMN: usize = 70;
 
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Help {
+    command: Option<Command>,
+    width: usize,
     styles: Vec<LineStyle>,
 }
 
@@ -61,13 +64,13 @@ fn key_lines(command: Command, places: &[(Scope, Vec<String>)]) -> Vec<String> {
         .collect()
 }
 
-fn page(command: Command, places: &[(Scope, Vec<String>)]) -> Page {
+fn page(command: Command, places: &[(Scope, Vec<String>)], width: usize) -> Page {
     let mut page = Page::default();
     page.heading(command.name());
     page.line(&[(&format!("{}.", command.summary()), None)]);
     if let Some(help) = command.help() {
         page.line(&[]);
-        page.line(&[(help, None)]);
+        page.paragraph(help, width);
     }
     page.line(&[]);
     for (index, keys) in key_lines(command, places).iter().enumerate() {
@@ -97,6 +100,37 @@ impl Editor {
                 editor.add_buffer_with(buffer, Mode::Help(Help::default()));
             });
         }
+        if let Some(index) = self.help_index()
+            && let Some(Mode::Help(help)) = self.buffers.mode_mut(index)
+        {
+            help.command = Some(command);
+            help.width = 0;
+        }
+        self.show_beside(Self::help_index);
+        self.render_help();
+        self.buffers.current_mut().set_point(0);
+        self.reveal_point();
+    }
+
+    pub(in crate::editor) fn render_help(&mut self) {
+        let Some(index) = self.help_index() else {
+            return;
+        };
+        let Some(Mode::Help(help)) = self.buffers.mode(index) else {
+            return;
+        };
+        let Some(command) = help.command else {
+            return;
+        };
+        let width = self
+            .buffers
+            .get(index)
+            .and_then(|buffer| self.width_showing(buffer.id()))
+            .filter(|width| *width > 0)
+            .map_or(FILL_COLUMN, |width| width.min(FILL_COLUMN));
+        if width == help.width {
+            return;
+        }
         let places: Vec<(Scope, Vec<String>)> = self
             .keymaps()
             .into_iter()
@@ -110,18 +144,14 @@ impl Editor {
             })
             .filter(|(_, keys)| !keys.is_empty())
             .collect();
-        let page = page(command, &places);
-        let Some(index) = self.help_index() else {
-            return;
-        };
+        let page = page(command, &places, width);
         if let Some(buffer) = self.buffers.get_mut(index) {
             page.fill(buffer);
-            buffer.set_point(0);
         }
         if let Some(Mode::Help(help)) = self.buffers.mode_mut(index) {
+            help.width = width;
             help.styles = page.styles;
         }
-        self.show_beside(Self::help_index);
     }
 }
 #[cfg(test)]
@@ -148,6 +178,22 @@ mod tests {
         assert_eq!(lines[1], "Open a file, creating it if it is new.");
         assert!(lines[3].starts_with("Type a path and the list narrows"));
         assert!(lines.contains(&"Keys      C-x C-f".to_owned()), "{lines:?}");
+    }
+
+    #[test]
+    fn help_text_fills_the_window_it_is_shown_in() {
+        let mut editor = Editor::new();
+        describe(&mut editor, "find-file");
+        assert!(lines(&editor).iter().all(|line| line.chars().count() <= 70));
+
+        editor.resize_pane(editor.selected_window(), 20, 41);
+
+        let shown = lines(&editor);
+        assert!(
+            shown.iter().all(|line| line.chars().count() <= 40),
+            "{shown:?}"
+        );
+        assert!(shown[3].starts_with("Type a path and the list narrows"));
     }
 
     #[test]
