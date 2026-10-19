@@ -26,6 +26,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 - `M-x load-theme` starts on the theme in use and previews the selected theme across the whole editor; `C-g` puts the old one back.
 - Switching themes fades 20% faster.
+- `M-x oxmacs-doctor` opens at once and fills in its tools as they answer; `g` keeps the last results while it checks again.
+- R starts about 200 ms sooner.
 
 ### Fixed
 
