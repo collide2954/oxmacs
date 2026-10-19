@@ -45,3 +45,24 @@ fn help_comes_back_as_markers_and_leaves_the_last_value_alone() {
     );
     assert!(output.contains("\u{1}help\u{2}median "), "{output:?}");
 }
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
+fn completions_come_back_with_where_they_start() {
+    let output = session(
+        "mydata <- data.frame(alpha = 1, beta = 2)\ngetOption(\"oxmacs\")$complete(\"mydata$a\", 8L)\ngetOption(\"oxmacs\")$complete(\"x <- pri\", 8L)\ngetOption(\"oxmacs\")$complete(\"library(stat\", 12L)\nq()\n",
+    );
+
+    assert!(
+        output.contains("\u{1}complete\u{2}0\tmydata$alpha\u{3}"),
+        "{output:?}"
+    );
+    assert!(
+        output.contains("\u{1}complete\u{2}5\tprincomp\tprint\t"),
+        "{output:?}"
+    );
+    assert!(
+        output.contains("\u{1}complete\u{2}8\tstats\tstats4"),
+        "{output:?}"
+    );
+}

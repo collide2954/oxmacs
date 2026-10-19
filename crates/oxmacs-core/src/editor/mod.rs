@@ -21,6 +21,7 @@ pub use job::{Job, JobId, Outcome};
 pub use languages::preview::PreviewScroll;
 pub use motion::mouse::{Cell, Clicks};
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
+pub use prompts::popup::PopupView;
 pub use prompts::question::Question;
 pub use search::isearch::Search;
 pub use search::replace::Replace;
@@ -101,6 +102,8 @@ pub struct Editor {
     weather_keymap: Keymap,
     chat_keymap: Keymap,
     search_keymap: Keymap,
+    popup_keymap: Keymap,
+    popup: Option<prompts::popup::Popup>,
     pending: Vec<Key>,
     last_key: Option<Key>,
     last_command: Option<Command>,
@@ -178,6 +181,8 @@ impl Editor {
             weather_keymap: bindings::weather(),
             chat_keymap: bindings::chat(),
             search_keymap: bindings::search(),
+            popup_keymap: bindings::popup(),
+            popup: None,
             pending: Vec::new(),
             last_key: None,
             last_command: None,
@@ -382,6 +387,12 @@ impl Editor {
     }
 
     fn lookup(&self, keys: &[Key]) -> Lookup {
+        if self.popup.is_some()
+            && keys.len() == 1
+            && let found @ Lookup::Command(_) = self.popup_keymap.lookup(keys)
+        {
+            return found;
+        }
         let local = if self.minibuffer.is_some() {
             Some(&self.minibuffer_keymap)
         } else {
@@ -412,11 +423,11 @@ impl Editor {
             Scope::Help => Some(&self.help_keymap),
             Scope::Weather => Some(&self.weather_keymap),
             Scope::Chat => Some(&self.chat_keymap),
-            Scope::Global | Scope::Minibuffer | Scope::Search => None,
+            Scope::Global | Scope::Minibuffer | Scope::Search | Scope::Popup => None,
         }
     }
 
-    fn keymaps(&self) -> [(Scope, &Keymap); 17] {
+    fn keymaps(&self) -> [(Scope, &Keymap); 18] {
         [
             (Scope::Global, &self.keymap),
             (Scope::Minibuffer, &self.minibuffer_keymap),
@@ -435,6 +446,7 @@ impl Editor {
             (Scope::Help, &self.help_keymap),
             (Scope::Weather, &self.weather_keymap),
             (Scope::Chat, &self.chat_keymap),
+            (Scope::Popup, &self.popup_keymap),
         ]
     }
 
@@ -524,6 +536,7 @@ impl Editor {
         self.perform(command, goal_column, previous);
         self.reset_selection(command);
         self.refresh_minibuffer();
+        self.refresh_popup(command);
         self.reveal_point();
     }
 }

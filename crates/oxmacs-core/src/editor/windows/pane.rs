@@ -4,7 +4,7 @@ use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
 use crate::editor::buffers::Mode;
 use crate::editor::motion::movement::display_column;
 use crate::editor::windows::status::{BufferState, Status};
-use crate::editor::{Editor, Gutter};
+use crate::editor::{Editor, Gutter, PopupView};
 use crate::external::diagnostics::Severity;
 use crate::files::LineEnding;
 use crate::irc::network::Member;
@@ -146,6 +146,18 @@ impl<'a> Pane<'a> {
             .distance(self.viewport.top(), spot, self.viewport.rows())
             .unwrap_or(0);
         (layout.column(self.point), row)
+    }
+
+    pub fn popup(&self) -> Option<PopupView> {
+        if !self.selected {
+            return None;
+        }
+        self.editor.popup_view(
+            self.buffer().id(),
+            &self.layout(),
+            self.viewport.top(),
+            self.viewport.rows(),
+        )
     }
 
     pub fn cursor_glyph(&self) -> (String, usize) {

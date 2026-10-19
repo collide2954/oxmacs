@@ -198,6 +198,8 @@ const R: &[(&str, Command)] = &[
     ("C-c C-c", Command::RSendFunction),
     ("C-c C-z", Command::RSwitchToConsole),
     ("C-c C-v", Command::RHelp),
+    ("TAB", Command::IndentOrComplete),
+    ("C-M-i", Command::CompletionAtPoint),
 ];
 
 const CONSOLE: &[(&str, Command)] = &[
@@ -206,6 +208,8 @@ const CONSOLE: &[(&str, Command)] = &[
     ("M-n", Command::ComintNextInput),
     ("C-c C-z", Command::RSwitchToConsole),
     ("C-c C-v", Command::RHelp),
+    ("TAB", Command::CompletionAtPoint),
+    ("C-M-i", Command::CompletionAtPoint),
 ];
 
 const PREVIEW: &[(&str, Command)] = &[
@@ -316,6 +320,21 @@ pub fn diagnostics() -> Keymap {
 
 pub fn help() -> Keymap {
     build(HELP)
+}
+
+const POPUP: &[(&str, Command)] = &[
+    ("C-n", Command::CompletionNext),
+    ("<down>", Command::CompletionNext),
+    ("C-p", Command::CompletionPrevious),
+    ("<up>", Command::CompletionPrevious),
+    ("TAB", Command::CompletionAccept),
+    ("RET", Command::CompletionAccept),
+    ("C-g", Command::CompletionQuit),
+    ("ESC", Command::CompletionQuit),
+];
+
+pub fn popup() -> Keymap {
+    build(POPUP)
 }
 
 pub fn chat() -> Keymap {

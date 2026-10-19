@@ -45,6 +45,18 @@ local({
     }
     last()
   }
+  oxmacs$complete <- function(line, cursor) {
+    found <- tryCatch({
+      utils:::.assignLinebuffer(line)
+      utils:::.assignEnd(cursor)
+      utils:::.guessTokenFromLine()
+      utils:::.completeToken()
+      c(utils:::.CompletionEnv[["start"]], utils:::.retrieveCompletions())
+    }, error = function(e) character())
+    marker("complete", paste(found, collapse = "\t"))
+    last()
+  }
+  utils::rc.settings(ipck = TRUE)
   options(
     oxmacs = oxmacs,
     help_type = "text",
@@ -190,6 +202,12 @@ mod tests {
         assert!(HELPER.contains("oxmacs$help <- function(topic)"));
         assert!(HELPER.contains("pager = function(files, header, title, delete.file)"));
         assert!(HELPER.contains("help_type = \"text\""));
+    }
+
+    #[test]
+    fn the_helper_completes_through_markers() {
+        assert!(HELPER.contains("oxmacs$complete <- function(line, cursor)"));
+        assert!(HELPER.contains("marker(\"complete\""));
     }
 
     #[test]

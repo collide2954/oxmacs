@@ -459,6 +459,24 @@ pub enum Command {
     BackwardButton,
     #[strum(message = "Run the command on this line")]
     PushButton,
+    #[strum(message = "Select the next completion")]
+    CompletionNext,
+    #[strum(message = "Select the previous completion")]
+    CompletionPrevious,
+    #[strum(message = "Insert the selected completion")]
+    CompletionAccept,
+    #[strum(message = "Close the completion popup")]
+    CompletionQuit,
+    #[strum(
+        message = "Complete the code before point",
+        detailed_message = "In R scripts and *R*, asks the running R session how the code before point could go on: objects, functions, arguments, columns after $ and packages. Several answers appear in a popup at point; a single answer is inserted at once."
+    )]
+    CompletionAtPoint,
+    #[strum(
+        message = "Indent the line, or complete once it is indented",
+        detailed_message = "Indents the line or selection like TAB elsewhere. When the line is already indented and point follows some code, completes the code before point instead."
+    )]
+    IndentOrComplete,
 }
 
 impl Command {
@@ -511,6 +529,8 @@ impl Command {
                 | Self::RustFormatBuffer
                 | Self::RInsertAssignment
                 | Self::RInsertPipe
+                | Self::CompletionAccept
+                | Self::IndentOrComplete
                 | Self::MarkdownInsertListItem
                 | Self::MarkdownPromote
                 | Self::MarkdownDemote
@@ -570,7 +590,8 @@ impl Command {
             Self::RInsertAssignment
             | Self::RInsertPipe
             | Self::RSendStatement
-            | Self::RSendFunction => Scope::R,
+            | Self::RSendFunction
+            | Self::IndentOrComplete => Scope::R,
             Self::ComintSendInput | Self::ComintPreviousInput | Self::ComintNextInput => {
                 Scope::Console
             }
@@ -597,6 +618,10 @@ impl Command {
             | Self::IsearchQueryReplaceRegexp
             | Self::IsearchExit
             | Self::IsearchAbort => Scope::Search,
+            Self::CompletionNext
+            | Self::CompletionPrevious
+            | Self::CompletionAccept
+            | Self::CompletionQuit => Scope::Popup,
             _ => Scope::Global,
         }
     }
@@ -621,6 +646,7 @@ pub enum Scope {
     Help,
     Weather,
     Chat,
+    Popup,
 }
 
 impl Scope {
@@ -643,6 +669,7 @@ impl Scope {
             Self::Help => Some("*Help*"),
             Self::Weather => Some("*Weather*"),
             Self::Chat => Some("IRC buffers"),
+            Self::Popup => Some("the completion popup"),
         }
     }
 }

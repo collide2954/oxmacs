@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::{env, fs, io, process};
 
 use crate::editor::buffers::Mode;
+use crate::editor::languages::r_complete::Asked;
 use crate::editor::prompts::input_line::InputLine;
 use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::external::r::{self, Piece, Stream};
@@ -21,6 +22,7 @@ pub(in crate::editor) struct Console {
     stream: Stream,
     expected: VecDeque<Option<String>>,
     waiting: bool,
+    asked: Option<Asked>,
 }
 
 static HELPERS: AtomicU64 = AtomicU64::new(0);
@@ -63,6 +65,27 @@ impl Editor {
 
     pub(super) fn r_running(&self) -> bool {
         self.console().is_some_and(|console| console.job.is_some())
+    }
+
+    pub(super) fn r_waiting(&self) -> bool {
+        self.console().is_some_and(|console| console.waiting)
+    }
+
+    pub(super) fn console_input_start(&self) -> Option<usize> {
+        let Some(Mode::Console(console)) = self.buffers.mode(0) else {
+            return None;
+        };
+        console.input.start(self.buffers.current())
+    }
+
+    pub(super) fn set_r_asked(&mut self, asked: Option<Asked>) {
+        if let Some(console) = self.console_mut() {
+            console.asked = asked;
+        }
+    }
+
+    pub(super) fn take_r_asked(&mut self) -> Option<Asked> {
+        self.console_mut().and_then(|console| console.asked.take())
     }
 
     pub(in crate::editor) fn run_r(&mut self) {
@@ -125,6 +148,7 @@ impl Editor {
             console.helper = Some(helper);
             console.stream = Stream::default();
             console.expected.clear();
+            console.asked = None;
             console.waiting = false;
             return true;
         }
@@ -140,6 +164,7 @@ impl Editor {
                     stream: Stream::default(),
                     expected: VecDeque::new(),
                     waiting: false,
+                    asked: None,
                 }),
             );
         });
@@ -318,6 +343,7 @@ impl Editor {
         match kind {
             "message" => self.show_message(payload),
             "help" => self.show_r_help(payload),
+            "complete" => self.r_completions(payload),
             _ => {}
         }
     }
