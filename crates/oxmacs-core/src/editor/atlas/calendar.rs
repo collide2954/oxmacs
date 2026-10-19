@@ -34,6 +34,18 @@ fn short(entry: &Entry) -> String {
     }
 }
 
+fn in_hour(entry: &Entry, start: jiff::civil::Time) -> String {
+    let minutes = if start.minute() == 0 {
+        String::new()
+    } else {
+        format!(":{:02} ", start.minute())
+    };
+    match &entry.kind {
+        Kind::Task { state, .. } => format!("{minutes}[{}] {}", state.mark(), entry.title),
+        Kind::Event { .. } => format!("{minutes}{}", entry.title),
+    }
+}
+
 fn entry_face(entry: &Entry) -> Highlight {
     match &entry.kind {
         Kind::Event { .. } => Highlight::Attribute,
@@ -401,7 +413,7 @@ fn hour_cell(grid: &Grid<'_>, day: Date, hour: i8) -> (String, Option<Highlight>
         };
         if start.hour() == hour {
             return (
-                format!(" {}", fit(&short(entry), grid.cell - 1)),
+                format!(" {}", fit(&in_hour(entry, start), grid.cell - 1)),
                 Some(entry_face(entry)),
             );
         }
@@ -532,14 +544,16 @@ mod tests {
 
     #[test]
     fn w_shows_the_week_by_hour() {
-        let (_dir, mut editor) = calendar("");
+        let (_dir, mut editor) = calendar("@2026-10-20 09:30-10:00 Dentist\n");
 
         press(&mut editor, "w");
 
         assert!(lines(&editor)[0].starts_with("Week of 19 October 2026"));
         let header = line_with(&editor, "Tue 20");
         let column = header.find("[Mon 19]").unwrap();
-        assert!(line_with(&editor, "10:00  ")[column..].starts_with(" 10:00 Vi"));
+        let tuesday = header.find("Tue 20").unwrap() - 1;
+        assert!(line_with(&editor, "10:00  ")[column..].starts_with(" Visit nur"));
+        assert!(line_with(&editor, "09:00  ")[tuesday..].starts_with(" :30 Denti"));
         assert!(line_with(&editor, "11:00  ")[column..].starts_with(" │"));
         assert!(!line_with(&editor, "12:00  ")[column..].starts_with(" │"));
         assert!(line_with(&editor, "all day").contains("[ ] Seeds"));
