@@ -1,5 +1,6 @@
 pub(super) mod numbers;
 pub(super) mod pane;
+pub(super) mod status;
 pub(super) mod tiling;
 
 use crate::display::{Layout, Viewport};

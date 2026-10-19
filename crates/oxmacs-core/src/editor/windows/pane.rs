@@ -3,6 +3,7 @@ use std::ops::Range;
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
 use crate::editor::buffers::Mode;
 use crate::editor::motion::movement::display_column;
+use crate::editor::windows::status::{BufferState, Status};
 use crate::editor::{Editor, Gutter};
 use crate::external::diagnostics::Severity;
 use crate::files::LineEnding;
@@ -169,36 +170,35 @@ impl<'a> Pane<'a> {
     }
 
     pub fn mode_line(&self) -> String {
+        self.status().to_string()
+    }
+
+    pub fn status(&self) -> Status {
         let buffer = self.buffer();
         let state = if self.editor.unsaved_settings(self.index) {
-            "%*"
+            BufferState::UnsavedSettings
         } else if buffer.is_read_only() {
-            "%%"
+            BufferState::ReadOnly
         } else if buffer.is_modified() {
-            "**"
+            BufferState::Modified
         } else {
-            "--"
+            BufferState::Unmodified
         };
-        let crlf = buffer
-            .file()
-            .is_some_and(|file| file.format.line_ending == LineEnding::CrLf);
         let language = self.editor.buffers.language(self.index);
-        let mode = language
-            .map(|language| format!("   ({})", language.name()))
-            .unwrap_or_default();
-        let lint = buffer
-            .file()
-            .filter(|_| language == Some(Language::Rust))
-            .and_then(|file| self.editor.lint_status(&file.path))
-            .map(|status| format!("   {status}"))
-            .unwrap_or_default();
-        format!(
-            "{state} {}   L{} C{}{}{mode}{lint}",
-            buffer.name(),
-            buffer.line_of(self.point) + 1,
-            display_column(buffer, self.point, self.editor.tab_width),
-            if crlf { "   CRLF" } else { "" }
-        )
+        Status {
+            state,
+            name: buffer.name().to_owned(),
+            line: buffer.line_of(self.point) + 1,
+            column: display_column(buffer, self.point, self.editor.tab_width),
+            crlf: buffer
+                .file()
+                .is_some_and(|file| file.format.line_ending == LineEnding::CrLf),
+            mode: language.map(Language::name),
+            lint: buffer
+                .file()
+                .filter(|_| language == Some(Language::Rust))
+                .and_then(|file| self.editor.lint_status(&file.path)),
+        }
     }
 }
 

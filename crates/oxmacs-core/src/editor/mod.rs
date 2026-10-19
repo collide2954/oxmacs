@@ -25,6 +25,7 @@ pub use search::isearch::Search;
 pub use search::replace::Replace;
 pub use windows::numbers::Gutter;
 pub use windows::pane::{Pane, ScreenRow};
+pub use windows::status::{BufferState, Status};
 pub use windows::tiling::{Axis, Rect, Tiling, WindowId};
 
 use std::ops::Range;
