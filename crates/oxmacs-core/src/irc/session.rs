@@ -33,6 +33,7 @@ pub struct Identity {
     pub nick: String,
     pub username: String,
     pub realname: String,
+    pub password: Option<String>,
     pub sasl: Option<Sasl>,
 }
 
@@ -90,6 +91,9 @@ impl Session {
     pub fn start(&mut self) {
         self.negotiating = true;
         self.send(&Message::new("CAP", ["LS", "302"]));
+        if let Some(password) = self.identity.password.clone() {
+            self.send(&Message::new("PASS", [password]));
+        }
         self.send(&Message::new("NICK", [self.nick.clone()]));
         self.send(&Message::new(
             "USER",
@@ -389,6 +393,7 @@ mod tests {
             nick: "oxtest".to_owned(),
             username: "oxtest".to_owned(),
             realname: "oxmacs".to_owned(),
+            password: None,
             sasl: sasl.then(|| Sasl {
                 account: "oxtest".to_owned(),
                 password: "hunter2".to_owned(),
@@ -419,6 +424,26 @@ mod tests {
         assert_eq!(
             session.take_outgoing(),
             ["CAP LS 302", "NICK oxtest", "USER oxtest 0 * oxmacs"]
+        );
+    }
+
+    #[test]
+    fn a_server_password_is_sent_before_the_nick() {
+        let mut session = Session::new(Identity {
+            password: Some("pw".to_owned()),
+            ..identity(false)
+        });
+
+        session.start();
+
+        assert_eq!(
+            session.take_outgoing(),
+            [
+                "CAP LS 302",
+                "PASS pw",
+                "NICK oxtest",
+                "USER oxtest 0 * oxmacs"
+            ]
         );
     }
 

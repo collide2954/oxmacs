@@ -672,6 +672,7 @@ mod tests {
             nick: "oxtest".to_owned(),
             username: "oxtest".to_owned(),
             realname: "oxmacs".to_owned(),
+            password: None,
             sasl: None,
         });
         session.receive(":srv 001 oxtest :Welcome");

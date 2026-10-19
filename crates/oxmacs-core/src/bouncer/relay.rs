@@ -56,6 +56,7 @@ impl Upstream {
             nick: server.nick.clone(),
             username: server.username().to_owned(),
             realname: server.realname().to_owned(),
+            password: None,
             sasl: server
                 .sasl
                 .clone()
