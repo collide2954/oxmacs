@@ -95,16 +95,33 @@ pub fn rustfmt(text: &str, directory: &Path, edition: &str) -> Result<String, St
     let mut command = Command::new(program);
     command
         .args(["--edition", edition, "--config", "newline_style=Unix"])
-        .current_dir(directory)
+        .current_dir(directory);
+    pipe(command, text)
+}
+
+pub fn air_format(program: &Path, text: &str, file: &Path) -> Result<String, String> {
+    let mut command = Command::new(program);
+    command.arg("format").arg("--stdin-file-path").arg(file);
+    if let Some(directory) = file.parent().filter(|directory| directory.is_dir()) {
+        command.current_dir(directory);
+    }
+    pipe(command, text)
+}
+
+fn pipe(mut command: Command, text: &str) -> Result<String, String> {
+    command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     hide_console(&mut command);
-    let mut child = command.spawn().map_err(|error| error.to_string())?;
+    let program = command.get_program().to_string_lossy().into_owned();
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("cannot run {program}: {error}"))?;
     let mut input = child
         .stdin
         .take()
-        .ok_or_else(|| "could not write to rustfmt".to_owned())?;
+        .ok_or_else(|| format!("cannot write to {program}"))?;
     let output = thread::scope(|scope| {
         scope.spawn(move || input.write_all(text.as_bytes()));
         child.wait_with_output()
@@ -475,6 +492,31 @@ mod tests {
             r_binary(&new)
         );
         assert_eq!(find_r_in(None, None, None, Vec::new), None);
+    }
+
+    #[test]
+    fn air_that_cannot_run_says_so() {
+        let error =
+            air_format(Path::new("oxmacs-no-such-air"), "x<-1", Path::new("a.R")).unwrap_err();
+
+        assert!(
+            error.starts_with("cannot run oxmacs-no-such-air"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn air_formats_text_when_installed() {
+        let Some(air) = find("air", env::var_os("PATH").as_deref()) else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+
+        assert_eq!(
+            air_format(&air, "x<-c(1,2)", &dir.path().join("a.R")),
+            Ok("x <- c(1, 2)\n".to_owned())
+        );
+        assert!(air_format(&air, "x <- (", &dir.path().join("a.R")).is_err());
     }
 
     #[test]
