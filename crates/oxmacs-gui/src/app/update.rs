@@ -113,6 +113,16 @@ impl App {
         }
     }
 
+    #[cfg(feature = "animated-splash")]
+    fn sync_splash_clock(&mut self) {
+        let shown = self.editor.splash_animation();
+        match (shown, self.splash_clock) {
+            (Some(animation), Some((known, _))) if animation == known => {}
+            (Some(animation), _) => self.splash_clock = Some((animation, Instant::now())),
+            (None, _) => self.splash_clock = None,
+        }
+    }
+
     fn tick(&mut self, now: Instant) {
         self.now = now;
         if self
@@ -224,6 +234,8 @@ impl App {
         }
         self.editor.prepare_display();
         self.refresh_previews();
+        #[cfg(feature = "animated-splash")]
+        self.sync_splash_clock();
         let plots = self.load_plots();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {

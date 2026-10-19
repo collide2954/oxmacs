@@ -4,7 +4,7 @@ use iced::widget::{
 };
 use iced::{Border, Color, ContentFit, Element, Length};
 use oxmacs_core::clock;
-use oxmacs_core::editor::{Axis, GalleryView, PlotView, Tiling, WindowId};
+use oxmacs_core::editor::{Axis, GalleryView, Pane, PlotView, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
 
 use super::{App, Message, preview_id};
@@ -102,7 +102,40 @@ impl App {
             ]
             .into();
         }
-        let body: Element<'_, Message> = match pane
+        let body = self.body(pane, window, faces);
+        let body = match pane.members() {
+            Some(members) => {
+                let own = pane.own_nick();
+                row![
+                    body,
+                    nick_list::view(&members, own.as_deref(), faces, self.text_size)
+                ]
+                .into()
+            }
+            None => body,
+        };
+        let last = self.editor.tiling().windows().last() == Some(&window);
+        let weather = self
+            .editor
+            .weather_brief()
+            .filter(|_| last && self.editor.config().mode_line_weather);
+        let time = self.clock.as_deref().filter(|_| last).map(clock::now);
+        let extras: Vec<String> = weather.into_iter().chain(time).collect();
+        let look = Look {
+            faces,
+            active,
+            font: self.font,
+            size: self.text_size,
+        };
+        column![
+            body,
+            mode_line::view(&pane.status(), &extras, self.mode_line_style, look)
+        ]
+        .into()
+    }
+
+    fn body<'a>(&'a self, pane: Pane<'a>, window: WindowId, faces: Faces) -> Element<'a, Message> {
+        let body: Element<'a, Message> = match pane
             .preview_source()
             .and_then(|source| self.previews.iter().find(|(id, ..)| *id == source.id()))
         {
@@ -141,35 +174,22 @@ impl App {
             .height(Length::Fill)
             .into(),
         };
-        let body = match pane.members() {
-            Some(members) => {
-                let own = pane.own_nick();
-                row![
-                    body,
-                    nick_list::view(&members, own.as_deref(), faces, self.text_size)
-                ]
-                .into()
-            }
-            None => body,
+        #[cfg(feature = "animated-splash")]
+        let body = match (pane.splash_art(), self.splash_seconds()) {
+            (Some(animation), Some(seconds)) => column![
+                crate::widgets::splash_art::SplashArt::new(
+                    animation,
+                    seconds,
+                    faces,
+                    self.font,
+                    self.text_size
+                ),
+                body
+            ]
+            .into(),
+            _ => body,
         };
-        let last = self.editor.tiling().windows().last() == Some(&window);
-        let weather = self
-            .editor
-            .weather_brief()
-            .filter(|_| last && self.editor.config().mode_line_weather);
-        let time = self.clock.as_deref().filter(|_| last).map(clock::now);
-        let extras: Vec<String> = weather.into_iter().chain(time).collect();
-        let look = Look {
-            faces,
-            active,
-            font: self.font,
-            size: self.text_size,
-        };
-        column![
-            body,
-            mode_line::view(&pane.status(), &extras, self.mode_line_style, look)
-        ]
-        .into()
+        body
     }
 
     fn plot(&self, window: WindowId, plot: &PlotView, faces: Faces) -> Element<'_, Message> {
