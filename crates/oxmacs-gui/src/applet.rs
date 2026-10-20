@@ -1,18 +1,56 @@
 use std::fmt;
 
-use iced::Task;
+use iced::time::Instant;
+use iced::{Element, Font, Subscription, Task};
 use oxmacs_core::applet::{Applet, Payload};
+use oxmacs_core::editor::{Editor, Pane};
+use oxmacs_core::theme::Theme as Faces;
+
+#[derive(Debug, Clone, Copy)]
+pub struct Context {
+    pub faces: Faces,
+    pub font: Font,
+    pub size: f32,
+    pub now: Instant,
+    pub animations: bool,
+}
 
 pub trait GuiApplet: Applet + fmt::Debug {
-    fn perform(&self, _effect: &Payload) -> Option<Task<Payload>> {
+    fn perform(&mut self, _effect: &Payload) -> Option<Task<Payload>> {
         None
     }
+
+    fn above<'a>(
+        &'a self,
+        _editor: &'a Editor,
+        _pane: Pane<'a>,
+        _context: &Context,
+    ) -> Option<Element<'a, Payload>> {
+        None
+    }
+
+    fn beside<'a>(
+        &'a self,
+        _editor: &'a Editor,
+        _pane: Pane<'a>,
+        _context: &Context,
+    ) -> Option<Element<'a, Payload>> {
+        None
+    }
+
+    fn subscription(&self, _editor: &Editor) -> Subscription<Payload> {
+        Subscription::none()
+    }
+
+    fn animating(&self, _editor: &Editor) -> bool {
+        false
+    }
+
+    fn tick(&mut self, _editor: &Editor, _now: Instant) {}
 }
 
 #[cfg(test)]
 mod tests {
-    use oxmacs_core::editor::Editor;
-
     use super::*;
 
     #[derive(Debug)]
@@ -37,7 +75,7 @@ mod tests {
     }
 
     impl GuiApplet for Echo {
-        fn perform(&self, effect: &Payload) -> Option<Task<Payload>> {
+        fn perform(&mut self, effect: &Payload) -> Option<Task<Payload>> {
             effect.get::<Ping>()?;
             Some(Task::done(Payload::new(Pong)))
         }
@@ -47,5 +85,21 @@ mod tests {
     fn gui_applets_perform_only_the_effects_they_know() {
         assert!(Echo.perform(&Payload::new(Ping)).is_some());
         assert!(Echo.perform(&Payload::new(Pong)).is_none());
+    }
+
+    #[test]
+    fn gui_applets_add_nothing_unless_they_choose_to() {
+        let editor = Editor::new();
+        let context = Context {
+            faces: *editor.theme(),
+            font: Font::MONOSPACE,
+            size: 14.0,
+            now: Instant::now(),
+            animations: true,
+        };
+
+        assert!(Echo.above(&editor, editor.pane(), &context).is_none());
+        assert!(Echo.beside(&editor, editor.pane(), &context).is_none());
+        assert!(!Echo.animating(&editor));
     }
 }

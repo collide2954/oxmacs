@@ -32,6 +32,8 @@ An applet is an ordinary Rust crate. It depends on `oxmacs-core` (and on `oxmacs
 
 **Effects and events.** Commands never block. `editor.request(Roll)` asks the GUI to do work; `GuiApplet::perform` in the same crate recognizes `Roll`, does the work in an iced `Task`, and answers with an event, `Rolled(4)`. `editor.on_event(rolled)` routes that typed event back to the applet.
 
+**Drawing in the GUI.** `GuiApplet` can also add widgets around a window. `above` draws the die over the demo buffer and `beside` draws the tally to its right; both check `pane.applet_buffer::<View>()` so they only appear in the demo's own windows. Anything they emit is a typed event that comes back through `on_event`. `animating` asks for animation frames while a roll is pending, and `subscription` and `tick` are there for applets that need timers, streams or GUI-side state.
+
 ## Wiring it in
 
 Three lines outside the crate add an applet to oxmacs:

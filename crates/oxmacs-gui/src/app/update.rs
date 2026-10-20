@@ -233,10 +233,7 @@ impl App {
             Message::WeatherTick => self.editor.weather_tick(Timestamp::now()),
             Message::AppletEvent(event) => self.editor.deliver(&event),
         }
-        self.editor.prepare_display();
-        self.refresh_previews();
-        #[cfg(feature = "animated-splash")]
-        self.sync_splash_clock();
+        self.settle();
         let plots = self.load_plots();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {
@@ -251,6 +248,16 @@ impl App {
             return iced::exit();
         }
         Task::batch([self.pending_effects(), plots])
+    }
+
+    fn settle(&mut self) {
+        self.editor.prepare_display();
+        for applet in &mut self.applets {
+            applet.tick(&self.editor, self.now);
+        }
+        self.refresh_previews();
+        #[cfg(feature = "animated-splash")]
+        self.sync_splash_clock();
     }
 
     fn sample_processes(&mut self) {
@@ -373,7 +380,7 @@ impl App {
             }
             Effect::Applet(effect) => self
                 .applets
-                .iter()
+                .iter_mut()
                 .find_map(|applet| applet.perform(&effect))
                 .map_or_else(Task::none, |task| task.map(Message::AppletEvent)),
         }

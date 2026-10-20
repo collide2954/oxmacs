@@ -8,6 +8,7 @@ use oxmacs_core::editor::{Axis, GalleryView, Pane, PlotView, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
 
 use super::{App, Message, preview_id};
+use crate::applet::Context;
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
 use crate::widgets::mode_line::{self, Look};
@@ -102,7 +103,7 @@ impl App {
             ]
             .into();
         }
-        let body = self.body(pane, window, faces);
+        let body = self.decorated(pane, self.body(pane, window, faces), faces);
         let body = match pane.members() {
             Some(members) => {
                 let own = pane.own_nick();
@@ -132,6 +133,43 @@ impl App {
             mode_line::view(&pane.status(), &extras, self.mode_line_style, look)
         ]
         .into()
+    }
+
+    fn decorated<'a>(
+        &'a self,
+        pane: Pane<'a>,
+        body: Element<'a, Message>,
+        faces: Faces,
+    ) -> Element<'a, Message> {
+        let context = Context {
+            faces,
+            font: self.font,
+            size: self.text_size,
+            now: self.now,
+            animations: self.animations,
+        };
+        let above: Vec<Element<'a, Message>> = self
+            .applets
+            .iter()
+            .filter_map(|applet| applet.above(&self.editor, pane, &context))
+            .map(|element| element.map(Message::AppletEvent))
+            .collect();
+        let beside: Vec<Element<'a, Message>> = self
+            .applets
+            .iter()
+            .filter_map(|applet| applet.beside(&self.editor, pane, &context))
+            .map(|element| element.map(Message::AppletEvent))
+            .collect();
+        let body = if above.is_empty() {
+            body
+        } else {
+            Column::with_children(above).push(body).into()
+        };
+        if beside.is_empty() {
+            body
+        } else {
+            Row::with_children(std::iter::once(body).chain(beside)).into()
+        }
     }
 
     fn body<'a>(&'a self, pane: Pane<'a>, window: WindowId, faces: Faces) -> Element<'a, Message> {

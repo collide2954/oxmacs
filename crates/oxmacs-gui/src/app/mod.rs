@@ -219,7 +219,12 @@ impl App {
         let splash = self.animations && self.splash_clock.is_some();
         #[cfg(not(feature = "animated-splash"))]
         let splash = false;
-        fading || splash || self.reveal.is_animating(self.now)
+        let applets = self.animations
+            && self
+                .applets
+                .iter()
+                .any(|applet| applet.animating(&self.editor));
+        fading || splash || applets || self.reveal.is_animating(self.now)
     }
 
     #[cfg(feature = "animated-splash")]
@@ -267,8 +272,14 @@ impl App {
         } else {
             Subscription::none()
         };
+        let applets = Subscription::batch(
+            self.applets
+                .iter()
+                .map(|applet| applet.subscription(&self.editor).map(Message::AppletEvent)),
+        );
         Subscription::batch([
             keyboard::listen().map(Message::Keyboard),
+            applets,
             system::theme_changes().map(Message::AppearanceChanged),
             watcher::changes(Watched {
                 files: self.editor.visited_files(),

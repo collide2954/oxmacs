@@ -3439,6 +3439,7 @@ name = "oxmacs-demo"
 version = "0.1.0"
 dependencies = [
  "iced",
+ "iced_test",
  "oxmacs-core",
  "oxmacs-gui",
 ]

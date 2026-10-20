@@ -1,5 +1,7 @@
+use std::any::Any;
 use std::ops::Range;
 
+use crate::applet::AppletBuffer;
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
 #[cfg(feature = "animated-splash")]
 use crate::editor::SplashAnimation;
@@ -163,6 +165,14 @@ impl<'a> Pane<'a> {
             Some(Mode::Splash(splash)) => Some(splash.art),
             _ => None,
         }
+    }
+
+    pub fn applet_buffer<T: AppletBuffer>(&self) -> Option<&'a T> {
+        let Some(Mode::Applet(view)) = self.editor.buffers.mode(self.index) else {
+            return None;
+        };
+        let any: &dyn Any = view.as_ref();
+        any.downcast_ref()
     }
 
     pub fn header_lines(&self) -> Vec<(String, LineStyle)> {
