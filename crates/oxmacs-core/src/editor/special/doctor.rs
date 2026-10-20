@@ -174,8 +174,14 @@ impl Editor {
             &format!("oxmacs {}", env!("CARGO_PKG_VERSION")),
             None,
         );
+        let applets = self
+            .installed()
+            .iter()
+            .filter(|applet| applet.opt_in)
+            .map(|applet| (applet.name, applet.version));
         let features: Vec<String> = features::opt_in()
             .into_iter()
+            .chain(applets)
             .map(|(name, version)| format!("{name} {version}"))
             .collect();
         let features = if features.is_empty() {
@@ -537,6 +543,39 @@ mod tests {
             line_with(&editor, "rust-analyzer")
                 .contains("✗ not found; rustup component add rust-analyzer")
         );
+    }
+
+    struct Sample {
+        opt_in: bool,
+    }
+
+    impl crate::applet::Applet for Sample {
+        fn name(&self) -> &'static str {
+            if self.opt_in { "sample" } else { "built-in" }
+        }
+
+        fn version(&self) -> &'static str {
+            "0.4.0"
+        }
+
+        fn opt_in(&self) -> bool {
+            self.opt_in
+        }
+
+        fn install(&self, _editor: &mut Editor) {}
+    }
+
+    #[test]
+    fn installed_opt_in_applets_are_listed_with_their_versions() {
+        let (_dir, mut editor) = doctor();
+        editor.install(&Sample { opt_in: true });
+        editor.install(&Sample { opt_in: false });
+
+        press(&mut editor, "g");
+
+        let line = line_with(&editor, "Features");
+        assert!(line.contains("sample 0.4.0"), "{line}");
+        assert!(!line.contains("built-in"), "{line}");
     }
 
     #[test]

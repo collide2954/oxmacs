@@ -10,6 +10,7 @@ use iced::widget::{self, markdown};
 use iced::{Animation, Event, Font, Subscription, Task, Theme, event, keyboard, system, window};
 use jiff::Timestamp;
 use native_theme::detect::prefers_reduced_motion;
+use oxmacs_core::applet::Applet;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{self, Config, ConfigError, ModeLineStyle};
@@ -133,9 +134,16 @@ impl App {
         app
     }
 
-    pub fn boot(config: &Result<Config, ConfigError>, visits: &[Visit]) -> (Self, Task<Message>) {
+    pub fn boot(
+        config: &Result<Config, ConfigError>,
+        visits: &[Visit],
+        applets: Vec<Box<dyn Applet>>,
+    ) -> (Self, Task<Message>) {
         let splash = config.as_ref().map_or(true, |config| config.splash);
         let mut app = Self::new(config.as_ref());
+        for applet in applets {
+            app.editor.install(applet.as_ref());
+        }
         app.start(visits, splash);
         app.reduced_motion = prefers_reduced_motion();
         app.configure(&app.editor.config().clone());

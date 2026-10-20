@@ -13,24 +13,29 @@ pub use iced::Result;
 
 use app::App;
 use iced::{Size, window};
+use oxmacs_core::applet::Applet;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::config::WindowMode;
 
-pub fn run(visits: Vec<Visit>) -> Result {
+pub fn run(visits: Vec<Visit>, applets: fn() -> Vec<Box<dyn Applet>>) -> Result {
     let config = app::load_config();
     let mode = config
         .as_ref()
         .map(|config| config.window_mode)
         .unwrap_or_default();
-    iced::application(move || App::boot(&config, &visits), App::update, App::view)
-        .title(App::title)
-        .theme(App::theme)
-        .subscription(App::subscription)
-        .font(fonts::JETBRAINS_MONO_REGULAR)
-        .default_font(fonts::EDITOR)
-        .window(window_settings(mode))
-        .antialiasing(true)
-        .run()
+    iced::application(
+        move || App::boot(&config, &visits, applets()),
+        App::update,
+        App::view,
+    )
+    .title(App::title)
+    .theme(App::theme)
+    .subscription(App::subscription)
+    .font(fonts::JETBRAINS_MONO_REGULAR)
+    .default_font(fonts::EDITOR)
+    .window(window_settings(mode))
+    .antialiasing(true)
+    .run()
 }
 
 fn window_settings(mode: WindowMode) -> window::Settings {
