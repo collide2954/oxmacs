@@ -19,7 +19,6 @@ pub(in crate::editor) enum Kind {
     RSession,
     Compile,
     Lint,
-    Bouncer,
     Named(&'static str),
 }
 
@@ -29,17 +28,28 @@ impl Kind {
             Self::RSession => "R session",
             Self::Compile => "compile",
             Self::Lint => "lint",
-            Self::Bouncer => "bouncer",
             Self::Named(label) => label,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ProcessKey(u64);
+
+#[derive(Debug, Clone)]
+pub struct ProcessSpec {
+    pub kind: &'static str,
+    pub name: String,
+    pub detail: String,
+    pub pid: Option<u32>,
+    pub stop: Option<fn(&mut Editor)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::editor) enum Source {
     Job(JobId),
     Connection(ConnectionId),
-    Daemon,
+    Applet(ProcessKey),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,12 +93,14 @@ struct Tracked {
     buffer: Option<BufferId>,
     cpu: Option<f32>,
     memory: Option<u64>,
+    stop: Option<fn(&mut Editor)>,
 }
 
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Processes {
     tracked: Vec<Tracked>,
     now: Option<Timestamp>,
+    next_key: u64,
 }
 
 #[derive(Debug, Default)]
@@ -295,6 +307,7 @@ impl Editor {
             buffer,
             cpu: None,
             memory: None,
+            stop: None,
         });
     }
 
@@ -311,32 +324,53 @@ impl Editor {
             buffer: None,
             cpu: None,
             memory: None,
+            stop: None,
         });
     }
 
-    pub(in crate::editor) fn track_daemon(&mut self, pid: Option<u32>, detail: String) {
-        let known = self
+    pub fn track_process(&mut self, spec: ProcessSpec) -> ProcessKey {
+        let running = self
             .processes
             .tracked
             .iter()
-            .any(|entry| entry.source == Source::Daemon && !entry.status.finished());
-        if known {
-            self.update_tracked(Source::Daemon, |entry| entry.pid = pid.or(entry.pid));
-            return;
+            .rev()
+            .find_map(|entry| match entry.source {
+                Source::Applet(key)
+                    if entry.kind == Kind::Named(spec.kind)
+                        && entry.name == spec.name
+                        && !entry.status.finished() =>
+                {
+                    Some(key)
+                }
+                _ => None,
+            });
+        if let Some(key) = running {
+            self.update_tracked(Source::Applet(key), |entry| {
+                entry.pid = spec.pid.or(entry.pid);
+            });
+            return key;
         }
+        let key = ProcessKey(self.processes.next_key);
+        self.processes.next_key += 1;
         self.track(Tracked {
-            source: Source::Daemon,
-            kind: Kind::Bouncer,
-            name: "irc-daemon".to_owned(),
-            detail,
+            source: Source::Applet(key),
+            kind: Kind::Named(spec.kind),
+            name: spec.name,
+            detail: spec.detail,
             started: Timestamp::now(),
             ended: None,
-            pid,
+            pid: spec.pid,
             status: Status::Running,
             buffer: None,
             cpu: None,
             memory: None,
+            stop: spec.stop,
         });
+        key
+    }
+
+    pub fn process_ended(&mut self, key: ProcessKey) {
+        self.end_tracked(Source::Applet(key), Status::Exited(Some(0)));
     }
 
     fn update_tracked(&mut self, source: Source, change: impl FnOnce(&mut Tracked)) {
@@ -375,10 +409,6 @@ impl Editor {
         } else {
             self.end_tracked(Source::Connection(id), Status::Closed);
         }
-    }
-
-    pub(in crate::editor) fn daemon_stopped(&mut self) {
-        self.end_tracked(Source::Daemon, Status::Exited(Some(0)));
     }
 
     fn end_tracked(&mut self, source: Source, status: Status) {
@@ -520,9 +550,17 @@ impl Editor {
         match source {
             Source::Job(job) => self.effects.push(Effect::Kill(job)),
             Source::Connection(id) => self.stop_connection(id),
-            Source::Daemon => {
-                self.irc_stop_daemon();
-                self.daemon_stopped();
+            Source::Applet(key) => {
+                let stop = self
+                    .processes
+                    .tracked
+                    .iter()
+                    .find(|entry| entry.source == source)
+                    .and_then(|entry| entry.stop);
+                if let Some(stop) = stop {
+                    stop(self);
+                }
+                self.process_ended(key);
             }
         }
     }
@@ -534,7 +572,7 @@ mod tests {
 
     use jiff::{SignedDuration, Timestamp};
 
-    use super::Kind;
+    use super::{Kind, ProcessSpec};
     use crate::editor::test_support::{lines, press, question, type_text};
     use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 
@@ -701,6 +739,52 @@ mod tests {
 
         assert!(lines(&editor)[4].starts_with("cargo test"));
         assert!(lines(&editor)[4].contains("starting"));
+    }
+
+    #[derive(Debug, Default)]
+    struct Stopped(usize);
+
+    fn daemon(pid: Option<u32>) -> ProcessSpec {
+        ProcessSpec {
+            kind: "helper",
+            name: "sync-daemon".to_owned(),
+            detail: "oxmacs sync".to_owned(),
+            pid,
+            stop: Some(|editor| {
+                if let Some(stopped) = editor.applet_state_mut::<Stopped>() {
+                    stopped.0 += 1;
+                }
+            }),
+        }
+    }
+
+    #[test]
+    fn applets_track_their_own_processes_once_and_can_stop_them() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Stopped::default());
+
+        let first = editor.track_process(daemon(None));
+        let again = editor.track_process(daemon(Some(321)));
+        listed(&mut editor);
+
+        assert_eq!(first, again);
+        let shown = lines(&editor);
+        assert_eq!(shown.len(), 5, "{shown:?}");
+        for part in ["sync-daemon", "helper", "running", "321", "oxmacs sync"] {
+            assert!(shown[4].contains(part), "{part} in {}", shown[4]);
+        }
+
+        press(&mut editor, "M-< C-n C-n C-n C-n k y");
+
+        assert_eq!(
+            editor.applet_state::<Stopped>().map(|stopped| stopped.0),
+            Some(1)
+        );
+        assert!(lines(&editor)[4].contains("exited"), "{:?}", lines(&editor));
+        let later = editor.track_process(daemon(Some(400)));
+        assert_ne!(later, first);
+        editor.process_ended(later);
+        assert!(!lines(&editor).iter().any(|line| line.contains("running")));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use crate::config::{BouncerMode, IrcServer, PasswordSource};
 use crate::editor::chat::Link;
 use crate::editor::prompts::minibuffer::Purpose;
-use crate::editor::{ConnectionSpec, Editor, Effect};
+use crate::editor::{ConnectionSpec, Editor, Effect, ProcessSpec};
 use crate::external::net::Endpoint;
 use crate::irc::network::{Network, Target};
 use crate::irc::session::{Identity, Sasl, Session};
@@ -21,6 +21,16 @@ pub(in crate::editor) enum Secret {
 enum Route {
     Direct(Option<String>),
     Bouncer(Endpoint, String),
+}
+
+fn daemon(pid: Option<u32>) -> ProcessSpec {
+    ProcessSpec {
+        kind: "bouncer",
+        name: "irc-daemon".to_owned(),
+        detail: "oxmacs irc-daemon".to_owned(),
+        pid,
+        stop: Some(Editor::irc_stop_daemon),
+    }
 }
 
 pub(in crate::editor) fn endpoint(address: &str, tls: bool) -> Option<Endpoint> {
@@ -250,7 +260,7 @@ impl Editor {
         }
         if via_bouncer && self.config.irc_bouncer.mode == BouncerMode::Local {
             let pid = (self.irc.local_daemon)().map(|daemon| daemon.pid);
-            self.track_daemon(pid, "oxmacs irc-daemon".to_owned());
+            self.track_process(daemon(pid));
         }
         self.irc_note(&server.name, &note, false);
         self.show_chat(&server.name, &Target::Server);
@@ -275,7 +285,7 @@ impl Editor {
             return;
         }
         let pid = (self.irc.local_daemon)().map(|daemon| daemon.pid);
-        self.track_daemon(pid, "oxmacs irc-daemon".to_owned());
+        self.track_process(daemon(pid));
         for name in waiting {
             let server = self
                 .config

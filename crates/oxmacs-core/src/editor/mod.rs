@@ -33,6 +33,7 @@ pub use prompts::popup::PopupView;
 pub use prompts::question::Question;
 pub use search::isearch::Search;
 pub use search::replace::Replace;
+pub use special::processes::{ProcessKey, ProcessSpec};
 pub use windows::numbers::Gutter;
 pub use windows::pane::{Pane, ScreenRow};
 pub use windows::status::{BufferState, Status};
