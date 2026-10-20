@@ -513,7 +513,7 @@ impl Editor {
                     editor.keep_irc_password(&name, &password);
                 });
             }
-            _ => self.ask_to_connect(&server.name),
+            _ => self.ask_to_connect_irc(&server.name),
         }
     }
 
@@ -533,7 +533,16 @@ impl Editor {
             self.show_message(format!("Keychain: {problem}"));
             return;
         }
-        self.ask_to_connect(&server.name);
+        self.ask_to_connect_irc(&server.name);
+    }
+
+    fn ask_to_connect_irc(&mut self, name: &str) {
+        let name = name.to_owned();
+        self.ask(&format!("Connect to {name} now?"), move |editor, yes| {
+            if yes {
+                editor.connect_named_irc(&name);
+            }
+        });
     }
 
     pub(in crate::editor) fn irc_setup_cancel(&mut self) {

@@ -96,7 +96,11 @@ fn label(server: &str, target: &Target) -> String {
 impl Editor {
     pub(in crate::editor) fn irc(&mut self) {
         match self.config.irc_server.as_slice() {
-            [] => self.ask_to_set_up_irc(),
+            [] => self.ask("No IRC servers yet; set one up?", |editor, yes| {
+                if yes {
+                    editor.irc_setup();
+                }
+            }),
             [server] => {
                 let server = server.clone();
                 self.connect_irc(&server);
