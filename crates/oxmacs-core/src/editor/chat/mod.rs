@@ -176,7 +176,7 @@ impl Editor {
         self.irc_flush(index);
     }
 
-    pub fn irc_farewell(&mut self) {
+    pub(in crate::editor) fn irc_farewell(&mut self) {
         for index in 0..self.irc.links.len() {
             if self.irc.links[index].open {
                 self.irc_quit(index, "oxmacs");
@@ -1242,12 +1242,12 @@ mod tests {
     fn leaving_says_goodbye_to_every_open_server() {
         let (mut editor, id) = connected();
 
-        editor.irc_farewell();
+        editor.quitting();
 
         let effects = editor.take_effects();
         assert!(effects.contains(&Effect::Transmit(id, vec!["QUIT oxmacs".to_owned()])));
         assert!(effects.contains(&Effect::Disconnect(id)));
-        editor.irc_farewell();
+        editor.quitting();
         assert_eq!(editor.take_effects(), []);
     }
 

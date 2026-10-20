@@ -597,6 +597,26 @@ mod tests {
     }
 
     #[test]
+    fn applets_say_goodbye_when_the_editor_quits() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        editor.on_quit(|editor| {
+            if let Some(answers) = editor.applet_state_mut::<Answers>() {
+                answers.0.push("bye".to_owned());
+            }
+        });
+
+        editor.quitting();
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["bye".to_owned()])
+        );
+    }
+
+    #[test]
     fn state_is_kept_per_type() {
         let mut states = States::default();
         states.set(Count(3));

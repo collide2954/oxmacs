@@ -39,6 +39,17 @@ fn downcast<T: AppletBuffer>(view: &dyn AppletBuffer) -> Option<&T> {
 }
 
 impl Editor {
+    pub fn on_quit(&mut self, handler: fn(&mut Editor)) {
+        self.quit_handlers.push(handler);
+    }
+
+    pub fn quitting(&mut self) {
+        self.irc_farewell();
+        for handler in self.quit_handlers.clone() {
+            handler(self);
+        }
+    }
+
     pub fn on_configured(&mut self, handler: fn(&mut Editor)) {
         self.configured_handlers.push(handler);
     }

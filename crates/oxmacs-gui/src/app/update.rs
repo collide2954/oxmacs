@@ -226,7 +226,7 @@ impl App {
         let plots = self.load_plots();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {
-            self.editor.irc_farewell();
+            self.editor.quitting();
             let _ = self.pending_effects();
             for (_, connection) in self.connections.drain(..) {
                 connection.wait(FAREWELL);
