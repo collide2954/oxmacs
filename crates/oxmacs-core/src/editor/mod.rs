@@ -25,6 +25,7 @@ pub use effect::{ConnectionId, Effect, FetchId};
 pub use job::{Job, JobId, Outcome};
 pub use languages::preview::PreviewScroll;
 pub use languages::r_plots::{GalleryView, PlotView};
+pub use languages::registry::LineHighlighter;
 pub use motion::mouse::{Cell, Clicks};
 pub use page::{Page, clip, fill};
 pub use prompts::applet::Offer;
@@ -54,7 +55,6 @@ use crate::display::{Layout, LineStyle, Viewport};
 use crate::external::tools;
 use crate::input::bindings::Keymaps;
 use crate::input::{Key, KeyCode, KeyParseError, KeySequence, Keymap, Lookup, Modifiers};
-use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::{self, Appearance, Highlight, Theme};
 
@@ -158,6 +158,7 @@ pub struct Editor {
     fetches: effect::Fetches,
     next_connection: u64,
     connections: Vec<(ConnectionId, ConnectionSpec)>,
+    languages: Vec<languages::registry::Registered>,
     paren_pair: Option<(usize, usize)>,
     next_job: u64,
     last_compile: Option<String>,
@@ -248,6 +249,7 @@ impl Editor {
             fetches: effect::Fetches::default(),
             next_connection: 0,
             connections: Vec::new(),
+            languages: languages::registry::built_in(),
             paren_pair: None,
             next_job: 0,
             last_compile: None,
@@ -454,6 +456,10 @@ impl Editor {
     fn buffer_scope(&self) -> ScopeId {
         match self.buffers.mode(0) {
             Some(Mode::Applet(view)) => view.scope(),
+            Some(Mode::Text(Some(syntax))) => self
+                .registered(syntax.language())
+                .and_then(|known| known.scope)
+                .unwrap_or_else(|| Scope::Global.into()),
             _ => self.core_scope().into(),
         }
     }
@@ -475,11 +481,6 @@ impl Editor {
             Some(Mode::AtlasList(_)) => Scope::AtlasList,
             Some(Mode::Environment(_)) => Scope::Environment,
             Some(Mode::Table(_)) => Scope::Table,
-            Some(Mode::Text(Some(syntax))) if syntax.language() == Language::RUST => Scope::Rust,
-            Some(Mode::Text(Some(syntax))) if syntax.language() == Language::R => Scope::R,
-            Some(Mode::Text(Some(syntax))) if syntax.language() == Language::MARKDOWN => {
-                Scope::Markdown
-            }
             Some(Mode::Preview(_)) => Scope::Preview,
             Some(Mode::Console(_)) => Scope::Console,
             Some(Mode::Text(_) | Mode::Applet(_)) | None => Scope::Global,
@@ -510,15 +511,25 @@ impl Editor {
             Some(Mode::Environment(view)) => view.line_style(line),
             Some(Mode::Table(view)) => view.line_style(line),
             Some(Mode::Applet(view)) => view.line_style(line),
-            Some(Mode::Preview(_) | Mode::Console(_) | Mode::Plots(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None if self.is_atlas(index) => LineStyle {
                 background: None,
                 spans: self.atlas_highlights(index, line),
             },
-            Some(Mode::Text(_)) | None => LineStyle {
+            Some(Mode::Text(Some(syntax))) => LineStyle {
                 background: None,
-                spans: self.syntax_highlights_at(index, line),
+                spans: match self
+                    .registered(syntax.language())
+                    .and_then(|known| known.highlight)
+                {
+                    Some(highlight) => self
+                        .buffers
+                        .get(index)
+                        .map_or_else(Vec::new, |buffer| highlight(self, buffer.id(), line)),
+                    None => self.syntax_highlights_at(index, line),
+                },
             },
+            Some(Mode::Preview(_) | Mode::Console(_) | Mode::Plots(_) | Mode::Text(None))
+            | None => LineStyle::default(),
         }
     }
 

@@ -29,7 +29,8 @@ impl Editor {
             self.show_message("This buffer keeps its own mode");
             return;
         }
-        self.buffers.set_language(0, language);
+        let known = self.languages();
+        self.buffers.set_language(0, language, &known);
     }
 }
 

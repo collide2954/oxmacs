@@ -10,3 +10,4 @@ pub(super) mod r_plots;
 pub(super) mod r_send;
 pub(super) mod r_signature;
 pub(super) mod r_table;
+pub(super) mod registry;

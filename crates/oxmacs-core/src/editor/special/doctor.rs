@@ -116,7 +116,7 @@ impl Editor {
         page.line(&[]);
         self.examine_environment(&mut page);
         page.line(&[]);
-        examine_languages(&mut page);
+        examine_languages(&mut page, &self.languages());
         page.line(&[]);
         self.examine_tools(&mut page);
         page.line(&[]);
@@ -314,8 +314,8 @@ fn tool(page: &mut Page, name: &str, probe: Option<&Probe>, hint: &str) {
     }
 }
 
-fn examine_languages(page: &mut Page) {
-    let names: Vec<String> = Language::BUILT_IN
+fn examine_languages(page: &mut Page, languages: &[Language]) {
+    let names: Vec<String> = languages
         .iter()
         .map(|language| {
             let extensions: Vec<String> = language
@@ -342,7 +342,7 @@ fn examine_languages(page: &mut Page) {
         );
     }
     page.line(&[(header.trim_end(), Some(Highlight::Heading))]);
-    for (language, name) in Language::BUILT_IN.into_iter().zip(names) {
+    for (language, name) in languages.iter().zip(names) {
         let name = format!("  {name:<name_width$}");
         let mut parts: Vec<(String, Option<Highlight>)> = vec![(name, None)];
         for feature in Feature::ALL {

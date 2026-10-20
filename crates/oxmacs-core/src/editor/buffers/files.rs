@@ -5,7 +5,7 @@ use crate::cli::Visit;
 use crate::editor::prompts::minibuffer::{PathListing, Purpose};
 use crate::editor::{Choice, Editor};
 use crate::files::{self, Sort, paths};
-use crate::syntax::{Feature, Language, language_for};
+use crate::syntax::{Feature, Language};
 use crate::text::{Buffer, FileInfo};
 
 impl Editor {
@@ -126,12 +126,13 @@ impl Editor {
     }
 
     pub(in crate::editor) fn finish_write(&mut self, path: PathBuf) {
+        let language = self.language_for(&path);
+        let known = self.languages();
         let buffer = self.buffers.current_mut();
         let format = buffer.file().map(|file| file.format).unwrap_or_default();
-        let language = language_for(&Language::BUILT_IN, &path);
         buffer.set_file(FileInfo::new(path, format, None));
         if language.is_some() {
-            self.buffers.set_language(0, language);
+            self.buffers.set_language(0, language, &known);
         }
         self.name_file_buffers();
         self.save_buffer_at(0);

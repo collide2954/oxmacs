@@ -75,7 +75,7 @@ fn r_files(directory: &Path, depth: usize, found: &mut Vec<PathBuf>) {
             if depth < MAX_DEPTH && !name.starts_with('.') && !SKIPPED.contains(&name.as_str()) {
                 r_files(&path, depth + 1, found);
             }
-        } else if language_for(&Language::BUILT_IN, &path) == Some(Language::R) {
+        } else if language_for(&[Language::R], &path).is_some() {
             found.push(path);
         }
     }

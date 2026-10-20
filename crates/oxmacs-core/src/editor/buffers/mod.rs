@@ -25,7 +25,7 @@ use crate::editor::special::splash::Splash;
 use crate::editor::special::toolbox::ToolList;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
-use crate::syntax::{Language, Syntax, language_for};
+use crate::syntax::{Language, Syntax};
 use crate::text::{Buffer, BufferId};
 
 pub(super) const SCRATCH: &str = "*scratch*";
@@ -149,7 +149,7 @@ impl BufferList {
 
     pub(super) fn syntax(&self, index: usize) -> Option<&Syntax> {
         match self.mode(index)? {
-            Mode::Text(syntax) => syntax.as_ref(),
+            Mode::Text(syntax) => syntax.as_ref().filter(|syntax| syntax.parses()),
             _ => None,
         }
     }
@@ -162,12 +162,17 @@ impl BufferList {
         }
     }
 
-    pub(super) fn set_language(&mut self, index: usize, language: Option<Language>) {
+    pub(super) fn set_language(
+        &mut self,
+        index: usize,
+        language: Option<Language>,
+        known: &[Language],
+    ) {
         if let Some(entry) = self.entries.get_mut(index)
             && let Mode::Text(syntax) = &mut entry.mode
             && syntax.as_ref().map(Syntax::language) != language
         {
-            *syntax = language.map(Syntax::new);
+            *syntax = language.map(|language| Syntax::knowing(language, known));
         }
     }
 
@@ -356,10 +361,12 @@ impl Editor {
     }
 
     pub(super) fn add_buffer(&mut self, buffer: Buffer) {
-        let language = buffer
-            .file()
-            .and_then(|file| language_for(&Language::BUILT_IN, &file.path));
-        self.add_buffer_with(buffer, Mode::Text(language.map(Syntax::new)));
+        let language = buffer.file().and_then(|file| self.language_for(&file.path));
+        let known = self.languages();
+        self.add_buffer_with(
+            buffer,
+            Mode::Text(language.map(|language| Syntax::knowing(language, &known))),
+        );
     }
 
     pub(super) fn add_buffer_with(&mut self, buffer: Buffer, mode: Mode) {
