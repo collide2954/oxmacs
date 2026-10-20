@@ -44,6 +44,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `M-x list-tools` can manage tools applets add, including libraries, checked against the digest GitHub publishes for each download.
 - Applets can list a directory in a buffer, ask for a path, a typed yes or no or one of several letters, hear about changes on disk and directories being opened, and move files along with the buffers visiting them. Double-clicking in an applet buffer runs what `RET` runs there, and `M-x revert-buffer` runs what `g` runs.
 - Applets can add languages: the file types they open, the mode-line name, a keymap and a highlighter or a tree-sitter grammar with its queries. Rust, TOML, Markdown and R are described the same way, and Markdown code blocks are highlighted in any language the build knows.
+- Applets can tint lines as added or removed, in soft shades of each theme's success and error colors.
 - Applets keep their settings in a table of their own in config.toml, such as `[demo]`. A table no applet in the build reads is kept, and `M-x oxmacs-doctor` points it out. Applet settings appear in `M-x customize` under the applet's name.
 
 ### Experimental (opt-in at build time)

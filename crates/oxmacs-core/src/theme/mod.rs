@@ -86,10 +86,16 @@ pub enum Highlight {
     Success,
     Warning,
     Error,
+    Added,
+    Removed,
     Nick(u8),
 }
 
 pub const NICK_COLORS: u8 = 8;
+
+pub const DIFF_TINT: f32 = 0.18;
+
+const DIFF_STEPS: u8 = 6;
 
 impl Face {
     pub fn mix(self, other: Self, amount: f32) -> Self {
@@ -174,8 +180,21 @@ impl Theme {
             Highlight::Success => self.success,
             Highlight::Warning => self.warning,
             Highlight::Error => self.error,
+            Highlight::Added => self.diff_tint(self.success),
+            Highlight::Removed => self.diff_tint(self.error),
             Highlight::Nick(index) => self.nick(index),
         }
+    }
+
+    fn diff_tint(&self, color: Color) -> Color {
+        (1..=DIFF_STEPS)
+            .rev()
+            .map(|step| {
+                let amount = DIFF_TINT * f32::from(step) / f32::from(DIFF_STEPS);
+                self.default.background.mix(color, amount)
+            })
+            .find(|tint| self.default.foreground.contrast_ratio(*tint) >= READABLE)
+            .unwrap_or(self.default.background)
     }
 
     fn nick(&self, index: u8) -> Color {
@@ -236,8 +255,10 @@ const TEXT: [Highlight; 16] = [
     Highlight::Error,
 ];
 
-const TINTS: [Highlight; 5] = [
+const TINTS: [Highlight; 7] = [
     Highlight::Marked,
+    Highlight::Added,
+    Highlight::Removed,
     Highlight::Flagged,
     Highlight::SearchMatch,
     Highlight::SearchCurrent,
@@ -393,6 +414,37 @@ mod tests {
                 .highlight(Highlight::Marked)
                 .mix(ADWAITA_DARK.highlight(Highlight::Marked), 0.5)
         );
+    }
+
+    #[test]
+    fn diff_lines_get_soft_tints_of_success_and_error() {
+        for theme in builtin() {
+            let background = theme.default.background;
+            let added = theme.highlight(Highlight::Added);
+            let removed = theme.highlight(Highlight::Removed);
+
+            assert_eq!(added, background.mix(theme.success, DIFF_TINT));
+            assert_eq!(removed, background.mix(theme.error, DIFF_TINT));
+            assert!(theme.default.foreground.contrast_ratio(added) >= READABLE);
+            assert!(theme.default.foreground.contrast_ratio(removed) >= READABLE);
+        }
+    }
+
+    #[test]
+    fn diff_tints_soften_where_text_would_be_hard_to_read() {
+        let dim = Theme {
+            default: Face {
+                foreground: Color::hex(0x93_A1_A1),
+                background: Color::hex(0x00_2B_36),
+            },
+            ..ADWAITA_DARK
+        };
+
+        let added = dim.highlight(Highlight::Added);
+
+        assert_ne!(added, dim.default.background.mix(dim.success, DIFF_TINT));
+        assert_ne!(added, dim.default.background);
+        assert!(dim.default.foreground.contrast_ratio(added) >= READABLE);
     }
 
     #[test]
