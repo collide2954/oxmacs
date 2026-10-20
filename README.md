@@ -33,6 +33,7 @@ Others are only built when you ask for them. These experimental applets are vers
 | Feature           | Version | What it adds                                                                  |
 |-------------------|---------|-------------------------------------------------------------------------------|
 | `animated-splash` | 0.1.0   | A start screen with the oxmacs logo animated above the keys; `a` cycles effects |
+| `atlas`           | 0.1.0   | Atlas: plain-text notes, tasks, the agenda and the calendar; `C-c n`          |
 | `demo`            | 0.1.0   | An example applet to copy when writing your own; `M-x demo`                  |
 | `extra-themes`    | 0.1.0   | 56 more color themes for `M-x load-theme`, from gruvbox to modus-vivendi       |
 | `irc`             | 0.1.0   | `M-x irc`, an IRCv3 client, with `M-x irc-setup` and a bouncer                |
@@ -45,11 +46,10 @@ cargo run -p oxmacs --release --features animated-splash
 
 A feature that is left off is not compiled at all, so it costs nothing in size or startup time. Experimental features may change or disappear between releases; CHANGELOG.md lists them under "Experimental", and `M-x oxmacs-doctor` shows which ones your build includes.
 
-More applets will be opt-in features as well. Until each one is moved into its own crate it is not yet optional:
+More applets will be opt-in features as well:
 
 | Feature        | What it will add                                  | Today                                  |
 |----------------|---------------------------------------------------|----------------------------------------|
-| `atlas`        | Notes, tasks, the agenda and the calendar         | Still compiled into every build        |
 | `sqlite`       | A SQLite database viewer and editor               | Not written yet                        |
 | `pdf`          | A PDF viewer                                      | Not written yet                        |
 
@@ -62,7 +62,7 @@ oxmacs has no plugin system. It does not load code at runtime, embed a scripting
 Larger pieces of functionality are applets: self-contained crates such as an IRC client, a knowledge system, a directory editor or a language mode. Each applet
 
 - lives in its own crate (`oxmacs-irc`, `oxmacs-atlas`, …) and depends on `oxmacs-core`,
-- implements the applet API from `oxmacs-core`: the buffers and modes it adds, its commands and their documentation, its key bindings, and how its buffers draw,
+- implements the applet API from `oxmacs-core`: the buffers and modes it adds, the languages and file types it knows, its commands and their documentation, its key bindings, its settings, and how its buffers draw,
 - is an optional dependency of the `oxmacs` binary crate behind a Cargo feature of the same name.
 
 Because built-in applets use exactly the same API, a fork can add its own the same way:

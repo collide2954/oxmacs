@@ -10,23 +10,27 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Weather is a default applet; `cargo build -p oxmacs --no-default-features` leaves it out.
 - IRC settings now live in an `[irc]` table: `[[irc-server]]` becomes `[[irc.server]]` and `[irc-bouncer]` becomes `[irc.bouncer]`, moved the same way the first time oxmacs starts.
 - IRC is no longer part of every build; it is the opt-in `irc` applet below.
+- Atlas vaults now live in an `[atlas]` table: `[[atlas-vault]]` becomes `[[atlas.vault]]`, moved the same way the first time oxmacs starts.
+- Atlas is no longer part of every build; it is the opt-in `atlas` applet below.
 
 ### Added
 
 - Atlas, a plain-text knowledge system in `.atlas` notes: a `key: value` header, `=` headings, tasks `[ ]` `[/]` `[?]` `[x]` `[-]` with `due:`, `on:`, `every:`, `!high` and `#tags`, `[Page]` links and `@date HH:MM-HH:MM` events, all highlighted. Loose dates such as `fri` or `+3d` become ISO dates when you leave the line or save.
 - `C-c C-c` in a note cycles the task at point, stamping `done:` and moving repeating tasks on; `C-c C-o` follows a link or starts the page, and `M-,` comes back.
-- Vaults are `[[atlas-vault]]` entries in config.toml, each with a name, folder and color. The first `C-c n` command offers to make one at `~/Atlas`.
+- Vaults are `[[atlas.vault]]` entries in config.toml, each with a name, folder and color. The first `C-c n` command offers to make one at `~/Atlas`.
 - `C-c n f` finds or starts a note, `C-c n t` opens today's journal, `C-c n c` captures a line or task into it, and `C-c n b` lists the lines that link to the current note.
 - `C-c n a` shows the agenda across all vaults: overdue work, today, the next seven days and waiting tasks, each tagged with its vault. `t` cycles a task, `s` and `d` set its dates, `v` filters by vault and `RET` visits.
 - `C-c n m` shows a month calendar with each day's entries and the selected day's details below; `w` switches to a week laid out by hour.
 - `M-x oxmacs-doctor` lists Atlas vaults and how many pages each holds.
 - `M-x oxmacs-doctor` lists the opt-in build features compiled in, with their versions.
 - The theme in *Settings* is picked from the same live-preview list as `M-x load-theme`.
+- Applets can add languages: the file types they open, the mode-line name, a keymap and a highlighter or a tree-sitter grammar with its queries. Rust, TOML, Markdown and R are described the same way, and Markdown code blocks are highlighted in any language the build knows.
 - Applets keep their settings in a table of their own in config.toml, such as `[demo]`. A table no applet in the build reads is kept, and `M-x oxmacs-doctor` points it out. Applet settings appear in `M-x customize` under the applet's name.
 
 ### Experimental (opt-in at build time)
 
 - `demo` 0.1.0: an example applet, `M-x demo`, showing how applets add commands, keys, buffers, prompts, questions, effects, GUI panels, a config table (`[demo] sides`) and a doctor section. Build with `cargo build -p oxmacs --features demo`.
+- `atlas` 0.1.0: the Atlas knowledge system above, with its notes, journal, capture, links, backlinks, agenda and calendar, as an applet of its own. Build with `cargo build -p oxmacs --features atlas`.
 - `animated-splash` 0.1.0: the start screen draws the oxmacs logo in block letters, animated above the keys; `a` cycles a drifting plasma field with a shimmer, a color wave, the logo assembling from scattered pixels, a network of neurons whose signals light the letters as they pass, and DNA replicating behind the logo with its helicase, polymerases, primers and Okazaki fragments. Build with `cargo build -p oxmacs --features animated-splash`.
 - `extra-themes` 0.1.0: 56 more color themes inspired by the ones Helix ships, among them gruvbox, catppuccin, tokyonight, rose-pine, kanagawa, nord, dracula, everforest, solarized, ayu, github, modus and doom-one, each tuned to stay readable. Build with `cargo build -p oxmacs --features extra-themes`.
 - `irc` 0.1.0: the IRC client, `M-x irc-setup` and the bouncer, as an applet of its own; `oxmacs irc-daemon` runs the bouncer when the build includes it. Build with `cargo build -p oxmacs --features irc`.
