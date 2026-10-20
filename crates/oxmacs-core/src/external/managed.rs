@@ -10,25 +10,53 @@ use serde::Deserialize;
 use crate::external::tools;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Form {
+    Program,
+    Library,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Checksum {
+    Sidecar,
+    Digest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Managed {
     pub name: &'static str,
     pub repository: &'static str,
     pub summary: &'static str,
+    pub form: Form,
+    pub tag_prefix: &'static str,
+    pub archives: &'static [(&'static str, &'static str, &'static str)],
+    pub checksum: Checksum,
+    pub setting: Option<&'static str>,
 }
 
 pub const AIR: Managed = Managed {
     name: "air",
     repository: "posit-dev/air",
     summary: "R formatter",
+    form: Form::Program,
+    tag_prefix: "v",
+    archives: &[
+        ("windows", "x86_64", "air-x86_64-pc-windows-msvc.zip"),
+        ("windows", "aarch64", "air-aarch64-pc-windows-msvc.zip"),
+        ("macos", "x86_64", "air-x86_64-apple-darwin.tar.gz"),
+        ("macos", "aarch64", "air-aarch64-apple-darwin.tar.gz"),
+        ("linux", "x86_64", "air-x86_64-unknown-linux-gnu.tar.gz"),
+        ("linux", "aarch64", "air-aarch64-unknown-linux-gnu.tar.gz"),
+    ],
+    checksum: Checksum::Sidecar,
+    setting: Some("air-program"),
 };
-
-pub const MANAGED: [Managed; 1] = [AIR];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Asset {
     pub name: String,
     pub url: String,
     pub size: u64,
+    pub digest: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,11 +72,17 @@ impl Release {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expected {
+    Download(Asset),
+    Digest(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Install {
     pub tool: Managed,
     pub version: String,
     pub archive: Asset,
-    pub checksum: Asset,
+    pub checksum: Expected,
     pub root: PathBuf,
 }
 
@@ -70,14 +104,20 @@ struct Published {
     name: String,
     browser_download_url: String,
     size: u64,
+    #[serde(default)]
+    digest: Option<String>,
 }
 
 impl Managed {
     pub fn binary(self) -> String {
-        if cfg!(windows) {
-            format!("{}.exe", self.name)
-        } else {
-            self.name.to_owned()
+        match self.form {
+            Form::Program => format!("{}{}", self.name, env::consts::EXE_SUFFIX),
+            Form::Library => format!(
+                "{}{}{}",
+                env::consts::DLL_PREFIX,
+                self.name,
+                env::consts::DLL_SUFFIX
+            ),
         }
     }
 
@@ -89,19 +129,40 @@ impl Managed {
     }
 
     pub fn archive(self, os: &str, arch: &str) -> Option<String> {
-        let arch = match arch {
-            "x86_64" | "aarch64" => arch,
-            _ => return None,
-        };
-        let (target, extension) = match os {
-            "windows" => ("pc-windows-msvc", "zip"),
-            "macos" => ("apple-darwin", "tar.gz"),
-            "linux" => ("unknown-linux-gnu", "tar.gz"),
-            _ => return None,
-        };
-        Some(format!("{}-{arch}-{target}.{extension}", self.name))
+        self.archives
+            .iter()
+            .find(|(known_os, known_arch, _)| *known_os == os && *known_arch == arch)
+            .map(|(_, _, name)| (*name).to_owned())
     }
 
+    pub fn parse_release(self, json: &str) -> Result<Release, String> {
+        let latest: Latest = serde_json::from_str(json).map_err(|error| error.to_string())?;
+        let version = latest
+            .tag_name
+            .strip_prefix(self.tag_prefix)
+            .unwrap_or(&latest.tag_name)
+            .to_owned();
+        if !plain(&version) {
+            return Err(format!("unexpected release name {:?}", latest.tag_name));
+        }
+        Ok(Release {
+            version,
+            assets: latest
+                .assets
+                .into_iter()
+                .map(|asset| Asset {
+                    digest: asset
+                        .digest
+                        .as_deref()
+                        .and_then(|digest| digest.strip_prefix("sha256:"))
+                        .map(str::to_ascii_lowercase),
+                    name: asset.name,
+                    url: asset.browser_download_url,
+                    size: asset.size,
+                })
+                .collect(),
+        })
+    }
     pub fn locate(
         self,
         configured: Option<&str>,
@@ -117,9 +178,10 @@ impl Managed {
             };
             return found.map(|path| (path, Origin::Setting));
         }
+        let path = search_path.filter(|_| self.form == Form::Program);
         root.and_then(|root| self.installed(root))
             .map(|(_, path)| (path, Origin::Managed))
-            .or_else(|| tools::find(self.name, search_path).map(|path| (path, Origin::Path)))
+            .or_else(|| tools::find(self.name, path).map(|path| (path, Origin::Path)))
     }
 
     pub fn archive_here(self) -> Option<String> {
@@ -152,26 +214,6 @@ fn numbers(version: &str) -> Vec<u64> {
         .split(['.', '-', '+'])
         .map_while(|part| part.parse().ok())
         .collect()
-}
-
-pub fn parse_release(json: &str) -> Result<Release, String> {
-    let latest: Latest = serde_json::from_str(json).map_err(|error| error.to_string())?;
-    let version = latest.tag_name.trim_start_matches('v').to_owned();
-    if !plain(&version) {
-        return Err(format!("unexpected release name {:?}", latest.tag_name));
-    }
-    Ok(Release {
-        version,
-        assets: latest
-            .assets
-            .into_iter()
-            .map(|asset| Asset {
-                name: asset.name,
-                url: asset.browser_download_url,
-                size: asset.size,
-            })
-            .collect(),
-    })
 }
 
 pub fn newer(candidate: &str, current: &str) -> bool {
@@ -315,7 +357,7 @@ mod tests {
 
     #[test]
     fn releases_give_their_version_and_assets() {
-        let release = parse_release(LATEST).unwrap();
+        let release = AIR.parse_release(LATEST).unwrap();
 
         assert_eq!(release.version, "0.12.0");
         assert_eq!(
@@ -324,6 +366,7 @@ mod tests {
                 name: "air-x86_64-pc-windows-msvc.zip".to_owned(),
                 url: "https://example.com/air.zip".to_owned(),
                 size: 5_242_880,
+                digest: None,
             })
         );
         assert!(release.asset("air.tar.gz").is_none());
@@ -332,12 +375,12 @@ mod tests {
     #[test]
     fn versions_lose_a_leading_v_and_must_be_plain() {
         let tagged =
-            |tag: &str| parse_release(&format!(r#"{{"tag_name": "{tag}", "assets": []}}"#));
+            |tag: &str| AIR.parse_release(&format!(r#"{{"tag_name": "{tag}", "assets": []}}"#));
 
         assert_eq!(tagged("v1.2.3").unwrap().version, "1.2.3");
         assert!(tagged("../1.2.3").is_err());
         assert!(tagged("").is_err());
-        assert!(parse_release("not json").is_err());
+        assert!(AIR.parse_release("not json").is_err());
     }
 
     #[test]
@@ -398,17 +441,22 @@ mod tests {
     }
 
     fn archive_of(binary: &str) -> (tempfile::TempDir, Vec<u8>) {
+        packed(AIR, "air-x86_64-unknown-linux-gnu", binary)
+    }
+
+    fn packed(tool: Managed, folder: &str, contents: &str) -> (tempfile::TempDir, Vec<u8>) {
         let dir = tempfile::tempdir().unwrap();
-        let inside = dir.path().join("air-x86_64-unknown-linux-gnu");
+        let top = folder.split('/').next().unwrap_or(folder);
+        let inside = dir.path().join(folder);
         fs::create_dir_all(&inside).unwrap();
-        fs::write(inside.join(AIR.binary()), binary).unwrap();
-        let archive = dir.path().join("air.tar.gz");
+        fs::write(inside.join(tool.binary()), contents).unwrap();
+        let archive = dir.path().join("packed.tar.gz");
         let status = Command::new(tar())
             .arg("-czf")
             .arg(&archive)
             .arg("-C")
             .arg(dir.path())
-            .arg("air-x86_64-unknown-linux-gnu")
+            .arg(top)
             .status()
             .unwrap();
         assert!(status.success());
@@ -503,6 +551,105 @@ mod tests {
         );
         assert_eq!(AIR.locate(Some("missing-air"), None, None), None);
         assert_eq!(AIR.locate(None, None, None), None);
+    }
+
+    const LIBRARY: Managed = Managed {
+        name: "pdfium",
+        repository: "bblanchon/pdfium-binaries",
+        summary: "PDF engine",
+        form: Form::Library,
+        tag_prefix: "chromium/",
+        archives: &[
+            ("windows", "aarch64", "pdfium-win-arm64.tgz"),
+            ("linux", "x86_64", "pdfium-linux-x64.tgz"),
+        ],
+        checksum: Checksum::Digest,
+        setting: None,
+    };
+
+    #[test]
+    fn libraries_are_named_the_way_the_platform_names_them() {
+        assert_eq!(
+            LIBRARY.binary(),
+            format!(
+                "{}pdfium{}",
+                env::consts::DLL_PREFIX,
+                env::consts::DLL_SUFFIX
+            )
+        );
+        assert_eq!(AIR.binary(), format!("air{}", env::consts::EXE_SUFFIX));
+    }
+
+    #[test]
+    fn archives_come_from_each_tools_table() {
+        assert_eq!(
+            LIBRARY.archive("windows", "aarch64").as_deref(),
+            Some("pdfium-win-arm64.tgz")
+        );
+        assert_eq!(LIBRARY.archive("macos", "aarch64"), None);
+    }
+
+    #[test]
+    fn tags_lose_the_tools_prefix() {
+        let tagged = r#"{"tag_name": "chromium/8111", "assets": []}"#;
+
+        assert_eq!(LIBRARY.parse_release(tagged).unwrap().version, "8111");
+        assert!(AIR.parse_release(tagged).is_err());
+    }
+
+    #[test]
+    fn assets_carry_their_published_digest() {
+        let release = LIBRARY
+            .parse_release(
+                r#"{"tag_name": "chromium/8111", "assets": [
+                    {"name": "pdfium-linux-x64.tgz", "browser_download_url": "https://example.com/p.tgz", "size": 3828739, "digest": "sha256:BDC6"},
+                    {"name": "pdfium-attestation.json", "browser_download_url": "https://example.com/a.json", "size": 18408, "digest": null},
+                    {"name": "other.tgz", "browser_download_url": "https://example.com/o.tgz", "size": 1, "digest": "md5:abc"}
+                ]}"#,
+            )
+            .unwrap();
+        let digest = |name: &str| release.asset(name).and_then(|asset| asset.digest.clone());
+
+        assert_eq!(digest("pdfium-linux-x64.tgz").as_deref(), Some("bdc6"));
+        assert_eq!(digest("pdfium-attestation.json"), None);
+        assert_eq!(digest("other.tgz"), None);
+    }
+
+    #[test]
+    fn libraries_are_not_looked_for_on_the_path() {
+        let on_path = tempfile::tempdir().unwrap();
+        fs::write(on_path.path().join(LIBRARY.binary()), "library").unwrap();
+        let search = env::join_paths([on_path.path()]).unwrap();
+
+        assert_eq!(LIBRARY.locate(None, None, Some(&search)), None);
+    }
+
+    #[test]
+    fn libraries_install_from_wherever_their_archive_keeps_them() {
+        let root = tempfile::tempdir().unwrap();
+        let (_dir, bytes) = packed(LIBRARY, "pdfium/lib", "library");
+
+        let installed = install(
+            LIBRARY,
+            "8111",
+            "pdfium-linux-x64.tgz",
+            &bytes,
+            &hex(&bytes),
+            root.path(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            installed,
+            root.path()
+                .join("pdfium")
+                .join("8111")
+                .join(LIBRARY.binary())
+        );
+        assert_eq!(
+            LIBRARY.installed(root.path()),
+            Some(("8111".to_owned(), installed))
+        );
     }
 
     #[test]

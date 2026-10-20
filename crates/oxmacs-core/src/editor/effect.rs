@@ -44,7 +44,7 @@ pub enum Effect {
     Transmit(ConnectionId, Vec<String>),
     Disconnect(ConnectionId),
     ProbeTools(Vec<Tool>),
-    InstallTool(Install),
+    InstallTool(Box<Install>),
     Applet(Payload),
 }
 

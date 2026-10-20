@@ -3,7 +3,7 @@ use std::thread;
 use std::time::Duration;
 
 use iced::futures::channel::oneshot;
-use oxmacs_core::external::managed::{self, Install};
+use oxmacs_core::external::managed::{self, Expected, Install};
 
 const TIMEOUT: Duration = Duration::from_secs(15);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
@@ -57,7 +57,10 @@ fn download(url: &str) -> Result<Vec<u8>, String> {
 }
 
 fn blocking_install(install: &Install) -> Result<PathBuf, String> {
-    let checksum = blocking_get(&install.checksum.url)?;
+    let checksum = match &install.checksum {
+        Expected::Download(asset) => blocking_get(&asset.url)?,
+        Expected::Digest(digest) => digest.clone(),
+    };
     let archive = download(&install.archive.url)?;
     managed::install(
         install.tool,
@@ -83,7 +86,9 @@ mod tests {
     #[ignore = "downloads air from GitHub; set OXMACS_TOOLS_ROOT to keep it"]
     fn air_installs_from_its_latest_release() {
         let air = managed::AIR;
-        let release = managed::parse_release(&blocking_get(&air.latest_url()).unwrap()).unwrap();
+        let release = air
+            .parse_release(&blocking_get(&air.latest_url()).unwrap())
+            .unwrap();
         let name = air.archive_here().unwrap();
         let kept = std::env::var_os("OXMACS_TOOLS_ROOT").map(PathBuf::from);
         let scratch = tempfile::tempdir().unwrap();
@@ -93,7 +98,7 @@ mod tests {
             tool: air,
             version: release.version.clone(),
             archive: release.asset(&name).unwrap().clone(),
-            checksum: release.asset(&format!("{name}.sha256")).unwrap().clone(),
+            checksum: Expected::Download(release.asset(&format!("{name}.sha256")).unwrap().clone()),
             root: root.clone(),
         })
         .unwrap();

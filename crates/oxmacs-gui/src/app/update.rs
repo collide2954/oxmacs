@@ -309,7 +309,7 @@ impl App {
             Effect::ProbeTools(tools) => Task::perform(probe_tools(tools), Message::ToolsProbed),
             Effect::InstallTool(install) => {
                 let tool = install.tool;
-                Task::perform(fetch::install(install), move |result| {
+                Task::perform(fetch::install(*install), move |result| {
                     Message::ToolInstalled(tool, result)
                 })
             }

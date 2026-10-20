@@ -6,7 +6,7 @@ use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::page::{self, Page};
 use crate::editor::{Editor, Effect, FetchId};
-use crate::external::managed::{self, Install, MANAGED, Managed, Origin, Release};
+use crate::external::managed::{self, Checksum, Expected, Install, Managed, Origin, Release};
 use crate::files::paths;
 use crate::text::Buffer;
 use crate::theme::Highlight;
@@ -25,11 +25,23 @@ enum Latest {
     Failed,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(in crate::editor) struct Toolbox {
+    tools: Vec<Managed>,
     latest: Vec<(Managed, Latest)>,
     checks: Vec<(FetchId, Managed)>,
     installing: Vec<(Managed, String)>,
+}
+
+impl Default for Toolbox {
+    fn default() -> Self {
+        Self {
+            tools: vec![managed::AIR],
+            latest: Vec::new(),
+            checks: Vec::new(),
+            installing: Vec::new(),
+        }
+    }
 }
 
 impl Toolbox {
@@ -122,7 +134,13 @@ impl Editor {
             .flatten()
     }
 
-    fn installed_tool(&self, tool: Managed) -> Option<(String, PathBuf)> {
+    pub fn add_managed_tool(&mut self, tool: Managed) {
+        if !self.toolbox.tools.contains(&tool) {
+            self.toolbox.tools.push(tool);
+        }
+    }
+
+    pub fn installed_tool(&self, tool: Managed) -> Option<(String, PathBuf)> {
         self.tools_root
             .as_deref()
             .and_then(|root| tool.installed(root))
@@ -151,7 +169,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn check_tool_releases(&mut self) {
-        for tool in MANAGED {
+        for tool in self.toolbox.tools.clone() {
             let id = FetchId(self.next_fetch);
             self.next_fetch += 1;
             self.toolbox.checks.retain(|(_, known)| *known != tool);
@@ -179,7 +197,7 @@ impl Editor {
         let release = result
             .as_ref()
             .map_err(Clone::clone)
-            .and_then(|json| managed::parse_release(json));
+            .and_then(|json| tool.parse_release(json));
         let latest = match release {
             Ok(release) => Latest::Known(release),
             Err(error) => {
@@ -259,7 +277,12 @@ impl Editor {
         };
         let assets = tool.archive_here().and_then(|name| {
             let archive = release.asset(&name)?.clone();
-            let checksum = release.asset(&format!("{name}.sha256"))?.clone();
+            let checksum = match tool.checksum {
+                Checksum::Sidecar => {
+                    Expected::Download(release.asset(&format!("{name}.sha256"))?.clone())
+                }
+                Checksum::Digest => Expected::Digest(archive.digest.clone()?),
+            };
             Some((archive, checksum))
         });
         let Some((archive, checksum)) = assets else {
@@ -272,13 +295,13 @@ impl Editor {
         self.toolbox
             .installing
             .push((tool, release.version.clone()));
-        self.effects.push(Effect::InstallTool(Install {
+        self.effects.push(Effect::InstallTool(Box::new(Install {
             tool,
             version: release.version.clone(),
             archive,
             checksum,
             root,
-        }));
+        })));
         self.show_message(format!("Installing {} {}…", tool.name, release.version));
         self.render_tools();
     }
@@ -337,7 +360,7 @@ impl Editor {
                 || "nothing yet".to_owned(),
                 |(path, origin)| {
                     let from = match origin {
-                        Origin::Setting => "air-program",
+                        Origin::Setting => tool.setting.unwrap_or("a setting"),
                         Origin::Managed => "oxmacs",
                         Origin::Path => "PATH",
                     };
@@ -386,7 +409,7 @@ impl Editor {
             page.line(&[(&line, Some(Highlight::Comment))]);
         }
         let mut rows = Vec::new();
-        for tool in MANAGED {
+        for tool in self.toolbox.tools.clone() {
             page.line(&[]);
             let start = page.styles.len();
             self.tool_card(&mut page, tool);
@@ -422,7 +445,9 @@ mod tests {
 
     use crate::editor::test_support::{lines, press, question, type_text};
     use crate::editor::{Editor, Effect, FetchId};
-    use crate::external::managed::{AIR, Install};
+    use std::env;
+
+    use crate::external::managed::{AIR, Checksum, Expected, Form, Install, Managed};
 
     fn release(version: &str) -> String {
         let archive = AIR.archive_here().unwrap();
@@ -465,7 +490,7 @@ mod tests {
             .take_effects()
             .into_iter()
             .filter_map(|effect| match effect {
-                Effect::InstallTool(install) => Some(install),
+                Effect::InstallTool(install) => Some(*install),
                 _ => None,
             })
             .collect()
@@ -569,7 +594,11 @@ mod tests {
         let install = installs(&mut editor).pop().unwrap();
         assert_eq!(install.version, "0.12.0");
         assert_eq!(install.archive.name, archive);
-        assert_eq!(install.checksum.name, format!("{archive}.sha256"));
+        assert!(
+            matches!(&install.checksum, Expected::Download(asset) if asset.name == format!("{archive}.sha256")),
+            "{:?}",
+            install.checksum
+        );
         assert_eq!(install.root, root.path());
         assert!(air_line(&editor).contains("installing 0.12.0…"));
 
@@ -647,6 +676,57 @@ mod tests {
             editor.message(),
             Some("Could not check air's latest release; g tries again")
         );
+    }
+
+    const ENGINE: Managed = Managed {
+        name: "engine",
+        repository: "example/engine",
+        summary: "Test engine",
+        form: Form::Library,
+        tag_prefix: "build/",
+        archives: &[(env::consts::OS, env::consts::ARCH, "engine.tgz")],
+        checksum: Checksum::Digest,
+        setting: None,
+    };
+
+    #[test]
+    fn applets_add_tools_that_install_by_their_published_digest() {
+        let root = tempfile::tempdir().unwrap();
+        let mut editor = Editor::new();
+        editor.add_managed_tool(ENGINE);
+        let mut editor = {
+            editor.tools_root = Some(root.path().to_owned());
+            press(&mut editor, "M-x");
+            type_text(&mut editor, "list-tools");
+            press(&mut editor, "RET");
+            editor
+        };
+        let (id, _) = checks(&mut editor)
+            .into_iter()
+            .find(|(_, url)| url.contains("example/engine"))
+            .unwrap();
+
+        editor.fetched(
+            id,
+            Ok(r#"{"tag_name": "build/42", "assets": [
+                {"name": "engine.tgz", "browser_download_url": "https://example.com/engine.tgz", "size": 2097152, "digest": "sha256:ABCD"}
+            ]}"#
+            .to_owned()),
+        );
+        let shown = lines(&editor);
+        let card = shown
+            .iter()
+            .position(|line| line == "engine  not installed")
+            .unwrap();
+        assert_eq!(shown[card + 3], "  Latest     42 (2.0 MB)");
+        assert_eq!(shown[card + 4], "  Runs from  nothing yet");
+        editor.go_to_line(card + 1, 1);
+        press(&mut editor, "i");
+
+        let install = installs(&mut editor).pop().unwrap();
+        assert_eq!(install.tool, ENGINE);
+        assert_eq!(install.archive.name, "engine.tgz");
+        assert_eq!(install.checksum, Expected::Digest("abcd".to_owned()));
     }
 
     #[test]
