@@ -250,6 +250,28 @@ fn recent(repository: &gix::Repository) -> Vec<Commit> {
         .collect()
 }
 
+pub fn messages(path: &Path, count: usize) -> Vec<String> {
+    let Ok(repository) = gix::discover(path) else {
+        return Vec::new();
+    };
+    let Ok(head) = repository.head_id() else {
+        return Vec::new();
+    };
+    let Ok(walk) = repository.rev_walk([head.detach()]).all() else {
+        return Vec::new();
+    };
+    walk.filter_map(Result::ok)
+        .take(count)
+        .filter_map(|info| info.object().ok())
+        .filter_map(|commit| {
+            commit
+                .message_raw()
+                .ok()
+                .map(|raw| raw.to_string().trim_end().to_owned())
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     Unstaged,
@@ -598,6 +620,22 @@ mod tests {
 
         assert!(diff.large);
         assert_eq!(diff.hunks, []);
+    }
+
+    #[test]
+    fn messages_come_newest_first_in_full() {
+        let dir = repository();
+        fs::write(dir.path().join("b.txt"), "bee bee\n").unwrap();
+        git(
+            dir.path(),
+            &["commit", "-q", "-am", "Second commit\n\nWith a body"],
+        );
+
+        assert_eq!(
+            messages(dir.path(), 5),
+            ["Second commit\n\nWith a body", "First commit"]
+        );
+        assert_eq!(messages(dir.path(), 1), ["Second commit\n\nWith a body"]);
     }
 
     #[test]

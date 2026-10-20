@@ -22,6 +22,7 @@ pub(crate) struct GitState {
     pub(crate) scope: ScopeId,
     pub(crate) diff_scope: ScopeId,
     pub(crate) patches: usize,
+    pub(crate) pending: Vec<crate::commit::Pending>,
 }
 
 #[derive(Debug)]

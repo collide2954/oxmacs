@@ -25,6 +25,7 @@ pub(crate) struct DiffPane {
     scope: ScopeId,
     pub(crate) root: PathBuf,
     pub(crate) file: Option<(Section, String)>,
+    pub(crate) staged: bool,
     pub(crate) layout: Layout,
     pub(crate) width: usize,
     pub(crate) rendered: Rendered,
@@ -260,6 +261,36 @@ fn find(status: &crate::status::Status, file: &(Section, String)) -> Option<(Sec
     })
 }
 
+fn staged_overview(status: &crate::status::Status, layout: Layout, width: usize) -> Rendered {
+    let staged = status.files(Section::Staged);
+    if staged.is_empty() {
+        let mut out = Rendered::default();
+        let mut line = Line::default();
+        line.push("Nothing staged", Some(Highlight::Comment));
+        out.add(Row::Blank, line);
+        return out;
+    }
+    let mut out = Rendered::default();
+    for (index, change) in staged.iter().enumerate() {
+        if index > 0 {
+            out.add(Row::Blank, Line::default());
+        }
+        let diff = status
+            .diff(Section::Staged, &change.path)
+            .cloned()
+            .unwrap_or_default();
+        out.append(render(
+            Section::Staged,
+            index,
+            &change.path,
+            &diff,
+            layout,
+            width,
+        ));
+    }
+    out
+}
+
 pub(crate) fn redraw(editor: &mut Editor, pane_id: BufferId) {
     let width = editor.buffer_width(pane_id).unwrap_or(WIDTH);
     let Some((_, pane)) = editor.applet_buffer::<DiffPane>(pane_id) else {
@@ -267,6 +298,7 @@ pub(crate) fn redraw(editor: &mut Editor, pane_id: BufferId) {
     };
     let root = pane.root.clone();
     let layout = pane.layout;
+    let staged = pane.staged;
     let Some(file) = pane.file.clone() else {
         return;
     };
@@ -276,8 +308,8 @@ pub(crate) fn redraw(editor: &mut Editor, pane_id: BufferId) {
     let Some((_, view)) = editor.applet_buffer::<StatusView>(status_id) else {
         return;
     };
-    let found = find(&view.status, &file);
-    let (rendered, file) = match found {
+    let (rendered, file) = match find(&view.status, &file) {
+        _ if staged => (staged_overview(&view.status, layout, width), file),
         Some((section, index)) => {
             let path = file.1.clone();
             let diff = view
@@ -336,53 +368,48 @@ pub(crate) fn follow(editor: &mut Editor) {
     let wanted = Some((section, path));
     let same = editor
         .applet_buffer::<DiffPane>(pane_id)
-        .is_some_and(|(_, pane)| pane.file == wanted);
+        .is_some_and(|(_, pane)| pane.file == wanted && !pane.staged);
     if same {
         return;
     }
     if let Some((buffer, pane)) = editor.applet_buffer_mut::<DiffPane>(pane_id) {
         pane.file = wanted;
+        pane.staged = false;
         buffer.set_point(0);
     }
     redraw(editor, pane_id);
 }
 
-pub(crate) fn show(editor: &mut Editor) {
-    let Some((root, section, path)) = file_at_point(editor) else {
-        return;
-    };
-    let pane_id = if let Some(id) = pane_of(editor, &root) {
-        id
-    } else {
-        let Some(scope) = editor
-            .applet_state::<GitState>()
-            .map(|state| state.diff_scope)
-        else {
-            return;
-        };
-        let name = format!(
-            "git diff: {}",
-            root.file_name().map_or_else(
-                || root.display().to_string(),
-                |name| name.to_string_lossy().into_owned()
-            )
-        );
-        let pane_root = root.clone();
-        editor.add_applet_buffer_with(&name, |buffer| {
-            buffer.set_read_only(true);
-            DiffPane {
-                scope,
-                root: pane_root,
-                file: None,
-                layout: Layout::Unified,
-                width: WIDTH,
-                rendered: Rendered::default(),
-            }
-        })
-    };
-    if let Some((_, pane)) = editor.applet_buffer_mut::<DiffPane>(pane_id) {
-        pane.file = Some((section, path));
+fn pane_for(editor: &mut Editor, root: &Path) -> Option<BufferId> {
+    if let Some(id) = pane_of(editor, root) {
+        return Some(id);
     }
+    let scope = editor
+        .applet_state::<GitState>()
+        .map(|state| state.diff_scope)?;
+    let name = format!(
+        "git diff: {}",
+        root.file_name().map_or_else(
+            || root.display().to_string(),
+            |name| name.to_string_lossy().into_owned()
+        )
+    );
+    let pane_root = root.to_owned();
+    Some(editor.add_applet_buffer_with(&name, |buffer| {
+        buffer.set_read_only(true);
+        DiffPane {
+            scope,
+            root: pane_root,
+            file: None,
+            staged: false,
+            layout: Layout::Unified,
+            width: WIDTH,
+            rendered: Rendered::default(),
+        }
+    }))
+}
+
+fn reveal(editor: &mut Editor, pane_id: BufferId) {
     if !editor.buffer_shown(pane_id) {
         let origin = editor.selected_window();
         editor.show_buffer_beside(pane_id);
@@ -391,6 +418,33 @@ pub(crate) fn show(editor: &mut Editor) {
     redraw(editor, pane_id);
 }
 
+pub(crate) fn show(editor: &mut Editor) {
+    let Some((root, section, path)) = file_at_point(editor) else {
+        return;
+    };
+    let Some(pane_id) = pane_for(editor, &root) else {
+        return;
+    };
+    if let Some((_, pane)) = editor.applet_buffer_mut::<DiffPane>(pane_id) {
+        pane.file = Some((section, path));
+        pane.staged = false;
+    }
+    reveal(editor, pane_id);
+}
+
+pub(crate) fn show_staged(editor: &mut Editor, root: &Path) {
+    let Some(pane_id) = pane_for(editor, root) else {
+        return;
+    };
+    if let Some((buffer, pane)) = editor.applet_buffer_mut::<DiffPane>(pane_id) {
+        pane.staged = true;
+        if pane.file.is_none() {
+            pane.file = Some((Section::Staged, String::new()));
+        }
+        buffer.set_point(0);
+    }
+    reveal(editor, pane_id);
+}
 pub(crate) fn fit(editor: &mut Editor) {
     for id in editor.applet_buffers::<DiffPane>() {
         let Some(width) = editor.buffer_width(id) else {

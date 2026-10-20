@@ -168,6 +168,16 @@ impl Rendered {
         self.pills.push(line.pills);
     }
 
+    pub(crate) fn append(&mut self, other: Rendered) {
+        if !self.rows.is_empty() && !other.rows.is_empty() {
+            self.text.push('\n');
+        }
+        self.text.push_str(&other.text);
+        self.rows.extend(other.rows);
+        self.styles.extend(other.styles);
+        self.pills.extend(other.pills);
+    }
+
     fn blank(&mut self) {
         self.add(Row::Blank, Line::default());
     }

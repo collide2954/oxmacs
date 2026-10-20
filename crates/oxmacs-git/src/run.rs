@@ -10,6 +10,7 @@ use crate::view;
 pub(crate) struct Plan {
     pub(crate) steps: VecDeque<Vec<String>>,
     pub(crate) scratch: Vec<PathBuf>,
+    pub(crate) done: Option<fn(&mut Editor, &Path)>,
 }
 
 impl Plan {
@@ -40,6 +41,9 @@ pub(crate) fn args<'a>(words: &[&str], paths: impl IntoIterator<Item = &'a Strin
 pub(crate) fn run(editor: &mut Editor, root: PathBuf, mut plan: Plan) {
     let Some(args) = plan.steps.pop_front() else {
         finish(editor, &root, &plan);
+        if let Some(done) = plan.done {
+            done(editor, &root);
+        }
         return;
     };
     let name = format!("git {}", args.first().map_or("", String::as_str));
