@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crate::command::ScopeId;
 use crate::display::LineStyle;
 use crate::editor::Editor;
+use crate::theme::Theme;
 
 pub trait AppletBuffer: Any + Send + fmt::Debug {
     fn scope(&self) -> ScopeId;
@@ -22,6 +23,10 @@ pub trait Applet {
 
     fn opt_in(&self) -> bool {
         false
+    }
+
+    fn themes(&self) -> &'static [Theme] {
+        &[]
     }
 
     fn install(&self, editor: &mut Editor);
@@ -124,10 +129,12 @@ impl States {
 mod tests {
     use super::Payload;
     use crate::command::{CommandSpec, Scope, ScopeId};
+    use crate::config::Config;
     use crate::display::LineStyle;
     use crate::editor::Editor;
     use crate::editor::Page;
     use crate::input::KeySequence;
+    use crate::theme::{self, ADWAITA, ADWAITA_DARK};
 
     use super::*;
 
@@ -297,7 +304,7 @@ mod tests {
         assert_eq!(editor.buffer().contents(), "Hello 2 times\n");
         assert_eq!(
             editor.line_style(0).spans,
-            [(0..13, crate::theme::Highlight::Heading)]
+            [(0..13, theme::Highlight::Heading)]
         );
         type_keys(&mut editor, "C-x b RET +");
         assert_eq!(editor.buffer().name(), "*scratch*");
@@ -395,6 +402,61 @@ mod tests {
                 .map(|answers| answers.0.clone()),
             Some(vec!["sunny".to_owned()])
         );
+    }
+
+    static PALETTE: [Theme; 2] = [
+        Theme {
+            name: "palette-light",
+            ..ADWAITA
+        },
+        Theme {
+            name: "palette-dark",
+            ..ADWAITA_DARK
+        },
+    ];
+
+    struct Palette;
+
+    impl Applet for Palette {
+        fn name(&self) -> &'static str {
+            "palette"
+        }
+
+        fn version(&self) -> &'static str {
+            "1.0.0"
+        }
+
+        fn themes(&self) -> &'static [Theme] {
+            &PALETTE
+        }
+
+        fn install(&self, _editor: &mut Editor) {}
+    }
+
+    #[test]
+    fn applet_themes_can_be_loaded_configured_and_toggled() {
+        let mut editor = Editor::new();
+
+        editor.install(&Palette);
+        type_keys(&mut editor, "M-x l o a d - t h e m e RET");
+        let labels: Vec<String> = editor
+            .completions()
+            .into_iter()
+            .map(|completion| completion.label)
+            .collect();
+
+        assert_eq!(
+            labels,
+            [
+                "adwaita",
+                "adwaita-dark",
+                "palette-light",
+                "palette-dark",
+                "system"
+            ]
+        );
+        assert!(Config::parse("theme = \"palette-dark\"").is_ok());
+        assert_eq!(theme::counterpart(&PALETTE[1]).name, "palette-light");
     }
 
     #[test]

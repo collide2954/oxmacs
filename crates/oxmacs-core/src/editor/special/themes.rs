@@ -5,6 +5,19 @@ use crate::theme::{self, Theme};
 const SYSTEM: &str = "system";
 
 impl Editor {
+    pub fn add_themes(&mut self, themes: &'static [Theme]) {
+        theme::register(themes);
+        for theme in themes {
+            if !self.themes.iter().any(|known| known.name == theme.name) {
+                self.themes.push(theme);
+            }
+        }
+    }
+
+    pub fn themes(&self) -> &[&'static Theme] {
+        &self.themes
+    }
+
     pub(in crate::editor) fn load_theme(&mut self) {
         self.open_minibuffer("Load theme: ", Purpose::LoadTheme);
     }
@@ -14,9 +27,9 @@ impl Editor {
         matches: impl Fn(&str) -> bool,
     ) -> Vec<Completion> {
         let current = self.configured_theme.map_or(SYSTEM, |theme| theme.name);
-        theme::all()
-            .into_iter()
-            .map(|theme| (theme.name, Some(theme)))
+        self.themes
+            .iter()
+            .map(|theme| (theme.name, Some(*theme)))
             .chain([(SYSTEM, None)])
             .filter(|(name, _)| matches(name))
             .map(|(name, theme)| Completion {

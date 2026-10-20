@@ -17,8 +17,12 @@ use applet::GuiApplet;
 use iced::{Size, window};
 use oxmacs_core::cli::Visit;
 use oxmacs_core::config::WindowMode;
+use oxmacs_core::theme;
 
 pub fn run(visits: Vec<Visit>, applets: fn() -> Vec<Box<dyn GuiApplet>>) -> Result {
+    for applet in applets() {
+        theme::register(applet.themes());
+    }
     let config = app::load_config();
     let mode = config
         .as_ref()

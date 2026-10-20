@@ -134,6 +134,7 @@ pub struct Editor {
     settings: Settings,
     appearance: Appearance,
     configured_theme: Option<&'static Theme>,
+    themes: Vec<&'static Theme>,
     working_directory: PathBuf,
     home: Option<PathBuf>,
     tool_report: special::doctor::ToolReport,
@@ -212,6 +213,7 @@ impl Editor {
             settings: Settings::from(&Config::default()),
             appearance: Appearance::Light,
             configured_theme: None,
+            themes: theme::builtin().to_vec(),
             working_directory: env::current_dir().unwrap_or_default(),
             home: dirs::home_dir(),
             tool_report: special::doctor::ToolReport::default(),
@@ -535,6 +537,7 @@ impl Editor {
             version: applet.version(),
             opt_in: applet.opt_in(),
         });
+        self.add_themes(applet.themes());
         applet.install(self);
     }
 
