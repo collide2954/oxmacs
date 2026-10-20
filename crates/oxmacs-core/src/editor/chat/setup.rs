@@ -1,5 +1,8 @@
+use std::any::Any;
 use std::env;
 
+use crate::applet::AppletBuffer;
+use crate::command::{Scope, ScopeId};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
@@ -87,11 +90,25 @@ pub(in crate::editor) struct SetupForm {
     styles: Vec<LineStyle>,
 }
 
-impl SetupForm {
-    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
-        self.styles.get(line).cloned().unwrap_or_default()
+impl AppletBuffer for SetupForm {
+    fn scope(&self) -> ScopeId {
+        Scope::IrcSetup.into()
     }
 
+    fn line_style(&self, line: usize) -> LineStyle {
+        self.styles.get(line).cloned().unwrap_or_default()
+    }
+}
+
+fn form_of(mode: &Mode) -> Option<&SetupForm> {
+    let Mode::Applet(view) = mode else {
+        return None;
+    };
+    let any: &dyn Any = view.as_ref();
+    any.downcast_ref()
+}
+
+impl SetupForm {
     fn fields(&self) -> Vec<Field> {
         let mut fields = vec![
             Field::Network,
@@ -221,8 +238,7 @@ fn page(form: &SetupForm) -> (Page, Vec<(usize, Field)>) {
 
 impl Editor {
     fn setup_index(&self) -> Option<usize> {
-        self.buffers
-            .find_mode(|mode| matches!(mode, Mode::IrcSetup(_)))
+        self.buffers.find_mode(|mode| form_of(mode).is_some())
     }
 
     fn unique_server_name(&self, base: &str) -> String {
@@ -264,36 +280,36 @@ impl Editor {
         };
         let mut buffer = Buffer::with_text(NAME, "");
         buffer.set_read_only(true);
-        self.add_buffer_with(buffer, Mode::IrcSetup(Box::new(form)));
+        self.add_buffer_with(buffer, Mode::Applet(Box::new(form)));
         self.render_setup();
         self.move_to_field(0);
     }
 
     fn setup_form(&self) -> Option<&SetupForm> {
-        match self.buffers.mode(0)? {
-            Mode::IrcSetup(form) => Some(form),
-            _ => None,
-        }
+        form_of(self.buffers.mode(0)?)
     }
 
     fn setup_form_mut(&mut self) -> Option<&mut SetupForm> {
         let index = self.setup_index()?;
-        match self.buffers.mode_mut(index)? {
-            Mode::IrcSetup(form) => Some(form),
-            _ => None,
-        }
+        let Mode::Applet(view) = self.buffers.mode_mut(index)? else {
+            return None;
+        };
+        let any: &mut dyn Any = view.as_mut();
+        any.downcast_mut()
     }
 
     fn render_setup(&mut self) {
         let Some(index) = self.setup_index() else {
             return;
         };
-        let Some(Mode::IrcSetup(form)) = self.buffers.mode(index) else {
+        let Some(form) = self.buffers.mode(index).and_then(form_of) else {
             return;
         };
         let (page, rows) = page(form);
-        if let Some((buffer, Mode::IrcSetup(form))) = self.buffers.entry_mut(index) {
+        if let Some(buffer) = self.buffers.get_mut(index) {
             page.fill(buffer);
+        }
+        if let Some(form) = self.setup_form_mut() {
             form.rows = rows;
             form.styles = page.styles;
         }
