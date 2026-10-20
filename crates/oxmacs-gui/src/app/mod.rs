@@ -50,8 +50,6 @@ pub struct App {
     jobs: Vec<(JobId, Handle)>,
     connections: Vec<(ConnectionId, Connection)>,
     preview_heights: Vec<(WindowId, f32)>,
-    #[cfg(feature = "animated-splash")]
-    splash_clock: Option<(oxmacs_core::editor::SplashAnimation, Instant)>,
     applets: Vec<Box<dyn GuiApplet>>,
 }
 
@@ -130,8 +128,6 @@ impl App {
             jobs: Vec::new(),
             connections: Vec::new(),
             preview_heights: Vec::new(),
-            #[cfg(feature = "animated-splash")]
-            splash_clock: None,
             applets: Vec::new(),
         };
         app.configure(&config);
@@ -215,26 +211,12 @@ impl App {
             .theme_fade
             .as_ref()
             .is_some_and(|(_, fade)| fade.is_animating(self.now));
-        #[cfg(feature = "animated-splash")]
-        let splash = self.animations && self.splash_clock.is_some();
-        #[cfg(not(feature = "animated-splash"))]
-        let splash = false;
         let applets = self.animations
             && self
                 .applets
                 .iter()
                 .any(|applet| applet.animating(&self.editor));
-        fading || splash || applets || self.reveal.is_animating(self.now)
-    }
-
-    #[cfg(feature = "animated-splash")]
-    pub fn splash_seconds(&self) -> Option<f32> {
-        let (animation, start) = self.splash_clock?;
-        Some(if self.animations {
-            self.now.saturating_duration_since(start).as_secs_f32()
-        } else {
-            crate::widgets::splash_art::still(animation)
-        })
+        fading || applets || self.reveal.is_animating(self.now)
     }
 
     pub fn completion_opacity(&self) -> f32 {

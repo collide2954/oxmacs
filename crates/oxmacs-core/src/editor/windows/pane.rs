@@ -3,8 +3,6 @@ use std::ops::Range;
 
 use crate::applet::AppletBuffer;
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
-#[cfg(feature = "animated-splash")]
-use crate::editor::SplashAnimation;
 use crate::editor::buffers::Mode;
 use crate::editor::motion::movement::display_column;
 use crate::editor::windows::status::{BufferState, Status};
@@ -161,14 +159,6 @@ impl<'a> Pane<'a> {
 
     pub fn is_splash(&self) -> bool {
         matches!(self.editor.buffers.mode(self.index), Some(Mode::Splash(_)))
-    }
-
-    #[cfg(feature = "animated-splash")]
-    pub fn splash_art(&self) -> Option<SplashAnimation> {
-        match self.editor.buffers.mode(self.index) {
-            Some(Mode::Splash(splash)) => Some(splash.art),
-            _ => None,
-        }
     }
 
     pub fn applet_buffer<T: AppletBuffer>(&self) -> Option<&'a T> {

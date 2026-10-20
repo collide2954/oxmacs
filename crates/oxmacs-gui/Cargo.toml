@@ -8,9 +8,6 @@ publish.workspace = true
 [lints]
 workspace = true
 
-[features]
-animated-splash = ["oxmacs-core/animated-splash"]
-
 [dependencies]
 iced.workspace = true
 jiff.workspace = true

@@ -212,21 +212,6 @@ impl App {
             .height(Length::Fill)
             .into(),
         };
-        #[cfg(feature = "animated-splash")]
-        let body = match (pane.splash_art(), self.splash_seconds()) {
-            (Some(animation), Some(seconds)) => column![
-                crate::widgets::splash_art::SplashArt::new(
-                    animation,
-                    seconds,
-                    faces,
-                    self.font,
-                    self.text_size
-                ),
-                body
-            ]
-            .into(),
-            _ => body,
-        };
         body
     }
 

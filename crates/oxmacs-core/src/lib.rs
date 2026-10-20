@@ -9,7 +9,6 @@ pub mod dired;
 pub mod display;
 pub mod editor;
 pub mod external;
-pub mod features;
 pub mod files;
 pub mod input;
 pub mod irc;

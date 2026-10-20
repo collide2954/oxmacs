@@ -5,8 +5,6 @@ use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
-#[cfg(feature = "animated-splash")]
-use crate::editor::special::splash_art::{self, SplashAnimation};
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -29,8 +27,6 @@ const BUTTONS: &[(Command, &str)] = &[
 #[derive(Debug)]
 pub(in crate::editor) struct Splash {
     pub(super) buttons: Vec<Button>,
-    #[cfg(feature = "animated-splash")]
-    pub(in crate::editor) art: SplashAnimation,
 }
 
 #[derive(Debug)]
@@ -73,19 +69,11 @@ impl Editor {
             self.select_buffer(index);
             return;
         }
-        #[cfg(feature = "animated-splash")]
-        let extras = splash_art::extras(SplashAnimation::default());
-        #[cfg(not(feature = "animated-splash"))]
-        let extras = Vec::new();
-        let (text, buttons) = self.splash_text(&extras);
+        let (text, buttons) = self.splash_text();
         let mut buffer = Buffer::with_text(NAME, &text);
         buffer.set_read_only(true);
         buffer.set_point(buffer.line_start(FIRST_BUTTON_LINE) + INDENT);
-        let splash = Splash {
-            buttons,
-            #[cfg(feature = "animated-splash")]
-            art: SplashAnimation::default(),
-        };
+        let splash = Splash { buttons };
         self.add_buffer_with(buffer, Mode::Splash(splash));
     }
 
@@ -117,15 +105,7 @@ impl Editor {
         else {
             return;
         };
-        #[cfg(feature = "animated-splash")]
-        let extras = self
-            .buffers
-            .splash(index)
-            .map(|splash| splash_art::extras(splash.art))
-            .unwrap_or_default();
-        #[cfg(not(feature = "animated-splash"))]
-        let extras = Vec::new();
-        let (text, buttons) = self.splash_text(&extras);
+        let (text, buttons) = self.splash_text();
         if let Some((buffer, Mode::Splash(splash))) = self.buffers.entry_mut(index) {
             Page {
                 text,
@@ -136,16 +116,11 @@ impl Editor {
         }
     }
 
-    pub(super) fn splash_text(&self, extras: &[(Command, String)]) -> (String, Vec<Button>) {
+    pub(super) fn splash_text(&self) -> (String, Vec<Button>) {
         let mut entries: Vec<(CommandId, String)> = BUTTONS
             .iter()
             .map(|(command, description)| ((*command).into(), (*description).to_owned()))
             .collect();
-        entries.extend(
-            extras
-                .iter()
-                .map(|(command, description)| ((*command).into(), description.clone())),
-        );
         entries.extend(self.splash_entries.iter().cloned());
         let keys: Vec<String> = entries
             .iter()
@@ -313,12 +288,7 @@ mod tests {
         assert!(at_point(&editor).starts_with("C-x d"));
 
         press(&mut editor, "p p");
-        let last = if cfg!(feature = "animated-splash") {
-            "a "
-        } else {
-            "C-x C-c"
-        };
-        assert!(at_point(&editor).starts_with(last));
+        assert!(at_point(&editor).starts_with("C-x C-c"));
 
         press(&mut editor, "TAB");
         assert!(at_point(&editor).starts_with("C-x C-f"));

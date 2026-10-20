@@ -9,7 +9,7 @@ publish.workspace = true
 workspace = true
 
 [features]
-animated-splash = ["oxmacs-gui/animated-splash"]
+animated-splash = ["dep:oxmacs-splash"]
 demo = ["dep:oxmacs-demo"]
 extra-themes = ["dep:oxmacs-themes"]
 
@@ -17,4 +17,5 @@ extra-themes = ["dep:oxmacs-themes"]
 oxmacs-core.workspace = true
 oxmacs-demo = { workspace = true, optional = true }
 oxmacs-gui.workspace = true
+oxmacs-splash = { workspace = true, optional = true }
 oxmacs-themes = { workspace = true, optional = true }

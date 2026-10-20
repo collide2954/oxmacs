@@ -9,7 +9,6 @@ use crate::editor::page::Page;
 use crate::editor::{Editor, Effect};
 use crate::external::managed::AIR;
 use crate::external::tools::{Probe, Tool};
-use crate::features;
 use crate::syntax::{Feature, Language};
 use crate::text::Buffer;
 use crate::theme::{Appearance, Highlight};
@@ -179,9 +178,7 @@ impl Editor {
             .iter()
             .filter(|applet| applet.opt_in)
             .map(|applet| (applet.name, applet.version));
-        let features: Vec<String> = features::opt_in()
-            .into_iter()
-            .chain(applets)
+        let features: Vec<String> = applets
             .map(|(name, version)| format!("{name} {version}"))
             .collect();
         let features = if features.is_empty() {
@@ -579,15 +576,11 @@ mod tests {
     }
 
     #[test]
-    fn opt_in_features_in_this_build_are_listed() {
+    fn a_build_without_opt_in_applets_says_so() {
         let (_dir, editor) = doctor();
 
         let line = line_with(&editor, "Features");
-        if cfg!(feature = "animated-splash") {
-            assert!(line.ends_with("animated-splash 0.1.0"), "{line}");
-        } else {
-            assert!(line.ends_with("none beyond the defaults"), "{line}");
-        }
+        assert!(line.ends_with("none beyond the defaults"), "{line}");
     }
 
     #[test]

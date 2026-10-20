@@ -3,8 +3,6 @@ pub(super) mod doctor;
 pub(super) mod help;
 pub(super) mod processes;
 pub(super) mod splash;
-#[cfg(feature = "animated-splash")]
-pub(super) mod splash_art;
 pub(super) mod themes;
 pub(super) mod toolbox;
 pub(super) mod weather;

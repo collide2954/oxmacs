@@ -113,16 +113,6 @@ impl App {
         }
     }
 
-    #[cfg(feature = "animated-splash")]
-    fn sync_splash_clock(&mut self) {
-        let shown = self.editor.splash_animation();
-        match (shown, self.splash_clock) {
-            (Some(animation), Some((known, _))) if animation == known => {}
-            (Some(animation), _) => self.splash_clock = Some((animation, Instant::now())),
-            (None, _) => self.splash_clock = None,
-        }
-    }
-
     fn tick(&mut self, now: Instant) {
         self.now = now;
         if self
@@ -256,8 +246,6 @@ impl App {
             applet.tick(&self.editor, self.now);
         }
         self.refresh_previews();
-        #[cfg(feature = "animated-splash")]
-        self.sync_splash_clock();
     }
 
     fn sample_processes(&mut self) {

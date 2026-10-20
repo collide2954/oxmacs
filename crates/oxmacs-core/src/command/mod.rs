@@ -258,12 +258,6 @@ pub enum Command {
     KillOxmacs,
     #[strum(message = "Show the oxmacs start screen")]
     AboutOxmacs,
-    #[cfg(feature = "animated-splash")]
-    #[strum(
-        message = "Switch the start screen's logo animation",
-        detailed_message = "With the animated-splash build feature, the start screen draws the oxmacs logo in block letters, animated above the usual keys. a cycles between a drifting plasma field with a shimmer, a color wave through the letters, the logo assembling from scattered pixels before it twinkles, a network of neurons firing signals that light the letters as they pass, and DNA replicating behind the logo with its helicase, polymerases and growing strands. The animation holds still when animations are off."
-    )]
-    CycleSplashAnimation,
     #[strum(
         message = "Switch to a color theme by name",
         detailed_message = "The list starts on the theme in use, and the whole editor previews whichever theme is selected as you move or type. RET keeps it and C-g puts the old one back. The new theme shows as an unsaved change in *Settings*; save it there with C-x C-s to keep it."
@@ -776,8 +770,6 @@ impl Command {
             | Self::DiredCreateDirectory
             | Self::DiredDoOpen => Scope::Dired,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
-            #[cfg(feature = "animated-splash")]
-            Self::CycleSplashAnimation => Scope::Splash,
             Self::WidgetForward | Self::WidgetBackward | Self::WidgetButtonPress => {
                 Scope::Customize
             }

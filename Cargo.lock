@@ -3400,6 +3400,7 @@ dependencies = [
  "oxmacs-core",
  "oxmacs-demo",
  "oxmacs-gui",
+ "oxmacs-splash",
  "oxmacs-themes",
 ]
 
@@ -3466,6 +3467,7 @@ name = "oxmacs-splash"
 version = "0.1.0"
 dependencies = [
  "iced",
+ "iced_test",
  "oxmacs-core",
  "oxmacs-gui",
 ]
