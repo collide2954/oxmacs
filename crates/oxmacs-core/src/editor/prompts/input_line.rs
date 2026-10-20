@@ -1,14 +1,14 @@
 use crate::text::{Buffer, Marker};
 
 #[derive(Debug)]
-pub(in crate::editor) struct InputLine {
+pub struct InputLine {
     mark: Marker,
     history: Vec<String>,
     recall: Option<usize>,
 }
 
 impl InputLine {
-    pub(in crate::editor) fn new(buffer: &mut Buffer) -> Self {
+    pub fn new(buffer: &mut Buffer) -> Self {
         let mark = buffer.add_marker(buffer.len_chars());
         Self {
             mark,
@@ -17,27 +17,27 @@ impl InputLine {
         }
     }
 
-    pub(in crate::editor) fn mark(&self) -> Marker {
+    pub fn mark(&self) -> Marker {
         self.mark
     }
 
-    pub(in crate::editor) fn start(&self, buffer: &Buffer) -> Option<usize> {
+    pub fn start(&self, buffer: &Buffer) -> Option<usize> {
         buffer.marker(self.mark)
     }
 
-    pub(in crate::editor) fn text(&self, buffer: &Buffer) -> Option<String> {
+    pub fn text(&self, buffer: &Buffer) -> Option<String> {
         let start = self.start(buffer)?;
         Some(buffer.text_in(start..buffer.len_chars()))
     }
 
-    pub(in crate::editor) fn remember(&mut self, input: &str) {
+    pub fn remember(&mut self, input: &str) {
         if !input.trim().is_empty() && self.history.last().map(String::as_str) != Some(input) {
             self.history.push(input.to_owned());
         }
         self.recall = None;
     }
 
-    pub(in crate::editor) fn recall(&mut self, older: bool) -> Option<String> {
+    pub fn recall(&mut self, older: bool) -> Option<String> {
         if self.history.is_empty() {
             return None;
         }
@@ -56,7 +56,7 @@ impl InputLine {
         )
     }
 
-    pub(in crate::editor) fn replace(&self, buffer: &mut Buffer, text: &str) {
+    pub fn replace(&self, buffer: &mut Buffer, text: &str) {
         let Some(start) = self.start(buffer) else {
             return;
         };

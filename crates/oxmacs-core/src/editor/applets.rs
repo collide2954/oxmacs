@@ -4,6 +4,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::applet::{AppletBuffer, DoctorLine};
+use crate::command::Command;
 use crate::config::Config;
 use crate::config::schema::Setting;
 use crate::editor::Editor;
@@ -133,6 +134,39 @@ impl Editor {
         let id = buffer.id();
         self.add_buffer_with(buffer, Mode::Applet(Box::new(view)));
         id
+    }
+
+    pub fn add_applet_buffer_with<T: AppletBuffer>(
+        &mut self,
+        name: &str,
+        make: impl FnOnce(&mut Buffer) -> T,
+    ) -> BufferId {
+        let mut buffer = Buffer::with_text(name, "");
+        let view = make(&mut buffer);
+        let id = buffer.id();
+        self.buffers
+            .push_back_with(buffer, Mode::Applet(Box::new(view)));
+        id
+    }
+
+    pub(super) fn guard_input(&mut self, command: Command) -> bool {
+        if !command.modifies_text() {
+            return false;
+        }
+        let Some((buffer, Mode::Applet(view))) = self.buffers.entry_mut(0) else {
+            return false;
+        };
+        let Some(start) = view.input_line().and_then(|input| input.start(buffer)) else {
+            return false;
+        };
+        if buffer.point() < start {
+            buffer.set_point(buffer.len_chars());
+        }
+        buffer.point() <= start
+            && matches!(
+                command,
+                Command::DeleteBackwardChar | Command::BackwardDeleteWord
+            )
     }
 
     pub fn find_applet_buffer<T: AppletBuffer>(

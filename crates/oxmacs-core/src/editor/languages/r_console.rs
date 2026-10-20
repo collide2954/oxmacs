@@ -590,6 +590,7 @@ impl Editor {
         let input = match self.buffers.entry_mut(0) {
             Some((buffer, Mode::Console(console))) => Some((buffer, &mut console.input)),
             Some((buffer, Mode::Chat(view))) => Some((buffer, &mut view.input)),
+            Some((buffer, Mode::Applet(view))) => view.input_line().map(|input| (buffer, input)),
             _ => None,
         };
         let Some((buffer, input)) = input else {

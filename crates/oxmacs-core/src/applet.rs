@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::command::ScopeId;
 use crate::display::LineStyle;
-use crate::editor::Editor;
+use crate::editor::{Editor, InputLine};
 use crate::theme::Theme;
 
 pub use crate::editor::Offer;
@@ -15,6 +15,10 @@ pub trait AppletBuffer: Any + Send + fmt::Debug {
 
     fn line_style(&self, _line: usize) -> LineStyle {
         LineStyle::default()
+    }
+
+    fn input_line(&mut self) -> Option<&mut InputLine> {
+        None
     }
 }
 
@@ -148,8 +152,8 @@ mod tests {
     use crate::command::{CommandSpec, Scope, ScopeId};
     use crate::config::Config;
     use crate::display::LineStyle;
-    use crate::editor::Editor;
     use crate::editor::Page;
+    use crate::editor::{Editor, InputLine};
     use crate::input::KeySequence;
     use crate::theme::{self, ADWAITA, ADWAITA_DARK};
 
@@ -655,6 +659,76 @@ mod tests {
                 .applet_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["bye".to_owned()])
+        );
+    }
+
+    #[derive(Debug)]
+    struct Shell {
+        scope: ScopeId,
+        input: InputLine,
+    }
+
+    impl AppletBuffer for Shell {
+        fn scope(&self) -> ScopeId {
+            self.scope
+        }
+
+        fn input_line(&mut self) -> Option<&mut InputLine> {
+            Some(&mut self.input)
+        }
+    }
+
+    fn send(editor: &mut Editor) {
+        let id = editor.buffer().id();
+        let Some((buffer, shell)) = editor.applet_buffer_mut::<Shell>(id) else {
+            return;
+        };
+        let text = shell.input.text(buffer).unwrap_or_default();
+        shell.input.remember(&text);
+        shell.input.replace(buffer, "");
+        note(editor, text);
+    }
+
+    #[test]
+    fn applet_buffers_can_take_input_after_a_prompt_with_history() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        let scope = editor.add_scope("*Shell*");
+        let command = editor.add_command(CommandSpec {
+            name: "shell-send",
+            summary: "Send the input",
+            help: None,
+            scope,
+            run: send,
+        });
+        editor.bind(scope, "RET", command).unwrap();
+        editor
+            .bind(scope, "M-p", crate::command::Command::ComintPreviousInput)
+            .unwrap();
+        let id = editor.add_applet_buffer_with("*Shell*", |buffer| {
+            buffer.insert_at(0, "> ");
+            Shell {
+                scope,
+                input: InputLine::new(buffer),
+            }
+        });
+        assert_eq!(editor.buffer().name(), "*scratch*");
+        editor.show_buffer(id);
+
+        type_keys(&mut editor, "h i RET");
+        assert_eq!(editor.buffer().contents(), "> ");
+        type_keys(&mut editor, "C-a x");
+        assert_eq!(editor.buffer().contents(), "> x");
+        type_keys(&mut editor, "DEL DEL");
+        assert_eq!(editor.buffer().contents(), "> ");
+        type_keys(&mut editor, "M-p");
+        assert_eq!(editor.buffer().contents(), "> hi");
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["hi".to_owned()])
         );
     }
 
