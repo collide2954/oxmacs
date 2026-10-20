@@ -3400,6 +3400,7 @@ dependencies = [
  "oxmacs-core",
  "oxmacs-demo",
  "oxmacs-gui",
+ "oxmacs-themes",
 ]
 
 [[package]]
