@@ -187,7 +187,7 @@ mod tests {
     use crate::config::Config;
     use crate::display::LineStyle;
     use crate::editor::Page;
-    use crate::editor::{Editor, InputLine};
+    use crate::editor::{Editor, InputLine, Question};
     use crate::input::KeySequence;
     use crate::theme::{self, ADWAITA, ADWAITA_DARK, Highlight};
 
@@ -1003,6 +1003,87 @@ mod tests {
                 dir.path().join("notes.txt").display().to_string(),
                 dir.path().join("sub").display().to_string(),
             ])
+        );
+    }
+
+    #[test]
+    fn applets_ask_typed_and_multiple_choice_questions() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+
+        editor.ask_typed("Delete it?", |editor, yes| note(editor, yes.to_string()));
+        assert_eq!(
+            editor.question().map(Question::prompt),
+            Some("Delete it? (yes or no) ")
+        );
+        type_keys(&mut editor, "y RET");
+        assert_eq!(editor.message(), Some("Please answer yes or no"));
+        type_keys(&mut editor, "y e s RET");
+
+        editor.ask_choice(
+            "Overwrite b.txt?",
+            &['y', 'n', '!', 'q'],
+            |editor, choice| {
+                note(editor, choice.to_string());
+            },
+        );
+        assert_eq!(
+            editor.question().map(Question::prompt),
+            Some("Overwrite b.txt? (y, n, !, q) ")
+        );
+        type_keys(&mut editor, "!");
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["true".to_owned(), "!".to_owned()])
+        );
+    }
+
+    #[test]
+    fn moved_files_keep_their_buffers() {
+        let dir = tempfile::tempdir().unwrap();
+        let from = dir.path().join("a.txt");
+        let to = dir.path().join("c.txt");
+        std::fs::write(&from, "hello").unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&from);
+        std::fs::rename(&from, &to).unwrap();
+
+        editor.file_moved(&from, &to);
+
+        assert_eq!(editor.buffer().name(), "c.txt");
+        assert_eq!(editor.buffer_visiting(&to), Some(editor.buffer().id()));
+        assert_eq!(
+            editor.absolute(Path::new("x")),
+            editor.default_directory().join("x")
+        );
+    }
+
+    #[test]
+    fn reverting_an_applet_buffer_runs_what_g_runs() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        let scope = editor.add_scope("*Board*");
+        let refresh = editor.add_command(CommandSpec {
+            name: "board-refresh",
+            summary: "Refresh",
+            help: None,
+            scope,
+            run: |editor| note(editor, "refreshed".to_owned()),
+        });
+        editor.bind(scope, "g", refresh).unwrap();
+        let id = editor.add_applet_buffer_with("*Board*", |_| Board(scope));
+        editor.show_buffer(id);
+
+        editor.execute(crate::command::Command::RevertBuffer);
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["refreshed".to_owned()])
         );
     }
 

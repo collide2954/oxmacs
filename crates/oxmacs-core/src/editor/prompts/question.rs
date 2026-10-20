@@ -209,7 +209,7 @@ impl Editor {
             }
             Pending::Applet => {
                 if let Some(then) = self.applet_answer.take() {
-                    then.give(self, answer == 'y');
+                    then.give(self, answer);
                 }
             }
         }
@@ -282,12 +282,19 @@ impl Editor {
         });
     }
 
-    pub(in crate::editor) fn ask_for_applet(&mut self, prompt: &str, then: Answer) {
+    pub(in crate::editor) fn ask_for_applet(
+        &mut self,
+        prompt: &str,
+        shown: &str,
+        choices: &'static [char],
+        typed: bool,
+        then: Answer,
+    ) {
         self.applet_answer = Some(then);
         self.question = Some(Question {
-            prompt: format!("{prompt} (y or n) "),
-            choices: YES_NO,
-            typed: None,
+            prompt: format!("{prompt} ({shown}) "),
+            choices,
+            typed: typed.then(String::new),
             pending: Pending::Applet,
         });
     }

@@ -125,6 +125,12 @@ impl Editor {
             self.refresh_listing(0);
             return;
         }
+        if matches!(self.buffers.mode(0), Some(Mode::Applet(_))) {
+            if let Some(command) = self.bound_command("g") {
+                self.run_id(command, false);
+            }
+            return;
+        }
         let buffer = self.buffers.current();
         let Some(file) = buffer.file() else {
             self.show_message("Buffer is not visiting a file");

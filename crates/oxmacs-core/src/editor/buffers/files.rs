@@ -217,7 +217,7 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn absolute(&self, path: &Path) -> PathBuf {
+    pub fn absolute(&self, path: &Path) -> PathBuf {
         let joined = self.default_directory().join(path);
         paths::normalize(&path::absolute(&joined).unwrap_or(joined))
     }

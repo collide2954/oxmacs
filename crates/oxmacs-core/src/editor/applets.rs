@@ -5,12 +5,13 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::applet::{AppletBuffer, DoctorLine};
-use crate::command::Command;
+use crate::command::{Command, CommandId};
 use crate::config::Config;
 use crate::config::schema::Setting;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::editor::{Editor, Effect};
+use crate::input::{KeySequence, Lookup};
 use crate::text::{Buffer, BufferId};
 
 #[derive(Debug, Clone, Copy)]
@@ -148,6 +149,29 @@ impl Editor {
 
     pub fn set_home(&mut self, home: Option<PathBuf>) {
         self.home = home;
+    }
+
+    pub fn file_moved(&mut self, from: &Path, to: &Path) {
+        for index in 0..self.buffers.len() {
+            if let Some(file) = self.buffers.get_mut(index).and_then(Buffer::file_mut)
+                && let Ok(rest) = file.path.strip_prefix(from)
+            {
+                file.path = if rest.as_os_str().is_empty() {
+                    to.to_owned()
+                } else {
+                    to.join(rest)
+                };
+            }
+        }
+        self.name_file_buffers();
+    }
+
+    pub(super) fn bound_command(&self, keys: &str) -> Option<CommandId> {
+        let keys: KeySequence = keys.parse().ok()?;
+        match self.keymaps.get(self.buffer_scope()).lookup(keys.keys()) {
+            Lookup::Command(command) => Some(command),
+            Lookup::Prefix | Lookup::Unbound => None,
+        }
     }
 
     pub fn buffer_ids(&self) -> Vec<BufferId> {
