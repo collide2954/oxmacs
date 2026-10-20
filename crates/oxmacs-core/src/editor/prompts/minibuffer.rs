@@ -2,8 +2,6 @@ use std::path::PathBuf;
 
 use crate::command::{Command, CommandId, Scope};
 use crate::editor::Editor;
-use crate::editor::chat::connect::Secret;
-use crate::editor::chat::setup::Field;
 use crate::editor::dired::Kind;
 use crate::editor::prompts::applet::AppletPrompt;
 use crate::files::Entry;
@@ -17,9 +15,6 @@ const LABEL_LIMIT: usize = 80;
 pub(in crate::editor) enum Purpose {
     RunCommand,
     DescribeCommand,
-    IrcServer,
-    IrcBuffer,
-    IrcPassword(usize, Secret, bool),
     PasteFromHistory,
     FindFile,
     WriteFile,
@@ -34,14 +29,12 @@ pub(in crate::editor) enum Purpose {
     Item,
     Compile,
     Setting(usize),
-    IrcSetup(Field),
-    KeepIrcPassword(usize),
     AtlasNote,
     AtlasCapture,
     AtlasDate(bool),
     RHelp,
     SavePlot,
-    Applet { completes: bool },
+    Applet { completes: bool, secret: bool },
 }
 
 impl Purpose {
@@ -68,12 +61,12 @@ impl Purpose {
                 | Self::ReplaceTo(_)
                 | Self::Compile
                 | Self::Setting(_)
-                | Self::IrcSetup(_)
-                | Self::KeepIrcPassword(_)
                 | Self::AtlasCapture
                 | Self::AtlasDate(_)
-                | Self::IrcPassword(..)
-                | Self::Applet { completes: false }
+                | Self::Applet {
+                    completes: false,
+                    ..
+                }
         )
     }
 
@@ -110,7 +103,6 @@ pub enum Choice {
     Entry(usize),
     Buffer(usize),
     Theme(Option<&'static Theme>),
-    IrcServer(usize),
     Item(usize),
     Page(usize),
     Offered(usize),
@@ -162,10 +154,7 @@ impl Minibuffer {
     }
 
     pub fn is_secret(&self) -> bool {
-        matches!(
-            self.purpose,
-            Purpose::IrcPassword(..) | Purpose::KeepIrcPassword(_)
-        )
+        matches!(self.purpose, Purpose::Applet { secret: true, .. })
     }
 }
 
@@ -208,18 +197,13 @@ impl Editor {
                 self.buffer_completions(minibuffer.purpose, matches)
             }
             Purpose::LoadTheme => self.theme_completions(matches),
-            Purpose::IrcServer => self.irc_server_completions(matches),
-            Purpose::IrcBuffer => self.irc_buffer_completions(matches),
             Purpose::ReplaceFrom(_)
             | Purpose::ReplaceTo(_)
             | Purpose::Compile
             | Purpose::RHelp
             | Purpose::Setting(_)
-            | Purpose::IrcSetup(_)
-            | Purpose::KeepIrcPassword(_)
             | Purpose::AtlasCapture
-            | Purpose::AtlasDate(_)
-            | Purpose::IrcPassword(..) => Vec::new(),
+            | Purpose::AtlasDate(_) => Vec::new(),
             Purpose::AtlasNote => self.atlas_note_completions(matches),
             Purpose::Item => self.item_completions(matches),
             Purpose::Applet { .. } => self.applet_completions(matches),
@@ -404,7 +388,6 @@ impl Editor {
             }
             Choice::Buffer(index) => self.choose_buffer(purpose, index),
             Choice::Theme(theme) => self.use_theme(theme),
-            Choice::IrcServer(index) => self.choose_irc_server(index),
             Choice::Item(position) => self.jump_to_item(position),
             Choice::Entry(_) | Choice::Page(_) | Choice::Offered(_) => {}
         }
@@ -413,21 +396,9 @@ impl Editor {
     fn exit_entry_prompt(&mut self, purpose: Purpose) -> bool {
         let input = self.minibuffer_input();
         match purpose {
-            Purpose::IrcPassword(index, secret, remember) => {
-                self.minibuffer = None;
-                self.irc_password_entered(index, secret, remember, input);
-            }
             Purpose::Setting(index) => {
                 self.minibuffer = None;
                 self.set_setting_from(index, &input);
-            }
-            Purpose::IrcSetup(field) => {
-                self.minibuffer = None;
-                self.set_setup_field(field, &input);
-            }
-            Purpose::KeepIrcPassword(index) => {
-                self.minibuffer = None;
-                self.keep_irc_password(index, &input);
             }
             Purpose::AtlasCapture => {
                 self.minibuffer = None;

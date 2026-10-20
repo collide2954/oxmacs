@@ -3,9 +3,36 @@ use std::fmt;
 use crate::editor::Editor;
 use crate::editor::prompts::minibuffer::{Choice, Completion, Purpose};
 
-type Offer = Box<dyn Fn(&Editor) -> Vec<String> + Send>;
+type Offers = Box<dyn Fn(&Editor) -> Vec<Offer> + Send>;
 type Done = Box<dyn FnOnce(&mut Editor, String) + Send>;
 type Then = Box<dyn FnOnce(&mut Editor, bool) + Send>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Offer {
+    pub label: String,
+    pub note: Option<String>,
+}
+
+impl Offer {
+    pub fn noted(label: impl Into<String>, note: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            note: Some(note.into()),
+        }
+    }
+}
+
+impl From<String> for Offer {
+    fn from(label: String) -> Self {
+        Self { label, note: None }
+    }
+}
+
+impl From<&str> for Offer {
+    fn from(label: &str) -> Self {
+        Self::from(label.to_owned())
+    }
+}
 
 pub(in crate::editor) struct Answer(Then);
 
@@ -22,7 +49,7 @@ impl fmt::Debug for Answer {
 }
 
 pub(in crate::editor) struct AppletPrompt {
-    offer: Option<Offer>,
+    offer: Option<Offers>,
     done: Done,
 }
 
@@ -43,6 +70,38 @@ impl Editor {
     ) {
         self.open_applet_prompt(
             prompt,
+            false,
+            AppletPrompt {
+                offer: None,
+                done: Box::new(done),
+            },
+        );
+    }
+
+    pub fn prompt_with_text(
+        &mut self,
+        prompt: &str,
+        text: &str,
+        done: impl FnOnce(&mut Editor, String) + Send + 'static,
+    ) {
+        self.prompt(prompt, done);
+        if self
+            .minibuffer
+            .as_ref()
+            .is_some_and(|minibuffer| minibuffer.applet.is_some())
+        {
+            self.set_minibuffer_input(text);
+        }
+    }
+
+    pub fn prompt_secret(
+        &mut self,
+        prompt: &str,
+        done: impl FnOnce(&mut Editor, String) + Send + 'static,
+    ) {
+        self.open_applet_prompt(
+            prompt,
+            true,
             AppletPrompt {
                 offer: None,
                 done: Box::new(done),
@@ -53,11 +112,12 @@ impl Editor {
     pub fn prompt_with(
         &mut self,
         prompt: &str,
-        offer: impl Fn(&Editor) -> Vec<String> + Send + 'static,
+        offer: impl Fn(&Editor) -> Vec<Offer> + Send + 'static,
         done: impl FnOnce(&mut Editor, String) + Send + 'static,
     ) {
         self.open_applet_prompt(
             prompt,
+            false,
             AppletPrompt {
                 offer: Some(Box::new(offer)),
                 done: Box::new(done),
@@ -69,9 +129,9 @@ impl Editor {
         self.ask_for_applet(prompt, Answer(Box::new(then)));
     }
 
-    fn open_applet_prompt(&mut self, prompt: &str, applet: AppletPrompt) {
+    fn open_applet_prompt(&mut self, prompt: &str, secret: bool, applet: AppletPrompt) {
         let completes = applet.offer.is_some();
-        if self.open_minibuffer(prompt, Purpose::Applet { completes })
+        if self.open_minibuffer(prompt, Purpose::Applet { completes, secret })
             && let Some(minibuffer) = &mut self.minibuffer
         {
             minibuffer.applet = Some(applet);
@@ -93,10 +153,10 @@ impl Editor {
         offer(self)
             .into_iter()
             .enumerate()
-            .filter(|(_, label)| matches(label))
-            .map(|(index, label)| Completion {
-                label,
-                annotation: None,
+            .filter(|(_, offer)| matches(&offer.label))
+            .map(|(index, offer)| Completion {
+                label: offer.label,
+                annotation: offer.note,
                 summary: None,
                 choice: Choice::Offered(index),
             })

@@ -5,7 +5,6 @@ use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
-use crate::editor::prompts::minibuffer::Purpose;
 use crate::files::{self, paths};
 use crate::text::Buffer;
 use crate::theme::Highlight;
@@ -22,7 +21,7 @@ const PRESETS: [(&str, &str, &str); 3] = [
 const PASSWORDS: [&str; 3] = ["keychain", "ask", "env"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::editor) enum Field {
+enum Field {
     Network,
     Name,
     Host,
@@ -350,9 +349,13 @@ impl Editor {
         };
         let editable = self.setup_form().and_then(|form| form.editable(field));
         if let Some(text) = editable {
-            if self.open_minibuffer(&format!("{}: ", field.label()), Purpose::IrcSetup(field)) {
-                self.set_minibuffer_input(&text);
-            }
+            self.prompt_with_text(
+                &format!("{}: ", field.label()),
+                &text,
+                move |editor, input| {
+                    editor.set_setup_field(field, &input);
+                },
+            );
             return;
         }
         let presets = PRESETS.len();
@@ -385,7 +388,7 @@ impl Editor {
         self.move_to_field(place);
     }
 
-    pub(in crate::editor) fn set_setup_field(&mut self, field: Field, input: &str) {
+    fn set_setup_field(&mut self, field: Field, input: &str) {
         let input = input.trim();
         if field == Field::Port {
             match input.parse::<u16>() {
@@ -499,27 +502,29 @@ impl Editor {
         if let Some(index) = self.setup_index() {
             self.finish_kill(index);
         }
-        let index = self
-            .config
-            .irc_server
-            .iter()
-            .position(|known| known.name == server.name);
-        match (&server.sasl, index) {
-            (Some(account), Some(index))
-                if keep_alive && server.password == PasswordSource::Keychain =>
-            {
+        match &server.sasl {
+            Some(account) if keep_alive && server.password == PasswordSource::Keychain => {
                 let prompt = format!(
                     "Password for {account} on {}, kept in the keychain for the bouncer: ",
                     server.name
                 );
-                self.open_minibuffer(&prompt, Purpose::KeepIrcPassword(index));
+                let name = server.name.clone();
+                self.prompt_secret(&prompt, move |editor, password| {
+                    editor.keep_irc_password(&name, &password);
+                });
             }
             _ => self.ask_to_connect(&server.name),
         }
     }
 
-    pub(in crate::editor) fn keep_irc_password(&mut self, index: usize, password: &str) {
-        let Some(server) = self.config.irc_server.get(index).cloned() else {
+    fn keep_irc_password(&mut self, name: &str, password: &str) {
+        let Some(server) = self
+            .config
+            .irc_server
+            .iter()
+            .find(|server| server.name == name)
+            .cloned()
+        else {
             return;
         };
         if let Some(account) = &server.sasl

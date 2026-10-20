@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use iced::widget::{column, container, row, text};
 use iced::{Alignment, Border, Element, Length, Task};
-use oxmacs_core::applet::{Applet, AppletBuffer, DoctorLine, Finding, Payload};
+use oxmacs_core::applet::{Applet, AppletBuffer, DoctorLine, Finding, Offer, Payload};
 use oxmacs_core::command::{Command, CommandSpec, Scope, ScopeId};
 use oxmacs_core::config::schema::{Kind, Setting};
 use oxmacs_core::display::LineStyle;
@@ -141,7 +141,7 @@ fn render(editor: &mut Editor) {
 fn add(editor: &mut Editor) {
     editor.prompt_with(
         "Add item: ",
-        |_| SUGGESTIONS.iter().map(|item| (*item).to_owned()).collect(),
+        |_| SUGGESTIONS.iter().map(|item| Offer::from(*item)).collect(),
         |editor, item| {
             if item.trim().is_empty() {
                 return;

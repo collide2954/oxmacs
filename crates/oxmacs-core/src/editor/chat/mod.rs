@@ -12,8 +12,7 @@ use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::chat::commands::Cycle;
 use crate::editor::prompts::input_line::InputLine;
-use crate::editor::prompts::minibuffer::Purpose;
-use crate::editor::{Choice, Completion, ConnectionId, Editor};
+use crate::editor::{ConnectionId, Editor, Offer};
 use crate::external::keychain;
 use crate::external::net::Event as NetEvent;
 use crate::irc::message::Message;
@@ -102,33 +101,20 @@ impl Editor {
                 let server = server.clone();
                 self.connect_irc(&server);
             }
-            _ => {
-                self.open_minibuffer("IRC server: ", Purpose::IrcServer);
-            }
-        }
-    }
-
-    pub(in crate::editor) fn irc_server_completions(
-        &self,
-        matches: impl Fn(&str) -> bool,
-    ) -> Vec<Completion> {
-        self.config
-            .irc_server
-            .iter()
-            .enumerate()
-            .filter(|(_, server)| matches(&server.name))
-            .map(|(index, server)| Completion {
-                label: server.name.clone(),
-                annotation: Some(format!("{}:{}", server.host, server.port)),
-                summary: None,
-                choice: Choice::IrcServer(index),
-            })
-            .collect()
-    }
-
-    pub(in crate::editor) fn choose_irc_server(&mut self, index: usize) {
-        if let Some(server) = self.config.irc_server.get(index).cloned() {
-            self.connect_irc(&server);
+            _ => self.prompt_with(
+                "IRC server: ",
+                |editor| {
+                    editor
+                        .config
+                        .irc_server
+                        .iter()
+                        .map(|server| {
+                            Offer::noted(&server.name, format!("{}:{}", server.host, server.port))
+                        })
+                        .collect()
+                },
+                |editor, name| editor.connect_named_irc(&name),
+            ),
         }
     }
 
@@ -426,23 +412,24 @@ impl Editor {
     }
 
     pub(in crate::editor) fn irc_switch(&mut self) {
-        self.open_minibuffer("IRC buffer: ", Purpose::IrcBuffer);
+        self.prompt_with(
+            "IRC buffer: ",
+            Self::irc_buffer_offers,
+            |editor, name| match editor.buffers.position(|buffer| buffer.name() == name) {
+                Some(index) => editor.select_buffer(index),
+                None => editor.show_message(format!("No IRC buffer named {name}")),
+            },
+        );
     }
 
-    pub(in crate::editor) fn irc_buffer_completions(
-        &self,
-        matches: impl Fn(&str) -> bool,
-    ) -> Vec<Completion> {
-        let mut found: Vec<(usize, usize, Completion)> = Vec::new();
+    fn irc_buffer_offers(&self) -> Vec<Offer> {
+        let mut found: Vec<(usize, usize, Offer)> = Vec::new();
         for index in 0..self.buffers.len() {
             let (Some(Mode::Chat(view)), Some(buffer)) =
                 (self.buffers.mode(index), self.buffers.get(index))
             else {
                 continue;
             };
-            if !matches(buffer.name()) {
-                continue;
-            }
             let (unread, mentions) = self
                 .irc
                 .links
@@ -465,21 +452,16 @@ impl Editor {
             found.push((
                 mentions,
                 unread,
-                Completion {
+                Offer {
                     label: buffer.name().to_owned(),
-                    annotation: (!counts.is_empty()).then(|| counts.join(" · ")),
-                    summary: None,
-                    choice: Choice::Buffer(index),
+                    note: (!counts.is_empty()).then(|| counts.join(" · ")),
                 },
             ));
         }
         found.sort_by_key(|(mentions, unread, _)| {
             (std::cmp::Reverse(*mentions), std::cmp::Reverse(*unread))
         });
-        found
-            .into_iter()
-            .map(|(_, _, completion)| completion)
-            .collect()
+        found.into_iter().map(|(_, _, offer)| offer).collect()
     }
 
     fn irc_note(&mut self, server: &str, text: &str, error: bool) {

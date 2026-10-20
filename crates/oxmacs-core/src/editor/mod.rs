@@ -28,6 +28,7 @@ pub use languages::preview::PreviewScroll;
 pub use languages::r_plots::{GalleryView, PlotView};
 pub use motion::mouse::{Cell, Clicks};
 pub use page::Page;
+pub use prompts::applet::Offer;
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
 pub use prompts::popup::PopupView;
 pub use prompts::question::Question;

@@ -1,6 +1,5 @@
 use crate::config::{BouncerMode, IrcServer, PasswordSource};
 use crate::editor::chat::Link;
-use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{ConnectionSpec, Editor, Effect, ProcessSpec};
 use crate::external::net::Endpoint;
 use crate::irc::network::{Network, Target};
@@ -13,7 +12,7 @@ const NOT_STARTED: &str =
     "The oxmacs bouncer did not start; irc-daemon.log in the oxmacs data folder says why";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::editor) enum Secret {
+enum Secret {
     Sasl,
     Bouncer,
 }
@@ -131,25 +130,26 @@ impl Editor {
         prompt: &str,
         remember: bool,
     ) {
-        let Some(index) = self
-            .config
-            .irc_server
-            .iter()
-            .position(|known| known.name == server.name)
-        else {
-            return;
-        };
-        self.open_minibuffer(prompt, Purpose::IrcPassword(index, secret, remember));
+        let name = server.name.clone();
+        self.prompt_secret(prompt, move |editor, password| {
+            editor.irc_password_entered(&name, secret, remember, password);
+        });
     }
 
-    pub(in crate::editor) fn irc_password_entered(
+    fn irc_password_entered(
         &mut self,
-        index: usize,
+        name: &str,
         secret: Secret,
         remember: bool,
         password: String,
     ) {
-        let Some(server) = self.config.irc_server.get(index).cloned() else {
+        let Some(server) = self
+            .config
+            .irc_server
+            .iter()
+            .find(|server| server.name == name)
+            .cloned()
+        else {
             return;
         };
         let (name, account) = match secret {

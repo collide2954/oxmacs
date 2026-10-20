@@ -8,6 +8,8 @@ use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::theme::Theme;
 
+pub use crate::editor::Offer;
+
 pub trait AppletBuffer: Any + Send + fmt::Debug {
     fn scope(&self) -> ScopeId;
 
@@ -342,7 +344,7 @@ mod tests {
 
         editor.prompt_with(
             "Fruit: ",
-            |_| vec!["apple".to_owned(), "banana".to_owned(), "cherry".to_owned()],
+            |_| vec!["apple".into(), "banana".into(), "cherry".into()],
             note,
         );
         assert_eq!(editor.minibuffer().unwrap().prompt(), "Fruit: ");
@@ -359,6 +361,9 @@ mod tests {
         assert!(!editor.minibuffer().unwrap().completes());
         type_keys(&mut editor, "z o e RET");
 
+        editor.prompt_with_text("Port: ", "66", note);
+        type_keys(&mut editor, "9 7 RET");
+
         editor.ask("Keep it?", |editor, keep| note(editor, keep.to_string()));
         assert_eq!(editor.question().unwrap().prompt(), "Keep it? (y or n) ");
         type_keys(&mut editor, "y");
@@ -373,10 +378,47 @@ mod tests {
             Some(vec![
                 "banana".to_owned(),
                 "zoe".to_owned(),
+                "6697".to_owned(),
                 "true".to_owned()
             ])
         );
         assert!(editor.question().is_none() && editor.minibuffer().is_none());
+    }
+
+    #[test]
+    fn offers_carry_notes_and_secret_prompts_hide_what_is_typed() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+
+        editor.prompt_with(
+            "Server: ",
+            |_| {
+                vec![
+                    Offer::noted("libera", "irc.libera.chat:6697"),
+                    Offer::from("oftc"),
+                ]
+            },
+            note,
+        );
+        let notes: Vec<Option<String>> = editor
+            .completions()
+            .into_iter()
+            .map(|completion| completion.annotation)
+            .collect();
+        assert_eq!(notes, [Some("irc.libera.chat:6697".to_owned()), None]);
+        type_keys(&mut editor, "C-g");
+
+        editor.prompt_secret("Password: ", note);
+        assert!(editor.minibuffer().unwrap().is_secret());
+        assert!(!editor.minibuffer().unwrap().completes());
+        type_keys(&mut editor, "s 3 c r 3 t RET");
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["s3cr3t".to_owned()])
+        );
     }
 
     #[derive(Debug)]
