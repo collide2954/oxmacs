@@ -165,6 +165,14 @@ impl States {
     pub fn set<T: Any + Send>(&mut self, state: T) {
         self.0.insert(TypeId::of::<T>(), Box::new(state));
     }
+
+    pub fn take<T: Any + Send>(&mut self) -> Option<T> {
+        self.0
+            .remove(&TypeId::of::<T>())?
+            .downcast()
+            .ok()
+            .map(|state| *state)
+    }
 }
 
 #[cfg(test)]
@@ -857,6 +865,43 @@ mod tests {
         assert_eq!(found.summary, "Run the sync daemon without the editor");
         assert_eq!((found.run)(), Err("not today".to_owned()));
         assert!(subcommand(applets, "notes.txt").is_none());
+    }
+
+    #[test]
+    fn applets_borrow_their_state_while_they_change_the_editor() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Count(1));
+
+        let hidden = editor.with_applet_state(|editor, count: &mut Count| {
+            count.0 += 1;
+            editor.show_message("busy");
+            editor.applet_state::<Count>().is_none()
+        });
+
+        assert_eq!(hidden, Some(true));
+        assert_eq!(editor.applet_state::<Count>().map(|count| count.0), Some(2));
+        assert_eq!(editor.message(), Some("busy"));
+        assert_eq!(editor.with_applet_state(|_, _: &mut String| ()), None);
+    }
+
+    #[test]
+    fn applets_find_list_and_close_their_buffers() {
+        let mut editor = Editor::new();
+        let scope = editor.add_scope("*Board*");
+        let first = editor.add_applet_buffer_with("*Board one*", |_| Board(scope));
+        let second = editor.add_applet_buffer_with("*Board two*", |_| Board(scope));
+
+        assert_eq!(editor.applet_buffers::<Board>(), [first, second]);
+        assert_eq!(editor.buffer_named("*Board two*"), Some(second));
+        assert_eq!(editor.buffer_named("*Board three*"), None);
+
+        editor.show_buffer(first);
+        editor.buffer_mut().insert_at(0, "hello");
+        assert_eq!(editor.buffer().contents(), "hello");
+        editor.close_buffer(first);
+
+        assert_eq!(editor.applet_buffers::<Board>(), [second]);
+        assert_ne!(editor.buffer().id(), first);
     }
 
     #[test]

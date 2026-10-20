@@ -199,6 +199,40 @@ impl Editor {
             )
     }
 
+    pub fn with_applet_state<T: Any + Send, R>(
+        &mut self,
+        work: impl FnOnce(&mut Editor, &mut T) -> R,
+    ) -> Option<R> {
+        let mut state = self.applet_states.take::<T>()?;
+        let result = work(self, &mut state);
+        self.applet_states.set(state);
+        Some(result)
+    }
+
+    pub fn applet_buffers<T: AppletBuffer>(&self) -> Vec<BufferId> {
+        (0..self.buffers.len())
+            .filter(|index| {
+                matches!(self.buffers.mode(*index), Some(Mode::Applet(view)) if downcast::<T>(view.as_ref()).is_some())
+            })
+            .filter_map(|index| self.buffers.get(index).map(Buffer::id))
+            .collect()
+    }
+
+    pub fn buffer_named(&self, name: &str) -> Option<BufferId> {
+        let index = self.buffers.position(|buffer| buffer.name() == name)?;
+        self.buffers.get(index).map(Buffer::id)
+    }
+
+    pub fn buffer_mut(&mut self) -> &mut Buffer {
+        self.buffers.current_mut()
+    }
+
+    pub fn close_buffer(&mut self, id: BufferId) {
+        if let Some(index) = self.buffers.position(|buffer| buffer.id() == id) {
+            self.finish_kill(index);
+        }
+    }
+
     pub fn find_applet_buffer<T: AppletBuffer>(
         &self,
         matches: impl Fn(&T) -> bool,
