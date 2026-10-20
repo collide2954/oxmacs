@@ -17,11 +17,19 @@ use crate::{style, units};
 impl App {
     pub fn view(&self) -> Element<'_, Message> {
         let faces = self.faces();
+        let offered = self.editor.completions();
         column![
             self.tile(self.editor.tiling(), Vec::new(), faces),
-            echo_area::view(&self.editor, faces, self.font, self.text_size),
+            echo_area::view(
+                &self.editor,
+                offered.len(),
+                faces,
+                self.font,
+                self.text_size
+            ),
             completions::view(
                 &self.editor,
+                offered,
                 faces,
                 self.font,
                 self.text_size,

@@ -10,6 +10,7 @@ use crate::style;
 
 pub fn view<'a, Message: 'a>(
     editor: &'a Editor,
+    total: usize,
     faces: Faces,
     font: Font,
     size: f32,
@@ -58,7 +59,6 @@ pub fn view<'a, Message: 'a>(
                 .note()
                 .map(|note| format!(" {note}"))
                 .unwrap_or_default();
-            let total = editor.completions().len();
             let position = if total == 0 {
                 0
             } else {

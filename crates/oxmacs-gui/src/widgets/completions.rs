@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use iced::widget::{Column, container, row, space, text};
 use iced::{Element, Font, Length};
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Completion, Editor};
 use oxmacs_core::theme::{Color, Theme as Faces};
 
 use crate::style;
@@ -15,6 +15,7 @@ const DETAIL_FADE: f32 = 0.4;
 
 pub fn view<'a, Message: 'a>(
     editor: &'a Editor,
+    completions: Vec<Completion>,
     faces: Faces,
     font: Font,
     size: f32,
@@ -24,11 +25,12 @@ pub fn view<'a, Message: 'a>(
         return Column::new().into();
     };
     let color = |color| style::color(color).scale_alpha(opacity);
-    let completions = editor.completions();
     let selected = minibuffer.selected();
     let range = visible_range(completions.len(), selected, ROWS);
-    let rows = completions[range.clone()]
-        .iter()
+    let rows = completions
+        .into_iter()
+        .skip(range.start)
+        .take(range.len())
         .zip(range)
         .map(|(completion, index)| {
             let current = index == selected;
@@ -39,12 +41,12 @@ pub fn view<'a, Message: 'a>(
             };
             let detail = detail_color(&faces, current);
             let label = row![
-                text(completion.label.clone())
+                text(completion.label)
                     .font(font)
                     .size(size)
                     .color(color(face.foreground)),
                 space::horizontal(),
-                text(completion.annotation.clone().unwrap_or_default())
+                text(completion.annotation.unwrap_or_default())
                     .font(font)
                     .size(size)
                     .color(color(detail)),

@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
 use indexmap::IndexMap;
 
 use crate::command::CommandId;
@@ -6,6 +9,7 @@ use crate::input::{Key, KeySequence, Modifiers};
 #[derive(Debug, Clone, Default)]
 pub struct Keymap {
     bindings: IndexMap<Key, Binding>,
+    first: OnceLock<HashMap<CommandId, KeySequence>>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +31,7 @@ impl Keymap {
     }
 
     fn bind_id(&mut self, keys: &[Key], command: CommandId) {
+        self.first = OnceLock::new();
         match keys {
             [] => {}
             [key] => {
@@ -48,7 +53,39 @@ impl Keymap {
     }
 
     pub fn where_is(&self, command: impl Into<CommandId>) -> Option<KeySequence> {
-        self.bindings(command).into_iter().next()
+        self.first
+            .get_or_init(|| self.first_bindings())
+            .get(&command.into())
+            .cloned()
+    }
+
+    fn first_bindings(&self) -> HashMap<CommandId, KeySequence> {
+        let mut all = Vec::new();
+        self.collect_all(&mut Vec::new(), &mut all);
+        let mut first: HashMap<CommandId, Vec<Key>> = HashMap::new();
+        for (command, keys) in all {
+            let better = first.get(&command).is_none_or(|best| {
+                (uses_super(&keys), keys.len()) < (uses_super(best), best.len())
+            });
+            if better {
+                first.insert(command, keys);
+            }
+        }
+        first
+            .into_iter()
+            .map(|(command, keys)| (command, KeySequence::from(keys)))
+            .collect()
+    }
+
+    fn collect_all(&self, prefix: &mut Vec<Key>, found: &mut Vec<(CommandId, Vec<Key>)>) {
+        for (key, binding) in &self.bindings {
+            prefix.push(*key);
+            match binding {
+                Binding::Command(command) => found.push((*command, prefix.clone())),
+                Binding::Prefix(keymap) => keymap.collect_all(prefix, found),
+            }
+            prefix.pop();
+        }
     }
 
     pub fn bindings(&self, command: impl Into<CommandId>) -> Vec<KeySequence> {
@@ -205,6 +242,32 @@ mod tests {
         assert_eq!(
             keymap.bindings(Command::BackwardChar),
             Vec::<KeySequence>::new()
+        );
+    }
+
+    #[test]
+    fn where_is_follows_later_bindings() {
+        let mut keymap = Keymap::default();
+        keymap.bind(&keys("C-x C-f"), Command::ForwardChar);
+        assert_eq!(
+            where_is(&keymap, Command::ForwardChar).as_deref(),
+            Some("C-x C-f")
+        );
+
+        keymap.bind(&keys("C-f"), Command::ForwardChar);
+        assert_eq!(
+            where_is(&keymap, Command::ForwardChar).as_deref(),
+            Some("C-f")
+        );
+
+        keymap.bind(&keys("C-f"), Command::BackwardChar);
+        assert_eq!(
+            where_is(&keymap, Command::ForwardChar).as_deref(),
+            Some("C-x C-f")
+        );
+        assert_eq!(
+            where_is(&keymap, Command::BackwardChar).as_deref(),
+            Some("C-f")
         );
     }
 
