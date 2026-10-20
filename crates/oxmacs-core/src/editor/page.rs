@@ -51,7 +51,7 @@ impl Page {
     }
 }
 
-pub(super) fn fill(text: &str, width: usize) -> Vec<String> {
+pub fn fill(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
     for word in text.split_whitespace() {
@@ -70,7 +70,7 @@ pub(super) fn fill(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-pub(super) fn clip(text: &str, width: usize) -> String {
+pub fn clip(text: &str, width: usize) -> String {
     if text.chars().count() <= width {
         return text.to_owned();
     }

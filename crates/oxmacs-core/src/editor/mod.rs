@@ -27,7 +27,7 @@ pub use job::{Job, JobId, Outcome};
 pub use languages::preview::PreviewScroll;
 pub use languages::r_plots::{GalleryView, PlotView};
 pub use motion::mouse::{Cell, Clicks};
-pub use page::Page;
+pub use page::{Page, clip, fill};
 pub use prompts::applet::Offer;
 pub use prompts::input_line::InputLine;
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
