@@ -4,6 +4,7 @@ mod layout;
 mod model;
 #[cfg(test)]
 mod sample;
+mod text;
 mod view;
 
 use std::sync::{Arc, Mutex};
@@ -19,7 +20,8 @@ use oxmacs_gui::applet::{Context, GuiApplet};
 
 pub use gui::Rendered;
 pub use layout::{Size, Zoom};
-pub use model::{Document, Heading};
+pub use model::{Document, Heading, Link, PageText, Rect, Target};
+pub use text::{Gesture, IndexDocument, Indexed, Pointer};
 pub use view::{DocId, Move, OpenDocument, Opened, RenderPages, ScrollPdf, Viewport, Wanted};
 
 use engine::Ink;
@@ -149,6 +151,12 @@ const COMMANDS: &[Spec] = &[
         run: view::toggle_dark,
     },
     Spec {
+        name: "pdf-outline",
+        summary: "Jump to a heading in the document's outline",
+        keys: &["o", "M-g i"],
+        run: text::outline,
+    },
+    Spec {
         name: "pdf-reload",
         summary: "Read the document again",
         keys: &["g"],
@@ -211,6 +219,9 @@ impl Applet for Pdf {
         editor.add_file_opener(&["pdf"], view::open);
         editor.on_event(view::opened);
         editor.on_event(view::viewed);
+        editor.on_event(text::indexed);
+        editor.on_event(text::pointed);
+        editor.on_command(text::follow_point);
         editor.add_mode_line_segment(view::page_counter);
     }
 }
@@ -219,6 +230,9 @@ impl GuiApplet for Pdf {
     fn perform(&mut self, payload: &Payload) -> Option<Task<Payload>> {
         if let Some(request) = payload.get::<OpenDocument>() {
             return Some(gui::open(request));
+        }
+        if let Some(request) = payload.get::<IndexDocument>() {
+            return Some(gui::index(*request));
         }
         if let Some(request) = payload.get::<RenderPages>() {
             return Some(gui::render(&self.cache, request, self.ink));
@@ -232,12 +246,12 @@ impl GuiApplet for Pdf {
 
     fn body<'a>(
         &'a self,
-        _editor: &'a Editor,
+        editor: &'a Editor,
         pane: Pane<'a>,
         window: WindowId,
         context: &Context,
     ) -> Option<Element<'a, Payload>> {
-        gui::body(&self.cache, self.ink, pane, window, context)
+        gui::body(editor, &self.cache, self.ink, pane, window, context)
     }
 }
 

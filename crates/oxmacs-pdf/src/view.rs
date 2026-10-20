@@ -9,6 +9,7 @@ use oxmacs_gui::units;
 use crate::PDFIUM;
 use crate::layout::{self, GAP, Placed, Size, Zoom};
 use crate::model::Document;
+use crate::text::{IndexDocument, Pointing, TextIndex};
 
 pub(crate) const ZOOM_STEP: f32 = 1.25;
 pub(crate) const RENDER_SCALE: f32 = 2.0;
@@ -100,6 +101,9 @@ pub(crate) struct PdfView {
     pub(crate) dark: bool,
     pub(crate) page: usize,
     viewports: Vec<Viewport>,
+    pub(crate) index: TextIndex,
+    pub(crate) pointing: Pointing,
+    pub(crate) revealed: Option<usize>,
 }
 
 impl PdfView {
@@ -136,7 +140,7 @@ impl PdfView {
             .copied()
     }
 
-    fn pages(&self) -> usize {
+    pub(crate) fn pages(&self) -> usize {
         self.document().map_or(0, |document| document.pages.len())
     }
 
@@ -158,14 +162,14 @@ impl AppletBuffer for PdfView {
     }
 }
 
-fn area(viewport: Viewport) -> Size {
+pub(crate) fn area(viewport: Viewport) -> Size {
     Size {
         width: viewport.width,
         height: viewport.height,
     }
 }
 
-fn fallback(window: WindowId) -> Viewport {
+pub(crate) fn fallback(window: WindowId) -> Viewport {
     Viewport {
         window,
         offset: 0.0,
@@ -203,6 +207,9 @@ pub(crate) fn open(editor: &mut Editor, path: &Path) -> bool {
             dark: false,
             page: 0,
             viewports: Vec::new(),
+            index: TextIndex::default(),
+            pointing: Pointing::default(),
+            revealed: None,
         }
     });
     editor.show_buffer(id);
@@ -233,7 +240,7 @@ fn load(editor: &mut Editor, id: BufferId) {
     }
 }
 
-fn find(editor: &Editor, doc: DocId) -> Option<BufferId> {
+pub(crate) fn find(editor: &Editor, doc: DocId) -> Option<BufferId> {
     editor.find_applet_buffer::<PdfView>(|view| view.doc == doc)
 }
 
@@ -255,10 +262,13 @@ pub(crate) fn opened(editor: &mut Editor, opened: &Opened) {
         };
         view.page = view.page.min(view.pages().saturating_sub(1));
     }
+    if opened.result.is_ok() {
+        editor.request(IndexDocument { doc: opened.doc });
+    }
     request_pages(editor, id);
 }
 
-fn showing(editor: &Editor, window: WindowId) -> Option<BufferId> {
+pub(crate) fn showing(editor: &Editor, window: WindowId) -> Option<BufferId> {
     let pane = editor.pane_of(window)?;
     pane.applet_buffer::<PdfView>()?;
     Some(pane.buffer().id())
@@ -276,10 +286,11 @@ pub(crate) fn viewed(editor: &mut Editor, seen: &Viewport) {
             view.page = layout::page_at(&placed, seen.offset, seen.height);
         }
     }
+    crate::text::sync_point(editor, id, *seen);
     request_pages(editor, id);
 }
 
-fn request_pages(editor: &mut Editor, id: BufferId) {
+pub(crate) fn request_pages(editor: &mut Editor, id: BufferId) {
     let windows: Vec<WindowId> = editor
         .tiling()
         .windows()
@@ -328,7 +339,7 @@ pub(crate) fn page_counter(editor: &Editor) -> Option<String> {
     }
 }
 
-fn current(editor: &Editor) -> Option<(BufferId, Viewport)> {
+pub(crate) fn current(editor: &Editor) -> Option<(BufferId, Viewport)> {
     let window = editor.selected_window();
     let id = showing(editor, window)?;
     let (_, view) = editor.applet_buffer::<PdfView>(id)?;
@@ -338,11 +349,11 @@ fn current(editor: &Editor) -> Option<(BufferId, Viewport)> {
     ))
 }
 
-fn scroll(editor: &mut Editor, window: WindowId, to: Move) {
+pub(crate) fn scroll(editor: &mut Editor, window: WindowId, to: Move) {
     editor.request(ScrollPdf { window, to });
 }
 
-fn show_page(editor: &mut Editor, page: usize) {
+pub(crate) fn show_page(editor: &mut Editor, page: usize) {
     let Some((id, viewport)) = current(editor) else {
         return;
     };
@@ -353,6 +364,7 @@ fn show_page(editor: &mut Editor, page: usize) {
     view.page = page;
     let top = view.top_of(page, area(viewport));
     scroll(editor, viewport.window, Move::To(top));
+    crate::text::sync_point(editor, id, viewport);
     request_pages(editor, id);
 }
 

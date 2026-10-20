@@ -1,19 +1,24 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use iced::mouse::{self, Interaction};
+use iced::widget::canvas::{self, Canvas};
 use iced::widget::image::Handle;
 use iced::widget::scrollable::{AbsoluteOffset, Direction, Scrollbar};
 use iced::widget::{
-    Column, center, container, image, operation, responsive, scrollable, sensor, space, text,
+    Column, Stack, center, container, image, mouse_area, operation, responsive, scrollable, sensor,
+    space, text,
 };
-use iced::{Alignment, Color, Element, Length, Task};
+use iced::{Alignment, Color, Element, Length, Point, Rectangle, Renderer, Task, Theme};
 use oxmacs_core::applet::Payload;
-use oxmacs_core::editor::{Pane, WindowId};
+use oxmacs_core::editor::{Editor, Pane, WindowId};
 use oxmacs_core::theme::Theme as Faces;
 use oxmacs_gui::applet::Context;
 use oxmacs_gui::{style, units};
 
 use crate::engine::{self, Bitmap, Ink};
-use crate::layout::{GAP, MARGIN, Size};
+use crate::layout::{GAP, MARGIN, Placed, Size};
+use crate::model::Rect;
+use crate::text::{self as words, Gesture, IndexDocument, Indexed, Pointer};
 use crate::view::{
     DocId, Loading, Move, OpenDocument, Opened, PdfView, RENDER_SCALE, RenderPages, ScrollPdf,
     Viewport,
@@ -21,6 +26,9 @@ use crate::view::{
 
 const BUDGET: usize = 384 * 1024 * 1024;
 const STOPPED: &str = "PDFium stopped";
+const MATCH_ALPHA: f32 = 0.4;
+const CURRENT_ALPHA: f32 = 0.6;
+const REGION_ALPHA: f32 = 0.4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rendered {
@@ -191,6 +199,98 @@ pub(crate) fn render(cache: &Arc<Mutex<Cache>>, request: &RenderPages, ink: Ink)
     Task::batch(tasks)
 }
 
+pub(crate) fn index(request: IndexDocument) -> Task<Payload> {
+    let doc = request.doc;
+    let Some(engine) = engine::running() else {
+        return Task::none();
+    };
+    Task::perform(engine.index(doc), move |result| {
+        Payload::new(Indexed {
+            doc,
+            result: result.unwrap_or_else(|_| Err(STOPPED.to_owned())),
+        })
+    })
+}
+
+struct Marks {
+    rects: Vec<(Rect, Color)>,
+    scale: f32,
+}
+
+impl canvas::Program<Payload> for Marks {
+    type State = ();
+
+    fn draw(
+        &self,
+        _state: &(),
+        renderer: &Renderer,
+        _theme: &Theme,
+        bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> Vec<canvas::Geometry> {
+        let mut frame = canvas::Frame::new(renderer, bounds.size());
+        for (rect, color) in &self.rects {
+            frame.fill_rectangle(
+                Point::new(rect.left * self.scale, rect.top * self.scale),
+                iced::Size::new(
+                    (rect.right - rect.left) * self.scale,
+                    (rect.bottom - rect.top) * self.scale,
+                ),
+                *color,
+            );
+        }
+        vec![frame.into_geometry()]
+    }
+}
+
+fn tinted(color: oxmacs_core::theme::Color, alpha: f32) -> Color {
+    Color {
+        a: alpha,
+        ..style::color(color)
+    }
+}
+
+fn marks(
+    editor: &Editor,
+    pane: Pane<'_>,
+    view: &PdfView,
+    faces: &Faces,
+) -> Vec<(usize, Rect, Color)> {
+    let mut marks = Vec::new();
+    let buffer = pane.buffer();
+    if buffer.mark_active()
+        && let Some(mark) = buffer.mark()
+    {
+        let point = buffer.point();
+        let region = tinted(faces.region, REGION_ALPHA);
+        marks.extend(
+            view.index
+                .rects(mark.min(point)..mark.max(point))
+                .into_iter()
+                .map(|(page, rect)| (page, rect, region)),
+        );
+    }
+    if editor.buffer().id() == buffer.id()
+        && let Some(search) = editor.search()
+    {
+        let found = search.found();
+        for range in search.matches() {
+            let color = if found == Some(range) {
+                tinted(faces.search_current, CURRENT_ALPHA)
+            } else {
+                tinted(faces.search_match, MATCH_ALPHA)
+            };
+            marks.extend(
+                view.index
+                    .rects(range.clone())
+                    .into_iter()
+                    .map(|(page, rect)| (page, rect, color)),
+            );
+        }
+    }
+    marks
+}
+
 pub(crate) fn scroll(scroll: &ScrollPdf) -> Task<Payload> {
     let id = pdf_id(scroll.window);
     match scroll.to {
@@ -215,6 +315,7 @@ fn notice(message: &str, context: &Context) -> Element<'static, Payload> {
 }
 
 pub(crate) fn body<'a>(
+    editor: &'a Editor,
     cache: &Arc<Mutex<Cache>>,
     theme_ink: Ink,
     pane: Pane<'a>,
@@ -225,8 +326,92 @@ pub(crate) fn body<'a>(
     Some(match &view.loading {
         Loading::Waiting => notice("Opening…", context),
         Loading::Failed(error) => notice(error, context),
-        Loading::Ready(_) => pages(view, Arc::clone(cache), theme_ink, window),
+        Loading::Ready(_) => {
+            let marks = marks(editor, pane, view, &context.faces);
+            pages(view, Arc::clone(cache), theme_ink, window, marks)
+        }
     })
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Sheet {
+    page: usize,
+    placed: Placed,
+    size: Size,
+    ink: Option<Ink>,
+    paper: Color,
+}
+
+fn sheet_view<'a>(
+    view: &'a PdfView,
+    cache: &mut Cache,
+    sheet: Sheet,
+    window: WindowId,
+    marks: &[(usize, Rect, Color)],
+) -> Element<'a, Payload> {
+    let Sheet {
+        page,
+        placed,
+        size,
+        ink,
+        paper,
+    } = sheet;
+    let key = Key {
+        doc: view.doc,
+        page,
+        width: units::floor_to_usize(placed.size.width * RENDER_SCALE),
+        ink,
+    };
+    let drawn: Element<'a, Payload> = match cache.find(key) {
+        Some(handle) => image(handle)
+            .width(placed.size.width)
+            .height(placed.size.height)
+            .into(),
+        None => container(space())
+            .width(placed.size.width)
+            .height(placed.size.height)
+            .style(move |_| container::Style {
+                background: Some(paper.into()),
+                ..container::Style::default()
+            })
+            .into(),
+    };
+    let scale = placed.size.width / size.width.max(1.0);
+    let rects: Vec<(Rect, Color)> = marks
+        .iter()
+        .filter(|(marked, ..)| *marked == page)
+        .map(|(_, rect, color)| (*rect, *color))
+        .collect();
+    let content: Element<'a, Payload> = if rects.is_empty() {
+        drawn
+    } else {
+        Stack::new()
+            .push(drawn)
+            .push(
+                Canvas::new(Marks { rects, scale })
+                    .width(placed.size.width)
+                    .height(placed.size.height),
+            )
+            .into()
+    };
+    let interaction = if words::over_link(view, page) {
+        Interaction::Pointer
+    } else {
+        Interaction::Text
+    };
+    let pointer = move |gesture| {
+        Payload::new(Pointer {
+            window,
+            page,
+            gesture,
+        })
+    };
+    mouse_area(content)
+        .interaction(interaction)
+        .on_move(move |at| pointer(Gesture::Moved(at.x / scale, at.y / scale)))
+        .on_press(pointer(Gesture::Pressed))
+        .on_release(pointer(Gesture::Released))
+        .into()
 }
 
 fn pages(
@@ -234,6 +419,7 @@ fn pages(
     cache: Arc<Mutex<Cache>>,
     theme_ink: Ink,
     window: WindowId,
+    marks: Vec<(usize, Rect, Color)>,
 ) -> Element<'_, Payload> {
     let ink = view.dark.then_some(theme_ink);
     let paper = ink.map_or(Color::WHITE, |ink| {
@@ -253,28 +439,15 @@ fn pages(
             .fold(0.0_f32, f32::max);
         let wide = widest + 2.0 * MARGIN > size.width;
         let mut known = lock(&cache);
-        let pages = placed.iter().zip(&shown).map(|(placed, (page, _))| {
-            let key = Key {
-                doc: view.doc,
+        let pages = placed.iter().zip(&shown).map(|(placed, (page, size))| {
+            let sheet = Sheet {
                 page: *page,
-                width: units::floor_to_usize(placed.size.width * RENDER_SCALE),
+                placed: *placed,
+                size: *size,
                 ink,
+                paper,
             };
-            let drawn: Element<'_, Payload> = match known.find(key) {
-                Some(handle) => image(handle)
-                    .width(placed.size.width)
-                    .height(placed.size.height)
-                    .into(),
-                None => container(space())
-                    .width(placed.size.width)
-                    .height(placed.size.height)
-                    .style(move |_| container::Style {
-                        background: Some(paper.into()),
-                        ..container::Style::default()
-                    })
-                    .into(),
-            };
-            drawn
+            sheet_view(view, &mut known, sheet, window, &marks)
         });
         let column = Column::with_children(pages)
             .spacing(GAP)
@@ -423,6 +596,7 @@ mod tests {
         };
 
         let drawn = body(
+            &editor,
             &pdf.cache,
             pdf.ink,
             editor.pane(),

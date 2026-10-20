@@ -5,11 +5,12 @@ use std::{fmt, fs, thread};
 
 use iced::futures::channel::oneshot;
 use pdfium_render::prelude::{
-    PdfBookmark, PdfDocument, PdfPageIndex, PdfRenderConfig, Pdfium, Pixels,
+    PdfBookmark, PdfDocument, PdfLink, PdfPage, PdfPageIndex, PdfRect, PdfRenderConfig, Pdfium,
+    Pixels,
 };
 
 use crate::layout::Size;
-use crate::model::{Document, Heading};
+use crate::model::{Document, Heading, Link, PageText, Rect, Target};
 use crate::view::DocId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -96,6 +97,10 @@ impl Engine {
         self.run(move |worker| worker.open(doc, &path))
     }
 
+    pub(crate) fn index(&self, doc: DocId) -> oneshot::Receiver<Result<Vec<PageText>, String>> {
+        self.run(move |worker| worker.index(doc))
+    }
+
     pub(crate) fn render(
         &self,
         doc: DocId,
@@ -154,6 +159,18 @@ impl Worker<'_> {
         Ok(Document { pages, outline })
     }
 
+    fn index(&self, doc: DocId) -> Result<Vec<PageText>, String> {
+        let document = self
+            .documents
+            .get(&doc)
+            .ok_or_else(|| "the document is closed".to_owned())?;
+        document
+            .pages()
+            .iter()
+            .map(|page| page_text(&page))
+            .collect()
+    }
+
     fn render(&self, doc: DocId, page: usize, width: usize) -> Result<Bitmap, String> {
         let document = self
             .documents
@@ -179,6 +196,57 @@ impl Worker<'_> {
             pixels: bitmap.as_rgba_bytes(),
         })
     }
+}
+
+fn page_text(page: &PdfPage<'_>) -> Result<PageText, String> {
+    let height = page.height().value;
+    let flip = |rect: PdfRect| Rect {
+        left: rect.left().value,
+        top: height - rect.top().value,
+        right: rect.right().value,
+        bottom: height - rect.bottom().value,
+    };
+    let text = page.text().map_err(|error| error.to_string())?;
+    let mut string = String::new();
+    let mut boxes = Vec::new();
+    for character in text.chars().iter() {
+        string.push(match character.unicode_char() {
+            Some('\r' | '\u{c}') => ' ',
+            Some(character) => character,
+            None => '\u{fffd}',
+        });
+        boxes.push(character.loose_bounds().map(flip).unwrap_or_default());
+    }
+    let links = page
+        .links()
+        .iter()
+        .filter_map(|link| {
+            Some(Link {
+                rect: flip(link.rect().ok()?),
+                target: target(&link)?,
+            })
+        })
+        .collect();
+    Ok(PageText {
+        text: string,
+        boxes,
+        links,
+    })
+}
+
+fn target(link: &PdfLink<'_>) -> Option<Target> {
+    if let Some(destination) = link.destination() {
+        return Some(Target::Page(
+            usize::try_from(destination.page_index().ok()?).ok()?,
+        ));
+    }
+    let action = link.action()?;
+    if let Some(uri) = action.as_uri_action() {
+        return uri.uri().ok().map(Target::Uri);
+    }
+    let local = action.as_local_destination_action()?;
+    let page = local.destination().ok()?.page_index().ok()?;
+    Some(Target::Page(usize::try_from(page).ok()?))
 }
 
 const OUTLINE_LIMIT: usize = 10_000;
@@ -285,6 +353,14 @@ mod tests {
                 .any(|pixel| pixel[0] < 100)
         );
         assert!(block_on(engine.render(8, 0, 306, None)).unwrap().is_err());
+
+        let pages = block_on(engine.index(7)).unwrap().unwrap();
+        assert_eq!(pages.len(), 3);
+        assert!(pages[1].text.starts_with("Page 2"), "{:?}", pages[1].text);
+        assert_eq!(pages[1].text.chars().count(), pages[1].boxes.len());
+        let first = pages[1].boxes[0];
+        assert!(first.top > 50.0 && first.top < 92.0, "{first:?}");
+        assert!(first.left > 70.0 && first.left < 80.0, "{first:?}");
     }
 
     #[test]
