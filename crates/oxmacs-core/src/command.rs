@@ -256,12 +256,9 @@ pub enum Command {
     AboutOxmacs,
     #[cfg(feature = "animated-splash")]
     #[strum(
-        message = "Show the start screen with an animated logo",
-        detailed_message = "The experimental start screen, built with the animated-splash cargo feature, where it also replaces *oxmacs* at startup and for about-oxmacs: the oxmacs logo in block letters, animated above the usual keys. a cycles between a drifting plasma field with a shimmer, a color wave through the letters, and the logo assembling from scattered pixels before it twinkles. The animation holds still when animations are off."
+        message = "Switch the start screen's logo animation",
+        detailed_message = "With the animated-splash build feature, the start screen draws the oxmacs logo in block letters, animated above the usual keys. a cycles between a drifting plasma field with a shimmer, a color wave through the letters, and the logo assembling from scattered pixels before it twinkles. The animation holds still when animations are off."
     )]
-    ExperimentalSplashScreen,
-    #[cfg(feature = "animated-splash")]
-    #[strum(message = "Switch the start screen's logo animation")]
     CycleSplashAnimation,
     #[strum(
         message = "Switch to a color theme by name",

@@ -115,8 +115,6 @@ impl Editor {
             Command::KillOxmacs => self.quit_requested = true,
             Command::AboutOxmacs => self.about(),
             #[cfg(feature = "animated-splash")]
-            Command::ExperimentalSplashScreen => self.about(),
-            #[cfg(feature = "animated-splash")]
             Command::CycleSplashAnimation => self.cycle_splash_animation(),
             Command::LoadTheme => self.load_theme(),
             Command::ToggleTheme => self.toggle_theme(),

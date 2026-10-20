@@ -10,10 +10,6 @@ use crate::text::Buffer;
 use crate::theme::Highlight;
 
 const NAME: &str = "*oxmacs*";
-#[cfg(feature = "animated-splash")]
-const EDITION: &str = " · experimental";
-#[cfg(not(feature = "animated-splash"))]
-const EDITION: &str = "";
 const TAGLINE: &str = "An Emacs-inspired editor, written in Rust.";
 const INDENT: usize = 3;
 const TITLE_LINE: usize = 1;
@@ -121,7 +117,7 @@ impl Editor {
             .unwrap_or(0);
         let pad = " ".repeat(INDENT);
         let mut text = format!(
-            "\n{pad}oxmacs {}{EDITION}\n{pad}{TAGLINE}\n\n",
+            "\n{pad}oxmacs {}\n{pad}{TAGLINE}\n\n",
             env!("CARGO_PKG_VERSION")
         );
         let mut buttons = Vec::new();
@@ -221,10 +217,7 @@ mod tests {
         assert!(editor.buffer().is_read_only());
         assert!(!editor.buffer().is_modified());
         let lines = lines(&editor);
-        assert_eq!(
-            lines[1],
-            format!("   oxmacs {}{}", env!("CARGO_PKG_VERSION"), super::EDITION)
-        );
+        assert_eq!(lines[1], format!("   oxmacs {}", env!("CARGO_PKG_VERSION")));
         assert_eq!(lines[2], "   An Emacs-inspired editor, written in Rust.");
     }
 

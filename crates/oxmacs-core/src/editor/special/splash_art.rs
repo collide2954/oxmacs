@@ -86,10 +86,7 @@ mod tests {
         assert_eq!(editor.pane().splash_art(), Some(SplashAnimation::Plasma));
         assert_eq!(editor.splash_animation(), Some(SplashAnimation::Plasma));
         let lines = lines(&editor);
-        assert_eq!(
-            lines[1],
-            format!("   oxmacs {} · experimental", env!("CARGO_PKG_VERSION"))
-        );
+        assert_eq!(lines[1], format!("   oxmacs {}", env!("CARGO_PKG_VERSION")));
         let cycle = lines
             .iter()
             .find(|line| line.trim_start().starts_with("a "))
@@ -121,11 +118,11 @@ mod tests {
     }
 
     #[test]
-    fn experimental_splash_screen_shows_the_same_screen() {
+    fn about_oxmacs_shows_the_animated_screen() {
         let mut editor = Editor::new();
 
         press(&mut editor, "M-x");
-        type_text(&mut editor, "experimental-splash-screen");
+        type_text(&mut editor, "about-oxmacs");
         press(&mut editor, "RET");
 
         assert_eq!(editor.buffer().name(), "*oxmacs*");
