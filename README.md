@@ -34,7 +34,17 @@ cargo run -p oxmacs --release --features animated-splash
 
 A feature that is left off is not compiled at all, so it costs nothing in size or startup time. Experimental features may change or disappear between releases; CHANGELOG.md lists them under "Experimental", and `M-x oxmacs-doctor` shows which ones your build includes.
 
-The IRC client, Atlas and extra color themes are moving behind their own opt-in features (`irc`, `atlas` and `extra-themes`) as they become applet crates; until then they are part of every build.
+More applets will be opt-in features as well. Until each one is moved into its own crate it is not yet optional:
+
+| Feature        | What it will add                                  | Today                                  |
+|----------------|---------------------------------------------------|----------------------------------------|
+| `irc`          | The IRC client and its bouncer                    | Still compiled into every build        |
+| `atlas`        | Notes, tasks, the agenda and the calendar         | Still compiled into every build        |
+| `extra-themes` | Many more color themes beside Adwaita light/dark  | Not written yet                        |
+| `sqlite`       | A SQLite database viewer and editor               | Not written yet                        |
+| `pdf`          | A PDF viewer                                      | Not written yet                        |
+
+Once moved, a build without the feature contains none of that applet's code.
 
 ## Applets, not plugins
 
