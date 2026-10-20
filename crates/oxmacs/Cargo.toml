@@ -9,12 +9,13 @@ publish.workspace = true
 workspace = true
 
 [features]
-default = ["weather"]
+default = ["markdown", "weather"]
 animated-splash = ["dep:oxmacs-splash"]
 atlas = ["dep:oxmacs-atlas"]
 demo = ["dep:oxmacs-demo"]
 extra-themes = ["dep:oxmacs-themes"]
 irc = ["dep:oxmacs-irc"]
+markdown = ["dep:oxmacs-markdown"]
 weather = ["dep:oxmacs-weather"]
 
 [dependencies]
@@ -23,6 +24,7 @@ oxmacs-core.workspace = true
 oxmacs-demo = { workspace = true, optional = true }
 oxmacs-gui.workspace = true
 oxmacs-irc = { workspace = true, optional = true }
+oxmacs-markdown = { workspace = true, optional = true }
 oxmacs-splash = { workspace = true, optional = true }
 oxmacs-themes = { workspace = true, optional = true }
 oxmacs-weather = { workspace = true, optional = true }

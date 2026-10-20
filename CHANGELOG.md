@@ -12,6 +12,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - IRC is no longer part of every build; it is the opt-in `irc` applet below.
 - Atlas vaults now live in an `[atlas]` table: `[[atlas-vault]]` becomes `[[atlas.vault]]`, moved the same way the first time oxmacs starts.
 - Atlas is no longer part of every build; it is the opt-in `atlas` applet below.
+- Markdown is a default applet: its mode, highlighting, list and heading keys and the rendered preview live in their own crate, and `--no-default-features` leaves them out.
+- `M-x` and other completion lists respond faster.
 
 ### Added
 
@@ -24,6 +26,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `M-x oxmacs-doctor` lists Atlas vaults and how many pages each holds.
 - `M-x oxmacs-doctor` lists the opt-in build features compiled in, with their versions.
 - The theme in *Settings* is picked from the same live-preview list as `M-x load-theme`.
+- Applets can draw the whole window of a buffer of their own; the Markdown preview is drawn this way.
 - Applets can add languages: the file types they open, the mode-line name, a keymap and a highlighter or a tree-sitter grammar with its queries. Rust, TOML, Markdown and R are described the same way, and Markdown code blocks are highlighted in any language the build knows.
 - Applets keep their settings in a table of their own in config.toml, such as `[demo]`. A table no applet in the build reads is kept, and `M-x oxmacs-doctor` points it out. Applet settings appear in `M-x customize` under the applet's name.
 

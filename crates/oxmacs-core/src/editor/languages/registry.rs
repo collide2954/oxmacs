@@ -20,7 +20,6 @@ pub(in crate::editor) fn built_in() -> Vec<Registered> {
     [
         (Language::RUST, Some(Scope::Rust)),
         (Language::TOML, None),
-        (Language::MARKDOWN, Some(Scope::Markdown)),
         (Language::R, Some(Scope::R)),
     ]
     .into_iter()
@@ -86,7 +85,7 @@ mod tests {
     use crate::command::CommandSpec;
     use crate::editor::Editor;
     use crate::editor::test_support::{lines, press, type_text};
-    use crate::syntax::{Feature, Grammar, Indentation, Language, LanguageSpec, Outline};
+    use crate::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
     use crate::theme::Highlight;
 
     static NOTES: LanguageSpec = LanguageSpec {
@@ -98,27 +97,6 @@ mod tests {
         pairs: &[],
         indentation: Indentation::KEEP,
         grammar: None,
-        grammars: &[],
-        outline: Outline::NONE,
-        features: &[Feature::Highlighting],
-    };
-
-    static CONF_GRAMMAR: Grammar = Grammar::new(
-        "conf",
-        || tree_sitter_toml_ng::LANGUAGE.into(),
-        include_str!("../../../queries/toml/highlights.scm"),
-        "",
-    );
-
-    static CONF: LanguageSpec = LanguageSpec {
-        name: "Conf",
-        extensions: &["conf"],
-        file_names: &[],
-        aliases: &["conf"],
-        line_comment: Some("#"),
-        pairs: &[],
-        indentation: Indentation::KEEP,
-        grammar: Some(&CONF_GRAMMAR),
         grammars: &[],
         outline: Outline::NONE,
         features: &[Feature::Highlighting],
@@ -199,20 +177,6 @@ mod tests {
         press(&mut editor, "RET TAB");
 
         assert_eq!(editor.buffer().contents(), "{\n\t");
-    }
-
-    #[test]
-    fn markdown_fences_highlight_added_languages() {
-        let mut editor = Editor::new();
-        editor.add_language(Language::new(&CONF), None);
-
-        let _dir = opened(&mut editor, "notes.md", "```conf\nname = 1\n```\n");
-        editor.prepare_display();
-
-        assert_eq!(
-            editor.line_style(1).spans,
-            [(0..4, Highlight::Function), (7..8, Highlight::Constant)]
-        );
     }
 
     #[test]

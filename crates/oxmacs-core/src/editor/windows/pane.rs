@@ -63,17 +63,6 @@ impl<'a> Pane<'a> {
         self.point
     }
 
-    pub fn preview_source(&self) -> Option<&'a Buffer> {
-        let Some(Mode::Preview(source)) = self.editor.buffers.mode(self.index) else {
-            return None;
-        };
-        let index = self
-            .editor
-            .buffers
-            .position(|buffer| buffer.id() == *source)?;
-        self.editor.buffers.get(index)
-    }
-
     pub fn is_selected(&self) -> bool {
         self.selected
     }

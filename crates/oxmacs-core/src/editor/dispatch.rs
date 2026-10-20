@@ -15,7 +15,7 @@ impl Editor {
         goal_column: Option<usize>,
         previous: Option<Command>,
     ) {
-        if self.scroll_preview(command) || self.guard_input(command) {
+        if self.guard_input(command) {
             return;
         }
         match command {
@@ -118,7 +118,6 @@ impl Editor {
             Command::ToggleTheme => self.toggle_theme(),
             Command::RustMode => self.set_major_mode(Some(Language::RUST)),
             Command::TomlMode => self.set_major_mode(Some(Language::TOML)),
-            Command::MarkdownMode => self.set_major_mode(Some(Language::MARKDOWN)),
             Command::RMode => self.set_major_mode(Some(Language::R)),
             Command::RInsertAssignment => self.insert_operator("<-"),
             Command::RInsertPipe => self.insert_operator("|>"),
@@ -183,10 +182,6 @@ impl Editor {
             Command::RustRun => self.cargo("run"),
             Command::RustRunClippy => self.cargo("clippy"),
             Command::Imenu => self.imenu(),
-            Command::MarkdownInsertListItem => self.markdown_insert_list_item(),
-            Command::MarkdownPromote => self.markdown_shift(false),
-            Command::MarkdownDemote => self.markdown_shift(true),
-            Command::MarkdownPreview => self.markdown_preview(),
             Command::Compile => self.compile(),
             Command::Recompile => self.recompile(),
             Command::KillCompilation => self.kill_compilation(),

@@ -357,20 +357,6 @@ mod tests {
     }
 
     #[test]
-    fn markdown_fences_use_any_known_language() {
-        let conf = Language::new(&CONF);
-        let text = "```conf\nname = 1\n```\n";
-
-        let (buffer, syntax) = synced(Language::MARKDOWN, &[conf], text);
-        assert_eq!(
-            syntax.highlights(&buffer, 1),
-            [(0..4, Highlight::Function), (7..8, Highlight::Constant)]
-        );
-        let (buffer, syntax) = synced(Language::MARKDOWN, &[], text);
-        assert_eq!(syntax.highlights(&buffer, 1), [(0..8, Highlight::String)]);
-    }
-
-    #[test]
     fn languages_without_a_grammar_parse_nothing() {
         let notes = Language::new(&NOTES);
 

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use iced::animation::Easing;
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
-use iced::widget::{self, markdown};
+use iced::widget;
 use iced::{Animation, Event, Font, Subscription, Task, Theme, event, keyboard, system, window};
 use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::applet::Payload;
@@ -19,7 +19,6 @@ use oxmacs_core::external::net::{self, Connection};
 use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::external::tools::{Probe, Tool};
 use oxmacs_core::external::usage::Usage;
-use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
 
 use crate::applet::GuiApplet;
@@ -42,13 +41,11 @@ pub struct App {
     reveal: Animation<bool>,
     clock: Option<String>,
     mode_line_style: ModeLineStyle,
-    previews: Vec<(BufferId, u64, markdown::Content)>,
     plot_images: Vec<(PathBuf, widget::image::Allocation)>,
     plot_loading: Vec<PathBuf>,
     usage: Usage,
     jobs: Vec<(JobId, Handle)>,
     connections: Vec<(ConnectionId, Connection)>,
-    preview_heights: Vec<(WindowId, f32)>,
     applets: Vec<Box<dyn GuiApplet>>,
 }
 
@@ -68,14 +65,12 @@ pub enum Message {
     DiskChanged,
     Opened(Result<(), String>),
     Clock,
-    OpenLink(markdown::Uri),
     Job(JobId, process::Event),
     AutoSave,
     AutoComplete,
     Signature,
     ProcessTick,
     FocusWindow(WindowId),
-    PreviewSized(WindowId, f32),
     PlotSized(WindowId, iced::Size),
     PickPlot(WindowId, usize),
     PlotLoaded(PathBuf, Option<widget::image::Allocation>),
@@ -118,13 +113,11 @@ impl App {
             reveal: transition(false, animation::REVEAL),
             clock: None,
             mode_line_style: config.mode_line_style,
-            previews: Vec::new(),
             plot_images: Vec::new(),
             plot_loading: Vec::new(),
             usage: Usage::new(),
             jobs: Vec::new(),
             connections: Vec::new(),
-            preview_heights: Vec::new(),
             applets: Vec::new(),
         };
         app.configure(&config);
@@ -310,10 +303,6 @@ pub fn animations_enabled(configured: bool, reduced_motion: bool) -> bool {
 const AUTO_SAVE_DELAY: Duration = Duration::from_millis(1500);
 const AUTO_COMPLETE_DELAY: Duration = Duration::from_millis(250);
 const SIGNATURE_DELAY: Duration = Duration::from_millis(400);
-
-fn preview_id(window: WindowId) -> widget::Id {
-    widget::Id::from(format!("preview-{window:?}"))
-}
 
 fn transition(state: bool, duration: Duration) -> Animation<bool> {
     Animation::new(state)
@@ -728,17 +717,6 @@ mod tests {
     }
 
     #[test]
-    fn preview_sizes_are_remembered_per_window() {
-        let mut app = App::default();
-        let window = app.editor().selected_window();
-
-        let _ = app.update(Message::PreviewSized(window, 300.0));
-        let _ = app.update(Message::PreviewSized(window, 400.0));
-
-        assert_eq!(app.preview_heights, [(window, 400.0)]);
-    }
-
-    #[test]
     fn reconfiguring_updates_the_view_settings() {
         let mut app = App::default();
 
@@ -995,27 +973,6 @@ mod tests {
         });
 
         assert_eq!(app.editor().tiling().boundary(&[], 0), Some(0.6));
-    }
-
-    #[test]
-    fn previews_parse_their_source_again_after_edits() {
-        let mut app = App::default();
-        press(&mut app, "x", Modifiers::ALT);
-        for c in "markdown-mode".chars() {
-            press(&mut app, &c.to_string(), Modifiers::empty());
-        }
-        enter(&mut app);
-        let _ = app.update(Message::Pasted(Some("# Title\n".to_owned())));
-        press(&mut app, "c", Modifiers::CTRL);
-        press(&mut app, "c", Modifiers::CTRL);
-        press(&mut app, "p", Modifiers::empty());
-        assert_eq!(app.previews.len(), 1);
-        let first = app.previews[0].1;
-
-        press(&mut app, "x", Modifiers::empty());
-
-        assert_eq!(app.previews[0].1, app.editor().buffer().revision());
-        assert_ne!(app.previews[0].1, first);
     }
 
     #[test]

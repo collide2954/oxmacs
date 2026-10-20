@@ -220,21 +220,6 @@ const CONSOLE: &[(&str, Command)] = &[
     ("C-M-i", Command::CompletionAtPoint),
 ];
 
-const PREVIEW: &[(&str, Command)] = &[
-    ("SPC", Command::ScrollUpCommand),
-    ("DEL", Command::ScrollDownCommand),
-    ("q", Command::QuitWindow),
-];
-
-const MARKDOWN: &[(&str, Command)] = &[
-    ("M-RET", Command::MarkdownInsertListItem),
-    ("M-<left>", Command::MarkdownPromote),
-    ("C-c C--", Command::MarkdownPromote),
-    ("M-<right>", Command::MarkdownDemote),
-    ("C-c C-=", Command::MarkdownDemote),
-    ("C-c C-c p", Command::MarkdownPreview),
-];
-
 const COMPILATION: &[(&str, Command)] = &[
     ("g", Command::Recompile),
     ("q", Command::QuitWindow),
@@ -393,8 +378,6 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::Doctor => DOCTOR,
         Scope::Rust => RUST,
         Scope::R => R,
-        Scope::Markdown => MARKDOWN,
-        Scope::Preview => PREVIEW,
         Scope::Console => CONSOLE,
         Scope::Compilation => COMPILATION,
         Scope::Customize => CUSTOMIZE,

@@ -249,7 +249,7 @@ mod tests {
         );
         assert_eq!(
             language_for(&Language::BUILT_IN, Path::new("README.md")),
-            Some(Language::MARKDOWN)
+            None
         );
         assert_eq!(
             language_for(&Language::BUILT_IN, Path::new("analysis.R")),

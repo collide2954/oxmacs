@@ -21,6 +21,7 @@ oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-demo = { path = "crates/oxmacs-demo" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
 oxmacs-irc = { path = "crates/oxmacs-irc" }
+oxmacs-markdown = { path = "crates/oxmacs-markdown" }
 oxmacs-splash = { path = "crates/oxmacs-splash" }
 oxmacs-themes = { path = "crates/oxmacs-themes" }
 oxmacs-weather = { path = "crates/oxmacs-weather" }

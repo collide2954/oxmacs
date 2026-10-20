@@ -54,22 +54,6 @@ mod tests {
     use crate::syntax::Language;
 
     #[test]
-    fn markdown_headings_are_items() {
-        let text = "# Guide\n\nIntro.\n\n## Install\n\nSteps\n=====\n";
-        let mut buffer = Buffer::with_text("t", text);
-        let mut syntax = Syntax::new(Language::MARKDOWN);
-        syntax.sync(&mut buffer);
-
-        let labels: Vec<String> = syntax
-            .items(&buffer)
-            .into_iter()
-            .map(|item| item.label)
-            .collect();
-
-        assert_eq!(labels, ["# Guide", "## Install", "Steps"]);
-    }
-
-    #[test]
     fn toml_tables_are_items() {
         let text = "[package]\nname = \"oxmacs\"\n\n[[bin]]\nname = \"oxmacs\"\n";
         let mut buffer = Buffer::with_text("t", text);

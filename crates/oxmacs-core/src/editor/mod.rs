@@ -22,7 +22,6 @@ mod windows;
 pub use connections::ConnectionSpec;
 pub use effect::{ConnectionId, Effect, FetchId};
 pub use job::{Job, JobId, Outcome};
-pub use languages::preview::PreviewScroll;
 pub use languages::r_plots::{GalleryView, PlotView};
 pub use languages::registry::LineHighlighter;
 pub use motion::mouse::{Cell, Clicks};
@@ -470,7 +469,6 @@ impl Editor {
             Some(Mode::Tools(_)) => Scope::Tools,
             Some(Mode::Environment(_)) => Scope::Environment,
             Some(Mode::Table(_)) => Scope::Table,
-            Some(Mode::Preview(_)) => Scope::Preview,
             Some(Mode::Console(_)) => Scope::Console,
             Some(Mode::Text(_) | Mode::Applet(_)) | None => Scope::Global,
         }
@@ -512,8 +510,9 @@ impl Editor {
                     None => self.syntax_highlights_at(index, line),
                 },
             },
-            Some(Mode::Preview(_) | Mode::Console(_) | Mode::Plots(_) | Mode::Text(None))
-            | None => LineStyle::default(),
+            Some(Mode::Console(_) | Mode::Plots(_) | Mode::Text(None)) | None => {
+                LineStyle::default()
+            }
         }
     }
 

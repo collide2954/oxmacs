@@ -17,20 +17,6 @@ static TOML_GRAMMAR: Grammar = Grammar::new(
     "",
 );
 
-static MARKDOWN_GRAMMAR: Grammar = Grammar::new(
-    "markdown",
-    || tree_sitter_md::LANGUAGE.into(),
-    include_str!("../../queries/markdown/highlights.scm"),
-    include_str!("../../queries/markdown/injections.scm"),
-);
-
-static MARKDOWN_INLINE_GRAMMAR: Grammar = Grammar::new(
-    "markdown_inline",
-    || tree_sitter_md::INLINE_LANGUAGE.into(),
-    include_str!("../../queries/markdown/inline.scm"),
-    "",
-);
-
 static R_GRAMMAR: Grammar = Grammar::new(
     "r",
     || tree_sitter_r::LANGUAGE.into(),
@@ -118,31 +104,6 @@ static TOML: LanguageSpec = LanguageSpec {
     features: EDITING,
 };
 
-static MARKDOWN: LanguageSpec = LanguageSpec {
-    name: "Markdown",
-    extensions: &["md", "markdown"],
-    file_names: &[],
-    aliases: &[],
-    line_comment: None,
-    pairs: &[],
-    indentation: Indentation::KEEP,
-    grammar: Some(&MARKDOWN_GRAMMAR),
-    grammars: &[&MARKDOWN_INLINE_GRAMMAR],
-    outline: Outline {
-        item: markdown_item,
-        context: |_| false,
-        defun: |node| node.kind() == "section",
-        sections: false,
-    },
-    features: &[
-        Feature::Highlighting,
-        Feature::Indentation,
-        Feature::Motion,
-        Feature::Items,
-        Feature::Preview,
-    ],
-};
-
 static R: LanguageSpec = LanguageSpec {
     name: "R",
     extensions: &["R", "r"],
@@ -188,9 +149,8 @@ static R: LanguageSpec = LanguageSpec {
 impl Language {
     pub const RUST: Self = Self::new(&RUST);
     pub const TOML: Self = Self::new(&TOML);
-    pub const MARKDOWN: Self = Self::new(&MARKDOWN);
     pub const R: Self = Self::new(&R);
-    pub const BUILT_IN: [Self; 4] = [Self::RUST, Self::TOML, Self::MARKDOWN, Self::R];
+    pub const BUILT_IN: [Self; 3] = [Self::RUST, Self::TOML, Self::R];
 }
 
 fn field(node: Node<'_>, buffer: &Buffer, name: &str) -> Option<String> {
@@ -237,13 +197,6 @@ fn toml_item(node: Node<'_>, buffer: &Buffer) -> Option<String> {
         format!("[{key}]")
     } else {
         format!("[[{key}]]")
-    })
-}
-
-fn markdown_item(node: Node<'_>, buffer: &Buffer) -> Option<String> {
-    matches!(node.kind(), "atx_heading" | "setext_heading").then(|| {
-        let line = buffer.line_of(buffer.byte_to_char(node.start_byte()));
-        buffer.line_text(line).trim().to_owned()
     })
 }
 

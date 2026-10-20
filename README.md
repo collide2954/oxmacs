@@ -22,9 +22,10 @@ cargo install --path crates/oxmacs
 
 Larger parts of oxmacs are applets, each a [Cargo feature](https://doc.rust-lang.org/cargo/reference/features.html) on the `oxmacs` crate. A few are built by default:
 
-| Feature   | What it adds                                                                 |
-|-----------|------------------------------------------------------------------------------|
-| `weather` | `M-x weather` with the forecast from Open-Meteo, and the weather in the mode line |
+| Feature    | What it adds                                                                 |
+|------------|------------------------------------------------------------------------------|
+| `markdown` | Markdown editing and highlighting, and a rendered preview with `C-c C-c p`    |
+| `weather`  | `M-x weather` with the forecast from Open-Meteo, and the weather in the mode line |
 
 `--no-default-features` leaves them out for a lean editor.
 

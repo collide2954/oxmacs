@@ -5,18 +5,16 @@ use iced::font::Family;
 use iced::futures::channel::{mpsc, oneshot};
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
-use iced::widget::scrollable::{AbsoluteOffset, RelativeOffset};
-use iced::widget::{image, markdown, operation};
+use iced::widget::image;
 use iced::{Task, clipboard, keyboard};
 use jiff::Timestamp;
-use oxmacs_core::editor::{ConnectionId, Effect, Job, Outcome, PreviewScroll, WindowId};
+use oxmacs_core::editor::{ConnectionId, Effect, Job, Outcome, WindowId};
 use oxmacs_core::external::net::{self, Endpoint};
 use oxmacs_core::external::process;
 use oxmacs_core::external::tools::{self, Probe, Tool};
-use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
-use super::{App, Message, preview_id, transition};
+use super::{App, Message, transition};
 use crate::keys::{self, Platform};
 use crate::widgets::buffer_view::ViewEvent;
 use crate::{animation, fetch, fonts, units};
@@ -64,33 +62,6 @@ impl App {
         }
         self.editor.select_window(window);
         true
-    }
-
-    fn refresh_previews(&mut self) {
-        let mut fresh: Vec<(BufferId, u64, markdown::Content)> = Vec::new();
-        for window in self.editor.tiling().windows() {
-            let Some(source) = self
-                .editor
-                .pane_of(window)
-                .and_then(|pane| pane.preview_source())
-            else {
-                continue;
-            };
-            let (id, revision) = (source.id(), source.revision());
-            if fresh.iter().any(|(known, ..)| *known == id) {
-                continue;
-            }
-            let content = match self
-                .previews
-                .iter()
-                .position(|(known, seen, _)| *known == id && *seen == revision)
-            {
-                Some(index) => self.previews.swap_remove(index).2,
-                None => markdown::Content::parse(&source.contents()),
-            };
-            fresh.push((id, revision, content));
-        }
-        self.previews = fresh;
     }
 
     fn fade_theme_from(&mut self, shown: Faces) {
@@ -177,11 +148,6 @@ impl App {
             Message::PastedPrimary(text) => self.editor.paste_primary(text),
             Message::DiskChanged => self.editor.check_disk_changes(),
             Message::Opened(Err(error)) => self.editor.show_message(error),
-            Message::OpenLink(uri) => {
-                if let Err(error) = open::that_detached(&uri) {
-                    self.editor.show_message(format!("{uri}: {error}"));
-                }
-            }
             Message::AutoSave => self.editor.auto_save(),
             Message::AutoComplete => self.editor.auto_complete(),
             Message::Signature => self.editor.show_signature(),
@@ -197,10 +163,6 @@ impl App {
                 self.editor.pick_plot_in(window, position);
             }
             Message::PlotSized(window, size) => self.plot_sized(window, size),
-            Message::PreviewSized(window, height) => {
-                self.preview_heights.retain(|(known, _)| *known != window);
-                self.preview_heights.push((window, height));
-            }
             Message::Job(job, process::Event::Line(line)) => self.editor.job_output(job, &line),
             Message::Job(job, process::Event::Output(text)) => {
                 self.editor.session_output(job, &text);
@@ -242,7 +204,6 @@ impl App {
         for applet in &mut self.applets {
             applet.tick(&self.editor, self.now);
         }
-        self.refresh_previews();
     }
 
     fn sample_processes(&mut self) {
@@ -326,7 +287,6 @@ impl App {
                 }
                 Task::none()
             }
-            Effect::ScrollPreview(window, scroll) => self.scroll_preview(window, scroll),
             Effect::Reconfigure => {
                 let config = self.editor.config().clone();
                 self.configure(&config);
@@ -366,26 +326,6 @@ impl App {
                 .iter_mut()
                 .find_map(|applet| applet.perform(&effect))
                 .map_or_else(Task::none, |task| task.map(Message::AppletEvent)),
-        }
-    }
-
-    fn scroll_preview(&self, window: WindowId, scroll: PreviewScroll) -> Task<Message> {
-        let line = self.text_size * 1.6;
-        let page = self
-            .preview_heights
-            .iter()
-            .find(|(known, _)| *known == window)
-            .map_or(line * 20.0, |(_, height)| height * 0.9);
-        let id = preview_id(window);
-        match preview_move(scroll, line, page) {
-            PreviewMove::By(y) => operation::scroll_by(id, AbsoluteOffset { x: 0.0, y }),
-            PreviewMove::To(y) => operation::snap_to(
-                id,
-                RelativeOffset {
-                    x: None,
-                    y: Some(y),
-                },
-            ),
         }
     }
 
@@ -446,50 +386,10 @@ fn open_externally(path: &Path) -> Result<(), String> {
     open::that_detached(path).map_err(|error| format!("{}: {error}", path.display()))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum PreviewMove {
-    By(f32),
-    To(f32),
-}
-
-fn preview_move(scroll: PreviewScroll, line: f32, page: f32) -> PreviewMove {
-    match scroll {
-        PreviewScroll::Lines(count) => PreviewMove::By(units::signed_to_f32(count) * line),
-        PreviewScroll::Pages(count) => PreviewMove::By(units::signed_to_f32(count) * page),
-        PreviewScroll::Top => PreviewMove::To(0.0),
-        PreviewScroll::Bottom => PreviewMove::To(1.0),
-    }
-}
-
 fn appearance(mode: Mode) -> Option<Appearance> {
     match mode {
         Mode::Light => Some(Appearance::Light),
         Mode::Dark => Some(Appearance::Dark),
         Mode::None => None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn preview_scrolls_move_by_lines_and_pages_or_snap() {
-        assert_eq!(
-            preview_move(PreviewScroll::Lines(2), 10.0, 100.0),
-            PreviewMove::By(20.0)
-        );
-        assert_eq!(
-            preview_move(PreviewScroll::Pages(-1), 10.0, 100.0),
-            PreviewMove::By(-100.0)
-        );
-        assert_eq!(
-            preview_move(PreviewScroll::Top, 10.0, 100.0),
-            PreviewMove::To(0.0)
-        );
-        assert_eq!(
-            preview_move(PreviewScroll::Bottom, 10.0, 100.0),
-            PreviewMove::To(1.0)
-        );
     }
 }

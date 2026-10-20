@@ -1,4 +1,4 @@
-use crate::editor::Editor;
+use oxmacs_core::editor::Editor;
 
 const LIST_INDENT: usize = 4;
 
@@ -44,70 +44,62 @@ impl ListItem {
     }
 }
 
-impl Editor {
-    pub(in crate::editor) fn markdown_insert_list_item(&mut self) {
-        let buffer = self.buffers.current_mut();
-        let line = buffer.line_of(buffer.point());
-        let text = buffer.line_text(line).into_owned();
-        let prefix = match ListItem::parse(&text) {
-            Some(item) => format!("\n{}", item.next()),
-            None if text.trim().is_empty() => {
-                buffer.set_point(buffer.line_start(line));
-                "- ".to_owned()
-            }
-            None => "\n- ".to_owned(),
-        };
-        buffer.insert(&prefix);
-    }
+pub(crate) fn insert_list_item(editor: &mut Editor) {
+    let buffer = editor.buffer_mut();
+    let line = buffer.line_of(buffer.point());
+    let text = buffer.line_text(line).into_owned();
+    let prefix = match ListItem::parse(&text) {
+        Some(item) => format!("\n{}", item.next()),
+        None if text.trim().is_empty() => {
+            buffer.set_point(buffer.line_start(line));
+            "- ".to_owned()
+        }
+        None => "\n- ".to_owned(),
+    };
+    buffer.insert(&prefix);
+}
 
-    pub(in crate::editor) fn markdown_shift(&mut self, deeper: bool) {
-        let buffer = self.buffers.current_mut();
-        let line = buffer.line_of(buffer.point());
-        let start = buffer.line_start(line);
-        let text = buffer.line_text(line).into_owned();
-        let hashes = text.chars().take_while(|c| *c == '#').count();
-        let heading = hashes > 0 && text[hashes..].starts_with(' ');
-        if heading {
-            match (deeper, hashes) {
-                (true, 6) => self.show_message("Cannot demote further"),
-                (false, 1) => self.show_message("Cannot promote further"),
-                (true, _) => buffer.insert_at(start, "#"),
-                (false, _) => {
-                    buffer.delete_range(start..start + 1);
-                }
+pub(crate) fn shift(editor: &mut Editor, deeper: bool) {
+    let buffer = editor.buffer_mut();
+    let line = buffer.line_of(buffer.point());
+    let start = buffer.line_start(line);
+    let text = buffer.line_text(line).into_owned();
+    let hashes = text.chars().take_while(|c| *c == '#').count();
+    let heading = hashes > 0 && text[hashes..].starts_with(' ');
+    if heading {
+        match (deeper, hashes) {
+            (true, 6) => editor.show_message("Cannot demote further"),
+            (false, 1) => editor.show_message("Cannot promote further"),
+            (true, _) => buffer.insert_at(start, "#"),
+            (false, _) => {
+                buffer.delete_range(start..start + 1);
             }
-            return;
         }
-        let Some(item) = ListItem::parse(&text) else {
-            self.show_message(if deeper {
-                "Nothing to demote"
-            } else {
-                "Nothing to promote"
-            });
-            return;
-        };
-        if deeper {
-            buffer.insert_at(start, &" ".repeat(LIST_INDENT));
+        return;
+    }
+    let Some(item) = ListItem::parse(&text) else {
+        editor.show_message(if deeper {
+            "Nothing to demote"
         } else {
-            buffer.delete_range(start..start + item.indent.min(LIST_INDENT));
-        }
+            "Nothing to promote"
+        });
+        return;
+    };
+    if deeper {
+        buffer.insert_at(start, &" ".repeat(LIST_INDENT));
+    } else {
+        buffer.delete_range(start..start + item.indent.min(LIST_INDENT));
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, press};
-    use crate::syntax::Language;
+    use oxmacs_core::editor::Editor;
 
-    fn markdown(text: &str, point: usize) -> Editor {
-        let mut editor = editor_with(text, point);
-        editor.set_major_mode(Some(Language::MARKDOWN));
-        editor
-    }
+    use crate::testing::{editor_with, press};
 
     fn after(text: &str, point: usize, keys: &str) -> (String, usize) {
-        let mut editor = markdown(text, point);
+        let mut editor = editor_with(text, point);
         press(&mut editor, keys);
         (editor.buffer().contents(), editor.buffer().point())
     }
@@ -139,7 +131,7 @@ mod tests {
         assert_eq!(after("## Title", 3, "M-<right> C-c C-=").0, "#### Title");
         assert_eq!(after("## Title", 3, "C-c C--").0, "# Title");
 
-        let mut editor = markdown("# Title", 0);
+        let mut editor: Editor = editor_with("# Title", 0);
         press(&mut editor, "M-<left>");
         assert_eq!(editor.buffer().contents(), "# Title");
         assert_eq!(editor.message(), Some("Cannot promote further"));
@@ -153,7 +145,7 @@ mod tests {
 
     #[test]
     fn plain_lines_have_nothing_to_shift() {
-        let mut editor = markdown("text", 0);
+        let mut editor = editor_with("text", 0);
 
         press(&mut editor, "M-<right>");
 

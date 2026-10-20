@@ -2,6 +2,8 @@ use oxmacs_gui::applet::GuiApplet;
 
 pub fn all() -> Vec<Box<dyn GuiApplet>> {
     vec![
+        #[cfg(feature = "markdown")]
+        Box::new(oxmacs_markdown::Markdown::default()),
         #[cfg(feature = "weather")]
         Box::new(oxmacs_weather::Weather),
         #[cfg(feature = "animated-splash")]

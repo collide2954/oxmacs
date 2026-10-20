@@ -272,8 +272,6 @@ pub enum Command {
     RustMode,
     #[strum(message = "Edit the buffer as TOML")]
     TomlMode,
-    #[strum(message = "Edit the buffer as Markdown")]
-    MarkdownMode,
     #[strum(message = "Edit the buffer as R")]
     RMode,
     #[strum(message = "Edit the buffer as plain text")]
@@ -373,17 +371,6 @@ pub enum Command {
     ComintPreviousInput,
     #[strum(message = "Bring back the next input")]
     ComintNextInput,
-    #[strum(message = "Continue the list with a new item")]
-    MarkdownInsertListItem,
-    #[strum(message = "Raise the heading or list item one level")]
-    MarkdownPromote,
-    #[strum(message = "Lower the heading or list item one level")]
-    MarkdownDemote,
-    #[strum(
-        message = "Show or hide a rendered preview beside the text",
-        detailed_message = "The preview follows your edits. In the preview, SPC and DEL scroll by a screen and q closes it."
-    )]
-    MarkdownPreview,
     #[strum(
         message = "Run a shell command and collect its errors",
         detailed_message = "Runs the command in the project directory and shows its output in *compilation*. RET or a click on an error visits it, n and p show errors while staying in the list, g runs the command again and C-c C-k stops it. M-g n and M-g p step through the errors from any buffer."
@@ -587,9 +574,6 @@ impl Command {
                 | Self::RInsertPipe
                 | Self::CompletionAccept
                 | Self::IndentOrComplete
-                | Self::MarkdownInsertListItem
-                | Self::MarkdownPromote
-                | Self::MarkdownDemote
                 | Self::DeleteChar
                 | Self::DeleteBackwardChar
                 | Self::DeleteLine
@@ -660,10 +644,6 @@ impl Command {
             | Self::CompilationNextError
             | Self::CompilationPreviousError
             | Self::CompileGotoError => Scope::Compilation,
-            Self::MarkdownInsertListItem
-            | Self::MarkdownPromote
-            | Self::MarkdownDemote
-            | Self::MarkdownPreview => Scope::Markdown,
             Self::IsearchRepeatForward
             | Self::IsearchRepeatBackward
             | Self::IsearchPrintingChar
@@ -708,8 +688,6 @@ pub enum Scope {
     Doctor,
     Rust,
     R,
-    Markdown,
-    Preview,
     Console,
     Compilation,
     Customize,
@@ -734,8 +712,6 @@ impl Scope {
             Self::Doctor => Some("*oxmacs-doctor*"),
             Self::Rust => Some("Rust buffers"),
             Self::R => Some("R buffers"),
-            Self::Markdown => Some("Markdown buffers"),
-            Self::Preview => Some("previews"),
             Self::Console => Some("consoles"),
             Self::Compilation => Some("*compilation*"),
             Self::Customize => Some("*Settings*"),

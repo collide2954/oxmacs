@@ -12,15 +12,10 @@ use crate::text::{Buffer, BufferId};
 
 const BUDGET: Duration = Duration::from_millis(50);
 const TRIES: usize = 3;
-const STARTS: [(Scope, Option<Language>, &str); 4] = [
+const STARTS: [(Scope, Option<Language>, &str); 3] = [
     (Scope::Global, None, ""),
     (Scope::Rust, Some(Language::RUST), "fn main() {}\n"),
     (Scope::R, Some(Language::R), "x <- 1\nplot(x)\n"),
-    (
-        Scope::Markdown,
-        Some(Language::MARKDOWN),
-        "# Notes\n\n- one\n",
-    ),
 ];
 
 fn start(folder: &Path, language: Option<Language>, text: &str) -> Editor {

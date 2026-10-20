@@ -1,0 +1,20 @@
+[package]
+name = "oxmacs-markdown"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+iced.workspace = true
+oxmacs-core.workspace = true
+oxmacs-gui.workspace = true
+tree-sitter.workspace = true
+tree-sitter-md.workspace = true
+
+[dev-dependencies]
+iced_test.workspace = true
+tempfile.workspace = true

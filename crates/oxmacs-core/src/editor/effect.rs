@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::{fmt, mem};
 
 use crate::applet::Payload;
-use crate::editor::{Editor, Job, JobId, PreviewScroll, WindowId};
+use crate::editor::{Editor, Job, JobId};
 use crate::external::managed::Install;
 use crate::external::net::Endpoint;
 use crate::external::tools::Tool;
@@ -39,7 +39,6 @@ pub enum Effect {
     Send(JobId, String),
     Kill(JobId),
     Reconfigure,
-    ScrollPreview(WindowId, PreviewScroll),
     Fetch(FetchId, String),
     Connect(ConnectionId, Endpoint),
     Transmit(ConnectionId, Vec<String>),

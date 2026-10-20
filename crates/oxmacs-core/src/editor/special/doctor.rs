@@ -496,15 +496,15 @@ mod tests {
         assert_eq!(mark("Rust (.rs)", "Highlight"), '✓');
         assert_eq!(mark("Rust (.rs)", "LSP"), '–');
         assert_eq!(mark("Rust (.rs)", "Lint"), '✓');
-        assert_eq!(mark("Markdown (", "Lint"), '–');
+        assert_eq!(mark("TOML (", "Lint"), '–');
         assert_eq!(mark("R (.R .r)", "Indent"), '✓');
         assert_eq!(mark("R (.R .r)", "Items"), '✓');
         assert_eq!(mark("R (.R .r)", "Format"), '✓');
         assert_eq!(mark("R (.R .r)", "Complete"), '✓');
         assert_eq!(mark("R (.R .r)", "REPL"), '✓');
         assert_eq!(mark("Rust (.rs)", "REPL"), '–');
-        assert_eq!(mark("Markdown (", "Items"), '✓');
-        assert_eq!(mark("Markdown (", "Comment"), '–');
+        assert_eq!(mark("TOML (", "Items"), '✓');
+        assert_eq!(mark("TOML (", "Preview"), '–');
     }
 
     #[test]

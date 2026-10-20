@@ -239,51 +239,6 @@ mod tests {
     }
 
     #[test]
-    fn markdown_blocks_are_highlighted() {
-        let text = "# Title\n\n- item\n\n```\ncode\n```\n\n> quote\n";
-        let markdown = |line| faces_in(Language::MARKDOWN, text, line);
-
-        assert_eq!(markdown(0), [(0..7, Highlight::Heading)]);
-        assert_eq!(markdown(2), [(0..2, Highlight::Keyword)]);
-        assert_eq!(markdown(4), [(0..3, Highlight::Comment)]);
-        assert_eq!(markdown(5), [(0..4, Highlight::String)]);
-        assert_eq!(markdown(8), [(0..7, Highlight::DocComment)]);
-    }
-
-    #[test]
-    fn markdown_inlines_are_highlighted() {
-        let text = "Some *em* and **strong** with `code` and [link](url).\n# A *b*\n";
-        let markdown = |line| faces_in(Language::MARKDOWN, text, line);
-
-        assert_eq!(
-            markdown(0),
-            [
-                (5..9, Highlight::Constant),
-                (14..24, Highlight::Keyword),
-                (30..36, Highlight::String),
-                (42..46, Highlight::Link),
-                (48..51, Highlight::Comment)
-            ]
-        );
-        assert_eq!(
-            markdown(1),
-            [(0..4, Highlight::Heading), (4..7, Highlight::Constant)]
-        );
-    }
-
-    #[test]
-    fn fenced_code_is_highlighted_in_its_language() {
-        let text = "```rust\nfn a() {}\n```\n\n```py\nx = 1\n```\n";
-        let markdown = |line| faces_in(Language::MARKDOWN, text, line);
-
-        assert_eq!(
-            markdown(1),
-            [(0..2, Highlight::Keyword), (3..4, Highlight::Function)]
-        );
-        assert_eq!(markdown(5), [(0..5, Highlight::String)]);
-    }
-
-    #[test]
     fn r_definitions_calls_and_literals_are_highlighted() {
         let text = "#' Adds one\nadd <- function(x = 1L) {\n  if (is.na(x)) return(NULL)\n  stats::median(x) + 2 # two\n}\n";
         let r = |line| faces_in(Language::R, text, line);
@@ -324,20 +279,6 @@ mod tests {
         assert_eq!(
             faces_in(Language::R, text, 0),
             [(5..12, Highlight::String), (13..16, Highlight::Comment)]
-        );
-    }
-
-    #[test]
-    fn fenced_r_code_is_highlighted_as_r() {
-        let text = "```r\nf <- function() NULL\n```\n";
-
-        assert_eq!(
-            faces_in(Language::MARKDOWN, text, 1),
-            [
-                (0..1, Highlight::Function),
-                (5..13, Highlight::Keyword),
-                (16..20, Highlight::Constant)
-            ]
         );
     }
 

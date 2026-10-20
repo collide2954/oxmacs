@@ -25,7 +25,7 @@ use crate::editor::special::toolbox::ToolList;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
 use crate::syntax::{Language, Syntax};
-use crate::text::{Buffer, BufferId};
+use crate::text::Buffer;
 
 pub(super) const SCRATCH: &str = "*scratch*";
 
@@ -35,7 +35,6 @@ pub(super) enum Mode {
     Dired(Listing),
     Splash(Splash),
     Doctor(Doctor),
-    Preview(BufferId),
     Compilation(Compilation),
     Customize(Box<Customize>),
     Diagnostics(DiagnosticsList),

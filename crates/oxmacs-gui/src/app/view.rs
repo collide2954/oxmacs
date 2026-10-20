@@ -1,13 +1,12 @@
 use iced::widget::{
-    Column, Row, column, container, image, markdown, mouse_area, responsive, scrollable, sensor,
-    space, stack, text,
+    Column, Row, column, container, image, mouse_area, responsive, sensor, space, stack, text,
 };
 use iced::{Border, Color, ContentFit, Element, Length};
 use oxmacs_core::clock;
 use oxmacs_core::editor::{Axis, GalleryView, Pane, PlotView, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
 
-use super::{App, Message, preview_id};
+use super::{App, Message};
 use crate::applet::Context;
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
@@ -186,46 +185,22 @@ impl App {
                 .on_press(Message::FocusWindow(window))
                 .into();
         }
-        let body: Element<'a, Message> = match pane
-            .preview_source()
-            .and_then(|source| self.previews.iter().find(|(id, ..)| *id == source.id()))
-        {
-            Some((_, _, parsed)) => {
-                let settings = markdown::Settings::with_text_size(
-                    self.text_size,
-                    markdown::Style::from_palette(self.theme().palette()),
-                );
-                let rendered = scrollable(
-                    container(markdown::view(parsed.items(), settings).map(Message::OpenLink))
-                        .padding(12),
-                )
-                .id(preview_id(window))
-                .height(Length::Fill);
-                let sized = sensor(rendered)
-                    .on_show(move |size| Message::PreviewSized(window, size.height))
-                    .on_resize(move |size| Message::PreviewSized(window, size.height));
-                mouse_area(sized)
-                    .on_press(Message::FocusWindow(window))
-                    .into()
-            }
-            None => container(BufferView::new(
-                pane,
-                window,
-                faces,
-                self.font,
-                self.text_size,
-                Motion {
-                    enabled: self.animations,
-                    last_input: self.last_input,
-                    blink_interval: self.blink_interval,
-                },
-                Message::View,
-            ))
-            .padding([0, 4])
-            .height(Length::Fill)
-            .into(),
-        };
-        body
+        container(BufferView::new(
+            pane,
+            window,
+            faces,
+            self.font,
+            self.text_size,
+            Motion {
+                enabled: self.animations,
+                last_input: self.last_input,
+                blink_interval: self.blink_interval,
+            },
+            Message::View,
+        ))
+        .padding([0, 4])
+        .height(Length::Fill)
+        .into()
     }
 
     fn plot(&self, window: WindowId, plot: &PlotView, faces: Faces) -> Element<'_, Message> {

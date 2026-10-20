@@ -24,7 +24,7 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn set_major_mode(&mut self, language: Option<Language>) {
+    pub fn set_major_mode(&mut self, language: Option<Language>) {
         if self.buffers.is_special(0) {
             self.show_message("This buffer keeps its own mode");
             return;
@@ -75,16 +75,6 @@ mod tests {
 
         assert_eq!(editor.language(), Some(Language::TOML));
         assert_eq!(editor.mode_line(), "-- Cargo.toml   L1 C0   (TOML)");
-    }
-
-    #[test]
-    fn markdown_mode_is_available_by_command() {
-        let mut editor = Editor::new();
-
-        run(&mut editor, "markdown-mode");
-
-        assert_eq!(editor.language(), Some(Language::MARKDOWN));
-        assert!(editor.mode_line().ends_with("(Markdown)"));
     }
 
     #[test]

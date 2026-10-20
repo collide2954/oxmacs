@@ -1,5 +1,3 @@
-pub(super) mod markdown;
-pub(super) mod preview;
 pub(super) mod r_complete;
 pub(super) mod r_console;
 pub(super) mod r_definition;
