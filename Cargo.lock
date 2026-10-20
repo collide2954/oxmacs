@@ -3462,6 +3462,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxmacs-splash"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "oxmacs-core",
+ "oxmacs-gui",
+]
+
+[[package]]
 name = "oxmacs-themes"
 version = "0.1.0"
 dependencies = [
