@@ -51,6 +51,12 @@ impl Editor {
         Some((buffer, any.downcast_mut()?))
     }
 
+    pub fn show_buffer(&mut self, id: BufferId) {
+        if let Some(index) = self.buffers.position(|buffer| buffer.id() == id) {
+            self.select_buffer(index);
+        }
+    }
+
     pub fn fill_buffer(&mut self, id: BufferId, text: &str) {
         let Some(index) = self.buffers.position(|buffer| buffer.id() == id) else {
             return;

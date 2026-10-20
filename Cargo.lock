@@ -3398,6 +3398,7 @@ name = "oxmacs"
 version = "0.13.0"
 dependencies = [
  "oxmacs-core",
+ "oxmacs-demo",
  "oxmacs-gui",
 ]
 
@@ -3431,6 +3432,15 @@ dependencies = [
  "tree-sitter-toml-ng",
  "unicode-width",
  "webpki-roots",
+]
+
+[[package]]
+name = "oxmacs-demo"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "oxmacs-core",
+ "oxmacs-gui",
 ]
 
 [[package]]

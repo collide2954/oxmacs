@@ -10,7 +10,9 @@ workspace = true
 
 [features]
 animated-splash = ["oxmacs-gui/animated-splash"]
+demo = ["dep:oxmacs-demo"]
 
 [dependencies]
 oxmacs-core.workspace = true
+oxmacs-demo = { workspace = true, optional = true }
 oxmacs-gui.workspace = true

@@ -17,6 +17,7 @@ indexmap = "2.14.2"
 jiff = "0.2.38"
 keyring = "4.2.0"
 oxmacs-core = { path = "crates/oxmacs-core" }
+oxmacs-demo = { path = "crates/oxmacs-demo" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
 native-theme = { version = "0.6.1", default-features = false }
 notify = "8.2.0"
