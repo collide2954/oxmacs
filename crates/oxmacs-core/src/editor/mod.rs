@@ -144,6 +144,9 @@ pub struct Editor {
     mode_line_segments: Vec<applets::Segment>,
     configured_handlers: Vec<fn(&mut Editor)>,
     quit_handlers: Vec<fn(&mut Editor)>,
+    display_handlers: Vec<fn(&mut Editor)>,
+    last_id: Option<CommandId>,
+    repeated: bool,
     working_directory: PathBuf,
     home: Option<PathBuf>,
     tool_report: special::doctor::ToolReport,
@@ -232,6 +235,9 @@ impl Editor {
             mode_line_segments: Vec::new(),
             configured_handlers: Vec::new(),
             quit_handlers: Vec::new(),
+            display_handlers: Vec::new(),
+            last_id: None,
+            repeated: false,
             working_directory: env::current_dir().unwrap_or_default(),
             home: dirs::home_dir(),
             tool_report: special::doctor::ToolReport::default(),
@@ -591,6 +597,8 @@ impl Editor {
     }
 
     fn run_id(&mut self, command: CommandId, shifted: bool) {
+        self.repeated = self.last_id == Some(command);
+        self.last_id = Some(command);
         match command.core() {
             Some(core) => self.run(core, shifted),
             None => self.run_added(command),

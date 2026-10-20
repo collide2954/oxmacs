@@ -202,6 +202,7 @@ impl Editor {
     fn end_command_chain(&mut self) {
         self.exit_search();
         self.last_command = None;
+        self.last_id = None;
         self.goal_column = None;
         self.shift_selection = false;
         self.buffers.current_mut().close_undo_step();

@@ -378,6 +378,7 @@ impl Editor {
         self.goal_column = None;
         self.shift_selection = false;
         self.last_command = None;
+        self.last_id = None;
     }
 }
 

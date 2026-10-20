@@ -229,9 +229,10 @@ impl Editor {
     }
 
     pub(in crate::editor) fn show_irc_server(&mut self, name: &str) {
-        let name = name.to_owned();
-        self.ensure_chat_buffer(&name, &Target::Server);
-        self.show_beside(move |editor| editor.chat_buffer(&name, &Target::Server));
+        let index = self.ensure_chat_buffer(name, &Target::Server);
+        if let Some(id) = self.buffers.get(index).map(Buffer::id) {
+            self.show_buffer_beside(id);
+        }
     }
 
     fn irc_quit(&mut self, index: usize, reason: &str) {
@@ -346,7 +347,7 @@ impl Editor {
         let visible = self
             .buffers
             .get(buffer)
-            .is_some_and(|buffer| self.window_showing(buffer.id()).is_some());
+            .is_some_and(|buffer| self.buffer_shown(buffer.id()));
         let network = &self.irc.links[index].network;
         let Some(line) = network
             .find(target)
@@ -377,11 +378,14 @@ impl Editor {
     }
 
     pub(in crate::editor) fn read_visible_chats(&mut self) {
-        let mut visible = self.visible_buffers();
-        visible.push(0);
-        for index in visible {
+        for index in 0..self.buffers.len() {
+            let shown = self
+                .buffers
+                .get(index)
+                .is_some_and(|buffer| self.buffer_shown(buffer.id()));
             let Some((server, target)) = self
                 .chat_at(index)
+                .filter(|_| shown)
                 .map(|view| (view.server.clone(), view.target.clone()))
             else {
                 continue;
@@ -406,7 +410,7 @@ impl Editor {
             let (Some(view), Some(buffer)) = (self.chat_at(index), self.buffers.get(index)) else {
                 continue;
             };
-            let width = self.width_showing(buffer.id()).filter(|width| *width > 0);
+            let width = self.buffer_width(buffer.id());
             if width.is_some_and(|width| width != view.width) {
                 stale.push((view.server.clone(), view.target.clone()));
             }
@@ -575,8 +579,7 @@ impl Editor {
         let width = self
             .buffers
             .get(index)
-            .and_then(|buffer| self.width_showing(buffer.id()))
-            .filter(|width| *width > 0)
+            .and_then(|buffer| self.buffer_width(buffer.id()))
             .unwrap_or(DEFAULT_WIDTH);
         let page = render::page(chat, width, &self.irc.zone);
         let name = label(server, target);
@@ -609,7 +612,7 @@ impl Editor {
         view.styles = styles;
         view.width = width;
         let id = buffer.id();
-        self.move_windows(id, |point, _| {
+        self.move_points(id, |point, _| {
             (point == prefix && prefix < start).then_some(start)
         });
     }

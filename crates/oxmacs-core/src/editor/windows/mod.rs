@@ -245,6 +245,7 @@ impl Editor {
         self.goal_column = None;
         self.shift_selection = false;
         self.last_command = None;
+        self.last_id = None;
         self.drag_anchor = None;
         self.reveal_point();
     }
@@ -403,6 +404,7 @@ impl Editor {
         self.render_backlinks();
         self.render_tables();
         self.render_environments();
+        self.tell_display();
     }
 
     pub(super) fn width_showing(&self, buffer: BufferId) -> Option<usize> {

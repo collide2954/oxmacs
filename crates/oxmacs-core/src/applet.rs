@@ -732,6 +732,79 @@ mod tests {
         );
     }
 
+    fn count_repeats(editor: &mut Editor) {
+        let repeated = editor.repeated();
+        note(editor, repeated.to_string());
+    }
+
+    #[test]
+    fn applet_commands_know_when_they_run_again_right_away() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        let command = editor.add_command(CommandSpec {
+            name: "count-repeats",
+            summary: "Note whether this repeats",
+            help: None,
+            scope: Scope::Global.into(),
+            run: count_repeats,
+        });
+        editor.bind(Scope::Global, "C-c r", command).unwrap();
+
+        type_keys(&mut editor, "C-c r C-c r C-f C-c r");
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec![
+                "false".to_owned(),
+                "true".to_owned(),
+                "false".to_owned()
+            ])
+        );
+    }
+
+    #[derive(Debug)]
+    struct Board(ScopeId);
+
+    impl AppletBuffer for Board {
+        fn scope(&self) -> ScopeId {
+            self.0
+        }
+    }
+
+    #[test]
+    fn applets_see_where_their_buffers_show_and_hear_before_each_display() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        editor.on_display(|editor| note(editor, "display".to_owned()));
+        let scope = editor.add_scope("*Board*");
+        let id = editor.add_applet_buffer_with("*Board*", |buffer| {
+            buffer.insert_at(0, "one\ntwo\nthree");
+            Board(scope)
+        });
+        assert!(!editor.buffer_shown(id));
+        assert_eq!(editor.buffer_width(id), None);
+
+        editor.show_buffer_beside(id);
+
+        assert!(editor.buffer_shown(id));
+        assert_eq!(editor.buffer().id(), id);
+        assert_eq!(editor.tiling().windows().len(), 2);
+        let window = editor.selected_window();
+        editor.resize_pane(window, 10, 33);
+        assert_eq!(editor.buffer_width(id), Some(32));
+        editor.move_points(id, |_, end| Some(end));
+        assert_eq!(editor.buffer().point(), 13);
+        editor.prepare_display();
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["display".to_owned(), "display".to_owned()])
+        );
+    }
+
     #[test]
     fn state_is_kept_per_type() {
         let mut states = States::default();

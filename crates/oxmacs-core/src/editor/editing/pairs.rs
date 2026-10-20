@@ -16,6 +16,7 @@ impl Editor {
         }
         self.paren_pair = self.find_paren_pair();
         self.read_visible_chats();
+        self.tell_display();
     }
 
     fn pairs(&self) -> &'static [(char, char)] {

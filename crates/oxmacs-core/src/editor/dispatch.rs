@@ -192,7 +192,7 @@ impl Editor {
             Command::IrcToggleNickList => self.irc_toggle_members(),
             Command::IrcStopDaemon => self.irc_stop_daemon(),
             Command::IrcCompleteNick => {
-                self.irc_complete_nick(previous == Some(Command::IrcCompleteNick));
+                self.irc_complete_nick(self.repeated());
             }
             Command::TextMode => self.set_major_mode(None),
             Command::OxmacsDoctor => self.oxmacs_doctor(),

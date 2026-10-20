@@ -40,6 +40,36 @@ fn downcast<T: AppletBuffer>(view: &dyn AppletBuffer) -> Option<&T> {
 }
 
 impl Editor {
+    pub fn on_display(&mut self, handler: fn(&mut Editor)) {
+        self.display_handlers.push(handler);
+    }
+
+    pub(super) fn tell_display(&mut self) {
+        for handler in self.display_handlers.clone() {
+            handler(self);
+        }
+    }
+
+    pub fn repeated(&self) -> bool {
+        self.repeated
+    }
+
+    pub fn buffer_shown(&self, id: BufferId) -> bool {
+        self.window_showing(id).is_some()
+    }
+
+    pub fn buffer_width(&self, id: BufferId) -> Option<usize> {
+        self.width_showing(id).filter(|width| *width > 0)
+    }
+
+    pub fn move_points(&mut self, id: BufferId, to: impl Fn(usize, usize) -> Option<usize>) {
+        self.move_windows(id, to);
+    }
+
+    pub fn show_buffer_beside(&mut self, id: BufferId) {
+        self.show_beside(move |editor| editor.buffers.position(|buffer| buffer.id() == id));
+    }
+
     pub fn on_quit(&mut self, handler: fn(&mut Editor)) {
         self.quit_handlers.push(handler);
     }
