@@ -64,7 +64,7 @@ Because built-in applets use exactly the same API, a fork can add its own the sa
 3. Register it in the binary's applet list.
 4. Build with `--features yours`.
 
-Nothing outside your crate and those few lines needs to change, and an applet you leave out is simply not compiled. [crates/oxmacs-demo](crates/oxmacs-demo/README.md) is a small, complete example to start from.
+Nothing outside your crate and those few lines needs to change, and an applet you leave out is simply not compiled. [crates/oxmacs-demo](crates/oxmacs-demo/README.md) is a small, complete example to start from. [crates/oxmacs-themes](crates/oxmacs-themes) adds color themes and [crates/oxmacs-splash](crates/oxmacs-splash) draws the animated start screen, both through the same API.
 
 The applet API is being extracted from the editor now; the built-in applets move into their own crates as it lands.
 
