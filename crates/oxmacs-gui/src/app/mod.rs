@@ -445,6 +445,46 @@ mod tests {
     }
 
     #[derive(Debug)]
+    struct Beacon;
+
+    impl oxmacs_core::applet::Applet for Beacon {
+        fn name(&self) -> &'static str {
+            "beacon"
+        }
+
+        fn version(&self) -> &'static str {
+            "1.0.0"
+        }
+
+        fn install(&self, _editor: &mut Editor) {}
+    }
+
+    impl GuiApplet for Beacon {
+        fn minibuffer_style(
+            &self,
+            editor: &Editor,
+            context: &crate::applet::Context,
+        ) -> Option<widget::container::Style> {
+            editor.prompting().then(|| widget::container::Style {
+                background: Some(style::color(context.faces.minibuffer_prompt).into()),
+                ..widget::container::Style::default()
+            })
+        }
+    }
+
+    #[test]
+    fn applets_can_style_the_minibuffer_while_a_prompt_waits() {
+        let (mut app, _) = App::boot(&Ok(Config::default()), &[], vec![Box::new(Beacon)]);
+        assert!(app.minibuffer_style().is_none());
+
+        press(&mut app, "x", Modifiers::ALT);
+
+        assert_eq!(
+            app.minibuffer_style().and_then(|style| style.background),
+            Some(style::color(app.faces().minibuffer_prompt).into())
+        );
+    }
+    #[derive(Debug)]
     struct Sign(oxmacs_core::command::ScopeId);
 
     impl oxmacs_core::applet::AppletBuffer for Sign {

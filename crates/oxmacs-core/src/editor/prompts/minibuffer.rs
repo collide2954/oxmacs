@@ -147,6 +147,13 @@ impl Editor {
         self.minibuffer.as_ref()
     }
 
+    pub fn prompting(&self) -> bool {
+        self.minibuffer.is_some()
+            || self.question.is_some()
+            || self.search().is_some()
+            || self.replacing().is_some()
+    }
+
     pub fn completions(&self) -> Vec<Completion> {
         let Some(minibuffer) = &self.minibuffer else {
             return Vec::new();
@@ -581,6 +588,35 @@ mod tests {
             editor.message(),
             Some("Command attempted to use minibuffer while in minibuffer")
         );
+    }
+
+    #[test]
+    fn the_editor_knows_when_a_prompt_waits_for_an_answer() {
+        let mut editor = Editor::new();
+        type_text(&mut editor, "aa");
+        assert!(!editor.prompting());
+
+        press(&mut editor, "M-x");
+        assert!(editor.prompting());
+        press(&mut editor, "C-g C-r");
+        assert!(editor.prompting());
+        press(&mut editor, "C-g");
+        assert!(!editor.prompting());
+
+        press(&mut editor, "M-< M-%");
+        type_text(&mut editor, "a");
+        press(&mut editor, "RET");
+        type_text(&mut editor, "b");
+        press(&mut editor, "RET");
+        assert!(editor.replacing().is_some());
+        assert!(editor.prompting());
+        press(&mut editor, "q");
+        assert!(!editor.prompting());
+
+        editor.ask("Go?", |_, _| {});
+        assert!(editor.prompting());
+        press(&mut editor, "n");
+        assert!(!editor.prompting());
     }
 
     fn open_with(editor: &mut Editor, text: &str) {

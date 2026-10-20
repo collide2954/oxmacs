@@ -2,6 +2,7 @@ use std::fmt;
 
 use iced::theme::Palette;
 use iced::time::Instant;
+use iced::widget::container;
 use iced::{Element, Font, Subscription, Task};
 use oxmacs_core::applet::{Applet, Payload};
 use oxmacs_core::editor::{Editor, Pane, WindowId};
@@ -47,6 +48,10 @@ pub trait GuiApplet: Applet + fmt::Debug {
         _window: WindowId,
         _context: &Context,
     ) -> Option<Element<'a, Payload>> {
+        None
+    }
+
+    fn minibuffer_style(&self, _editor: &Editor, _context: &Context) -> Option<container::Style> {
         None
     }
 

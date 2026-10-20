@@ -24,7 +24,8 @@ impl App {
                 offered.len(),
                 faces,
                 self.font,
-                self.text_size
+                self.text_size,
+                self.minibuffer_style()
             ),
             completions::view(
                 &self.editor,
@@ -36,6 +37,13 @@ impl App {
             ),
         ]
         .into()
+    }
+
+    pub fn minibuffer_style(&self) -> Option<container::Style> {
+        let context = self.context(self.faces());
+        self.applets
+            .iter()
+            .find_map(|applet| applet.minibuffer_style(&self.editor, &context))
     }
 
     fn tile<'a>(
