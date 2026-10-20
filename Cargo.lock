@@ -3401,6 +3401,7 @@ dependencies = [
  "oxmacs-core",
  "oxmacs-demo",
  "oxmacs-dired",
+ "oxmacs-glow",
  "oxmacs-gui",
  "oxmacs-irc",
  "oxmacs-markdown",
@@ -3475,6 +3476,16 @@ dependencies = [
  "serde",
  "tempfile",
  "trash",
+]
+
+[[package]]
+name = "oxmacs-glow"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "iced_test",
+ "oxmacs-core",
+ "oxmacs-gui",
 ]
 
 [[package]]

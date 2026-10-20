@@ -20,6 +20,7 @@ oxmacs-atlas = { path = "crates/oxmacs-atlas" }
 oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-demo = { path = "crates/oxmacs-demo" }
 oxmacs-dired = { path = "crates/oxmacs-dired" }
+oxmacs-glow = { path = "crates/oxmacs-glow" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
 oxmacs-irc = { path = "crates/oxmacs-irc" }
 oxmacs-markdown = { path = "crates/oxmacs-markdown" }
