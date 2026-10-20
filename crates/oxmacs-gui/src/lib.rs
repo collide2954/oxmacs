@@ -6,7 +6,7 @@ pub mod fonts;
 pub mod keys;
 pub mod style;
 pub mod ticker;
-mod units;
+pub mod units;
 pub mod watcher;
 pub mod widgets;
 
