@@ -35,6 +35,7 @@ Others are only built when you ask for them. These experimental applets are vers
 | `animated-splash` | 0.1.0   | A start screen with the oxmacs logo animated above the keys; `a` cycles effects |
 | `demo`            | 0.1.0   | An example applet to copy when writing your own; `M-x demo`                  |
 | `extra-themes`    | 0.1.0   | 56 more color themes for `M-x load-theme`, from gruvbox to modus-vivendi       |
+| `irc`             | 0.1.0   | `M-x irc`, an IRCv3 client, with `M-x irc-setup` and a bouncer                |
 
 Turn one on with `--features`, and separate several with commas:
 
@@ -48,7 +49,6 @@ More applets will be opt-in features as well. Until each one is moved into its o
 
 | Feature        | What it will add                                  | Today                                  |
 |----------------|---------------------------------------------------|----------------------------------------|
-| `irc`          | The IRC client and its bouncer                    | Still compiled into every build        |
 | `atlas`        | Notes, tasks, the agenda and the calendar         | Still compiled into every build        |
 | `sqlite`       | A SQLite database viewer and editor               | Not written yet                        |
 | `pdf`          | A PDF viewer                                      | Not written yet                        |

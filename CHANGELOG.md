@@ -8,6 +8,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 - Weather settings now live in a `[weather]` table: `location`, `units` and `mode-line`. oxmacs moves `weather-location`, `weather-units` and `mode-line-weather` there the first time it starts, keeping comments, and says so.
 - Weather is a default applet; `cargo build -p oxmacs --no-default-features` leaves it out.
+- IRC settings now live in an `[irc]` table: `[[irc-server]]` becomes `[[irc.server]]` and `[irc-bouncer]` becomes `[irc.bouncer]`, moved the same way the first time oxmacs starts.
+- IRC is no longer part of every build; it is the opt-in `irc` applet below.
 
 ### Added
 
@@ -27,6 +29,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `demo` 0.1.0: an example applet, `M-x demo`, showing how applets add commands, keys, buffers, prompts, questions, effects, GUI panels, a config table (`[demo] sides`) and a doctor section. Build with `cargo build -p oxmacs --features demo`.
 - `animated-splash` 0.1.0: the start screen draws the oxmacs logo in block letters, animated above the keys; `a` cycles a drifting plasma field with a shimmer, a color wave, the logo assembling from scattered pixels, a network of neurons whose signals light the letters as they pass, and DNA replicating behind the logo with its helicase, polymerases, primers and Okazaki fragments. Build with `cargo build -p oxmacs --features animated-splash`.
 - `extra-themes` 0.1.0: 56 more color themes inspired by the ones Helix ships, among them gruvbox, catppuccin, tokyonight, rose-pine, kanagawa, nord, dracula, everforest, solarized, ayu, github, modus and doom-one, each tuned to stay readable. Build with `cargo build -p oxmacs --features extra-themes`.
+- `irc` 0.1.0: the IRC client, `M-x irc-setup` and the bouncer, as an applet of its own; `oxmacs irc-daemon` runs the bouncer when the build includes it. Build with `cargo build -p oxmacs --features irc`.
 
 ## [0.13.0] - 2026-10-19
 
