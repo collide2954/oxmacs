@@ -1,0 +1,13 @@
+[package]
+name = "oxmacs-themes"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+oxmacs-core.workspace = true
+oxmacs-gui.workspace = true

@@ -19,6 +19,7 @@ keyring = "4.2.0"
 oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-demo = { path = "crates/oxmacs-demo" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
+oxmacs-themes = { path = "crates/oxmacs-themes" }
 native-theme = { version = "0.6.1", default-features = false }
 notify = "8.2.0"
 open = "5.4.4"
