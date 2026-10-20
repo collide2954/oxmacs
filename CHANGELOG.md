@@ -33,7 +33,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `atlas` 0.1.0: the Atlas knowledge system above, with its notes, journal, capture, links, backlinks, agenda and calendar, as an applet of its own. Build with `cargo build -p oxmacs --features atlas`.
 - `animated-splash` 0.1.0: the start screen draws the oxmacs logo in block letters, animated above the keys; `a` cycles a drifting plasma field with a shimmer, a color wave, the logo assembling from scattered pixels, a network of neurons whose signals light the letters as they pass, and DNA replicating behind the logo with its helicase, polymerases, primers and Okazaki fragments. Build with `cargo build -p oxmacs --features animated-splash`.
 - `extra-themes` 0.1.0: 56 more color themes inspired by the ones Helix ships, among them gruvbox, catppuccin, tokyonight, rose-pine, kanagawa, nord, dracula, everforest, solarized, ayu, github, modus and doom-one, each tuned to stay readable. Build with `cargo build -p oxmacs --features extra-themes`.
-- `irc` 0.1.0: the IRC client, `M-x irc-setup` and the bouncer, as an applet of its own; `oxmacs irc-daemon` runs the bouncer when the build includes it. Build with `cargo build -p oxmacs --features irc`.
+- `irc` 0.1.0: the IRC client, `M-x irc-setup` and the bouncer, as an applet of its own; `oxmacs irc-daemon` runs the bouncer when the build includes it. IRC waits for `M-x irc` unless a server has `autostart = true`, which connects it in the background at startup while the start screen stays up. Build with `cargo build -p oxmacs --features irc`.
 
 ## [0.13.0] - 2026-10-19
 

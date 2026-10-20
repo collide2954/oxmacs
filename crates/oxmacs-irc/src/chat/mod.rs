@@ -37,6 +37,7 @@ pub(crate) struct IrcState {
     pub(crate) keychain: Keychain,
     pub(crate) local_daemon: fn() -> Option<LocalDaemon>,
     waiting: Vec<String>,
+    background: Vec<String>,
     launching: bool,
     relaunched: bool,
 }
@@ -62,6 +63,7 @@ impl IrcState {
             },
             local_daemon: || LocalDaemon::file().and_then(|file| LocalDaemon::read(&file)),
             waiting: Vec::new(),
+            background: Vec::new(),
             launching: false,
             relaunched: false,
         }
@@ -203,7 +205,26 @@ impl Chat<'_> {
         irc_settings(self)
     }
 
+    pub(crate) fn autostart(&mut self) {
+        let servers: Vec<IrcServer> = self
+            .irc_settings()
+            .server
+            .into_iter()
+            .filter(|server| server.autostart)
+            .collect();
+        for server in servers {
+            self.irc.background.push(server.name.clone());
+            self.connect_irc(&server);
+        }
+    }
+
+    pub(crate) fn quietly(&mut self, name: &str) -> bool {
+        let at = self.irc.background.iter().position(|known| known == name);
+        at.map(|at| self.irc.background.remove(at)).is_some()
+    }
+
     pub(crate) fn irc(&mut self) {
+        self.irc.background.clear();
         match self.irc_settings().server.as_slice() {
             [] => self.ask("No IRC servers yet; set one up?", |editor, yes| {
                 if yes {
@@ -1275,5 +1296,49 @@ mod tests {
         press(&mut editor, "RET");
 
         assert_eq!(connections(&mut editor)[0].1.host, "localhost");
+    }
+
+    #[test]
+    fn servers_marked_autostart_connect_in_the_background_at_startup() {
+        let mut editor = Editor::new();
+        editor.apply_config(
+            &Config::parse(&format!(
+                "{LIBERA}autostart = true\n[[irc.server]]\nname = \"oftc\"\nhost = \"irc.oftc.net\"\nnick = \"oxtest\"\n"
+            ))
+            .unwrap(),
+        );
+
+        editor.install(&crate::Irc);
+
+        let started = connections(&mut editor);
+        assert_eq!(started.len(), 1);
+        assert_eq!(started[0].1.host, "irc.libera.chat");
+        assert_eq!(editor.buffer().name(), "*scratch*");
+        assert!(editor.buffer_names().contains(&"libera"));
+        assert!(!editor.buffer_names().contains(&"oftc"));
+    }
+
+    #[test]
+    fn autostarted_servers_join_their_channels_without_showing_them() {
+        let mut editor = Editor::new();
+        editor.apply_config(&Config::parse(&format!("{LIBERA}autostart = true\n")).unwrap());
+        editor.install(&crate::Irc);
+        let id = connections(&mut editor)[0].0;
+
+        editor.connection_event(id, Event::Connected);
+        feed(
+            &mut editor,
+            id,
+            &[
+                ":srv CAP * LS :",
+                ":srv 001 oxtest :Welcome",
+                ":oxtest!o@h JOIN #oxmacs-test",
+            ],
+        );
+
+        assert_eq!(editor.buffer().name(), "*scratch*");
+        assert!(editor.buffer_names().contains(&"#oxmacs-test"));
+        irc(&mut editor);
+        assert_eq!(editor.buffer().name(), "libera");
     }
 }

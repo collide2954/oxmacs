@@ -275,7 +275,9 @@ impl Chat<'_> {
             self.track_process(daemon(pid));
         }
         self.irc_note(&server.name, &note, false);
-        self.show_chat(&server.name, &Target::Server);
+        if !self.quietly(&server.name) {
+            self.show_chat(&server.name, &Target::Server);
+        }
     }
 
     pub(crate) fn launch_daemon(&mut self, server: &IrcServer) {
@@ -326,6 +328,7 @@ impl Chat<'_> {
     }
 
     pub(crate) fn connect_named_irc(&mut self, name: &str) {
+        self.irc.background.clear();
         if let Some(server) = self
             .irc_settings()
             .server

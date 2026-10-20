@@ -25,6 +25,8 @@ pub struct IrcServer {
     pub sasl: Option<String>,
     #[serde(default)]
     pub password: PasswordSource,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub autostart: bool,
 }
 
 impl IrcServer {
@@ -238,6 +240,7 @@ port = 6667
 tls = false
 nick = "me"
 password = { env = "LOCAL_IRC" }
+autostart = true
 "##)
         .unwrap();
 
@@ -248,11 +251,13 @@ password = { env = "LOCAL_IRC" }
         assert_eq!(libera.realname(), "oxmacs");
         assert_eq!(libera.channels, ["#oxmacs-test"]);
         assert_eq!(libera.password, PasswordSource::Keychain);
+        assert!(!libera.autostart);
 
         let local = &settings.server[1];
         assert_eq!((local.port, local.tls), (6667, false));
         assert_eq!(local.password, PasswordSource::Env("LOCAL_IRC".to_owned()));
         assert_eq!(local.sasl, None);
+        assert!(local.autostart);
     }
 
     #[test]
@@ -321,6 +326,7 @@ password = { env = "LOCAL_IRC" }
             channels: vec!["#emacs".to_owned(), "#rust".to_owned()],
             sasl: Some("brett".to_owned()),
             password,
+            autostart: false,
         }
     }
 

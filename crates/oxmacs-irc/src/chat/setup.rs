@@ -186,6 +186,7 @@ impl SetupForm {
             channels,
             sasl: (!account.is_empty()).then(|| account.to_owned()),
             password,
+            autostart: false,
         }
     }
 }

@@ -242,6 +242,7 @@ impl Applet for Irc {
         editor.on_event(|editor, ready: &DaemonReady| {
             chat(editor, |chat| chat.irc_daemon_ready(ready));
         });
+        chat(editor, Chat::autostart);
     }
 }
 

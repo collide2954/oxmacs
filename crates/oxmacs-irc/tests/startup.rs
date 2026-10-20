@@ -16,3 +16,16 @@ fn startup_shows_the_splash_and_irc_waits_for_m_x_irc() {
     assert_eq!(app.editor().buffer().name(), "*oxmacs*");
     assert!(!app.editor().buffer_names().contains(&"libera"));
 }
+
+#[test]
+fn autostarted_servers_connect_behind_the_start_screen() {
+    let config = Config::parse(
+        "[[irc.server]]\nname = \"libera\"\nhost = \"irc.libera.chat\"\nnick = \"oxtest\"\nautostart = true\n",
+    )
+    .unwrap();
+
+    let (app, _) = App::boot(&Ok(config), &[], vec![Box::new(Irc)]);
+
+    assert_eq!(app.editor().buffer().name(), "*oxmacs*");
+    assert!(app.editor().buffer_names().contains(&"libera"));
+}
