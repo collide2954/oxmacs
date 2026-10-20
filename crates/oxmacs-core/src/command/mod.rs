@@ -181,6 +181,11 @@ pub enum Command {
     FindFile,
     #[strum(message = "Save the buffer to its file")]
     SaveBuffer,
+    #[strum(
+        message = "Format the buffer or selection with its language's formatter",
+        detailed_message = "Uses the formatter the buffer's language provides, such as rustfmt for Rust and air for R. With a selection, formatters that can handle part of a file format only the selected lines and keep their indentation. Saving formats first when format-on-save is on."
+    )]
+    FormatBuffer,
     #[strum(message = "Save the buffer to a different file")]
     WriteFile,
     #[strum(
@@ -264,8 +269,6 @@ pub enum Command {
     EnlargeWindowHorizontally,
     #[strum(message = "Make the window narrower")]
     ShrinkWindowHorizontally,
-    #[strum(message = "Format the buffer with rustfmt")]
-    RustFormatBuffer,
     #[strum(
         message = "Jump to the definition of the R name at point",
         detailed_message = "Looks for an assignment to the name, first in open R buffers, then in the project's R files (the folder with .git, DESCRIPTION or an .Rproj file). Otherwise the running session supplies it: the file a function was sourced from, or its source in *R source: name*. M-, goes back."
@@ -273,11 +276,6 @@ pub enum Command {
     RFindDefinition,
     #[strum(message = "Go back to where the last jump started")]
     XrefGoBack,
-    #[strum(
-        message = "Format the buffer or the selection with air",
-        detailed_message = "Formats the R buffer with air, or only the lines of the selection when one is active, keeping their indentation. air.toml settings apply. The air-program setting picks the program; otherwise oxmacs's own copy from M-x list-tools, then the one on your PATH."
-    )]
-    RFormatBuffer,
     #[strum(message = "Run cargo check in *compilation*")]
     RustCheck,
     #[strum(message = "Run cargo build in *compilation*")]
@@ -525,8 +523,7 @@ impl Command {
                 | Self::IndentRegion
                 | Self::CommentLine
                 | Self::CommentDwim
-                | Self::RustFormatBuffer
-                | Self::RFormatBuffer
+                | Self::FormatBuffer
                 | Self::RInsertAssignment
                 | Self::RInsertPipe
                 | Self::CompletionAccept
@@ -560,15 +557,13 @@ impl Command {
             Self::WidgetForward | Self::WidgetBackward | Self::WidgetButtonPress => {
                 Scope::Customize
             }
-            Self::RustFormatBuffer
-            | Self::RustCheck
+            Self::RustCheck
             | Self::RustCompile
             | Self::RustTest
             | Self::RustRun
             | Self::RustRunClippy => Scope::Rust,
             Self::RInsertAssignment
             | Self::RFindDefinition
-            | Self::RFormatBuffer
             | Self::RInsertPipe
             | Self::RSendStatement
             | Self::RSendFunction

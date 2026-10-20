@@ -113,7 +113,14 @@ mod tests {
     fn auto_save_does_not_format() {
         let (dir, mut editor) = project();
         editor.apply_config(&Config::parse("format-on-save = true").unwrap());
-        editor.formatter = |text, _, _| Ok(text.to_uppercase());
+        editor.add_formatter(
+            crate::syntax::Language::RUST,
+            crate::editor::Formatter {
+                name: "upper",
+                format: |_, request| Ok(request.text.to_uppercase()),
+                regions: false,
+            },
+        );
         edited(&mut editor);
 
         editor.auto_save();

@@ -153,7 +153,7 @@ const SPLASH: &[(&str, Command)] = &[
 const DOCTOR: &[(&str, Command)] = &[("g", Command::RevertBuffer), ("q", Command::QuitWindow)];
 
 const RUST: &[(&str, Command)] = &[
-    ("C-c C-f", Command::RustFormatBuffer),
+    ("C-c C-f", Command::FormatBuffer),
     ("C-c C-c C-k", Command::RustCheck),
     ("C-c C-c C-b", Command::RustCompile),
     ("C-c C-c C-t", Command::RustTest),
@@ -170,7 +170,7 @@ const R: &[(&str, Command)] = &[
     ("C-c C-z", Command::RSwitchToConsole),
     ("C-c C-v", Command::RHelp),
     ("C-c C-e", Command::REnvironment),
-    ("C-c C-f", Command::RFormatBuffer),
+    ("C-c C-f", Command::FormatBuffer),
     ("M-.", Command::RFindDefinition),
     ("TAB", Command::IndentOrComplete),
     ("C-M-i", Command::CompletionAtPoint),

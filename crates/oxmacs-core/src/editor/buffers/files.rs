@@ -5,7 +5,7 @@ use crate::cli::Visit;
 use crate::editor::prompts::minibuffer::{PathListing, Purpose};
 use crate::editor::{Choice, Editor};
 use crate::files::{self, Sort, paths};
-use crate::syntax::{Feature, Language};
+use crate::syntax::Language;
 use crate::text::{Buffer, FileInfo};
 
 impl Editor {
@@ -318,11 +318,7 @@ impl Editor {
         let Some(index) = self.buffers.position(|buffer| buffer.id() == id) else {
             return false;
         };
-        let formatting = format
-            && self
-                .buffers
-                .language(index)
-                .is_some_and(|language| language.supports(Feature::Formatting));
+        let formatting = format && self.formatter_for(index).is_some();
         let format_error = formatting
             .then(|| self.format_buffer_at(index).err())
             .flatten();

@@ -276,7 +276,7 @@ mod tests {
     fn mode_commands_say_where_they_work() {
         let mut editor = Editor::new();
 
-        describe(&mut editor, "rust-format-buffer");
+        describe(&mut editor, "rust-check");
 
         assert!(lines(&editor).contains(&"Works in  Rust buffers".to_owned()));
     }
@@ -286,12 +286,12 @@ mod tests {
         let mut editor = Editor::new();
 
         press(&mut editor, "C-h f");
-        type_text(&mut editor, "rust-format");
+        type_text(&mut editor, "rust-check");
 
-        assert_eq!(labels(&editor), ["rust-format-buffer"]);
+        assert_eq!(labels(&editor), ["rust-check"]);
         assert_eq!(
             editor.completions()[0].summary,
-            Some("Format the buffer with rustfmt")
+            Some("Run cargo check in *compilation*")
         );
     }
 

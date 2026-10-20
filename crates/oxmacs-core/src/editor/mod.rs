@@ -19,6 +19,7 @@ mod test_support;
 mod windows;
 
 pub use connections::ConnectionSpec;
+pub use editing::format::{FormatRequest, Formatter};
 pub use effect::{ConnectionId, Effect, FetchId};
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
 pub use languages::r_plots::{GalleryView, PlotView};
@@ -52,6 +53,7 @@ use crate::display::{Layout, LineStyle, Viewport};
 use crate::external::tools;
 use crate::input::bindings::Keymaps;
 use crate::input::{Key, KeyCode, KeyParseError, KeySequence, Keymap, Lookup, Modifiers};
+use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::{self, Appearance, Highlight, Theme};
 
@@ -143,8 +145,7 @@ pub struct Editor {
     home: Option<PathBuf>,
     tool_report: special::doctor::ToolReport,
     find_r: fn(Option<&str>) -> Option<PathBuf>,
-    formatter: fn(&str, &Path, &str) -> Result<String, String>,
-    air_formatter: fn(&Path, &str, &Path) -> Result<String, String>,
+    formatters: Vec<(Language, Formatter)>,
     tools_root: Option<PathBuf>,
     font_note: Option<String>,
     config_path: Option<PathBuf>,
@@ -236,8 +237,10 @@ impl Editor {
             home: dirs::home_dir(),
             tool_report: special::doctor::ToolReport::default(),
             find_r: tools::find_r,
-            formatter: tools::rustfmt,
-            air_formatter: tools::air_format,
+            formatters: vec![
+                (Language::RUST, editing::format::RUSTFMT),
+                (Language::R, editing::format::AIR_FORMAT),
+            ],
             tools_root: dirs::data_dir().map(|data| data.join("oxmacs").join("tools")),
             font_note: None,
             config_path: config::default_path(),

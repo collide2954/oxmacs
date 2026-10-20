@@ -21,6 +21,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `delete-to-trash` now lives in a `[dired]` table, moved the same way the first time oxmacs starts.
 - Start-screen lines from applets sit above Save and Quit.
 - `M-x` and other completion lists respond faster.
+- `rust-format-buffer` and `r-format-buffer` are now one command, `format-buffer`, still on `C-c C-f` in Rust and R buffers.
 
 ### Added
 
@@ -35,6 +36,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - The theme in *Settings* is picked from the same live-preview list as `M-x load-theme`.
 - Applets can draw the whole window of a buffer of their own; the Markdown preview is drawn this way.
 - Applets can restyle the minibuffer line while a prompt waits.
+- Applets can give their languages a formatter, used by `format-buffer` and format-on-save.
 - Applets can run background jobs and interactive sessions of their own, listed in `M-x list-processes`.
 - Applets can open the file types they claim, show their own position in the mode line and have their file watched for changes.
 - `M-x list-tools` can manage tools applets add, including libraries, checked against the digest GitHub publishes for each download.
