@@ -10,7 +10,7 @@ use thiserror::Error;
 use toml::Spanned;
 use toml::de::{DeTable, DeValue};
 
-use crate::{clock, theme};
+use crate::{clock, files, theme};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
@@ -58,6 +58,15 @@ pub struct Config {
 }
 
 const CORE_TABLES: &[&str] = &["irc-bouncer"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Moved {
+    pub from: &'static str,
+    pub table: &'static str,
+    pub key: &'static str,
+}
+
+const MOVED: &[Moved] = &[];
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -280,6 +289,8 @@ pub enum ConfigError {
     AtlasVault(String),
     #[error("{}: {source}", path.display())]
     Read { path: PathBuf, source: io::Error },
+    #[error("{}: {reason}", path.display())]
+    Migrate { path: PathBuf, reason: String },
     #[error("{}: {source}", path.display())]
     Invalid {
         path: PathBuf,
@@ -289,13 +300,20 @@ pub enum ConfigError {
 
 impl Config {
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
+        Self::parse_with(text, MOVED)
+    }
+
+    fn parse_with(text: &str, moved: &[Moved]) -> Result<Self, ConfigError> {
         let root = DeTable::parse(text).map_err(|error| syntax_error(text, &error))?;
         let span = root.span();
         let mut core = DeTable::new();
         let mut names = Vec::new();
+        let mut relocated = Vec::new();
         for (key, value) in root.into_inner() {
             let name: &str = key.get_ref();
-            if matches!(value.get_ref(), DeValue::Table(_)) && !CORE_TABLES.contains(&name) {
+            if let Some(entry) = moved.iter().find(|entry| entry.from == name) {
+                relocated.push(*entry);
+            } else if matches!(value.get_ref(), DeValue::Table(_)) && !CORE_TABLES.contains(&name) {
                 names.push(name.to_owned());
             } else {
                 core.insert(key, value);
@@ -303,12 +321,22 @@ impl Config {
         }
         let mut config = Self::deserialize(toml::de::Deserializer::from(Spanned::new(span, core)))
             .map_err(|error| syntax_error(text, &error))?;
-        if !names.is_empty() {
+        if !names.is_empty() || !relocated.is_empty() {
             let mut all: toml::Table =
                 toml::from_str(text).map_err(|error| syntax_error(text, &error))?;
             for name in names {
                 if let Some(toml::Value::Table(table)) = all.remove(&name) {
                     config.applets.insert(name, table);
+                }
+            }
+            for entry in relocated {
+                if let Some(value) = all.remove(entry.from) {
+                    config
+                        .applets
+                        .entry(entry.table.to_owned())
+                        .or_default()
+                        .entry(entry.key)
+                        .or_insert(value);
                 }
             }
         }
@@ -456,6 +484,68 @@ impl Config {
         }
         Ok(())
     }
+}
+
+pub fn migrate_file(path: &Path) -> Result<Option<String>, ConfigError> {
+    migrate_file_with(path, MOVED)
+}
+
+fn migrate_file_with(path: &Path, moved: &[Moved]) -> Result<Option<String>, ConfigError> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let failed = |reason: String| ConfigError::Migrate {
+        path: path.to_owned(),
+        reason,
+    };
+    let loaded = files::load(path).map_err(|error| failed(error.to_string()))?;
+    let Some((text, entries)) = migrate_with(&loaded.text, moved) else {
+        return Ok(None);
+    };
+    files::save(path, &text, loaded.format).map_err(|error| failed(error.to_string()))?;
+    let mut tables: Vec<(&str, Vec<&str>)> = Vec::new();
+    for entry in &entries {
+        match tables.iter_mut().find(|(table, _)| *table == entry.table) {
+            Some((_, keys)) => keys.push(entry.from),
+            None => tables.push((entry.table, vec![entry.from])),
+        }
+    }
+    let parts: Vec<String> = tables
+        .iter()
+        .map(|(table, keys)| format!("{} to [{table}]", keys.join(", ")))
+        .collect();
+    let name = path.file_name().map_or_else(
+        || path.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    Ok(Some(format!("Moved {} in {name}", parts.join("; "))))
+}
+
+fn migrate_with(text: &str, moved: &[Moved]) -> Option<(String, Vec<Moved>)> {
+    let mut document: toml_edit::DocumentMut = text.parse().ok()?;
+    let mut done = Vec::new();
+    for entry in moved {
+        let Some((key, item)) = document.remove_entry(entry.from) else {
+            continue;
+        };
+        done.push(*entry);
+        if !document.contains_key(entry.table) {
+            document.insert(entry.table, toml_edit::table());
+        }
+        let Some(table) = document
+            .get_mut(entry.table)
+            .and_then(toml_edit::Item::as_table_mut)
+        else {
+            continue;
+        };
+        if table.contains_key(entry.key) {
+            continue;
+        }
+        let mut renamed = toml_edit::Key::new(entry.key);
+        *renamed.leaf_decor_mut() = key.leaf_decor().clone();
+        table.insert_formatted(&renamed, item);
+    }
+    (!done.is_empty()).then(|| (document.to_string(), done))
 }
 
 pub fn default_path() -> Option<PathBuf> {
@@ -630,6 +720,76 @@ mod tests {
                 .unwrap()
                 .applet::<Dice>("dice"),
             Ok(Dice { sides: 8 })
+        );
+    }
+
+    const MOVES: &[Moved] = &[
+        Moved {
+            from: "dice-sides",
+            table: "dice",
+            key: "sides",
+        },
+        Moved {
+            from: "dice-color",
+            table: "dice",
+            key: "color",
+        },
+    ];
+
+    #[test]
+    fn moved_keys_still_work_from_their_old_place() {
+        let config = Config::parse_with("tab-width = 2\ndice-sides = 8\n", MOVES).unwrap();
+        assert_eq!(config.tab_width, 2);
+        assert_eq!(config.applet::<Dice>("dice"), Ok(Dice { sides: 8 }));
+
+        let both = Config::parse_with("dice-sides = 8\n\n[dice]\nsides = 12\n", MOVES).unwrap();
+        assert_eq!(both.applet::<Dice>("dice"), Ok(Dice { sides: 12 }));
+    }
+
+    #[test]
+    fn migrating_moves_old_keys_into_their_table_with_their_comments() {
+        let text = "# mine\ntab-width = 2\n# how many\ndice-sides = 8 # big\n";
+
+        let (rewritten, moved) = migrate_with(text, MOVES).unwrap();
+
+        assert_eq!(moved, [MOVES[0]]);
+        assert_eq!(
+            rewritten,
+            "# mine\ntab-width = 2\n\n[dice]\n# how many\nsides = 8 # big\n"
+        );
+        assert_eq!(migrate_with(&rewritten, MOVES), None);
+        assert_eq!(migrate_with("not = [valid", MOVES), None);
+    }
+
+    #[test]
+    fn migrating_keeps_a_value_already_in_the_table() {
+        let (rewritten, _) = migrate_with("dice-sides = 8\n\n[dice]\nsides = 12\n", MOVES).unwrap();
+
+        assert!(!rewritten.contains("dice-sides"), "{rewritten}");
+        assert!(rewritten.contains("sides = 12"), "{rewritten}");
+        assert!(!rewritten.contains("sides = 8"), "{rewritten}");
+    }
+
+    #[test]
+    fn config_files_are_migrated_once_with_a_note_of_what_moved() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        fs::write(&path, "dice-color = \"red\"\ndice-sides = 8\n").unwrap();
+
+        let note = migrate_file_with(&path, MOVES).unwrap();
+
+        assert_eq!(
+            note.as_deref(),
+            Some("Moved dice-sides, dice-color to [dice] in config.toml")
+        );
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "[dice]\nsides = 8\ncolor = \"red\"\n"
+        );
+        assert_eq!(migrate_file_with(&path, MOVES).unwrap(), None);
+        assert_eq!(
+            migrate_file_with(&dir.path().join("missing.toml"), MOVES).unwrap(),
+            None
         );
     }
 
