@@ -435,6 +435,61 @@ impl Editor {
         self.render_settings();
     }
 
+    pub fn edit_config_file(
+        &mut self,
+        edit: impl FnOnce(&mut toml_edit::DocumentMut) -> Result<(), String>,
+    ) -> Result<(), String> {
+        let path = self
+            .config_path
+            .clone()
+            .ok_or("No config directory to save in")?;
+        let shown = paths::abbreviate(&path, self.home.as_deref());
+        let (old, format) = if path.exists() {
+            let loaded = files::load(&path).map_err(|error| error.to_string())?;
+            (loaded.text, loaded.format)
+        } else {
+            (String::new(), files::Format::default())
+        };
+        let mut document: toml_edit::DocumentMut = old
+            .parse()
+            .map_err(|error: toml_edit::TomlError| format!("{shown}: {}", error.message()))?;
+        edit(&mut document)?;
+        let text = document.to_string();
+        let before = Config::parse(&old).map_err(|error| format!("{shown}: {error}"))?;
+        let after = Config::parse(&text).map_err(|error| format!("{shown}: {error}"))?;
+        for name in after.applet_tables() {
+            self.check_config_table(&after, name)?;
+        }
+        if let Some(directory) = path.parent() {
+            fs::create_dir_all(directory).map_err(|error| error.to_string())?;
+        }
+        files::save(&path, &text, format).map_err(|error| error.to_string())?;
+        let changed: Vec<(String, Option<toml::Table>)> = before
+            .applet_tables()
+            .into_iter()
+            .chain(after.applet_tables())
+            .filter(|name| before.applets.get(*name) != after.applets.get(*name))
+            .map(|name| (name.to_owned(), after.applets.get(name).cloned()))
+            .collect();
+        let apply = |config: &mut Config| {
+            for (name, table) in &changed {
+                match table {
+                    Some(table) => {
+                        config.applets.insert(name.clone(), table.clone());
+                    }
+                    None => {
+                        config.applets.remove(name);
+                    }
+                }
+            }
+        };
+        let mut live = self.config.clone();
+        apply(&mut live);
+        self.reconfigure(&live);
+        self.note_saved_settings(apply);
+        Ok(())
+    }
+
     pub(in crate::editor) fn find_config_file(&mut self) {
         match self.config_path.clone() {
             Some(path) => {
@@ -621,6 +676,34 @@ mod tests {
             config_text(&dir),
             "tab-width = 4\n\n[dice]\nloaded = true\nsides = 20\n"
         );
+    }
+
+    #[test]
+    fn applets_edit_config_toml_and_the_change_counts_as_saved() {
+        let (dir, mut editor) = dice(Some("# mine\ntab-width = 4\n"));
+
+        editor
+            .edit_config_file(|document| {
+                document["dice"] = toml_edit::table();
+                document["dice"]["sides"] = toml_edit::value(12);
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(
+            config_text(&dir),
+            "# mine\ntab-width = 4\n\n[dice]\nsides = 12\n"
+        );
+        assert_eq!(editor.applet_config::<Dice>("dice").sides, 12);
+        assert!(row(&editor, "sides").starts_with("  sides"));
+        assert!(editor.mode_line().starts_with("%% *Settings*"));
+
+        let refused = editor.edit_config_file(|document| {
+            document["dice"]["sides"] = toml_edit::value(300);
+            Ok(())
+        });
+        assert!(refused.unwrap_err().starts_with("[dice] "));
+        assert!(config_text(&dir).contains("sides = 12"));
     }
 
     #[test]
