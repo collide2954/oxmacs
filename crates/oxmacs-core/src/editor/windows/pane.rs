@@ -204,6 +204,13 @@ impl<'a> Pane<'a> {
         self.editor.diagnostics_on_line(self.index, line)
     }
 
+    pub fn line_pills(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
+        match self.editor.buffers.mode(self.index) {
+            Some(Mode::Applet(view)) => view.pills(line),
+            _ => Vec::new(),
+        }
+    }
+
     pub fn line_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
         if self.selected {
             self.editor.line_marks(line)

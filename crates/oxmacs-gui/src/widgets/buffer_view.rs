@@ -30,6 +30,9 @@ const NARROW_SAMPLE: &str = "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii";
 const WHEEL_ROWS: f32 = 3.0;
 const CONTINUATION: &str = "\\";
 const HEADER_RAISE: f32 = 0.06;
+const PILL_ALPHA: f32 = 0.22;
+const PILL_INSET: f32 = 0.08;
+const PILL_PADDING: f32 = 0.35;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewEvent {
@@ -597,6 +600,15 @@ where
                     .marks
                     .iter()
                     .map(|(columns, mark)| (*columns, style::color(self.faces.highlight(*mark))));
+                for (columns, pill) in &line.pills {
+                    if let Some(columns) =
+                        display::row_highlight(*columns, row.column, row.end_column)
+                    {
+                        let color =
+                            style::color(self.faces.highlight(*pill)).scale_alpha(PILL_ALPHA);
+                        draw_pill(renderer, columns, *rectangle, cell.width, color);
+                    }
+                }
                 for (columns, color) in selection.into_iter().chain(marks) {
                     if let Some(columns) =
                         display::row_highlight(columns, row.column, row.end_column)
@@ -670,6 +682,7 @@ struct DrawnLine<'a> {
     style: LineStyle,
     highlight: Option<(usize, Option<usize>)>,
     marks: Vec<((usize, Option<usize>), Highlight)>,
+    pills: Vec<((usize, Option<usize>), Highlight)>,
     diagnostics: Vec<((usize, Option<usize>), Severity)>,
 }
 
@@ -703,6 +716,16 @@ impl<'a, Message> BufferView<'a, Message> {
                         Some((columns, mark))
                     })
                     .collect();
+                let pills = self
+                    .pane
+                    .line_pills(row.line)
+                    .into_iter()
+                    .filter_map(|(range, pill)| {
+                        let columns =
+                            display::highlight_columns(&text, 0..span.len(), &range, tab_width)?;
+                        Some((columns, pill))
+                    })
+                    .collect();
                 let diagnostics = self
                     .pane
                     .line_diagnostics(row.line)
@@ -720,6 +743,7 @@ impl<'a, Message> BufferView<'a, Message> {
                         display::highlight_columns(&text, span, selection, tab_width)
                     }),
                     marks,
+                    pills,
                     style: self.pane.line_style(row.line),
                     text,
                 });
@@ -798,6 +822,36 @@ fn draw_highlight<Renderer>(
     renderer.fill_quad(
         Quad {
             bounds: Rectangle::new(Point::new(left, row.y), Size::new(right - left, row.height)),
+            ..Quad::default()
+        },
+        color,
+    );
+}
+
+fn draw_pill<Renderer>(
+    renderer: &mut Renderer,
+    (start, end): (usize, Option<usize>),
+    row: Rectangle,
+    cell_width: f32,
+    color: Color,
+) where
+    Renderer: text::Renderer<Font = Font>,
+{
+    let inset = row.height * PILL_INSET;
+    let left = row.x + to_f32(start) * cell_width - cell_width * PILL_PADDING;
+    let right = end.map_or(row.x + row.width, |end| row.x + to_f32(end) * cell_width)
+        + cell_width * PILL_PADDING;
+    let height = row.height - 2.0 * inset;
+    renderer.fill_quad(
+        Quad {
+            bounds: Rectangle::new(
+                Point::new(left, row.y + inset),
+                Size::new(right - left, height),
+            ),
+            border: Border {
+                radius: (height / 2.0).into(),
+                ..Border::default()
+            },
             ..Quad::default()
         },
         color,

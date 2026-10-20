@@ -1,13 +1,14 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt;
+use std::ops::Range;
 use std::path::Path;
 use std::sync::Arc;
 
 use crate::command::ScopeId;
 use crate::display::LineStyle;
 use crate::editor::{Editor, InputLine};
-use crate::theme::Theme;
+use crate::theme::{Highlight, Theme};
 
 pub use crate::editor::Offer;
 
@@ -32,6 +33,10 @@ pub trait AppletBuffer: Any + Send + fmt::Debug {
 
     fn position(&self) -> Option<String> {
         None
+    }
+
+    fn pills(&self, _line: usize) -> Vec<(Range<usize>, Highlight)> {
+        Vec::new()
     }
 }
 
@@ -1072,6 +1077,14 @@ mod tests {
             Some("2/9".to_owned())
         }
 
+        fn pills(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
+            if line == 0 {
+                vec![(2..8, Highlight::Link)]
+            } else {
+                Vec::new()
+            }
+        }
+
         fn file(&self) -> Option<&Path> {
             Some(&self.file)
         }
@@ -1090,6 +1103,8 @@ mod tests {
         editor.show_buffer(id);
 
         assert_eq!(editor.pane().status().position.as_deref(), Some("2/9"));
+        assert_eq!(editor.pane().line_pills(0), [(2..8, Highlight::Link)]);
+        assert_eq!(editor.pane().line_pills(1), []);
         assert_eq!(editor.visited_files(), [file]);
     }
     #[test]
