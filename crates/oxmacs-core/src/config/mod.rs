@@ -1,10 +1,14 @@
 pub mod schema;
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use toml::Spanned;
+use toml::de::{DeTable, DeValue};
 
 use crate::{clock, theme};
 
@@ -49,7 +53,11 @@ pub struct Config {
     pub air_program: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub atlas_vault: Vec<AtlasVault>,
+    #[serde(skip)]
+    pub(crate) applets: BTreeMap<String, toml::Table>,
 }
+
+const CORE_TABLES: &[&str] = &["irc-bouncer"];
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -247,6 +255,7 @@ impl Default for Config {
             r_program: None,
             air_program: None,
             atlas_vault: Vec::new(),
+            applets: BTreeMap::new(),
         }
     }
 }
@@ -280,9 +289,44 @@ pub enum ConfigError {
 
 impl Config {
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
-        let config: Self = toml::from_str(text).map_err(|error| syntax_error(text, &error))?;
+        let root = DeTable::parse(text).map_err(|error| syntax_error(text, &error))?;
+        let span = root.span();
+        let mut core = DeTable::new();
+        let mut names = Vec::new();
+        for (key, value) in root.into_inner() {
+            let name: &str = key.get_ref();
+            if matches!(value.get_ref(), DeValue::Table(_)) && !CORE_TABLES.contains(&name) {
+                names.push(name.to_owned());
+            } else {
+                core.insert(key, value);
+            }
+        }
+        let mut config = Self::deserialize(toml::de::Deserializer::from(Spanned::new(span, core)))
+            .map_err(|error| syntax_error(text, &error))?;
+        if !names.is_empty() {
+            let mut all: toml::Table =
+                toml::from_str(text).map_err(|error| syntax_error(text, &error))?;
+            for name in names {
+                if let Some(toml::Value::Table(table)) = all.remove(&name) {
+                    config.applets.insert(name, table);
+                }
+            }
+        }
         config.validate()?;
         Ok(config)
+    }
+
+    pub fn applet_tables(&self) -> Vec<&str> {
+        self.applets.keys().map(String::as_str).collect()
+    }
+
+    pub fn applet<T: DeserializeOwned + Default>(&self, name: &str) -> Result<T, String> {
+        match self.applets.get(name) {
+            None => Ok(T::default()),
+            Some(table) => toml::Value::Table(table.clone())
+                .try_into()
+                .map_err(|error: toml::de::Error| format!("[{name}] {}", error.message())),
+        }
     }
 
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
@@ -317,10 +361,11 @@ impl Config {
             Some(value) => table.insert(key.to_owned(), value),
             None => table.remove(key),
         };
-        let config: Self = toml::Value::Table(table)
+        let mut config: Self = toml::Value::Table(table)
             .try_into()
             .map_err(|error: toml::de::Error| ConfigError::Syntax(error.message().to_owned()))?;
         config.validate()?;
+        config.applets.clone_from(&self.applets);
         Ok(config)
     }
 
@@ -491,6 +536,37 @@ fn syntax_error(text: &str, error: &toml::de::Error) -> ConfigError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug, Default, PartialEq, Deserialize)]
+    #[serde(default, deny_unknown_fields)]
+    struct Dice {
+        sides: u8,
+    }
+
+    #[test]
+    fn tables_core_does_not_know_are_kept_for_applets() {
+        let config =
+            Config::parse("tab-width = 4\n\n[dice]\nsides = 8\n\n[elsewhere]\nx = 1\n").unwrap();
+
+        assert_eq!(config.tab_width, 4);
+        assert_eq!(config.applet::<Dice>("dice"), Ok(Dice { sides: 8 }));
+        assert_eq!(config.applet::<Dice>("absent"), Ok(Dice::default()));
+        assert!(config.applet::<Dice>("elsewhere").is_err());
+        assert_eq!(config.applet_tables(), ["dice", "elsewhere"]);
+        assert_eq!(
+            config
+                .with("tab-width", Some(toml::Value::Integer(2)))
+                .unwrap()
+                .applet::<Dice>("dice"),
+            Ok(Dice { sides: 8 })
+        );
+    }
+
+    #[test]
+    fn unknown_plain_keys_are_still_mistakes() {
+        assert!(Config::parse("dice = 8\n").is_err());
+        assert!(Config::parse("[irc-bouncer]\nmode = \"local\"\n").is_ok());
+    }
 
     #[test]
     fn empty_config_uses_defaults() {
