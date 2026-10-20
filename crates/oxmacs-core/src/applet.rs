@@ -474,7 +474,7 @@ mod tests {
         assert_eq!(theme::counterpart(&PALETTE[1]).name, "palette-light");
     }
 
-    #[derive(Debug, Default, PartialEq, serde::Deserialize)]
+    #[derive(Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
     #[serde(default, deny_unknown_fields)]
     struct Greeting {
         text: String,

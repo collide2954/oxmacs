@@ -88,10 +88,19 @@ fn editable_text(value: Option<Value>) -> String {
     }
 }
 
-fn page(config: &Config, state: &Customize, location: &str) -> (Page, Vec<Row>) {
-    let key_width = SETTINGS
+type Entry = (Option<&'static str>, &'static Setting);
+
+struct Listed {
+    table: Option<&'static str>,
+    setting: &'static Setting,
+    value: Option<Value>,
+    changed: bool,
+}
+
+fn page(entries: &[Listed], state: &Customize, location: &str) -> (Page, Vec<Row>) {
+    let key_width = entries
         .iter()
-        .map(|setting| setting.key.len())
+        .map(|entry| entry.setting.key.len())
         .max()
         .unwrap_or(0);
     let mut page = Page::default();
@@ -104,15 +113,19 @@ fn page(config: &Config, state: &Customize, location: &str) -> (Page, Vec<Row>) 
         page.line(&[(problem, Some(Highlight::Error))]);
     }
     let mut rows = Vec::new();
-    let mut group = "";
-    for (index, setting) in SETTINGS.iter().enumerate() {
-        if setting.group != group {
-            group = setting.group;
+    let mut group = ("", None);
+    for (index, entry) in entries.iter().enumerate() {
+        let setting = entry.setting;
+        if (setting.group, entry.table) != group {
+            group = (setting.group, entry.table);
             page.line(&[]);
-            page.heading(group);
+            match entry.table {
+                Some(table) => page.heading(&format!("{}  [{table}]", setting.group)),
+                None => page.heading(setting.group),
+            }
         }
-        let value = shown(setting, config.get(setting.key).as_ref());
-        let changed = config.get(setting.key) != state.saved.get(setting.key);
+        let value = shown(setting, entry.value.as_ref());
+        let changed = entry.changed;
         let marker = format!("{:<MARGIN$}", if changed { "*" } else { "" });
         let name = format!("{:<width$}", setting.key, width = key_width + GAP);
         let start = MARGIN + key_width + GAP;
@@ -208,7 +221,18 @@ impl Editor {
         let Some(Mode::Customize(state)) = self.buffers.mode(index) else {
             return;
         };
-        let (page, rows) = page(&self.config, state, &location);
+        let entries: Vec<Listed> = self
+            .setting_list()
+            .into_iter()
+            .map(|(table, setting)| Listed {
+                table,
+                setting,
+                value: self.setting_value(table, setting.key),
+                changed: self.config.value(table, setting.key)
+                    != state.saved.value(table, setting.key),
+            })
+            .collect();
+        let (page, rows) = page(&entries, state, &location);
         if let Some(buffer) = self.buffers.get_mut(index) {
             page.fill(buffer);
         }
@@ -247,7 +271,7 @@ impl Editor {
         };
         let buffer = self.buffers.current_mut();
         buffer.set_point(buffer.line_start(line) + value.0);
-        if let Some(setting) = SETTINGS.get(setting) {
+        if let Some((_, setting)) = self.setting_list().get(setting) {
             self.show_message(setting.hint);
         }
     }
@@ -274,15 +298,33 @@ impl Editor {
             .map(|row| row.setting)
     }
 
+    fn setting_list(&self) -> Vec<Entry> {
+        SETTINGS
+            .iter()
+            .map(|setting| (None, setting))
+            .chain(
+                self.applet_settings
+                    .iter()
+                    .map(|(table, setting)| (Some(*table), *setting)),
+            )
+            .collect()
+    }
+
+    fn setting_value(&self, table: Option<&str>, key: &str) -> Option<Value> {
+        self.config
+            .value(table, key)
+            .or_else(|| table.and_then(|table| self.config_default(table, key)))
+    }
+
     pub(in crate::editor) fn change_setting(&mut self, index: usize) {
-        let Some(setting) = SETTINGS.get(index) else {
+        let Some((table, setting)) = self.setting_list().get(index).copied() else {
             return;
         };
-        let current = self.config.get(setting.key);
+        let current = self.setting_value(table, setting.key);
         match setting.kind {
             Kind::Toggle => {
                 let on = matches!(current, Some(Value::Boolean(true)));
-                self.set_setting(setting, Some(Value::Boolean(!on)));
+                self.set_setting(table, setting, Some(Value::Boolean(!on)));
             }
             Kind::Choice(values) => {
                 let options: Vec<Option<&str>> = setting
@@ -297,7 +339,8 @@ impl Editor {
                     .position(|option| *option == now)
                     .unwrap_or(0);
                 let next = options[(at + 1) % options.len()];
-                self.set_setting(setting, next.map(|value| Value::String(value.to_owned())));
+                let next = next.map(|value| Value::String(value.to_owned()));
+                self.set_setting(table, setting, next);
             }
             Kind::Theme => self.load_theme(),
             Kind::Integer | Kind::Number | Kind::Text => {
@@ -309,7 +352,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn set_setting_from(&mut self, index: usize, input: &str) {
-        let Some(setting) = SETTINGS.get(index) else {
+        let Some((table, setting)) = self.setting_list().get(index).copied() else {
             return;
         };
         let value = match setting.kind {
@@ -329,7 +372,7 @@ impl Editor {
             }
         };
         match value {
-            Ok(value) => self.set_setting(setting, value),
+            Ok(value) => self.set_setting(table, setting, value),
             Err(expected) => self.show_message(format!("{} needs {expected}", setting.key)),
         }
     }
@@ -413,8 +456,23 @@ impl Editor {
         }
     }
 
-    fn set_setting(&mut self, setting: &Setting, value: Option<Value>) {
-        self.change_config(setting.key, value);
+    fn set_setting(&mut self, table: Option<&str>, setting: &Setting, value: Option<Value>) {
+        let Some(name) = table else {
+            self.change_config(setting.key, value);
+            return;
+        };
+        let changed = self
+            .config
+            .with_value(table, setting.key, value)
+            .map_err(|error| error.to_string())
+            .and_then(|config| self.check_config_table(&config, name).map(|()| config));
+        match changed {
+            Ok(config) => {
+                self.reconfigure(&config);
+                self.render_settings();
+            }
+            Err(error) => self.show_message(error),
+        }
     }
 
     pub(in crate::editor) fn change_config(&mut self, key: &str, value: Option<Value>) {
@@ -433,8 +491,10 @@ mod tests {
     use std::fs;
 
     use crate::command::Command;
+    use serde::{Deserialize, Serialize};
+
     use crate::config::Config;
-    use crate::config::schema::SETTINGS;
+    use crate::config::schema::{Kind, SETTINGS, Setting};
     use crate::editor::test_support::{at_point, lines, minibuffer_input, press, type_text};
     use crate::editor::{Cell, Clicks, Editor, Effect};
 
@@ -443,9 +503,17 @@ mod tests {
     }
 
     fn settings_from(text: Option<&str>) -> (tempfile::TempDir, Editor) {
+        settings_with(text, |_| {})
+    }
+
+    fn settings_with(
+        text: Option<&str>,
+        setup: impl FnOnce(&mut Editor),
+    ) -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
         let mut editor = Editor::new();
+        setup(&mut editor);
         if let Some(text) = text {
             fs::write(&path, text).unwrap();
             if let Ok(config) = Config::parse(text) {
@@ -479,6 +547,80 @@ mod tests {
         );
         assert!(editor.mode_line().starts_with("%% *Settings*"));
         assert!(row(&editor, "clock").starts_with("  clock"));
+    }
+
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    #[serde(default, deny_unknown_fields)]
+    struct Dice {
+        sides: u8,
+        loaded: bool,
+    }
+
+    impl Default for Dice {
+        fn default() -> Self {
+            Self {
+                sides: 6,
+                loaded: false,
+            }
+        }
+    }
+
+    const DICE: &[Setting] = &[
+        Setting {
+            key: "sides",
+            group: "Dice",
+            kind: Kind::Integer,
+            unset: None,
+            hint: "Sides on the die",
+        },
+        Setting {
+            key: "loaded",
+            group: "Dice",
+            kind: Kind::Toggle,
+            unset: None,
+            hint: "Always roll the top face",
+        },
+    ];
+
+    fn dice(text: Option<&str>) -> (tempfile::TempDir, Editor) {
+        settings_with(text, |editor| {
+            editor.add_config_table::<Dice>("dice");
+            editor.add_settings("dice", DICE);
+        })
+    }
+
+    #[test]
+    fn applet_settings_show_under_their_table_with_their_defaults() {
+        let (_dir, editor) = dice(None);
+
+        assert!(lines(&editor).iter().any(|line| line == "Dice  [dice]"));
+        assert!(row(&editor, "sides").ends_with(" 6"));
+        assert!(row(&editor, "loaded").ends_with(" [ ]"));
+    }
+
+    #[test]
+    fn applet_settings_change_are_checked_and_save_into_their_table() {
+        let (dir, mut editor) = dice(Some("tab-width = 4\n"));
+
+        on(&mut editor, "loaded");
+        press(&mut editor, "RET");
+        assert!(editor.applet_config::<Dice>("dice").loaded);
+        assert!(row(&editor, "loaded").starts_with("* loaded"));
+
+        on(&mut editor, "sides");
+        press(&mut editor, "RET C-a C-k 3 0 0 RET");
+        let message = editor.message().unwrap_or_default().to_owned();
+        assert!(message.starts_with("[dice] "), "{message}");
+        assert_eq!(editor.applet_config::<Dice>("dice").sides, 6);
+
+        press(&mut editor, "RET C-a C-k 2 0 RET");
+        assert_eq!(editor.applet_config::<Dice>("dice").sides, 20);
+
+        press(&mut editor, "C-x C-s");
+        assert_eq!(
+            config_text(&dir),
+            "tab-width = 4\n\n[dice]\nloaded = true\nsides = 20\n"
+        );
     }
 
     #[test]

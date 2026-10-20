@@ -9,7 +9,7 @@ use oxmacs_core::editor::{Editor, Page, Pane};
 use oxmacs_core::theme::Highlight;
 use oxmacs_gui::applet::{Context, GuiApplet};
 use oxmacs_gui::style;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 const NAME: &str = "*Demo*";
 const TABLE: &str = "demo";
@@ -33,7 +33,7 @@ pub struct Roll {
 #[derive(Debug)]
 pub struct Rolled(pub u8);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Settings {
     #[serde(deserialize_with = "at_least_two")]

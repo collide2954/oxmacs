@@ -1,20 +1,34 @@
 use std::any::Any;
 
+use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::applet::{AppletBuffer, DoctorLine};
 use crate::config::Config;
+use crate::config::schema::Setting;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::text::{Buffer, BufferId};
 
-pub(super) type ConfigCheck = fn(&Config, &str) -> Result<(), String>;
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ConfigTable {
+    name: &'static str,
+    check: fn(&Config, &str) -> Result<(), String>,
+    defaults: fn() -> Option<toml::Table>,
+}
 
 pub(super) type DoctorSection = fn(&Editor) -> Vec<DoctorLine>;
 
 fn check<T: DeserializeOwned + Default>(config: &Config, name: &str) -> Result<(), String> {
     config.applet::<T>(name).map(|_| ())
+}
+
+fn defaults<T: Serialize + Default>() -> Option<toml::Table> {
+    match toml::Value::try_from(T::default()).ok()? {
+        toml::Value::Table(table) => Some(table),
+        _ => None,
+    }
 }
 
 fn downcast<T: AppletBuffer>(view: &dyn AppletBuffer) -> Option<&T> {
@@ -27,9 +41,33 @@ impl Editor {
         self.doctor_sections.push((title, lines));
     }
 
-    pub fn add_config_table<T: DeserializeOwned + Default>(&mut self, name: &'static str) {
-        self.config_tables.push((name, check::<T>));
+    pub fn add_config_table<T: Serialize + DeserializeOwned + Default>(
+        &mut self,
+        name: &'static str,
+    ) {
+        self.config_tables.push(ConfigTable {
+            name,
+            check: check::<T>,
+            defaults: defaults::<T>,
+        });
         self.check_config_tables();
+    }
+
+    pub fn add_settings(&mut self, table: &'static str, settings: &'static [Setting]) {
+        self.applet_settings
+            .extend(settings.iter().map(|setting| (table, setting)));
+    }
+
+    pub(super) fn check_config_table(&self, config: &Config, name: &str) -> Result<(), String> {
+        self.config_tables
+            .iter()
+            .filter(|table| table.name == name)
+            .try_for_each(|table| (table.check)(config, name))
+    }
+
+    pub(super) fn config_default(&self, name: &str, key: &str) -> Option<toml::Value> {
+        let table = self.config_tables.iter().find(|table| table.name == name)?;
+        (table.defaults)()?.remove(key)
     }
 
     pub fn applet_config<T: DeserializeOwned + Default>(&self, name: &str) -> T {
@@ -40,7 +78,7 @@ impl Editor {
         self.config
             .applet_tables()
             .into_iter()
-            .filter(|table| self.config_tables.iter().all(|(name, _)| name != table))
+            .filter(|table| self.config_tables.iter().all(|known| known.name != *table))
             .collect()
     }
 
@@ -48,7 +86,7 @@ impl Editor {
         let problems: Vec<String> = self
             .config_tables
             .iter()
-            .filter_map(|(name, check)| check(&self.config, name).err())
+            .filter_map(|table| (table.check)(&self.config, table.name).err())
             .collect();
         if !problems.is_empty() {
             self.show_message(problems.join("; "));

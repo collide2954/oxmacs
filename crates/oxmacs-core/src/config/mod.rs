@@ -1,6 +1,6 @@
 pub mod schema;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -316,6 +316,38 @@ impl Config {
         Ok(config)
     }
 
+    pub fn value(&self, table: Option<&str>, key: &str) -> Option<toml::Value> {
+        match table {
+            None => self.get(key),
+            Some(table) => self.applets.get(table)?.get(key).cloned(),
+        }
+    }
+
+    pub fn with_value(
+        &self,
+        table: Option<&str>,
+        key: &str,
+        value: Option<toml::Value>,
+    ) -> Result<Self, ConfigError> {
+        let Some(name) = table else {
+            return self.with(key, value);
+        };
+        let mut config = self.clone();
+        let entries = config.applets.entry(name.to_owned()).or_default();
+        match value {
+            Some(value) => {
+                entries.insert(key.to_owned(), value);
+            }
+            None => {
+                entries.remove(key);
+            }
+        }
+        if entries.is_empty() {
+            config.applets.remove(name);
+        }
+        Ok(config)
+    }
+
     pub fn applet_tables(&self) -> Vec<&str> {
         self.applets.keys().map(String::as_str).collect()
     }
@@ -444,22 +476,61 @@ pub fn rewrite(text: &str, config: &Config) -> Result<String, ConfigError> {
             document.remove(setting.key);
             continue;
         };
-        let mut value: toml_edit::Value =
-            wanted
-                .to_string()
-                .parse()
-                .map_err(|error: toml_edit::TomlError| {
-                    ConfigError::Syntax(error.message().to_owned())
-                })?;
-        if let Some(old) = document
+        let old = document
             .get(setting.key)
-            .and_then(toml_edit::Item::as_value)
-        {
-            *value.decor_mut() = old.decor().clone();
+            .and_then(toml_edit::Item::as_value);
+        document[setting.key] = toml_edit::Item::Value(edited(&wanted, old)?);
+    }
+    let empty = toml::Table::new();
+    let names: BTreeSet<&String> = config
+        .applets
+        .keys()
+        .chain(on_disk.applets.keys())
+        .collect();
+    for name in names {
+        let wanted = config.applets.get(name).unwrap_or(&empty);
+        let found = on_disk.applets.get(name).unwrap_or(&empty);
+        let keys: BTreeSet<&String> = wanted.keys().chain(found.keys()).collect();
+        for key in keys {
+            if wanted.get(key) == found.get(key) {
+                continue;
+            }
+            if !document.contains_key(name) {
+                document.insert(name, toml_edit::table());
+            }
+            let Some(table) = document
+                .get_mut(name)
+                .and_then(toml_edit::Item::as_table_like_mut)
+            else {
+                continue;
+            };
+            match wanted.get(key) {
+                None => {
+                    table.remove(key);
+                }
+                Some(value) => {
+                    let old = table.get(key).and_then(toml_edit::Item::as_value);
+                    let value = edited(value, old)?;
+                    table.insert(key, toml_edit::Item::Value(value));
+                }
+            }
         }
-        document[setting.key] = toml_edit::Item::Value(value);
     }
     Ok(document.to_string())
+}
+
+fn edited(
+    wanted: &toml::Value,
+    old: Option<&toml_edit::Value>,
+) -> Result<toml_edit::Value, ConfigError> {
+    let mut value: toml_edit::Value = wanted
+        .to_string()
+        .parse()
+        .map_err(|error: toml_edit::TomlError| ConfigError::Syntax(error.message().to_owned()))?;
+    if let Some(old) = old {
+        *value.decor_mut() = old.decor().clone();
+    }
+    Ok(value)
 }
 
 fn edit_error(error: &toml_edit::TomlError) -> ConfigError {
