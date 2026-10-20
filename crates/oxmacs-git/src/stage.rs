@@ -1,5 +1,4 @@
 use std::fs;
-use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use oxmacs_core::editor::Editor;
@@ -18,28 +17,41 @@ pub(crate) enum Target {
         section: Section,
         path: String,
         hunk: usize,
-        lines: Option<Range<usize>>,
+        lines: Option<Vec<usize>>,
     },
 }
 
+fn place(row: Row) -> Option<(Section, usize, usize, Vec<usize>)> {
+    match row {
+        Row::Line(section, index, hunk, line) => Some((section, index, hunk, vec![line])),
+        Row::Pair(section, index, hunk, left, right) => Some((
+            section,
+            index,
+            hunk,
+            left.into_iter().chain(right).collect(),
+        )),
+        _ => None,
+    }
+}
+
 pub(crate) fn target(editor: &Editor) -> Option<(BufferId, Result<Target, &'static str>)> {
-    let (id, view) = view::current(editor)?;
+    let here = view::here(editor)?;
+    let (id, rows) = (here.status_id, here.rows);
+    let path = |section, index| here.view.status.path(section, index).map(str::to_owned);
     let buffer = editor.buffer();
-    let rows = &view.rendered.rows;
-    let path = |section, index| view.status.path(section, index).map(str::to_owned);
     let Some(selection) = buffer.selection().filter(|range| !range.is_empty()) else {
-        let row = *rows.get(buffer.line_of(buffer.point()))?;
+        let row = *rows.get(here.line)?;
         let found = match row {
             Row::Section(section) => Ok(Target::Section(section)),
             Row::File(section, index) => Ok(Target::Files(section, vec![path(section, index)?])),
-            Row::Hunk(section, index, hunk) | Row::Line(section, index, hunk, _) => {
-                Ok(Target::Hunk {
-                    section,
-                    path: path(section, index)?,
-                    hunk,
-                    lines: None,
-                })
-            }
+            Row::Hunk(section, index, hunk)
+            | Row::Line(section, index, hunk, _)
+            | Row::Pair(section, index, hunk, ..) => Ok(Target::Hunk {
+                section,
+                path: path(section, index)?,
+                hunk,
+                lines: None,
+            }),
             Row::Info | Row::Blank | Row::Stash(_) | Row::Commit(_) => {
                 Err("Nothing here to act on")
             }
@@ -51,42 +63,53 @@ pub(crate) fn target(editor: &Editor) -> Option<(BufferId, Result<Target, &'stat
         .line_of(selection.end - 1)
         .min(rows.len().saturating_sub(1));
     let picked = rows.get(first..=last)?;
-    let found = match picked {
-        [Row::Line(section, index, hunk, _), ..]
-            if picked.iter().all(
-                |row| matches!(row, Row::Line(s, i, h, _) if (s, i, h) == (section, index, hunk)),
-            ) =>
-        {
-            let at = |row: &Row| match row {
-                Row::Line(.., line) => *line,
-                _ => 0,
-            };
-            Ok(Target::Hunk {
-                section: *section,
-                path: path(*section, *index)?,
-                hunk: *hunk,
-                lines: Some(at(&picked[0])..at(&picked[picked.len() - 1]) + 1),
+    let places: Vec<_> = picked.iter().map(|row| place(*row)).collect();
+    let one_hunk = places
+        .first()
+        .and_then(Option::as_ref)
+        .is_some_and(|(s, i, h, _)| {
+            places.iter().all(|found| {
+                found
+                    .as_ref()
+                    .is_some_and(|(s2, i2, h2, _)| (s, i, h) == (s2, i2, h2))
             })
+        });
+    let found = if one_hunk {
+        let (section, index, hunk, _) = places[0].clone()?;
+        let mut lines: Vec<usize> = places
+            .into_iter()
+            .flatten()
+            .flat_map(|(.., lines)| lines)
+            .collect();
+        lines.sort_unstable();
+        lines.dedup();
+        Ok(Target::Hunk {
+            section,
+            path: path(section, index)?,
+            hunk,
+            lines: Some(lines),
+        })
+    } else {
+        match picked {
+            [Row::File(section, _), ..]
+                if picked
+                    .iter()
+                    .all(|row| matches!(row, Row::File(s, _) if s == section)) =>
+            {
+                let paths = picked
+                    .iter()
+                    .filter_map(|row| match row {
+                        Row::File(s, i) => path(*s, *i),
+                        _ => None,
+                    })
+                    .collect();
+                Ok(Target::Files(*section, paths))
+            }
+            _ => Err("Select lines of one hunk or files of one section"),
         }
-        [Row::File(section, _), ..]
-            if picked
-                .iter()
-                .all(|row| matches!(row, Row::File(s, _) if s == section)) =>
-        {
-            let paths = picked
-                .iter()
-                .filter_map(|row| match row {
-                    Row::File(s, i) => path(*s, *i),
-                    _ => None,
-                })
-                .collect();
-            Ok(Target::Files(*section, paths))
-        }
-        _ => Err("Select lines of one hunk or files of one section"),
     };
     Some((id, found))
 }
-
 fn patch_file(editor: &mut Editor, metadata: &Path) -> PathBuf {
     let number = editor.applet_state_mut::<GitState>().map_or(0, |state| {
         state.patches += 1;
@@ -120,7 +143,7 @@ fn hunk_patch(
     let root = view.root.clone();
     let metadata = view.metadata.clone();
     let hunk = view.status.diff(*section, path)?.hunks.get(*hunk)?.clone();
-    let text = diff::patch(path, &hunk, lines.as_ref(), reverse);
+    let text = diff::patch(path, &hunk, lines.as_deref(), reverse);
     let file = patch_file(editor, &metadata);
     if let Err(error) = fs::write(&file, text) {
         editor.show_message(format!("Could not write the patch: {error}"));

@@ -1,4 +1,5 @@
 mod diff;
+mod pane;
 mod repo;
 mod run;
 mod stage;
@@ -89,6 +90,65 @@ const STATUS: &[Spec] = &[
     },
 ];
 
+const DIFF: &[Spec] = &[
+    Spec {
+        name: "git-diff-next",
+        summary: "Move to the next hunk",
+        help: None,
+        keys: &["n"],
+        run: |editor| view::step(editor, true),
+    },
+    Spec {
+        name: "git-diff-previous",
+        summary: "Move to the previous hunk",
+        help: None,
+        keys: &["p"],
+        run: |editor| view::step(editor, false),
+    },
+    Spec {
+        name: "git-diff-stage",
+        summary: "Stage the hunk or selected lines",
+        help: None,
+        keys: &["s"],
+        run: stage::stage,
+    },
+    Spec {
+        name: "git-diff-unstage",
+        summary: "Unstage the hunk or selected lines",
+        help: None,
+        keys: &["u"],
+        run: stage::unstage,
+    },
+    Spec {
+        name: "git-diff-discard",
+        summary: "Throw away the hunk or selected lines",
+        help: None,
+        keys: &["k"],
+        run: stage::discard,
+    },
+    Spec {
+        name: "git-diff-visit",
+        summary: "Visit the file at the line shown",
+        help: None,
+        keys: &["RET"],
+        run: view::visit,
+    },
+    Spec {
+        name: "git-diff-toggle-layout",
+        summary: "Switch between one column and side by side",
+        help: None,
+        keys: &["t"],
+        run: pane::toggle_layout,
+    },
+    Spec {
+        name: "git-diff-refresh",
+        summary: "Read the repository again",
+        help: None,
+        keys: &["g"],
+        run: pane::refresh,
+    },
+];
+
 fn register(editor: &mut Editor, scope: ScopeId, specs: &[Spec]) -> Vec<CommandId> {
     let mut added = Vec::new();
     for spec in specs {
@@ -125,10 +185,19 @@ impl Applet for Git {
 
     fn install(&self, editor: &mut Editor) {
         let scope = editor.add_scope("git status");
-        editor.set_applet_state(GitState { scope, patches: 0 });
+        let diff_scope = editor.add_scope("git diff");
+        editor.set_applet_state(GitState {
+            scope,
+            diff_scope,
+            patches: 0,
+        });
         register(editor, Scope::Global.into(), GLOBAL);
         register(editor, scope, STATUS);
+        register(editor, diff_scope, DIFF);
         editor.bind(scope, "q", Command::QuitWindow).ok();
+        editor.bind(diff_scope, "q", Command::QuitWindow).ok();
+        editor.on_command(pane::follow);
+        editor.on_display(pane::fit);
         editor.on_disk_change(view::refresh_all);
         editor.on_saved(view::refresh_saved);
     }

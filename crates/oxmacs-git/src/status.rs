@@ -45,6 +45,7 @@ pub(crate) enum Row {
     File(Section, usize),
     Hunk(Section, usize, usize),
     Line(Section, usize, usize, usize),
+    Pair(Section, usize, usize, Option<usize>, Option<usize>),
     Stash(usize),
     Commit(usize),
 }
@@ -136,6 +137,14 @@ impl Line {
     pub(crate) fn pill(&mut self, text: &str, face: Highlight) {
         let range = self.push(text, Some(face));
         self.pills.push((range, face));
+    }
+
+    pub(crate) fn tint(&mut self, range: Range<usize>, face: Highlight) {
+        self.pills.push((range, face));
+    }
+
+    pub(crate) fn width(&self) -> usize {
+        self.width
     }
 
     pub(crate) fn pad(&mut self, column: usize) {

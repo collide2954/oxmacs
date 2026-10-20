@@ -117,8 +117,8 @@ fn gather(group: &[Change], before: &[&str], after: &[&str], context: usize) -> 
     }
 }
 
-pub fn patch(path: &str, hunk: &Hunk, selected: Option<&Range<usize>>, reverse: bool) -> String {
-    let chosen = |at: usize| selected.is_none_or(|range| range.contains(&at));
+pub fn patch(path: &str, hunk: &Hunk, selected: Option<&[usize]>, reverse: bool) -> String {
+    let chosen = |at: usize| selected.is_none_or(|lines| lines.contains(&at));
     let mut body = String::new();
     let (mut old_len, mut new_len) = (0, 0);
     for (at, line) in hunk.lines.iter().enumerate() {
@@ -250,7 +250,7 @@ mod tests {
             .unwrap();
         fs::write(
             dir.path().join("p.diff"),
-            patch("a.txt", &hunk, Some(&(added_four..added_four + 1)), false),
+            patch("a.txt", &hunk, Some(&[added_four][..]), false),
         )
         .unwrap();
 
@@ -273,7 +273,12 @@ mod tests {
             .unwrap();
         fs::write(
             dir.path().join("p.diff"),
-            patch("a.txt", &hunk, Some(&(removed_two..removed_two + 2)), true),
+            patch(
+                "a.txt",
+                &hunk,
+                Some(&[removed_two, removed_two + 1][..]),
+                true,
+            ),
         )
         .unwrap();
 

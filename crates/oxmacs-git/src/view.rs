@@ -11,6 +11,7 @@ use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
 use crate::diff::LineKind;
+use crate::pane::{self, DiffPane};
 use crate::repo;
 use crate::status::{self, Folds, Rendered, Row, Section, Status};
 
@@ -19,6 +20,7 @@ const DIFFED: usize = 200;
 #[derive(Debug)]
 pub(crate) struct GitState {
     pub(crate) scope: ScopeId,
+    pub(crate) diff_scope: ScopeId,
     pub(crate) patches: usize,
 }
 
@@ -78,6 +80,9 @@ pub(crate) fn spot(status: &Status, row: Row) -> Option<Spot> {
         Row::Line(section, index, hunk, line) => {
             Spot::Line(section, path(section, index)?, hunk, line)
         }
+        Row::Pair(section, index, hunk, left, right) => {
+            Spot::Line(section, path(section, index)?, hunk, left.or(right)?)
+        }
         Row::Stash(index) => Spot::Stash(index),
         Row::Commit(index) => Spot::Commit(index),
     })
@@ -123,11 +128,41 @@ pub(crate) fn current(editor: &Editor) -> Option<(BufferId, &StatusView)> {
         .map(|(_, view)| (id, view))
 }
 
-pub(crate) fn row_at_point(editor: &Editor) -> Option<(BufferId, Row)> {
-    let (id, view) = current(editor)?;
+#[derive(Debug)]
+pub(crate) struct Here<'a> {
+    pub(crate) status_id: BufferId,
+    pub(crate) view: &'a StatusView,
+    pub(crate) rows: &'a [Row],
+    pub(crate) line: usize,
+}
+
+pub(crate) fn here(editor: &Editor) -> Option<Here<'_>> {
     let buffer = editor.buffer();
-    let row = *view.rendered.rows.get(buffer.line_of(buffer.point()))?;
-    Some((id, row))
+    let id = buffer.id();
+    let line = buffer.line_of(buffer.point());
+    if let Some((_, view)) = editor.applet_buffer::<StatusView>(id) {
+        return Some(Here {
+            status_id: id,
+            view,
+            rows: &view.rendered.rows,
+            line,
+        });
+    }
+    let (_, diff) = editor.applet_buffer::<DiffPane>(id)?;
+    let status_id = editor.find_applet_buffer::<StatusView>(|view| view.root == diff.root)?;
+    let (_, view) = editor.applet_buffer::<StatusView>(status_id)?;
+    Some(Here {
+        status_id,
+        view,
+        rows: &diff.rendered.rows,
+        line,
+    })
+}
+
+pub(crate) fn row_at_point(editor: &Editor) -> Option<(BufferId, Row)> {
+    let here = here(editor)?;
+    let row = *here.rows.get(here.line)?;
+    Some((here.status_id, row))
 }
 
 pub(crate) fn open(editor: &mut Editor) {
@@ -140,6 +175,7 @@ pub(crate) fn open(editor: &mut Editor) {
     if let Some(id) = editor.find_applet_buffer::<StatusView>(|view| view.root == root) {
         editor.show_buffer(id);
         update(editor, id, Some(status), None);
+        pane::show(editor);
         return;
     }
     let Some(scope) = editor.applet_state::<GitState>().map(|state| state.scope) else {
@@ -175,6 +211,7 @@ pub(crate) fn open(editor: &mut Editor) {
             .unwrap_or(0);
         place(buffer, first);
     }
+    pane::show(editor);
 }
 
 pub(crate) fn update(
@@ -207,6 +244,8 @@ pub(crate) fn update(
     });
     let last = view.rendered.rows.len().saturating_sub(1);
     place(buffer, found.unwrap_or(line.min(last)));
+    let root = view.root.clone();
+    pane::redraw_root(editor, &root);
 }
 
 fn place(buffer: &mut Buffer, line: usize) {
@@ -271,21 +310,17 @@ fn item(row: Row) -> bool {
 }
 
 pub(crate) fn step(editor: &mut Editor, forward: bool) {
-    let Some((id, _)) = current(editor) else {
+    let Some(here) = here(editor) else {
         return;
     };
-    let Some((buffer, view)) = editor.applet_buffer_mut::<StatusView>(id) else {
-        return;
-    };
-    let line = buffer.line_of(buffer.point());
-    let rows = &view.rendered.rows;
+    let (line, rows) = (here.line, here.rows);
     let found = if forward {
         (line + 1..rows.len()).find(|at| item(rows[*at]))
     } else {
         (0..line).rev().find(|at| item(rows[*at]))
     };
     if let Some(found) = found {
-        place(buffer, found);
+        place(editor.buffer_mut(), found);
     }
 }
 
@@ -314,12 +349,14 @@ pub(crate) fn toggle(editor: &mut Editor) {
             }
             None
         }
-        Row::Hunk(section, index, hunk) | Row::Line(section, index, hunk, _) => {
+        Row::Hunk(section, index, hunk)
+        | Row::Line(section, index, hunk, _)
+        | Row::Pair(section, index, hunk, ..) => {
             let Some(path) = path(section, index) else {
                 return;
             };
             let key = (section, path.clone(), hunk);
-            if matches!(row, Row::Line(..)) || !view.folds.hidden.remove(&key) {
+            if matches!(row, Row::Line(..) | Row::Pair(..)) || !view.folds.hidden.remove(&key) {
                 view.folds.hidden.insert(key);
             }
             Some(Spot::Hunk(section, path, hunk))
@@ -340,6 +377,9 @@ pub(crate) fn visit(editor: &mut Editor) {
         Row::File(section, index) => (section, index, None),
         Row::Hunk(section, index, hunk) => (section, index, Some((hunk, None))),
         Row::Line(section, index, hunk, line) => (section, index, Some((hunk, Some(line)))),
+        Row::Pair(section, index, hunk, left, right) => {
+            (section, index, Some((hunk, right.or(left))))
+        }
         _ => {
             editor.show_message("Nothing to visit here");
             return;
