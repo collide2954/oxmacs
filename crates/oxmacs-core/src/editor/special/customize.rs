@@ -50,11 +50,11 @@ impl Customize {
 fn shown(setting: &Setting, value: Option<&Value>) -> String {
     let unset = setting.unset.unwrap_or_default();
     match value {
-        None if matches!(setting.kind, Kind::Choice(_)) => format!("[{unset}]"),
+        None if matches!(setting.kind, Kind::Choice(_) | Kind::Theme) => format!("[{unset}]"),
         None => format!("({unset})"),
         Some(Value::Boolean(true)) => "[x]".to_owned(),
         Some(Value::Boolean(false)) => "[ ]".to_owned(),
-        Some(Value::String(text)) if matches!(setting.kind, Kind::Choice(_)) => {
+        Some(Value::String(text)) if matches!(setting.kind, Kind::Choice(_) | Kind::Theme) => {
             format!("[{text}]")
         }
         Some(Value::String(text)) => text.clone(),
@@ -71,6 +71,10 @@ fn hint(setting: &Setting) -> String {
             .chain(values.iter().copied())
             .collect::<Vec<_>>()
             .join(" | "),
+        Kind::Theme => format!(
+            "{} | RET picks a theme with a live preview",
+            setting.unset.unwrap_or_default()
+        ),
         Kind::Toggle | Kind::Integer | Kind::Number | Kind::Text => setting.hint.to_owned(),
     }
 }
@@ -295,6 +299,7 @@ impl Editor {
                 let next = options[(at + 1) % options.len()];
                 self.set_setting(setting, next.map(|value| Value::String(value.to_owned())));
             }
+            Kind::Theme => self.load_theme(),
             Kind::Integer | Kind::Number | Kind::Text => {
                 if self.open_minibuffer(&format!("{}: ", setting.key), Purpose::Setting(index)) {
                     self.set_minibuffer_input(&editable_text(current));
@@ -319,7 +324,7 @@ impl Editor {
                 .map(|number| Some(Value::Float(number)))
                 .map_err(|_| "a number"),
             _ if input.is_empty() && setting.unset.is_some() => Ok(None),
-            Kind::Toggle | Kind::Choice(_) | Kind::Text => {
+            Kind::Toggle | Kind::Choice(_) | Kind::Theme | Kind::Text => {
                 Ok(Some(Value::String(input.to_owned())))
             }
         };
@@ -610,7 +615,7 @@ mod tests {
         assert!(row(&editor, "theme").ends_with(" [follow OS]"));
         assert_eq!(
             lines[line_of(&editor, "theme") + 1],
-            "    follow OS | adwaita | adwaita-dark"
+            "    follow OS | RET picks a theme with a live preview"
         );
         assert_eq!(
             lines[line_of(&editor, "tab-width") + 1],
@@ -651,7 +656,7 @@ mod tests {
     }
 
     #[test]
-    fn return_toggles_switches_and_cycles_choices() {
+    fn return_toggles_switches_and_picks_themes() {
         let (_dir, mut editor) = settings();
         editor.take_effects();
 
@@ -663,11 +668,12 @@ mod tests {
         assert_eq!(editor.take_effects(), [Effect::Reconfigure]);
 
         on(&mut editor, "theme");
-        for expected in [Some("adwaita"), Some("adwaita-dark"), None] {
-            press(&mut editor, "RET");
-            assert_eq!(editor.config().theme.as_deref(), expected);
-        }
-        assert!(row(&editor, "theme").starts_with("  theme"));
+        press(&mut editor, "RET");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Load theme: ");
+        type_text(&mut editor, "dark");
+        press(&mut editor, "RET");
+        assert_eq!(editor.config().theme.as_deref(), Some("adwaita-dark"));
+        assert!(row(&editor, "theme").starts_with("* theme"));
     }
 
     #[test]

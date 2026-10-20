@@ -2,6 +2,7 @@
 pub enum Kind {
     Toggle,
     Choice(&'static [&'static str]),
+    Theme,
     Integer,
     Number,
     Text,
@@ -50,7 +51,7 @@ pub const SETTINGS: &[Setting] = &[
         setting(
             APPEARANCE,
             "theme",
-            Kind::Choice(&["adwaita", "adwaita-dark"]),
+            Kind::Theme,
             "Color theme; unset follows the OS light or dark preference",
         ),
         "follow OS",

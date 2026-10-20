@@ -715,14 +715,11 @@ mod tests {
     }
 
     #[test]
-    fn theme_choices_are_the_builtin_themes() {
-        let names: Vec<&str> = theme::builtin().iter().map(|theme| theme.name).collect();
-
+    fn the_theme_setting_picks_from_the_known_themes() {
         assert_eq!(
             schema::find("theme").map(|setting| setting.kind),
-            Some(schema::Kind::Choice(&["adwaita", "adwaita-dark"]))
+            Some(schema::Kind::Theme)
         );
-        assert_eq!(names, ["adwaita", "adwaita-dark"]);
     }
 
     #[test]
