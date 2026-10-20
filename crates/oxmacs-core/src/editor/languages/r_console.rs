@@ -8,7 +8,7 @@ use crate::editor::languages::r_complete::Asked;
 use crate::editor::languages::r_signature::Call;
 use crate::editor::prompts::input_line::InputLine;
 use crate::editor::special::processes::Kind;
-use crate::editor::{Editor, Effect, Job, JobId, Outcome};
+use crate::editor::{Editor, Effect, Job, JobEvent, JobId, Outcome};
 use crate::external::r::{self, Piece, Stream};
 use crate::external::tools;
 use crate::syntax::Language;
@@ -364,6 +364,9 @@ impl Editor {
     }
 
     pub fn session_output(&mut self, job: JobId, chunk: &str) {
+        if self.notify_job(job, JobEvent::Output(chunk)) {
+            return;
+        }
         if let Some(console) = self.console_of_job(job) {
             self.with_session(console, |editor| editor.process_output(chunk));
         }

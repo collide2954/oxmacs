@@ -20,7 +20,7 @@ mod windows;
 
 pub use connections::ConnectionSpec;
 pub use effect::{ConnectionId, Effect, FetchId};
-pub use job::{Job, JobId, Outcome};
+pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
 pub use languages::r_plots::{GalleryView, PlotView};
 pub use languages::registry::LineHighlighter;
 pub use motion::mouse::{Cell, Clicks};
@@ -150,6 +150,7 @@ pub struct Editor {
     config_path: Option<PathBuf>,
     next_fetch: u64,
     fetches: effect::Fetches,
+    job_handlers: job::JobHandlers,
     next_connection: u64,
     connections: Vec<(ConnectionId, ConnectionSpec)>,
     languages: Vec<languages::registry::Registered>,
@@ -242,6 +243,7 @@ impl Editor {
             config_path: config::default_path(),
             next_fetch: 0,
             fetches: effect::Fetches::default(),
+            job_handlers: job::JobHandlers::default(),
             next_connection: 0,
             connections: Vec::new(),
             languages: languages::registry::built_in(),

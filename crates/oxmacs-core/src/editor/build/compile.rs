@@ -4,7 +4,7 @@ use crate::editor::buffers::Mode;
 use crate::editor::build::errors::{ErrorSource, Errors};
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::special::processes::Kind;
-use crate::editor::{Editor, Effect, Job, JobId, Outcome};
+use crate::editor::{Editor, Effect, Job, JobEvent, JobId, Outcome};
 use crate::external::tools;
 use crate::files::paths;
 use crate::text::Buffer;
@@ -163,7 +163,7 @@ impl Editor {
     }
 
     pub fn job_output(&mut self, job: JobId, line: &str) {
-        if self.lint_output(job, line) {
+        if self.notify_job(job, JobEvent::Line(line)) || self.lint_output(job, line) {
             return;
         }
         let Some(index) = self.compilation_for(job) else {
@@ -181,7 +181,10 @@ impl Editor {
 
     pub fn job_finished(&mut self, job: JobId, outcome: &Outcome) {
         self.job_ended(job, outcome);
-        if self.lint_finished(job, outcome) || self.console_finished(job, outcome) {
+        if self.notify_job(job, JobEvent::Finished(outcome))
+            || self.lint_finished(job, outcome)
+            || self.console_finished(job, outcome)
+        {
             return;
         }
         let Some(index) = self.compilation_for(job) else {
