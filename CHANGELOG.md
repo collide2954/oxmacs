@@ -15,10 +15,11 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `M-x oxmacs-doctor` lists Atlas vaults and how many pages each holds.
 - `M-x oxmacs-doctor` lists the opt-in build features compiled in, with their versions.
 - The theme in *Settings* is picked from the same live-preview list as `M-x load-theme`.
+- Applets keep their settings in a table of their own in config.toml, such as `[demo]`. A table no applet in the build reads is kept, and `M-x oxmacs-doctor` points it out.
 
 ### Experimental (opt-in at build time)
 
-- `demo` 0.1.0: an example applet, `M-x demo`, showing how applets add commands, keys, buffers, prompts, questions and effects. Build with `cargo build -p oxmacs --features demo`.
+- `demo` 0.1.0: an example applet, `M-x demo`, showing how applets add commands, keys, buffers, prompts, questions, effects, GUI panels, a config table (`[demo] sides`) and a doctor section. Build with `cargo build -p oxmacs --features demo`.
 - `animated-splash` 0.1.0: the start screen draws the oxmacs logo in block letters, animated above the keys; `a` cycles a drifting plasma field with a shimmer, a color wave, the logo assembling from scattered pixels, a network of neurons whose signals light the letters as they pass, and DNA replicating behind the logo with its helicase, polymerases, primers and Okazaki fragments. Build with `cargo build -p oxmacs --features animated-splash`.
 - `extra-themes` 0.1.0: 56 more color themes inspired by the ones Helix ships, among them gruvbox, catppuccin, tokyonight, rose-pine, kanagawa, nord, dracula, everforest, solarized, ayu, github, modus and doom-one, each tuned to stay readable. Build with `cargo build -p oxmacs --features extra-themes`.
 
