@@ -35,7 +35,28 @@ pub trait Applet {
         &[]
     }
 
+    fn subcommands(&self) -> &'static [Subcommand] {
+        &[]
+    }
+
     fn install(&self, editor: &mut Editor);
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Subcommand {
+    pub name: &'static str,
+    pub summary: &'static str,
+    pub run: fn() -> Result<(), String>,
+}
+
+pub fn subcommand<'a>(
+    applets: impl IntoIterator<Item = &'a dyn Applet>,
+    name: &str,
+) -> Option<&'static Subcommand> {
+    applets
+        .into_iter()
+        .flat_map(Applet::subcommands)
+        .find(|subcommand| subcommand.name == name)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -803,6 +824,39 @@ mod tests {
                 .map(|answers| answers.0.clone()),
             Some(vec!["display".to_owned(), "display".to_owned()])
         );
+    }
+
+    struct Syncer;
+
+    impl Applet for Syncer {
+        fn name(&self) -> &'static str {
+            "syncer"
+        }
+
+        fn version(&self) -> &'static str {
+            "1.0.0"
+        }
+
+        fn subcommands(&self) -> &'static [Subcommand] {
+            &[Subcommand {
+                name: "sync-daemon",
+                summary: "Run the sync daemon without the editor",
+                run: || Err("not today".to_owned()),
+            }]
+        }
+
+        fn install(&self, _editor: &mut Editor) {}
+    }
+
+    #[test]
+    fn applets_can_add_command_line_subcommands() {
+        let applets: [&dyn Applet; 2] = [&Counter, &Syncer];
+
+        let found = subcommand(applets, "sync-daemon").unwrap();
+
+        assert_eq!(found.summary, "Run the sync daemon without the editor");
+        assert_eq!((found.run)(), Err("not today".to_owned()));
+        assert!(subcommand(applets, "notes.txt").is_none());
     }
 
     #[test]
