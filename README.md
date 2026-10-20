@@ -20,7 +20,15 @@ cargo install --path crates/oxmacs
 
 ## Build features
 
-Some parts of oxmacs are optional and only exist in the binary when you ask for them at build time. They are [Cargo features](https://doc.rust-lang.org/cargo/reference/features.html) on the `oxmacs` crate, all off by default. These experimental applets are versioned on their own, apart from oxmacs:
+Larger parts of oxmacs are applets, each a [Cargo feature](https://doc.rust-lang.org/cargo/reference/features.html) on the `oxmacs` crate. A few are built by default:
+
+| Feature   | What it adds                                                                 |
+|-----------|------------------------------------------------------------------------------|
+| `weather` | `M-x weather` with the forecast from Open-Meteo, and the weather in the mode line |
+
+`--no-default-features` leaves them out for a lean editor.
+
+Others are only built when you ask for them. These experimental applets are versioned on their own, apart from oxmacs:
 
 | Feature           | Version | What it adds                                                                  |
 |-------------------|---------|-------------------------------------------------------------------------------|

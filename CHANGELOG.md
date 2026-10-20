@@ -4,6 +4,11 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- Weather settings now live in a `[weather]` table: `location`, `units` and `mode-line`. oxmacs moves `weather-location`, `weather-units` and `mode-line-weather` there the first time it starts, keeping comments, and says so.
+- Weather is a default applet; `cargo build -p oxmacs --no-default-features` leaves it out.
+
 ### Added
 
 - Atlas, a plain-text knowledge system in `.atlas` notes: a `key: value` header, `=` headings, tasks `[ ]` `[/]` `[?]` `[x]` `[-]` with `due:`, `on:`, `every:`, `!high` and `#tags`, `[Page]` links and `@date HH:MM-HH:MM` events, all highlighted. Loose dates such as `fri` or `+3d` become ISO dates when you leave the line or save.
