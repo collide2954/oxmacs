@@ -39,10 +39,6 @@ pub struct Config {
     pub line_number_separator: bool,
     pub window_mode: WindowMode,
     pub mode_line_style: ModeLineStyle,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub irc_server: Vec<IrcServer>,
-    #[serde(skip_serializing_if = "IrcBouncer::is_default")]
-    pub irc_bouncer: IrcBouncer,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r_program: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -52,8 +48,6 @@ pub struct Config {
     #[serde(skip)]
     pub(crate) applets: BTreeMap<String, toml::Table>,
 }
-
-const CORE_TABLES: &[&str] = &["irc-bouncer"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Moved {
@@ -77,6 +71,16 @@ const MOVED: &[Moved] = &[
         from: "mode-line-weather",
         table: "weather",
         key: "mode-line",
+    },
+    Moved {
+        from: "irc-server",
+        table: "irc",
+        key: "server",
+    },
+    Moved {
+        from: "irc-bouncer",
+        table: "irc",
+        key: "bouncer",
     },
 ];
 
@@ -136,100 +140,6 @@ pub enum ModeLineStyle {
     Boxed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct IrcServer {
-    pub name: String,
-    pub host: String,
-    #[serde(default = "irc_port")]
-    pub port: u16,
-    #[serde(default = "enabled")]
-    pub tls: bool,
-    pub nick: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub username: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub realname: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub channels: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sasl: Option<String>,
-    #[serde(default)]
-    pub password: PasswordSource,
-}
-
-impl IrcServer {
-    pub fn username(&self) -> &str {
-        self.username.as_deref().unwrap_or(&self.nick)
-    }
-
-    pub fn realname(&self) -> &str {
-        self.realname.as_deref().unwrap_or("oxmacs")
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
-pub struct IrcBouncer {
-    pub mode: BouncerMode,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub address: Option<String>,
-    pub tls: bool,
-    pub password: PasswordSource,
-    pub listen: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub certificate: Option<PathBuf>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub key: Option<PathBuf>,
-}
-
-impl Default for IrcBouncer {
-    fn default() -> Self {
-        Self {
-            mode: BouncerMode::Off,
-            address: None,
-            tls: true,
-            password: PasswordSource::Keychain,
-            listen: "127.0.0.1:0".to_owned(),
-            certificate: None,
-            key: None,
-        }
-    }
-}
-
-impl IrcBouncer {
-    fn is_default(&self) -> bool {
-        *self == Self::default()
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum BouncerMode {
-    #[default]
-    Off,
-    Local,
-    Remote,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum PasswordSource {
-    #[default]
-    Keychain,
-    Ask,
-    Env(String),
-    Text(String),
-}
-
-fn irc_port() -> u16 {
-    6697
-}
-
-fn enabled() -> bool {
-    true
-}
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RustLint {
@@ -260,8 +170,6 @@ impl Default for Config {
             line_number_separator: false,
             window_mode: WindowMode::default(),
             mode_line_style: ModeLineStyle::default(),
-            irc_server: Vec::new(),
-            irc_bouncer: IrcBouncer::default(),
             r_program: None,
             air_program: None,
             atlas_vault: Vec::new(),
@@ -282,10 +190,6 @@ pub enum ConfigError {
     FontSize,
     #[error("clock-format: {0}")]
     ClockFormat(String),
-    #[error("irc-server: {0}")]
-    IrcServer(String),
-    #[error("irc-bouncer: {0}")]
-    IrcBouncer(String),
     #[error("atlas-vault: {0}")]
     AtlasVault(String),
     #[error("{}: {source}", path.display())]
@@ -314,7 +218,7 @@ impl Config {
             let name: &str = key.get_ref();
             if let Some(entry) = moved.iter().find(|entry| entry.from == name) {
                 relocated.push(*entry);
-            } else if matches!(value.get_ref(), DeValue::Table(_)) && !CORE_TABLES.contains(&name) {
+            } else if matches!(value.get_ref(), DeValue::Table(_)) {
                 names.push(name.to_owned());
             } else {
                 core.insert(key, value);
@@ -444,28 +348,6 @@ impl Config {
         }
         let sample = jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC);
         clock::text(&self.clock_format, &sample).map_err(ConfigError::ClockFormat)?;
-        if self.irc_bouncer.mode == BouncerMode::Remote && self.irc_bouncer.address.is_none() {
-            return Err(ConfigError::IrcBouncer(
-                "mode = \"remote\" needs an address".to_owned(),
-            ));
-        }
-        for (index, server) in self.irc_server.iter().enumerate() {
-            if server.nick.trim().is_empty() {
-                return Err(ConfigError::IrcServer(format!(
-                    "{} needs a nick",
-                    server.name
-                )));
-            }
-            if self.irc_server[..index]
-                .iter()
-                .any(|earlier| earlier.name == server.name)
-            {
-                return Err(ConfigError::IrcServer(format!(
-                    "two servers are named {}",
-                    server.name
-                )));
-            }
-        }
         for (index, vault) in self.atlas_vault.iter().enumerate() {
             if vault.path.trim().is_empty() {
                 return Err(ConfigError::AtlasVault(format!(
@@ -531,7 +413,9 @@ fn migrate_with(text: &str, moved: &[Moved]) -> Option<(String, Vec<Moved>)> {
         };
         done.push(*entry);
         if !document.contains_key(entry.table) {
-            document.insert(entry.table, toml_edit::table());
+            let mut table = toml_edit::Table::new();
+            table.set_implicit(true);
+            document.insert(entry.table, toml_edit::Item::Table(table));
         }
         let Some(table) = document
             .get_mut(entry.table)
@@ -654,36 +538,6 @@ pub fn add_atlas_vault(text: &str, vault: &AtlasVault) -> Result<String, ConfigE
     Ok(rewritten)
 }
 
-pub fn add_irc_server(
-    text: &str,
-    server: &IrcServer,
-    keep_alive: bool,
-) -> Result<String, ConfigError> {
-    let mut document: toml_edit::DocumentMut = text.parse().map_err(|error| edit_error(&error))?;
-    let mut table = table_of(server)?;
-    if let Some(password) = table.remove("password") {
-        let value = match password {
-            toml_edit::Item::Table(inner) => {
-                toml_edit::Value::InlineTable(inner.into_inline_table())
-            }
-            other => other
-                .into_value()
-                .map_err(|_| ConfigError::Syntax("password".to_owned()))?,
-        };
-        table.insert("password", toml_edit::Item::Value(value));
-    }
-    push_table(&mut document, "irc-server", table);
-    if keep_alive {
-        if !document.contains_table("irc-bouncer") {
-            document.insert("irc-bouncer", toml_edit::table());
-        }
-        document["irc-bouncer"]["mode"] = toml_edit::value("local");
-    }
-    let rewritten = document.to_string();
-    Config::parse(&rewritten)?;
-    Ok(rewritten)
-}
-
 fn syntax_error(text: &str, error: &toml::de::Error) -> ConfigError {
     let line = error
         .span()
@@ -797,7 +651,6 @@ mod tests {
     #[test]
     fn unknown_plain_keys_are_still_mistakes() {
         assert!(Config::parse("dice = 8\n").is_err());
-        assert!(Config::parse("[irc-bouncer]\nmode = \"local\"\n").is_ok());
     }
 
     #[test]
@@ -871,70 +724,6 @@ mod tests {
             Config::parse("format-on-save = true")
                 .unwrap()
                 .format_on_save
-        );
-    }
-
-    fn libera(password: PasswordSource) -> IrcServer {
-        IrcServer {
-            name: "libera".to_owned(),
-            host: "irc.libera.chat".to_owned(),
-            port: 6697,
-            tls: true,
-            nick: "brett".to_owned(),
-            username: None,
-            realname: None,
-            channels: vec!["#emacs".to_owned(), "#rust".to_owned()],
-            sasl: Some("brett".to_owned()),
-            password,
-        }
-    }
-
-    #[test]
-    fn irc_servers_are_added_without_disturbing_the_file() {
-        let text = "# my settings\ntheme = \"adwaita\" # light\n";
-
-        let added = add_irc_server(text, &libera(PasswordSource::Keychain), false).unwrap();
-
-        assert_eq!(
-            added,
-            "# my settings\ntheme = \"adwaita\" # light\n\n[[irc-server]]\nname = \"libera\"\nhost = \"irc.libera.chat\"\nport = 6697\ntls = true\nnick = \"brett\"\nchannels = [\"#emacs\", \"#rust\"]\nsasl = \"brett\"\npassword = \"keychain\"\n"
-        );
-        let config = Config::parse(&added).unwrap();
-        assert_eq!(config.theme.as_deref(), Some("adwaita"));
-        assert_eq!(config.irc_server, [libera(PasswordSource::Keychain)]);
-        assert_eq!(config.irc_bouncer, IrcBouncer::default());
-    }
-
-    #[test]
-    fn added_servers_can_turn_on_the_local_bouncer_and_read_env_passwords() {
-        let text = "[irc-bouncer]\ntls = true\n";
-        let server = libera(PasswordSource::Env("LIBERA_PASSWORD".to_owned()));
-
-        let added = add_irc_server(text, &server, true).unwrap();
-
-        let config = Config::parse(&added).unwrap();
-        assert_eq!(config.irc_bouncer.mode, BouncerMode::Local);
-        assert_eq!(config.irc_server, [server]);
-        assert!(
-            added.contains("password = { env = \"LIBERA_PASSWORD\" }"),
-            "{added}"
-        );
-        let again = add_irc_server(
-            &added,
-            &IrcServer {
-                name: "oftc".to_owned(),
-                host: "irc.oftc.net".to_owned(),
-                ..libera(PasswordSource::Ask)
-            },
-            false,
-        )
-        .unwrap();
-        assert_eq!(Config::parse(&again).unwrap().irc_server.len(), 2);
-        assert_eq!(
-            add_irc_server(&again, &libera(PasswordSource::Ask), false)
-                .unwrap_err()
-                .to_string(),
-            "irc-server: two servers are named libera"
         );
     }
 
@@ -1172,6 +961,23 @@ mod tests {
     }
 
     #[test]
+    fn the_old_irc_keys_move_into_the_irc_table() {
+        let text = "theme = \"adwaita\"\n\n[[irc-server]]\nname = \"libera\" # main\nhost = \"irc.libera.chat\"\nnick = \"me\"\n\n[irc-bouncer]\nmode = \"local\"\n";
+
+        let (rewritten, moved) = migrate_with(text, MOVED).unwrap();
+
+        assert_eq!(moved.len(), 2);
+        assert_eq!(
+            rewritten,
+            "theme = \"adwaita\"\n\n[[irc.server]]\nname = \"libera\" # main\nhost = \"irc.libera.chat\"\nnick = \"me\"\n\n[irc.bouncer]\nmode = \"local\"\n"
+        );
+        assert_eq!(
+            Config::parse(&rewritten).unwrap().applets,
+            Config::parse(text).unwrap().applets
+        );
+    }
+
+    #[test]
     fn the_old_weather_keys_move_into_the_weather_table() {
         let text = "weather-location = \"Berlin\"\nweather-units = \"imperial\"\nmode-line-weather = true\n";
 
@@ -1187,110 +993,6 @@ mod tests {
             rewritten,
             "[weather]\nlocation = \"Berlin\"\nunits = \"imperial\"\nmode-line = true\n"
         );
-    }
-
-    #[test]
-    fn irc_servers_are_tables_with_sensible_defaults() {
-        let config = Config::parse(
-            r##"
-[[irc-server]]
-name = "libera"
-host = "irc.libera.chat"
-nick = "oxtest"
-channels = ["#oxmacs-test"]
-sasl = "oxtest"
-
-[[irc-server]]
-name = "local"
-host = "localhost"
-port = 6667
-tls = false
-nick = "me"
-password = { env = "LOCAL_IRC" }
-"##,
-        )
-        .unwrap();
-
-        let libera = &config.irc_server[0];
-        assert_eq!(libera.port, 6697);
-        assert!(libera.tls);
-        assert_eq!(libera.username(), "oxtest");
-        assert_eq!(libera.realname(), "oxmacs");
-        assert_eq!(libera.channels, ["#oxmacs-test"]);
-        assert_eq!(libera.password, PasswordSource::Keychain);
-
-        let local = &config.irc_server[1];
-        assert_eq!((local.port, local.tls), (6667, false));
-        assert_eq!(local.password, PasswordSource::Env("LOCAL_IRC".to_owned()));
-        assert_eq!(local.sasl, None);
-    }
-
-    #[test]
-    fn irc_password_sources_are_spelled_plainly() {
-        let read = |password: &str| {
-            Config::parse(&format!(
-                "[[irc-server]]\nname = \"n\"\nhost = \"h\"\nnick = \"x\"\npassword = {password}\n"
-            ))
-            .map(|config| config.irc_server[0].password.clone())
-        };
-
-        assert_eq!(read("\"ask\"").unwrap(), PasswordSource::Ask);
-        assert_eq!(read("\"keychain\"").unwrap(), PasswordSource::Keychain);
-        assert_eq!(
-            read("{ text = \"hunter2\" }").unwrap(),
-            PasswordSource::Text("hunter2".to_owned())
-        );
-        assert!(read("\"sometimes\"").is_err());
-    }
-
-    #[test]
-    fn the_irc_bouncer_is_off_unless_configured() {
-        let bouncer = Config::default().irc_bouncer;
-        assert_eq!(bouncer.mode, BouncerMode::Off);
-        assert_eq!(bouncer.listen, "127.0.0.1:0");
-
-        let config = Config::parse(
-            "[irc-bouncer]\nmode = \"remote\"\naddress = \"bnc.example.org:6697\"\npassword = \"ask\"\n",
-        )
-        .unwrap();
-        assert_eq!(config.irc_bouncer.mode, BouncerMode::Remote);
-        assert_eq!(
-            config.irc_bouncer.address.as_deref(),
-            Some("bnc.example.org:6697")
-        );
-        assert!(config.irc_bouncer.tls);
-        assert_eq!(config.irc_bouncer.password, PasswordSource::Ask);
-
-        let daemon = Config::parse(
-            "[irc-bouncer]\nlisten = \"0.0.0.0:6697\"\ncertificate = \"cert.pem\"\nkey = \"key.pem\"\n",
-        )
-        .unwrap()
-        .irc_bouncer;
-        assert_eq!(daemon.listen, "0.0.0.0:6697");
-        assert_eq!(daemon.certificate.as_deref(), Some(Path::new("cert.pem")));
-    }
-
-    #[test]
-    fn remote_bouncers_need_an_address() {
-        let error = Config::parse("[irc-bouncer]\nmode = \"remote\"\n").unwrap_err();
-
-        assert_eq!(
-            error.to_string(),
-            "irc-bouncer: mode = \"remote\" needs an address"
-        );
-    }
-
-    #[test]
-    fn irc_servers_need_distinct_names_and_a_nick() {
-        let error = Config::parse(
-            "[[irc-server]]\nname = \"a\"\nhost = \"h\"\nnick = \"x\"\n[[irc-server]]\nname = \"a\"\nhost = \"h\"\nnick = \"y\"\n",
-        )
-        .unwrap_err();
-        assert_eq!(error.to_string(), "irc-server: two servers are named a");
-
-        let error =
-            Config::parse("[[irc-server]]\nname = \"a\"\nhost = \"h\"\nnick = \"\"\n").unwrap_err();
-        assert_eq!(error.to_string(), "irc-server: a needs a nick");
     }
 
     #[test]

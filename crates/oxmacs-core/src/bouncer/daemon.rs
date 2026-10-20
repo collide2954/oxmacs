@@ -11,8 +11,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::bouncer::history::DiskHistory;
 use crate::bouncer::run::{self, Daemon};
-use crate::config::{self, BouncerMode, Config, PasswordSource};
+use crate::config::{self, Config};
 use crate::external::{keychain, net};
+use crate::irc::settings::{BouncerMode, IrcSettings, PasswordSource, TABLE};
 
 const TOKEN_BYTES: usize = 32;
 const KNOCK: Duration = Duration::from_millis(100);
@@ -152,16 +153,18 @@ pub fn main() -> Result<(), String> {
 
 fn serve() -> Result<(), String> {
     let path = config::default_path().ok_or("no config directory")?;
-    let config = Config::load(&path).map_err(|error| error.to_string())?;
-    let bouncer = &config.irc_bouncer;
+    let settings = Config::load(&path)
+        .map_err(|error| error.to_string())?
+        .applet::<IrcSettings>(TABLE)?;
+    let bouncer = &settings.bouncer;
     let local = bouncer.mode == BouncerMode::Local;
     let password = if local {
         token()?
     } else {
         headless_password(&bouncer.password, "irc-bouncer", "bouncer")?
     };
-    let passwords = config
-        .irc_server
+    let passwords = settings
+        .server
         .iter()
         .map(|server| {
             server
@@ -195,7 +198,7 @@ fn serve() -> Result<(), String> {
     let history = DiskHistory::new(data_directory().ok_or("no data directory")?.join("irc"));
     run::run(
         Daemon {
-            servers: config.irc_server.clone(),
+            servers: settings.server.clone(),
             passwords,
             password,
             history,
@@ -211,7 +214,7 @@ fn serve() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::PasswordSource;
+    use crate::irc::settings::PasswordSource;
 
     #[test]
     fn tokens_are_long_random_and_hexadecimal() {

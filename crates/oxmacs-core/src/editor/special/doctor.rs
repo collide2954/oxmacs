@@ -650,12 +650,13 @@ mod tests {
     #[test]
     fn config_tables_no_applet_reads_are_pointed_out() {
         let (_dir, mut editor) = doctor();
-        editor.apply_config(&Config::parse("[irc]\nnick = \"me\"\n").unwrap());
+        editor.apply_config(&Config::parse("[news]\nfeeds = 3\n").unwrap());
 
         press(&mut editor, "g");
 
         assert!(
-            line_with(&editor, "[irc]").ends_with("[irc] is not read by any applet in this build")
+            line_with(&editor, "[news]")
+                .ends_with("[news] is not read by any applet in this build")
         );
     }
 

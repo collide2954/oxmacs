@@ -3,11 +3,11 @@ use std::time::Duration;
 use jiff::Timestamp;
 
 use crate::bouncer::history::History;
-use crate::config::IrcServer;
 use crate::external::net::{Endpoint, Event};
 use crate::irc::message::Message;
 use crate::irc::network::{Network, Target};
 use crate::irc::session::{Event as SessionEvent, Identity, Sasl, Session};
+use crate::irc::settings::IrcServer;
 
 const NAME: &str = "oxmacs";
 const OFFERED: &[&str] = &[
@@ -549,6 +549,7 @@ mod tests {
     use super::*;
     use crate::bouncer::history::MemoryHistory;
     use crate::config::Config;
+    use crate::irc::settings::{IrcSettings, TABLE};
 
     const PASSWORD: &str = "s3cret";
     const ME: ClientId = ClientId(1);
@@ -562,7 +563,9 @@ mod tests {
             "[[irc-server]]\nname = \"libera\"\nhost = \"irc.libera.chat\"\nnick = \"oxtest\"\nchannels = [\"#rust\"]\n",
         )
         .unwrap()
-        .irc_server;
+        .applet::<IrcSettings>(TABLE)
+        .unwrap()
+        .server;
         let mut bouncer = Bouncer::new(servers, vec![None], PASSWORD, MemoryHistory::default());
         bouncer.start();
         bouncer

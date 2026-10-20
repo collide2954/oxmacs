@@ -1,11 +1,10 @@
-use std::{env, fs};
+use std::env;
 
-use crate::config::{self, BouncerMode, IrcServer, PasswordSource};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
-use crate::files::{self, paths};
+use crate::irc::settings::{self, IrcServer, PasswordSource};
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -228,15 +227,15 @@ impl Editor {
 
     fn unique_server_name(&self, base: &str) -> String {
         let taken = |name: &str| {
-            self.config
-                .irc_server
+            self.irc_settings()
+                .server
                 .iter()
                 .any(|server| server.name == name)
         };
         if !taken(base) {
             return base.to_owned();
         }
-        (2..=self.config.irc_server.len() + 2)
+        (2..=self.irc_settings().server.len() + 2)
             .map(|number| format!("{base}-{number}"))
             .find(|name| !taken(name))
             .unwrap_or_else(|| base.to_owned())
@@ -434,8 +433,8 @@ impl Editor {
             return Some("The server needs a name".to_owned());
         }
         if self
-            .config
-            .irc_server
+            .irc_settings()
+            .server
             .iter()
             .any(|known| known.name == server.name)
         {
@@ -470,35 +469,12 @@ impl Editor {
             self.show_message(problem);
             return;
         }
-        let Some(path) = self.config_path.clone() else {
-            self.show_message("No config directory to save the server in");
-            return;
-        };
-        let shown = paths::abbreviate(&path, self.home.as_deref());
-        let written = files::load(&path)
-            .map_err(|error| error.to_string())
-            .and_then(|loaded| {
-                let text = config::add_irc_server(&loaded.text, &server, keep_alive)
-                    .map_err(|error| format!("{shown}: {error}"))?;
-                if let Some(directory) = path.parent() {
-                    fs::create_dir_all(directory).map_err(|error| error.to_string())?;
-                }
-                files::save(&path, &text, loaded.format).map_err(|error| error.to_string())
-            });
-        if let Err(error) = written {
+        if let Err(error) =
+            self.edit_config_file(|document| settings::add_server(document, &server, keep_alive))
+        {
             self.show_message(error);
             return;
         }
-        let add = |config: &mut config::Config| {
-            config.irc_server.push(server.clone());
-            if keep_alive {
-                config.irc_bouncer.mode = BouncerMode::Local;
-            }
-        };
-        let mut live = self.config.clone();
-        add(&mut live);
-        self.reconfigure(&live);
-        self.note_saved_settings(add);
         if let Some(index) = self.setup_index() {
             self.finish_kill(index);
         }
@@ -519,8 +495,8 @@ impl Editor {
 
     fn keep_irc_password(&mut self, name: &str, password: &str) {
         let Some(server) = self
-            .config
-            .irc_server
+            .irc_settings()
+            .server
             .iter()
             .find(|server| server.name == name)
             .cloned()
@@ -554,8 +530,8 @@ impl Editor {
 
     pub(in crate::editor) fn connect_named_irc(&mut self, name: &str) {
         if let Some(server) = self
-            .config
-            .irc_server
+            .irc_settings()
+            .server
             .iter()
             .find(|server| server.name == name)
             .cloned()
@@ -568,11 +544,16 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
-    use crate::config::{BouncerMode, Config, PasswordSource};
+    use crate::config::Config;
     use crate::editor::test_support::{lines, press, question, type_text};
     use crate::editor::{Editor, Effect};
+    use crate::irc::settings::{BouncerMode, IrcSettings, PasswordSource, TABLE};
+
+    fn kept(path: &Path) -> IrcSettings {
+        Config::load(path).unwrap().applet(TABLE).unwrap()
+    }
 
     fn opened(config: &str) -> (tempfile::TempDir, PathBuf, Editor) {
         let dir = tempfile::tempdir().unwrap();
@@ -674,13 +655,14 @@ mod tests {
 
         let saved = Config::load(&path).unwrap();
         assert_eq!(saved.theme.as_deref(), Some("adwaita"));
-        let server = &saved.irc_server[0];
+        let irc = kept(&path);
+        let server = &irc.server[0];
         assert_eq!(server.name, "libera");
         assert_eq!(server.nick, "brett");
         assert_eq!(server.sasl, None);
         assert_eq!(server.channels, ["#emacs", "#rust"]);
         assert_eq!(server.password, PasswordSource::Keychain);
-        assert_eq!(editor.config().irc_server, saved.irc_server);
+        assert_eq!(editor.irc_settings().server, irc.server);
         assert!(
             editor
                 .buffers
@@ -709,8 +691,7 @@ mod tests {
 
         press(&mut editor, "C-c C-c");
 
-        let saved = Config::load(&path).unwrap();
-        assert_eq!(saved.irc_server[0].sasl.as_deref(), Some("brett"));
+        assert_eq!(kept(&path).server[0].sasl.as_deref(), Some("brett"));
     }
 
     #[test]
@@ -722,11 +703,8 @@ mod tests {
 
         press(&mut editor, "C-c C-c");
 
-        assert_eq!(
-            Config::load(&path).unwrap().irc_bouncer.mode,
-            BouncerMode::Local
-        );
-        assert_eq!(editor.config().irc_bouncer.mode, BouncerMode::Local);
+        assert_eq!(kept(&path).bouncer.mode, BouncerMode::Local);
+        assert_eq!(editor.irc_settings().bouncer.mode, BouncerMode::Local);
     }
 
     std::thread_local! {
@@ -748,7 +726,7 @@ mod tests {
         go_to(&mut editor, "Keep alive");
         press(&mut editor, "RET C-c C-c");
 
-        assert_eq!(Config::load(&path).unwrap().irc_server.len(), 1);
+        assert_eq!(kept(&path).server.len(), 1);
         let minibuffer = editor.minibuffer().unwrap();
         assert_eq!(
             minibuffer.prompt(),
@@ -800,7 +778,7 @@ mod tests {
         edit(&mut editor, "Variable", "LIBERA_PASSWORD");
         press(&mut editor, "C-c C-c");
         assert_eq!(
-            Config::load(&path).unwrap().irc_server[0].password,
+            kept(&path).server[0].password,
             PasswordSource::Env("LIBERA_PASSWORD".to_owned())
         );
     }

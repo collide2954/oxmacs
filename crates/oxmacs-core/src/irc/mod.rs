@@ -1,6 +1,7 @@
 pub mod message;
 pub mod network;
 pub mod session;
+pub mod settings;
 
 use crate::theme::NICK_COLORS;
 

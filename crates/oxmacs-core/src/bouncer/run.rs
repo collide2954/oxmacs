@@ -10,8 +10,8 @@ use rustls::ServerConfig;
 
 use crate::bouncer::history::History;
 use crate::bouncer::relay::{Action, Bouncer, ClientId};
-use crate::config::IrcServer;
 use crate::external::net::{self, Connection, Event};
+use crate::irc::settings::IrcServer;
 
 const IDLE: Duration = Duration::from_secs(60);
 const FAREWELL: Duration = Duration::from_secs(2);
@@ -170,6 +170,7 @@ mod tests {
     use super::*;
     use crate::bouncer::history::MemoryHistory;
     use crate::config::Config;
+    use crate::irc::settings::{IrcSettings, TABLE};
 
     const PATIENCE: Duration = Duration::from_secs(20);
 
@@ -243,7 +244,9 @@ mod tests {
             "[[irc-server]]\nname = \"fake\"\nhost = \"127.0.0.1\"\nport = {port}\ntls = false\nnick = \"oxtest\"\nchannels = [\"#c\"]\n"
         ))
         .unwrap()
-        .irc_server;
+        .applet::<IrcSettings>(TABLE)
+        .unwrap()
+        .server;
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let daemon = Daemon {

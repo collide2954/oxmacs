@@ -181,7 +181,7 @@ impl Editor {
     }
 
     pub fn with_buffer(buffer: Buffer) -> Self {
-        Self {
+        let mut editor = Self {
             buffers: BufferList::new(buffer),
             windows: windows::Windows::new(),
             minibuffer: None,
@@ -258,7 +258,9 @@ impl Editor {
             lints: build::lint::Lints::default(),
             errors_from: build::errors::ErrorSource::default(),
             config: Config::default(),
-        }
+        };
+        editor.add_config_table::<crate::irc::settings::IrcSettings>(crate::irc::settings::TABLE);
+        editor
     }
 
     pub fn apply_config(&mut self, config: &Config) {

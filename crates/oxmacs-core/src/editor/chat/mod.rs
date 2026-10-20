@@ -11,7 +11,6 @@ use jiff::tz::TimeZone;
 use crate::applet::AppletBuffer;
 use crate::bouncer::daemon::LocalDaemon;
 use crate::command::{Scope, ScopeId};
-use crate::config::{BouncerMode, IrcServer};
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::chat::commands::Cycle;
@@ -21,6 +20,7 @@ use crate::external::net::Event as NetEvent;
 use crate::irc::message::Message;
 use crate::irc::network::{Kind, LineEvent, Member, Network, Target, Update};
 use crate::irc::session::{Event, Session};
+use crate::irc::settings::{self, BouncerMode, IrcServer, IrcSettings};
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -113,6 +113,10 @@ fn label(server: &str, target: &Target) -> String {
 }
 
 impl Editor {
+    pub(in crate::editor) fn irc_settings(&self) -> IrcSettings {
+        self.applet_config(settings::TABLE)
+    }
+
     fn chat_at(&self, index: usize) -> Option<&ChatView> {
         chat_of(self.buffers.mode(index)?)
     }
@@ -126,7 +130,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn irc(&mut self) {
-        match self.config.irc_server.as_slice() {
+        match self.irc_settings().server.as_slice() {
             [] => self.ask("No IRC servers yet; set one up?", |editor, yes| {
                 if yes {
                     editor.irc_setup();
@@ -140,8 +144,8 @@ impl Editor {
                 "IRC server: ",
                 |editor| {
                     editor
-                        .config
-                        .irc_server
+                        .irc_settings()
+                        .server
                         .iter()
                         .map(|server| {
                             Offer::noted(&server.name, format!("{}:{}", server.host, server.port))
@@ -179,7 +183,7 @@ impl Editor {
                 link.network.disconnected();
                 let stale = link.via_bouncer
                     && !link.connected
-                    && self.config.irc_bouncer.mode == BouncerMode::Local
+                    && self.irc_settings().bouncer.mode == BouncerMode::Local
                     && !self.irc.relaunched;
                 if stale {
                     self.irc.relaunched = true;

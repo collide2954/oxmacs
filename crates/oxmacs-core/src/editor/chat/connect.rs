@@ -1,9 +1,9 @@
-use crate::config::{BouncerMode, IrcServer, PasswordSource};
 use crate::editor::chat::Link;
 use crate::editor::{ConnectionSpec, Editor, Effect, ProcessSpec};
 use crate::external::net::Endpoint;
 use crate::irc::network::{Network, Target};
 use crate::irc::session::{Identity, Sasl, Session};
+use crate::irc::settings::{BouncerMode, IrcServer, PasswordSource};
 
 const BOUNCER_NAME: &str = "irc-bouncer";
 const BOUNCER_ACCOUNT: &str = "bouncer";
@@ -52,7 +52,7 @@ impl Editor {
             self.show_chat(&server.name, &Target::Server);
             return;
         }
-        match self.config.irc_bouncer.mode {
+        match self.irc_settings().bouncer.mode {
             BouncerMode::Off => match server.sasl.clone() {
                 Some(account) => {
                     let source = server.password.clone();
@@ -74,7 +74,7 @@ impl Editor {
                 None => self.launch_daemon(server),
             },
             BouncerMode::Remote => {
-                let source = self.config.irc_bouncer.password.clone();
+                let source = self.irc_settings().bouncer.password.clone();
                 self.with_password(
                     server,
                     Secret::Bouncer,
@@ -144,8 +144,8 @@ impl Editor {
         password: String,
     ) {
         let Some(server) = self
-            .config
-            .irc_server
+            .irc_settings()
+            .server
             .iter()
             .find(|server| server.name == name)
             .cloned()
@@ -166,7 +166,7 @@ impl Editor {
         match secret {
             Secret::Sasl => self.start_irc(server, Route::Direct(Some(password))),
             Secret::Bouncer => {
-                let bouncer = &self.config.irc_bouncer;
+                let bouncer = &self.irc_settings().bouncer;
                 match bouncer
                     .address
                     .as_deref()
@@ -258,7 +258,7 @@ impl Editor {
                 via_bouncer,
             });
         }
-        if via_bouncer && self.config.irc_bouncer.mode == BouncerMode::Local {
+        if via_bouncer && self.irc_settings().bouncer.mode == BouncerMode::Local {
             let pid = (self.irc.local_daemon)().map(|daemon| daemon.pid);
             self.track_process(daemon(pid));
         }
@@ -288,8 +288,8 @@ impl Editor {
         self.track_process(daemon(pid));
         for name in waiting {
             let server = self
-                .config
-                .irc_server
+                .irc_settings()
+                .server
                 .iter()
                 .find(|server| server.name == name)
                 .cloned();
