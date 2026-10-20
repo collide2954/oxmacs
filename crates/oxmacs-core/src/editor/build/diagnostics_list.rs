@@ -171,8 +171,8 @@ impl Editor {
     }
 
     pub(in crate::editor) fn recheck(&mut self) {
-        match self.lints.root.clone() {
-            Some(root) => self.lints.due = Some(root),
+        match self.lints.last.clone() {
+            Some(last) => self.lints.due = Some(last),
             None => self.show_message("Nothing has been checked yet"),
         }
     }

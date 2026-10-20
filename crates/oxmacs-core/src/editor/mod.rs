@@ -18,6 +18,8 @@ mod special;
 mod test_support;
 mod windows;
 
+pub use crate::external::diagnostics::{Diagnostic, LintLine, Severity};
+pub use build::lint::{LintRun, Linter};
 pub use connections::ConnectionSpec;
 pub use editing::format::{FormatRequest, Formatter};
 pub use effect::{ConnectionId, Effect, FetchId};
@@ -146,6 +148,7 @@ pub struct Editor {
     tool_report: special::doctor::ToolReport,
     find_r: fn(Option<&str>) -> Option<PathBuf>,
     formatters: Vec<(Language, Formatter)>,
+    linters: Vec<(Language, Linter)>,
     tools_root: Option<PathBuf>,
     font_note: Option<String>,
     config_path: Option<PathBuf>,
@@ -241,6 +244,7 @@ impl Editor {
                 (Language::RUST, editing::format::RUSTFMT),
                 (Language::R, editing::format::AIR_FORMAT),
             ],
+            linters: vec![(Language::RUST, build::lint::CARGO_LINT)],
             tools_root: dirs::data_dir().map(|data| data.join("oxmacs").join("tools")),
             font_note: None,
             config_path: config::default_path(),

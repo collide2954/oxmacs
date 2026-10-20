@@ -5,7 +5,6 @@ use crate::cli::Visit;
 use crate::editor::prompts::minibuffer::{PathListing, Purpose};
 use crate::editor::{Choice, Editor};
 use crate::files::{self, Sort, paths};
-use crate::syntax::Language;
 use crate::text::{Buffer, FileInfo};
 
 impl Editor {
@@ -353,8 +352,8 @@ impl Editor {
                 if configuring {
                     self.apply_config_file(&text, &shown);
                 }
-                if self.buffers.language(index) == Some(Language::RUST) {
-                    self.request_lint(&path);
+                if let Some(language) = self.buffers.language(index) {
+                    self.request_lint(language, &path);
                 }
                 self.tell_saved(id);
                 true

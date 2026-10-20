@@ -1,3 +1,4 @@
+use std::fmt;
 use std::mem;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -5,14 +6,38 @@ use std::path::{Path, PathBuf};
 use crate::config::RustLint;
 use crate::editor::build::errors::ErrorSource;
 use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
-use crate::external::diagnostics::{self, Diagnostic, Output, Severity};
+use crate::external::diagnostics::{self, Diagnostic, LintLine, Severity};
 use crate::external::tools;
+use crate::syntax::Language;
 use crate::text::{Buffer, BufferId, Marker};
+
+#[derive(Clone, Copy)]
+pub struct Linter {
+    pub start: fn(&Editor, &Path) -> Option<LintRun>,
+    pub read: fn(&str, &Path) -> LintLine,
+    pub complete: fn(&Outcome) -> bool,
+}
+
+impl fmt::Debug for Linter {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("Linter").finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LintRun {
+    pub root: PathBuf,
+    pub program: String,
+    pub args: Vec<String>,
+    pub label: &'static str,
+    pub name: String,
+}
 
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Lints {
-    pub(in crate::editor) due: Option<PathBuf>,
-    run: Option<Run>,
+    pub(in crate::editor) due: Option<(Language, PathBuf)>,
+    runs: Vec<Run>,
+    pub(in crate::editor) last: Option<(Language, PathBuf)>,
     pub(in crate::editor) diagnostics: Vec<Diagnostic>,
     marks: Vec<Mark>,
     pub(in crate::editor) root: Option<PathBuf>,
@@ -37,8 +62,11 @@ fn position(buffer: &Buffer, (row, column): (usize, usize)) -> usize {
 #[derive(Debug)]
 struct Run {
     job: JobId,
+    language: Language,
+    linter: Linter,
     root: PathBuf,
-    tool: RustLint,
+    label: &'static str,
+    name: String,
     found: Vec<Diagnostic>,
     built: bool,
     failure: Option<String>,
@@ -59,48 +87,89 @@ fn running(tool: RustLint) -> &'static str {
     }
 }
 
+fn cargo_lint(editor: &Editor, path: &Path) -> Option<LintRun> {
+    let tool = editor.settings.rust_lint;
+    let subcommand = subcommand(tool)?;
+    let root = path.parent().and_then(tools::cargo_root)?;
+    Some(LintRun {
+        root,
+        program: "cargo".to_owned(),
+        args: [
+            subcommand,
+            "--workspace",
+            "--all-targets",
+            "--message-format=json",
+        ]
+        .map(str::to_owned)
+        .to_vec(),
+        label: running(tool),
+        name: format!("cargo {subcommand}"),
+    })
+}
+
+pub(in crate::editor) const CARGO_LINT: Linter = Linter {
+    start: cargo_lint,
+    read: diagnostics::parse,
+    complete: |_| false,
+};
+
 impl Editor {
-    pub(in crate::editor) fn request_lint(&mut self, path: &Path) {
-        if subcommand(self.settings.rust_lint).is_some()
-            && let Some(root) = path.parent().and_then(tools::cargo_root)
-        {
-            self.lints.due = Some(root);
+    pub fn add_linter(&mut self, language: Language, linter: Linter) {
+        self.linters.retain(|(known, _)| *known != language);
+        self.linters.push((language, linter));
+    }
+
+    pub(in crate::editor) fn has_linter(&self, language: Language) -> bool {
+        self.linters.iter().any(|(known, _)| *known == language)
+    }
+
+    pub(in crate::editor) fn request_lint(&mut self, language: Language, path: &Path) {
+        if self.has_linter(language) {
+            self.lints.due = Some((language, path.to_owned()));
         }
     }
 
     pub(in crate::editor) fn start_due_lint(&mut self) {
-        let Some(root) = self.lints.due.take() else {
+        let Some((language, path)) = self.lints.due.take() else {
             return;
         };
-        let tool = self.settings.rust_lint;
-        let Some(subcommand) = subcommand(tool) else {
+        let Some(linter) = self
+            .linters
+            .iter()
+            .find(|(known, _)| *known == language)
+            .map(|(_, linter)| *linter)
+        else {
             return;
         };
-        if let Some(run) = self.lints.run.take() {
-            self.effects.push(Effect::Kill(run.job));
+        let Some(run) = (linter.start)(self, &path) else {
+            return;
+        };
+        for stale in self
+            .lints
+            .runs
+            .extract_if(.., |stale| stale.language == language)
+        {
+            self.effects.push(Effect::Kill(stale.job));
         }
         let spec = JobSpec {
-            program: "cargo".to_owned(),
-            args: [
-                subcommand,
-                "--workspace",
-                "--all-targets",
-                "--message-format=json",
-            ]
-            .map(str::to_owned)
-            .to_vec(),
-            directory: root.clone(),
+            program: run.program,
+            args: run.args,
+            directory: run.root.clone(),
             env: Vec::new(),
             label: "lint",
-            name: format!("cargo {subcommand}"),
+            name: run.name.clone(),
             buffer: None,
             interactive: false,
         };
         let job = self.start_job(spec, Self::lint_event);
-        self.lints.run = Some(Run {
+        self.lints.last = Some((language, path));
+        self.lints.runs.push(Run {
             job,
-            root,
-            tool,
+            language,
+            linter,
+            root: run.root,
+            label: run.label,
+            name: run.name,
             found: Vec::new(),
             built: false,
             failure: None,
@@ -115,17 +184,17 @@ impl Editor {
     }
 
     fn lint_output(&mut self, job: JobId, line: &str) {
-        let Some(run) = self.lints.run.as_mut().filter(|run| run.job == job) else {
+        let Some(run) = self.lints.runs.iter_mut().find(|run| run.job == job) else {
             return;
         };
-        match diagnostics::parse(line, &run.root) {
-            Output::Diagnostic(diagnostic) => {
+        match (run.linter.read)(line, &run.root) {
+            LintLine::Diagnostic(diagnostic) => {
                 if !run.found.contains(&diagnostic) {
                     run.found.push(diagnostic);
                 }
             }
-            Output::Finished => run.built = true,
-            Output::Other => {
+            LintLine::Finished => run.built = true,
+            LintLine::Other => {
                 if run.failure.is_none() && line.starts_with("error") {
                     run.failure = Some(line.to_owned());
                 }
@@ -134,15 +203,26 @@ impl Editor {
     }
 
     fn lint_finished(&mut self, job: JobId, outcome: &Outcome) {
-        let Some(run) = self.lints.run.take_if(|run| run.job == job) else {
+        let Some(at) = self.lints.runs.iter().position(|run| run.job == job) else {
             return;
         };
-        let name = subcommand(run.tool).unwrap_or_default();
+        let run = self.lints.runs.remove(at);
+        let completed = run.built || (run.linter.complete)(outcome);
         match outcome {
-            Outcome::Exited(_) if run.built => {
-                self.lints
+            Outcome::Exited(_) if completed => {
+                let language = run.language;
+                let languages: Vec<Option<Language>> = self
+                    .lints
                     .diagnostics
-                    .retain(|diagnostic| !diagnostic.path.starts_with(&run.root));
+                    .iter()
+                    .map(|diagnostic| self.language_for(&diagnostic.path))
+                    .collect();
+                let mut kept = languages.into_iter();
+                let root = run.root.clone();
+                self.lints.diagnostics.retain(|diagnostic| {
+                    let theirs = kept.next().flatten() == Some(language);
+                    !(theirs && diagnostic.path.starts_with(&root))
+                });
                 self.lints.diagnostics.extend(run.found);
                 self.lints.diagnostics.sort();
                 self.lints.root = Some(run.root);
@@ -153,12 +233,11 @@ impl Editor {
             }
             Outcome::Exited(_) => {
                 let reason = run.failure.unwrap_or_else(|| "failed".to_owned());
-                self.show_message(format!("cargo {name}: {reason}"));
+                self.show_message(format!("{}: {reason}", run.name));
             }
-            Outcome::Failed(error) => self.show_message(format!("cargo {name}: {error}")),
+            Outcome::Failed(error) => self.show_message(format!("{}: {error}", run.name)),
         }
     }
-
     fn mark_diagnostics(&mut self) {
         for mark in mem::take(&mut self.lints.marks) {
             if let Some(index) = self.buffers.position(|buffer| buffer.id() == mark.buffer)
@@ -250,13 +329,14 @@ impl Editor {
     }
 
     pub(in crate::editor) fn lint_status(&self, path: &Path) -> Option<String> {
+        let language = self.language_for(path);
         if let Some(run) = self
             .lints
-            .run
-            .as_ref()
-            .filter(|run| path.starts_with(&run.root))
+            .runs
+            .iter()
+            .find(|run| path.starts_with(&run.root) && Some(run.language) == language)
         {
-            return Some(running(run.tool).to_owned());
+            return Some(run.label.to_owned());
         }
         let count = |severity| {
             self.lints
@@ -347,12 +427,124 @@ pub(crate) mod fixtures {
 mod tests {
     use std::fs;
 
+    use std::path::{Path, PathBuf};
+
     use super::fixtures::{FINISHED, linting, project, report, reported, save, spawned};
     use crate::config::Config;
     use crate::editor::test_support::{press, type_text};
-    use crate::editor::{Effect, Job};
-    use crate::external::diagnostics::{Severity, sample};
+    use crate::editor::{Editor, Effect, Job, LintLine, LintRun, Linter, Outcome};
+    use crate::external::diagnostics::{Diagnostic, Severity, sample};
+    use crate::syntax::{Indentation, Language, LanguageSpec, Outline};
 
+    static SHOUTY: LanguageSpec = LanguageSpec {
+        name: "Shouty",
+        extensions: &["shout"],
+        file_names: &[],
+        aliases: &[],
+        line_comment: None,
+        pairs: &[],
+        indentation: Indentation::KEEP,
+        grammar: None,
+        grammars: &[],
+        outline: Outline::NONE,
+        features: &[],
+    };
+
+    fn shout_line(line: &str, root: &Path) -> LintLine {
+        let mut parts = line.splitn(4, ':');
+        let (Some(file), Some(row), Some(column), Some(message)) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            return LintLine::Other;
+        };
+        let (Ok(row), Ok(column)) = (row.parse::<usize>(), column.parse::<usize>()) else {
+            return LintLine::Other;
+        };
+        LintLine::Diagnostic(Diagnostic {
+            path: root.join(file),
+            start: (row, column),
+            end: (row, column + 1),
+            severity: Severity::Error,
+            message: message.trim().to_owned(),
+        })
+    }
+
+    const SHOUT_LINT: Linter = Linter {
+        start: |_, path| {
+            Some(LintRun {
+                root: path.parent()?.to_owned(),
+                program: "shoutlint".to_owned(),
+                args: vec![path.display().to_string()],
+                label: "Shouting",
+                name: "shoutlint".to_owned(),
+            })
+        },
+        read: shout_line,
+        complete: |outcome| matches!(outcome, Outcome::Exited(Some(0 | 1))),
+    };
+
+    fn shouting(editor: &mut Editor, dir: &Path) -> PathBuf {
+        let shouty = Language::new(&SHOUTY);
+        editor.add_language(shouty, None);
+        editor.add_linter(shouty, SHOUT_LINT);
+        let path = dir.join("a.shout");
+        fs::write(&path, "hello there\n").unwrap();
+        editor.open_file(&path);
+        path
+    }
+
+    #[test]
+    fn languages_from_applets_lint_their_files_on_save() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut editor = Editor::new();
+        let path = shouting(&mut editor, dir.path());
+
+        save(&mut editor);
+
+        let jobs = spawned(&mut editor);
+        assert_eq!(jobs[0].program, "shoutlint");
+        assert_eq!(jobs[0].args, [path.display().to_string()]);
+        assert_eq!(jobs[0].directory, dir.path());
+        assert_eq!(editor.pane().status().lint.as_deref(), Some("Shouting"));
+        editor.job_output(jobs[0].id, "a.shout:1:1: too quiet");
+        editor.job_finished(jobs[0].id, &Outcome::Exited(Some(1)));
+        assert_eq!(editor.pane().status().lint.as_deref(), Some("E1"));
+        press(&mut editor, "C-a");
+        assert_eq!(editor.diagnostic_at_point(), Some("too quiet"));
+    }
+
+    #[test]
+    fn a_failed_check_keeps_earlier_results_and_says_why() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut editor = Editor::new();
+        shouting(&mut editor, dir.path());
+        save(&mut editor);
+        let first = spawned(&mut editor)[0].id;
+        editor.job_output(first, "a.shout:1:1: too quiet");
+        editor.job_finished(first, &Outcome::Exited(Some(1)));
+
+        save(&mut editor);
+        let second = spawned(&mut editor)[0].id;
+        editor.job_output(second, "error: bad settings");
+        editor.job_finished(second, &Outcome::Exited(Some(2)));
+
+        assert_eq!(editor.message(), Some("shoutlint: error: bad settings"));
+        assert_eq!(editor.pane().status().lint.as_deref(), Some("E1"));
+    }
+
+    #[test]
+    fn each_language_keeps_its_own_results() {
+        let (dir, mut editor) = project();
+        reported(&mut editor);
+        shouting(&mut editor, dir.path());
+        save(&mut editor);
+        let job = spawned(&mut editor)[0].id;
+
+        editor.job_finished(job, &Outcome::Exited(Some(0)));
+        editor.open_file(&dir.path().join("src").join("main.rs"));
+
+        assert_eq!(editor.pane().status().lint.as_deref(), Some("E1 W2"));
+    }
     #[test]
     fn saving_a_rust_file_checks_its_project() {
         let (dir, mut editor) = project();

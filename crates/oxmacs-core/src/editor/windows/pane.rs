@@ -243,7 +243,7 @@ impl<'a> Pane<'a> {
             mode: language.map(Language::name),
             lint: buffer
                 .file()
-                .filter(|_| language == Some(Language::RUST))
+                .filter(|_| language.is_some_and(|language| self.editor.has_linter(language)))
                 .and_then(|file| self.editor.lint_status(&file.path)),
         }
     }

@@ -18,7 +18,7 @@ pub struct Diagnostic {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Output {
+pub enum LintLine {
     Diagnostic(Diagnostic),
     Finished,
     Other,
@@ -59,21 +59,21 @@ struct Expansion {
     span: Span,
 }
 
-pub fn parse(line: &str, root: &Path) -> Output {
+pub fn parse(line: &str, root: &Path) -> LintLine {
     let Some(line) = line
         .starts_with('{')
         .then(|| serde_json::from_str::<Line>(line).ok())
         .flatten()
     else {
-        return Output::Other;
+        return LintLine::Other;
     };
     match line.reason.as_str() {
-        "build-finished" => Output::Finished,
+        "build-finished" => LintLine::Finished,
         "compiler-message" => line
             .message
             .and_then(|report| diagnostic(report, root))
-            .map_or(Output::Other, Output::Diagnostic),
-        _ => Output::Other,
+            .map_or(LintLine::Other, LintLine::Diagnostic),
+        _ => LintLine::Other,
     }
 }
 
@@ -134,7 +134,7 @@ mod tests {
 
     fn diagnostic_in(line: &str) -> Diagnostic {
         match parse(line, Path::new("root")) {
-            Output::Diagnostic(diagnostic) => diagnostic,
+            LintLine::Diagnostic(diagnostic) => diagnostic,
             other => panic!("{other:?}"),
         }
     }
@@ -201,7 +201,7 @@ mod tests {
                 r#"{"reason":"build-finished","success":false}"#,
                 Path::new("root")
             ),
-            Output::Finished
+            LintLine::Finished
         );
     }
 
@@ -218,15 +218,15 @@ mod tests {
     fn other_lines_and_levels_are_ignored() {
         let root = Path::new("root");
 
-        assert_eq!(parse("   Compiling demo v0.1.0", root), Output::Other);
-        assert_eq!(parse("{not json", root), Output::Other);
+        assert_eq!(parse("   Compiling demo v0.1.0", root), LintLine::Other);
+        assert_eq!(parse("{not json", root), LintLine::Other);
         assert_eq!(
             parse(
                 &message("note", "null", &span("src/main.rs", true, "null")),
                 root
             ),
-            Output::Other
+            LintLine::Other
         );
-        assert_eq!(parse(&message("error", "null", ""), root), Output::Other);
+        assert_eq!(parse(&message("error", "null", ""), root), LintLine::Other);
     }
 }
