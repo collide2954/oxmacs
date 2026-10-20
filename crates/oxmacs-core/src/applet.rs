@@ -885,6 +885,18 @@ mod tests {
     }
 
     #[test]
+    fn applets_take_their_state_out_until_they_set_it_again() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Count(1));
+
+        let taken = editor.take_applet_state::<Count>();
+
+        assert_eq!(taken.map(|count| count.0), Some(1));
+        assert!(editor.applet_state::<Count>().is_none());
+        assert!(editor.take_applet_state::<Count>().is_none());
+    }
+
+    #[test]
     fn applets_find_list_and_close_their_buffers() {
         let mut editor = Editor::new();
         let scope = editor.add_scope("*Board*");

@@ -581,6 +581,10 @@ impl Editor {
         self.applet_states.set(state);
     }
 
+    pub fn take_applet_state<T: Any + Send>(&mut self) -> Option<T> {
+        self.applet_states.take()
+    }
+
     pub fn add_scope(&mut self, label: &'static str) -> ScopeId {
         self.keymaps.add(label)
     }

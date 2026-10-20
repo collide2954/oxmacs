@@ -36,6 +36,16 @@ impl Page {
         self.line(&[(title, Some(Highlight::Heading))]);
     }
 
+    pub fn set_background(&mut self, background: Option<Highlight>) {
+        if let Some(style) = self.styles.last_mut() {
+            style.background = background;
+        }
+    }
+
+    pub fn line_count(&self) -> usize {
+        self.styles.len()
+    }
+
     pub fn into_parts(self) -> (String, Vec<LineStyle>) {
         (self.text, self.styles)
     }
@@ -103,6 +113,20 @@ mod tests {
 
         assert_eq!(page.text, "one two\nthree\nfourteen\nsixteen-letters\nx\n");
         assert_eq!(page.styles.len(), 5);
+    }
+
+    #[test]
+    fn the_last_line_can_take_a_background_and_lines_are_counted() {
+        let mut page = Page::default();
+        page.set_background(Some(Highlight::Region));
+        page.line(&[("first", None)]);
+        page.line(&[("second", None)]);
+
+        page.set_background(Some(Highlight::Region));
+
+        assert_eq!(page.line_count(), 2);
+        assert_eq!(page.styles[0].background, None);
+        assert_eq!(page.styles[1].background, Some(Highlight::Region));
     }
 
     #[test]
