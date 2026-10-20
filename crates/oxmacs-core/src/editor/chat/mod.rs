@@ -1,3 +1,5 @@
+use std::any::Any;
+
 pub(super) mod commands;
 pub(super) mod connect;
 pub(super) mod render;
@@ -6,13 +8,14 @@ pub(super) mod setup;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 
+use crate::applet::AppletBuffer;
 use crate::bouncer::daemon::LocalDaemon;
+use crate::command::{Scope, ScopeId};
 use crate::config::{BouncerMode, IrcServer};
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::chat::commands::Cycle;
-use crate::editor::prompts::input_line::InputLine;
-use crate::editor::{ConnectionId, Editor, Offer};
+use crate::editor::{ConnectionId, Editor, InputLine, Offer};
 use crate::external::keychain;
 use crate::external::net::Event as NetEvent;
 use crate::irc::message::Message;
@@ -83,10 +86,26 @@ pub(in crate::editor) struct ChatView {
     width: usize,
 }
 
-impl ChatView {
-    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
+impl AppletBuffer for ChatView {
+    fn scope(&self) -> ScopeId {
+        Scope::Chat.into()
+    }
+
+    fn line_style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
+
+    fn input_line(&mut self) -> Option<&mut InputLine> {
+        Some(&mut self.input)
+    }
+}
+
+fn chat_of(mode: &Mode) -> Option<&ChatView> {
+    let Mode::Applet(view) = mode else {
+        return None;
+    };
+    let any: &dyn Any = view.as_ref();
+    any.downcast_ref()
 }
 
 fn label(server: &str, target: &Target) -> String {
@@ -94,6 +113,18 @@ fn label(server: &str, target: &Target) -> String {
 }
 
 impl Editor {
+    fn chat_at(&self, index: usize) -> Option<&ChatView> {
+        chat_of(self.buffers.mode(index)?)
+    }
+
+    fn chat_entry_mut(&mut self, index: usize) -> Option<(&mut Buffer, &mut ChatView)> {
+        let (buffer, Mode::Applet(view)) = self.buffers.entry_mut(index)? else {
+            return None;
+        };
+        let any: &mut dyn Any = view.as_mut();
+        Some((buffer, any.downcast_mut()?))
+    }
+
     pub(in crate::editor) fn irc(&mut self) {
         match self.config.irc_server.as_slice() {
             [] => self.ask("No IRC servers yet; set one up?", |editor, yes| {
@@ -349,18 +380,21 @@ impl Editor {
         let mut visible = self.visible_buffers();
         visible.push(0);
         for index in visible {
-            let Some(Mode::Chat(view)) = self.buffers.mode(index) else {
+            let Some((server, target)) = self
+                .chat_at(index)
+                .map(|view| (view.server.clone(), view.target.clone()))
+            else {
                 continue;
             };
             let Some(link) = self
                 .irc
                 .links
                 .iter_mut()
-                .find(|link| link.server.name == view.server)
+                .find(|link| link.server.name == server)
             else {
                 continue;
             };
-            if let Some(chat) = link.network.find(&view.target) {
+            if let Some(chat) = link.network.find(&target) {
                 link.network.mark_read(chat);
             }
         }
@@ -369,9 +403,7 @@ impl Editor {
     pub(in crate::editor) fn refill_chats(&mut self) {
         let mut stale = Vec::new();
         for index in 0..self.buffers.len() {
-            let (Some(Mode::Chat(view)), Some(buffer)) =
-                (self.buffers.mode(index), self.buffers.get(index))
-            else {
+            let (Some(view), Some(buffer)) = (self.chat_at(index), self.buffers.get(index)) else {
                 continue;
             };
             let width = self.width_showing(buffer.id()).filter(|width| *width > 0);
@@ -385,9 +417,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn chat_members(&self, index: usize) -> Option<Vec<Member>> {
-        let Some(Mode::Chat(view)) = self.buffers.mode(index) else {
-            return None;
-        };
+        let view = self.chat_at(index)?;
         if self.irc.hide_members || !matches!(view.target, Target::Channel(_)) {
             return None;
         }
@@ -401,9 +431,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn chat_nick(&self, index: usize) -> Option<String> {
-        let Some(Mode::Chat(view)) = self.buffers.mode(index) else {
-            return None;
-        };
+        let view = self.chat_at(index)?;
         self.irc
             .links
             .iter()
@@ -429,9 +457,7 @@ impl Editor {
     fn irc_buffer_offers(&self) -> Vec<Offer> {
         let mut found: Vec<(usize, usize, Offer)> = Vec::new();
         for index in 0..self.buffers.len() {
-            let (Some(Mode::Chat(view)), Some(buffer)) =
-                (self.buffers.mode(index), self.buffers.get(index))
-            else {
+            let (Some(view), Some(buffer)) = (self.chat_at(index), self.buffers.get(index)) else {
                 continue;
             };
             let (unread, mentions) = self
@@ -489,7 +515,7 @@ impl Editor {
 
     fn chat_buffer(&self, server: &str, target: &Target) -> Option<usize> {
         self.buffers.find_mode(|mode| {
-            matches!(mode, Mode::Chat(view) if view.server == server && view.target.same(target))
+            chat_of(mode).is_some_and(|view| view.server == server && view.target.same(target))
         })
     }
 
@@ -511,14 +537,14 @@ impl Editor {
         let input = InputLine::new(&mut buffer);
         self.buffers.push_back_with(
             buffer,
-            Mode::Chat(ChatView {
+            Mode::Applet(Box::new(ChatView {
                 server: server.to_owned(),
                 target: target.clone(),
                 input,
                 styles: Vec::new(),
                 cycle: None,
                 width: 0,
-            }),
+            })),
         )
     }
 
@@ -555,7 +581,7 @@ impl Editor {
         let page = render::page(chat, width, &self.irc.zone);
         let name = label(server, target);
         let shown = format!("{}{name}{PROMPT}", page.text);
-        let Some((buffer, Mode::Chat(view))) = self.buffers.entry_mut(index) else {
+        let Some((buffer, view)) = self.chat_entry_mut(index) else {
             return;
         };
         let old_start = view
@@ -589,7 +615,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn irc_send_input(&mut self) {
-        let Some((buffer, Mode::Chat(view))) = self.buffers.entry_mut(0) else {
+        let Some((buffer, view)) = self.chat_entry_mut(0) else {
             return;
         };
         let Some(text) = view.input.text(buffer) else {

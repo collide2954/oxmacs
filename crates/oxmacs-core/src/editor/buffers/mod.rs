@@ -12,7 +12,6 @@ use crate::display::{ScreenLine, Viewport};
 use crate::editor::atlas::list::AtlasList;
 use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
-use crate::editor::chat::ChatView;
 use crate::editor::chat::setup::SetupForm;
 use crate::editor::languages::r_console::Console;
 use crate::editor::languages::r_environment::EnvironmentView;
@@ -44,7 +43,6 @@ pub(super) enum Mode {
     Diagnostics(DiagnosticsList),
     Console(Console),
     Help(Help),
-    Chat(ChatView),
     Plots(Plots),
     Processes(ProcessList),
     Tools(ToolList),

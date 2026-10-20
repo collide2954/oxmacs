@@ -1,6 +1,4 @@
-use crate::command::Command;
 use crate::editor::Editor;
-use crate::editor::buffers::Mode;
 use crate::irc::message::Message;
 use crate::irc::network::Target;
 
@@ -138,32 +136,12 @@ impl Editor {
         Some(Message::new("PART", params))
     }
 
-    pub(in crate::editor) fn guard_chat_input(&mut self, command: Command) -> bool {
-        if !command.modifies_text() {
-            return false;
-        }
-        let Some((buffer, Mode::Chat(view))) = self.buffers.entry_mut(0) else {
-            return false;
-        };
-        let Some(start) = view.input.start(buffer) else {
-            return false;
-        };
-        if buffer.point() < start {
-            buffer.set_point(buffer.len_chars());
-        }
-        buffer.point() <= start
-            && matches!(
-                command,
-                Command::DeleteBackwardChar | Command::BackwardDeleteWord
-            )
-    }
-
     pub(in crate::editor) fn irc_complete_nick(&mut self, again: bool) {
-        let Some(Mode::Chat(view)) = self.buffers.mode(0) else {
+        let Some(view) = self.chat_at(0) else {
             return;
         };
         let nicks = self.irc_members(&view.server.clone(), &view.target.clone());
-        let Some((buffer, Mode::Chat(view))) = self.buffers.entry_mut(0) else {
+        let Some((buffer, view)) = self.chat_entry_mut(0) else {
             return;
         };
         let Some(start) = view.input.start(buffer) else {

@@ -15,10 +15,7 @@ impl Editor {
         goal_column: Option<usize>,
         previous: Option<Command>,
     ) {
-        if self.scroll_preview(command)
-            || self.guard_chat_input(command)
-            || self.guard_input(command)
-        {
+        if self.scroll_preview(command) || self.guard_input(command) {
             return;
         }
         match command {
