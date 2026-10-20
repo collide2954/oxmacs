@@ -17,7 +17,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Experimental (opt-in at build time)
 
-- `animated-splash` 0.1.0: the start screen draws the oxmacs logo in block letters, animated above the keys; `a` cycles a drifting plasma field with a shimmer, a color wave, the logo assembling from scattered pixels, and a network of neurons whose signals light the letters as they pass. Build with `cargo build -p oxmacs --features animated-splash`.
+- `animated-splash` 0.1.0: the start screen draws the oxmacs logo in block letters, animated above the keys; `a` cycles a drifting plasma field with a shimmer, a color wave, the logo assembling from scattered pixels, a network of neurons whose signals light the letters as they pass, and DNA replicating behind the logo with its helicase, polymerases, primers and Okazaki fragments. Build with `cargo build -p oxmacs --features animated-splash`.
 
 ## [0.13.0] - 2026-10-19
 

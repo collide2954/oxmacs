@@ -261,7 +261,7 @@ pub enum Command {
     #[cfg(feature = "animated-splash")]
     #[strum(
         message = "Switch the start screen's logo animation",
-        detailed_message = "With the animated-splash build feature, the start screen draws the oxmacs logo in block letters, animated above the usual keys. a cycles between a drifting plasma field with a shimmer, a color wave through the letters, the logo assembling from scattered pixels before it twinkles, and a network of neurons firing signals that light the letters as they pass. The animation holds still when animations are off."
+        detailed_message = "With the animated-splash build feature, the start screen draws the oxmacs logo in block letters, animated above the usual keys. a cycles between a drifting plasma field with a shimmer, a color wave through the letters, the logo assembling from scattered pixels before it twinkles, a network of neurons firing signals that light the letters as they pass, and DNA replicating behind the logo with its helicase, polymerases and growing strands. The animation holds still when animations are off."
     )]
     CycleSplashAnimation,
     #[strum(

@@ -10,6 +10,7 @@ pub enum SplashAnimation {
     Wave,
     Assemble,
     Neurons,
+    Dna,
 }
 
 impl SplashAnimation {
@@ -19,6 +20,7 @@ impl SplashAnimation {
             Self::Wave => "color wave",
             Self::Assemble => "assemble",
             Self::Neurons => "neurons",
+            Self::Dna => "DNA replication",
         }
     }
 
@@ -27,7 +29,8 @@ impl SplashAnimation {
             Self::Plasma => Self::Wave,
             Self::Wave => Self::Assemble,
             Self::Assemble => Self::Neurons,
-            Self::Neurons => Self::Plasma,
+            Self::Neurons => Self::Dna,
+            Self::Dna => Self::Plasma,
         }
     }
 }
@@ -99,13 +102,14 @@ mod tests {
     }
 
     #[test]
-    fn a_cycles_through_the_four_animations() {
+    fn a_cycles_through_every_animation() {
         let mut editor = shown();
 
         for expected in [
             SplashAnimation::Wave,
             SplashAnimation::Assemble,
             SplashAnimation::Neurons,
+            SplashAnimation::Dna,
             SplashAnimation::Plasma,
             SplashAnimation::Wave,
         ] {

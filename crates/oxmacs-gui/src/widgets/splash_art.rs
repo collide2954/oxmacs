@@ -53,6 +53,22 @@ const ROOM: f32 = 16.0;
 const REACH: f32 = 4.0;
 const TAIL: usize = 5;
 
+const FORK_CYCLE: f32 = 32.0;
+const SPIN: f32 = 0.8;
+const GROOVE: f32 = 2.4;
+const HELIX_TURN: f32 = 18.0;
+const HELIX_HEIGHT: f32 = 3.5;
+const DAUGHTER_HEIGHT: f32 = 2.5;
+const UNZIP: f32 = 16.0;
+const DIVERGE: f32 = 9.0;
+const SPREAD: f32 = 50.0;
+const LEAD_LAG: f32 = 10.0;
+const FRAGMENT: f32 = 20.0;
+const PRIMER: f32 = 3.0;
+const OPENING: f32 = 8.0;
+const LAG_SPEED: f32 = 1.4;
+const RUNG_EVERY: usize = 2;
+const FEED: usize = 6;
 type Point2 = (f32, f32);
 
 fn along(from: Point2, to: Point2, progress: f32) -> Point2 {
@@ -60,6 +76,34 @@ fn along(from: Point2, to: Point2, progress: f32) -> Point2 {
         from.0 + (to.0 - from.0) * progress,
         from.1 + (to.1 - from.1) * progress,
     )
+}
+
+fn smooth(progress: f32) -> f32 {
+    let progress = progress.clamp(0.0, 1.0);
+    progress * progress * (3.0 - 2.0 * progress)
+}
+
+fn lagging(column: f32, fork: f32) -> Option<bool> {
+    let right = ((column / FRAGMENT).floor() + 1.0) * FRAGMENT;
+    let started = fork - right - OPENING;
+    if started <= 0.0 {
+        return None;
+    }
+    let grown = (started * LAG_SPEED).min(FRAGMENT - PRIMER - 1.0);
+    if column >= right - PRIMER {
+        Some(true)
+    } else if column >= right - PRIMER - grown {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+fn lagging_front(fork: f32) -> Option<f32> {
+    let right = ((fork - OPENING) / FRAGMENT).floor() * FRAGMENT;
+    let started = fork - right - OPENING;
+    let grown = started * LAG_SPEED;
+    (started > 0.0 && grown < FRAGMENT - PRIMER - 1.0).then_some(right - PRIMER - grown)
 }
 
 fn bezier(start: Point2, bend: Point2, end: Point2, progress: f32) -> Point2 {
@@ -132,6 +176,7 @@ pub fn still(animation: SplashAnimation) -> f32 {
         SplashAnimation::Wave => 1.0,
         SplashAnimation::Assemble => 6.0,
         SplashAnimation::Neurons => 2.4,
+        SplashAnimation::Dna => FORK_CYCLE * 0.8,
     }
 }
 
@@ -205,6 +250,7 @@ struct Scene {
     cells: Vec<Vec<Option<Glyph>>>,
     pixels: Vec<Pixel>,
     tint: Color,
+    fade: f32,
 }
 
 impl Scene {
@@ -225,6 +271,7 @@ impl Scene {
             cells: vec![vec![None; columns]; ROWS],
             pixels: Vec::new(),
             tint: faces.default.foreground,
+            fade: 1.0,
             logo,
         }
     }
@@ -575,6 +622,224 @@ impl Scene {
         }
     }
 
+    fn base_pair(&self, column: usize, depth: f32) -> (Color, Color) {
+        let base = floor_to_usize(hash(column, 0, 40) * 4.0) % 4;
+        let strength = (0.35 + 0.4 * (depth + 1.0) / 2.0) * self.fade;
+        let dim = |index: usize| self.background.mix(self.colors[index], strength);
+        (dim(base), dim(base ^ 1))
+    }
+
+    fn shaded(&self, color: Color, depth: f32) -> Color {
+        self.background
+            .mix(color, (0.35 + 0.6 * (depth + 1.0) / 2.0) * self.fade)
+    }
+
+    fn backbone(&mut self, column: f32, row: f32, depth: f32, color: Color) {
+        if hash(floor_to_usize(column), floor_to_usize(row * 3.0), 50) < 0.06 {
+            return;
+        }
+        let color = self.shaded(color, depth);
+        self.dot((column, row), color);
+        if depth > 0.5 {
+            self.dot((column, row + 1.0), color);
+        }
+    }
+
+    fn paired(&mut self, column: f32, one: (f32, f32, Color), two: (f32, f32, Color), step: usize) {
+        let (back, front) = if one.1 < two.1 {
+            (one, two)
+        } else {
+            (two, one)
+        };
+        self.backbone(column, back.0, back.1, back.2);
+        let uneven = hash(step, 0, 52) < 0.25;
+        if step.is_multiple_of(RUNG_EVERY) && !uneven && (front.0 - back.0).abs() > 1.5 {
+            let colors = self.base_pair(step, f32::midpoint(back.1, front.1));
+            let (from, to) = (one.0, two.0);
+            let steps = floor_to_usize((to - from).abs().ceil());
+            for at in 1..steps {
+                let progress = to_f32(at) / to_f32(steps);
+                let color = if progress < 0.5 { colors.0 } else { colors.1 };
+                self.dot((column, from + (to - from) * progress), color);
+            }
+        }
+        self.backbone(column, front.0, front.1, front.2);
+    }
+
+    fn blob(&mut self, at: Point2, radius: f32, color: Color, seed: usize) {
+        let reach = (radius * 1.3).ceil();
+        let steps = floor_to_usize(reach * 2.0);
+        for row in 0..=steps {
+            for column in 0..=steps {
+                let offset = (to_f32(column) - reach, to_f32(row) - reach);
+                let angle = offset.1.atan2(offset.0) + std::f32::consts::PI;
+                let lobe = floor_to_usize(angle / TAU * 7.0) % 7;
+                let edge = radius * (0.75 + 0.4 * hash(seed, lobe, 51));
+                if offset.0.powi(2) + offset.1.powi(2) <= edge.powi(2) {
+                    self.dot((at.0 + offset.0, at.1 + offset.1), color);
+                }
+            }
+        }
+    }
+
+    fn ring_of(&mut self, at: Point2, radius: f32, beads: usize, turn: f32, color: Color) {
+        for bead in 0..beads {
+            let angle = turn + to_f32(bead) / to_f32(beads) * TAU;
+            self.dot(
+                (
+                    at.0 + angle.cos() * radius,
+                    at.1 + angle.sin() * radius * 0.8,
+                ),
+                color,
+            );
+        }
+    }
+
+    fn feed(&mut self, target: Point2, seed: usize) {
+        for stream in 0..FEED {
+            let angle = hash(seed, stream, 44) * TAU;
+            let reach = 9.0 + hash(seed, stream, 45) * 7.0;
+            let origin = (
+                target.0 + angle.cos() * reach,
+                target.1 + angle.sin() * reach * 0.5,
+            );
+            let progress = (self.seconds / 2.4 + hash(seed, stream, 46)).fract();
+            let at = along(origin, target, progress * progress);
+            let base = floor_to_usize(hash(seed, stream, 47) * 4.0) % 4;
+            let color = self
+                .background
+                .mix(self.colors[base], 0.75 * (1.0 - progress * 0.7));
+            self.dot(at, color);
+        }
+    }
+
+    fn axis(&self, column: f32) -> f32 {
+        let height = to_f32(ROWS) * SUB_Y;
+        height / 2.0
+            + 2.5 * (column * 0.021 + self.seconds * 0.15).sin()
+            + 1.5 * (column * 0.057 + 1.3 - self.seconds * 0.1).sin()
+    }
+
+    fn wobble(&self, column: f32, strand: f32) -> f32 {
+        0.45 * (column * 0.9 + self.seconds * 2.3 + strand * 1.7).sin()
+    }
+
+    fn daughters(&self, column: f32, fork: f32) -> (f32, f32) {
+        let axis = self.axis(column);
+        let spread = DIVERGE * smooth((fork - column) / SPREAD);
+        (axis - spread, axis + spread)
+    }
+
+    fn dna(&mut self) {
+        let width = to_f32(self.columns) * SUB_X;
+        let fork = (self.seconds / FORK_CYCLE).fract() * (width + 80.0) - 40.0;
+        let old = self.foreground;
+        let new = self.accent.mix(self.colors[1], 0.4);
+        let primer = self.colors[3].mix(self.foreground, 0.3);
+        let coat = self.colors[0];
+        for step in 0..floor_to_usize(width) {
+            let column = to_f32(step);
+            let axis = self.axis(column);
+            let turn = column / HELIX_TURN * TAU - self.seconds * SPIN;
+            let (one, two) = (turn.sin(), (turn + GROOVE).sin());
+            let (one_depth, two_depth) = (turn.cos(), (turn + GROOVE).cos());
+            let top = axis + one * HELIX_HEIGHT + self.wobble(column, 0.0);
+            let bottom = axis + two * HELIX_HEIGHT + self.wobble(column, 1.0);
+            if column >= fork {
+                self.fade = 1.0 - smooth((column - fork - width * 0.45) / (width * 0.3));
+                self.paired(
+                    column,
+                    (top, one_depth, old),
+                    (bottom, two_depth, old),
+                    step,
+                );
+                continue;
+            }
+            let behind = fork - column;
+            self.fade = 1.0 - smooth((behind - width * 0.3) / (width * 0.25));
+            if self.fade <= 0.02 {
+                continue;
+            }
+            let open = smooth(behind / UNZIP);
+            let (upper, lower) = self.daughters(column, fork);
+            let partner = two * DAUGHTER_HEIGHT;
+            let template_top = top + (upper + one * DAUGHTER_HEIGHT - top) * open;
+            let template_bottom = bottom + (lower + one * DAUGHTER_HEIGHT - bottom) * open;
+            if open >= 1.0 && behind >= LEAD_LAG {
+                self.paired(
+                    column,
+                    (template_top, one_depth, old),
+                    (upper + partner, two_depth, new),
+                    step,
+                );
+            } else {
+                self.backbone(column, template_top, one_depth, old);
+            }
+            match lagging(column, fork).filter(|_| open >= 1.0) {
+                Some(false) => self.paired(
+                    column,
+                    (template_bottom, one_depth, old),
+                    (lower + partner, two_depth, new),
+                    step,
+                ),
+                Some(true) => {
+                    self.backbone(column, template_bottom, one_depth, old);
+                    self.backbone(column, lower + partner, two_depth, primer);
+                }
+                None => {
+                    self.backbone(column, template_bottom, one_depth, old);
+                    if open > 0.6 && step.is_multiple_of(4) {
+                        self.dot((column, template_bottom + 1.5), self.shaded(coat, 0.0));
+                    }
+                }
+            }
+        }
+        self.fade = 1.0;
+        self.machinery(fork);
+    }
+
+    fn machinery(&mut self, fork: f32) {
+        let seconds = self.seconds;
+        let jiggle = move |seed: f32| (seconds * 3.1 + seed).sin() * 0.4;
+        let topoisomerase = (fork + 22.0, self.axis(fork + 22.0));
+        self.blob(
+            topoisomerase,
+            2.4,
+            self.colors[3].mix(self.background, 0.3),
+            3,
+        );
+        self.ring_of(
+            (fork, self.axis(fork)),
+            2.6,
+            6,
+            self.seconds * 2.2,
+            self.accent,
+        );
+        let polymerase = self.colors[2].mix(self.foreground, 0.15);
+        let lead = fork - LEAD_LAG;
+        let leading_at = (
+            lead + jiggle(0.0),
+            self.daughters(lead, fork).0 + jiggle(1.7),
+        );
+        self.feed(leading_at, 1);
+        self.blob(leading_at, 2.8, polymerase, 1);
+        if let Some(front) = lagging_front(fork) {
+            let lagging_at = (
+                front + jiggle(3.1),
+                self.daughters(front, fork).1 + jiggle(4.4),
+            );
+            self.feed(lagging_at, 2);
+            self.blob(lagging_at, 2.6, polymerase, 2);
+        }
+        let helicase = (fork / SUB_X, self.axis(fork) / SUB_Y);
+        for (column, row) in self.letters() {
+            let here = (to_f32(self.left + column), to_f32(TOP + row));
+            let glow = (1.0 - cell_gap(here, helicase) / 6.0).max(0.0);
+            let color = self.ink.mix(self.accent, glow * 0.7);
+            self.put(self.left + column, TOP + row, Glyph { ch: BLOCK, color });
+        }
+    }
+
     fn assemble(&mut self) {
         self.sparkles();
         for (column, row) in self.letters() {
@@ -613,6 +878,7 @@ pub fn frame(animation: SplashAnimation, seconds: f32, columns: usize, faces: &F
         SplashAnimation::Wave => scene.wave(),
         SplashAnimation::Assemble => scene.assemble(),
         SplashAnimation::Neurons => scene.neurons(),
+        SplashAnimation::Dna => scene.dna(),
     }
     Art {
         cells: scene.cells,
@@ -819,6 +1085,7 @@ mod tests {
             SplashAnimation::Wave,
             SplashAnimation::Assemble,
             SplashAnimation::Neurons,
+            SplashAnimation::Dna,
         ] {
             let grid = frame(animation, still(animation), 71, &faces).cells;
             assert_eq!(grid.len(), ROWS);
@@ -889,6 +1156,31 @@ mod tests {
                 .iter()
                 .all(|axon| axon.from != axon.to && (0.0..1.0).contains(&axon.progress))
         );
+    }
+
+    #[test]
+    fn lagging_fragments_start_with_a_primer_and_grow_back_from_the_fork() {
+        let fork = 95.0;
+
+        assert_eq!(lagging(39.0, fork), Some(true));
+        assert_eq!(lagging(30.0, fork), Some(false));
+        assert_eq!(lagging(20.5, fork), None);
+        assert_eq!(lagging(fork - 2.0, fork), None);
+        assert_eq!(lagging(200.0, fork), None);
+        let front = lagging_front(fork).unwrap();
+        assert!(front < fork - OPENING && front > fork - OPENING - FRAGMENT * 2.0);
+    }
+
+    #[test]
+    fn replicating_dna_draws_strands_enzymes_and_nucleotides() {
+        let art = frame(
+            SplashAnimation::Dna,
+            still(SplashAnimation::Dna),
+            100,
+            &faces(),
+        );
+
+        assert!(art.pixels.len() > 600, "{}", art.pixels.len());
     }
 
     #[test]
