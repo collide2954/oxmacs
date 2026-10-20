@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -108,6 +109,27 @@ impl Editor {
     pub fn buffer_by_id_mut(&mut self, id: BufferId) -> Option<&mut Buffer> {
         let index = self.buffers.position(|buffer| buffer.id() == id)?;
         self.buffers.get_mut(index)
+    }
+
+    pub fn home(&self) -> Option<&Path> {
+        self.home.as_deref()
+    }
+
+    pub fn set_home(&mut self, home: Option<PathBuf>) {
+        self.home = home;
+    }
+
+    pub fn buffer_visiting(&self, path: &Path) -> Option<BufferId> {
+        let index = self
+            .buffers
+            .position(|buffer| buffer.file().is_some_and(|file| file.path == path))?;
+        self.buffers.get(index).map(Buffer::id)
+    }
+
+    pub fn save_buffer(&mut self, id: BufferId) -> bool {
+        self.buffers
+            .position(|buffer| buffer.id() == id)
+            .is_some_and(|index| self.save_buffer_at(index))
     }
 
     pub fn on_quit(&mut self, handler: fn(&mut Editor)) {

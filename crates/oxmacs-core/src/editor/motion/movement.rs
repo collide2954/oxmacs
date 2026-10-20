@@ -46,7 +46,7 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn go_to_line(&mut self, line: usize, column: usize) {
+    pub fn go_to_line(&mut self, line: usize, column: usize) {
         let buffer = self.buffers.current_mut();
         let line = line.saturating_sub(1);
         let target = buffer.line_start(line) + column.saturating_sub(1);

@@ -271,7 +271,7 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn save_buffer(&mut self) {
+    pub(in crate::editor) fn save_current_buffer(&mut self) {
         if self.customizing().is_some() {
             self.save_settings();
             return;

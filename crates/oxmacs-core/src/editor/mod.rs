@@ -28,7 +28,7 @@ pub use languages::r_plots::{GalleryView, PlotView};
 pub use languages::registry::LineHighlighter;
 pub use motion::mouse::{Cell, Clicks};
 pub use page::{Page, clip, fill};
-pub use prompts::applet::Offer;
+pub use prompts::applet::{InputStyle, Offer, Picked};
 pub use prompts::input_line::InputLine;
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
 pub use prompts::popup::PopupView;

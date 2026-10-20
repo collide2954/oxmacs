@@ -82,7 +82,7 @@ impl Editor {
             | Command::IsearchExit
             | Command::IsearchAbort => self.run_in_search(command),
             Command::FindFile => self.find_file(),
-            Command::SaveBuffer => self.save_buffer(),
+            Command::SaveBuffer => self.save_current_buffer(),
             Command::WriteFile => self.write_file(),
             Command::SaveSomeBuffers => self.save_some_buffers(false),
             Command::SwitchToBuffer => self.switch_to_buffer(),

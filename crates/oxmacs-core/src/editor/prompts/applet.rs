@@ -1,11 +1,27 @@
 use std::fmt;
+use std::ops::Range;
 
 use crate::editor::Editor;
 use crate::editor::prompts::minibuffer::{Choice, Completion, Purpose};
+use crate::theme::Highlight;
 
 type Offers = Box<dyn Fn(&Editor) -> Vec<Offer> + Send>;
-type Done = Box<dyn FnOnce(&mut Editor, String) + Send>;
 type Then = Box<dyn FnOnce(&mut Editor, bool) + Send>;
+type Answered = Box<dyn FnOnce(&mut Editor, String) + Send>;
+type Chose = Box<dyn FnOnce(&mut Editor, Picked) + Send>;
+
+pub type InputStyle = fn(&Editor, &str) -> Vec<(Range<usize>, Highlight)>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Picked {
+    Offered(usize),
+    Typed(String),
+}
+
+enum Done {
+    Text(Answered),
+    Pick(Chose),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Offer {
@@ -51,6 +67,7 @@ impl fmt::Debug for Answer {
 pub(in crate::editor) struct AppletPrompt {
     offer: Option<Offers>,
     done: Done,
+    style: Option<InputStyle>,
 }
 
 impl fmt::Debug for AppletPrompt {
@@ -73,7 +90,8 @@ impl Editor {
             false,
             AppletPrompt {
                 offer: None,
-                done: Box::new(done),
+                done: Done::Text(Box::new(done)),
+                style: None,
             },
         );
     }
@@ -104,7 +122,8 @@ impl Editor {
             true,
             AppletPrompt {
                 offer: None,
-                done: Box::new(done),
+                done: Done::Text(Box::new(done)),
+                style: None,
             },
         );
     }
@@ -120,9 +139,54 @@ impl Editor {
             false,
             AppletPrompt {
                 offer: Some(Box::new(offer)),
-                done: Box::new(done),
+                done: Done::Text(Box::new(done)),
+                style: None,
             },
         );
+    }
+
+    pub fn prompt_pick(
+        &mut self,
+        prompt: &str,
+        offer: impl Fn(&Editor) -> Vec<Offer> + Send + 'static,
+        done: impl FnOnce(&mut Editor, Picked) + Send + 'static,
+    ) {
+        self.open_applet_prompt(
+            prompt,
+            false,
+            AppletPrompt {
+                offer: Some(Box::new(offer)),
+                done: Done::Pick(Box::new(done)),
+                style: None,
+            },
+        );
+    }
+
+    pub fn prompt_styled(
+        &mut self,
+        prompt: &str,
+        style: InputStyle,
+        done: impl FnOnce(&mut Editor, String) + Send + 'static,
+    ) {
+        self.open_applet_prompt(
+            prompt,
+            false,
+            AppletPrompt {
+                offer: None,
+                done: Done::Text(Box::new(done)),
+                style: Some(style),
+            },
+        );
+    }
+
+    pub fn minibuffer_highlights(&self) -> Vec<(Range<usize>, Highlight)> {
+        let Some(minibuffer) = &self.minibuffer else {
+            return Vec::new();
+        };
+        match minibuffer.applet.as_ref().and_then(|applet| applet.style) {
+            Some(style) => style(self, &minibuffer.input().contents()),
+            None => self.atlas_capture_highlights(),
+        }
     }
 
     pub fn ask(&mut self, prompt: &str, then: impl FnOnce(&mut Editor, bool) + Send + 'static) {
@@ -163,16 +227,29 @@ impl Editor {
             .collect()
     }
 
-    pub(in crate::editor) fn exit_applet_prompt(&mut self) {
-        let value = self
-            .selected_completion()
-            .map_or_else(|| self.minibuffer_input(), |completion| completion.label);
+    pub(in crate::editor) fn exit_applet_prompt(&mut self, typed: bool) {
+        let input = self.minibuffer_input();
+        let selected = if typed {
+            None
+        } else {
+            self.selected_completion()
+        };
         let applet = self
             .minibuffer
             .take()
             .and_then(|minibuffer| minibuffer.applet);
-        if let Some(applet) = applet {
-            (applet.done)(self, value);
+        let Some(applet) = applet else {
+            return;
+        };
+        match applet.done {
+            Done::Text(done) => done(self, selected.map_or(input, |completion| completion.label)),
+            Done::Pick(done) => {
+                let picked = match selected.map(|completion| completion.choice) {
+                    Some(Choice::Offered(index)) => Picked::Offered(index),
+                    _ => Picked::Typed(input),
+                };
+                done(self, picked);
+            }
         }
     }
 }

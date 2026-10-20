@@ -184,7 +184,7 @@ mod tests {
     use crate::editor::Page;
     use crate::editor::{Editor, InputLine};
     use crate::input::KeySequence;
-    use crate::theme::{self, ADWAITA, ADWAITA_DARK};
+    use crate::theme::{self, ADWAITA, ADWAITA_DARK, Highlight};
 
     use super::*;
 
@@ -352,10 +352,7 @@ mod tests {
         assert_eq!(editor.buffer().name(), "*Greeter*");
         assert!(editor.buffer().is_read_only());
         assert_eq!(editor.buffer().contents(), "Hello 2 times\n");
-        assert_eq!(
-            editor.line_style(0).spans,
-            [(0..13, theme::Highlight::Heading)]
-        );
+        assert_eq!(editor.line_style(0).spans, [(0..13, Highlight::Heading)]);
         type_keys(&mut editor, "C-x b RET +");
         assert_eq!(editor.buffer().name(), "*scratch*");
         assert_eq!(editor.buffer().contents(), "+");
@@ -882,6 +879,104 @@ mod tests {
                 "command".to_owned(),
             ])
         );
+    }
+
+    #[test]
+    fn applets_reach_files_by_path_and_save_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plan.txt");
+        std::fs::write(&path, "one\ntwo\nthree\n").unwrap();
+        let mut editor = Editor::new();
+        editor.set_home(Some(dir.path().to_owned()));
+        assert_eq!(editor.home(), Some(dir.path()));
+        assert_eq!(editor.buffer_visiting(&path), None);
+
+        editor.open_file(&path);
+        let id = editor.buffer_visiting(&path).unwrap();
+        let start = editor.current_location();
+        editor.go_to_line(3, 2);
+        editor.remember_location(start);
+        if let Some(buffer) = editor.buffer_by_id_mut(id) {
+            buffer.insert_at(0, "zero\n");
+        }
+
+        assert!(editor.save_buffer(id));
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "zero\none\ntwo\nthree\n"
+        );
+        assert_eq!(editor.buffer().point(), 14);
+        type_keys(&mut editor, "M-,");
+        assert_eq!(editor.buffer().point(), 0);
+    }
+
+    #[test]
+    fn pick_prompts_say_which_offer_was_chosen_or_what_was_typed() {
+        fn ask(editor: &mut Editor) {
+            editor.prompt_pick(
+                "Note: ",
+                |_| {
+                    vec![
+                        Offer::noted("Inbox", "personal"),
+                        Offer::noted("Inbox", "work"),
+                    ]
+                },
+                |editor, picked| note(editor, format!("{picked:?}")),
+            );
+        }
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+
+        ask(&mut editor);
+        type_keys(&mut editor, "C-n RET");
+        ask(&mut editor);
+        type_keys(&mut editor, "G a r d e n RET");
+        ask(&mut editor);
+        type_keys(&mut editor, "I n b M-RET");
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec![
+                "Offered(1)".to_owned(),
+                "Typed(\"Garden\")".to_owned(),
+                "Typed(\"Inb\")".to_owned(),
+            ])
+        );
+    }
+
+    #[test]
+    fn m_ret_answers_a_prompt_with_what_was_typed() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        editor.prompt_with("Server: ", |_| vec![Offer::from("libera")], note);
+
+        type_keys(&mut editor, "l i M-RET");
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["li".to_owned()])
+        );
+    }
+
+    #[test]
+    fn styled_prompts_color_what_is_typed() {
+        let mut editor = Editor::new();
+        assert_eq!(editor.minibuffer_highlights(), []);
+
+        editor.prompt_styled(
+            "Capture: ",
+            |_, text| vec![(0..text.chars().count(), Highlight::Keyword)],
+            |_, _| {},
+        );
+        type_keys(&mut editor, "a b");
+
+        assert_eq!(editor.minibuffer_highlights(), [(0..2, Highlight::Keyword)]);
+        type_keys(&mut editor, "C-g");
+        assert_eq!(editor.minibuffer_highlights(), []);
     }
 
     struct Syncer;

@@ -301,6 +301,9 @@ impl Editor {
                 self.minibuffer = None;
                 self.atlas_note_chosen(None, &input);
             }
+            Some(Purpose::Applet { .. }) if !input.trim().is_empty() => {
+                self.exit_applet_prompt(true);
+            }
             Some(purpose) if purpose.takes_path() => self.exit_file_prompt(true),
             Some(purpose) if purpose.takes_buffer() && !input.is_empty() => {
                 self.exit_buffer_prompt(purpose, &input);
@@ -325,7 +328,7 @@ impl Editor {
             return;
         }
         if let Purpose::Applet { .. } = purpose {
-            self.exit_applet_prompt();
+            self.exit_applet_prompt(false);
             return;
         }
         if purpose == Purpose::Compile {

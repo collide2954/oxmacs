@@ -181,7 +181,7 @@ impl Editor {
         line_faces(spans, buffer.line_end(line) - buffer.line_start(line))
     }
 
-    pub fn minibuffer_highlights(&self) -> Vec<(Range<usize>, Highlight)> {
+    pub(in crate::editor) fn atlas_capture_highlights(&self) -> Vec<(Range<usize>, Highlight)> {
         let Some(minibuffer) = &self.minibuffer else {
             return Vec::new();
         };

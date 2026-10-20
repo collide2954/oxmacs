@@ -4,13 +4,13 @@ use crate::text::BufferId;
 const KEPT: usize = 100;
 
 impl Editor {
-    pub(in crate::editor) fn remember_location(&mut self, location: (BufferId, usize)) {
+    pub fn remember_location(&mut self, location: (BufferId, usize)) {
         self.xref.push(location);
         let excess = self.xref.len().saturating_sub(KEPT);
         self.xref.drain(..excess);
     }
 
-    pub(in crate::editor) fn current_location(&self) -> (BufferId, usize) {
+    pub fn current_location(&self) -> (BufferId, usize) {
         let buffer = self.buffers.current();
         (buffer.id(), buffer.point())
     }
