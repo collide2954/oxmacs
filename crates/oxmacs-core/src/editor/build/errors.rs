@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use crate::display::LineStyle;
@@ -28,6 +29,18 @@ impl Severity {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ErrorAt {
+    pub path: String,
+    pub row: usize,
+    pub column: usize,
+    pub link: Range<usize>,
+}
+
+pub type ErrorPattern = fn(&str) -> Option<ErrorAt>;
+
+pub(in crate::editor) const BUILT_IN: &[ErrorPattern] = &[arrow_at, panic_at];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Location {
     start: usize,
     line: usize,
@@ -35,6 +48,7 @@ struct Location {
     path: PathBuf,
     row: usize,
     column: usize,
+    link: Range<usize>,
     message: Option<String>,
 }
 
@@ -47,18 +61,22 @@ pub(in crate::editor) struct Errors {
 }
 
 impl Errors {
-    pub(in crate::editor) fn scan(&mut self, line: usize, text: &str, directory: &Path) {
+    pub(in crate::editor) fn scan(
+        &mut self,
+        line: usize,
+        text: &str,
+        directory: &Path,
+        patterns: &[ErrorPattern],
+    ) {
         if text.trim().is_empty() {
             self.header = None;
             self.open = false;
         } else if severity_of(text).is_some() {
             self.header = Some((line, text.to_owned()));
             self.open = false;
-        } else if let Some(rest) = arrow(text) {
+        } else if let Some(at) = patterns.iter().find_map(|pattern| pattern(text)) {
             let header = self.header.take();
-            self.push(line, header, rest, directory);
-        } else if let Some(rest) = panic(text) {
-            self.push(line, None, rest, directory);
+            self.push(line, header, at, directory);
         } else if self.open
             && let Some(last) = self.locations.last_mut()
         {
@@ -66,18 +84,22 @@ impl Errors {
         }
     }
 
-    fn push(&mut self, line: usize, header: Option<(usize, String)>, rest: &str, directory: &Path) {
-        let Some((path, row, column)) = position(rest) else {
-            return;
-        };
+    fn push(
+        &mut self,
+        line: usize,
+        header: Option<(usize, String)>,
+        at: ErrorAt,
+        directory: &Path,
+    ) {
         let (start, message) = header.map_or((line, None), |(start, text)| (start, Some(text)));
         self.locations.push(Location {
             start,
             line,
             end: line,
-            path: directory.join(path),
-            row,
-            column,
+            path: directory.join(&at.path),
+            row: at.row,
+            column: at.column,
+            link: at.link,
             message,
         });
         self.open = true;
@@ -88,7 +110,12 @@ impl Errors {
             .current
             .and_then(|current| self.locations.get(current))
             .is_some_and(|location| location.start == line);
-        style(text, current)
+        let linked = self
+            .locations
+            .iter()
+            .find(|location| location.line == line)
+            .map(|location| location.link.clone());
+        style(text, linked, current)
     }
 
     fn step(&self, forward: bool) -> Option<usize> {
@@ -147,13 +174,25 @@ fn severity_of(line: &str) -> Option<Severity> {
     })
 }
 
-fn arrow(line: &str) -> Option<&str> {
-    line.trim_start().strip_prefix("--> ")
+fn arrow_at(line: &str) -> Option<ErrorAt> {
+    let rest = line.trim_start().strip_prefix("--> ")?;
+    located(rest, line.len() - rest.len())
 }
 
-fn panic(line: &str) -> Option<&str> {
-    let at = line.find(PANICKED)?;
-    Some(&line[at + PANICKED.len()..])
+fn panic_at(line: &str) -> Option<ErrorAt> {
+    let at = line.find(PANICKED)? + PANICKED.len();
+    located(&line[at..], at)
+}
+
+fn located(rest: &str, start: usize) -> Option<ErrorAt> {
+    let (path, row, column) = position(rest)?;
+    let end = start + rest.trim_end().trim_end_matches(':').len();
+    Some(ErrorAt {
+        path: path.to_owned(),
+        row,
+        column,
+        link: start..end,
+    })
 }
 
 fn position(rest: &str) -> Option<(&str, usize, usize)> {
@@ -164,20 +203,14 @@ fn position(rest: &str) -> Option<(&str, usize, usize)> {
     Some((path, row, column))
 }
 
-fn location_in(line: &str) -> Option<(&str, usize, usize)> {
-    position(arrow(line).or_else(|| panic(line))?)
-}
-
-fn style(text: &str, current: bool) -> LineStyle {
+fn style(text: &str, link: Option<Range<usize>>, current: bool) -> LineStyle {
     let width = text.chars().count();
     let columns = |bytes: usize| text[..bytes].chars().count();
     let span = if let Some(severity) = severity_of(text) {
         let label = text.find(':').map_or(width, columns);
         severity.highlight().map(|highlight| (0..label, highlight))
-    } else if let Some((path, _, _)) = location_in(text) {
-        let start = text.find(path).map_or(0, columns);
-        let end = text.trim_end().trim_end_matches(':').chars().count();
-        Some((start..end, Highlight::Link))
+    } else if let Some(link) = link.filter(|link| link.end <= text.len()) {
+        Some((columns(link.start)..columns(link.end), Highlight::Link))
     } else if text == FINISHED {
         Some((0..width, Highlight::Success))
     } else if text.starts_with("Compilation ") {
@@ -314,7 +347,7 @@ mod tests {
 
     use super::*;
     use crate::editor::test_support::{press, type_text};
-    use crate::editor::{Cell, Clicks, Effect, Outcome};
+    use crate::editor::{Cell, Clicks, Effect, ErrorAt, Outcome};
 
     #[test]
     fn headers_set_the_severity() {
@@ -331,45 +364,61 @@ mod tests {
         assert_eq!(severity_of("   Compiling oxmacs"), None);
     }
 
+    fn found(text: &str) -> Option<(String, usize, usize)> {
+        BUILT_IN
+            .iter()
+            .find_map(|pattern| pattern(text))
+            .map(|at| (at.path, at.row, at.column))
+    }
+
     #[test]
     fn locations_come_from_arrows_and_panics() {
         assert_eq!(
-            location_in("  --> src/main.rs:3:5"),
-            Some(("src/main.rs", 3, 5))
+            found("  --> src/main.rs:3:5"),
+            Some(("src/main.rs".to_owned(), 3, 5))
         );
         assert_eq!(
-            location_in(r"  --> C:\work\src\lib.rs:10:1"),
-            Some((r"C:\work\src\lib.rs", 10, 1))
+            found(r"  --> C:\work\src\lib.rs:10:1"),
+            Some((r"C:\work\src\lib.rs".to_owned(), 10, 1))
         );
         assert_eq!(
-            location_in("thread 'main' panicked at src/main.rs:2:9:"),
-            Some(("src/main.rs", 2, 9))
+            found("thread 'main' panicked at src/main.rs:2:9:"),
+            Some(("src/main.rs".to_owned(), 2, 9))
         );
-        assert_eq!(location_in("   Compiling oxmacs v0.12.0"), None);
+        assert_eq!(found("   Compiling oxmacs v0.12.0"), None);
+    }
+
+    fn found_link(text: &str) -> Option<Range<usize>> {
+        BUILT_IN
+            .iter()
+            .find_map(|pattern| pattern(text))
+            .map(|at| at.link)
     }
 
     #[test]
     fn lines_are_colored_by_what_they_report() {
         assert_eq!(
-            style("error[E0425]: cannot find", false).spans,
+            style("error[E0425]: cannot find", None, false).spans,
             [(0..12, Highlight::Error)]
         );
+        let arrow = "  --> src/main.rs:3:5";
         assert_eq!(
-            style("  --> src/main.rs:3:5", true),
+            style(arrow, found_link(arrow), true),
             LineStyle {
                 background: Some(Highlight::Region),
                 spans: vec![(6..21, Highlight::Link)],
             }
         );
+        let panic = "thread 'main' panicked at src/a.rs:2:9:";
         assert_eq!(
-            style("thread 'main' panicked at src/a.rs:2:9:", false).spans,
+            style(panic, found_link(panic), false).spans,
             [(26..38, Highlight::Link)]
         );
         assert_eq!(
-            style("Compilation finished", false).spans,
+            style("Compilation finished", None, false).spans,
             [(0..20, Highlight::Success)]
         );
-        assert_eq!(style("note: defined here", false).spans, []);
+        assert_eq!(style("note: defined here", None, false).spans, []);
     }
 
     #[test]
@@ -388,7 +437,7 @@ mod tests {
         .into_iter()
         .enumerate()
         {
-            errors.scan(line, text, directory);
+            errors.scan(line, text, directory, BUILT_IN);
         }
 
         assert_eq!(
@@ -401,6 +450,7 @@ mod tests {
                     path: directory.join("src/main.rs"),
                     row: 2,
                     column: 5,
+                    link: 5..20,
                     message: Some("error[E0425]: cannot find".to_owned()),
                 },
                 Location {
@@ -410,6 +460,7 @@ mod tests {
                     path: directory.join("src/main.rs"),
                     row: 9,
                     column: 1,
+                    link: 26..41,
                     message: None,
                 },
             ]
@@ -517,6 +568,59 @@ mod tests {
         editor.click(Cell { row: 4, column: 3 }, Clicks::Single, false);
 
         assert_eq!(editor.mode_line(), "-- main.rs   L2 C4   (Rust)");
+    }
+
+    fn traceback(line: &str) -> Option<ErrorAt> {
+        let rest = line.trim_start().strip_prefix("File \"")?;
+        let (path, rest) = rest.split_once("\", line ")?;
+        let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+        let start = line.find("File \"")? + 6;
+        Some(ErrorAt {
+            path: path.to_owned(),
+            row: digits.parse().ok()?,
+            column: 1,
+            link: start..start + path.len(),
+        })
+    }
+
+    #[test]
+    fn applets_add_patterns_that_make_their_errors_clickable() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.py"), "x = 1\nprint(y)\n").unwrap();
+        let mut editor = Editor::new();
+        editor.add_error_pattern(traceback);
+
+        editor.compile_in("python a.py", dir.path().to_owned());
+        let job = editor
+            .take_effects()
+            .into_iter()
+            .find_map(|effect| match effect {
+                Effect::Spawn(job) => Some(job),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(
+            (job.program.as_str(), job.args.as_slice()),
+            ("python", &["a.py".to_owned()][..])
+        );
+        for line in [
+            "Traceback (most recent call last):",
+            "  File \"a.py\", line 2, in <module>",
+            "NameError: name 'y' is not defined",
+        ] {
+            editor.job_output(job.id, line);
+        }
+        editor.job_finished(job.id, &Outcome::Exited(Some(1)));
+        let window = editor.tiling().windows()[1];
+        assert_eq!(
+            editor.pane_of(window).unwrap().line_style(4).spans,
+            [(8..12, Highlight::Link)]
+        );
+
+        press(&mut editor, "M-g n");
+
+        assert_eq!(editor.buffer().name(), "a.py");
+        assert_eq!(editor.buffer().line_of(editor.buffer().point()), 1);
     }
 
     #[test]

@@ -37,6 +37,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Applets can draw the whole window of a buffer of their own; the Markdown preview is drawn this way.
 - Applets can restyle the minibuffer line while a prompt waits.
 - Applets can give their languages a formatter, used by `format-buffer` and format-on-save, and a linter that checks files on save with the same underlines, mode-line counts and `*Diagnostics*` as cargo.
+- Applets can run commands in `*compilation*` and teach it the error locations their tools print.
 - Applets can run background jobs and interactive sessions of their own, listed in `M-x list-processes`.
 - Applets can open the file types they claim, show their own position in the mode line and have their file watched for changes.
 - `M-x list-tools` can manage tools applets add, including libraries, checked against the digest GitHub publishes for each download.

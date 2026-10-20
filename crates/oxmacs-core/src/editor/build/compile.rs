@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::editor::buffers::Mode;
-use crate::editor::build::errors::{ErrorSource, Errors};
+use crate::editor::build::errors::{ErrorPattern, ErrorSource, Errors};
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::tools;
@@ -73,6 +73,14 @@ impl Editor {
     pub(in crate::editor) fn project_directory(&self) -> PathBuf {
         let directory = self.default_directory();
         tools::cargo_root(&directory).unwrap_or(directory)
+    }
+
+    pub fn compile_in(&mut self, command: impl Into<String>, directory: PathBuf) {
+        self.start_compile(command.into(), directory);
+    }
+
+    pub fn add_error_pattern(&mut self, pattern: ErrorPattern) {
+        self.error_patterns.push(pattern);
     }
 
     pub(in crate::editor) fn start_compile(&mut self, command: String, directory: PathBuf) {
@@ -182,8 +190,11 @@ impl Editor {
             .buffers
             .get(index)
             .map_or(0, |buffer| buffer.line_of(buffer.len_chars()));
+        let patterns = self.error_patterns.clone();
         if let Some(compilation) = self.compilation_mut() {
-            compilation.errors.scan(at, line, &compilation.directory);
+            compilation
+                .errors
+                .scan(at, line, &compilation.directory, &patterns);
         }
         self.append_output(index, &format!("{line}\n"));
     }
