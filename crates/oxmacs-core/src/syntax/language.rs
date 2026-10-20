@@ -205,10 +205,6 @@ impl Language {
         self.0.features.contains(&feature)
     }
 
-    pub fn indent_unit(self) -> usize {
-        self.0.indentation.unit
-    }
-
     pub fn indentation(self) -> Indentation {
         self.0.indentation
     }

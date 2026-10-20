@@ -4,10 +4,6 @@ use jiff::civil::Date;
 use crate::model::agenda::{self, Entry, Kind};
 use crate::model::vault::Index;
 
-pub fn first_of(day: Date) -> Date {
-    day.first_of_month()
-}
-
 pub fn weeks(day: Date) -> Vec<[Date; 7]> {
     let first = day.first_of_month();
     let last = day.last_of_month();
@@ -103,7 +99,6 @@ mod tests {
         assert_eq!(weeks(date(2026, 2, 10)).len(), 5);
         assert_eq!(weeks(date(2027, 2, 10)).len(), 4);
         assert_eq!(weeks(date(2026, 3, 10)).len(), 6);
-        assert_eq!(first_of(date(2026, 10, 19)), date(2026, 10, 1));
     }
 
     #[test]

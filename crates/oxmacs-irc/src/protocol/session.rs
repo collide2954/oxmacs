@@ -58,7 +58,6 @@ pub struct Session {
     prefix_symbols: String,
     channel_types: String,
     channel_modes: [String; 4],
-    network: Option<String>,
     outgoing: Vec<String>,
     events: Vec<Event>,
 }
@@ -82,7 +81,6 @@ impl Session {
                 "l".to_owned(),
                 "imnpst".to_owned(),
             ],
-            network: None,
             outgoing: Vec::new(),
             events: Vec::new(),
         }
@@ -129,16 +127,8 @@ impl Session {
         &self.nick
     }
 
-    pub fn is_registered(&self) -> bool {
-        self.registered
-    }
-
     pub fn has_cap(&self, name: &str) -> bool {
         self.enabled.contains(name)
-    }
-
-    pub fn network_name(&self) -> Option<&str> {
-        self.network.as_deref()
     }
 
     pub fn prefix_symbol(&self, mode: char) -> Option<char> {
@@ -341,7 +331,6 @@ impl Session {
                         modes.clone_into(kind);
                     }
                 }
-                "NETWORK" => self.network = Some(value.to_owned()),
                 _ => {}
             }
         }
@@ -561,7 +550,6 @@ mod tests {
         feed(&mut session, &[":srv 001 oxtest_ :Welcome to the network"]);
 
         assert_eq!(session.nick(), "oxtest_");
-        assert!(session.is_registered());
         assert!(
             session
                 .take_events()
@@ -637,7 +625,6 @@ mod tests {
             ],
         );
 
-        assert_eq!(session.network_name(), Some("Libera.Chat"));
         assert_eq!(session.prefix_symbol('o'), Some('@'));
         assert_eq!(session.prefix_rank('~'), Some(0));
         assert_eq!(session.prefix_rank('+'), Some(4));
