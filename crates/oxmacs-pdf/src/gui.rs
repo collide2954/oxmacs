@@ -12,7 +12,7 @@ use oxmacs_core::theme::Theme as Faces;
 use oxmacs_gui::applet::Context;
 use oxmacs_gui::{style, units};
 
-use crate::engine::{Bitmap, Engine, Ink};
+use crate::engine::{self, Bitmap, Ink};
 use crate::layout::{GAP, MARGIN, Size};
 use crate::view::{
     DocId, Loading, Move, OpenDocument, Opened, PdfView, RENDER_SCALE, RenderPages, ScrollPdf,
@@ -138,13 +138,9 @@ pub(crate) fn pdf_id(window: WindowId) -> iced::widget::Id {
     iced::widget::Id::from(format!("pdf-{window:?}"))
 }
 
-pub(crate) fn open(engine: &mut Option<Engine>, request: &OpenDocument) -> Task<Payload> {
+pub(crate) fn open(request: &OpenDocument) -> Task<Payload> {
     let doc = request.doc;
-    let started = match engine {
-        Some(engine) => Ok(engine.clone()),
-        None => Engine::start(&request.library).inspect(|started| *engine = Some(started.clone())),
-    };
-    match started {
+    match engine::shared(&request.library) {
         Ok(engine) => Task::perform(engine.open(doc, request.path.clone()), move |result| {
             Payload::new(Opened {
                 doc,
@@ -158,13 +154,8 @@ pub(crate) fn open(engine: &mut Option<Engine>, request: &OpenDocument) -> Task<
     }
 }
 
-pub(crate) fn render(
-    engine: Option<&Engine>,
-    cache: &Arc<Mutex<Cache>>,
-    request: &RenderPages,
-    ink: Ink,
-) -> Task<Payload> {
-    let Some(engine) = engine else {
+pub(crate) fn render(cache: &Arc<Mutex<Cache>>, request: &RenderPages, ink: Ink) -> Task<Payload> {
+    let Some(engine) = engine::running() else {
         return Task::none();
     };
     let ink = request.dark.then_some(ink);

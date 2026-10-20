@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::{Mutex, PoisonError, mpsc};
 use std::{fmt, fs, thread};
 
 use iced::futures::channel::oneshot;
@@ -43,8 +43,27 @@ impl fmt::Debug for Engine {
     }
 }
 
+static SHARED: Mutex<Option<Engine>> = Mutex::new(None);
+
+pub(crate) fn shared(library: &Path) -> Result<Engine, String> {
+    let mut shared = SHARED.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(engine) = shared.as_ref() {
+        return Ok(engine.clone());
+    }
+    let engine = Engine::start(library)?;
+    *shared = Some(engine.clone());
+    Ok(engine)
+}
+
+pub(crate) fn running() -> Option<Engine> {
+    SHARED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+}
+
 impl Engine {
-    pub(crate) fn start(library: &Path) -> Result<Self, String> {
+    fn start(library: &Path) -> Result<Self, String> {
         let (jobs, inbox) = mpsc::channel::<Job>();
         let (ready, started) = mpsc::channel();
         let library = library.to_owned();
@@ -231,7 +250,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("sample.pdf");
         fs::write(&path, crate::sample::pdf()).unwrap();
-        let engine = Engine::start(&library).unwrap();
+        let engine = shared(&library).unwrap();
+        assert!(running().is_some());
+        assert!(shared(Path::new("elsewhere")).is_ok());
 
         let document = block_on(engine.open(7, path)).unwrap().unwrap();
         let letter = Size {

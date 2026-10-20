@@ -22,7 +22,7 @@ pub use layout::{Size, Zoom};
 pub use model::{Document, Heading};
 pub use view::{DocId, Move, OpenDocument, Opened, RenderPages, ScrollPdf, Viewport, Wanted};
 
-use engine::{Engine, Ink};
+use engine::Ink;
 use gui::Cache;
 use view::PdfState;
 
@@ -176,7 +176,6 @@ fn register(editor: &mut Editor, scope: ScopeId) -> Vec<CommandId> {
 
 #[derive(Debug)]
 pub struct Pdf {
-    engine: Option<Engine>,
     cache: Arc<Mutex<Cache>>,
     ink: Ink,
 }
@@ -184,7 +183,6 @@ pub struct Pdf {
 impl Default for Pdf {
     fn default() -> Self {
         Self {
-            engine: None,
             cache: Arc::default(),
             ink: gui::ink(&oxmacs_core::theme::ADWAITA_DARK),
         }
@@ -220,15 +218,10 @@ impl Applet for Pdf {
 impl GuiApplet for Pdf {
     fn perform(&mut self, payload: &Payload) -> Option<Task<Payload>> {
         if let Some(request) = payload.get::<OpenDocument>() {
-            return Some(gui::open(&mut self.engine, request));
+            return Some(gui::open(request));
         }
         if let Some(request) = payload.get::<RenderPages>() {
-            return Some(gui::render(
-                self.engine.as_ref(),
-                &self.cache,
-                request,
-                self.ink,
-            ));
+            return Some(gui::render(&self.cache, request, self.ink));
         }
         payload.get::<ScrollPdf>().map(gui::scroll)
     }
