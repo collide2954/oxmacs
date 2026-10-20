@@ -70,6 +70,46 @@ impl Editor {
         self.show_beside(move |editor| editor.buffers.position(|buffer| buffer.id() == id));
     }
 
+    pub fn on_command(&mut self, handler: fn(&mut Editor)) {
+        self.command_handlers.push(handler);
+    }
+
+    pub(super) fn tell_command(&mut self) {
+        for handler in self.command_handlers.clone() {
+            handler(self);
+        }
+    }
+
+    pub fn on_save(&mut self, handler: fn(&mut Editor, BufferId)) {
+        self.save_handlers.push(handler);
+    }
+
+    pub(super) fn tell_save(&mut self, id: BufferId) {
+        for handler in self.save_handlers.clone() {
+            handler(self, id);
+        }
+    }
+
+    pub fn on_saved(&mut self, handler: fn(&mut Editor, BufferId)) {
+        self.saved_handlers.push(handler);
+    }
+
+    pub(super) fn tell_saved(&mut self, id: BufferId) {
+        for handler in self.saved_handlers.clone() {
+            handler(self, id);
+        }
+    }
+
+    pub fn buffer_by_id(&self, id: BufferId) -> Option<&Buffer> {
+        let index = self.buffers.position(|buffer| buffer.id() == id)?;
+        self.buffers.get(index)
+    }
+
+    pub fn buffer_by_id_mut(&mut self, id: BufferId) -> Option<&mut Buffer> {
+        let index = self.buffers.position(|buffer| buffer.id() == id)?;
+        self.buffers.get_mut(index)
+    }
+
     pub fn on_quit(&mut self, handler: fn(&mut Editor)) {
         self.quit_handlers.push(handler);
     }

@@ -143,6 +143,9 @@ pub struct Editor {
     configured_handlers: Vec<fn(&mut Editor)>,
     quit_handlers: Vec<fn(&mut Editor)>,
     display_handlers: Vec<fn(&mut Editor)>,
+    command_handlers: Vec<fn(&mut Editor)>,
+    save_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
+    saved_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
     last_id: Option<CommandId>,
     repeated: bool,
     working_directory: PathBuf,
@@ -234,6 +237,9 @@ impl Editor {
             configured_handlers: Vec::new(),
             quit_handlers: Vec::new(),
             display_handlers: Vec::new(),
+            command_handlers: Vec::new(),
+            save_handlers: Vec::new(),
+            saved_handlers: Vec::new(),
             last_id: None,
             repeated: false,
             working_directory: env::current_dir().unwrap_or_default(),
@@ -621,6 +627,7 @@ impl Editor {
         self.goal_column = None;
         self.last_command = None;
         run(self);
+        self.tell_command();
         self.refresh_minibuffer();
         self.reveal_point();
     }
@@ -637,6 +644,7 @@ impl Editor {
         }
         self.perform(command, goal_column, previous);
         self.after_atlas_command();
+        self.tell_command();
         self.reset_selection(command);
         self.refresh_minibuffer();
         self.refresh_popup(command);

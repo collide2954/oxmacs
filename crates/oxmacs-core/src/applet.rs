@@ -834,6 +834,56 @@ mod tests {
         );
     }
 
+    #[test]
+    fn applets_hear_after_each_command_and_around_each_save() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plan.txt");
+        std::fs::write(&path, "one\n").unwrap();
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        editor.on_command(|editor| note(editor, "command".to_owned()));
+        editor.on_save(|editor, id| {
+            if let Some(buffer) = editor.buffer_by_id_mut(id) {
+                buffer.insert_at(0, "# ");
+            }
+            note(editor, "saving".to_owned());
+        });
+        editor.on_saved(|editor, id| {
+            let name = editor
+                .buffer_by_id(id)
+                .map(|buffer| buffer.name().to_owned())
+                .unwrap_or_default();
+            note(editor, format!("saved {name}"));
+        });
+        let shout = editor.add_command(CommandSpec {
+            name: "shout",
+            summary: "Shout",
+            help: None,
+            scope: Scope::Global.into(),
+            run: |editor| editor.show_message("hey"),
+        });
+        editor.bind(Scope::Global, "C-c s", shout).unwrap();
+        editor.open_file(&path);
+        editor.set_applet_state(Answers::default());
+
+        type_keys(&mut editor, "C-e x C-c s C-x C-s");
+
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "# onex\n");
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec![
+                "command".to_owned(),
+                "command".to_owned(),
+                "command".to_owned(),
+                "saving".to_owned(),
+                "saved plan.txt".to_owned(),
+                "command".to_owned(),
+            ])
+        );
+    }
+
     struct Syncer;
 
     impl Applet for Syncer {

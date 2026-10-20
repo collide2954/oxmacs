@@ -301,6 +301,13 @@ impl Editor {
 
     pub(in crate::editor) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {
         self.exact_atlas_dates(index);
+        let Some(id) = self.buffers.get(index).map(Buffer::id) else {
+            return false;
+        };
+        self.tell_save(id);
+        let Some(index) = self.buffers.position(|buffer| buffer.id() == id) else {
+            return false;
+        };
         let formatting = format
             && self
                 .buffers
@@ -346,6 +353,7 @@ impl Editor {
                 if self.is_atlas(index) {
                     self.note_atlas_saved(&path, &text);
                 }
+                self.tell_saved(id);
                 true
             }
             Err(error) => {
