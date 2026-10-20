@@ -40,6 +40,7 @@ Others are only built when you ask for them. These experimental applets are vers
 | `extra-themes`    | 0.1.0   | 56 more color themes for `M-x load-theme`, from gruvbox to modus-vivendi       |
 | `glow`            | 0.1.0   | A soft glow around the minibuffer while a prompt or question waits for you     |
 | `irc`             | 0.1.0   | `M-x irc`, an IRCv3 client, with `M-x irc-setup` and a bouncer                |
+| `pdf`             | 0.1.0   | A PDF viewer with search, outline, links and dark pages; PDFium from `M-x list-tools` |
 
 Turn one on with `--features`, and separate several with commas and no spaces:
 
@@ -56,9 +57,8 @@ More applets will be opt-in features as well:
 | Feature        | What it will add                                  | Today                                  |
 |----------------|---------------------------------------------------|----------------------------------------|
 | `sqlite`       | A SQLite database viewer and editor               | Not written yet                        |
-| `pdf`          | A PDF viewer                                      | Not written yet                        |
 
-Once moved, a build without the feature contains none of that applet's code.
+A build without such a feature contains none of its code.
 
 ## Applets, not plugins
 
