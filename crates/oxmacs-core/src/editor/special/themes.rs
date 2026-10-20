@@ -14,7 +14,7 @@ impl Editor {
         matches: impl Fn(&str) -> bool,
     ) -> Vec<Completion> {
         let current = self.configured_theme.map_or(SYSTEM, |theme| theme.name);
-        theme::builtin()
+        theme::all()
             .into_iter()
             .map(|theme| (theme.name, Some(theme)))
             .chain([(SYSTEM, None)])
