@@ -1,5 +1,5 @@
-use std::mem;
 use std::path::PathBuf;
+use std::{fmt, mem};
 
 use crate::applet::Payload;
 use crate::editor::{Editor, Job, JobId, PreviewScroll, WindowId};
@@ -12,6 +12,20 @@ pub struct FetchId(pub u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ConnectionId(pub u64);
+
+type Then = Box<dyn FnOnce(&mut Editor, Result<String, String>) + Send>;
+
+#[derive(Default)]
+pub(super) struct Fetches(Vec<(FetchId, Then)>);
+
+impl fmt::Debug for Fetches {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Fetches")
+            .field("waiting", &self.0.len())
+            .finish()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
@@ -56,7 +70,24 @@ impl Editor {
         }
     }
 
+    pub fn fetch(
+        &mut self,
+        url: impl Into<String>,
+        then: impl FnOnce(&mut Editor, Result<String, String>) + Send + 'static,
+    ) -> FetchId {
+        let id = FetchId(self.next_fetch);
+        self.next_fetch += 1;
+        self.fetches.0.push((id, Box::new(then)));
+        self.effects.push(Effect::Fetch(id, url.into()));
+        id
+    }
+
     pub fn fetched(&mut self, id: FetchId, result: Result<String, String>) {
+        if let Some(at) = self.fetches.0.iter().position(|(known, _)| *known == id) {
+            let (_, then) = self.fetches.0.swap_remove(at);
+            then(self, result);
+            return;
+        }
         if !self.tool_release_fetched(id, &result) {
             self.weather_fetched(id, result);
         }

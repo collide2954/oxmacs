@@ -242,14 +242,14 @@ impl Editor {
         match known {
             Some(place) => {
                 let url = forecast_url(&place, self.config.weather_units);
-                self.fetch(url, Request::Forecast);
+                self.fetch_weather(url, Request::Forecast);
             }
-            None => self.fetch(geocode_url(&name), Request::Place(name)),
+            None => self.fetch_weather(geocode_url(&name), Request::Place(name)),
         }
         self.render_weather();
     }
 
-    fn fetch(&mut self, url: String, request: Request) {
+    fn fetch_weather(&mut self, url: String, request: Request) {
         let id = FetchId(self.next_fetch);
         self.next_fetch += 1;
         self.weather.pending = Some((id, request));
@@ -277,7 +277,7 @@ impl Editor {
                 Ok(Some(place)) => {
                     let url = forecast_url(&place, self.config.weather_units);
                     self.weather.place = Some((name, place));
-                    self.fetch(url, Request::Forecast);
+                    self.fetch_weather(url, Request::Forecast);
                 }
                 Ok(None) => {
                     self.weather.problem =

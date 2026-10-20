@@ -523,6 +523,43 @@ mod tests {
         assert_eq!(editor.tab_width(), 2);
     }
 
+    fn fetch_effects(editor: &mut Editor) -> Vec<(crate::editor::FetchId, String)> {
+        editor
+            .take_effects()
+            .into_iter()
+            .filter_map(|effect| match effect {
+                crate::editor::Effect::Fetch(id, url) => Some((id, url)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn applets_fetch_urls_and_get_the_answer_once() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+
+        editor.fetch("https://example.org/a", |editor, result| {
+            if let Some(answers) = editor.applet_state_mut::<Answers>() {
+                answers.0.push(result.unwrap_or_else(|error| error));
+            }
+        });
+        let fetches = fetch_effects(&mut editor);
+        assert_eq!(fetches.len(), 1);
+        assert_eq!(fetches[0].1, "https://example.org/a");
+
+        editor.fetched(fetches[0].0, Ok("body".to_owned()));
+        editor.fetched(fetches[0].0, Err("again".to_owned()));
+        editor.fetched(crate::editor::FetchId(999), Ok("stray".to_owned()));
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["body".to_owned()])
+        );
+    }
+
     #[test]
     fn state_is_kept_per_type() {
         let mut states = States::default();
