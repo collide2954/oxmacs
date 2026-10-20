@@ -912,6 +912,28 @@ mod tests {
     }
 
     #[test]
+    fn applets_open_links_outside_and_hide_buffers_they_showed() {
+        let mut editor = Editor::new();
+        editor.open_externally("https://example.org");
+        assert_eq!(
+            editor.take_effects(),
+            [crate::editor::Effect::OpenExternally(
+                "https://example.org".into()
+            )]
+        );
+        let scope = editor.add_scope("*Board*");
+        let id = editor.add_applet_buffer_with("*Board*", |_| Board(scope));
+        let origin = editor.selected_window();
+        editor.show_buffer_beside(id);
+        editor.select_window(origin);
+
+        assert!(editor.hide_buffer(id));
+        assert_eq!(editor.tiling().windows(), [origin]);
+        assert_eq!(editor.selected_window(), origin);
+        assert!(!editor.hide_buffer(id));
+    }
+
+    #[test]
     fn pick_prompts_say_which_offer_was_chosen_or_what_was_typed() {
         fn ask(editor: &mut Editor) {
             editor.prompt_pick(

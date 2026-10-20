@@ -8,9 +8,9 @@ use crate::applet::{AppletBuffer, DoctorLine};
 use crate::command::Command;
 use crate::config::Config;
 use crate::config::schema::Setting;
-use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
+use crate::editor::{Editor, Effect};
 use crate::text::{Buffer, BufferId};
 
 #[derive(Debug, Clone, Copy)]
@@ -65,6 +65,23 @@ impl Editor {
 
     pub fn move_points(&mut self, id: BufferId, to: impl Fn(usize, usize) -> Option<usize>) {
         self.move_windows(id, to);
+    }
+
+    pub fn hide_buffer(&mut self, id: BufferId) -> bool {
+        let Some(window) = self.window_showing(id) else {
+            return false;
+        };
+        let origin = self.selected_window();
+        self.select_window(window);
+        self.delete_window();
+        if origin != window {
+            self.select_window(origin);
+        }
+        true
+    }
+
+    pub fn open_externally(&mut self, target: impl Into<PathBuf>) {
+        self.effects.push(Effect::OpenExternally(target.into()));
     }
 
     pub fn show_buffer_beside(&mut self, id: BufferId) {
