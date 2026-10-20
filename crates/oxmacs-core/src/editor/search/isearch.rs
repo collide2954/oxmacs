@@ -100,8 +100,12 @@ impl Search {
         self.step.regex
     }
 
-    pub(in crate::editor) fn found(&self) -> Option<&Range<usize>> {
+    pub fn found(&self) -> Option<&Range<usize>> {
         self.step.found.as_ref()
+    }
+
+    pub fn matches(&self) -> &[Range<usize>] {
+        &self.lazy.matches
     }
 
     pub fn note(&self) -> Option<&str> {
@@ -441,6 +445,19 @@ mod tests {
     use crate::editor::test_support::{editor_with, press, type_text};
     use crate::editor::{Cell, Clicks, Editor, Effect};
     use crate::theme::Highlight;
+
+    #[test]
+    fn searches_tell_their_current_match_and_every_match() {
+        let mut editor = editor_with("ab xx ab ab", 0);
+
+        press(&mut editor, "C-s");
+        type_text(&mut editor, "ab");
+        press(&mut editor, "C-s");
+
+        let search = editor.search().unwrap();
+        assert_eq!(search.found(), Some(&(6..8)));
+        assert_eq!(search.matches(), [0..2, 6..8, 9..11]);
+    }
 
     fn prompt(editor: &Editor) -> String {
         editor.search().unwrap().prompt()
