@@ -24,6 +24,7 @@ Larger parts of oxmacs are applets, each a [Cargo feature](https://doc.rust-lang
 
 | Feature    | What it adds                                                                 |
 |------------|------------------------------------------------------------------------------|
+| `dired`    | `C-x d`, a directory editor: mark, delete to the trash, rename, copy and open files |
 | `markdown` | Markdown editing and highlighting, and a rendered preview with `C-c C-c p`    |
 | `weather`  | `M-x weather` with the forecast from Open-Meteo, and the weather in the mode line |
 
