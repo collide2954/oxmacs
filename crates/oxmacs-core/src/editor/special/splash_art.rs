@@ -1,7 +1,6 @@
 use crate::command::Command;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
-use crate::editor::page::Page;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SplashAnimation {
@@ -57,16 +56,10 @@ impl Editor {
             return;
         };
         let next = art.next();
-        let (text, buttons) = self.splash_text(extras(next));
-        if let Some((buffer, Mode::Splash(splash))) = self.buffers.entry_mut(0) {
-            Page {
-                text,
-                styles: Vec::new(),
-            }
-            .fill(buffer);
+        if let Some((_, Mode::Splash(splash))) = self.buffers.entry_mut(0) {
             splash.art = next;
-            splash.buttons = buttons;
         }
+        self.refill_splash();
         self.show_message(format!("Animation: {}", next.name()));
     }
 }

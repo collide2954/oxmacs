@@ -1,9 +1,10 @@
 use std::fmt::Write;
 
-use crate::command::{Command, Scope};
+use crate::command::{Command, CommandId, Scope};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
+use crate::editor::page::Page;
 #[cfg(feature = "animated-splash")]
 use crate::editor::special::splash_art::{self, SplashAnimation};
 use crate::text::Buffer;
@@ -35,7 +36,7 @@ pub(in crate::editor) struct Splash {
 #[derive(Debug)]
 pub(super) struct Button {
     line: usize,
-    command: Command,
+    command: CommandId,
     key_width: usize,
 }
 
@@ -76,7 +77,7 @@ impl Editor {
         let extras = splash_art::extras(SplashAnimation::default());
         #[cfg(not(feature = "animated-splash"))]
         let extras = Vec::new();
-        let (text, buttons) = self.splash_text(extras);
+        let (text, buttons) = self.splash_text(&extras);
         let mut buffer = Buffer::with_text(NAME, &text);
         buffer.set_read_only(true);
         buffer.set_point(buffer.line_start(FIRST_BUTTON_LINE) + INDENT);
@@ -88,12 +89,56 @@ impl Editor {
         self.add_buffer_with(buffer, Mode::Splash(splash));
     }
 
-    pub(super) fn splash_text(&self, extras: Vec<(Command, String)>) -> (String, Vec<Button>) {
-        let mut entries: Vec<(Command, String)> = BUTTONS
+    pub fn set_splash_entry(&mut self, command: CommandId, description: impl Into<String>) {
+        let description = description.into();
+        match self
+            .splash_entries
+            .iter_mut()
+            .find(|(known, _)| *known == command)
+        {
+            Some(entry) => entry.1 = description,
+            None => self.splash_entries.push((command, description)),
+        }
+        self.refill_splash();
+    }
+
+    pub(super) fn refill_splash(&mut self) {
+        let Some(index) = self
+            .buffers
+            .find_mode(|mode| matches!(mode, Mode::Splash(_)))
+        else {
+            return;
+        };
+        #[cfg(feature = "animated-splash")]
+        let extras = self
+            .buffers
+            .splash(index)
+            .map(|splash| splash_art::extras(splash.art))
+            .unwrap_or_default();
+        #[cfg(not(feature = "animated-splash"))]
+        let extras = Vec::new();
+        let (text, buttons) = self.splash_text(&extras);
+        if let Some((buffer, Mode::Splash(splash))) = self.buffers.entry_mut(index) {
+            Page {
+                text,
+                styles: Vec::new(),
+            }
+            .fill(buffer);
+            splash.buttons = buttons;
+        }
+    }
+
+    pub(super) fn splash_text(&self, extras: &[(Command, String)]) -> (String, Vec<Button>) {
+        let mut entries: Vec<(CommandId, String)> = BUTTONS
             .iter()
-            .map(|(command, description)| (*command, (*description).to_owned()))
+            .map(|(command, description)| ((*command).into(), (*description).to_owned()))
             .collect();
-        entries.extend(extras);
+        entries.extend(
+            extras
+                .iter()
+                .map(|(command, description)| ((*command).into(), description.clone())),
+        );
+        entries.extend(self.splash_entries.iter().cloned());
         let keys: Vec<String> = entries
             .iter()
             .map(|(command, _)| {
@@ -112,7 +157,7 @@ impl Editor {
             .unwrap_or(0);
         let name_width = entries
             .iter()
-            .map(|(command, _)| command.name().len())
+            .map(|(command, _)| self.commands.name(*command).len())
             .max()
             .unwrap_or(0);
         let pad = " ".repeat(INDENT);
@@ -122,7 +167,7 @@ impl Editor {
         );
         let mut buttons = Vec::new();
         for (index, ((command, description), key)) in entries.iter().zip(&keys).enumerate() {
-            let name = command.name();
+            let name = self.commands.name(*command);
             let _ = writeln!(
                 text,
                 "{pad}{key:<key_width$}   {name:<name_width$}  {description}"
@@ -176,6 +221,7 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
+    use crate::command::{CommandSpec, Scope};
     use crate::display::LineStyle;
     use crate::editor::test_support::{at_point, lines, press, type_text};
     use crate::editor::{Cell, Clicks, Editor};
@@ -343,6 +389,45 @@ mod tests {
         press(&mut editor, "C-x C-q");
         assert!(editor.buffer().is_read_only());
         assert_eq!(editor.message(), Some("This buffer stays read-only"));
+    }
+
+    fn wave(editor: &mut Editor) {
+        editor.show_message("Hello");
+    }
+
+    #[test]
+    fn applets_add_lines_that_run_their_commands_and_can_reword_them() {
+        let mut editor = Editor::new();
+        let command = editor.add_command(CommandSpec {
+            name: "wave-hello",
+            summary: "Wave hello",
+            help: None,
+            scope: Scope::Splash.into(),
+            run: wave,
+        });
+        editor.bind(Scope::Splash, "w", command).unwrap();
+        editor.set_splash_entry(command, "Wave");
+        editor.about();
+
+        let line = line_of(&editor, "w ");
+        assert!(lines(&editor)[line].contains("wave-hello"));
+        assert!(lines(&editor)[line].ends_with("Wave"));
+        assert_eq!(editor.line_style(line).spans, [(3..4, Highlight::Link)]);
+
+        press(&mut editor, "n");
+        editor.set_splash_entry(command, "Wave again");
+        assert!(lines(&editor)[line].ends_with("Wave again"));
+        assert!(at_point(&editor).starts_with("C-x d"));
+
+        editor.click(
+            Cell {
+                row: line,
+                column: 20,
+            },
+            Clicks::Single,
+            false,
+        );
+        assert_eq!(editor.message(), Some("Hello"));
     }
 
     #[test]
