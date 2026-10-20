@@ -109,6 +109,26 @@ impl Editor {
         }
     }
 
+    pub fn add_file_opener(
+        &mut self,
+        extensions: &'static [&'static str],
+        open: fn(&mut Editor, &Path) -> bool,
+    ) {
+        self.file_openers.push((extensions, open));
+    }
+
+    pub(super) fn file_opener(&self, path: &Path) -> Option<fn(&mut Editor, &Path) -> bool> {
+        let extension = path.extension()?.to_str()?;
+        self.file_openers
+            .iter()
+            .find(|(extensions, _)| {
+                extensions
+                    .iter()
+                    .any(|known| known.eq_ignore_ascii_case(extension))
+            })
+            .map(|(_, open)| *open)
+    }
+
     pub fn on_open_directory(&mut self, handler: fn(&mut Editor, &Path) -> bool) {
         self.directory_handler = Some(handler);
     }

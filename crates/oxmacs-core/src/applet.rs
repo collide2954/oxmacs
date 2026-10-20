@@ -1041,6 +1041,29 @@ mod tests {
         );
     }
 
+    fn open_as_document(editor: &mut Editor, path: &Path) -> bool {
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned());
+        editor.show_message(format!("document {}", name.unwrap_or_default()));
+        true
+    }
+
+    #[test]
+    fn applets_open_the_file_types_they_claim() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("paper.PDF"), b"%PDF\xFF").unwrap();
+        std::fs::write(dir.path().join("notes.txt"), "plain").unwrap();
+        let mut editor = Editor::new();
+        editor.add_file_opener(&["pdf"], open_as_document);
+
+        assert!(editor.open_file(&dir.path().join("paper.PDF")));
+        assert_eq!(editor.message(), Some("document paper.PDF"));
+        assert_eq!(editor.buffer_names(), ["*scratch*"]);
+
+        assert!(editor.open_file(&dir.path().join("notes.txt")));
+        assert_eq!(editor.buffer().contents(), "plain");
+    }
     #[test]
     fn moved_files_keep_their_buffers() {
         let dir = tempfile::tempdir().unwrap();

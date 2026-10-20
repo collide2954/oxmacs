@@ -57,6 +57,8 @@ use crate::theme::{self, Appearance, Highlight, Theme};
 
 const DEFAULT_ROWS: usize = 24;
 
+type FileOpener = (&'static [&'static str], fn(&mut Editor, &Path) -> bool);
+
 #[derive(Debug, Clone, Copy)]
 struct Settings {
     format_on_save: bool,
@@ -132,6 +134,7 @@ pub struct Editor {
     command_handlers: Vec<fn(&mut Editor)>,
     disk_handlers: Vec<fn(&mut Editor)>,
     directory_handler: Option<fn(&mut Editor, &Path) -> bool>,
+    file_openers: Vec<FileOpener>,
     save_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
     saved_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
     last_id: Option<CommandId>,
@@ -223,6 +226,7 @@ impl Editor {
             command_handlers: Vec::new(),
             disk_handlers: Vec::new(),
             directory_handler: None,
+            file_openers: Vec::new(),
             save_handlers: Vec::new(),
             saved_handlers: Vec::new(),
             last_id: None,
