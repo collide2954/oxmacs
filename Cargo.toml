@@ -16,6 +16,7 @@ iced_test = "0.14.0"
 indexmap = "2.14.2"
 jiff = "0.2.38"
 keyring = "4.2.0"
+oxmacs-atlas = { path = "crates/oxmacs-atlas" }
 oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-demo = { path = "crates/oxmacs-demo" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }

@@ -12,5 +12,7 @@ pub fn all() -> Vec<Box<dyn GuiApplet>> {
         Box::new(oxmacs_themes::Themes),
         #[cfg(feature = "irc")]
         Box::new(oxmacs_irc::Irc),
+        #[cfg(feature = "atlas")]
+        Box::new(oxmacs_atlas::Atlas),
     ]
 }

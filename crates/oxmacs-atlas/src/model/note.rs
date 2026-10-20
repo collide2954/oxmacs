@@ -3,7 +3,7 @@ use std::ops::Range;
 use jiff::Unit;
 use jiff::civil::{Date, DateTime, Time};
 
-use crate::atlas::date::{self, Every};
+use crate::model::date::{self, Every};
 
 pub const COMMENTS: &str = "--- comments";
 

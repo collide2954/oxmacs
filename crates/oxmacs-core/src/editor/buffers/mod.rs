@@ -9,7 +9,6 @@ use std::path::Path;
 use crate::applet::AppletBuffer;
 use crate::dired::Listing;
 use crate::display::{ScreenLine, Viewport};
-use crate::editor::atlas::list::AtlasList;
 use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
 use crate::editor::languages::r_console::Console;
@@ -45,7 +44,6 @@ pub(super) enum Mode {
     Plots(Plots),
     Processes(ProcessList),
     Tools(ToolList),
-    AtlasList(Box<AtlasList>),
     Environment(EnvironmentView),
     Table(TableView),
     Applet(Box<dyn AppletBuffer>),

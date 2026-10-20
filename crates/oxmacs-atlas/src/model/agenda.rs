@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use jiff::ToSpan;
 use jiff::civil::{Date, Time};
 
-use crate::atlas::note::{Priority, State};
-use crate::atlas::vault::Index;
+use crate::model::note::{Priority, State};
+use crate::model::vault::Index;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Kind {
@@ -146,7 +146,7 @@ mod tests {
     use jiff::civil::{date, time};
 
     use super::*;
-    use crate::atlas::vault;
+    use crate::model::vault;
 
     const TODAY: Date = date(2026, 10, 19);
 

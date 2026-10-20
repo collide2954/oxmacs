@@ -1,5 +1,4 @@
 pub mod applet;
-pub mod atlas;
 pub mod cli;
 pub mod clock;
 pub mod command;

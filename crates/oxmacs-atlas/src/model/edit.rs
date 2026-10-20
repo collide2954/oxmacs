@@ -3,8 +3,8 @@ use std::sync::LazyLock;
 use jiff::civil::Date;
 use regex::Regex;
 
-use crate::atlas::date;
-use crate::atlas::note::{self, State, Style};
+use crate::model::date;
+use crate::model::note::{self, State, Style};
 
 static DONE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\s+done:\S+").unwrap_or_else(|_| unreachable!("a valid pattern"))

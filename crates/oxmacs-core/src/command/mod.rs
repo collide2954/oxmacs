@@ -476,74 +476,6 @@ pub enum Command {
     #[strum(message = "Show the previous columns of the table")]
     RTablePreviousColumn,
     #[strum(
-        message = "Open an Atlas note by title, or start a new one",
-        detailed_message = "Lists the notes of every Atlas vault by title. RET opens the selected note; a title nothing matches, or M-RET, starts a new note with that title in your first vault. Offers to create a vault the first time."
-    )]
-    AtlasFindNote,
-    #[strum(
-        message = "Open today's Atlas journal page",
-        detailed_message = "Opens journal/YYYY-MM-DD.atlas in your first vault, creating it with today's date as its heading."
-    )]
-    AtlasToday,
-    #[strum(
-        message = "Capture a line into today's Atlas journal",
-        detailed_message = "Asks for a line and adds it to today's journal page without leaving what you are doing: tasks such as [ ] Buy seeds due:fri keep their form with exact dates, anything else is stamped with the time."
-    )]
-    AtlasCapture,
-    #[strum(
-        message = "Open the Atlas note named by the link at point",
-        detailed_message = "Follows a [Title] link to the note with that title in any vault, starting the note in the same vault when it does not exist yet. M-, comes back."
-    )]
-    AtlasFollowLink,
-    #[strum(
-        message = "List the Atlas notes that link to this one",
-        detailed_message = "Opens *Backlinks* beside the note: each note that links here, with the lines that hold the link. RET visits a line, g refreshes and q quits."
-    )]
-    AtlasBacklinks,
-    #[strum(message = "Visit the note line on this row")]
-    AtlasVisit,
-    #[strum(
-        message = "Show the Atlas agenda across vaults",
-        detailed_message = "Opens *Agenda*: overdue work, today's events and tasks, each of the next seven days, then tasks waiting on others, from every vault with its name in its color. RET visits a task, t cycles it, s plans it and d sets its due date (fri, tomorrow, +3d), each written back to its note; v filters by vault, g refreshes and q quits."
-    )]
-    AtlasAgenda,
-    #[strum(message = "Cycle the task on this row in its note")]
-    AtlasAgendaCycle,
-    #[strum(message = "Plan the task on this row for a day")]
-    AtlasAgendaPlan,
-    #[strum(message = "Set the due date of the task on this row")]
-    AtlasAgendaDue,
-    #[strum(message = "Show the next vault, or all of them again")]
-    AtlasFilterVault,
-    #[strum(
-        message = "Show the Atlas calendar",
-        detailed_message = "Opens *Calendar* on this month: each day with its events and tasks from every vault, and the selected day listed below. The arrows move the day, n and p the month, w switches to the week by hour, . returns to today and v filters by vault; RET steps into the day's list and visits an entry."
-    )]
-    AtlasCalendar,
-    #[strum(message = "Select the day before")]
-    AtlasCalendarBackDay,
-    #[strum(message = "Select the day after")]
-    AtlasCalendarForwardDay,
-    #[strum(message = "Select the same day a week earlier")]
-    AtlasCalendarBackWeek,
-    #[strum(message = "Select the same day a week later")]
-    AtlasCalendarForwardWeek,
-    #[strum(message = "Show the next month, or week")]
-    AtlasCalendarNext,
-    #[strum(message = "Show the previous month, or week")]
-    AtlasCalendarPrevious,
-    #[strum(message = "Switch between the month and the week by hour")]
-    AtlasCalendarWeekView,
-    #[strum(message = "Select today")]
-    AtlasCalendarToday,
-    #[strum(message = "Step into the selected day or visit the entry at point")]
-    AtlasCalendarSelect,
-    #[strum(
-        message = "Cycle the task on this line: todo, doing, done",
-        detailed_message = "Turns [ ] into [/] and [/] into [x], stamping done: with today's date; done, waiting and dropped tasks go back to [ ]. A task that repeats with every: is moved to its next date instead, with a done line logged under it."
-    )]
-    AtlasCycleTask,
-    #[strum(
         message = "List the tools oxmacs can install and update",
         detailed_message = "Opens *Tools*: each tool oxmacs can install itself, such as air for formatting R, with the version installed, the latest release, and which program runs. Opening it, or g, asks GitHub for the latest releases; nothing is downloaded until you press i to install or u to update, and d removes oxmacs's copy."
     )]
@@ -675,31 +607,7 @@ impl Command {
         )
     }
 
-    fn atlas_scope(self) -> Option<Scope> {
-        Some(match self {
-            Self::AtlasCycleTask | Self::AtlasFollowLink => Scope::Atlas,
-            Self::AtlasVisit
-            | Self::AtlasAgendaCycle
-            | Self::AtlasAgendaPlan
-            | Self::AtlasAgendaDue
-            | Self::AtlasFilterVault => Scope::AtlasList,
-            Self::AtlasCalendarBackDay
-            | Self::AtlasCalendarForwardDay
-            | Self::AtlasCalendarBackWeek
-            | Self::AtlasCalendarForwardWeek
-            | Self::AtlasCalendarNext
-            | Self::AtlasCalendarPrevious
-            | Self::AtlasCalendarWeekView
-            | Self::AtlasCalendarToday
-            | Self::AtlasCalendarSelect => Scope::AtlasCalendar,
-            _ => return None,
-        })
-    }
-
     pub fn scope(self) -> Scope {
-        if let Some(scope) = self.atlas_scope() {
-            return scope;
-        }
         match self {
             Self::ExitMinibuffer
             | Self::MinibufferNext
@@ -811,9 +719,6 @@ pub enum Scope {
     Plots,
     Processes,
     Tools,
-    Atlas,
-    AtlasList,
-    AtlasCalendar,
     Environment,
     Table,
 }
@@ -840,9 +745,6 @@ impl Scope {
             Self::Plots => Some("R plot windows"),
             Self::Processes => Some("*Processes*"),
             Self::Tools => Some("*Tools*"),
-            Self::Atlas => Some("Atlas notes"),
-            Self::AtlasList => Some("Atlas lists"),
-            Self::AtlasCalendar => Some("*Calendar*"),
             Self::Environment => Some("R environments"),
             Self::Table => Some("R tables"),
         }

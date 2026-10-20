@@ -893,6 +893,7 @@ mod tests {
 
         editor.open_file(&path);
         let id = editor.buffer_visiting(&path).unwrap();
+        assert!(editor.buffer_ids().contains(&id));
         let start = editor.current_location();
         editor.go_to_line(3, 2);
         editor.remember_location(start);

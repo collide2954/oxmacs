@@ -1,17 +1,16 @@
 use std::fmt::Write;
-use std::path::PathBuf;
 
 use jiff::ToSpan;
 use jiff::civil::Date;
 
-use crate::atlas::agenda::{Entry, Kind};
-use crate::atlas::calendar;
-use crate::editor::Editor;
-use crate::editor::atlas::agenda::{color, fit, lead};
-use crate::editor::atlas::list::{ListKind, Month};
-use crate::editor::buffers::Mode;
-use crate::editor::page::Page;
-use crate::theme::Highlight;
+use oxmacs_core::editor::Page;
+use oxmacs_core::theme::Highlight;
+
+use crate::agenda::{fit, lead, vault_colors};
+use crate::lists::{ListKind, ListView, Month, Rows};
+use crate::model::agenda::{Entry, Kind};
+use crate::model::calendar;
+use crate::notes::Notebook;
 
 const HELP: &str = "arrows day · n/p month · w week · . today · v vault · RET visit · q quit";
 const MIN_CELL: usize = 9;
@@ -21,8 +20,6 @@ const LAST_HOUR: i8 = 21;
 const ROOM: usize = 84;
 const TIMES: usize = 7;
 const WEEKDAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-type Rows = Vec<(usize, PathBuf, usize)>;
 
 fn short(entry: &Entry) -> String {
     match &entry.kind {
@@ -104,36 +101,35 @@ impl Grid<'_> {
     }
 }
 
-impl Editor {
-    pub(in crate::editor) fn atlas_calendar(&mut self) {
-        if self.config.atlas_vault.is_empty() {
+impl Notebook<'_> {
+    pub(crate) fn calendar(&mut self) {
+        if self.vaults().is_empty() {
             self.show_message("No Atlas vault yet; C-c n f offers to make one");
             return;
         }
         let month = Month {
-            selected: (self.today)(),
+            selected: self.today(),
             week: false,
             filter: None,
         };
-        self.show_atlas_list(&ListKind::Calendar(month));
+        self.show_list(&ListKind::Calendar(month));
     }
 
-    fn calendar_month(&self) -> Option<Month> {
-        match self.atlas_list_kind(0)? {
+    fn calendar_month_shown(&self) -> Option<Month> {
+        match self.current_kind()? {
             ListKind::Calendar(month) => Some(month),
             _ => None,
         }
     }
 
     fn set_calendar(&mut self, month: Month) {
-        if let Some(Mode::AtlasList(list)) = self.buffers.mode_mut(0) {
-            list.kind = ListKind::Calendar(month);
-        }
+        let id = self.buffer().id();
+        self.set_kind(id, ListKind::Calendar(month));
         self.render_calendar();
     }
 
-    pub(in crate::editor) fn atlas_calendar_move(&mut self, days: i64) {
-        if let Some(mut month) = self.calendar_month() {
+    pub(crate) fn calendar_move(&mut self, days: i64) {
+        if let Some(mut month) = self.calendar_month_shown() {
             month.selected = month
                 .selected
                 .checked_add(days.days())
@@ -142,8 +138,8 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn atlas_calendar_month(&mut self, forward: bool) {
-        let Some(mut month) = self.calendar_month() else {
+    pub(crate) fn calendar_month(&mut self, forward: bool) {
+        let Some(mut month) = self.calendar_month_shown() else {
             return;
         };
         let span = match (month.week, forward) {
@@ -156,32 +152,32 @@ impl Editor {
         self.set_calendar(month);
     }
 
-    pub(in crate::editor) fn atlas_calendar_week(&mut self) {
-        if let Some(mut month) = self.calendar_month() {
+    pub(crate) fn calendar_week(&mut self) {
+        if let Some(mut month) = self.calendar_month_shown() {
             month.week = !month.week;
             self.set_calendar(month);
         }
     }
 
-    pub(in crate::editor) fn atlas_calendar_today(&mut self) {
-        if let Some(mut month) = self.calendar_month() {
-            month.selected = (self.today)();
+    pub(crate) fn calendar_today(&mut self) {
+        if let Some(mut month) = self.calendar_month_shown() {
+            month.selected = self.today();
             self.set_calendar(month);
         }
     }
 
-    pub(in crate::editor) fn atlas_calendar_select(&mut self) {
-        if self.atlas_row().is_some() {
-            self.atlas_visit();
+    pub(crate) fn calendar_select(&mut self) {
+        if self.row().is_some() {
+            self.visit();
             return;
         }
-        let first = match self.buffers.mode(0) {
-            Some(Mode::AtlasList(list)) => list.rows.first().map(|(row, ..)| *row),
-            _ => None,
-        };
+        let id = self.buffer().id();
+        let first = self
+            .applet_buffer::<ListView>(id)
+            .and_then(|(_, view)| view.rows.first().map(|(row, ..)| *row));
         match first {
             Some(row) => {
-                let buffer = self.buffers.current_mut();
+                let buffer = self.buffer_mut();
                 let start = buffer.line_start(row);
                 buffer.set_point(start);
             }
@@ -189,24 +185,19 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn render_calendar(&mut self) {
-        let Some(index) = self.atlas_list_index(&ListKind::Calendar(Month {
-            selected: (self.today)(),
+    pub(crate) fn render_calendar(&mut self) {
+        let today = self.today();
+        let Some(id) = self.list_id(&ListKind::Calendar(Month {
+            selected: today,
             week: false,
             filter: None,
         })) else {
             return;
         };
-        let Some(ListKind::Calendar(month)) = self.atlas_list_kind(index) else {
+        let Some(ListKind::Calendar(month)) = self.list_kind(id) else {
             return;
         };
-        let room = self
-            .buffers
-            .get(index)
-            .and_then(|buffer| self.width_showing(buffer.id()))
-            .filter(|width| *width > 0)
-            .unwrap_or(ROOM);
-        let today = (self.today)();
+        let room = self.buffer_width(id).unwrap_or(ROOM);
         let weeks = if month.week {
             let monday = month
                 .selected
@@ -221,7 +212,7 @@ impl Editor {
         };
         let from = weeks.first().map_or(month.selected, |week| week[0]);
         let to = weeks.last().map_or(month.selected, |week| week[6]);
-        let days = calendar::days(self.atlas_index(), from, to, month.filter.as_deref());
+        let days = calendar::days(self.index(), from, to, month.filter.as_deref());
         let mut page = Page::default();
         let title = if month.week {
             format!("Week of {}", from.strftime("%-d %B %Y"))
@@ -252,24 +243,16 @@ impl Editor {
             month_view(&mut page, &grid, &weeks, month.selected)
         };
         let rows = self.calendar_details(&mut page, &grid, grid_room);
-        if let Some((buffer, Mode::AtlasList(list))) = self.buffers.entry_mut(index) {
-            page.fill(buffer);
+        self.fill_list(id, page, rows);
+        if let Some(buffer) = self.buffer_by_id_mut(id) {
             let (line, column) = point;
             let start = buffer.line_start(line);
             buffer.set_point((start + column).min(buffer.line_end(line)));
-            list.rows = rows;
-            list.styles = page.styles;
         }
     }
 
     fn calendar_details(&self, page: &mut Page, grid: &Grid<'_>, room: usize) -> Rows {
-        let vaults: Vec<(String, Highlight)> = self
-            .config
-            .atlas_vault
-            .iter()
-            .enumerate()
-            .map(|(position, vault)| (vault.name.clone(), color(vault.color.as_deref(), position)))
-            .collect();
+        let vaults = vault_colors(self);
         page.line(&[]);
         page.heading(&grid.selected.strftime("%A %-d %B").to_string());
         let entries = grid.entries(grid.selected);
@@ -283,7 +266,7 @@ impl Editor {
                 .iter()
                 .find(|(name, _)| *name == entry.vault)
                 .map_or(Highlight::Comment, |(_, face)| *face);
-            rows.push((page.styles.len(), entry.path.clone(), entry.line));
+            rows.push((page.line_count(), entry.path.clone(), entry.line));
             let width = room
                 .saturating_sub(16 + entry.vault.chars().count())
                 .max(10);
@@ -296,7 +279,6 @@ impl Editor {
         rows
     }
 }
-
 fn month_view(
     page: &mut Page,
     grid: &Grid<'_>,
@@ -313,7 +295,7 @@ fn month_view(
         let numbers: Vec<(String, Option<Highlight>)> =
             week.iter().map(|day| grid.number(*day, month)).collect();
         if let Some(column) = week.iter().position(|day| *day == grid.selected) {
-            point = (page.styles.len(), column * grid.cell);
+            point = (page.line_count(), column * grid.cell);
         }
         let parts: Vec<(&str, Option<Highlight>)> = numbers
             .iter()
@@ -356,7 +338,7 @@ fn week_view(page: &mut Page, grid: &Grid<'_>, week: &[Date; 7]) -> (usize, usiz
         .iter()
         .position(|day| *day == grid.selected)
         .map_or(TIMES, |column| TIMES + column * grid.cell);
-    let point = (page.styles.len(), point_column);
+    let point = (page.line_count(), point_column);
     let mut parts: Vec<(&str, Option<Highlight>)> = vec![("       ", None)];
     parts.extend(header.iter().map(|(text, face)| (text.as_str(), *face)));
     page.line(&parts);
@@ -436,28 +418,19 @@ fn hour_cell(grid: &Grid<'_>, day: Date, hour: i8) -> (String, Option<Highlight>
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use oxmacs_core::editor::Editor;
 
-    use jiff::civil::date;
-
-    use crate::config::Config;
-    use crate::editor::Editor;
-    use crate::editor::test_support::{lines, press};
+    use crate::testing::{lines, press, vault_config, write};
 
     fn calendar(extra: &str) -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(
-            dir.path().join("Garden.atlas"),
-            format!("[ ] Rake  on:2026-10-21\n@2026-10-19 10:00-12:00 Visit nursery\n[ ] Seeds  due:2026-10-19\n{extra}"),
-        )
-        .unwrap();
-        let text = format!(
-            "[[atlas-vault]]\nname = \"personal\"\npath = \"{}\"\n",
-            dir.path().display().to_string().replace('\\', "/")
+        write(
+            &dir.path().join("Garden.atlas"),
+            &format!(
+                "[ ] Rake  on:2026-10-21\n@2026-10-19 10:00-12:00 Visit nursery\n[ ] Seeds  due:2026-10-19\n{extra}"
+            ),
         );
-        let mut editor = Editor::new();
-        editor.apply_config(&Config::parse(&text).unwrap());
-        editor.today = || date(2026, 10, 19);
+        let mut editor = crate::testing::configured(&vault_config(&[("personal", dir.path())]));
         press(&mut editor, "C-c n m");
         let window = editor.selected_window();
         editor.resize_pane(window, 40, 85);

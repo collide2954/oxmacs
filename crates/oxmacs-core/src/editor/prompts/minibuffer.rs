@@ -29,9 +29,6 @@ pub(in crate::editor) enum Purpose {
     Item,
     Compile,
     Setting(usize),
-    AtlasNote,
-    AtlasCapture,
-    AtlasDate(bool),
     RHelp,
     SavePlot,
     Applet { completes: bool, secret: bool },
@@ -61,8 +58,6 @@ impl Purpose {
                 | Self::ReplaceTo(_)
                 | Self::Compile
                 | Self::Setting(_)
-                | Self::AtlasCapture
-                | Self::AtlasDate(_)
                 | Self::Applet {
                     completes: false,
                     ..
@@ -104,7 +99,6 @@ pub enum Choice {
     Buffer(usize),
     Theme(Option<&'static Theme>),
     Item(usize),
-    Page(usize),
     Offered(usize),
 }
 
@@ -201,10 +195,7 @@ impl Editor {
             | Purpose::ReplaceTo(_)
             | Purpose::Compile
             | Purpose::RHelp
-            | Purpose::Setting(_)
-            | Purpose::AtlasCapture
-            | Purpose::AtlasDate(_) => Vec::new(),
-            Purpose::AtlasNote => self.atlas_note_completions(matches),
+            | Purpose::Setting(_) => Vec::new(),
             Purpose::Item => self.item_completions(matches),
             Purpose::Applet { .. } => self.applet_completions(matches),
         }
@@ -297,10 +288,6 @@ impl Editor {
     pub(in crate::editor) fn exit_minibuffer_with_input(&mut self) {
         let input = self.minibuffer_input();
         match self.minibuffer_purpose() {
-            Some(Purpose::AtlasNote) if !input.trim().is_empty() => {
-                self.minibuffer = None;
-                self.atlas_note_chosen(None, &input);
-            }
             Some(Purpose::Applet { .. }) if !input.trim().is_empty() => {
                 self.exit_applet_prompt(true);
             }
@@ -350,18 +337,6 @@ impl Editor {
         if self.exit_entry_prompt(purpose) {
             return;
         }
-        if purpose == Purpose::AtlasNote {
-            let input = self.minibuffer_input();
-            let page = self
-                .selected_completion()
-                .and_then(|completion| match completion.choice {
-                    Choice::Page(at) => Some(at),
-                    _ => None,
-                });
-            self.minibuffer = None;
-            self.atlas_note_chosen(page, &input);
-            return;
-        }
         if purpose.takes_text() {
             self.exit_replace_prompt(purpose);
             return;
@@ -392,7 +367,7 @@ impl Editor {
             Choice::Buffer(index) => self.choose_buffer(purpose, index),
             Choice::Theme(theme) => self.use_theme(theme),
             Choice::Item(position) => self.jump_to_item(position),
-            Choice::Entry(_) | Choice::Page(_) | Choice::Offered(_) => {}
+            Choice::Entry(_) | Choice::Offered(_) => {}
         }
     }
 
@@ -402,14 +377,6 @@ impl Editor {
             Purpose::Setting(index) => {
                 self.minibuffer = None;
                 self.set_setting_from(index, &input);
-            }
-            Purpose::AtlasCapture => {
-                self.minibuffer = None;
-                self.captured(&input);
-            }
-            Purpose::AtlasDate(due) => {
-                self.minibuffer = None;
-                self.atlas_date_entered(due, &input);
             }
             _ => return false,
         }

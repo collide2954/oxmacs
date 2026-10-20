@@ -183,10 +183,13 @@ impl Editor {
         let Some(minibuffer) = &self.minibuffer else {
             return Vec::new();
         };
-        match minibuffer.applet.as_ref().and_then(|applet| applet.style) {
-            Some(style) => style(self, &minibuffer.input().contents()),
-            None => self.atlas_capture_highlights(),
-        }
+        minibuffer
+            .applet
+            .as_ref()
+            .and_then(|applet| applet.style)
+            .map_or_else(Vec::new, |style| {
+                style(self, &minibuffer.input().contents())
+            })
     }
 
     pub fn ask(&mut self, prompt: &str, then: impl FnOnce(&mut Editor, bool) + Send + 'static) {

@@ -119,8 +119,6 @@ impl Editor {
         examine_languages(&mut page, &self.languages());
         page.line(&[]);
         self.examine_tools(&mut page);
-        page.line(&[]);
-        self.examine_atlas(&mut page);
         for (title, lines) in &self.doctor_sections {
             page.line(&[]);
             page.heading(title);
@@ -129,48 +127,6 @@ impl Editor {
             }
         }
         page
-    }
-
-    fn examine_atlas(&self, page: &mut Page) {
-        page.heading("Atlas");
-        if self.config.atlas_vault.is_empty() {
-            field(
-                page,
-                "no vaults",
-                "C-c n f offers to make one",
-                Some(Highlight::Comment),
-            );
-        }
-        for vault in &self.config.atlas_vault {
-            let label = format!("  {:<LABEL_WIDTH$}", vault.name);
-            let directory = vault.directory(self.home.as_deref());
-            let shown = directory.display().to_string();
-            if !directory.is_dir() {
-                page.line(&[
-                    (&label, None),
-                    ("✗ ", Some(Highlight::Error)),
-                    (&format!("folder missing  {shown}"), None),
-                ]);
-                continue;
-            }
-            let pages = self.atlas_index.as_ref().map(|index| {
-                index
-                    .pages
-                    .iter()
-                    .filter(|page| page.vault == vault.name)
-                    .count()
-            });
-            let text = match pages {
-                Some(1) => format!("1 page  {shown}"),
-                Some(count) => format!("{count} pages  {shown}"),
-                None => shown,
-            };
-            page.line(&[
-                (&label, None),
-                ("✓ ", Some(Highlight::Success)),
-                (&text, None),
-            ]);
-        }
     }
 
     fn examine_environment(&self, page: &mut Page) {
@@ -378,7 +334,7 @@ fn config_status(path: &Path) -> (String, Highlight) {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use crate::applet::{DoctorLine, Finding};
     use crate::config::Config;
@@ -666,31 +622,6 @@ mod tests {
 
         let line = line_with(&editor, "Features");
         assert!(line.ends_with("none beyond the defaults"), "{line}");
-    }
-
-    #[test]
-    fn atlas_vaults_are_listed_with_pages_once_indexed() {
-        let (dir, mut editor) = doctor();
-        assert!(line_with(&editor, "  no vaults").ends_with("C-c n f offers to make one"));
-
-        let notes = dir.path().join("notes");
-        fs::create_dir_all(&notes).unwrap();
-        fs::write(notes.join("Garden plan.atlas"), "title: Garden plan\n---\n").unwrap();
-        let slashed = |path: &Path| path.display().to_string().replace('\\', "/");
-        let text = format!(
-            "[[atlas-vault]]\nname = \"personal\"\npath = \"{}\"\n[[atlas-vault]]\nname = \"work\"\npath = \"{}\"\n",
-            slashed(&notes),
-            slashed(&dir.path().join("gone"))
-        );
-        editor.apply_config(&Config::parse(&text).unwrap());
-        press(&mut editor, "g");
-        assert!(line_with(&editor, "  personal").ends_with(&format!("✓ {}", slashed(&notes))));
-        assert!(line_with(&editor, "  work").contains("✗ folder missing"));
-
-        press(&mut editor, "C-c n f C-g C-x b");
-        type_text(&mut editor, "*oxmacs-doctor*");
-        press(&mut editor, "RET g");
-        assert!(line_with(&editor, "  personal").contains("✓ 1 page  "));
     }
 
     #[test]

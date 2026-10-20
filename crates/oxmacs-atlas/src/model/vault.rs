@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use jiff::civil::Date;
 
-use crate::atlas::note::{self, Note};
+use crate::model::note::{self, Note};
 
 pub const EXTENSION: &str = "atlas";
 pub const JOURNAL: &str = "journal";

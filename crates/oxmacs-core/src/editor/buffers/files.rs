@@ -300,7 +300,6 @@ impl Editor {
     }
 
     pub(in crate::editor) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {
-        self.exact_atlas_dates(index);
         let Some(id) = self.buffers.get(index).map(Buffer::id) else {
             return false;
         };
@@ -349,9 +348,6 @@ impl Editor {
                 }
                 if self.buffers.language(index) == Some(Language::RUST) {
                     self.request_lint(&path);
-                }
-                if self.is_atlas(index) {
-                    self.note_atlas_saved(&path, &text);
                 }
                 self.tell_saved(id);
                 true

@@ -1,8 +1,8 @@
 use jiff::ToSpan;
 use jiff::civil::Date;
 
-use crate::atlas::agenda::{self, Entry, Kind};
-use crate::atlas::vault::Index;
+use crate::model::agenda::{self, Entry, Kind};
+use crate::model::vault::Index;
 
 pub fn first_of(day: Date) -> Date {
     day.first_of_month()
@@ -90,7 +90,7 @@ mod tests {
     use jiff::civil::date;
 
     use super::*;
-    use crate::atlas::vault;
+    use crate::model::vault;
 
     #[test]
     fn months_are_whole_weeks_from_monday() {

@@ -1,19 +1,16 @@
 use std::path::Path;
 
 use jiff::civil::Date;
+use oxmacs_core::editor::{Page, clip};
+use oxmacs_core::files;
+use oxmacs_core::theme::Highlight;
 
-use crate::atlas::agenda::{self, Entry, Heading, Kind};
-use crate::atlas::date;
-use crate::atlas::edit;
-use crate::atlas::note::{Priority, State};
-use crate::editor::Editor;
-use crate::editor::atlas::list::ListKind;
-use crate::editor::atlas::{cycled_message, face};
-use crate::editor::buffers::Mode;
-use crate::editor::page::{self, Page};
-use crate::editor::prompts::minibuffer::Purpose;
-use crate::files;
-use crate::theme::Highlight;
+use crate::lists::ListKind;
+use crate::model::agenda::{self, Entry, Heading, Kind};
+use crate::model::date;
+use crate::model::edit;
+use crate::model::note::{Priority, State, Style};
+use crate::notes::{Notebook, cycled_message, face, notebook, settings};
 
 const HELP: &str = "RET visit · t cycle · s plan · d due · v vault · g refresh · q quit";
 const DAYS: i64 = 7;
@@ -21,7 +18,7 @@ const LEAD: usize = 12;
 const ROOM: usize = 80;
 const WHEN: usize = 14;
 
-pub(super) fn color(name: Option<&str>, position: usize) -> Highlight {
+pub(crate) fn color(name: Option<&str>, position: usize) -> Highlight {
     match name.map(str::to_lowercase).as_deref() {
         Some("red") => Highlight::Error,
         Some("orange" | "yellow") => Highlight::Warning,
@@ -73,7 +70,7 @@ fn when(entry: &Entry, section: Heading, today: Date) -> (String, Option<Highlig
     }
 }
 
-pub(super) fn lead(entry: &Entry) -> (String, Highlight) {
+pub(crate) fn lead(entry: &Entry) -> (String, Highlight) {
     match &entry.kind {
         Kind::Event { start, end } => {
             let time = |time: Option<jiff::civil::Time>| {
@@ -96,54 +93,52 @@ pub(super) fn lead(entry: &Entry) -> (String, Highlight) {
             };
             (
                 format!("[{}]{flag}", state.mark()),
-                face(crate::atlas::note::Style::Box(*state)),
+                face(Style::Box(*state)),
             )
         }
     }
 }
 
-pub(super) fn fit(text: &str, width: usize) -> String {
-    format!("{:<width$}", page::clip(text, width))
+pub(crate) fn fit(text: &str, width: usize) -> String {
+    format!("{:<width$}", clip(text, width))
 }
 
-impl Editor {
-    pub(in crate::editor) fn atlas_agenda(&mut self) {
-        if self.config.atlas_vault.is_empty() {
+pub(crate) fn vault_colors(book: &Notebook<'_>) -> Vec<(String, Highlight)> {
+    settings(book)
+        .vault
+        .iter()
+        .enumerate()
+        .map(|(position, vault)| (vault.name.clone(), color(vault.color.as_deref(), position)))
+        .collect()
+}
+
+impl Notebook<'_> {
+    pub(crate) fn agenda(&mut self) {
+        if self.vaults().is_empty() {
             self.show_message("No Atlas vault yet; C-c n f offers to make one");
             return;
         }
         let filter = self
-            .atlas_list_index(&ListKind::Agenda(None))
-            .and_then(|index| self.atlas_list_kind(index))
+            .list_id(&ListKind::Agenda(None))
+            .and_then(|id| self.list_kind(id))
             .and_then(|kind| match kind {
                 ListKind::Agenda(filter) => filter,
                 ListKind::Backlinks(_) | ListKind::Calendar(_) => None,
             });
-        self.show_atlas_list(&ListKind::Agenda(filter));
+        self.show_list(&ListKind::Agenda(filter));
     }
 
-    pub(in crate::editor) fn render_agenda(&mut self) {
-        let Some(index) = self.atlas_list_index(&ListKind::Agenda(None)) else {
+    pub(crate) fn render_agenda(&mut self) {
+        let Some(id) = self.list_id(&ListKind::Agenda(None)) else {
             return;
         };
-        let Some(ListKind::Agenda(filter)) = self.atlas_list_kind(index) else {
+        let Some(ListKind::Agenda(filter)) = self.list_kind(id) else {
             return;
         };
-        let today = (self.today)();
-        let sections = agenda::build(self.atlas_index(), today, DAYS, filter.as_deref());
-        let room = self
-            .buffers
-            .get(index)
-            .and_then(|buffer| self.width_showing(buffer.id()))
-            .filter(|width| *width > 0)
-            .unwrap_or(ROOM);
-        let vaults: Vec<(String, Highlight)> = self
-            .config
-            .atlas_vault
-            .iter()
-            .enumerate()
-            .map(|(position, vault)| (vault.name.clone(), color(vault.color.as_deref(), position)))
-            .collect();
+        let today = self.today();
+        let sections = agenda::build(self.index(), today, DAYS, filter.as_deref());
+        let room = self.buffer_width(id).unwrap_or(ROOM);
+        let vaults = vault_colors(self);
         let vault_width = vaults
             .iter()
             .map(|(name, _)| name.chars().count())
@@ -176,7 +171,7 @@ impl Editor {
                     .map_or(Highlight::Comment, |(_, face)| *face);
                 let waiting =
                     matches!(entry.kind, Kind::Task { state, .. } if state == State::Waiting);
-                rows.push((page.styles.len(), entry.path.clone(), entry.line));
+                rows.push((page.line_count(), entry.path.clone(), entry.line));
                 page.line(&[
                     (&format!("  {lead:<LEAD$}"), Some(lead_face)),
                     (
@@ -188,31 +183,24 @@ impl Editor {
                 ]);
             }
         }
-        if let Some((buffer, Mode::AtlasList(list))) = self.buffers.entry_mut(index) {
-            page.fill(buffer);
-            list.rows = rows;
-            list.styles = page.styles;
-        }
+        self.fill_list(id, page, rows);
     }
 
-    pub(super) fn change_note_line(
+    fn change_note_line(
         &mut self,
         path: &Path,
         line: usize,
         change: impl FnOnce(&str) -> Option<String>,
     ) -> Result<bool, String> {
-        let open = self
-            .buffers
-            .position(|buffer| buffer.file().is_some_and(|file| file.path == path));
-        if let Some(index) = open {
-            let Some(buffer) = self.buffers.get(index) else {
+        if let Some(id) = self.buffer_visiting(path) {
+            let Some(buffer) = self.buffer_by_id(id) else {
                 return Ok(false);
             };
             let Some(changed) = change(buffer.line_text(line).as_ref()) else {
                 return Ok(false);
             };
-            self.replace_line(index, line, &changed);
-            return if self.save_buffer_at(index) {
+            self.replace_line(id, line, &changed);
+            return if self.save(id) {
                 Ok(true)
             } else {
                 Err(format!("Could not save {}", path.display()))
@@ -229,16 +217,16 @@ impl Editor {
         lines[line] = changed;
         let text = lines.join("\n");
         files::save(path, &text, loaded.format).map_err(|error| error.to_string())?;
-        self.note_atlas_saved(path, &text);
+        self.note_saved(path, &text);
         Ok(true)
     }
 
-    pub(in crate::editor) fn atlas_agenda_cycle(&mut self) {
-        let Some((path, line)) = self.atlas_row() else {
+    pub(crate) fn agenda_cycle(&mut self) {
+        let Some((path, line)) = self.row() else {
             self.show_message("No task on this line");
             return;
         };
-        let today = (self.today)();
+        let today = self.today();
         let mut message = None;
         let changed = self.change_note_line(&path, line, |text| {
             edit::cycle(text, today).map(|cycled| {
@@ -252,7 +240,7 @@ impl Editor {
     fn after_note_change(&mut self, changed: Result<bool, String>, message: Option<String>) {
         match changed {
             Ok(true) => {
-                self.refresh_atlas_list();
+                self.refresh_list();
                 if let Some(message) = message {
                     self.show_message(message);
                 }
@@ -262,22 +250,24 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn atlas_agenda_date(&mut self, due: bool) {
-        if self.atlas_row().is_none() {
+    pub(crate) fn agenda_date(&mut self, due: bool) {
+        if self.row().is_none() {
             self.show_message("No task on this line");
             return;
         }
         let prompt = if due { "Due: " } else { "Plan for: " };
-        self.open_minibuffer(prompt, Purpose::AtlasDate(due));
+        self.prompt(prompt, move |editor, input| {
+            notebook(editor, |book| book.date_entered(due, &input));
+        });
     }
 
-    pub(in crate::editor) fn atlas_date_entered(&mut self, due: bool, input: &str) {
-        let today = (self.today)();
+    fn date_entered(&mut self, due: bool, input: &str) {
+        let today = self.today();
         let Some(day) = date::resolve(input, today) else {
             self.show_message(format!("Not a date: {}", input.trim()));
             return;
         };
-        let Some((path, line)) = self.atlas_row() else {
+        let Some((path, line)) = self.row() else {
             return;
         };
         let key = if due { "due" } else { "on" };
@@ -288,16 +278,12 @@ impl Editor {
         self.after_note_change(changed, Some(format!("{key}:{day}")));
     }
 
-    pub(in crate::editor) fn atlas_list_vault(&mut self) {
-        let Some(kind) = self.atlas_list_kind(0) else {
+    pub(crate) fn filter_vault(&mut self) {
+        let id = self.buffer().id();
+        let Some(kind) = self.list_kind(id) else {
             return;
         };
-        let names: Vec<String> = self
-            .config
-            .atlas_vault
-            .iter()
-            .map(|vault| vault.name.clone())
-            .collect();
+        let names: Vec<String> = self.vaults().into_iter().map(|(name, _)| name).collect();
         let next = |filter: Option<String>| match filter {
             None => names.first().cloned(),
             Some(name) => names
@@ -313,10 +299,8 @@ impl Editor {
             }
             ListKind::Backlinks(_) => return,
         };
-        if let Some(Mode::AtlasList(list)) = self.buffers.mode_mut(0) {
-            list.kind = kind.clone();
-        }
-        self.render_atlas_list(&kind);
+        self.set_kind(id, kind.clone());
+        self.render_list(&kind);
     }
 }
 
@@ -325,38 +309,28 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use jiff::civil::date;
+    use oxmacs_core::editor::Editor;
 
-    use crate::config::Config;
-    use crate::editor::Editor;
-    use crate::editor::test_support::{lines, press, type_text};
+    use crate::testing::{lines, press, slashed, type_text, write};
 
     fn agenda() -> (tempfile::TempDir, PathBuf, Editor) {
         let dir = tempfile::tempdir().unwrap();
         let personal = dir.path().join("personal");
         let work = dir.path().join("work");
-        fs::create_dir_all(&personal).unwrap();
-        fs::create_dir_all(&work).unwrap();
-        let garden = personal.join("Garden.atlas");
-        fs::write(
-            &garden,
+        let garden = write(
+            &personal.join("Garden.atlas"),
             "[ ] Buy seeds  due:2026-10-19  !high\n[ ] Rake  on:2026-10-21\n@2026-10-19 10:00-11:00 Visit nursery\n",
-        )
-        .unwrap();
-        fs::write(
-            work.join("Office.atlas"),
-            "[ ] Send invoice  due:2026-10-15\n",
-        )
-        .unwrap();
-        let path = |dir: &PathBuf| dir.display().to_string().replace('\\', "/");
-        let text = format!(
-            "[[atlas-vault]]\nname = \"personal\"\npath = \"{}\"\n[[atlas-vault]]\nname = \"work\"\npath = \"{}\"\ncolor = \"red\"\n",
-            path(&personal),
-            path(&work)
         );
-        let mut editor = Editor::new();
-        editor.apply_config(&Config::parse(&text).unwrap());
-        editor.today = || date(2026, 10, 19);
+        write(
+            &work.join("Office.atlas"),
+            "[ ] Send invoice  due:2026-10-15\n",
+        );
+        let text = format!(
+            "[[atlas.vault]]\nname = \"personal\"\npath = \"{}\"\n[[atlas.vault]]\nname = \"work\"\npath = \"{}\"\ncolor = \"red\"\n",
+            slashed(&personal),
+            slashed(&work)
+        );
+        let mut editor = crate::testing::configured(&text);
         press(&mut editor, "C-c n a");
         (dir, garden, editor)
     }
@@ -460,11 +434,8 @@ mod tests {
 
         press(&mut editor, "t");
 
-        let index = editor
-            .buffers
-            .position(|buffer| buffer.name() == "Garden.atlas")
-            .unwrap();
-        let buffer = editor.buffers.get(index).unwrap();
+        let id = editor.buffer_visiting(&garden).unwrap();
+        let buffer = editor.buffer_by_id(id).unwrap();
         assert!(buffer.contents().starts_with("[/] Buy seeds"));
         assert!(!buffer.is_modified());
     }

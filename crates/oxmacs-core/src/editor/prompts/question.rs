@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use crate::command::Command;
 use crate::editor::dired::Transfer;
 use crate::editor::prompts::applet::Answer;
 use crate::editor::special::processes::Source;
@@ -38,7 +37,6 @@ enum Pending {
     Transfer(Transfer),
     StopProcess(Source),
     RemoveTool(Managed),
-    CreateVault(Command),
     Applet,
 }
 
@@ -214,11 +212,6 @@ impl Editor {
                     then.give(self, answer == 'y');
                 }
             }
-            Pending::CreateVault(then) => {
-                if answer == 'y' {
-                    self.create_first_vault(then);
-                }
-            }
         }
     }
 
@@ -286,15 +279,6 @@ impl Editor {
             choices: YES_NO,
             typed: None,
             pending: Pending::StopProcess(source),
-        });
-    }
-
-    pub(in crate::editor) fn ask_to_create_vault(&mut self, name: &str, path: &str, then: Command) {
-        self.question = Some(Question {
-            prompt: format!("No Atlas vault yet; create {name} at {path}? (y or n) "),
-            choices: YES_NO,
-            typed: None,
-            pending: Pending::CreateVault(then),
         });
     }
 

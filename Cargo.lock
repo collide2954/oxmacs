@@ -3397,6 +3397,7 @@ dependencies = [
 name = "oxmacs"
 version = "0.13.0"
 dependencies = [
+ "oxmacs-atlas",
  "oxmacs-core",
  "oxmacs-demo",
  "oxmacs-gui",
@@ -3404,6 +3405,22 @@ dependencies = [
  "oxmacs-splash",
  "oxmacs-themes",
  "oxmacs-weather",
+]
+
+[[package]]
+name = "oxmacs-atlas"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "iced_test",
+ "jiff",
+ "oxmacs-core",
+ "oxmacs-gui",
+ "regex",
+ "serde",
+ "tempfile",
+ "toml",
+ "toml_edit",
 ]
 
 [[package]]

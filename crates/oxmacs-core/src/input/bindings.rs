@@ -52,12 +52,6 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-M-u", Command::BackwardUpList),
     ("C-M-d", Command::DownList),
     ("M-g i", Command::Imenu),
-    ("C-c n f", Command::AtlasFindNote),
-    ("C-c n t", Command::AtlasToday),
-    ("C-c n c", Command::AtlasCapture),
-    ("C-c n b", Command::AtlasBacklinks),
-    ("C-c n a", Command::AtlasAgenda),
-    ("C-c n m", Command::AtlasCalendar),
     ("M-,", Command::XrefGoBack),
     ("M-g n", Command::NextError),
     ("M-g M-n", Command::NextError),
@@ -323,39 +317,6 @@ const TOOLS: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
-const ATLAS: &[(&str, Command)] = &[
-    ("C-c C-c", Command::AtlasCycleTask),
-    ("C-c C-o", Command::AtlasFollowLink),
-];
-
-const ATLAS_CALENDAR: &[(&str, Command)] = &[
-    ("<left>", Command::AtlasCalendarBackDay),
-    ("<right>", Command::AtlasCalendarForwardDay),
-    ("<up>", Command::AtlasCalendarBackWeek),
-    ("<down>", Command::AtlasCalendarForwardWeek),
-    ("n", Command::AtlasCalendarNext),
-    ("p", Command::AtlasCalendarPrevious),
-    ("w", Command::AtlasCalendarWeekView),
-    (".", Command::AtlasCalendarToday),
-    ("v", Command::AtlasFilterVault),
-    ("RET", Command::AtlasCalendarSelect),
-    ("g", Command::RevertBuffer),
-    ("q", Command::QuitWindow),
-];
-
-const ATLAS_LIST: &[(&str, Command)] = &[
-    ("RET", Command::AtlasVisit),
-    ("t", Command::AtlasAgendaCycle),
-    ("C-c C-c", Command::AtlasAgendaCycle),
-    ("s", Command::AtlasAgendaPlan),
-    ("d", Command::AtlasAgendaDue),
-    ("v", Command::AtlasFilterVault),
-    ("n", Command::NextLine),
-    ("p", Command::PreviousLine),
-    ("g", Command::RevertBuffer),
-    ("q", Command::QuitWindow),
-];
-
 const ENVIRONMENT: &[(&str, Command)] = &[
     ("RET", Command::REnvironmentVisit),
     ("n", Command::NextLine),
@@ -443,9 +404,6 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::Plots => PLOTS,
         Scope::Processes => PROCESSES,
         Scope::Tools => TOOLS,
-        Scope::Atlas => ATLAS,
-        Scope::AtlasList => ATLAS_LIST,
-        Scope::AtlasCalendar => ATLAS_CALENDAR,
         Scope::Environment => ENVIRONMENT,
         Scope::Table => TABLE,
     }

@@ -119,6 +119,10 @@ impl Editor {
         self.home = home;
     }
 
+    pub fn buffer_ids(&self) -> Vec<BufferId> {
+        self.buffers.iter().map(Buffer::id).collect()
+    }
+
     pub fn buffer_visiting(&self, path: &Path) -> Option<BufferId> {
         let index = self
             .buffers

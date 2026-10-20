@@ -50,7 +50,7 @@ impl Page {
         (self.text, self.styles)
     }
 
-    pub(super) fn fill(&self, buffer: &mut Buffer) {
+    pub fn fill(&self, buffer: &mut Buffer) {
         let point = buffer.point();
         let line = buffer.line_of(point);
         let column = point - buffer.line_start(line);

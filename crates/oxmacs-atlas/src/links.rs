@@ -1,14 +1,14 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::atlas::note::{self, Style};
-use crate::atlas::vault;
-use crate::editor::Editor;
-use crate::editor::atlas::list::ListKind;
-use crate::editor::atlas::vaults::note_template;
-use crate::editor::buffers::Mode;
-use crate::editor::page::{Page, clip};
-use crate::theme::Highlight;
+use oxmacs_core::editor::{Page, clip};
+use oxmacs_core::theme::Highlight;
+
+use crate::lists::ListKind;
+use crate::model::note::{self, Style};
+use crate::model::vault;
+use crate::notes::{Notebook, is_note};
+use crate::vaults::note_template;
 
 const HELP: &str = "RET visits · g refreshes · q quits";
 const ROOM: usize = 80;
@@ -29,16 +29,16 @@ fn excerpt(line: &str, wanted: &str, room: usize) -> String {
     format!("…{}", clip(rest.trim_start(), room.saturating_sub(1)))
 }
 
-impl Editor {
+impl Notebook<'_> {
     fn link_at_point(&self) -> Option<String> {
-        if !self.is_atlas(0) {
+        let buffer = self.buffer();
+        if !is_note(self, buffer.id()) {
             return None;
         }
-        let buffer = self.buffers.current();
         let line = buffer.line_of(buffer.point());
         let column = buffer.point() - buffer.line_start(line);
         let text = buffer.line_text(line).to_string();
-        let parsed = note::parse(&text, (self.today)());
+        let parsed = note::parse(&text, self.today());
         let span = parsed.spans.first()?.iter().find(|span| {
             span.style == Style::Link && span.columns.start <= column && column < span.columns.end
         })?;
@@ -51,7 +51,7 @@ impl Editor {
     }
 
     fn current_vault_directory(&self) -> Option<PathBuf> {
-        let here = self.buffers.current().file().map(|file| file.path.clone());
+        let here = self.buffer().file().map(|file| file.path.clone());
         let vaults = self.vaults();
         here.and_then(|path| {
             vaults
@@ -62,16 +62,13 @@ impl Editor {
         .or_else(|| vaults.first().map(|(_, directory)| directory.clone()))
     }
 
-    pub(in crate::editor) fn atlas_follow_link(&mut self) {
+    pub(crate) fn follow_link(&mut self) {
         let Some(target) = self.link_at_point() else {
             self.show_message("No link here");
             return;
         };
         let origin = self.current_location();
-        let known = self
-            .atlas_index()
-            .find(&target)
-            .map(|page| page.path.clone());
+        let known = self.index().find(&target).map(|page| page.path.clone());
         let Some(path) = known.or_else(|| self.start_note(&target)) else {
             return;
         };
@@ -91,45 +88,39 @@ impl Editor {
             self.show_message(format!("{}: {error}", path.display()));
             return None;
         }
-        self.note_atlas_saved(&path, &template);
+        self.note_saved(&path, &template);
         self.show_message(format!("Started {title}"));
         Some(path)
     }
 
-    pub(in crate::editor) fn atlas_backlinks(&mut self) {
-        let title = self.buffers.current().file().and_then(|file| {
-            let text = self.buffers.current().contents();
-            self.is_atlas(0)
-                .then(|| vault::title_of(&file.path, &note::parse(&text, (self.today)())))
+    pub(crate) fn backlinks(&mut self) {
+        let buffer = self.buffer();
+        let title = buffer.file().and_then(|file| {
+            is_note(self, buffer.id()).then(|| {
+                vault::title_of(&file.path, &note::parse(&buffer.contents(), self.today()))
+            })
         });
         let Some(title) = title else {
             self.show_message("Backlinks are for Atlas notes");
             return;
         };
-        self.show_atlas_list(&ListKind::Backlinks(title));
+        self.show_list(&ListKind::Backlinks(title));
     }
 
-    pub(in crate::editor) fn render_backlinks(&mut self) {
-        let kind = ListKind::Backlinks(String::new());
-        let Some(index) = self.atlas_list_index(&kind) else {
+    pub(crate) fn render_backlinks(&mut self) {
+        let Some(id) = self.list_id(&ListKind::Backlinks(String::new())) else {
             return;
         };
-        let Some(ListKind::Backlinks(subject)) = self.atlas_list_kind(index) else {
+        let Some(ListKind::Backlinks(subject)) = self.list_kind(id) else {
             return;
         };
         let linking: Vec<(String, PathBuf)> = self
-            .atlas_index()
+            .index()
             .backlinks(&subject)
             .iter()
             .map(|page| (page.title.clone(), page.path.clone()))
             .collect();
-        let room = self
-            .buffers
-            .get(index)
-            .and_then(|buffer| self.width_showing(buffer.id()))
-            .filter(|width| *width > 0)
-            .unwrap_or(ROOM)
-            .saturating_sub(LABEL);
+        let room = self.buffer_width(id).unwrap_or(ROOM).saturating_sub(LABEL);
         let mut page = Page::default();
         page.line(&[
             ("Backlinks to ", Some(Highlight::Heading)),
@@ -150,7 +141,7 @@ impl Editor {
                 if !line.to_lowercase().contains(&wanted) {
                     continue;
                 }
-                rows.push((page.styles.len(), path.clone(), number));
+                rows.push((page.line_count(), path.clone(), number));
                 let label = format!("  {:>4}  ", number + 1);
                 page.line(&[
                     (&label, Some(Highlight::Comment)),
@@ -158,11 +149,7 @@ impl Editor {
                 ]);
             }
         }
-        if let Some((buffer, Mode::AtlasList(list))) = self.buffers.entry_mut(index) {
-            page.fill(buffer);
-            list.rows = rows;
-            list.styles = page.styles;
-        }
+        self.fill_list(id, page, rows);
     }
 }
 
@@ -170,38 +157,26 @@ impl Editor {
 mod tests {
     use std::fs;
 
-    use jiff::civil::date;
+    use oxmacs_core::editor::Editor;
 
-    use crate::config::Config;
-    use crate::editor::Editor;
-    use crate::editor::test_support::{lines, press};
+    use crate::testing::{lines, press, vault_config, write};
 
     fn vault() -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        fs::write(
-            root.join("Garden plan.atlas"),
+        write(
+            &root.join("Garden plan.atlas"),
             "title: Garden plan\n---\nsee [Seed catalog] and [Ana]\n",
-        )
-        .unwrap();
-        fs::write(
-            root.join("Seed catalog.atlas"),
-            "= Seeds\nback to [garden plan]\n",
-        )
-        .unwrap();
-        fs::create_dir_all(root.join("journal")).unwrap();
-        fs::write(
-            root.join("journal").join("2026-10-19.atlas"),
-            "title: 2026-10-19\n---\nmet about the [Garden plan]\nnothing here\n",
-        )
-        .unwrap();
-        let text = format!(
-            "[[atlas-vault]]\nname = \"personal\"\npath = \"{}\"\n",
-            root.display().to_string().replace('\\', "/")
         );
-        let mut editor = Editor::new();
-        editor.apply_config(&Config::parse(&text).unwrap());
-        editor.today = || date(2026, 10, 19);
+        write(
+            &root.join("Seed catalog.atlas"),
+            "= Seeds\nback to [garden plan]\n",
+        );
+        write(
+            &root.join("journal").join("2026-10-19.atlas"),
+            "title: 2026-10-19\n---\nmet about the [Garden plan]\nnothing here\n",
+        );
+        let mut editor = crate::testing::configured(&vault_config(&[("personal", root)]));
         editor.open_file(&root.join("Garden plan.atlas"));
         (dir, editor)
     }
@@ -265,11 +240,10 @@ mod tests {
     #[test]
     fn backlinks_fit_the_window_and_keep_the_link_in_view() {
         let (dir, mut editor) = vault();
-        fs::write(
-            dir.path().join("Long.atlas"),
+        write(
+            &dir.path().join("Long.atlas"),
             "title: Long\n---\nshort start [Garden plan] then a great deal more text after it\nplenty of words written well before we finally mention [Garden plan]\naaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbb [Garden plan]\n",
-        )
-        .unwrap();
+        );
         press(&mut editor, "C-c n b");
         let window = editor.selected_window();
 

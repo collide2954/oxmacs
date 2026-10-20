@@ -105,10 +105,6 @@ impl Editor {
             self.check_tool_releases();
             return;
         }
-        if matches!(self.buffers.mode(0), Some(Mode::AtlasList(_))) {
-            self.refresh_atlas_list();
-            return;
-        }
         if matches!(self.buffers.mode(0), Some(Mode::Doctor(_))) {
             self.oxmacs_doctor();
             return;

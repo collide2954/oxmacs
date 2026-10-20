@@ -1,5 +1,4 @@
 mod applets;
-mod atlas;
 mod buffers;
 mod build;
 mod connections;
@@ -100,11 +99,6 @@ pub struct Editor {
     popup: Option<prompts::popup::Popup>,
     r_sessions: languages::r_console::Sessions,
     xref: Vec<(crate::text::BufferId, usize)>,
-    atlas_notes: Vec<(crate::text::BufferId, u64, crate::atlas::note::Note)>,
-    atlas_line: Option<(crate::text::BufferId, usize)>,
-    today: fn() -> jiff::civil::Date,
-    time_now: fn() -> jiff::civil::Time,
-    atlas_index: Option<crate::atlas::vault::Index>,
     processes: special::processes::Processes,
     toolbox: special::toolbox::Toolbox,
     pending: Vec<Key>,
@@ -194,11 +188,6 @@ impl Editor {
             popup: None,
             r_sessions: languages::r_console::Sessions::default(),
             xref: Vec::new(),
-            atlas_notes: Vec::new(),
-            atlas_line: None,
-            today: atlas::today,
-            time_now: atlas::time_now,
-            atlas_index: None,
             processes: special::processes::Processes::default(),
             toolbox: special::toolbox::Toolbox::default(),
             pending: Vec::new(),
@@ -270,9 +259,6 @@ impl Editor {
         self.on_disk_change = config.on_disk_change;
         self.settings = Settings::from(config);
         self.configured_theme = config.theme.as_deref().and_then(theme::find);
-        if config.atlas_vault != self.config.atlas_vault {
-            self.atlas_index = None;
-        }
         self.config = config.clone();
         self.check_config_tables();
         self.tell_configured();
@@ -482,9 +468,6 @@ impl Editor {
             Some(Mode::Plots(_)) => Scope::Plots,
             Some(Mode::Processes(_)) => Scope::Processes,
             Some(Mode::Tools(_)) => Scope::Tools,
-            Some(Mode::Text(None)) if self.is_atlas(0) => Scope::Atlas,
-            Some(Mode::AtlasList(list)) if list.is_calendar() => Scope::AtlasCalendar,
-            Some(Mode::AtlasList(_)) => Scope::AtlasList,
             Some(Mode::Environment(_)) => Scope::Environment,
             Some(Mode::Table(_)) => Scope::Table,
             Some(Mode::Preview(_)) => Scope::Preview,
@@ -513,14 +496,9 @@ impl Editor {
             Some(Mode::Help(help)) => help.line_style(line),
             Some(Mode::Processes(list)) => list.line_style(line),
             Some(Mode::Tools(list)) => list.line_style(line),
-            Some(Mode::AtlasList(list)) => list.line_style(line),
             Some(Mode::Environment(view)) => view.line_style(line),
             Some(Mode::Table(view)) => view.line_style(line),
             Some(Mode::Applet(view)) => view.line_style(line),
-            Some(Mode::Text(_)) | None if self.is_atlas(index) => LineStyle {
-                background: None,
-                spans: self.atlas_highlights(index, line),
-            },
             Some(Mode::Text(Some(syntax))) => LineStyle {
                 background: None,
                 spans: match self
@@ -643,7 +621,6 @@ impl Editor {
             self.prepare_motion_selection(shifted);
         }
         self.perform(command, goal_column, previous);
-        self.after_atlas_command();
         self.tell_command();
         self.reset_selection(command);
         self.refresh_minibuffer();
