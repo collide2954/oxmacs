@@ -38,6 +38,7 @@ Others are only built when you ask for them. These experimental applets are vers
 | `atlas`           | 0.1.0   | Atlas: plain-text notes, tasks, the agenda and the calendar; `C-c n`          |
 | `demo`            | 0.1.0   | An example applet to copy when writing your own; `M-x demo`                  |
 | `extra-themes`    | 0.1.0   | 56 more color themes for `M-x load-theme`, from gruvbox to modus-vivendi       |
+| `git`             | 0.1.0   | A Magit-style status that stages files, hunks and lines; `C-x g`               |
 | `glow`            | 0.1.0   | A soft glow around the minibuffer while a prompt or question waits for you     |
 | `irc`             | 0.1.0   | `M-x irc`, an IRCv3 client, with `M-x irc-setup` and a bouncer                |
 | `pdf`             | 0.1.0   | A PDF viewer with search, outline, links and dark pages; PDFium from `M-x list-tools` |

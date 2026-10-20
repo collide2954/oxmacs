@@ -15,6 +15,7 @@ atlas = ["dep:oxmacs-atlas"]
 demo = ["dep:oxmacs-demo"]
 dired = ["dep:oxmacs-dired"]
 extra-themes = ["dep:oxmacs-themes"]
+git = ["dep:oxmacs-git"]
 glow = ["dep:oxmacs-glow"]
 irc = ["dep:oxmacs-irc"]
 markdown = ["dep:oxmacs-markdown"]
@@ -26,6 +27,7 @@ oxmacs-atlas = { workspace = true, optional = true }
 oxmacs-core.workspace = true
 oxmacs-demo = { workspace = true, optional = true }
 oxmacs-dired = { workspace = true, optional = true }
+oxmacs-git = { workspace = true, optional = true }
 oxmacs-glow = { workspace = true, optional = true }
 oxmacs-gui.workspace = true
 oxmacs-irc = { workspace = true, optional = true }
