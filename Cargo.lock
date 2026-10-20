@@ -3465,6 +3465,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxmacs-irc"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "iced",
+ "iced_test",
+ "jiff",
+ "keyring",
+ "oxmacs-core",
+ "oxmacs-gui",
+ "ring",
+ "rustls",
+ "serde",
+ "tempfile",
+ "toml",
+ "toml_edit",
+]
+
+[[package]]
 name = "oxmacs-splash"
 version = "0.1.0"
 dependencies = [

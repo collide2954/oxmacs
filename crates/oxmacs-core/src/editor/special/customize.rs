@@ -152,6 +152,10 @@ impl Editor {
         &self.config
     }
 
+    pub fn set_config_path(&mut self, path: Option<PathBuf>) {
+        self.config_path = path;
+    }
+
     pub fn reconfigure(&mut self, config: &Config) {
         self.apply_config(config);
         self.effects.push(Effect::Reconfigure);
@@ -704,6 +708,26 @@ mod tests {
         });
         assert!(refused.unwrap_err().starts_with("[dice] "));
         assert!(config_text(&dir).contains("sides = 12"));
+    }
+
+    #[test]
+    fn the_config_file_can_be_pointed_elsewhere() {
+        let (_dir, mut editor) = dice(None);
+        let other = tempfile::tempdir().unwrap();
+        let path = other.path().join("elsewhere.toml");
+
+        editor.set_config_path(Some(path.clone()));
+        editor
+            .edit_config_file(|document| {
+                document["dice"] = toml_edit::table();
+                document["dice"]["sides"] = toml_edit::value(8);
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(fs::read_to_string(path).unwrap(), "[dice]\nsides = 8\n");
+        editor.set_config_path(None);
+        assert!(editor.edit_config_file(|_| Ok(())).is_err());
     }
 
     #[test]
