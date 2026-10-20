@@ -46,9 +46,10 @@ const FADE: f32 = 6.0;
 const BLOCK: char = '█';
 const SUB_X: f32 = 2.0;
 const SUB_Y: f32 = 4.0;
-const NEURON_SPACING: usize = 10;
-const ROOM: f32 = 9.0;
-const MARGIN: f32 = 3.0;
+const SPACING: f32 = 28.0;
+const CLEAR: f32 = 8.0;
+const BENDS: usize = 3;
+const ROOM: f32 = 16.0;
 const REACH: f32 = 4.0;
 const TAIL: usize = 5;
 
@@ -203,6 +204,7 @@ struct Scene {
     ink: Color,
     cells: Vec<Vec<Option<Glyph>>>,
     pixels: Vec<Pixel>,
+    tint: Color,
 }
 
 impl Scene {
@@ -222,6 +224,7 @@ impl Scene {
             ink: faces.default.foreground.mix(colors[0], 0.35),
             cells: vec![vec![None; columns]; ROWS],
             pixels: Vec::new(),
+            tint: faces.default.foreground,
             logo,
         }
     }
@@ -348,14 +351,33 @@ impl Scene {
         }
     }
 
-    fn dendrite(&mut self, from: Point2, angle: f32, length: f32, depth: usize, color: Color) {
-        let to = (from.0 + angle.cos() * length, from.1 + angle.sin() * length);
-        self.stroke(from, to, color);
-        if depth < 2 {
-            let spread = 0.35 + hash(floor_to_usize(to.0), floor_to_usize(to.1), 30) * 0.3;
-            let tip = color.mix(self.background, 0.3);
-            self.dendrite(to, angle - spread, length * 0.6, depth + 1, tip);
-            self.dendrite(to, angle + spread, length * 0.6, depth + 1, tip);
+    fn dendrite(&mut self, from: Point2, angle: f32, length: f32, depth: usize, seed: usize) {
+        let color = self.tint.mix(self.background, 0.22 * to_f32(depth));
+        let mut at = from;
+        let mut heading = angle;
+        for segment in 0..BENDS {
+            heading += (hash(seed, segment, 32) - 0.5) * 0.6;
+            let next = (
+                at.0 + heading.cos() * length / to_f32(BENDS),
+                at.1 + heading.sin() * length / to_f32(BENDS),
+            );
+            self.stroke(at, next, color);
+            at = next;
+        }
+        if depth >= 3 || length < 2.5 {
+            return;
+        }
+        let forks = if hash(seed, depth, 33) < 0.65 { 2 } else { 1 };
+        for fork in 0..forks {
+            let turn = if forks == 1 {
+                (hash(seed, fork, 34) - 0.5) * 0.6
+            } else if fork == 0 {
+                -(0.3 + hash(seed, fork, 34) * 0.45)
+            } else {
+                0.3 + hash(seed, fork, 34) * 0.45
+            };
+            let shorter = length * (0.5 + hash(seed, fork, 35) * 0.25);
+            self.dendrite(at, heading + turn, shorter, depth + 1, seed * 4 + fork + 1);
         }
     }
 
@@ -372,36 +394,77 @@ impl Scene {
         }
     }
 
-    fn in_logo(&self, at: Point2) -> bool {
-        let left = to_f32(self.left) * SUB_X - MARGIN;
-        let right = to_f32(self.left + self.width) * SUB_X + MARGIN;
-        let top = to_f32(TOP) * SUB_Y - MARGIN;
-        let bottom = to_f32(TOP + self.logo.len()) * SUB_Y + MARGIN;
-        (left..=right).contains(&at.0) && (top..=bottom).contains(&at.1)
+    fn spots(&self) -> Vec<Point2> {
+        let width = to_f32(self.columns) * SUB_X;
+        let lanes = [to_f32(ROWS) * SUB_Y * 0.27, to_f32(ROWS) * SUB_Y * 0.75];
+        let count = floor_to_usize(width / SPACING) + 1;
+        let mut found = Vec::new();
+        for (lane, row) in lanes.into_iter().enumerate() {
+            let stagger = if lane == 0 { 0.0 } else { SPACING / 2.0 };
+            for slot in 0..count {
+                let column = to_f32(slot) * SPACING + stagger + (hash(slot, lane, 36) - 0.5) * 8.0;
+                let row = row + (hash(slot, lane, 37) - 0.5) * 6.0;
+                found.push((column, row));
+            }
+        }
+        found
+    }
+
+    fn near_logo_column(&self, column: f32) -> bool {
+        let left = to_f32(self.left) * SUB_X - CLEAR;
+        let right = to_f32(self.left + self.width) * SUB_X + CLEAR;
+        (left..=right).contains(&column)
     }
 
     fn neuron_layout(&self) -> Vec<Neuron> {
-        let wanted = (self.columns / NEURON_SPACING).clamp(4, 14);
         let (width, height) = (to_f32(self.columns) * SUB_X, to_f32(ROWS) * SUB_Y);
         let mut found: Vec<Neuron> = Vec::new();
-        for seed in 0..wanted * 12 {
-            if found.len() == wanted {
-                break;
-            }
-            let at = (
-                (2.0 + hash(seed, 0, 20) * (width - 4.0)).round(),
-                (2.0 + hash(seed, 0, 21) * (height - 4.0)).round(),
-            );
+        for (seed, at) in self.spots().into_iter().enumerate() {
+            let at = (at.0.round(), at.1.round());
+            let visible =
+                (-2.0..=width + 2.0).contains(&at.0) && (-1.0..=height + 1.0).contains(&at.1);
             let crowded = found.iter().any(|known| gap(known.at, at) < ROOM);
-            if !self.in_logo(at) && !crowded {
+            if visible && !self.near_logo_column(at.0) && !crowded {
                 found.push(Neuron {
                     at,
-                    size: 1.6 + hash(seed, 0, 22),
+                    size: 1.8 + hash(seed, 0, 22) * 1.2,
                     color: cyclic(&self.colors, hash(seed, 0, 23)),
                 });
             }
         }
         found
+    }
+
+    fn connect(&self, neurons: &[Neuron], from: usize, to: usize, lean: f32, seed: usize) -> Axon {
+        let (neuron, target) = (neurons[from], neurons[to]);
+        let length = gap(neuron.at, target.at).max(1.0);
+        let direction = (
+            (target.at.0 - neuron.at.0) / length,
+            (target.at.1 - neuron.at.1) / length,
+        );
+        let start = (
+            neuron.at.0 + direction.0 * (neuron.size + 0.5),
+            neuron.at.1 + direction.1 * (neuron.size + 0.5),
+        );
+        let end = (
+            target.at.0 - direction.0 * (target.size + 2.0),
+            target.at.1 - direction.1 * (target.size + 2.0),
+        );
+        let middle = along(start, end, 0.5);
+        let bend = (
+            middle.0 - direction.1 * lean * length,
+            middle.1 + direction.0 * lean * length,
+        );
+        let period = 1.6 + hash(seed, 0, 26) * 2.0;
+        let progress = (self.seconds / period + hash(seed, 0, 27)).fract();
+        Axon {
+            from,
+            to,
+            start,
+            bend,
+            end,
+            progress,
+        }
     }
 
     fn axons(&self, neurons: &[Neuron]) -> Vec<Axon> {
@@ -415,35 +478,28 @@ impl Scene {
                 .collect();
             nearest.sort_by(|a, b| a.0.total_cmp(&b.0));
             let pick = usize::from(hash(from, 0, 24) < 0.5);
-            let Some(&(length, to)) = nearest.get(pick).or(nearest.first()) else {
-                continue;
-            };
-            let target = neurons[to];
-            let direction = (
-                (target.at.0 - neuron.at.0) / length.max(1.0),
-                (target.at.1 - neuron.at.1) / length.max(1.0),
-            );
-            let start = (
-                neuron.at.0 + direction.0 * (neuron.size + 0.5),
-                neuron.at.1 + direction.1 * (neuron.size + 0.5),
-            );
-            let end = (
-                target.at.0 - direction.0 * (target.size + 2.0),
-                target.at.1 - direction.1 * (target.size + 2.0),
-            );
-            let lean = (hash(from, 0, 25) - 0.5) * length * 0.5;
-            let middle = along(start, end, 0.5);
-            let bend = (middle.0 - direction.1 * lean, middle.1 + direction.0 * lean);
-            let period = 1.6 + hash(from, 0, 26) * 2.0;
-            let progress = (self.seconds / period + hash(from, 0, 27)).fract();
-            found.push(Axon {
-                from,
-                to,
-                start,
-                bend,
-                end,
-                progress,
-            });
+            if let Some(&(_, to)) = nearest.get(pick).or(nearest.first()) {
+                let lean = (hash(from, 0, 25) - 0.5) * 0.5;
+                found.push(self.connect(neurons, from, to, lean, from));
+            }
+        }
+        let middle = to_f32(self.left) * SUB_X + to_f32(self.width) * SUB_X / 2.0;
+        let inner = |left: bool| {
+            neurons
+                .iter()
+                .enumerate()
+                .filter(|(_, neuron)| (neuron.at.0 < middle) == left)
+                .min_by(|a, b| {
+                    (a.1.at.0 - middle)
+                        .abs()
+                        .total_cmp(&(b.1.at.0 - middle).abs())
+                })
+                .map(|(index, _)| index)
+        };
+        if let (Some(left), Some(right)) = (inner(true), inner(false)) {
+            let seed = neurons.len();
+            found.push(self.connect(neurons, left, right, 0.12, seed));
+            found.push(self.connect(neurons, right, left, 0.12, seed + 1));
         }
         found
     }
@@ -458,14 +514,14 @@ impl Scene {
                 charge[axon.from].max(((0.1 - axon.progress) / 0.1).clamp(0.0, 1.0));
         }
         for (index, neuron) in neurons.iter().enumerate() {
-            let color = self
+            self.tint = self
                 .background
                 .mix(neuron.color, 0.35 + 0.45 * charge[index]);
             let branches = 4 + floor_to_usize(hash(index, 0, 28) * 3.0);
             for branch in 0..branches {
                 let angle = to_f32(branch) / to_f32(branches) * TAU + hash(index, branch, 29);
-                let length = 3.0 + hash(index, branch, 31) * 2.5;
-                self.dendrite(neuron.at, angle, length, 0, color);
+                let length = 5.0 + hash(index, branch, 31) * 4.0;
+                self.dendrite(neuron.at, angle, length, 0, index * 16 + branch);
             }
         }
         let mut signals: Vec<(Point2, Color)> = Vec::new();
@@ -782,18 +838,43 @@ mod tests {
 
     #[test]
     fn neurons_grow_around_the_logo_and_send_signals() {
-        let scene = Scene::new(0.0, 71, &faces());
+        let scene = Scene::new(0.0, 100, &faces());
         let neurons = scene.neuron_layout();
         let art = frame(
             SplashAnimation::Neurons,
             still(SplashAnimation::Neurons),
-            71,
+            100,
             &faces(),
         );
 
         assert!(neurons.len() >= 4);
-        assert!(neurons.iter().all(|neuron| !scene.in_logo(neuron.at)));
+        assert!(
+            neurons
+                .iter()
+                .all(|neuron| !scene.near_logo_column(neuron.at.0))
+        );
         assert!(art.pixels.len() > 200, "{}", art.pixels.len());
+    }
+
+    #[test]
+    fn neurons_spread_all_around_the_logo() {
+        let scene = Scene::new(0.0, 120, &faces());
+        let neurons = scene.neuron_layout();
+        let left = to_f32(scene.left) * SUB_X;
+        let right = to_f32(scene.left + scene.width) * SUB_X;
+        let middle = f32::midpoint(left, right);
+        let side =
+            |test: &dyn Fn(Point2) -> bool| neurons.iter().filter(|neuron| test(neuron.at)).count();
+
+        assert!(side(&|at| at.0 < left) >= 1);
+        assert!(side(&|at| at.0 > right) >= 1);
+        assert!(side(&|at| at.0 < middle) >= 3);
+        assert!(side(&|at| at.0 >= middle) >= 3);
+        for (index, neuron) in neurons.iter().enumerate() {
+            for other in &neurons[index + 1..] {
+                assert!(gap(neuron.at, other.at) >= ROOM, "{neurons:?}");
+            }
+        }
     }
 
     #[test]
@@ -802,7 +883,7 @@ mod tests {
         let neurons = scene.neuron_layout();
         let axons = scene.axons(&neurons);
 
-        assert_eq!(axons.len(), neurons.len());
+        assert_eq!(axons.len(), neurons.len() + 2);
         assert!(
             axons
                 .iter()
