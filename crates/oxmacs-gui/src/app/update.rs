@@ -214,11 +214,11 @@ impl App {
             Message::DaemonReady(ready) => self.editor.irc_daemon_ready(ready),
             Message::ToolsProbed(probes) => self.editor.tools_probed(probes),
             Message::ToolInstalled(tool, result) => self.editor.tool_installed(tool, result),
-            Message::Irc(id, event) => {
+            Message::Connection(id, event) => {
                 if matches!(event, net::Event::Closed(_)) {
                     self.connections.retain(|(known, _)| *known != id);
                 }
-                self.editor.irc_event(id, event);
+                self.editor.connection_event(id, event);
             }
             Message::AppletEvent(event) => self.editor.deliver(&event),
         }
@@ -398,7 +398,7 @@ impl App {
             let _ = sender.unbounded_send(event);
         });
         self.connections.push((id, connection));
-        Task::run(events, move |event| Message::Irc(id, event))
+        Task::run(events, move |event| Message::Connection(id, event))
     }
 
     fn spawn(&mut self, job: &Job, session: bool) -> Task<Message> {

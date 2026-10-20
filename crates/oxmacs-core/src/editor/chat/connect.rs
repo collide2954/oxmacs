@@ -1,7 +1,7 @@
 use crate::config::{BouncerMode, IrcServer, PasswordSource};
 use crate::editor::chat::Link;
 use crate::editor::prompts::minibuffer::Purpose;
-use crate::editor::{ConnectionId, Editor, Effect};
+use crate::editor::{ConnectionSpec, Editor, Effect};
 use crate::external::net::Endpoint;
 use crate::irc::network::{Network, Target};
 use crate::irc::session::{Identity, Sasl, Session};
@@ -202,8 +202,27 @@ impl Editor {
                 true,
             ),
         };
-        let id = ConnectionId(self.irc.next);
-        self.irc.next += 1;
+        let route = if via_bouncer { " via the bouncer" } else { "" };
+        let detail = format!("{}:{}{route}", endpoint.host, endpoint.port);
+        let note = if via_bouncer {
+            format!(
+                "Connecting through the bouncer at {}:{}…",
+                endpoint.host, endpoint.port
+            )
+        } else {
+            format!("Connecting to {}:{}…", endpoint.host, endpoint.port)
+        };
+        let id = self.connect(
+            endpoint,
+            ConnectionSpec {
+                kind: "IRC",
+                name: server.name.clone(),
+                detail,
+                events: |editor, id, event| editor.irc_event(id, event),
+                visit: |editor, id| editor.visit_irc(id),
+                stop: |editor, id| editor.irc_disconnect(id),
+            },
+        );
         let session = Session::new(identity);
         let existing = self
             .irc
@@ -229,25 +248,10 @@ impl Editor {
                 via_bouncer,
             });
         }
-        let note = if via_bouncer {
-            format!(
-                "Connecting through the bouncer at {}:{}…",
-                endpoint.host, endpoint.port
-            )
-        } else {
-            format!("Connecting to {}:{}…", endpoint.host, endpoint.port)
-        };
-        let route = if via_bouncer { " via the bouncer" } else { "" };
-        self.track_connection(
-            id,
-            &server.name,
-            format!("{}:{}{route}", endpoint.host, endpoint.port),
-        );
         if via_bouncer && self.config.irc_bouncer.mode == BouncerMode::Local {
             let pid = (self.irc.local_daemon)().map(|daemon| daemon.pid);
             self.track_daemon(pid, "oxmacs irc-daemon".to_owned());
         }
-        self.effects.push(Effect::Connect(id, endpoint));
         self.irc_note(&server.name, &note, false);
         self.show_chat(&server.name, &Target::Server);
     }

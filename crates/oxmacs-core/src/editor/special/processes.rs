@@ -5,7 +5,7 @@ use jiff::{SignedDuration, Timestamp};
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::page::{Page, clip};
-use crate::editor::{ConnectionId, Editor, Effect, Job, JobId, Outcome};
+use crate::editor::{ConnectionId, ConnectionSpec, Editor, Effect, Job, JobId, Outcome};
 use crate::text::{Buffer, BufferId};
 use crate::theme::Highlight;
 
@@ -19,8 +19,8 @@ pub(in crate::editor) enum Kind {
     RSession,
     Compile,
     Lint,
-    Irc,
     Bouncer,
+    Named(&'static str),
 }
 
 impl Kind {
@@ -29,8 +29,8 @@ impl Kind {
             Self::RSession => "R session",
             Self::Compile => "compile",
             Self::Lint => "lint",
-            Self::Irc => "IRC",
             Self::Bouncer => "bouncer",
+            Self::Named(label) => label,
         }
     }
 }
@@ -298,17 +298,12 @@ impl Editor {
         });
     }
 
-    pub(in crate::editor) fn track_connection(
-        &mut self,
-        id: ConnectionId,
-        name: &str,
-        detail: String,
-    ) {
+    pub(in crate::editor) fn track_connection(&mut self, id: ConnectionId, spec: &ConnectionSpec) {
         self.track(Tracked {
             source: Source::Connection(id),
-            kind: Kind::Irc,
-            name: name.to_owned(),
-            detail,
+            kind: Kind::Named(spec.kind),
+            name: spec.name.clone(),
+            detail: spec.detail.clone(),
             started: Timestamp::now(),
             ended: None,
             pid: None,
@@ -490,8 +485,11 @@ impl Editor {
         let Some(entry) = self.process_at_point() else {
             return;
         };
+        if let Source::Connection(id) = entry.source {
+            self.visit_connection(id);
+            return;
+        }
         match (entry.kind, entry.buffer) {
-            (Kind::Irc, _) => self.show_irc_server(&entry.name),
             (Kind::Lint, _) => self.list_diagnostics(),
             (_, Some(buffer))
                 if self
@@ -521,7 +519,7 @@ impl Editor {
     pub(in crate::editor) fn finish_stop(&mut self, source: Source) {
         match source {
             Source::Job(job) => self.effects.push(Effect::Kill(job)),
-            Source::Connection(id) => self.irc_disconnect(id),
+            Source::Connection(id) => self.stop_connection(id),
             Source::Daemon => {
                 self.irc_stop_daemon();
                 self.daemon_stopped();

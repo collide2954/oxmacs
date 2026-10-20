@@ -80,7 +80,7 @@ pub enum Message {
     PickPlot(WindowId, usize),
     PlotLoaded(PathBuf, Option<widget::image::Allocation>),
     Fetched(FetchId, Result<String, String>),
-    Irc(ConnectionId, net::Event),
+    Connection(ConnectionId, net::Event),
     DaemonReady(bool),
     ToolsProbed(Vec<(Tool, Probe)>),
     ToolInstalled(Managed, Result<PathBuf, String>),
@@ -466,7 +466,7 @@ mod tests {
         app.editor.execute(oxmacs_core::command::Command::Irc);
         app.editor.take_effects();
         let id = ConnectionId(0);
-        app.editor.irc_event(id, net::Event::Connected);
+        app.editor.connection_event(id, net::Event::Connected);
         for line in [
             ":srv CAP * LS :",
             ":srv 001 oxtest :Welcome",
@@ -474,7 +474,8 @@ mod tests {
             ":srv 353 oxtest = #c :alice @bob oxtest",
             ":srv 366 oxtest #c :End",
         ] {
-            app.editor.irc_event(id, net::Event::Line(line.to_owned()));
+            app.editor
+                .connection_event(id, net::Event::Line(line.to_owned()));
         }
         app.editor.take_effects();
         press(&mut app, "x", Modifiers::CTRL);

@@ -13,7 +13,7 @@ use crate::editor::buffers::Mode;
 use crate::editor::chat::commands::Cycle;
 use crate::editor::prompts::input_line::InputLine;
 use crate::editor::prompts::minibuffer::Purpose;
-use crate::editor::{Choice, Completion, ConnectionId, Editor, Effect};
+use crate::editor::{Choice, Completion, ConnectionId, Editor};
 use crate::external::keychain;
 use crate::external::net::Event as NetEvent;
 use crate::irc::message::Message;
@@ -28,7 +28,6 @@ const PROMPT: &str = " › ";
 #[derive(Debug)]
 pub(in crate::editor) struct Irc {
     links: Vec<Link>,
-    next: u64,
     focus: Option<(String, Target)>,
     hide_members: bool,
     pub(in crate::editor) zone: TimeZone,
@@ -49,7 +48,6 @@ impl Default for Irc {
     fn default() -> Self {
         Self {
             links: Vec::new(),
-            next: 0,
             focus: None,
             hide_members: false,
             zone: TimeZone::system(),
@@ -134,14 +132,13 @@ impl Editor {
         }
     }
 
-    pub fn irc_event(&mut self, id: ConnectionId, event: NetEvent) {
+    fn irc_event(&mut self, id: ConnectionId, event: NetEvent) {
         let Some(index) = self.irc.links.iter().position(|link| link.id == id) else {
             return;
         };
         let name = self.irc.links[index].server.name.clone();
         match event {
             NetEvent::Connected => {
-                self.connection_changed(id, true);
                 let link = &mut self.irc.links[index];
                 link.connected = true;
                 link.session.start();
@@ -156,7 +153,6 @@ impl Editor {
                 }
             }
             NetEvent::Closed(problem) => {
-                self.connection_changed(id, false);
                 let link = &mut self.irc.links[index];
                 link.open = false;
                 link.network.disconnected();
@@ -199,6 +195,18 @@ impl Editor {
         }
     }
 
+    fn visit_irc(&mut self, id: ConnectionId) {
+        if let Some(name) = self
+            .irc
+            .links
+            .iter()
+            .find(|link| link.id == id)
+            .map(|link| link.server.name.clone())
+        {
+            self.show_irc_server(&name);
+        }
+    }
+
     pub(in crate::editor) fn show_irc_server(&mut self, name: &str) {
         let name = name.to_owned();
         self.ensure_chat_buffer(&name, &Target::Server);
@@ -211,7 +219,7 @@ impl Editor {
         link.session.send(&Message::new("QUIT", [reason]));
         let id = link.id;
         self.irc_flush(index);
-        self.effects.push(Effect::Disconnect(id));
+        self.disconnect(id);
     }
 
     fn irc_open(&mut self, index: usize, target: &Target) {
@@ -489,10 +497,8 @@ impl Editor {
 
     fn irc_flush(&mut self, index: usize) {
         let link = &mut self.irc.links[index];
-        let lines = link.session.take_outgoing();
-        if !lines.is_empty() {
-            self.effects.push(Effect::Transmit(link.id, lines));
-        }
+        let (id, lines) = (link.id, link.session.take_outgoing());
+        self.transmit(id, lines);
     }
 
     fn chat_buffer(&self, server: &str, target: &Target) -> Option<usize> {
@@ -700,7 +706,7 @@ mod tests {
 
     fn feed(editor: &mut Editor, id: ConnectionId, received: &[&str]) {
         for line in received {
-            editor.irc_event(id, Event::Line((*line).to_owned()));
+            editor.connection_event(id, Event::Line((*line).to_owned()));
         }
     }
 
@@ -708,7 +714,7 @@ mod tests {
         let mut editor = configured(LIBERA);
         irc(&mut editor);
         let id = connections(&mut editor)[0].0;
-        editor.irc_event(id, Event::Connected);
+        editor.connection_event(id, Event::Connected);
         feed(&mut editor, id, &[&format!(":srv CAP * LS :{caps}")]);
         if !caps.is_empty() {
             feed(&mut editor, id, &[&format!(":srv CAP oxtest ACK :{caps}")]);
@@ -780,7 +786,7 @@ mod tests {
         irc(&mut editor);
         let id = connections(&mut editor)[0].0;
 
-        editor.irc_event(id, Event::Connected);
+        editor.connection_event(id, Event::Connected);
         assert_eq!(
             sent(&mut editor),
             ["CAP LS 302", "NICK oxtest", "USER oxtest 0 * oxmacs"]
@@ -883,7 +889,7 @@ mod tests {
     fn disconnection_is_shown_in_the_server_buffer() {
         let (mut editor, id) = connected();
 
-        editor.irc_event(id, Event::Closed(Some("connection reset".to_owned())));
+        editor.connection_event(id, Event::Closed(Some("connection reset".to_owned())));
         visit(&mut editor, "libera");
 
         assert!(shows(&editor, "Disconnected: connection reset"));
@@ -1041,7 +1047,7 @@ mod tests {
     }
 
     fn authenticates_with(editor: &mut Editor, id: ConnectionId) -> Vec<String> {
-        editor.irc_event(id, Event::Connected);
+        editor.connection_event(id, Event::Connected);
         feed(
             editor,
             id,
@@ -1170,7 +1176,7 @@ mod tests {
                 tls: true
             }
         );
-        editor.irc_event(id, Event::Connected);
+        editor.connection_event(id, Event::Connected);
         assert_eq!(
             sent(&mut editor),
             [
@@ -1198,7 +1204,7 @@ mod tests {
                 tls: false
             }
         );
-        editor.irc_event(id, Event::Connected);
+        editor.connection_event(id, Event::Connected);
         assert!(sent(&mut editor).contains(&"PASS tok".to_owned()));
     }
 
@@ -1222,7 +1228,7 @@ mod tests {
         editor.irc.local_daemon = || Some(local("127.0.0.1:4321"));
         irc(&mut editor);
         let id = connections(&mut editor)[0].0;
-        editor.irc_event(id, Event::Connected);
+        editor.connection_event(id, Event::Connected);
         sent(&mut editor);
 
         press(&mut editor, "M-x");

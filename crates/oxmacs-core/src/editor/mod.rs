@@ -3,6 +3,7 @@ mod atlas;
 mod buffers;
 mod build;
 mod chat;
+mod connections;
 mod dired;
 mod dispatch;
 mod editing;
@@ -20,6 +21,7 @@ mod special;
 mod test_support;
 mod windows;
 
+pub use connections::ConnectionSpec;
 pub use effect::{ConnectionId, Effect, FetchId};
 pub use job::{Job, JobId, Outcome};
 pub use languages::preview::PreviewScroll;
@@ -149,6 +151,8 @@ pub struct Editor {
     config_path: Option<PathBuf>,
     next_fetch: u64,
     fetches: effect::Fetches,
+    next_connection: u64,
+    connections: Vec<(ConnectionId, ConnectionSpec)>,
     irc: Irc,
     paren_pair: Option<(usize, usize)>,
     next_job: u64,
@@ -234,6 +238,8 @@ impl Editor {
             config_path: config::default_path(),
             next_fetch: 0,
             fetches: effect::Fetches::default(),
+            next_connection: 0,
+            connections: Vec::new(),
             irc: Irc::default(),
             paren_pair: None,
             next_job: 0,

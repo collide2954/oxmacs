@@ -93,7 +93,7 @@ fn a_short_courteous_session_on_libera() {
                 other => println!("-- {other:?}"),
             }
             closed = matches!(event, Event::Closed(_));
-            editor.irc_event(oxmacs_core::editor::ConnectionId(0), event);
+            editor.connection_event(oxmacs_core::editor::ConnectionId(0), event);
         }
         perform(&mut editor, &mut connection, &sender);
         let joined = editor.buffer_names().contains(&CHANNEL);

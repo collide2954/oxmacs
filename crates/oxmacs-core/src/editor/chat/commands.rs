@@ -228,7 +228,7 @@ mod tests {
         type_text(&mut editor, "irc");
         press(&mut editor, "RET");
         let id = ConnectionId(0);
-        editor.irc_event(id, Event::Connected);
+        editor.connection_event(id, Event::Connected);
         for line in [
             ":srv CAP * LS :",
             ":srv 001 oxtest :Welcome",
@@ -236,7 +236,7 @@ mod tests {
             ":srv 353 oxtest = #oxmacs-test :oxtest alice albert @bob",
             ":srv 366 oxtest #oxmacs-test :End",
         ] {
-            editor.irc_event(id, Event::Line(line.to_owned()));
+            editor.connection_event(id, Event::Line(line.to_owned()));
         }
         press(&mut editor, "C-x b");
         type_text(&mut editor, "#oxmacs-test");
@@ -335,7 +335,7 @@ mod tests {
         let (mut editor, id) = connected();
 
         run(&mut editor, "/join #rust");
-        editor.irc_event(id, Event::Line(":oxtest!o@h JOIN #rust".to_owned()));
+        editor.connection_event(id, Event::Line(":oxtest!o@h JOIN #rust".to_owned()));
 
         assert_eq!(editor.buffer().name(), "#rust");
     }
