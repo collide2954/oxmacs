@@ -3444,6 +3444,7 @@ dependencies = [
  "iced_test",
  "oxmacs-core",
  "oxmacs-gui",
+ "serde",
 ]
 
 [[package]]

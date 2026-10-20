@@ -12,6 +12,7 @@ workspace = true
 iced.workspace = true
 oxmacs-core.workspace = true
 oxmacs-gui.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 iced_test.workspace = true

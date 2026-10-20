@@ -2,15 +2,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use iced::widget::{column, container, row, text};
 use iced::{Alignment, Border, Element, Length, Task};
-use oxmacs_core::applet::{Applet, AppletBuffer, Payload};
+use oxmacs_core::applet::{Applet, AppletBuffer, DoctorLine, Finding, Payload};
 use oxmacs_core::command::{Command, CommandSpec, Scope, ScopeId};
 use oxmacs_core::display::LineStyle;
 use oxmacs_core::editor::{Editor, Page, Pane};
 use oxmacs_core::theme::Highlight;
 use oxmacs_gui::applet::{Context, GuiApplet};
 use oxmacs_gui::style;
+use serde::{Deserialize, Deserializer};
 
 const NAME: &str = "*Demo*";
+const TABLE: &str = "demo";
 const HELP: &str = "a add · d delete · r roll a die · q quit";
 const FIRST_ITEM: usize = 3;
 const SUGGESTIONS: &[&str] = &[
@@ -24,10 +26,33 @@ const SUGGESTIONS: &[&str] = &[
 pub struct Demo;
 
 #[derive(Debug)]
-pub struct Roll;
+pub struct Roll {
+    pub sides: u8,
+}
 
 #[derive(Debug)]
 pub struct Rolled(pub u8);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Settings {
+    #[serde(deserialize_with = "at_least_two")]
+    pub sides: u8,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { sides: 6 }
+    }
+}
+
+fn at_least_two<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {
+    let sides = u8::deserialize(deserializer)?;
+    if sides < 2 {
+        return Err(serde::de::Error::custom("sides must be at least 2"));
+    }
+    Ok(sides)
+}
 
 #[derive(Debug, Default)]
 struct List {
@@ -53,11 +78,11 @@ impl AppletBuffer for View {
     }
 }
 
-pub fn roll() -> u8 {
+pub fn roll(sides: u8) -> u8 {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |since| since.subsec_nanos());
-    u8::try_from(nanos % 6).unwrap_or(0) + 1
+    u8::try_from(nanos % u32::from(sides.max(1))).unwrap_or(0) + 1
 }
 
 fn open(editor: &mut Editor) {
@@ -147,8 +172,28 @@ fn ask_for_roll(editor: &mut Editor) {
     if let Some(list) = editor.applet_state_mut::<List>() {
         list.rolling = true;
     }
-    editor.request(Roll);
+    let sides = editor.applet_config::<Settings>(TABLE).sides;
+    editor.request(Roll { sides });
     editor.show_message("Rolling…");
+}
+
+fn report(editor: &Editor) -> Vec<DoctorLine> {
+    let items = editor
+        .applet_state::<List>()
+        .map_or(0, |list| list.items.len());
+    let sides = editor.applet_config::<Settings>(TABLE).sides;
+    vec![
+        DoctorLine {
+            label: "Items".to_owned(),
+            finding: Finding::Info,
+            text: items.to_string(),
+        },
+        DoctorLine {
+            label: "Die".to_owned(),
+            finding: Finding::Good,
+            text: format!("{sides} sides, set by [demo] sides in config.toml"),
+        },
+    ]
 }
 
 fn rolled(editor: &mut Editor, event: &Rolled) {
@@ -214,13 +259,15 @@ impl Applet for Demo {
         }
         editor.bind(scope, "q", Command::QuitWindow).ok();
         editor.on_event(rolled);
+        editor.add_config_table::<Settings>(TABLE);
+        editor.add_doctor_section("Demo", report);
     }
 }
 
 impl GuiApplet for Demo {
     fn perform(&mut self, effect: &Payload) -> Option<Task<Payload>> {
-        effect.get::<Roll>()?;
-        Some(Task::perform(async { roll() }, |value| {
+        let sides = effect.get::<Roll>()?.sides;
+        Some(Task::perform(async move { roll(sides) }, |value| {
             Payload::new(Rolled(value))
         }))
     }
@@ -234,7 +281,7 @@ impl GuiApplet for Demo {
         pane.applet_buffer::<View>()?;
         let list = editor.applet_state::<List>()?;
         let face = if list.rolling {
-            roll()
+            roll(editor.applet_config::<Settings>(TABLE).sides)
         } else {
             list.rolled.unwrap_or(1)
         };
@@ -313,6 +360,7 @@ impl GuiApplet for Demo {
 #[cfg(test)]
 mod tests {
     use oxmacs_core::applet::Payload;
+    use oxmacs_core::config::Config;
     use oxmacs_core::editor::{Editor, Effect};
     use oxmacs_core::input::KeySequence;
     use oxmacs_gui::applet::{Context, GuiApplet};
@@ -451,9 +499,60 @@ mod tests {
     }
 
     #[test]
-    fn dice_land_between_one_and_six() {
+    fn dice_land_between_one_and_their_sides() {
         for _ in 0..20 {
-            assert!((1..=6).contains(&roll()));
+            assert!((1..=6).contains(&roll(6)));
+            assert!((1..=20).contains(&roll(20)));
         }
+    }
+
+    fn rolls(editor: &mut Editor) -> Vec<u8> {
+        editor
+            .take_effects()
+            .into_iter()
+            .filter_map(|effect| match effect {
+                Effect::Applet(payload) => payload.get::<Roll>().map(|roll| roll.sides),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_die_has_the_sides_set_in_config() {
+        let mut editor = opened();
+        keys(&mut editor, "r");
+        assert_eq!(rolls(&mut editor), [6]);
+
+        editor.apply_config(&Config::parse("[demo]\nsides = 20\n").unwrap());
+        keys(&mut editor, "r");
+
+        assert_eq!(rolls(&mut editor), [20]);
+    }
+
+    #[test]
+    fn a_die_with_too_few_sides_is_reported() {
+        let mut editor = opened();
+
+        editor.apply_config(&Config::parse("[demo]\nsides = 1\n").unwrap());
+
+        let message = editor.message().unwrap_or_default();
+        assert!(
+            message.starts_with("[demo] sides must be at least 2"),
+            "{message}"
+        );
+        assert_eq!(editor.applet_config::<Settings>(TABLE).sides, 6);
+    }
+
+    #[test]
+    fn the_doctor_has_a_demo_section() {
+        let mut editor = opened();
+        keys(&mut editor, "M-x");
+        typed(&mut editor, "oxmacs-doctor");
+        keys(&mut editor, "RET");
+
+        let lines = lines(&editor);
+        let heading = lines.iter().position(|line| line == "Demo").unwrap();
+        assert!(lines[heading + 1].starts_with("  Items"));
+        assert!(lines[heading + 2].ends_with("✓ 6 sides, set by [demo] sides in config.toml"));
     }
 }
