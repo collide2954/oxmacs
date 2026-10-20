@@ -5,6 +5,7 @@ use crate::editor::Editor;
 use crate::editor::chat::connect::Secret;
 use crate::editor::chat::setup::Field;
 use crate::editor::dired::Kind;
+use crate::editor::prompts::applet::AppletPrompt;
 use crate::files::Entry;
 use crate::syntax::Item;
 use crate::text::Buffer;
@@ -40,6 +41,7 @@ pub(in crate::editor) enum Purpose {
     AtlasDate(bool),
     RHelp,
     SavePlot,
+    Applet { completes: bool },
 }
 
 impl Purpose {
@@ -71,6 +73,7 @@ impl Purpose {
                 | Self::AtlasCapture
                 | Self::AtlasDate(_)
                 | Self::IrcPassword(..)
+                | Self::Applet { completes: false }
         )
     }
 
@@ -97,6 +100,7 @@ pub struct Minibuffer {
     pub(in crate::editor) from: String,
     pub(in crate::editor) items: Vec<Item>,
     pub(in crate::editor) default: Option<String>,
+    pub(in crate::editor) applet: Option<AppletPrompt>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,6 +113,7 @@ pub enum Choice {
     IrcServer(usize),
     Item(usize),
     Page(usize),
+    Offered(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,6 +137,7 @@ impl Minibuffer {
             from: String::new(),
             items: Vec::new(),
             default: None,
+            applet: None,
         }
     }
 
@@ -216,6 +222,7 @@ impl Editor {
             | Purpose::IrcPassword(..) => Vec::new(),
             Purpose::AtlasNote => self.atlas_note_completions(matches),
             Purpose::Item => self.item_completions(matches),
+            Purpose::Applet { .. } => self.applet_completions(matches),
         }
     }
 
@@ -333,6 +340,10 @@ impl Editor {
             self.exit_file_prompt(false);
             return;
         }
+        if let Purpose::Applet { .. } = purpose {
+            self.exit_applet_prompt();
+            return;
+        }
         if purpose == Purpose::Compile {
             let command = self.minibuffer_input();
             self.minibuffer = None;
@@ -395,7 +406,7 @@ impl Editor {
             Choice::Theme(theme) => self.use_theme(theme),
             Choice::IrcServer(index) => self.choose_irc_server(index),
             Choice::Item(position) => self.jump_to_item(position),
-            Choice::Entry(_) | Choice::Page(_) => {}
+            Choice::Entry(_) | Choice::Page(_) | Choice::Offered(_) => {}
         }
     }
 

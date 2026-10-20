@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::command::Command;
 use crate::editor::dired::Transfer;
+use crate::editor::prompts::applet::Answer;
 use crate::editor::special::processes::Source;
 use crate::editor::{Editor, is_keyboard_quit};
 use crate::external::managed::Managed;
@@ -40,6 +41,7 @@ enum Pending {
     ConnectIrc(String),
     IrcSetup,
     CreateVault(Command),
+    Applet,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,6 +72,7 @@ impl Editor {
             return false;
         };
         if is_keyboard_quit(key) {
+            self.applet_answer = None;
             self.show_message("Quit");
             return true;
         }
@@ -218,6 +221,11 @@ impl Editor {
                     self.irc_setup();
                 }
             }
+            Pending::Applet => {
+                if let Some(then) = self.applet_answer.take() {
+                    then.give(self, answer == 'y');
+                }
+            }
             Pending::CreateVault(then) => {
                 if answer == 'y' {
                     self.create_first_vault(then);
@@ -308,6 +316,16 @@ impl Editor {
             choices: YES_NO,
             typed: None,
             pending: Pending::CreateVault(then),
+        });
+    }
+
+    pub(in crate::editor) fn ask_for_applet(&mut self, prompt: &str, then: Answer) {
+        self.applet_answer = Some(then);
+        self.question = Some(Question {
+            prompt: format!("{prompt} (y or n) "),
+            choices: YES_NO,
+            typed: None,
+            pending: Pending::Applet,
         });
     }
 

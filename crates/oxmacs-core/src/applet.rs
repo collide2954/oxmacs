@@ -242,6 +242,59 @@ mod tests {
         assert_eq!(editor.buffer().contents(), "+");
     }
 
+    #[derive(Debug, Default)]
+    struct Answers(Vec<String>);
+
+    fn note(editor: &mut Editor, answer: String) {
+        if let Some(answers) = editor.applet_state_mut::<Answers>() {
+            answers.0.push(answer);
+        }
+    }
+
+    #[test]
+    fn applets_prompt_with_their_own_completions_and_ask_questions() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+
+        editor.prompt_with(
+            "Fruit: ",
+            |_| vec!["apple".to_owned(), "banana".to_owned(), "cherry".to_owned()],
+            note,
+        );
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Fruit: ");
+        type_keys(&mut editor, "a n");
+        let offered: Vec<String> = editor
+            .completions()
+            .into_iter()
+            .map(|completion| completion.label)
+            .collect();
+        assert_eq!(offered, ["banana"]);
+        type_keys(&mut editor, "RET");
+
+        editor.prompt("Name: ", note);
+        assert!(!editor.minibuffer().unwrap().completes());
+        type_keys(&mut editor, "z o e RET");
+
+        editor.ask("Keep it?", |editor, keep| note(editor, keep.to_string()));
+        assert_eq!(editor.question().unwrap().prompt(), "Keep it? (y or n) ");
+        type_keys(&mut editor, "y");
+
+        editor.ask("Again?", |editor, keep| note(editor, keep.to_string()));
+        type_keys(&mut editor, "C-g");
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec![
+                "banana".to_owned(),
+                "zoe".to_owned(),
+                "true".to_owned()
+            ])
+        );
+        assert!(editor.question().is_none() && editor.minibuffer().is_none());
+    }
+
     #[test]
     fn state_is_kept_per_type() {
         let mut states = States::default();
