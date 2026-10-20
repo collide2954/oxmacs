@@ -4,8 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::RustLint;
 use crate::editor::build::errors::ErrorSource;
-use crate::editor::special::processes::Kind;
-use crate::editor::{Editor, Effect, Job, JobId, Outcome};
+use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::diagnostics::{self, Diagnostic, Output, Severity};
 use crate::external::tools;
 use crate::text::{Buffer, BufferId, Marker};
@@ -80,10 +79,7 @@ impl Editor {
         if let Some(run) = self.lints.run.take() {
             self.effects.push(Effect::Kill(run.job));
         }
-        let job = JobId(self.next_job);
-        self.next_job += 1;
-        let spawned = Job {
-            id: job,
+        let spec = JobSpec {
             program: "cargo".to_owned(),
             args: [
                 subcommand,
@@ -95,9 +91,12 @@ impl Editor {
             .to_vec(),
             directory: root.clone(),
             env: Vec::new(),
+            label: "lint",
+            name: format!("cargo {subcommand}"),
+            buffer: None,
+            interactive: false,
         };
-        self.track_job(&spawned, Kind::Lint, format!("cargo {subcommand}"), None);
-        self.effects.push(Effect::Spawn(spawned));
+        let job = self.start_job(spec, Self::lint_event);
         self.lints.run = Some(Run {
             job,
             root,
@@ -108,9 +107,16 @@ impl Editor {
         });
     }
 
-    pub(in crate::editor) fn lint_output(&mut self, job: JobId, line: &str) -> bool {
+    fn lint_event(&mut self, job: JobId, event: JobEvent<'_>) {
+        match event {
+            JobEvent::Line(line) | JobEvent::Output(line) => self.lint_output(job, line),
+            JobEvent::Finished(outcome) => self.lint_finished(job, outcome),
+        }
+    }
+
+    fn lint_output(&mut self, job: JobId, line: &str) {
         let Some(run) = self.lints.run.as_mut().filter(|run| run.job == job) else {
-            return false;
+            return;
         };
         match diagnostics::parse(line, &run.root) {
             Output::Diagnostic(diagnostic) => {
@@ -125,12 +131,11 @@ impl Editor {
                 }
             }
         }
-        true
     }
 
-    pub(in crate::editor) fn lint_finished(&mut self, job: JobId, outcome: &Outcome) -> bool {
+    fn lint_finished(&mut self, job: JobId, outcome: &Outcome) {
         let Some(run) = self.lints.run.take_if(|run| run.job == job) else {
-            return false;
+            return;
         };
         let name = subcommand(run.tool).unwrap_or_default();
         match outcome {
@@ -152,7 +157,6 @@ impl Editor {
             }
             Outcome::Failed(error) => self.show_message(format!("cargo {name}: {error}")),
         }
-        true
     }
 
     fn mark_diagnostics(&mut self) {

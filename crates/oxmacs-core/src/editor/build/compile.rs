@@ -3,8 +3,7 @@ use std::path::PathBuf;
 use crate::editor::buffers::Mode;
 use crate::editor::build::errors::{ErrorSource, Errors};
 use crate::editor::prompts::minibuffer::Purpose;
-use crate::editor::special::processes::Kind;
-use crate::editor::{Editor, Effect, Job, JobEvent, JobId, Outcome};
+use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::tools;
 use crate::files::paths;
 use crate::text::Buffer;
@@ -85,8 +84,6 @@ impl Editor {
         if let Some(running) = self.compilation().and_then(|compilation| compilation.job) {
             self.effects.push(Effect::Kill(running));
         }
-        let id = JobId(self.next_job);
-        self.next_job += 1;
         self.errors_from = ErrorSource::Compilation;
         self.last_compile = Some(command.clone());
         let shown = paths::abbreviate(&directory, self.home.as_deref());
@@ -94,7 +91,7 @@ impl Editor {
         let compilation = Compilation {
             command,
             directory: directory.clone(),
-            job: Some(id),
+            job: None,
             killed: false,
             errors: Errors::default(),
         };
@@ -121,13 +118,6 @@ impl Editor {
                 editor.add_buffer_with(buffer, Mode::Compilation(compilation));
             }),
         }
-        let job = Job {
-            id,
-            program: program.clone(),
-            args: args.to_vec(),
-            directory,
-            env: Vec::new(),
-        };
         let buffer = self
             .compilation_index()
             .and_then(|index| self.buffers.get(index))
@@ -137,10 +127,28 @@ impl Editor {
             .take(2)
             .collect::<Vec<_>>()
             .join(" ");
-        self.track_job(&job, Kind::Compile, name, buffer);
-        self.effects.push(Effect::Spawn(job));
+        let spec = JobSpec {
+            program: program.clone(),
+            args: args.to_vec(),
+            directory,
+            env: Vec::new(),
+            label: "compile",
+            name,
+            buffer,
+            interactive: false,
+        };
+        let id = self.start_job(spec, Self::compilation_event);
+        if let Some(compilation) = self.compilation_mut() {
+            compilation.job = Some(id);
+        }
     }
 
+    fn compilation_event(&mut self, job: JobId, event: JobEvent<'_>) {
+        match event {
+            JobEvent::Line(line) | JobEvent::Output(line) => self.compilation_line(job, line),
+            JobEvent::Finished(outcome) => self.compilation_finished(job, outcome),
+        }
+    }
     pub(in crate::editor) fn kill_compilation(&mut self) {
         let Some(compilation) = self
             .compilation_mut()
@@ -163,9 +171,10 @@ impl Editor {
     }
 
     pub fn job_output(&mut self, job: JobId, line: &str) {
-        if self.notify_job(job, JobEvent::Line(line)) || self.lint_output(job, line) {
-            return;
-        }
+        self.notify_job(job, JobEvent::Line(line));
+    }
+
+    fn compilation_line(&mut self, job: JobId, line: &str) {
         let Some(index) = self.compilation_for(job) else {
             return;
         };
@@ -181,12 +190,12 @@ impl Editor {
 
     pub fn job_finished(&mut self, job: JobId, outcome: &Outcome) {
         self.job_ended(job, outcome);
-        if self.notify_job(job, JobEvent::Finished(outcome))
-            || self.lint_finished(job, outcome)
-            || self.console_finished(job, outcome)
-        {
-            return;
+        if !self.notify_job(job, JobEvent::Finished(outcome)) {
+            self.console_finished(job, outcome);
         }
+    }
+
+    fn compilation_finished(&mut self, job: JobId, outcome: &Outcome) {
         let Some(index) = self.compilation_for(job) else {
             return;
         };

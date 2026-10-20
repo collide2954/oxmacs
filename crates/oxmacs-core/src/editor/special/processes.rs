@@ -17,8 +17,6 @@ const MEBIBYTE: u64 = 1024 * 1024;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::editor) enum Kind {
     RSession,
-    Compile,
-    Lint,
     Named(&'static str),
 }
 
@@ -26,8 +24,6 @@ impl Kind {
     fn label(self) -> &'static str {
         match self {
             Self::RSession => "R session",
-            Self::Compile => "compile",
-            Self::Lint => "lint",
             Self::Named(label) => label,
         }
     }
@@ -520,7 +516,7 @@ impl Editor {
             return;
         }
         match (entry.kind, entry.buffer) {
-            (Kind::Lint, _) => self.list_diagnostics(),
+            (Kind::Named("lint"), _) => self.list_diagnostics(),
             (_, Some(buffer))
                 if self
                     .buffers
@@ -608,7 +604,7 @@ mod tests {
         );
         editor.track_job(
             &job(1, "cargo", &["check"]),
-            Kind::Lint,
+            Kind::Named("lint"),
             "cargo check".to_owned(),
             None,
         );
@@ -686,7 +682,7 @@ mod tests {
         let mut editor = Editor::new();
         editor.track_job(
             &job(7, "cargo", &["build"]),
-            Kind::Compile,
+            Kind::Named("compile"),
             "cargo build".to_owned(),
             None,
         );
@@ -710,7 +706,7 @@ mod tests {
         for id in 0..15 {
             editor.track_job(
                 &job(id, "cargo", &["check"]),
-                Kind::Lint,
+                Kind::Named("lint"),
                 format!("check {id}"),
                 None,
             );
@@ -732,7 +728,7 @@ mod tests {
 
         editor.track_job(
             &job(3, "cargo", &["test"]),
-            Kind::Compile,
+            Kind::Named("compile"),
             "cargo test".to_owned(),
             None,
         );
