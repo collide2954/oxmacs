@@ -561,6 +561,18 @@ mod tests {
     }
 
     #[test]
+    fn applets_add_mode_line_segments_in_order() {
+        let mut editor = Editor::new();
+
+        let counted = |editor: &Editor| Some(format!("{} buffers", editor.buffer_names().len()));
+        editor.add_mode_line_segment(counted);
+        editor.add_mode_line_segment(|_| None);
+        editor.add_mode_line_segment(counted);
+
+        assert_eq!(editor.mode_line_segments(), ["1 buffers", "1 buffers"]);
+    }
+
+    #[test]
     fn state_is_kept_per_type() {
         let mut states = States::default();
         states.set(Count(3));

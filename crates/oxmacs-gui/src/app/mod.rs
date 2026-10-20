@@ -415,6 +415,34 @@ mod tests {
         assert!(ui.find("Select the whole buffer").is_ok());
     }
 
+    #[derive(Debug)]
+    struct Umbrella;
+
+    impl oxmacs_core::applet::Applet for Umbrella {
+        fn name(&self) -> &'static str {
+            "umbrella"
+        }
+
+        fn version(&self) -> &'static str {
+            "1.0.0"
+        }
+
+        fn install(&self, editor: &mut Editor) {
+            editor.add_mode_line_segment(|_| Some("☂ bring one".to_owned()));
+        }
+    }
+
+    impl GuiApplet for Umbrella {}
+
+    #[test]
+    fn applet_segments_show_in_the_mode_line() {
+        let (app, _) = App::boot(&Ok(Config::default()), &[], vec![Box::new(Umbrella)]);
+
+        let mut ui = iced_test::simulator(app.view());
+
+        assert!(ui.find("☂ bring one").is_ok());
+    }
+
     #[test]
     fn the_mode_line_shows_the_weather_when_asked() {
         let config =

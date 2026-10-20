@@ -116,12 +116,17 @@ impl App {
             None => body,
         };
         let last = self.editor.tiling().windows().last() == Some(&window);
+        let segments = if last {
+            self.editor.mode_line_segments()
+        } else {
+            Vec::new()
+        };
         let weather = self
             .editor
             .weather_brief()
             .filter(|_| last && self.editor.config().mode_line_weather);
         let time = self.clock.as_deref().filter(|_| last).map(clock::now);
-        let extras: Vec<String> = weather.into_iter().chain(time).collect();
+        let extras: Vec<String> = segments.into_iter().chain(weather).chain(time).collect();
         let look = Look {
             faces,
             active,

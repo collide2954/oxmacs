@@ -20,6 +20,8 @@ pub(super) struct ConfigTable {
 
 pub(super) type DoctorSection = fn(&Editor) -> Vec<DoctorLine>;
 
+pub(super) type Segment = fn(&Editor) -> Option<String>;
+
 fn check<T: DeserializeOwned + Default>(config: &Config, name: &str) -> Result<(), String> {
     config.applet::<T>(name).map(|_| ())
 }
@@ -37,6 +39,17 @@ fn downcast<T: AppletBuffer>(view: &dyn AppletBuffer) -> Option<&T> {
 }
 
 impl Editor {
+    pub fn add_mode_line_segment(&mut self, segment: Segment) {
+        self.mode_line_segments.push(segment);
+    }
+
+    pub fn mode_line_segments(&self) -> Vec<String> {
+        self.mode_line_segments
+            .iter()
+            .filter_map(|segment| segment(self))
+            .collect()
+    }
+
     pub fn add_doctor_section(&mut self, title: &'static str, lines: DoctorSection) {
         self.doctor_sections.push((title, lines));
     }
