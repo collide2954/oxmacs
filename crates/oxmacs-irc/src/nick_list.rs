@@ -1,11 +1,11 @@
 use iced::font::Family;
 use iced::widget::{Column, container, scrollable, text};
 use iced::{Border, Element, Font, Length};
-use oxmacs_core::irc::network::Member;
-use oxmacs_core::irc::nick_color;
 use oxmacs_core::theme::{Color, Highlight, Theme as Faces};
+use oxmacs_gui::style;
 
-use crate::style;
+use crate::protocol::network::Member;
+use crate::protocol::nick_color;
 
 const UI_FONT: Font = Font {
     family: Family::SansSerif,

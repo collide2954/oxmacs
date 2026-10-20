@@ -1,8 +1,8 @@
 use jiff::Timestamp;
 
-use crate::irc::message::Message;
-use crate::irc::plain;
-use crate::irc::session::Session;
+use crate::protocol::message::Message;
+use crate::protocol::plain;
+use crate::protocol::session::Session;
 
 const CTCP: char = '\u{1}';
 
@@ -723,7 +723,7 @@ mod tests {
     use jiff::Timestamp;
 
     use super::*;
-    use crate::irc::session::{Identity, Session};
+    use crate::protocol::session::{Identity, Session};
 
     const NOW: &str = "2026-10-19T12:00:00Z";
 

@@ -1,10 +1,10 @@
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
 
-use crate::editor::page::{Page, fill};
-use crate::irc::network::{Chat, Kind, Line, LineEvent, Target};
-use crate::irc::nick_color;
-use crate::theme::Highlight;
+use crate::protocol::network::{Chat, Kind, Line, LineEvent, Target};
+use crate::protocol::nick_color;
+use oxmacs_core::editor::{Page, fill};
+use oxmacs_core::theme::Highlight;
 
 const TIME: usize = 5;
 const MIN_NICK: usize = 4;
@@ -92,9 +92,7 @@ impl Columns {
                 (BAR, Some(Highlight::Comment)),
                 (part, row.style),
             ]);
-            if let Some(style) = page.styles.last_mut() {
-                style.background = row.background;
-            }
+            page.set_background(row.background);
         }
     }
 }
@@ -164,7 +162,7 @@ fn row(line: &Line, time: String) -> Row<'_> {
     }
 }
 
-pub(in crate::editor) fn page(chat: &Chat, width: usize, zone: &TimeZone) -> Page {
+pub(crate) fn page(chat: &Chat, width: usize, zone: &TimeZone) -> Page {
     let mut page = Page::default();
     if let (Target::Channel(_), Some(topic)) = (&chat.target, &chat.topic) {
         for line in fill(&format!("Topic: {topic}"), width.max(MIN_TEXT)) {
@@ -221,11 +219,12 @@ pub(in crate::editor) fn page(chat: &Chat, width: usize, zone: &TimeZone) -> Pag
 mod tests {
     use jiff::Timestamp;
     use jiff::tz::TimeZone;
+    use oxmacs_core::display::LineStyle;
 
     use super::*;
-    use crate::irc::message::Message;
-    use crate::irc::network::{Network, Target};
-    use crate::irc::session::{Identity, Session};
+    use crate::protocol::message::Message;
+    use crate::protocol::network::{Network, Target};
+    use crate::protocol::session::{Identity, Session};
 
     fn session() -> Session {
         let mut session = Session::new(Identity {
@@ -255,12 +254,11 @@ mod tests {
         (network, session)
     }
 
-    fn shown(lines: &[(&str, &str)], width: usize) -> (Vec<String>, Page) {
+    fn shown(lines: &[(&str, &str)], width: usize) -> (Vec<String>, Vec<LineStyle>) {
         let (network, _) = chat(lines);
         let index = network.find(&Target::Channel("#rust".to_owned())).unwrap();
-        let page = page(&network.chats()[index], width, &TimeZone::UTC);
-        let text = page.text.lines().map(str::to_owned).collect();
-        (text, page)
+        let (text, styles) = page(&network.chats()[index], width, &TimeZone::UTC).into_parts();
+        (text.lines().map(str::to_owned).collect(), styles)
     }
 
     #[test]
@@ -403,14 +401,14 @@ mod tests {
             80,
         );
 
-        let mention = &page.styles[1];
+        let mention = &page[1];
         assert_eq!(mention.background, Some(Highlight::Marked));
         assert_eq!(mention.spans[0], (0..5, Highlight::Comment));
         assert_eq!(
             mention.spans[1],
             (6..12, Highlight::Nick(nick_color("alice")))
         );
-        assert_eq!(page.styles[2].background, None);
-        assert_eq!(page.styles[2].spans[1].1, Highlight::Heading);
+        assert_eq!(page[2].background, None);
+        assert_eq!(page[2].spans[1].1, Highlight::Heading);
     }
 }

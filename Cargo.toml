@@ -19,6 +19,7 @@ keyring = "4.2.0"
 oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-demo = { path = "crates/oxmacs-demo" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
+oxmacs-irc = { path = "crates/oxmacs-irc" }
 oxmacs-splash = { path = "crates/oxmacs-splash" }
 oxmacs-themes = { path = "crates/oxmacs-themes" }
 oxmacs-weather = { path = "crates/oxmacs-weather" }

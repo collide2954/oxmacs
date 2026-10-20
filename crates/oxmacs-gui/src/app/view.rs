@@ -1,6 +1,6 @@
 use iced::widget::{
-    Column, Row, column, container, image, markdown, mouse_area, responsive, row, scrollable,
-    sensor, space, stack, text,
+    Column, Row, column, container, image, markdown, mouse_area, responsive, scrollable, sensor,
+    space, stack, text,
 };
 use iced::{Border, Color, ContentFit, Element, Length};
 use oxmacs_core::clock;
@@ -12,7 +12,7 @@ use crate::applet::Context;
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
 use crate::widgets::mode_line::{self, Look};
-use crate::widgets::{completions, echo_area, nick_list};
+use crate::widgets::{completions, echo_area};
 use crate::{style, units};
 impl App {
     pub fn view(&self) -> Element<'_, Message> {
@@ -104,17 +104,6 @@ impl App {
             .into();
         }
         let body = self.decorated(pane, self.body(pane, window, faces), faces);
-        let body = match pane.members() {
-            Some(members) => {
-                let own = pane.own_nick();
-                row![
-                    body,
-                    nick_list::view(&members, own.as_deref(), faces, self.text_size)
-                ]
-                .into()
-            }
-            None => body,
-        };
         let last = self.editor.tiling().windows().last() == Some(&window);
         let segments = if last {
             self.editor.mode_line_segments()

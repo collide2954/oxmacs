@@ -1,9 +1,11 @@
-use crate::editor::chat::Link;
-use crate::editor::{ConnectionSpec, Editor, Effect, ProcessSpec};
-use crate::external::net::Endpoint;
-use crate::irc::network::{Network, Target};
-use crate::irc::session::{Identity, Sasl, Session};
-use crate::irc::settings::{BouncerMode, IrcServer, PasswordSource};
+use oxmacs_core::editor::{ConnectionSpec, ProcessSpec};
+use oxmacs_core::external::net::Endpoint;
+
+use crate::chat::{Chat, Link, chat};
+use crate::protocol::network::{Network, Target};
+use crate::protocol::session::{Identity, Sasl, Session};
+use crate::settings::{BouncerMode, IrcServer, PasswordSource};
+use crate::{DaemonReady, LaunchDaemon};
 
 const BOUNCER_NAME: &str = "irc-bouncer";
 const BOUNCER_ACCOUNT: &str = "bouncer";
@@ -28,11 +30,13 @@ fn daemon(pid: Option<u32>) -> ProcessSpec {
         name: "irc-daemon".to_owned(),
         detail: "oxmacs irc-daemon".to_owned(),
         pid,
-        stop: Some(Editor::irc_stop_daemon),
+        stop: Some(|editor| {
+            chat(editor, Chat::irc_stop_daemon);
+        }),
     }
 }
 
-pub(in crate::editor) fn endpoint(address: &str, tls: bool) -> Option<Endpoint> {
+pub(crate) fn endpoint(address: &str, tls: bool) -> Option<Endpoint> {
     let (host, port) = address.rsplit_once(':')?;
     Some(Endpoint {
         host: host.trim_matches(['[', ']']).to_owned(),
@@ -41,8 +45,8 @@ pub(in crate::editor) fn endpoint(address: &str, tls: bool) -> Option<Endpoint> 
     })
 }
 
-impl Editor {
-    pub(in crate::editor) fn connect_irc(&mut self, server: &IrcServer) {
+impl Chat<'_> {
+    pub(crate) fn connect_irc(&mut self, server: &IrcServer) {
         let open = self
             .irc
             .links
@@ -52,7 +56,8 @@ impl Editor {
             self.show_chat(&server.name, &Target::Server);
             return;
         }
-        match self.irc_settings().bouncer.mode {
+        let bouncer = self.irc_settings().bouncer;
+        match bouncer.mode {
             BouncerMode::Off => match server.sasl.clone() {
                 Some(account) => {
                     let source = server.password.clone();
@@ -74,11 +79,10 @@ impl Editor {
                 None => self.launch_daemon(server),
             },
             BouncerMode::Remote => {
-                let source = self.irc_settings().bouncer.password.clone();
                 self.with_password(
                     server,
                     Secret::Bouncer,
-                    &source,
+                    &bouncer.password,
                     BOUNCER_NAME,
                     BOUNCER_ACCOUNT,
                 );
@@ -132,7 +136,9 @@ impl Editor {
     ) {
         let name = server.name.clone();
         self.prompt_secret(prompt, move |editor, password| {
-            editor.irc_password_entered(&name, secret, remember, password);
+            chat(editor, |chat| {
+                chat.irc_password_entered(&name, secret, remember, password);
+            });
         });
     }
 
@@ -166,14 +172,14 @@ impl Editor {
         match secret {
             Secret::Sasl => self.start_irc(server, Route::Direct(Some(password))),
             Secret::Bouncer => {
-                let bouncer = &self.irc_settings().bouncer;
+                let bouncer = self.irc_settings().bouncer;
                 match bouncer
                     .address
                     .as_deref()
                     .and_then(|address| endpoint(address, bouncer.tls))
                 {
                     Some(endpoint) => self.start_irc(server, Route::Bouncer(endpoint, password)),
-                    None => self.show_message("irc-bouncer: address should look like host:port"),
+                    None => self.show_message("[irc] bouncer address should look like host:port"),
                 }
             }
         }
@@ -228,9 +234,15 @@ impl Editor {
                 kind: "IRC",
                 name: server.name.clone(),
                 detail,
-                events: |editor, id, event| editor.irc_event(id, event),
-                visit: |editor, id| editor.visit_irc(id),
-                stop: |editor, id| editor.irc_disconnect(id),
+                events: |editor, id, event| {
+                    chat(editor, |chat| chat.irc_event(id, event));
+                },
+                visit: |editor, id| {
+                    chat(editor, |chat| chat.visit_irc(id));
+                },
+                stop: |editor, id| {
+                    chat(editor, |chat| chat.irc_disconnect(id));
+                },
             },
         );
         let session = Session::new(identity);
@@ -266,21 +278,21 @@ impl Editor {
         self.show_chat(&server.name, &Target::Server);
     }
 
-    pub(in crate::editor) fn launch_daemon(&mut self, server: &IrcServer) {
+    pub(crate) fn launch_daemon(&mut self, server: &IrcServer) {
         if !self.irc.waiting.contains(&server.name) {
             self.irc.waiting.push(server.name.clone());
         }
         if !self.irc.launching {
             self.irc.launching = true;
-            self.effects.push(Effect::LaunchDaemon);
+            self.request(LaunchDaemon);
         }
         self.show_message(STARTING);
     }
 
-    pub fn irc_daemon_ready(&mut self, ready: bool) {
+    pub(crate) fn irc_daemon_ready(&mut self, ready: &DaemonReady) {
         self.irc.launching = false;
         let waiting = std::mem::take(&mut self.irc.waiting);
-        if !ready {
+        if !ready.0 {
             self.show_message(NOT_STARTED);
             return;
         }
@@ -299,7 +311,7 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn irc_stop_daemon(&mut self) {
+    pub(crate) fn irc_stop_daemon(&mut self) {
         let Some(index) = self
             .irc
             .links
@@ -312,8 +324,19 @@ impl Editor {
         self.irc.links[index].session.send_raw("OXMACS STOP");
         self.irc_flush(index);
     }
-}
 
+    pub(crate) fn connect_named_irc(&mut self, name: &str) {
+        if let Some(server) = self
+            .irc_settings()
+            .server
+            .iter()
+            .find(|server| server.name == name)
+            .cloned()
+        {
+            self.connect_irc(&server);
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

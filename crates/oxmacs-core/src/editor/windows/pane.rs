@@ -9,7 +9,6 @@ use crate::editor::windows::status::{BufferState, Status};
 use crate::editor::{Editor, GalleryView, Gutter, PlotView, PopupView};
 use crate::external::diagnostics::Severity;
 use crate::files::LineEnding;
-use crate::irc::network::Member;
 use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::Highlight;
@@ -222,14 +221,6 @@ impl<'a> Pane<'a> {
         } else {
             Vec::new()
         }
-    }
-
-    pub fn members(&self) -> Option<Vec<Member>> {
-        self.editor.chat_members(self.index)
-    }
-
-    pub fn own_nick(&self) -> Option<String> {
-        self.editor.chat_nick(self.index)
     }
 
     pub fn mode_line(&self) -> String {

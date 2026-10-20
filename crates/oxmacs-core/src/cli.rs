@@ -8,20 +8,6 @@ pub struct Visit {
     pub column: Option<usize>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Invocation {
-    Edit(Vec<Visit>),
-    IrcDaemon,
-}
-
-pub fn invocation(args: impl IntoIterator<Item = OsString>) -> Invocation {
-    let args: Vec<OsString> = args.into_iter().collect();
-    if args.len() == 1 && args[0] == "irc-daemon" {
-        return Invocation::IrcDaemon;
-    }
-    Invocation::Edit(parse(args))
-}
-
 pub fn parse(args: impl IntoIterator<Item = OsString>) -> Vec<Visit> {
     let mut visits = Vec::new();
     let mut position = None;
@@ -108,34 +94,5 @@ mod tests {
             visits(&["--", "+5", "--"]),
             [visit("+5", None, None), visit("--", None, None)]
         );
-    }
-
-    fn invoked(args: &[&str]) -> Invocation {
-        invocation(args.iter().map(OsString::from))
-    }
-
-    #[test]
-    fn irc_daemon_runs_the_bouncer_instead_of_the_editor() {
-        assert_eq!(invoked(&["irc-daemon"]), Invocation::IrcDaemon);
-        assert_eq!(
-            invoked(&["notes.txt"]),
-            Invocation::Edit(vec![visit("notes.txt", None, None)])
-        );
-        assert_eq!(
-            invoked(&["--", "irc-daemon"]),
-            Invocation::Edit(vec![visit("irc-daemon", None, None)])
-        );
-        assert_eq!(
-            invoked(&["notes.txt", "irc-daemon"]),
-            Invocation::Edit(vec![
-                visit("notes.txt", None, None),
-                visit("irc-daemon", None, None)
-            ])
-        );
-    }
-
-    #[test]
-    fn a_trailing_position_is_ignored() {
-        assert_eq!(visits(&["a.rs", "+5"]), [visit("a.rs", None, None)]);
     }
 }

@@ -13,7 +13,6 @@ bitflags.workspace = true
 dirs.workspace = true
 indexmap.workspace = true
 jiff.workspace = true
-keyring.workspace = true
 regex.workspace = true
 ring.workspace = true
 ropey.workspace = true

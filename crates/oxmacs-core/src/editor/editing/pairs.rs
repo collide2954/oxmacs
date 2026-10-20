@@ -15,7 +15,6 @@ impl Editor {
             self.sync_atlas(index);
         }
         self.paren_pair = self.find_paren_pair();
-        self.read_visible_chats();
         self.tell_display();
     }
 

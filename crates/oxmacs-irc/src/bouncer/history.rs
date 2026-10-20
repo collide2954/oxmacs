@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use jiff::Timestamp;
 
-use crate::irc::message::Message;
+use crate::protocol::message::Message;
 
 pub trait History {
     fn append(&mut self, network: &str, target: &str, line: &str);

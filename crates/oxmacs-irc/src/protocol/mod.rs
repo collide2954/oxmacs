@@ -1,9 +1,8 @@
 pub mod message;
 pub mod network;
 pub mod session;
-pub mod settings;
 
-use crate::theme::NICK_COLORS;
+use oxmacs_core::theme::NICK_COLORS;
 
 pub fn nick_color(nick: &str) -> u8 {
     let hash = nick.to_ascii_lowercase().bytes().fold(0u32, |hash, byte| {

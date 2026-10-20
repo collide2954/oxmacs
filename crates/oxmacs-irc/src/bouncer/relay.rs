@@ -3,11 +3,11 @@ use std::time::Duration;
 use jiff::Timestamp;
 
 use crate::bouncer::history::History;
-use crate::external::net::{Endpoint, Event};
-use crate::irc::message::Message;
-use crate::irc::network::{Network, Target};
-use crate::irc::session::{Event as SessionEvent, Identity, Sasl, Session};
-use crate::irc::settings::IrcServer;
+use crate::protocol::message::Message;
+use crate::protocol::network::{Network, Target};
+use crate::protocol::session::{Event as SessionEvent, Identity, Sasl, Session};
+use crate::settings::IrcServer;
+use oxmacs_core::external::net::{Endpoint, Event};
 
 const NAME: &str = "oxmacs";
 const OFFERED: &[&str] = &[
@@ -548,8 +548,8 @@ mod tests {
 
     use super::*;
     use crate::bouncer::history::MemoryHistory;
-    use crate::config::Config;
-    use crate::irc::settings::{IrcSettings, TABLE};
+    use crate::settings::{IrcSettings, TABLE};
+    use oxmacs_core::config::Config;
 
     const PASSWORD: &str = "s3cret";
     const ME: ClientId = ClientId(1);

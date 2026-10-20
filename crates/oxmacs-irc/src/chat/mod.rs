@@ -1,54 +1,57 @@
-use std::any::Any;
+pub(crate) mod commands;
+pub(crate) mod connect;
+pub(crate) mod render;
+pub(crate) mod setup;
 
-pub(super) mod commands;
-pub(super) mod connect;
-pub(super) mod render;
-pub(super) mod setup;
+use std::ops::{Deref, DerefMut};
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
+use oxmacs_core::applet::AppletBuffer;
+use oxmacs_core::command::ScopeId;
+use oxmacs_core::display::LineStyle;
+use oxmacs_core::editor::{ConnectionId, Editor, InputLine, Offer};
+use oxmacs_core::external::net::Event as NetEvent;
+use oxmacs_core::text::BufferId;
+use oxmacs_core::theme::Highlight;
 
-use crate::applet::AppletBuffer;
 use crate::bouncer::daemon::LocalDaemon;
-use crate::command::{Scope, ScopeId};
-use crate::display::LineStyle;
-use crate::editor::buffers::Mode;
-use crate::editor::chat::commands::Cycle;
-use crate::editor::{ConnectionId, Editor, InputLine, Offer};
-use crate::external::keychain;
-use crate::external::net::Event as NetEvent;
-use crate::irc::message::Message;
-use crate::irc::network::{Kind, LineEvent, Member, Network, Target, Update};
-use crate::irc::session::{Event, Session};
-use crate::irc::settings::{self, BouncerMode, IrcServer, IrcSettings};
-use crate::text::Buffer;
-use crate::theme::Highlight;
+use crate::keychain;
+use crate::protocol::message::Message;
+use crate::protocol::network::{Kind, LineEvent, Member, Network, Target, Update};
+use crate::protocol::session::{Event, Session};
+use crate::settings::{self, BouncerMode, IrcServer, IrcSettings};
+use commands::Cycle;
 
 const DEFAULT_WIDTH: usize = 80;
 const PROMPT: &str = " › ";
 
 #[derive(Debug)]
-pub(in crate::editor) struct Irc {
+pub(crate) struct IrcState {
+    pub(crate) chat_scope: ScopeId,
+    pub(crate) setup_scope: ScopeId,
     links: Vec<Link>,
     focus: Option<(String, Target)>,
     hide_members: bool,
-    pub(in crate::editor) zone: TimeZone,
-    pub(in crate::editor) keychain: Keychain,
-    pub(in crate::editor) local_daemon: fn() -> Option<LocalDaemon>,
+    pub(crate) zone: TimeZone,
+    pub(crate) keychain: Keychain,
+    pub(crate) local_daemon: fn() -> Option<LocalDaemon>,
     waiting: Vec<String>,
     launching: bool,
     relaunched: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(in crate::editor) struct Keychain {
-    pub(in crate::editor) read: fn(&str, &str) -> Result<Option<String>, String>,
-    pub(in crate::editor) write: fn(&str, &str, &str) -> Result<(), String>,
+pub(crate) struct Keychain {
+    pub(crate) read: fn(&str, &str) -> Result<Option<String>, String>,
+    pub(crate) write: fn(&str, &str, &str) -> Result<(), String>,
 }
 
-impl Default for Irc {
-    fn default() -> Self {
+impl IrcState {
+    pub(crate) fn new(chat_scope: ScopeId, setup_scope: ScopeId) -> Self {
         Self {
+            chat_scope,
+            setup_scope,
             links: Vec::new(),
             focus: None,
             hide_members: false,
@@ -77,10 +80,11 @@ struct Link {
 }
 
 #[derive(Debug)]
-pub(in crate::editor) struct ChatView {
+pub(crate) struct ChatView {
+    scope: ScopeId,
     server: String,
     target: Target,
-    pub(in crate::editor) input: InputLine,
+    input: InputLine,
     styles: Vec<LineStyle>,
     cycle: Option<Cycle>,
     width: usize,
@@ -88,7 +92,7 @@ pub(in crate::editor) struct ChatView {
 
 impl AppletBuffer for ChatView {
     fn scope(&self) -> ScopeId {
-        Scope::Chat.into()
+        self.scope
     }
 
     fn line_style(&self, line: usize) -> LineStyle {
@@ -100,40 +104,110 @@ impl AppletBuffer for ChatView {
     }
 }
 
-fn chat_of(mode: &Mode) -> Option<&ChatView> {
-    let Mode::Applet(view) = mode else {
-        return None;
-    };
-    let any: &dyn Any = view.as_ref();
-    any.downcast_ref()
+pub(crate) struct Chat<'a> {
+    editor: &'a mut Editor,
+    pub(crate) irc: IrcState,
+}
+
+impl Deref for Chat<'_> {
+    type Target = Editor;
+
+    fn deref(&self) -> &Editor {
+        self.editor
+    }
+}
+
+impl DerefMut for Chat<'_> {
+    fn deref_mut(&mut self) -> &mut Editor {
+        self.editor
+    }
+}
+
+pub(crate) fn chat<'a, R>(
+    editor: &'a mut Editor,
+    work: impl FnOnce(&mut Chat<'a>) -> R,
+) -> Option<R> {
+    let irc = editor.take_applet_state::<IrcState>()?;
+    let mut chat = Chat { editor, irc };
+    let result = work(&mut chat);
+    chat.editor.set_applet_state(chat.irc);
+    Some(result)
 }
 
 fn label(server: &str, target: &Target) -> String {
     target.name().unwrap_or(server).to_owned()
 }
 
-impl Editor {
-    pub(in crate::editor) fn irc_settings(&self) -> IrcSettings {
-        self.applet_config(settings::TABLE)
-    }
+pub(crate) fn irc_settings(editor: &Editor) -> IrcSettings {
+    editor.applet_config(settings::TABLE)
+}
 
-    fn chat_at(&self, index: usize) -> Option<&ChatView> {
-        chat_of(self.buffers.mode(index)?)
+pub(crate) fn members(editor: &Editor, view: &ChatView) -> Option<(Vec<Member>, String)> {
+    let irc = editor.applet_state::<IrcState>()?;
+    if irc.hide_members || !matches!(view.target, Target::Channel(_)) {
+        return None;
     }
+    let link = irc
+        .links
+        .iter()
+        .find(|link| link.server.name == view.server)?;
+    let chat = link.network.find(&view.target)?;
+    let members = link.network.chats().get(chat)?.members(&link.session);
+    Some((members, link.session.nick().to_owned()))
+}
 
-    fn chat_entry_mut(&mut self, index: usize) -> Option<(&mut Buffer, &mut ChatView)> {
-        let (buffer, Mode::Applet(view)) = self.buffers.entry_mut(index)? else {
-            return None;
+fn buffer_offers(editor: &Editor) -> Vec<Offer> {
+    let Some(irc) = editor.applet_state::<IrcState>() else {
+        return Vec::new();
+    };
+    let mut found: Vec<(usize, usize, Offer)> = Vec::new();
+    for id in editor.applet_buffers::<ChatView>() {
+        let Some((buffer, view)) = editor.applet_buffer::<ChatView>(id) else {
+            continue;
         };
-        let any: &mut dyn Any = view.as_mut();
-        Some((buffer, any.downcast_mut()?))
+        let (unread, mentions) = irc
+            .links
+            .iter()
+            .find(|link| link.server.name == view.server)
+            .and_then(|link| {
+                let chat = link.network.find(&view.target)?;
+                link.network.chats().get(chat)
+            })
+            .map_or((0, 0), |chat| (chat.unread, chat.mentions));
+        let mut counts = Vec::new();
+        if unread > 0 {
+            counts.push(format!("{unread} new"));
+        }
+        match mentions {
+            0 => {}
+            1 => counts.push("1 mention".to_owned()),
+            many => counts.push(format!("{many} mentions")),
+        }
+        found.push((
+            mentions,
+            unread,
+            Offer {
+                label: buffer.name().to_owned(),
+                note: (!counts.is_empty()).then(|| counts.join(" · ")),
+            },
+        ));
+    }
+    found.sort_by_key(|(mentions, unread, _)| {
+        (std::cmp::Reverse(*mentions), std::cmp::Reverse(*unread))
+    });
+    found.into_iter().map(|(_, _, offer)| offer).collect()
+}
+
+impl Chat<'_> {
+    pub(crate) fn irc_settings(&self) -> IrcSettings {
+        irc_settings(self)
     }
 
-    pub(in crate::editor) fn irc(&mut self) {
+    pub(crate) fn irc(&mut self) {
         match self.irc_settings().server.as_slice() {
             [] => self.ask("No IRC servers yet; set one up?", |editor, yes| {
                 if yes {
-                    editor.irc_setup();
+                    chat(editor, Chat::irc_setup);
                 }
             }),
             [server] => {
@@ -143,8 +217,7 @@ impl Editor {
             _ => self.prompt_with(
                 "IRC server: ",
                 |editor| {
-                    editor
-                        .irc_settings()
+                    irc_settings(editor)
                         .server
                         .iter()
                         .map(|server| {
@@ -152,12 +225,14 @@ impl Editor {
                         })
                         .collect()
                 },
-                |editor, name| editor.connect_named_irc(&name),
+                |editor, name| {
+                    chat(editor, |chat| chat.connect_named_irc(&name));
+                },
             ),
         }
     }
 
-    fn irc_event(&mut self, id: ConnectionId, event: NetEvent) {
+    pub(crate) fn irc_event(&mut self, id: ConnectionId, event: NetEvent) {
         let Some(index) = self.irc.links.iter().position(|link| link.id == id) else {
             return;
         };
@@ -178,13 +253,11 @@ impl Editor {
                 }
             }
             NetEvent::Closed(problem) => {
+                let local = self.irc_settings().bouncer.mode == BouncerMode::Local;
                 let link = &mut self.irc.links[index];
                 link.open = false;
                 link.network.disconnected();
-                let stale = link.via_bouncer
-                    && !link.connected
-                    && self.irc_settings().bouncer.mode == BouncerMode::Local
-                    && !self.irc.relaunched;
+                let stale = link.via_bouncer && !link.connected && local && !self.irc.relaunched;
                 if stale {
                     self.irc.relaunched = true;
                     let server = self.irc.links[index].server.clone();
@@ -201,7 +274,7 @@ impl Editor {
         self.irc_flush(index);
     }
 
-    pub(in crate::editor) fn irc_farewell(&mut self) {
+    pub(crate) fn irc_farewell(&mut self) {
         for index in 0..self.irc.links.len() {
             if self.irc.links[index].open {
                 self.irc_quit(index, "oxmacs");
@@ -209,7 +282,7 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn irc_disconnect(&mut self, id: ConnectionId) {
+    pub(crate) fn irc_disconnect(&mut self, id: ConnectionId) {
         if let Some(index) = self
             .irc
             .links
@@ -220,7 +293,7 @@ impl Editor {
         }
     }
 
-    fn visit_irc(&mut self, id: ConnectionId) {
+    pub(crate) fn visit_irc(&mut self, id: ConnectionId) {
         if let Some(name) = self
             .irc
             .links
@@ -232,11 +305,9 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn show_irc_server(&mut self, name: &str) {
-        let index = self.ensure_chat_buffer(name, &Target::Server);
-        if let Some(id) = self.buffers.get(index).map(Buffer::id) {
-            self.show_buffer_beside(id);
-        }
+    fn show_irc_server(&mut self, name: &str) {
+        let id = self.ensure_chat_buffer(name, &Target::Server);
+        self.show_buffer_beside(id);
     }
 
     fn irc_quit(&mut self, index: usize, reason: &str) {
@@ -347,11 +418,8 @@ impl Editor {
         }
     }
 
-    fn announce(&mut self, index: usize, target: &Target, buffer: usize) {
-        let visible = self
-            .buffers
-            .get(buffer)
-            .is_some_and(|buffer| self.buffer_shown(buffer.id()));
+    fn announce(&mut self, index: usize, target: &Target, buffer: BufferId) {
+        let visible = self.buffer_shown(buffer);
         let network = &self.irc.links[index].network;
         let Some(line) = network
             .find(target)
@@ -381,16 +449,14 @@ impl Editor {
         self.show_message(announcement);
     }
 
-    pub(in crate::editor) fn read_visible_chats(&mut self) {
-        for index in 0..self.buffers.len() {
-            let shown = self
-                .buffers
-                .get(index)
-                .is_some_and(|buffer| self.buffer_shown(buffer.id()));
+    pub(crate) fn read_visible_chats(&mut self) {
+        for id in self.applet_buffers::<ChatView>() {
+            if !self.buffer_shown(id) {
+                continue;
+            }
             let Some((server, target)) = self
-                .chat_at(index)
-                .filter(|_| shown)
-                .map(|view| (view.server.clone(), view.target.clone()))
+                .applet_buffer::<ChatView>(id)
+                .map(|(_, view)| (view.server.clone(), view.target.clone()))
             else {
                 continue;
             };
@@ -408,13 +474,13 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn refill_chats(&mut self) {
+    pub(crate) fn refill_chats(&mut self) {
         let mut stale = Vec::new();
-        for index in 0..self.buffers.len() {
-            let (Some(view), Some(buffer)) = (self.chat_at(index), self.buffers.get(index)) else {
+        for id in self.applet_buffers::<ChatView>() {
+            let width = self.buffer_width(id);
+            let Some((_, view)) = self.applet_buffer::<ChatView>(id) else {
                 continue;
             };
-            let width = self.buffer_width(buffer.id());
             if width.is_some_and(|width| width != view.width) {
                 stale.push((view.server.clone(), view.target.clone()));
             }
@@ -424,82 +490,17 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn chat_members(&self, index: usize) -> Option<Vec<Member>> {
-        let view = self.chat_at(index)?;
-        if self.irc.hide_members || !matches!(view.target, Target::Channel(_)) {
-            return None;
-        }
-        let link = self
-            .irc
-            .links
-            .iter()
-            .find(|link| link.server.name == view.server)?;
-        let chat = link.network.find(&view.target)?;
-        Some(link.network.chats().get(chat)?.members(&link.session))
-    }
-
-    pub(in crate::editor) fn chat_nick(&self, index: usize) -> Option<String> {
-        let view = self.chat_at(index)?;
-        self.irc
-            .links
-            .iter()
-            .find(|link| link.server.name == view.server)
-            .map(|link| link.session.nick().to_owned())
-    }
-
-    pub(in crate::editor) fn irc_toggle_members(&mut self) {
+    pub(crate) fn irc_toggle_members(&mut self) {
         self.irc.hide_members = !self.irc.hide_members;
     }
 
-    pub(in crate::editor) fn irc_switch(&mut self) {
-        self.prompt_with(
-            "IRC buffer: ",
-            Self::irc_buffer_offers,
-            |editor, name| match editor.buffers.position(|buffer| buffer.name() == name) {
-                Some(index) => editor.select_buffer(index),
+    pub(crate) fn irc_switch(&mut self) {
+        self.prompt_with("IRC buffer: ", buffer_offers, |editor, name| {
+            match editor.buffer_named(&name) {
+                Some(id) => editor.show_buffer(id),
                 None => editor.show_message(format!("No IRC buffer named {name}")),
-            },
-        );
-    }
-
-    fn irc_buffer_offers(&self) -> Vec<Offer> {
-        let mut found: Vec<(usize, usize, Offer)> = Vec::new();
-        for index in 0..self.buffers.len() {
-            let (Some(view), Some(buffer)) = (self.chat_at(index), self.buffers.get(index)) else {
-                continue;
-            };
-            let (unread, mentions) = self
-                .irc
-                .links
-                .iter()
-                .find(|link| link.server.name == view.server)
-                .and_then(|link| {
-                    let chat = link.network.find(&view.target)?;
-                    link.network.chats().get(chat)
-                })
-                .map_or((0, 0), |chat| (chat.unread, chat.mentions));
-            let mut counts = Vec::new();
-            if unread > 0 {
-                counts.push(format!("{unread} new"));
             }
-            match mentions {
-                0 => {}
-                1 => counts.push("1 mention".to_owned()),
-                many => counts.push(format!("{many} mentions")),
-            }
-            found.push((
-                mentions,
-                unread,
-                Offer {
-                    label: buffer.name().to_owned(),
-                    note: (!counts.is_empty()).then(|| counts.join(" · ")),
-                },
-            ));
-        }
-        found.sort_by_key(|(mentions, unread, _)| {
-            (std::cmp::Reverse(*mentions), std::cmp::Reverse(*unread))
         });
-        found.into_iter().map(|(_, _, offer)| offer).collect()
     }
 
     fn irc_note(&mut self, server: &str, text: &str, error: bool) {
@@ -521,50 +522,45 @@ impl Editor {
         self.transmit(id, lines);
     }
 
-    fn chat_buffer(&self, server: &str, target: &Target) -> Option<usize> {
-        self.buffers.find_mode(|mode| {
-            chat_of(mode).is_some_and(|view| view.server == server && view.target.same(target))
+    fn chat_buffer(&self, server: &str, target: &Target) -> Option<BufferId> {
+        self.find_applet_buffer::<ChatView>(|view| {
+            view.server == server && view.target.same(target)
         })
     }
 
-    fn ensure_chat_buffer(&mut self, server: &str, target: &Target) -> usize {
-        if let Some(index) = self.chat_buffer(server, target) {
-            return index;
+    fn ensure_chat_buffer(&mut self, server: &str, target: &Target) -> BufferId {
+        if let Some(id) = self.chat_buffer(server, target) {
+            return id;
         }
         let base = label(server, target);
-        let name = if self
-            .buffers
-            .position(|buffer| buffer.name() == base)
-            .is_some()
-        {
+        let name = if self.buffer_named(&base).is_some() {
             format!("{base}<{server}>")
         } else {
             base
         };
-        let mut buffer = Buffer::new(name);
-        let input = InputLine::new(&mut buffer);
-        self.buffers.push_back_with(
-            buffer,
-            Mode::Applet(Box::new(ChatView {
-                server: server.to_owned(),
-                target: target.clone(),
-                input,
-                styles: Vec::new(),
-                cycle: None,
-                width: 0,
-            })),
-        )
+        let scope = self.irc.chat_scope;
+        let (server, target) = (server.to_owned(), target.clone());
+        self.add_applet_buffer_with(&name, move |buffer| ChatView {
+            scope,
+            server,
+            target,
+            input: InputLine::new(buffer),
+            styles: Vec::new(),
+            cycle: None,
+            width: 0,
+        })
     }
 
     fn show_chat(&mut self, server: &str, target: &Target) {
-        let index = self.ensure_chat_buffer(server, target);
-        self.select_buffer(index);
+        let id = self.ensure_chat_buffer(server, target);
+        self.show_buffer(id);
     }
 
     fn render_chat(&mut self, server: &str, target: &Target) {
-        let Some(index) = self.chat_buffer(server, target) else {
+        let Some(id) = self.chat_buffer(server, target) else {
             return;
         };
+        let width = self.buffer_width(id).unwrap_or(DEFAULT_WIDTH);
         let Some(link) = self
             .irc
             .links
@@ -580,15 +576,10 @@ impl Editor {
         else {
             return;
         };
-        let width = self
-            .buffers
-            .get(index)
-            .and_then(|buffer| self.buffer_width(buffer.id()))
-            .unwrap_or(DEFAULT_WIDTH);
-        let page = render::page(chat, width, &self.irc.zone);
+        let (text, mut styles) = render::page(chat, width, &self.irc.zone).into_parts();
         let name = label(server, target);
-        let shown = format!("{}{name}{PROMPT}", page.text);
-        let Some((buffer, view)) = self.chat_entry_mut(index) else {
+        let shown = format!("{text}{name}{PROMPT}");
+        let Some((buffer, view)) = self.applet_buffer_mut::<ChatView>(id) else {
             return;
         };
         let old_start = view
@@ -608,21 +599,20 @@ impl Editor {
         if buffer.point() == prefix && prefix < start {
             buffer.set_point(start);
         }
-        let mut styles = page.styles;
         styles.push(LineStyle {
             background: None,
             spans: vec![(0..name.chars().count(), Highlight::Heading)],
         });
         view.styles = styles;
         view.width = width;
-        let id = buffer.id();
         self.move_points(id, |point, _| {
             (point == prefix && prefix < start).then_some(start)
         });
     }
 
-    pub(in crate::editor) fn irc_send_input(&mut self) {
-        let Some((buffer, view)) = self.chat_entry_mut(0) else {
+    pub(crate) fn irc_send_input(&mut self) {
+        let id = self.buffer().id();
+        let Some((buffer, view)) = self.applet_buffer_mut::<ChatView>(id) else {
             return;
         };
         let Some(text) = view.input.text(buffer) else {
@@ -674,23 +664,22 @@ impl Editor {
         self.irc_updates(index, &updates);
     }
 }
-
 #[cfg(test)]
 mod tests {
-    use jiff::tz::TimeZone;
+    use oxmacs_core::config::Config;
+    use oxmacs_core::editor::{BufferState, ConnectionId, Editor, Effect};
+    use oxmacs_core::external::net::{Endpoint, Event};
 
+    use super::ChatView;
     use crate::bouncer::daemon::LocalDaemon;
-    use crate::config::Config;
-    use crate::editor::test_support::{labels, lines, press, type_text};
-    use crate::editor::{ConnectionId, Editor, Effect};
-    use crate::external::net::{Endpoint, Event};
+    use crate::testing::{labels, lines, press, state, type_text};
+    use crate::{DaemonReady, LaunchDaemon};
 
-    const LIBERA: &str = "[[irc-server]]\nname = \"libera\"\nhost = \"irc.libera.chat\"\nnick = \"oxtest\"\nchannels = [\"#oxmacs-test\"]\n";
+    const LIBERA: &str = "[[irc.server]]\nname = \"libera\"\nhost = \"irc.libera.chat\"\nnick = \"oxtest\"\nchannels = [\"#oxmacs-test\"]\n";
 
     fn configured(text: &str) -> Editor {
-        let mut editor = Editor::new();
+        let mut editor = crate::testing::editor();
         editor.apply_config(&Config::parse(text).unwrap());
-        editor.irc.zone = TimeZone::UTC;
         editor
     }
 
@@ -761,6 +750,16 @@ mod tests {
         lines(editor).iter().any(|line| line.contains(text))
     }
 
+    fn members(editor: &Editor) -> Option<(Vec<String>, String)> {
+        let view = editor.pane().applet_buffer::<ChatView>()?;
+        let (members, own) = super::members(editor, view)?;
+        let shown = members
+            .iter()
+            .map(|member| format!("{}{}", member.prefixes, member.nick))
+            .collect();
+        Some((shown, own))
+    }
+
     #[test]
     fn m_x_irc_connects_to_the_configured_server() {
         let mut editor = configured(LIBERA);
@@ -789,9 +788,7 @@ mod tests {
         irc(&mut editor);
 
         assert_eq!(
-            editor
-                .question()
-                .map(|question| question.prompt().to_owned()),
+            crate::testing::question(&editor),
             Some("No IRC servers yet; set one up? (y or n) ".to_owned())
         );
         assert_eq!(connections(&mut editor), []);
@@ -938,6 +935,7 @@ mod tests {
         visit(&mut editor, "#oxmacs-test");
 
         editor.resize_pane(editor.selected_window(), 20, 41);
+        editor.prepare_display();
 
         let shown = lines(&editor);
         assert!(
@@ -1029,20 +1027,15 @@ mod tests {
         );
         visit(&mut editor, "#oxmacs-test");
 
-        let members: Vec<String> = editor
-            .pane()
-            .members()
-            .unwrap()
-            .iter()
-            .map(|member| format!("{}{}", member.prefixes, member.nick))
-            .collect();
-        assert_eq!(members, ["@bob", "alice", "oxtest"]);
+        let (shown, own) = members(&editor).unwrap();
+        assert_eq!(shown, ["@bob", "alice", "oxtest"]);
+        assert_eq!(own, "oxtest");
 
         press(&mut editor, "C-c C-n");
-        assert_eq!(editor.pane().members(), None);
+        assert_eq!(members(&editor), None);
         press(&mut editor, "C-c C-n");
         visit(&mut editor, "libera");
-        assert_eq!(editor.pane().members(), None);
+        assert_eq!(members(&editor), None);
     }
 
     #[test]
@@ -1052,16 +1045,12 @@ mod tests {
 
         type_text(&mut editor, "draft");
 
-        assert_eq!(
-            editor.pane().status().state,
-            crate::editor::BufferState::Unmodified
-        );
-        assert_eq!(editor.pane().own_nick().as_deref(), Some("oxtest"));
+        assert_eq!(editor.pane().status().state, BufferState::Unmodified);
     }
 
     fn with_sasl(password: &str) -> Editor {
         configured(&format!(
-            "[[irc-server]]\nname = \"libera\"\nhost = \"irc.libera.chat\"\nnick = \"oxtest\"\nsasl = \"oxtest\"\npassword = {password}\n"
+            "[[irc.server]]\nname = \"libera\"\nhost = \"irc.libera.chat\"\nnick = \"oxtest\"\nsasl = \"oxtest\"\npassword = {password}\n"
         ))
     }
 
@@ -1101,7 +1090,7 @@ mod tests {
     #[test]
     fn keychain_passwords_connect_at_once() {
         let mut editor = with_sasl("\"keychain\"");
-        editor.irc.keychain.read = |server, account| {
+        state(&mut editor).keychain.read = |server, account| {
             assert_eq!((server, account), ("libera", "oxtest"));
             Ok(Some("hunter2".to_owned()))
         };
@@ -1123,8 +1112,8 @@ mod tests {
     #[test]
     fn missing_keychain_passwords_are_asked_for_and_kept() {
         let mut editor = with_sasl("\"keychain\"");
-        editor.irc.keychain.read = |_, _| Ok(None);
-        editor.irc.keychain.write = |server, account, password| {
+        state(&mut editor).keychain.read = |_, _| Ok(None);
+        state(&mut editor).keychain.write = |server, account, password| {
             STORED.with(|stored| {
                 stored
                     .borrow_mut()
@@ -1145,7 +1134,7 @@ mod tests {
     #[test]
     fn missing_environment_passwords_are_asked_for_instead() {
         let mut editor = with_sasl("{ env = \"OXMACS_TEST_NO_SUCH_VARIABLE\" }");
-        editor.irc.keychain.write = |server, account, password| {
+        state(&mut editor).keychain.write = |server, account, password| {
             STORED.with(|stored| {
                 stored
                     .borrow_mut()
@@ -1181,7 +1170,7 @@ mod tests {
     #[test]
     fn a_remote_bouncer_carries_every_server() {
         let mut editor = configured(&format!(
-            "[irc-bouncer]\nmode = \"remote\"\naddress = \"bnc.example.org:6697\"\npassword = {{ text = \"pw\" }}\n\n{LIBERA}"
+            "[irc.bouncer]\nmode = \"remote\"\naddress = \"bnc.example.org:6697\"\npassword = {{ text = \"pw\" }}\n\n{LIBERA}"
         ));
 
         irc(&mut editor);
@@ -1209,8 +1198,8 @@ mod tests {
 
     #[test]
     fn a_running_local_bouncer_is_used_with_its_token() {
-        let mut editor = configured(&format!("[irc-bouncer]\nmode = \"local\"\n\n{LIBERA}"));
-        editor.irc.local_daemon = || Some(local("127.0.0.1:4321"));
+        let mut editor = configured(&format!("[irc.bouncer]\nmode = \"local\"\n\n{LIBERA}"));
+        state(&mut editor).local_daemon = || Some(local("127.0.0.1:4321"));
 
         irc(&mut editor);
 
@@ -1229,22 +1218,25 @@ mod tests {
 
     #[test]
     fn a_missing_local_bouncer_is_started_first() {
-        let mut editor = configured(&format!("[irc-bouncer]\nmode = \"local\"\n\n{LIBERA}"));
-        editor.irc.local_daemon = || None;
+        let mut editor = configured(&format!("[irc.bouncer]\nmode = \"local\"\n\n{LIBERA}"));
+        state(&mut editor).local_daemon = || None;
 
         irc(&mut editor);
 
-        assert!(editor.take_effects().contains(&Effect::LaunchDaemon));
+        let launched = editor.take_effects().iter().any(|effect| {
+            matches!(effect, Effect::Applet(payload) if payload.get::<LaunchDaemon>().is_some())
+        });
+        assert!(launched);
         assert_eq!(editor.message(), Some("Starting the oxmacs bouncer…"));
-        editor.irc.local_daemon = || Some(local("127.0.0.1:4321"));
-        editor.irc_daemon_ready(true);
+        state(&mut editor).local_daemon = || Some(local("127.0.0.1:4321"));
+        editor.deliver(&oxmacs_core::applet::Payload::new(DaemonReady(true)));
         assert_eq!(connections(&mut editor)[0].1.port, 4321);
     }
 
     #[test]
     fn stopping_the_daemon_asks_the_bouncer_to_quit() {
-        let mut editor = configured(&format!("[irc-bouncer]\nmode = \"local\"\n\n{LIBERA}"));
-        editor.irc.local_daemon = || Some(local("127.0.0.1:4321"));
+        let mut editor = configured(&format!("[irc.bouncer]\nmode = \"local\"\n\n{LIBERA}"));
+        state(&mut editor).local_daemon = || Some(local("127.0.0.1:4321"));
         irc(&mut editor);
         let id = connections(&mut editor)[0].0;
         editor.connection_event(id, Event::Connected);
@@ -1273,7 +1265,7 @@ mod tests {
     #[test]
     fn several_servers_are_chosen_by_name() {
         let mut editor = configured(&format!(
-            "{LIBERA}[[irc-server]]\nname = \"local\"\nhost = \"localhost\"\nport = 6667\ntls = false\nnick = \"me\"\n"
+            "{LIBERA}[[irc.server]]\nname = \"local\"\nhost = \"localhost\"\nport = 6667\ntls = false\nnick = \"me\"\n"
         ));
 
         irc(&mut editor);

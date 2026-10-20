@@ -213,7 +213,7 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use crate::config::Config;
+    use oxmacs_core::config::Config;
 
     fn irc(text: &str) -> Result<IrcSettings, String> {
         Config::parse(text)

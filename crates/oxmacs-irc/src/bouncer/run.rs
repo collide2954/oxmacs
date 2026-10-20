@@ -10,8 +10,8 @@ use rustls::ServerConfig;
 
 use crate::bouncer::history::History;
 use crate::bouncer::relay::{Action, Bouncer, ClientId};
-use crate::external::net::{self, Connection, Event};
-use crate::irc::settings::IrcServer;
+use crate::settings::IrcServer;
+use oxmacs_core::external::net::{self, Connection, Event};
 
 const IDLE: Duration = Duration::from_secs(60);
 const FAREWELL: Duration = Duration::from_secs(2);
@@ -169,8 +169,8 @@ mod tests {
 
     use super::*;
     use crate::bouncer::history::MemoryHistory;
-    use crate::config::Config;
-    use crate::irc::settings::{IrcSettings, TABLE};
+    use crate::settings::{IrcSettings, TABLE};
+    use oxmacs_core::config::Config;
 
     const PATIENCE: Duration = Duration::from_secs(20);
 

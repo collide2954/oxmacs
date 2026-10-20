@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::irc::message::Message;
+use crate::protocol::message::Message;
 
 const WANTED: &[&str] = &[
     "message-tags",

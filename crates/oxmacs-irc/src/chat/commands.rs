@@ -1,12 +1,14 @@
-use crate::editor::Editor;
-use crate::irc::message::Message;
-use crate::irc::network::Target;
+use oxmacs_core::editor::InputLine;
 
-pub(super) const HELP: &str = "Commands: /join #channel [key] · /part [#channel] [reason] · /msg nick text · /query nick [text] · /me action · /nick name · /topic [text] · /whois nick · /names · /away [text] · /notice target text · /quote raw line · /quit [reason] · //text sends text starting with /";
+use crate::chat::{Chat, ChatView};
+use crate::protocol::message::Message;
+use crate::protocol::network::Target;
+
+pub(crate) const HELP: &str = "Commands: /join #channel [key] · /part [#channel] [reason] · /msg nick text · /query nick [text] · /me action · /nick name · /topic [text] · /whois nick · /names · /away [text] · /notice target text · /quote raw line · /quit [reason] · //text sends text starting with /";
 const ACTION: char = '\u{1}';
 
 #[derive(Debug)]
-pub(in crate::editor) struct Cycle {
+pub(crate) struct Cycle {
     start: usize,
     candidates: Vec<String>,
     index: usize,
@@ -18,8 +20,8 @@ fn split_word(text: &str) -> (&str, &str) {
     (word, rest.trim())
 }
 
-impl Editor {
-    pub(in crate::editor) fn irc_command(&mut self, index: usize, target: &Target, line: &str) {
+impl Chat<'_> {
+    pub(crate) fn irc_command(&mut self, index: usize, target: &Target, line: &str) {
         let (name, rest) = split_word(line);
         let here = target.name().map(str::to_owned);
         let channel = match target {
@@ -136,15 +138,21 @@ impl Editor {
         Some(Message::new("PART", params))
     }
 
-    pub(in crate::editor) fn irc_complete_nick(&mut self, again: bool) {
-        let Some(view) = self.chat_at(0) else {
+    pub(crate) fn irc_complete_nick(&mut self) {
+        let again = self.repeated();
+        let id = self.buffer().id();
+        let Some((server, target)) = self
+            .applet_buffer::<ChatView>(id)
+            .map(|(_, view)| (view.server.clone(), view.target.clone()))
+        else {
             return;
         };
-        let nicks = self.irc_members(&view.server.clone(), &view.target.clone());
-        let Some((buffer, view)) = self.chat_entry_mut(0) else {
+        let nicks = self.irc_members(&server, &target);
+        let Some((buffer, view)) = self.applet_buffer_mut::<ChatView>(id) else {
             return;
         };
-        let Some(start) = view.input.start(buffer) else {
+        let input: &InputLine = &view.input;
+        let Some(start) = input.start(buffer) else {
             return;
         };
         let point = buffer.point();
@@ -189,19 +197,16 @@ impl Editor {
 }
 #[cfg(test)]
 mod tests {
-    use jiff::tz::TimeZone;
-
-    use crate::config::Config;
-    use crate::editor::test_support::{lines, press, type_text};
-    use crate::editor::{ConnectionId, Editor, Effect};
-    use crate::external::net::Event;
+    use crate::testing::{lines, press, type_text};
+    use oxmacs_core::config::Config;
+    use oxmacs_core::editor::{ConnectionId, Editor, Effect};
+    use oxmacs_core::external::net::Event;
 
     const LIBERA: &str = "[[irc-server]]\nname = \"libera\"\nhost = \"irc.libera.chat\"\nnick = \"oxtest\"\nchannels = [\"#oxmacs-test\"]\n";
 
     fn connected() -> (Editor, ConnectionId) {
-        let mut editor = Editor::new();
+        let mut editor = crate::testing::editor();
         editor.apply_config(&Config::parse(LIBERA).unwrap());
-        editor.irc.zone = TimeZone::UTC;
         press(&mut editor, "M-x");
         type_text(&mut editor, "irc");
         press(&mut editor, "RET");

@@ -277,15 +277,6 @@ const HELP: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
-const CHAT: &[(&str, Command)] = &[
-    ("RET", Command::IrcSendInput),
-    ("TAB", Command::IrcCompleteNick),
-    ("C-c C-b", Command::IrcSwitch),
-    ("C-c C-n", Command::IrcToggleNickList),
-    ("M-p", Command::ComintPreviousInput),
-    ("M-n", Command::ComintNextInput),
-];
-
 const POPUP: &[(&str, Command)] = &[
     ("C-n", Command::CompletionNext),
     ("<down>", Command::CompletionNext),
@@ -363,16 +354,6 @@ const ATLAS_LIST: &[(&str, Command)] = &[
     ("p", Command::PreviousLine),
     ("g", Command::RevertBuffer),
     ("q", Command::QuitWindow),
-];
-
-const IRC_SETUP: &[(&str, Command)] = &[
-    ("TAB", Command::IrcSetupNextField),
-    ("n", Command::IrcSetupNextField),
-    ("S-TAB", Command::IrcSetupPreviousField),
-    ("p", Command::IrcSetupPreviousField),
-    ("RET", Command::IrcSetupChange),
-    ("C-c C-c", Command::IrcSetupSave),
-    ("C-c C-k", Command::IrcSetupCancel),
 ];
 
 const ENVIRONMENT: &[(&str, Command)] = &[
@@ -458,12 +439,10 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::Customize => CUSTOMIZE,
         Scope::Diagnostics => DIAGNOSTICS,
         Scope::Help => HELP,
-        Scope::Chat => CHAT,
         Scope::Popup => POPUP,
         Scope::Plots => PLOTS,
         Scope::Processes => PROCESSES,
         Scope::Tools => TOOLS,
-        Scope::IrcSetup => IRC_SETUP,
         Scope::Atlas => ATLAS,
         Scope::AtlasList => ATLAS_LIST,
         Scope::AtlasCalendar => ATLAS_CALENDAR,

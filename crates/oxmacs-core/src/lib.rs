@@ -1,6 +1,5 @@
 pub mod applet;
 pub mod atlas;
-pub mod bouncer;
 pub mod cli;
 pub mod clock;
 pub mod command;
@@ -11,7 +10,6 @@ pub mod editor;
 pub mod external;
 pub mod files;
 pub mod input;
-pub mod irc;
 pub mod search;
 pub mod syntax;
 pub mod text;

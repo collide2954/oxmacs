@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod applets;
 use oxmacs_core::applet::{Applet, subcommand};
-use oxmacs_core::cli::{self, Invocation};
+use oxmacs_core::cli;
 use std::ffi::OsString;
 use std::process::ExitCode;
 fn main() -> ExitCode {
@@ -18,12 +18,7 @@ fn main() -> ExitCode {
         });
     let outcome = match named {
         Some(found) => (found.run)(),
-        None => match cli::invocation(args) {
-            Invocation::Edit(visits) => {
-                oxmacs_gui::run(visits, applets::all).map_err(|error| error.to_string())
-            }
-            Invocation::IrcDaemon => oxmacs_core::bouncer::daemon::main(),
-        },
+        None => oxmacs_gui::run(cli::parse(args), applets::all).map_err(|error| error.to_string()),
     };
     match outcome {
         Ok(()) => ExitCode::SUCCESS,

@@ -1,7 +1,6 @@
 use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use oxmacs_core::command::Command;
 use oxmacs_core::config::Config;
 use oxmacs_core::editor::{Editor, Effect};
 use oxmacs_core::external::net::{self, Connection, Event};
@@ -75,11 +74,15 @@ fn a_short_courteous_session_on_libera() {
     ))
     .unwrap();
     let mut editor = Editor::new();
+    editor.install(&oxmacs_irc::Irc);
     editor.apply_config(&config);
     let (sender, received) = mpsc::channel();
     let mut connection = None;
 
-    editor.execute(Command::Irc);
+    let keys: KeySequence = "M-x i r c RET".parse().unwrap();
+    for key in keys.keys() {
+        editor.handle_key(*key);
+    }
     perform(&mut editor, &mut connection, &sender);
 
     let start = Instant::now();

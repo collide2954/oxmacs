@@ -1,16 +1,14 @@
-use std::any::Any;
 use std::env;
 
-use crate::applet::AppletBuffer;
-use crate::command::{Scope, ScopeId};
-use crate::display::LineStyle;
-use crate::editor::Editor;
-use crate::editor::buffers::Mode;
-use crate::editor::page::Page;
-use crate::irc::settings::{self, IrcServer, PasswordSource};
-use crate::text::Buffer;
-use crate::theme::Highlight;
+use oxmacs_core::applet::AppletBuffer;
+use oxmacs_core::command::ScopeId;
+use oxmacs_core::display::LineStyle;
+use oxmacs_core::editor::Page;
+use oxmacs_core::text::BufferId;
+use oxmacs_core::theme::Highlight;
 
+use crate::chat::{Chat, chat};
+use crate::settings::{self, IrcServer, PasswordSource};
 const NAME: &str = "*IRC Setup*";
 const HELP: &str = "TAB next field · RET change · C-c C-c save · C-c C-k cancel";
 const LABEL: usize = 12;
@@ -74,7 +72,8 @@ impl Field {
 }
 
 #[derive(Debug)]
-pub(in crate::editor) struct SetupForm {
+pub(crate) struct SetupForm {
+    scope: ScopeId,
     network: Option<usize>,
     name: String,
     host: String,
@@ -92,22 +91,13 @@ pub(in crate::editor) struct SetupForm {
 
 impl AppletBuffer for SetupForm {
     fn scope(&self) -> ScopeId {
-        Scope::IrcSetup.into()
+        self.scope
     }
 
     fn line_style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
 }
-
-fn form_of(mode: &Mode) -> Option<&SetupForm> {
-    let Mode::Applet(view) = mode else {
-        return None;
-    };
-    let any: &dyn Any = view.as_ref();
-    any.downcast_ref()
-}
-
 impl SetupForm {
     fn fields(&self) -> Vec<Field> {
         let mut fields = vec![
@@ -223,7 +213,7 @@ fn page(form: &SetupForm) -> (Page, Vec<(usize, Field)>) {
     page.line(&[]);
     let mut rows = Vec::new();
     for field in form.fields() {
-        rows.push((page.styles.len(), field));
+        rows.push((page.line_count(), field));
         let label = format!("{MARGIN}{:<LABEL$}", field.label());
         let value = form.value(field);
         let style = if value == "(none)" {
@@ -236,34 +226,31 @@ fn page(form: &SetupForm) -> (Page, Vec<(usize, Field)>) {
     (page, rows)
 }
 
-impl Editor {
-    fn setup_index(&self) -> Option<usize> {
-        self.buffers.find_mode(|mode| form_of(mode).is_some())
+impl Chat<'_> {
+    fn setup_id(&self) -> Option<BufferId> {
+        self.find_applet_buffer::<SetupForm>(|_| true)
     }
 
     fn unique_server_name(&self, base: &str) -> String {
-        let taken = |name: &str| {
-            self.irc_settings()
-                .server
-                .iter()
-                .any(|server| server.name == name)
-        };
+        let servers = self.irc_settings().server;
+        let taken = |name: &str| servers.iter().any(|server| server.name == name);
         if !taken(base) {
             return base.to_owned();
         }
-        (2..=self.irc_settings().server.len() + 2)
+        (2..=servers.len() + 2)
             .map(|number| format!("{base}-{number}"))
             .find(|name| !taken(name))
             .unwrap_or_else(|| base.to_owned())
     }
 
-    pub(in crate::editor) fn irc_setup(&mut self) {
-        if let Some(index) = self.setup_index() {
-            self.select_buffer(index);
+    pub(crate) fn irc_setup(&mut self) {
+        if let Some(id) = self.setup_id() {
+            self.show_buffer(id);
             return;
         }
         let (_, name, host) = PRESETS[0];
         let form = SetupForm {
+            scope: self.irc.setup_scope,
             network: Some(0),
             name: self.unique_server_name(name),
             host: host.to_owned(),
@@ -278,41 +265,41 @@ impl Editor {
             rows: Vec::new(),
             styles: Vec::new(),
         };
-        let mut buffer = Buffer::with_text(NAME, "");
-        buffer.set_read_only(true);
-        self.add_buffer_with(buffer, Mode::Applet(Box::new(form)));
+        self.open_applet_buffer(NAME, form);
         self.render_setup();
         self.move_to_field(0);
     }
 
     fn setup_form(&self) -> Option<&SetupForm> {
-        form_of(self.buffers.mode(0)?)
+        let id = self.buffer().id();
+        self.applet_buffer::<SetupForm>(id).map(|(_, form)| form)
     }
 
     fn setup_form_mut(&mut self) -> Option<&mut SetupForm> {
-        let index = self.setup_index()?;
-        let Mode::Applet(view) = self.buffers.mode_mut(index)? else {
-            return None;
-        };
-        let any: &mut dyn Any = view.as_mut();
-        any.downcast_mut()
+        let id = self.setup_id()?;
+        self.applet_buffer_mut::<SetupForm>(id)
+            .map(|(_, form)| form)
     }
 
     fn render_setup(&mut self) {
-        let Some(index) = self.setup_index() else {
+        let Some(id) = self.setup_id() else {
             return;
         };
-        let Some(form) = self.buffers.mode(index).and_then(form_of) else {
+        let Some((_, form)) = self.applet_buffer::<SetupForm>(id) else {
             return;
         };
         let (page, rows) = page(form);
-        if let Some(buffer) = self.buffers.get_mut(index) {
-            page.fill(buffer);
-        }
+        let (text, styles) = page.into_parts();
+        self.fill_buffer(id, &text);
         if let Some(form) = self.setup_form_mut() {
             form.rows = rows;
-            form.styles = page.styles;
+            form.styles = styles;
         }
+    }
+
+    fn point_line(&self) -> usize {
+        let buffer = self.buffer();
+        buffer.line_of(buffer.point())
     }
 
     fn field_at_point(&self) -> Option<(usize, Field)> {
@@ -332,13 +319,13 @@ impl Editor {
         else {
             return;
         };
-        let buffer = self.buffers.current_mut();
+        let buffer = self.buffer_mut();
         let start = buffer.line_start(line);
         buffer.set_point((start + MARGIN.len() + LABEL).min(buffer.line_end(line)));
         self.show_message(field.hint());
     }
 
-    pub(in crate::editor) fn irc_setup_next_field(&mut self, forward: bool) {
+    pub(crate) fn irc_setup_next_field(&mut self, forward: bool) {
         let Some(count) = self.setup_form().map(|form| form.rows.len()) else {
             return;
         };
@@ -357,7 +344,7 @@ impl Editor {
         self.move_to_field(place);
     }
 
-    pub(in crate::editor) fn irc_setup_change(&mut self) {
+    pub(crate) fn irc_setup_change(&mut self) {
         let Some((place, field)) = self.field_at_point() else {
             self.show_message("No field here");
             return;
@@ -368,7 +355,7 @@ impl Editor {
                 &format!("{}: ", field.label()),
                 &text,
                 move |editor, input| {
-                    editor.set_setup_field(field, &input);
+                    chat(editor, |chat| chat.set_setup_field(field, &input));
                 },
             );
             return;
@@ -474,7 +461,7 @@ impl Editor {
         None
     }
 
-    pub(in crate::editor) fn irc_setup_save(&mut self) {
+    pub(crate) fn irc_setup_save(&mut self) {
         let Some((server, keep_alive)) = self
             .setup_form()
             .map(|form| (form.server(), form.keep_alive))
@@ -491,8 +478,8 @@ impl Editor {
             self.show_message(error);
             return;
         }
-        if let Some(index) = self.setup_index() {
-            self.finish_kill(index);
+        if let Some(id) = self.setup_id() {
+            self.close_buffer(id);
         }
         match &server.sasl {
             Some(account) if keep_alive && server.password == PasswordSource::Keychain => {
@@ -502,7 +489,7 @@ impl Editor {
                 );
                 let name = server.name.clone();
                 self.prompt_secret(&prompt, move |editor, password| {
-                    editor.keep_irc_password(&name, &password);
+                    chat(editor, |chat| chat.keep_irc_password(&name, &password));
                 });
             }
             _ => self.ask_to_connect_irc(&server.name),
@@ -532,40 +519,27 @@ impl Editor {
         let name = name.to_owned();
         self.ask(&format!("Connect to {name} now?"), move |editor, yes| {
             if yes {
-                editor.connect_named_irc(&name);
+                chat(editor, |chat| chat.connect_named_irc(&name));
             }
         });
     }
 
-    pub(in crate::editor) fn irc_setup_cancel(&mut self) {
-        if let Some(index) = self.setup_index() {
-            self.finish_kill(index);
+    pub(crate) fn irc_setup_cancel(&mut self) {
+        if let Some(id) = self.setup_id() {
+            self.close_buffer(id);
         }
         self.show_message("IRC setup canceled");
     }
-
-    pub(in crate::editor) fn connect_named_irc(&mut self, name: &str) {
-        if let Some(server) = self
-            .irc_settings()
-            .server
-            .iter()
-            .find(|server| server.name == name)
-            .cloned()
-        {
-            self.connect_irc(&server);
-        }
-    }
 }
-
 #[cfg(test)]
 mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use crate::config::Config;
-    use crate::editor::test_support::{lines, press, question, type_text};
-    use crate::editor::{Editor, Effect};
-    use crate::irc::settings::{BouncerMode, IrcSettings, PasswordSource, TABLE};
+    use crate::settings::{BouncerMode, IrcSettings, PasswordSource, TABLE};
+    use crate::testing::{lines, press, question, type_text};
+    use oxmacs_core::config::Config;
+    use oxmacs_core::editor::{Editor, Effect};
 
     fn kept(path: &Path) -> IrcSettings {
         Config::load(path).unwrap().applet(TABLE).unwrap()
@@ -575,9 +549,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
         fs::write(&path, config).unwrap();
-        let mut editor = Editor::new();
+        let mut editor = crate::testing::editor();
         editor.apply_config(&Config::parse(config).unwrap());
-        editor.config_path = Some(path.clone());
+        editor.set_config_path(Some(path.clone()));
         press(&mut editor, "M-x");
         type_text(&mut editor, "irc-setup");
         press(&mut editor, "RET");
@@ -678,12 +652,12 @@ mod tests {
         assert_eq!(server.sasl, None);
         assert_eq!(server.channels, ["#emacs", "#rust"]);
         assert_eq!(server.password, PasswordSource::Keychain);
-        assert_eq!(editor.irc_settings().server, irc.server);
+        assert_eq!(crate::chat::irc_settings(&editor).server, irc.server);
         assert!(
             editor
-                .buffers
+                .buffer_names()
                 .iter()
-                .all(|buffer| buffer.name() != "*IRC Setup*")
+                .all(|name| *name != "*IRC Setup*")
         );
         assert_eq!(
             question(&editor).as_deref(),
@@ -720,7 +694,10 @@ mod tests {
         press(&mut editor, "C-c C-c");
 
         assert_eq!(kept(&path).bouncer.mode, BouncerMode::Local);
-        assert_eq!(editor.irc_settings().bouncer.mode, BouncerMode::Local);
+        assert_eq!(
+            crate::chat::irc_settings(&editor).bouncer.mode,
+            BouncerMode::Local
+        );
     }
 
     std::thread_local! {
@@ -730,7 +707,7 @@ mod tests {
     #[test]
     fn keeping_alive_with_an_account_takes_the_password_now() {
         let (_dir, path, mut editor) = opened("");
-        editor.irc.keychain.write = |server, account, password| {
+        crate::testing::state(&mut editor).keychain.write = |server, account, password| {
             KEPT.with(|kept| {
                 kept.borrow_mut()
                     .push(format!("{account}@{server}={password}"));
@@ -825,9 +802,9 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), "");
         assert!(
             editor
-                .buffers
+                .buffer_names()
                 .iter()
-                .all(|buffer| buffer.name() != "*IRC Setup*")
+                .all(|name| *name != "*IRC Setup*")
         );
     }
 }

@@ -395,7 +395,6 @@ impl Editor {
             self.resize_parked(window, rows, columns);
         }
         self.render_help();
-        self.refill_chats();
         self.fit_r_widths();
         self.render_processes();
         self.render_tools();

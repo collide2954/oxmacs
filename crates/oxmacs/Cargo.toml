@@ -13,12 +13,14 @@ default = ["weather"]
 animated-splash = ["dep:oxmacs-splash"]
 demo = ["dep:oxmacs-demo"]
 extra-themes = ["dep:oxmacs-themes"]
+irc = ["dep:oxmacs-irc"]
 weather = ["dep:oxmacs-weather"]
 
 [dependencies]
 oxmacs-core.workspace = true
 oxmacs-demo = { workspace = true, optional = true }
 oxmacs-gui.workspace = true
+oxmacs-irc = { workspace = true, optional = true }
 oxmacs-splash = { workspace = true, optional = true }
 oxmacs-themes = { workspace = true, optional = true }
 oxmacs-weather = { workspace = true, optional = true }

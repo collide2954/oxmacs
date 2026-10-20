@@ -369,30 +369,6 @@ pub enum Command {
     RHelp,
     #[strum(message = "Send the input after the prompt")]
     ComintSendInput,
-    #[strum(
-        message = "Connect to an IRC server from config.toml",
-        detailed_message = "Connects to the [[irc-server]] in config.toml, asking which one when there are several, and joins its channels. Each server, channel and private chat gets its own buffer; type after the prompt and press RET to send. Already connected, it shows the server buffer."
-    )]
-    Irc,
-    #[strum(
-        message = "Send the message or /command after the prompt",
-        detailed_message = "Text is sent to the channel or person of this buffer. A line starting with / is a command, such as /join #channel, /msg nick text, /me waves or /quit; /help lists them all, and // sends text that starts with a slash."
-    )]
-    IrcSendInput,
-    #[strum(message = "Complete the nick before the cursor; again cycles")]
-    IrcCompleteNick,
-    #[strum(
-        message = "Switch to an IRC buffer, busiest first",
-        detailed_message = "Lists every IRC server, channel and private chat with its unread messages and mentions; chats that mention you come first."
-    )]
-    IrcSwitch,
-    #[strum(message = "Show or hide the member list beside channels")]
-    IrcToggleNickList,
-    #[strum(
-        message = "Stop the IRC bouncer and its server connections",
-        detailed_message = "Asks the bouncer you are connected through to leave every IRC server and exit. A local bouncer starts again the next time you use M-x irc."
-    )]
-    IrcStopDaemon,
     #[strum(message = "Bring back the previous input")]
     ComintPreviousInput,
     #[strum(message = "Bring back the next input")]
@@ -485,7 +461,7 @@ pub enum Command {
     CompletionQuit,
     #[strum(
         message = "List the processes and connections oxmacs runs",
-        detailed_message = "Opens *Processes*: every R session, compile, lint, IRC connection and bouncer oxmacs started or controls, with its status, process id, running time, CPU and memory. It updates as things change; RET visits an entry's buffer and k stops it."
+        detailed_message = "Opens *Processes*: every R session, compile, lint, network connection and background process oxmacs started or controls, with its status, process id, running time, CPU and memory. It updates as things change; RET visits an entry's buffer and k stops it."
     )]
     ListProcesses,
     #[strum(
@@ -567,21 +543,6 @@ pub enum Command {
         detailed_message = "Turns [ ] into [/] and [/] into [x], stamping done: with today's date; done, waiting and dropped tasks go back to [ ]. A task that repeats with every: is moved to its next date instead, with a done line logged under it."
     )]
     AtlasCycleTask,
-    #[strum(
-        message = "Add an IRC server with a short form",
-        detailed_message = "Opens *IRC Setup*: pick Libera.Chat, OFTC, EFnet or another server, then your nick, an optional account to sign in with, where the password is kept (the OS keychain, asked each time, or an environment variable), channels to join, and whether the built-in bouncer keeps you connected when oxmacs closes. TAB moves between fields and RET changes one; C-c C-c adds the server to config.toml and offers to connect, C-c C-k cancels."
-    )]
-    IrcSetup,
-    #[strum(message = "Move to the next field of the IRC setup")]
-    IrcSetupNextField,
-    #[strum(message = "Move to the previous field of the IRC setup")]
-    IrcSetupPreviousField,
-    #[strum(message = "Change the IRC setup field at point")]
-    IrcSetupChange,
-    #[strum(message = "Save the IRC server to config.toml")]
-    IrcSetupSave,
-    #[strum(message = "Close the IRC setup without saving")]
-    IrcSetupCancel,
     #[strum(
         message = "List the tools oxmacs can install and update",
         detailed_message = "Opens *Tools*: each tool oxmacs can install itself, such as air for formatting R, with the version installed, the latest release, and which program runs. Opening it, or g, asks GitHub for the latest releases; nothing is downloaded until you press i to install or u to update, and d removes oxmacs's copy."
@@ -784,7 +745,6 @@ impl Command {
             Self::ComintSendInput | Self::ComintPreviousInput | Self::ComintNextInput => {
                 Scope::Console
             }
-            Self::IrcSendInput | Self::IrcCompleteNick | Self::IrcToggleNickList => Scope::Chat,
             Self::Recompile
             | Self::KillCompilation
             | Self::NextErrorNoSelect
@@ -813,11 +773,6 @@ impl Command {
             | Self::CompletionQuit => Scope::Popup,
             Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
             Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => Scope::Tools,
-            Self::IrcSetupNextField
-            | Self::IrcSetupPreviousField
-            | Self::IrcSetupChange
-            | Self::IrcSetupSave
-            | Self::IrcSetupCancel => Scope::IrcSetup,
             Self::REnvironmentVisit => Scope::Environment,
             Self::RTableNextColumn | Self::RTablePreviousColumn => Scope::Table,
             Self::RPlotNext
@@ -852,12 +807,10 @@ pub enum Scope {
     Customize,
     Diagnostics,
     Help,
-    Chat,
     Popup,
     Plots,
     Processes,
     Tools,
-    IrcSetup,
     Atlas,
     AtlasList,
     AtlasCalendar,
@@ -883,12 +836,10 @@ impl Scope {
             Self::Customize => Some("*Settings*"),
             Self::Diagnostics => Some("*Diagnostics*"),
             Self::Help => Some("*Help*"),
-            Self::Chat => Some("IRC buffers"),
             Self::Popup => Some("the completion popup"),
             Self::Plots => Some("R plot windows"),
             Self::Processes => Some("*Processes*"),
             Self::Tools => Some("*Tools*"),
-            Self::IrcSetup => Some("*IRC Setup*"),
             Self::Atlas => Some("Atlas notes"),
             Self::AtlasList => Some("Atlas lists"),
             Self::AtlasCalendar => Some("*Calendar*"),

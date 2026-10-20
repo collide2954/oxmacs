@@ -2,7 +2,6 @@ mod applets;
 mod atlas;
 mod buffers;
 mod build;
-mod chat;
 mod connections;
 mod dired;
 mod dispatch;
@@ -52,7 +51,6 @@ use crate::applet::{Applet, Handlers, Installed, States};
 use crate::command::{Command, CommandId, CommandSpec, Commands, Scope, ScopeId};
 use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
-use crate::editor::chat::Irc;
 use crate::external::tools;
 use crate::input::bindings::Keymaps;
 use crate::input::{Key, KeyCode, KeyParseError, KeySequence, Keymap, Lookup, Modifiers};
@@ -160,7 +158,6 @@ pub struct Editor {
     fetches: effect::Fetches,
     next_connection: u64,
     connections: Vec<(ConnectionId, ConnectionSpec)>,
-    irc: Irc,
     paren_pair: Option<(usize, usize)>,
     next_job: u64,
     last_compile: Option<String>,
@@ -181,7 +178,7 @@ impl Editor {
     }
 
     pub fn with_buffer(buffer: Buffer) -> Self {
-        let mut editor = Self {
+        Self {
             buffers: BufferList::new(buffer),
             windows: windows::Windows::new(),
             minibuffer: None,
@@ -251,16 +248,13 @@ impl Editor {
             fetches: effect::Fetches::default(),
             next_connection: 0,
             connections: Vec::new(),
-            irc: Irc::default(),
             paren_pair: None,
             next_job: 0,
             last_compile: None,
             lints: build::lint::Lints::default(),
             errors_from: build::errors::ErrorSource::default(),
             config: Config::default(),
-        };
-        editor.add_config_table::<crate::irc::settings::IrcSettings>(crate::irc::settings::TABLE);
-        editor
+        }
     }
 
     pub fn apply_config(&mut self, config: &Config) {

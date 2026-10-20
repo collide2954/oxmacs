@@ -75,7 +75,6 @@ impl Editor {
     }
 
     pub fn quitting(&mut self) {
-        self.irc_farewell();
         for handler in self.quit_handlers.clone() {
             handler(self);
         }

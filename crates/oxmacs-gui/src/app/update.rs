@@ -9,7 +9,6 @@ use iced::widget::scrollable::{AbsoluteOffset, RelativeOffset};
 use iced::widget::{image, markdown, operation};
 use iced::{Task, clipboard, keyboard};
 use jiff::Timestamp;
-use oxmacs_core::bouncer::daemon;
 use oxmacs_core::editor::{ConnectionId, Effect, Job, Outcome, PreviewScroll, WindowId};
 use oxmacs_core::external::net::{self, Endpoint};
 use oxmacs_core::external::process;
@@ -211,7 +210,6 @@ impl App {
                 self.editor.job_finished(job, &outcome);
             }
             Message::Fetched(id, result) => self.editor.fetched(id, result),
-            Message::DaemonReady(ready) => self.editor.irc_daemon_ready(ready),
             Message::ToolsProbed(probes) => self.editor.tools_probed(probes),
             Message::ToolInstalled(tool, result) => self.editor.tool_installed(tool, result),
             Message::Connection(id, event) => {
@@ -348,7 +346,6 @@ impl App {
                 }
                 Task::none()
             }
-            Effect::LaunchDaemon => Task::perform(start_daemon(), Message::DaemonReady),
             Effect::ProbeTools(tools) => Task::perform(probe_tools(tools), Message::ToolsProbed),
             Effect::InstallTool(install) => {
                 let tool = install.tool;
@@ -438,16 +435,6 @@ pub fn shown_plot<'a, T>(loaded: &'a [(PathBuf, T)], path: &Path) -> Option<&'a 
         .map(|(_, item)| item)
 }
 const FAREWELL: Duration = Duration::from_secs(1);
-const DAEMON_PATIENCE: Duration = Duration::from_secs(10);
-
-async fn start_daemon() -> bool {
-    let (sender, receiver) = oneshot::channel();
-    thread::spawn(move || {
-        let ready = daemon::launch().is_ok() && daemon::wait_until_running(DAEMON_PATIENCE);
-        let _ = sender.send(ready);
-    });
-    receiver.await.unwrap_or(false)
-}
 
 async fn probe_tools(tools: Vec<Tool>) -> Vec<(Tool, Probe)> {
     let (sender, receiver) = oneshot::channel();

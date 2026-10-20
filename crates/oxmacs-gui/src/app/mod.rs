@@ -81,7 +81,6 @@ pub enum Message {
     PlotLoaded(PathBuf, Option<widget::image::Allocation>),
     Fetched(FetchId, Result<String, String>),
     Connection(ConnectionId, net::Event),
-    DaemonReady(bool),
     ToolsProbed(Vec<(Tool, Probe)>),
     ToolInstalled(Managed, Result<PathBuf, String>),
     AppletEvent(Payload),
@@ -454,40 +453,6 @@ mod tests {
         let mut ui = iced_test::simulator(app.view());
 
         assert!(ui.find("☂ bring one").is_ok());
-    }
-
-    #[test]
-    fn channel_windows_list_their_members() {
-        let config = Config::parse(
-            "[[irc-server]]\nname = \"libera\"\nhost = \"irc.example\"\nnick = \"oxtest\"\nchannels = [\"#c\"]\n",
-        )
-        .unwrap();
-        let mut app = App::new(Ok(&config));
-        app.editor.execute(oxmacs_core::command::Command::Irc);
-        app.editor.take_effects();
-        let id = ConnectionId(0);
-        app.editor.connection_event(id, net::Event::Connected);
-        for line in [
-            ":srv CAP * LS :",
-            ":srv 001 oxtest :Welcome",
-            ":oxtest!o@h JOIN #c",
-            ":srv 353 oxtest = #c :alice @bob oxtest",
-            ":srv 366 oxtest #c :End",
-        ] {
-            app.editor
-                .connection_event(id, net::Event::Line(line.to_owned()));
-        }
-        app.editor.take_effects();
-        press(&mut app, "x", Modifiers::CTRL);
-        press(&mut app, "b", Modifiers::empty());
-        type_text(&mut app, "#c");
-        enter(&mut app);
-
-        let mut ui = iced_test::simulator(app.view());
-
-        assert!(ui.find("3 members").is_ok());
-        assert!(ui.find("@bob").is_ok());
-        assert!(ui.find(" alice").is_ok());
     }
 
     #[test]

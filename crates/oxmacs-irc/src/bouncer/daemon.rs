@@ -11,9 +11,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::bouncer::history::DiskHistory;
 use crate::bouncer::run::{self, Daemon};
-use crate::config::{self, Config};
-use crate::external::{keychain, net};
-use crate::irc::settings::{BouncerMode, IrcSettings, PasswordSource, TABLE};
+use crate::keychain;
+use crate::settings::{BouncerMode, IrcSettings, PasswordSource, TABLE};
+use oxmacs_core::config::{self, Config};
+use oxmacs_core::external::net;
 
 const TOKEN_BYTES: usize = 32;
 const KNOCK: Duration = Duration::from_millis(100);
@@ -214,7 +215,7 @@ fn serve() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::irc::settings::PasswordSource;
+    use crate::settings::PasswordSource;
 
     #[test]
     fn tokens_are_long_random_and_hexadecimal() {
