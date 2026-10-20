@@ -36,6 +36,9 @@ pub use prompts::input_line::InputLine;
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
 pub use prompts::popup::PopupView;
 pub use prompts::question::Question;
+pub use prompts::transient::{
+    Action, EntryView, Group, GroupView, Switch, Transient, TransientView,
+};
 pub use search::isearch::Search;
 pub use search::replace::Replace;
 pub use special::processes::{ProcessKey, ProcessSpec};
@@ -98,6 +101,7 @@ pub struct Editor {
     last_replacements: [Option<(String, String)>; 2],
     keymaps: Keymaps,
     popup: Option<prompts::popup::Popup>,
+    transients: prompts::transient::Transients,
     r_sessions: languages::r_console::Sessions,
     xref: Vec<(crate::text::BufferId, usize)>,
     processes: special::processes::Processes,
@@ -192,6 +196,7 @@ impl Editor {
             last_replacements: [None, None],
             keymaps: Keymaps::default(),
             popup: None,
+            transients: prompts::transient::Transients::default(),
             r_sessions: languages::r_console::Sessions::default(),
             xref: Vec::new(),
             processes: special::processes::Processes::default(),
@@ -359,7 +364,11 @@ impl Editor {
 
     pub fn handle_key(&mut self, mut key: Key) {
         self.message = None;
-        if self.answer_question(key) || self.answer_replace(key) || self.search_key(key) {
+        if self.transient_key(key)
+            || self.answer_question(key)
+            || self.answer_replace(key)
+            || self.search_key(key)
+        {
             return;
         }
         if let Some(minibuffer) = &mut self.minibuffer {

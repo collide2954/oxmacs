@@ -11,7 +11,7 @@ use crate::applet::Context;
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
 use crate::widgets::mode_line::{self, Look};
-use crate::widgets::{completions, echo_area};
+use crate::widgets::{completions, echo_area, transient};
 use crate::{style, units};
 impl App {
     pub fn view(&self) -> Element<'_, Message> {
@@ -19,6 +19,7 @@ impl App {
         let offered = self.editor.completions();
         column![
             self.tile(self.editor.tiling(), Vec::new(), faces),
+            transient::view(&self.editor, faces, self.font, self.text_size),
             echo_area::view(
                 &self.editor,
                 offered.len(),

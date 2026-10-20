@@ -5,3 +5,4 @@ pub mod echo_area;
 pub mod mode_line;
 pub mod popup;
 pub mod powerline;
+pub mod transient;
