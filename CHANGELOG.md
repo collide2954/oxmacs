@@ -15,7 +15,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `M-x oxmacs-doctor` lists Atlas vaults and how many pages each holds.
 - `M-x oxmacs-doctor` lists the opt-in build features compiled in, with their versions.
 - The theme in *Settings* is picked from the same live-preview list as `M-x load-theme`.
-- Applets keep their settings in a table of their own in config.toml, such as `[demo]`. A table no applet in the build reads is kept, and `M-x oxmacs-doctor` points it out.
+- Applets keep their settings in a table of their own in config.toml, such as `[demo]`. A table no applet in the build reads is kept, and `M-x oxmacs-doctor` points it out. Applet settings appear in `M-x customize` under the applet's name.
 
 ### Experimental (opt-in at build time)
 
