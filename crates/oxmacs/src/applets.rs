@@ -1,5 +1,5 @@
-use oxmacs_core::applet::Applet;
+use oxmacs_gui::applet::GuiApplet;
 
-pub fn all() -> Vec<Box<dyn Applet>> {
+pub fn all() -> Vec<Box<dyn GuiApplet>> {
     Vec::new()
 }

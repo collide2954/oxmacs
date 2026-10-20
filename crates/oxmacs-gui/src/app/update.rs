@@ -231,6 +231,7 @@ impl App {
                 self.editor.irc_event(id, event);
             }
             Message::WeatherTick => self.editor.weather_tick(Timestamp::now()),
+            Message::AppletEvent(event) => self.editor.deliver(&event),
         }
         self.editor.prepare_display();
         self.refresh_previews();
@@ -370,6 +371,11 @@ impl App {
                 }
                 Task::none()
             }
+            Effect::Applet(effect) => self
+                .applets
+                .iter()
+                .find_map(|applet| applet.perform(&effect))
+                .map_or_else(Task::none, |task| task.map(Message::AppletEvent)),
         }
     }
 

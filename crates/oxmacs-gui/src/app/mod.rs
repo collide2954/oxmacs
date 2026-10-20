@@ -10,7 +10,7 @@ use iced::widget::{self, markdown};
 use iced::{Animation, Event, Font, Subscription, Task, Theme, event, keyboard, system, window};
 use jiff::Timestamp;
 use native_theme::detect::prefers_reduced_motion;
-use oxmacs_core::applet::Applet;
+use oxmacs_core::applet::Payload;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{self, Config, ConfigError, ModeLineStyle};
@@ -23,6 +23,7 @@ use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
 
+use crate::applet::GuiApplet;
 use crate::watcher::Watched;
 use crate::widgets::buffer_view::ViewEvent;
 use crate::{animation, fonts, style, ticker, watcher};
@@ -51,6 +52,7 @@ pub struct App {
     preview_heights: Vec<(WindowId, f32)>,
     #[cfg(feature = "animated-splash")]
     splash_clock: Option<(oxmacs_core::editor::SplashAnimation, Instant)>,
+    applets: Vec<Box<dyn GuiApplet>>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,6 +88,7 @@ pub enum Message {
     ToolsProbed(Vec<(Tool, Probe)>),
     ToolInstalled(Managed, Result<PathBuf, String>),
     WeatherTick,
+    AppletEvent(Payload),
 }
 
 pub fn load_config() -> Result<Config, ConfigError> {
@@ -129,6 +132,7 @@ impl App {
             preview_heights: Vec::new(),
             #[cfg(feature = "animated-splash")]
             splash_clock: None,
+            applets: Vec::new(),
         };
         app.configure(&config);
         app
@@ -137,13 +141,14 @@ impl App {
     pub fn boot(
         config: &Result<Config, ConfigError>,
         visits: &[Visit],
-        applets: Vec<Box<dyn Applet>>,
+        applets: Vec<Box<dyn GuiApplet>>,
     ) -> (Self, Task<Message>) {
         let splash = config.as_ref().map_or(true, |config| config.splash);
         let mut app = Self::new(config.as_ref());
-        for applet in applets {
+        for applet in &applets {
             app.editor.install(applet.as_ref());
         }
+        app.applets = applets;
         app.start(visits, splash);
         app.reduced_motion = prefers_reduced_motion();
         app.configure(&app.editor.config().clone());

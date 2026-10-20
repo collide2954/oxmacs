@@ -1,5 +1,6 @@
 pub mod animation;
 pub mod app;
+pub mod applet;
 mod fetch;
 pub mod fonts;
 pub mod keys;
@@ -12,12 +13,12 @@ pub mod widgets;
 pub use iced::Result;
 
 use app::App;
+use applet::GuiApplet;
 use iced::{Size, window};
-use oxmacs_core::applet::Applet;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::config::WindowMode;
 
-pub fn run(visits: Vec<Visit>, applets: fn() -> Vec<Box<dyn Applet>>) -> Result {
+pub fn run(visits: Vec<Visit>, applets: fn() -> Vec<Box<dyn GuiApplet>>) -> Result {
     let config = app::load_config();
     let mode = config
         .as_ref()

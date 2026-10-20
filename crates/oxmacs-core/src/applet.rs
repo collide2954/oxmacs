@@ -1,6 +1,7 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 
 use crate::command::ScopeId;
 use crate::display::LineStyle;
@@ -24,6 +25,66 @@ pub trait Applet {
     }
 
     fn install(&self, editor: &mut Editor);
+}
+
+#[derive(Clone)]
+pub struct Payload(Arc<dyn Any + Send + Sync>);
+
+impl Payload {
+    pub fn new<T: Any + Send + Sync>(value: T) -> Self {
+        Self(Arc::new(value))
+    }
+
+    pub fn get<T: Any>(&self) -> Option<&T> {
+        self.0.downcast_ref()
+    }
+
+    pub fn kind(&self) -> TypeId {
+        Any::type_id(&*self.0)
+    }
+}
+
+impl PartialEq for Payload {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for Payload {}
+
+impl fmt::Debug for Payload {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("Payload")
+    }
+}
+
+type Handler = Arc<dyn Fn(&mut Editor, &Payload) + Send + Sync>;
+
+#[derive(Default)]
+pub struct Handlers(HashMap<TypeId, Handler>);
+
+impl fmt::Debug for Handlers {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Handlers")
+            .field("count", &self.0.len())
+            .finish()
+    }
+}
+
+impl Handlers {
+    pub fn add<T: Any + Send + Sync>(&mut self, handler: fn(&mut Editor, &T)) {
+        let handler: Handler = Arc::new(move |editor: &mut Editor, payload: &Payload| {
+            if let Some(event) = payload.get::<T>() {
+                handler(editor, event);
+            }
+        });
+        self.0.insert(TypeId::of::<T>(), handler);
+    }
+
+    pub fn find(&self, payload: &Payload) -> Option<Handler> {
+        self.0.get(&payload.kind()).cloned()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,6 +122,7 @@ impl States {
 
 #[cfg(test)]
 mod tests {
+    use super::Payload;
     use crate::command::{CommandSpec, Scope, ScopeId};
     use crate::display::LineStyle;
     use crate::editor::Editor;
@@ -293,6 +355,46 @@ mod tests {
             ])
         );
         assert!(editor.question().is_none() && editor.minibuffer().is_none());
+    }
+
+    #[derive(Debug)]
+    struct Fetch(String);
+
+    #[derive(Debug)]
+    struct Fetched(String);
+
+    fn fetched(editor: &mut Editor, event: &Fetched) {
+        note(editor, event.0.clone());
+    }
+
+    #[test]
+    fn applets_request_effects_and_get_typed_events_back() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        editor.on_event(fetched);
+
+        editor.request(Fetch("weather".to_owned()));
+        let requested: Vec<String> = editor
+            .take_effects()
+            .into_iter()
+            .filter_map(|effect| match effect {
+                crate::editor::Effect::Applet(payload) => {
+                    payload.get::<Fetch>().map(|fetch| fetch.0.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(requested, ["weather"]);
+
+        editor.deliver(&Payload::new(Fetched("sunny".to_owned())));
+        editor.deliver(&Payload::new(7_u8));
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["sunny".to_owned()])
+        );
     }
 
     #[test]

@@ -45,7 +45,7 @@ use std::{env, mem};
 
 use buffers::{BufferList, Mode};
 
-use crate::applet::{Applet, Installed, States};
+use crate::applet::{Applet, Handlers, Installed, States};
 use crate::command::{Command, CommandId, CommandSpec, Commands, Scope, ScopeId};
 use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
@@ -115,6 +115,7 @@ pub struct Editor {
     applets: Vec<Installed>,
     applet_states: States,
     applet_answer: Option<prompts::applet::Answer>,
+    event_handlers: Handlers,
     goal_column: Option<usize>,
     shift_selection: bool,
     typed_in_step: usize,
@@ -192,6 +193,7 @@ impl Editor {
             applets: Vec::new(),
             applet_states: States::default(),
             applet_answer: None,
+            event_handlers: Handlers::default(),
             goal_column: None,
             shift_selection: false,
             typed_in_step: 0,
