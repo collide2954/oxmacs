@@ -5,7 +5,7 @@ use crate::cli::Visit;
 use crate::editor::prompts::minibuffer::{PathListing, Purpose};
 use crate::editor::{Choice, Editor};
 use crate::files::{self, Sort, paths};
-use crate::syntax::Language;
+use crate::syntax::{Feature, Language, language_for};
 use crate::text::{Buffer, FileInfo};
 
 impl Editor {
@@ -128,7 +128,7 @@ impl Editor {
     pub(in crate::editor) fn finish_write(&mut self, path: PathBuf) {
         let buffer = self.buffers.current_mut();
         let format = buffer.file().map(|file| file.format).unwrap_or_default();
-        let language = Language::for_path(&path);
+        let language = language_for(&Language::BUILT_IN, &path);
         buffer.set_file(FileInfo::new(path, format, None));
         if language.is_some() {
             self.buffers.set_language(0, language);
@@ -301,10 +301,10 @@ impl Editor {
     pub(in crate::editor) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {
         self.exact_atlas_dates(index);
         let formatting = format
-            && matches!(
-                self.buffers.language(index),
-                Some(Language::Rust | Language::R)
-            );
+            && self
+                .buffers
+                .language(index)
+                .is_some_and(|language| language.supports(Feature::Formatting));
         let format_error = formatting
             .then(|| self.format_buffer_at(index).err())
             .flatten();
@@ -339,7 +339,7 @@ impl Editor {
                 if configuring {
                     self.apply_config_file(&text, &shown);
                 }
-                if self.buffers.language(index) == Some(Language::Rust) {
+                if self.buffers.language(index) == Some(Language::RUST) {
                     self.request_lint(&path);
                 }
                 if self.is_atlas(index) {

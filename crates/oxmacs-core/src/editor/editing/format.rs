@@ -26,8 +26,8 @@ impl Editor {
 
     pub(in crate::editor) fn format_buffer_at(&mut self, index: usize) -> Result<(), String> {
         match self.buffers.language(index) {
-            Some(Language::Rust) => self.rustfmt_buffer_at(index),
-            Some(Language::R) => self.air_buffer_at(index),
+            Some(language) if language == Language::RUST => self.rustfmt_buffer_at(index),
+            Some(language) if language == Language::R => self.air_buffer_at(index),
             _ => Err("No formatter for this buffer".to_owned()),
         }
     }
@@ -174,7 +174,7 @@ mod tests {
 
     fn rust(text: &str, point: usize) -> Editor {
         let mut editor = editor_with(text, point);
-        editor.set_major_mode(Some(Language::Rust));
+        editor.set_major_mode(Some(Language::RUST));
         editor.formatter = SQUEEZE;
         editor
     }

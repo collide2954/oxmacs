@@ -142,7 +142,7 @@ mod tests {
 
     fn rust(point: usize) -> Editor {
         let mut editor = editor_with(SOURCE, point);
-        editor.set_major_mode(Some(Language::Rust));
+        editor.set_major_mode(Some(Language::RUST));
         editor
     }
 
@@ -179,7 +179,7 @@ mod tests {
         assert_eq!(after(&mut editor, "C-M-f"), 23);
 
         let mut comment = editor_with("// note\nfoo", 0);
-        comment.set_major_mode(Some(Language::Rust));
+        comment.set_major_mode(Some(Language::RUST));
         assert_eq!(after(&mut comment, "C-M-f"), 11);
     }
 

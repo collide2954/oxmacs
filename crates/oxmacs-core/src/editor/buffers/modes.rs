@@ -56,7 +56,7 @@ mod tests {
         let mut editor = Editor::new();
 
         editor.open_file(&dir.path().join("main.rs"));
-        assert_eq!(editor.language(), Some(Language::Rust));
+        assert_eq!(editor.language(), Some(Language::RUST));
         assert_eq!(editor.mode_line(), "-- main.rs   L1 C0   (Rust)");
 
         editor.open_file(&dir.path().join("notes.txt"));
@@ -72,7 +72,7 @@ mod tests {
 
         editor.open_file(&dir.path().join("Cargo.toml"));
 
-        assert_eq!(editor.language(), Some(Language::Toml));
+        assert_eq!(editor.language(), Some(Language::TOML));
         assert_eq!(editor.mode_line(), "-- Cargo.toml   L1 C0   (TOML)");
     }
 
@@ -82,7 +82,7 @@ mod tests {
 
         run(&mut editor, "markdown-mode");
 
-        assert_eq!(editor.language(), Some(Language::Markdown));
+        assert_eq!(editor.language(), Some(Language::MARKDOWN));
         assert!(editor.mode_line().ends_with("(Markdown)"));
     }
 
@@ -116,7 +116,7 @@ mod tests {
         let mut editor = Editor::new();
 
         run(&mut editor, "rust-mode");
-        assert_eq!(editor.language(), Some(Language::Rust));
+        assert_eq!(editor.language(), Some(Language::RUST));
 
         run(&mut editor, "text-mode");
         assert_eq!(editor.language(), None);
@@ -130,7 +130,7 @@ mod tests {
 
         editor.finish_write(dir.path().join("x.rs"));
 
-        assert_eq!(editor.language(), Some(Language::Rust));
+        assert_eq!(editor.language(), Some(Language::RUST));
     }
 
     #[test]

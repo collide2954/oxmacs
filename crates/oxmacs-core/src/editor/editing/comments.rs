@@ -123,7 +123,7 @@ mod tests {
 
     fn rust(text: &str, point: usize) -> Editor {
         let mut editor = editor_with(text, point);
-        editor.set_major_mode(Some(Language::Rust));
+        editor.set_major_mode(Some(Language::RUST));
         editor
     }
 
@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn meta_semicolon_finds_hash_comments_in_r_and_toml() {
-        for language in [Language::R, Language::Toml] {
+        for language in [Language::R, Language::TOML] {
             let mut editor = editor_with("x = 1 # one", 0);
             editor.set_major_mode(Some(language));
 

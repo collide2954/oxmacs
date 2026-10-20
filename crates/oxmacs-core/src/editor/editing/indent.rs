@@ -126,7 +126,7 @@ mod tests {
 
     fn rust(text: &str, point: usize) -> Editor {
         let mut editor = editor_with(text, point);
-        editor.set_major_mode(Some(Language::Rust));
+        editor.set_major_mode(Some(Language::RUST));
         editor
     }
 

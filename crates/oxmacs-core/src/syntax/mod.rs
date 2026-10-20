@@ -1,191 +1,30 @@
+mod builtin;
 mod highlight;
 mod indent;
 mod items;
+mod language;
 mod layers;
 pub(crate) mod motion;
 mod statements;
 
 use std::fmt;
-use std::path::Path;
 
 use tree_sitter::{InputEdit, Node, Parser, Point, Tree};
 
 pub use items::Item;
+pub use language::{Feature, Grammar, Indentation, Language, LanguageSpec, Outline, language_for};
 
-use layers::{Grammar, Layer};
+use layers::Layer;
 
 use crate::text::{Buffer, TextChange};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Language {
-    Rust,
-    Toml,
-    Markdown,
-    R,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Feature {
-    Highlighting,
-    Indentation,
-    Comments,
-    Pairs,
-    Formatting,
-    Lint,
-    Motion,
-    Items,
-    Folding,
-    Preview,
-    Completion,
-    Repl,
-    Lsp,
-}
-
-impl Feature {
-    pub const ALL: [Self; 13] = [
-        Self::Highlighting,
-        Self::Indentation,
-        Self::Comments,
-        Self::Pairs,
-        Self::Formatting,
-        Self::Lint,
-        Self::Motion,
-        Self::Items,
-        Self::Folding,
-        Self::Preview,
-        Self::Completion,
-        Self::Repl,
-        Self::Lsp,
-    ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Highlighting => "Highlight",
-            Self::Indentation => "Indent",
-            Self::Comments => "Comment",
-            Self::Pairs => "Pairs",
-            Self::Formatting => "Format",
-            Self::Lint => "Lint",
-            Self::Motion => "Motion",
-            Self::Items => "Items",
-            Self::Folding => "Fold",
-            Self::Preview => "Preview",
-            Self::Completion => "Complete",
-            Self::Repl => "REPL",
-            Self::Lsp => "LSP",
-        }
-    }
-}
-
-impl Language {
-    pub const ALL: [Self; 4] = [Self::Rust, Self::Toml, Self::Markdown, Self::R];
-
-    pub fn extensions(self) -> &'static [&'static str] {
-        match self {
-            Self::Rust => &["rs"],
-            Self::Toml => &["toml"],
-            Self::Markdown => &["md", "markdown"],
-            Self::R => &["R", "r"],
-        }
-    }
-
-    pub fn line_comment(self) -> Option<&'static str> {
-        match self {
-            Self::Rust => Some("//"),
-            Self::Toml | Self::R => Some("#"),
-            Self::Markdown => None,
-        }
-    }
-
-    pub fn supports(self, feature: Feature) -> bool {
-        matches!(
-            (self, feature),
-            (
-                Self::Rust,
-                Feature::Highlighting
-                    | Feature::Indentation
-                    | Feature::Comments
-                    | Feature::Pairs
-                    | Feature::Formatting
-                    | Feature::Lint
-                    | Feature::Motion
-                    | Feature::Items
-            ) | (
-                Self::Toml | Self::R,
-                Feature::Highlighting
-                    | Feature::Indentation
-                    | Feature::Comments
-                    | Feature::Pairs
-                    | Feature::Motion
-                    | Feature::Items
-            ) | (
-                Self::R,
-                Feature::Completion | Feature::Repl | Feature::Formatting
-            ) | (
-                Self::Markdown,
-                Feature::Highlighting
-                    | Feature::Indentation
-                    | Feature::Motion
-                    | Feature::Items
-                    | Feature::Preview
-            )
-        )
-    }
-
-    pub fn pairs(self) -> &'static [(char, char)] {
-        match self {
-            Self::Rust | Self::Toml => &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"')],
-            Self::R => &[
-                ('(', ')'),
-                ('[', ']'),
-                ('{', '}'),
-                ('"', '"'),
-                ('\'', '\''),
-                ('`', '`'),
-            ],
-            Self::Markdown => &[],
-        }
-    }
-
-    pub fn for_path(path: &Path) -> Option<Self> {
-        if path
-            .file_name()
-            .is_some_and(|name| name.eq_ignore_ascii_case("Cargo.lock"))
-        {
-            return Some(Self::Toml);
-        }
-        if path
-            .file_name()
-            .is_some_and(|name| name.eq_ignore_ascii_case(".Rprofile"))
-        {
-            return Some(Self::R);
-        }
-        let extension = path.extension()?.to_str()?;
-        Self::ALL.into_iter().find(|language| {
-            language
-                .extensions()
-                .iter()
-                .any(|known| extension.eq_ignore_ascii_case(known))
-        })
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Rust => "Rust",
-            Self::Toml => "TOML",
-            Self::Markdown => "Markdown",
-            Self::R => "R",
-        }
-    }
-}
-
 pub struct Syntax {
     language: Language,
-    parser: Parser,
+    known: Vec<Language>,
+    parser: Option<Parser>,
     tree: Option<Tree>,
     revision: Option<u64>,
     layers: Vec<Layer>,
-    injectors: Vec<(Grammar, Parser)>,
+    injectors: Vec<(&'static Grammar, Parser)>,
 }
 
 impl fmt::Debug for Syntax {
@@ -200,10 +39,18 @@ impl fmt::Debug for Syntax {
 
 impl Syntax {
     pub fn new(language: Language) -> Self {
-        let mut parser = Parser::new();
-        let _ = parser.set_language(&language.grammar().language());
+        Self::knowing(language, &Language::BUILT_IN)
+    }
+
+    pub fn knowing(language: Language, known: &[Language]) -> Self {
+        let parser = language.grammar().and_then(|grammar| {
+            let mut parser = Parser::new();
+            parser.set_language(&grammar.language()).ok()?;
+            Some(parser)
+        });
         Self {
             language,
+            known: known.to_vec(),
             parser,
             tree: None,
             revision: None,
@@ -214,6 +61,10 @@ impl Syntax {
 
     pub fn language(&self) -> Language {
         self.language
+    }
+
+    pub fn parses(&self) -> bool {
+        self.parser.is_some()
     }
 
     pub fn tree(&self) -> Option<&Tree> {
@@ -289,6 +140,9 @@ impl Syntax {
     }
 
     pub fn sync(&mut self, buffer: &mut Buffer) {
+        if self.parser.is_none() {
+            return;
+        }
         buffer.track_changes();
         let changes = buffer.take_changes();
         let revision = buffer.revision();
@@ -305,11 +159,13 @@ impl Syntax {
             }
         }
         let text: &Buffer = buffer;
-        self.tree = self.parser.parse_with_options(
-            &mut |byte, _| text.chunk_at_byte(byte).as_bytes(),
-            old.as_ref(),
-            None,
-        );
+        self.tree = self.parser.as_mut().and_then(|parser| {
+            parser.parse_with_options(
+                &mut |byte, _| text.chunk_at_byte(byte).as_bytes(),
+                old.as_ref(),
+                None,
+            )
+        });
         self.revision = Some(revision);
         self.inject(buffer);
     }
@@ -333,16 +189,6 @@ fn preorder<'tree>(tree: &'tree Tree, mut visit: impl FnMut(Node<'tree>)) {
     }
 }
 
-fn is_function_assignment(node: Node<'_>) -> bool {
-    node.kind() == "binary_operator"
-        && node
-            .child_by_field_name("rhs")
-            .is_some_and(|rhs| rhs.kind() == "function_definition")
-        && node
-            .child_by_field_name("operator")
-            .is_some_and(|operator| matches!(operator.kind(), "<-" | "=" | "<<-"))
-}
-
 fn ancestors(node: Node<'_>) -> impl Iterator<Item = Node<'_>> {
     std::iter::successors(Some(node), Node::parent)
 }
@@ -364,11 +210,13 @@ fn point((row, column): (usize, usize)) -> Point {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
     fn parsed(text: &str) -> (Buffer, Syntax) {
         let mut buffer = Buffer::with_text("t", text);
-        let mut syntax = Syntax::new(Language::Rust);
+        let mut syntax = Syntax::new(Language::RUST);
         syntax.sync(&mut buffer);
         (buffer, syntax)
     }
@@ -384,36 +232,45 @@ mod tests {
     #[test]
     fn languages_follow_file_extensions() {
         assert_eq!(
-            Language::for_path(Path::new("src/main.rs")),
-            Some(Language::Rust)
+            language_for(&Language::BUILT_IN, Path::new("src/main.rs")),
+            Some(Language::RUST)
         );
         assert_eq!(
-            Language::for_path(Path::new("LIB.RS")),
-            Some(Language::Rust)
+            language_for(&Language::BUILT_IN, Path::new("LIB.RS")),
+            Some(Language::RUST)
         );
         assert_eq!(
-            Language::for_path(Path::new("Cargo.toml")),
-            Some(Language::Toml)
+            language_for(&Language::BUILT_IN, Path::new("Cargo.toml")),
+            Some(Language::TOML)
         );
         assert_eq!(
-            Language::for_path(Path::new("Cargo.lock")),
-            Some(Language::Toml)
+            language_for(&Language::BUILT_IN, Path::new("Cargo.lock")),
+            Some(Language::TOML)
         );
         assert_eq!(
-            Language::for_path(Path::new("README.md")),
-            Some(Language::Markdown)
+            language_for(&Language::BUILT_IN, Path::new("README.md")),
+            Some(Language::MARKDOWN)
         );
         assert_eq!(
-            Language::for_path(Path::new("analysis.R")),
+            language_for(&Language::BUILT_IN, Path::new("analysis.R")),
             Some(Language::R)
         );
-        assert_eq!(Language::for_path(Path::new("plot.r")), Some(Language::R));
         assert_eq!(
-            Language::for_path(Path::new(".Rprofile")),
+            language_for(&Language::BUILT_IN, Path::new("plot.r")),
             Some(Language::R)
         );
-        assert_eq!(Language::for_path(Path::new("notes.txt")), None);
-        assert_eq!(Language::for_path(Path::new("Makefile")), None);
+        assert_eq!(
+            language_for(&Language::BUILT_IN, Path::new(".Rprofile")),
+            Some(Language::R)
+        );
+        assert_eq!(
+            language_for(&Language::BUILT_IN, Path::new("notes.txt")),
+            None
+        );
+        assert_eq!(
+            language_for(&Language::BUILT_IN, Path::new("Makefile")),
+            None
+        );
     }
 
     #[test]

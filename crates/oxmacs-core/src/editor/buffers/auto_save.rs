@@ -5,7 +5,7 @@ impl Editor {
     fn modified_rust_files(&self) -> impl Iterator<Item = usize> + '_ {
         (0..self.buffers.len())
             .filter(|_| self.settings.auto_save)
-            .filter(|index| self.buffers.language(*index) == Some(Language::Rust))
+            .filter(|index| self.buffers.language(*index) == Some(Language::RUST))
             .filter(|index| {
                 self.buffers
                     .get(*index)

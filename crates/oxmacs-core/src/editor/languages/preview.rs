@@ -75,7 +75,7 @@ mod tests {
 
     fn markdown() -> Editor {
         let mut editor = editor_with("# Title\n", 0);
-        editor.set_major_mode(Some(Language::Markdown));
+        editor.set_major_mode(Some(Language::MARKDOWN));
         editor
     }
 
@@ -116,7 +116,7 @@ mod tests {
 
     fn previewed(text: &str) -> Editor {
         let mut editor = editor_with(text, 0);
-        editor.set_major_mode(Some(Language::Markdown));
+        editor.set_major_mode(Some(Language::MARKDOWN));
         press(&mut editor, "C-c C-c p");
         editor.take_effects();
         editor

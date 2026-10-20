@@ -198,7 +198,7 @@ mod tests {
 
     fn rust(text: &str, point: usize) -> Editor {
         let mut editor = editor_with(text, point);
-        editor.set_major_mode(Some(Language::Rust));
+        editor.set_major_mode(Some(Language::RUST));
         editor
     }
 
@@ -326,7 +326,7 @@ mod tests {
 
     #[test]
     fn brackets_around_point_are_marked() {
-        let rust = Some(Language::Rust);
+        let rust = Some(Language::RUST);
         for point in [7, 9] {
             let editor = shown("fn a() {}", point, rust);
 
@@ -336,7 +336,7 @@ mod tests {
 
     #[test]
     fn matches_can_span_lines() {
-        let editor = shown("fn a() {\n}", 7, Some(Language::Rust));
+        let editor = shown("fn a() {\n}", 7, Some(Language::RUST));
 
         assert_eq!(editor.line_marks(0), [paren(7..8)]);
         assert_eq!(editor.line_marks(1), [paren(0..1)]);
@@ -344,7 +344,7 @@ mod tests {
 
     #[test]
     fn brackets_in_strings_do_not_count() {
-        let editor = shown("let s = \"(\";", 9, Some(Language::Rust));
+        let editor = shown("let s = \"(\";", 9, Some(Language::RUST));
 
         assert_eq!(editor.line_marks(0), []);
     }

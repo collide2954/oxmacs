@@ -475,9 +475,9 @@ impl Editor {
             Some(Mode::AtlasList(_)) => Scope::AtlasList,
             Some(Mode::Environment(_)) => Scope::Environment,
             Some(Mode::Table(_)) => Scope::Table,
-            Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Rust => Scope::Rust,
+            Some(Mode::Text(Some(syntax))) if syntax.language() == Language::RUST => Scope::Rust,
             Some(Mode::Text(Some(syntax))) if syntax.language() == Language::R => Scope::R,
-            Some(Mode::Text(Some(syntax))) if syntax.language() == Language::Markdown => {
+            Some(Mode::Text(Some(syntax))) if syntax.language() == Language::MARKDOWN => {
                 Scope::Markdown
             }
             Some(Mode::Preview(_)) => Scope::Preview,

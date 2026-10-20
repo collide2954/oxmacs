@@ -62,7 +62,7 @@ mod tests {
     #[test]
     fn the_shortcuts_belong_to_r_buffers() {
         let mut editor = editor_with("x", 1);
-        editor.set_major_mode(Some(Language::Rust));
+        editor.set_major_mode(Some(Language::RUST));
 
         press(&mut editor, "M--");
 

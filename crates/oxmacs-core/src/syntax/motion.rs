@@ -3,28 +3,11 @@ use std::ops::Range;
 use tree_sitter::{Node, Tree};
 
 use crate::syntax::indent::open_bracket;
-use crate::syntax::{Syntax, ancestors, is_function_assignment, preorder};
+use crate::syntax::{Syntax, ancestors, preorder};
 use crate::text::Buffer;
 
 pub const PREMATURE: &str = "Containing expression ends prematurely";
 
-const DEFUNS: &[&str] = &[
-    "function_item",
-    "function_signature_item",
-    "impl_item",
-    "struct_item",
-    "enum_item",
-    "union_item",
-    "trait_item",
-    "mod_item",
-    "macro_definition",
-    "const_item",
-    "static_item",
-    "type_item",
-    "table",
-    "table_array_element",
-    "section",
-];
 const OPENERS: &[&str] = &["(", "[", "{", "[["];
 const CLOSERS: &[&str] = &[")", "]", "}", "]]"];
 pub(super) const COMMENTS: &[&str] = &["line_comment", "block_comment", "comment"];
@@ -34,9 +17,10 @@ impl Syntax {
         let Some(tree) = self.synced(buffer) else {
             return Vec::new();
         };
+        let defun = self.language.outline().defun;
         let mut found = Vec::new();
         preorder(tree, |node| {
-            if DEFUNS.contains(&node.kind()) || is_function_assignment(node) {
+            if defun(node) {
                 found.push(chars(buffer, node.byte_range()));
             }
         });

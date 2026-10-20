@@ -1,7 +1,6 @@
 use std::cmp::Reverse;
 use std::iter;
 use std::ops::Range;
-use std::sync::LazyLock;
 
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{Node, Query, QueryCursor, Tree};
@@ -11,31 +10,14 @@ use crate::syntax::{Grammar, Syntax};
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
-const RUST: &str = include_str!("../../queries/rust/highlights.scm");
-const TOML: &str = include_str!("../../queries/toml/highlights.scm");
-const MARKDOWN: &str = include_str!("../../queries/markdown/highlights.scm");
-const MARKDOWN_INLINE: &str = include_str!("../../queries/markdown/inline.scm");
-const R: &str = include_str!("../../queries/r/highlights.scm");
-
-struct Highlighter {
+pub(crate) struct Highlighter {
     query: Query,
     faces: Vec<Option<Highlight>>,
 }
 
-static RUST_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
-    LazyLock::new(|| Highlighter::new(Grammar::Rust, RUST));
-static TOML_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
-    LazyLock::new(|| Highlighter::new(Grammar::Toml, TOML));
-static MARKDOWN_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
-    LazyLock::new(|| Highlighter::new(Grammar::Markdown, MARKDOWN));
-static MARKDOWN_INLINE_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
-    LazyLock::new(|| Highlighter::new(Grammar::MarkdownInline, MARKDOWN_INLINE));
-static R_HIGHLIGHTER: LazyLock<Option<Highlighter>> =
-    LazyLock::new(|| Highlighter::new(Grammar::R, R));
-
 impl Highlighter {
-    fn new(grammar: Grammar, source: &str) -> Option<Self> {
-        let query = Query::new(&grammar.language(), source).ok()?;
+    pub(super) fn new(language: &tree_sitter::Language, source: &str) -> Option<Self> {
+        let query = Query::new(language, source).ok()?;
         let faces = query
             .capture_names()
             .iter()
@@ -43,18 +25,7 @@ impl Highlighter {
             .collect();
         Some(Self { query, faces })
     }
-
-    fn of(grammar: Grammar) -> Option<&'static Self> {
-        match grammar {
-            Grammar::Rust => RUST_HIGHLIGHTER.as_ref(),
-            Grammar::Toml => TOML_HIGHLIGHTER.as_ref(),
-            Grammar::Markdown => MARKDOWN_HIGHLIGHTER.as_ref(),
-            Grammar::MarkdownInline => MARKDOWN_INLINE_HIGHLIGHTER.as_ref(),
-            Grammar::R => R_HIGHLIGHTER.as_ref(),
-        }
-    }
 }
-
 fn face(capture: &str) -> Option<Highlight> {
     Some(match capture {
         "keyword" => Highlight::Keyword,
@@ -82,7 +53,7 @@ fn contains_others(highlight: Highlight) -> bool {
 
 impl Syntax {
     pub fn highlights(&self, buffer: &Buffer, line: usize) -> Vec<(Range<usize>, Highlight)> {
-        let Some(tree) = self.synced(buffer) else {
+        let (Some(tree), Some(grammar)) = (self.synced(buffer), self.language.grammar()) else {
             return Vec::new();
         };
         let start = buffer.line_start(line);
@@ -94,7 +65,7 @@ impl Syntax {
             start,
             bytes: bytes.clone(),
         };
-        span.paint(&mut faces, self.language.grammar(), tree);
+        span.paint(&mut faces, grammar, tree);
         for layer in &self.layers {
             if layer.replaces {
                 for range in &layer.ranges {
@@ -124,8 +95,8 @@ impl Span<'_> {
         })
     }
 
-    fn paint(&self, faces: &mut [Option<Highlight>], grammar: Grammar, tree: &Tree) {
-        let Some(highlighter) = Highlighter::of(grammar) else {
+    fn paint(&self, faces: &mut [Option<Highlight>], grammar: &Grammar, tree: &Tree) {
+        let Some(highlighter) = grammar.highlighter() else {
             return;
         };
         let mut cursor = QueryCursor::new();
@@ -158,7 +129,7 @@ mod tests {
     use crate::syntax::Language;
 
     fn faces(text: &str, line: usize) -> Vec<(Range<usize>, Highlight)> {
-        faces_in(Language::Rust, text, line)
+        faces_in(Language::RUST, text, line)
     }
 
     fn faces_in(language: Language, text: &str, line: usize) -> Vec<(Range<usize>, Highlight)> {
@@ -249,7 +220,7 @@ mod tests {
     #[test]
     fn toml_tables_keys_and_values_are_highlighted() {
         let text = "[package]\nname = \"oxmacs\" # c\nversion = 1\n[[bin]]\n";
-        let toml = |line| faces_in(Language::Toml, text, line);
+        let toml = |line| faces_in(Language::TOML, text, line);
 
         assert_eq!(toml(0), [(0..9, Highlight::Type)]);
         assert_eq!(
@@ -270,7 +241,7 @@ mod tests {
     #[test]
     fn markdown_blocks_are_highlighted() {
         let text = "# Title\n\n- item\n\n```\ncode\n```\n\n> quote\n";
-        let markdown = |line| faces_in(Language::Markdown, text, line);
+        let markdown = |line| faces_in(Language::MARKDOWN, text, line);
 
         assert_eq!(markdown(0), [(0..7, Highlight::Heading)]);
         assert_eq!(markdown(2), [(0..2, Highlight::Keyword)]);
@@ -282,7 +253,7 @@ mod tests {
     #[test]
     fn markdown_inlines_are_highlighted() {
         let text = "Some *em* and **strong** with `code` and [link](url).\n# A *b*\n";
-        let markdown = |line| faces_in(Language::Markdown, text, line);
+        let markdown = |line| faces_in(Language::MARKDOWN, text, line);
 
         assert_eq!(
             markdown(0),
@@ -303,7 +274,7 @@ mod tests {
     #[test]
     fn fenced_code_is_highlighted_in_its_language() {
         let text = "```rust\nfn a() {}\n```\n\n```py\nx = 1\n```\n";
-        let markdown = |line| faces_in(Language::Markdown, text, line);
+        let markdown = |line| faces_in(Language::MARKDOWN, text, line);
 
         assert_eq!(
             markdown(1),
@@ -361,7 +332,7 @@ mod tests {
         let text = "```r\nf <- function() NULL\n```\n";
 
         assert_eq!(
-            faces_in(Language::Markdown, text, 1),
+            faces_in(Language::MARKDOWN, text, 1),
             [
                 (0..1, Highlight::Function),
                 (5..13, Highlight::Keyword),
@@ -373,7 +344,7 @@ mod tests {
     #[test]
     fn stale_trees_give_no_highlights() {
         let mut buffer = Buffer::with_text("t", "fn a() {}");
-        let mut syntax = Syntax::new(Language::Rust);
+        let mut syntax = Syntax::new(Language::RUST);
         syntax.sync(&mut buffer);
 
         buffer.insert("x");

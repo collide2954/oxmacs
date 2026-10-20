@@ -25,7 +25,7 @@ use crate::editor::special::splash::Splash;
 use crate::editor::special::toolbox::ToolList;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
-use crate::syntax::{Language, Syntax};
+use crate::syntax::{Language, Syntax, language_for};
 use crate::text::{Buffer, BufferId};
 
 pub(super) const SCRATCH: &str = "*scratch*";
@@ -358,7 +358,7 @@ impl Editor {
     pub(super) fn add_buffer(&mut self, buffer: Buffer) {
         let language = buffer
             .file()
-            .and_then(|file| Language::for_path(&file.path));
+            .and_then(|file| language_for(&Language::BUILT_IN, &file.path));
         self.add_buffer_with(buffer, Mode::Text(language.map(Syntax::new)));
     }
 

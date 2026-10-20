@@ -5,7 +5,7 @@ use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::languages::r_help::symbol_at;
 use crate::external::r;
-use crate::syntax::Language;
+use crate::syntax::{Language, language_for};
 use crate::text::{Buffer, BufferId};
 
 const MARKERS: [&str; 2] = [".git", "DESCRIPTION"];
@@ -75,7 +75,7 @@ fn r_files(directory: &Path, depth: usize, found: &mut Vec<PathBuf>) {
             if depth < MAX_DEPTH && !name.starts_with('.') && !SKIPPED.contains(&name.as_str()) {
                 r_files(&path, depth + 1, found);
             }
-        } else if Language::for_path(&path) == Some(Language::R) {
+        } else if language_for(&Language::BUILT_IN, &path) == Some(Language::R) {
             found.push(path);
         }
     }

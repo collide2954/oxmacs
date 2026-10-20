@@ -1,7 +1,7 @@
 use tree_sitter::Node;
 
 use crate::display;
-use crate::syntax::{Language, Syntax, ancestors};
+use crate::syntax::{Indentation, Syntax, ancestors};
 use crate::text::Buffer;
 
 const OPENERS: &[&str] = &["{", "(", "[", "[["];
@@ -12,15 +12,6 @@ const LITERALS: &[&str] = &[
     "block_comment",
     "string",
 ];
-
-impl Language {
-    pub fn indent_unit(self) -> usize {
-        match self {
-            Self::Rust | Self::Toml | Self::Markdown => 4,
-            Self::R => 2,
-        }
-    }
-}
 
 impl Syntax {
     pub fn indentation(&self, buffer: &Buffer, line: usize, tab_width: usize) -> Option<usize> {
@@ -40,23 +31,19 @@ impl Syntax {
                 .filter(|open| row(*open) < line)
                 .map(|open| (ancestor, open))
         });
-        let unit = self.language.indent_unit();
-        let language = self.language;
+        let rules = self.language.indentation();
+        let unit = rules.unit;
         let Some((container, open)) = container else {
-            return Some(match language {
-                Language::Rust | Language::R => {
-                    continuation(language, statement(node, tree.root_node()), line, &rest) * unit
-                }
-                Language::Toml | Language::Markdown => {
-                    previous_indentation(buffer, line, tab_width)
-                }
+            return Some(if rules.continues {
+                continuation(rules, statement(node, tree.root_node()), line, &rest) * unit
+            } else {
+                previous_indentation(buffer, line, tab_width)
             });
         };
-        let base = match language {
-            Language::R => indentation_of(buffer, row(owner(container, open)), tab_width),
-            Language::Rust | Language::Toml | Language::Markdown => {
-                indentation_of(buffer, row(open), tab_width)
-            }
+        let base = if rules.from_owner {
+            indentation_of(buffer, row(owner(container, open)), tab_width)
+        } else {
+            indentation_of(buffer, row(open), tab_width)
         };
         let closes = !node.is_named()
             && CLOSERS.contains(&node.kind())
@@ -65,19 +52,17 @@ impl Syntax {
         if closes {
             return Some(base);
         }
-        let continues = match language {
-            Language::Rust | Language::R => {
-                continuation(language, statement(node, container), line, &rest)
-            }
-            Language::Toml | Language::Markdown => 0,
+        let continues = if rules.continues {
+            continuation(rules, statement(node, container), line, &rest)
+        } else {
+            0
         };
-        let hanging = (language == Language::R && open.kind() != "{")
+        let hanging = (rules.hanging && open.kind() != "{")
             .then(|| hanging_column(buffer, open, tab_width))
             .flatten();
         Some(hanging.unwrap_or(base + unit) + continues * unit)
     }
 }
-
 fn owner<'tree>(container: Node<'tree>, open: Node<'tree>) -> Node<'tree> {
     if container.start_byte() < open.start_byte() {
         return container;
@@ -130,9 +115,12 @@ fn statement<'tree>(node: Node<'tree>, container: Node<'tree>) -> Option<Node<'t
     ancestors(node).find(|ancestor| ancestor.parent() == Some(container))
 }
 
-fn continuation(language: Language, statement: Option<Node<'_>>, line: usize, rest: &str) -> usize {
-    let starts_fresh =
-        rest.starts_with('{') || (language == Language::Rust && starts_with_word(rest, "where"));
+fn continuation(rules: Indentation, statement: Option<Node<'_>>, line: usize, rest: &str) -> usize {
+    let starts_fresh = rest.starts_with('{')
+        || rules
+            .fresh_words
+            .iter()
+            .any(|word| starts_with_word(rest, word));
     usize::from(statement.is_some_and(|statement| row(statement) < line) && !starts_fresh)
 }
 
@@ -157,6 +145,7 @@ fn indentation_of(buffer: &Buffer, line: usize, tab_width: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::syntax::Language;
 
     const FORMATTED: &str = r#"use std::collections::{
     HashMap,
@@ -218,7 +207,7 @@ impl Point {
 "#;
 
     fn indentations(text: &str) -> (Buffer, Syntax) {
-        parsed(Language::Rust, text)
+        parsed(Language::RUST, text)
     }
 
     fn parsed(language: Language, text: &str) -> (Buffer, Syntax) {
@@ -270,7 +259,7 @@ impl Point {
 
     #[test]
     fn toml_indents_arrays_and_keeps_other_lines_level() {
-        let (buffer, syntax) = parsed(Language::Toml, "[a]\n  x = 1\n  y = [\n\"b\",\n]\n");
+        let (buffer, syntax) = parsed(Language::TOML, "[a]\n  x = 1\n  y = [\n\"b\",\n]\n");
         let indent = |line| syntax.indentation(&buffer, line, 8);
 
         assert_eq!(indent(2), Some(2));

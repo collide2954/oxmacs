@@ -252,7 +252,7 @@ impl<'a> Pane<'a> {
                 .or_else(|| self.editor.is_atlas(self.index).then_some("Atlas")),
             lint: buffer
                 .file()
-                .filter(|_| language == Some(Language::Rust))
+                .filter(|_| language == Some(Language::RUST))
                 .and_then(|file| self.editor.lint_status(&file.path)),
         }
     }

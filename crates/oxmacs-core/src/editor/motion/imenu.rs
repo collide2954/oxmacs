@@ -63,7 +63,7 @@ mod tests {
 
     fn rust(text: &str) -> Editor {
         let mut editor = editor_with(text, 0);
-        editor.set_major_mode(Some(Language::Rust));
+        editor.set_major_mode(Some(Language::RUST));
         editor
     }
 

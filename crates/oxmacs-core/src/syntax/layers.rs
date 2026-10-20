@@ -1,102 +1,117 @@
+use std::iter;
 use std::ops::Range;
 
-use tree_sitter::{Node, Parser, Tree};
+use streaming_iterator::StreamingIterator;
+use tree_sitter::{Node, Parser, Query, QueryCursor, QueryMatch, Tree};
 
-use crate::syntax::{Language, Syntax, preorder};
+use crate::syntax::{Grammar, Syntax};
 use crate::text::Buffer;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Grammar {
-    Rust,
-    Toml,
-    Markdown,
-    MarkdownInline,
-    R,
-}
-
-impl Grammar {
-    pub(super) fn language(self) -> tree_sitter::Language {
-        match self {
-            Self::Rust => tree_sitter_rust::LANGUAGE.into(),
-            Self::Toml => tree_sitter_toml_ng::LANGUAGE.into(),
-            Self::Markdown => tree_sitter_md::LANGUAGE.into(),
-            Self::MarkdownInline => tree_sitter_md::INLINE_LANGUAGE.into(),
-            Self::R => tree_sitter_r::LANGUAGE.into(),
-        }
-    }
-
-    fn for_fence(name: &str) -> Option<Self> {
-        match name.to_ascii_lowercase().as_str() {
-            "rust" | "rs" => Some(Self::Rust),
-            "toml" => Some(Self::Toml),
-            "r" => Some(Self::R),
-            _ => None,
-        }
-    }
-}
-
-impl Language {
-    pub(super) fn grammar(self) -> Grammar {
-        match self {
-            Self::Rust => Grammar::Rust,
-            Self::Toml => Grammar::Toml,
-            Self::Markdown => Grammar::Markdown,
-            Self::R => Grammar::R,
-        }
-    }
-}
-
 pub(super) struct Layer {
-    pub(super) grammar: Grammar,
+    pub(super) grammar: &'static Grammar,
     pub(super) tree: Tree,
     pub(super) ranges: Vec<Range<usize>>,
     pub(super) replaces: bool,
 }
 
+struct Injection {
+    grammar: &'static Grammar,
+    range: tree_sitter::Range,
+    combined: bool,
+}
+
 impl Syntax {
     pub(super) fn inject(&mut self, buffer: &Buffer) {
         self.layers.clear();
-        let Some(tree) = self
-            .tree
-            .as_ref()
-            .filter(|_| self.language == Language::Markdown)
+        let Some(query) = self
+            .language
+            .grammar()
+            .and_then(|grammar| grammar.injections())
         else {
             return;
         };
-        let mut inline = Vec::new();
-        let mut code = Vec::new();
-        preorder(tree, |node| match node.kind() {
-            "inline" => inline.push(node.range()),
-            "fenced_code_block" => {
-                if let Some(injection) = fenced_code(node, buffer) {
-                    code.push(injection);
-                }
+        let Some(tree) = &self.tree else {
+            return;
+        };
+        let mut found = Vec::new();
+        let mut cursor = QueryCursor::new();
+        let text = |node: Node<'_>| iter::once(buffer.text_in_bytes(node.byte_range()));
+        let mut matches = cursor.matches(query, tree.root_node(), text);
+        while let Some(matched) = matches.next() {
+            if let Some(injection) = self.injection(query, matched, buffer) {
+                found.push(injection);
             }
-            _ => {}
-        });
-        if !inline.is_empty() {
-            self.add_layer(Grammar::MarkdownInline, &inline, false, buffer);
         }
-        for (grammar, range) in code {
-            self.add_layer(grammar, &[range], true, buffer);
+        let mut combined: Vec<(&'static Grammar, Vec<tree_sitter::Range>)> = Vec::new();
+        let mut separate = Vec::new();
+        for injection in found {
+            if injection.combined {
+                match combined
+                    .iter_mut()
+                    .find(|(grammar, _)| std::ptr::eq(*grammar, injection.grammar))
+                {
+                    Some((_, ranges)) => ranges.push(injection.range),
+                    None => combined.push((injection.grammar, vec![injection.range])),
+                }
+            } else {
+                separate.push(injection);
+            }
+        }
+        for (grammar, ranges) in combined {
+            self.add_layer(grammar, &ranges, false, buffer);
+        }
+        for injection in separate {
+            self.add_layer(injection.grammar, &[injection.range], true, buffer);
         }
     }
 
-    fn injector(&mut self, grammar: Grammar) -> Option<&mut Parser> {
-        if !self.injectors.iter().any(|(known, _)| *known == grammar) {
+    fn injection(
+        &self,
+        query: &Query,
+        matched: &QueryMatch<'_, '_>,
+        buffer: &Buffer,
+    ) -> Option<Injection> {
+        let names = query.capture_names();
+        let captured = |wanted: &str| {
+            matched
+                .captures()
+                .iter()
+                .find(|capture| names.get(capture.index as usize) == Some(&wanted))
+                .map(|capture| capture.node)
+        };
+        let content = captured("injection.content")?;
+        let properties = query.property_settings(matched.pattern_index);
+        let property = |key: &str| properties.iter().find(|property| &*property.key == key);
+        let name = match captured("injection.language") {
+            Some(node) => buffer.text_in_bytes(node.byte_range()),
+            None => property("injection.language")?.value.as_deref()?.to_owned(),
+        };
+        Some(Injection {
+            grammar: self.language.injected(name.trim(), &self.known)?,
+            range: content.range(),
+            combined: property("injection.combined").is_some(),
+        })
+    }
+
+    fn injector(&mut self, grammar: &'static Grammar) -> Option<&mut Parser> {
+        if !self
+            .injectors
+            .iter()
+            .any(|(known, _)| std::ptr::eq(*known, grammar))
+        {
             let mut parser = Parser::new();
             parser.set_language(&grammar.language()).ok()?;
             self.injectors.push((grammar, parser));
         }
         self.injectors
             .iter_mut()
-            .find(|(known, _)| *known == grammar)
+            .find(|(known, _)| std::ptr::eq(*known, grammar))
             .map(|(_, parser)| parser)
     }
 
     fn add_layer(
         &mut self,
-        grammar: Grammar,
+        grammar: &'static Grammar,
         ranges: &[tree_sitter::Range],
         replaces: bool,
         buffer: &Buffer,
@@ -124,21 +139,4 @@ impl Syntax {
             });
         }
     }
-}
-
-fn fenced_code(node: Node<'_>, buffer: &Buffer) -> Option<(Grammar, tree_sitter::Range)> {
-    let mut cursor = node.walk();
-    let children: Vec<Node<'_>> = node.named_children(&mut cursor).collect();
-    let info = children
-        .iter()
-        .find(|child| child.kind() == "info_string")?;
-    let mut info_cursor = info.walk();
-    let language = info
-        .named_children(&mut info_cursor)
-        .find(|child| child.kind() == "language")?;
-    let grammar = Grammar::for_fence(&buffer.text_in_bytes(language.byte_range()))?;
-    let content = children
-        .iter()
-        .find(|child| child.kind() == "code_fence_content")?;
-    Some((grammar, content.range()))
 }
