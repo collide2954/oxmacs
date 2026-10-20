@@ -32,6 +32,21 @@ pub trait Applet {
     fn install(&self, editor: &mut Editor);
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Finding {
+    Info,
+    Good,
+    Warning,
+    Problem,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DoctorLine {
+    pub label: String,
+    pub finding: Finding,
+    pub text: String,
+}
+
 #[derive(Clone)]
 pub struct Payload(Arc<dyn Any + Send + Sync>);
 

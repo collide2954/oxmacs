@@ -2,7 +2,7 @@ use std::any::Any;
 
 use serde::de::DeserializeOwned;
 
-use crate::applet::AppletBuffer;
+use crate::applet::{AppletBuffer, DoctorLine};
 use crate::config::Config;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
@@ -10,6 +10,8 @@ use crate::editor::page::Page;
 use crate::text::{Buffer, BufferId};
 
 pub(super) type ConfigCheck = fn(&Config, &str) -> Result<(), String>;
+
+pub(super) type DoctorSection = fn(&Editor) -> Vec<DoctorLine>;
 
 fn check<T: DeserializeOwned + Default>(config: &Config, name: &str) -> Result<(), String> {
     config.applet::<T>(name).map(|_| ())
@@ -21,6 +23,10 @@ fn downcast<T: AppletBuffer>(view: &dyn AppletBuffer) -> Option<&T> {
 }
 
 impl Editor {
+    pub fn add_doctor_section(&mut self, title: &'static str, lines: DoctorSection) {
+        self.doctor_sections.push((title, lines));
+    }
+
     pub fn add_config_table<T: DeserializeOwned + Default>(&mut self, name: &'static str) {
         self.config_tables.push((name, check::<T>));
         self.check_config_tables();

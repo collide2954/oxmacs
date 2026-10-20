@@ -2,6 +2,7 @@ use std::env;
 use std::fmt::Write;
 use std::path::Path;
 
+use crate::applet::{DoctorLine, Finding};
 use crate::config::Config;
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
@@ -120,6 +121,13 @@ impl Editor {
         self.examine_tools(&mut page);
         page.line(&[]);
         self.examine_atlas(&mut page);
+        for (title, lines) in &self.doctor_sections {
+            page.line(&[]);
+            page.heading(title);
+            for line in lines(self) {
+                finding(&mut page, &line);
+            }
+        }
         page
     }
 
@@ -220,6 +228,14 @@ impl Editor {
                 Some(Highlight::Warning),
             ),
         }
+        for table in self.unclaimed_config_tables() {
+            field(
+                page,
+                "",
+                &format!("[{table}] is not read by any applet in this build"),
+                Some(Highlight::Warning),
+            );
+        }
         let data = dirs::data_dir().map(|dir| dir.join("oxmacs").display().to_string());
         field(page, "Data", data.as_deref().unwrap_or("none"), None);
     }
@@ -254,6 +270,22 @@ impl Editor {
             report.find(|tool| matches!(tool, Tool::Managed { tool, .. } if *tool == AIR)),
             "M-x list-tools installs it, or set air-program",
         );
+    }
+}
+
+fn finding(page: &mut Page, line: &DoctorLine) {
+    let label = format!("  {:<LABEL_WIDTH$}", line.label);
+    let mark = match line.finding {
+        Finding::Info => None,
+        Finding::Good => Some(("✓ ", Highlight::Success)),
+        Finding::Warning => Some(("! ", Highlight::Warning)),
+        Finding::Problem => Some(("✗ ", Highlight::Error)),
+    };
+    match mark {
+        Some((mark, highlight)) => {
+            page.line(&[(&label, None), (mark, Some(highlight)), (&line.text, None)]);
+        }
+        None => page.line(&[(&label, None), (&line.text, None)]),
     }
 }
 
@@ -348,6 +380,7 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
+    use crate::applet::{DoctorLine, Finding};
     use crate::config::Config;
     use crate::editor::test_support::{lines, press, type_text};
     use crate::editor::{Editor, Effect};
@@ -573,6 +606,57 @@ mod tests {
         let line = line_with(&editor, "Features");
         assert!(line.contains("sample 0.4.0"), "{line}");
         assert!(!line.contains("built-in"), "{line}");
+    }
+
+    fn sample_findings(editor: &Editor) -> Vec<DoctorLine> {
+        vec![
+            DoctorLine {
+                label: "buffers".to_owned(),
+                finding: Finding::Info,
+                text: format!("{} open", editor.buffer_names().len()),
+            },
+            DoctorLine {
+                label: "server".to_owned(),
+                finding: Finding::Good,
+                text: "reachable".to_owned(),
+            },
+            DoctorLine {
+                label: "token".to_owned(),
+                finding: Finding::Problem,
+                text: "missing".to_owned(),
+            },
+        ]
+    }
+
+    #[test]
+    fn applets_add_their_own_sections() {
+        let (_dir, mut editor) = doctor();
+        editor.add_doctor_section("Sample", sample_findings);
+
+        press(&mut editor, "g");
+
+        let lines = lines(&editor);
+        let heading = lines.iter().position(|line| line == "Sample").unwrap();
+        assert!(
+            lines[heading + 1].starts_with("  buffers"),
+            "{}",
+            lines[heading + 1]
+        );
+        assert!(lines[heading + 1].ends_with(" open"));
+        assert!(lines[heading + 2].ends_with("✓ reachable"));
+        assert!(lines[heading + 3].ends_with("✗ missing"));
+    }
+
+    #[test]
+    fn config_tables_no_applet_reads_are_pointed_out() {
+        let (_dir, mut editor) = doctor();
+        editor.apply_config(&Config::parse("[irc]\nnick = \"me\"\n").unwrap());
+
+        press(&mut editor, "g");
+
+        assert!(
+            line_with(&editor, "[irc]").ends_with("[irc] is not read by any applet in this build")
+        );
     }
 
     #[test]
