@@ -44,6 +44,47 @@ const SPARKLES_FROM: f32 = 2.0;
 const SPARKLE_DENSITY: f32 = 0.08;
 const FADE: f32 = 6.0;
 const BLOCK: char = '█';
+const FIRING: char = '●';
+const RESTING: char = '○';
+const SIGNAL: char = '•';
+const AXON: char = '·';
+const NEURON_SPACING: usize = 4;
+const SYNAPSES: usize = 3;
+const REACH: f32 = 5.0;
+
+type Point2 = (f32, f32);
+
+fn distance(from: Point2, to: Point2) -> f32 {
+    let (across, down) = (to.0 - from.0, (to.1 - from.1) * 2.0);
+    (across * across + down * down).sqrt()
+}
+
+fn along(from: Point2, to: Point2, progress: f32) -> Point2 {
+    (
+        from.0 + (to.0 - from.0) * progress,
+        from.1 + (to.1 - from.1) * progress,
+    )
+}
+
+fn synapses(neurons: &[Point2]) -> Vec<(usize, usize)> {
+    let mut found: Vec<(usize, usize)> = Vec::new();
+    for (from, here) in neurons.iter().enumerate() {
+        let mut nearest: Vec<(f32, usize)> = neurons
+            .iter()
+            .enumerate()
+            .filter(|(to, _)| *to != from)
+            .map(|(to, there)| (distance(*here, *there), to))
+            .collect();
+        nearest.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for (_, to) in nearest.into_iter().take(SYNAPSES) {
+            let pair = (from.min(to), from.max(to));
+            if !found.contains(&pair) {
+                found.push(pair);
+            }
+        }
+    }
+    found
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Glyph {
@@ -68,6 +109,7 @@ pub fn still(animation: SplashAnimation) -> f32 {
         SplashAnimation::Plasma => SHIMMER_PERIOD + SHIMMER_SWEEP / 2.0,
         SplashAnimation::Wave => 1.0,
         SplashAnimation::Assemble => 6.0,
+        SplashAnimation::Neurons => 2.4,
     }
 }
 
@@ -264,6 +306,100 @@ impl Scene {
         }
     }
 
+    fn neuron_layout(&self) -> Vec<Point2> {
+        let wanted = (self.columns / NEURON_SPACING).clamp(6, 40);
+        let mut found = Vec::new();
+        for seed in 0..wanted * 8 {
+            if found.len() == wanted {
+                break;
+            }
+            let column = (hash(seed, 0, 20) * to_f32(self.columns.saturating_sub(1))).round();
+            let row = (hash(seed, 0, 21) * to_f32(ROWS - 1)).round();
+            let cell = (floor_to_usize(column), floor_to_usize(row));
+            let crowded = found
+                .iter()
+                .any(|known| distance(*known, (column, row)) < 3.0);
+            if self.distance_from_logo(cell.0, cell.1) >= 2.0 && !crowded {
+                found.push((column, row));
+            }
+        }
+        found
+    }
+
+    fn put_at(&mut self, at: Point2, glyph: Glyph) {
+        self.put(
+            floor_to_usize(at.0 + 0.5),
+            floor_to_usize(at.1 + 0.5),
+            glyph,
+        );
+    }
+
+    fn neurons(&mut self) {
+        let neurons = self.neuron_layout();
+        let mut charge = vec![0.0_f32; neurons.len()];
+        let mut signals: Vec<(Point2, Color)> = Vec::new();
+        for (index, &(first, second)) in synapses(&neurons).iter().enumerate() {
+            let (from, to) = if hash(index, 0, 22) < 0.5 {
+                (first, second)
+            } else {
+                (second, first)
+            };
+            let (start, end) = (neurons[from], neurons[to]);
+            let steps = (end.0 - start.0)
+                .abs()
+                .max((end.1 - start.1).abs() * 2.0)
+                .ceil()
+                .max(1.0);
+            let axon = self.background.mix(self.colors[1], 0.32);
+            for step in 1..floor_to_usize(steps) {
+                let at = along(start, end, to_f32(step) / steps);
+                self.put_at(
+                    at,
+                    Glyph {
+                        ch: AXON,
+                        color: axon,
+                    },
+                );
+            }
+            let period = 1.4 + hash(index, 0, 23) * 2.2;
+            let progress = (self.seconds / period + hash(index, 0, 24)).fract();
+            let color = cyclic(&self.colors, hash(index, 0, 25));
+            let trail = (progress - 1.5 / steps).max(0.0);
+            self.put_at(
+                along(start, end, trail),
+                Glyph {
+                    ch: SIGNAL,
+                    color: self.background.mix(color, 0.45),
+                },
+            );
+            signals.push((along(start, end, progress), color));
+            charge[to] = charge[to].max(((progress - 0.8) / 0.2).clamp(0.0, 1.0));
+            charge[from] = charge[from].max(((0.12 - progress) / 0.12).clamp(0.0, 1.0));
+        }
+        for &(at, color) in &signals {
+            self.put_at(at, Glyph { ch: SIGNAL, color });
+        }
+        for (index, &at) in neurons.iter().enumerate() {
+            let level = charge[index];
+            let ch = if level > 0.3 { FIRING } else { RESTING };
+            let color = self
+                .background
+                .mix(cyclic(&self.colors, hash(index, 0, 26)), 0.4 + 0.6 * level);
+            self.put_at(at, Glyph { ch, color });
+        }
+        for (column, row) in self.letters() {
+            let here = (to_f32(self.left + column), to_f32(TOP + row));
+            let (glow, lit) = signals
+                .iter()
+                .map(|(at, color)| ((1.0 - distance(here, *at) / REACH).max(0.0), *color))
+                .fold((0.0, self.accent), |best, next| {
+                    if next.0 > best.0 { next } else { best }
+                });
+            let color = self.ink.mix(lit, glow * 0.85);
+            self.put(self.left + column, TOP + row, Glyph { ch: BLOCK, color });
+        }
+    }
+
     fn assemble(&mut self) {
         self.sparkles();
         for (column, row) in self.letters() {
@@ -306,6 +442,7 @@ pub fn frame(
         SplashAnimation::Plasma => scene.plasma(),
         SplashAnimation::Wave => scene.wave(),
         SplashAnimation::Assemble => scene.assemble(),
+        SplashAnimation::Neurons => scene.neurons(),
     }
     scene.cells
 }
@@ -492,6 +629,7 @@ mod tests {
             SplashAnimation::Plasma,
             SplashAnimation::Wave,
             SplashAnimation::Assemble,
+            SplashAnimation::Neurons,
         ] {
             let grid = frame(animation, still(animation), 71, &faces);
             assert_eq!(grid.len(), ROWS);
@@ -507,6 +645,37 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn neurons_fire_signals_along_their_axons() {
+        let grid = frame(
+            SplashAnimation::Neurons,
+            still(SplashAnimation::Neurons),
+            71,
+            &faces(),
+        );
+        let count = |wanted: &[char]| {
+            grid.iter()
+                .flatten()
+                .filter(|cell| cell.is_some_and(|glyph| wanted.contains(&glyph.ch)))
+                .count()
+        };
+
+        assert!(count(&[FIRING, RESTING]) >= 6);
+        assert!(count(&[SIGNAL]) >= 1);
+        assert!(count(&[AXON]) > count(&[SIGNAL]));
+    }
+
+    #[test]
+    fn every_neuron_has_a_synapse() {
+        let neurons = [(0.0, 0.0), (4.0, 0.0), (40.0, 6.0), (44.0, 6.0)];
+        let found = synapses(&neurons);
+
+        for neuron in 0..neurons.len() {
+            assert!(found.iter().any(|(a, b)| *a == neuron || *b == neuron));
+        }
+        assert!(found.contains(&(0, 1)) && found.contains(&(2, 3)));
     }
 
     #[test]
