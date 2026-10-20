@@ -36,7 +36,12 @@ impl Registry {
     }
 
     pub(super) fn counterpart(&self, theme: &Theme) -> &'static Theme {
-        let family = |name: &str| name.split('-').next().unwrap_or_default().to_owned();
+        let family = |name: &str| {
+            name.split('-')
+                .find(|part| !["dark", "light"].contains(part))
+                .unwrap_or_default()
+                .to_owned()
+        };
         let other = match theme.appearance {
             Appearance::Light => Appearance::Dark,
             Appearance::Dark => Appearance::Light,
@@ -126,5 +131,21 @@ mod tests {
         );
         assert_eq!(registry.counterpart(named("dracula")).name, "adwaita");
         assert_eq!(registry.counterpart(named("adwaita")).name, "adwaita-dark");
+    }
+
+    #[test]
+    fn leading_dark_and_light_are_not_family_names() {
+        let registry = Registry::new();
+        registry.register(themes(&[
+            ("dark-plus", Appearance::Dark),
+            ("light-plus", Appearance::Light),
+        ]));
+
+        assert_eq!(
+            registry
+                .counterpart(registry.find("dark-plus").unwrap())
+                .name,
+            "light-plus"
+        );
     }
 }
