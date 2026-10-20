@@ -1,4 +1,4 @@
-use crate::command::{CommandId, Scope};
+use crate::command::CommandId;
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
@@ -56,14 +56,16 @@ struct Described {
     name: &'static str,
     summary: &'static str,
     help: Option<&'static str>,
-    scope: Scope,
+    place: Option<&'static str>,
 }
 
-fn key_lines(name: &str, places: &[(Scope, Vec<String>)]) -> Vec<String> {
+type Places = [(Option<&'static str>, Vec<String>)];
+
+fn key_lines(name: &str, places: &Places) -> Vec<String> {
     let mut groups: Vec<(String, Vec<String>)> = Vec::new();
-    for (scope, keys) in places {
+    for (label, keys) in places {
         let keys = listed(keys, "or");
-        let place = scope.label().unwrap_or_default().to_owned();
+        let place = label.unwrap_or_default().to_owned();
         match groups.iter_mut().find(|(shown, _)| *shown == keys) {
             Some((_, scopes)) => scopes.push(place),
             None => groups.push((keys, vec![place])),
@@ -88,7 +90,7 @@ fn key_lines(name: &str, places: &[(Scope, Vec<String>)]) -> Vec<String> {
         .collect()
 }
 
-fn page(command: &Described, places: &[(Scope, Vec<String>)], width: usize) -> Page {
+fn page(command: &Described, places: &Places, width: usize) -> Page {
     let mut page = Page::default();
     page.heading(command.name);
     page.line(&[(&format!("{}.", command.summary), None)]);
@@ -101,7 +103,7 @@ fn page(command: &Described, places: &[(Scope, Vec<String>)], width: usize) -> P
         let label = if index == 0 { KEYS } else { INDENT };
         page.line(&[(label, Some(Highlight::Comment)), (keys, None)]);
     }
-    if let Some(place) = command.scope.label() {
+    if let Some(place) = command.place {
         page.line(&[(WORKS_IN, Some(Highlight::Comment)), (place, None)]);
     }
     page
@@ -156,7 +158,7 @@ impl Editor {
         if width == help.width {
             return;
         }
-        let places: Vec<(Scope, Vec<String>)> = self
+        let places: Vec<(Option<&'static str>, Vec<String>)> = self
             .keymaps
             .all()
             .map(|(scope, keymap)| {
@@ -165,7 +167,7 @@ impl Editor {
                     .iter()
                     .map(ToString::to_string)
                     .collect::<Vec<_>>();
-                (scope, keys)
+                (self.keymaps.label(scope), keys)
             })
             .filter(|(_, keys)| !keys.is_empty())
             .collect();
@@ -173,7 +175,7 @@ impl Editor {
             name: self.commands.name(command),
             summary: self.commands.summary(command),
             help: self.commands.help(command),
-            scope: self.commands.scope(command),
+            place: self.keymaps.label(self.commands.scope(command)),
         };
         let page = page(&described, &places, width);
         if let Some(buffer) = self.buffers.get_mut(index) {

@@ -18,12 +18,35 @@ impl CommandId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ScopeId(u16);
+
+impl From<Scope> for ScopeId {
+    fn from(scope: Scope) -> Self {
+        Self(scope as u16)
+    }
+}
+
+impl ScopeId {
+    pub fn core(self) -> Option<Scope> {
+        Scope::VARIANTS.get(usize::from(self.0)).copied()
+    }
+
+    pub(crate) fn at(index: usize) -> Self {
+        Self(u16::try_from(index).unwrap_or(u16::MAX))
+    }
+
+    pub(crate) fn index(self) -> usize {
+        usize::from(self.0)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct CommandSpec {
     pub name: &'static str,
     pub summary: &'static str,
     pub help: Option<&'static str>,
-    pub scope: Scope,
+    pub scope: ScopeId,
     pub run: fn(&mut Editor),
 }
 
@@ -76,10 +99,12 @@ impl Commands {
         }
     }
 
-    pub fn scope(&self, id: CommandId) -> Scope {
+    pub fn scope(&self, id: CommandId) -> ScopeId {
         match id.core() {
-            Some(command) => command.scope(),
-            None => self.added(id).map_or(Scope::Global, |spec| spec.scope),
+            Some(command) => command.scope().into(),
+            None => self
+                .added(id)
+                .map_or(Scope::Global.into(), |spec| spec.scope),
         }
     }
 
@@ -100,7 +125,7 @@ mod tests {
         name: "say-hello",
         summary: "Say hello in the echo area",
         help: Some("Shows hello."),
-        scope: Scope::Global,
+        scope: ScopeId(0),
         run: hello,
     };
 
@@ -111,7 +136,7 @@ mod tests {
 
         assert_eq!(id.core(), Some(Command::DiredMark));
         assert_eq!(commands.name(id), "dired-mark");
-        assert_eq!(commands.scope(id), Scope::Dired);
+        assert_eq!(commands.scope(id), Scope::Dired.into());
         assert_eq!(commands.find("dired-mark"), Some(id));
         assert!(commands.handler(id).is_none());
     }

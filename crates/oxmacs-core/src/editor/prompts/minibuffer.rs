@@ -230,7 +230,7 @@ impl Editor {
             .filter(|command| {
                 let scope = self.commands.scope(*command);
                 let available =
-                    everywhere || scope == Scope::Global || scope == self.buffer_scope();
+                    everywhere || scope == Scope::Global.into() || scope == self.buffer_scope();
                 available && matches(self.commands.name(*command))
             })
             .collect();

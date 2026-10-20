@@ -42,7 +42,7 @@ use std::{env, mem};
 
 use buffers::{BufferList, Mode};
 
-use crate::command::{Command, CommandId, CommandSpec, Commands, Scope};
+use crate::command::{Command, CommandId, CommandSpec, Commands, Scope, ScopeId};
 use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::editor::chat::Irc;
@@ -409,13 +409,15 @@ impl Editor {
     }
 
     fn mode_keymap(&self) -> Option<&Keymap> {
-        match self.buffer_scope() {
-            Scope::Global => None,
-            scope => Some(self.keymaps.get(scope)),
-        }
+        let scope = self.buffer_scope();
+        (scope != Scope::Global.into()).then(|| self.keymaps.get(scope))
     }
 
-    fn buffer_scope(&self) -> Scope {
+    fn buffer_scope(&self) -> ScopeId {
+        self.core_scope().into()
+    }
+
+    fn core_scope(&self) -> Scope {
         match self.buffers.mode(0) {
             Some(Mode::Dired(_)) => Scope::Dired,
             Some(Mode::Splash(_)) => Scope::Splash,
@@ -511,9 +513,13 @@ impl Editor {
         self.commands.add(spec)
     }
 
+    pub fn add_scope(&mut self, label: &'static str) -> ScopeId {
+        self.keymaps.add(label)
+    }
+
     pub fn bind(
         &mut self,
-        scope: Scope,
+        scope: impl Into<ScopeId>,
         keys: &str,
         command: impl Into<CommandId>,
     ) -> Result<(), KeyParseError> {
@@ -582,13 +588,51 @@ mod tests {
     }
 
     #[test]
+    fn added_scopes_label_their_keys_and_keep_commands_to_themselves() {
+        let mut editor = Editor::new();
+        let scope = editor.add_scope("greeting buffers");
+        let id = editor.add_command(CommandSpec {
+            name: "say-hello",
+            summary: "Say hello in the echo area",
+            help: None,
+            scope,
+            run: say_hello,
+        });
+        editor.bind(scope, "g", id).unwrap();
+
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "say-hello");
+        assert!(
+            editor
+                .completions()
+                .iter()
+                .all(|completion| completion.label != "say-hello")
+        );
+        press(&mut editor, "C-g C-h f");
+        type_text(&mut editor, "say-hello");
+        press(&mut editor, "RET");
+
+        let help = lines(&editor);
+        assert!(
+            help.iter()
+                .any(|line| line.ends_with("g in greeting buffers")),
+            "{help:?}"
+        );
+        assert!(
+            help.iter()
+                .any(|line| line.ends_with("greeting buffers") && line.starts_with("Works in")),
+            "{help:?}"
+        );
+    }
+
+    #[test]
     fn added_commands_run_from_keys_and_m_x_and_have_help() {
         let mut editor = Editor::new();
         let id = editor.add_command(CommandSpec {
             name: "say-hello",
             summary: "Say hello in the echo area",
             help: None,
-            scope: Scope::Global,
+            scope: Scope::Global.into(),
             run: say_hello,
         });
         editor.bind(Scope::Global, "C-c z", id).unwrap();

@@ -1,6 +1,6 @@
 use strum::VariantArray;
 
-use crate::command::{Command, Scope};
+use crate::command::{Command, Scope, ScopeId};
 use crate::input::{KeySequence, Keymap};
 
 const GLOBAL: &[(&str, Command)] = &[
@@ -401,30 +401,47 @@ const TABLE: &[(&str, Command)] = &[
 ];
 
 #[derive(Debug)]
-pub struct Keymaps(Vec<Keymap>);
+pub struct Keymaps {
+    maps: Vec<Keymap>,
+    labels: Vec<Option<&'static str>>,
+}
 
 impl Default for Keymaps {
     fn default() -> Self {
-        Self(
-            Scope::VARIANTS
+        Self {
+            maps: Scope::VARIANTS
                 .iter()
                 .map(|scope| build(table(*scope)))
                 .collect(),
-        )
+            labels: Scope::VARIANTS.iter().map(|scope| scope.label()).collect(),
+        }
     }
 }
 
 impl Keymaps {
-    pub fn get(&self, scope: Scope) -> &Keymap {
-        &self.0[scope as usize]
+    pub fn get(&self, scope: impl Into<ScopeId>) -> &Keymap {
+        &self.maps[scope.into().index()]
     }
 
-    pub fn get_mut(&mut self, scope: Scope) -> &mut Keymap {
-        &mut self.0[scope as usize]
+    pub fn get_mut(&mut self, scope: impl Into<ScopeId>) -> &mut Keymap {
+        &mut self.maps[scope.into().index()]
     }
 
-    pub fn all(&self) -> impl Iterator<Item = (Scope, &Keymap)> {
-        Scope::VARIANTS.iter().copied().zip(&self.0)
+    pub fn label(&self, scope: impl Into<ScopeId>) -> Option<&'static str> {
+        self.labels.get(scope.into().index()).copied().flatten()
+    }
+
+    pub fn add(&mut self, label: &'static str) -> ScopeId {
+        self.maps.push(Keymap::default());
+        self.labels.push(Some(label));
+        ScopeId::at(self.maps.len() - 1)
+    }
+
+    pub fn all(&self) -> impl Iterator<Item = (ScopeId, &Keymap)> {
+        self.maps
+            .iter()
+            .enumerate()
+            .map(|(index, keymap)| (ScopeId::at(index), keymap))
     }
 }
 
@@ -498,8 +515,10 @@ mod tests {
     #[test]
     fn every_scope_lists_its_own_keymap() {
         let keymaps = Keymaps::default();
-        let scopes: Vec<Scope> = keymaps.all().map(|(scope, _)| scope).collect();
-        assert_eq!(scopes, Scope::VARIANTS);
+        let scopes: Vec<Option<Scope>> = keymaps.all().map(|(scope, _)| scope.core()).collect();
+        let expected: Vec<Option<Scope>> = Scope::VARIANTS.iter().copied().map(Some).collect();
+        assert_eq!(scopes, expected);
+        assert_eq!(keymaps.label(Scope::Tools), Some("*Tools*"));
         let sequence: KeySequence = "i".parse().unwrap();
         assert_eq!(
             keymaps.get(Scope::Tools).lookup(sequence.keys()),
