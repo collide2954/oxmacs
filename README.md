@@ -38,11 +38,13 @@ Others are only built when you ask for them. These experimental applets are vers
 | `extra-themes`    | 0.1.0   | 56 more color themes for `M-x load-theme`, from gruvbox to modus-vivendi       |
 | `irc`             | 0.1.0   | `M-x irc`, an IRCv3 client, with `M-x irc-setup` and a bouncer                |
 
-Turn one on with `--features`, and separate several with commas:
+Turn one on with `--features`, and separate several with commas and no spaces:
 
 ```sh
-cargo run -p oxmacs --release --features animated-splash
+cargo run -p oxmacs --release --features animated-splash,atlas,irc
 ```
+
+Words after the list that are not joined to it by commas reach oxmacs as files to open, so `--features animated-splash atlas irc` builds only `animated-splash` and opens files named `atlas` and `irc`.
 
 A feature that is left off is not compiled at all, so it costs nothing in size or startup time. Experimental features may change or disappear between releases; CHANGELOG.md lists them under "Experimental", and `M-x oxmacs-doctor` shows which ones your build includes.
 
