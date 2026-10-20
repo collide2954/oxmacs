@@ -190,9 +190,7 @@ impl Editor {
 
     pub fn job_finished(&mut self, job: JobId, outcome: &Outcome) {
         self.job_ended(job, outcome);
-        if !self.notify_job(job, JobEvent::Finished(outcome)) {
-            self.console_finished(job, outcome);
-        }
+        self.notify_job(job, JobEvent::Finished(outcome));
     }
 
     fn compilation_finished(&mut self, job: JobId, outcome: &Outcome) {

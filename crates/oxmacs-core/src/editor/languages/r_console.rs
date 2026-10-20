@@ -7,8 +7,7 @@ use crate::editor::buffers::Mode;
 use crate::editor::languages::r_complete::Asked;
 use crate::editor::languages::r_signature::Call;
 use crate::editor::prompts::input_line::InputLine;
-use crate::editor::special::processes::Kind;
-use crate::editor::{Editor, Effect, Job, JobEvent, JobId, Outcome};
+use crate::editor::{Editor, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::r::{self, Piece, Stream};
 use crate::external::tools;
 use crate::syntax::Language;
@@ -84,6 +83,7 @@ pub(in crate::editor) struct Sessions {
     links: Vec<(BufferId, BufferId)>,
     pub(super) signature_shown: Option<Call>,
     pub(super) definition: Option<(String, (BufferId, usize))>,
+    launched: u64,
 }
 
 impl Editor {
@@ -312,12 +312,12 @@ impl Editor {
                 return None;
             }
         };
-        let job = JobId(self.next_job);
-        self.next_job += 1;
-        let plots =
-            env::temp_dir()
-                .join("oxmacs")
-                .join(format!("plots-{}-{}", process::id(), job.0));
+        self.r_sessions.launched += 1;
+        let plots = env::temp_dir().join("oxmacs").join(format!(
+            "plots-{}-{}",
+            process::id(),
+            self.r_sessions.launched
+        ));
         let mut variables = vec![
             (r::PROFILE_VARIABLE.to_owned(), helper.display().to_string()),
             (r::PLOTS_VARIABLE.to_owned(), plots.display().to_string()),
@@ -328,50 +328,71 @@ impl Editor {
                 original.to_string_lossy().into_owned(),
             ));
         }
-        let session = Job {
-            id: job,
+        let restarted = existing.filter(|id| {
+            self.buffers
+                .position(|buffer| buffer.id() == *id)
+                .is_some_and(|index| matches!(self.buffers.mode(index), Some(Mode::Console(_))))
+        });
+        let buffer = match restarted {
+            Some(_) => None,
+            None => Some(Buffer::new(self.session_name())),
+        };
+        let console = restarted.or_else(|| buffer.as_ref().map(Buffer::id))?;
+        let name = buffer.as_ref().map_or_else(
+            || {
+                self.buffers
+                    .position(|known| known.id() == console)
+                    .and_then(|index| self.buffers.get(index))
+                    .map_or_else(|| "R".to_owned(), |known| known.name().to_owned())
+            },
+            |buffer| buffer.name().to_owned(),
+        );
+        let spec = JobSpec {
             program: path.display().to_string(),
             args: tools::r_arguments(),
             directory: self.default_directory(),
             env: variables,
+            label: "R session",
+            name,
+            buffer: Some(console),
+            interactive: true,
         };
-        if let Some(id) = existing
-            && let Some(index) = self.buffers.position(|buffer| buffer.id() == id)
-            && let Some(Mode::Console(console)) = self.buffers.mode_mut(index)
-        {
-            console.restart(job, helper);
-            self.start_tracked_session(session, id);
-            return Some(id);
+        let job = self.start_job(spec, Self::r_session_event);
+        match buffer {
+            Some(mut buffer) => {
+                let input = InputLine::new(&mut buffer);
+                self.beside(|editor| {
+                    editor.add_buffer_with(buffer, Mode::Console(Console::new(job, helper, input)));
+                });
+            }
+            None => {
+                if let Some(index) = self.buffers.position(|known| known.id() == console)
+                    && let Some(Mode::Console(existing)) = self.buffers.mode_mut(index)
+                {
+                    existing.restart(job, helper);
+                }
+            }
         }
-        let mut buffer = Buffer::new(self.session_name());
-        let id = buffer.id();
-        let input = InputLine::new(&mut buffer);
-        self.beside(|editor| {
-            editor.add_buffer_with(buffer, Mode::Console(Console::new(job, helper, input)));
-        });
-        self.start_tracked_session(session, id);
-        Some(id)
+        Some(console)
     }
 
-    fn start_tracked_session(&mut self, session: Job, console: BufferId) {
-        let name = self
-            .buffers
-            .position(|buffer| buffer.id() == console)
-            .and_then(|index| self.buffers.get(index))
-            .map_or_else(|| "R".to_owned(), |buffer| buffer.name().to_owned());
-        self.track_job(&session, Kind::RSession, name, Some(console));
-        self.effects.push(Effect::StartSession(session));
+    fn r_session_event(&mut self, job: JobId, event: JobEvent<'_>) {
+        let Some(console) = self.console_of_job(job) else {
+            return;
+        };
+        match event {
+            JobEvent::Line(chunk) | JobEvent::Output(chunk) => {
+                self.with_session(console, |editor| editor.process_output(chunk));
+            }
+            JobEvent::Finished(outcome) => {
+                self.with_session(console, |editor| editor.report_end(outcome));
+            }
+        }
     }
 
     pub fn session_output(&mut self, job: JobId, chunk: &str) {
-        if self.notify_job(job, JobEvent::Output(chunk)) {
-            return;
-        }
-        if let Some(console) = self.console_of_job(job) {
-            self.with_session(console, |editor| editor.process_output(chunk));
-        }
+        self.notify_job(job, JobEvent::Output(chunk));
     }
-
     fn process_output(&mut self, chunk: &str) {
         let Some(console) = self.console_mut() else {
             return;
@@ -443,14 +464,6 @@ impl Editor {
         {
             console.width = Some(width);
         }
-    }
-
-    pub(in crate::editor) fn console_finished(&mut self, job: JobId, outcome: &Outcome) -> bool {
-        let Some(console) = self.console_of_job(job) else {
-            return false;
-        };
-        self.with_session(console, |editor| editor.report_end(outcome));
-        true
     }
 
     fn report_end(&mut self, outcome: &Outcome) {
@@ -534,7 +547,7 @@ impl Editor {
         let unseen = lines - usize::from(console.waiting);
         console.expected.extend(std::iter::repeat_n(None, unseen));
         console.waiting = false;
-        self.effects.push(Effect::Send(job, code.to_owned()));
+        self.send_job(job, code);
     }
 
     pub(in crate::editor) fn r_evaluate(&mut self, code: &str) {
@@ -557,7 +570,7 @@ impl Editor {
         if let Some(first) = first {
             self.console_insert(&format!("{first}\n"));
         }
-        self.effects.push(Effect::Send(job, format!("{code}\n")));
+        self.send_job(job, format!("{code}\n"));
     }
 
     pub(in crate::editor) fn r_request(&mut self, call: &str) -> bool {
@@ -568,7 +581,7 @@ impl Editor {
             return false;
         };
         console.expected.push_back(None);
-        self.effects.push(Effect::Send(job, format!("{call}\n")));
+        self.send_job(job, format!("{call}\n"));
         true
     }
 

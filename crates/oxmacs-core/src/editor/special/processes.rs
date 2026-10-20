@@ -14,21 +14,6 @@ const HELP: &str = "RET visit  k stop  g refresh  q quit";
 const KEPT: usize = 10;
 const MEBIBYTE: u64 = 1024 * 1024;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::editor) enum Kind {
-    RSession,
-    Named(&'static str),
-}
-
-impl Kind {
-    fn label(self) -> &'static str {
-        match self {
-            Self::RSession => "R session",
-            Self::Named(label) => label,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ProcessKey(u64);
 
@@ -79,7 +64,7 @@ impl Status {
 #[derive(Debug, Clone)]
 struct Tracked {
     source: Source,
-    kind: Kind,
+    kind: &'static str,
     name: String,
     detail: String,
     started: Timestamp,
@@ -148,7 +133,7 @@ fn cells(entry: &Tracked, now: Timestamp) -> [String; 8] {
     let usage = |value: Option<String>| value.filter(|_| live).unwrap_or_else(|| "-".to_owned());
     [
         entry.name.clone(),
-        entry.kind.label().to_owned(),
+        entry.kind.to_owned(),
         entry.status.shown().0,
         entry
             .pid
@@ -279,7 +264,7 @@ impl Editor {
     pub(in crate::editor) fn track_job(
         &mut self,
         job: &Job,
-        kind: Kind,
+        kind: &'static str,
         name: String,
         buffer: Option<BufferId>,
     ) {
@@ -310,7 +295,7 @@ impl Editor {
     pub(in crate::editor) fn track_connection(&mut self, id: ConnectionId, spec: &ConnectionSpec) {
         self.track(Tracked {
             source: Source::Connection(id),
-            kind: Kind::Named(spec.kind),
+            kind: spec.kind,
             name: spec.name.clone(),
             detail: spec.detail.clone(),
             started: Timestamp::now(),
@@ -332,7 +317,7 @@ impl Editor {
             .rev()
             .find_map(|entry| match entry.source {
                 Source::Applet(key)
-                    if entry.kind == Kind::Named(spec.kind)
+                    if entry.kind == spec.kind
                         && entry.name == spec.name
                         && !entry.status.finished() =>
                 {
@@ -350,7 +335,7 @@ impl Editor {
         self.processes.next_key += 1;
         self.track(Tracked {
             source: Source::Applet(key),
-            kind: Kind::Named(spec.kind),
+            kind: spec.kind,
             name: spec.name,
             detail: spec.detail,
             started: Timestamp::now(),
@@ -516,7 +501,7 @@ impl Editor {
             return;
         }
         match (entry.kind, entry.buffer) {
-            (Kind::Named("lint"), _) => self.list_diagnostics(),
+            ("lint", _) => self.list_diagnostics(),
             (_, Some(buffer))
                 if self
                     .buffers
@@ -568,7 +553,7 @@ mod tests {
 
     use jiff::{SignedDuration, Timestamp};
 
-    use super::{Kind, ProcessSpec};
+    use super::ProcessSpec;
     use crate::editor::test_support::{lines, press, question, type_text};
     use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 
@@ -598,13 +583,13 @@ mod tests {
         let mut editor = Editor::new();
         editor.track_job(
             &job(0, "Rterm", &["--ess"]),
-            Kind::RSession,
+            "R session",
             "*R:analysis*".to_owned(),
             None,
         );
         editor.track_job(
             &job(1, "cargo", &["check"]),
-            Kind::Named("lint"),
+            "lint",
             "cargo check".to_owned(),
             None,
         );
@@ -643,7 +628,7 @@ mod tests {
         let mut editor = Editor::new();
         editor.track_job(
             &job(0, "Rterm", &["--ess"]),
-            Kind::RSession,
+            "R session",
             "*R:analysis*".to_owned(),
             None,
         );
@@ -682,7 +667,7 @@ mod tests {
         let mut editor = Editor::new();
         editor.track_job(
             &job(7, "cargo", &["build"]),
-            Kind::Named("compile"),
+            "compile",
             "cargo build".to_owned(),
             None,
         );
@@ -706,7 +691,7 @@ mod tests {
         for id in 0..15 {
             editor.track_job(
                 &job(id, "cargo", &["check"]),
-                Kind::Named("lint"),
+                "lint",
                 format!("check {id}"),
                 None,
             );
@@ -728,7 +713,7 @@ mod tests {
 
         editor.track_job(
             &job(3, "cargo", &["test"]),
-            Kind::Named("compile"),
+            "compile",
             "cargo test".to_owned(),
             None,
         );

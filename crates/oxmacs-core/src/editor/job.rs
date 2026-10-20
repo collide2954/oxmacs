@@ -1,7 +1,6 @@
 use std::fmt;
 use std::path::PathBuf;
 
-use crate::editor::special::processes::Kind;
 use crate::editor::{Editor, Effect};
 use crate::text::BufferId;
 
@@ -71,7 +70,7 @@ impl Editor {
             directory: spec.directory,
             env: spec.env,
         };
-        self.track_job(&job, Kind::Named(spec.label), spec.name, spec.buffer);
+        self.track_job(&job, spec.label, spec.name, spec.buffer);
         self.job_handlers.0.push((id, Box::new(handler)));
         self.effects.push(if spec.interactive {
             Effect::StartSession(job)

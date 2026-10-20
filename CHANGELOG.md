@@ -35,6 +35,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - The theme in *Settings* is picked from the same live-preview list as `M-x load-theme`.
 - Applets can draw the whole window of a buffer of their own; the Markdown preview is drawn this way.
 - Applets can restyle the minibuffer line while a prompt waits.
+- Applets can run background jobs and interactive sessions of their own, listed in `M-x list-processes`.
 - Applets can open the file types they claim, show their own position in the mode line and have their file watched for changes.
 - `M-x list-tools` can manage tools applets add, including libraries, checked against the digest GitHub publishes for each download.
 - Applets can list a directory in a buffer, ask for a path, a typed yes or no or one of several letters, hear about changes on disk and directories being opened, and move files along with the buffers visiting them. Double-clicking in an applet buffer runs what `RET` runs there, and `M-x revert-buffer` runs what `g` runs.
