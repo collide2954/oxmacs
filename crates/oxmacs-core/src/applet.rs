@@ -572,6 +572,30 @@ mod tests {
         assert_eq!(editor.mode_line_segments(), ["1 buffers", "1 buffers"]);
     }
 
+    fn remember_tab_width(editor: &mut Editor) {
+        let width = editor.tab_width().to_string();
+        if let Some(answers) = editor.applet_state_mut::<Answers>() {
+            answers.0.push(width);
+        }
+    }
+
+    #[test]
+    fn applets_hear_about_every_config_change() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        editor.on_configured(remember_tab_width);
+
+        editor.apply_config(&Config::parse("tab-width = 2\n").unwrap());
+        editor.apply_config(&Config::parse("tab-width = 3\n").unwrap());
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["2".to_owned(), "3".to_owned()])
+        );
+    }
+
     #[test]
     fn state_is_kept_per_type() {
         let mut states = States::default();

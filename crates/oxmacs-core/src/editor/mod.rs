@@ -138,6 +138,7 @@ pub struct Editor {
     applet_settings: Vec<(&'static str, &'static config::schema::Setting)>,
     doctor_sections: Vec<(&'static str, applets::DoctorSection)>,
     mode_line_segments: Vec<applets::Segment>,
+    configured_handlers: Vec<fn(&mut Editor)>,
     working_directory: PathBuf,
     home: Option<PathBuf>,
     tool_report: special::doctor::ToolReport,
@@ -223,6 +224,7 @@ impl Editor {
             applet_settings: Vec::new(),
             doctor_sections: Vec::new(),
             mode_line_segments: Vec::new(),
+            configured_handlers: Vec::new(),
             working_directory: env::current_dir().unwrap_or_default(),
             home: dirs::home_dir(),
             tool_report: special::doctor::ToolReport::default(),
@@ -255,6 +257,7 @@ impl Editor {
         }
         self.config = config.clone();
         self.check_config_tables();
+        self.tell_configured();
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
