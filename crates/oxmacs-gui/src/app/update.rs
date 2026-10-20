@@ -220,7 +220,6 @@ impl App {
                 }
                 self.editor.irc_event(id, event);
             }
-            Message::WeatherTick => self.editor.weather_tick(Timestamp::now()),
             Message::AppletEvent(event) => self.editor.deliver(&event),
         }
         self.settle();
@@ -333,7 +332,6 @@ impl App {
             Effect::Reconfigure => {
                 let config = self.editor.config().clone();
                 self.configure(&config);
-                self.editor.weather_tick(Timestamp::now());
                 self.pending_effects()
             }
             Effect::Fetch(id, url) => {

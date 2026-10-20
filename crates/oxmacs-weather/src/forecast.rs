@@ -2,7 +2,7 @@ use jiff::civil::{Date, DateTime};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::config::WeatherUnits;
+use crate::Units;
 
 const GEOCODING: &str = "https://geocoding-api.open-meteo.com/v1/search";
 const FORECAST: &str = "https://api.open-meteo.com/v1/forecast";
@@ -188,14 +188,14 @@ struct RawPlace {
 
 #[derive(Deserialize)]
 struct RawForecast {
-    current_units: Units,
+    current_units: RawUnits,
     current: RawNow,
     hourly: RawHours,
     daily: RawDays,
 }
 
 #[derive(Deserialize)]
-struct Units {
+struct RawUnits {
     temperature_2m: String,
     wind_speed_10m: String,
 }
@@ -264,10 +264,10 @@ pub fn parse_place(json: &str) -> Result<Option<Place>, WeatherError> {
     }))
 }
 
-pub fn forecast_url(place: &Place, units: WeatherUnits) -> String {
+pub fn forecast_url(place: &Place, units: Units) -> String {
     let imperial = match units {
-        WeatherUnits::Metric => "",
-        WeatherUnits::Imperial => "&temperature_unit=fahrenheit&wind_speed_unit=mph",
+        Units::Metric => "",
+        Units::Imperial => "&temperature_unit=fahrenheit&wind_speed_unit=mph",
     };
     format!(
         "{FORECAST}?latitude={}&longitude={}&current={CURRENT}&hourly={HOURLY}&daily={DAILY}&timezone=auto&forecast_days=7{imperial}",
@@ -410,7 +410,7 @@ pub(crate) mod fixtures {
 mod tests {
     use super::fixtures::{FORECAST, PLACES};
     use super::*;
-    use crate::config::WeatherUnits;
+    use crate::Units;
 
     #[test]
     fn places_are_looked_up_by_name() {
@@ -436,8 +436,8 @@ mod tests {
     fn forecasts_ask_for_the_configured_units() {
         let place = parse_place(PLACES).unwrap().unwrap();
 
-        let metric = forecast_url(&place, WeatherUnits::Metric);
-        let imperial = forecast_url(&place, WeatherUnits::Imperial);
+        let metric = forecast_url(&place, Units::Metric);
+        let imperial = forecast_url(&place, Units::Imperial);
 
         assert!(metric.starts_with(
             "https://api.open-meteo.com/v1/forecast?latitude=52.52437&longitude=13.41053&"

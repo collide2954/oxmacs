@@ -48,7 +48,6 @@ use crate::command::{Command, CommandId, CommandSpec, Commands, Scope, ScopeId};
 use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::editor::chat::Irc;
-use crate::editor::special::weather::WeatherState;
 use crate::external::tools;
 use crate::input::bindings::Keymaps;
 use crate::input::{Key, KeyCode, KeyParseError, KeySequence, Keymap, Lookup, Modifiers};
@@ -148,7 +147,6 @@ pub struct Editor {
     tools_root: Option<PathBuf>,
     font_note: Option<String>,
     config_path: Option<PathBuf>,
-    weather: WeatherState,
     next_fetch: u64,
     fetches: effect::Fetches,
     irc: Irc,
@@ -234,7 +232,6 @@ impl Editor {
             tools_root: dirs::data_dir().map(|data| data.join("oxmacs").join("tools")),
             font_note: None,
             config_path: config::default_path(),
-            weather: WeatherState::default(),
             next_fetch: 0,
             fetches: effect::Fetches::default(),
             irc: Irc::default(),
@@ -457,7 +454,6 @@ impl Editor {
             Some(Mode::Customize(_)) => Scope::Customize,
             Some(Mode::Diagnostics(_)) => Scope::Diagnostics,
             Some(Mode::Help(_)) => Scope::Help,
-            Some(Mode::Weather(_)) => Scope::Weather,
             Some(Mode::Chat(_)) => Scope::Chat,
             Some(Mode::Plots(_)) => Scope::Plots,
             Some(Mode::Processes(_)) => Scope::Processes,
@@ -497,7 +493,6 @@ impl Editor {
             Some(Mode::Customize(state)) => state.line_style(line),
             Some(Mode::Diagnostics(list)) => list.line_style(line),
             Some(Mode::Help(help)) => help.line_style(line),
-            Some(Mode::Weather(view)) => view.line_style(line),
             Some(Mode::Chat(view)) => view.line_style(line),
             Some(Mode::Processes(list)) => list.line_style(line),
             Some(Mode::Tools(list)) => list.line_style(line),

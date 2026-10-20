@@ -9,9 +9,11 @@ publish.workspace = true
 workspace = true
 
 [features]
+default = ["weather"]
 animated-splash = ["dep:oxmacs-splash"]
 demo = ["dep:oxmacs-demo"]
 extra-themes = ["dep:oxmacs-themes"]
+weather = ["dep:oxmacs-weather"]
 
 [dependencies]
 oxmacs-core.workspace = true
@@ -19,3 +21,4 @@ oxmacs-demo = { workspace = true, optional = true }
 oxmacs-gui.workspace = true
 oxmacs-splash = { workspace = true, optional = true }
 oxmacs-themes = { workspace = true, optional = true }
+oxmacs-weather = { workspace = true, optional = true }

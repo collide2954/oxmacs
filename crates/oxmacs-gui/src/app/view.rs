@@ -121,12 +121,8 @@ impl App {
         } else {
             Vec::new()
         };
-        let weather = self
-            .editor
-            .weather_brief()
-            .filter(|_| last && self.editor.config().mode_line_weather);
         let time = self.clock.as_deref().filter(|_| last).map(clock::now);
-        let extras: Vec<String> = segments.into_iter().chain(weather).chain(time).collect();
+        let extras: Vec<String> = segments.into_iter().chain(time).collect();
         let look = Look {
             faces,
             active,

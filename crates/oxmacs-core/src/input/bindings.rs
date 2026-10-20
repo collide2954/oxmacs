@@ -277,8 +277,6 @@ const HELP: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
-const WEATHER: &[(&str, Command)] = &[("g", Command::RevertBuffer), ("q", Command::QuitWindow)];
-
 const CHAT: &[(&str, Command)] = &[
     ("RET", Command::IrcSendInput),
     ("TAB", Command::IrcCompleteNick),
@@ -460,7 +458,6 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::Customize => CUSTOMIZE,
         Scope::Diagnostics => DIAGNOSTICS,
         Scope::Help => HELP,
-        Scope::Weather => WEATHER,
         Scope::Chat => CHAT,
         Scope::Popup => POPUP,
         Scope::Plots => PLOTS,

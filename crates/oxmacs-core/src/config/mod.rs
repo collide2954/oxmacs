@@ -39,10 +39,6 @@ pub struct Config {
     pub line_number_separator: bool,
     pub window_mode: WindowMode,
     pub mode_line_style: ModeLineStyle,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub weather_location: Option<String>,
-    pub weather_units: WeatherUnits,
-    pub mode_line_weather: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub irc_server: Vec<IrcServer>,
     #[serde(skip_serializing_if = "IrcBouncer::is_default")]
@@ -66,7 +62,23 @@ pub struct Moved {
     pub key: &'static str,
 }
 
-const MOVED: &[Moved] = &[];
+const MOVED: &[Moved] = &[
+    Moved {
+        from: "weather-location",
+        table: "weather",
+        key: "location",
+    },
+    Moved {
+        from: "weather-units",
+        table: "weather",
+        key: "units",
+    },
+    Moved {
+        from: "mode-line-weather",
+        table: "weather",
+        key: "mode-line",
+    },
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -220,14 +232,6 @@ fn enabled() -> bool {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum WeatherUnits {
-    #[default]
-    Metric,
-    Imperial,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
 pub enum RustLint {
     #[default]
     Check,
@@ -256,9 +260,6 @@ impl Default for Config {
             line_number_separator: false,
             window_mode: WindowMode::default(),
             mode_line_style: ModeLineStyle::default(),
-            weather_location: None,
-            weather_units: WeatherUnits::default(),
-            mode_line_weather: false,
             irc_server: Vec::new(),
             irc_bouncer: IrcBouncer::default(),
             r_program: None,
@@ -1007,7 +1008,6 @@ mod tests {
             font_family: Some("Iosevka".to_owned()),
             r_program: Some("R".to_owned()),
             air_program: Some("air".to_owned()),
-            weather_location: Some("Berlin".to_owned()),
             ..Config::default()
         };
         let toml::Value::Table(table) = toml::Value::try_from(&full).unwrap() else {
@@ -1172,19 +1172,21 @@ mod tests {
     }
 
     #[test]
-    fn weather_is_metric_and_off_the_mode_line_unless_configured() {
-        let config = Config::default();
-        assert_eq!(config.weather_location, None);
-        assert_eq!(config.weather_units, WeatherUnits::Metric);
-        assert!(!config.mode_line_weather);
+    fn the_old_weather_keys_move_into_the_weather_table() {
+        let text = "weather-location = \"Berlin\"\nweather-units = \"imperial\"\nmode-line-weather = true\n";
 
-        let config = Config::parse(
-            "weather-location = \"Berlin\"\nweather-units = \"imperial\"\nmode-line-weather = true",
-        )
-        .unwrap();
-        assert_eq!(config.weather_location.as_deref(), Some("Berlin"));
-        assert_eq!(config.weather_units, WeatherUnits::Imperial);
-        assert!(config.mode_line_weather);
+        let config = Config::parse(text).unwrap();
+        let (rewritten, moved) = migrate_with(text, MOVED).unwrap();
+
+        let expected: toml::Table =
+            toml::from_str("location = \"Berlin\"\nunits = \"imperial\"\nmode-line = true\n")
+                .unwrap();
+        assert_eq!(config.applets.get("weather"), Some(&expected));
+        assert_eq!(moved.len(), 3);
+        assert_eq!(
+            rewritten,
+            "[weather]\nlocation = \"Berlin\"\nunits = \"imperial\"\nmode-line = true\n"
+        );
     }
 
     #[test]

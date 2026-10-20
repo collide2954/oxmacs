@@ -8,7 +8,6 @@ use iced::theme::Mode;
 use iced::time::{Duration, Instant};
 use iced::widget::{self, markdown};
 use iced::{Animation, Event, Font, Subscription, Task, Theme, event, keyboard, system, window};
-use jiff::Timestamp;
 use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::applet::Payload;
 use oxmacs_core::cli::Visit;
@@ -85,7 +84,6 @@ pub enum Message {
     DaemonReady(bool),
     ToolsProbed(Vec<(Tool, Probe)>),
     ToolInstalled(Managed, Result<PathBuf, String>),
-    WeatherTick,
     AppletEvent(Payload),
 }
 
@@ -148,7 +146,6 @@ impl App {
         app.start(visits, splash);
         app.reduced_motion = prefers_reduced_motion();
         app.configure(&app.editor.config().clone());
-        app.editor.weather_tick(Timestamp::now());
         let effects = app.pending_effects();
         (
             app,
@@ -250,11 +247,6 @@ impl App {
         } else {
             Subscription::none()
         };
-        let weather = if self.editor.config().mode_line_weather {
-            ticker::ticks(Some(ticker::MINUTE)).map(|()| Message::WeatherTick)
-        } else {
-            Subscription::none()
-        };
         let frames = if self.is_animating() {
             window::frames().map(Message::Tick)
         } else {
@@ -287,7 +279,6 @@ impl App {
             completing,
             signature,
             processes,
-            weather,
             frames,
         ])
     }
@@ -463,28 +454,6 @@ mod tests {
         let mut ui = iced_test::simulator(app.view());
 
         assert!(ui.find("☂ bring one").is_ok());
-    }
-
-    #[test]
-    fn the_mode_line_shows_the_weather_when_asked() {
-        let config =
-            Config::parse("weather-location = \"Berlin\"\nmode-line-weather = true").unwrap();
-        let mut app = App::new(Ok(&config));
-        let place = r#"{"results":[{"name":"Berlin","latitude":52.5,"longitude":13.4}]}"#;
-        let forecast = r#"{"current_units":{"temperature_2m":"°C","wind_speed_10m":"km/h"},
-            "current":{"time":"2026-10-19T14:15","temperature_2m":13.2,"apparent_temperature":11.0,
-                "relative_humidity_2m":71,"is_day":1,"weather_code":3,"wind_speed_10m":11.5,
-                "wind_direction_10m":250},
-            "hourly":{"time":[],"temperature_2m":[],"precipitation_probability":[],"weather_code":[]},
-            "daily":{"time":[],"weather_code":[],"temperature_2m_max":[],"temperature_2m_min":[],
-                "precipitation_probability_max":[],"sunrise":[],"sunset":[]}}"#;
-
-        let _ = app.update(Message::WeatherTick);
-        let _ = app.update(Message::Fetched(FetchId(0), Ok(place.to_owned())));
-        let _ = app.update(Message::Fetched(FetchId(1), Ok(forecast.to_owned())));
-
-        let mut ui = iced_test::simulator(app.view());
-        assert!(ui.find("☁ 13°").is_ok());
     }
 
     #[test]

@@ -88,8 +88,6 @@ impl Editor {
             then(self, result);
             return;
         }
-        if !self.tool_release_fetched(id, &result) {
-            self.weather_fetched(id, result);
-        }
+        self.tool_release_fetched(id, &result);
     }
 }

@@ -21,6 +21,7 @@ oxmacs-demo = { path = "crates/oxmacs-demo" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
 oxmacs-splash = { path = "crates/oxmacs-splash" }
 oxmacs-themes = { path = "crates/oxmacs-themes" }
+oxmacs-weather = { path = "crates/oxmacs-weather" }
 native-theme = { version = "0.6.1", default-features = false }
 notify = "8.2.0"
 open = "5.4.4"

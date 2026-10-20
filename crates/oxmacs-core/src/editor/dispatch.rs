@@ -236,7 +236,6 @@ impl Editor {
             Command::Customize => self.customize(),
             Command::FindConfigFile => self.find_config_file(),
             Command::DescribeCommand => self.describe_command(),
-            Command::Weather => self.weather(),
             Command::ListDiagnostics => self.list_diagnostics(),
             Command::GotoDiagnostic => self.goto_diagnostic(),
             Command::ShowDiagnostic => self.show_diagnostic(),

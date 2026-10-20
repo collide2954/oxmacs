@@ -25,7 +25,6 @@ use crate::editor::special::help::Help;
 use crate::editor::special::processes::ProcessList;
 use crate::editor::special::splash::Splash;
 use crate::editor::special::toolbox::ToolList;
-use crate::editor::special::weather::WeatherView;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
 use crate::syntax::{Language, Syntax};
@@ -45,7 +44,6 @@ pub(super) enum Mode {
     Diagnostics(DiagnosticsList),
     Console(Console),
     Help(Help),
-    Weather(WeatherView),
     Chat(ChatView),
     Plots(Plots),
     Processes(ProcessList),
