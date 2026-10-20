@@ -21,6 +21,6 @@ pub fn all() -> Vec<Box<dyn GuiApplet>> {
         #[cfg(feature = "atlas")]
         Box::new(oxmacs_atlas::Atlas),
         #[cfg(feature = "pdf")]
-        Box::new(oxmacs_pdf::Pdf),
+        Box::new(oxmacs_pdf::Pdf::default()),
     ]
 }

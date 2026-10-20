@@ -1,17 +1,29 @@
+mod engine;
+mod gui;
 mod layout;
 mod model;
+#[cfg(test)]
+mod sample;
 mod view;
 
-use oxmacs_core::applet::Applet;
-use oxmacs_core::command::{Command, CommandId, CommandSpec, ScopeId};
-use oxmacs_core::editor::Editor;
-use oxmacs_core::external::managed::{Checksum, Form, Managed};
-use oxmacs_gui::applet::GuiApplet;
+use std::sync::{Arc, Mutex};
 
+use iced::time::Instant;
+use iced::{Element, Task};
+
+use oxmacs_core::applet::{Applet, Payload};
+use oxmacs_core::command::{Command, CommandId, CommandSpec, ScopeId};
+use oxmacs_core::editor::{Editor, Pane, WindowId};
+use oxmacs_core::external::managed::{Checksum, Form, Managed};
+use oxmacs_gui::applet::{Context, GuiApplet};
+
+pub use gui::Rendered;
 pub use layout::{Size, Zoom};
 pub use model::{Document, Heading};
 pub use view::{DocId, Move, OpenDocument, Opened, RenderPages, ScrollPdf, Viewport, Wanted};
 
+use engine::{Engine, Ink};
+use gui::Cache;
 use view::PdfState;
 
 pub const PDFIUM: Managed = Managed {
@@ -162,8 +174,22 @@ fn register(editor: &mut Editor, scope: ScopeId) -> Vec<CommandId> {
     added
 }
 
-#[derive(Debug, Default)]
-pub struct Pdf;
+#[derive(Debug)]
+pub struct Pdf {
+    engine: Option<Engine>,
+    cache: Arc<Mutex<Cache>>,
+    ink: Ink,
+}
+
+impl Default for Pdf {
+    fn default() -> Self {
+        Self {
+            engine: None,
+            cache: Arc::default(),
+            ink: gui::ink(&oxmacs_core::theme::ADWAITA_DARK),
+        }
+    }
+}
 
 impl Applet for Pdf {
     fn name(&self) -> &'static str {
@@ -191,7 +217,36 @@ impl Applet for Pdf {
     }
 }
 
-impl GuiApplet for Pdf {}
+impl GuiApplet for Pdf {
+    fn perform(&mut self, payload: &Payload) -> Option<Task<Payload>> {
+        if let Some(request) = payload.get::<OpenDocument>() {
+            return Some(gui::open(&mut self.engine, request));
+        }
+        if let Some(request) = payload.get::<RenderPages>() {
+            return Some(gui::render(
+                self.engine.as_ref(),
+                &self.cache,
+                request,
+                self.ink,
+            ));
+        }
+        payload.get::<ScrollPdf>().map(gui::scroll)
+    }
+
+    fn tick(&mut self, editor: &Editor, _now: Instant) {
+        self.ink = gui::ink(editor.theme());
+    }
+
+    fn body<'a>(
+        &'a self,
+        _editor: &'a Editor,
+        pane: Pane<'a>,
+        window: WindowId,
+        context: &Context,
+    ) -> Option<Element<'a, Payload>> {
+        gui::body(&self.cache, self.ink, pane, window, context)
+    }
+}
 
 #[cfg(test)]
 pub(crate) mod testing {

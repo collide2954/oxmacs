@@ -510,7 +510,7 @@ mod tests {
             fs::create_dir_all(&folder).unwrap();
             fs::write(folder.join(PDFIUM.binary()), "library").unwrap();
         }
-        editor.install(&Pdf);
+        editor.install(&Pdf::default());
         editor
     }
 
