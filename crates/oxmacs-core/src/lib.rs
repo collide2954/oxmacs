@@ -1,3 +1,4 @@
+pub mod applet;
 pub mod atlas;
 pub mod bouncer;
 pub mod cli;

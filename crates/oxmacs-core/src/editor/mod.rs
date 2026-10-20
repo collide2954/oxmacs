@@ -36,12 +36,14 @@ pub use windows::pane::{Pane, ScreenRow};
 pub use windows::status::{BufferState, Status};
 pub use windows::tiling::{Axis, Rect, Tiling, WindowId};
 
+use std::any::Any;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::{env, mem};
 
 use buffers::{BufferList, Mode};
 
+use crate::applet::{Applet, Installed, States};
 use crate::command::{Command, CommandId, CommandSpec, Commands, Scope, ScopeId};
 use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
@@ -108,6 +110,8 @@ pub struct Editor {
     last_command: Option<Command>,
     command_history: Vec<CommandId>,
     commands: Commands,
+    applets: Vec<Installed>,
+    applet_states: States,
     goal_column: Option<usize>,
     shift_selection: bool,
     typed_in_step: usize,
@@ -182,6 +186,8 @@ impl Editor {
             last_command: None,
             command_history: Vec::new(),
             commands: Commands::default(),
+            applets: Vec::new(),
+            applet_states: States::default(),
             goal_column: None,
             shift_selection: false,
             typed_in_step: 0,
@@ -511,6 +517,31 @@ impl Editor {
 
     pub fn add_command(&mut self, spec: CommandSpec) -> CommandId {
         self.commands.add(spec)
+    }
+
+    pub fn install(&mut self, applet: &dyn Applet) {
+        self.applets.push(Installed {
+            name: applet.name(),
+            version: applet.version(),
+            opt_in: applet.opt_in(),
+        });
+        applet.install(self);
+    }
+
+    pub fn installed(&self) -> &[Installed] {
+        &self.applets
+    }
+
+    pub fn applet_state<T: Any + Send>(&self) -> Option<&T> {
+        self.applet_states.get()
+    }
+
+    pub fn applet_state_mut<T: Any + Send>(&mut self) -> Option<&mut T> {
+        self.applet_states.get_mut()
+    }
+
+    pub fn set_applet_state<T: Any + Send>(&mut self, state: T) {
+        self.applet_states.set(state);
     }
 
     pub fn add_scope(&mut self, label: &'static str) -> ScopeId {
