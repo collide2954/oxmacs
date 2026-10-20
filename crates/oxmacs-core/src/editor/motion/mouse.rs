@@ -1,5 +1,8 @@
+use crate::command::CommandId;
 use crate::display::Layout;
+use crate::editor::buffers::Mode;
 use crate::editor::{Editor, Effect};
+use crate::input::{KeySequence, Lookup};
 use crate::text::{Buffer, motion};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +67,17 @@ impl Editor {
             self.visit_error(error);
             return;
         }
+        if clicks == Clicks::Double
+            && matches!(self.buffers.mode(0), Some(Mode::Applet(_)))
+            && let Some(command) = self.return_command()
+        {
+            let buffer = self.buffers.current_mut();
+            buffer.deactivate_mark();
+            buffer.set_point(position);
+            self.drag_anchor = None;
+            self.run_id(command, false);
+            return;
+        }
         if clicks == Clicks::Double && self.buffers.listing(0).is_some() {
             let buffer = self.buffers.current_mut();
             buffer.deactivate_mark();
@@ -116,6 +130,14 @@ impl Editor {
         }
         buffer.set_point(position);
         self.publish_primary();
+    }
+
+    fn return_command(&self) -> Option<CommandId> {
+        let keys: KeySequence = "RET".parse().ok()?;
+        match self.keymaps.get(self.buffer_scope()).lookup(keys.keys()) {
+            Lookup::Command(command) => Some(command),
+            Lookup::Prefix | Lookup::Unbound => None,
+        }
     }
 
     pub fn click_line_number(&mut self, row: usize, extend: bool) {

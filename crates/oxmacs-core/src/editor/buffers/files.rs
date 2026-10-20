@@ -93,10 +93,10 @@ impl Editor {
                 None => self.resolve_path(&input),
             }
         };
-        let sources = self
+        let (sources, applet) = self
             .minibuffer
             .take()
-            .map(|minibuffer| minibuffer.sources)
+            .map(|minibuffer| (minibuffer.sources, minibuffer.applet))
             .unwrap_or_default();
         match purpose {
             Purpose::WriteFile => self.write_file_to(path),
@@ -106,6 +106,12 @@ impl Editor {
             }
             Purpose::Transfer(kind) => self.transfer_to(kind, sources, &path),
             Purpose::CreateDirectory => self.create_directory(&path),
+            Purpose::AppletPath { .. } => {
+                if let Some(applet) = applet {
+                    let path = self.absolute(&path);
+                    applet.answer_path(self, path);
+                }
+            }
             _ => {
                 self.open_file(&path);
             }
@@ -243,7 +249,10 @@ impl Editor {
     pub fn open_file(&mut self, path: &Path) -> bool {
         let path = self.absolute(path);
         if path.is_dir() {
-            return self.dired(&path);
+            return match self.directory_handler {
+                Some(open) => open(self, &path),
+                None => self.dired(&path),
+            };
         }
         if let Some(index) = self
             .buffers

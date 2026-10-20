@@ -98,6 +98,20 @@ impl Editor {
         }
     }
 
+    pub fn on_disk_change(&mut self, handler: fn(&mut Editor)) {
+        self.disk_handlers.push(handler);
+    }
+
+    pub(super) fn tell_disk_change(&mut self) {
+        for handler in self.disk_handlers.clone() {
+            handler(self);
+        }
+    }
+
+    pub fn on_open_directory(&mut self, handler: fn(&mut Editor, &Path) -> bool) {
+        self.directory_handler = Some(handler);
+    }
+
     pub fn on_save(&mut self, handler: fn(&mut Editor, BufferId)) {
         self.save_handlers.push(handler);
     }

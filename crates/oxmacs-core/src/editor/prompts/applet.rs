@@ -1,5 +1,6 @@
 use std::fmt;
 use std::ops::Range;
+use std::path::PathBuf;
 
 use crate::editor::Editor;
 use crate::editor::prompts::minibuffer::{Choice, Completion, Purpose};
@@ -9,6 +10,7 @@ type Offers = Box<dyn Fn(&Editor) -> Vec<Offer> + Send>;
 type Then = Box<dyn FnOnce(&mut Editor, bool) + Send>;
 type Answered = Box<dyn FnOnce(&mut Editor, String) + Send>;
 type Chose = Box<dyn FnOnce(&mut Editor, Picked) + Send>;
+type Located = Box<dyn FnOnce(&mut Editor, PathBuf) + Send>;
 
 pub type InputStyle = fn(&Editor, &str) -> Vec<(Range<usize>, Highlight)>;
 
@@ -21,6 +23,7 @@ pub enum Picked {
 enum Done {
     Text(Answered),
     Pick(Chose),
+    Path(Located),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +79,16 @@ impl fmt::Debug for AppletPrompt {
             .debug_struct("AppletPrompt")
             .field("offers", &self.offer.is_some())
             .finish_non_exhaustive()
+    }
+}
+
+impl AppletPrompt {
+    pub(in crate::editor) fn answer_path(self, editor: &mut Editor, path: PathBuf) {
+        match self.done {
+            Done::Path(done) => done(editor, path),
+            Done::Text(done) => done(editor, path.display().to_string()),
+            Done::Pick(done) => done(editor, Picked::Typed(path.display().to_string())),
+        }
     }
 }
 
@@ -162,6 +175,23 @@ impl Editor {
         );
     }
 
+    pub fn prompt_path(
+        &mut self,
+        prompt: &str,
+        directories: bool,
+        done: impl FnOnce(&mut Editor, PathBuf) + Send + 'static,
+    ) {
+        if self.open_file_prompt(prompt, Purpose::AppletPath { directories })
+            && let Some(minibuffer) = &mut self.minibuffer
+        {
+            minibuffer.applet = Some(AppletPrompt {
+                offer: None,
+                done: Done::Path(Box::new(done)),
+                style: None,
+            });
+        }
+    }
+
     pub fn prompt_styled(
         &mut self,
         prompt: &str,
@@ -246,6 +276,7 @@ impl Editor {
         };
         match applet.done {
             Done::Text(done) => done(self, selected.map_or(input, |completion| completion.label)),
+            Done::Path(done) => done(self, PathBuf::from(input)),
             Done::Pick(done) => {
                 let picked = match selected.map(|completion| completion.choice) {
                     Some(Choice::Offered(index)) => Picked::Offered(index),

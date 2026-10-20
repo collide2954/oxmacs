@@ -949,6 +949,102 @@ mod tests {
     }
 
     #[test]
+    fn applets_hear_about_disk_changes_and_open_directories() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        editor.on_disk_change(|editor| note(editor, "disk".to_owned()));
+        editor.on_open_directory(|editor, path| {
+            note(editor, format!("open {}", path.display()));
+            true
+        });
+
+        editor.check_disk_changes();
+        assert!(editor.open_file(dir.path()));
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec![
+                "disk".to_owned(),
+                format!("open {}", dir.path().display())
+            ])
+        );
+    }
+
+    #[test]
+    fn path_prompts_complete_names_and_answer_with_a_path() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("notes.txt"), "").unwrap();
+        std::fs::create_dir_all(dir.path().join("sub")).unwrap();
+        let mut editor = Editor::new();
+        editor.set_working_directory(dir.path().to_owned());
+        editor.set_applet_state(Answers::default());
+
+        editor.prompt_path("Copy to: ", false, |editor, path| {
+            note(editor, path.display().to_string());
+        });
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Copy to: ");
+        assert_eq!(editor.completions().len(), 2);
+        type_keys(&mut editor, "n o t RET");
+
+        editor.prompt_path("Directory: ", true, |editor, path| {
+            note(editor, path.display().to_string());
+        });
+        assert_eq!(editor.completions().len(), 1);
+        type_keys(&mut editor, "s u b / RET");
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec![
+                dir.path().join("notes.txt").display().to_string(),
+                dir.path().join("sub").display().to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn double_clicks_in_applet_buffers_run_what_return_runs() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        let scope = editor.add_scope("*Board*");
+        let pick = editor.add_command(CommandSpec {
+            name: "board-pick",
+            summary: "Pick",
+            help: None,
+            scope,
+            run: |editor| {
+                let line = editor.buffer().line_of(editor.buffer().point());
+                note(editor, format!("line {line}"));
+            },
+        });
+        editor.bind(scope, "RET", pick).unwrap();
+        let id = editor.add_applet_buffer_with("*Board*", |buffer| {
+            buffer.insert_at(0, "one\ntwo\nthree");
+            Board(scope)
+        });
+        editor.show_buffer(id);
+        let window = editor.selected_window();
+        editor.resize_pane(window, 10, 40);
+
+        editor.click(
+            crate::editor::Cell { row: 1, column: 0 },
+            crate::editor::Clicks::Double,
+            false,
+        );
+
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["line 1".to_owned()])
+        );
+    }
+
+    #[test]
     fn applets_open_links_outside_and_hide_buffers_they_showed() {
         let mut editor = Editor::new();
         editor.open_externally("https://example.org");

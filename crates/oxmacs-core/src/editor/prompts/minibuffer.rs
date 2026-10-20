@@ -32,6 +32,7 @@ pub(in crate::editor) enum Purpose {
     RHelp,
     SavePlot,
     Applet { completes: bool, secret: bool },
+    AppletPath { directories: bool },
 }
 
 impl Purpose {
@@ -44,11 +45,15 @@ impl Purpose {
                 | Self::Dired
                 | Self::Transfer(_)
                 | Self::CreateDirectory
+                | Self::AppletPath { .. }
         )
     }
 
     fn lists_only_directories(self) -> bool {
-        matches!(self, Self::Dired | Self::CreateDirectory)
+        matches!(
+            self,
+            Self::Dired | Self::CreateDirectory | Self::AppletPath { directories: true }
+        )
     }
 
     fn takes_text(self) -> bool {
@@ -186,7 +191,8 @@ impl Editor {
             | Purpose::SavePlot
             | Purpose::Dired
             | Purpose::Transfer(_)
-            | Purpose::CreateDirectory => file_completions(minibuffer),
+            | Purpose::CreateDirectory
+            | Purpose::AppletPath { .. } => file_completions(minibuffer),
             Purpose::SwitchBuffer | Purpose::KillBuffer => {
                 self.buffer_completions(minibuffer.purpose, matches)
             }
