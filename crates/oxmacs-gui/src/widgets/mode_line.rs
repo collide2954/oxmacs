@@ -216,7 +216,10 @@ fn divider<'a, Message: 'a>(paint: &Paint) -> Element<'a, Message> {
 }
 
 fn position(status: &Status) -> String {
-    format!("{}:{}", status.line, status.column)
+    status
+        .position
+        .clone()
+        .unwrap_or_else(|| format!("{}:{}", status.line, status.column))
 }
 
 fn marker(state: BufferState) -> Option<&'static str> {
@@ -412,6 +415,7 @@ mod tests {
             name: "main.rs".to_owned(),
             line: 12,
             column: 4,
+            position: None,
             crlf: false,
             mode: Some("Rust"),
             lint: Some("E1 W2".to_owned()),

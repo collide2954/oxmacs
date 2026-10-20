@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::command::Command;
 use crate::config::OnDiskChange;
@@ -9,10 +9,15 @@ use crate::text::{Buffer, FileInfo};
 
 impl Editor {
     pub fn visited_files(&self) -> Vec<PathBuf> {
-        let mut files: Vec<PathBuf> = self
-            .buffers
-            .iter()
-            .filter_map(|buffer| buffer.file().map(|file| file.path.clone()))
+        let mut files: Vec<PathBuf> = (0..self.buffers.len())
+            .filter_map(|index| match self.buffers.mode(index) {
+                Some(Mode::Applet(view)) => view.file().map(Path::to_path_buf),
+                _ => self
+                    .buffers
+                    .get(index)?
+                    .file()
+                    .map(|file| file.path.clone()),
+            })
             .collect();
         files.sort();
         files.dedup();

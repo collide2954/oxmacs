@@ -25,6 +25,7 @@ pub struct Status {
     pub name: String,
     pub line: usize,
     pub column: usize,
+    pub position: Option<String>,
     pub crlf: bool,
     pub mode: Option<&'static str>,
     pub lint: Option<String>,
@@ -32,14 +33,11 @@ pub struct Status {
 
 impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {}   L{} C{}",
-            self.state.flag(),
-            self.name,
-            self.line,
-            self.column
-        )?;
+        write!(f, "{} {}   ", self.state.flag(), self.name)?;
+        match &self.position {
+            Some(position) => write!(f, "{position}")?,
+            None => write!(f, "L{} C{}", self.line, self.column)?,
+        }
         if self.crlf {
             write!(f, "   CRLF")?;
         }
@@ -75,6 +73,7 @@ mod tests {
                 name: "main.rs".to_owned(),
                 line: 1,
                 column: 13,
+                position: None,
                 crlf: true,
                 mode: Some("Rust"),
                 lint: None,

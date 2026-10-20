@@ -25,6 +25,14 @@ pub trait AppletBuffer: Any + Send + fmt::Debug {
     fn directory(&self) -> Option<&Path> {
         None
     }
+
+    fn file(&self) -> Option<&Path> {
+        None
+    }
+
+    fn position(&self) -> Option<String> {
+        None
+    }
 }
 
 pub trait Applet {
@@ -1049,6 +1057,41 @@ mod tests {
         true
     }
 
+    #[derive(Debug)]
+    struct Viewer {
+        scope: ScopeId,
+        file: std::path::PathBuf,
+    }
+
+    impl AppletBuffer for Viewer {
+        fn scope(&self) -> ScopeId {
+            self.scope
+        }
+
+        fn position(&self) -> Option<String> {
+            Some("2/9".to_owned())
+        }
+
+        fn file(&self) -> Option<&Path> {
+            Some(&self.file)
+        }
+    }
+
+    #[test]
+    fn applet_buffers_show_their_own_position_and_watch_their_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("paper.pdf");
+        let mut editor = Editor::new();
+        let scope = editor.add_scope("viewer");
+        let id = editor.add_applet_buffer_with("paper.pdf", |_| Viewer {
+            scope,
+            file: file.clone(),
+        });
+        editor.show_buffer(id);
+
+        assert_eq!(editor.pane().status().position.as_deref(), Some("2/9"));
+        assert_eq!(editor.visited_files(), [file]);
+    }
     #[test]
     fn applets_open_the_file_types_they_claim() {
         let dir = tempfile::tempdir().unwrap();

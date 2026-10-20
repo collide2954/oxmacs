@@ -233,6 +233,10 @@ impl<'a> Pane<'a> {
             name: buffer.name().to_owned(),
             line: buffer.line_of(self.point) + 1,
             column: display_column(buffer, self.point, self.editor.tab_width),
+            position: match self.editor.buffers.mode(self.index) {
+                Some(Mode::Applet(view)) => view.position(),
+                _ => None,
+            },
             crlf: buffer
                 .file()
                 .is_some_and(|file| file.format.line_ending == LineEnding::CrLf),
