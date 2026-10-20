@@ -134,6 +134,7 @@ pub struct Editor {
     configured_theme: Option<&'static Theme>,
     themes: Vec<&'static Theme>,
     splash_entries: Vec<(CommandId, String)>,
+    config_tables: Vec<(&'static str, applets::ConfigCheck)>,
     working_directory: PathBuf,
     home: Option<PathBuf>,
     tool_report: special::doctor::ToolReport,
@@ -214,6 +215,7 @@ impl Editor {
             configured_theme: None,
             themes: theme::builtin().to_vec(),
             splash_entries: Vec::new(),
+            config_tables: Vec::new(),
             working_directory: env::current_dir().unwrap_or_default(),
             home: dirs::home_dir(),
             tool_report: special::doctor::ToolReport::default(),
@@ -244,6 +246,7 @@ impl Editor {
             self.atlas_index = None;
         }
         self.config = config.clone();
+        self.check_config_tables();
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {

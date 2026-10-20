@@ -459,6 +459,55 @@ mod tests {
         assert_eq!(theme::counterpart(&PALETTE[1]).name, "palette-light");
     }
 
+    #[derive(Debug, Default, PartialEq, serde::Deserialize)]
+    #[serde(default, deny_unknown_fields)]
+    struct Greeting {
+        text: String,
+    }
+
+    struct Hello;
+
+    impl Applet for Hello {
+        fn name(&self) -> &'static str {
+            "hello"
+        }
+
+        fn version(&self) -> &'static str {
+            "1.0.0"
+        }
+
+        fn install(&self, editor: &mut Editor) {
+            editor.add_config_table::<Greeting>("hello");
+        }
+    }
+
+    #[test]
+    fn applets_read_their_own_config_table_and_mistakes_are_reported() {
+        let mut editor = Editor::new();
+        editor.install(&Hello);
+
+        editor.apply_config(&Config::parse("[hello]\ntext = \"hi\"\n\n[other]\nx = 1\n").unwrap());
+        assert_eq!(
+            editor.applet_config::<Greeting>("hello"),
+            Greeting {
+                text: "hi".to_owned()
+            }
+        );
+        assert_eq!(editor.unclaimed_config_tables(), ["other"]);
+
+        editor.apply_config(&Config::parse("tab-width = 2\n[hello]\ntxt = \"hi\"\n").unwrap());
+        let message = editor.message().unwrap_or_default();
+        assert!(
+            message.starts_with("[hello] unknown field `txt`"),
+            "{message}"
+        );
+        assert_eq!(
+            editor.applet_config::<Greeting>("hello"),
+            Greeting::default()
+        );
+        assert_eq!(editor.tab_width(), 2);
+    }
+
     #[test]
     fn state_is_kept_per_type() {
         let mut states = States::default();

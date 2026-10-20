@@ -1,10 +1,19 @@
 use std::any::Any;
 
+use serde::de::DeserializeOwned;
+
 use crate::applet::AppletBuffer;
+use crate::config::Config;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::text::{Buffer, BufferId};
+
+pub(super) type ConfigCheck = fn(&Config, &str) -> Result<(), String>;
+
+fn check<T: DeserializeOwned + Default>(config: &Config, name: &str) -> Result<(), String> {
+    config.applet::<T>(name).map(|_| ())
+}
 
 fn downcast<T: AppletBuffer>(view: &dyn AppletBuffer) -> Option<&T> {
     let any: &dyn Any = view;
@@ -12,6 +21,34 @@ fn downcast<T: AppletBuffer>(view: &dyn AppletBuffer) -> Option<&T> {
 }
 
 impl Editor {
+    pub fn add_config_table<T: DeserializeOwned + Default>(&mut self, name: &'static str) {
+        self.config_tables.push((name, check::<T>));
+        self.check_config_tables();
+    }
+
+    pub fn applet_config<T: DeserializeOwned + Default>(&self, name: &str) -> T {
+        self.config.applet(name).unwrap_or_default()
+    }
+
+    pub fn unclaimed_config_tables(&self) -> Vec<&str> {
+        self.config
+            .applet_tables()
+            .into_iter()
+            .filter(|table| self.config_tables.iter().all(|(name, _)| name != table))
+            .collect()
+    }
+
+    pub(super) fn check_config_tables(&mut self) {
+        let problems: Vec<String> = self
+            .config_tables
+            .iter()
+            .filter_map(|(name, check)| check(&self.config, name).err())
+            .collect();
+        if !problems.is_empty() {
+            self.show_message(problems.join("; "));
+        }
+    }
+
     pub fn open_applet_buffer(&mut self, name: &str, view: impl AppletBuffer) -> BufferId {
         let mut buffer = Buffer::with_text(name, "");
         buffer.set_read_only(true);
