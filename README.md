@@ -79,7 +79,7 @@ Because built-in applets use exactly the same API, a fork can add its own the sa
 
 Nothing outside your crate and those few lines needs to change, and an applet you leave out is simply not compiled. [crates/oxmacs-demo](crates/oxmacs-demo/README.md) is a small, complete example to start from. [crates/oxmacs-themes](crates/oxmacs-themes) adds color themes and [crates/oxmacs-splash](crates/oxmacs-splash) draws the animated start screen, both through the same API.
 
-The applet API is being extracted from the editor now; the built-in applets move into their own crates as it lands.
+Rust and R support and the process and tool lists still live in the core; they are the next to move into applets.
 
 ## Configuration
 
@@ -91,4 +91,4 @@ Settings live in `config.toml` in the oxmacs config folder (for example `~/.conf
 git config core.hooksPath .githooks
 ```
 
-The pre-commit hook runs `cargo fmt --check`, `cargo clippy` with every feature turned on, and the tests both with every feature and with none. Changes are recorded in CHANGELOG.md.
+The pre-commit hook runs `cargo fmt --check`, `cargo clippy` with every feature turned on and on the lean build without default features, and the tests with every feature and with the default ones. Changes are recorded in CHANGELOG.md.
