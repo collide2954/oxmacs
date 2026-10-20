@@ -144,6 +144,7 @@ impl Editor {
 
     pub(in crate::editor) fn name_file_buffers(&mut self) {
         let located: Vec<(usize, PathBuf, bool)> = (0..self.buffers.len())
+            .filter(|index| !self.buffers.fixed_name(*index))
             .filter_map(|index| {
                 let (path, directory) = self.buffers.location(index)?;
                 Some((index, path.to_owned(), directory))

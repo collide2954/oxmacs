@@ -29,6 +29,10 @@ impl Editor {
             .filter_map(|index| self.buffers.location(index))
             .filter(|(_, directory)| *directory)
             .map(|(path, _)| path.to_owned())
+            .chain(
+                (0..self.buffers.len())
+                    .filter_map(|index| self.buffers.watched(index).map(Path::to_path_buf)),
+            )
             .collect();
         directories.sort();
         directories.dedup();

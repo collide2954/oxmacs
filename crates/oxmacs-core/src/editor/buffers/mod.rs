@@ -120,6 +120,17 @@ impl BufferList {
         }
     }
 
+    pub(super) fn fixed_name(&self, index: usize) -> bool {
+        matches!(self.mode(index), Some(Mode::Applet(view)) if view.fixed_name())
+    }
+
+    pub(super) fn watched(&self, index: usize) -> Option<&Path> {
+        match self.mode(index)? {
+            Mode::Applet(view) => view.watched(),
+            _ => None,
+        }
+    }
+
     pub(super) fn language(&self, index: usize) -> Option<Language> {
         match self.mode(index)? {
             Mode::Text(syntax) => syntax.as_ref().map(Syntax::language),

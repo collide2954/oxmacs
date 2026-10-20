@@ -31,6 +31,14 @@ pub trait AppletBuffer: Any + Send + fmt::Debug {
         None
     }
 
+    fn fixed_name(&self) -> bool {
+        false
+    }
+
+    fn watched(&self) -> Option<&Path> {
+        None
+    }
+
     fn position(&self) -> Option<String> {
         None
     }
@@ -959,6 +967,48 @@ mod tests {
             format!("docs{}", crate::files::paths::SEPARATOR)
         );
         assert!(editor.watched_directories().contains(&docs));
+    }
+
+    #[derive(Debug)]
+    struct Repository(ScopeId, std::path::PathBuf, std::path::PathBuf);
+
+    impl AppletBuffer for Repository {
+        fn scope(&self) -> ScopeId {
+            self.0
+        }
+
+        fn directory(&self) -> Option<&Path> {
+            Some(&self.1)
+        }
+
+        fn fixed_name(&self) -> bool {
+            true
+        }
+
+        fn watched(&self) -> Option<&Path> {
+            Some(&self.2)
+        }
+    }
+
+    #[test]
+    fn applet_buffers_can_keep_their_name_and_watch_another_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let metadata = dir.path().join(".git");
+        std::fs::create_dir_all(&metadata).unwrap();
+        let mut editor = Editor::new();
+        let scope = editor.add_scope("*Repository*");
+
+        let id = editor.add_applet_buffer_with("git: project", |_| {
+            Repository(scope, dir.path().to_owned(), metadata.clone())
+        });
+        editor.show_buffer(id);
+
+        assert_eq!(editor.buffer().name(), "git: project");
+        assert_eq!(editor.default_directory(), dir.path());
+        assert_eq!(
+            editor.watched_directories(),
+            [dir.path().to_owned(), metadata]
+        );
     }
 
     #[test]
