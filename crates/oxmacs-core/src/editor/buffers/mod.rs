@@ -7,7 +7,6 @@ pub(super) mod read_only;
 use std::path::Path;
 
 use crate::applet::AppletBuffer;
-use crate::dired::Listing;
 use crate::display::{ScreenLine, Viewport};
 use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
@@ -32,7 +31,6 @@ pub(super) const SCRATCH: &str = "*scratch*";
 #[derive(Debug)]
 pub(super) enum Mode {
     Text(Option<Syntax>),
-    Dired(Listing),
     Splash(Splash),
     Doctor(Doctor),
     Compilation(Compilation),
@@ -106,13 +104,6 @@ impl BufferList {
             .is_some_and(|mode| !matches!(mode, Mode::Text(_)))
     }
 
-    pub(super) fn listing(&self, index: usize) -> Option<&Listing> {
-        match self.mode(index)? {
-            Mode::Dired(listing) => Some(listing),
-            _ => None,
-        }
-    }
-
     pub(super) fn splash(&self, index: usize) -> Option<&Splash> {
         match self.mode(index)? {
             Mode::Splash(splash) => Some(splash),
@@ -120,18 +111,9 @@ impl BufferList {
         }
     }
 
-    pub(super) fn dired_mut(&mut self, index: usize) -> Option<(&mut Buffer, &mut Listing)> {
-        let entry = self.entries.get_mut(index)?;
-        match &mut entry.mode {
-            Mode::Dired(listing) => Some((&mut entry.buffer, listing)),
-            _ => None,
-        }
-    }
-
     pub(super) fn location(&self, index: usize) -> Option<(&Path, bool)> {
         let entry = self.entries.get(index)?;
         match &entry.mode {
-            Mode::Dired(listing) => Some((listing.directory(), true)),
             Mode::Applet(view) => view.directory().map(|directory| (directory, true)),
             Mode::Text(_) => entry.buffer.file().map(|file| (file.path.as_path(), false)),
             _ => None,
@@ -240,15 +222,6 @@ impl BufferList {
         if let Some(entry) = self.entries.get_mut(index) {
             entry.mode = mode;
         }
-    }
-
-    pub(super) fn replace_current(&mut self, buffer: Buffer, mode: Mode) {
-        self.entries[0] = Entry {
-            buffer,
-            top: ScreenLine::default(),
-            mode,
-            numbers: None,
-        };
     }
 
     pub(super) fn select(&mut self, index: usize) {

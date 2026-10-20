@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use crate::editor::dired::Transfer;
 use crate::editor::prompts::applet::Answer;
 use crate::editor::special::processes::Source;
 use crate::editor::{Editor, is_keyboard_quit};
@@ -31,10 +30,6 @@ enum Pending {
         disk: Option<DiskState>,
     },
     SaveOver,
-    Delete {
-        paths: Vec<PathBuf>,
-    },
-    Transfer(Transfer),
     StopProcess(Source),
     RemoveTool(Managed),
     Applet,
@@ -191,12 +186,6 @@ impl Editor {
                     self.save_buffer_at(0);
                 }
             }
-            Pending::Delete { paths } => {
-                if answer == 'y' {
-                    self.delete_paths(&paths);
-                }
-            }
-            Pending::Transfer(transfer) => self.answer_transfer(transfer, answer),
             Pending::StopProcess(source) => {
                 if answer == 'y' {
                     self.finish_stop(source);
@@ -213,31 +202,6 @@ impl Editor {
                 }
             }
         }
-    }
-
-    pub(in crate::editor) fn ask_to_overwrite_transfer(&mut self, path: &Path, transfer: Transfer) {
-        let shown = paths::abbreviate(path, self.home.as_deref());
-        self.question = Some(Question {
-            prompt: format!("Overwrite {shown}? (y, n, !, q) "),
-            choices: SAVE_CHOICES,
-            typed: None,
-            pending: Pending::Transfer(transfer),
-        });
-    }
-
-    pub(in crate::editor) fn ask_to_delete(
-        &mut self,
-        prompt: &str,
-        paths: Vec<PathBuf>,
-        typed: bool,
-    ) {
-        let choices = if typed { "yes or no" } else { "y or n" };
-        self.question = Some(Question {
-            prompt: format!("{prompt} ({choices}) "),
-            choices: YES_NO,
-            typed: typed.then(String::new),
-            pending: Pending::Delete { paths },
-        });
     }
 
     pub(in crate::editor) fn ask_to_save_over(&mut self, name: &str) {

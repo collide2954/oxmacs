@@ -1062,6 +1062,20 @@ mod tests {
     }
 
     #[test]
+    fn g_bound_to_revert_buffer_in_an_applet_buffer_does_not_loop() {
+        let mut editor = Editor::new();
+        let scope = editor.add_scope("*Board*");
+        editor
+            .bind(scope, "g", crate::command::Command::RevertBuffer)
+            .unwrap();
+        let id = editor.add_applet_buffer_with("*Board*", |_| Board(scope));
+        editor.show_buffer(id);
+
+        editor.execute(crate::command::Command::RevertBuffer);
+
+        assert_eq!(editor.buffer().name(), "*Board*");
+    }
+    #[test]
     fn reverting_an_applet_buffer_runs_what_g_runs() {
         let mut editor = Editor::new();
         editor.set_applet_state(Answers::default());

@@ -2,99 +2,101 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::dired::Mark;
-use crate::editor::prompts::minibuffer::Purpose;
-use crate::editor::{Editor, Effect};
-use crate::files::{ops, paths};
+use oxmacs_core::editor::Editor;
+use oxmacs_core::files::paths;
 
-impl Editor {
-    pub(in crate::editor) fn dired_do_open(&mut self) {
-        let targets = self.dired_targets(Mark::Marked, true);
-        if targets.is_empty() {
-            self.show_message("No file on this line");
-            return;
-        }
-        self.effects.extend(
-            targets
-                .into_iter()
-                .map(|(path, _)| Effect::OpenExternally(path)),
-        );
+use crate::browse::{current, focus, refresh_all};
+use crate::listing::Mark;
+use crate::marks::targets;
+use crate::ops;
+use crate::settings;
+
+pub(crate) fn open(editor: &mut Editor) {
+    let found = targets(editor, Mark::Marked, true);
+    if found.is_empty() {
+        editor.show_message("No file on this line");
+        return;
     }
-
-    pub(in crate::editor) fn dired_create_directory(&mut self) {
-        if self.buffers.listing(0).is_some() {
-            self.open_file_prompt("Create directory: ", Purpose::CreateDirectory);
-        }
+    for (path, _) in found {
+        editor.open_externally(path);
     }
+}
 
-    pub(in crate::editor) fn create_directory(&mut self, path: &Path) {
-        let path = self.absolute(path);
-        let shown = paths::abbreviate(&path, self.home.as_deref());
-        if path.exists() {
-            self.show_message(format!("{shown} already exists"));
-            return;
-        }
-        if let Err(error) = fs::create_dir_all(&path) {
-            self.show_message(format!("{shown}: {error}"));
-            return;
-        }
-        self.refresh_listings();
-        let created = self
-            .buffers
-            .listing(0)
-            .and_then(|listing| path.strip_prefix(listing.directory()).ok())
-            .and_then(|rest| rest.iter().next())
-            .map(OsStr::to_owned);
-        if let Some(name) = created {
-            self.dired_focus(&name);
-        }
+pub(crate) fn create_directory(editor: &mut Editor) {
+    if current(editor).is_some() {
+        editor.prompt_path("Create directory: ", true, |editor, path| {
+            create(editor, &path);
+        });
     }
+}
 
-    pub(in crate::editor) fn dired_do_delete(&mut self, flagged: bool) {
-        let targets = if flagged {
-            self.dired_targets(Mark::Flagged, false)
+fn create(editor: &mut Editor, path: &Path) {
+    let path = editor.absolute(path);
+    let shown = paths::abbreviate(&path, editor.home());
+    if path.exists() {
+        editor.show_message(format!("{shown} already exists"));
+        return;
+    }
+    if let Err(error) = fs::create_dir_all(&path) {
+        editor.show_message(format!("{shown}: {error}"));
+        return;
+    }
+    refresh_all(editor);
+    let created = current(editor)
+        .and_then(|listing| path.strip_prefix(listing.directory()).ok())
+        .and_then(|rest| rest.iter().next())
+        .map(OsStr::to_owned);
+    if let Some(name) = created {
+        focus(editor, &name);
+    }
+}
+
+pub(crate) fn delete(editor: &mut Editor, flagged: bool) {
+    let found = if flagged {
+        targets(editor, Mark::Flagged, false)
+    } else {
+        targets(editor, Mark::Marked, true)
+    };
+    if found.is_empty() {
+        editor.show_message(if flagged {
+            "(No deletions requested)"
         } else {
-            self.dired_targets(Mark::Marked, true)
-        };
-        if targets.is_empty() {
-            self.show_message(if flagged {
-                "(No deletions requested)"
-            } else {
-                "No file on this line"
-            });
-            return;
-        }
-        let (paths, names): (Vec<PathBuf>, Vec<String>) = targets.into_iter().unzip();
-        let verb = if self.settings.delete_to_trash {
-            "Trash"
-        } else {
-            "Delete"
-        };
-        let typed = !self.settings.delete_to_trash;
-        self.ask_to_delete(&format!("{verb} {}?", describe(&names)), paths, typed);
+            "No file on this line"
+        });
+        return;
     }
-
-    pub(in crate::editor) fn delete_paths(&mut self, paths: &[PathBuf]) {
-        let result = if self.settings.delete_to_trash {
-            ops::trash(paths)
-        } else {
-            paths
-                .iter()
-                .try_for_each(|path| ops::remove(path))
-                .map_err(|error| error.to_string())
-        };
-        self.refresh_listings();
-        match result {
-            Ok(()) => {
-                let verb = if self.settings.delete_to_trash {
-                    "Trashed"
-                } else {
-                    "Deleted"
-                };
-                self.show_message(format!("{verb} {}", files(paths.len())));
-            }
-            Err(error) => self.show_message(error),
+    let (paths, names): (Vec<PathBuf>, Vec<String>) = found.into_iter().unzip();
+    let to_trash = settings(editor).delete_to_trash;
+    let verb = if to_trash { "Trash" } else { "Delete" };
+    let prompt = format!("{verb} {}?", describe(&names));
+    let then = move |editor: &mut Editor, yes: bool| {
+        if yes {
+            delete_paths(editor, &paths, to_trash);
         }
+    };
+    if to_trash {
+        editor.ask(&prompt, then);
+    } else {
+        editor.ask_typed(&prompt, then);
+    }
+}
+
+fn delete_paths(editor: &mut Editor, paths: &[PathBuf], to_trash: bool) {
+    let result = if to_trash {
+        ops::trash(paths)
+    } else {
+        paths
+            .iter()
+            .try_for_each(|path| ops::remove(path))
+            .map_err(|error| error.to_string())
+    };
+    refresh_all(editor);
+    match result {
+        Ok(()) => {
+            let verb = if to_trash { "Trashed" } else { "Deleted" };
+            editor.show_message(format!("{verb} {}", files(paths.len())));
+        }
+        Err(error) => editor.show_message(error),
     }
 }
 
@@ -108,7 +110,7 @@ fn describe(names: &[String]) -> String {
     }
 }
 
-pub(in crate::editor) fn files(count: usize) -> String {
+pub(crate) fn files(count: usize) -> String {
     if count == 1 {
         "1 file".to_owned()
     } else {
@@ -120,10 +122,11 @@ pub(in crate::editor) fn files(count: usize) -> String {
 mod tests {
     use std::fs;
 
-    use crate::editor::Effect;
-    use crate::editor::dired::fixtures::{listed, mark_column, permanent, trashed, workspace};
-    use crate::editor::test_support::{at_point, lines, press, question, type_text};
-    use crate::files::paths::SEPARATOR as SEP;
+    use oxmacs_core::editor::Effect;
+    use oxmacs_core::files::paths::SEPARATOR as SEP;
+
+    use crate::fixtures::{listed, mark_column, permanent, trashed, workspace};
+    use crate::testing::{at_point, lines, press, question, type_text};
 
     #[test]
     fn x_trashes_flagged_files_after_asking() {

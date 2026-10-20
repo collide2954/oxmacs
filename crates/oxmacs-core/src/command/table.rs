@@ -132,12 +132,12 @@ mod tests {
     #[test]
     fn core_commands_keep_their_names_and_scopes() {
         let commands = Commands::default();
-        let id = CommandId::from(Command::DiredMark);
+        let id = CommandId::from(Command::IsearchExit);
 
-        assert_eq!(id.core(), Some(Command::DiredMark));
-        assert_eq!(commands.name(id), "dired-mark");
-        assert_eq!(commands.scope(id), Scope::Dired.into());
-        assert_eq!(commands.find("dired-mark"), Some(id));
+        assert_eq!(id.core(), Some(Command::IsearchExit));
+        assert_eq!(commands.name(id), "isearch-exit");
+        assert_eq!(commands.scope(id), Scope::Search.into());
+        assert_eq!(commands.find("isearch-exit"), Some(id));
         assert!(commands.handler(id).is_none());
     }
 

@@ -13,9 +13,9 @@ const TAGLINE: &str = "An Emacs-inspired editor, written in Rust.";
 const INDENT: usize = 3;
 const TITLE_LINE: usize = 1;
 const FIRST_BUTTON_LINE: usize = 4;
+const CLOSING_BUTTONS: usize = 2;
 const BUTTONS: &[(Command, &str)] = &[
     (Command::FindFile, "Open a file"),
-    (Command::Dired, "Browse a directory"),
     (Command::SwitchToBuffer, "Switch buffers"),
     (Command::IsearchForward, "Search"),
     (Command::ExecuteExtendedCommand, "Run any command"),
@@ -121,7 +121,8 @@ impl Editor {
             .iter()
             .map(|(command, description)| ((*command).into(), (*description).to_owned()))
             .collect();
-        entries.extend(self.splash_entries.iter().cloned());
+        let closing = entries.len().saturating_sub(CLOSING_BUTTONS);
+        entries.splice(closing..closing, self.splash_entries.iter().cloned());
         let keys: Vec<String> = entries
             .iter()
             .map(|(command, _)| {
@@ -256,7 +257,6 @@ mod tests {
 
         for (key, command, description) in [
             ("C-x C-f", "find-file", "Open a file"),
-            ("C-x d", "dired", "Browse a directory"),
             ("C-x b", "switch-to-buffer", "Switch buffers"),
             ("C-s", "isearch-forward", "Search"),
             ("M-x", "execute-extended-command", "Run any command"),
@@ -285,7 +285,7 @@ mod tests {
         let mut editor = shown();
 
         press(&mut editor, "n");
-        assert!(at_point(&editor).starts_with("C-x d"));
+        assert!(at_point(&editor).starts_with("C-x b"));
 
         press(&mut editor, "p p");
         assert!(at_point(&editor).starts_with("C-x C-c"));
@@ -300,7 +300,7 @@ mod tests {
 
         press(&mut editor, "n RET");
 
-        assert_eq!(editor.minibuffer().unwrap().prompt(), "Dired (directory): ");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Switch to buffer: ");
     }
 
     #[test]
@@ -402,12 +402,13 @@ mod tests {
         let line = line_of(&editor, "w ");
         assert!(lines(&editor)[line].contains("wave-hello"));
         assert!(lines(&editor)[line].ends_with("Wave"));
+        assert!(line < line_of(&editor, "C-x C-s"));
         assert_eq!(editor.line_style(line).spans, [(3..4, Highlight::Link)]);
 
         press(&mut editor, "n");
         editor.set_splash_entry(command, "Wave again");
         assert!(lines(&editor)[line].ends_with("Wave again"));
-        assert!(at_point(&editor).starts_with("C-x d"));
+        assert!(at_point(&editor).starts_with("C-x b"));
 
         editor.click(
             Cell {

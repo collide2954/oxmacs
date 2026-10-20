@@ -3,7 +3,6 @@ pub mod cli;
 pub mod clock;
 pub mod command;
 pub mod config;
-pub mod dired;
 pub mod display;
 pub mod editor;
 pub mod external;

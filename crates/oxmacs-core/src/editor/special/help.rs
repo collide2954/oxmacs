@@ -255,10 +255,10 @@ mod tests {
             "{shown:?}"
         );
 
-        describe(&mut editor, "dired-next-line");
+        describe(&mut editor, "forward-button");
         let shown = lines(&editor);
         assert!(
-            shown.contains(&"Keys      n, SPC, C-n or <down> in dired".to_owned()),
+            shown.contains(&"Keys      n, TAB, C-n or <down> in the start screen".to_owned()),
             "{shown:?}"
         );
     }

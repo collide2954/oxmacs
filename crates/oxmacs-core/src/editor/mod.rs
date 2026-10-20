@@ -2,7 +2,6 @@ mod applets;
 mod buffers;
 mod build;
 mod connections;
-mod dired;
 mod dispatch;
 mod editing;
 mod effect;
@@ -59,12 +58,7 @@ use crate::theme::{self, Appearance, Highlight, Theme};
 const DEFAULT_ROWS: usize = 24;
 
 #[derive(Debug, Clone, Copy)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "each flag mirrors a config.toml setting"
-)]
 struct Settings {
-    delete_to_trash: bool,
     format_on_save: bool,
     rust_lint: RustLint,
     line_numbers: LineNumbers,
@@ -75,7 +69,6 @@ struct Settings {
 impl From<&Config> for Settings {
     fn from(config: &Config) -> Self {
         Self {
-            delete_to_trash: config.delete_to_trash,
             format_on_save: config.format_on_save,
             rust_lint: config.rust_lint,
             line_numbers: config.line_numbers,
@@ -461,7 +454,6 @@ impl Editor {
 
     fn core_scope(&self) -> Scope {
         match self.buffers.mode(0) {
-            Some(Mode::Dired(_)) => Scope::Dired,
             Some(Mode::Splash(_)) => Scope::Splash,
             Some(Mode::Doctor(_)) => Scope::Doctor,
             Some(Mode::Compilation(_)) => Scope::Compilation,
@@ -484,7 +476,6 @@ impl Editor {
 
     fn line_style_at(&self, index: usize, line: usize) -> LineStyle {
         match self.buffers.mode(index) {
-            Some(Mode::Dired(listing)) => listing.line_style(line),
             Some(Mode::Splash(splash)) => splash.line_style(line),
             Some(Mode::Doctor(doctor)) => doctor.line_style(line),
             Some(Mode::Compilation(compilation)) => self

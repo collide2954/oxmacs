@@ -1,7 +1,6 @@
 mod entry;
 mod format;
 mod io;
-pub mod ops;
 pub mod paths;
 
 pub use entry::{Entry, Kind, Sort, read_entries, sort};

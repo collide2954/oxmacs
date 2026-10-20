@@ -1,6 +1,4 @@
 use crate::command::Command;
-use crate::dired::Mark;
-use crate::editor::dired::Kind;
 use crate::editor::search::isearch::Direction as SearchDirection;
 use crate::editor::windows::Direction;
 use crate::editor::{Axis, Editor};
@@ -89,26 +87,6 @@ impl Editor {
             Command::KillBuffer => self.kill_buffer(),
             Command::RevertBuffer => self.revert_buffer(),
             Command::ReadOnlyMode => self.toggle_read_only(),
-            Command::Dired => self.dired_prompt(),
-            Command::DiredJump => self.dired_jump(),
-            Command::DiredNextLine => self.dired_next_line(1),
-            Command::DiredPreviousLine => self.dired_next_line(-1),
-            Command::DiredFindFile => self.dired_find_file(),
-            Command::DiredUpDirectory => self.dired_up_directory(),
-            Command::DiredCycleSort => self.dired_cycle_sort(),
-            Command::DiredMark => self.dired_mark(Some(Mark::Marked)),
-            Command::DiredFlagFileDeletion => self.dired_mark(Some(Mark::Flagged)),
-            Command::DiredUnmark => self.dired_mark(None),
-            Command::DiredUnmarkBackward => self.dired_unmark_backward(),
-            Command::DiredUnmarkAllMarks => self.dired_unmark_all(),
-            Command::DiredToggleMarks => self.dired_toggle_marks(),
-            Command::DiredDoFlaggedDelete => self.dired_do_delete(true),
-            Command::DiredDoDelete => self.dired_do_delete(false),
-            Command::DiredDoRename => self.dired_do_transfer(Kind::Move),
-            Command::DiredDoCopy => self.dired_do_transfer(Kind::Copy),
-            Command::DiredCreateDirectory => self.dired_create_directory(),
-            Command::DiredDoOpen => self.dired_do_open(),
-            Command::DiredHideDetailsMode => self.dired_hide_details(),
             Command::QuitWindow => self.quit_window(),
             Command::KeyboardQuit => self.keyboard_quit(),
             Command::SaveBuffersKillOxmacs => self.save_some_buffers(true),

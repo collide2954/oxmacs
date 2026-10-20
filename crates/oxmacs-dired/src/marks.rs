@@ -1,70 +1,67 @@
 use std::path::PathBuf;
 
-use crate::dired::{Listing, Mark};
-use crate::editor::Editor;
+use oxmacs_core::editor::Editor;
 
-impl Editor {
-    pub(in crate::editor) fn dired_targets(
-        &self,
-        mark: Mark,
-        at_point: bool,
-    ) -> Vec<(PathBuf, String)> {
-        let line = self.point_line();
-        let Some(listing) = self.buffers.listing(0) else {
-            return Vec::new();
-        };
-        let mut entries = listing.marked(mark);
-        if entries.is_empty() && at_point {
-            entries.extend(listing.entry_at(line));
-        }
-        entries
-            .iter()
-            .map(|entry| {
-                (
-                    listing.directory().join(&entry.name),
-                    entry.display_name().into_owned(),
-                )
-            })
-            .collect()
-    }
+use crate::browse::{current, next_line, point_line, update};
+use crate::listing::{Listing, Mark};
 
-    pub(in crate::editor) fn dired_mark(&mut self, mark: Option<Mark>) {
-        self.mark_at_point(mark);
-        self.dired_next_line(1);
+pub(crate) fn targets(editor: &Editor, mark: Mark, at_point: bool) -> Vec<(PathBuf, String)> {
+    let line = point_line(editor);
+    let Some(listing) = current(editor) else {
+        return Vec::new();
+    };
+    let mut entries = listing.marked(mark);
+    if entries.is_empty() && at_point {
+        entries.extend(listing.entry_at(line));
     }
-
-    pub(in crate::editor) fn dired_unmark_backward(&mut self) {
-        self.dired_next_line(-1);
-        self.mark_at_point(None);
-    }
-
-    pub(in crate::editor) fn dired_unmark_all(&mut self) {
-        self.update_listing(0, Listing::clear_marks);
-    }
-
-    pub(in crate::editor) fn dired_toggle_marks(&mut self) {
-        self.update_listing(0, Listing::toggle_marks);
-    }
-
-    fn mark_at_point(&mut self, mark: Option<Mark>) {
-        let line = self.point_line();
-        let Some(name) = self
-            .buffers
-            .listing(0)
-            .and_then(|listing| listing.entry_at(line))
-            .map(|entry| entry.name.clone())
-        else {
-            return;
-        };
-        self.update_listing(0, |listing| listing.set_mark(&name, mark));
-    }
+    entries
+        .iter()
+        .map(|entry| {
+            (
+                listing.directory().join(&entry.name),
+                entry.display_name().into_owned(),
+            )
+        })
+        .collect()
 }
 
+pub(crate) fn mark(editor: &mut Editor, mark: Option<Mark>) {
+    mark_at_point(editor, mark);
+    next_line(editor, 1);
+}
+
+pub(crate) fn unmark_backward(editor: &mut Editor) {
+    next_line(editor, -1);
+    mark_at_point(editor, None);
+}
+
+pub(crate) fn unmark_all(editor: &mut Editor) {
+    let id = editor.buffer().id();
+    update(editor, id, Listing::clear_marks);
+}
+
+pub(crate) fn toggle(editor: &mut Editor) {
+    let id = editor.buffer().id();
+    update(editor, id, Listing::toggle_marks);
+}
+
+fn mark_at_point(editor: &mut Editor, mark: Option<Mark>) {
+    let line = point_line(editor);
+    let Some(name) = current(editor)
+        .and_then(|listing| listing.entry_at(line))
+        .map(|entry| entry.name.clone())
+    else {
+        return;
+    };
+    let id = editor.buffer().id();
+    update(editor, id, |listing| listing.set_mark(&name, mark));
+}
 #[cfg(test)]
 mod tests {
-    use crate::editor::dired::fixtures::{listed, mark_column, workspace};
-    use crate::editor::test_support::{at_point, lines, press};
-    use crate::files::paths::SEPARATOR as SEP;
+    use oxmacs_core::files::paths::SEPARATOR as SEP;
+
+    use crate::fixtures::{listed, mark_column, workspace};
+    use crate::testing::{at_point, lines, press};
 
     #[test]
     fn m_marks_and_moves_down() {

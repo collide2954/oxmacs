@@ -26,7 +26,6 @@ tempfile.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 toml_edit.workspace = true
-trash.workspace = true
 tree-sitter.workspace = true
 tree-sitter-r.workspace = true
 tree-sitter-rust.workspace = true

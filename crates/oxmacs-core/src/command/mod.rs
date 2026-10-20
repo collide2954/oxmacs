@@ -176,7 +176,7 @@ pub enum Command {
     IsearchAbort,
     #[strum(
         message = "Open a file, creating it if it is new",
-        detailed_message = "Type a path and the list narrows to matching names. TAB or / enters the selected directory, DEL right after a / goes up a level, and RET opens the selection. M-RET opens exactly what you typed, which is how you name a new file. ~ stands for your home directory, and opening a directory lists it in dired."
+        detailed_message = "Type a path and the list narrows to matching names. TAB or / enters the selected directory, DEL right after a / goes up a level, and RET opens the selection. M-RET opens exactly what you typed, which is how you name a new file. ~ stands for your home directory, and opening a directory browses it."
     )]
     FindFile,
     #[strum(message = "Save the buffer to its file")]
@@ -202,49 +202,6 @@ pub enum Command {
     RevertBuffer,
     #[strum(message = "Toggle whether the buffer can be edited")]
     ReadOnlyMode,
-    #[strum(
-        message = "List a directory to manage its files",
-        detailed_message = "In the listing, RET opens a file or directory, ^ goes up and g refreshes. Mark files with m and flag them for deletion with d; x deletes the flagged files, D deletes the marked ones, R renames or moves, C copies, + creates a directory and W opens a file with its usual app. s changes the sort and ( hides the details. Deleted files go to the trash unless delete-to-trash is off."
-    )]
-    Dired,
-    #[strum(message = "List the directory of the current file")]
-    DiredJump,
-    #[strum(message = "Move to the next file")]
-    DiredNextLine,
-    #[strum(message = "Move to the previous file")]
-    DiredPreviousLine,
-    #[strum(message = "Open the file or directory on this line")]
-    DiredFindFile,
-    #[strum(message = "Go up to the parent directory")]
-    DiredUpDirectory,
-    #[strum(message = "Sort by name, newest or largest")]
-    DiredCycleSort,
-    #[strum(message = "Show or hide sizes and dates")]
-    DiredHideDetailsMode,
-    #[strum(message = "Mark this file and move on")]
-    DiredMark,
-    #[strum(message = "Flag this file for deletion and move on")]
-    DiredFlagFileDeletion,
-    #[strum(message = "Remove this file's mark and move on")]
-    DiredUnmark,
-    #[strum(message = "Move back and remove that file's mark")]
-    DiredUnmarkBackward,
-    #[strum(message = "Remove every mark and deletion flag")]
-    DiredUnmarkAllMarks,
-    #[strum(message = "Mark the unmarked files and unmark the marked ones")]
-    DiredToggleMarks,
-    #[strum(message = "Delete the files flagged for deletion")]
-    DiredDoFlaggedDelete,
-    #[strum(message = "Delete the marked files, or this one")]
-    DiredDoDelete,
-    #[strum(message = "Rename or move the marked files, or this one")]
-    DiredDoRename,
-    #[strum(message = "Copy the marked files, or this one")]
-    DiredDoCopy,
-    #[strum(message = "Create a new directory")]
-    DiredCreateDirectory,
-    #[strum(message = "Open the file with its usual app")]
-    DiredDoOpen,
     #[strum(message = "Leave this buffer and put it out of the way")]
     QuitWindow,
     #[strum(
@@ -599,24 +556,6 @@ impl Command {
             | Self::MinibufferComplete
             | Self::MinibufferDeleteBackward
             | Self::ExitMinibufferWithInput => Scope::Minibuffer,
-            Self::DiredNextLine
-            | Self::DiredPreviousLine
-            | Self::DiredFindFile
-            | Self::DiredUpDirectory
-            | Self::DiredCycleSort
-            | Self::DiredHideDetailsMode
-            | Self::DiredMark
-            | Self::DiredFlagFileDeletion
-            | Self::DiredUnmark
-            | Self::DiredUnmarkBackward
-            | Self::DiredUnmarkAllMarks
-            | Self::DiredToggleMarks
-            | Self::DiredDoFlaggedDelete
-            | Self::DiredDoDelete
-            | Self::DiredDoRename
-            | Self::DiredDoCopy
-            | Self::DiredCreateDirectory
-            | Self::DiredDoOpen => Scope::Dired,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
             Self::WidgetForward | Self::WidgetBackward | Self::WidgetButtonPress => {
                 Scope::Customize
@@ -683,7 +622,6 @@ pub enum Scope {
     Global,
     Minibuffer,
     Search,
-    Dired,
     Splash,
     Doctor,
     Rust,
@@ -707,7 +645,6 @@ impl Scope {
             Self::Global => None,
             Self::Minibuffer => Some("the minibuffer"),
             Self::Search => Some("searches"),
-            Self::Dired => Some("dired"),
             Self::Splash => Some("the start screen"),
             Self::Doctor => Some("*oxmacs-doctor*"),
             Self::Rust => Some("Rust buffers"),
@@ -776,7 +713,7 @@ mod tests {
     fn commands_belong_to_a_scope() {
         assert_eq!(Command::ForwardChar.scope(), Scope::Global);
         assert_eq!(Command::ExitMinibuffer.scope(), Scope::Minibuffer);
-        assert_eq!(Command::DiredNextLine.scope(), Scope::Dired);
+        assert_eq!(Command::IsearchExit.scope(), Scope::Search);
     }
 
     #[test]

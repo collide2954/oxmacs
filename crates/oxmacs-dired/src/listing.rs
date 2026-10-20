@@ -5,10 +5,11 @@ use std::path::{Path, PathBuf};
 
 use jiff::{Timestamp, Zoned};
 
-use crate::dired::{human_size, ls_time};
-use crate::display::LineStyle;
-use crate::files::{Entry, Kind, Sort, paths, read_entries, sort};
-use crate::theme::Highlight;
+use oxmacs_core::display::LineStyle;
+use oxmacs_core::files::{Entry, Kind, Sort, paths, read_entries, sort};
+use oxmacs_core::theme::Highlight;
+
+use crate::format::{human_size, ls_time};
 
 const TIME_WIDTH: usize = 12;
 
@@ -266,7 +267,7 @@ mod tests {
     use jiff::tz::TimeZone;
 
     use super::*;
-    use crate::files::paths::SEPARATOR as SEP;
+    use oxmacs_core::files::paths::SEPARATOR as SEP;
 
     fn time(text: &str) -> SystemTime {
         SystemTime::from(text.parse::<Timestamp>().unwrap())

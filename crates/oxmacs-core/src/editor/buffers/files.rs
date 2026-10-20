@@ -30,10 +30,15 @@ impl Editor {
     }
 
     pub(in crate::editor) fn open_file_prompt(&mut self, prompt: &str, purpose: Purpose) -> bool {
+        let directory = self.default_directory();
+        self.open_path_prompt(prompt, purpose, &directory)
+    }
+
+    fn open_path_prompt(&mut self, prompt: &str, purpose: Purpose, directory: &Path) -> bool {
         if !self.open_minibuffer(prompt, purpose) {
             return false;
         }
-        let mut start = paths::abbreviate(&self.default_directory(), self.home.as_deref());
+        let mut start = paths::abbreviate(directory, self.home.as_deref());
         if !start.ends_with(paths::is_separator) {
             start.push(paths::SEPARATOR);
         }
@@ -93,19 +98,13 @@ impl Editor {
                 None => self.resolve_path(&input),
             }
         };
-        let (sources, applet) = self
+        let applet = self
             .minibuffer
             .take()
-            .map(|minibuffer| (minibuffer.sources, minibuffer.applet))
-            .unwrap_or_default();
+            .and_then(|minibuffer| minibuffer.applet);
         match purpose {
             Purpose::WriteFile => self.write_file_to(path),
             Purpose::SavePlot => self.save_plot_to(&path),
-            Purpose::Dired => {
-                self.dired(&path);
-            }
-            Purpose::Transfer(kind) => self.transfer_to(kind, sources, &path),
-            Purpose::CreateDirectory => self.create_directory(&path),
             Purpose::AppletPath { .. } => {
                 if let Some(applet) = applet {
                     let path = self.absolute(&path);
@@ -251,7 +250,7 @@ impl Editor {
         if path.is_dir() {
             return match self.directory_handler {
                 Some(open) => open(self, &path),
-                None => self.dired(&path),
+                None => self.open_path_prompt("Find file: ", Purpose::FindFile, &path),
             };
         }
         if let Some(index) = self
@@ -491,6 +490,22 @@ mod tests {
     }
 
     const SEP: char = crate::files::paths::SEPARATOR;
+
+    #[test]
+    fn opening_a_directory_without_a_browser_asks_for_a_file_there() {
+        let (dir, mut editor) = workspace();
+        let sub = dir.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+        fs::write(sub.join("c.txt"), "sea").unwrap();
+        editor.set_home_directory(None);
+
+        assert!(editor.open_file(&sub));
+
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Find file: ");
+        assert_eq!(minibuffer_input(&editor), format!("{}{SEP}", sub.display()));
+        assert_eq!(labels(&editor), ["c.txt"]);
+        assert_eq!(editor.buffer_names(), ["*scratch*"]);
+    }
 
     fn find_file_workspace() -> (tempfile::TempDir, Editor) {
         let (dir, mut editor) = workspace();

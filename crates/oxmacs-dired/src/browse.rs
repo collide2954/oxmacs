@@ -1,231 +1,296 @@
-#[cfg(test)]
-mod fixtures;
-mod marks;
-mod operations;
-mod transfer;
-
-pub(super) use transfer::{Kind, Transfer};
-
 use std::ffi::OsStr;
 use std::path::Path;
 
 use jiff::Zoned;
+use oxmacs_core::applet::AppletBuffer;
+use oxmacs_core::command::ScopeId;
+use oxmacs_core::display::LineStyle;
+use oxmacs_core::editor::Editor;
+use oxmacs_core::files::{read_entries, sort};
+use oxmacs_core::text::{Buffer, BufferId};
 
-use crate::dired::Listing;
-use crate::editor::Editor;
-use crate::editor::buffers::Mode;
-use crate::editor::prompts::minibuffer::Purpose;
-use crate::files::{read_entries, sort};
-use crate::text::Buffer;
+use crate::listing::Listing;
 
-impl Editor {
-    pub(super) fn dired_prompt(&mut self) {
-        self.open_file_prompt("Dired (directory): ", Purpose::Dired);
+#[derive(Debug)]
+pub(crate) struct DiredState {
+    pub(crate) scope: ScopeId,
+}
+
+#[derive(Debug)]
+pub(crate) struct ListingView {
+    scope: ScopeId,
+    pub(crate) listing: Listing,
+}
+
+impl AppletBuffer for ListingView {
+    fn scope(&self) -> ScopeId {
+        self.scope
     }
 
-    pub fn dired(&mut self, directory: &Path) -> bool {
-        let directory = self.absolute(directory);
-        if let Some(index) = self.listing_index(&directory) {
-            self.select_buffer(index);
-            return true;
-        }
-        let Some(listing) = self.read_listing(&directory) else {
-            return false;
-        };
-        self.add_buffer_with(listing_buffer(listing.directory()), Mode::Dired(listing));
-        self.redisplay_listing(0);
-        true
+    fn line_style(&self, line: usize) -> LineStyle {
+        self.listing.line_style(line)
     }
 
-    pub(super) fn dired_jump(&mut self) {
-        if self.buffers.listing(0).is_some() {
-            self.dired_up_directory();
-            return;
-        }
-        let file = self.buffers.current().file().map(|file| file.path.clone());
-        let directory = file
-            .as_deref()
-            .and_then(Path::parent)
-            .map_or_else(|| self.default_directory(), Path::to_owned);
-        if self.dired(&directory)
-            && let Some(name) = file.as_deref().and_then(Path::file_name)
-        {
-            self.dired_focus(name);
-        }
-    }
-
-    pub(super) fn dired_find_file(&mut self) {
-        let line = self.point_line();
-        let Some(listing) = self.buffers.listing(0) else {
-            return;
-        };
-        if Some(line) == listing.parent_line() {
-            self.dired_up_directory();
-            return;
-        }
-        let Some(entry) = listing.entry_at(line) else {
-            self.show_message("No file on this line");
-            return;
-        };
-        let path = listing.directory().join(&entry.name);
-        if entry.is_dir() {
-            self.dired_move_to(&path, None);
-        } else {
-            self.open_file(&path);
-        }
-    }
-
-    pub(super) fn dired_up_directory(&mut self) {
-        let Some(listing) = self.buffers.listing(0) else {
-            return;
-        };
-        let Some(parent) = listing.directory().parent() else {
-            return;
-        };
-        let parent = parent.to_owned();
-        let from = listing.directory().file_name().map(OsStr::to_owned);
-        self.dired_move_to(&parent, from.as_deref());
-    }
-
-    fn dired_move_to(&mut self, directory: &Path, focus: Option<&OsStr>) {
-        let directory = self.absolute(directory);
-        if let Some(index) = self.listing_index(&directory) {
-            self.select_buffer(index);
-            self.finish_kill(1);
-        } else {
-            let Some(current) = self.buffers.listing(0) else {
-                return;
-            };
-            let (sort, details) = (current.sort(), current.details());
-            let Some(mut listing) = self.read_listing(&directory) else {
-                return;
-            };
-            listing.set_sort(sort);
-            listing.set_details(details);
-            self.buffers
-                .replace_current(listing_buffer(listing.directory()), Mode::Dired(listing));
-            self.name_file_buffers();
-            self.after_buffer_switch();
-            self.redisplay_listing(0);
-        }
-        if let Some(name) = focus {
-            self.dired_focus(name);
-        }
-    }
-
-    pub(super) fn refresh_listing(&mut self, index: usize) {
-        let Some(listing) = self.buffers.listing(index) else {
-            return;
-        };
-        let directory = listing.directory().to_owned();
-        match read_entries(&directory) {
-            Ok(entries) => self.update_listing(index, |listing| listing.set_entries(entries)),
-            Err(error) => self.show_message(format!("{}: {error}", directory.display())),
-        }
-    }
-
-    pub(super) fn refresh_changed_listings(&mut self) {
-        for index in 0..self.buffers.len() {
-            let Some(listing) = self.buffers.listing(index) else {
-                continue;
-            };
-            let Ok(mut entries) = read_entries(listing.directory()) else {
-                continue;
-            };
-            sort(&mut entries, listing.sort());
-            if entries != listing.entries() {
-                self.update_listing(index, |listing| listing.set_entries(entries));
-            }
-        }
-    }
-
-    pub(super) fn refresh_listings(&mut self) {
-        for index in 0..self.buffers.len() {
-            self.refresh_listing(index);
-        }
-    }
-
-    pub(super) fn dired_cycle_sort(&mut self) {
-        self.update_listing(0, |listing| listing.set_sort(listing.sort().next()));
-    }
-
-    pub(super) fn dired_hide_details(&mut self) {
-        self.update_listing(0, |listing| listing.set_details(!listing.details()));
-    }
-
-    pub(super) fn dired_focus(&mut self, name: &OsStr) {
-        if let Some((buffer, listing)) = self.buffers.dired_mut(0)
-            && let Some(line) = listing.line_of(name)
-        {
-            place_point(buffer, listing, line);
-            self.reveal_point();
-        }
-    }
-
-    fn listing_index(&self, directory: &Path) -> Option<usize> {
-        (0..self.buffers.len()).find(|index| {
-            self.buffers
-                .listing(*index)
-                .is_some_and(|listing| listing.directory() == directory)
-        })
-    }
-
-    fn read_listing(&mut self, directory: &Path) -> Option<Listing> {
-        match Listing::read(directory.to_owned()) {
-            Ok(listing) => Some(listing),
-            Err(error) => {
-                self.show_message(format!("{}: {error}", directory.display()));
-                None
-            }
-        }
-    }
-
-    pub(super) fn redisplay_listing(&mut self, index: usize) {
-        self.update_listing(index, |_| {});
-    }
-
-    fn update_listing(&mut self, index: usize, change: impl FnOnce(&mut Listing)) {
-        let home = self.home.clone();
-        let Some((buffer, listing)) = self.buffers.dired_mut(index) else {
-            return;
-        };
-        let line = buffer.line_of(buffer.point());
-        let focus = listing.entry_at(line).map(|entry| entry.name.clone());
-        change(listing);
-        buffer.set_text(&listing.render(&Zoned::now(), home.as_deref()));
-        let line = focus
-            .and_then(|name| listing.line_of(&name))
-            .unwrap_or_else(|| {
-                if Some(line) == listing.parent_line() {
-                    line
-                } else {
-                    line.max(listing.first_entry_line())
-                        .min(listing.last_entry_line())
-                }
-            });
-        place_point(buffer, listing, line);
-        if index == 0 {
-            self.reveal_point();
-        }
-    }
-
-    pub(super) fn dired_next_line(&mut self, lines: isize) {
-        let Some((buffer, listing)) = self.buffers.dired_mut(0) else {
-            return;
-        };
-        let last = buffer.len_lines() - 1;
-        let line = buffer
-            .line_of(buffer.point())
-            .saturating_add_signed(lines)
-            .min(last);
-        place_point(buffer, listing, line);
+    fn directory(&self) -> Option<&Path> {
+        Some(self.listing.directory())
     }
 }
 
-fn listing_buffer(directory: &Path) -> Buffer {
-    let mut buffer = Buffer::new(directory.display().to_string());
-    buffer.set_read_only(true);
-    buffer
+pub(crate) fn current(editor: &Editor) -> Option<&Listing> {
+    editor
+        .applet_buffer::<ListingView>(editor.buffer().id())
+        .map(|(_, view)| &view.listing)
+}
+
+pub(crate) fn point_line(editor: &Editor) -> usize {
+    let buffer = editor.buffer();
+    buffer.line_of(buffer.point())
+}
+
+fn listing_id(editor: &Editor, directory: &Path) -> Option<BufferId> {
+    editor.find_applet_buffer::<ListingView>(|view| view.listing.directory() == directory)
+}
+
+pub(crate) fn prompt(editor: &mut Editor) {
+    editor.prompt_path("Dired (directory): ", true, |editor, path| {
+        dired(editor, &path);
+    });
+}
+
+pub(crate) fn dired(editor: &mut Editor, directory: &Path) -> bool {
+    let directory = editor.absolute(directory);
+    if let Some(id) = listing_id(editor, &directory) {
+        editor.show_buffer(id);
+        return true;
+    }
+    let Some(listing) = read_listing(editor, &directory) else {
+        return false;
+    };
+    let Some(id) = add_listing(editor, listing) else {
+        return false;
+    };
+    editor.show_buffer(id);
+    redisplay(editor, id);
+    true
+}
+
+fn add_listing(editor: &mut Editor, listing: Listing) -> Option<BufferId> {
+    let scope = editor.applet_state::<DiredState>()?.scope;
+    let name = listing.directory().display().to_string();
+    Some(editor.add_applet_buffer_with(&name, |buffer| {
+        buffer.set_read_only(true);
+        ListingView { scope, listing }
+    }))
+}
+
+pub(crate) fn jump(editor: &mut Editor) {
+    if current(editor).is_some() {
+        up_directory(editor);
+        return;
+    }
+    let file = editor.buffer().file().map(|file| file.path.clone());
+    let directory = file
+        .as_deref()
+        .and_then(Path::parent)
+        .map_or_else(|| editor.default_directory(), Path::to_owned);
+    if dired(editor, &directory)
+        && let Some(name) = file.as_deref().and_then(Path::file_name)
+    {
+        focus(editor, name);
+    }
+}
+
+pub(crate) fn find_file(editor: &mut Editor) {
+    let line = point_line(editor);
+    let Some(listing) = current(editor) else {
+        return;
+    };
+    if Some(line) == listing.parent_line() {
+        up_directory(editor);
+        return;
+    }
+    let Some(entry) = listing.entry_at(line) else {
+        editor.show_message("No file on this line");
+        return;
+    };
+    let path = listing.directory().join(&entry.name);
+    if entry.is_dir() {
+        move_to(editor, &path, None);
+    } else {
+        editor.open_file(&path);
+    }
+}
+
+pub(crate) fn up_directory(editor: &mut Editor) {
+    let Some(listing) = current(editor) else {
+        return;
+    };
+    let Some(parent) = listing.directory().parent() else {
+        return;
+    };
+    let parent = parent.to_owned();
+    let from = listing.directory().file_name().map(OsStr::to_owned);
+    move_to(editor, &parent, from.as_deref());
+}
+
+fn move_to(editor: &mut Editor, directory: &Path, name: Option<&OsStr>) {
+    let directory = editor.absolute(directory);
+    let old = editor.buffer().id();
+    if let Some(id) = listing_id(editor, &directory) {
+        editor.show_buffer(id);
+        editor.close_buffer(old);
+    } else {
+        let Some((order, details)) =
+            current(editor).map(|listing| (listing.sort(), listing.details()))
+        else {
+            return;
+        };
+        let Some(mut listing) = read_listing(editor, &directory) else {
+            return;
+        };
+        listing.set_sort(order);
+        listing.set_details(details);
+        let Some(id) = add_listing(editor, listing) else {
+            return;
+        };
+        editor.show_buffer(id);
+        editor.close_buffer(old);
+        redisplay(editor, id);
+    }
+    if let Some(name) = name {
+        focus(editor, name);
+    }
+}
+
+pub(crate) fn revert(editor: &mut Editor) {
+    let id = editor.buffer().id();
+    refresh(editor, id);
+}
+
+fn refresh(editor: &mut Editor, id: BufferId) {
+    let Some(directory) = editor
+        .applet_buffer::<ListingView>(id)
+        .map(|(_, view)| view.listing.directory().to_owned())
+    else {
+        return;
+    };
+    match read_entries(&directory) {
+        Ok(entries) => update(editor, id, |listing| listing.set_entries(entries)),
+        Err(error) => editor.show_message(format!("{}: {error}", directory.display())),
+    }
+}
+
+pub(crate) fn refresh_changed(editor: &mut Editor) {
+    for id in editor.applet_buffers::<ListingView>() {
+        let Some(listing) = editor
+            .applet_buffer::<ListingView>(id)
+            .map(|(_, view)| &view.listing)
+        else {
+            continue;
+        };
+        let Ok(mut entries) = read_entries(listing.directory()) else {
+            continue;
+        };
+        sort(&mut entries, listing.sort());
+        if entries != listing.entries() {
+            update(editor, id, |listing| listing.set_entries(entries));
+        }
+    }
+}
+
+pub(crate) fn refresh_all(editor: &mut Editor) {
+    for id in editor.applet_buffers::<ListingView>() {
+        refresh(editor, id);
+    }
+}
+
+pub(crate) fn cycle_sort(editor: &mut Editor) {
+    let id = editor.buffer().id();
+    update(editor, id, |listing| {
+        listing.set_sort(listing.sort().next());
+    });
+}
+
+pub(crate) fn hide_details(editor: &mut Editor) {
+    let id = editor.buffer().id();
+    update(editor, id, |listing| {
+        listing.set_details(!listing.details());
+    });
+}
+
+pub(crate) fn focus(editor: &mut Editor, name: &OsStr) {
+    let id = editor.buffer().id();
+    if let Some((buffer, view)) = editor.applet_buffer_mut::<ListingView>(id)
+        && let Some(line) = view.listing.line_of(name)
+    {
+        place_point(buffer, &view.listing, line);
+    }
+}
+
+fn read_listing(editor: &mut Editor, directory: &Path) -> Option<Listing> {
+    match Listing::read(directory.to_owned()) {
+        Ok(listing) => Some(listing),
+        Err(error) => {
+            editor.show_message(format!("{}: {error}", directory.display()));
+            None
+        }
+    }
+}
+
+fn redisplay(editor: &mut Editor, id: BufferId) {
+    update(editor, id, |_| {});
+}
+
+pub(crate) fn update(editor: &mut Editor, id: BufferId, change: impl FnOnce(&mut Listing)) {
+    let home = editor.home().map(Path::to_owned);
+    let Some((buffer, view)) = editor.applet_buffer_mut::<ListingView>(id) else {
+        return;
+    };
+    let listing = &mut view.listing;
+    let line = buffer.line_of(buffer.point());
+    let focus = listing.entry_at(line).map(|entry| entry.name.clone());
+    change(listing);
+    buffer.set_text(&listing.render(&Zoned::now(), home.as_deref()));
+    let line = focus
+        .and_then(|name| listing.line_of(&name))
+        .unwrap_or_else(|| {
+            if Some(line) == listing.parent_line() {
+                line
+            } else {
+                line.max(listing.first_entry_line())
+                    .min(listing.last_entry_line())
+            }
+        });
+    place_point(buffer, listing, line);
+}
+
+pub(crate) fn next_line(editor: &mut Editor, lines: isize) {
+    let id = editor.buffer().id();
+    let Some((buffer, view)) = editor.applet_buffer_mut::<ListingView>(id) else {
+        return;
+    };
+    let last = buffer.len_lines() - 1;
+    let line = buffer
+        .line_of(buffer.point())
+        .saturating_add_signed(lines)
+        .min(last);
+    place_point(buffer, &view.listing, line);
+}
+
+pub(crate) fn relocate(editor: &mut Editor, from: &Path, to: &Path) {
+    for id in editor.applet_buffers::<ListingView>() {
+        if let Some((_, view)) = editor.applet_buffer_mut::<ListingView>(id)
+            && let Ok(rest) = view.listing.directory().strip_prefix(from)
+        {
+            let moved = if rest.as_os_str().is_empty() {
+                to.to_owned()
+            } else {
+                to.join(rest)
+            };
+            view.listing.set_directory(moved);
+        }
+    }
+    editor.file_moved(from, to);
 }
 
 fn place_point(buffer: &mut Buffer, listing: &Listing, line: usize) {
@@ -233,21 +298,22 @@ fn place_point(buffer: &mut Buffer, listing: &Listing, line: usize) {
     let column = if line == 0 { 0 } else { listing.name_column() };
     buffer.set_point((start + column).min(buffer.line_end(line)));
 }
-
 #[cfg(test)]
 mod tests {
     use std::fs;
 
-    use super::fixtures::{dir_name, listed, mark_column, workspace};
-    use crate::editor::Editor;
-    use crate::editor::test_support::{at_point, labels, lines, press, type_text};
-    use crate::files::paths::SEPARATOR as SEP;
+    use oxmacs_core::editor::Editor;
+    use oxmacs_core::files::paths::SEPARATOR as SEP;
+
+    use crate::browse::dired;
+    use crate::fixtures::{dir_name, listed, mark_column, workspace};
+    use crate::testing::{at_point, labels, lines, press, type_text};
 
     #[test]
     fn dired_lists_a_directory_in_a_read_only_buffer() {
         let (dir, mut editor) = workspace();
 
-        assert!(editor.dired(dir.path()));
+        assert!(dired(&mut editor, dir.path()));
 
         let lines = lines(&editor);
         assert_eq!(lines[0], format!("  {}:", dir.path().display()));
@@ -264,7 +330,7 @@ mod tests {
     fn point_starts_on_the_first_entry_name() {
         let (dir, mut editor) = workspace();
 
-        editor.dired(dir.path());
+        dired(&mut editor, dir.path());
 
         assert_eq!(at_point(&editor), format!("sub{SEP}"));
     }
@@ -272,10 +338,10 @@ mod tests {
     #[test]
     fn a_directory_already_listed_reuses_its_buffer() {
         let (dir, mut editor) = workspace();
-        editor.dired(dir.path());
+        dired(&mut editor, dir.path());
         editor.open_file(&dir.path().join("a.txt"));
 
-        editor.dired(dir.path());
+        dired(&mut editor, dir.path());
 
         assert_eq!(
             editor.buffer_names(),
@@ -287,7 +353,7 @@ mod tests {
     fn missing_directories_are_reported() {
         let (dir, mut editor) = workspace();
 
-        assert!(!editor.dired(&dir.path().join("missing")));
+        assert!(!dired(&mut editor, &dir.path().join("missing")));
 
         assert!(editor.message().unwrap().contains("missing"));
         assert_eq!(editor.buffer_names(), ["*scratch*"]);
@@ -297,7 +363,7 @@ mod tests {
     fn the_default_directory_of_a_listing_is_its_directory() {
         let (dir, mut editor) = workspace();
 
-        editor.dired(&dir.path().join("sub"));
+        dired(&mut editor, &dir.path().join("sub"));
 
         assert_eq!(editor.default_directory(), dir.path().join("sub"));
     }
@@ -462,7 +528,7 @@ mod tests {
     #[test]
     fn return_on_the_parent_line_goes_up() {
         let (dir, mut editor) = workspace();
-        editor.dired(&dir.path().join("sub"));
+        dired(&mut editor, &dir.path().join("sub"));
 
         press(&mut editor, "p RET");
 
@@ -473,7 +539,7 @@ mod tests {
     #[test]
     fn moving_to_a_directory_listed_elsewhere_switches_to_that_listing() {
         let (dir, mut editor) = workspace();
-        editor.dired(&dir.path().join("sub"));
+        dired(&mut editor, &dir.path().join("sub"));
         listed(&mut editor, &dir);
 
         press(&mut editor, "RET");
@@ -526,7 +592,7 @@ mod tests {
         listed(&mut editor, &dir);
         fs::write(dir.path().join("aa.txt"), "").unwrap();
 
-        editor.execute(crate::command::Command::RevertBuffer);
+        editor.execute(oxmacs_core::command::Command::RevertBuffer);
 
         assert!(lines(&editor)[4].ends_with(" aa.txt"));
     }
@@ -602,7 +668,7 @@ mod tests {
     fn visiting_a_directory_lists_it_and_ignores_the_line() {
         let (dir, mut editor) = workspace();
 
-        editor.visit(&crate::cli::Visit {
+        editor.visit(&oxmacs_core::cli::Visit {
             path: dir.path().join("sub"),
             line: Some(1),
             column: None,
@@ -625,7 +691,7 @@ mod tests {
     #[test]
     fn c_x_c_j_in_a_listing_goes_up() {
         let (dir, mut editor) = workspace();
-        editor.dired(&dir.path().join("sub"));
+        dired(&mut editor, &dir.path().join("sub"));
 
         press(&mut editor, "C-x C-j");
 
@@ -682,14 +748,17 @@ mod tests {
     #[test]
     fn only_listing_lines_are_styled() {
         let (dir, mut editor) = workspace();
-        assert_eq!(editor.line_style(0), crate::display::LineStyle::default());
+        assert_eq!(
+            editor.line_style(0),
+            oxmacs_core::display::LineStyle::default()
+        );
 
         listed(&mut editor, &dir);
         press(&mut editor, "m");
 
         assert_eq!(
             editor.line_style(2).background,
-            Some(crate::theme::Highlight::Marked)
+            Some(oxmacs_core::theme::Highlight::Marked)
         );
     }
 
@@ -697,16 +766,16 @@ mod tests {
     fn double_clicking_an_entry_opens_it() {
         let (dir, mut editor) = workspace();
         listed(&mut editor, &dir);
-        let cell = |line| crate::editor::Cell {
+        let cell = |line| oxmacs_core::editor::Cell {
             row: line,
             column: 30,
         };
 
-        editor.click(cell(3), crate::editor::Clicks::Single, false);
+        editor.click(cell(3), oxmacs_core::editor::Clicks::Single, false);
         assert_eq!(editor.buffer().line_of(editor.buffer().point()), 3);
         assert_eq!(editor.buffer().name(), dir_name(dir.path()));
 
-        editor.click(cell(3), crate::editor::Clicks::Double, false);
+        editor.click(cell(3), oxmacs_core::editor::Clicks::Double, false);
         assert_eq!(editor.buffer().name(), "a.txt");
         assert_eq!(editor.buffer().selection(), None);
     }
@@ -717,8 +786,8 @@ mod tests {
         listed(&mut editor, &dir);
 
         editor.click(
-            crate::editor::Cell { row: 2, column: 0 },
-            crate::editor::Clicks::Double,
+            oxmacs_core::editor::Cell { row: 2, column: 0 },
+            oxmacs_core::editor::Clicks::Double,
             false,
         );
 
@@ -743,7 +812,7 @@ mod tests {
     #[test]
     fn listings_refresh_even_when_file_changes_are_ignored() {
         let (dir, mut editor) = workspace();
-        let config = crate::config::Config::parse("on-disk-change = \"ignore\"").unwrap();
+        let config = oxmacs_core::config::Config::parse("on-disk-change = \"ignore\"").unwrap();
         editor.apply_config(&config);
         listed(&mut editor, &dir);
         fs::write(dir.path().join("0.txt"), "").unwrap();
@@ -756,7 +825,7 @@ mod tests {
     #[test]
     fn watched_directories_are_the_listed_ones() {
         let (dir, mut editor) = workspace();
-        editor.dired(&dir.path().join("sub"));
+        dired(&mut editor, &dir.path().join("sub"));
         listed(&mut editor, &dir);
         editor.open_file(&dir.path().join("a.txt"));
 
@@ -771,7 +840,7 @@ mod tests {
         let (dir, mut editor) = workspace();
         for parent in ["x", "y"] {
             fs::create_dir_all(dir.path().join(parent).join("src")).unwrap();
-            editor.dired(&dir.path().join(parent).join("src"));
+            dired(&mut editor, &dir.path().join(parent).join("src"));
         }
 
         assert_eq!(

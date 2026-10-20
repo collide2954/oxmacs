@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::command::Command;
 use crate::config::OnDiskChange;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
@@ -30,7 +31,6 @@ impl Editor {
     }
 
     pub fn check_disk_changes(&mut self) {
-        self.refresh_changed_listings();
         self.tell_disk_change();
         if self.on_disk_change == OnDiskChange::Ignore {
             return;
@@ -121,12 +121,10 @@ impl Editor {
             self.oxmacs_doctor();
             return;
         }
-        if self.buffers.listing(0).is_some() {
-            self.refresh_listing(0);
-            return;
-        }
         if matches!(self.buffers.mode(0), Some(Mode::Applet(_))) {
-            if let Some(command) = self.bound_command("g") {
+            if let Some(command) = self.bound_command("g")
+                && command.core() != Some(Command::RevertBuffer)
+            {
                 self.run_id(command, false);
             }
             return;

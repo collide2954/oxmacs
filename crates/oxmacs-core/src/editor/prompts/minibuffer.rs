@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use crate::command::{Command, CommandId, Scope};
 use crate::editor::Editor;
-use crate::editor::dired::Kind;
 use crate::editor::prompts::applet::AppletPrompt;
 use crate::files::Entry;
 use crate::syntax::Item;
@@ -20,9 +19,6 @@ pub(in crate::editor) enum Purpose {
     WriteFile,
     SwitchBuffer,
     KillBuffer,
-    Dired,
-    Transfer(Kind),
-    CreateDirectory,
     LoadTheme,
     ReplaceFrom(bool),
     ReplaceTo(bool),
@@ -39,21 +35,12 @@ impl Purpose {
     pub(in crate::editor) fn takes_path(self) -> bool {
         matches!(
             self,
-            Self::FindFile
-                | Self::WriteFile
-                | Self::SavePlot
-                | Self::Dired
-                | Self::Transfer(_)
-                | Self::CreateDirectory
-                | Self::AppletPath { .. }
+            Self::FindFile | Self::WriteFile | Self::SavePlot | Self::AppletPath { .. }
         )
     }
 
     fn lists_only_directories(self) -> bool {
-        matches!(
-            self,
-            Self::Dired | Self::CreateDirectory | Self::AppletPath { directories: true }
-        )
+        matches!(self, Self::AppletPath { directories: true })
     }
 
     fn takes_text(self) -> bool {
@@ -89,7 +76,6 @@ pub struct Minibuffer {
     pub(in crate::editor) note: Option<String>,
     pub(in crate::editor) selected: usize,
     pub(in crate::editor) listing: Option<PathListing>,
-    pub(in crate::editor) sources: Vec<PathBuf>,
     pub(in crate::editor) from: String,
     pub(in crate::editor) items: Vec<Item>,
     pub(in crate::editor) default: Option<String>,
@@ -124,7 +110,6 @@ impl Minibuffer {
             note: None,
             selected: 0,
             listing: None,
-            sources: Vec::new(),
             from: String::new(),
             items: Vec::new(),
             default: None,
@@ -189,9 +174,6 @@ impl Editor {
             Purpose::FindFile
             | Purpose::WriteFile
             | Purpose::SavePlot
-            | Purpose::Dired
-            | Purpose::Transfer(_)
-            | Purpose::CreateDirectory
             | Purpose::AppletPath { .. } => file_completions(minibuffer),
             Purpose::SwitchBuffer | Purpose::KillBuffer => {
                 self.buffer_completions(minibuffer.purpose, matches)
@@ -663,11 +645,11 @@ mod tests {
     #[test]
     fn an_exact_name_comes_first() {
         let mut editor = Editor::new();
-        open_with(&mut editor, "dired-jump");
-        press(&mut editor, "RET");
-        open_with(&mut editor, "dired");
+        open_with(&mut editor, "isearch-forward-regexp");
+        press(&mut editor, "RET C-g");
+        open_with(&mut editor, "isearch-forward");
 
-        assert_eq!(labels(&editor)[0], "dired");
+        assert_eq!(labels(&editor)[0], "isearch-forward");
     }
 
     #[test]

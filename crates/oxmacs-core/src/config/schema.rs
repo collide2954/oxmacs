@@ -138,12 +138,6 @@ pub const SETTINGS: &[Setting] = &[
         "What to do when a visited file changes on disk",
     ),
     setting(
-        FILES,
-        "delete-to-trash",
-        Kind::Toggle,
-        "Dired deletes to the trash instead of permanently",
-    ),
-    setting(
         RUST,
         "rust-lint",
         Kind::Choice(&["check", "clippy", "off"]),

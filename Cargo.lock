@@ -3400,6 +3400,7 @@ dependencies = [
  "oxmacs-atlas",
  "oxmacs-core",
  "oxmacs-demo",
+ "oxmacs-dired",
  "oxmacs-gui",
  "oxmacs-irc",
  "oxmacs-markdown",
@@ -3445,7 +3446,6 @@ dependencies = [
  "thiserror 2.0.21",
  "toml",
  "toml_edit",
- "trash",
  "tree-sitter",
  "tree-sitter-r",
  "tree-sitter-rust",
@@ -3463,6 +3463,18 @@ dependencies = [
  "oxmacs-core",
  "oxmacs-gui",
  "serde",
+]
+
+[[package]]
+name = "oxmacs-dired"
+version = "0.13.0"
+dependencies = [
+ "jiff",
+ "oxmacs-core",
+ "oxmacs-gui",
+ "serde",
+ "tempfile",
+ "trash",
 ]
 
 [[package]]

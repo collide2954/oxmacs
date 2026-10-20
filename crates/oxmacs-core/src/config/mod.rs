@@ -28,7 +28,6 @@ pub struct Config {
     pub animations: bool,
     pub cursor_blink_interval: u64,
     pub on_disk_change: OnDiskChange,
-    pub delete_to_trash: bool,
     pub splash: bool,
     pub format_on_save: bool,
     pub clock: bool,
@@ -84,6 +83,11 @@ const MOVED: &[Moved] = &[
         from: "atlas-vault",
         table: "atlas",
         key: "vault",
+    },
+    Moved {
+        from: "delete-to-trash",
+        table: "dired",
+        key: "delete-to-trash",
     },
 ];
 
@@ -144,7 +148,6 @@ impl Default for Config {
             animations: true,
             cursor_blink_interval: 400,
             on_disk_change: OnDiskChange::default(),
-            delete_to_trash: true,
             splash: true,
             format_on_save: false,
             clock: true,
@@ -625,13 +628,16 @@ mod tests {
     }
 
     #[test]
-    fn deleting_moves_to_the_trash_unless_turned_off() {
-        assert!(Config::default().delete_to_trash);
-        assert!(
-            !Config::parse("delete-to-trash = false")
-                .unwrap()
-                .delete_to_trash
-        );
+    fn the_old_trash_setting_moves_into_the_dired_table() {
+        let text = "delete-to-trash = false\n";
+
+        let config = Config::parse(text).unwrap();
+        let (rewritten, moved) = migrate_with(text, MOVED).unwrap();
+
+        let expected: toml::Table = toml::from_str("delete-to-trash = false\n").unwrap();
+        assert_eq!(config.applets.get("dired"), Some(&expected));
+        assert_eq!(moved.len(), 1);
+        assert_eq!(rewritten, "[dired]\ndelete-to-trash = false\n");
     }
 
     #[test]
