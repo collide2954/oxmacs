@@ -20,11 +20,11 @@ cargo install --path crates/oxmacs
 
 ## Build features
 
-Some parts of oxmacs are optional and only exist in the binary when you ask for them at build time. They are [Cargo features](https://doc.rust-lang.org/cargo/reference/features.html) on the `oxmacs` crate, all off by default:
+Some parts of oxmacs are optional and only exist in the binary when you ask for them at build time. They are [Cargo features](https://doc.rust-lang.org/cargo/reference/features.html) on the `oxmacs` crate, all off by default. These experimental applets are versioned on their own, apart from oxmacs:
 
-| Feature           | What it adds                                                                  | Status       |
-|-------------------|-------------------------------------------------------------------------------|--------------|
-| `animated-splash` | A start screen with the oxmacs logo animated above the keys; `a` cycles effects | Experimental |
+| Feature           | Version | What it adds                                                                  |
+|-------------------|---------|-------------------------------------------------------------------------------|
+| `animated-splash` | 0.1.0   | A start screen with the oxmacs logo animated above the keys; `a` cycles effects |
 
 Turn one on with `--features`, and separate several with commas:
 
@@ -32,7 +32,7 @@ Turn one on with `--features`, and separate several with commas:
 cargo run -p oxmacs --release --features animated-splash
 ```
 
-A feature that is left off is not compiled at all, so it costs nothing in size or startup time. Experimental features may change or disappear between releases; CHANGELOG.md lists them under "Experimental".
+A feature that is left off is not compiled at all, so it costs nothing in size or startup time. Experimental features may change or disappear between releases; CHANGELOG.md lists them under "Experimental", and `M-x oxmacs-doctor` shows which ones your build includes.
 
 The IRC client, Atlas and extra color themes are moving behind their own opt-in features (`irc`, `atlas` and `extra-themes`) as they become applet crates; until then they are part of every build.
 

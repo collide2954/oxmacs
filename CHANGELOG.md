@@ -13,10 +13,11 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `C-c n a` shows the agenda across all vaults: overdue work, today, the next seven days and waiting tasks, each tagged with its vault. `t` cycles a task, `s` and `d` set its dates, `v` filters by vault and `RET` visits.
 - `C-c n m` shows a month calendar with each day's entries and the selected day's details below; `w` switches to a week laid out by hour.
 - `M-x oxmacs-doctor` lists Atlas vaults and how many pages each holds.
+- `M-x oxmacs-doctor` lists the opt-in build features compiled in, with their versions.
 
 ### Experimental (opt-in at build time)
 
-- `animated-splash`: the start screen draws the oxmacs logo in block letters, animated above the keys; `a` cycles a drifting plasma field with a shimmer, a color wave and the logo assembling from scattered pixels. Build with `cargo build -p oxmacs --features animated-splash`.
+- `animated-splash` 0.1.0: the start screen draws the oxmacs logo in block letters, animated above the keys; `a` cycles a drifting plasma field with a shimmer, a color wave and the logo assembling from scattered pixels. Build with `cargo build -p oxmacs --features animated-splash`.
 
 ## [0.13.0] - 2026-10-19
 

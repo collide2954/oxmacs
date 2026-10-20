@@ -9,6 +9,7 @@ use crate::editor::page::Page;
 use crate::editor::{Editor, Effect};
 use crate::external::managed::AIR;
 use crate::external::tools::{Probe, Tool};
+use crate::features;
 use crate::syntax::{Feature, Language};
 use crate::text::Buffer;
 use crate::theme::{Appearance, Highlight};
@@ -173,6 +174,16 @@ impl Editor {
             &format!("oxmacs {}", env!("CARGO_PKG_VERSION")),
             None,
         );
+        let features: Vec<String> = features::opt_in()
+            .into_iter()
+            .map(|(name, version)| format!("{name} {version}"))
+            .collect();
+        let features = if features.is_empty() {
+            "none beyond the defaults".to_owned()
+        } else {
+            features.join(", ")
+        };
+        field(page, "Features", &features, None);
         field(
             page,
             "System",
@@ -526,6 +537,18 @@ mod tests {
             line_with(&editor, "rust-analyzer")
                 .contains("✗ not found; rustup component add rust-analyzer")
         );
+    }
+
+    #[test]
+    fn opt_in_features_in_this_build_are_listed() {
+        let (_dir, editor) = doctor();
+
+        let line = line_with(&editor, "Features");
+        if cfg!(feature = "animated-splash") {
+            assert!(line.ends_with("animated-splash 0.1.0"), "{line}");
+        } else {
+            assert!(line.ends_with("none beyond the defaults"), "{line}");
+        }
     }
 
     #[test]
