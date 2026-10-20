@@ -16,20 +16,27 @@ use app::App;
 use applet::GuiApplet;
 use iced::{Size, window};
 use oxmacs_core::cli::Visit;
-use oxmacs_core::config::WindowMode;
+use oxmacs_core::config::{self, WindowMode};
 use oxmacs_core::theme;
 
 pub fn run(visits: Vec<Visit>, applets: fn() -> Vec<Box<dyn GuiApplet>>) -> Result {
     for applet in applets() {
         theme::register(applet.themes());
     }
+    let note = config::default_path().and_then(|path| {
+        config::migrate_file(&path).unwrap_or_else(|error| Some(error.to_string()))
+    });
     let config = app::load_config();
     let mode = config
         .as_ref()
         .map(|config| config.window_mode)
         .unwrap_or_default();
     iced::application(
-        move || App::boot(&config, &visits, applets()),
+        move || {
+            let (mut app, task) = App::boot(&config, &visits, applets());
+            app.note(note.clone());
+            (app, task)
+        },
         App::update,
         App::view,
     )

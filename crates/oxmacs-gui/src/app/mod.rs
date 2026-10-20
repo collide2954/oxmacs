@@ -190,6 +190,12 @@ impl App {
         &self.editor
     }
 
+    pub fn note(&mut self, note: Option<String>) {
+        if let Some(note) = note {
+            self.editor.show_message(note);
+        }
+    }
+
     pub fn text_size(&self) -> f32 {
         self.text_size
     }
@@ -413,6 +419,22 @@ mod tests {
         assert!(ui.find("mark-whole-buffer").is_ok());
         assert!(ui.find("C-x h").is_ok());
         assert!(ui.find("Select the whole buffer").is_ok());
+    }
+
+    #[test]
+    fn startup_notes_show_in_the_echo_area() {
+        let mut app = App::default();
+
+        app.note(None);
+        assert_eq!(app.editor().message(), None);
+
+        app.note(Some(
+            "Moved weather-location to [weather] in config.toml".to_owned(),
+        ));
+        assert_eq!(
+            app.editor().message(),
+            Some("Moved weather-location to [weather] in config.toml")
+        );
     }
 
     #[derive(Debug)]
