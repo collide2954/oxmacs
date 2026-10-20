@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{env, fs, io, process};
@@ -6,24 +6,19 @@ use std::{env, fs, io, process};
 use crate::editor::buffers::Mode;
 use crate::editor::languages::r_complete::Asked;
 use crate::editor::languages::r_signature::Call;
-use crate::editor::prompts::input_line::InputLine;
-use crate::editor::{Editor, JobEvent, JobId, JobSpec, Outcome};
-use crate::external::r::{self, Piece, Stream};
+use crate::editor::{ConsoleSpec, Editor, JobSpec};
+use crate::external::r;
 use crate::external::tools;
 use crate::syntax::Language;
 use crate::text::{Buffer, BufferId};
 
+const LABEL: &str = "R";
 const MIN_WIDTH: usize = 10;
 const MISSING: &str = "R not found; install it from https://cran.r-project.org or set r-program";
 
-#[derive(Debug)]
-pub(in crate::editor) struct Console {
-    job: Option<JobId>,
+#[derive(Debug, Default)]
+struct Extras {
     helper: Option<PathBuf>,
-    input: InputLine,
-    stream: Stream,
-    expected: VecDeque<Option<String>>,
-    waiting: bool,
     asked: Option<Asked>,
     width: Option<usize>,
     auto: Option<(BufferId, u64)>,
@@ -41,41 +36,6 @@ fn write_helper() -> io::Result<PathBuf> {
     Ok(path)
 }
 
-fn without_prompt(line: &str) -> &str {
-    line.strip_prefix("> ")
-        .or_else(|| line.strip_prefix("+ "))
-        .unwrap_or(line)
-}
-
-impl Console {
-    fn new(job: JobId, helper: PathBuf, input: InputLine) -> Self {
-        Self {
-            job: Some(job),
-            helper: Some(helper),
-            input,
-            stream: Stream::default(),
-            expected: VecDeque::new(),
-            waiting: false,
-            asked: None,
-            width: None,
-            auto: None,
-            signatures: HashMap::new(),
-        }
-    }
-
-    fn restart(&mut self, job: JobId, helper: PathBuf) {
-        self.job = Some(job);
-        self.helper = Some(helper);
-        self.stream = Stream::default();
-        self.expected.clear();
-        self.waiting = false;
-        self.asked = None;
-        self.width = None;
-        self.auto = None;
-        self.signatures.clear();
-    }
-}
-
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Sessions {
     focus: Option<BufferId>,
@@ -84,18 +44,16 @@ pub(in crate::editor) struct Sessions {
     pub(super) signature_shown: Option<Call>,
     pub(super) definition: Option<(String, (BufferId, usize))>,
     launched: u64,
+    extras: Vec<(BufferId, Extras)>,
 }
 
 impl Editor {
-    fn consoles(&self) -> Vec<BufferId> {
-        (0..self.buffers.len())
-            .filter(|index| matches!(self.buffers.mode(*index), Some(Mode::Console(_))))
-            .filter_map(|index| self.buffers.get(index).map(Buffer::id))
-            .collect()
+    fn r_consoles(&self) -> Vec<BufferId> {
+        self.consoles(LABEL)
     }
 
     pub(super) fn session_id(&self) -> Option<BufferId> {
-        let consoles = self.consoles();
+        let consoles = self.r_consoles();
         let known = |id: &BufferId| consoles.contains(id);
         if let Some(focus) = self.r_sessions.focus.filter(known) {
             return Some(focus);
@@ -146,15 +104,6 @@ impl Editor {
         result
     }
 
-    fn console_of_job(&self, job: JobId) -> Option<BufferId> {
-        (0..self.buffers.len()).find_map(|index| match self.buffers.mode(index) {
-            Some(Mode::Console(console)) if console.job == Some(job) => {
-                self.buffers.get(index).map(Buffer::id)
-            }
-            _ => None,
-        })
-    }
-
     fn link_to(&mut self, console: BufferId) {
         if self.buffers.language(0) != Some(Language::R) {
             return;
@@ -191,69 +140,65 @@ impl Editor {
             .unwrap_or_default()
     }
 
-    fn console_mut(&mut self) -> Option<&mut Console> {
-        let index = self.console_index()?;
-        match self.buffers.mode_mut(index)? {
-            Mode::Console(console) => Some(console),
-            _ => None,
-        }
+    fn extras(&self) -> Option<&Extras> {
+        let id = self.session_id()?;
+        self.r_sessions
+            .extras
+            .iter()
+            .find(|(known, _)| *known == id)
+            .map(|(_, extras)| extras)
     }
 
-    fn console(&self) -> Option<&Console> {
-        match self.buffers.mode(self.console_index()?)? {
-            Mode::Console(console) => Some(console),
-            _ => None,
-        }
+    fn extras_mut(&mut self) -> Option<&mut Extras> {
+        let id = self.session_id()?;
+        self.r_sessions
+            .extras
+            .iter_mut()
+            .find(|(known, _)| *known == id)
+            .map(|(_, extras)| extras)
     }
+
     pub(super) fn r_running(&self) -> bool {
-        self.console().is_some_and(|console| console.job.is_some())
+        self.session_id().is_some_and(|id| self.console_running(id))
     }
 
     pub(super) fn r_waiting(&self) -> bool {
-        self.console().is_some_and(|console| console.waiting)
-    }
-
-    pub(super) fn console_input_start(&self) -> Option<usize> {
-        let Some(Mode::Console(console)) = self.buffers.mode(0) else {
-            return None;
-        };
-        console.input.start(self.buffers.current())
+        self.session_id().is_some_and(|id| self.console_waiting(id))
     }
 
     pub(super) fn set_r_asked(&mut self, asked: Option<Asked>) {
-        if let Some(console) = self.console_mut() {
-            console.asked = asked;
+        if let Some(extras) = self.extras_mut() {
+            extras.asked = asked;
         }
     }
 
     pub(super) fn cached_signature(&self, name: &str) -> Option<String> {
-        self.console()
-            .and_then(|console| console.signatures.get(name).cloned())
+        self.extras()
+            .and_then(|extras| extras.signatures.get(name).cloned())
     }
 
     pub(super) fn cache_signature(&mut self, name: &str, text: &str) {
-        if let Some(console) = self.console_mut() {
-            console.signatures.insert(name.to_owned(), text.to_owned());
+        if let Some(extras) = self.extras_mut() {
+            extras.signatures.insert(name.to_owned(), text.to_owned());
         }
     }
 
     pub(super) fn r_asking(&self) -> bool {
-        self.console()
-            .is_some_and(|console| console.asked.is_some())
+        self.extras().is_some_and(|extras| extras.asked.is_some())
     }
 
     pub(super) fn r_auto_mark(&self) -> Option<(BufferId, u64)> {
-        self.console().and_then(|console| console.auto)
+        self.extras().and_then(|extras| extras.auto)
     }
 
     pub(super) fn set_r_auto_mark(&mut self, mark: (BufferId, u64)) {
-        if let Some(console) = self.console_mut() {
-            console.auto = Some(mark);
+        if let Some(extras) = self.extras_mut() {
+            extras.auto = Some(mark);
         }
     }
 
     pub(super) fn take_r_asked(&mut self) -> Option<Asked> {
-        self.console_mut().and_then(|console| console.asked.take())
+        self.extras_mut().and_then(|extras| extras.asked.take())
     }
 
     pub(in crate::editor) fn run_r(&mut self) {
@@ -328,261 +273,91 @@ impl Editor {
                 original.to_string_lossy().into_owned(),
             ));
         }
-        let restarted = existing.filter(|id| {
-            self.buffers
-                .position(|buffer| buffer.id() == *id)
-                .is_some_and(|index| matches!(self.buffers.mode(index), Some(Mode::Console(_))))
-        });
-        let buffer = match restarted {
-            Some(_) => None,
-            None => Some(Buffer::new(self.session_name())),
-        };
-        let console = restarted.or_else(|| buffer.as_ref().map(Buffer::id))?;
-        let name = buffer.as_ref().map_or_else(
-            || {
-                self.buffers
-                    .position(|known| known.id() == console)
-                    .and_then(|index| self.buffers.get(index))
-                    .map_or_else(|| "R".to_owned(), |known| known.name().to_owned())
+        let restarted = existing.filter(|id| self.console_at(*id).is_some());
+        let name = restarted
+            .and_then(|id| self.buffer_by_id(id))
+            .map_or_else(|| self.session_name(), |buffer| buffer.name().to_owned());
+        let spec = ConsoleSpec {
+            name: name.clone(),
+            label: LABEL,
+            job: JobSpec {
+                program: path.display().to_string(),
+                args: tools::r_arguments(),
+                directory: self.default_directory(),
+                env: variables,
+                label: "R session",
+                name,
+                buffer: None,
+                interactive: true,
             },
-            |buffer| buffer.name().to_owned(),
-        );
-        let spec = JobSpec {
-            program: path.display().to_string(),
-            args: tools::r_arguments(),
-            directory: self.default_directory(),
-            env: variables,
-            label: "R session",
-            name,
-            buffer: Some(console),
-            interactive: true,
+            on_marker: |editor, id, kind, payload| {
+                editor.with_session(id, |editor| editor.r_marker(kind, payload));
+            },
+            on_idle: |editor, id| editor.with_session(id, Self::r_idle),
         };
-        let job = self.start_job(spec, Self::r_session_event);
-        match buffer {
-            Some(mut buffer) => {
-                let input = InputLine::new(&mut buffer);
-                self.beside(|editor| {
-                    editor.add_buffer_with(buffer, Mode::Console(Console::new(job, helper, input)));
-                });
-            }
-            None => {
-                if let Some(index) = self.buffers.position(|known| known.id() == console)
-                    && let Some(Mode::Console(existing)) = self.buffers.mode_mut(index)
-                {
-                    existing.restart(job, helper);
-                }
-            }
-        }
+        let console = self.start_console(spec, restarted);
+        self.r_sessions
+            .extras
+            .retain(|(known, _)| *known != console);
+        self.r_sessions.extras.push((
+            console,
+            Extras {
+                helper: Some(helper),
+                ..Extras::default()
+            },
+        ));
         Some(console)
     }
 
-    fn r_session_event(&mut self, job: JobId, event: JobEvent<'_>) {
-        let Some(console) = self.console_of_job(job) else {
-            return;
-        };
-        match event {
-            JobEvent::Line(chunk) | JobEvent::Output(chunk) => {
-                self.with_session(console, |editor| editor.process_output(chunk));
+    fn r_idle(&mut self) {
+        if let Some(extras) = self.extras_mut() {
+            if let Some(helper) = extras.helper.take() {
+                let _ = fs::remove_file(helper);
             }
-            JobEvent::Finished(outcome) => {
-                self.with_session(console, |editor| editor.report_end(outcome));
-            }
+            extras.signatures.clear();
         }
-    }
-
-    pub fn session_output(&mut self, job: JobId, chunk: &str) {
-        self.notify_job(job, JobEvent::Output(chunk));
-    }
-    fn process_output(&mut self, chunk: &str) {
-        let Some(console) = self.console_mut() else {
-            return;
-        };
-        let mut idle = false;
-        for piece in console.stream.feed(chunk) {
-            match piece {
-                Piece::Text(text) => {
-                    self.console_insert(&text);
-                    if let Some(console) = self.console_mut() {
-                        console.waiting = false;
-                    }
-                }
-                Piece::Prompt(prompt) => {
-                    let Some(console) = self.console_mut() else {
-                        return;
-                    };
-                    if let Some(helper) = console.helper.take() {
-                        let _ = fs::remove_file(helper);
-                    }
-                    match console.expected.pop_front() {
-                        Some(None) => {}
-                        Some(Some(line)) => {
-                            self.console_insert(&format!("{prompt} {line}\n"));
-                        }
-                        None => {
-                            console.waiting = true;
-                            idle = true;
-                            self.console_insert(&format!("{prompt} "));
-                        }
-                    }
-                }
-                Piece::Marker { kind, payload } => self.r_marker(&kind, &payload),
-            }
-        }
-        if idle {
-            if let Some(console) = self.console_mut() {
-                console.signatures.clear();
-            }
-            self.r_sessions.signature_shown = None;
-            self.r_environment_due();
-        }
+        self.r_sessions.signature_shown = None;
+        self.r_environment_due();
         self.fit_r_width();
     }
 
     pub(in crate::editor) fn fit_r_widths(&mut self) {
-        for console in self.consoles() {
+        for console in self.r_consoles() {
             self.with_session(console, Self::fit_r_width);
         }
     }
+
     fn fit_r_width(&mut self) {
-        let Some(console) = self.console() else {
+        let Some(id) = self.session_id() else {
             return;
         };
-        if console.job.is_none() || console.helper.is_some() {
+        let ready = self.extras().is_some_and(|extras| extras.helper.is_none());
+        if !self.console_running(id) || !ready {
             return;
         }
-        let known = console.width;
+        let known = self.extras().and_then(|extras| extras.width);
         let Some(width) = self
-            .console_index()
-            .and_then(|index| self.buffers.get(index))
-            .and_then(|buffer| self.width_showing(buffer.id()))
+            .width_showing(id)
             .filter(|width| *width >= MIN_WIDTH && Some(*width) != known)
         else {
             return;
         };
         if self.r_request(&format!("getOption(\"oxmacs\")$width({width}L)"))
-            && let Some(console) = self.console_mut()
+            && let Some(extras) = self.extras_mut()
         {
-            console.width = Some(width);
+            extras.width = Some(width);
         }
-    }
-
-    fn report_end(&mut self, outcome: &Outcome) {
-        let summary = match outcome {
-            Outcome::Exited(_) => "Process R finished".to_owned(),
-            Outcome::Failed(error) => format!("Process R failed to start: {error}"),
-        };
-        self.console_insert(&format!("\n{summary}\n"));
-        if let Some(console) = self.console_mut() {
-            console.job = None;
-        }
-        self.show_message(summary);
-    }
-
-    fn console_insert(&mut self, text: &str) {
-        let Some(mark) = self.console().map(|console| console.input.mark()) else {
-            return;
-        };
-        let Some(buffer) = self
-            .console_index()
-            .and_then(|index| self.buffers.get_mut(index))
-        else {
-            return;
-        };
-        let at = buffer.marker(mark).unwrap_or_else(|| buffer.len_chars());
-        buffer.insert_at(at, text);
-        let after = at + text.chars().count();
-        buffer.set_marker(mark, after);
-        let id = buffer.id();
-        self.move_windows(id, |point, _| (point == at).then_some(after));
-    }
-
-    fn console_input(&self) -> Option<(usize, String)> {
-        let input = &self.console()?.input;
-        let buffer = self.buffers.current();
-        Some((input.start(buffer)?, input.text(buffer)?))
-    }
-
-    fn replace_console_input(&mut self, text: &str) {
-        let Some(index) = self.console_index() else {
-            return;
-        };
-        if let Some((buffer, Mode::Console(console))) = self.buffers.entry_mut(index) {
-            console.input.replace(buffer, text);
-        }
-    }
-
-    pub(in crate::editor) fn console_send_input(&mut self) {
-        let Some((start, input)) = self.console_input() else {
-            return;
-        };
-        let buffer = self.buffers.current();
-        if buffer.point() < start {
-            let line = buffer.line_text(buffer.line_of(buffer.point()));
-            let old = without_prompt(&line).to_owned();
-            self.replace_console_input(&old);
-            return;
-        }
-        let end = buffer.len_chars();
-        self.buffers.current_mut().insert_at(end, "\n");
-        self.buffers.current_mut().set_point(end + 1);
-        let Some(console) = self.console_mut() else {
-            return;
-        };
-        let after = end + 1;
-        let mark = console.input.mark();
-        console.input.remember(&input);
-        self.buffers.current_mut().set_marker(mark, after);
-        self.send_to_r(&format!("{input}\n"));
-    }
-
-    fn send_to_r(&mut self, code: &str) {
-        let Some(console) = self.console_mut() else {
-            return;
-        };
-        let Some(job) = console.job else {
-            self.show_message("R is not running; M-x run-r starts it");
-            return;
-        };
-        let lines = code.lines().count().max(1);
-        let unseen = lines - usize::from(console.waiting);
-        console.expected.extend(std::iter::repeat_n(None, unseen));
-        console.waiting = false;
-        self.send_job(job, code);
     }
 
     pub(in crate::editor) fn r_evaluate(&mut self, code: &str) {
-        let code = code.trim_end();
-        if code.is_empty() {
-            return;
+        if let Some(id) = self.session_id() {
+            self.console_evaluate(id, code);
         }
-        let Some(console) = self.console_mut() else {
-            return;
-        };
-        let Some(job) = console.job else {
-            return;
-        };
-        let mut lines = code.lines();
-        let first = if console.waiting { lines.next() } else { None };
-        console
-            .expected
-            .extend(lines.map(|line| Some(line.to_owned())));
-        console.waiting = false;
-        if let Some(first) = first {
-            self.console_insert(&format!("{first}\n"));
-        }
-        self.send_job(job, format!("{code}\n"));
     }
 
     pub(in crate::editor) fn r_request(&mut self, call: &str) -> bool {
-        let Some(console) = self.console_mut() else {
-            return false;
-        };
-        let Some(job) = console.job else {
-            return false;
-        };
-        console.expected.push_back(None);
-        self.send_job(job, format!("{call}\n"));
-        true
+        self.session_id()
+            .is_some_and(|id| self.console_request(id, call))
     }
 
     fn r_marker(&mut self, kind: &str, payload: &str) {
@@ -601,23 +376,7 @@ impl Editor {
             _ => {}
         }
     }
-
-    pub(in crate::editor) fn recall_input(&mut self, older: bool) {
-        let input = match self.buffers.entry_mut(0) {
-            Some((buffer, Mode::Console(console))) => Some((buffer, &mut console.input)),
-            Some((buffer, Mode::Applet(view))) => view.input_line().map(|input| (buffer, input)),
-            _ => None,
-        };
-        let Some((buffer, input)) = input else {
-            return;
-        };
-        match input.recall(older) {
-            Some(text) => input.replace(buffer, &text),
-            None => self.show_message("No history"),
-        }
-    }
 }
-
 #[cfg(test)]
 mod tests {
     use std::fs;

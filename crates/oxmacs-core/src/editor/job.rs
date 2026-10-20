@@ -80,6 +80,10 @@ impl Editor {
         id
     }
 
+    pub fn session_output(&mut self, job: JobId, chunk: &str) {
+        self.notify_job(job, JobEvent::Output(chunk));
+    }
+
     pub fn job_running(&self, job: JobId) -> bool {
         self.job_handlers.0.iter().any(|(known, _)| *known == job)
     }

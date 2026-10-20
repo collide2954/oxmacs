@@ -1,3 +1,4 @@
+pub mod console;
 pub mod diagnostics;
 pub mod managed;
 pub mod net;

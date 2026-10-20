@@ -10,7 +10,7 @@ use crate::applet::AppletBuffer;
 use crate::display::{ScreenLine, Viewport};
 use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
-use crate::editor::languages::r_console::Console;
+use crate::editor::console::Console;
 use crate::editor::languages::r_environment::EnvironmentView;
 use crate::editor::languages::r_plots::Plots;
 use crate::editor::languages::r_table::TableView;
