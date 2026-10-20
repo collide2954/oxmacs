@@ -217,8 +217,8 @@ impl Editor {
     }
 
     pub fn default_directory(&self) -> PathBuf {
-        if let Some(listing) = self.buffers.listing(0) {
-            return listing.directory().to_owned();
+        if let Some((directory, true)) = self.buffers.location(0) {
+            return directory.to_owned();
         }
         self.buffers
             .current()
@@ -233,7 +233,7 @@ impl Editor {
 
     pub fn visit(&mut self, visit: &Visit) {
         if self.open_file(&visit.path)
-            && self.buffers.listing(0).is_none()
+            && self.buffers.current().file().is_some()
             && let Some(line) = visit.line
         {
             self.go_to_line(line, visit.column.unwrap_or(1));

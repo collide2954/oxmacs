@@ -7,7 +7,7 @@ mod transfer;
 pub(super) use transfer::{Kind, Transfer};
 
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use jiff::Zoned;
 
@@ -122,16 +122,6 @@ impl Editor {
             Ok(entries) => self.update_listing(index, |listing| listing.set_entries(entries)),
             Err(error) => self.show_message(format!("{}: {error}", directory.display())),
         }
-    }
-
-    pub fn watched_directories(&self) -> Vec<PathBuf> {
-        let mut directories: Vec<PathBuf> = (0..self.buffers.len())
-            .filter_map(|index| self.buffers.listing(index))
-            .map(|listing| listing.directory().to_owned())
-            .collect();
-        directories.sort();
-        directories.dedup();
-        directories
     }
 
     pub(super) fn refresh_changed_listings(&mut self) {

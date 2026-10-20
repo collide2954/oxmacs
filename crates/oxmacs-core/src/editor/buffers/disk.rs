@@ -18,6 +18,17 @@ impl Editor {
         files
     }
 
+    pub fn watched_directories(&self) -> Vec<PathBuf> {
+        let mut directories: Vec<PathBuf> = (0..self.buffers.len())
+            .filter_map(|index| self.buffers.location(index))
+            .filter(|(_, directory)| *directory)
+            .map(|(path, _)| path.to_owned())
+            .collect();
+        directories.sort();
+        directories.dedup();
+        directories
+    }
+
     pub fn check_disk_changes(&mut self) {
         self.refresh_changed_listings();
         if self.on_disk_change == OnDiskChange::Ignore {

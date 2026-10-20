@@ -1,6 +1,7 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt;
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::command::ScopeId;
@@ -18,6 +19,10 @@ pub trait AppletBuffer: Any + Send + fmt::Debug {
     }
 
     fn input_line(&mut self) -> Option<&mut InputLine> {
+        None
+    }
+
+    fn directory(&self) -> Option<&Path> {
         None
     }
 }
@@ -909,6 +914,38 @@ mod tests {
         assert_eq!(editor.buffer().point(), 14);
         type_keys(&mut editor, "M-,");
         assert_eq!(editor.buffer().point(), 0);
+    }
+
+    #[derive(Debug)]
+    struct Folder(ScopeId, std::path::PathBuf);
+
+    impl AppletBuffer for Folder {
+        fn scope(&self) -> ScopeId {
+            self.0
+        }
+
+        fn directory(&self) -> Option<&Path> {
+            Some(&self.1)
+        }
+    }
+
+    #[test]
+    fn applet_buffers_can_show_a_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let docs = dir.path().join("docs");
+        std::fs::create_dir_all(&docs).unwrap();
+        let mut editor = Editor::new();
+        let scope = editor.add_scope("*Folder*");
+
+        let id = editor.add_applet_buffer_with("*Folder*", |_| Folder(scope, docs.clone()));
+        editor.show_buffer(id);
+
+        assert_eq!(editor.default_directory(), docs);
+        assert_eq!(
+            editor.buffer().name(),
+            format!("docs{}", crate::files::paths::SEPARATOR)
+        );
+        assert!(editor.watched_directories().contains(&docs));
     }
 
     #[test]

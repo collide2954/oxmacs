@@ -258,6 +258,7 @@ impl Editor {
         let id = buffer.id();
         self.buffers
             .push_back_with(buffer, Mode::Applet(Box::new(view)));
+        self.name_file_buffers();
         id
     }
 

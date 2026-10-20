@@ -132,6 +132,7 @@ impl BufferList {
         let entry = self.entries.get(index)?;
         match &entry.mode {
             Mode::Dired(listing) => Some((listing.directory(), true)),
+            Mode::Applet(view) => view.directory().map(|directory| (directory, true)),
             Mode::Text(_) => entry.buffer.file().map(|file| (file.path.as_path(), false)),
             _ => None,
         }
