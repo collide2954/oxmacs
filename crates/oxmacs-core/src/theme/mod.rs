@@ -215,6 +215,92 @@ pub fn counterpart(theme: &Theme) -> &'static Theme {
     REGISTRY.counterpart(theme)
 }
 
+const READABLE: f64 = 4.5;
+
+const TEXT: [Highlight; 16] = [
+    Highlight::Heading,
+    Highlight::Link,
+    Highlight::Symlink,
+    Highlight::Keyword,
+    Highlight::String,
+    Highlight::Comment,
+    Highlight::DocComment,
+    Highlight::Function,
+    Highlight::Type,
+    Highlight::Constant,
+    Highlight::Macro,
+    Highlight::Attribute,
+    Highlight::Lifetime,
+    Highlight::Success,
+    Highlight::Warning,
+    Highlight::Error,
+];
+
+const TINTS: [Highlight; 5] = [
+    Highlight::Marked,
+    Highlight::Flagged,
+    Highlight::SearchMatch,
+    Highlight::SearchCurrent,
+    Highlight::ParenMatch,
+];
+
+pub fn problems(theme: &Theme) -> Vec<String> {
+    let mut found = Vec::new();
+    let background = theme.default.background;
+    let text = theme.default.foreground;
+    for highlight in TEXT
+        .into_iter()
+        .chain((0..NICK_COLORS).map(Highlight::Nick))
+    {
+        let ratio = theme.highlight(highlight).contrast_ratio(background);
+        if ratio < READABLE {
+            found.push(format!("{highlight:?} on the background: {ratio:.2}"));
+        }
+    }
+    for highlight in TINTS {
+        let tint = theme.highlight(highlight);
+        let ratio = text.contrast_ratio(tint);
+        if ratio < READABLE {
+            found.push(format!("text on {highlight:?}: {ratio:.2}"));
+        }
+        if tint == background {
+            found.push(format!("{highlight:?} is the background color"));
+        }
+        if tint == theme.region {
+            found.push(format!("{highlight:?} is the region color"));
+        }
+    }
+    if theme.search_match == theme.search_current {
+        found.push("SearchCurrent is the SearchMatch color".to_owned());
+    }
+    for (face, label) in [
+        (
+            Face {
+                foreground: text,
+                background: theme.region,
+            },
+            "text on the region",
+        ),
+        (theme.default, "default text"),
+        (theme.mode_line, "mode-line text"),
+    ] {
+        let ratio = face.foreground.contrast_ratio(face.background);
+        if ratio < READABLE {
+            found.push(format!("{label}: {ratio:.2}"));
+        }
+    }
+    let darker = background.relative_luminance() < text.relative_luminance();
+    let mismatch = match (theme.appearance, darker) {
+        (Appearance::Dark, false) => Some("Dark but the background is lighter"),
+        (Appearance::Light, true) => Some("Light but the background is darker"),
+        _ => None,
+    };
+    if let Some(mismatch) = mismatch {
+        found.push(format!("appearance is {mismatch} than the text"));
+    }
+    found
+}
+
 pub fn for_appearance(appearance: Appearance) -> &'static Theme {
     match appearance {
         Appearance::Light => &ADWAITA,
@@ -250,58 +336,41 @@ mod tests {
     }
 
     #[test]
-    fn highlights_are_readable() {
+    fn the_builtin_themes_have_no_readability_problems() {
         for theme in builtin() {
-            for highlight in [
-                Highlight::Heading,
-                Highlight::Link,
-                Highlight::Symlink,
-                Highlight::Keyword,
-                Highlight::String,
-                Highlight::Comment,
-                Highlight::DocComment,
-                Highlight::Function,
-                Highlight::Type,
-                Highlight::Constant,
-                Highlight::Macro,
-                Highlight::Attribute,
-                Highlight::Lifetime,
-                Highlight::Success,
-                Highlight::Warning,
-                Highlight::Error,
-            ]
-            .into_iter()
-            .chain((0..NICK_COLORS).map(Highlight::Nick))
-            {
-                let ratio = theme
-                    .highlight(highlight)
-                    .contrast_ratio(theme.default.background);
-                assert!(ratio >= 4.5, "{} {highlight:?}: {ratio:.2}", theme.name);
-            }
-            for highlight in [
-                Highlight::Marked,
-                Highlight::Flagged,
-                Highlight::SearchMatch,
-                Highlight::SearchCurrent,
-                Highlight::ParenMatch,
-            ] {
-                let ratio = theme
-                    .default
-                    .foreground
-                    .contrast_ratio(theme.highlight(highlight));
-                assert!(ratio >= 4.5, "{} {highlight:?}: {ratio:.2}", theme.name);
-                assert_ne!(theme.highlight(highlight), theme.default.background);
-                assert_ne!(theme.highlight(highlight), theme.region);
-            }
-            assert_ne!(theme.search_match, theme.search_current);
-            let ratio = theme
-                .default
-                .foreground
-                .contrast_ratio(theme.highlight(Highlight::Region));
-            assert!(ratio >= 4.5, "{} Region: {ratio:.2}", theme.name);
+            assert_eq!(problems(theme), Vec::<String>::new(), "{}", theme.name);
         }
     }
 
+    #[test]
+    fn problems_name_each_unreadable_or_clashing_face() {
+        let murky = Theme {
+            name: "murky",
+            syntax: SyntaxColors {
+                comment: ADWAITA.default.background,
+                ..ADWAITA.syntax
+            },
+            marked: ADWAITA.region,
+            search_current: ADWAITA.search_match,
+            mode_line: Face {
+                foreground: Color::hex(0xFF_FF_FF),
+                background: Color::hex(0xFF_FF_FF),
+            },
+            appearance: Appearance::Dark,
+            ..ADWAITA
+        };
+
+        assert_eq!(
+            problems(&murky),
+            [
+                "Comment on the background: 1.00",
+                "Marked is the region color",
+                "SearchCurrent is the SearchMatch color",
+                "mode-line text: 1.00",
+                "appearance is Dark but the background is lighter than the text",
+            ]
+        );
+    }
     #[test]
     fn nick_colors_cycle_through_distinct_colors() {
         let colors: Vec<Color> = (0..NICK_COLORS)
@@ -346,29 +415,5 @@ mod tests {
     fn os_appearance_selects_the_matching_adwaita_variant() {
         assert_eq!(for_appearance(Appearance::Light).name, "adwaita");
         assert_eq!(for_appearance(Appearance::Dark).name, "adwaita-dark");
-    }
-
-    #[test]
-    fn appearance_matches_the_default_background() {
-        for theme in builtin() {
-            let background = theme.default.background.relative_luminance();
-            let foreground = theme.default.foreground.relative_luminance();
-            let expected = if background < foreground {
-                Appearance::Dark
-            } else {
-                Appearance::Light
-            };
-            assert_eq!(theme.appearance, expected, "{}", theme.name);
-        }
-    }
-
-    #[test]
-    fn text_faces_meet_wcag_aa_contrast() {
-        for theme in builtin() {
-            for (face, label) in [(theme.default, "default"), (theme.mode_line, "mode-line")] {
-                let ratio = face.foreground.contrast_ratio(face.background);
-                assert!(ratio >= 4.5, "{} {label}: {ratio:.2}", theme.name);
-            }
-        }
     }
 }
