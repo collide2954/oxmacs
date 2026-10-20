@@ -5,13 +5,13 @@ use crate::text::Buffer;
 use crate::theme::Highlight;
 
 #[derive(Debug, Default)]
-pub(super) struct Page {
+pub struct Page {
     pub(super) text: String,
     pub(super) styles: Vec<LineStyle>,
 }
 
 impl Page {
-    pub(super) fn line(&mut self, parts: &[(&str, Option<Highlight>)]) {
+    pub fn line(&mut self, parts: &[(&str, Option<Highlight>)]) {
         let mut style = LineStyle::default();
         let mut column = 0;
         for (part, highlight) in parts {
@@ -26,14 +26,18 @@ impl Page {
         self.styles.push(style);
     }
 
-    pub(super) fn paragraph(&mut self, text: &str, width: usize) {
+    pub fn paragraph(&mut self, text: &str, width: usize) {
         for line in fill(text, width) {
             self.line(&[(&line, None)]);
         }
     }
 
-    pub(super) fn heading(&mut self, title: &str) {
+    pub fn heading(&mut self, title: &str) {
         self.line(&[(title, Some(Highlight::Heading))]);
+    }
+
+    pub fn into_parts(self) -> (String, Vec<LineStyle>) {
+        (self.text, self.styles)
     }
 
     pub(super) fn fill(&self, buffer: &mut Buffer) {

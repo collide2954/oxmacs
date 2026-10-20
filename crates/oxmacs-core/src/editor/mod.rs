@@ -1,3 +1,4 @@
+mod applets;
 mod atlas;
 mod buffers;
 mod build;
@@ -24,6 +25,7 @@ pub use job::{Job, JobId, Outcome};
 pub use languages::preview::PreviewScroll;
 pub use languages::r_plots::{GalleryView, PlotView};
 pub use motion::mouse::{Cell, Clicks};
+pub use page::Page;
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
 pub use prompts::popup::PopupView;
 pub use prompts::question::Question;
@@ -420,7 +422,10 @@ impl Editor {
     }
 
     fn buffer_scope(&self) -> ScopeId {
-        self.core_scope().into()
+        match self.buffers.mode(0) {
+            Some(Mode::Applet(view)) => view.scope(),
+            _ => self.core_scope().into(),
+        }
     }
 
     fn core_scope(&self) -> Scope {
@@ -450,7 +455,7 @@ impl Editor {
             }
             Some(Mode::Preview(_)) => Scope::Preview,
             Some(Mode::Console(_)) => Scope::Console,
-            Some(Mode::Text(_)) | None => Scope::Global,
+            Some(Mode::Text(_) | Mode::Applet(_)) | None => Scope::Global,
         }
     }
 
@@ -480,6 +485,7 @@ impl Editor {
             Some(Mode::AtlasList(list)) => list.line_style(line),
             Some(Mode::Environment(view)) => view.line_style(line),
             Some(Mode::Table(view)) => view.line_style(line),
+            Some(Mode::Applet(view)) => view.line_style(line),
             Some(Mode::Preview(_) | Mode::Console(_) | Mode::Plots(_)) => LineStyle::default(),
             Some(Mode::Text(_)) | None if self.is_atlas(index) => LineStyle {
                 background: None,

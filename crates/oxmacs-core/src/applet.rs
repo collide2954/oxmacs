@@ -2,7 +2,17 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt;
 
+use crate::command::ScopeId;
+use crate::display::LineStyle;
 use crate::editor::Editor;
+
+pub trait AppletBuffer: Any + Send + fmt::Debug {
+    fn scope(&self) -> ScopeId;
+
+    fn line_style(&self, _line: usize) -> LineStyle {
+        LineStyle::default()
+    }
+}
 
 pub trait Applet {
     fn name(&self) -> &'static str;
@@ -51,8 +61,10 @@ impl States {
 
 #[cfg(test)]
 mod tests {
-    use crate::command::{CommandSpec, Scope};
+    use crate::command::{CommandSpec, Scope, ScopeId};
+    use crate::display::LineStyle;
     use crate::editor::Editor;
+    use crate::editor::Page;
     use crate::input::KeySequence;
 
     use super::*;
@@ -113,6 +125,121 @@ mod tests {
                 opt_in: true
             }]
         );
+    }
+
+    #[derive(Debug)]
+    struct Greeter {
+        scope: ScopeId,
+        count: usize,
+        styles: Vec<LineStyle>,
+    }
+
+    impl AppletBuffer for Greeter {
+        fn scope(&self) -> ScopeId {
+            self.scope
+        }
+
+        fn line_style(&self, line: usize) -> LineStyle {
+            self.styles.get(line).cloned().unwrap_or_default()
+        }
+    }
+
+    fn greet_open(editor: &mut Editor) {
+        let Some(scope) = editor.applet_state::<GreeterScope>().map(|known| known.0) else {
+            return;
+        };
+        let id = editor.open_applet_buffer(
+            "*Greeter*",
+            Greeter {
+                scope,
+                count: 0,
+                styles: Vec::new(),
+            },
+        );
+        render_greeter(editor, id);
+    }
+
+    fn greet_more(editor: &mut Editor) {
+        let Some(id) = editor.find_applet_buffer::<Greeter>(|_| true) else {
+            return;
+        };
+        if let Some((_, greeter)) = editor.applet_buffer_mut::<Greeter>(id) {
+            greeter.count += 1;
+        }
+        render_greeter(editor, id);
+    }
+
+    fn render_greeter(editor: &mut Editor, id: crate::text::BufferId) {
+        let Some((_, greeter)) = editor.applet_buffer_mut::<Greeter>(id) else {
+            return;
+        };
+        let mut page = Page::default();
+        page.heading(&format!("Hello {} times", greeter.count));
+        let (text, styles) = page.into_parts();
+        greeter.styles = styles;
+        editor.fill_buffer(id, &text);
+    }
+
+    #[derive(Debug)]
+    struct GreeterScope(ScopeId);
+
+    struct Greetings;
+
+    impl Applet for Greetings {
+        fn name(&self) -> &'static str {
+            "greetings"
+        }
+
+        fn version(&self) -> &'static str {
+            "0.1.0"
+        }
+
+        fn install(&self, editor: &mut Editor) {
+            let scope = editor.add_scope("*Greeter*");
+            editor.set_applet_state(GreeterScope(scope));
+            let open = editor.add_command(CommandSpec {
+                name: "greet",
+                summary: "Open the greeter",
+                help: None,
+                scope: Scope::Global.into(),
+                run: greet_open,
+            });
+            let more = editor.add_command(CommandSpec {
+                name: "greet-more",
+                summary: "Greet once more",
+                help: None,
+                scope,
+                run: greet_more,
+            });
+            editor.bind(Scope::Global, "C-c g", open).ok();
+            editor.bind(scope, "+", more).ok();
+        }
+    }
+
+    fn type_keys(editor: &mut Editor, notation: &str) {
+        let keys: KeySequence = notation.parse().unwrap();
+        for key in keys.keys() {
+            editor.handle_key(*key);
+        }
+    }
+
+    #[test]
+    fn applet_buffers_have_their_own_keys_text_and_styles() {
+        let mut editor = Editor::new();
+        editor.install(&Greetings);
+
+        type_keys(&mut editor, "C-c g + +");
+
+        assert_eq!(editor.buffer().name(), "*Greeter*");
+        assert!(editor.buffer().is_read_only());
+        assert_eq!(editor.buffer().contents(), "Hello 2 times\n");
+        assert_eq!(
+            editor.line_style(0).spans,
+            [(0..13, crate::theme::Highlight::Heading)]
+        );
+        type_keys(&mut editor, "C-x b RET +");
+        assert_eq!(editor.buffer().name(), "*scratch*");
+        assert_eq!(editor.buffer().contents(), "+");
     }
 
     #[test]

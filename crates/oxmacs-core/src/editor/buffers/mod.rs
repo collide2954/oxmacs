@@ -6,6 +6,7 @@ pub(super) mod read_only;
 
 use std::path::Path;
 
+use crate::applet::AppletBuffer;
 use crate::dired::Listing;
 use crate::display::{ScreenLine, Viewport};
 use crate::editor::atlas::list::AtlasList;
@@ -53,6 +54,7 @@ pub(super) enum Mode {
     AtlasList(Box<AtlasList>),
     Environment(EnvironmentView),
     Table(TableView),
+    Applet(Box<dyn AppletBuffer>),
 }
 
 #[derive(Debug)]
