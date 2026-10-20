@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use oxmacs_core::applet::AppletBuffer;
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::{Editor, WindowId};
+use oxmacs_core::files::DiskState;
 use oxmacs_core::text::BufferId;
 use oxmacs_gui::units;
 
@@ -104,6 +105,7 @@ pub(crate) struct PdfView {
     pub(crate) index: TextIndex,
     pub(crate) pointing: Pointing,
     pub(crate) revealed: Option<usize>,
+    disk: Option<DiskState>,
 }
 
 impl PdfView {
@@ -160,6 +162,18 @@ impl AppletBuffer for PdfView {
     fn scope(&self) -> ScopeId {
         self.scope
     }
+
+    fn file(&self) -> Option<&Path> {
+        Some(&self.path)
+    }
+
+    fn position(&self) -> Option<String> {
+        match &self.loading {
+            Loading::Waiting => Some("loading".to_owned()),
+            Loading::Ready(document) => Some(format!("{}/{}", self.page + 1, document.pages.len())),
+            Loading::Failed(_) => None,
+        }
+    }
 }
 
 pub(crate) fn area(viewport: Viewport) -> Size {
@@ -210,6 +224,7 @@ pub(crate) fn open(editor: &mut Editor, path: &Path) -> bool {
             index: TextIndex::default(),
             pointing: Pointing::default(),
             revealed: None,
+            disk: None,
         }
     });
     editor.show_buffer(id);
@@ -230,8 +245,11 @@ fn load(editor: &mut Editor, id: BufferId) {
         return;
     };
     view.doc = doc;
+    view.disk = DiskState::of(&view.path).ok().flatten();
     if let Some(library) = library {
-        view.loading = Loading::Waiting;
+        if !matches!(view.loading, Loading::Ready(_)) {
+            view.loading = Loading::Waiting;
+        }
         let path = view.path.clone();
         editor.request(OpenDocument { doc, path, library });
     } else {
@@ -256,10 +274,11 @@ pub(crate) fn opened(editor: &mut Editor, opened: &Opened) {
         editor.show_message(format!("{name}: {error}"));
     }
     if let Some((_, view)) = editor.applet_buffer_mut::<PdfView>(id) {
-        view.loading = match &opened.result {
-            Ok(document) => Loading::Ready(document.clone()),
-            Err(error) => Loading::Failed(error.clone()),
-        };
+        match &opened.result {
+            Ok(document) => view.loading = Loading::Ready(document.clone()),
+            Err(_) if matches!(view.loading, Loading::Ready(_)) => {}
+            Err(error) => view.loading = Loading::Failed(error.clone()),
+        }
         view.page = view.page.min(view.pages().saturating_sub(1));
     }
     if opened.result.is_ok() {
@@ -328,15 +347,6 @@ pub(crate) fn request_pages(editor: &mut Editor, id: BufferId) {
         dark: view.dark,
     };
     editor.request(request);
-}
-
-pub(crate) fn page_counter(editor: &Editor) -> Option<String> {
-    let view = editor.pane().applet_buffer::<PdfView>()?;
-    match &view.loading {
-        Loading::Waiting => Some("loading".to_owned()),
-        Loading::Ready(document) => Some(format!("{}/{}", view.page + 1, document.pages.len())),
-        Loading::Failed(_) => None,
-    }
 }
 
 pub(crate) fn current(editor: &Editor) -> Option<(BufferId, Viewport)> {
@@ -493,6 +503,17 @@ pub(crate) fn toggle_dark(editor: &mut Editor) {
     request_pages(editor, id);
 }
 
+pub(crate) fn reload_changed(editor: &mut Editor) {
+    for id in editor.applet_buffers::<PdfView>() {
+        let changed = editor
+            .applet_buffer::<PdfView>(id)
+            .is_some_and(|(_, view)| DiskState::of(&view.path).ok().flatten() != view.disk);
+        if changed {
+            load(editor, id);
+        }
+    }
+}
+
 pub(crate) fn reload(editor: &mut Editor) {
     if let Some((id, _)) = current(editor) {
         load(editor, id);
@@ -569,6 +590,10 @@ mod tests {
             .collect()
     }
 
+    fn position(editor: &Editor) -> Option<String> {
+        editor.pane().status().position
+    }
+
     fn view(editor: &Editor) -> &PdfView {
         editor.pane().applet_buffer::<PdfView>().unwrap()
     }
@@ -591,7 +616,7 @@ mod tests {
                 library: library(root.path()),
             }]
         );
-        assert_eq!(page_counter(&editor).as_deref(), Some("loading"));
+        assert_eq!(position(&editor).as_deref(), Some("loading"));
     }
 
     #[test]
@@ -685,7 +710,7 @@ mod tests {
                 dark: false,
             }]
         );
-        assert_eq!(page_counter(&editor).as_deref(), Some("1/5"));
+        assert_eq!(position(&editor).as_deref(), Some("1/5"));
     }
 
     #[test]
@@ -705,7 +730,7 @@ mod tests {
                 height: 500.0,
             },
         );
-        assert_eq!(page_counter(&editor).as_deref(), Some("2/5"));
+        assert_eq!(position(&editor).as_deref(), Some("2/5"));
         press(&mut editor, "p p");
         assert_eq!(scrolls(&mut editor), [Move::To(0.0), Move::To(0.0)]);
     }
@@ -771,11 +796,11 @@ mod tests {
 
         press(&mut editor, "n");
 
-        assert_eq!(page_counter(&editor).as_deref(), Some("2/5"));
+        assert_eq!(position(&editor).as_deref(), Some("2/5"));
         let rendered = requests::<RenderPages>(&mut editor);
         assert_eq!(rendered[0].pages[0].page, 1);
         press(&mut editor, "M->");
-        assert_eq!(page_counter(&editor).as_deref(), Some("5/5"));
+        assert_eq!(position(&editor).as_deref(), Some("5/5"));
         press(&mut editor, "c");
         assert_eq!(editor.message(), Some("Scrolling pages"));
     }
@@ -788,6 +813,54 @@ mod tests {
 
         assert!(view(&editor).dark);
         assert!(requests::<RenderPages>(&mut editor)[0].dark);
+    }
+
+    #[test]
+    fn the_document_file_is_watched() {
+        let (root, editor) = opened(2);
+
+        assert_eq!(editor.visited_files(), [root.path().join("paper.pdf")]);
+    }
+
+    #[test]
+    fn a_rewritten_file_reloads_in_place() {
+        let (root, mut editor) = opened(5);
+        let path = root.path().join("paper.pdf");
+        press(&mut editor, "c n n");
+        editor.take_effects();
+
+        fs::write(&path, "%PDF rewritten").unwrap();
+        editor.check_disk_changes();
+
+        assert_eq!(
+            requests::<OpenDocument>(&mut editor),
+            [OpenDocument {
+                doc: 1,
+                path,
+                library: library(root.path()),
+            }]
+        );
+        assert_eq!(position(&editor).as_deref(), Some("3/5"));
+        editor.check_disk_changes();
+        assert_eq!(requests::<OpenDocument>(&mut editor), []);
+    }
+
+    #[test]
+    fn a_failed_reload_keeps_the_pages_shown() {
+        let (root, mut editor) = opened(5);
+        fs::write(root.path().join("paper.pdf"), "%PDF half written").unwrap();
+        editor.check_disk_changes();
+
+        deliver(
+            &mut editor,
+            Opened {
+                doc: 1,
+                result: Err("truncated".to_owned()),
+            },
+        );
+
+        assert_eq!(editor.message(), Some("paper.pdf: truncated"));
+        assert_eq!(position(&editor).as_deref(), Some("1/5"));
     }
 
     #[test]

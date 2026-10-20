@@ -222,7 +222,7 @@ impl Applet for Pdf {
         editor.on_event(text::indexed);
         editor.on_event(text::pointed);
         editor.on_command(text::follow_point);
-        editor.add_mode_line_segment(view::page_counter);
+        editor.on_disk_change(view::reload_changed);
     }
 }
 

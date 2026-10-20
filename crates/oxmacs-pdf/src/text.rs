@@ -166,11 +166,12 @@ pub(crate) fn indexed(editor: &mut Editor, indexed: &Indexed) {
     };
     let (index, text) = TextIndex::build(pages);
     if let Some((buffer, view)) = editor.applet_buffer_mut::<PdfView>(id) {
+        let point = index.start_of(view.page).unwrap_or(0);
         buffer.replace_text(&text);
-        buffer.set_point(0);
+        buffer.set_point(point);
         buffer.mark_saved();
         view.index = index;
-        view.revealed = Some(0);
+        view.revealed = Some(point);
     }
 }
 
@@ -522,6 +523,22 @@ mod tests {
         );
         assert!(!editor.buffer().is_modified());
         assert_eq!(editor.buffer().point(), 0);
+    }
+
+    #[test]
+    fn new_text_keeps_point_on_the_page_in_view() {
+        let (_root, mut editor) = indexed_viewer(pages());
+        press(&mut editor, "c n n");
+
+        deliver(
+            &mut editor,
+            Indexed {
+                doc: 0,
+                result: Ok(pages()),
+            },
+        );
+
+        assert_eq!(editor.buffer().point(), 24);
     }
 
     #[test]
