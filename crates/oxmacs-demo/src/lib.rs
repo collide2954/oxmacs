@@ -4,6 +4,7 @@ use iced::widget::{column, container, row, text};
 use iced::{Alignment, Border, Element, Length, Task};
 use oxmacs_core::applet::{Applet, AppletBuffer, DoctorLine, Finding, Payload};
 use oxmacs_core::command::{Command, CommandSpec, Scope, ScopeId};
+use oxmacs_core::config::schema::{Kind, Setting};
 use oxmacs_core::display::LineStyle;
 use oxmacs_core::editor::{Editor, Page, Pane};
 use oxmacs_core::theme::Highlight;
@@ -13,6 +14,13 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 const NAME: &str = "*Demo*";
 const TABLE: &str = "demo";
+const SETTINGS: &[Setting] = &[Setting {
+    key: "sides",
+    group: "Demo",
+    kind: Kind::Integer,
+    unset: None,
+    hint: "How many sides the demo's die has, at least 2",
+}];
 const HELP: &str = "a add · d delete · r roll a die · q quit";
 const FIRST_ITEM: usize = 3;
 const SUGGESTIONS: &[&str] = &[
@@ -260,6 +268,7 @@ impl Applet for Demo {
         editor.bind(scope, "q", Command::QuitWindow).ok();
         editor.on_event(rolled);
         editor.add_config_table::<Settings>(TABLE);
+        editor.add_settings(TABLE, SETTINGS);
         editor.add_doctor_section("Demo", report);
     }
 }
@@ -541,6 +550,27 @@ mod tests {
             "{message}"
         );
         assert_eq!(editor.applet_config::<Settings>(TABLE).sides, 6);
+    }
+
+    #[test]
+    fn customize_lists_and_changes_the_die() {
+        let mut editor = opened();
+        keys(&mut editor, "M-x");
+        typed(&mut editor, "customize");
+        keys(&mut editor, "RET");
+
+        let lines = lines(&editor);
+        let heading = lines
+            .iter()
+            .position(|line| line == "Demo  [demo]")
+            .unwrap();
+        assert!(lines[heading + 1].ends_with(" 6"), "{}", lines[heading + 1]);
+
+        keys(&mut editor, "M-> p RET C-a C-k");
+        typed(&mut editor, "12");
+        keys(&mut editor, "RET");
+
+        assert_eq!(editor.applet_config::<Settings>(TABLE).sides, 12);
     }
 
     #[test]
