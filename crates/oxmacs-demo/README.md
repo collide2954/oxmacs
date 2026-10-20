@@ -38,8 +38,19 @@ An applet is an ordinary Rust crate. It depends on `oxmacs-core` (and on `oxmacs
 
 **The doctor.** `editor.add_doctor_section("Demo", report)` adds a section to `M-x oxmacs-doctor`. `report` returns `DoctorLine`s, each a label, a finding (`Info`, `Good`, `Warning` or `Problem`) and some text.
 
-## Wiring it in
+## Beyond the demo
 
+The demo keeps to the basics. The other built-in applets use more of the same API:
+
+- **Languages.** `editor.add_language(spec, scope)` adds a file type with its highlighting, indentation, comments and outline. Markdown is built this way.
+- **Files and folders.** `add_file_opener(&["pdf"], open)` claims a file type, as the PDF viewer does, and `on_open_directory` takes over opening folders, as dired does. An applet buffer can name a `file()` to have it watched for changes, a `directory()` to stand for a folder, and a `position()` to show in the mode line instead of line and column.
+- **More prompts.** `prompt_pick` offers choices and also accepts typed text, `prompt_path` asks for a file or folder like `C-x C-f`, `prompt_styled` highlights what is typed, `ask_typed` wants a typed yes or no, and `ask_choice` takes one of several letters.
+- **Hooks.** `on_command`, `on_save`, `on_saved`, `on_disk_change`, `on_configured` and `on_quit` run after the matching editor event, `on_display` runs before the editor is drawn, and `fetch` downloads a page and hands back its text.
+- **Whole windows.** `GuiApplet::body` draws a buffer's entire window, as the Markdown preview and the PDF viewer do, and `minibuffer_style` restyles the minibuffer while a prompt waits, as the glow applet does.
+- **Tools.** `add_managed_tool` lists a program or library in `M-x list-tools`, which downloads it from its GitHub releases and checks it against the published checksum; `installed_tool` finds it again. The PDF viewer gets PDFium this way.
+- **The start screen and the mode line.** `set_splash_entry` adds a line to the start screen and `add_mode_line_segment` adds text before the clock.
+
+## Wiring it in
 Three lines outside the crate add an applet to oxmacs:
 
 1. `Cargo.toml` at the workspace root: `oxmacs-demo = { path = "crates/oxmacs-demo" }`.

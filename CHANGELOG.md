@@ -4,6 +4,10 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Security
+
+- Updated rustls-webpki and webpki-roots, which check the certificates of IRC servers and downloads, for RUSTSEC-2026-0381 and RUSTSEC-2026-0382.
+
 ### Changed
 
 - Weather settings now live in a `[weather]` table: `location`, `units` and `mode-line`. oxmacs moves `weather-location`, `weather-units` and `mode-line-weather` there the first time it starts, keeping comments, and says so.
