@@ -159,6 +159,10 @@ impl<'a> Pane<'a> {
         }
     }
 
+    pub fn is_splash(&self) -> bool {
+        matches!(self.editor.buffers.mode(self.index), Some(Mode::Splash(_)))
+    }
+
     #[cfg(feature = "animated-splash")]
     pub fn splash_art(&self) -> Option<SplashAnimation> {
         match self.editor.buffers.mode(self.index) {

@@ -89,6 +89,14 @@ impl Editor {
         self.add_buffer_with(buffer, Mode::Splash(splash));
     }
 
+    pub fn splash_shown(&self) -> bool {
+        self.tiling()
+            .windows()
+            .into_iter()
+            .filter_map(|window| self.pane_of(window))
+            .any(|pane| pane.is_splash())
+    }
+
     pub fn set_splash_entry(&mut self, command: CommandId, description: impl Into<String>) {
         let description = description.into();
         match self
@@ -389,6 +397,18 @@ mod tests {
         press(&mut editor, "C-x C-q");
         assert!(editor.buffer().is_read_only());
         assert_eq!(editor.message(), Some("This buffer stays read-only"));
+    }
+
+    #[test]
+    fn windows_and_the_editor_know_when_the_start_screen_shows() {
+        let mut editor = shown();
+        assert!(editor.pane().is_splash());
+        assert!(editor.splash_shown());
+
+        press(&mut editor, "q");
+
+        assert!(!editor.pane().is_splash());
+        assert!(!editor.splash_shown());
     }
 
     fn wave(editor: &mut Editor) {
