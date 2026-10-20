@@ -18,6 +18,7 @@ extra-themes = ["dep:oxmacs-themes"]
 glow = ["dep:oxmacs-glow"]
 irc = ["dep:oxmacs-irc"]
 markdown = ["dep:oxmacs-markdown"]
+pdf = ["dep:oxmacs-pdf"]
 weather = ["dep:oxmacs-weather"]
 
 [dependencies]
@@ -29,6 +30,7 @@ oxmacs-glow = { workspace = true, optional = true }
 oxmacs-gui.workspace = true
 oxmacs-irc = { workspace = true, optional = true }
 oxmacs-markdown = { workspace = true, optional = true }
+oxmacs-pdf = { workspace = true, optional = true }
 oxmacs-splash = { workspace = true, optional = true }
 oxmacs-themes = { workspace = true, optional = true }
 oxmacs-weather = { workspace = true, optional = true }

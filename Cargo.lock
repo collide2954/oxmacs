@@ -3405,6 +3405,7 @@ dependencies = [
  "oxmacs-gui",
  "oxmacs-irc",
  "oxmacs-markdown",
+ "oxmacs-pdf",
  "oxmacs-splash",
  "oxmacs-themes",
  "oxmacs-weather",
@@ -3534,6 +3535,16 @@ dependencies = [
  "tempfile",
  "tree-sitter",
  "tree-sitter-md",
+]
+
+[[package]]
+name = "oxmacs-pdf"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "oxmacs-core",
+ "oxmacs-gui",
+ "tempfile",
 ]
 
 [[package]]
