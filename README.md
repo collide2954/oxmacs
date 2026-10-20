@@ -26,6 +26,7 @@ Some parts of oxmacs are optional and only exist in the binary when you ask for 
 |-------------------|---------|-------------------------------------------------------------------------------|
 | `animated-splash` | 0.1.0   | A start screen with the oxmacs logo animated above the keys; `a` cycles effects |
 | `demo`            | 0.1.0   | An example applet to copy when writing your own; `M-x demo`                  |
+| `extra-themes`    | 0.1.0   | 56 more color themes for `M-x load-theme`, from gruvbox to modus-vivendi       |
 
 Turn one on with `--features`, and separate several with commas:
 
@@ -41,7 +42,6 @@ More applets will be opt-in features as well. Until each one is moved into its o
 |----------------|---------------------------------------------------|----------------------------------------|
 | `irc`          | The IRC client and its bouncer                    | Still compiled into every build        |
 | `atlas`        | Notes, tasks, the agenda and the calendar         | Still compiled into every build        |
-| `extra-themes` | Many more color themes beside Adwaita light/dark  | Not written yet                        |
 | `sqlite`       | A SQLite database viewer and editor               | Not written yet                        |
 | `pdf`          | A PDF viewer                                      | Not written yet                        |
 

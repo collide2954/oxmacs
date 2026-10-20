@@ -14,11 +14,13 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `C-c n m` shows a month calendar with each day's entries and the selected day's details below; `w` switches to a week laid out by hour.
 - `M-x oxmacs-doctor` lists Atlas vaults and how many pages each holds.
 - `M-x oxmacs-doctor` lists the opt-in build features compiled in, with their versions.
+- The theme in *Settings* is picked from the same live-preview list as `M-x load-theme`.
 
 ### Experimental (opt-in at build time)
 
 - `demo` 0.1.0: an example applet, `M-x demo`, showing how applets add commands, keys, buffers, prompts, questions and effects. Build with `cargo build -p oxmacs --features demo`.
 - `animated-splash` 0.1.0: the start screen draws the oxmacs logo in block letters, animated above the keys; `a` cycles a drifting plasma field with a shimmer, a color wave, the logo assembling from scattered pixels, a network of neurons whose signals light the letters as they pass, and DNA replicating behind the logo with its helicase, polymerases, primers and Okazaki fragments. Build with `cargo build -p oxmacs --features animated-splash`.
+- `extra-themes` 0.1.0: 56 more color themes inspired by the ones Helix ships, among them gruvbox, catppuccin, tokyonight, rose-pine, kanagawa, nord, dracula, everforest, solarized, ayu, github, modus and doom-one, each tuned to stay readable. Build with `cargo build -p oxmacs --features extra-themes`.
 
 ## [0.13.0] - 2026-10-19
 
