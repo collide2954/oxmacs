@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 
-use strum::VariantArray;
-
-use crate::command::{Command, Scope};
+use crate::command::{Command, CommandId, Scope};
 use crate::editor::Editor;
 use crate::editor::chat::connect::Secret;
 use crate::editor::chat::setup::Field;
@@ -103,7 +101,7 @@ pub struct Minibuffer {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Choice {
-    Command(Command),
+    Command(CommandId),
     Clip(usize),
     Entry(usize),
     Buffer(usize),
@@ -226,14 +224,14 @@ impl Editor {
         matches: impl Fn(&str) -> bool,
         everywhere: bool,
     ) -> Vec<Completion> {
-        let mut commands: Vec<Command> = Command::VARIANTS
-            .iter()
-            .copied()
+        let mut commands: Vec<CommandId> = self
+            .commands
+            .all()
             .filter(|command| {
-                let scope = command.scope();
+                let scope = self.commands.scope(*command);
                 let available =
                     everywhere || scope == Scope::Global || scope == self.buffer_scope();
-                available && matches(command.name())
+                available && matches(self.commands.name(*command))
             })
             .collect();
         let typed = self
@@ -243,24 +241,21 @@ impl Editor {
             .unwrap_or_default();
         let typed = typed.trim();
         commands.sort_by_key(|command| {
-            (
-                command.name() != typed,
-                self.recency(*command),
-                command.name(),
-            )
+            let name = self.commands.name(*command);
+            (name != typed, self.recency(*command), name)
         });
         commands
             .into_iter()
             .map(|command| Completion {
-                label: command.name().to_owned(),
+                label: self.commands.name(command).to_owned(),
                 annotation: self.where_is(command).map(|keys| keys.to_string()),
-                summary: Some(command.summary()),
+                summary: Some(self.commands.summary(command)),
                 choice: Choice::Command(command),
             })
             .collect()
     }
 
-    fn recency(&self, command: Command) -> usize {
+    fn recency(&self, command: CommandId) -> usize {
         self.command_history
             .iter()
             .rev()

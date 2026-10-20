@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 
-use crate::command::Command;
+use crate::command::CommandId;
 use crate::input::{Key, KeySequence, Modifiers};
 
 #[derive(Debug, Clone, Default)]
@@ -10,19 +10,23 @@ pub struct Keymap {
 
 #[derive(Debug, Clone)]
 enum Binding {
-    Command(Command),
+    Command(CommandId),
     Prefix(Keymap),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lookup {
-    Command(Command),
+    Command(CommandId),
     Prefix,
     Unbound,
 }
 
 impl Keymap {
-    pub fn bind(&mut self, keys: &[Key], command: Command) {
+    pub fn bind(&mut self, keys: &[Key], command: impl Into<CommandId>) {
+        self.bind_id(keys, command.into());
+    }
+
+    fn bind_id(&mut self, keys: &[Key], command: CommandId) {
         match keys {
             [] => {}
             [key] => {
@@ -37,24 +41,24 @@ impl Keymap {
                     *binding = Binding::Prefix(Self::default());
                 }
                 if let Binding::Prefix(submap) = binding {
-                    submap.bind(rest, command);
+                    submap.bind_id(rest, command);
                 }
             }
         }
     }
 
-    pub fn where_is(&self, command: Command) -> Option<KeySequence> {
+    pub fn where_is(&self, command: impl Into<CommandId>) -> Option<KeySequence> {
         self.bindings(command).into_iter().next()
     }
 
-    pub fn bindings(&self, command: Command) -> Vec<KeySequence> {
+    pub fn bindings(&self, command: impl Into<CommandId>) -> Vec<KeySequence> {
         let mut found = Vec::new();
-        self.collect(command, &mut Vec::new(), &mut found);
+        self.collect(command.into(), &mut Vec::new(), &mut found);
         found.sort_by_key(|keys| (uses_super(keys), keys.len()));
         found.into_iter().map(KeySequence::from).collect()
     }
 
-    fn collect(&self, command: Command, prefix: &mut Vec<Key>, found: &mut Vec<Vec<Key>>) {
+    fn collect(&self, command: CommandId, prefix: &mut Vec<Key>, found: &mut Vec<Vec<Key>>) {
         for (key, binding) in &self.bindings {
             prefix.push(*key);
             match binding {
@@ -86,10 +90,15 @@ fn uses_super(keys: &[Key]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::Command;
     use crate::input::KeySequence;
 
     fn keys(notation: &str) -> Vec<Key> {
         notation.parse::<KeySequence>().unwrap().keys().to_vec()
+    }
+
+    fn found(command: Command) -> Lookup {
+        Lookup::Command(command.into())
     }
 
     #[test]
@@ -97,10 +106,7 @@ mod tests {
         let mut keymap = Keymap::default();
         keymap.bind(&keys("C-f"), Command::ForwardChar);
 
-        assert_eq!(
-            keymap.lookup(&keys("C-f")),
-            Lookup::Command(Command::ForwardChar)
-        );
+        assert_eq!(keymap.lookup(&keys("C-f")), found(Command::ForwardChar));
     }
 
     #[test]
@@ -116,10 +122,7 @@ mod tests {
         keymap.bind(&keys("C-x C-f"), Command::ForwardChar);
 
         assert_eq!(keymap.lookup(&keys("C-x")), Lookup::Prefix);
-        assert_eq!(
-            keymap.lookup(&keys("C-x C-f")),
-            Lookup::Command(Command::ForwardChar)
-        );
+        assert_eq!(keymap.lookup(&keys("C-x C-f")), found(Command::ForwardChar));
         assert_eq!(keymap.lookup(&keys("C-x C-g")), Lookup::Unbound);
     }
 
@@ -140,10 +143,7 @@ mod tests {
         keymap.bind(&keys("C-n"), Command::NextLine);
 
         assert_eq!(keymap.lookup(&keys("C-x")), Lookup::Prefix);
-        assert_eq!(
-            keymap.lookup(&keys("C-n")),
-            Lookup::Command(Command::NextLine)
-        );
+        assert_eq!(keymap.lookup(&keys("C-n")), found(Command::NextLine));
     }
 
     fn where_is(keymap: &Keymap, command: Command) -> Option<String> {
@@ -222,9 +222,6 @@ mod tests {
         keymap.bind(&keys("C-x C-f"), Command::ForwardChar);
         keymap.bind(&keys("C-x C-b"), Command::BackwardChar);
 
-        assert_eq!(
-            keymap.lookup(&keys("C-x C-f")),
-            Lookup::Command(Command::ForwardChar)
-        );
+        assert_eq!(keymap.lookup(&keys("C-x C-f")), found(Command::ForwardChar));
     }
 }

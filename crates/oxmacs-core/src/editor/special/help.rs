@@ -1,4 +1,4 @@
-use crate::command::{Command, Scope};
+use crate::command::{CommandId, Scope};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
@@ -15,7 +15,7 @@ const FILL_COLUMN: usize = 70;
 
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Help {
-    command: Option<Command>,
+    command: Option<CommandId>,
     width: usize,
     styles: Vec<LineStyle>,
     r: bool,
@@ -52,7 +52,14 @@ fn listed(items: &[String], last: &str) -> String {
     }
 }
 
-fn key_lines(command: Command, places: &[(Scope, Vec<String>)]) -> Vec<String> {
+struct Described {
+    name: &'static str,
+    summary: &'static str,
+    help: Option<&'static str>,
+    scope: Scope,
+}
+
+fn key_lines(name: &str, places: &[(Scope, Vec<String>)]) -> Vec<String> {
     let mut groups: Vec<(String, Vec<String>)> = Vec::new();
     for (scope, keys) in places {
         let keys = listed(keys, "or");
@@ -63,7 +70,7 @@ fn key_lines(command: Command, places: &[(Scope, Vec<String>)]) -> Vec<String> {
         }
     }
     if groups.is_empty() {
-        return vec![format!("none; run it with M-x {}", command.name())];
+        return vec![format!("none; run it with M-x {name}")];
     }
     groups
         .into_iter()
@@ -81,20 +88,20 @@ fn key_lines(command: Command, places: &[(Scope, Vec<String>)]) -> Vec<String> {
         .collect()
 }
 
-fn page(command: Command, places: &[(Scope, Vec<String>)], width: usize) -> Page {
+fn page(command: &Described, places: &[(Scope, Vec<String>)], width: usize) -> Page {
     let mut page = Page::default();
-    page.heading(command.name());
-    page.line(&[(&format!("{}.", command.summary()), None)]);
-    if let Some(help) = command.help() {
+    page.heading(command.name);
+    page.line(&[(&format!("{}.", command.summary), None)]);
+    if let Some(help) = command.help {
         page.line(&[]);
         page.paragraph(help, width);
     }
     page.line(&[]);
-    for (index, keys) in key_lines(command, places).iter().enumerate() {
+    for (index, keys) in key_lines(command.name, places).iter().enumerate() {
         let label = if index == 0 { KEYS } else { INDENT };
         page.line(&[(label, Some(Highlight::Comment)), (keys, None)]);
     }
-    if let Some(place) = command.scope().label() {
+    if let Some(place) = command.scope.label() {
         page.line(&[(WORKS_IN, Some(Highlight::Comment)), (place, None)]);
     }
     page
@@ -110,7 +117,7 @@ impl Editor {
             .find_mode(|mode| matches!(mode, Mode::Help(help) if !help.r))
     }
 
-    pub(in crate::editor) fn describe(&mut self, command: Command) {
+    pub(in crate::editor) fn describe(&mut self, command: CommandId) {
         if self.help_index().is_none() {
             self.beside(|editor| {
                 let mut buffer = Buffer::with_text(NAME, "");
@@ -162,7 +169,13 @@ impl Editor {
             })
             .filter(|(_, keys)| !keys.is_empty())
             .collect();
-        let page = page(command, &places, width);
+        let described = Described {
+            name: self.commands.name(command),
+            summary: self.commands.summary(command),
+            help: self.commands.help(command),
+            scope: self.commands.scope(command),
+        };
+        let page = page(&described, &places, width);
         if let Some(buffer) = self.buffers.get_mut(index) {
             page.fill(buffer);
         }

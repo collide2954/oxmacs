@@ -1,4 +1,8 @@
+mod table;
+
 use strum::{EnumMessage, EnumString, IntoStaticStr, VariantArray};
+
+pub use table::{CommandId, CommandSpec, Commands};
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, EnumMessage, EnumString, IntoStaticStr, VariantArray,

@@ -419,6 +419,10 @@ impl Keymaps {
         &self.0[scope as usize]
     }
 
+    pub fn get_mut(&mut self, scope: Scope) -> &mut Keymap {
+        &mut self.0[scope as usize]
+    }
+
     pub fn all(&self) -> impl Iterator<Item = (Scope, &Keymap)> {
         Scope::VARIANTS.iter().copied().zip(&self.0)
     }
@@ -477,7 +481,7 @@ mod tests {
             let sequence: KeySequence = notation.parse().unwrap();
             assert_eq!(
                 keymap.lookup(sequence.keys()),
-                Lookup::Command(*command),
+                Lookup::Command((*command).into()),
                 "{notation}"
             );
         }
@@ -499,7 +503,7 @@ mod tests {
         let sequence: KeySequence = "i".parse().unwrap();
         assert_eq!(
             keymaps.get(Scope::Tools).lookup(sequence.keys()),
-            Lookup::Command(Command::ToolInstall)
+            Lookup::Command(Command::ToolInstall.into())
         );
     }
 }

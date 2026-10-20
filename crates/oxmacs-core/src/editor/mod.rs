@@ -42,14 +42,14 @@ use std::{env, mem};
 
 use buffers::{BufferList, Mode};
 
-use crate::command::{Command, Scope};
+use crate::command::{Command, CommandId, CommandSpec, Commands, Scope};
 use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::editor::chat::Irc;
 use crate::editor::special::weather::WeatherState;
 use crate::external::tools;
 use crate::input::bindings::Keymaps;
-use crate::input::{Key, KeyCode, KeySequence, Keymap, Lookup, Modifiers};
+use crate::input::{Key, KeyCode, KeyParseError, KeySequence, Keymap, Lookup, Modifiers};
 use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::{self, Appearance, Highlight, Theme};
@@ -106,7 +106,8 @@ pub struct Editor {
     pending: Vec<Key>,
     last_key: Option<Key>,
     last_command: Option<Command>,
-    command_history: Vec<Command>,
+    command_history: Vec<CommandId>,
+    commands: Commands,
     goal_column: Option<usize>,
     shift_selection: bool,
     typed_in_step: usize,
@@ -180,6 +181,7 @@ impl Editor {
             last_key: None,
             last_command: None,
             command_history: Vec::new(),
+            commands: Commands::default(),
             goal_column: None,
             shift_selection: false,
             typed_in_step: 0,
@@ -318,7 +320,7 @@ impl Editor {
             minibuffer.note = None;
         }
         if self.quits_pending_sequence(key) {
-            self.dispatch(key, Command::KeyboardQuit, false);
+            self.dispatch(key, Command::KeyboardQuit.into(), false);
             return;
         }
         self.pending.push(key);
@@ -342,9 +344,9 @@ impl Editor {
 
     fn handle_unbound_key(&mut self, key: Key) {
         if let Some(command) = self.shifted_motion(key) {
-            self.dispatch(key, command, true);
+            self.dispatch(key, command.into(), true);
         } else if inserts_itself(key) {
-            self.dispatch(key, Command::SelfInsertCommand, false);
+            self.dispatch(key, Command::SelfInsertCommand.into(), false);
         } else {
             self.report_undefined();
         }
@@ -352,7 +354,7 @@ impl Editor {
 
     fn shifted_motion(&self, key: Key) -> Option<Command> {
         match self.lookup(&[key.unshifted()?]) {
-            Lookup::Command(command) if command.is_motion() => Some(command),
+            Lookup::Command(id) => id.core().filter(|command| command.is_motion()),
             _ => None,
         }
     }
@@ -489,20 +491,53 @@ impl Editor {
         marks
     }
 
-    fn where_is(&self, command: Command) -> Option<KeySequence> {
+    fn where_is(&self, command: CommandId) -> Option<KeySequence> {
         self.mode_keymap()
             .and_then(|keymap| keymap.where_is(command))
             .or_else(|| self.keymaps.get(Scope::Global).where_is(command))
     }
 
-    fn dispatch(&mut self, key: Key, command: Command, shifted: bool) {
+    fn dispatch(&mut self, key: Key, command: CommandId, shifted: bool) {
         self.pending.clear();
         self.last_key = Some(key);
-        self.run(command, shifted);
+        self.run_id(command, shifted);
     }
 
-    pub fn execute(&mut self, command: Command) {
-        self.run(command, false);
+    pub fn execute(&mut self, command: impl Into<CommandId>) {
+        self.run_id(command.into(), false);
+    }
+
+    pub fn add_command(&mut self, spec: CommandSpec) -> CommandId {
+        self.commands.add(spec)
+    }
+
+    pub fn bind(
+        &mut self,
+        scope: Scope,
+        keys: &str,
+        command: impl Into<CommandId>,
+    ) -> Result<(), KeyParseError> {
+        let keys: KeySequence = keys.parse()?;
+        self.keymaps.get_mut(scope).bind(keys.keys(), command);
+        Ok(())
+    }
+
+    fn run_id(&mut self, command: CommandId, shifted: bool) {
+        match command.core() {
+            Some(core) => self.run(core, shifted),
+            None => self.run_added(command),
+        }
+    }
+
+    fn run_added(&mut self, command: CommandId) {
+        let Some(run) = self.commands.handler(command) else {
+            return;
+        };
+        self.goal_column = None;
+        self.last_command = None;
+        run(self);
+        self.refresh_minibuffer();
+        self.reveal_point();
     }
 
     fn run(&mut self, command: Command, shifted: bool) {
@@ -539,8 +574,44 @@ fn inserts_itself(key: Key) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::test_support::{editor_with, press};
+    use super::test_support::{editor_with, lines, press, type_text};
     use super::*;
+
+    fn say_hello(editor: &mut Editor) {
+        editor.show_message("hello");
+    }
+
+    #[test]
+    fn added_commands_run_from_keys_and_m_x_and_have_help() {
+        let mut editor = Editor::new();
+        let id = editor.add_command(CommandSpec {
+            name: "say-hello",
+            summary: "Say hello in the echo area",
+            help: None,
+            scope: Scope::Global,
+            run: say_hello,
+        });
+        editor.bind(Scope::Global, "C-c z", id).unwrap();
+
+        press(&mut editor, "C-c z");
+        assert_eq!(editor.message(), Some("hello"));
+
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "say-hello");
+        let first = &editor.completions()[0];
+        assert_eq!(first.label, "say-hello");
+        assert_eq!(first.annotation.as_deref(), Some("C-c z"));
+        assert_eq!(first.summary, Some("Say hello in the echo area"));
+        press(&mut editor, "RET");
+        assert_eq!(editor.message(), Some("hello"));
+
+        press(&mut editor, "C-h f");
+        type_text(&mut editor, "say-hello");
+        press(&mut editor, "RET");
+        let help = lines(&editor);
+        assert_eq!(help[0], "say-hello");
+        assert!(help.iter().any(|line| line.contains("C-c z")), "{help:?}");
+    }
 
     #[test]
     fn starts_with_empty_scratch_buffer() {

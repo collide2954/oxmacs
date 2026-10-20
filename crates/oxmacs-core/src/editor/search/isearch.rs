@@ -121,7 +121,9 @@ impl Editor {
         search.note = None;
         match self.keymaps.get(Scope::Search).lookup(&[key]) {
             Lookup::Command(command) => self.dispatch(key, command, false),
-            _ if inserts_itself(key) => self.dispatch(key, Command::IsearchPrintingChar, false),
+            _ if inserts_itself(key) => {
+                self.dispatch(key, Command::IsearchPrintingChar.into(), false);
+            }
             _ => {
                 self.exit_search();
                 return false;
