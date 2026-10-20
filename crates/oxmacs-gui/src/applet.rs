@@ -1,14 +1,16 @@
 use std::fmt;
 
+use iced::theme::Palette;
 use iced::time::Instant;
 use iced::{Element, Font, Subscription, Task};
 use oxmacs_core::applet::{Applet, Payload};
-use oxmacs_core::editor::{Editor, Pane};
+use oxmacs_core::editor::{Editor, Pane, WindowId};
 use oxmacs_core::theme::Theme as Faces;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Context {
     pub faces: Faces,
+    pub palette: Palette,
     pub font: Font,
     pub size: f32,
     pub now: Instant,
@@ -33,6 +35,16 @@ pub trait GuiApplet: Applet + fmt::Debug {
         &'a self,
         _editor: &'a Editor,
         _pane: Pane<'a>,
+        _context: &Context,
+    ) -> Option<Element<'a, Payload>> {
+        None
+    }
+
+    fn body<'a>(
+        &'a self,
+        _editor: &'a Editor,
+        _pane: Pane<'a>,
+        _window: WindowId,
         _context: &Context,
     ) -> Option<Element<'a, Payload>> {
         None
@@ -92,6 +104,7 @@ mod tests {
         let editor = Editor::new();
         let context = Context {
             faces: *editor.theme(),
+            palette: iced::Theme::Light.palette(),
             font: Font::MONOSPACE,
             size: 14.0,
             now: Instant::now(),
@@ -100,6 +113,10 @@ mod tests {
 
         assert!(Echo.above(&editor, editor.pane(), &context).is_none());
         assert!(Echo.beside(&editor, editor.pane(), &context).is_none());
+        assert!(
+            Echo.body(&editor, editor.pane(), editor.selected_window(), &context)
+                .is_none()
+        );
         assert!(!Echo.animating(&editor));
     }
 }

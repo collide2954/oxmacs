@@ -131,13 +131,7 @@ impl App {
         body: Element<'a, Message>,
         faces: Faces,
     ) -> Element<'a, Message> {
-        let context = Context {
-            faces,
-            font: self.font,
-            size: self.text_size,
-            now: self.now,
-            animations: self.animations,
-        };
+        let context = self.context(faces);
         let above: Vec<Element<'a, Message>> = self
             .applets
             .iter()
@@ -162,18 +156,39 @@ impl App {
         }
     }
 
+    fn context(&self, faces: Faces) -> Context {
+        Context {
+            faces,
+            palette: self.theme().palette(),
+            font: self.font,
+            size: self.text_size,
+            now: self.now,
+            animations: self.animations,
+        }
+    }
+
     fn body<'a>(&'a self, pane: Pane<'a>, window: WindowId, faces: Faces) -> Element<'a, Message> {
+        let context = self.context(faces);
+        if let Some(drawn) = self
+            .applets
+            .iter()
+            .find_map(|applet| applet.body(&self.editor, pane, window, &context))
+        {
+            return mouse_area(drawn.map(Message::AppletEvent))
+                .on_press(Message::FocusWindow(window))
+                .into();
+        }
         let body: Element<'a, Message> = match pane
             .preview_source()
             .and_then(|source| self.previews.iter().find(|(id, ..)| *id == source.id()))
         {
-            Some((_, _, content)) => {
+            Some((_, _, parsed)) => {
                 let settings = markdown::Settings::with_text_size(
                     self.text_size,
                     markdown::Style::from_palette(self.theme().palette()),
                 );
                 let rendered = scrollable(
-                    container(markdown::view(content.items(), settings).map(Message::OpenLink))
+                    container(markdown::view(parsed.items(), settings).map(Message::OpenLink))
                         .padding(12),
                 )
                 .id(preview_id(window))

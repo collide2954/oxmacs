@@ -455,6 +455,57 @@ mod tests {
         assert!(ui.find("☂ bring one").is_ok());
     }
 
+    #[derive(Debug)]
+    struct Sign(oxmacs_core::command::ScopeId);
+
+    impl oxmacs_core::applet::AppletBuffer for Sign {
+        fn scope(&self) -> oxmacs_core::command::ScopeId {
+            self.0
+        }
+    }
+
+    #[derive(Debug)]
+    struct Billboard;
+
+    impl oxmacs_core::applet::Applet for Billboard {
+        fn name(&self) -> &'static str {
+            "billboard"
+        }
+
+        fn version(&self) -> &'static str {
+            "1.0.0"
+        }
+
+        fn install(&self, editor: &mut Editor) {
+            let scope = editor.add_scope("Billboard");
+            editor.open_applet_buffer("*Billboard*", Sign(scope));
+        }
+    }
+
+    impl GuiApplet for Billboard {
+        fn body<'a>(
+            &'a self,
+            _editor: &'a Editor,
+            pane: oxmacs_core::editor::Pane<'a>,
+            _window: WindowId,
+            context: &crate::applet::Context,
+        ) -> Option<iced::Element<'a, Payload>> {
+            pane.applet_buffer::<Sign>()?;
+            Some(widget::text(format!("billboard at {}", context.size)).into())
+        }
+    }
+
+    #[test]
+    fn applets_can_draw_their_own_buffers() {
+        let (mut app, _) = App::boot(&Ok(Config::default()), &[], vec![Box::new(Billboard)]);
+        let id = app.editor.buffer_named("*Billboard*").unwrap();
+        app.editor.show_buffer(id);
+
+        let mut ui = iced_test::simulator(app.view());
+
+        assert!(ui.find(format!("billboard at {}", app.text_size())).is_ok());
+    }
+
     #[test]
     fn view_echoes_the_editor_message() {
         let mut app = App::default();

@@ -191,6 +191,7 @@ mod tests {
     fn context(editor: &Editor, now: Instant, animations: bool) -> Context {
         Context {
             faces: *editor.theme(),
+            palette: iced::Theme::Light.palette(),
             font: Font::MONOSPACE,
             size: 14.0,
             now,

@@ -471,6 +471,7 @@ mod tests {
     fn context(editor: &Editor) -> Context {
         Context {
             faces: *editor.theme(),
+            palette: iced::Theme::Light.palette(),
             font: iced::Font::MONOSPACE,
             size: 14.0,
             now: iced::time::Instant::now(),
