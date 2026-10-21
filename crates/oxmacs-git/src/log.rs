@@ -20,6 +20,7 @@ use crate::widget::{LogClick, LogScroll, LogViewport};
 pub(crate) const PAGE: usize = 1000;
 const SUBJECT: usize = 72;
 const FILE_COLUMN: usize = 60;
+const MARGIN: usize = 100;
 
 pub(crate) static LOG: Transient = Transient {
     title: "Log",
@@ -55,6 +56,8 @@ pub(crate) struct LogView {
     pub(crate) graph: Vec<GraphRow>,
     lanes: Lanes<ObjectId>,
     pub(crate) labels: HashMap<ObjectId, Vec<Label>>,
+    pub(crate) complete: bool,
+    pub(crate) page: usize,
     pub(crate) rendered: Rendered,
     pub(crate) selected: Option<ObjectId>,
     pub(crate) details: Option<Details>,
@@ -188,6 +191,8 @@ fn buffer_for(editor: &mut Editor, root: &Path, tips: &Tips) -> Option<BufferId>
             graph: Vec::new(),
             lanes: Lanes::default(),
             labels: HashMap::new(),
+            complete: true,
+            page: PAGE,
             rendered: Rendered::default(),
             selected: None,
             details: None,
@@ -205,10 +210,13 @@ pub(crate) fn open(editor: &mut Editor, tips: Tips) {
     let Some(id) = buffer_for(editor, &root, &tips) else {
         return;
     };
-    if let Some((_, view)) = editor.applet_buffer_mut::<LogView>(id) {
+    let Some(page) = editor.applet_buffer_mut::<LogView>(id).map(|(_, view)| {
         view.tips = tips;
-    }
-    if load(editor, id, PAGE, None) {
+        view.page
+    }) else {
+        return;
+    };
+    if load(editor, id, page, None) {
         editor.show_buffer(id);
     }
 }
@@ -230,6 +238,7 @@ fn load(editor: &mut Editor, id: BufferId, count: usize, keep: Option<ObjectId>)
     let Some((buffer, view)) = editor.applet_buffer_mut::<LogView>(id) else {
         return false;
     };
+    view.complete = entries.len() < count;
     view.lanes = Lanes::default();
     view.graph = entries
         .iter()
@@ -284,8 +293,7 @@ fn move_to(editor: &mut Editor, id: BufferId, line: usize) {
         buffer.set_point(start);
     }
     editor.move_points(id, |_, _| Some(start));
-    reveal(editor, id, line);
-    select(editor, id, line);
+    settle(editor, id, line);
 }
 
 pub(crate) fn scrolled(editor: &mut Editor, event: &LogScroll) {
@@ -301,8 +309,11 @@ pub(crate) fn scrolled(editor: &mut Editor, event: &LogScroll) {
     let line = buffer.line_of(buffer.point());
     let bottom = (view.top + view.shown.max(1) - 1).min(last).max(view.top);
     let target = line.clamp(view.top, bottom);
+    let near = near_end(view, view.top + view.shown);
     if target != line {
         move_to(editor, event.buffer, target);
+    } else if near {
+        more(editor, event.buffer);
     }
 }
 
@@ -395,8 +406,44 @@ pub(crate) fn follow(editor: &mut Editor) {
     };
     let buffer = editor.buffer();
     let line = buffer.line_of(buffer.point());
+    settle(editor, id, line);
+}
+
+fn settle(editor: &mut Editor, id: BufferId, line: usize) {
+    let near = editor
+        .applet_buffer::<LogView>(id)
+        .is_some_and(|(_, view)| near_end(view, line));
+    if near {
+        more(editor, id);
+    }
     reveal(editor, id, line);
     select(editor, id, line);
+}
+
+fn near_end(view: &LogView, line: usize) -> bool {
+    !view.complete && line + MARGIN >= view.entries.len()
+}
+
+fn more(editor: &mut Editor, id: BufferId) {
+    let Some((_, view)) = editor.applet_buffer::<LogView>(id) else {
+        return;
+    };
+    let page = view.page;
+    let fresh = history::log(&view.root, &view.tips, view.entries.len(), page).unwrap_or_default();
+    let now = view::now();
+    let Some((buffer, view)) = editor.applet_buffer_mut::<LogView>(id) else {
+        return;
+    };
+    let point = buffer.point();
+    view.complete = fresh.len() < page;
+    for entry in &fresh {
+        let row = view.lanes.place(&entry.id, &entry.parents);
+        view.graph.push(row);
+    }
+    view.entries.extend(fresh);
+    view.rendered = render(&view.entries, &view.labels, now);
+    buffer.set_text(&view.rendered.text);
+    buffer.set_point(point);
 }
 
 fn other(editor: &mut Editor) {
@@ -451,7 +498,7 @@ pub(crate) fn refresh(editor: &mut Editor) {
         .entries
         .get(buffer.line_of(buffer.point()))
         .map(|entry| entry.id);
-    let count = view.entries.len().max(PAGE);
+    let count = view.entries.len().max(view.page);
     load(editor, id, count, keep);
 }
 
@@ -764,6 +811,29 @@ mod tests {
         let mut editor = installed(dir.path());
         press(&mut editor, "C-x g l l");
         (dir, editor)
+    }
+
+    #[test]
+    fn more_commits_load_near_the_end() {
+        let (_dir, mut editor) = long();
+        let id = editor.buffer().id();
+        if let Some((_, view)) = editor.applet_buffer_mut::<LogView>(id) {
+            view.page = 10;
+        }
+        press(&mut editor, "q l l");
+        assert_eq!(view(&editor).entries.len(), 10);
+        assert!(!view(&editor).complete);
+
+        press(&mut editor, "M->");
+        assert_eq!(view(&editor).entries.len(), 20);
+        assert_eq!(view(&editor).graph.len(), 20);
+        assert_eq!(lines(&editor).len(), 20);
+        assert_eq!(line(&editor), 9);
+
+        press(&mut editor, "M-> M->");
+        assert_eq!(view(&editor).entries.len(), 31);
+        assert!(view(&editor).complete);
+        assert!(lines(&editor)[30].contains("First commit"));
     }
 
     fn line(editor: &Editor) -> usize {
