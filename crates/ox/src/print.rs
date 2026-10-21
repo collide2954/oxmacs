@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 
 use crate::heap::Heap;
+use crate::map::Map;
 use crate::value::Value;
 use crate::vector::Vector;
 
@@ -41,6 +42,8 @@ fn write_into(heap: &Heap, value: Value, out: &mut String) {
                 list(heap, value, out);
             } else if let Some(items) = heap.vector_of(value) {
                 vector(heap, items, out);
+            } else if let Some(entries) = heap.map_of(value) {
+                map(heap, entries, out);
             } else if let Some(native) = heap.native_of(value) {
                 let _ = write!(out, "#<native {}>", native.name.name());
             } else if let Some(closure) = heap.closure_of(value) {
@@ -135,6 +138,24 @@ fn vector(heap: &Heap, vector: Vector, out: &mut String) {
         write_into(heap, item, out);
     }
     out.push(']');
+}
+
+fn map(heap: &Heap, map: Map, out: &mut String) {
+    out.push('{');
+    for (index, (key, value)) in map.entries(heap).into_iter().enumerate() {
+        if index > 0 {
+            out.push(' ');
+        }
+        if let Value::Keyword(name) = key {
+            out.push_str(name.name());
+            out.push(':');
+        } else {
+            write_into(heap, key, out);
+        }
+        out.push(' ');
+        write_into(heap, value, out);
+    }
+    out.push('}');
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ use crate::bind::{Binding, bind};
 use crate::bytecode::{Capture, Code, Op};
 use crate::error::Error;
 use crate::heap::{Closure, Heap};
+use crate::map::Map;
 use crate::print;
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -213,6 +214,26 @@ impl Runtime {
                 let items = &machine.stack[start..start + usize::from(count)];
                 let vector = Vector::from_items(&mut self.heap, items).map_err(full)?;
                 let value = self.heap.vector(vector).map_err(full)?;
+                machine.set(to, value);
+            }
+            Op::MakeMap { to, base, count } => {
+                let start = machine.base + usize::from(base);
+                let items = &machine.stack[start..start + usize::from(count)];
+                let mut map = Map::EMPTY;
+                for pair in items.chunks(2) {
+                    let [key, value] = pair else {
+                        continue;
+                    };
+                    let grown = map.assoc(&mut self.heap, *key, *value).map_err(full)?;
+                    if grown.count == map.count {
+                        return Err(Error::new(format!(
+                            "Duplicate key {} in a map literal",
+                            print::write(&self.heap, *key)
+                        )));
+                    }
+                    map = grown;
+                }
+                let value = self.heap.map(map).map_err(full)?;
                 machine.set(to, value);
             }
             Op::CellGet { to, cell } => {

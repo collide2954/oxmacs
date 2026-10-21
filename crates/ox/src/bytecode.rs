@@ -44,6 +44,11 @@ pub enum Op {
         base: Register,
         count: u16,
     },
+    MakeMap {
+        to: Register,
+        base: Register,
+        count: u16,
+    },
     CellGet {
         to: Register,
         cell: Register,

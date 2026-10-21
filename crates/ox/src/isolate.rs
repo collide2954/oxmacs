@@ -552,6 +552,33 @@ mod tests {
     }
 
     #[test]
+    fn map_literals_evaluate_and_print_in_insertion_order() {
+        all(&[
+            ("{}", "{}"),
+            (r#"{name: "Ana" age: (+ 1 2)}"#, r#"{name: "Ana" age: 3}"#),
+            ("{:b 1 :a 2}", "{b: 1 a: 2}"),
+            (
+                r#"{"a b" 1 42 [1 2] nil :k}"#,
+                r#"{"a b" 1 42 [1 2] nil :k}"#,
+            ),
+            ("{a: {b: 1}}", "{a: {b: 1}}"),
+            ("(let [k :z] {k 1})", "{z: 1}"),
+            (
+                "{a: 1 b: 2 c: 3 d: 4 e: 5 f: 6 g: 7 h: 8 i: 9 j: 10}",
+                "{a: 1 b: 2 c: 3 d: 4 e: 5 f: 6 g: 7 h: 8 i: 9 j: 10}",
+            ),
+            (
+                "{a: 1 b: 2 a: 3}",
+                "error: Duplicate key :a in a map literal",
+            ),
+            (
+                "{[1] 1 (list 1) 2}",
+                "error: Duplicate key (1) in a map literal",
+            ),
+        ]);
+    }
+
+    #[test]
     fn vectors_and_lists_are_built_counted_and_indexed() {
         all(&[
             ("(vector 1 2 3)", "[1 2 3]"),

@@ -271,7 +271,7 @@ impl Compiler<'_> {
                     .bigint(number)
                     .map_err(|full| Error::at(form.span, full.to_string()))?
             }
-            Datum::Map(_) => return Err(Error::at(form.span, "This form is not supported yet")),
+            Datum::Map(items) => return self.map(items, target, form.span),
         };
         self.load(value, target, form.span)
     }
@@ -649,13 +649,32 @@ impl Compiler<'_> {
         Ok(())
     }
 
-    fn vector(&mut self, items: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+    fn gather(&mut self, items: &[Syntax], span: Span) -> Result<(Register, u16), Error> {
         let count = u16::try_from(items.len())
-            .map_err(|_| Error::at(span, "This vector has too many items"))?;
+            .map_err(|_| Error::at(span, "This literal has too many items"))?;
         let base = self.reserve(items.len(), span)?;
         for (offset, item) in (0..).zip(items) {
             self.expression(item, base + offset)?;
         }
+        Ok((base, count))
+    }
+
+    fn map(&mut self, items: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let (base, count) = self.gather(items, span)?;
+        self.emit(
+            Op::MakeMap {
+                to: target,
+                base,
+                count,
+            },
+            span,
+        );
+        self.release(base);
+        Ok(())
+    }
+
+    fn vector(&mut self, items: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let (base, count) = self.gather(items, span)?;
         self.emit(
             Op::MakeVector {
                 to: target,
