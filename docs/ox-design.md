@@ -64,7 +64,8 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
   (weather (setting 'weather.location)))
 ```
 
-- **Reading.** `( )` lists, `[ ]` vectors, `{k: v}` maps, `:key` keywords, `"…{expr}…"` interpolation with `a.b` field access inside braces, and `#;` datum comments. The reader keeps exact source spans, so errors, tracebacks and highlighting point at the right characters.
+- **Reading.** `( )` lists, `[ ]` vectors, `{k: v}` maps, `:key` keywords, `"…{expr}…"` interpolation with `a.b` field access inside braces, and `#;` datum comments. Numbers can be written `0xff`, `0b1010`, `0o755` and `1_000_000`; `500ms`, `2s`, `5min` and `1h` are durations; `50%` reads as 0.5, and `#ff8800` as a color. The reader keeps exact source spans, so errors, tracebacks and highlighting point at the right characters.
+- **Documentation.** A string right after a definition's signature is its documentation, and its examples run as tests. An optional map after it holds metadata such as `{since: "0.2" deprecated: "use fetch"}`; help shows it, and the checker warns about uses of deprecated definitions.
 - **Definitions.** `def` for values and functions, `fn` for lambdas, and `let` with vector bindings and destructuring: `(let [{name: n} city] …)`.
 - **Modules.** Each file is one module with explicit imports and exports. There is no single global namespace; plugins see only what they import.
 - **Macros.** Hygienic `syntax-rules`, plus procedural `defmacro` with hygiene helpers for anything harder.
@@ -95,17 +96,58 @@ Each of Emacs's bottlenecks has a planned answer in Ox:
 - **Isolates.** The UI isolate owns the editor. `spawn-worker` starts a worker isolate with its own heap on a thread pool. Messages are immutable values: large ones go into a shared, frozen, reference-counted arena instead of being copied. Buffer contents cross as rope snapshots that cost nothing to share.
 - **The bridge.** Native primitives are Rust functions registered through a small `#[ox::native]` macro. Strings and ropes cross without copying. Rust holds Ox values through rooted handles.
 
-## Editor API (first version)
+## Editor API
 
-- **Buffers.** Open, create and kill buffers; read text through snapshots; edit through transactions that form one undo step. Point, mark, markers and selections.
-- **Commands and keys.** `defcommand` (with documentation and an interactive spec), `defkeymap`, `bind-key`, prefix keys, transient-style menus.
-- **Modes.** `defmode` for major modes that extend `prog` or `text`, and minor modes. Language modes provide a tree-sitter grammar or highlighter, indentation guesses, comment syntax, pairs, outline rules, formatters, linters and statement rules.
+```clojure
+(defcommand rename-file
+  "Rename the visited file."
+  [to : Path "Rename to: "
+   open-after? : Bool]
+  ...)
+
+(on :saved "*.md"
+  (fn [event] (rebuild-index event.buffer)))
+
+(with-progress "Indexing notes"
+  (fn [report] ... (report 0.4 "notes/plan") ...))
+```
+
+- **Commands.** `defcommand` takes typed parameters that prompt for themselves:
+  - `String` asks in the minibuffer;
+  - `Path` opens the file picker and `Buffer` the buffer picker;
+  - a union of keywords offers a choice;
+  - `Int` validates digits.
+
+  A label and a default can be given. Called from Ox, the same command just takes arguments.
+- **Undo.** Everything a command changes undoes in one step. `(as-one-edit …)` groups edits made outside commands, such as from timers and event handlers.
+- **Buffers.** Open, create and kill buffers; point, mark, markers and selections. `(text buffer)` returns an immutable `Text`, a rope snapshot shared with the editor: instant to take, even for huge buffers, and safe to send to a worker. It supports the string functions, and `str` turns it into a plain string.
+- **Events.** `(on :saved "*.md" handler)` subscribes to a named event, with an optional file pattern. Handlers get a typed event record, may be async, run by priority, and are removed with `(off handle)`. A slow handler never delays typing.
+- **Keys.** `defkeymap`, `bind-key`, prefix keys and transient menus.
+  - Your `init.ox` always wins.
+  - Plugins bind freely inside their own modes' keymaps.
+  - A global key must be declared in `plugin.ox`, and binds only if it is free.
+  - `describe-key` shows who bound what.
+- **Modes.** `defmode` defines major modes that extend `prog` or `text`, and minor modes. Language modes provide:
+  - a tree-sitter grammar or highlighter;
+  - indentation guesses, comment syntax and pairs;
+  - outline and statement rules;
+  - formatters and linters.
 - **Minibuffer.** `prompt`, `pick` with async completion sources, `yes-or-no`, and file and buffer pickers.
-- **Hooks.** `add-hook` with priority and async support: before and after save, buffer opened, mode entered, idle, and more.
-- **Processes.** `spawn-process` with async line streams and consoles (REPL buffers), `*compilation*`, error patterns, and timers.
-- **Settings.** `defsetting` with a type, default and documentation, which feeds `M-x customize`, `custom.ox` and doctor findings.
+- **Processes.** `spawn-process` with async line streams, consoles (REPL buffers), `*compilation*`, error patterns and timers.
+- **Progress.** `with-progress` shows a quiet indicator in the mode line and lists the job in `M-x list-processes`, where `C-g` or `k` cancels it cleanly.
+- **Settings.** `defsetting` declares a setting with a type, a default and documentation, which feed `M-x customize`, `custom.ox` and doctor findings. A setting can apply:
+  - everywhere;
+  - per language: `(set! tab-width 2 :in python)`;
+  - per project;
+  - per buffer: `(set! wrap true :buffer)`;
+  - below a directory: `(set! format-on-save false :under "~/vendor/**")`.
+- **Plugin data.** `(store :last-city)` and `(store! :last-city "Austin")` read and write a small typed key-value store that each plugin owns, saved atomically in oxmacs's data folder. Each plugin also gets its own folder for larger files.
+- **Between plugins.** A plugin lists others in `:requires`, with version ranges, and imports their exported modules, `(import (git status))`, with type checking across plugins. Loading one wakes its dependencies first.
+  - If two plugins define the same command, the second is refused and `*ox log*` names both. `(prefer weather/forecast)` in `init.ox` picks one.
+- **Reloading.** A reload replaces a plugin's functions, keeps values defined with `defonce` (atoms, caches, open connections), and redraws its open views.
+- **Projects.** A project's `.oxmacs/project.ox` (settings, commands and keys for that project) runs only after you trust the folder once. An untrusted project gets its plain settings, never its code.
+- **Startup errors.** If `init.ox` fails, the forms before the failure still apply and the rest fall back to defaults. The error and its traceback open beside the editor, linked to the line; fix it and `C-c C-k` reloads it without a restart.
 - **Display.** Mode-line segments, faces and themes as Ox data, `message`, and notifications.
-
 ## GUI API
 
 ```clojure
