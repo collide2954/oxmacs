@@ -8,6 +8,7 @@ pub type Register = u16;
 pub enum Op {
     Constant { to: Register, index: u32 },
     Global { to: Register, name: Sym },
+    DefineGlobal { name: Sym, from: Register },
     Move { to: Register, from: Register },
     Call { base: Register, count: u16 },
     Jump { to: u32 },

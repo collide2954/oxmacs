@@ -203,6 +203,36 @@ mod tests {
     }
 
     #[test]
+    fn def_names_a_global_value() {
+        all(&[
+            ("(def x 10) (+ x 1)", "11"),
+            ("(def x 1)", "x"),
+            ("(def x 1) (def x 2) x", "2"),
+            ("(def twice-ten (* 2 10)) twice-ten", "20"),
+        ]);
+    }
+
+    #[test]
+    fn globals_last_between_evaluations() {
+        let mut isolate = Isolate::new();
+
+        isolate.eval("(def y 5)").unwrap();
+
+        assert_eq!(isolate.eval("(* y y)"), Ok(Value::Int(25)));
+    }
+
+    #[test]
+    fn malformed_defs_are_reported() {
+        let message = "error: def takes a name and a value";
+        all(&[
+            ("(def)", message),
+            ("(def x)", message),
+            ("(def 1 2)", message),
+            ("(def x 1 2)", message),
+        ]);
+    }
+
+    #[test]
     fn rust_functions_can_be_called_from_ox() {
         let mut isolate = Isolate::new();
         isolate.define_native("twice", 1, Some(1), |_, arguments| match arguments {

@@ -104,8 +104,26 @@ impl Compiler<'_> {
         match name.as_str() {
             "if" => Some(self.branch(rest, target, span)),
             "do" => Some(self.sequence(rest, target, span)),
+            "def" => Some(self.define(rest, target, span)),
             _ => None,
         }
+    }
+
+    fn define(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let [
+            Syntax {
+                datum: Datum::Symbol(name),
+                ..
+            },
+            value,
+        ] = parts
+        else {
+            return Err(Error::at(span, "def takes a name and a value"));
+        };
+        let name = Sym::intern(name);
+        self.expression(value, target)?;
+        self.emit(Op::DefineGlobal { name, from: target }, span);
+        self.load(Value::Symbol(name), target, span)
     }
 
     fn branch(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {

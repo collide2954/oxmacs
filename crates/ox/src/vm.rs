@@ -34,6 +34,9 @@ impl Runtime {
                             Error::at(code.spans[at], format!("{} is not defined", name.name()))
                         })?;
                 }
+                Op::DefineGlobal { name, from } => {
+                    self.globals.insert(name, registers[usize::from(from)]);
+                }
                 Op::Move { to, from } => {
                     registers[usize::from(to)] = registers[usize::from(from)];
                 }
