@@ -4,7 +4,10 @@ use crate::span::Span;
 pub enum Datum {
     Int(i64),
     Float(f64),
+    Char(char),
+    Str(String),
     Symbol(String),
+    Keyword(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,9 +49,22 @@ fn delimiter(character: char) -> bool {
     separator(character) || matches!(character, '(' | ')' | '[' | ']' | '{' | '}' | '"' | ';')
 }
 
-impl Reader<'_> {
-    fn rest(&self) -> &str {
+impl<'a> Reader<'a> {
+    fn rest(&self) -> &'a str {
         &self.source[self.at..]
+    }
+
+    fn error(&mut self, start: usize, message: impl Into<String>) {
+        self.errors.push(ReadError {
+            message: message.into(),
+            span: Span::new(start, self.at),
+        });
+    }
+
+    fn next_char(&mut self) -> Option<char> {
+        let character = self.rest().chars().next()?;
+        self.at += character.len_utf8();
+        Some(character)
     }
 
     fn skip_separators(&mut self) {
@@ -56,26 +72,124 @@ impl Reader<'_> {
         self.at += rest.len() - rest.trim_start_matches(separator).len();
     }
 
+    fn token(&mut self) -> &'a str {
+        let rest = self.rest();
+        let length = rest.find(delimiter).unwrap_or(rest.len());
+        self.at += length;
+        &rest[..length]
+    }
+
     fn datum(&mut self) -> Option<Syntax> {
         loop {
             self.skip_separators();
             let start = self.at;
             let first = self.rest().chars().next()?;
-            if delimiter(first) {
-                self.at += first.len_utf8();
-                self.errors.push(ReadError {
-                    message: format!("Unexpected {first}"),
-                    span: Span::new(start, self.at),
-                });
-                continue;
-            }
-            let rest = self.rest();
-            self.at += rest.find(delimiter).unwrap_or(rest.len());
+            let datum = match first {
+                '"' => self.string(start),
+                '\\' => self.character(start),
+                _ if delimiter(first) => {
+                    self.at += first.len_utf8();
+                    self.error(start, format!("Unexpected {first}"));
+                    continue;
+                }
+                _ => atom(self.token()),
+            };
             return Some(Syntax {
-                datum: atom(&self.source[start..self.at]),
+                datum,
                 span: Span::new(start, self.at),
             });
         }
+    }
+
+    fn string(&mut self, start: usize) -> Datum {
+        self.at += 1;
+        let mut text = String::new();
+        loop {
+            let escape = self.at;
+            match self.next_char() {
+                None => {
+                    self.error(start, "This string is never closed");
+                    break;
+                }
+                Some('"') => break,
+                Some('\\') => text.extend(self.escape(escape)),
+                Some(other) => text.push(other),
+            }
+        }
+        Datum::Str(text)
+    }
+
+    fn escape(&mut self, start: usize) -> Option<char> {
+        let character = self.next_char()?;
+        let escaped = match character {
+            'n' => '\n',
+            't' => '\t',
+            'r' => '\r',
+            '0' => '\0',
+            '\\' | '"' => character,
+            'u' => {
+                let code = self.code_point();
+                if code.is_none() {
+                    self.error(start, "Write \\u{…} with a hexadecimal code point");
+                }
+                return code;
+            }
+            other => {
+                self.error(start, format!("Unknown escape \\{other}"));
+                other
+            }
+        };
+        Some(escaped)
+    }
+
+    fn code_point(&mut self) -> Option<char> {
+        let inner = self.rest().strip_prefix('{')?;
+        let close = inner.find('}')?;
+        self.at += close + 2;
+        u32::from_str_radix(&inner[..close], 16)
+            .ok()
+            .and_then(char::from_u32)
+    }
+
+    fn character(&mut self, start: usize) -> Datum {
+        self.at += 1;
+        let Some(first) = self.rest().chars().next() else {
+            self.error(start, "Name a character after \\");
+            return Datum::Char(' ');
+        };
+        let found = if first == 'u' && self.rest()[1..].starts_with('{') {
+            self.at += 1;
+            self.code_point()
+        } else if delimiter(first) {
+            self.at += first.len_utf8();
+            Some(first)
+        } else {
+            named(self.token())
+        };
+        let Some(character) = found else {
+            let source = self.source;
+            self.error(
+                start,
+                format!("Unknown character {}", &source[start..self.at]),
+            );
+            return Datum::Char(' ');
+        };
+        Datum::Char(character)
+    }
+}
+
+fn named(name: &str) -> Option<char> {
+    let mut characters = name.chars();
+    if let (Some(only), None) = (characters.next(), characters.next()) {
+        return Some(only);
+    }
+    match name {
+        "newline" => Some('\n'),
+        "space" => Some(' '),
+        "tab" => Some('\t'),
+        "return" => Some('\r'),
+        "nul" => Some('\0'),
+        _ => None,
     }
 }
 
@@ -95,9 +209,17 @@ fn atom(token: &str) -> Datum {
             return Datum::Float(value);
         }
     }
+    if let Some(name) = token.strip_prefix(':').filter(|name| !name.is_empty()) {
+        return Datum::Keyword(name.to_owned());
+    }
+    if let Some(name) = token
+        .strip_suffix(':')
+        .filter(|name| !name.is_empty() && !name.contains(':'))
+    {
+        return Datum::Keyword(name.to_owned());
+    }
     Datum::Symbol(token.to_owned())
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,6 +278,100 @@ mod tests {
                 (symbol("a"), Span::new(0, 1)),
                 (symbol("b"), Span::new(2, 3)),
                 (symbol("c"), Span::new(5, 6)),
+            ]
+        );
+    }
+
+    fn errors(source: &str) -> Vec<(String, Span)> {
+        read(source)
+            .1
+            .into_iter()
+            .map(|error| (error.message, error.span))
+            .collect()
+    }
+
+    fn string(text: &str) -> Datum {
+        Datum::Str(text.to_owned())
+    }
+
+    fn keyword(name: &str) -> Datum {
+        Datum::Keyword(name.to_owned())
+    }
+
+    #[test]
+    fn strings_read_with_their_escapes() {
+        assert_eq!(
+            data(r#""a\nb" "tab\there" "\"q\" \\ \u{263A}\0\r""#),
+            [
+                (string("a\nb"), Span::new(0, 6)),
+                (string("tab\there"), Span::new(7, 18)),
+                (string("\"q\" \\ \u{263A}\0\r"), Span::new(19, 42)),
+            ]
+        );
+    }
+
+    #[test]
+    fn strings_keep_their_lines_and_unicode() {
+        assert_eq!(data("\"λ\nx\""), [(string("λ\nx"), Span::new(0, 6))]);
+    }
+
+    #[test]
+    fn unclosed_strings_and_unknown_escapes_are_reported() {
+        assert_eq!(
+            errors(r#""ok\q" "abc"#),
+            [
+                ("Unknown escape \\q".to_owned(), Span::new(3, 5)),
+                ("This string is never closed".to_owned(), Span::new(7, 11)),
+            ]
+        );
+        assert_eq!(
+            read(r#""ok\q" "abc"#)
+                .0
+                .into_iter()
+                .map(|syntax| syntax.datum)
+                .collect::<Vec<_>>(),
+            [string("okq"), string("abc")]
+        );
+    }
+
+    #[test]
+    fn characters_read_by_themselves_or_by_name() {
+        let characters: Vec<Datum> = data(r"\a \( \newline \space \tab \return \u{263A} \λ")
+            .into_iter()
+            .map(|(datum, _)| datum)
+            .collect();
+
+        assert_eq!(
+            characters,
+            ['a', '(', '\n', ' ', '\t', '\r', '\u{263A}', 'λ'].map(Datum::Char)
+        );
+        assert_eq!(
+            data(r"\u{263A}"),
+            [(Datum::Char('\u{263A}'), Span::new(0, 8))]
+        );
+    }
+
+    #[test]
+    fn unknown_characters_are_reported() {
+        assert_eq!(
+            errors(r"\bogus \u{110000} \"),
+            [
+                ("Unknown character \\bogus".to_owned(), Span::new(0, 6)),
+                ("Unknown character \\u{110000}".to_owned(), Span::new(7, 17)),
+                ("Name a character after \\".to_owned(), Span::new(18, 19)),
+            ]
+        );
+    }
+
+    #[test]
+    fn keywords_read_with_a_leading_or_trailing_colon() {
+        assert_eq!(
+            data(":key name: : a:b"),
+            [
+                (keyword("key"), Span::new(0, 4)),
+                (keyword("name"), Span::new(5, 10)),
+                (symbol(":"), Span::new(11, 12)),
+                (symbol("a:b"), Span::new(13, 16)),
             ]
         );
     }
