@@ -8,6 +8,12 @@ static STANDARD: LazyLock<Shared<Module>> =
 
 pub(crate) type Failure = Box<EvalAltResult>;
 
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct Origin {
+    pub(crate) line: usize,
+    pub(crate) column: usize,
+}
+
 fn sandbox() -> Engine {
     let mut engine = Engine::new_raw();
     engine.register_global_module(Shared::clone(&STANDARD));
@@ -28,16 +34,23 @@ fn innermost(error: EvalAltResult) -> EvalAltResult {
     }
 }
 
-pub(crate) fn describe(error: EvalAltResult) -> String {
+pub(crate) fn describe(error: EvalAltResult, origin: Origin) -> String {
     let mut error = innermost(error);
     let position = error.take_position();
     let text = match &error {
         EvalAltResult::ErrorRuntime(value, _) => value.to_string(),
         other => other.to_string(),
     };
-    match (position.line(), position.position()) {
-        (Some(line), Some(column)) => format!("{text} (line {line}, column {column})"),
-        (Some(line), None) => format!("{text} (line {line})"),
-        _ => text,
+    let Some(line) = position.line() else {
+        return text;
+    };
+    let shown = line + origin.line;
+    match position.position() {
+        Some(column) if line == 1 => {
+            let column = column + origin.column;
+            format!("{text} (line {shown}, column {column})")
+        }
+        Some(column) => format!("{text} (line {shown}, column {column})"),
+        None => format!("{text} (line {shown})"),
     }
 }

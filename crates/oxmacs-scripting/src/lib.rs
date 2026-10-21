@@ -6,22 +6,37 @@ use oxmacs_core::editor::Editor;
 use oxmacs_gui::applet::GuiApplet;
 use rhai::Dynamic;
 
-use script::Failure;
+use script::{Failure, Origin};
 
 #[derive(Debug)]
 pub struct Scripting;
 
-fn report(editor: &mut Editor, outcome: Result<Dynamic, Failure>) {
+fn report(editor: &mut Editor, outcome: Result<Dynamic, Failure>, origin: Origin) {
     match outcome {
         Ok(value) if value.is_unit() => {}
         Ok(value) => editor.show_message(format!("{value:?}")),
-        Err(error) => editor.show_message(script::describe(*error)),
+        Err(error) => editor.show_message(script::describe(*error, origin)),
     }
 }
 
 fn eval_buffer(editor: &mut Editor) {
     let code = editor.buffer().contents();
-    report(editor, script::evaluate(&code));
+    report(editor, script::evaluate(&code), Origin::default());
+}
+
+fn eval_region(editor: &mut Editor) {
+    let buffer = editor.buffer();
+    let Some(range) = buffer.selection() else {
+        editor.show_message("Select the code to evaluate");
+        return;
+    };
+    let line = buffer.line_of(range.start);
+    let origin = Origin {
+        line,
+        column: range.start - buffer.line_start(line),
+    };
+    let code = buffer.text_in(range);
+    report(editor, script::evaluate(&code), origin);
 }
 
 impl Applet for Scripting {
@@ -46,6 +61,15 @@ impl Applet for Scripting {
             ),
             scope: Scope::Global.into(),
             run: eval_buffer,
+        });
+        editor.add_command(CommandSpec {
+            name: "script-eval-region",
+            summary: "Evaluate the selected code as a Rhai script",
+            help: Some(
+                "Runs the selected code as a Rhai script and shows its value in the echo area, or the error with its line and column in the buffer.",
+            ),
+            scope: Scope::Global.into(),
+            run: eval_region,
         });
     }
 }
@@ -98,7 +122,7 @@ pub(crate) mod testing {
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::{installed, m_x, with_text};
+    use crate::testing::{installed, m_x, press, with_text};
 
     #[test]
     fn the_applet_is_opt_in_with_its_own_version() {
@@ -144,6 +168,41 @@ mod tests {
         let message = editor.message().unwrap_or_default();
         assert!(message.starts_with("Syntax error: "), "{message}");
         assert!(message.ends_with("(line 1, column 5)"), "{message}");
+    }
+
+    #[test]
+    fn evaluating_the_region_runs_only_the_selection() {
+        let mut editor = with_text("1 + 1\n2 * 21\n");
+
+        press(&mut editor, "M-< C-n C-SPC C-e");
+        m_x(&mut editor, "script-eval-region");
+
+        assert_eq!(editor.message(), Some("42"));
+    }
+
+    #[test]
+    fn region_errors_say_where_they_are_in_the_buffer() {
+        let mut editor = with_text("let a = 1;\nlet b = 1 + zz;\n");
+
+        press(
+            &mut editor,
+            "M-< C-n C-f C-f C-f C-f C-f C-f C-f C-f C-SPC C-e",
+        );
+        m_x(&mut editor, "script-eval-region");
+
+        assert_eq!(
+            editor.message(),
+            Some("Variable not found: zz (line 2, column 13)")
+        );
+    }
+
+    #[test]
+    fn evaluating_the_region_without_one_asks_for_it() {
+        let mut editor = with_text("1 + 1");
+
+        m_x(&mut editor, "script-eval-region");
+
+        assert_eq!(editor.message(), Some("Select the code to evaluate"));
     }
 
     #[test]
