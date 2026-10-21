@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::bytecode::{Code, Op, Register};
+use crate::bytecode::{Capture, Code, Op, Register};
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::reader::{Datum, Syntax};
@@ -9,56 +9,150 @@ use crate::symbol::Sym;
 use crate::value::Value;
 
 pub fn compile(heap: &mut Heap, form: &Syntax) -> Result<Code, Error> {
-    let mut compiler = Compiler::new(heap);
+    let mut compiler = Compiler {
+        heap,
+        current: Function::default(),
+        outer: Vec::new(),
+    };
     let target = compiler.reserve(1, form.span)?;
     compiler.expression(form, target)?;
     compiler.emit(Op::Return { from: target }, form.span);
-    Ok(compiler.code)
+    Ok(compiler.current.code)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Place {
+    Register(Register),
+    Captured(u16),
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Variable {
+    place: Place,
+    boxed: bool,
+}
+
+struct Local {
+    name: Sym,
+    register: Register,
+    boxed: bool,
+}
+
+#[derive(Default)]
+struct Function {
+    code: Code,
+    top: Register,
+    locals: Vec<Local>,
+    captured: Vec<(Sym, bool)>,
 }
 
 struct Compiler<'a> {
     heap: &'a mut Heap,
-    code: Code,
-    top: Register,
-    locals: Vec<(Sym, Register)>,
+    current: Function,
+    outer: Vec<Function>,
 }
 
-impl<'a> Compiler<'a> {
-    fn new(heap: &'a mut Heap) -> Self {
-        Self {
-            heap,
-            code: Code::default(),
-            top: 0,
-            locals: Vec::new(),
+fn assigns(form: &Syntax, name: &str) -> bool {
+    match &form.datum {
+        Datum::List(items) => {
+            let assigned = matches!(
+                items.as_slice(),
+                [
+                    Syntax {
+                        datum: Datum::Symbol(head),
+                        ..
+                    },
+                    Syntax {
+                        datum: Datum::Symbol(target),
+                        ..
+                    },
+                    ..
+                ] if head == "set!" && target == name
+            );
+            assigned || items.iter().any(|item| assigns(item, name))
+        }
+        Datum::Vector(items) | Datum::Map(items) => items.iter().any(|item| assigns(item, name)),
+        _ => false,
+    }
+}
+
+fn assigned_in(forms: &[Syntax], name: &str) -> bool {
+    forms.iter().any(|form| assigns(form, name))
+}
+
+impl Compiler<'_> {
+    fn function_at(&mut self, depth: usize) -> Option<&mut Function> {
+        if depth == self.outer.len() {
+            Some(&mut self.current)
+        } else {
+            self.outer.get_mut(depth)
         }
     }
 
-    fn local(&self, name: Sym) -> Option<Register> {
-        self.locals
+    fn resolve(&mut self, name: Sym) -> Option<Variable> {
+        self.resolve_at(self.outer.len(), name)
+    }
+
+    fn resolve_at(&mut self, depth: usize, name: Sym) -> Option<Variable> {
+        let function = self.function_at(depth)?;
+        if let Some(local) = function
+            .locals
             .iter()
             .rev()
-            .find(|(local, _)| *local == name)
-            .map(|(_, register)| *register)
+            .find(|local| local.name == name)
+        {
+            return Some(Variable {
+                place: Place::Register(local.register),
+                boxed: local.boxed,
+            });
+        }
+        if let Some((index, (_, boxed))) = (0_u16..)
+            .zip(&function.captured)
+            .find(|(_, (captured, _))| *captured == name)
+        {
+            return Some(Variable {
+                place: Place::Captured(index),
+                boxed: *boxed,
+            });
+        }
+        let outside = self.resolve_at(depth.checked_sub(1)?, name)?;
+        let function = self.function_at(depth)?;
+        let index = u16::try_from(function.captured.len()).ok()?;
+        function.captured.push((name, outside.boxed));
+        function.code.captures.push(match outside.place {
+            Place::Register(register) => Capture::Register(register),
+            Place::Captured(index) => Capture::Captured(index),
+        });
+        Some(Variable {
+            place: Place::Captured(index),
+            boxed: outside.boxed,
+        })
     }
 
     fn reserve(&mut self, count: usize, span: Span) -> Result<Register, Error> {
-        let base = self.top;
-        self.top = u16::try_from(usize::from(base) + count)
+        let function = &mut self.current;
+        let base = function.top;
+        function.top = u16::try_from(usize::from(base) + count)
             .map_err(|_| Error::at(span, "This function needs too many registers"))?;
-        self.code.registers = self.code.registers.max(self.top);
+        function.code.registers = function.code.registers.max(function.top);
         Ok(base)
     }
 
+    fn release(&mut self, top: Register) {
+        self.current.top = top;
+    }
+
     fn constant(&mut self, value: Value, span: Span) -> Result<u32, Error> {
-        let index = u32::try_from(self.code.constants.len())
+        let constants = &mut self.current.code.constants;
+        let index = u32::try_from(constants.len())
             .map_err(|_| Error::at(span, "This function has too many constants"))?;
-        self.code.constants.push(value);
+        constants.push(value);
         Ok(index)
     }
 
     fn emit(&mut self, op: Op, span: Span) {
-        self.code.ops.push(op);
-        self.code.spans.push(span);
+        self.current.code.ops.push(op);
+        self.current.code.spans.push(span);
     }
 
     fn load(&mut self, value: Value, target: Register, span: Span) -> Result<(), Error> {
@@ -70,18 +164,7 @@ impl<'a> Compiler<'a> {
     fn expression(&mut self, form: &Syntax, target: Register) -> Result<(), Error> {
         let value = match &form.datum {
             Datum::Symbol(name) => {
-                let name = Sym::intern(name);
-                match self.local(name) {
-                    Some(register) if register == target => {}
-                    Some(register) => self.emit(
-                        Op::Move {
-                            to: target,
-                            from: register,
-                        },
-                        form.span,
-                    ),
-                    None => self.emit(Op::Global { to: target, name }, form.span),
-                }
+                self.variable(Sym::intern(name), target, form.span);
                 return Ok(());
             }
             Datum::List(items) => return self.call(items, target, form.span),
@@ -100,13 +183,51 @@ impl<'a> Compiler<'a> {
         self.load(value, target, form.span)
     }
 
+    fn variable(&mut self, name: Sym, target: Register, span: Span) {
+        let Some(variable) = self.resolve(name) else {
+            self.emit(Op::Global { to: target, name }, span);
+            return;
+        };
+        match variable.place {
+            Place::Register(register) if variable.boxed => {
+                self.emit(
+                    Op::CellGet {
+                        to: target,
+                        cell: register,
+                    },
+                    span,
+                );
+                return;
+            }
+            Place::Register(register) if register == target => {}
+            Place::Register(register) => self.emit(
+                Op::Move {
+                    to: target,
+                    from: register,
+                },
+                span,
+            ),
+            Place::Captured(index) => self.emit(Op::Captured { to: target, index }, span),
+        }
+        if variable.boxed {
+            self.emit(
+                Op::CellGet {
+                    to: target,
+                    cell: target,
+                },
+                span,
+            );
+        }
+    }
+
     fn here(&self, span: Span) -> Result<u32, Error> {
-        u32::try_from(self.code.ops.len()).map_err(|_| Error::at(span, "This function is too long"))
+        u32::try_from(self.current.code.ops.len())
+            .map_err(|_| Error::at(span, "This function is too long"))
     }
 
     fn patch(&mut self, jump: usize, to: u32) {
         if let Some(Op::Jump { to: target } | Op::JumpUnless { to: target, .. }) =
-            self.code.ops.get_mut(jump)
+            self.current.code.ops.get_mut(jump)
         {
             *target = to;
         }
@@ -128,6 +249,7 @@ impl<'a> Compiler<'a> {
             "def" => Some(self.define(rest, target, span)),
             "fn" => Some(self.function(rest, target, span)),
             "let" => Some(self.binding(rest, target, span)),
+            "set!" => Some(self.assign(rest, target, span)),
             _ => None,
         }
     }
@@ -172,6 +294,49 @@ impl<'a> Compiler<'a> {
         self.load(Value::Symbol(name), target, span)
     }
 
+    fn assign(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let [
+            Syntax {
+                datum: Datum::Symbol(name),
+                ..
+            },
+            value,
+        ] = parts
+        else {
+            return Err(Error::at(span, "set! takes a name and a value"));
+        };
+        let name = Sym::intern(name);
+        self.expression(value, target)?;
+        let Some(variable) = self.resolve(name) else {
+            self.emit(Op::SetGlobal { name, from: target }, span);
+            return Ok(());
+        };
+        match (variable.place, variable.boxed) {
+            (Place::Register(register), true) => self.emit(
+                Op::CellSet {
+                    cell: register,
+                    from: target,
+                },
+                span,
+            ),
+            (Place::Register(register), false) => self.emit(
+                Op::Move {
+                    to: register,
+                    from: target,
+                },
+                span,
+            ),
+            (Place::Captured(index), _) => {
+                let top = self.current.top;
+                let cell = self.reserve(1, span)?;
+                self.emit(Op::Captured { to: cell, index }, span);
+                self.emit(Op::CellSet { cell, from: target }, span);
+                self.release(top);
+            }
+        }
+        Ok(())
+    }
+
     fn binding(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
         let Some((
             Syntax {
@@ -186,22 +351,31 @@ impl<'a> Compiler<'a> {
         if bindings.len() % 2 == 1 {
             return Err(Error::at(span, "let bindings come in name and value pairs"));
         }
-        let top = self.top;
-        let locals = self.locals.len();
-        for pair in bindings.chunks(2) {
+        let top = self.current.top;
+        let locals = self.current.locals.len();
+        for (index, pair) in bindings.chunks(2).enumerate() {
             let [name, value] = pair else {
                 continue;
             };
             let Datum::Symbol(name) = &name.datum else {
                 return Err(Error::at(name.span, "Bindings must be names"));
             };
+            let scope = &bindings[(index + 1) * 2..];
+            let boxed = assigned_in(scope, name) || assigned_in(body, name);
             let register = self.reserve(1, span)?;
             self.expression(value, register)?;
-            self.locals.push((Sym::intern(name), register));
+            if boxed {
+                self.emit(Op::MakeCell { register }, span);
+            }
+            self.current.locals.push(Local {
+                name: Sym::intern(name),
+                register,
+                boxed,
+            });
         }
         self.sequence(body, target, span)?;
-        self.locals.truncate(locals);
-        self.top = top;
+        self.current.locals.truncate(locals);
+        self.release(top);
         Ok(())
     }
 
@@ -227,23 +401,43 @@ impl<'a> Compiler<'a> {
         target: Register,
         span: Span,
     ) -> Result<(), Error> {
-        let mut inner = Compiler::new(&mut *self.heap);
-        inner.code.name = name;
+        let parent = std::mem::take(&mut self.current);
+        self.outer.push(parent);
+        self.current.code.name = name;
         for parameter in parameters {
             let Datum::Symbol(parameter_name) = &parameter.datum else {
                 return Err(Error::at(parameter.span, "Parameters must be names"));
             };
-            let register = inner.reserve(1, parameter.span)?;
-            inner.locals.push((Sym::intern(parameter_name), register));
+            let register = self.reserve(1, parameter.span)?;
+            self.current.locals.push(Local {
+                name: Sym::intern(parameter_name),
+                register,
+                boxed: assigned_in(body, parameter_name),
+            });
         }
-        inner.code.arity = inner.top;
-        let result = inner.reserve(1, span)?;
-        inner.sequence(body, result, span)?;
-        inner.emit(Op::Return { from: result }, span);
-        let code = inner.code;
-        let index = u32::try_from(self.code.functions.len())
+        self.current.code.arity = self.current.top;
+        let boxed: Vec<Register> = self
+            .current
+            .locals
+            .iter()
+            .filter(|local| local.boxed)
+            .map(|local| local.register)
+            .collect();
+        for register in boxed {
+            self.emit(Op::MakeCell { register }, span);
+        }
+        let result = self.reserve(1, span)?;
+        self.sequence(body, result, span)?;
+        self.emit(Op::Return { from: result }, span);
+        let parent = self
+            .outer
+            .pop()
+            .ok_or_else(|| Error::at(span, "The compiler lost its enclosing function"))?;
+        let inner = std::mem::replace(&mut self.current, parent);
+        let functions = &mut self.current.code.functions;
+        let index = u32::try_from(functions.len())
             .map_err(|_| Error::at(span, "This function holds too many functions"))?;
-        self.code.functions.push(Rc::new(code));
+        functions.push(Rc::new(inner.code));
         self.emit(
             Op::Closure {
                 to: target,
@@ -253,6 +447,7 @@ impl<'a> Compiler<'a> {
         );
         Ok(())
     }
+
     fn branch(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
         let (test, then, otherwise) = match parts {
             [test, then] => (test, then, None),
@@ -266,7 +461,7 @@ impl<'a> Compiler<'a> {
         };
         let condition = self.reserve(1, span)?;
         self.expression(test, condition)?;
-        let skip = self.code.ops.len();
+        let skip = self.current.code.ops.len();
         self.emit(
             Op::JumpUnless {
                 test: condition,
@@ -274,9 +469,9 @@ impl<'a> Compiler<'a> {
             },
             span,
         );
-        self.top = condition;
+        self.release(condition);
         self.expression(then, target)?;
-        let finish = self.code.ops.len();
+        let finish = self.current.code.ops.len();
         self.emit(Op::Jump { to: 0 }, span);
         let alternative = self.here(span)?;
         self.patch(skip, alternative);
@@ -323,7 +518,7 @@ impl<'a> Compiler<'a> {
                 span,
             );
         }
-        self.top = base;
+        self.release(base);
         Ok(())
     }
 }

@@ -24,6 +24,7 @@ pub enum Kind {
     Pair,
     Native,
     Closure,
+    Cell,
 }
 
 impl Value {

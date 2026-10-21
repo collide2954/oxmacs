@@ -308,6 +308,52 @@ mod tests {
     }
 
     #[test]
+    fn closures_capture_the_variables_around_them() {
+        all(&[
+            ("(def (adder n) (fn [x] (+ x n))) ((adder 10) 5)", "15"),
+            ("(def (f a) (fn [b] (fn [c] (+ a b c)))) (((f 1) 2) 3)", "6"),
+            ("(let [x 5] ((fn [] (* x 2))))", "10"),
+            ("(let [y 2] (def h (fn [] y))) (h)", "2"),
+            (
+                "(def (f a) (let [b 2] (fn [] (fn [] (* a b))))) (((f 3)))",
+                "6",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn set_assigns_locals_captured_variables_and_globals() {
+        all(&[
+            ("(let [x 1] (set! x (+ x 1)) x)", "2"),
+            ("(def (f x) (set! x 10) x) (f 1)", "10"),
+            ("(let [x 1] (set! x 7))", "7"),
+            ("(def g 1) (set! g 5) g", "5"),
+            (
+                "(def (counter) (let [n 0] (fn [] (set! n (+ n 1)) n))) (def c (counter)) (c) (c) (c)",
+                "3",
+            ),
+            (
+                "(let [n 0] (def inc! (fn [] (set! n (+ n 1)))) (def get (fn [] n))) (inc!) (inc!) (get)",
+                "2",
+            ),
+            (
+                "(def (make) (let [n 0] (fn [] (set! n (+ n 1)) n))) (def a (make)) (def b (make)) (a) (a) (b)",
+                "1",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn malformed_and_undefined_assignments_are_errors() {
+        all(&[
+            ("(set! nowhere 1)", "error: nowhere is not defined"),
+            ("(set!)", "error: set! takes a name and a value"),
+            ("(set! x)", "error: set! takes a name and a value"),
+            ("(set! 1 2)", "error: set! takes a name and a value"),
+        ]);
+    }
+
+    #[test]
     fn rust_functions_can_be_called_from_ox() {
         let mut isolate = Isolate::new();
         isolate.define_native("twice", 1, Some(1), |_, arguments| match arguments {

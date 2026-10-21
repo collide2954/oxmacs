@@ -57,6 +57,10 @@ impl<T> Arena<T> {
     fn get(&self, index: u32) -> Option<&T> {
         self.slots.get(index as usize)?.as_ref()
     }
+
+    fn get_mut(&mut self, index: u32) -> Option<&mut T> {
+        self.slots.get_mut(index as usize)?.as_mut()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -65,6 +69,7 @@ pub struct Heap {
     pairs: Arena<Pair>,
     natives: Arena<Native>,
     closures: Arena<Closure>,
+    cells: Arena<Value>,
 }
 
 fn reference(value: Value, kind: Kind) -> Option<u32> {
@@ -123,6 +128,27 @@ impl Heap {
 
     pub fn closure_of(&self, value: Value) -> Option<&Closure> {
         self.closures.get(reference(value, Kind::Closure)?)
+    }
+
+    pub fn cell(&mut self, value: Value) -> Result<Value, HeapFull> {
+        let index = self.cells.alloc(value)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Cell,
+            index,
+        }))
+    }
+
+    pub fn cell_get(&self, cell: Value) -> Option<Value> {
+        self.cells.get(reference(cell, Kind::Cell)?).copied()
+    }
+
+    pub fn cell_set(&mut self, cell: Value, value: Value) -> bool {
+        let Some(slot) = reference(cell, Kind::Cell).and_then(|index| self.cells.get_mut(index))
+        else {
+            return false;
+        };
+        *slot = value;
+        true
     }
 
     pub fn list(

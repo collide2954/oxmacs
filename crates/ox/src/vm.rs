@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::bytecode::{Code, Op};
+use crate::bytecode::{Capture, Code, Op};
 use crate::error::Error;
 use crate::heap::{Closure, Heap};
 use crate::native::arguments;
@@ -19,6 +19,7 @@ pub struct Runtime {
 
 struct Frame {
     code: Rc<Code>,
+    closure: Value,
     pc: usize,
     base: usize,
     result: usize,
@@ -28,6 +29,7 @@ struct Machine {
     stack: Vec<Value>,
     frames: Vec<Frame>,
     code: Rc<Code>,
+    closure: Value,
     pc: usize,
     base: usize,
 }
@@ -38,11 +40,13 @@ impl Machine {
             stack: vec![Value::Nil; usize::from(entry.registers)],
             frames: vec![Frame {
                 code: Rc::clone(entry),
+                closure: Value::Nil,
                 pc: 0,
                 base: 0,
                 result: 0,
             }],
             code: Rc::clone(entry),
+            closure: Value::Nil,
             pc: 0,
             base: 0,
         }
@@ -56,7 +60,7 @@ impl Machine {
         self.stack[self.base + usize::from(register)] = value;
     }
 
-    fn enter(&mut self, function: Rc<Code>, slot: usize) -> Result<(), Error> {
+    fn enter(&mut self, function: Rc<Code>, closure: Value, slot: usize) -> Result<(), Error> {
         if self.frames.len() >= MAX_FRAMES {
             return Err(Error::new("Stack overflow"));
         }
@@ -70,11 +74,13 @@ impl Machine {
         }
         self.frames.push(Frame {
             code: Rc::clone(&function),
+            closure,
             pc: 0,
             base: start,
             result: slot,
         });
         self.code = function;
+        self.closure = closure;
         self.pc = 0;
         self.base = start;
         Ok(())
@@ -89,10 +95,15 @@ impl Machine {
         };
         self.stack[finished.result] = value;
         self.code = Rc::clone(&caller.code);
+        self.closure = caller.closure;
         self.pc = caller.pc;
         self.base = caller.base;
         None
     }
+}
+
+fn full(error: crate::heap::HeapFull) -> Error {
+    Error::new(error.to_string())
 }
 
 fn arity_error(code: &Code, count: usize) -> Error {
@@ -138,17 +149,36 @@ impl Runtime {
             Op::DefineGlobal { name, from } => {
                 self.globals.insert(name, machine.get(from));
             }
+            Op::SetGlobal { name, from } => {
+                let Some(slot) = self.globals.get_mut(&name) else {
+                    return Err(Error::new(format!("{} is not defined", name.name())));
+                };
+                *slot = machine.get(from);
+            }
             Op::Move { to, from } => machine.set(to, machine.get(from)),
             Op::Closure { to, function } => {
-                let closure = Closure {
-                    code: Rc::clone(&machine.code.functions[function as usize]),
-                    captured: Box::new([]),
-                };
+                let value = self.close(machine, function)?;
+                machine.set(to, value);
+            }
+            Op::Captured { to, index } => {
+                let value = self.captured(machine.closure, index)?;
+                machine.set(to, value);
+            }
+            Op::MakeCell { register } => {
+                let cell = self.heap.cell(machine.get(register)).map_err(full)?;
+                machine.set(register, cell);
+            }
+            Op::CellGet { to, cell } => {
                 let value = self
                     .heap
-                    .closure(closure)
-                    .map_err(|full| Error::new(full.to_string()))?;
+                    .cell_get(machine.get(cell))
+                    .ok_or_else(|| Error::new("A variable lost its cell"))?;
                 machine.set(to, value);
+            }
+            Op::CellSet { cell, from } => {
+                if !self.heap.cell_set(machine.get(cell), machine.get(from)) {
+                    return Err(Error::new("A variable lost its cell"));
+                }
             }
             Op::Call { base, count } => self.call(machine, base, count)?,
             Op::Jump { to } => machine.pc = to as usize,
@@ -178,7 +208,28 @@ impl Runtime {
         if count != usize::from(function.arity) {
             return Err(arity_error(&function, count));
         }
-        machine.enter(function, slot)
+        machine.enter(function, callee, slot)
+    }
+
+    fn close(&mut self, machine: &Machine, function: u32) -> Result<Value, Error> {
+        let code = Rc::clone(&machine.code.functions[function as usize]);
+        let captured = code
+            .captures
+            .iter()
+            .map(|capture| match *capture {
+                Capture::Register(register) => Ok(machine.get(register)),
+                Capture::Captured(index) => self.captured(machine.closure, index),
+            })
+            .collect::<Result<Box<[Value]>, Error>>()?;
+        self.heap.closure(Closure { code, captured }).map_err(full)
+    }
+
+    fn captured(&self, closure: Value, index: u16) -> Result<Value, Error> {
+        self.heap
+            .closure_of(closure)
+            .and_then(|closure| closure.captured.get(usize::from(index)))
+            .copied()
+            .ok_or_else(|| Error::new("A closure lost a captured variable"))
     }
 
     fn call_native(&mut self, callee: Value, arguments: &[Value]) -> Result<Value, Error> {
