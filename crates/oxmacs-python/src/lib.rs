@@ -201,6 +201,13 @@ impl Applet for Python {
         editor.add_formatter(LANGUAGE, ruff::FORMAT);
         editor.add_linter(LANGUAGE, ruff::LINT);
         editor.add_error_pattern(run::traceback);
+        let console = editor.add_scope("Python console");
+        editor.set_applet_state(repl::ConsoleScope(console));
+        editor.bind(console, "RET", Command::ComintSendInput).ok();
+        editor
+            .bind(console, "M-p", Command::ComintPreviousInput)
+            .ok();
+        editor.bind(console, "M-n", Command::ComintNextInput).ok();
         let dashboard = editor.add_scope("uv dashboard");
         editor.set_applet_state(uv::UvState { scope: dashboard });
         register(editor, dashboard, DASHBOARD);

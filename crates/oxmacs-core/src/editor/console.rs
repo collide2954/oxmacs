@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use crate::command::ScopeId;
 use crate::editor::buffers::Mode;
 use crate::editor::prompts::input_line::InputLine;
 use crate::editor::{Editor, JobEvent, JobId, JobSpec, Outcome};
@@ -18,6 +19,7 @@ pub struct ConsoleSpec {
     pub job: JobSpec,
     pub on_marker: MarkerHook,
     pub on_idle: ConsoleHook,
+    pub scope: Option<ScopeId>,
 }
 
 #[derive(Debug)]
@@ -30,6 +32,7 @@ pub(in crate::editor) struct Console {
     pub(in crate::editor) label: &'static str,
     on_marker: MarkerHook,
     on_idle: ConsoleHook,
+    pub(in crate::editor) scope: Option<ScopeId>,
 }
 
 fn without_prompt(line: &str) -> &str {
@@ -65,6 +68,7 @@ impl Editor {
                     label: spec.label,
                     on_marker: spec.on_marker,
                     on_idle: spec.on_idle,
+                    scope: spec.scope,
                 };
                 self.beside(|editor| editor.add_buffer_with(buffer, Mode::Console(console)));
             }
@@ -307,6 +311,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    use crate::command::Command;
     use crate::editor::Effect;
     use crate::editor::test_support::{press, type_text};
 
@@ -345,15 +350,19 @@ mod tests {
             },
             on_marker: heard,
             on_idle: idle,
+            scope: None,
         }
     }
 
     const PROMPT: &str = "\u{1}>\u{2}$ \u{3}";
 
     fn started() -> (Editor, BufferId, JobId) {
-        let mut editor = Editor::new();
+        start(Editor::new(), spec())
+    }
+
+    fn start(mut editor: Editor, spec: ConsoleSpec) -> (Editor, BufferId, JobId) {
         editor.set_applet_state(Heard::default());
-        let id = editor.start_console(spec(), None);
+        let id = editor.start_console(spec, None);
         let job = editor
             .take_effects()
             .into_iter()
@@ -466,6 +475,27 @@ mod tests {
         type_text(&mut editor, "x");
         press(&mut editor, "RET");
         assert_eq!(editor.message(), Some("Shell is not running"));
+    }
+
+    #[test]
+    fn consoles_with_keys_of_their_own_leave_out_the_r_keys() {
+        let mut editor = Editor::new();
+        let scope = editor.add_scope("Shell console");
+        editor.bind(scope, "RET", Command::ComintSendInput).unwrap();
+        let (mut editor, _, job) = start(
+            editor,
+            ConsoleSpec {
+                scope: Some(scope),
+                ..spec()
+            },
+        );
+        editor.session_output(job, PROMPT);
+
+        type_text(&mut editor, "ls");
+        press(&mut editor, "RET C-c C-v");
+
+        assert_eq!(sent(&mut editor), ["ls\n"]);
+        assert_eq!(editor.message(), Some("C-c C-v is undefined"));
     }
 
     #[test]

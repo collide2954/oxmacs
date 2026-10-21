@@ -294,6 +294,7 @@ impl Editor {
                 editor.with_session(id, |editor| editor.r_marker(kind, payload));
             },
             on_idle: |editor, id| editor.with_session(id, Self::r_idle),
+            scope: None,
         };
         let console = self.start_console(spec, restarted);
         self.r_sessions

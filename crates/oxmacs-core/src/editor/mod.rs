@@ -477,6 +477,7 @@ impl Editor {
     fn buffer_scope(&self) -> ScopeId {
         match self.buffers.mode(0) {
             Some(Mode::Applet(view)) => view.scope(),
+            Some(Mode::Console(console)) => console.scope.unwrap_or_else(|| Scope::Console.into()),
             Some(Mode::Text(Some(syntax))) => self
                 .registered(syntax.language())
                 .and_then(|known| known.scope)

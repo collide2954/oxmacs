@@ -1,6 +1,7 @@
 use std::iter;
 use std::ops::Range;
 
+use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::{ConsoleSpec, Editor, JobSpec};
 use oxmacs_core::syntax::Syntax;
 use oxmacs_core::text::{Buffer, BufferId};
@@ -10,6 +11,9 @@ use crate::indent::{self, parsed};
 use crate::tools;
 
 const LABEL: &str = "Python";
+
+#[derive(Debug)]
+pub(crate) struct ConsoleScope(pub(crate) ScopeId);
 const NOTHING: &str = "No Python code here";
 const STARTUP: &str = r"import sys; sys.ps1 = '\x01>\x02>>> \x03'; sys.ps2 = '\x01+\x02... \x03'";
 const COMPOUND: &[&str] = &[
@@ -132,6 +136,7 @@ fn running(editor: &mut Editor) -> Option<BufferId> {
         },
         on_marker: |_, _, _, _| {},
         on_idle: |_, _| {},
+        scope: editor.applet_state::<ConsoleScope>().map(|known| known.0),
     };
     Some(editor.start_console(spec, existing))
 }
@@ -416,6 +421,19 @@ mod tests {
         assert_eq!(editor.tiling().windows().len(), 2);
         editor.session_output(job.id, &format!("hello\n{PS1}"));
         assert_eq!(editor.buffer().contents(), "hello\n>>> ");
+    }
+
+    #[test]
+    fn the_console_has_keys_of_its_own_and_none_of_rs() {
+        let (_dir, _interpreter, mut editor) = script("x = 1\n", 0);
+        press(&mut editor, "C-c C-z");
+        let job = sessions(&mut editor).pop().unwrap().id;
+        editor.session_output(job, PS1);
+
+        press(&mut editor, "1 RET C-c C-v");
+
+        assert_eq!(sent(&editor.take_effects()), ["1\n"]);
+        assert_eq!(editor.message(), Some("C-c C-v is undefined"));
     }
 
     #[test]
