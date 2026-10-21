@@ -140,7 +140,7 @@ pub struct Ref { kind: Kind, index: u32 }
 
 ## Bytecode and VM
 
-- **Encoding.** Instructions are `u32`: an 8-bit opcode with three 8-bit operands, or one 8-bit and one 16-bit operand. Wide variants cover larger register numbers.
+- **Encoding.** Instructions are a compact `Copy` enum, `Op`, with 16-bit register operands and 32-bit constant indices. A `match` on it compiles to a jump table, and no hand-written bit packing can go wrong. Code objects are shared through `Rc`, so an isolate stays on the thread that created it; worker isolates are created on their own threads.
 - **Code objects.** A `Code` object holds:
   - its name and arity (required, optional, rest and keyword parameters);
   - its register count and instructions;
