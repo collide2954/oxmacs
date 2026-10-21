@@ -57,6 +57,7 @@ pub const RUFF: Managed = Managed {
     name: "ruff",
     repository: "astral-sh/ruff",
     summary: "Python formatter and linter",
+    group: "Python",
     form: Form::Program,
     tag_prefix: "v",
     archives: &[
@@ -75,6 +76,7 @@ pub const UV: Managed = Managed {
     name: "uv",
     repository: "astral-sh/uv",
     summary: "Python package and project manager",
+    group: "Python",
     form: Form::Program,
     tag_prefix: "v",
     archives: &[
@@ -251,14 +253,9 @@ mod tests {
         run(&mut editor, "list-tools");
 
         let shown = lines(&editor);
-        assert!(
-            shown.iter().any(|line| line == "ruff  not installed"),
-            "{shown:?}"
-        );
-        assert!(
-            shown.iter().any(|line| line == "uv  not installed"),
-            "{shown:?}"
-        );
+        let python = shown.iter().position(|line| line == "Python").unwrap();
+        assert!(shown[python + 1].starts_with("  ruff "), "{shown:?}");
+        assert!(shown[python + 2].starts_with("  uv "), "{shown:?}");
     }
 
     #[test]

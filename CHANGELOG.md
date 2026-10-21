@@ -10,6 +10,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `M-x list-tools` is a compact table: one line per tool, grouped by what uses it (R, Python, PDF), with the version that runs and where it comes from, and the latest release.
 - `RET` leaves the line it ends alone in languages that keep the previous line's indentation, such as TOML and Markdown, instead of re-indenting it to match the line above.
 - Weather settings now live in a `[weather]` table: `location`, `units` and `mode-line`. oxmacs moves `weather-location`, `weather-units` and `mode-line-weather` there the first time it starts, keeping comments, and says so.
 - Weather is a default applet; `cargo build -p oxmacs --no-default-features` leaves it out.

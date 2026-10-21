@@ -32,6 +32,7 @@ pub const PDFIUM: Managed = Managed {
     name: "pdfium",
     repository: "bblanchon/pdfium-binaries",
     summary: "Draws pages for the PDF viewer",
+    group: "PDF",
     form: Form::Library,
     tag_prefix: "chromium/",
     archives: &[

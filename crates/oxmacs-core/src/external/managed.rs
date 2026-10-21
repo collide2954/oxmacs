@@ -26,6 +26,7 @@ pub struct Managed {
     pub name: &'static str,
     pub repository: &'static str,
     pub summary: &'static str,
+    pub group: &'static str,
     pub form: Form,
     pub tag_prefix: &'static str,
     pub archives: &'static [(&'static str, &'static str, &'static str)],
@@ -37,6 +38,7 @@ pub const AIR: Managed = Managed {
     name: "air",
     repository: "posit-dev/air",
     summary: "R formatter",
+    group: "R",
     form: Form::Program,
     tag_prefix: "v",
     archives: &[
@@ -557,6 +559,7 @@ mod tests {
         name: "pdfium",
         repository: "bblanchon/pdfium-binaries",
         summary: "PDF engine",
+        group: "PDF",
         form: Form::Library,
         tag_prefix: "chromium/",
         archives: &[
