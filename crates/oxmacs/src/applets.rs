@@ -26,5 +26,7 @@ pub fn all() -> Vec<Box<dyn GuiApplet>> {
         Box::new(oxmacs_git::Git),
         #[cfg(feature = "database")]
         Box::new(oxmacs_database::Database::default()),
+        #[cfg(feature = "scripting")]
+        Box::new(oxmacs_scripting::Scripting),
     ]
 }

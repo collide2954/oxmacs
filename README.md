@@ -43,6 +43,7 @@ Others are only built when you ask for them. These experimental applets are vers
 | `glow`            | 0.1.0   | A soft glow around the minibuffer while a prompt or question waits for you     |
 | `irc`             | 0.1.0   | `M-x irc`, an IRCv3 client, with `M-x irc-setup` and a bouncer                |
 | `pdf`             | 0.1.0   | A PDF viewer with search, outline, links and dark pages; PDFium from `M-x list-tools` |
+| `scripting`       | 0.1.0   | A minimal show-and-tell of Rhai scripts, not a supported way to extend oxmacs  |
 
 Turn one on with `--features`, and separate several with commas and no spaces:
 
@@ -57,7 +58,7 @@ A feature that is left off is not compiled at all, so it costs nothing in size o
 
 ## Applets, not plugins
 
-oxmacs has no plugin system. It does not load code at runtime, embed a scripting language or download extensions. Anything oxmacs can do is Rust code compiled into the binary, checked by the compiler, linted and tested like the rest.
+oxmacs has no plugin system. It does not load code at runtime, embed a scripting language or download extensions. Anything oxmacs can do is Rust code compiled into the binary, checked by the compiler, linted and tested like the rest. The experimental `scripting` applet embeds the Rhai language only to show that it can be done; applets remain the way to extend oxmacs.
 
 Larger pieces of functionality are applets: self-contained crates such as an IRC client, a knowledge system, a directory editor or a language mode. Each applet
 

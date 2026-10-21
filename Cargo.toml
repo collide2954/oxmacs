@@ -28,6 +28,7 @@ oxmacs-gui = { path = "crates/oxmacs-gui" }
 oxmacs-irc = { path = "crates/oxmacs-irc" }
 oxmacs-markdown = { path = "crates/oxmacs-markdown" }
 oxmacs-pdf = { path = "crates/oxmacs-pdf" }
+oxmacs-scripting = { path = "crates/oxmacs-scripting" }
 oxmacs-splash = { path = "crates/oxmacs-splash" }
 oxmacs-themes = { path = "crates/oxmacs-themes" }
 oxmacs-weather = { path = "crates/oxmacs-weather" }
@@ -36,6 +37,7 @@ native-theme = { version = "0.6.1", default-features = false }
 notify = "8.2.0"
 open = "5.4.4"
 regex = "1.13.1"
+rhai = { version = "1.26.1", features = ["sync"] }
 ring = "0.17.14"
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
