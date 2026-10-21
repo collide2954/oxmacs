@@ -4,7 +4,7 @@ use std::thread;
 
 use oxmacs_core::editor::Editor;
 use rhai::packages::{Package, StandardPackage};
-use rhai::{Dynamic, Engine, EvalAltResult, INT, Module, Shared};
+use rhai::{AST, Dynamic, Engine, EvalAltResult, INT, Module, Scope, Shared};
 
 use crate::api;
 
@@ -23,6 +23,12 @@ type Link = Sender<(Job, Sender<Reply>)>;
 
 #[derive(Debug)]
 struct Nesting(usize);
+
+#[derive(Debug, Default)]
+pub(crate) struct Session {
+    variables: Scope<'static>,
+    functions: AST,
+}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct Origin {
@@ -121,9 +127,19 @@ fn run(
     outcome
 }
 
+impl Session {
+    pub(crate) fn evaluate(&mut self, editor: &mut Editor, code: &str) -> Result<Dynamic, Failure> {
+        let ast = self.functions.merge(&sandbox().compile(code)?);
+        self.functions = ast.clone_functions_only();
+        let variables = &mut self.variables;
+        run(editor, move |engine| {
+            engine.eval_ast_with_scope(variables, &ast)
+        })
+    }
+}
+
 pub(crate) fn evaluate(editor: &mut Editor, code: &str) -> Result<Dynamic, Failure> {
-    let ast = sandbox().compile(code)?;
-    run(editor, move |engine| engine.eval_ast(&ast))
+    Session::default().evaluate(editor, code)
 }
 
 fn innermost(error: EvalAltResult) -> EvalAltResult {

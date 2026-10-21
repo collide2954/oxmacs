@@ -1,9 +1,10 @@
 mod api;
+mod console;
 mod language;
 mod script;
 
 use oxmacs_core::applet::Applet;
-use oxmacs_core::command::{CommandSpec, Scope};
+use oxmacs_core::command::{Command, CommandSpec, Scope};
 use oxmacs_core::editor::Editor;
 use oxmacs_gui::applet::GuiApplet;
 use rhai::Dynamic;
@@ -43,6 +44,30 @@ fn eval_region(editor: &mut Editor) {
     report(editor, outcome, origin);
 }
 
+fn install_console(editor: &mut Editor) {
+    let scope = editor.add_scope(console::NAME);
+    editor.set_applet_state(console::ConsoleScope(scope));
+    editor.add_command(CommandSpec {
+        name: "script-console",
+        summary: "Open a Rhai console that keeps its variables",
+        help: Some(
+            "Opens *Script*, where each line you enter after the prompt is evaluated as Rhai and its value or error printed below. Variables and functions last until the buffer is closed, and M-p and M-n bring back earlier input.",
+        ),
+        scope: Scope::Global.into(),
+        run: console::open,
+    });
+    let send = editor.add_command(CommandSpec {
+        name: "script-console-send",
+        summary: "Evaluate the input and print its value",
+        help: None,
+        scope,
+        run: console::send,
+    });
+    editor.bind(scope, "RET", send).ok();
+    editor.bind(scope, "M-p", Command::ComintPreviousInput).ok();
+    editor.bind(scope, "M-n", Command::ComintNextInput).ok();
+}
+
 impl Applet for Scripting {
     fn name(&self) -> &'static str {
         "scripting"
@@ -80,6 +105,7 @@ impl Applet for Scripting {
         editor.set_highlighter(language::LANGUAGE, language::highlight);
         editor.bind(rhai, "C-c C-c", buffer).ok();
         editor.bind(rhai, "C-c C-r", region).ok();
+        install_console(editor);
     }
 }
 
