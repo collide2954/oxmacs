@@ -36,6 +36,7 @@ Others are only built when you ask for them. These experimental applets are vers
 |-------------------|---------|-------------------------------------------------------------------------------|
 | `animated-splash` | 0.1.0   | A start screen with the oxmacs logo animated above the keys; `a` cycles effects |
 | `atlas`           | 0.1.0   | Atlas: plain-text notes, tasks, the agenda and the calendar; `C-c n`          |
+| `database`        | 0.1.0   | SQLite databases: a schema tree and a fast table grid; `M-x database-open`    |
 | `demo`            | 0.1.0   | An example applet to copy when writing your own; `M-x demo`                  |
 | `extra-themes`    | 0.1.0   | 56 more color themes for `M-x load-theme`, from gruvbox to modus-vivendi       |
 | `git`             | 0.1.0   | A Magit-style status that stages files, hunks and lines; `C-x g`               |
@@ -53,13 +54,6 @@ Words after the list that are not joined to it by commas reach oxmacs as files t
 
 A feature that is left off is not compiled at all, so it costs nothing in size or startup time. Experimental features may change or disappear between releases; CHANGELOG.md lists them under "Experimental", and `M-x oxmacs-doctor` shows which ones your build includes.
 
-More applets will be opt-in features as well:
-
-| Feature        | What it will add                                  | Today                                  |
-|----------------|---------------------------------------------------|----------------------------------------|
-| `sqlite`       | A SQLite database viewer and editor               | Not written yet                        |
-
-A build without such a feature contains none of its code.
 
 ## Applets, not plugins
 

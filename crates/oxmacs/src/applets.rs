@@ -24,5 +24,7 @@ pub fn all() -> Vec<Box<dyn GuiApplet>> {
         Box::new(oxmacs_pdf::Pdf::default()),
         #[cfg(feature = "git")]
         Box::new(oxmacs_git::Git),
+        #[cfg(feature = "database")]
+        Box::new(oxmacs_database::Database::default()),
     ]
 }

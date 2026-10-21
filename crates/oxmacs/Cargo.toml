@@ -12,6 +12,7 @@ workspace = true
 default = ["dired", "markdown", "weather"]
 animated-splash = ["dep:oxmacs-splash"]
 atlas = ["dep:oxmacs-atlas"]
+database = ["dep:oxmacs-database"]
 demo = ["dep:oxmacs-demo"]
 dired = ["dep:oxmacs-dired"]
 extra-themes = ["dep:oxmacs-themes"]
@@ -25,6 +26,7 @@ weather = ["dep:oxmacs-weather"]
 [dependencies]
 oxmacs-atlas = { workspace = true, optional = true }
 oxmacs-core.workspace = true
+oxmacs-database = { workspace = true, optional = true }
 oxmacs-demo = { workspace = true, optional = true }
 oxmacs-dired = { workspace = true, optional = true }
 oxmacs-git = { workspace = true, optional = true }

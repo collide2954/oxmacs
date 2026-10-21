@@ -4474,6 +4474,7 @@ version = "0.13.0"
 dependencies = [
  "oxmacs-atlas",
  "oxmacs-core",
+ "oxmacs-database",
  "oxmacs-demo",
  "oxmacs-dired",
  "oxmacs-git",
