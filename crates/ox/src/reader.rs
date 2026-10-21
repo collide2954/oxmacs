@@ -8,6 +8,9 @@ pub enum Datum {
     Str(String),
     Symbol(String),
     Keyword(String),
+    List(Vec<Syntax>),
+    Vector(Vec<Syntax>),
+    Map(Vec<Syntax>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -22,23 +25,40 @@ pub struct ReadError {
     pub span: Span,
 }
 
+const MAX_DEPTH: usize = 1000;
+
 pub fn read(source: &str) -> (Vec<Syntax>, Vec<ReadError>) {
     let mut reader = Reader {
         source,
         at: 0,
         errors: Vec::new(),
+        open: Vec::new(),
+        top: Vec::new(),
     };
-    let mut data = Vec::new();
-    while let Some(syntax) = reader.datum() {
-        data.push(syntax);
-    }
-    (data, reader.errors)
+    reader.read_all();
+    (reader.top, reader.errors)
+}
+
+struct Open {
+    bracket: char,
+    start: usize,
+    items: Vec<Syntax>,
 }
 
 struct Reader<'a> {
     source: &'a str,
     at: usize,
     errors: Vec<ReadError>,
+    open: Vec<Open>,
+    top: Vec<Syntax>,
+}
+
+fn closer(opener: char) -> char {
+    match opener {
+        '(' => ')',
+        '[' => ']',
+        _ => '}',
+    }
 }
 
 fn separator(character: char) -> bool {
@@ -55,9 +75,13 @@ impl<'a> Reader<'a> {
     }
 
     fn error(&mut self, start: usize, message: impl Into<String>) {
+        self.error_at(Span::new(start, self.at), message);
+    }
+
+    fn error_at(&mut self, span: Span, message: impl Into<String>) {
         self.errors.push(ReadError {
             message: message.into(),
-            span: Span::new(start, self.at),
+            span,
         });
     }
 
@@ -79,28 +103,127 @@ impl<'a> Reader<'a> {
         &rest[..length]
     }
 
-    fn datum(&mut self) -> Option<Syntax> {
+    fn read_all(&mut self) {
         loop {
             self.skip_separators();
             let start = self.at;
-            let first = self.rest().chars().next()?;
-            let datum = match first {
-                '"' => self.string(start),
-                '\\' => self.character(start),
+            let Some(first) = self.rest().chars().next() else {
+                while let Some(open) = self.open.pop() {
+                    self.unclosed(open);
+                }
+                return;
+            };
+            match first {
+                '(' | '[' | '{' => self.opening(first, start),
+                ')' | ']' | '}' => self.closing(first, start),
+                '"' => {
+                    let datum = self.string(start);
+                    self.push(datum, start);
+                }
+                '\\' => {
+                    let datum = self.character(start);
+                    self.push(datum, start);
+                }
                 _ if delimiter(first) => {
                     self.at += first.len_utf8();
                     self.error(start, format!("Unexpected {first}"));
-                    continue;
                 }
-                _ => atom(self.token()),
-            };
-            return Some(Syntax {
-                datum,
-                span: Span::new(start, self.at),
-            });
+                _ => {
+                    let datum = atom(self.token());
+                    self.push(datum, start);
+                }
+            }
         }
     }
 
+    fn push(&mut self, datum: Datum, start: usize) {
+        self.place(Syntax {
+            datum,
+            span: Span::new(start, self.at),
+        });
+    }
+
+    fn place(&mut self, syntax: Syntax) {
+        match self.open.last_mut() {
+            Some(open) => open.items.push(syntax),
+            None => self.top.push(syntax),
+        }
+    }
+
+    fn opening(&mut self, bracket: char, start: usize) {
+        if self.open.len() >= MAX_DEPTH {
+            self.error_at(
+                Span::new(start, start + 1),
+                format!("Nested deeper than {MAX_DEPTH}"),
+            );
+            self.skip_balanced();
+            return;
+        }
+        self.at += 1;
+        self.open.push(Open {
+            bracket,
+            start,
+            items: Vec::new(),
+        });
+    }
+
+    fn closing(&mut self, bracket: char, start: usize) {
+        let Some(position) = self
+            .open
+            .iter()
+            .rposition(|open| closer(open.bracket) == bracket)
+        else {
+            self.at += 1;
+            self.error(start, format!("Unexpected {bracket}"));
+            return;
+        };
+        while self.open.len() > position + 1 {
+            if let Some(open) = self.open.pop() {
+                self.unclosed(open);
+            }
+        }
+        self.at += 1;
+        if let Some(open) = self.open.pop() {
+            self.finish(open);
+        }
+    }
+
+    fn unclosed(&mut self, open: Open) {
+        self.error_at(
+            Span::new(open.start, open.start + 1),
+            format!("This {} is never closed", open.bracket),
+        );
+        self.finish(open);
+    }
+
+    fn finish(&mut self, open: Open) {
+        let span = Span::new(open.start, self.at);
+        let datum = match open.bracket {
+            '(' => Datum::List(open.items),
+            '[' => Datum::Vector(open.items),
+            _ => {
+                if open.items.len() % 2 == 1 {
+                    self.error_at(span, "This map has a key without a value");
+                }
+                Datum::Map(open.items)
+            }
+        };
+        self.place(Syntax { datum, span });
+    }
+
+    fn skip_balanced(&mut self) {
+        let mut depth = 0_usize;
+        while let Some(character) = self.next_char() {
+            match character {
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+            if depth == 0 {
+                return;
+            }
+        }
+    }
     fn string(&mut self, start: usize) -> Datum {
         self.at += 1;
         let mut text = String::new();
@@ -374,6 +497,92 @@ mod tests {
                 (symbol("a:b"), Span::new(13, 16)),
             ]
         );
+    }
+
+    fn shape(syntax: &Syntax) -> String {
+        let join = |items: &[Syntax]| items.iter().map(shape).collect::<Vec<_>>().join(" ");
+        match &syntax.datum {
+            Datum::Int(number) => number.to_string(),
+            Datum::Float(number) => format!("{number:?}"),
+            Datum::Char(character) => format!("\\{character}"),
+            Datum::Str(text) => format!("{text:?}"),
+            Datum::Symbol(name) => name.clone(),
+            Datum::Keyword(name) => format!(":{name}"),
+            Datum::List(items) => format!("({})", join(items)),
+            Datum::Vector(items) => format!("[{}]", join(items)),
+            Datum::Map(items) => format!("{{{}}}", join(items)),
+        }
+    }
+
+    fn shapes(source: &str) -> Vec<String> {
+        read(source).0.iter().map(shape).collect()
+    }
+
+    #[test]
+    fn lists_vectors_and_maps_nest() {
+        assert_eq!(errors("(f [1 2] {a: 1 :b [x]}) () [] {}"), []);
+        assert_eq!(
+            shapes("(f [1 2] {a: 1 :b [x]}) () [] {}"),
+            ["(f [1 2] {:a 1 :b [x]})", "()", "[]", "{}"]
+        );
+    }
+
+    #[test]
+    fn collections_span_from_opener_to_closer() {
+        let (data, _) = read(" (a [b])");
+        let Datum::List(items) = &data[0].datum else {
+            panic!("expected a list");
+        };
+
+        assert_eq!(data[0].span, Span::new(1, 8));
+        assert_eq!(items[1].span, Span::new(4, 7));
+    }
+
+    #[test]
+    fn unclosed_and_mismatched_brackets_are_reported_where_they_open() {
+        assert_eq!(
+            errors("(a [b) c"),
+            [("This [ is never closed".to_owned(), Span::new(3, 4))]
+        );
+        assert_eq!(shapes("(a [b) c"), ["(a [b])", "c"]);
+        assert_eq!(
+            errors("(a"),
+            [("This ( is never closed".to_owned(), Span::new(0, 1))]
+        );
+    }
+
+    #[test]
+    fn stray_closers_are_reported_and_skipped() {
+        assert_eq!(
+            errors("(a ] b) }"),
+            [
+                ("Unexpected ]".to_owned(), Span::new(3, 4)),
+                ("Unexpected }".to_owned(), Span::new(8, 9)),
+            ]
+        );
+        assert_eq!(shapes("(a ] b) }"), ["(a b)"]);
+    }
+
+    #[test]
+    fn maps_need_a_value_for_every_key() {
+        assert_eq!(
+            errors("{a: 1 b:}"),
+            [(
+                "This map has a key without a value".to_owned(),
+                Span::new(0, 9)
+            )]
+        );
+    }
+
+    #[test]
+    fn nesting_is_limited_without_overflowing_the_stack() {
+        let deep = format!("{}{} x", "(".repeat(5000), ")".repeat(5000));
+
+        assert_eq!(
+            errors(&deep),
+            [("Nested deeper than 1000".to_owned(), Span::new(1000, 1001))]
+        );
+        assert_eq!(read(&deep).0.len(), 2);
     }
 
     #[test]
