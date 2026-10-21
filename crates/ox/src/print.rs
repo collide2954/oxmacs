@@ -36,6 +36,8 @@ fn write_into(heap: &Heap, value: Value, out: &mut String) {
                 string(text, out);
             } else if heap.pair_of(value).is_some() {
                 list(heap, value, out);
+            } else if let Some(native) = heap.native_of(value) {
+                let _ = write!(out, "#<native {}>", native.name.name());
             }
         }
     }

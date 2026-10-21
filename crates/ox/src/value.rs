@@ -22,6 +22,7 @@ pub struct Ref {
 pub enum Kind {
     String,
     Pair,
+    Native,
 }
 
 impl Value {

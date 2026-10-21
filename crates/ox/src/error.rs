@@ -16,6 +16,12 @@ impl Error {
         }
     }
 
+    #[must_use]
+    pub fn or_at(mut self, span: Span) -> Self {
+        self.span.get_or_insert(span);
+        self
+    }
+
     pub fn at(span: Span, message: impl Into<String>) -> Self {
         Self {
             message: message.into(),

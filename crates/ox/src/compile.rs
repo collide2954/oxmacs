@@ -3,30 +3,34 @@ use crate::error::Error;
 use crate::heap::Heap;
 use crate::reader::{Datum, Syntax};
 use crate::span::Span;
+use crate::symbol::Sym;
 use crate::value::Value;
 
 pub fn compile(heap: &mut Heap, form: &Syntax) -> Result<Code, Error> {
     let mut compiler = Compiler {
         heap,
         code: Code::default(),
+        top: 0,
     };
-    let result = compiler.expression(form)?;
-    compiler.emit(Op::Return { from: result }, form.span);
+    let target = compiler.reserve(1, form.span)?;
+    compiler.expression(form, target)?;
+    compiler.emit(Op::Return { from: target }, form.span);
     Ok(compiler.code)
 }
 
 struct Compiler<'a> {
     heap: &'a mut Heap,
     code: Code,
+    top: Register,
 }
 
 impl Compiler<'_> {
-    fn register(&mut self, span: Span) -> Result<Register, Error> {
-        let register = self.code.registers;
-        self.code.registers = register
-            .checked_add(1)
-            .ok_or_else(|| Error::at(span, "This function needs too many registers"))?;
-        Ok(register)
+    fn reserve(&mut self, count: usize, span: Span) -> Result<Register, Error> {
+        let base = self.top;
+        self.top = u16::try_from(usize::from(base) + count)
+            .map_err(|_| Error::at(span, "This function needs too many registers"))?;
+        self.code.registers = self.code.registers.max(self.top);
+        Ok(base)
     }
 
     fn constant(&mut self, value: Value, span: Span) -> Result<u32, Error> {
@@ -41,8 +45,25 @@ impl Compiler<'_> {
         self.code.spans.push(span);
     }
 
-    fn expression(&mut self, form: &Syntax) -> Result<Register, Error> {
+    fn load(&mut self, value: Value, target: Register, span: Span) -> Result<(), Error> {
+        let index = self.constant(value, span)?;
+        self.emit(Op::Constant { to: target, index }, span);
+        Ok(())
+    }
+
+    fn expression(&mut self, form: &Syntax, target: Register) -> Result<(), Error> {
         let value = match &form.datum {
+            Datum::Symbol(name) => {
+                self.emit(
+                    Op::Global {
+                        to: target,
+                        name: Sym::intern(name),
+                    },
+                    form.span,
+                );
+                return Ok(());
+            }
+            Datum::List(items) => return self.call(items, target, form.span),
             Datum::Nil => Value::Nil,
             Datum::Bool(flag) => Value::Bool(*flag),
             Datum::Int(number) => Value::Int(*number),
@@ -55,9 +76,31 @@ impl Compiler<'_> {
                 .map_err(|full| Error::at(form.span, full.to_string()))?,
             _ => return Err(Error::at(form.span, "This form is not supported yet")),
         };
-        let to = self.register(form.span)?;
-        let index = self.constant(value, form.span)?;
-        self.emit(Op::Constant { to, index }, form.span);
-        Ok(to)
+        self.load(value, target, form.span)
+    }
+
+    fn call(&mut self, items: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let Some((callee, arguments)) = items.split_first() else {
+            return self.load(Value::Nil, target, span);
+        };
+        let count = u16::try_from(arguments.len())
+            .map_err(|_| Error::at(span, "This call has too many arguments"))?;
+        let base = self.reserve(1 + arguments.len(), span)?;
+        self.expression(callee, base)?;
+        for (offset, argument) in (1..).zip(arguments) {
+            self.expression(argument, base + offset)?;
+        }
+        self.emit(Op::Call { base, count }, span);
+        if base != target {
+            self.emit(
+                Op::Move {
+                    to: target,
+                    from: base,
+                },
+                span,
+            );
+        }
+        self.top = base;
+        Ok(())
     }
 }

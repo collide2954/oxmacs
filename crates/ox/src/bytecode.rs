@@ -7,6 +7,9 @@ pub type Register = u16;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Op {
     Constant { to: Register, index: u32 },
+    Global { to: Register, name: Sym },
+    Move { to: Register, from: Register },
+    Call { base: Register, count: u16 },
     Return { from: Register },
 }
 

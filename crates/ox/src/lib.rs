@@ -1,8 +1,11 @@
+mod builtins;
 pub mod bytecode;
 mod compile;
 pub mod error;
 pub mod heap;
 mod isolate;
+pub mod native;
+mod number;
 pub mod print;
 pub mod reader;
 pub mod span;

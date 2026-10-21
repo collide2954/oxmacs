@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::native::Native;
 use crate::value::{Kind, Ref, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +55,7 @@ impl<T> Arena<T> {
 pub struct Heap {
     strings: Arena<Box<str>>,
     pairs: Arena<Pair>,
+    natives: Arena<Native>,
 }
 
 fn reference(value: Value, kind: Kind) -> Option<u32> {
@@ -88,6 +90,18 @@ impl Heap {
 
     pub fn pair_of(&self, value: Value) -> Option<Pair> {
         self.pairs.get(reference(value, Kind::Pair)?).copied()
+    }
+
+    pub fn native(&mut self, native: Native) -> Result<Value, HeapFull> {
+        let index = self.natives.alloc(native)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Native,
+            index,
+        }))
+    }
+
+    pub fn native_of(&self, value: Value) -> Option<&Native> {
+        self.natives.get(reference(value, Kind::Native)?)
     }
 
     pub fn list(
