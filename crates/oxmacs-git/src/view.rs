@@ -24,6 +24,7 @@ pub(crate) struct GitState {
     pub(crate) scope: ScopeId,
     pub(crate) diff_scope: ScopeId,
     pub(crate) process_scope: ScopeId,
+    pub(crate) log_scope: ScopeId,
     pub(crate) patches: usize,
     pub(crate) pending: Vec<crate::commit::Pending>,
     pub(crate) mode_line: mode_line::Cache,
@@ -94,7 +95,14 @@ pub(crate) fn spot(status: &Status, row: Row) -> Option<Spot> {
     })
 }
 
-fn now() -> i64 {
+pub(crate) fn folder_name(root: &Path) -> String {
+    root.file_name().map_or_else(
+        || root.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
+}
+
+pub(crate) fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |elapsed| {
@@ -187,13 +195,7 @@ pub(crate) fn open(editor: &mut Editor) {
     let Some(scope) = editor.applet_state::<GitState>().map(|state| state.scope) else {
         return;
     };
-    let name = format!(
-        "git: {}",
-        root.file_name().map_or_else(
-            || root.display().to_string(),
-            |name| name.to_string_lossy().into_owned()
-        )
-    );
+    let name = format!("git: {}", folder_name(&root));
     let metadata = status.snapshot.metadata.clone();
     let id = editor.add_applet_buffer_with(&name, |buffer| {
         buffer.set_read_only(true);

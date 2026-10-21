@@ -387,13 +387,7 @@ fn pane_for(editor: &mut Editor, root: &Path) -> Option<BufferId> {
     let scope = editor
         .applet_state::<GitState>()
         .map(|state| state.diff_scope)?;
-    let name = format!(
-        "git diff: {}",
-        root.file_name().map_or_else(
-            || root.display().to_string(),
-            |name| name.to_string_lossy().into_owned()
-        )
-    );
+    let name = format!("git diff: {}", view::folder_name(root));
     let pane_root = root.to_owned();
     Some(editor.add_applet_buffer_with(&name, |buffer| {
         buffer.set_read_only(true);

@@ -1,5 +1,7 @@
 mod commit;
 mod diff;
+mod history;
+mod log;
 mod mode_line;
 mod pane;
 mod process;
@@ -30,7 +32,7 @@ const GLOBAL: &[Spec] = &[Spec {
     name: "git-status",
     summary: "Show the Git status of the current repository",
     help: Some(
-        "The status lists untracked, unstaged and staged files, stashes and recent commits. n and p move between sections and files, TAB shows or hides a file's changes, a hunk or a whole section, RET visits the file at the line shown and g reads the repository again. s stages and u unstages a file, section, hunk or the lines in the region, and k throws changes away after asking. The diff of the file at point shows beside the status, where t switches to side by side. c opens the commit menu; the message is written beside the staged diff and C-c C-c commits it. $ lists the Git commands run and what they printed. The status also refreshes itself when files are saved or the repository changes.",
+        "The status lists untracked, unstaged and staged files, stashes and recent commits. n and p move between sections and files, TAB shows or hides a file's changes, a hunk or a whole section, RET visits the file at the line shown and g reads the repository again. s stages and u unstages a file, section, hunk or the lines in the region, and k throws changes away after asking. The diff of the file at point shows beside the status, where t switches to side by side. c opens the commit menu; the message is written beside the staged diff and C-c C-c commits it. l opens the log menu. $ lists the Git commands run and what they printed. The status also refreshes itself when files are saved or the repository changes.",
     ),
     keys: &["C-x g"],
     run: view::open,
@@ -106,6 +108,37 @@ const STATUS: &[Spec] = &[
         help: None,
         keys: &["$"],
         run: process::open,
+    },
+    Spec {
+        name: "git-log",
+        summary: "Log the current branch, all branches or another one",
+        help: None,
+        keys: &["l"],
+        run: log::dispatch,
+    },
+];
+
+const LOG: &[Spec] = &[
+    Spec {
+        name: "git-log-next",
+        summary: "Move to the next commit",
+        help: None,
+        keys: &["n"],
+        run: |editor| log::step(editor, true),
+    },
+    Spec {
+        name: "git-log-previous",
+        summary: "Move to the previous commit",
+        help: None,
+        keys: &["p"],
+        run: |editor| log::step(editor, false),
+    },
+    Spec {
+        name: "git-log-refresh",
+        summary: "Read the log again",
+        help: None,
+        keys: &["g"],
+        run: log::refresh,
     },
 ];
 
@@ -237,10 +270,12 @@ impl Applet for Git {
         let scope = editor.add_scope("git status");
         let diff_scope = editor.add_scope("git diff");
         let process_scope = editor.add_scope("git process");
+        let log_scope = editor.add_scope("git log");
         editor.set_applet_state(GitState {
             scope,
             diff_scope,
             process_scope,
+            log_scope,
             patches: 0,
             pending: Vec::new(),
             mode_line: mode_line::Cache::default(),
@@ -249,6 +284,7 @@ impl Applet for Git {
         register(editor, Scope::Global.into(), GLOBAL);
         register(editor, scope, STATUS);
         register(editor, diff_scope, DIFF);
+        register(editor, log_scope, LOG);
         let message = editor.add_scope("git commit");
         register(editor, message, MESSAGE);
         editor.add_language(commit::LANGUAGE, Some(message));
@@ -256,6 +292,7 @@ impl Applet for Git {
         editor.bind(scope, "q", Command::QuitWindow).ok();
         editor.bind(diff_scope, "q", Command::QuitWindow).ok();
         editor.bind(process_scope, "q", Command::QuitWindow).ok();
+        editor.bind(log_scope, "q", Command::QuitWindow).ok();
         editor.on_command(pane::follow);
         editor.on_command(mode_line::notice);
         editor.on_display(pane::fit);

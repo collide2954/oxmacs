@@ -423,7 +423,7 @@ fn commits(out: &mut Rendered, recent: &[Commit], now: i64) {
     }
 }
 
-fn shorten(text: &str, width: usize) -> String {
+pub(crate) fn shorten(text: &str, width: usize) -> String {
     if text.chars().count() <= width {
         return text.to_owned();
     }
