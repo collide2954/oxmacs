@@ -129,9 +129,11 @@ impl Editor {
     }
 
     fn tool_setting(&self, tool: Managed) -> Option<&str> {
-        (tool == managed::AIR)
-            .then_some(self.config.air_program.as_deref())
-            .flatten()
+        if tool == managed::AIR {
+            return self.config.air_program.as_deref();
+        }
+        let (table, key) = tool.setting?.split_once('.')?;
+        self.config.applets.get(table)?.get(key)?.as_str()
     }
 
     pub fn set_tools_root(&mut self, root: Option<PathBuf>) {
@@ -447,6 +449,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
+    use crate::config::Config;
     use crate::editor::test_support::{lines, press, question, type_text};
     use crate::editor::{Editor, Effect, FetchId};
     use std::env;
@@ -733,6 +736,40 @@ mod tests {
         assert_eq!(install.checksum, Expected::Digest("abcd".to_owned()));
     }
 
+    const DRIVER: Managed = Managed {
+        name: "driver",
+        form: Form::Program,
+        setting: Some("engine.driver"),
+        ..ENGINE
+    };
+
+    #[test]
+    fn applet_tools_run_from_the_setting_in_their_table() {
+        let root = tempfile::tempdir().unwrap();
+        let program = root.path().join("my-driver");
+        fs::write(&program, "").unwrap();
+        let mut editor = Editor::new();
+        editor.apply_config(
+            &Config::parse(&format!("[engine]\ndriver = '{}'\n", program.display())).unwrap(),
+        );
+        editor.add_managed_tool(DRIVER);
+        editor.tools_root = Some(root.path().join("tools"));
+
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "list-tools");
+        press(&mut editor, "RET");
+
+        let shown = lines(&editor);
+        let card = shown
+            .iter()
+            .position(|line| line.starts_with("driver  "))
+            .unwrap();
+        assert!(
+            shown[card + 4].ends_with("my-driver (engine.driver)"),
+            "{}",
+            shown[card + 4]
+        );
+    }
     #[test]
     fn keys_off_a_tool_line_say_so() {
         let root = tempfile::tempdir().unwrap();

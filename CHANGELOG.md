@@ -41,6 +41,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Applets can give their languages a guess at each line's indentation, which `TAB`, `RET` and `C-M-\` follow.
 - Applets can give their languages a formatter, used by `format-buffer` (on `C-c C-f` in that language's buffers) and format-on-save, and a linter that checks files on save with the same underlines, mode-line counts and `*Diagnostics*` as cargo.
 - Applets can run commands in `*compilation*` and teach it the error locations their tools print.
+- `M-x list-tools` says when an applet's tool runs from a setting in the applet's table, such as `[python] ruff`.
 - Applets can start REPL consoles like the R console, with input history, echoed code, hidden requests and keys of their own instead of the R console's.
 - Applets can run background jobs and interactive sessions of their own, listed in `M-x list-processes`.
 - Applets can open the file types they claim, show their own position in the mode line and have their file watched for changes.

@@ -68,7 +68,7 @@ pub const RUFF: Managed = Managed {
         ("linux", "aarch64", "ruff-aarch64-unknown-linux-gnu.tar.gz"),
     ],
     checksum: Checksum::Sidecar,
-    setting: None,
+    setting: Some("python.ruff"),
 };
 
 pub const UV: Managed = Managed {
@@ -86,7 +86,7 @@ pub const UV: Managed = Managed {
         ("linux", "aarch64", "uv-aarch64-unknown-linux-gnu.tar.gz"),
     ],
     checksum: Checksum::Sidecar,
-    setting: None,
+    setting: Some("python.uv"),
 };
 
 pub(crate) fn settings(editor: &Editor) -> Settings {
