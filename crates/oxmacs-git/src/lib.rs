@@ -1,5 +1,6 @@
 mod commit;
 mod diff;
+mod graph;
 mod history;
 mod log;
 mod mode_line;
@@ -11,14 +12,17 @@ mod run;
 mod stage;
 mod status;
 mod view;
+mod widget;
 
 use std::collections::VecDeque;
 
-use oxmacs_core::applet::Applet;
+use iced::Element;
+use oxmacs_core::applet::{Applet, Payload};
 use oxmacs_core::command::{Command, CommandId, CommandSpec, Scope, ScopeId};
-use oxmacs_core::editor::Editor;
-use oxmacs_gui::applet::GuiApplet;
+use oxmacs_core::editor::{Editor, Pane, WindowId};
+use oxmacs_gui::applet::{Context, GuiApplet};
 
+use log::LogView;
 use view::GitState;
 
 struct Spec {
@@ -334,6 +338,9 @@ impl Applet for Git {
         editor.on_command(mode_line::notice);
         editor.on_display(pane::fit);
         editor.on_display(revision::fit);
+        editor.on_event(log::viewport);
+        editor.on_event(log::scrolled);
+        editor.on_event(log::clicked);
         editor.on_disk_change(view::refresh_all);
         editor.on_disk_change(mode_line::disk_changed);
         editor.on_saved(view::refresh_saved);
@@ -342,7 +349,30 @@ impl Applet for Git {
     }
 }
 
-impl GuiApplet for Git {}
+impl GuiApplet for Git {
+    fn body<'a>(
+        &'a self,
+        _editor: &'a Editor,
+        pane: Pane<'a>,
+        _window: WindowId,
+        context: &Context,
+    ) -> Option<Element<'a, Payload>> {
+        let view = pane.applet_buffer::<LogView>()?;
+        let buffer = pane.buffer();
+        Some(
+            widget::LogWidget::new(
+                view,
+                buffer.id(),
+                buffer.line_of(pane.point()),
+                context.faces,
+                context.font,
+                context.size,
+                pane.is_selected(),
+            )
+            .into(),
+        )
+    }
+}
 
 #[cfg(test)]
 pub(crate) mod testing {

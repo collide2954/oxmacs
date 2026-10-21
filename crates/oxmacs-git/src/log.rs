@@ -10,10 +10,12 @@ use oxmacs_core::editor::{Action, Editor, Group, Offer, Picked, Transient};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Highlight;
 
+use crate::graph::{GraphRow, Lanes};
 use crate::history::{self, Details, Entry, Label, LabelKind, Tips};
 use crate::revision;
 use crate::status::{self, Line, Rendered, Row, Section};
 use crate::view::{self, GitState};
+use crate::widget::{LogClick, LogScroll, LogViewport};
 
 pub(crate) const PAGE: usize = 1000;
 const SUBJECT: usize = 72;
@@ -50,10 +52,15 @@ pub(crate) struct LogView {
     pub(crate) root: PathBuf,
     pub(crate) tips: Tips,
     pub(crate) entries: Vec<Entry>,
+    pub(crate) graph: Vec<GraphRow>,
+    lanes: Lanes<ObjectId>,
+    pub(crate) labels: HashMap<ObjectId, Vec<Label>>,
     pub(crate) rendered: Rendered,
     pub(crate) selected: Option<ObjectId>,
     pub(crate) details: Option<Details>,
     pub(crate) about: Rendered,
+    pub(crate) top: usize,
+    pub(crate) shown: usize,
 }
 
 impl LogView {
@@ -178,10 +185,15 @@ fn buffer_for(editor: &mut Editor, root: &Path, tips: &Tips) -> Option<BufferId>
             root,
             tips,
             entries: Vec::new(),
+            graph: Vec::new(),
+            lanes: Lanes::default(),
+            labels: HashMap::new(),
             rendered: Rendered::default(),
             selected: None,
             details: None,
             about: Rendered::default(),
+            top: 0,
+            shown: 0,
         }
     }))
 }
@@ -218,7 +230,13 @@ fn load(editor: &mut Editor, id: BufferId, count: usize, keep: Option<ObjectId>)
     let Some((buffer, view)) = editor.applet_buffer_mut::<LogView>(id) else {
         return false;
     };
+    view.lanes = Lanes::default();
+    view.graph = entries
+        .iter()
+        .map(|entry| view.lanes.place(&entry.id, &entry.parents))
+        .collect();
     view.rendered = render(&entries, &labels, now);
+    view.labels = labels;
     view.entries = entries;
     buffer.set_text(&view.rendered.text);
     let line = keep
@@ -226,8 +244,76 @@ fn load(editor: &mut Editor, id: BufferId, count: usize, keep: Option<ObjectId>)
         .unwrap_or(0);
     let start = buffer.line_start(line);
     buffer.set_point(start);
+    view.top = visible_top(view.top, view.shown, line);
     select(editor, id, line);
     true
+}
+
+pub(crate) fn visible_top(top: usize, shown: usize, line: usize) -> usize {
+    if shown == 0 || line < top {
+        return line.min(top);
+    }
+    if line >= top + shown {
+        return line + 1 - shown;
+    }
+    top
+}
+
+fn reveal(editor: &mut Editor, id: BufferId, line: usize) {
+    if let Some((_, view)) = editor.applet_buffer_mut::<LogView>(id) {
+        view.top = visible_top(view.top, view.shown, line);
+    }
+}
+
+pub(crate) fn viewport(editor: &mut Editor, event: &LogViewport) {
+    let Some((buffer, view)) = editor.applet_buffer_mut::<LogView>(event.buffer) else {
+        return;
+    };
+    view.shown = event.rows;
+    view.top = visible_top(view.top, view.shown, buffer.line_of(buffer.point()));
+}
+
+fn move_to(editor: &mut Editor, id: BufferId, line: usize) {
+    let Some(start) = editor
+        .buffer_by_id(id)
+        .map(|buffer| buffer.line_start(line))
+    else {
+        return;
+    };
+    if let Some(buffer) = editor.buffer_by_id_mut(id) {
+        buffer.set_point(start);
+    }
+    editor.move_points(id, |_, _| Some(start));
+    reveal(editor, id, line);
+    select(editor, id, line);
+}
+
+pub(crate) fn scrolled(editor: &mut Editor, event: &LogScroll) {
+    let Some((buffer, view)) = editor.applet_buffer_mut::<LogView>(event.buffer) else {
+        return;
+    };
+    let last = view.entries.len().saturating_sub(1);
+    let moved = i64::try_from(view.top)
+        .unwrap_or(i64::MAX)
+        .saturating_add(event.rows)
+        .max(0);
+    view.top = usize::try_from(moved).unwrap_or(0).min(last);
+    let line = buffer.line_of(buffer.point());
+    let bottom = (view.top + view.shown.max(1) - 1).min(last).max(view.top);
+    let target = line.clamp(view.top, bottom);
+    if target != line {
+        move_to(editor, event.buffer, target);
+    }
+}
+
+pub(crate) fn clicked(editor: &mut Editor, event: &LogClick) {
+    let Some((_, view)) = editor.applet_buffer::<LogView>(event.buffer) else {
+        return;
+    };
+    let line = view.top + event.row;
+    if line < view.entries.len() {
+        move_to(editor, event.buffer, line);
+    }
 }
 
 pub(crate) fn about(entry: &Entry, details: &Details, now: i64) -> Rendered {
@@ -309,6 +395,7 @@ pub(crate) fn follow(editor: &mut Editor) {
     };
     let buffer = editor.buffer();
     let line = buffer.line_of(buffer.point());
+    reveal(editor, id, line);
     select(editor, id, line);
 }
 
@@ -373,6 +460,8 @@ mod tests {
     use std::fs;
 
     use oxmacs_core::editor::Editor;
+
+    use oxmacs_core::applet::Payload;
 
     use super::*;
     use crate::diff::hunks;
@@ -635,5 +724,77 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn every_branch_takes_a_lane_of_its_own() {
+        let (_dir, mut editor) = branched();
+
+        press(&mut editor, "l a");
+
+        let graph = &view(&editor).graph;
+        assert_eq!(graph.len(), 3);
+        assert_eq!(graph[0].lane, 0);
+        assert_eq!(graph[1].lane, 1);
+        assert_eq!(graph[2].above, [0, 1]);
+    }
+
+    #[test]
+    fn the_top_row_keeps_point_in_view() {
+        assert_eq!(visible_top(0, 10, 5), 0);
+        assert_eq!(visible_top(0, 10, 12), 3);
+        assert_eq!(visible_top(8, 10, 3), 3);
+        assert_eq!(visible_top(4, 0, 9), 4);
+    }
+
+    fn long() -> (tempfile::TempDir, Editor) {
+        let dir = repository();
+        for number in 1..=30 {
+            git(
+                dir.path(),
+                &[
+                    "commit",
+                    "-q",
+                    "--allow-empty",
+                    "-m",
+                    &format!("Change {number}"),
+                ],
+            );
+        }
+        let mut editor = installed(dir.path());
+        press(&mut editor, "C-x g l l");
+        (dir, editor)
+    }
+
+    fn line(editor: &Editor) -> usize {
+        let buffer = editor.buffer();
+        buffer.line_of(buffer.point())
+    }
+
+    #[test]
+    fn the_window_scrolls_and_clicks_select_commits() {
+        let (_dir, mut editor) = long();
+        let id = editor.buffer().id();
+
+        editor.deliver(&Payload::new(LogViewport {
+            buffer: id,
+            rows: 10,
+        }));
+        assert_eq!(view(&editor).shown, 10);
+
+        editor.deliver(&Payload::new(LogScroll {
+            buffer: id,
+            rows: 6,
+        }));
+        assert_eq!(view(&editor).top, 6);
+        assert_eq!(line(&editor), 6);
+        assert!(view(&editor).about.text.contains("\nChange 24\n"));
+
+        editor.deliver(&Payload::new(LogClick { buffer: id, row: 2 }));
+        assert_eq!(line(&editor), 8);
+        assert!(view(&editor).about.text.contains("\nChange 22\n"));
+
+        press(&mut editor, "M->");
+        assert_eq!(view(&editor).top, 21);
     }
 }
