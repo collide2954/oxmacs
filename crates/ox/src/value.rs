@@ -25,6 +25,7 @@ pub enum Kind {
     Native,
     Closure,
     Cell,
+    BigInt,
 }
 
 impl Value {

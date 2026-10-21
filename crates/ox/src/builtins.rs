@@ -10,23 +10,30 @@ use crate::value::Value;
 
 type Step = fn(Number, Number) -> Result<Number, Error>;
 
-fn fold(
+fn total(
     heap: &Heap,
     name: &str,
     start: Number,
     arguments: &[Value],
     step: Step,
+) -> Result<Number, Error> {
+    arguments.iter().try_fold(start, |total, value| {
+        step(total, Number::of(heap, name, *value)?)
+    })
+}
+
+fn fold(
+    heap: &mut Heap,
+    name: &str,
+    start: Number,
+    arguments: &[Value],
+    step: Step,
 ) -> Result<Value, Error> {
-    arguments
-        .iter()
-        .try_fold(start, |total, value| {
-            step(total, Number::of(heap, name, *value)?)
-        })
-        .map(Number::value)
+    total(heap, name, start, arguments, step)?.store(heap)
 }
 
 fn reduce(
-    heap: &Heap,
+    heap: &mut Heap,
     name: &str,
     arguments: &[Value],
     single: fn(Number) -> Result<Number, Error>,
@@ -39,7 +46,7 @@ fn reduce(
     };
     let first = Number::of(heap, name, *first)?;
     if rest.is_empty() {
-        return single(first).map(Number::value);
+        return single(first)?.store(heap);
     }
     fold(heap, name, first, rest, step)
 }
@@ -57,7 +64,7 @@ fn chain(
     Ok(Value::Bool(
         numbers
             .windows(2)
-            .all(|pair| pair[0].compare(pair[1]).is_some_and(holds)),
+            .all(|pair| pair[0].compare(&pair[1]).is_some_and(holds)),
     ))
 }
 
@@ -86,25 +93,33 @@ pub fn install(isolate: &mut Isolate) {
         output(heap, arguments, true)
     });
     isolate.define_native("+", 0, None, |heap, arguments| {
-        fold(heap, "+", Number::Int(0), arguments, Number::add)
+        fold(heap, "+", Number::Int(0), arguments, |a, b| Ok(a.add(&b)))
     });
     isolate.define_native("*", 0, None, |heap, arguments| {
-        fold(heap, "*", Number::Int(1), arguments, Number::multiply)
+        fold(heap, "*", Number::Int(1), arguments, |a, b| {
+            Ok(a.multiply(&b))
+        })
     });
     isolate.define_native("-", 1, None, |heap, arguments| {
-        reduce(heap, "-", arguments, Number::negate, Number::subtract)
+        reduce(
+            heap,
+            "-",
+            arguments,
+            |only| Ok(only.negate()),
+            |a, b| Ok(a.subtract(&b)),
+        )
     });
     isolate.define_native("/", 1, None, |heap, arguments| {
         reduce(
             heap,
             "/",
             arguments,
-            |only| Number::Int(1).divide(only),
-            Number::divide,
+            |only| Number::Int(1).divide(&only),
+            |a, b| a.divide(&b),
         )
     });
     isolate.define_native("//", 2, Some(2), |heap, arguments| {
-        reduce(heap, "//", arguments, Ok, Number::floor_divide)
+        reduce(heap, "//", arguments, Ok, |a, b| a.floor_divide(&b))
     });
     isolate.define_native("<", 1, None, |heap, arguments| {
         chain(heap, "<", arguments, Ordering::is_lt)

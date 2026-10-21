@@ -1,6 +1,8 @@
 use std::fmt;
 use std::rc::Rc;
 
+use num_bigint::BigInt;
+
 use crate::bytecode::Code;
 use crate::native::Native;
 use crate::value::{Kind, Ref, Value};
@@ -70,6 +72,7 @@ pub struct Heap {
     natives: Arena<Native>,
     closures: Arena<Closure>,
     cells: Arena<Value>,
+    bigints: Arena<BigInt>,
 }
 
 fn reference(value: Value, kind: Kind) -> Option<u32> {
@@ -149,6 +152,18 @@ impl Heap {
         };
         *slot = value;
         true
+    }
+
+    pub fn bigint(&mut self, number: BigInt) -> Result<Value, HeapFull> {
+        let index = self.bigints.alloc(number)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::BigInt,
+            index,
+        }))
+    }
+
+    pub fn bigint_of(&self, value: Value) -> Option<&BigInt> {
+        self.bigints.get(reference(value, Kind::BigInt)?)
     }
 
     pub fn list(

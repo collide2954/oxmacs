@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use num_bigint::BigInt;
+
 use crate::bytecode::{Arity, Capture, Code, Op, Register};
 use crate::error::Error;
 use crate::heap::Heap;
@@ -260,6 +262,14 @@ impl Compiler<'_> {
                 .heap
                 .string(text)
                 .map_err(|full| Error::at(form.span, full.to_string()))?,
+            Datum::BigInt(digits) => {
+                let number = digits
+                    .parse::<BigInt>()
+                    .map_err(|_| Error::at(form.span, format!("{digits} is not a number")))?;
+                self.heap
+                    .bigint(number)
+                    .map_err(|full| Error::at(form.span, full.to_string()))?
+            }
             _ => return Err(Error::at(form.span, "This form is not supported yet")),
         };
         self.load(value, target, form.span)

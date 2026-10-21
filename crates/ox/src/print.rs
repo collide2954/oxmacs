@@ -34,6 +34,8 @@ fn write_into(heap: &Heap, value: Value, out: &mut String) {
         Value::Ref(_) => {
             if let Some(text) = heap.text(value) {
                 string(text, out);
+            } else if let Some(number) = heap.bigint_of(value) {
+                let _ = write!(out, "{number}");
             } else if heap.pair_of(value).is_some() {
                 list(heap, value, out);
             } else if let Some(native) = heap.native_of(value) {

@@ -36,6 +36,8 @@ oxmacs-weather = { path = "crates/oxmacs-weather" }
 pdfium-render = { version = "0.9.4", default-features = false, features = ["pdfium_latest", "thread_safe"] }
 native-theme = { version = "0.6.1", default-features = false }
 notify = "8.2.0"
+num-bigint = "0.4.8"
+num-traits = "0.2.19"
 open = "5.4.4"
 regex = "1.13.1"
 rhai = { version = "1.26.1", features = ["sync"] }

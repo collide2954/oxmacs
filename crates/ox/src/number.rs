@@ -1,13 +1,17 @@
 use std::cmp::Ordering;
 
+use num_bigint::BigInt;
+use num_traits::{ToPrimitive, Zero};
+
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::print;
 use crate::value::Value;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Number {
     Int(i64),
+    Big(BigInt),
     Float(f64),
 }
 
@@ -19,8 +23,8 @@ pub fn to_float(number: i64) -> f64 {
     number as f64
 }
 
-fn overflow() -> Error {
-    Error::new("Integer overflow")
+fn shrink(number: BigInt) -> Number {
+    i64::try_from(&number).map_or(Number::Big(number), Number::Int)
 }
 
 impl Number {
@@ -28,91 +32,126 @@ impl Number {
         match value {
             Value::Int(number) => Ok(Self::Int(number)),
             Value::Float(number) => Ok(Self::Float(number)),
-            other => Err(Error::new(format!(
-                "{name} expects numbers, got {}",
-                print::write(heap, other)
-            ))),
+            other => heap
+                .bigint_of(other)
+                .map(|number| Self::Big(number.clone()))
+                .ok_or_else(|| {
+                    Error::new(format!(
+                        "{name} expects numbers, got {}",
+                        print::write(heap, other)
+                    ))
+                }),
         }
     }
 
-    pub fn value(self) -> Value {
+    pub fn store(self, heap: &mut Heap) -> Result<Value, Error> {
         match self {
-            Self::Int(number) => Value::Int(number),
-            Self::Float(number) => Value::Float(number),
+            Self::Int(number) => Ok(Value::Int(number)),
+            Self::Float(number) => Ok(Value::Float(number)),
+            Self::Big(number) => heap
+                .bigint(number)
+                .map_err(|full| Error::new(full.to_string())),
         }
     }
 
-    pub fn float(self) -> f64 {
+    pub fn float(&self) -> f64 {
         match self {
-            Self::Int(number) => to_float(number),
-            Self::Float(number) => number,
+            Self::Int(number) => to_float(*number),
+            Self::Big(number) => number.to_f64().unwrap_or(f64::NAN),
+            Self::Float(number) => *number,
         }
     }
 
-    pub fn add(self, other: Self) -> Result<Self, Error> {
-        match (self, other) {
-            (Self::Int(a), Self::Int(b)) => a.checked_add(b).map(Self::Int).ok_or_else(overflow),
-            _ => Ok(Self::Float(self.float() + other.float())),
+    fn big(&self) -> Option<BigInt> {
+        match self {
+            Self::Int(number) => Some(BigInt::from(*number)),
+            Self::Big(number) => Some(number.clone()),
+            Self::Float(_) => None,
         }
     }
 
-    pub fn subtract(self, other: Self) -> Result<Self, Error> {
-        match (self, other) {
-            (Self::Int(a), Self::Int(b)) => a.checked_sub(b).map(Self::Int).ok_or_else(overflow),
-            _ => Ok(Self::Float(self.float() - other.float())),
+    fn exact(
+        &self,
+        other: &Self,
+        small: fn(i64, i64) -> Option<i64>,
+        large: fn(BigInt, BigInt) -> BigInt,
+        inexact: fn(f64, f64) -> f64,
+    ) -> Self {
+        if let (Self::Int(a), Self::Int(b)) = (self, other)
+            && let Some(result) = small(*a, *b)
+        {
+            return Self::Int(result);
+        }
+        match (self.big(), other.big()) {
+            (Some(a), Some(b)) => shrink(large(a, b)),
+            _ => Self::Float(inexact(self.float(), other.float())),
         }
     }
 
-    pub fn multiply(self, other: Self) -> Result<Self, Error> {
-        match (self, other) {
-            (Self::Int(a), Self::Int(b)) => a.checked_mul(b).map(Self::Int).ok_or_else(overflow),
-            _ => Ok(Self::Float(self.float() * other.float())),
-        }
+    pub fn add(&self, other: &Self) -> Self {
+        self.exact(other, i64::checked_add, |a, b| a + b, |a, b| a + b)
     }
 
-    pub fn divide(self, other: Self) -> Result<Self, Error> {
+    pub fn subtract(&self, other: &Self) -> Self {
+        self.exact(other, i64::checked_sub, |a, b| a - b, |a, b| a - b)
+    }
+
+    pub fn multiply(&self, other: &Self) -> Self {
+        self.exact(other, i64::checked_mul, |a, b| a * b, |a, b| a * b)
+    }
+
+    pub fn divide(&self, other: &Self) -> Result<Self, Error> {
         if other.is_zero() {
             return Err(Error::new("Division by zero"));
         }
         Ok(Self::Float(self.float() / other.float()))
     }
 
-    pub fn floor_divide(self, other: Self) -> Result<Self, Error> {
+    pub fn floor_divide(&self, other: &Self) -> Result<Self, Error> {
         if other.is_zero() {
             return Err(Error::new("Division by zero"));
         }
-        match (self, other) {
-            (Self::Int(a), Self::Int(b)) => {
-                let quotient = a.checked_div(b).ok_or_else(overflow)?;
-                let inexact = a.checked_rem(b).is_some_and(|rest| rest != 0);
+        Ok(self.exact(
+            other,
+            |a, b| {
+                let quotient = a.checked_div(b)?;
+                let inexact = a.checked_rem(b)? != 0;
                 if inexact && ((a < 0) != (b < 0)) {
-                    quotient.checked_sub(1).map(Self::Int).ok_or_else(overflow)
+                    quotient.checked_sub(1)
                 } else {
-                    Ok(Self::Int(quotient))
+                    Some(quotient)
                 }
-            }
-            _ => Ok(Self::Float((self.float() / other.float()).floor())),
-        }
+            },
+            |a, b| {
+                let quotient = &a / &b;
+                let remainder = &a % &b;
+                if !remainder.is_zero() && ((remainder < BigInt::zero()) != (b < BigInt::zero())) {
+                    quotient - 1
+                } else {
+                    quotient
+                }
+            },
+            |a, b| (a / b).floor(),
+        ))
     }
 
-    pub fn negate(self) -> Result<Self, Error> {
-        match self {
-            Self::Int(number) => number.checked_neg().map(Self::Int).ok_or_else(overflow),
-            Self::Float(number) => Ok(Self::Float(-number)),
-        }
+    pub fn negate(&self) -> Self {
+        Self::Int(0).subtract(self)
     }
 
-    pub fn compare(self, other: Self) -> Option<Ordering> {
+    pub fn compare(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (Self::Int(a), Self::Int(b)) => Some(a.cmp(&b)),
-            _ => self.float().partial_cmp(&other.float()),
+            (Self::Int(a), Self::Int(b)) => Some(a.cmp(b)),
+            (Self::Float(_), _) | (_, Self::Float(_)) => self.float().partial_cmp(&other.float()),
+            _ => Some(self.big()?.cmp(&other.big()?)),
         }
     }
 
-    fn is_zero(self) -> bool {
+    fn is_zero(&self) -> bool {
         match self {
-            Self::Int(number) => number == 0,
-            Self::Float(number) => number == 0.0,
+            Self::Int(number) => *number == 0,
+            Self::Big(number) => number.is_zero(),
+            Self::Float(number) => *number == 0.0,
         }
     }
 }
