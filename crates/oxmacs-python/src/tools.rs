@@ -10,6 +10,13 @@ use serde::{Deserialize, Serialize};
 
 pub(crate) const TABLE: &str = "python";
 const GROUP: &str = "Python";
+const MISSING: &str =
+    "Python not found; install it from https://www.python.org or set [python] interpreter";
+const VENV: [&str; 3] = if cfg!(windows) {
+    [".venv", "Scripts", "python.exe"]
+} else {
+    [".venv", "bin", "python"]
+};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -111,6 +118,44 @@ pub(crate) fn ruff(editor: &Editor) -> Result<PathBuf, String> {
         editor,
         RUFF,
         settings(editor).ruff.as_deref(),
+        search.as_deref(),
+    )
+}
+
+pub(crate) fn interpreter_in(
+    start: &Path,
+    configured: Option<&str>,
+    search: Option<&OsStr>,
+) -> Result<PathBuf, String> {
+    let venv = start
+        .ancestors()
+        .map(|folder| {
+            VENV.iter()
+                .fold(folder.to_path_buf(), |path, part| path.join(part))
+        })
+        .find(|path| path.is_file());
+    if let Some(venv) = venv {
+        return Ok(venv);
+    }
+    if let Some(configured) = configured {
+        let path = Path::new(configured);
+        if path.is_file() {
+            return Ok(path.to_owned());
+        }
+        return tools::find(configured, search)
+            .ok_or_else(|| format!("[python] interpreter not found: {configured}"));
+    }
+    ["python3", "python"]
+        .into_iter()
+        .find_map(|name| tools::find(name, search))
+        .ok_or_else(|| MISSING.to_owned())
+}
+
+pub(crate) fn interpreter(editor: &Editor) -> Result<PathBuf, String> {
+    let search = env::var_os("PATH");
+    interpreter_in(
+        &editor.default_directory(),
+        settings(editor).interpreter.as_deref(),
         search.as_deref(),
     )
 }
@@ -238,6 +283,63 @@ mod tests {
         assert_eq!(
             locate(&editor, RUFF, Some("no-such-ruff"), None),
             Err("[python] ruff not found: no-such-ruff".to_owned())
+        );
+    }
+
+    fn venv_python(project: &Path) -> PathBuf {
+        let folder = if cfg!(windows) {
+            project.join(".venv").join("Scripts")
+        } else {
+            project.join(".venv").join("bin")
+        };
+        program(&folder, "python")
+    }
+
+    #[test]
+    fn the_projects_venv_comes_first_looking_upward() {
+        let project = tempfile::tempdir().unwrap();
+        let python = venv_python(project.path());
+        let inner = project.path().join("src").join("app");
+        fs::create_dir_all(&inner).unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let configured = program(elsewhere.path(), "configured");
+
+        assert_eq!(
+            interpreter_in(&inner, configured.to_str(), None),
+            Ok(python)
+        );
+    }
+
+    #[test]
+    fn without_a_venv_the_setting_then_python3_then_python_run() {
+        let project = tempfile::tempdir().unwrap();
+        let path_folder = tempfile::tempdir().unwrap();
+        let search = env::join_paths([path_folder.path()]).unwrap();
+        let python = program(path_folder.path(), "python");
+
+        assert_eq!(
+            interpreter_in(project.path(), None, Some(&search)),
+            Ok(python.clone())
+        );
+        let python3 = program(path_folder.path(), "python3");
+        assert_eq!(
+            interpreter_in(project.path(), None, Some(&search)),
+            Ok(python3)
+        );
+        assert_eq!(
+            interpreter_in(project.path(), python.to_str(), Some(&search)),
+            Ok(python)
+        );
+        assert_eq!(
+            interpreter_in(project.path(), Some("no-such-python"), Some(&search)),
+            Err("[python] interpreter not found: no-such-python".to_owned())
+        );
+        assert_eq!(
+            interpreter_in(project.path(), None, None),
+            Err(
+                "Python not found; install it from https://www.python.org or set [python] interpreter"
+                    .to_owned()
+            )
         );
     }
 

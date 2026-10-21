@@ -1,6 +1,7 @@
 mod indent;
 mod mode;
 mod ruff;
+mod run;
 mod tools;
 
 use oxmacs_core::applet::Applet;
@@ -43,6 +44,24 @@ const PYTHON: &[Spec] = &[
         help: None,
         keys: &["RET", "C-j"],
         run: indent::newline,
+    },
+    Spec {
+        name: "python-run-file",
+        summary: "Run this file with the project's Python in *compilation*",
+        help: Some(
+            "Python is the project's .venv, looked for upward from the file, then [python] interpreter, then python3 or python on PATH. The file runs in the folder holding pyproject.toml, or its own folder, and the lines of a traceback visit the code they name.",
+        ),
+        keys: &["C-c C-r"],
+        run: run::run_file,
+    },
+    Spec {
+        name: "python-pytest",
+        summary: "Run pytest for the project in *compilation*",
+        help: Some(
+            "pytest runs with the project's Python in the folder holding pyproject.toml, and prints failures as Python tracebacks whose lines visit the code they name.",
+        ),
+        keys: &["C-c C-t"],
+        run: run::pytest,
     },
 ];
 
@@ -92,6 +111,7 @@ impl Applet for Python {
         editor.add_managed_tool(UV);
         editor.add_formatter(LANGUAGE, ruff::FORMAT);
         editor.add_linter(LANGUAGE, ruff::LINT);
+        editor.add_error_pattern(run::traceback);
     }
 }
 
