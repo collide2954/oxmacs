@@ -75,8 +75,8 @@ pub struct Ref { kind: Kind, index: u32 }
 
 - **Size.** A value is 16 bytes and `Copy`. Code outside `value.rs` uses constructors and accessors only, so a NaN-boxed 8-byte form can replace it later.
 - **Heap kinds.** `Kind` names the arena: String, Pair, BigInt, Vector, VecNode, Map, MapNode, Record, RecordType, Closure, Code, Atom, Cell (a captured variable that is assigned), Native, Foreign, Task, Promise, Syntax.
-- **Equality.** `=` is structural for strings, lists, vectors, maps and records. `identical?` compares references.
-- **Hashing.** Structural for the same kinds. Strings cache their hash.
+- **Equality.** `=` is structural for strings, lists, vectors, maps and records, and a list equals a vector with the same items. On floats `=` is an equivalence: NaN equals NaN, and `0.0` differs from `-0.0`. `==` compares numbers by IEEE value. `identical?` compares references.
+- **Hashing.** Structural and consistent with `=`, so a list and a vector with the same items hash alike. Strings cache their hash.
 - **Symbols and keywords.** Interned once per process (a read-mostly `RwLock` table of leaked names), so a symbol means the same thing in every isolate.
 
 ## Heap and collector
@@ -103,8 +103,8 @@ pub struct Ref { kind: Kind, index: u32 }
 - **`OxString`.** Holds `Box<str>`, its character count, an ASCII flag (when set, character and byte positions are equal), a cached hash, and, for non-ASCII text, a sparse index of the byte offset of every 64th character, built lazily. Interpolation compiles to one `str` call over the pieces.
 - **Numbers.** `Int(i64)` arithmetic is checked and promotes to a heap `BigInt` (num-bigint) on overflow; a `BigInt` that fits again demotes. `Float` is f64. `/` returns a float, `//` the floor, and `mod` and `rem` follow the floor and truncation rules.
 - **Vectors.** Clojure's persistent vector: a header (count, shift, root, tail) over 32-way `VecNode`s, which are ordinary heap objects. `get` and `assoc` take O(log32 n), and `conj` is amortized constant time through the tail. `transient` versions mutate nodes they own while being built.
-- **Maps and sets.** A HAMT with bitmap-indexed nodes (32-way) and collision nodes. A set is a map whose values are `true`. Small maps (up to 8 entries) are flat arrays, which keep records-as-maps and keyword arguments cheap.
-- **Records.** `(def-record forecast day high low sky)` creates a `RecordType` (its name and field symbols) and instances with a field array. Records are immutable; `(with r :high 30)` copies one. `r.day` compiles to a field access with an inline cache keyed by record type; on a map it is `get`.
+- **Maps and sets.** Keys keep insertion order, so printing, iteration, JSON round-trips and snapshots are predictable. A map is a persistent vector of entries in insertion order plus a HAMT (bitmap-indexed 32-way nodes and collision nodes) from each key to its entry. Removing a key leaves a hole that iteration skips, and the map is compacted when holes outnumber entries. A set is a map whose values are `true`. Small maps (up to 8 entries) are flat arrays scanned in order, which keep records-as-maps and keyword arguments cheap.
+- **Records.** Fields are declared with parameter syntax: `(defrecord Point [x y (z 0) {label nil}])` has required, optional and keyword fields, so `(Point 1 2)` and `(Point 1 2 3 label: "a")` both build one. It creates a `RecordType` (its name and fields) and instances with a field array. Records are immutable; `(with r :high 30)` copies one. `r.day` compiles to a field access with an inline cache keyed by record type; on a map it is `get`.
 - **Lists.** Immutable pairs. `()` is `nil`.
 - **Atoms.** The mutable cells: `atom`, `@a` (deref), `reset!` and `swap!`.
 
@@ -118,7 +118,7 @@ pub struct Ref { kind: Kind, index: u32 }
 
 - **Hygiene.** By sets of scopes (Flatt 2016). Each identifier carries a set of scopes. A binding is recorded as (symbol, scope set) to target, and resolution picks the binding whose scope set is the largest subset of the identifier's.
 - **Expansion.** Each macro expansion adds a use-site scope and flips a fresh introduction scope, so names a macro introduces never capture the user's names, and the reverse.
-- **Core forms.** After expansion only these remain: `quote`, `def`, `fn`, `let`, `if`, `do`, `set!`, `.`, `try`, `raise`, `await`, `yield`, `match`, `with-param`, `module`, `import` and `export`. Everything else is a macro, most of them in the prelude: `cond`, `when`, `unless`, `and`, `or`, `when-let`, `if-let`, `->`, `->>`, `for`, `def-record`, `defcommand` (in phase 2) and `quasiquote`.
+- **Core forms.** After expansion only these remain: `quote`, `def`, `fn`, `let`, `if`, `do`, `set!`, `.`, `try`, `raise`, `await`, `yield`, `match`, `with-param`, `module`, `import` and `export`. Everything else is a macro, most of them in the prelude: `cond`, `when`, `unless`, `and`, `or`, `when-let`, `if-let`, `->`, `->>`, `for`, `defrecord`, `defcommand` (in phase 2) and `quasiquote`.
 - **Macros.** `defmacro` defines a procedural macro: a function from syntax to syntax, run at expansion time in the compiling isolate, which may import other modules. `syntax-rules` is a macro that builds such a function from patterns and templates. Ox has no separate run-time and compile-time phases; a macro sees whatever its module imports.
 
 ## Compiler
@@ -154,7 +154,7 @@ pub struct Ref { kind: Kind, index: u32 }
 
 ## Errors
 
-- **Raising.** `raise` accepts any value. By convention errors are records: `def-error` defines a record type that also carries a message and the traceback.
+- **Raising.** `raise` accepts any value. By convention errors are records: `deferror` defines a record type that also carries a message and the traceback.
 - **Catching.** `(try body (catch http-error e …) (catch _ e …))` pushes a handler (catch address and frame depth). `raise` unwinds to the nearest handler whose clause matches; with none, the task fails.
 - **Tracebacks.** A traceback is the list of (code, instruction) pairs captured at `raise` and resolved to spans lazily. It prints as `file:line:column` lines that the editor makes clickable.
 - **Native errors.** A native returns `Result<Value, Error>`, and an `Err` becomes an Ox error at the call site. A panic in a native is caught at the native boundary and becomes an Ox error too, so it never unwinds through the VM.
@@ -226,9 +226,9 @@ Each slice is one commit and starts with a failing test.
 21. **Index strings by character and build them by interpolation.**
 22. **Compare and hash values structurally.**
 23. **Add persistent vectors with conj, get, assoc and pop.** 100,000 elements, with older versions left intact.
-24. **Add persistent hash maps and sets.** Including collisions and flat small maps.
+24. **Add persistent hash maps and sets in insertion order.** Including collisions, removal holes and flat small maps.
 25. **Read keys with a.b and get, on maps and records.**
-26. **Define records with def-record and update them with with.**
+26. **Define records with defrecord and update them with with.**
 27. **Cache field access per record type.**
 28. **Make atoms the mutable cell, with deref, reset! and swap!**
 29. **Quasiquote with unquote and splicing.**

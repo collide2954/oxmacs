@@ -48,7 +48,7 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
   (import (ox editor) (ox http) (ox json) (ox ui))
   (export weather weather-refresh))
 
-(def-record forecast day high low sky)
+(defrecord Forecast [day high low sky])
 
 (def (forecast-url [city : String]) : String
   "https://api.open-meteo.com/v1/forecast?name={city}")
