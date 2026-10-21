@@ -1,6 +1,7 @@
 mod bind;
 mod builtins;
 pub mod bytecode;
+mod collections;
 mod compile;
 mod equal;
 pub mod error;

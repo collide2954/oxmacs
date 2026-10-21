@@ -552,6 +552,78 @@ mod tests {
     }
 
     #[test]
+    fn vectors_and_lists_are_built_counted_and_indexed() {
+        all(&[
+            ("(vector 1 2 3)", "[1 2 3]"),
+            ("(vector)", "[]"),
+            ("(list 1 2 3)", "(1 2 3)"),
+            ("(list)", "nil"),
+            ("(vector? [1])", "true"),
+            ("(vector? (list 1))", "false"),
+            ("(count [1 2 3])", "3"),
+            ("(count (list 1 2))", "2"),
+            ("(nth [:a :b :c] 2)", ":c"),
+            ("(nth (list :a :b :c) 1)", ":b"),
+            (
+                "(nth [:a] 3)",
+                "error: Index 3 is out of range for a vector of 1 item",
+            ),
+            (
+                "(nth (list :a :b) 2)",
+                "error: Index 2 is out of range for a list of 2 items",
+            ),
+            ("(nth 5 0)", "error: nth expects a collection, got 5"),
+            ("(get [1 2 3] 1)", "2"),
+            ("(get [1 2 3] 5)", "nil"),
+            ("(get [1 2 3] 5 :none)", ":none"),
+            ("(get [1 2 3] :a)", "nil"),
+            (r#"(get "abc" 2)"#, r"\c"),
+            ("(get nil 0)", "nil"),
+            ("(vec (list 1 2))", "[1 2]"),
+            ("(vec [1 2])", "[1 2]"),
+            ("(vec nil)", "[]"),
+            (r#"(vec "héllo")"#, r"[\h \é \l \l \o]"),
+            ("(vec 5)", "error: vec expects a collection, got 5"),
+        ]);
+    }
+
+    #[test]
+    fn vectors_and_lists_change_without_changing_the_original() {
+        all(&[
+            ("(conj [1 2] 3)", "[1 2 3]"),
+            ("(conj [] 1 2 3)", "[1 2 3]"),
+            ("(conj (list 1 2) 0)", "(0 1 2)"),
+            ("(conj nil 1 2)", "(2 1)"),
+            ("(def v [1 2 3]) (conj v 4) v", "[1 2 3]"),
+            ("(conj 5 1)", "error: conj expects a collection, got 5"),
+            ("(assoc [1 2 3] 0 :a)", "[:a 2 3]"),
+            ("(assoc [1 2 3] 3 4)", "[1 2 3 4]"),
+            ("(assoc [1 2 3] 0 :a 2 :c)", "[:a 2 :c]"),
+            ("(def v [1 2 3]) (assoc v 1 :b) v", "[1 2 3]"),
+            (
+                "(assoc [1 2 3] 5 :x)",
+                "error: Index 5 is out of range for a vector of 3 items",
+            ),
+            (
+                "(assoc [1 2 3] 0 :a 1)",
+                "error: assoc takes a collection and key value pairs",
+            ),
+            (
+                "(assoc [1] :k 2)",
+                "error: assoc expects an integer index, got :k",
+            ),
+            ("(pop [1 2 3])", "[1 2]"),
+            ("(pop (list 1 2 3))", "(2 3)"),
+            ("(pop nil)", "nil"),
+            ("(pop [])", "error: Cannot pop an empty vector"),
+            ("(peek [1 2 3])", "3"),
+            ("(peek (list 1 2 3))", "1"),
+            ("(peek [])", "nil"),
+            ("(peek 5)", "error: peek expects a vector or list, got 5"),
+        ]);
+    }
+
+    #[test]
     fn equality_is_exact_and_structural() {
         all(&[
             ("(= 1 1)", "true"),

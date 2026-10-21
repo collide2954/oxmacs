@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::io::{self, Write};
 
+use crate::collections;
 use crate::equal::{equal, identical};
 use crate::error::Error;
 use crate::heap::Heap;
@@ -96,52 +97,6 @@ fn join(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         .map_err(|full| Error::new(full.to_string()))
 }
 
-fn count(heap: &Heap, value: Value) -> Result<Value, Error> {
-    let length = match value {
-        Value::Nil => 0,
-        _ => heap
-            .length(value)
-            .or_else(|| heap.pair_of(value).map(|_| heap.items(value).len()))
-            .ok_or_else(|| {
-                Error::new(format!(
-                    "count expects a collection, got {}",
-                    print::write(heap, value)
-                ))
-            })?,
-    };
-    Ok(Value::Int(i64::try_from(length).unwrap_or(i64::MAX)))
-}
-
-fn nth(heap: &Heap, collection: Value, index: Value) -> Result<Value, Error> {
-    let Value::Int(wanted) = index else {
-        return Err(Error::new(format!(
-            "nth expects an integer index, got {}",
-            print::write(heap, index)
-        )));
-    };
-    let position = usize::try_from(wanted).ok();
-    if let Some(text) = heap.text(collection) {
-        return position
-            .and_then(|position| text.chars().nth(position))
-            .map(Value::Char)
-            .ok_or_else(|| {
-                Error::new(format!(
-                    "Index {wanted} is out of range for a string of {} characters",
-                    text.chars().count()
-                ))
-            });
-    }
-    let items = heap.items(collection);
-    position
-        .and_then(|position| items.get(position).copied())
-        .ok_or_else(|| {
-            Error::new(format!(
-                "Index {wanted} is out of range for a list of {} items",
-                items.len()
-            ))
-        })
-}
-
 fn all_equal(heap: &Heap, arguments: &[Value]) -> bool {
     arguments
         .windows(2)
@@ -162,12 +117,8 @@ pub fn install(isolate: &mut Isolate) {
         chain(heap, "==", arguments, Ordering::is_eq)
     });
     isolate.define_native("str", 0, None, join);
-    isolate.define_native("count", 1, Some(1), |heap, arguments| {
-        count(heap, arguments[0])
-    });
-    isolate.define_native("nth", 2, Some(2), |heap, arguments| {
-        nth(heap, arguments[0], arguments[1])
-    });
+    collections::install(isolate);
+
     isolate.define_native("print", 0, None, |heap, arguments| {
         output(heap, arguments, false)
     });
