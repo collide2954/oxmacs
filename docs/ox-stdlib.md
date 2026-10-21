@@ -11,8 +11,8 @@ Companion to [ox-design.md](ox-design.md) and [ox-internals.md](ox-internals.md)
 - **Typed and tested.** Every function has a type signature, which feeds inference, and documentation with examples that run as tests.
 - **Failure raises.** Functions that can fail raise a typed error with a clear message, such as `parse-error`, `io-error` or `http-error`. `(maybe expr)` turns any error into `nil` when you would rather check, so no function needs a second "or nil" twin.
 - **Missing keys give `nil`.** `(get m :k)` returns `nil` when the key is absent, and the checker types the result as `V?`, so nil safety makes you handle it. `(get m :k default)` gives a fallback, and field access on a map shape with a required key gives the plain type.
-- **Equality is exact.** `(= 1 1.0)` is false, so maps and sets never confuse an integer with a float. `(== 1 1.0)` is true; it compares numbers by value. Sequences compare by their items, so `(= [1 2] (list 1 2))` is true. On floats `=` is an equivalence (NaN equals NaN, and `0.0` differs from `-0.0`), so NaN keys work in maps and sets; `==` follows IEEE.
-- **Maps keep insertion order.** Printing, iteration and JSON round-trips follow the order keys were added, so output and snapshots are predictable.
+- **Equality is exact.** `(= 1 1.0)` is false, so maps and sets never confuse an integer with a float. `(== 1 1.0)` is true; it compares numbers by value. Sequences compare by their items, so `(= [1 2] (list 1 2))` is true, and since `()` is `nil`, `(= [] nil)` is true too. On floats `=` is an equivalence (NaN equals NaN, and `0.0` differs from `-0.0`), so NaN keys work in maps and sets; `==` follows IEEE.
+- **Maps keep insertion order.** Printing, iteration and JSON round-trips follow the order keys were added, so output and snapshots are predictable. Keyword keys print with the literal shorthand, `{name: "Ana" age: 3}`, and other keys as themselves, `{"a b" 1 42 "x"}`.
 - **I/O never blocks.** File, process and network functions return promises to `await`, so no plugin can freeze typing. In the `ox` command line and REPL, top-level `await` just works.
 - **Naming conventions.**
   - kebab-case;
