@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+for name in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do
+    unset "$name"
+done
+
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo clippy -p oxmacs --all-targets --no-default-features --locked -- -D warnings
+cargo test --workspace --all-features --locked --quiet
+cargo test --workspace --locked --quiet

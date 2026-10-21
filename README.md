@@ -88,4 +88,4 @@ Settings live in `config.toml` in the oxmacs config folder (for example `~/.conf
 git config core.hooksPath .githooks
 ```
 
-The pre-commit hook runs `cargo fmt --check`, `cargo clippy` with every feature turned on and on the lean build without default features, and the tests with every feature and with the default ones. Changes are recorded in CHANGELOG.md.
+The pre-commit hook runs `cargo fmt --check`, `cargo clippy` and the tests with every feature turned on, which takes a minute or two once built. The pre-push hook runs the full gate: the same, plus `cargo clippy` on the lean build without default features and the tests with the default features. Changes are recorded in CHANGELOG.md.
