@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use oxmacs_core::editor::{Editor, JobEvent, JobSpec, Outcome};
 
+use crate::branches;
 use crate::process::{self, Ran};
 use crate::view;
 
@@ -99,4 +100,5 @@ fn finish(editor: &mut Editor, root: &Path, plan: &Plan) {
         fs::remove_file(path).ok();
     }
     view::refresh_root(editor, root);
+    branches::refresh_root(editor, root);
 }

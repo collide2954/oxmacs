@@ -1,4 +1,5 @@
 mod branch;
+mod branches;
 mod commit;
 mod diff;
 mod graph;
@@ -162,6 +163,44 @@ const LOG: &[Spec] = &[
     },
 ];
 
+const BRANCHES: &[Spec] = &[
+    Spec {
+        name: "git-branches-next",
+        summary: "Move to the next branch",
+        help: None,
+        keys: &["n"],
+        run: |editor| branches::step(editor, true),
+    },
+    Spec {
+        name: "git-branches-previous",
+        summary: "Move to the previous branch",
+        help: None,
+        keys: &["p"],
+        run: |editor| branches::step(editor, false),
+    },
+    Spec {
+        name: "git-branches-checkout",
+        summary: "Check out the branch at point",
+        help: None,
+        keys: &["RET"],
+        run: branches::checkout,
+    },
+    Spec {
+        name: "git-branches-refresh",
+        summary: "Read the branches again",
+        help: None,
+        keys: &["g"],
+        run: branches::refresh,
+    },
+    Spec {
+        name: "git-branches-filter",
+        summary: "Show only the branches whose names contain some text",
+        help: None,
+        keys: &["/"],
+        run: branches::filter,
+    },
+];
+
 const REVISION: &[Spec] = &[
     Spec {
         name: "git-revision-next",
@@ -316,12 +355,15 @@ impl Applet for Git {
         let process_scope = editor.add_scope("git process");
         let log_scope = editor.add_scope("git log");
         let revision_scope = editor.add_scope("git revision");
+        let branches_scope = editor.add_scope("git branches");
         editor.set_applet_state(GitState {
             scope,
             diff_scope,
             process_scope,
             log_scope,
             revision_scope,
+            branches_scope,
+            filtering: None,
             patches: 0,
             pending: Vec::new(),
             mode_line: mode_line::Cache::default(),
@@ -332,6 +374,7 @@ impl Applet for Git {
         register(editor, diff_scope, DIFF);
         register(editor, log_scope, LOG);
         register(editor, revision_scope, REVISION);
+        register(editor, branches_scope, BRANCHES);
         let message = editor.add_scope("git commit");
         register(editor, message, MESSAGE);
         editor.add_language(commit::LANGUAGE, Some(message));
@@ -341,8 +384,10 @@ impl Applet for Git {
         editor.bind(process_scope, "q", Command::QuitWindow).ok();
         editor.bind(log_scope, "q", Command::QuitWindow).ok();
         editor.bind(revision_scope, "q", Command::QuitWindow).ok();
+        editor.bind(branches_scope, "q", Command::QuitWindow).ok();
         editor.on_command(pane::follow);
         editor.on_command(log::follow);
+        editor.on_command(branches::live);
         editor.on_command(mode_line::notice);
         editor.on_display(pane::fit);
         editor.on_display(revision::fit);

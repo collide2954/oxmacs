@@ -26,6 +26,8 @@ pub(crate) struct GitState {
     pub(crate) process_scope: ScopeId,
     pub(crate) log_scope: ScopeId,
     pub(crate) revision_scope: ScopeId,
+    pub(crate) branches_scope: ScopeId,
+    pub(crate) filtering: Option<(BufferId, String)>,
     pub(crate) patches: usize,
     pub(crate) pending: Vec<crate::commit::Pending>,
     pub(crate) mode_line: mode_line::Cache,

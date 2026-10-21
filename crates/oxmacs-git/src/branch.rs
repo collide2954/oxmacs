@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use oxmacs_core::editor::{Action, Editor, Group, Offer, Picked, Transient};
 
+use crate::branches;
 use crate::history;
 use crate::run::{self, Plan};
 use crate::view;
@@ -17,6 +18,11 @@ pub(crate) static BRANCH: Transient = Transient {
                     key: 'b',
                     summary: "Branch or revision",
                     run: |editor, _| checkout(editor),
+                },
+                Action {
+                    key: 'l',
+                    summary: "Branches",
+                    run: |editor, _| branches::open(editor),
                 },
                 Action {
                     key: 'c',
@@ -244,7 +250,7 @@ mod tests {
             .iter()
             .flat_map(|group| group.entries.iter().map(|entry| entry.key.clone()))
             .collect();
-        assert_eq!(keys, ["b", "c", "n", "m", "x"]);
+        assert_eq!(keys, ["b", "l", "c", "n", "m", "x"]);
     }
 
     #[test]
