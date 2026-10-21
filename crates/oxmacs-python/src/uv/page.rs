@@ -2,13 +2,14 @@ use std::ops::Range;
 use std::path::Path;
 
 use oxmacs_core::display::LineStyle;
+use oxmacs_core::editor::Outcome;
 use oxmacs_core::files::paths;
 use oxmacs_core::theme::Highlight;
 
 use crate::uv::facts::{Facts, Lock, Probe};
 
 const LABEL: usize = 10;
-const HELP: &str = "g refresh · q quit";
+const HELP: &str = "a add · d remove · u upgrade · s sync · l lock · g refresh · q quit";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Row {
@@ -18,6 +19,7 @@ pub(crate) enum Row {
     Required(usize),
     Locked(usize),
     Newer(usize),
+    Output,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -26,6 +28,13 @@ pub(crate) struct Rendered {
     pub(crate) rows: Vec<Row>,
     pub(crate) styles: Vec<LineStyle>,
     pub(crate) pills: Vec<Vec<(Range<usize>, Highlight)>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Last {
+    pub(crate) command: String,
+    pub(crate) output: Vec<String>,
+    pub(crate) outcome: Option<Outcome>,
 }
 
 #[derive(Debug, Default)]
@@ -198,11 +207,39 @@ fn newer(out: &mut Rendered, facts: &Facts) {
     }
 }
 
-pub(crate) fn render(facts: &Facts, home: Option<&Path>) -> Rendered {
+fn command(out: &mut Rendered, last: &Last) {
+    out.add(Row::Blank, Line::default());
+    let mut line = Line::default();
+    line.push(&last.command, Some(Highlight::Heading));
+    line.push("  ", None);
+    match &last.outcome {
+        None => {
+            line.push("running…", Some(Highlight::Comment));
+        }
+        Some(Outcome::Exited(Some(0))) => line.pill("done", Highlight::Success),
+        Some(Outcome::Exited(Some(code))) => line.pill(&format!("exit {code}"), Highlight::Error),
+        Some(Outcome::Exited(None)) => line.pill("stopped", Highlight::Error),
+        Some(Outcome::Failed(error)) => {
+            line.push(error, Some(Highlight::Error));
+        }
+    }
+    out.add(Row::Heading, line);
+    for text in &last.output {
+        let mut line = Line::default();
+        line.push("  ", None);
+        line.push(text, None);
+        out.add(Row::Output, line);
+    }
+}
+
+pub(crate) fn render(facts: &Facts, last: Option<&Last>, home: Option<&Path>) -> Rendered {
     let mut out = Rendered::default();
     header(&mut out, facts, home);
     dependencies(&mut out, facts);
     newer(&mut out, facts);
+    if let Some(last) = last {
+        command(&mut out, last);
+    }
     out
 }
 
@@ -242,7 +279,7 @@ mod tests {
 
     #[test]
     fn the_dashboard_shows_the_project_then_its_dependencies() {
-        let rendered = render(&sample(), Some(Path::new("/home/ada")));
+        let rendered = render(&sample(), None, Some(Path::new("/home/ada")));
         let venv = format!("Venv:     ~{SEPARATOR}demo{SEPARATOR}.venv");
 
         assert_eq!(
@@ -252,7 +289,7 @@ mod tests {
                 "Python:   3.12.4",
                 &venv,
                 "Lock:     up to date",
-                "g refresh · q quit",
+                "a add · d remove · u upgrade · s sync · l lock · g refresh · q quit",
                 "",
                 "Required (2)",
                 "  requests>=2.31",
@@ -274,7 +311,7 @@ mod tests {
 
     #[test]
     fn names_states_and_new_versions_are_pills() {
-        let rendered = render(&sample(), None);
+        let rendered = render(&sample(), None, None);
 
         assert_eq!(rendered.pills[0], [(10..14, Highlight::Link)]);
         assert_eq!(rendered.pills[3], [(10..20, Highlight::Success)]);
@@ -300,7 +337,7 @@ mod tests {
             ..Facts::default()
         };
 
-        let rendered = render(&facts, None);
+        let rendered = render(&facts, None, None);
 
         assert_eq!(
             lines(&rendered),
@@ -309,7 +346,7 @@ mod tests {
                 "Python:   no .venv",
                 "Venv:     none",
                 "Lock:     out of date",
-                "g refresh · q quit",
+                "a add · d remove · u upgrade · s sync · l lock · g refresh · q quit",
                 "",
                 "Required (0)",
                 "  none",
@@ -332,7 +369,7 @@ mod tests {
             ..Facts::default()
         };
 
-        let rendered = render(&facts, None);
+        let rendered = render(&facts, None, None);
 
         let shown = lines(&rendered);
         assert_eq!(shown[3], "Lock:     uv is not installed");
@@ -342,5 +379,41 @@ mod tests {
                 .spans
                 .contains(&(10..29, Highlight::Error))
         );
+    }
+
+    fn last(outcome: Option<Outcome>) -> Last {
+        Last {
+            command: "uv sync".to_owned(),
+            output: vec![
+                "Resolved 3 packages".to_owned(),
+                "Installed 3 packages".to_owned(),
+            ],
+            outcome,
+        }
+    }
+
+    #[test]
+    fn the_last_command_and_its_output_close_the_page() {
+        let running = render(&sample(), Some(&last(None)), None);
+        let shown = lines(&running);
+        assert_eq!(
+            shown[shown.len() - 4..],
+            [
+                "",
+                "uv sync  running…",
+                "  Resolved 3 packages",
+                "  Installed 3 packages"
+            ]
+        );
+        assert_eq!(running.rows.last(), Some(&Row::Output));
+
+        let done = render(&sample(), Some(&last(Some(Outcome::Exited(Some(0))))), None);
+        let at = done.rows.len() - 3;
+        assert_eq!(lines(&done)[at], "uv sync  done");
+        assert_eq!(done.pills[at], [(9..13, Highlight::Success)]);
+
+        let failed = render(&sample(), Some(&last(Some(Outcome::Exited(Some(2))))), None);
+        assert_eq!(lines(&failed)[at], "uv sync  exit 2");
+        assert_eq!(failed.pills[at], [(9..15, Highlight::Error)]);
     }
 }

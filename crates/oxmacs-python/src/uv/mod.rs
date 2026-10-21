@@ -8,15 +8,17 @@ use oxmacs_core::applet::AppletBuffer;
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::display::LineStyle;
 use oxmacs_core::editor::{Editor, JobEvent, JobSpec};
+use oxmacs_core::external::tools::split_command;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Highlight;
 
 use crate::tools;
 use facts::{Facts, Lock, Probe};
-use page::Rendered;
+use page::{Last, Rendered, Row};
 
 const NAME: &str = "*uv*";
 const OUTSIDE: &str = "No pyproject.toml here or above";
+const NO_PACKAGE: &str = "No package on this line";
 
 #[derive(Debug, Clone, Copy)]
 enum Query {
@@ -34,6 +36,7 @@ pub(crate) struct Dashboard {
     scope: ScopeId,
     root: PathBuf,
     facts: Facts,
+    last: Option<Last>,
     rendered: Rendered,
 }
 
@@ -76,6 +79,7 @@ pub(crate) fn open(editor: &mut Editor) {
                 scope,
                 root: root.clone(),
                 facts: Facts::default(),
+                last: None,
                 rendered: Rendered::default(),
             }
         }),
@@ -85,6 +89,149 @@ pub(crate) fn open(editor: &mut Editor) {
     }
     editor.show_buffer(id);
     reload(editor, id);
+}
+
+fn current(editor: &Editor) -> Option<BufferId> {
+    let id = editor.buffer().id();
+    editor.applet_buffer::<Dashboard>(id).map(|_| id)
+}
+
+fn package_at(dashboard: &Dashboard, line: usize) -> Option<String> {
+    match dashboard.rendered.rows.get(line)? {
+        Row::Required(index) => dashboard
+            .facts
+            .project
+            .required
+            .get(*index)
+            .map(|requirement| facts::requirement_name(requirement)),
+        Row::Locked(index) => dashboard
+            .facts
+            .locked
+            .get(*index)
+            .map(|(name, _)| name.clone()),
+        Row::Newer(index) => match &dashboard.facts.newer {
+            Probe::Known(newer) => newer.get(*index).map(|package| package.name.clone()),
+            Probe::Checking | Probe::Failed(_) => None,
+        },
+        Row::Info | Row::Blank | Row::Heading | Row::Output => None,
+    }
+}
+
+fn with_package(editor: &mut Editor, args: impl FnOnce(String) -> Vec<String>) {
+    let Some(id) = current(editor) else {
+        return;
+    };
+    let line = editor.buffer().line_of(editor.buffer().point());
+    let package = editor
+        .applet_buffer::<Dashboard>(id)
+        .and_then(|(_, dashboard)| package_at(dashboard, line));
+    match package {
+        Some(package) => act(editor, id, args(package)),
+        None => editor.show_message(NO_PACKAGE),
+    }
+}
+
+fn words(words: &[&str]) -> Vec<String> {
+    words.iter().map(|word| (*word).to_owned()).collect()
+}
+
+pub(crate) fn add(editor: &mut Editor) {
+    let Some(id) = current(editor) else {
+        return;
+    };
+    editor.prompt("Add dependency: ", move |editor, answer| {
+        let requested = split_command(&answer);
+        if !requested.is_empty() {
+            act(editor, id, [words(&["add"]), requested].concat());
+        }
+    });
+}
+
+pub(crate) fn remove(editor: &mut Editor) {
+    with_package(editor, |package| words(&["remove", &package]));
+}
+
+pub(crate) fn upgrade(editor: &mut Editor) {
+    with_package(editor, |package| {
+        words(&["lock", "--upgrade-package", &package])
+    });
+}
+
+pub(crate) fn sync(editor: &mut Editor) {
+    if let Some(id) = current(editor) {
+        act(editor, id, words(&["sync"]));
+    }
+}
+
+pub(crate) fn lock(editor: &mut Editor) {
+    if let Some(id) = current(editor) {
+        act(editor, id, words(&["lock"]));
+    }
+}
+
+fn act(editor: &mut Editor, id: BufferId, args: Vec<String>) {
+    let Some((_, dashboard)) = editor.applet_buffer::<Dashboard>(id) else {
+        return;
+    };
+    if let Some(running) = dashboard
+        .last
+        .as_ref()
+        .filter(|last| last.outcome.is_none())
+    {
+        let message = format!("{} is still running", running.command);
+        editor.show_message(message);
+        return;
+    }
+    let root = dashboard.root.clone();
+    let uv = match tools::uv(editor) {
+        Ok(uv) => uv,
+        Err(error) => {
+            editor.show_message(error);
+            return;
+        }
+    };
+    let command = format!("uv {}", args.join(" "));
+    if let Some((_, dashboard)) = editor.applet_buffer_mut::<Dashboard>(id) {
+        dashboard.last = Some(Last {
+            command: command.clone(),
+            output: Vec::new(),
+            outcome: None,
+        });
+    }
+    render(editor, id);
+    let spec = JobSpec {
+        program: uv.display().to_string(),
+        args,
+        directory: root,
+        env: Vec::new(),
+        label: "uv",
+        name: command,
+        buffer: None,
+        interactive: false,
+    };
+    editor.start_job(spec, move |editor, _, event| {
+        let Some(last) = editor
+            .applet_buffer_mut::<Dashboard>(id)
+            .and_then(|(_, dashboard)| dashboard.last.as_mut())
+        else {
+            return;
+        };
+        let finished = match event {
+            JobEvent::Line(line) | JobEvent::Output(line) => {
+                last.output.push(line.to_owned());
+                false
+            }
+            JobEvent::Finished(outcome) => {
+                last.outcome = Some(outcome.clone());
+                true
+            }
+        };
+        if finished {
+            reload(editor, id);
+        } else {
+            render(editor, id);
+        }
+    });
 }
 
 pub(crate) fn refresh(editor: &mut Editor) {
@@ -161,7 +308,7 @@ fn render(editor: &mut Editor, id: BufferId) {
         return;
     };
     let line = buffer.line_of(buffer.point());
-    dashboard.rendered = page::render(&dashboard.facts, home.as_deref());
+    dashboard.rendered = page::render(&dashboard.facts, dashboard.last.as_ref(), home.as_deref());
     buffer.set_text(&dashboard.rendered.text);
     let last = dashboard.rendered.rows.len().saturating_sub(1);
     let start = buffer.line_start(line.min(last));
@@ -264,7 +411,138 @@ mod tests {
     use oxmacs_core::theme::Highlight;
 
     use super::testing::{PYPROJECT, finish, full, line_with, opened, project, spawned};
-    use crate::testing::{lines, press};
+    use crate::testing::{lines, press, type_text};
+
+    fn ready() -> super::testing::Project {
+        let mut project = full();
+        let jobs = opened(&mut project);
+        for job in &jobs {
+            finish(&mut project.editor, job, 0, &["[]"]);
+        }
+        project
+    }
+
+    fn on_line(editor: &mut oxmacs_core::editor::Editor, text: &str) {
+        let at = lines(editor)
+            .iter()
+            .position(|line| line == text)
+            .unwrap_or_else(|| panic!("{text} missing"));
+        editor.go_to_line(at + 1, 1);
+    }
+
+    fn arguments(jobs: &[oxmacs_core::editor::Job]) -> Vec<Vec<String>> {
+        jobs.iter().map(|job| job.args.clone()).collect()
+    }
+
+    #[test]
+    fn a_adds_a_dependency_and_shows_what_uv_says() {
+        let mut project = ready();
+
+        press(&mut project.editor, "a");
+        assert_eq!(
+            project
+                .editor
+                .minibuffer()
+                .map(|prompt| prompt.prompt().to_owned()),
+            Some("Add dependency: ".to_owned())
+        );
+        type_text(&mut project.editor, "httpx>=0.27");
+        press(&mut project.editor, "RET");
+
+        let jobs = spawned(&mut project.editor);
+        assert_eq!(arguments(&jobs), [vec!["add", "httpx>=0.27"]]);
+        assert_eq!(jobs[0].program, project.uv.display().to_string());
+        assert_eq!(jobs[0].directory, project.root);
+        assert_eq!(
+            lines(&project.editor).last().map(String::as_str),
+            Some("uv add httpx>=0.27  running…")
+        );
+        project
+            .editor
+            .job_output(jobs[0].id, "Resolved 5 packages in 12ms");
+        assert_eq!(
+            lines(&project.editor).last().map(String::as_str),
+            Some("  Resolved 5 packages in 12ms")
+        );
+        project
+            .editor
+            .job_finished(jobs[0].id, &oxmacs_core::editor::Outcome::Exited(Some(0)));
+        let shown = lines(&project.editor);
+        let at = shown
+            .iter()
+            .position(|line| line == "uv add httpx>=0.27  done")
+            .unwrap();
+        assert_eq!(
+            project.editor.pane().line_pills(at),
+            [(20..24, Highlight::Success)]
+        );
+        assert_eq!(spawned(&mut project.editor).len(), 2);
+    }
+
+    #[test]
+    fn d_removes_and_u_upgrades_the_package_at_point() {
+        let mut project = ready();
+
+        on_line(&mut project.editor, "  requests>=2.31");
+        press(&mut project.editor, "d");
+        let removed = spawned(&mut project.editor);
+        finish(&mut project.editor, &removed[0], 0, &[]);
+        spawned(&mut project.editor);
+        on_line(&mut project.editor, "  numpy     2.1.0");
+        press(&mut project.editor, "u");
+
+        assert_eq!(arguments(&removed), [vec!["remove", "requests"]]);
+        assert_eq!(
+            arguments(&spawned(&mut project.editor)),
+            [vec!["lock", "--upgrade-package", "numpy"]]
+        );
+    }
+
+    #[test]
+    fn keys_off_a_package_say_so() {
+        let mut project = ready();
+
+        press(&mut project.editor, "M-< d");
+
+        assert_eq!(project.editor.message(), Some("No package on this line"));
+        assert_eq!(spawned(&mut project.editor), []);
+    }
+
+    #[test]
+    fn s_syncs_and_l_locks_one_at_a_time() {
+        let mut project = ready();
+
+        press(&mut project.editor, "s");
+        let synced = spawned(&mut project.editor);
+        press(&mut project.editor, "l");
+
+        assert_eq!(arguments(&synced), [vec!["sync"]]);
+        assert_eq!(project.editor.message(), Some("uv sync is still running"));
+        assert_eq!(spawned(&mut project.editor), []);
+        finish(&mut project.editor, &synced[0], 2, &["error: boom"]);
+        spawned(&mut project.editor);
+        let shown = lines(&project.editor);
+        assert!(shown.contains(&"uv sync  exit 2".to_owned()), "{shown:?}");
+        assert!(shown.contains(&"  error: boom".to_owned()), "{shown:?}");
+        press(&mut project.editor, "l");
+        assert_eq!(arguments(&spawned(&mut project.editor)), [vec!["lock"]]);
+    }
+
+    #[test]
+    fn actions_need_uv() {
+        let mut project = ready();
+        project.editor.apply_config(
+            &oxmacs_core::config::Config::parse("[python]\nuv = \"oxmacs-no-such-uv\"\n").unwrap(),
+        );
+
+        press(&mut project.editor, "s");
+
+        assert_eq!(
+            project.editor.message(),
+            Some("[python] uv not found: oxmacs-no-such-uv")
+        );
+        assert_eq!(spawned(&mut project.editor), []);
+    }
 
     #[test]
     fn c_c_c_u_shows_the_project_and_checks_it_with_uv() {

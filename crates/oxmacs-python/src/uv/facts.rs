@@ -91,6 +91,14 @@ pub(crate) fn normalized(name: &str) -> String {
     name.to_ascii_lowercase().replace(['_', '.'], "-")
 }
 
+pub(crate) fn requirement_name(requirement: &str) -> String {
+    requirement
+        .trim()
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        .collect()
+}
+
 pub(crate) fn project(text: &str) -> Project {
     let Some(table) = toml::from_str::<Pyproject>(text)
         .ok()
@@ -243,6 +251,15 @@ source = { registry = "https://pypi.org/simple" }
     #[test]
     fn names_compare_the_way_python_packaging_does() {
         assert_eq!(normalized("Zope.Interface_x"), "zope-interface-x");
+        assert_eq!(
+            requirement_name("requests[socks]>=2.31; python_version > '3'"),
+            "requests"
+        );
+        assert_eq!(requirement_name("  numpy"), "numpy");
+        assert_eq!(
+            requirement_name("my-pkg @ https://example.com/x.whl"),
+            "my-pkg"
+        );
     }
 
     #[test]

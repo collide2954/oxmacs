@@ -101,13 +101,52 @@ const PYTHON: &[Spec] = &[
     },
 ];
 
-const DASHBOARD: &[Spec] = &[Spec {
-    name: "uv-refresh",
-    summary: "Read the project again and check it with uv",
-    help: None,
-    keys: &["g"],
-    run: uv::refresh,
-}];
+const DASHBOARD: &[Spec] = &[
+    Spec {
+        name: "uv-add",
+        summary: "Add a dependency to the project with uv add",
+        help: Some(
+            "The answer goes to uv add as it is typed, so it can be a requirement such as httpx>=0.27 or several, with options such as --dev.",
+        ),
+        keys: &["a"],
+        run: uv::add,
+    },
+    Spec {
+        name: "uv-remove",
+        summary: "Remove the dependency at point with uv remove",
+        help: None,
+        keys: &["d"],
+        run: uv::remove,
+    },
+    Spec {
+        name: "uv-upgrade",
+        summary: "Upgrade the package at point in uv.lock",
+        help: None,
+        keys: &["u"],
+        run: uv::upgrade,
+    },
+    Spec {
+        name: "uv-sync",
+        summary: "Bring the .venv in line with uv.lock with uv sync",
+        help: None,
+        keys: &["s"],
+        run: uv::sync,
+    },
+    Spec {
+        name: "uv-lock",
+        summary: "Update uv.lock with uv lock",
+        help: None,
+        keys: &["l"],
+        run: uv::lock,
+    },
+    Spec {
+        name: "uv-refresh",
+        summary: "Read the project again and check it with uv",
+        help: None,
+        keys: &["g"],
+        run: uv::refresh,
+    },
+];
 
 fn register(editor: &mut Editor, scope: ScopeId, specs: &[Spec]) -> Vec<CommandId> {
     let mut added = Vec::new();
