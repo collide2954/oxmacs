@@ -10,12 +10,14 @@ use oxmacs_core::editor::{Action, Editor, Group, Offer, Picked, Transient};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Highlight;
 
-use crate::history::{self, Entry, Label, LabelKind, Tips};
-use crate::status::{self, Line, Rendered, Row};
+use crate::history::{self, Details, Entry, Label, LabelKind, Tips};
+use crate::revision;
+use crate::status::{self, Line, Rendered, Row, Section};
 use crate::view::{self, GitState};
 
 pub(crate) const PAGE: usize = 1000;
 const SUBJECT: usize = 72;
+const FILE_COLUMN: usize = 60;
 
 pub(crate) static LOG: Transient = Transient {
     title: "Log",
@@ -49,6 +51,16 @@ pub(crate) struct LogView {
     pub(crate) tips: Tips,
     pub(crate) entries: Vec<Entry>,
     pub(crate) rendered: Rendered,
+    pub(crate) selected: Option<ObjectId>,
+    pub(crate) details: Option<Details>,
+    pub(crate) about: Rendered,
+}
+
+impl LogView {
+    pub(crate) fn selected_entry(&self) -> Option<&Entry> {
+        let selected = self.selected?;
+        self.entries.iter().find(|entry| entry.id == selected)
+    }
 }
 
 impl AppletBuffer for LogView {
@@ -167,6 +179,9 @@ fn buffer_for(editor: &mut Editor, root: &Path, tips: &Tips) -> Option<BufferId>
             tips,
             entries: Vec::new(),
             rendered: Rendered::default(),
+            selected: None,
+            details: None,
+            about: Rendered::default(),
         }
     }))
 }
@@ -211,7 +226,90 @@ fn load(editor: &mut Editor, id: BufferId, count: usize, keep: Option<ObjectId>)
         .unwrap_or(0);
     let start = buffer.line_start(line);
     buffer.set_point(start);
+    select(editor, id, line);
     true
+}
+
+pub(crate) fn about(entry: &Entry, details: &Details, now: i64) -> Rendered {
+    let mut out = Rendered::default();
+    let mut line = Line::default();
+    line.push(&entry.short, Some(Highlight::Constant));
+    line.push("  ", None);
+    line.push(&details.author, Some(status::author_color(&details.author)));
+    line.push(&format!(" <{}>", details.email), Some(Highlight::Comment));
+    line.push("  ", None);
+    line.push(&status::ago(details.time, now), Some(Highlight::Comment));
+    out.add(Row::Info, line);
+    out.add(Row::Blank, Line::default());
+    for (number, text) in details.message.lines().enumerate() {
+        let mut line = Line::default();
+        line.push(text, (number == 0).then_some(Highlight::Heading));
+        out.add(Row::Info, line);
+    }
+    out.add(Row::Blank, Line::default());
+    let mut line = Line::default();
+    line.push(
+        &format!("Changed files ({})", details.files.len()),
+        Some(Highlight::Heading),
+    );
+    out.add(Row::Info, line);
+    let width = details
+        .files
+        .iter()
+        .map(|(change, _)| change.path.chars().count())
+        .max()
+        .unwrap_or(0)
+        .min(FILE_COLUMN);
+    for (change, diff) in &details.files {
+        let mut line = Line::default();
+        let (letter, face) = status::letter(Section::Revision, change.kind);
+        line.push("  ", None);
+        line.pill(letter, face);
+        line.push("  ", None);
+        line.push(&change.path, None);
+        if let Some(from) = &change.from {
+            line.push(&format!(" ← {from}"), Some(Highlight::Comment));
+        }
+        line.pad(5 + width + 2);
+        status::stats(&mut line, diff);
+        out.add(Row::Info, line);
+    }
+    out
+}
+
+fn select(editor: &mut Editor, id: BufferId, line: usize) {
+    let Some((_, view)) = editor.applet_buffer::<LogView>(id) else {
+        return;
+    };
+    let Some(entry) = view.entries.get(line) else {
+        return;
+    };
+    if view.selected == Some(entry.id) {
+        return;
+    }
+    let root = view.root.clone();
+    let commit = entry.id;
+    let details = history::details(&root, commit).ok();
+    let shown = details
+        .as_ref()
+        .map(|details| about(entry, details, view::now()))
+        .unwrap_or_default();
+    let Some((_, view)) = editor.applet_buffer_mut::<LogView>(id) else {
+        return;
+    };
+    view.selected = Some(commit);
+    view.details = details;
+    view.about = shown;
+    revision::follow(editor, &root);
+}
+
+pub(crate) fn follow(editor: &mut Editor) {
+    let Some((id, _)) = current_log(editor) else {
+        return;
+    };
+    let buffer = editor.buffer();
+    let line = buffer.line_of(buffer.point());
+    select(editor, id, line);
 }
 
 fn other(editor: &mut Editor) {
@@ -277,8 +375,15 @@ mod tests {
     use oxmacs_core::editor::Editor;
 
     use super::*;
+    use crate::diff::hunks;
     use crate::repo::fixtures::{git, repository};
+    use crate::repo::{Change, FileDiff, Kind};
     use crate::testing::{at_point, installed, lines, press, type_text};
+
+    fn view(editor: &Editor) -> &LogView {
+        let id = editor.buffer().id();
+        editor.applet_buffer::<LogView>(id).unwrap().1
+    }
 
     fn entry(short: &str, summary: &str, author: &str) -> Entry {
         Entry {
@@ -317,6 +422,73 @@ mod tests {
         );
         assert_eq!(rendered.pills[0], [(9..13, Highlight::Link)]);
         assert_eq!(rendered.rows, [Row::Commit(0), Row::Commit(1)]);
+    }
+
+    #[test]
+    fn details_show_the_author_message_and_changed_files() {
+        let details = Details {
+            message: "Shout\n\nAnd add a file".to_owned(),
+            author: "Ada".to_owned(),
+            email: "ada@example.com".to_owned(),
+            time: 0,
+            files: vec![
+                (
+                    Change {
+                        path: "a.txt".to_owned(),
+                        kind: Kind::Modified,
+                        from: None,
+                    },
+                    FileDiff {
+                        hunks: hunks("one\n", "ONE\n", 3),
+                        ..FileDiff::default()
+                    },
+                ),
+                (
+                    Change {
+                        path: "c.txt".to_owned(),
+                        kind: Kind::Added,
+                        from: None,
+                    },
+                    FileDiff {
+                        hunks: hunks("", "new\n", 3),
+                        ..FileDiff::default()
+                    },
+                ),
+            ],
+        };
+
+        let rendered = about(&entry("abc1234", "Shout", "Ada"), &details, 30);
+
+        assert_eq!(
+            rendered.text.split('\n').collect::<Vec<_>>(),
+            [
+                "abc1234  Ada <ada@example.com>  just now",
+                "",
+                "Shout",
+                "",
+                "And add a file",
+                "",
+                "Changed files (2)",
+                "  M  a.txt  +1 -1",
+                "  A  c.txt  +1",
+            ]
+        );
+        assert_eq!(rendered.pills[7], [(2..3, Highlight::Warning)]);
+        assert_eq!(rendered.styles[2].spans, [(0..5, Highlight::Heading)]);
+    }
+
+    #[test]
+    fn the_commit_at_point_shows_its_details() {
+        let (_dir, mut editor) = branched();
+
+        press(&mut editor, "l l");
+        let shown = view(&editor).about.text.clone();
+        assert!(shown.contains("Ada Lovelace <ada@example.com>"), "{shown}");
+        assert!(shown.contains("\nMain work\n"), "{shown}");
+        assert!(shown.ends_with("\n  A  m.txt  +1"), "{shown}");
+
+        press(&mut editor, "n");
+        assert!(view(&editor).about.text.contains("\nFirst commit\n"));
     }
 
     #[test]

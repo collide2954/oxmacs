@@ -76,7 +76,7 @@ fn label(section: Section) -> &'static str {
         Section::Untracked => "Untracked",
         Section::Unstaged => "Unstaged",
         Section::Staged => "Staged",
-        Section::Stashes | Section::Recent => "",
+        Section::Stashes | Section::Recent | Section::Revision => "",
     }
 }
 
@@ -96,6 +96,18 @@ pub(crate) fn render(
     line.push("  ", None);
     stats(&mut line, diff);
     out.add(Row::File(section, index), line);
+    hunks(&mut out, section, index, diff, layout, width);
+    out
+}
+
+pub(crate) fn hunks(
+    out: &mut Rendered,
+    section: Section,
+    index: usize,
+    diff: &FileDiff,
+    layout: Layout,
+    width: usize,
+) {
     let digits = digits(diff);
     for (number, hunk) in diff.hunks.iter().enumerate() {
         out.add(Row::Blank, Line::default());
@@ -103,11 +115,10 @@ pub(crate) fn render(
         line.push(&hunk.header(), Some(Highlight::Keyword));
         out.add(Row::Hunk(section, index, number), line);
         match layout {
-            Layout::Unified => unified(&mut out, (section, index, number), hunk, digits),
-            Layout::Split => split(&mut out, (section, index, number), hunk, digits, width),
+            Layout::Unified => unified(out, (section, index, number), hunk, digits),
+            Layout::Split => split(out, (section, index, number), hunk, digits, width),
         }
     }
-    out
 }
 
 fn nothing(path: &str) -> Rendered {

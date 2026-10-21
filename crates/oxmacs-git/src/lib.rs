@@ -6,6 +6,7 @@ mod mode_line;
 mod pane;
 mod process;
 mod repo;
+mod revision;
 mod run;
 mod stage;
 mod status;
@@ -140,6 +141,37 @@ const LOG: &[Spec] = &[
         keys: &["g"],
         run: log::refresh,
     },
+    Spec {
+        name: "git-log-show",
+        summary: "Show the changes of the commit at point beside the log",
+        help: None,
+        keys: &["RET"],
+        run: revision::show,
+    },
+];
+
+const REVISION: &[Spec] = &[
+    Spec {
+        name: "git-revision-next",
+        summary: "Move to the next file or hunk",
+        help: None,
+        keys: &["n"],
+        run: |editor| revision::step(editor, true),
+    },
+    Spec {
+        name: "git-revision-previous",
+        summary: "Move to the previous file or hunk",
+        help: None,
+        keys: &["p"],
+        run: |editor| revision::step(editor, false),
+    },
+    Spec {
+        name: "git-revision-toggle-layout",
+        summary: "Switch between one column and side by side",
+        help: None,
+        keys: &["t"],
+        run: revision::toggle_layout,
+    },
 ];
 
 const MESSAGE: &[Spec] = &[
@@ -271,11 +303,13 @@ impl Applet for Git {
         let diff_scope = editor.add_scope("git diff");
         let process_scope = editor.add_scope("git process");
         let log_scope = editor.add_scope("git log");
+        let revision_scope = editor.add_scope("git revision");
         editor.set_applet_state(GitState {
             scope,
             diff_scope,
             process_scope,
             log_scope,
+            revision_scope,
             patches: 0,
             pending: Vec::new(),
             mode_line: mode_line::Cache::default(),
@@ -285,6 +319,7 @@ impl Applet for Git {
         register(editor, scope, STATUS);
         register(editor, diff_scope, DIFF);
         register(editor, log_scope, LOG);
+        register(editor, revision_scope, REVISION);
         let message = editor.add_scope("git commit");
         register(editor, message, MESSAGE);
         editor.add_language(commit::LANGUAGE, Some(message));
@@ -293,9 +328,12 @@ impl Applet for Git {
         editor.bind(diff_scope, "q", Command::QuitWindow).ok();
         editor.bind(process_scope, "q", Command::QuitWindow).ok();
         editor.bind(log_scope, "q", Command::QuitWindow).ok();
+        editor.bind(revision_scope, "q", Command::QuitWindow).ok();
         editor.on_command(pane::follow);
+        editor.on_command(log::follow);
         editor.on_command(mode_line::notice);
         editor.on_display(pane::fit);
+        editor.on_display(revision::fit);
         editor.on_disk_change(view::refresh_all);
         editor.on_disk_change(mode_line::disk_changed);
         editor.on_saved(view::refresh_saved);

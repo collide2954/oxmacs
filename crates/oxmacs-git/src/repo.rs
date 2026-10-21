@@ -390,7 +390,7 @@ fn diff_in(
     })
 }
 
-fn text(bytes: &[u8]) -> Option<&str> {
+pub(crate) fn text(bytes: &[u8]) -> Option<&str> {
     if bytes.iter().take(8000).any(|byte| *byte == 0) {
         return None;
     }

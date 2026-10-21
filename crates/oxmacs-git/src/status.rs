@@ -14,6 +14,7 @@ pub(crate) enum Section {
     Staged,
     Stashes,
     Recent,
+    Revision,
 }
 
 impl Section {
@@ -22,7 +23,7 @@ impl Section {
             Self::Untracked => Some(Side::Untracked),
             Self::Unstaged => Some(Side::Unstaged),
             Self::Staged => Some(Side::Staged),
-            Self::Stashes | Self::Recent => None,
+            Self::Stashes | Self::Recent | Self::Revision => None,
         }
     }
 
@@ -33,6 +34,7 @@ impl Section {
             Self::Staged => "Staged changes",
             Self::Stashes => "Stashes",
             Self::Recent => "Recent commits",
+            Self::Revision => "Changes",
         }
     }
 }
@@ -78,7 +80,7 @@ impl Status {
                 .collect(),
             Section::Unstaged => self.snapshot.unstaged.clone(),
             Section::Staged => self.snapshot.staged.clone(),
-            Section::Stashes | Section::Recent => Vec::new(),
+            Section::Stashes | Section::Recent | Section::Revision => Vec::new(),
         }
     }
 
@@ -95,7 +97,7 @@ impl Status {
                 .staged
                 .get(index)
                 .map(|change| change.path.as_str()),
-            Section::Stashes | Section::Recent => None,
+            Section::Stashes | Section::Recent | Section::Revision => None,
         }
     }
 

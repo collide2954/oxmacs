@@ -4,6 +4,9 @@ use std::path::Path;
 use gix::ObjectId;
 use gix::traverse::commit::simple::CommitTimeOrder;
 
+use crate::diff;
+use crate::repo::{self, Change, FileDiff, Kind};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Entry {
     pub(crate) id: ObjectId,
@@ -35,8 +38,148 @@ pub(crate) struct Label {
     pub(crate) kind: LabelKind,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Details {
+    pub(crate) message: String,
+    pub(crate) author: String,
+    pub(crate) email: String,
+    pub(crate) time: i64,
+    pub(crate) files: Vec<(Change, FileDiff)>,
+}
+
 fn failed(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+const CONTEXT: usize = 3;
+const LARGE: usize = 1 << 20;
+const DIFFED: usize = 200;
+
+struct Touched {
+    change: Change,
+    old: Option<ObjectId>,
+    new: Option<ObjectId>,
+}
+
+fn touched(found: &gix::object::tree::diff::ChangeDetached) -> Option<Touched> {
+    use gix::object::tree::diff::ChangeDetached as Found;
+    let (path, kind, from, old, new) = match found {
+        Found::Addition {
+            location,
+            entry_mode,
+            id,
+            ..
+        } if entry_mode.is_blob_or_symlink() => (location, Kind::Added, None, None, Some(*id)),
+        Found::Deletion {
+            location,
+            entry_mode,
+            id,
+            ..
+        } if entry_mode.is_blob_or_symlink() => (location, Kind::Deleted, None, Some(*id), None),
+        Found::Modification {
+            location,
+            entry_mode,
+            previous_id,
+            id,
+            ..
+        } if entry_mode.is_blob_or_symlink() => (
+            location,
+            Kind::Modified,
+            None,
+            Some(*previous_id),
+            Some(*id),
+        ),
+        Found::Rewrite {
+            source_location,
+            location,
+            entry_mode,
+            source_id,
+            id,
+            copy,
+            ..
+        } if entry_mode.is_blob_or_symlink() => (
+            location,
+            if *copy { Kind::Added } else { Kind::Renamed },
+            Some(source_location.to_string()),
+            Some(*source_id),
+            Some(*id),
+        ),
+        _ => return None,
+    };
+    Some(Touched {
+        change: Change {
+            path: path.to_string(),
+            kind,
+            from,
+        },
+        old,
+        new,
+    })
+}
+
+fn blob(repository: &gix::Repository, id: Option<ObjectId>) -> Vec<u8> {
+    id.and_then(|id| repository.find_blob(id).ok())
+        .map(|mut blob| blob.take_data())
+        .unwrap_or_default()
+}
+
+fn compare(repository: &gix::Repository, old: Option<ObjectId>, new: Option<ObjectId>) -> FileDiff {
+    let (old, new) = (blob(repository, old), blob(repository, new));
+    if old.len().max(new.len()) > LARGE {
+        return FileDiff {
+            large: true,
+            ..FileDiff::default()
+        };
+    }
+    let (Some(old), Some(new)) = (repo::text(&old), repo::text(&new)) else {
+        return FileDiff {
+            binary: true,
+            ..FileDiff::default()
+        };
+    };
+    FileDiff {
+        hunks: diff::hunks(old, new, CONTEXT),
+        ..FileDiff::default()
+    }
+}
+
+pub(crate) fn details(root: &Path, id: ObjectId) -> Result<Details, String> {
+    let repository = gix::open(root).map_err(failed)?;
+    let commit = repository.find_commit(id).map_err(failed)?;
+    let tree = commit.tree().map_err(failed)?;
+    let parent = commit
+        .parent_ids()
+        .next()
+        .and_then(|parent| repository.find_commit(parent.detach()).ok())
+        .and_then(|parent| parent.tree().ok());
+    let changes = repository
+        .diff_tree_to_tree(parent.as_ref(), &tree, None::<gix::diff::Options>)
+        .map_err(failed)?;
+    let mut found: Vec<Touched> = changes.iter().filter_map(touched).collect();
+    found.sort_by(|a, b| a.change.path.cmp(&b.change.path));
+    let files = found
+        .into_iter()
+        .enumerate()
+        .map(|(index, touched)| {
+            let diff = if index < DIFFED {
+                compare(&repository, touched.old, touched.new)
+            } else {
+                FileDiff::default()
+            };
+            (touched.change, diff)
+        })
+        .collect();
+    let author = commit.author().map_err(failed)?;
+    Ok(Details {
+        message: commit
+            .message_raw()
+            .map(|raw| raw.to_string().trim_end().to_owned())
+            .unwrap_or_default(),
+        author: author.name.to_string(),
+        email: author.email.to_string(),
+        time: commit.time().map(|time| time.seconds).unwrap_or_default(),
+        files,
+    })
 }
 
 fn peeled<'repo, E>(
@@ -107,7 +250,7 @@ pub(crate) fn log(
 }
 
 fn entry(commit: &gix::Commit<'_>) -> Entry {
-    let described = crate::repo::describe(commit);
+    let described = repo::describe(commit);
     Entry {
         id: commit.id,
         parents: commit.parent_ids().map(gix::Id::detach).collect(),
@@ -389,5 +532,56 @@ mod tests {
 
         assert_eq!(local, ["feature", "main"]);
         assert_eq!(remote, ["origin/main"]);
+    }
+
+    #[test]
+    fn details_hold_the_message_and_the_changed_files() {
+        let dir = repository();
+        fs::write(dir.path().join("a.txt"), "one\nTWO\nthree\n").unwrap();
+        fs::write(dir.path().join("c.txt"), "new\n").unwrap();
+        git(dir.path(), &["add", "."]);
+        git(
+            dir.path(),
+            &["commit", "-q", "-m", "Shout\n\nAnd add a file"],
+        );
+        let head =
+            ObjectId::from_hex(git(dir.path(), &["rev-parse", "HEAD"]).trim().as_bytes()).unwrap();
+
+        let details = details(dir.path(), head).unwrap();
+
+        assert_eq!(details.message, "Shout\n\nAnd add a file");
+        assert_eq!(details.author, "Ada Lovelace");
+        assert_eq!(details.email, "ada@example.com");
+        let files: Vec<(&str, Kind, usize)> = details
+            .files
+            .iter()
+            .map(|(change, diff)| (change.path.as_str(), change.kind, diff.hunks.len()))
+            .collect();
+        assert_eq!(
+            files,
+            [("a.txt", Kind::Modified, 1), ("c.txt", Kind::Added, 1)]
+        );
+    }
+
+    #[test]
+    fn the_first_commit_adds_everything() {
+        let dir = repository();
+        let head =
+            ObjectId::from_hex(git(dir.path(), &["rev-parse", "HEAD"]).trim().as_bytes()).unwrap();
+
+        let details = details(dir.path(), head).unwrap();
+
+        let paths: Vec<&str> = details
+            .files
+            .iter()
+            .map(|(change, _)| change.path.as_str())
+            .collect();
+        assert_eq!(paths, ["a.txt", "b.txt"]);
+        assert!(
+            details
+                .files
+                .iter()
+                .all(|(change, _)| change.kind == Kind::Added)
+        );
     }
 }
