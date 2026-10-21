@@ -579,6 +579,59 @@ mod tests {
     }
 
     #[test]
+    fn maps_are_read_by_key() {
+        all(&[
+            ("(get {a: 1} :a)", "1"),
+            ("(get {a: 1} :b)", "nil"),
+            ("(get {a: 1} :b 0)", "0"),
+            ("(get {[1 2] :v} (list 1 2))", ":v"),
+            ("(count {a: 1 b: 2})", "2"),
+            ("(map? {})", "true"),
+            ("(map? [])", "false"),
+            ("(contains? {a: nil} :a)", "true"),
+            ("(contains? {a: 1} :b)", "false"),
+            ("(contains? nil :a)", "false"),
+            (
+                "(contains? [1] 0)",
+                "error: contains? expects a map, got [1]",
+            ),
+            ("(keys {b: 1 a: 2})", "[:b :a]"),
+            ("(vals {b: 1 a: 2})", "[1 2]"),
+            ("(entries {b: 1 a: 2})", "[[:b 1] [:a 2]]"),
+            ("(keys {})", "[]"),
+            ("(keys nil)", "[]"),
+            ("(vals 5)", "error: vals expects a map, got 5"),
+            ("(vec {a: 1})", "[[:a 1]]"),
+        ]);
+    }
+
+    #[test]
+    fn maps_change_without_changing_the_original() {
+        all(&[
+            ("(assoc {a: 1} :b 2)", "{a: 1 b: 2}"),
+            ("(assoc {a: 1 b: 2} :a 3)", "{a: 3 b: 2}"),
+            ("(assoc {} :a 1 :b 2)", "{a: 1 b: 2}"),
+            ("(assoc nil :a 1)", "{a: 1}"),
+            ("(def m {a: 1}) (assoc m :b 2) m", "{a: 1}"),
+            (
+                "(assoc 5 :a 1)",
+                "error: assoc expects a map or vector, got 5",
+            ),
+            ("(dissoc {a: 1 b: 2 c: 3} :b)", "{a: 1 c: 3}"),
+            ("(dissoc {a: 1 b: 2 c: 3} :a :c :z)", "{b: 2}"),
+            ("(def m {a: 1}) (dissoc m :a) m", "{a: 1}"),
+            ("(dissoc nil :a)", "nil"),
+            ("(dissoc [1] 0)", "error: dissoc expects a map, got [1]"),
+            ("(conj {a: 1} [:b 2])", "{a: 1 b: 2}"),
+            ("(conj {a: 1} {b: 2 a: 3})", "{a: 3 b: 2}"),
+            (
+                "(conj {} 5)",
+                "error: conj on a map expects [key value] pairs or maps, got 5",
+            ),
+        ]);
+    }
+
+    #[test]
     fn vectors_and_lists_are_built_counted_and_indexed() {
         all(&[
             ("(vector 1 2 3)", "[1 2 3]"),

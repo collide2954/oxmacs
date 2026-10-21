@@ -1,6 +1,7 @@
 use crate::error::Error;
 use crate::heap::{Heap, HeapFull};
 use crate::isolate::Isolate;
+use crate::map::Map;
 use crate::print;
 use crate::value::Value;
 use crate::vector::Vector;
@@ -42,12 +43,75 @@ fn store(heap: &mut Heap, vector: Vector) -> Result<Value, Error> {
     heap.vector(vector).map_err(full)
 }
 
+fn store_map(heap: &mut Heap, map: Map) -> Result<Value, Error> {
+    heap.map(map).map_err(full)
+}
+
+fn vector_of(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
+    let vector = Vector::from_items(heap, items).map_err(full)?;
+    store(heap, vector)
+}
+
+fn map_or_nil(heap: &Heap, name: &str, collection: Value) -> Result<Map, Error> {
+    if collection == Value::Nil {
+        return Ok(Map::EMPTY);
+    }
+    heap.map_of(collection)
+        .ok_or_else(|| expected(heap, name, "a map", collection))
+}
+
+fn entries(heap: &mut Heap, map: Map) -> Result<Value, Error> {
+    let mut pairs = Vec::with_capacity(map.count);
+    for (key, value) in map.entries(heap) {
+        pairs.push(vector_of(heap, &[key, value])?);
+    }
+    vector_of(heap, &pairs)
+}
+
+fn dissoc(heap: &mut Heap, collection: Value, keys: &[Value]) -> Result<Value, Error> {
+    if collection == Value::Nil {
+        return Ok(Value::Nil);
+    }
+    let mut map = map_or_nil(heap, "dissoc", collection)?;
+    for key in keys {
+        map = map.dissoc(heap, *key).map_err(full)?;
+    }
+    store_map(heap, map)
+}
+
+fn conj_entries(heap: &mut Heap, map: Map, items: &[Value]) -> Result<Value, Error> {
+    let mut map = map;
+    for item in items {
+        let pairs = if let Some(other) = heap.map_of(*item) {
+            other.entries(heap)
+        } else if let Some(pair) = heap.vector_of(*item).filter(|pair| pair.count == 2)
+            && let (Some(key), Some(value)) = (pair.get(heap, 0), pair.get(heap, 1))
+        {
+            vec![(key, value)]
+        } else {
+            return Err(expected(
+                heap,
+                "conj on a map",
+                "[key value] pairs or maps",
+                *item,
+            ));
+        };
+        for (key, value) in pairs {
+            map = map.assoc(heap, key, value).map_err(full)?;
+        }
+    }
+    store_map(heap, map)
+}
+
 fn count(heap: &Heap, value: Value) -> Result<Value, Error> {
     if let Some(length) = heap.length(value) {
         return Ok(int(length));
     }
     if let Some(vector) = heap.vector_of(value) {
         return Ok(int(vector.count));
+    }
+    if let Some(map) = heap.map_of(value) {
+        return Ok(int(map.count));
     }
     if is_list(heap, value) {
         return Ok(int(heap.items(value).len()));
@@ -83,7 +147,13 @@ fn nth(heap: &Heap, collection: Value, wanted: Value) -> Result<Value, Error> {
 
 fn get(heap: &Heap, arguments: &[Value]) -> Value {
     let fallback = arguments.get(2).copied().unwrap_or(Value::Nil);
-    let (Some(collection), Some(Value::Int(wanted))) = (arguments.first(), arguments.get(1)) else {
+    let (Some(collection), Some(key)) = (arguments.first(), arguments.get(1)) else {
+        return fallback;
+    };
+    if let Some(map) = heap.map_of(*collection) {
+        return map.get(heap, *key).unwrap_or(fallback);
+    }
+    let Value::Int(wanted) = key else {
         return fallback;
     };
     let Ok(position) = usize::try_from(*wanted) else {
@@ -102,6 +172,9 @@ fn get(heap: &Heap, arguments: &[Value]) -> Value {
 fn vec(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
     if heap.vector_of(collection).is_some() {
         return Ok(collection);
+    }
+    if let Some(map) = heap.map_of(collection) {
+        return entries(heap, map);
     }
     let items: Vec<Value> = if let Some(text) = heap.text(collection) {
         text.chars().map(Value::Char).collect()
@@ -122,6 +195,9 @@ fn conj(heap: &mut Heap, collection: Value, items: &[Value]) -> Result<Value, Er
             .map_err(full)?;
         return store(heap, grown);
     }
+    if let Some(map) = heap.map_of(collection) {
+        return conj_entries(heap, map, items);
+    }
     if is_list(heap, collection) {
         return items
             .iter()
@@ -135,8 +211,21 @@ fn assoc(heap: &mut Heap, collection: Value, pairs: &[Value]) -> Result<Value, E
     if pairs.len() % 2 == 1 {
         return Err(Error::new("assoc takes a collection and key value pairs"));
     }
+    let map = if collection == Value::Nil {
+        Some(Map::EMPTY)
+    } else {
+        heap.map_of(collection)
+    };
+    if let Some(mut map) = map {
+        for pair in pairs.chunks(2) {
+            if let [key, value] = pair {
+                map = map.assoc(heap, *key, *value).map_err(full)?;
+            }
+        }
+        return store_map(heap, map);
+    }
     let Some(mut vector) = heap.vector_of(collection) else {
-        return Err(expected(heap, "assoc", "a vector", collection));
+        return Err(expected(heap, "assoc", "a map or vector", collection));
     };
     for pair in pairs.chunks(2) {
         let [key, value] = pair else {
@@ -194,9 +283,34 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_native("get", 2, Some(3), |heap, arguments| {
         Ok(get(heap, arguments))
     });
-    isolate.define_native("vector", 0, None, |heap, arguments| {
-        let vector = Vector::from_items(heap, arguments).map_err(full)?;
-        store(heap, vector)
+    isolate.define_native("vector", 0, None, vector_of);
+    isolate.define_native("map?", 1, Some(1), |heap, arguments| {
+        Ok(Value::Bool(heap.map_of(arguments[0]).is_some()))
+    });
+    isolate.define_native("dissoc", 1, None, |heap, arguments| {
+        dissoc(heap, arguments[0], &arguments[1..])
+    });
+    isolate.define_native("contains?", 2, Some(2), |heap, arguments| {
+        let map = map_or_nil(heap, "contains?", arguments[0])?;
+        Ok(Value::Bool(map.get(heap, arguments[1]).is_some()))
+    });
+    isolate.define_native("keys", 1, Some(1), |heap, arguments| {
+        let map = map_or_nil(heap, "keys", arguments[0])?;
+        let keys: Vec<Value> = map.entries(heap).into_iter().map(|(key, _)| key).collect();
+        vector_of(heap, &keys)
+    });
+    isolate.define_native("vals", 1, Some(1), |heap, arguments| {
+        let map = map_or_nil(heap, "vals", arguments[0])?;
+        let values: Vec<Value> = map
+            .entries(heap)
+            .into_iter()
+            .map(|(_, value)| value)
+            .collect();
+        vector_of(heap, &values)
+    });
+    isolate.define_native("entries", 1, Some(1), |heap, arguments| {
+        let map = map_or_nil(heap, "entries", arguments[0])?;
+        entries(heap, map)
     });
     isolate.define_native("vector?", 1, Some(1), |heap, arguments| {
         Ok(Value::Bool(heap.vector_of(arguments[0]).is_some()))
