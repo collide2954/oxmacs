@@ -655,6 +655,27 @@ mod tests {
     }
 
     #[test]
+    fn lists_and_vectors_with_the_same_items_are_equal() {
+        all(&[
+            ("(= [1 2] [1 2])", "true"),
+            ("(= [1 2] [2 1])", "false"),
+            ("(= [1 2] (list 1 2))", "true"),
+            ("(= (list 1 2) [1 2])", "true"),
+            ("(= [1 [2 3]] (list 1 (list 2 3)))", "true"),
+            ("(= [1 2] (list 1 2 3))", "false"),
+            ("(= [1 2 3] (list 1 2))", "false"),
+            ("(= [1 1.0] [1 1])", "false"),
+            ("(= [] nil)", "true"),
+            ("(= nil [])", "true"),
+            ("(= [] (list))", "true"),
+            ("(= [nil] [])", "false"),
+            ("(= [nil] nil)", "false"),
+            (r#"(= [] "")"#, "false"),
+            ("(not= [1] (list 1))", "false"),
+        ]);
+    }
+
+    #[test]
     fn equality_on_floats_is_an_equivalence() {
         let not_a_number = "(def big (* 1e308 10)) (def x (- big big))";
         all(&[

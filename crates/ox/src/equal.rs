@@ -1,5 +1,8 @@
 use crate::heap::Heap;
 use crate::value::{Kind, Value};
+use crate::vector::Vector;
+
+type Pending = Vec<(Value, Value)>;
 
 fn same_contents(heap: &Heap, a: Value, b: Value) -> bool {
     match (a, b) {
@@ -13,6 +16,37 @@ fn same_contents(heap: &Heap, a: Value, b: Value) -> bool {
     }
 }
 
+fn vector_and_list(heap: &Heap, vector: Vector, list: Value, pending: &mut Pending) -> bool {
+    let mut rest = list;
+    for item in vector.items(heap) {
+        let Some(pair) = heap.pair_of(rest) else {
+            return false;
+        };
+        pending.push((item, pair.head));
+        rest = pair.tail;
+    }
+    rest == Value::Nil
+}
+
+fn is_list(heap: &Heap, value: Value) -> bool {
+    value == Value::Nil || heap.pair_of(value).is_some()
+}
+
+fn sequences(heap: &Heap, a: Value, b: Value, pending: &mut Pending) -> Option<bool> {
+    match (heap.vector_of(a), heap.vector_of(b)) {
+        (Some(left), Some(right)) => {
+            if left.count != right.count {
+                return Some(false);
+            }
+            pending.extend(left.items(heap).into_iter().zip(right.items(heap)));
+            Some(true)
+        }
+        (Some(vector), None) if is_list(heap, b) => Some(vector_and_list(heap, vector, b, pending)),
+        (None, Some(vector)) if is_list(heap, a) => Some(vector_and_list(heap, vector, a, pending)),
+        _ => None,
+    }
+}
+
 pub fn equal(heap: &Heap, a: Value, b: Value) -> bool {
     let mut pending = Vec::new();
     let (mut a, mut b) = (a, b);
@@ -23,7 +57,9 @@ pub fn equal(heap: &Heap, a: Value, b: Value) -> bool {
                 (a, b) = (left.head, right.head);
                 continue;
             }
-            if !same_contents(heap, a, b) {
+            let same =
+                sequences(heap, a, b, &mut pending).unwrap_or_else(|| same_contents(heap, a, b));
+            if !same {
                 return false;
             }
         }
