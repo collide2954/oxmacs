@@ -1,10 +1,10 @@
-use std::sync::LazyLock;
 use std::sync::mpsc::{self, Sender};
+use std::sync::{Arc, LazyLock};
 use std::thread;
 
 use oxmacs_core::editor::Editor;
 use rhai::packages::{Package, StandardPackage};
-use rhai::{AST, Dynamic, Engine, EvalAltResult, INT, Module, Scope, Shared};
+use rhai::{AST, Dynamic, Engine, EvalAltResult, FnPtr, FuncArgs, INT, Module, Scope, Shared};
 
 use crate::api;
 
@@ -27,7 +27,13 @@ struct Nesting(usize);
 #[derive(Debug, Default)]
 pub(crate) struct Session {
     variables: Scope<'static>,
-    functions: AST,
+    functions: Arc<AST>,
+}
+
+#[derive(Clone)]
+pub(crate) struct Callback {
+    function: FnPtr,
+    lib: Arc<AST>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -57,7 +63,7 @@ fn on_editor(
     answer.recv().map_err(|_| STOPPED)?.map_err(Into::into)
 }
 
-fn with_editor(link: Link) -> Engine {
+fn with_editor(link: Link, lib: &Arc<AST>) -> Engine {
     let mut engine = sandbox();
     let to = link.clone();
     engine.register_fn("insert", move |text: &str| {
@@ -89,19 +95,39 @@ fn with_editor(link: Link) -> Engine {
         let text = text.to_owned();
         on_editor(&to, move |editor| Ok(api::message(editor, text)))
     });
+    let to = link.clone();
     engine.register_fn("run", move |name: &str| {
         let name = name.to_owned();
-        on_editor(&link, move |editor| api::run(editor, &name))
+        on_editor(&to, move |editor| api::run(editor, &name))
+    });
+    let (to, shared) = (link.clone(), Arc::clone(lib));
+    engine.register_fn(
+        "command",
+        move |name: &str, summary: &str, function: FnPtr| {
+            let callback = Callback {
+                function,
+                lib: Arc::clone(&shared),
+            };
+            let (name, summary) = (name.to_owned(), summary.to_owned());
+            on_editor(&to, move |editor| {
+                api::command(editor, name, summary, callback)
+            })
+        },
+    );
+    engine.register_fn("bind", move |keys: &str, name: &str| {
+        let (keys, name) = (keys.to_owned(), name.to_owned());
+        on_editor(&link, move |editor| api::bind(editor, &keys, &name))
     });
     engine
 }
 
 fn serve(
     editor: &mut Editor,
+    lib: &Arc<AST>,
     work: impl FnOnce(&Engine) -> Result<Dynamic, Failure> + Send,
 ) -> Result<Dynamic, Failure> {
     let (link, requests) = mpsc::channel();
-    let engine = with_editor(link);
+    let engine = with_editor(link, lib);
     thread::scope(|scope| {
         let worker = scope.spawn(move || work(&engine));
         for (job, reply) in &requests {
@@ -113,6 +139,7 @@ fn serve(
 
 fn run(
     editor: &mut Editor,
+    lib: &Arc<AST>,
     work: impl FnOnce(&Engine) -> Result<Dynamic, Failure> + Send,
 ) -> Result<Dynamic, Failure> {
     let depth = editor
@@ -122,7 +149,7 @@ fn run(
         return Err(NESTED.into());
     }
     editor.set_applet_state(Nesting(depth + 1));
-    let outcome = serve(editor, work);
+    let outcome = serve(editor, lib, work);
     editor.set_applet_state(Nesting(depth));
     outcome
 }
@@ -130,9 +157,9 @@ fn run(
 impl Session {
     pub(crate) fn evaluate(&mut self, editor: &mut Editor, code: &str) -> Result<Dynamic, Failure> {
         let ast = self.functions.merge(&sandbox().compile(code)?);
-        self.functions = ast.clone_functions_only();
+        self.functions = Arc::new(ast.clone_functions_only());
         let variables = &mut self.variables;
-        run(editor, move |engine| {
+        run(editor, &self.functions, move |engine| {
             engine.eval_ast_with_scope(variables, &ast)
         })
     }
@@ -140,6 +167,16 @@ impl Session {
 
 pub(crate) fn evaluate(editor: &mut Editor, code: &str) -> Result<Dynamic, Failure> {
     Session::default().evaluate(editor, code)
+}
+
+pub(crate) fn call_back(editor: &mut Editor, callback: &Callback, args: impl FuncArgs + Send) {
+    let Callback { function, lib } = callback.clone();
+    let outcome = run(editor, &callback.lib, move |engine| {
+        function.call::<Dynamic>(engine, &lib, args)
+    });
+    if let Err(error) = outcome {
+        editor.show_message(describe(*error, Origin::default()));
+    }
 }
 
 fn innermost(error: EvalAltResult) -> EvalAltResult {
