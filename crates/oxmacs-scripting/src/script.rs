@@ -12,6 +12,12 @@ const STOPPED: &str = "The script stopped unexpectedly";
 const NESTED: &str = "Scripts are nested too deeply";
 const GOTO: &str = "goto";
 const MAX_NESTING: usize = 8;
+const MAX_OPERATIONS: u64 = 1_000_000;
+const MAX_CALL_LEVELS: usize = 64;
+const MAX_EXPRESSION_DEPTH: usize = 64;
+const MAX_FUNCTION_DEPTH: usize = 32;
+const MAX_STRING_BYTES: usize = 16 * 1024 * 1024;
+const MAX_ITEMS: usize = 100_000;
 
 static STANDARD: LazyLock<Shared<Module>> =
     LazyLock::new(|| StandardPackage::new().as_shared_module());
@@ -45,6 +51,12 @@ pub(crate) struct Origin {
 fn sandbox() -> Engine {
     let mut engine = Engine::new_raw();
     engine.register_global_module(Shared::clone(&STANDARD));
+    engine.set_max_operations(MAX_OPERATIONS);
+    engine.set_max_call_levels(MAX_CALL_LEVELS);
+    engine.set_max_expr_depths(MAX_EXPRESSION_DEPTH, MAX_FUNCTION_DEPTH);
+    engine.set_max_string_size(MAX_STRING_BYTES);
+    engine.set_max_array_size(MAX_ITEMS);
+    engine.set_max_map_size(MAX_ITEMS);
     engine
         .register_custom_syntax([GOTO, "(", "$expr$", ")"], false, |context, inputs| {
             let position = context.eval_expression_tree(&inputs[0])?;
@@ -214,5 +226,66 @@ pub(crate) fn describe(error: EvalAltResult, origin: Origin) -> String {
         }
         Some(column) => format!("{text} (line {shown}, column {column})"),
         None => format!("{text} (line {shown})"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use oxmacs_core::editor::Editor;
+
+    use super::{Origin, describe, evaluate};
+
+    fn evaluated(code: &str) -> String {
+        let mut editor = Editor::new();
+        match evaluate(&mut editor, code) {
+            Ok(value) => format!("{value:?}"),
+            Err(error) => describe(*error, Origin::default()),
+        }
+    }
+
+    #[test]
+    fn runaway_loops_stop_with_an_error() {
+        let message = evaluated("let n = 0; for i in 0..2000000 { n += 1; } n");
+        assert!(message.starts_with("Too many operations"), "{message}");
+
+        let message = evaluated("loop {}");
+        assert!(message.starts_with("Too many operations"), "{message}");
+    }
+
+    #[test]
+    fn huge_strings_and_arrays_are_refused() {
+        let message = evaluated("let s = \"x\"; for i in 0..25 { s += s; } s.len()");
+        assert!(
+            message.starts_with("Length of string too large"),
+            "{message}"
+        );
+
+        let message = evaluated("let a = [0]; for i in 0..20 { a += a; } a.len()");
+        assert!(message.starts_with("Size of array"), "{message}");
+    }
+
+    #[test]
+    fn recursion_and_nesting_have_room_up_to_a_limit() {
+        assert_eq!(
+            evaluated("fn down(n) { if n == 0 { 0 } else { down(n - 1) } } down(40)"),
+            "0"
+        );
+        let message = evaluated("fn down(n) { down(n + 1) } down(0)");
+        assert!(message.starts_with("Stack overflow"), "{message}");
+
+        let deep = format!("{}1{}", "(".repeat(24), ")".repeat(24));
+        assert_eq!(evaluated(&deep), "1");
+    }
+
+    #[test]
+    fn scripts_reach_no_files_or_modules() {
+        let message = evaluated("open_file(\"notes.txt\")");
+        assert!(
+            message.starts_with("Function not found: open_file"),
+            "{message}"
+        );
+
+        let message = evaluated("import \"notes\" as notes; 1");
+        assert!(message.starts_with("Module not found: notes"), "{message}");
     }
 }
