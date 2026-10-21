@@ -8,6 +8,7 @@ pub mod editor;
 pub mod external;
 pub mod files;
 pub mod input;
+pub mod routine;
 pub mod search;
 pub mod syntax;
 pub mod text;
