@@ -2,6 +2,8 @@
 
 Status: design, agreed in five rounds of questions on 2026-10-21. Nothing here is built yet.
 
+The standard library is described in [ox-stdlib.md](ox-stdlib.md), and how the language is built in [ox-internals.md](ox-internals.md).
+
 ## Why
 
 Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each change means recompiling and relinking a large workspace, and the commit gate has become the bottleneck of the whole project. Ox moves everything that is not the editor's engine into plugins written in a fast, modern Scheme dialect that loads at run time. Changing a plugin then means saving a file, not rebuilding the editor.
