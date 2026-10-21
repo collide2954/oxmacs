@@ -255,7 +255,7 @@ pub enum Command {
     TextMode,
     #[strum(
         message = "Check the config, font, languages and tools",
-        detailed_message = "Opens *oxmacs-doctor*, a report on config.toml, the font in use, what each language supports, and external tools such as cargo, rustfmt and R. g refreshes it and q closes it."
+        detailed_message = "Opens *oxmacs-doctor*, a report on config.toml, the font in use, how many languages there are (M-x list-languages shows what works in each), and external tools such as cargo, rustfmt and R. g refreshes it and q closes it."
     )]
     OxmacsDoctor,
     #[strum(message = "Split the window into top and bottom")]
@@ -432,6 +432,11 @@ pub enum Command {
     RTableNextColumn,
     #[strum(message = "Show the previous columns of the table")]
     RTablePreviousColumn,
+    #[strum(
+        message = "List each language and what works in it",
+        detailed_message = "Opens *Languages*: every language this build knows, with its file extensions and which features work in it, from highlighting and indentation to formatting, linting, completion and a console. q closes it."
+    )]
+    ListLanguages,
     #[strum(
         message = "List the tools oxmacs can install and update",
         detailed_message = "Opens *Tools*: each tool oxmacs can install itself, such as air for formatting R, with the version installed, the latest release, and which program runs. Opening it, or g, asks GitHub for the latest releases; nothing is downloaded until you press i to install or u to update, and d removes oxmacs's copy."

@@ -107,6 +107,7 @@ impl Editor {
             Command::RInsertPipe => self.insert_operator("|>"),
             Command::RunR => self.run_r(),
             Command::ListProcesses => self.list_processes(),
+            Command::ListLanguages => self.list_languages(),
             Command::ListTools => self.list_tools(),
             Command::ToolInstall => self.tool_install(),
             Command::ToolUpdate => self.tool_update(),

@@ -26,6 +26,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `M-x list-languages` shows each language with its file extensions and what works in it; `M-x oxmacs-doctor` now only counts them and points there.
 - Keyboard macros: `F3` or `C-x (` starts recording, `F4` or `C-x )` stops, and `F4` or `C-x e` plays the keys back, with `e` playing them again; `C-x C-k r` plays them on each line of the region and `F3` while recording inserts a counter. A replay stops at the first error and undoes as one step, and the mode line says when a macro is being recorded.
 - Atlas, a plain-text knowledge system in `.atlas` notes: a `key: value` header, `=` headings, tasks `[ ]` `[/]` `[?]` `[x]` `[-]` with `due:`, `on:`, `every:`, `!high` and `#tags`, `[Page]` links and `@date HH:MM-HH:MM` events, all highlighted. Loose dates such as `fri` or `+3d` become ISO dates when you leave the line or save.
 - `C-c C-c` in a note cycles the task at point, stamping `done:` and moving repeating tasks on; `C-c C-o` follows a link or starts the page, and `M-,` comes back.

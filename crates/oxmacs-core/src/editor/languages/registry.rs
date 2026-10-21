@@ -84,7 +84,7 @@ mod tests {
 
     use crate::command::CommandSpec;
     use crate::editor::Editor;
-    use crate::editor::test_support::{lines, press, type_text};
+    use crate::editor::test_support::{press, type_text};
     use crate::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
     use crate::theme::Highlight;
 
@@ -177,23 +177,5 @@ mod tests {
         press(&mut editor, "RET TAB");
 
         assert_eq!(editor.buffer().contents(), "{\n\t");
-    }
-
-    #[test]
-    fn the_doctor_lists_added_languages() {
-        let mut editor = Editor::new();
-        editor.add_language(notes(), None);
-
-        press(&mut editor, "M-x");
-        type_text(&mut editor, "oxmacs-doctor");
-        press(&mut editor, "RET");
-
-        let shown = lines(&editor);
-        assert!(
-            shown
-                .iter()
-                .any(|line| line.trim_start().starts_with("Notes (.notes)")),
-            "{shown:?}"
-        );
     }
 }

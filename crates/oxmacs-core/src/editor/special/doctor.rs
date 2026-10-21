@@ -1,5 +1,4 @@
 use std::env;
-use std::fmt::Write;
 use std::path::Path;
 
 use crate::applet::{DoctorLine, Finding};
@@ -10,7 +9,6 @@ use crate::editor::page::Page;
 use crate::editor::{Editor, Effect};
 use crate::external::managed::AIR;
 use crate::external::tools::{Probe, Tool};
-use crate::syntax::{Feature, Language};
 use crate::text::Buffer;
 use crate::theme::{Appearance, Highlight};
 
@@ -116,7 +114,16 @@ impl Editor {
         page.line(&[]);
         self.examine_environment(&mut page);
         page.line(&[]);
-        examine_languages(&mut page, &self.languages());
+        page.heading("Languages");
+        field(
+            &mut page,
+            "Known",
+            &format!(
+                "{} languages; M-x list-languages shows what works in each",
+                self.languages().len()
+            ),
+            None,
+        );
         page.line(&[]);
         self.examine_tools(&mut page);
         for (title, lines) in &self.doctor_sections {
@@ -268,57 +275,6 @@ fn tool(page: &mut Page, name: &str, probe: Option<&Probe>, hint: &str) {
             (&format!("not found; {hint}"), None),
         ]),
     }
-}
-
-fn examine_languages(page: &mut Page, languages: &[Language]) {
-    let names: Vec<String> = languages
-        .iter()
-        .map(|language| {
-            let extensions: Vec<String> = language
-                .extensions()
-                .iter()
-                .map(|extension| format!(".{extension}"))
-                .collect();
-            format!("{} ({})", language.name(), extensions.join(" "))
-        })
-        .collect();
-    let name_width = names
-        .iter()
-        .map(|name| name.chars().count() + 2)
-        .max()
-        .unwrap_or(0)
-        .max(LABEL_WIDTH);
-    let mut header = format!("{:<width$}", "Languages", width = name_width + 2);
-    for feature in Feature::ALL {
-        let _ = write!(
-            header,
-            "{:<width$}",
-            feature.label(),
-            width = column_width(feature)
-        );
-    }
-    page.line(&[(header.trim_end(), Some(Highlight::Heading))]);
-    for (language, name) in languages.iter().zip(names) {
-        let name = format!("  {name:<name_width$}");
-        let mut parts: Vec<(String, Option<Highlight>)> = vec![(name, None)];
-        for feature in Feature::ALL {
-            let width = column_width(feature);
-            parts.push(if language.supports(feature) {
-                (format!("{:<width$}", "✓"), Some(Highlight::Success))
-            } else {
-                (format!("{:<width$}", "–"), None)
-            });
-        }
-        let borrowed: Vec<(&str, Option<Highlight>)> = parts
-            .iter()
-            .map(|(text, highlight)| (text.as_str(), *highlight))
-            .collect();
-        page.line(&borrowed);
-    }
-}
-
-fn column_width(feature: Feature) -> usize {
-    feature.label().len() + 2
 }
 
 fn config_status(path: &Path) -> (String, Highlight) {
@@ -485,26 +441,15 @@ mod tests {
     }
 
     #[test]
-    fn languages_show_which_features_work() {
+    fn languages_are_counted_with_a_pointer_to_their_list() {
         let (_dir, editor) = doctor();
 
-        let header = line_with(&editor, "Languages");
-        let column = |label: &str| header.find(label).unwrap();
-        let mark =
-            |row: &str, label: &str| line_with(&editor, row).chars().nth(column(label)).unwrap();
-
-        assert_eq!(mark("Rust (.rs)", "Highlight"), '✓');
-        assert_eq!(mark("Rust (.rs)", "LSP"), '–');
-        assert_eq!(mark("Rust (.rs)", "Lint"), '✓');
-        assert_eq!(mark("TOML (", "Lint"), '–');
-        assert_eq!(mark("R (.R .r)", "Indent"), '✓');
-        assert_eq!(mark("R (.R .r)", "Items"), '✓');
-        assert_eq!(mark("R (.R .r)", "Format"), '✓');
-        assert_eq!(mark("R (.R .r)", "Complete"), '✓');
-        assert_eq!(mark("R (.R .r)", "REPL"), '✓');
-        assert_eq!(mark("Rust (.rs)", "REPL"), '–');
-        assert_eq!(mark("TOML (", "Items"), '✓');
-        assert_eq!(mark("TOML (", "Preview"), '–');
+        assert!(
+            line_with(&editor, "Known")
+                .ends_with("languages; M-x list-languages shows what works in each"),
+            "{}",
+            line_with(&editor, "Known")
+        );
     }
 
     #[test]

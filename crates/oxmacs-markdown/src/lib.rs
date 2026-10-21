@@ -505,11 +505,11 @@ mod tests {
     }
 
     #[test]
-    fn the_doctor_shows_what_markdown_supports() {
+    fn the_language_list_shows_what_markdown_supports() {
         let mut editor = installed();
 
         press(&mut editor, "M-x");
-        type_text(&mut editor, "oxmacs-doctor");
+        type_text(&mut editor, "list-languages");
         press(&mut editor, "RET");
 
         let row = editor

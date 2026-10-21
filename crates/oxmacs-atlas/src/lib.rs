@@ -540,10 +540,12 @@ mod tests {
     }
 
     #[test]
-    fn the_doctor_and_mode_line_know_the_atlas_language() {
+    fn the_language_list_knows_the_atlas_language() {
         let mut editor = crate::testing::editor();
 
-        doctor(&mut editor);
+        press(&mut editor, "M-x");
+        type_text(&mut editor, "list-languages");
+        press(&mut editor, "RET");
 
         assert!(line_with(&editor, "Atlas (.atlas)").contains('✓'));
     }

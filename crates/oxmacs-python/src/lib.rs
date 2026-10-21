@@ -327,10 +327,10 @@ mod tests {
     }
 
     #[test]
-    fn the_doctor_shows_what_python_supports() {
+    fn the_language_list_shows_what_python_supports() {
         let mut editor = installed();
 
-        run(&mut editor, "oxmacs-doctor");
+        run(&mut editor, "list-languages");
 
         let row = lines(&editor)
             .into_iter()
