@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::bytecode::{Capture, Code, Op, Register};
+use crate::bytecode::{Arity, Capture, Code, Op, Register};
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::reader::{Datum, Syntax};
@@ -74,6 +74,84 @@ fn assigns(form: &Syntax, name: &str) -> bool {
         Datum::Vector(items) | Datum::Map(items) => items.iter().any(|item| assigns(item, name)),
         _ => false,
     }
+}
+
+#[derive(Default)]
+struct Parameters<'s> {
+    required: Vec<&'s str>,
+    optional: Vec<(&'s str, Option<&'s Syntax>)>,
+    rest: Option<&'s str>,
+    keywords: Vec<(&'s str, &'s Syntax)>,
+}
+
+fn parse_parameters(list: &[Syntax]) -> Result<Parameters<'_>, Error> {
+    let mut found = Parameters::default();
+    let mut items = list.iter().peekable();
+    while let Some(item) = items.next() {
+        let at = |message: &str| Error::at(item.span, message);
+        match &item.datum {
+            Datum::Symbol(name) if name == "&" => {
+                let Some(Syntax {
+                    datum: Datum::Symbol(rest),
+                    ..
+                }) = items.next()
+                else {
+                    return Err(at("& takes one name for the rest of the arguments"));
+                };
+                found.rest = Some(rest);
+                if let Some(next) = items.peek()
+                    && !matches!(next.datum, Datum::Map(_))
+                {
+                    return Err(Error::at(
+                        next.span,
+                        "& takes one name for the rest of the arguments",
+                    ));
+                }
+            }
+            Datum::Symbol(name) => {
+                if !found.optional.is_empty() || found.rest.is_some() {
+                    return Err(at("Required parameters come before optional ones"));
+                }
+                found.required.push(name);
+            }
+            Datum::List(parts) => match parts.as_slice() {
+                [
+                    Syntax {
+                        datum: Datum::Symbol(name),
+                        ..
+                    },
+                ] => found.optional.push((name, None)),
+                [
+                    Syntax {
+                        datum: Datum::Symbol(name),
+                        ..
+                    },
+                    default,
+                ] => found.optional.push((name, Some(default))),
+                _ => return Err(at("Parameters must be names")),
+            },
+            Datum::Map(pairs) => {
+                if items.peek().is_some() {
+                    return Err(at("Keyword parameters come last"));
+                }
+                for pair in pairs.chunks(2) {
+                    let [
+                        Syntax {
+                            datum: Datum::Symbol(name),
+                            ..
+                        },
+                        default,
+                    ] = pair
+                    else {
+                        return Err(at("Parameters must be names"));
+                    };
+                    found.keywords.push((name, default));
+                }
+            }
+            _ => return Err(at("Parameters must be names")),
+        }
+    }
+    Ok(found)
 }
 
 fn assigned_in(forms: &[Syntax], name: &str) -> bool {
@@ -230,8 +308,11 @@ impl Compiler<'_> {
     }
 
     fn patch(&mut self, jump: usize, to: u32) {
-        if let Some(Op::Jump { to: target } | Op::JumpUnless { to: target, .. }) =
-            self.current.code.ops.get_mut(jump)
+        if let Some(
+            Op::Jump { to: target }
+            | Op::JumpUnless { to: target, .. }
+            | Op::JumpIfSupplied { to: target, .. },
+        ) = self.current.code.ops.get_mut(jump)
         {
             *target = to;
         }
@@ -412,30 +493,69 @@ impl Compiler<'_> {
         target: Register,
         span: Span,
     ) -> Result<(), Error> {
+        let parameters = parse_parameters(parameters)?;
         let parent = std::mem::take(&mut self.current);
         self.outer.push(parent);
         self.current.code.name = name;
-        for parameter in parameters {
-            let Datum::Symbol(parameter_name) = &parameter.datum else {
-                return Err(Error::at(parameter.span, "Parameters must be names"));
-            };
-            let register = self.reserve(1, parameter.span)?;
-            self.current.locals.push(Local {
-                name: Sym::intern(parameter_name),
-                register,
-                boxed: assigned_in(body, parameter_name),
-            });
+        let defaults = parameters.optional.len() + parameters.keywords.len();
+        if defaults > 64 {
+            return Err(Error::at(
+                span,
+                "This function has too many optional and keyword parameters",
+            ));
         }
-        self.current.code.arity = self.current.top;
-        let boxed: Vec<Register> = self
-            .current
-            .locals
-            .iter()
-            .filter(|local| local.boxed)
-            .map(|local| local.register)
-            .collect();
-        for register in boxed {
-            self.emit(Op::MakeCell { register }, span);
+        let mut order: Vec<(&str, Option<&Syntax>)> = Vec::new();
+        order.extend(parameters.required.iter().map(|name| (*name, None)));
+        order.extend(parameters.optional.iter().copied());
+        order.extend(parameters.rest.iter().map(|name| (*name, None)));
+        order.extend(
+            parameters
+                .keywords
+                .iter()
+                .map(|(name, default)| (*name, Some(*default))),
+        );
+        let mut registers = Vec::new();
+        for (parameter, _) in &order {
+            let register = self.reserve(1, span)?;
+            let boxed = assigned_in(body, parameter);
+            self.current.locals.push(Local {
+                name: Sym::intern(parameter),
+                register,
+                boxed,
+            });
+            registers.push((register, boxed));
+        }
+        self.current.code.arity = Arity {
+            required: u16::try_from(parameters.required.len()).unwrap_or(u16::MAX),
+            optional: u16::try_from(parameters.optional.len()).unwrap_or(u16::MAX),
+            rest: parameters.rest.is_some(),
+            keywords: parameters
+                .keywords
+                .iter()
+                .map(|(name, _)| Sym::intern(name))
+                .collect(),
+        };
+        let first_default = parameters.required.len();
+        let rest_slot = parameters
+            .rest
+            .map(|_| first_default + parameters.optional.len());
+        let mut bit = 0_u8;
+        for (index, ((_, default), (register, boxed))) in order.iter().zip(registers).enumerate() {
+            let defaulted = index >= first_default && Some(index) != rest_slot;
+            if defaulted {
+                let skip = self.current.code.ops.len();
+                self.emit(Op::JumpIfSupplied { bit, to: 0 }, span);
+                match default {
+                    Some(default) => self.expression(default, register)?,
+                    None => self.load(Value::Nil, register, span)?,
+                }
+                let after = self.here(span)?;
+                self.patch(skip, after);
+                bit += 1;
+            }
+            if boxed {
+                self.emit(Op::MakeCell { register }, span);
+            }
         }
         let result = self.reserve(1, span)?;
         self.sequence(body, result, span, true)?;

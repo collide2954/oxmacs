@@ -1,3 +1,4 @@
+mod bind;
 mod builtins;
 pub mod bytecode;
 mod compile;

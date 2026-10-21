@@ -396,6 +396,84 @@ mod tests {
     }
 
     #[test]
+    fn optional_parameters_take_their_defaults() {
+        all(&[
+            ("(def (f a (b 10)) (+ a b)) (f 1)", "11"),
+            ("(def (f a (b 10)) (+ a b)) (f 1 2)", "3"),
+            ("(def (f a (b (* a 2)) (c (+ b 1))) (+ a b c)) (f 1)", "6"),
+            (
+                "(def (f a (b (* a 2)) (c (+ b 1))) (+ a b c)) (f 1 5)",
+                "12",
+            ),
+            ("(def (f (x)) x) (f)", "nil"),
+        ]);
+    }
+
+    #[test]
+    fn rest_parameters_collect_the_remaining_arguments() {
+        all(&[
+            ("(def (f a & more) more) (f 1 2 3)", "(2 3)"),
+            ("(def (f a & more) more) (f 1)", "nil"),
+            ("(def (f & all) all) (f)", "nil"),
+            ("(def (f (a 0) & more) more) (f 1 2)", "(2)"),
+        ]);
+    }
+
+    #[test]
+    fn keyword_parameters_take_names_and_defaults() {
+        let scaled = "(def (f x {scale 2 shift 0}) (+ (* x scale) shift))";
+        all(&[
+            (&format!("{scaled} (f 5)"), "10"),
+            (&format!("{scaled} (f 5 :shift 1)"), "11"),
+            (&format!("{scaled} (f 5 shift: 1 scale: 3)"), "16"),
+            ("(def (f (a 1) {b 2}) (+ a b)) (f :b 5)", "6"),
+            ("(def (f (a 1) {b 2}) (+ a b)) (f 10 :b 5)", "15"),
+            ("(def (f & xs {k 0}) k) (f 1 2 :k 9)", "9"),
+            ("(def (f {k (+ 1 1)}) k) (f)", "2"),
+            (
+                "(def (g n {total 0}) (if (< n 1) total (g (- n 1) :total (+ total n)))) (g 1000)",
+                "500500",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn parameter_mistakes_are_reported() {
+        all(&[
+            (
+                "(def (f a (b 1)) b) (f)",
+                "error: f takes 1 to 2 arguments, got 0",
+            ),
+            (
+                "(def (f a (b 1)) b) (f 1 2 3)",
+                "error: f takes 1 to 2 arguments, got 3",
+            ),
+            (
+                "(def (f a & r) r) (f)",
+                "error: f takes at least 1 argument, got 0",
+            ),
+            (
+                "(def (f {k 1}) k) (f :j 2)",
+                "error: f has no keyword parameter :j",
+            ),
+            (
+                "(def (f {k 1}) k) (f :k)",
+                "error: f was given :k without a value",
+            ),
+            (
+                "(fn [(a 1) b] a)",
+                "error: Required parameters come before optional ones",
+            ),
+            (
+                "(fn [& a b] a)",
+                "error: & takes one name for the rest of the arguments",
+            ),
+            ("(fn [{k 1} a] a)", "error: Keyword parameters come last"),
+            ("(fn [(1 2)] 1)", "error: Parameters must be names"),
+        ]);
+    }
+
+    #[test]
     fn rust_functions_can_be_called_from_ox() {
         let mut isolate = Isolate::new();
         isolate.define_native("twice", 1, Some(1), |_, arguments| match arguments {

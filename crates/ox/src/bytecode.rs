@@ -22,6 +22,7 @@ pub enum Op {
     TailCall { base: Register, count: u16 },
     Jump { to: u32 },
     JumpUnless { test: Register, to: u32 },
+    JumpIfSupplied { bit: u8, to: u32 },
     Return { from: Register },
 }
 
@@ -31,10 +32,24 @@ pub enum Capture {
     Captured(u16),
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Arity {
+    pub required: u16,
+    pub optional: u16,
+    pub rest: bool,
+    pub keywords: Vec<Sym>,
+}
+
+impl Arity {
+    pub fn simple(&self) -> bool {
+        self.optional == 0 && !self.rest && self.keywords.is_empty()
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Code {
     pub name: Option<Sym>,
-    pub arity: u16,
+    pub arity: Arity,
     pub registers: Register,
     pub ops: Vec<Op>,
     pub constants: Vec<Value>,

@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use crate::bind::{Binding, bind};
 use crate::bytecode::{Capture, Code, Op};
 use crate::error::Error;
 use crate::heap::{Closure, Heap};
-use crate::native::arguments;
 use crate::print;
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -20,6 +20,7 @@ pub struct Runtime {
 struct Frame {
     code: Rc<Code>,
     closure: Value,
+    missing: u64,
     pc: usize,
     base: usize,
     result: usize,
@@ -30,6 +31,7 @@ struct Machine {
     frames: Vec<Frame>,
     code: Rc<Code>,
     closure: Value,
+    missing: u64,
     pc: usize,
     base: usize,
 }
@@ -41,12 +43,14 @@ impl Machine {
             frames: vec![Frame {
                 code: Rc::clone(entry),
                 closure: Value::Nil,
+                missing: 0,
                 pc: 0,
                 base: 0,
                 result: 0,
             }],
             code: Rc::clone(entry),
             closure: Value::Nil,
+            missing: 0,
             pc: 0,
             base: 0,
         }
@@ -60,7 +64,27 @@ impl Machine {
         self.stack[self.base + usize::from(register)] = value;
     }
 
-    fn enter(&mut self, function: Rc<Code>, closure: Value, slot: usize) -> Result<(), Error> {
+    fn place(&mut self, start: usize, function: &Code, binding: Binding) -> u64 {
+        let needed = start + usize::from(function.registers);
+        if self.stack.len() < needed {
+            self.stack.resize(needed, Value::Nil);
+        }
+        match binding {
+            Binding::Direct => 0,
+            Binding::Bound { values, missing } => {
+                self.stack[start..start + values.len()].copy_from_slice(&values);
+                missing
+            }
+        }
+    }
+
+    fn enter(
+        &mut self,
+        function: Rc<Code>,
+        closure: Value,
+        slot: usize,
+        binding: Binding,
+    ) -> Result<(), Error> {
         if self.frames.len() >= MAX_FRAMES {
             return Err(Error::new("Stack overflow"));
         }
@@ -68,36 +92,43 @@ impl Machine {
             frame.pc = self.pc;
         }
         let start = slot + 1;
-        let needed = start + usize::from(function.registers);
-        if self.stack.len() < needed {
-            self.stack.resize(needed, Value::Nil);
-        }
+        let missing = self.place(start, &function, binding);
         self.frames.push(Frame {
             code: Rc::clone(&function),
             closure,
+            missing,
             pc: 0,
             base: start,
             result: slot,
         });
         self.code = function;
         self.closure = closure;
+        self.missing = missing;
         self.pc = 0;
         self.base = start;
         Ok(())
     }
 
-    fn replace(&mut self, function: Rc<Code>, closure: Value, slot: usize, count: usize) {
-        self.stack.copy_within(slot + 1..=slot + count, self.base);
-        let needed = self.base + usize::from(function.registers);
-        if self.stack.len() < needed {
-            self.stack.resize(needed, Value::Nil);
+    fn replace(
+        &mut self,
+        function: Rc<Code>,
+        closure: Value,
+        slot: usize,
+        count: usize,
+        binding: Binding,
+    ) {
+        if matches!(binding, Binding::Direct) {
+            self.stack.copy_within(slot + 1..=slot + count, self.base);
         }
+        let missing = self.place(self.base, &function, binding);
         if let Some(frame) = self.frames.last_mut() {
             frame.code = Rc::clone(&function);
             frame.closure = closure;
+            frame.missing = missing;
         }
         self.code = function;
         self.closure = closure;
+        self.missing = missing;
         self.pc = 0;
     }
 
@@ -111,6 +142,7 @@ impl Machine {
         self.stack[finished.result] = value;
         self.code = Rc::clone(&caller.code);
         self.closure = caller.closure;
+        self.missing = caller.missing;
         self.pc = caller.pc;
         self.base = caller.base;
         None
@@ -119,14 +151,6 @@ impl Machine {
 
 fn full(error: crate::heap::HeapFull) -> Error {
     Error::new(error.to_string())
-}
-
-fn arity_error(code: &Code, count: usize) -> Error {
-    let name = code.name.map_or("fn", Sym::name);
-    Error::new(format!(
-        "{name} takes {}, got {count}",
-        arguments(usize::from(code.arity))
-    ))
 }
 
 impl Runtime {
@@ -198,6 +222,11 @@ impl Runtime {
             Op::Call { base, count } => self.call(machine, base, count)?,
             Op::TailCall { base, count } => return self.tail_call(machine, base, count),
             Op::Jump { to } => machine.pc = to as usize,
+            Op::JumpIfSupplied { bit, to } => {
+                if machine.missing & (1 << bit) == 0 {
+                    machine.pc = to as usize;
+                }
+            }
             Op::JumpUnless { test, to } => {
                 if !machine.get(test).truthy() {
                     machine.pc = to as usize;
@@ -221,10 +250,12 @@ impl Runtime {
             machine.stack[slot] = result;
             return Ok(());
         };
-        if count != usize::from(function.arity) {
-            return Err(arity_error(&function, count));
-        }
-        machine.enter(function, callee, slot)
+        let binding = bind(
+            &mut self.heap,
+            &function,
+            &machine.stack[slot + 1..=slot + count],
+        )?;
+        machine.enter(function, callee, slot, binding)
     }
 
     fn tail_call(
@@ -244,10 +275,12 @@ impl Runtime {
             let result = self.call_native(callee, &machine.stack[slot + 1..=slot + count])?;
             return Ok(machine.leave(result));
         };
-        if count != usize::from(function.arity) {
-            return Err(arity_error(&function, count));
-        }
-        machine.replace(function, callee, slot, count);
+        let binding = bind(
+            &mut self.heap,
+            &function,
+            &machine.stack[slot + 1..=slot + count],
+        )?;
+        machine.replace(function, callee, slot, count, binding);
         Ok(None)
     }
 
