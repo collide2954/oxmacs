@@ -208,6 +208,20 @@ const GRID: &[Spec] = &[
         keys: &["g"],
         run: table::refresh,
     },
+    Spec {
+        name: "database-sort",
+        summary: "Sort by this column alone, cycling up, down and off",
+        help: None,
+        keys: &["s"],
+        run: |editor| table::sort(editor, false),
+    },
+    Spec {
+        name: "database-sort-also",
+        summary: "Sort by this column after the others, cycling up, down and off",
+        help: None,
+        keys: &["S"],
+        run: |editor| table::sort(editor, true),
+    },
 ];
 
 fn register(editor: &mut Editor, scope: ScopeId, specs: &[Spec]) -> Vec<CommandId> {

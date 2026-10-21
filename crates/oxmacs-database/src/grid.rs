@@ -5,6 +5,7 @@ use std::ops::Range;
 
 use crate::driver::{Page, Query, Value};
 use crate::service::DbId;
+use crate::widget::clip;
 
 pub(crate) const PAGE: u64 = 200;
 pub(crate) const PAD: usize = 2;
@@ -284,6 +285,85 @@ impl Grid {
         self.error = None;
     }
 
+    fn requery(&mut self) {
+        self.reset();
+        self.anchor = None;
+        self.cursor.row = 0;
+        self.top = 0;
+    }
+
+    pub(crate) fn sort(&mut self, column: usize, add: bool) -> bool {
+        let Some(name) = self.columns.get(column).cloned() else {
+            return false;
+        };
+        let sort = &mut self.query.sort;
+        let found = sort.iter().position(|(sorted, _)| *sorted == name);
+        let next = match found.map(|at| sort[at].1) {
+            None => Some(false),
+            Some(false) => Some(true),
+            Some(true) => None,
+        };
+        if add {
+            match (found, next) {
+                (Some(at), Some(descending)) => sort[at].1 = descending,
+                (Some(at), None) => {
+                    sort.remove(at);
+                }
+                (None, Some(descending)) => sort.push((name, descending)),
+                (None, None) => {}
+            }
+        } else {
+            *sort = next
+                .map(|descending| (name, descending))
+                .into_iter()
+                .collect();
+        }
+        self.fit_headings();
+        self.requery();
+        true
+    }
+
+    pub(crate) fn sort_mark(&self, column: usize) -> Option<(bool, usize)> {
+        let name = self.columns.get(column)?;
+        let at = self
+            .query
+            .sort
+            .iter()
+            .position(|(sorted, _)| sorted == name)?;
+        Some((self.query.sort[at].1, at + 1))
+    }
+
+    fn mark(&self, column: usize) -> String {
+        let Some((descending, order)) = self.sort_mark(column) else {
+            return String::new();
+        };
+        let arrow = if descending { '▾' } else { '▴' };
+        if self.query.sort.len() > 1 {
+            format!(" {arrow}{order}")
+        } else {
+            format!(" {arrow}")
+        }
+    }
+
+    pub(crate) fn heading(&self, column: usize) -> String {
+        let name = self.columns.get(column).map_or("", String::as_str);
+        let mark = self.mark(column);
+        let room = self.width(column).saturating_sub(mark.chars().count());
+        format!("{}{mark}", clip(name, room))
+    }
+
+    fn fit_headings(&mut self) {
+        let wanted: Vec<usize> = self
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(column, name)| name.chars().count() + self.mark(column).chars().count())
+            .collect();
+        for (width, wanted) in self.widths.iter_mut().zip(wanted) {
+            *width = (*width).max(wanted.min(WIDEST));
+        }
+    }
+
     pub(crate) fn copied(&self) -> String {
         let anchor = self.anchor.unwrap_or(self.cursor);
         let rows = anchor.row.min(self.cursor.row)..=anchor.row.max(self.cursor.row);
@@ -502,6 +582,76 @@ mod tests {
         assert_eq!(grid.total, None);
         assert_eq!(grid.cursor, Cell { row: 5, column: 1 });
         assert_eq!(grid.wanted(), [0]);
+    }
+
+    fn sorts(grid: &Grid) -> Vec<(&str, bool)> {
+        grid.query
+            .sort
+            .iter()
+            .map(|(name, descending)| (name.as_str(), *descending))
+            .collect()
+    }
+
+    #[test]
+    fn s_cycles_up_down_and_off_from_the_first_row() {
+        let mut grid = sized(100);
+        grid.go(Cell { row: 40, column: 1 });
+        grid.anchor = Some(Cell { row: 30, column: 0 });
+        grid.left = 1;
+
+        assert!(grid.sort(1, false));
+        assert_eq!(sorts(&grid), [("label", false)]);
+        assert_eq!(grid.cursor, Cell { row: 0, column: 1 });
+        assert_eq!((grid.top, grid.left, grid.total), (0, 1, None));
+        assert_eq!(grid.anchor, None);
+        assert!(grid.pages.is_empty());
+        assert_eq!(grid.wanted(), [0]);
+        grid.sort(1, false);
+        assert_eq!(sorts(&grid), [("label", true)]);
+        grid.sort(1, false);
+        assert_eq!(sorts(&grid), []);
+        assert!(!grid.sort(7, false));
+    }
+
+    #[test]
+    fn s_on_another_column_replaces_the_sort() {
+        let mut grid = sized(100);
+        grid.sort(0, false);
+        grid.sort(1, true);
+
+        grid.sort(1, false);
+        assert_eq!(sorts(&grid), [("label", true)]);
+        grid.sort(0, false);
+        assert_eq!(sorts(&grid), [("n", false)]);
+    }
+
+    #[test]
+    fn shift_s_adds_a_further_key_and_cycles_it_in_place() {
+        let mut grid = sized(100);
+        grid.sort(1, false);
+
+        grid.sort(0, true);
+        assert_eq!(sorts(&grid), [("label", false), ("n", false)]);
+        grid.sort(1, true);
+        assert_eq!(sorts(&grid), [("label", true), ("n", false)]);
+        grid.sort(1, true);
+        assert_eq!(sorts(&grid), [("n", false)]);
+    }
+
+    #[test]
+    fn sort_marks_number_several_sorts() {
+        let mut grid = sized(100);
+        assert_eq!(grid.heading(1), "label");
+
+        grid.sort(1, false);
+        assert_eq!(grid.sort_mark(1), Some((false, 1)));
+        assert_eq!(grid.heading(1), "label ▴");
+        grid.sort(0, true);
+        grid.sort(0, true);
+        assert_eq!(grid.sort_mark(0), Some((true, 2)));
+        assert_eq!(grid.sort_mark(5), None);
+        assert_eq!(grid.heading(0), "n ▾2");
+        assert_eq!(grid.heading(1), "label ▴1");
     }
 
     #[test]

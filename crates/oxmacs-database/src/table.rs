@@ -254,6 +254,23 @@ pub(crate) fn copy(editor: &mut Editor) {
     editor.copy_text(text);
 }
 
+fn requery(editor: &mut Editor, id: BufferId, work: impl FnOnce(&mut Grid) -> bool) {
+    let Some((_, view)) = editor.applet_buffer_mut::<GridView>(id) else {
+        return;
+    };
+    if work(&mut view.grid) {
+        view.counting = false;
+        load(editor, id);
+    }
+}
+
+pub(crate) fn sort(editor: &mut Editor, add: bool) {
+    let Some(id) = current(editor) else {
+        return;
+    };
+    requery(editor, id, |grid| grid.sort(grid.cursor.column, add));
+}
+
 pub(crate) fn refresh(editor: &mut Editor) {
     let Some(id) = current(editor) else {
         return;
@@ -591,6 +608,83 @@ mod tests {
         let grid = view(&editor);
         assert_eq!(grid.top, 600);
         assert_eq!(grid.value(610, 0), Some(&Value::Integer(611)));
+    }
+
+    fn titles(editor: &Editor) -> Vec<String> {
+        let grid = view(editor);
+        (0..grid.total.unwrap_or(0))
+            .filter_map(|row| match grid.value(row, 1) {
+                Some(Value::Text(title)) => Some(title.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn sorts(editor: &Editor) -> Vec<(String, bool)> {
+        view(editor).query.sort.clone()
+    }
+
+    #[test]
+    fn s_sorts_by_the_cursor_column_up_down_and_off() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+
+        press(&mut editor, "C-n C-f s");
+        pump(&mut editor, &mut service);
+        assert_eq!(
+            titles(&editor),
+            [
+                "Balls to the Wall",
+                "For Those About To Rock",
+                "Let There Be Rock",
+                "Restless and Wild"
+            ]
+        );
+        assert_eq!(view(&editor).cursor, Cell { row: 0, column: 1 });
+        assert_eq!(editor.pane().status().position.as_deref(), Some("1/4"));
+
+        press(&mut editor, "s");
+        pump(&mut editor, &mut service);
+        assert_eq!(titles(&editor)[0], "Restless and Wild");
+
+        press(&mut editor, "s");
+        pump(&mut editor, &mut service);
+        assert_eq!(titles(&editor)[0], "For Those About To Rock");
+        assert_eq!(sorts(&editor), []);
+    }
+
+    #[test]
+    fn shift_s_sorts_by_a_further_column() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+
+        press(&mut editor, "C-f C-f s C-b S");
+        pump(&mut editor, &mut service);
+        assert_eq!(
+            sorts(&editor),
+            [("artist_id".to_owned(), false), ("title".to_owned(), false)]
+        );
+        assert_eq!(
+            titles(&editor),
+            [
+                "For Those About To Rock",
+                "Let There Be Rock",
+                "Balls to the Wall",
+                "Restless and Wild"
+            ]
+        );
+
+        press(&mut editor, "S");
+        pump(&mut editor, &mut service);
+        assert_eq!(
+            titles(&editor),
+            [
+                "Let There Be Rock",
+                "For Those About To Rock",
+                "Restless and Wild",
+                "Balls to the Wall"
+            ]
+        );
     }
 
     #[test]

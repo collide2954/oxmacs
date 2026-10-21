@@ -509,13 +509,12 @@ impl GridWidget<'_> {
             inset,
         } = *frame;
         for (column, x, width) in &geometry.boxes {
-            let name = self.grid.columns.get(*column).cloned().unwrap_or_default();
             let area = Rectangle::new(
                 Point::new(*x, bounds.y),
                 Size::new(*width, geometry.row_height),
             );
             renderer.fill_text(
-                self.text(clip(&name, self.grid.width(*column)), geometry.row_height),
+                self.text(self.grid.heading(*column), geometry.row_height),
                 Point::new(x + geometry.cell.width, bounds.y + inset),
                 style::color(self.faces.heading),
                 area,
