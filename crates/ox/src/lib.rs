@@ -2,6 +2,7 @@ mod bind;
 mod builtins;
 pub mod bytecode;
 mod compile;
+mod equal;
 pub mod error;
 pub mod heap;
 mod isolate;

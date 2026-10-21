@@ -537,6 +537,59 @@ mod tests {
     }
 
     #[test]
+    fn equality_is_exact_and_structural() {
+        all(&[
+            ("(= 1 1)", "true"),
+            ("(= 1 1.0)", "false"),
+            ("(= 1.5 1.5)", "true"),
+            (r#"(= "abc" (str "a" "bc"))"#, "true"),
+            (r#"(= "abc" "abd")"#, "false"),
+            ("(= :a :a)", "true"),
+            (r"(= \a \a)", "true"),
+            ("(= nil nil)", "true"),
+            ("(= nil false)", "false"),
+            (
+                "(= 100000000000000000000 (* 10000000000 10000000000))",
+                "true",
+            ),
+            ("(= 1)", "true"),
+            ("(= 1 1 1)", "true"),
+            ("(= 1 1 2)", "false"),
+            (
+                r#"(def (f & xs) xs) (= (f 1 "a" (f 2)) (f 1 "a" (f 2)))"#,
+                "true",
+            ),
+            ("(def (f & xs) xs) (= (f 1 2) (f 1 2 3))", "false"),
+            ("(= + +)", "true"),
+            ("(= (fn [] 1) (fn [] 1))", "false"),
+            ("(not= 1 2)", "true"),
+            ("(not= 1 1)", "false"),
+        ]);
+    }
+
+    #[test]
+    fn numeric_equality_compares_numbers_by_value() {
+        all(&[
+            ("(== 1 1.0)", "true"),
+            ("(== 1 1.0 1)", "true"),
+            ("(== 1 2)", "false"),
+            ("(== 9223372036854775808 9223372036854775808.0)", "true"),
+            (r#"(== "a" 1)"#, r#"error: == expects numbers, got "a""#),
+        ]);
+    }
+
+    #[test]
+    fn identical_compares_references() {
+        all(&[
+            (r#"(def s "abc") (identical? s s)"#, "true"),
+            (r#"(identical? (str "a") (str "a"))"#, "false"),
+            ("(identical? :a :a)", "true"),
+            ("(identical? 1 1)", "true"),
+            ("(identical? 1 1.0)", "false"),
+        ]);
+    }
+
+    #[test]
     fn rust_functions_can_be_called_from_ox() {
         let mut isolate = Isolate::new();
         isolate.define_native("twice", 1, Some(1), |_, arguments| match arguments {

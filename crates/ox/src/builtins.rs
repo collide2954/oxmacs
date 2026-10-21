@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::io::{self, Write};
 
+use crate::equal::{equal, identical};
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
@@ -141,7 +142,25 @@ fn nth(heap: &Heap, collection: Value, index: Value) -> Result<Value, Error> {
         })
 }
 
+fn all_equal(heap: &Heap, arguments: &[Value]) -> bool {
+    arguments
+        .windows(2)
+        .all(|pair| equal(heap, pair[0], pair[1]))
+}
+
 pub fn install(isolate: &mut Isolate) {
+    isolate.define_native("=", 1, None, |heap, arguments| {
+        Ok(Value::Bool(all_equal(heap, arguments)))
+    });
+    isolate.define_native("not=", 1, None, |heap, arguments| {
+        Ok(Value::Bool(!all_equal(heap, arguments)))
+    });
+    isolate.define_native("identical?", 2, Some(2), |_, arguments| {
+        Ok(Value::Bool(identical(arguments[0], arguments[1])))
+    });
+    isolate.define_native("==", 1, None, |heap, arguments| {
+        chain(heap, "==", arguments, Ordering::is_eq)
+    });
     isolate.define_native("str", 0, None, join);
     isolate.define_native("count", 1, Some(1), |heap, arguments| {
         count(heap, arguments[0])
