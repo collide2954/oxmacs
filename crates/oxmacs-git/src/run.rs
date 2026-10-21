@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use oxmacs_core::editor::{Editor, JobEvent, JobSpec, Outcome};
 
+use crate::process::{self, Ran};
 use crate::view;
 
 #[derive(Debug, Default)]
@@ -47,6 +48,7 @@ pub(crate) fn run(editor: &mut Editor, root: PathBuf, mut plan: Plan) {
         return;
     };
     let name = format!("git {}", args.first().map_or("", String::as_str));
+    let mut command = process::command_line(&args);
     let mut output: Vec<String> = Vec::new();
     let directory = root.clone();
     editor.start_job(
@@ -63,11 +65,8 @@ pub(crate) fn run(editor: &mut Editor, root: PathBuf, mut plan: Plan) {
         move |editor, _, event| match event {
             JobEvent::Line(line) | JobEvent::Output(line) => output.push(line.to_owned()),
             JobEvent::Finished(outcome) => {
-                if *outcome == Outcome::Exited(Some(0)) {
-                    run(editor, root.clone(), std::mem::take(&mut plan));
-                    return;
-                }
-                let reason = output
+                let lines = std::mem::take(&mut output);
+                let reason = lines
                     .iter()
                     .rev()
                     .find(|line| !line.trim().is_empty())
@@ -76,6 +75,18 @@ pub(crate) fn run(editor: &mut Editor, root: PathBuf, mut plan: Plan) {
                         Outcome::Exited(code) => format!("exited with {code:?}"),
                         Outcome::Failed(error) => error.clone(),
                     });
+                process::record(
+                    editor,
+                    Ran {
+                        command: std::mem::take(&mut command),
+                        outcome: outcome.clone(),
+                        output: lines,
+                    },
+                );
+                if *outcome == Outcome::Exited(Some(0)) {
+                    run(editor, root.clone(), std::mem::take(&mut plan));
+                    return;
+                }
                 finish(editor, &root, &plan);
                 editor.show_message(format!("Git: {}", reason.trim()));
             }

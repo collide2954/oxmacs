@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -13,6 +13,7 @@ use oxmacs_core::theme::Highlight;
 use crate::diff::LineKind;
 use crate::mode_line;
 use crate::pane::{self, DiffPane};
+use crate::process::Ran;
 use crate::repo::{self, Summary};
 use crate::status::{self, Folds, Rendered, Row, Section, Status};
 
@@ -22,9 +23,11 @@ const DIFFED: usize = 200;
 pub(crate) struct GitState {
     pub(crate) scope: ScopeId,
     pub(crate) diff_scope: ScopeId,
+    pub(crate) process_scope: ScopeId,
     pub(crate) patches: usize,
     pub(crate) pending: Vec<crate::commit::Pending>,
     pub(crate) mode_line: mode_line::Cache,
+    pub(crate) history: VecDeque<Ran>,
 }
 
 #[derive(Debug)]

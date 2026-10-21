@@ -2,11 +2,14 @@ mod commit;
 mod diff;
 mod mode_line;
 mod pane;
+mod process;
 mod repo;
 mod run;
 mod stage;
 mod status;
 mod view;
+
+use std::collections::VecDeque;
 
 use oxmacs_core::applet::Applet;
 use oxmacs_core::command::{Command, CommandId, CommandSpec, Scope, ScopeId};
@@ -27,7 +30,7 @@ const GLOBAL: &[Spec] = &[Spec {
     name: "git-status",
     summary: "Show the Git status of the current repository",
     help: Some(
-        "The status lists untracked, unstaged and staged files, stashes and recent commits. n and p move between sections and files, TAB shows or hides a file's changes, a hunk or a whole section, RET visits the file at the line shown and g reads the repository again. s stages and u unstages a file, section, hunk or the lines in the region, and k throws changes away after asking. The diff of the file at point shows beside the status, where t switches to side by side. c opens the commit menu; the message is written beside the staged diff and C-c C-c commits it. The status also refreshes itself when files are saved or the repository changes.",
+        "The status lists untracked, unstaged and staged files, stashes and recent commits. n and p move between sections and files, TAB shows or hides a file's changes, a hunk or a whole section, RET visits the file at the line shown and g reads the repository again. s stages and u unstages a file, section, hunk or the lines in the region, and k throws changes away after asking. The diff of the file at point shows beside the status, where t switches to side by side. c opens the commit menu; the message is written beside the staged diff and C-c C-c commits it. $ lists the Git commands run and what they printed. The status also refreshes itself when files are saved or the repository changes.",
     ),
     keys: &["C-x g"],
     run: view::open,
@@ -96,6 +99,13 @@ const STATUS: &[Spec] = &[
         help: None,
         keys: &["c"],
         run: commit::dispatch,
+    },
+    Spec {
+        name: "git-process",
+        summary: "Show the Git commands run and what they printed",
+        help: None,
+        keys: &["$"],
+        run: process::open,
     },
 ];
 
@@ -226,12 +236,15 @@ impl Applet for Git {
     fn install(&self, editor: &mut Editor) {
         let scope = editor.add_scope("git status");
         let diff_scope = editor.add_scope("git diff");
+        let process_scope = editor.add_scope("git process");
         editor.set_applet_state(GitState {
             scope,
             diff_scope,
+            process_scope,
             patches: 0,
             pending: Vec::new(),
             mode_line: mode_line::Cache::default(),
+            history: VecDeque::new(),
         });
         register(editor, Scope::Global.into(), GLOBAL);
         register(editor, scope, STATUS);
@@ -242,6 +255,7 @@ impl Applet for Git {
         editor.set_highlighter(commit::LANGUAGE, commit::highlight);
         editor.bind(scope, "q", Command::QuitWindow).ok();
         editor.bind(diff_scope, "q", Command::QuitWindow).ok();
+        editor.bind(process_scope, "q", Command::QuitWindow).ok();
         editor.on_command(pane::follow);
         editor.on_command(mode_line::notice);
         editor.on_display(pane::fit);
