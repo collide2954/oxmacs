@@ -568,6 +568,18 @@ mod tests {
     }
 
     #[test]
+    fn equality_on_floats_is_an_equivalence() {
+        let not_a_number = "(def big (* 1e308 10)) (def x (- big big))";
+        all(&[
+            (&format!("{not_a_number} (= x x)"), "true"),
+            (&format!("{not_a_number} (= x (- big big))"), "true"),
+            (&format!("{not_a_number} (== x x)"), "false"),
+            ("(= 0.0 -0.0)", "false"),
+            ("(== 0.0 -0.0)", "true"),
+        ]);
+    }
+
+    #[test]
     fn numeric_equality_compares_numbers_by_value() {
         all(&[
             ("(== 1 1.0)", "true"),

@@ -2,12 +2,13 @@ use crate::heap::Heap;
 use crate::value::{Kind, Value};
 
 fn same_contents(heap: &Heap, a: Value, b: Value) -> bool {
-    let (Value::Ref(left), Value::Ref(right)) = (a, b) else {
-        return false;
-    };
-    match (left.kind, right.kind) {
-        (Kind::String, Kind::String) => heap.text(a) == heap.text(b),
-        (Kind::BigInt, Kind::BigInt) => heap.bigint_of(a) == heap.bigint_of(b),
+    match (a, b) {
+        (Value::Float(left), Value::Float(right)) => left.is_nan() && right.is_nan(),
+        (Value::Ref(left), Value::Ref(right)) => match (left.kind, right.kind) {
+            (Kind::String, Kind::String) => heap.text(a) == heap.text(b),
+            (Kind::BigInt, Kind::BigInt) => heap.bigint_of(a) == heap.bigint_of(b),
+            _ => false,
+        },
         _ => false,
     }
 }
@@ -16,7 +17,7 @@ pub fn equal(heap: &Heap, a: Value, b: Value) -> bool {
     let mut pending = Vec::new();
     let (mut a, mut b) = (a, b);
     loop {
-        if a != b {
+        if !identical(a, b) {
             if let (Some(left), Some(right)) = (heap.pair_of(a), heap.pair_of(b)) {
                 pending.push((left.tail, right.tail));
                 (a, b) = (left.head, right.head);
