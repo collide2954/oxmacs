@@ -86,7 +86,7 @@ impl Applet for Scripting {
             name: "script-eval-buffer",
             summary: "Evaluate the buffer as a Rhai script",
             help: Some(
-                "Runs the whole buffer as a Rhai script and shows its value in the echo area, or the error with its line and column. Nothing runs until you ask.",
+                "Runs the whole buffer as a Rhai script and shows its value in the echo area, or the error with its line and column. Scripts act on the current buffer with insert(text), text(), region(), point(), goto(position) and line(), and can call message(text), run(name), ask(prompt, callback), command(name, summary, callback) and bind(keys, name). They reach nothing outside the editor, and nothing runs until you ask.",
             ),
             scope: Scope::Global.into(),
             run: eval_buffer,
@@ -168,7 +168,7 @@ pub(crate) mod testing {
 mod tests {
     use oxmacs_core::theme::Highlight;
 
-    use crate::testing::{installed, m_x, opened, press, with_text};
+    use crate::testing::{installed, m_x, opened, press, type_text, with_text};
 
     #[test]
     fn the_applet_is_opt_in_with_its_own_version() {
@@ -178,6 +178,19 @@ mod tests {
         assert_eq!(applet.name, "scripting");
         assert_eq!(applet.version, "0.1.0");
         assert!(applet.opt_in);
+    }
+
+    #[test]
+    fn the_help_names_what_scripts_can_call() {
+        let mut editor = installed();
+
+        press(&mut editor, "C-h f");
+        type_text(&mut editor, "script-eval-buffer");
+        press(&mut editor, "RET");
+
+        let help = editor.buffer().contents();
+        assert!(help.contains("goto(position)"), "{help}");
+        assert!(help.contains("message(text)"), "{help}");
     }
 
     #[test]
