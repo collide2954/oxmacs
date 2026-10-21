@@ -11,9 +11,6 @@ use crate::indent::{self, parsed};
 use crate::tools;
 
 const LABEL: &str = "Python";
-
-#[derive(Debug)]
-pub(crate) struct ConsoleScope(pub(crate) ScopeId);
 const NOTHING: &str = "No Python code here";
 const STARTUP: &str = r"import sys; sys.ps1 = '\x01>\x02>>> \x03'; sys.ps2 = '\x01+\x02... \x03'";
 const COMPOUND: &[&str] = &[
@@ -27,6 +24,9 @@ const COMPOUND: &[&str] = &[
     "with_statement",
     "match_statement",
 ];
+
+#[derive(Debug)]
+pub(crate) struct ConsoleScope(pub(crate) ScopeId);
 
 fn ancestors(node: Node<'_>) -> impl Iterator<Item = Node<'_>> {
     iter::successors(Some(node), Node::parent)
@@ -194,42 +194,6 @@ fn send_selection(editor: &mut Editor) -> bool {
     true
 }
 
-fn code_from(buffer: &Buffer, syntax: &Syntax, first: usize) -> Option<usize> {
-    (first..buffer.len_lines()).find_map(|line| {
-        (!indent::code(buffer, syntax, line).trim().is_empty())
-            .then(|| buffer.line_start(line) + indent::leading(&buffer.line_text(line)))
-    })
-}
-
-fn is_statement(node: Node<'_>) -> bool {
-    node.is_named()
-        && node.kind() != "comment"
-        && node
-            .parent()
-            .is_some_and(|parent| matches!(parent.kind(), "module" | "block"))
-}
-
-fn statement_at(buffer: &Buffer, syntax: &Syntax, point: usize) -> Option<Range<usize>> {
-    let tree = syntax.tree()?;
-    let anchor = code_from(buffer, syntax, buffer.line_of(point))?;
-    let leaf = tree
-        .root_node()
-        .descendant_for_byte_range(buffer.char_to_byte(anchor), buffer.char_to_byte(anchor + 1))?;
-    let statement = ancestors(leaf).find(|node| is_statement(*node))?;
-    let line_of = |byte: usize| buffer.line_of(buffer.byte_to_char(byte));
-    let last = line_of(statement.end_byte());
-    let mut end = statement.end_byte();
-    let mut next = statement.next_named_sibling();
-    while let Some(sibling) = next.filter(|sibling| is_statement(*sibling)) {
-        if line_of(sibling.start_byte()) != last {
-            break;
-        }
-        end = sibling.end_byte();
-        next = sibling.next_named_sibling();
-    }
-    Some(buffer.byte_to_char(statement.start_byte())..buffer.byte_to_char(end))
-}
-
 fn paragraph(buffer: &Buffer, point: usize) -> Option<Range<usize>> {
     let blank = |line: usize| buffer.line_text(line).trim().is_empty();
     let lines = buffer.len_lines();
@@ -256,7 +220,8 @@ fn send_and_step(
     };
     let start = buffer.line_start(buffer.line_of(range.start));
     let code = buffer.text_in(start..range.end);
-    let next = code_from(buffer, syntax, buffer.line_of(range.end) + 1)
+    let next = syntax
+        .statement_after(buffer, range.end)
         .unwrap_or_else(|| buffer.len_chars());
     editor.buffer_mut().set_point(next);
     send(editor, &code);
@@ -267,7 +232,7 @@ pub(crate) fn send_statement(editor: &mut Editor) {
         return;
     }
     let (buffer, syntax) = parsed(&editor.buffer().contents());
-    let range = statement_at(&buffer, &syntax, editor.buffer().point());
+    let range = syntax.statement_at(&buffer, editor.buffer().point());
     send_and_step(editor, &buffer, &syntax, range);
 }
 

@@ -147,6 +147,7 @@ pub struct Outline {
     pub context: fn(Node<'_>) -> bool,
     pub defun: fn(Node<'_>) -> bool,
     pub sections: bool,
+    pub statements: &'static [&'static str],
 }
 
 impl Outline {
@@ -155,6 +156,7 @@ impl Outline {
         context: |_| false,
         defun: |_| false,
         sections: false,
+        statements: &[],
     };
 }
 
@@ -163,6 +165,7 @@ impl fmt::Debug for Outline {
         formatter
             .debug_struct("Outline")
             .field("sections", &self.sections)
+            .field("statements", &self.statements)
             .finish_non_exhaustive()
     }
 }

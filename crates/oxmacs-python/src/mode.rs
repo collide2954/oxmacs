@@ -27,6 +27,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         context: is_definition,
         defun: |node| is_definition(node) || node.kind() == "decorated_definition",
         sections: false,
+        statements: &["module", "block"],
     },
     features: &[
         Feature::Highlighting,
@@ -193,6 +194,23 @@ class Point(Base):
         assert_eq!(syntax.defun_around(&buffer, 2), None);
     }
 
+    #[test]
+    fn statements_are_found_at_the_top_and_inside_blocks() {
+        let text = "x = 1\n\ndef f():\n    a = 2\n    b = 3\n";
+        let mut buffer = Buffer::with_text("t", text);
+        let mut syntax = Syntax::new(LANGUAGE);
+        syntax.sync(&mut buffer);
+
+        let at = |point: usize| {
+            syntax
+                .statement_at(&buffer, point)
+                .map(|range| buffer.text_in(range))
+        };
+
+        assert_eq!(at(0).as_deref(), Some("x = 1"));
+        assert_eq!(at(22).as_deref(), Some("a = 2"));
+        assert_eq!(syntax.statement_after(&buffer, 5), Some(7));
+    }
     #[test]
     fn python_files_and_stubs_are_python() {
         assert_eq!(LANGUAGE.extensions(), ["py", "pyi"]);

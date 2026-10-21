@@ -6,8 +6,6 @@ use crate::syntax::motion::{COMMENTS, chars, leaf_at};
 use crate::syntax::{Syntax, ancestors};
 use crate::text::Buffer;
 
-const CONTAINERS: &[&str] = &["program", "braced_expression"];
-
 fn code_from(tree: &Tree, buffer: &Buffer, first: usize) -> Option<usize> {
     (first..buffer.len_lines()).find_map(|line| {
         let start = buffer.line_start(line);
@@ -25,24 +23,25 @@ fn code_from(tree: &Tree, buffer: &Buffer, first: usize) -> Option<usize> {
     })
 }
 
-fn is_statement(node: Node<'_>) -> bool {
+fn is_statement(node: Node<'_>, containers: &[&str]) -> bool {
     node.is_named()
         && !COMMENTS.contains(&node.kind())
         && node
             .parent()
-            .is_some_and(|parent| CONTAINERS.contains(&parent.kind()))
+            .is_some_and(|parent| containers.contains(&parent.kind()))
 }
 
 impl Syntax {
     pub fn statement_at(&self, buffer: &Buffer, point: usize) -> Option<Range<usize>> {
         let tree = self.synced(buffer)?;
+        let containers = self.language.outline().statements;
         let anchor = code_from(tree, buffer, buffer.line_of(point))?;
-        let statement =
-            ancestors(leaf_at(tree, buffer, anchor)?).find(|node| is_statement(*node))?;
+        let statement = ancestors(leaf_at(tree, buffer, anchor)?)
+            .find(|node| is_statement(*node, containers))?;
         let mut range = chars(buffer, statement.byte_range());
         let last = buffer.line_of(range.end);
         let mut next = statement.next_named_sibling();
-        while let Some(sibling) = next.filter(|sibling| is_statement(*sibling)) {
+        while let Some(sibling) = next.filter(|sibling| is_statement(*sibling, containers)) {
             let span = chars(buffer, sibling.byte_range());
             if buffer.line_of(span.start) != last {
                 break;

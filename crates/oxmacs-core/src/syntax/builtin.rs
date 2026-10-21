@@ -73,6 +73,7 @@ static RUST: LanguageSpec = LanguageSpec {
             )
         },
         sections: false,
+        statements: &[],
     },
     features: &[
         Feature::Highlighting,
@@ -101,6 +102,7 @@ static TOML: LanguageSpec = LanguageSpec {
         context: |_| false,
         defun: |node| matches!(node.kind(), "table" | "table_array_element"),
         sections: false,
+        statements: &[],
     },
     features: EDITING,
 };
@@ -134,6 +136,7 @@ static R: LanguageSpec = LanguageSpec {
         context: is_function_assignment,
         defun: is_function_assignment,
         sections: true,
+        statements: &["program", "braced_expression"],
     },
     features: &[
         Feature::Highlighting,

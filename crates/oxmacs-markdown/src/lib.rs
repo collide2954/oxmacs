@@ -50,6 +50,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         context: |_| false,
         defun: |node| node.kind() == "section",
         sections: false,
+        statements: &[],
     },
     features: &[
         Feature::Highlighting,
