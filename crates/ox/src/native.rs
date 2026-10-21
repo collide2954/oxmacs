@@ -25,7 +25,7 @@ impl fmt::Debug for Native {
     }
 }
 
-fn arguments(count: usize) -> String {
+pub fn arguments(count: usize) -> String {
     if count == 1 {
         "1 argument".to_owned()
     } else {

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::bytecode::{Code, Op, Register};
 use crate::error::Error;
 use crate::heap::Heap;
@@ -7,11 +9,7 @@ use crate::symbol::Sym;
 use crate::value::Value;
 
 pub fn compile(heap: &mut Heap, form: &Syntax) -> Result<Code, Error> {
-    let mut compiler = Compiler {
-        heap,
-        code: Code::default(),
-        top: 0,
-    };
+    let mut compiler = Compiler::new(heap);
     let target = compiler.reserve(1, form.span)?;
     compiler.expression(form, target)?;
     compiler.emit(Op::Return { from: target }, form.span);
@@ -22,9 +20,27 @@ struct Compiler<'a> {
     heap: &'a mut Heap,
     code: Code,
     top: Register,
+    locals: Vec<(Sym, Register)>,
 }
 
-impl Compiler<'_> {
+impl<'a> Compiler<'a> {
+    fn new(heap: &'a mut Heap) -> Self {
+        Self {
+            heap,
+            code: Code::default(),
+            top: 0,
+            locals: Vec::new(),
+        }
+    }
+
+    fn local(&self, name: Sym) -> Option<Register> {
+        self.locals
+            .iter()
+            .rev()
+            .find(|(local, _)| *local == name)
+            .map(|(_, register)| *register)
+    }
+
     fn reserve(&mut self, count: usize, span: Span) -> Result<Register, Error> {
         let base = self.top;
         self.top = u16::try_from(usize::from(base) + count)
@@ -54,13 +70,18 @@ impl Compiler<'_> {
     fn expression(&mut self, form: &Syntax, target: Register) -> Result<(), Error> {
         let value = match &form.datum {
             Datum::Symbol(name) => {
-                self.emit(
-                    Op::Global {
-                        to: target,
-                        name: Sym::intern(name),
-                    },
-                    form.span,
-                );
+                let name = Sym::intern(name);
+                match self.local(name) {
+                    Some(register) if register == target => {}
+                    Some(register) => self.emit(
+                        Op::Move {
+                            to: target,
+                            from: register,
+                        },
+                        form.span,
+                    ),
+                    None => self.emit(Op::Global { to: target, name }, form.span),
+                }
                 return Ok(());
             }
             Datum::List(items) => return self.call(items, target, form.span),
@@ -105,27 +126,99 @@ impl Compiler<'_> {
             "if" => Some(self.branch(rest, target, span)),
             "do" => Some(self.sequence(rest, target, span)),
             "def" => Some(self.define(rest, target, span)),
+            "fn" => Some(self.function(rest, target, span)),
             _ => None,
         }
     }
 
     fn define(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
-        let [
-            Syntax {
-                datum: Datum::Symbol(name),
-                ..
-            },
-            value,
-        ] = parts
-        else {
-            return Err(Error::at(span, "def takes a name and a value"));
+        let malformed = || Error::at(span, "def takes a name and a value");
+        let name = match parts {
+            [
+                Syntax {
+                    datum: Datum::Symbol(name),
+                    ..
+                },
+                value,
+            ] => {
+                self.expression(value, target)?;
+                Sym::intern(name)
+            }
+            [
+                Syntax {
+                    datum: Datum::List(signature),
+                    ..
+                },
+                body @ ..,
+            ] => {
+                let Some((
+                    Syntax {
+                        datum: Datum::Symbol(name),
+                        ..
+                    },
+                    parameters,
+                )) = signature.split_first()
+                else {
+                    return Err(malformed());
+                };
+                let name = Sym::intern(name);
+                self.lambda(Some(name), parameters, body, target, span)?;
+                name
+            }
+            _ => return Err(malformed()),
         };
-        let name = Sym::intern(name);
-        self.expression(value, target)?;
         self.emit(Op::DefineGlobal { name, from: target }, span);
         self.load(Value::Symbol(name), target, span)
     }
 
+    fn function(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let Some((
+            Syntax {
+                datum: Datum::Vector(parameters),
+                ..
+            },
+            body,
+        )) = parts.split_first()
+        else {
+            return Err(Error::at(span, "fn takes a parameter vector and a body"));
+        };
+        self.lambda(None, parameters, body, target, span)
+    }
+
+    fn lambda(
+        &mut self,
+        name: Option<Sym>,
+        parameters: &[Syntax],
+        body: &[Syntax],
+        target: Register,
+        span: Span,
+    ) -> Result<(), Error> {
+        let mut inner = Compiler::new(&mut *self.heap);
+        inner.code.name = name;
+        for parameter in parameters {
+            let Datum::Symbol(parameter_name) = &parameter.datum else {
+                return Err(Error::at(parameter.span, "Parameters must be names"));
+            };
+            let register = inner.reserve(1, parameter.span)?;
+            inner.locals.push((Sym::intern(parameter_name), register));
+        }
+        inner.code.arity = inner.top;
+        let result = inner.reserve(1, span)?;
+        inner.sequence(body, result, span)?;
+        inner.emit(Op::Return { from: result }, span);
+        let code = inner.code;
+        let index = u32::try_from(self.code.functions.len())
+            .map_err(|_| Error::at(span, "This function holds too many functions"))?;
+        self.code.functions.push(Rc::new(code));
+        self.emit(
+            Op::Closure {
+                to: target,
+                function: index,
+            },
+            span,
+        );
+        Ok(())
+    }
     fn branch(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
         let (test, then, otherwise) = match parts {
             [test, then] => (test, then, None),

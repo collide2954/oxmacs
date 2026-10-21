@@ -37,7 +37,7 @@ impl Isolate {
         }
         let mut result = Value::Nil;
         for form in &forms {
-            let code = compile(&mut self.runtime.heap, form)?;
+            let code = Rc::new(compile(&mut self.runtime.heap, form)?);
             result = self.runtime.run(&code)?;
         }
         Ok(result)
@@ -229,6 +229,52 @@ mod tests {
             ("(def x)", message),
             ("(def 1 2)", message),
             ("(def x 1 2)", message),
+        ]);
+    }
+
+    #[test]
+    fn functions_are_made_with_fn_and_called() {
+        all(&[
+            ("((fn [x] (* x x)) 5)", "25"),
+            ("(def square (fn [x] (* x x))) (square 7)", "49"),
+            ("(def (add a b) (+ a b)) (add 2 3)", "5"),
+            ("(def (answer) 42) (answer)", "42"),
+            ("(def (g x) 1 2 (+ x 1)) (g 1)", "2"),
+            ("((fn [x]) 1)", "nil"),
+            ("(def (inc x) (+ x 1)) (inc (inc (inc 0)))", "3"),
+            ("(def x 100) (def (f x) x) (f 1)", "1"),
+            ("(def (f a b) (- a b)) (+ 10 (f 5 (f 3 1)))", "13"),
+        ]);
+    }
+
+    #[test]
+    fn functions_call_themselves_through_their_global_name() {
+        all(&[(
+            "(def (fact n) (if (< n 2) 1 (* n (fact (- n 1))))) (fact 10)",
+            "3628800",
+        )]);
+    }
+
+    #[test]
+    fn functions_print_with_their_names() {
+        all(&[("(fn [x] x)", "#<fn>"), ("(def (f) 1) f", "#<fn f>")]);
+    }
+
+    #[test]
+    fn calls_with_the_wrong_number_of_arguments_are_errors() {
+        all(&[
+            ("((fn [x] x))", "error: fn takes 1 argument, got 0"),
+            ("(def (f a) a) (f 1 2)", "error: f takes 1 argument, got 2"),
+        ]);
+    }
+
+    #[test]
+    fn malformed_functions_are_reported() {
+        all(&[
+            ("(fn)", "error: fn takes a parameter vector and a body"),
+            ("(fn x 1)", "error: fn takes a parameter vector and a body"),
+            ("(fn [1] 1)", "error: Parameters must be names"),
+            ("(def (1 x) x)", "error: def takes a name and a value"),
         ]);
     }
 

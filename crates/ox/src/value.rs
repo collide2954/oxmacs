@@ -23,6 +23,7 @@ pub enum Kind {
     String,
     Pair,
     Native,
+    Closure,
 }
 
 impl Value {

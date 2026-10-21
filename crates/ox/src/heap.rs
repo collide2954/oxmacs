@@ -1,5 +1,7 @@
 use std::fmt;
+use std::rc::Rc;
 
+use crate::bytecode::Code;
 use crate::native::Native;
 use crate::value::{Kind, Ref, Value};
 
@@ -16,6 +18,12 @@ impl fmt::Display for HeapFull {
 pub struct Pair {
     pub head: Value,
     pub tail: Value,
+}
+
+#[derive(Debug)]
+pub struct Closure {
+    pub code: Rc<Code>,
+    pub captured: Box<[Value]>,
 }
 
 #[derive(Debug)]
@@ -56,6 +64,7 @@ pub struct Heap {
     strings: Arena<Box<str>>,
     pairs: Arena<Pair>,
     natives: Arena<Native>,
+    closures: Arena<Closure>,
 }
 
 fn reference(value: Value, kind: Kind) -> Option<u32> {
@@ -102,6 +111,18 @@ impl Heap {
 
     pub fn native_of(&self, value: Value) -> Option<&Native> {
         self.natives.get(reference(value, Kind::Native)?)
+    }
+
+    pub fn closure(&mut self, closure: Closure) -> Result<Value, HeapFull> {
+        let index = self.closures.alloc(closure)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Closure,
+            index,
+        }))
+    }
+
+    pub fn closure_of(&self, value: Value) -> Option<&Closure> {
+        self.closures.get(reference(value, Kind::Closure)?)
     }
 
     pub fn list(

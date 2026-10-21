@@ -38,6 +38,13 @@ fn write_into(heap: &Heap, value: Value, out: &mut String) {
                 list(heap, value, out);
             } else if let Some(native) = heap.native_of(value) {
                 let _ = write!(out, "#<native {}>", native.name.name());
+            } else if let Some(closure) = heap.closure_of(value) {
+                match closure.code.name {
+                    Some(name) => {
+                        let _ = write!(out, "#<fn {}>", name.name());
+                    }
+                    None => out.push_str("#<fn>"),
+                }
             }
         }
     }
