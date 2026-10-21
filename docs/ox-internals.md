@@ -269,9 +269,16 @@ Each slice is one commit and starts with a failing test.
 64. **Run doc examples as tests.**
 65. **Generate and shrink values for property tests.**
 66. **Compare output with stored snapshots and offer to update them.**
-67. **Measure the budgets and run them, ox check and ox test in pre-push.**
+67. **Keep comments and their spans when reading for tools.**
+68. **Format Ox in one canonical style with ox fmt.**
+69. **Serve reader and compile diagnostics to other editors with ox lsp.**
+70. **Format documents and list their definitions over LSP.**
+71. **Complete names and show signatures and documentation over LSP.**
+72. **Go to definitions, find references and rename over LSP.**
+73. **Show inferred types and type errors over LSP.**
+74. **Measure the budgets and run them, ox check and ox test in pre-push.**
 
-Phase 1 is done when the corpus passes, `ox check` and `ox test` are clean, and `budgets.rs` meets every budget. The editor's `*tests*` runner comes with the embedding in phase 2.
+Phase 1 is done when the corpus passes, `ox check`, `ox test` and `ox fmt --check` are clean, `ox lsp` serves its features, and `budgets.rs` meets every budget. `ox lsp` lives in its own crate, `crates/ox-lsp`. Its first slices (69 and 70) can come as soon as the reader and compiler are stable, ahead of the order above, and later ones follow the features they expose. The editor's `*tests*` runner comes with the embedding in phase 2.
 
 ## Risks
 

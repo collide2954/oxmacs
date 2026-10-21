@@ -263,12 +263,41 @@ Speed budgets are checked in pre-push and fail on regression:
 - **Snapshot tests.** `expect-snapshot` compares output with a stored file next to the test. When the output changes on purpose, the runner offers to update the file.
 - **Runner.** `ox test` runs from the command line and in the gate. In the editor, a `*tests*` buffer lists results with clickable failures; tests can be run at point and rerun on save.
 
-## Tooling
+## Editor support
 
-- **Evaluating.** `M-x ox-repl`, `C-x C-e`, eval-region and eval-buffer.
-- **Help.** describe-function and describe-variable for Ox definitions, jumping to their source.
-- **Errors and editing.** Tracebacks you can click; completion and signatures from module exports and type annotations; errors shown as you type in `.ox` buffers.
-- **Profiling and debugging.** `M-x ox-profile` for CPU and allocations per plugin; a stepping debugger later.
+oxmacs's support for Ox should be the best place to write Ox. The compiler, checker and test runner run inside the editor, so nothing goes through a separate server.
+
+- **Live development, like CIDER.** Code evaluates in the running editor:
+  - `C-x C-e` shows the result inline beside the form;
+  - `C-c C-k` reloads the file in place;
+  - results are live values you can open and explore;
+  - errors jump to source.
+
+  A scratch worker isolate is one key away, for experiments that should not touch the editor.
+- **Language intelligence.**
+  - **Writing.** Completion from locals, imports, modules and types; the signature of the call at point in the echo area; hover documentation with its examples.
+  - **Navigation.** Go to definition, into the standard library too; find references; rename a name across files.
+  - **Checking.** Inferred types shown faintly beside bindings, and reader, type and test errors underlined as you type, with explanations.
+  - **Code actions.** Add the missing import, handle `nil`, fill in the missing `match` cases, extract a function.
+- **Structural editing by default.**
+  - Brackets always balance.
+  - Slurp, barf, raise, splice and wrap; motion by form; a selection that grows form by form; whole-form deletion.
+  - Indentation follows Ox's forms.
+
+  One key turns it off.
+- **Formatting.** One canonical style, like gofmt: `ox fmt`, `C-c C-f`, and formatting on save. There are no style settings.
+- **Debugging and inspection.**
+  - A value inspector that walks into maps, vectors, records, closures and buffers, with large collections paged.
+  - A stepping debugger: breakpoints in the gutter, step in, over and out, locals for every frame, and evaluation in a paused frame.
+  - A macro expander that expands the form at point one step or fully, shown inline or beside the code.
+  - Tracing of a function's arguments and results, and profiling of CPU and allocations per plugin, shown as a flame graph.
+- **Tests.** The `*tests*` runner: run the test at point, see failures in the gutter and rerun on save.
+- **Plugin development.**
+  - `M-x ox-new-plugin` scaffolds a plugin folder with `plugin.ox`, an entry module and a test.
+  - An `*ox log*` buffer lists each plugin's errors, warnings, load times and reloads, linked to source.
+  - `M-x list-plugins` installs, updates, pins, disables and removes plugins, and shows their versions, sources and wake-ups.
+  - `M-x ox-docs` is a searchable reference of the standard library and every loaded plugin, built from docstrings with runnable examples.
+- **Other editors.** `ox lsp` is a language server built in phase 1, reusing the same reader, checker, formatter and test runner, so VS Code, Helix and Neovim users can write Ox too. It lives in its own crate, `ox-lsp`, so the `ox` crate stays free of protocol dependencies.
 
 ## Open questions, for later
 
