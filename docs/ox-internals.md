@@ -256,11 +256,22 @@ Each slice is one commit and starts with a failing test.
 51. **Run worker isolates and send immutable values between them.**
 52. **Wrap Rust values as foreign values.**
 53. **Check type annotations at function entry.**
-54. **Report definite type mismatches at compile time.**
-55. **Use typed instructions for annotated numbers.**
-56. **Measure the budgets and run them in pre-push.**
+54. **Infer types through unannotated code and report definite mismatches.**
+55. **Make nil explicit: T never holds nil, T? may, and nil tests narrow.**
+56. **Check generic vectors, maps and functions per use.**
+57. **Check map shapes like record fields.**
+58. **Name types with deftype, including unions.**
+59. **Require match to handle every case of a union, record or T?.**
+60. **Run ox check from the command line.**
+61. **Use typed instructions for annotated numbers.**
+62. **Run inline test blocks with ox test, skipping them on load.**
+63. **Explain failed expectations with the values of each sub-expression.**
+64. **Run doc examples as tests.**
+65. **Generate and shrink values for property tests.**
+66. **Compare output with stored snapshots and offer to update them.**
+67. **Measure the budgets and run them, ox check and ox test in pre-push.**
 
-Phase 1 is done when the corpus passes and `budgets.rs` meets every budget.
+Phase 1 is done when the corpus passes, `ox check` and `ox test` are clean, and `budgets.rs` meets every budget. The editor's `*tests*` runner comes with the embedding in phase 2.
 
 ## Risks
 

@@ -23,7 +23,9 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
 | Migration | Prove it, then port: the VM and editor bindings first, then weather end to end, then one applet at a time, deleting each Rust crate as its plugin lands. |
 | Dialect | Ox's own dialect, Scheme-flavored and free to break compatibility where that makes it cleaner. |
 | Words | Short modern words: `def`, `fn`, `let [x 1]`, `if`, `cond`, `match`, `do`, `set!`. |
-| Additions | Modules with explicit imports and exports; hygienic `syntax-rules` and procedural macros; lexical scope only; `[ ]` vectors, `{ }` maps, `:keywords`, string interpolation; `match`, records, destructuring; optional gradual types. |
+| Additions | Modules with explicit imports and exports; hygienic `syntax-rules` and procedural macros; lexical scope only; `[ ]` vectors, `{ }` maps, `:keywords`, string interpolation; `match`, records, destructuring. |
+| Types | Gradual with inference: annotations are optional, but the checker infers through unannotated code and reports definite errors as you type, in `ox check` and in the gate. Nil safety, generics, map shapes, unions and aliases, and exhaustive `match`. |
+| Tests | Built in: inline `(test …)` blocks with an `expect` that explains failures, doc examples, property tests, snapshot tests, `ox test` and an editor runner. |
 | Data | Immutable by default: persistent vectors, maps and strings. Atoms and buffers are mutable. |
 | Control | Proper tail calls, async/await, generators and green tasks. No `call/cc`. |
 | Errors | Exceptions with typed error records and clickable tracebacks. A failing hook is reported, never fatal. |
@@ -65,7 +67,7 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
 - **Modules.** Each file is one module with explicit imports and exports. There is no single global namespace; plugins see only what they import.
 - **Macros.** Hygienic `syntax-rules`, plus procedural `defmacro` with hygiene helpers for anything harder.
 - **Scope.** Lexical only. Parameters (`with-param`) replace dynamic variables, with fast lookup.
-- **Types.** Annotations are optional. Where they are given, the compiler checks them and uses them for unboxed fast paths and editor help; untyped code runs unchanged.
+- **Types.** Annotations are optional; see "Types" below.
 - **Numbers.** 64-bit integers that grow into bignums, and 64-bit floats.
 - **Strings.** Immutable UTF-8; large ones are ropes. Characters are Unicode scalar values.
 - **Collections.** Persistent vectors (RRB trees), maps and sets (HAMT). Updates share structure; `transient` batches edits inside one function.
@@ -199,6 +201,65 @@ Speed budgets are checked in pre-push and fail on regression:
 - GC pause at the 99th percentile: under 1 ms;
 - a call from Rust into Ox and back: measured and tracked;
 - loading a plugin from the bytecode cache: measured per plugin.
+
+## Types
+
+```clojure
+(deftype Units (or :metric :imperial))
+(deftype City {name: String lat: Float lon: Float zip: String?})
+
+(def (describe [city : City] [units : Units]) : String
+  (match units
+    [:metric "{city.name} in °C"]
+    [:imperial "{city.name} in °F"]))
+
+(def (first-or [items : (Vector T)] [fallback : T]) : T
+  (if (empty? items) fallback (first items)))
+```
+
+- **Gradual, with inference.** Annotations are optional, and untyped code always runs. The checker infers types through unannotated code from literals, locals and calls to typed functions. It reports only definite errors: a value that cannot be what its use needs.
+- **Where it runs.** In `.ox` buffers as you type, with underlines; in `ox check`; and in the gate.
+- **Speed.** Typed code runs faster, because annotated numbers get unboxed instructions.
+- **Nil safety.** `String` never holds `nil`; `String?` may. Before a `String?` can be used as a `String`, the checker requires a nil test (`if`, `when-let`, `match`).
+- **Generics.** `(Vector T)`, `(Map K V)` and generic functions such as `(fn [T] T)` are checked per use.
+- **Map shapes.** `{name: String lat: Float}` is a type, so plain maps get checked fields, as records do. Extra keys are allowed unless the shape is marked closed.
+- **Unions and aliases.** `(deftype Units (or :metric :imperial))` names a type. Unions can mix keywords, records and other types.
+- **Exhaustive `match`.** A `match` over a union, a record type or `T?` must handle every case. The checker names the missing ones.
+- **At run time.** Annotated parameters are also checked at function entry, so typed code can trust its types even when untyped code calls it.
+
+## Testing
+
+```clojure
+(def (add a b)
+  "Adds two numbers.
+  (add 1 2) ;=> 3"
+  (+ a b))
+
+(test "add sums its arguments"
+  (expect (= (add 1 2) 3))
+  (expect (= (add -1 1) 0)))
+
+(test "add commutes"
+  (for-all [x Int, y Int]
+    (expect (= (add x y) (add y x)))))
+
+(test "the forecast view renders"
+  (expect-snapshot (render (forecast-view sample))))
+```
+
+- **Inline tests.** `(test "name" …)` blocks live next to the code they test, as in Rust. Loading a plugin skips them; `ox test` and `M-x ox-test` run them.
+- **`expect`.** It understands the expression it checks. A failure shows each sub-expression's value and the exact location:
+
+  ```
+  weather.ox:12:3  add sums its arguments
+    (= (add 1 2) 4)
+       (add 1 2) => 3
+  ```
+
+- **Doc examples.** Lines in a docstring written as `(add 1 2) ;=> 3` run as tests, so documentation cannot go stale.
+- **Property tests.** `for-all` generates values for its typed variables, tries many, and shrinks a failure to the smallest example.
+- **Snapshot tests.** `expect-snapshot` compares output with a stored file next to the test. When the output changes on purpose, the runner offers to update the file.
+- **Runner.** `ox test` runs from the command line and in the gate. In the editor, a `*tests*` buffer lists results with clickable failures; tests can be run at point and rerun on save.
 
 ## Tooling
 
