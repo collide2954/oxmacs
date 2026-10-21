@@ -3,6 +3,7 @@ use std::mem;
 use oxmacs_core::applet::AppletBuffer;
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::{Editor, InputLine};
+use oxmacs_core::text::BufferId;
 
 use crate::script::{self, Origin, Session};
 
@@ -17,6 +18,7 @@ struct ConsoleView {
     scope: ScopeId,
     input: InputLine,
     session: Session,
+    working: BufferId,
 }
 
 impl AppletBuffer for ConsoleView {
@@ -30,7 +32,13 @@ impl AppletBuffer for ConsoleView {
 }
 
 pub(crate) fn open(editor: &mut Editor) {
+    let from = editor.buffer().id();
     if let Some(id) = editor.find_applet_buffer::<ConsoleView>(|_| true) {
+        if id != from
+            && let Some((_, view)) = editor.applet_buffer_mut::<ConsoleView>(id)
+        {
+            view.working = from;
+        }
         editor.show_buffer(id);
         return;
     }
@@ -44,16 +52,31 @@ pub(crate) fn open(editor: &mut Editor) {
             scope,
             input: InputLine::new(buffer),
             session: Session::default(),
+            working: from,
         }
     });
     editor.show_buffer(id);
 }
 
-fn outcome(editor: &mut Editor, session: &mut Session, code: &str) -> Option<String> {
+fn outcome(
+    editor: &mut Editor,
+    session: &mut Session,
+    code: &str,
+    working: BufferId,
+) -> Option<String> {
     if code.trim().is_empty() {
         return None;
     }
-    match session.evaluate(editor, code) {
+    let console = editor.buffer().id();
+    let elsewhere = working != console && editor.buffer_by_id(working).is_some();
+    if elsewhere {
+        editor.show_buffer(working);
+    }
+    let evaluated = session.evaluate(editor, code);
+    if elsewhere {
+        editor.show_buffer(console);
+    }
+    match evaluated {
         Ok(value) if value.is_unit() => None,
         Ok(value) => Some(format!("{value:?}")),
         Err(error) => Some(script::describe(*error, Origin::default())),
@@ -69,8 +92,9 @@ pub(crate) fn send(editor: &mut Editor) {
         return;
     };
     view.input.remember(&code);
+    let working = view.working;
     let mut session = mem::take(&mut view.session);
-    let printed = outcome(editor, &mut session, &code);
+    let printed = outcome(editor, &mut session, &code, working);
     let Some((buffer, view)) = editor.applet_buffer_mut::<ConsoleView>(id) else {
         return;
     };
@@ -89,6 +113,7 @@ pub(crate) fn send(editor: &mut Editor) {
 #[cfg(test)]
 mod tests {
     use oxmacs_core::editor::Editor;
+    use oxmacs_core::text::Buffer;
 
     use crate::testing::{installed, m_x, press, type_text};
 
@@ -138,6 +163,45 @@ mod tests {
 
         assert!(
             editor.buffer().contents().ends_with("\n42\n> "),
+            "{}",
+            editor.buffer().contents()
+        );
+    }
+
+    #[test]
+    fn scripts_in_the_console_act_on_the_buffer_it_was_opened_from() {
+        let mut editor = installed();
+        let scratch = editor.buffer().id();
+        editor.buffer_mut().insert("abc");
+        m_x(&mut editor, "script-console");
+
+        enter(&mut editor, "insert(\"!\"); text()");
+
+        assert_eq!(editor.buffer().name(), "*Script*");
+        assert!(
+            editor.buffer().contents().ends_with("\n\"abc!\"\n> "),
+            "{}",
+            editor.buffer().contents()
+        );
+        assert_eq!(
+            editor.buffer_by_id(scratch).map(Buffer::contents),
+            Some("abc!".to_owned())
+        );
+    }
+
+    #[test]
+    fn opening_the_console_from_another_buffer_works_on_that_one() {
+        let mut editor = console();
+        press(&mut editor, "C-x b");
+        type_text(&mut editor, "notes");
+        press(&mut editor, "RET");
+        editor.buffer_mut().insert("n");
+        m_x(&mut editor, "script-console");
+
+        enter(&mut editor, "text()");
+
+        assert!(
+            editor.buffer().contents().ends_with("\n\"n\"\n> "),
             "{}",
             editor.buffer().contents()
         );

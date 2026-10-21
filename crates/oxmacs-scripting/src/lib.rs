@@ -51,7 +51,7 @@ fn install_console(editor: &mut Editor) {
         name: "script-console",
         summary: "Open a Rhai console that keeps its variables",
         help: Some(
-            "Opens *Script*, where each line you enter after the prompt is evaluated as Rhai and its value or error printed below. Variables and functions last until the buffer is closed, and M-p and M-n bring back earlier input.",
+            "Opens *Script*, where each line you enter after the prompt is evaluated as Rhai and its value or error printed below. Scripts there act on the buffer you opened the console from. Variables and functions last until the buffer is closed, and M-p and M-n bring back earlier input.",
         ),
         scope: Scope::Global.into(),
         run: console::open,

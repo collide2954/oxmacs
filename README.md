@@ -42,9 +42,9 @@ Others are only built when you ask for them. These experimental applets are vers
 | `git`             | 0.1.0   | A Magit-style status that stages files, hunks and lines; `C-x g`               |
 | `glow`            | 0.1.0   | A soft glow around the minibuffer while a prompt or question waits for you     |
 | `irc`             | 0.1.0   | `M-x irc`, an IRCv3 client, with `M-x irc-setup` and a bouncer                |
-| `scripting`       | 0.1.0   | A minimal show-and-tell of Rhai scripts, not a supported way to extend oxmacs; `M-x script-console` |
 | `pdf`             | 0.1.0   | A PDF viewer with search, outline, links and dark pages; PDFium from `M-x list-tools` |
 | `python`          | 0.1.0   | Python editing with ruff, pytest, a console and a uv dashboard; `C-c C-u`     |
+| `scripting`       | 0.1.0   | A minimal show-and-tell of Rhai scripts, not a supported way to extend oxmacs; `M-x script-console` |
 
 Turn one on with `--features`, and separate several with commas and no spaces:
 
