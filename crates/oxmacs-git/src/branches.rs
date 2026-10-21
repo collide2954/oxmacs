@@ -414,21 +414,33 @@ pub(crate) fn checkout(editor: &mut Editor) {
     let Some(id) = current(editor) else {
         return;
     };
-    let Some((_, name)) = at_point(editor, id) else {
+    let Some((group, name)) = at_point(editor, id) else {
         editor.show_message("No branch on this line");
         return;
     };
-    let Some(root) = editor
-        .applet_buffer::<BranchView>(id)
-        .map(|(_, view)| view.root.clone())
-    else {
+    let Some((root, step)) = editor.applet_buffer::<BranchView>(id).map(|(_, view)| {
+        (
+            view.root.clone(),
+            checkout_step(&view.branches, group, &name),
+        )
+    }) else {
         return;
     };
-    run::run(
-        editor,
-        root,
-        Plan::default().step(["checkout", name.as_str()]),
-    );
+    run::run(editor, root, Plan::default().step(step));
+}
+
+fn checkout_step(branches: &Branches, group: Group, name: &str) -> Vec<String> {
+    let tracked = (group == Group::Remote)
+        .then(|| name.split_once('/').map(|(_, local)| local))
+        .flatten();
+    let args: Vec<&str> = match tracked {
+        Some(local) if branches.local.iter().any(|branch| branch.name == local) => {
+            vec!["checkout", local]
+        }
+        Some(_) => vec!["checkout", "--track", name],
+        None => vec!["checkout", name],
+    };
+    args.into_iter().map(str::to_owned).collect()
 }
 
 pub(crate) fn filter(editor: &mut Editor) {
@@ -685,6 +697,50 @@ mod tests {
             lines(&editor)
         );
         assert_eq!(at_point(&editor), "  ● feature");
+    }
+
+    #[test]
+    fn return_on_a_remote_branch_checks_out_a_branch_that_tracks_it() {
+        let dir = branched();
+        git(
+            dir.path(),
+            &["update-ref", "refs/remotes/origin/topic", "HEAD"],
+        );
+        let mut editor = installed(dir.path());
+        press(&mut editor, "C-x g b l n n n");
+        assert_eq!(at_point(&editor), "    origin/topic");
+
+        press(&mut editor, "RET");
+        run_jobs(&mut editor);
+
+        assert_eq!(
+            git(dir.path(), &["branch", "--show-current"]).trim(),
+            "topic"
+        );
+        assert_eq!(
+            git(
+                dir.path(),
+                &["rev-parse", "--abbrev-ref", "topic@{upstream}"]
+            )
+            .trim(),
+            "origin/topic"
+        );
+    }
+
+    #[test]
+    fn return_on_a_remote_branch_with_a_local_one_checks_that_out() {
+        let (dir, mut editor) = tree();
+        git(dir.path(), &["checkout", "-q", "feature"]);
+        press(&mut editor, "g n n");
+        assert_eq!(at_point(&editor), "    origin/main");
+
+        press(&mut editor, "RET");
+        run_jobs(&mut editor);
+
+        assert_eq!(
+            git(dir.path(), &["branch", "--show-current"]).trim(),
+            "main"
+        );
     }
 
     #[test]
