@@ -11,8 +11,9 @@ use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
 use crate::diff::LineKind;
+use crate::mode_line;
 use crate::pane::{self, DiffPane};
-use crate::repo;
+use crate::repo::{self, Summary};
 use crate::status::{self, Folds, Rendered, Row, Section, Status};
 
 const DIFFED: usize = 200;
@@ -23,6 +24,7 @@ pub(crate) struct GitState {
     pub(crate) diff_scope: ScopeId,
     pub(crate) patches: usize,
     pub(crate) pending: Vec<crate::commit::Pending>,
+    pub(crate) mode_line: mode_line::Cache,
 }
 
 #[derive(Debug)]
@@ -232,6 +234,7 @@ pub(crate) fn update(
             .get(line)
             .and_then(|row| spot(&view.status, *row))
     });
+    let summary = fresh.as_ref().map(|fresh| Summary::of(&fresh.snapshot));
     if let Some(fresh) = fresh {
         view.status = fresh;
     }
@@ -246,6 +249,9 @@ pub(crate) fn update(
     let last = view.rendered.rows.len().saturating_sub(1);
     place(buffer, found.unwrap_or(line.min(last)));
     let root = view.root.clone();
+    if let Some(summary) = summary {
+        mode_line::remember(editor, &root, summary);
+    }
     pane::redraw_root(editor, &root);
 }
 

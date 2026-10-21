@@ -53,6 +53,28 @@ pub struct Snapshot {
     pub recent: Vec<Commit>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Summary {
+    pub branch: Option<String>,
+    pub upstream: Option<(usize, usize)>,
+    pub dirty: bool,
+}
+
+impl Summary {
+    pub fn of(snapshot: &Snapshot) -> Self {
+        Self {
+            branch: snapshot.branch.clone(),
+            upstream: snapshot
+                .upstream
+                .as_ref()
+                .map(|upstream| (upstream.ahead, upstream.behind)),
+            dirty: !(snapshot.untracked.is_empty()
+                && snapshot.unstaged.is_empty()
+                && snapshot.staged.is_empty()),
+        }
+    }
+}
+
 const RECENT: usize = 10;
 
 fn failed(error: impl std::fmt::Display) -> String {
@@ -74,11 +96,7 @@ pub fn snapshot(path: &Path) -> Result<Snapshot, String> {
     Ok(Snapshot {
         root,
         metadata: repository.git_dir().to_owned(),
-        branch: repository
-            .head_name()
-            .ok()
-            .flatten()
-            .map(|name| name.shorten().to_string()),
+        branch: branch(&repository),
         head: repository
             .head_commit()
             .ok()
@@ -90,6 +108,46 @@ pub fn snapshot(path: &Path) -> Result<Snapshot, String> {
         stashes: stashes(&repository),
         recent: recent(&repository),
     })
+}
+
+fn branch(repository: &gix::Repository) -> Option<String> {
+    repository
+        .head_name()
+        .ok()
+        .flatten()
+        .map(|name| name.shorten().to_string())
+}
+
+pub fn root(directory: &Path) -> Option<PathBuf> {
+    gix::discover(directory)
+        .ok()?
+        .workdir()
+        .map(Path::to_path_buf)
+}
+
+pub fn summary(path: &Path) -> Result<Summary, String> {
+    let repository = gix::discover(path).map_err(failed)?;
+    Ok(Summary {
+        branch: branch(&repository),
+        upstream: upstream(&repository).map(|upstream| (upstream.ahead, upstream.behind)),
+        dirty: dirty(&repository)?,
+    })
+}
+
+fn dirty(repository: &gix::Repository) -> Result<bool, String> {
+    let status = repository
+        .status(gix::progress::Discard)
+        .map_err(failed)?
+        .untracked_files(gix::status::UntrackedFiles::Files)
+        .into_iter(None)
+        .map_err(failed)?;
+    for item in status {
+        match item.map_err(failed)? {
+            gix::status::Item::IndexWorktree(entry) if entry.summary().is_none() => {}
+            _ => return Ok(true),
+        }
+    }
+    Ok(false)
 }
 
 pub(crate) fn describe(commit: &gix::Commit<'_>) -> Commit {
@@ -643,5 +701,43 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
 
         assert!(snapshot(dir.path()).is_err());
+        assert_eq!(root(dir.path()), None);
+    }
+
+    #[test]
+    fn roots_are_found_from_folders_inside() {
+        let dir = repository();
+        fs::create_dir(dir.path().join("sub")).unwrap();
+
+        assert_eq!(root(&dir.path().join("sub")), Some(dir.path().to_owned()));
+    }
+
+    #[test]
+    fn summaries_agree_with_the_snapshot() {
+        let dir = repository();
+        git(dir.path(), &["branch", "-q", "base"]);
+        git(dir.path(), &["branch", "-q", "--set-upstream-to=base"]);
+        fs::write(dir.path().join("b.txt"), "bee bee\n").unwrap();
+        git(dir.path(), &["commit", "-q", "-am", "Ahead"]);
+        fs::write(dir.path().join("c.txt"), "new\n").unwrap();
+
+        let summary = summary(dir.path()).unwrap();
+
+        assert_eq!(
+            summary,
+            Summary {
+                branch: Some("main".to_owned()),
+                upstream: Some((1, 0)),
+                dirty: true,
+            }
+        );
+        assert_eq!(Summary::of(&snapshot(dir.path()).unwrap()), summary);
+    }
+
+    #[test]
+    fn clean_trees_are_not_dirty() {
+        let dir = repository();
+
+        assert!(!summary(dir.path()).unwrap().dirty);
     }
 }

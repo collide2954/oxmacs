@@ -1,5 +1,6 @@
 mod commit;
 mod diff;
+mod mode_line;
 mod pane;
 mod repo;
 mod run;
@@ -230,6 +231,7 @@ impl Applet for Git {
             diff_scope,
             patches: 0,
             pending: Vec::new(),
+            mode_line: mode_line::Cache::default(),
         });
         register(editor, Scope::Global.into(), GLOBAL);
         register(editor, scope, STATUS);
@@ -241,9 +243,13 @@ impl Applet for Git {
         editor.bind(scope, "q", Command::QuitWindow).ok();
         editor.bind(diff_scope, "q", Command::QuitWindow).ok();
         editor.on_command(pane::follow);
+        editor.on_command(mode_line::notice);
         editor.on_display(pane::fit);
         editor.on_disk_change(view::refresh_all);
+        editor.on_disk_change(mode_line::disk_changed);
         editor.on_saved(view::refresh_saved);
+        editor.on_saved(mode_line::saved);
+        editor.add_mode_line_segment(mode_line::segment);
     }
 }
 
