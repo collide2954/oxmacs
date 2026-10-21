@@ -1,3 +1,4 @@
+mod api;
 mod language;
 mod script;
 
@@ -22,7 +23,8 @@ fn report(editor: &mut Editor, outcome: Result<Dynamic, Failure>, origin: Origin
 
 fn eval_buffer(editor: &mut Editor) {
     let code = editor.buffer().contents();
-    report(editor, script::evaluate(&code), Origin::default());
+    let outcome = script::evaluate(editor, &code);
+    report(editor, outcome, Origin::default());
 }
 
 fn eval_region(editor: &mut Editor) {
@@ -37,7 +39,8 @@ fn eval_region(editor: &mut Editor) {
         column: range.start - buffer.line_start(line),
     };
     let code = buffer.text_in(range);
-    report(editor, script::evaluate(&code), origin);
+    let outcome = script::evaluate(editor, &code);
+    report(editor, outcome, origin);
 }
 
 impl Applet for Scripting {
