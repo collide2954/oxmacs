@@ -55,7 +55,7 @@ use std::{env, mem};
 use buffers::{BufferList, Mode};
 
 use crate::applet::{Applet, Handlers, Installed, States};
-use crate::command::{Command, CommandId, CommandSpec, Commands, Scope, ScopeId};
+use crate::command::{Command, CommandId, CommandSpec, Commands, DynamicSpec, Scope, ScopeId};
 use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::external::tools;
@@ -571,6 +571,18 @@ impl Editor {
         self.commands.add(spec)
     }
 
+    pub fn add_dynamic_command(&mut self, spec: DynamicSpec) -> CommandId {
+        self.commands.add_dynamic(spec)
+    }
+
+    pub fn remove_dynamic_command(&mut self, name: &str) -> bool {
+        self.commands.remove_dynamic(name)
+    }
+
+    pub fn command_named(&self, name: &str) -> Option<CommandId> {
+        self.commands.find(name)
+    }
+
     pub fn install(&mut self, applet: &dyn Applet) {
         self.applets.push(Installed {
             name: applet.name(),
@@ -626,12 +638,18 @@ impl Editor {
     }
 
     fn run_added(&mut self, command: CommandId) {
-        let Some(run) = self.commands.handler(command) else {
+        let plain = self.commands.handler(command);
+        let shared = self.commands.shared(command);
+        if plain.is_none() && shared.is_none() {
             return;
-        };
+        }
         self.goal_column = None;
         self.last_command = None;
-        run(self);
+        if let Some(run) = plain {
+            run(self);
+        } else if let Some(run) = shared {
+            run(self);
+        }
         self.tell_command();
         self.refresh_minibuffer();
         self.reveal_point();

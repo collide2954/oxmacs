@@ -790,6 +790,36 @@ mod tests {
     }
 
     #[test]
+    fn applets_add_commands_made_at_run_time_and_find_commands_by_name() {
+        let mut editor = Editor::new();
+        editor.set_applet_state(Answers::default());
+        let id = editor.add_dynamic_command(crate::command::DynamicSpec {
+            name: "note-hi".to_owned(),
+            summary: "Note hi".to_owned(),
+            scope: Scope::Global.into(),
+            run: Arc::new(|editor: &mut Editor| note(editor, "hi".to_owned())),
+        });
+        editor.bind(Scope::Global, "C-c h", id).unwrap();
+
+        type_keys(&mut editor, "C-c h M-x n o t e - h i RET");
+        assert_eq!(
+            editor.command_named("next-line"),
+            Some(crate::command::Command::NextLine.into())
+        );
+        assert_eq!(editor.command_named("note-hi"), Some(id));
+        assert!(editor.remove_dynamic_command("note-hi"));
+        type_keys(&mut editor, "C-c h");
+
+        assert_eq!(editor.command_named("note-hi"), None);
+        assert_eq!(
+            editor
+                .applet_state::<Answers>()
+                .map(|answers| answers.0.clone()),
+            Some(vec!["hi".to_owned(), "hi".to_owned()])
+        );
+    }
+
+    #[test]
     fn applet_commands_know_when_they_run_again_right_away() {
         let mut editor = Editor::new();
         editor.set_applet_state(Answers::default());

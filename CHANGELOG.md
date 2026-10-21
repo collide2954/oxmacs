@@ -48,6 +48,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Applets can tint lines as added or removed, in soft shades of each theme's success and error colors.
 - Applet buffers can show a directory under a name of their own and have a second folder watched for changes.
 - Applets can copy text of their own to the clipboard and the kill ring.
+- Applets can add commands whose names are only known at run time, replace or remove them, and look up any command by its name.
 - Applets can open transient popups, Magit's key menus: `-` and a letter toggle a switch, a single key runs an action with the switches that are on, and `q` or `C-g` closes it. The panel sits above the echo area, and switches are remembered until oxmacs quits.
 - Applets keep their settings in a table of their own in config.toml, such as `[demo]`. A table no applet in the build reads is kept, and `M-x oxmacs-doctor` points it out. Applet settings appear in `M-x customize` under the applet's name.
 
