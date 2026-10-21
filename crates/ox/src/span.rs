@@ -11,6 +11,14 @@ impl Span {
             end: offset(end),
         }
     }
+
+    #[must_use]
+    pub fn through(self, last: Self) -> Self {
+        Self {
+            start: self.start,
+            end: last.end,
+        }
+    }
 }
 
 fn offset(at: usize) -> u32 {

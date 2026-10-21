@@ -2,6 +2,8 @@ use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Datum {
+    Nil,
+    Bool(bool),
     Int(i64),
     Float(f64),
     Char(char),
@@ -32,24 +34,31 @@ pub fn read(source: &str) -> (Vec<Syntax>, Vec<ReadError>) {
         source,
         at: 0,
         errors: Vec::new(),
-        open: Vec::new(),
+        frames: Vec::new(),
         top: Vec::new(),
     };
     reader.read_all();
     (reader.top, reader.errors)
 }
 
-struct Open {
-    bracket: char,
-    start: usize,
-    items: Vec<Syntax>,
+enum Frame {
+    Collection {
+        bracket: char,
+        start: usize,
+        items: Vec<Syntax>,
+    },
+    Prefix {
+        name: Option<&'static str>,
+        mark: &'static str,
+        start: usize,
+    },
 }
 
 struct Reader<'a> {
     source: &'a str,
     at: usize,
     errors: Vec<ReadError>,
-    open: Vec<Open>,
+    frames: Vec<Frame>,
     top: Vec<Syntax>,
 }
 
@@ -92,8 +101,37 @@ impl<'a> Reader<'a> {
     }
 
     fn skip_separators(&mut self) {
-        let rest = self.rest();
-        self.at += rest.len() - rest.trim_start_matches(separator).len();
+        loop {
+            let rest = self.rest();
+            self.at += rest.len() - rest.trim_start_matches(separator).len();
+            let rest = self.rest();
+            if rest.starts_with(';') {
+                self.at += rest.find('\n').unwrap_or(rest.len());
+            } else if rest.starts_with("#|") {
+                self.block_comment();
+            } else {
+                return;
+            }
+        }
+    }
+
+    fn block_comment(&mut self) {
+        let start = self.at;
+        self.at += 2;
+        let mut depth = 1_usize;
+        while depth > 0 {
+            let rest = self.rest();
+            if rest.starts_with("#|") {
+                depth += 1;
+                self.at += 2;
+            } else if rest.starts_with("|#") {
+                depth -= 1;
+                self.at += 2;
+            } else if self.next_char().is_none() {
+                self.error(start, "This comment is never closed");
+                return;
+            }
+        }
     }
 
     fn token(&mut self) -> &'a str {
@@ -108,8 +146,8 @@ impl<'a> Reader<'a> {
             self.skip_separators();
             let start = self.at;
             let Some(first) = self.rest().chars().next() else {
-                while let Some(open) = self.open.pop() {
-                    self.unclosed(open);
+                while let Some(frame) = self.frames.pop() {
+                    self.abandon(frame);
                 }
                 return;
             };
@@ -123,6 +161,18 @@ impl<'a> Reader<'a> {
                 '\\' => {
                     let datum = self.character(start);
                     self.push(datum, start);
+                }
+                '\'' => self.prefix(Some("quote"), "'", start),
+                '`' => self.prefix(Some("quasiquote"), "`", start),
+                '~' if self.rest().starts_with("~@") => {
+                    self.prefix(Some("unquote-splicing"), "~@", start);
+                }
+                '~' => self.prefix(Some("unquote"), "~", start),
+                '@' => self.prefix(Some("deref"), "@", start),
+                '#' if self.rest().starts_with("#;") => self.prefix(None, "#;", start),
+                '#' => {
+                    let token = self.token();
+                    self.error(start, format!("Unknown form {token}"));
                 }
                 _ if delimiter(first) => {
                     self.at += first.len_utf8();
@@ -143,15 +193,47 @@ impl<'a> Reader<'a> {
         });
     }
 
-    fn place(&mut self, syntax: Syntax) {
-        match self.open.last_mut() {
-            Some(open) => open.items.push(syntax),
-            None => self.top.push(syntax),
+    fn place(&mut self, mut syntax: Syntax) {
+        loop {
+            match self.frames.last_mut() {
+                Some(Frame::Collection { items, .. }) => {
+                    items.push(syntax);
+                    return;
+                }
+                Some(Frame::Prefix { .. }) => {
+                    let Some(Frame::Prefix { name, mark, start }) = self.frames.pop() else {
+                        return;
+                    };
+                    let Some(name) = name else {
+                        return;
+                    };
+                    let head = Span::new(start, start + mark.len());
+                    syntax = Syntax {
+                        span: head.through(syntax.span),
+                        datum: Datum::List(vec![
+                            Syntax {
+                                datum: Datum::Symbol(name.to_owned()),
+                                span: head,
+                            },
+                            syntax,
+                        ]),
+                    };
+                }
+                None => {
+                    self.top.push(syntax);
+                    return;
+                }
+            }
         }
     }
 
+    fn prefix(&mut self, name: Option<&'static str>, mark: &'static str, start: usize) {
+        self.at += mark.len();
+        self.frames.push(Frame::Prefix { name, mark, start });
+    }
+
     fn opening(&mut self, bracket: char, start: usize) {
-        if self.open.len() >= MAX_DEPTH {
+        if self.frames.len() >= MAX_DEPTH {
             self.error_at(
                 Span::new(start, start + 1),
                 format!("Nested deeper than {MAX_DEPTH}"),
@@ -160,7 +242,7 @@ impl<'a> Reader<'a> {
             return;
         }
         self.at += 1;
-        self.open.push(Open {
+        self.frames.push(Frame::Collection {
             bracket,
             start,
             items: Vec::new(),
@@ -168,44 +250,66 @@ impl<'a> Reader<'a> {
     }
 
     fn closing(&mut self, bracket: char, start: usize) {
-        let Some(position) = self
-            .open
-            .iter()
-            .rposition(|open| closer(open.bracket) == bracket)
-        else {
+        let Some(position) = self.frames.iter().rposition(
+            |frame| matches!(frame, Frame::Collection { bracket: opener, .. } if closer(*opener) == bracket),
+        ) else {
+            while matches!(self.frames.last(), Some(Frame::Prefix { .. })) {
+                if let Some(frame) = self.frames.pop() {
+                    self.abandon(frame);
+                }
+            }
             self.at += 1;
             self.error(start, format!("Unexpected {bracket}"));
             return;
         };
-        while self.open.len() > position + 1 {
-            if let Some(open) = self.open.pop() {
-                self.unclosed(open);
+        while self.frames.len() > position + 1 {
+            if let Some(frame) = self.frames.pop() {
+                self.abandon(frame);
             }
         }
         self.at += 1;
-        if let Some(open) = self.open.pop() {
-            self.finish(open);
+        if let Some(Frame::Collection {
+            bracket,
+            start,
+            items,
+        }) = self.frames.pop()
+        {
+            self.finish(bracket, start, items);
         }
     }
 
-    fn unclosed(&mut self, open: Open) {
-        self.error_at(
-            Span::new(open.start, open.start + 1),
-            format!("This {} is never closed", open.bracket),
-        );
-        self.finish(open);
+    fn abandon(&mut self, frame: Frame) {
+        match frame {
+            Frame::Collection {
+                bracket,
+                start,
+                items,
+            } => {
+                self.error_at(
+                    Span::new(start, start + 1),
+                    format!("This {bracket} is never closed"),
+                );
+                self.finish(bracket, start, items);
+            }
+            Frame::Prefix { mark, start, .. } => {
+                self.error_at(
+                    Span::new(start, start + mark.len()),
+                    format!("Put something after {mark}"),
+                );
+            }
+        }
     }
 
-    fn finish(&mut self, open: Open) {
-        let span = Span::new(open.start, self.at);
-        let datum = match open.bracket {
-            '(' => Datum::List(open.items),
-            '[' => Datum::Vector(open.items),
+    fn finish(&mut self, bracket: char, start: usize, items: Vec<Syntax>) {
+        let span = Span::new(start, self.at);
+        let datum = match bracket {
+            '(' => Datum::List(items),
+            '[' => Datum::Vector(items),
             _ => {
-                if open.items.len() % 2 == 1 {
+                if items.len() % 2 == 1 {
                     self.error_at(span, "This map has a key without a value");
                 }
-                Datum::Map(open.items)
+                Datum::Map(items)
             }
         };
         self.place(Syntax { datum, span });
@@ -341,7 +445,12 @@ fn atom(token: &str) -> Datum {
     {
         return Datum::Keyword(name.to_owned());
     }
-    Datum::Symbol(token.to_owned())
+    match token {
+        "nil" => Datum::Nil,
+        "true" => Datum::Bool(true),
+        "false" => Datum::Bool(false),
+        _ => Datum::Symbol(token.to_owned()),
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -502,6 +611,8 @@ mod tests {
     fn shape(syntax: &Syntax) -> String {
         let join = |items: &[Syntax]| items.iter().map(shape).collect::<Vec<_>>().join(" ");
         match &syntax.datum {
+            Datum::Nil => "nil".to_owned(),
+            Datum::Bool(value) => value.to_string(),
             Datum::Int(number) => number.to_string(),
             Datum::Float(number) => format!("{number:?}"),
             Datum::Char(character) => format!("\\{character}"),
@@ -585,6 +696,64 @@ mod tests {
         assert_eq!(read(&deep).0.len(), 2);
     }
 
+    #[test]
+    fn true_false_and_nil_are_read_as_themselves() {
+        assert_eq!(
+            data("true false nil truthy"),
+            [
+                (Datum::Bool(true), Span::new(0, 4)),
+                (Datum::Bool(false), Span::new(5, 10)),
+                (Datum::Nil, Span::new(11, 14)),
+                (symbol("truthy"), Span::new(15, 21)),
+            ]
+        );
+    }
+
+    #[test]
+    fn quote_forms_wrap_the_next_form() {
+        assert_eq!(errors("'x `(a ~b ~@c) @atom '[1]"), []);
+        assert_eq!(
+            shapes("'x `(a ~b ~@c) @atom '[1]"),
+            [
+                "(quote x)",
+                "(quasiquote (a (unquote b) (unquote-splicing c)))",
+                "(deref atom)",
+                "(quote [1])",
+            ]
+        );
+        assert_eq!(read("'x").0[0].span, Span::new(0, 2));
+    }
+
+    #[test]
+    fn quotes_with_nothing_after_them_are_reported() {
+        assert_eq!(
+            errors("(a ') '"),
+            [
+                ("Put something after '".to_owned(), Span::new(3, 4)),
+                ("Put something after '".to_owned(), Span::new(6, 7)),
+            ]
+        );
+        assert_eq!(shapes("(a ') '"), ["(a)"]);
+    }
+
+    #[test]
+    fn comments_are_skipped() {
+        let source = "a ; line\nb #| block #| nested |# |# c #;(skipped form) d #;  e f";
+
+        assert_eq!(errors(source), []);
+        assert_eq!(shapes(source), ["a", "b", "c", "d", "f"]);
+    }
+
+    #[test]
+    fn unclosed_block_comments_and_unknown_hash_forms_are_reported() {
+        assert_eq!(
+            errors("#x a #| open"),
+            [
+                ("Unknown form #x".to_owned(), Span::new(0, 2)),
+                ("This comment is never closed".to_owned(), Span::new(5, 12)),
+            ]
+        );
+    }
     #[test]
     fn symbols_span_their_bytes_in_utf8() {
         assert_eq!(
