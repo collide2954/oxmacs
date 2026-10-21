@@ -222,6 +222,20 @@ const GRID: &[Spec] = &[
         keys: &["S"],
         run: |editor| table::sort(editor, true),
     },
+    Spec {
+        name: "database-filter-equal",
+        summary: "Keep only the rows with this cell's value",
+        help: None,
+        keys: &["="],
+        run: |editor| table::filter_cell(editor, false),
+    },
+    Spec {
+        name: "database-filter-different",
+        summary: "Keep only the rows without this cell's value",
+        help: None,
+        keys: &["!"],
+        run: |editor| table::filter_cell(editor, true),
+    },
 ];
 
 fn register(editor: &mut Editor, scope: ScopeId, specs: &[Spec]) -> Vec<CommandId> {

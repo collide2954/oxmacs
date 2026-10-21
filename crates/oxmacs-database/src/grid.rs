@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 #[cfg(test)]
 use std::ops::Range;
 
-use crate::driver::{Page, Query, Value};
+use crate::driver::{Page, Query, Value, quote};
 use crate::service::DbId;
 use crate::widget::clip;
 
@@ -73,6 +73,183 @@ pub(crate) fn raw(value: &Value) -> String {
             out
         }),
         Value::Integer(_) | Value::Real(_) => shown(value),
+    }
+}
+
+const KEYWORDS: &[&str] = &[
+    "abort",
+    "action",
+    "add",
+    "after",
+    "all",
+    "alter",
+    "always",
+    "analyze",
+    "and",
+    "as",
+    "asc",
+    "attach",
+    "autoincrement",
+    "before",
+    "begin",
+    "between",
+    "by",
+    "cascade",
+    "case",
+    "cast",
+    "check",
+    "collate",
+    "column",
+    "commit",
+    "conflict",
+    "constraint",
+    "create",
+    "cross",
+    "current",
+    "current_date",
+    "current_time",
+    "current_timestamp",
+    "database",
+    "default",
+    "deferrable",
+    "deferred",
+    "delete",
+    "desc",
+    "detach",
+    "distinct",
+    "do",
+    "drop",
+    "each",
+    "else",
+    "end",
+    "escape",
+    "except",
+    "exclude",
+    "exclusive",
+    "exists",
+    "explain",
+    "fail",
+    "filter",
+    "first",
+    "following",
+    "for",
+    "foreign",
+    "from",
+    "full",
+    "generated",
+    "glob",
+    "group",
+    "groups",
+    "having",
+    "if",
+    "ignore",
+    "immediate",
+    "in",
+    "index",
+    "indexed",
+    "initially",
+    "inner",
+    "insert",
+    "instead",
+    "intersect",
+    "into",
+    "is",
+    "isnull",
+    "join",
+    "key",
+    "last",
+    "left",
+    "like",
+    "limit",
+    "match",
+    "materialized",
+    "natural",
+    "no",
+    "not",
+    "nothing",
+    "notnull",
+    "null",
+    "nulls",
+    "of",
+    "offset",
+    "on",
+    "or",
+    "order",
+    "others",
+    "outer",
+    "over",
+    "partition",
+    "plan",
+    "pragma",
+    "preceding",
+    "primary",
+    "query",
+    "raise",
+    "range",
+    "recursive",
+    "references",
+    "regexp",
+    "reindex",
+    "release",
+    "rename",
+    "replace",
+    "restrict",
+    "returning",
+    "right",
+    "rollback",
+    "row",
+    "rows",
+    "savepoint",
+    "select",
+    "set",
+    "table",
+    "temp",
+    "temporary",
+    "then",
+    "ties",
+    "to",
+    "transaction",
+    "trigger",
+    "unbounded",
+    "union",
+    "unique",
+    "update",
+    "using",
+    "vacuum",
+    "values",
+    "view",
+    "virtual",
+    "when",
+    "where",
+    "window",
+    "with",
+    "without",
+];
+
+pub(crate) fn identifier(name: &str) -> String {
+    let mut chars = name.chars();
+    let plain = chars
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|rest| rest.is_ascii_alphanumeric() || rest == '_');
+    if plain && !KEYWORDS.iter().any(|word| word.eq_ignore_ascii_case(name)) {
+        name.to_owned()
+    } else {
+        quote(name)
+    }
+}
+
+fn literal(value: &Value) -> String {
+    match value {
+        Value::Null => "NULL".to_owned(),
+        Value::Integer(number) => number.to_string(),
+        Value::Real(number) if number.is_infinite() => {
+            let sign = if number.is_sign_negative() { "-" } else { "" };
+            format!("{sign}9e999")
+        }
+        Value::Real(number) => real(*number),
+        Value::Text(text) => format!("'{}'", text.replace('\'', "''")),
+        Value::Blob(_) => format!("x'{}'", raw(value)),
     }
 }
 
@@ -350,6 +527,27 @@ impl Grid {
         let mark = self.mark(column);
         let room = self.width(column).saturating_sub(mark.chars().count());
         format!("{}{mark}", clip(name, room))
+    }
+
+    pub(crate) fn condition(&self, negate: bool) -> Option<String> {
+        let Cell { row, column } = self.cursor;
+        let name = identifier(self.columns.get(column)?);
+        Some(match (self.value(row, column)?, negate) {
+            (Value::Null, false) => format!("{name} IS NULL"),
+            (Value::Null, true) => format!("{name} IS NOT NULL"),
+            (value, false) => format!("{name} = {}", literal(value)),
+            (value, true) => format!("{name} IS NOT {}", literal(value)),
+        })
+    }
+
+    pub(crate) fn filter(&mut self, condition: &str) -> bool {
+        let condition = condition.trim();
+        if condition.is_empty() || self.query.filters.iter().any(|known| known == condition) {
+            return false;
+        }
+        self.query.filters.push(condition.to_owned());
+        self.requery();
+        true
     }
 
     fn fit_headings(&mut self) {
@@ -652,6 +850,92 @@ mod tests {
         assert_eq!(grid.sort_mark(5), None);
         assert_eq!(grid.heading(0), "n ▾2");
         assert_eq!(grid.heading(1), "label ▴1");
+    }
+
+    fn varied() -> Grid {
+        let mut grid = grid();
+        grid.insert(
+            0,
+            page(
+                &["name", "notes", "data", "n", "price", "Unit Price", "order"],
+                vec![vec![
+                    Value::Text("it's".to_owned()),
+                    Value::Null,
+                    Value::Blob(vec![0xAB, 0x01]),
+                    Value::Integer(-3),
+                    Value::Real(2.5),
+                    Value::Real(f64::INFINITY),
+                    Value::Integer(2),
+                ]],
+            ),
+        );
+        grid
+    }
+
+    fn condition(grid: &mut Grid, column: usize, negate: bool) -> String {
+        grid.cursor.column = column;
+        grid.condition(negate).unwrap()
+    }
+
+    #[test]
+    fn conditions_match_the_value_under_the_cursor() {
+        let mut grid = varied();
+
+        for (column, negate, expected) in [
+            (0, false, "name = 'it''s'"),
+            (0, true, "name IS NOT 'it''s'"),
+            (1, false, "notes IS NULL"),
+            (1, true, "notes IS NOT NULL"),
+            (2, false, "data = x'ab01'"),
+            (3, false, "n = -3"),
+            (4, true, "price IS NOT 2.5"),
+            (5, false, "\"Unit Price\" = 9e999"),
+            (6, false, "\"order\" = 2"),
+        ] {
+            assert_eq!(condition(&mut grid, column, negate), expected);
+        }
+    }
+
+    #[test]
+    fn cells_not_loaded_yet_have_no_condition() {
+        let mut grid = sized(1000);
+
+        grid.go(Cell {
+            row: 500,
+            column: 0,
+        });
+
+        assert_eq!(grid.condition(false), None);
+    }
+
+    #[test]
+    fn plain_names_stay_bare_and_others_are_quoted() {
+        for (name, expected) in [
+            ("Composer", "Composer"),
+            ("_n2", "_n2"),
+            ("order", "\"order\""),
+            ("Order", "\"Order\""),
+            ("Unit Price", "\"Unit Price\""),
+            ("2nd", "\"2nd\""),
+            ("say \"hi\"", "\"say \"\"hi\"\"\""),
+            ("", "\"\""),
+        ] {
+            assert_eq!(identifier(name), expected);
+        }
+    }
+
+    #[test]
+    fn filters_start_over_and_ignore_blanks_and_duplicates() {
+        let mut grid = sized(100);
+        grid.go(Cell { row: 40, column: 1 });
+
+        assert!(grid.filter(" n > 3 "));
+        assert_eq!(grid.query.filters, ["n > 3"]);
+        assert_eq!(grid.cursor, Cell { row: 0, column: 1 });
+        assert!(grid.pages.is_empty());
+        assert!(!grid.filter("n > 3"));
+        assert!(!grid.filter("   "));
+        assert_eq!(grid.query.filters, ["n > 3"]);
     }
 
     #[test]

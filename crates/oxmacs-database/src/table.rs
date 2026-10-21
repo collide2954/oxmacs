@@ -271,6 +271,20 @@ pub(crate) fn sort(editor: &mut Editor, add: bool) {
     requery(editor, id, |grid| grid.sort(grid.cursor.column, add));
 }
 
+pub(crate) fn filter_cell(editor: &mut Editor, negate: bool) {
+    let Some(id) = current(editor) else {
+        return;
+    };
+    let condition = editor
+        .applet_buffer::<GridView>(id)
+        .and_then(|(_, view)| view.grid.condition(negate));
+    let Some(condition) = condition else {
+        editor.show_message("This row has not loaded yet");
+        return;
+    };
+    requery(editor, id, |grid| grid.filter(&condition));
+}
+
 pub(crate) fn refresh(editor: &mut Editor) {
     let Some(id) = current(editor) else {
         return;
@@ -685,6 +699,58 @@ mod tests {
                 "Balls to the Wall"
             ]
         );
+    }
+
+    #[test]
+    fn equals_keeps_the_rows_with_this_cells_value() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+
+        press(&mut editor, "C-f C-f =");
+        pump(&mut editor, &mut service);
+
+        assert_eq!(view(&editor).query.filters, ["artist_id = 1"]);
+        assert_eq!(
+            titles(&editor),
+            ["For Those About To Rock", "Let There Be Rock"]
+        );
+        assert_eq!(editor.pane().status().position.as_deref(), Some("1/2"));
+    }
+
+    #[test]
+    fn bang_keeps_the_rows_that_differ_including_nulls() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+
+        press(&mut editor, "C-n C-e !");
+        pump(&mut editor, &mut service);
+        assert_eq!(
+            titles(&editor),
+            [
+                "For Those About To Rock",
+                "Restless and Wild",
+                "Let There Be Rock"
+            ]
+        );
+
+        press(&mut editor, "C-n !");
+        pump(&mut editor, &mut service);
+        assert_eq!(
+            view(&editor).query.filters,
+            ["price IS NOT 8.5", "price IS NOT NULL"]
+        );
+        assert_eq!(editor.pane().status().position.as_deref(), Some("1/2"));
+    }
+
+    #[test]
+    fn filtering_a_row_not_loaded_yet_says_so() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "n n");
+
+        press(&mut editor, "M-> =");
+
+        assert_eq!(editor.message(), Some("This row has not loaded yet"));
+        assert_eq!(view(&editor).query.filters, Vec::<String>::new());
     }
 
     #[test]
