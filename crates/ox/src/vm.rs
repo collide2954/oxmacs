@@ -9,7 +9,7 @@ use crate::print;
 use crate::symbol::Sym;
 use crate::value::Value;
 
-const MAX_FRAMES: usize = 1_000_000;
+const MAX_FRAMES: usize = 400_000;
 
 #[derive(Debug, Default)]
 pub struct Runtime {
@@ -84,6 +84,21 @@ impl Machine {
         self.pc = 0;
         self.base = start;
         Ok(())
+    }
+
+    fn replace(&mut self, function: Rc<Code>, closure: Value, slot: usize, count: usize) {
+        self.stack.copy_within(slot + 1..=slot + count, self.base);
+        let needed = self.base + usize::from(function.registers);
+        if self.stack.len() < needed {
+            self.stack.resize(needed, Value::Nil);
+        }
+        if let Some(frame) = self.frames.last_mut() {
+            frame.code = Rc::clone(&function);
+            frame.closure = closure;
+        }
+        self.code = function;
+        self.closure = closure;
+        self.pc = 0;
     }
 
     fn leave(&mut self, value: Value) -> Option<Value> {
@@ -181,6 +196,7 @@ impl Runtime {
                 }
             }
             Op::Call { base, count } => self.call(machine, base, count)?,
+            Op::TailCall { base, count } => return self.tail_call(machine, base, count),
             Op::Jump { to } => machine.pc = to as usize,
             Op::JumpUnless { test, to } => {
                 if !machine.get(test).truthy() {
@@ -209,6 +225,30 @@ impl Runtime {
             return Err(arity_error(&function, count));
         }
         machine.enter(function, callee, slot)
+    }
+
+    fn tail_call(
+        &mut self,
+        machine: &mut Machine,
+        base: u16,
+        count: u16,
+    ) -> Result<Option<Value>, Error> {
+        let slot = machine.base + usize::from(base);
+        let count = usize::from(count);
+        let callee = machine.stack[slot];
+        let Some(function) = self
+            .heap
+            .closure_of(callee)
+            .map(|closure| Rc::clone(&closure.code))
+        else {
+            let result = self.call_native(callee, &machine.stack[slot + 1..=slot + count])?;
+            return Ok(machine.leave(result));
+        };
+        if count != usize::from(function.arity) {
+            return Err(arity_error(&function, count));
+        }
+        machine.replace(function, callee, slot, count);
+        Ok(None)
     }
 
     fn close(&mut self, machine: &Machine, function: u32) -> Result<Value, Error> {

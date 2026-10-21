@@ -19,6 +19,7 @@ pub enum Op {
     CellGet { to: Register, cell: Register },
     CellSet { cell: Register, from: Register },
     Call { base: Register, count: u16 },
+    TailCall { base: Register, count: u16 },
     Jump { to: u32 },
     JumpUnless { test: Register, to: u32 },
     Return { from: Register },

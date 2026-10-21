@@ -162,12 +162,16 @@ impl Compiler<'_> {
     }
 
     fn expression(&mut self, form: &Syntax, target: Register) -> Result<(), Error> {
+        self.form(form, target, false)
+    }
+
+    fn form(&mut self, form: &Syntax, target: Register, tail: bool) -> Result<(), Error> {
         let value = match &form.datum {
             Datum::Symbol(name) => {
                 self.variable(Sym::intern(name), target, form.span);
                 return Ok(());
             }
-            Datum::List(items) => return self.call(items, target, form.span),
+            Datum::List(items) => return self.call(items, target, form.span, tail),
             Datum::Nil => Value::Nil,
             Datum::Bool(flag) => Value::Bool(*flag),
             Datum::Int(number) => Value::Int(*number),
@@ -239,16 +243,17 @@ impl Compiler<'_> {
         rest: &[Syntax],
         target: Register,
         span: Span,
+        tail: bool,
     ) -> Option<Result<(), Error>> {
         let Datum::Symbol(name) = &head.datum else {
             return None;
         };
         match name.as_str() {
-            "if" => Some(self.branch(rest, target, span)),
-            "do" => Some(self.sequence(rest, target, span)),
+            "if" => Some(self.branch(rest, target, span, tail)),
+            "do" => Some(self.sequence(rest, target, span, tail)),
             "def" => Some(self.define(rest, target, span)),
             "fn" => Some(self.function(rest, target, span)),
-            "let" => Some(self.binding(rest, target, span)),
+            "let" => Some(self.binding(rest, target, span, tail)),
             "set!" => Some(self.assign(rest, target, span)),
             _ => None,
         }
@@ -337,7 +342,13 @@ impl Compiler<'_> {
         Ok(())
     }
 
-    fn binding(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+    fn binding(
+        &mut self,
+        parts: &[Syntax],
+        target: Register,
+        span: Span,
+        tail: bool,
+    ) -> Result<(), Error> {
         let Some((
             Syntax {
                 datum: Datum::Vector(bindings),
@@ -373,7 +384,7 @@ impl Compiler<'_> {
                 boxed,
             });
         }
-        self.sequence(body, target, span)?;
+        self.sequence(body, target, span, tail)?;
         self.current.locals.truncate(locals);
         self.release(top);
         Ok(())
@@ -427,7 +438,7 @@ impl Compiler<'_> {
             self.emit(Op::MakeCell { register }, span);
         }
         let result = self.reserve(1, span)?;
-        self.sequence(body, result, span)?;
+        self.sequence(body, result, span, true)?;
         self.emit(Op::Return { from: result }, span);
         let parent = self
             .outer
@@ -448,7 +459,13 @@ impl Compiler<'_> {
         Ok(())
     }
 
-    fn branch(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+    fn branch(
+        &mut self,
+        parts: &[Syntax],
+        target: Register,
+        span: Span,
+        tail: bool,
+    ) -> Result<(), Error> {
         let (test, then, otherwise) = match parts {
             [test, then] => (test, then, None),
             [test, then, otherwise] => (test, then, Some(otherwise)),
@@ -470,13 +487,13 @@ impl Compiler<'_> {
             span,
         );
         self.release(condition);
-        self.expression(then, target)?;
+        self.form(then, target, tail)?;
         let finish = self.current.code.ops.len();
         self.emit(Op::Jump { to: 0 }, span);
         let alternative = self.here(span)?;
         self.patch(skip, alternative);
         match otherwise {
-            Some(otherwise) => self.expression(otherwise, target)?,
+            Some(otherwise) => self.form(otherwise, target, tail)?,
             None => self.load(Value::Nil, target, span)?,
         }
         let end = self.here(span)?;
@@ -484,21 +501,34 @@ impl Compiler<'_> {
         Ok(())
     }
 
-    fn sequence(&mut self, forms: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+    fn sequence(
+        &mut self,
+        forms: &[Syntax],
+        target: Register,
+        span: Span,
+        tail: bool,
+    ) -> Result<(), Error> {
         if forms.is_empty() {
             return self.load(Value::Nil, target, span);
         }
-        for form in forms {
-            self.expression(form, target)?;
+        let last = forms.len() - 1;
+        for (index, form) in forms.iter().enumerate() {
+            self.form(form, target, tail && index == last)?;
         }
         Ok(())
     }
 
-    fn call(&mut self, items: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+    fn call(
+        &mut self,
+        items: &[Syntax],
+        target: Register,
+        span: Span,
+        tail: bool,
+    ) -> Result<(), Error> {
         let Some((callee, arguments)) = items.split_first() else {
             return self.load(Value::Nil, target, span);
         };
-        if let Some(done) = self.special(callee, arguments, target, span) {
+        if let Some(done) = self.special(callee, arguments, target, span, tail) {
             return done;
         }
         let count = u16::try_from(arguments.len())
@@ -507,6 +537,11 @@ impl Compiler<'_> {
         self.expression(callee, base)?;
         for (offset, argument) in (1..).zip(arguments) {
             self.expression(argument, base + offset)?;
+        }
+        if tail {
+            self.emit(Op::TailCall { base, count }, span);
+            self.release(base);
+            return Ok(());
         }
         self.emit(Op::Call { base, count }, span);
         if base != target {
