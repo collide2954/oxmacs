@@ -17,8 +17,9 @@ use oxmacs_gui::applet::{Context, GuiApplet};
 pub use driver::{
     Column, Driver, ForeignKey, Index, Kind, Page, Query, Schema, Sqlite, Table, Value,
 };
+pub use grid::Pill;
 pub use service::{DbId, Reply, Request, Service, Source, answer};
-pub use table::{GridClick, GridScroll, GridViewport};
+pub use table::{GridClick, GridHeader, GridScroll, GridUnpill, GridViewport};
 
 use open::DatabaseState;
 use table::Motion;
@@ -308,6 +309,8 @@ impl Applet for Database {
         editor.on_event(table::viewport);
         editor.on_event(table::clicked);
         editor.on_event(table::scrolled);
+        editor.on_event(table::header_clicked);
+        editor.on_event(table::unpilled);
         editor.on_command(open::close_unused);
         if let Some(command) = global.first() {
             editor.set_splash_entry(*command, "Open a database");

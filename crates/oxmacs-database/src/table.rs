@@ -4,7 +4,7 @@ use oxmacs_core::editor::{Editor, Offer, Picked, Tiling, WindowId};
 use oxmacs_core::text::BufferId;
 
 use crate::driver::Query;
-use crate::grid::{Cell, Grid, PAGE, identifier};
+use crate::grid::{Cell, Grid, PAGE, Pill, identifier};
 use crate::open::{DatabaseState, TreeView, tree_of};
 use crate::service::{DbId, Reply, Request};
 use crate::text::thousands;
@@ -65,6 +65,19 @@ pub struct GridScroll {
     pub buffer: BufferId,
     pub rows: i64,
     pub columns: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GridHeader {
+    pub buffer: BufferId,
+    pub column: usize,
+    pub add: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GridUnpill {
+    pub buffer: BufferId,
+    pub pill: Pill,
 }
 
 const TREE_SHARE: f32 = 0.28;
@@ -453,6 +466,16 @@ pub(crate) fn scrolled(editor: &mut Editor, event: &GridScroll) {
     change(editor, event.buffer, |grid| {
         grid.scroll(event.rows, event.columns);
     });
+}
+
+pub(crate) fn header_clicked(editor: &mut Editor, event: &GridHeader) {
+    requery(editor, event.buffer, |grid| {
+        grid.sort(event.column, event.add)
+    });
+}
+
+pub(crate) fn unpilled(editor: &mut Editor, event: &GridUnpill) {
+    requery(editor, event.buffer, |grid| grid.unpill(event.pill));
 }
 
 fn matching(editor: &Editor, db: DbId, query: &Query) -> Vec<BufferId> {
@@ -1100,6 +1123,37 @@ mod tests {
         let id = grids(&editor)[0];
         let grid = &editor.applet_buffer::<GridView>(id).unwrap().1.grid;
         assert_eq!((grid.total, grid.unfiltered), (Some(2), Some(5)));
+    }
+
+    #[test]
+    fn header_clicks_sort_and_crosses_take_pills_off() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+        let buffer = editor.buffer().id();
+
+        editor.deliver(&Payload::new(GridHeader {
+            buffer,
+            column: 2,
+            add: false,
+        }));
+        editor.deliver(&Payload::new(GridHeader {
+            buffer,
+            column: 1,
+            add: true,
+        }));
+        pump(&mut editor, &mut service);
+        assert_eq!(
+            sorts(&editor),
+            [("artist_id".to_owned(), false), ("title".to_owned(), false)]
+        );
+
+        editor.deliver(&Payload::new(GridUnpill {
+            buffer,
+            pill: Pill::Sort(0),
+        }));
+        pump(&mut editor, &mut service);
+        assert_eq!(sorts(&editor), [("title".to_owned(), false)]);
+        assert_eq!(titles(&editor)[0], "Balls to the Wall");
     }
 
     #[test]

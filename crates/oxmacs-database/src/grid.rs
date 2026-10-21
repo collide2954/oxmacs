@@ -20,7 +20,7 @@ pub(crate) struct Cell {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Pill {
+pub enum Pill {
     Filter(usize),
     Sort(usize),
 }

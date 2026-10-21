@@ -16,12 +16,24 @@ use oxmacs_gui::style;
 use oxmacs_gui::units::{floor_to_isize, floor_to_usize, to_f32};
 
 use crate::driver::Value;
-use crate::grid::{Grid, PAD, shown};
-use crate::table::{GridClick, GridScroll, GridViewport};
+use crate::grid::{Grid, PAD, Pill, shown};
+use crate::table::{GridClick, GridHeader, GridScroll, GridUnpill, GridViewport};
 
 pub(crate) const ROW_SCALE: f32 = 1.45;
 const WHEEL_ROWS: f32 = 3.0;
 const ABOVE_ROWS: f32 = 2.0;
+const PILL_GAP: usize = 2;
+const PILL_ROOM: usize = 4;
+const COUNT_SEPARATOR: &str = " · ";
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PlacedPill {
+    pub(crate) pill: Pill,
+    pub(crate) label: String,
+    pub(crate) x: f32,
+    pub(crate) width: f32,
+    pub(crate) close: f32,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Geometry {
@@ -32,10 +44,33 @@ pub(crate) struct Geometry {
     pub(crate) gutter: f32,
     pub(crate) boxes: Vec<(usize, f32, f32)>,
     pub(crate) rows: usize,
+    pub(crate) pills: Vec<PlacedPill>,
 }
 
 fn digits(number: u64) -> usize {
     number.to_string().len()
+}
+
+fn place_pills(grid: &Grid, origin: Point, cell: Size) -> Vec<PlacedPill> {
+    let title = grid.query.table.chars().count()
+        + COUNT_SEPARATOR.chars().count()
+        + grid.counted().chars().count();
+    let mut x = origin.x + to_f32(1 + title) * cell.width;
+    let mut placed = Vec::new();
+    for (pill, label) in grid.pills() {
+        x += to_f32(PILL_GAP) * cell.width;
+        let length = label.chars().count();
+        let width = to_f32(length + PILL_ROOM) * cell.width;
+        placed.push(PlacedPill {
+            pill,
+            label,
+            x,
+            width,
+            close: x + to_f32(length + 1) * cell.width,
+        });
+        x += width;
+    }
+    placed
 }
 
 impl Geometry {
@@ -66,6 +101,7 @@ impl Geometry {
             gutter,
             boxes,
             rows,
+            pills: place_pills(grid, origin, cell),
         }
     }
 
@@ -90,6 +126,25 @@ impl Geometry {
         }
         let row = floor_to_usize(y / self.row_height);
         Some((row, self.column_at(point.x)?))
+    }
+
+    pub(crate) fn header(&self, point: Point) -> Option<usize> {
+        let y = point.y - self.origin.y;
+        if y < self.row_height || y >= self.row_height * ABOVE_ROWS {
+            return None;
+        }
+        self.column_at(point.x)
+    }
+
+    pub(crate) fn unpill(&self, point: Point) -> Option<Pill> {
+        let y = point.y - self.origin.y;
+        if y < 0.0 || y >= self.row_height {
+            return None;
+        }
+        self.pills
+            .iter()
+            .find(|placed| point.x >= placed.close && point.x < placed.x + placed.width)
+            .map(|placed| placed.pill)
     }
 }
 
@@ -121,6 +176,8 @@ const ZEBRA_TINT: f32 = 0.03;
 const LINE_TINT: f32 = 0.14;
 const ROW_TINT: f32 = 0.08;
 const SELECTION_ALPHA: f32 = 0.55;
+const PILL_ALPHA: f32 = 0.22;
+const PILL_INSET: f32 = 0.12;
 
 #[derive(Debug, Default)]
 struct State {
@@ -179,6 +236,35 @@ impl<'a> GridWidget<'a> {
                 .background
                 .mix(self.faces.default.foreground, amount),
         )
+    }
+
+    fn click(
+        &self,
+        geometry: &Geometry,
+        point: Point,
+        shift: bool,
+        shell: &mut Shell<'_, Payload>,
+    ) {
+        let buffer = self.buffer;
+        if let Some(pill) = geometry.unpill(point) {
+            shell.publish(Payload::new(GridUnpill { buffer, pill }));
+        } else if let Some(column) = geometry.header(point) {
+            shell.publish(Payload::new(GridHeader {
+                buffer,
+                column,
+                add: shift,
+            }));
+        } else if let Some((offset, column)) = geometry.hit(point) {
+            let row = self.grid.top + u64::try_from(offset).unwrap_or(0);
+            if row <= self.grid.last_row() {
+                shell.publish(Payload::new(GridClick {
+                    buffer,
+                    row,
+                    column,
+                    extend: shift,
+                }));
+            }
+        }
     }
 
     fn cell_face(&self, value: &Value) -> (String, oxmacs_core::theme::Color, bool) {
@@ -271,17 +357,8 @@ where
                 if let Some(point) = cursor
                     .position_in(bounds)
                     .map(|at| at + Vector::new(bounds.x, bounds.y))
-                    && let Some((offset, column)) = geometry.hit(point)
                 {
-                    let row = self.grid.top + u64::try_from(offset).unwrap_or(0);
-                    if row <= self.grid.last_row() {
-                        shell.publish(Payload::new(GridClick {
-                            buffer: self.buffer,
-                            row,
-                            column,
-                            extend: state.modifiers.shift(),
-                        }));
-                    }
+                    self.click(&geometry, point, state.modifiers.shift(), shell);
                 }
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) if cursor.is_over(bounds) => {
@@ -549,8 +626,54 @@ impl GridWidget<'_> {
             bounds,
         );
         renderer.fill_text(
-            self.text(format!(" · {}", self.grid.counted()), geometry.row_height),
+            self.text(
+                format!("{COUNT_SEPARATOR}{}", self.grid.counted()),
+                geometry.row_height,
+            ),
             Point::new(x + to_f32(name.chars().count()) * geometry.cell.width, y),
+            style::color(self.faces.shadow),
+            bounds,
+        );
+        for placed in &geometry.pills {
+            self.pill(renderer, frame, placed);
+        }
+    }
+
+    fn pill<Renderer>(&self, renderer: &mut Renderer, frame: &Frame<'_>, placed: &PlacedPill)
+    where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        let Frame {
+            bounds,
+            geometry,
+            inset,
+        } = *frame;
+        let margin = geometry.row_height * PILL_INSET;
+        let height = geometry.row_height - 2.0 * margin;
+        renderer.fill_quad(
+            Quad {
+                bounds: Rectangle::new(
+                    Point::new(placed.x, bounds.y + margin),
+                    Size::new(placed.width, height),
+                ),
+                border: Border {
+                    radius: (height / 2.0).into(),
+                    ..Border::default()
+                },
+                ..Quad::default()
+            },
+            style::color(self.faces.link).scale_alpha(PILL_ALPHA),
+        );
+        let y = bounds.y + inset;
+        renderer.fill_text(
+            self.text(placed.label.clone(), geometry.row_height),
+            Point::new(placed.x + geometry.cell.width, y),
+            style::color(self.faces.default.foreground),
+            bounds,
+        );
+        renderer.fill_text(
+            self.text("×".to_owned(), geometry.row_height),
+            Point::new(placed.close + geometry.cell.width, y),
             style::color(self.faces.shadow),
             bounds,
         );
@@ -697,6 +820,59 @@ mod tests {
         assert_eq!(geometry.hit(Point::new(60.0, 10.0)), None);
         assert_eq!(geometry.hit(Point::new(60.0, 40.0)), None);
         assert_eq!(geometry.hit(Point::new(480.0, 129.0)), None);
+    }
+
+    #[test]
+    fn the_header_row_hits_its_columns() {
+        let grid = grid();
+        let geometry = Geometry::new(&grid, Point::ORIGIN, Size::new(500.0, 300.0), CELL);
+
+        assert_eq!(geometry.header(Point::new(130.0, 40.0)), Some(1));
+        assert_eq!(geometry.header(Point::new(130.0, 10.0)), None);
+        assert_eq!(geometry.header(Point::new(130.0, 60.0)), None);
+        assert_eq!(geometry.header(Point::new(20.0, 40.0)), None);
+    }
+
+    #[test]
+    fn pills_follow_the_count_and_their_crosses_take_them_off() {
+        let mut grid = grid();
+        grid.query.filters.push("id > 3".to_owned());
+        grid.query.sort.push(("name".to_owned(), true));
+        grid.unfiltered = Some(3_503);
+
+        let geometry = Geometry::new(&grid, Point::ORIGIN, Size::new(800.0, 300.0), CELL);
+
+        let placed: Vec<(Pill, &str, f32, f32, f32)> = geometry
+            .pills
+            .iter()
+            .map(|placed| {
+                (
+                    placed.pill,
+                    placed.label.as_str(),
+                    placed.x,
+                    placed.width,
+                    placed.close,
+                )
+            })
+            .collect();
+        assert_eq!(
+            placed,
+            [
+                (Pill::Filter(0), "id > 3", 240.0, 100.0, 310.0),
+                (Pill::Sort(0), "↓ name", 360.0, 100.0, 430.0),
+            ]
+        );
+        assert_eq!(
+            geometry.unpill(Point::new(320.0, 10.0)),
+            Some(Pill::Filter(0))
+        );
+        assert_eq!(geometry.unpill(Point::new(300.0, 10.0)), None);
+        assert_eq!(
+            geometry.unpill(Point::new(455.0, 28.0)),
+            Some(Pill::Sort(0))
+        );
+        assert_eq!(geometry.unpill(Point::new(320.0, 40.0)), None);
+        assert_eq!(geometry.unpill(Point::new(600.0, 10.0)), None);
     }
 
     #[test]
