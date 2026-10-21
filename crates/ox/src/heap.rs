@@ -5,6 +5,7 @@ use std::rc::Rc;
 use num_bigint::BigInt;
 
 use crate::bytecode::Code;
+use crate::map::{Map, Node};
 use crate::native::Native;
 use crate::value::{Kind, Ref, Value};
 use crate::vector::Vector;
@@ -84,6 +85,8 @@ pub struct Heap {
     bigints: Arena<BigInt>,
     vectors: Arena<Vector>,
     nodes: Arena<Box<[Value]>>,
+    maps: Arena<Map>,
+    map_nodes: Arena<Node>,
 }
 
 fn reference(value: Value, kind: Kind) -> Option<u32> {
@@ -219,6 +222,30 @@ impl Heap {
         reference(node, Kind::VecNode)
             .and_then(|index| self.nodes.get(index))
             .map_or(&[], AsRef::as_ref)
+    }
+
+    pub fn map(&mut self, map: Map) -> Result<Value, HeapFull> {
+        let index = self.maps.alloc(map)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Map,
+            index,
+        }))
+    }
+
+    pub fn map_of(&self, value: Value) -> Option<Map> {
+        self.maps.get(reference(value, Kind::Map)?).copied()
+    }
+
+    pub fn map_node(&mut self, node: Node) -> Result<Value, HeapFull> {
+        let index = self.map_nodes.alloc(node)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::MapNode,
+            index,
+        }))
+    }
+
+    pub fn map_node_of(&self, value: Value) -> Option<&Node> {
+        self.map_nodes.get(reference(value, Kind::MapNode)?)
     }
 
     pub fn list(

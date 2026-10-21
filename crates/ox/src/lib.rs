@@ -7,6 +7,7 @@ mod equal;
 pub mod error;
 pub mod heap;
 mod isolate;
+mod map;
 pub mod native;
 mod number;
 pub mod print;

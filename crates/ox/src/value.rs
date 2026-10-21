@@ -28,6 +28,8 @@ pub enum Kind {
     BigInt,
     Vector,
     VecNode,
+    Map,
+    MapNode,
 }
 
 impl Value {
