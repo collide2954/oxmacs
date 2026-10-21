@@ -4,6 +4,7 @@ mod repl;
 mod ruff;
 mod run;
 mod tools;
+mod uv;
 
 use oxmacs_core::applet::Applet;
 use oxmacs_core::command::{Command, CommandId, CommandSpec, Scope, ScopeId};
@@ -89,7 +90,24 @@ const PYTHON: &[Spec] = &[
         keys: &["C-c C-z"],
         run: repl::switch,
     },
+    Spec {
+        name: "python-uv-dashboard",
+        summary: "Show the project's uv dashboard",
+        help: Some(
+            "The dashboard in *uv* shows the project from pyproject.toml, the Python in its .venv, whether uv.lock is up to date, and the required, locked and newer packages. uv checks run in the background; g reads everything again.",
+        ),
+        keys: &["C-c C-u"],
+        run: uv::open,
+    },
 ];
+
+const DASHBOARD: &[Spec] = &[Spec {
+    name: "uv-refresh",
+    summary: "Read the project again and check it with uv",
+    help: None,
+    keys: &["g"],
+    run: uv::refresh,
+}];
 
 fn register(editor: &mut Editor, scope: ScopeId, specs: &[Spec]) -> Vec<CommandId> {
     let mut added = Vec::new();
@@ -138,6 +156,10 @@ impl Applet for Python {
         editor.add_formatter(LANGUAGE, ruff::FORMAT);
         editor.add_linter(LANGUAGE, ruff::LINT);
         editor.add_error_pattern(run::traceback);
+        let dashboard = editor.add_scope("uv dashboard");
+        editor.set_applet_state(uv::UvState { scope: dashboard });
+        register(editor, dashboard, DASHBOARD);
+        editor.bind(dashboard, "q", Command::QuitWindow).ok();
     }
 }
 

@@ -44,7 +44,7 @@ Others are only built when you ask for them. These experimental applets are vers
 | `irc`             | 0.1.0   | `M-x irc`, an IRCv3 client, with `M-x irc-setup` and a bouncer                |
 | `scripting`       | 0.1.0   | A minimal show-and-tell of Rhai scripts, not a supported way to extend oxmacs; `M-x script-console` |
 | `pdf`             | 0.1.0   | A PDF viewer with search, outline, links and dark pages; PDFium from `M-x list-tools` |
-| `python`          | 0.1.0   | Python editing with ruff, running files and pytest, and a console; `C-c C-z` |
+| `python`          | 0.1.0   | Python editing with ruff, pytest, a console and a uv dashboard; `C-c C-u`     |
 
 Turn one on with `--features`, and separate several with commas and no spaces:
 

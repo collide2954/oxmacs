@@ -122,6 +122,16 @@ pub(crate) fn ruff(editor: &Editor) -> Result<PathBuf, String> {
     )
 }
 
+pub(crate) fn uv(editor: &Editor) -> Result<PathBuf, String> {
+    let search = env::var_os("PATH");
+    locate(
+        editor,
+        UV,
+        settings(editor).uv.as_deref(),
+        search.as_deref(),
+    )
+}
+
 pub(crate) fn interpreter_in(
     start: &Path,
     configured: Option<&str>,
