@@ -5,6 +5,7 @@ pub enum Datum {
     Nil,
     Bool(bool),
     Int(i64),
+    BigInt(String),
     Float(f64),
     Char(char),
     Str(String),
@@ -185,19 +186,34 @@ impl<'a> Reader<'a> {
                 }
                 _ => {
                     let token = self.token();
-                    let datum = self.fields(token, start).unwrap_or_else(|| atom(token));
+                    let datum = if numeric(token) {
+                        self.number(token, start)
+                    } else {
+                        self.fields(token, start).unwrap_or_else(|| atom(token))
+                    };
                     self.push(datum, start);
                 }
             }
         }
     }
 
+    fn number(&mut self, token: &str, start: usize) -> Datum {
+        let digits = token.strip_prefix(['-', '+']).unwrap_or(token);
+        if digits.bytes().all(|byte| byte.is_ascii_digit()) {
+            return token.parse::<i64>().map_or_else(
+                |_| Datum::BigInt(token.trim_start_matches('+').to_owned()),
+                Datum::Int,
+            );
+        }
+        if let Ok(value) = token.parse::<f64>() {
+            return Datum::Float(value);
+        }
+        self.error(start, format!("{token} is not a number"));
+        Datum::Symbol(token.to_owned())
+    }
+
     fn fields(&mut self, token: &str, start: usize) -> Option<Datum> {
-        if !token.contains('.')
-            || numeric(token)
-            || token.starts_with([':', '.'])
-            || token.ends_with('.')
-        {
+        if !token.contains('.') || token.starts_with([':', '.']) || token.ends_with('.') {
             return None;
         }
         if token.split('.').any(str::is_empty) {
@@ -573,14 +589,6 @@ fn numeric(token: &str) -> bool {
 }
 
 fn atom(token: &str) -> Datum {
-    if numeric(token) {
-        if let Ok(value) = token.parse::<i64>() {
-            return Datum::Int(value);
-        }
-        if let Ok(value) = token.parse::<f64>() {
-            return Datum::Float(value);
-        }
-    }
     if let Some(name) = token.strip_prefix(':').filter(|name| !name.is_empty()) {
         return Datum::Keyword(name.to_owned());
     }
@@ -759,6 +767,7 @@ mod tests {
             Datum::Nil => "nil".to_owned(),
             Datum::Bool(value) => value.to_string(),
             Datum::Int(number) => number.to_string(),
+            Datum::BigInt(digits) => digits.clone(),
             Datum::Float(number) => format!("{number:?}"),
             Datum::Char(character) => format!("\\{character}"),
             Datum::Str(text) => format!("{text:?}"),
@@ -974,6 +983,48 @@ mod tests {
                 ("This string is never closed".to_owned(), Span::new(13, 20)),
             ]
         );
+    }
+    #[test]
+    fn integers_too_big_for_64_bits_read_as_big_integers() {
+        assert_eq!(
+            data("123456789012345678901234567890 -99999999999999999999 +5"),
+            [
+                (
+                    Datum::BigInt("123456789012345678901234567890".to_owned()),
+                    Span::new(0, 30)
+                ),
+                (
+                    Datum::BigInt("-99999999999999999999".to_owned()),
+                    Span::new(31, 52)
+                ),
+                (Datum::Int(5), Span::new(53, 55)),
+            ]
+        );
+    }
+
+    #[test]
+    fn malformed_numbers_are_reported() {
+        assert_eq!(
+            errors("1abc 2.5.1 -3x 1e"),
+            [
+                ("1abc is not a number".to_owned(), Span::new(0, 4)),
+                ("2.5.1 is not a number".to_owned(), Span::new(5, 10)),
+                ("-3x is not a number".to_owned(), Span::new(11, 14)),
+                ("1e is not a number".to_owned(), Span::new(15, 17)),
+            ]
+        );
+    }
+
+    #[test]
+    fn reading_goes_on_after_mistakes() {
+        assert_eq!(
+            errors(r#"(a 1x) "ok" ) b"#),
+            [
+                ("1x is not a number".to_owned(), Span::new(3, 5)),
+                ("Unexpected )".to_owned(), Span::new(12, 13)),
+            ]
+        );
+        assert_eq!(shapes(r#"(a 1x) "ok" ) b"#), ["(a 1x)", r#""ok""#, "b"]);
     }
     #[test]
     fn symbols_span_their_bytes_in_utf8() {
