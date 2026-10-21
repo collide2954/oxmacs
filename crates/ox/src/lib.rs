@@ -13,6 +13,7 @@ pub mod reader;
 pub mod span;
 pub mod symbol;
 pub mod value;
+mod vector;
 mod vm;
 
 pub use error::Error;

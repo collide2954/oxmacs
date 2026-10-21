@@ -6,6 +6,7 @@ use num_bigint::BigInt;
 use crate::bytecode::Code;
 use crate::native::Native;
 use crate::value::{Kind, Ref, Value};
+use crate::vector::Vector;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeapFull;
@@ -79,6 +80,8 @@ pub struct Heap {
     closures: Arena<Closure>,
     cells: Arena<Value>,
     bigints: Arena<BigInt>,
+    vectors: Arena<Vector>,
+    nodes: Arena<Box<[Value]>>,
 }
 
 fn reference(value: Value, kind: Kind) -> Option<u32> {
@@ -179,6 +182,32 @@ impl Heap {
 
     pub fn bigint_of(&self, value: Value) -> Option<&BigInt> {
         self.bigints.get(reference(value, Kind::BigInt)?)
+    }
+
+    pub fn vector(&mut self, vector: Vector) -> Result<Value, HeapFull> {
+        let index = self.vectors.alloc(vector)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Vector,
+            index,
+        }))
+    }
+
+    pub fn vector_of(&self, value: Value) -> Option<Vector> {
+        self.vectors.get(reference(value, Kind::Vector)?).copied()
+    }
+
+    pub fn node(&mut self, items: Box<[Value]>) -> Result<Value, HeapFull> {
+        let index = self.nodes.alloc(items)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::VecNode,
+            index,
+        }))
+    }
+
+    pub fn node_items(&self, node: Value) -> &[Value] {
+        reference(node, Kind::VecNode)
+            .and_then(|index| self.nodes.get(index))
+            .map_or(&[], AsRef::as_ref)
     }
 
     pub fn list(

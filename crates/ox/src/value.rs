@@ -26,6 +26,8 @@ pub enum Kind {
     Closure,
     Cell,
     BigInt,
+    Vector,
+    VecNode,
 }
 
 impl Value {
