@@ -17,7 +17,7 @@ pub(crate) fn parsed(text: &str) -> (Buffer, Syntax) {
     (buffer, syntax)
 }
 
-fn leading(text: &str) -> usize {
+pub(crate) fn leading(text: &str) -> usize {
     text.chars().take_while(|c| matches!(c, ' ' | '\t')).count()
 }
 
@@ -25,7 +25,7 @@ fn indentation(text: &str, tab_width: usize) -> usize {
     display_column(text, leading(text), tab_width)
 }
 
-fn code(buffer: &Buffer, syntax: &Syntax, line: usize) -> String {
+pub(crate) fn code(buffer: &Buffer, syntax: &Syntax, line: usize) -> String {
     let text = buffer.line_text(line);
     let end = syntax
         .comment_start(buffer, line)

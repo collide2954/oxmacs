@@ -1,5 +1,6 @@
 mod indent;
 mod mode;
+mod repl;
 mod ruff;
 mod run;
 mod tools;
@@ -62,6 +63,31 @@ const PYTHON: &[Spec] = &[
         ),
         keys: &["C-c C-t"],
         run: run::pytest,
+    },
+    Spec {
+        name: "python-shell-send-statement",
+        summary: "Send the statement at point, or the region, to the Python console",
+        help: Some(
+            "Point moves on to the next statement. The console starts if it is not running. Code is sent the way the console reads it: dedented, without the blank lines and comments between statements, and with a blank line closing each block.",
+        ),
+        keys: &["C-RET"],
+        run: repl::send_statement,
+    },
+    Spec {
+        name: "python-shell-send-defun",
+        summary: "Send the class or def around point, or the paragraph, to the Python console",
+        help: None,
+        keys: &["C-c C-c"],
+        run: repl::send_defun,
+    },
+    Spec {
+        name: "python-shell-switch-to-shell",
+        summary: "Show the Python console, starting it if needed",
+        help: Some(
+            "The console runs the project's Python, the same one C-c C-r uses, over pipes in the file's folder.",
+        ),
+        keys: &["C-c C-z"],
+        run: repl::switch,
     },
 ];
 

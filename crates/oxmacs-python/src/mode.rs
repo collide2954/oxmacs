@@ -40,6 +40,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         Feature::Lint,
         Feature::Motion,
         Feature::Items,
+        Feature::Repl,
     ],
 };
 
