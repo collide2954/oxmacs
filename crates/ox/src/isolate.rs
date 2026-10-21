@@ -509,6 +509,34 @@ mod tests {
         );
     }
     #[test]
+    fn str_joins_what_its_arguments_display_as() {
+        all(&[
+            (r#"(str "a" 1 :k nil 2.5 \c)"#, r#""a1:k2.5c""#),
+            ("(str)", r#""""#),
+            (r#"(def name "Ana") "Hi {name}!""#, r#""Hi Ana!""#),
+            (r#""{(+ 1 2)} items""#, r#""3 items""#),
+            (r#"(let [a 1 b 2] "{a}+{b}={(+ a b)}")"#, r#""1+2=3""#),
+        ]);
+    }
+
+    #[test]
+    fn strings_count_and_index_by_character() {
+        all(&[
+            (r#"(count "héllo")"#, "5"),
+            (r#"(count "")"#, "0"),
+            ("(count nil)", "0"),
+            ("(def (f & xs) (count xs)) (f 1 2 3)", "3"),
+            (r#"(nth "héllo" 1)"#, r"\é"),
+            (r#"(nth "日本語" 2)"#, r"\語"),
+            (
+                r#"(nth "abc" 5)"#,
+                "error: Index 5 is out of range for a string of 3 characters",
+            ),
+            ("(count 5)", "error: count expects a collection, got 5"),
+        ]);
+    }
+
+    #[test]
     fn rust_functions_can_be_called_from_ox() {
         let mut isolate = Isolate::new();
         isolate.define_native("twice", 1, Some(1), |_, arguments| match arguments {

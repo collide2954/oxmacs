@@ -23,6 +23,12 @@ pub struct Pair {
 }
 
 #[derive(Debug)]
+struct OxString {
+    text: Box<str>,
+    length: usize,
+}
+
+#[derive(Debug)]
 pub struct Closure {
     pub code: Rc<Code>,
     pub captured: Box<[Value]>,
@@ -67,7 +73,7 @@ impl<T> Arena<T> {
 
 #[derive(Debug, Default)]
 pub struct Heap {
-    strings: Arena<Box<str>>,
+    strings: Arena<OxString>,
     pairs: Arena<Pair>,
     natives: Arena<Native>,
     closures: Arena<Closure>,
@@ -84,7 +90,10 @@ fn reference(value: Value, kind: Kind) -> Option<u32> {
 
 impl Heap {
     pub fn string(&mut self, text: &str) -> Result<Value, HeapFull> {
-        let index = self.strings.alloc(text.into())?;
+        let index = self.strings.alloc(OxString {
+            text: text.into(),
+            length: text.chars().count(),
+        })?;
         Ok(Value::Ref(Ref {
             kind: Kind::String,
             index,
@@ -94,7 +103,13 @@ impl Heap {
     pub fn text(&self, value: Value) -> Option<&str> {
         self.strings
             .get(reference(value, Kind::String)?)
-            .map(AsRef::as_ref)
+            .map(|string| string.text.as_ref())
+    }
+
+    pub fn length(&self, value: Value) -> Option<usize> {
+        self.strings
+            .get(reference(value, Kind::String)?)
+            .map(|string| string.length)
     }
 
     pub fn pair(&mut self, head: Value, tail: Value) -> Result<Value, HeapFull> {
