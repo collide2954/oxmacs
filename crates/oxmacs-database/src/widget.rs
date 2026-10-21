@@ -21,6 +21,7 @@ use crate::table::{GridClick, GridScroll, GridViewport};
 
 pub(crate) const ROW_SCALE: f32 = 1.45;
 const WHEEL_ROWS: f32 = 3.0;
+const ABOVE_ROWS: f32 = 2.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Geometry {
@@ -53,7 +54,7 @@ impl Geometry {
             x += width;
         }
         let rows = if row_height > 0.0 {
-            floor_to_usize((size.height - row_height).max(0.0) / row_height)
+            floor_to_usize((size.height - row_height * ABOVE_ROWS).max(0.0) / row_height)
         } else {
             0
         };
@@ -75,18 +76,20 @@ impl Geometry {
         floor_to_usize((self.size.width - self.gutter).max(0.0) / self.cell.width)
     }
 
+    fn column_at(&self, x: f32) -> Option<usize> {
+        self.boxes
+            .iter()
+            .find(|(_, left, width)| x >= *left && x < left + width)
+            .map(|(column, _, _)| *column)
+    }
+
     pub(crate) fn hit(&self, point: Point) -> Option<(usize, usize)> {
-        let y = point.y - self.origin.y - self.row_height;
+        let y = point.y - self.origin.y - self.row_height * ABOVE_ROWS;
         if y < 0.0 || self.row_height <= 0.0 {
             return None;
         }
         let row = floor_to_usize(y / self.row_height);
-        let column = self
-            .boxes
-            .iter()
-            .find(|(_, x, width)| point.x >= *x && point.x < x + width)?
-            .0;
-        Some((row, column))
+        Some((row, self.column_at(point.x)?))
     }
 }
 
@@ -349,7 +352,11 @@ struct Frame<'g> {
 
 impl Frame<'_> {
     fn row_top(&self, offset: usize) -> f32 {
-        self.bounds.y + self.geometry.row_height * to_f32(offset + 1)
+        self.bounds.y + self.geometry.row_height * (to_f32(offset) + ABOVE_ROWS)
+    }
+
+    fn header_top(&self) -> f32 {
+        self.bounds.y + self.geometry.row_height
     }
 }
 
@@ -374,6 +381,7 @@ impl GridWidget<'_> {
         }
         self.headers(renderer, &frame);
         self.lines(renderer, &frame, shown_rows.len());
+        self.strip(renderer, &frame);
         self.notice(renderer, &frame);
     }
 
@@ -382,6 +390,7 @@ impl GridWidget<'_> {
             bounds, geometry, ..
         } = *frame;
         let row_height = geometry.row_height;
+        let body = frame.row_top(0);
         fill(
             renderer,
             bounds,
@@ -389,14 +398,17 @@ impl GridWidget<'_> {
         );
         fill(
             renderer,
-            Rectangle::new(bounds.position(), Size::new(bounds.width, row_height)),
+            Rectangle::new(
+                Point::new(bounds.x, frame.header_top()),
+                Size::new(bounds.width, row_height),
+            ),
             self.tint(HEADER_TINT),
         );
         fill(
             renderer,
             Rectangle::new(
-                Point::new(bounds.x, bounds.y + row_height),
-                Size::new(geometry.gutter, bounds.height - row_height),
+                Point::new(bounds.x, body),
+                Size::new(geometry.gutter, bounds.y + bounds.height - body),
             ),
             self.tint(HEADER_TINT),
         );
@@ -504,22 +516,44 @@ impl GridWidget<'_> {
         Renderer: text::Renderer<Font = Font>,
     {
         let Frame {
-            bounds,
-            geometry,
-            inset,
+            geometry, inset, ..
         } = *frame;
+        let top = frame.header_top();
         for (column, x, width) in &geometry.boxes {
-            let area = Rectangle::new(
-                Point::new(*x, bounds.y),
-                Size::new(*width, geometry.row_height),
-            );
+            let area = Rectangle::new(Point::new(*x, top), Size::new(*width, geometry.row_height));
             renderer.fill_text(
                 self.text(self.grid.heading(*column), geometry.row_height),
-                Point::new(x + geometry.cell.width, bounds.y + inset),
+                Point::new(x + geometry.cell.width, top + inset),
                 style::color(self.faces.heading),
                 area,
             );
         }
+    }
+
+    fn strip<Renderer>(&self, renderer: &mut Renderer, frame: &Frame<'_>)
+    where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        let Frame {
+            bounds,
+            geometry,
+            inset,
+        } = *frame;
+        let name = &self.grid.query.table;
+        let x = bounds.x + geometry.cell.width;
+        let y = bounds.y + inset;
+        renderer.fill_text(
+            self.text(name.clone(), geometry.row_height),
+            Point::new(x, y),
+            style::color(self.faces.heading),
+            bounds,
+        );
+        renderer.fill_text(
+            self.text(format!(" · {}", self.grid.counted()), geometry.row_height),
+            Point::new(x + to_f32(name.chars().count()) * geometry.cell.width, y),
+            style::color(self.faces.shadow),
+            bounds,
+        );
     }
 
     fn lines<Renderer: renderer::Renderer>(
@@ -532,30 +566,30 @@ impl GridWidget<'_> {
             bounds, geometry, ..
         } = *frame;
         let line = self.tint(LINE_TINT);
+        let top = frame.header_top();
         let bottom = frame.row_top(rows);
         for (_, x, width) in &geometry.boxes {
             fill(
                 renderer,
                 Rectangle::new(
-                    Point::new(x + width - 1.0, bounds.y),
-                    Size::new(1.0, bottom - bounds.y),
+                    Point::new(x + width - 1.0, top),
+                    Size::new(1.0, bottom - top),
                 ),
+                line,
+            );
+        }
+        for y in [top, frame.row_top(0)] {
+            fill(
+                renderer,
+                Rectangle::new(Point::new(bounds.x, y - 1.0), Size::new(bounds.width, 1.0)),
                 line,
             );
         }
         fill(
             renderer,
             Rectangle::new(
-                Point::new(bounds.x, bounds.y + geometry.row_height - 1.0),
-                Size::new(bounds.width, 1.0),
-            ),
-            line,
-        );
-        fill(
-            renderer,
-            Rectangle::new(
-                Point::new(bounds.x + geometry.gutter - 1.0, bounds.y),
-                Size::new(1.0, bounds.height),
+                Point::new(bounds.x + geometry.gutter - 1.0, top),
+                Size::new(1.0, bounds.y + bounds.height - top),
             ),
             line,
         );
@@ -647,7 +681,7 @@ mod tests {
             geometry.boxes,
             [(0, 55.0, 60.0), (1, 115.0, 120.0), (2, 235.0, 220.0)]
         );
-        assert_eq!(geometry.rows, 9);
+        assert_eq!(geometry.rows, 8);
         assert_eq!(geometry.width_in_cells(), 45);
     }
 
@@ -656,12 +690,13 @@ mod tests {
         let grid = grid();
         let geometry = Geometry::new(&grid, Point::ORIGIN, Size::new(500.0, 300.0), CELL);
 
-        assert_eq!(geometry.hit(Point::new(60.0, 30.0)), Some((0, 0)));
-        assert_eq!(geometry.hit(Point::new(130.0, 59.0)), Some((1, 1)));
-        assert_eq!(geometry.hit(Point::new(300.0, 100.0)), Some((2, 2)));
-        assert_eq!(geometry.hit(Point::new(20.0, 100.0)), None);
+        assert_eq!(geometry.hit(Point::new(60.0, 59.0)), Some((0, 0)));
+        assert_eq!(geometry.hit(Point::new(130.0, 88.0)), Some((1, 1)));
+        assert_eq!(geometry.hit(Point::new(300.0, 129.0)), Some((2, 2)));
+        assert_eq!(geometry.hit(Point::new(20.0, 129.0)), None);
         assert_eq!(geometry.hit(Point::new(60.0, 10.0)), None);
-        assert_eq!(geometry.hit(Point::new(480.0, 100.0)), None);
+        assert_eq!(geometry.hit(Point::new(60.0, 40.0)), None);
+        assert_eq!(geometry.hit(Point::new(480.0, 129.0)), None);
     }
 
     #[test]

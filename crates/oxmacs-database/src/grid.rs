@@ -5,6 +5,7 @@ use std::ops::Range;
 
 use crate::driver::{Page, Query, Value, quote};
 use crate::service::DbId;
+use crate::text::thousands;
 use crate::widget::clip;
 
 pub(crate) const PAGE: u64 = 200;
@@ -37,6 +38,7 @@ pub(crate) struct Grid {
     pub(crate) columns: Vec<String>,
     pub(crate) widths: Vec<usize>,
     pub(crate) total: Option<u64>,
+    pub(crate) unfiltered: Option<u64>,
     pub(crate) pages: BTreeMap<u64, Loaded>,
     pub(crate) pending: BTreeSet<u64>,
     pub(crate) error: Option<String>,
@@ -275,6 +277,7 @@ impl Grid {
             columns: Vec::new(),
             widths: Vec::new(),
             total: None,
+            unfiltered: None,
             pages: BTreeMap::new(),
             pending: BTreeSet::new(),
             error: None,
@@ -554,6 +557,22 @@ impl Grid {
         self.query.filters.push(condition.to_owned());
         self.requery();
         true
+    }
+
+    pub(crate) fn counted(&self) -> String {
+        let number = |count: Option<u64>| count.map_or_else(|| "…".to_owned(), thousands);
+        let filtered = !self.query.filters.is_empty();
+        let all = if filtered {
+            self.unfiltered
+        } else {
+            self.total
+        };
+        let noun = if all == Some(1) { "row" } else { "rows" };
+        if filtered {
+            format!("{} of {} {noun}", number(self.total), number(all))
+        } else {
+            format!("{} {noun}", number(all))
+        }
     }
 
     pub(crate) fn pills(&self) -> Vec<(Pill, String)> {
@@ -1030,6 +1049,25 @@ mod tests {
 
         assert_eq!(grid.pills(), []);
         assert_eq!(grid.wanted(), [0]);
+    }
+
+    #[test]
+    fn the_count_says_how_many_rows_the_filters_keep() {
+        let mut grid = grid();
+        assert_eq!(grid.counted(), "… rows");
+        grid.total = Some(3_503);
+        assert_eq!(grid.counted(), "3,503 rows");
+
+        grid.filter("n > 3");
+        assert_eq!(grid.counted(), "… of … rows");
+        grid.unfiltered = Some(3_503);
+        grid.total = Some(12);
+        assert_eq!(grid.counted(), "12 of 3,503 rows");
+        grid.unfiltered = Some(1);
+        grid.total = Some(1);
+        assert_eq!(grid.counted(), "1 of 1 row");
+        grid.clear_pills();
+        assert_eq!(grid.counted(), "… rows");
     }
 
     #[test]

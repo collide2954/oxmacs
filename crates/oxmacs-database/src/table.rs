@@ -15,6 +15,7 @@ pub(crate) struct GridView {
     scope: ScopeId,
     pub(crate) grid: Grid,
     pub(crate) counting: bool,
+    pub(crate) counting_all: bool,
 }
 
 impl AppletBuffer for GridView {
@@ -94,6 +95,11 @@ fn load(editor: &mut Editor, id: BufferId) {
     if count {
         view.counting = true;
     }
+    let count_all =
+        !query.filters.is_empty() && view.grid.unfiltered.is_none() && !view.counting_all;
+    if count_all {
+        view.counting_all = true;
+    }
     for page in wanted {
         editor.request(Request::Rows {
             db,
@@ -103,7 +109,19 @@ fn load(editor: &mut Editor, id: BufferId) {
         });
     }
     if count {
-        editor.request(Request::Count { db, query });
+        editor.request(Request::Count {
+            db,
+            query: query.clone(),
+        });
+    }
+    if count_all {
+        editor.request(Request::Count {
+            db,
+            query: Query {
+                table: query.table,
+                ..Query::default()
+            },
+        });
     }
 }
 
@@ -177,6 +195,7 @@ fn open_table(editor: &mut Editor, db: DbId, title: &str, table: &str, column: u
                 scope,
                 grid: Grid::new(db, query),
                 counting: false,
+                counting_all: false,
             }
         })
     };
@@ -403,7 +422,9 @@ pub(crate) fn refresh(editor: &mut Editor) {
     };
     if let Some((_, view)) = editor.applet_buffer_mut::<GridView>(id) {
         view.grid.reset();
+        view.grid.unfiltered = None;
         view.counting = false;
+        view.counting_all = false;
     }
     load(editor, id);
 }
@@ -445,9 +466,26 @@ fn matching(editor: &Editor, db: DbId, query: &Query) -> Vec<BufferId> {
         .collect()
 }
 
+fn heard_full_count(editor: &mut Editor, db: DbId, table: &str, count: u64) {
+    for id in grids(editor) {
+        if let Some((_, view)) = editor.applet_buffer_mut::<GridView>(id)
+            && view.grid.db == db
+            && view.grid.query.table == table
+        {
+            view.grid.unfiltered = Some(count);
+            view.counting_all = false;
+        }
+    }
+}
+
 pub(crate) fn replied(editor: &mut Editor, reply: &Reply) {
     match reply {
         Reply::Counted { db, query, count } => {
+            if query.filters.is_empty()
+                && let Ok(count) = count
+            {
+                heard_full_count(editor, *db, &query.table, *count);
+            }
             for id in matching(editor, *db, query) {
                 if let Some((_, view)) = editor.applet_buffer_mut::<GridView>(id) {
                     view.counting = false;
@@ -1006,6 +1044,62 @@ mod tests {
         assert_eq!(grid.error, None);
         assert_eq!(grid.query.filters, Vec::<String>::new());
         assert_eq!(grid.total, Some(4));
+    }
+
+    #[test]
+    fn filtered_tables_count_all_their_rows_too() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+
+        press(&mut editor, "C-f C-f =");
+        pump(&mut editor, &mut service);
+
+        let grid = view(&editor);
+        assert_eq!((grid.total, grid.unfiltered), (Some(2), Some(4)));
+        assert_eq!(grid.counted(), "2 of 4 rows");
+    }
+
+    #[test]
+    fn the_full_count_is_asked_for_when_unknown() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+        press(&mut editor, "C-f C-f =");
+        pump(&mut editor, &mut service);
+        let db = view(&editor).db;
+
+        press(&mut editor, "g");
+        let asked = requests(&mut editor);
+        assert!(asked.contains(&Request::Count {
+            db,
+            query: query("albums"),
+        }));
+        for request in asked {
+            let reply = service.handle(request);
+            editor.deliver(&Payload::new(reply));
+        }
+        press(&mut editor, "C-n");
+
+        assert_eq!(view(&editor).unfiltered, Some(4));
+        assert_eq!(requests(&mut editor), []);
+    }
+
+    #[test]
+    fn every_grid_of_the_table_hears_new_full_counts() {
+        let (dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+        press(&mut editor, "C-f C-f =");
+        pump(&mut editor, &mut service);
+        let connection = rusqlite::Connection::open(dir.path().join("music.db")).unwrap();
+        connection
+            .execute_batch("INSERT INTO albums (title) VALUES ('Powerage')")
+            .unwrap();
+
+        press(&mut editor, "C-x o g");
+        pump(&mut editor, &mut service);
+
+        let id = grids(&editor)[0];
+        let grid = &editor.applet_buffer::<GridView>(id).unwrap().1.grid;
+        assert_eq!((grid.total, grid.unfiltered), (Some(2), Some(5)));
     }
 
     #[test]
