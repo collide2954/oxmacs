@@ -26,6 +26,7 @@ pub struct Syntax {
 pub struct ReadError {
     pub message: String,
     pub span: Span,
+    pub incomplete: bool,
 }
 
 const MAX_DEPTH: usize = 1000;
@@ -97,6 +98,15 @@ impl<'a> Reader<'a> {
         self.errors.push(ReadError {
             message: message.into(),
             span,
+            incomplete: false,
+        });
+    }
+
+    fn unfinished(&mut self, span: Span, message: impl Into<String>) {
+        self.errors.push(ReadError {
+            message: message.into(),
+            span,
+            incomplete: self.end == self.source.len(),
         });
     }
 
@@ -134,7 +144,7 @@ impl<'a> Reader<'a> {
                 depth -= 1;
                 self.at += 2;
             } else if self.next_char().is_none() {
-                self.error(start, "This comment is never closed");
+                self.unfinished(Span::new(start, self.at), "This comment is never closed");
                 return;
             }
         }
@@ -153,7 +163,7 @@ impl<'a> Reader<'a> {
             let start = self.at;
             let Some(first) = self.rest().chars().next() else {
                 while let Some(frame) = self.frames.pop() {
-                    self.abandon(frame);
+                    self.abandon(frame, true);
                 }
                 return;
             };
@@ -313,7 +323,7 @@ impl<'a> Reader<'a> {
         ) else {
             while matches!(self.frames.last(), Some(Frame::Prefix { .. })) {
                 if let Some(frame) = self.frames.pop() {
-                    self.abandon(frame);
+                    self.abandon(frame, false);
                 }
             }
             self.at += 1;
@@ -322,7 +332,7 @@ impl<'a> Reader<'a> {
         };
         while self.frames.len() > position + 1 {
             if let Some(frame) = self.frames.pop() {
-                self.abandon(frame);
+                self.abandon(frame, false);
             }
         }
         self.at += 1;
@@ -336,25 +346,29 @@ impl<'a> Reader<'a> {
         }
     }
 
-    fn abandon(&mut self, frame: Frame) {
-        match frame {
-            Frame::Collection {
-                bracket,
-                start,
-                items,
-            } => {
-                self.error_at(
-                    Span::new(start, start + 1),
-                    format!("This {bracket} is never closed"),
-                );
-                self.finish(bracket, start, items);
-            }
-            Frame::Prefix { mark, start, .. } => {
-                self.error_at(
-                    Span::new(start, start + mark.len()),
-                    format!("Put something after {mark}"),
-                );
-            }
+    fn abandon(&mut self, frame: Frame, at_end: bool) {
+        let (span, message) = match &frame {
+            Frame::Collection { bracket, start, .. } => (
+                Span::new(*start, start + 1),
+                format!("This {bracket} is never closed"),
+            ),
+            Frame::Prefix { mark, start, .. } => (
+                Span::new(*start, start + mark.len()),
+                format!("Put something after {mark}"),
+            ),
+        };
+        if at_end {
+            self.unfinished(span, message);
+        } else {
+            self.error_at(span, message);
+        }
+        if let Frame::Collection {
+            bracket,
+            start,
+            items,
+        } = frame
+        {
+            self.finish(bracket, start, items);
         }
     }
 
@@ -396,7 +410,7 @@ impl<'a> Reader<'a> {
             let here = self.at;
             match self.next_char() {
                 None => {
-                    self.error(start, "This string is never closed");
+                    self.unfinished(Span::new(start, self.at), "This string is never closed");
                     break self.at;
                 }
                 Some('"') => break here,
@@ -441,7 +455,7 @@ impl<'a> Reader<'a> {
 
     fn interpolation(&mut self, open: usize) -> Option<Syntax> {
         let Some(close) = self.matching_brace() else {
-            self.error_at(Span::new(open, open + 1), "This { is never closed");
+            self.unfinished(Span::new(open, open + 1), "This { is never closed");
             self.at = self.end;
             return None;
         };
@@ -1025,6 +1039,24 @@ mod tests {
             ]
         );
         assert_eq!(shapes(r#"(a 1x) "ok" ) b"#), ["(a 1x)", r#""ok""#, "b"]);
+    }
+    #[test]
+    fn errors_at_the_end_say_more_input_could_finish_them() {
+        let flags = |source: &str| -> Vec<bool> {
+            read(source)
+                .1
+                .into_iter()
+                .map(|error| error.incomplete)
+                .collect()
+        };
+
+        assert_eq!(flags("(a [b"), [true, true]);
+        assert_eq!(flags("\"open"), [true]);
+        assert_eq!(flags("#| open"), [true]);
+        assert_eq!(flags("'"), [true]);
+        assert_eq!(flags("(a [b)"), [false]);
+        assert_eq!(flags("1x"), [false]);
+        assert_eq!(flags(r#""{"#), [true, true]);
     }
     #[test]
     fn symbols_span_their_bytes_in_utf8() {

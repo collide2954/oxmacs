@@ -1,9 +1,11 @@
 use std::cmp::Ordering;
+use std::io::{self, Write};
 
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::number::Number;
+use crate::print;
 use crate::value::Value;
 
 type Step = fn(Number, Number) -> Result<Number, Error>;
@@ -59,7 +61,30 @@ fn chain(
     ))
 }
 
+fn output(heap: &Heap, arguments: &[Value], newline: bool) -> Result<Value, Error> {
+    let mut text = arguments
+        .iter()
+        .map(|value| print::display(heap, *value))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if newline {
+        text.push('\n');
+    }
+    let mut stdout = io::stdout().lock();
+    stdout
+        .write_all(text.as_bytes())
+        .and_then(|()| stdout.flush())
+        .map_err(|error| Error::new(error.to_string()))?;
+    Ok(Value::Nil)
+}
+
 pub fn install(isolate: &mut Isolate) {
+    isolate.define_native("print", 0, None, |heap, arguments| {
+        output(heap, arguments, false)
+    });
+    isolate.define_native("println", 0, None, |heap, arguments| {
+        output(heap, arguments, true)
+    });
     isolate.define_native("+", 0, None, |heap, arguments| {
         fold(heap, "+", Number::Int(0), arguments, Number::add)
     });
