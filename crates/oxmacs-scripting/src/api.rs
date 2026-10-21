@@ -64,6 +64,13 @@ pub(crate) fn run(editor: &mut Editor, name: &str) -> Reply {
     Ok(Dynamic::UNIT)
 }
 
+pub(crate) fn ask(editor: &mut Editor, prompt: &str, callback: Callback) -> Dynamic {
+    editor.prompt(prompt, move |editor, answer| {
+        script::call_back(editor, &callback, (answer,));
+    });
+    Dynamic::UNIT
+}
+
 pub(crate) fn command(
     editor: &mut Editor,
     name: String,
@@ -105,7 +112,7 @@ mod tests {
     use oxmacs_core::editor::Editor;
 
     use crate::script::{Origin, describe, evaluate};
-    use crate::testing::{m_x, press};
+    use crate::testing::{m_x, press, type_text};
 
     fn evaluated(editor: &mut Editor, code: &str) -> String {
         match evaluate(editor, code) {
@@ -257,6 +264,50 @@ mod tests {
         evaluated(&mut editor, "command(\"broken\", \"Break\", || nope())");
 
         m_x(&mut editor, "broken");
+
+        let message = editor.message().unwrap_or_default();
+        assert!(message.starts_with("Function not found: nope"), "{message}");
+    }
+
+    #[test]
+    fn ask_calls_back_with_the_answer_once_it_is_given() {
+        let mut editor = holding("");
+
+        assert_eq!(
+            evaluated(
+                &mut editor,
+                "ask(\"Name: \", |name| insert(\"Hi \" + name))"
+            ),
+            "()"
+        );
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Name: ");
+        type_text(&mut editor, "Ada");
+        press(&mut editor, "RET");
+
+        assert_eq!(editor.buffer().contents(), "Hi Ada");
+    }
+
+    #[test]
+    fn answers_reach_closures_with_what_they_captured() {
+        let mut editor = holding("");
+
+        evaluated(
+            &mut editor,
+            "let greeting = \"Hello \"; ask(\"Name: \", |name| insert(greeting + name))",
+        );
+        type_text(&mut editor, "Bo");
+        press(&mut editor, "RET");
+
+        assert_eq!(editor.buffer().contents(), "Hello Bo");
+    }
+
+    #[test]
+    fn errors_in_answers_show_in_the_echo_area() {
+        let mut editor = holding("");
+        evaluated(&mut editor, "ask(\"Name: \", |name| nope(name))");
+
+        type_text(&mut editor, "x");
+        press(&mut editor, "RET");
 
         let message = editor.message().unwrap_or_default();
         assert!(message.starts_with("Function not found: nope"), "{message}");

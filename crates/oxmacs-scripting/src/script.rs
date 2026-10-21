@@ -101,6 +101,15 @@ fn with_editor(link: Link, lib: &Arc<AST>) -> Engine {
         on_editor(&to, move |editor| api::run(editor, &name))
     });
     let (to, shared) = (link.clone(), Arc::clone(lib));
+    engine.register_fn("ask", move |prompt: &str, function: FnPtr| {
+        let callback = Callback {
+            function,
+            lib: Arc::clone(&shared),
+        };
+        let prompt = prompt.to_owned();
+        on_editor(&to, move |editor| Ok(api::ask(editor, &prompt, callback)))
+    });
+    let (to, shared) = (link.clone(), Arc::clone(lib));
     engine.register_fn(
         "command",
         move |name: &str, summary: &str, function: FnPtr| {
