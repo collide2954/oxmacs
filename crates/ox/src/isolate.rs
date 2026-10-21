@@ -537,6 +537,21 @@ mod tests {
     }
 
     #[test]
+    fn vector_literals_evaluate_their_items() {
+        all(&[
+            ("[]", "[]"),
+            ("[1 (+ 1 1) 3]", "[1 2 3]"),
+            (r#"[[1 2] "a" :k nil \c]"#, r#"[[1 2] "a" :k nil \c]"#),
+            ("(let [x 5] [x (* x x)])", "[5 25]"),
+            ("(def (f & xs) xs) (f [1] [2])", "([1] [2])"),
+            (
+                "[1 (undefined-thing)]",
+                "error: undefined-thing is not defined",
+            ),
+        ]);
+    }
+
+    #[test]
     fn equality_is_exact_and_structural() {
         all(&[
             ("(= 1 1)", "true"),

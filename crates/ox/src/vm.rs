@@ -8,6 +8,7 @@ use crate::heap::{Closure, Heap};
 use crate::print;
 use crate::symbol::Sym;
 use crate::value::Value;
+use crate::vector::Vector;
 
 const MAX_FRAMES: usize = 400_000;
 
@@ -206,6 +207,13 @@ impl Runtime {
             Op::MakeCell { register } => {
                 let cell = self.heap.cell(machine.get(register)).map_err(full)?;
                 machine.set(register, cell);
+            }
+            Op::MakeVector { to, base, count } => {
+                let start = machine.base + usize::from(base);
+                let items = &machine.stack[start..start + usize::from(count)];
+                let vector = Vector::from_items(&mut self.heap, items).map_err(full)?;
+                let value = self.heap.vector(vector).map_err(full)?;
+                machine.set(to, value);
             }
             Op::CellGet { to, cell } => {
                 let value = self

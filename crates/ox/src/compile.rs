@@ -252,6 +252,7 @@ impl Compiler<'_> {
                 return Ok(());
             }
             Datum::List(items) => return self.call(items, target, form.span, tail),
+            Datum::Vector(items) => return self.vector(items, target, form.span),
             Datum::Nil => Value::Nil,
             Datum::Bool(flag) => Value::Bool(*flag),
             Datum::Int(number) => Value::Int(*number),
@@ -270,7 +271,7 @@ impl Compiler<'_> {
                     .bigint(number)
                     .map_err(|full| Error::at(form.span, full.to_string()))?
             }
-            _ => return Err(Error::at(form.span, "This form is not supported yet")),
+            Datum::Map(_) => return Err(Error::at(form.span, "This form is not supported yet")),
         };
         self.load(value, target, form.span)
     }
@@ -645,6 +646,25 @@ impl Compiler<'_> {
         for (index, form) in forms.iter().enumerate() {
             self.form(form, target, tail && index == last)?;
         }
+        Ok(())
+    }
+
+    fn vector(&mut self, items: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let count = u16::try_from(items.len())
+            .map_err(|_| Error::at(span, "This vector has too many items"))?;
+        let base = self.reserve(items.len(), span)?;
+        for (offset, item) in (0..).zip(items) {
+            self.expression(item, base + offset)?;
+        }
+        self.emit(
+            Op::MakeVector {
+                to: target,
+                base,
+                count,
+            },
+            span,
+        );
+        self.release(base);
         Ok(())
     }
 

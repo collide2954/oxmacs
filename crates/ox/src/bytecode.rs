@@ -8,22 +8,72 @@ pub type Register = u16;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Op {
-    Constant { to: Register, index: u32 },
-    Global { to: Register, name: Sym },
-    DefineGlobal { name: Sym, from: Register },
-    SetGlobal { name: Sym, from: Register },
-    Move { to: Register, from: Register },
-    Closure { to: Register, function: u32 },
-    Captured { to: Register, index: u16 },
-    MakeCell { register: Register },
-    CellGet { to: Register, cell: Register },
-    CellSet { cell: Register, from: Register },
-    Call { base: Register, count: u16 },
-    TailCall { base: Register, count: u16 },
-    Jump { to: u32 },
-    JumpUnless { test: Register, to: u32 },
-    JumpIfSupplied { bit: u8, to: u32 },
-    Return { from: Register },
+    Constant {
+        to: Register,
+        index: u32,
+    },
+    Global {
+        to: Register,
+        name: Sym,
+    },
+    DefineGlobal {
+        name: Sym,
+        from: Register,
+    },
+    SetGlobal {
+        name: Sym,
+        from: Register,
+    },
+    Move {
+        to: Register,
+        from: Register,
+    },
+    Closure {
+        to: Register,
+        function: u32,
+    },
+    Captured {
+        to: Register,
+        index: u16,
+    },
+    MakeCell {
+        register: Register,
+    },
+    MakeVector {
+        to: Register,
+        base: Register,
+        count: u16,
+    },
+    CellGet {
+        to: Register,
+        cell: Register,
+    },
+    CellSet {
+        cell: Register,
+        from: Register,
+    },
+    Call {
+        base: Register,
+        count: u16,
+    },
+    TailCall {
+        base: Register,
+        count: u16,
+    },
+    Jump {
+        to: u32,
+    },
+    JumpUnless {
+        test: Register,
+        to: u32,
+    },
+    JumpIfSupplied {
+        bit: u8,
+        to: u32,
+    },
+    Return {
+        from: Register,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
