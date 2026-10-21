@@ -15,6 +15,9 @@ const LITERALS: &[&str] = &[
 
 impl Syntax {
     pub fn indentation(&self, buffer: &Buffer, line: usize, tab_width: usize) -> Option<usize> {
+        if let Some(guess) = self.language.indentation().guess {
+            return guess(self, buffer, line, tab_width);
+        }
         let tree = self.synced(buffer)?;
         let text = buffer.line_text(line);
         let leading = text.chars().take_while(|c| matches!(c, ' ' | '\t')).count();

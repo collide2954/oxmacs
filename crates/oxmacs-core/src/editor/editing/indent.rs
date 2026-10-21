@@ -1,10 +1,17 @@
 use crate::editor::Editor;
+use crate::syntax::Indentation;
 
 const ELECTRIC: &[char] = &['}', ')', ']'];
 
 impl Editor {
     fn indents(&self) -> bool {
         self.minibuffer.is_none() && self.buffers.syntax(0).is_some()
+    }
+
+    fn indentation_rules(&self) -> Option<Indentation> {
+        self.buffers
+            .syntax(0)
+            .map(|syntax| syntax.language().indentation())
     }
 
     pub(in crate::editor) fn indent_for_tab(&mut self) {
@@ -43,7 +50,12 @@ impl Editor {
         }
         self.delete_selection();
         let line = self.point_line();
-        self.indent_line(line);
+        if self
+            .indentation_rules()
+            .is_some_and(|rules| rules.continues)
+        {
+            self.indent_line(line);
+        }
         let buffer = self.buffers.current_mut();
         let point = buffer.point();
         let spaces = buffer
@@ -71,7 +83,12 @@ impl Editor {
     }
 
     pub(in crate::editor) fn reindent_after(&mut self, typed: char) {
-        if !self.indents() || !ELECTRIC.contains(&typed) {
+        if !self.indents()
+            || !ELECTRIC.contains(&typed)
+            || self
+                .indentation_rules()
+                .is_some_and(|rules| rules.guess.is_some())
+        {
             return;
         }
         let buffer = self.buffers.current();
@@ -122,12 +139,52 @@ impl Editor {
 mod tests {
     use crate::editor::Editor;
     use crate::editor::test_support::{editor_with, lines, press, type_text};
-    use crate::syntax::Language;
+    use crate::syntax::{Grammar, Indentation, Language, LanguageSpec, Outline};
 
     fn rust(text: &str, point: usize) -> Editor {
         let mut editor = editor_with(text, point);
         editor.set_major_mode(Some(Language::RUST));
         editor
+    }
+
+    static GUESSING_GRAMMAR: Grammar =
+        Grammar::new("toml", || tree_sitter_toml_ng::LANGUAGE.into(), "", "");
+
+    static GUESSING: LanguageSpec = LanguageSpec {
+        name: "Guessing",
+        extensions: &[],
+        file_names: &[],
+        aliases: &[],
+        line_comment: None,
+        pairs: &[],
+        indentation: Indentation {
+            guess: Some(|_, _, line, _| Some(line * 2)),
+            ..Indentation::KEEP
+        },
+        grammar: Some(&GUESSING_GRAMMAR),
+        grammars: &[],
+        outline: Outline::NONE,
+        features: &[],
+    };
+
+    #[test]
+    fn languages_can_guess_the_indentation_of_each_line() {
+        let mut editor = editor_with("a\nb", 2);
+        editor.set_major_mode(Some(Language::new(&GUESSING)));
+
+        press(&mut editor, "TAB C-e RET");
+
+        assert_eq!(lines(&editor), ["a", "  b", "    "]);
+    }
+
+    #[test]
+    fn return_leaves_the_line_alone_where_indentation_is_kept() {
+        let mut editor = editor_with("[a]\n  x = 1", 11);
+        editor.set_major_mode(Some(Language::TOML));
+
+        press(&mut editor, "RET");
+
+        assert_eq!(lines(&editor), ["[a]", "  x = 1", "  "]);
     }
 
     #[test]

@@ -66,6 +66,15 @@ fn levels(buffer: &Buffer, syntax: &Syntax, line: usize, tab_width: usize) -> Ve
     iter::once(guess).chain(others).collect()
 }
 
+pub(crate) fn guess(
+    syntax: &Syntax,
+    buffer: &Buffer,
+    line: usize,
+    tab_width: usize,
+) -> Option<usize> {
+    levels(buffer, syntax, line, tab_width).first().copied()
+}
+
 fn refused(editor: &mut Editor) -> bool {
     if !editor.buffer().is_read_only() {
         return false;
@@ -126,29 +135,6 @@ pub(crate) fn indent_line(editor: &mut Editor) {
     let buffer = editor.buffer_mut();
     buffer.close_undo_step();
     reindent(buffer, line, target);
-}
-
-pub(crate) fn newline(editor: &mut Editor) {
-    if refused(editor) {
-        return;
-    }
-    let buffer = editor.buffer_mut();
-    buffer.close_undo_step();
-    if let Some(selection) = buffer.selection() {
-        buffer.delete_range(selection);
-    }
-    buffer.deactivate_mark();
-    let point = buffer.point();
-    let spaces = buffer
-        .chars_before(point)
-        .take(buffer.column(point))
-        .take_while(|c| matches!(c, ' ' | '\t'))
-        .count();
-    buffer.delete_range(point - spaces..point);
-    buffer.insert("\n");
-    let line = buffer.line_of(buffer.point());
-    let target = guesses(editor, line).first().copied().unwrap_or(0);
-    reindent(editor.buffer_mut(), line, target);
 }
 
 #[cfg(test)]
@@ -264,6 +250,18 @@ mod tests {
     fn return_drops_spaces_before_point_and_splits_the_line() {
         assert_eq!(after("x = 1   ", 8, "RET").0, "x = 1\n");
         assert_eq!(after("if a: b", 5, "RET"), ("if a:\n    b".to_owned(), 10));
+    }
+
+    #[test]
+    fn indenting_the_region_follows_the_guess() {
+        let mut editor = editor_with("def f():\nx = 1\nreturn x", 0);
+
+        press(&mut editor, "C-x h C-M-\\");
+
+        assert_eq!(
+            editor.buffer().contents(),
+            "def f():\n    x = 1\n    return x"
+        );
     }
 
     #[test]

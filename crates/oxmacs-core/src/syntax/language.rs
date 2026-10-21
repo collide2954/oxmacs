@@ -4,6 +4,7 @@ use std::sync::OnceLock;
 
 use tree_sitter::{Node, Query};
 
+use crate::syntax::Syntax;
 use crate::syntax::highlight::Highlighter;
 use crate::text::Buffer;
 
@@ -117,6 +118,8 @@ impl fmt::Debug for Grammar {
     }
 }
 
+pub type IndentGuess = fn(&Syntax, &Buffer, usize, usize) -> Option<usize>;
+
 #[derive(Debug, Clone, Copy)]
 pub struct Indentation {
     pub unit: usize,
@@ -124,6 +127,7 @@ pub struct Indentation {
     pub fresh_words: &'static [&'static str],
     pub from_owner: bool,
     pub hanging: bool,
+    pub guess: Option<IndentGuess>,
 }
 
 impl Indentation {
@@ -133,6 +137,7 @@ impl Indentation {
         fresh_words: &[],
         from_owner: false,
         hanging: false,
+        guess: None,
     };
 }
 

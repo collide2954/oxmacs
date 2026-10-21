@@ -17,11 +17,8 @@ static SPEC: LanguageSpec = LanguageSpec {
     line_comment: Some("#"),
     pairs: &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ('\'', '\'')],
     indentation: Indentation {
-        unit: 4,
-        continues: false,
-        fresh_words: &[],
-        from_owner: false,
-        hanging: false,
+        guess: Some(crate::indent::guess),
+        ..Indentation::KEEP
     },
     grammar: Some(&GRAMMAR),
     grammars: &[],

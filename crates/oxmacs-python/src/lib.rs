@@ -41,13 +41,6 @@ const PYTHON: &[Spec] = &[
         run: indent::indent_line,
     },
     Spec {
-        name: "python-newline-and-indent",
-        summary: "Start a new line indented as TAB would guess",
-        help: None,
-        keys: &["RET", "C-j"],
-        run: indent::newline,
-    },
-    Spec {
         name: "python-run-file",
         summary: "Run this file with the project's Python in *compilation*",
         help: Some(
