@@ -2,6 +2,7 @@ pub(super) mod clipboard;
 pub(super) mod comments;
 pub(super) mod format;
 pub(super) mod indent;
+pub(super) mod macros;
 pub(super) mod pairs;
 pub(super) mod selection;
 pub(super) mod undo;

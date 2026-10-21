@@ -40,6 +40,7 @@ impl Editor {
 
     pub(in crate::editor) fn keyboard_quit(&mut self) {
         self.shift_selection = false;
+        self.cancel_macro();
         if self.minibuffer.take().is_none() {
             self.buffers.current_mut().deactivate_mark();
         }

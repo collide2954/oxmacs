@@ -108,6 +108,12 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-g", Command::KeyboardQuit),
     ("ESC ESC", Command::KeyboardQuit),
     ("C-x C-c", Command::SaveBuffersKillOxmacs),
+    ("C-x (", Command::KmacroStartMacro),
+    ("C-x )", Command::KmacroEndMacro),
+    ("<f3>", Command::KmacroStartMacroOrInsertCounter),
+    ("<f4>", Command::KmacroEndOrCallMacro),
+    ("C-x e", Command::KmacroEndAndCallMacro),
+    ("C-x C-k r", Command::ApplyMacroToRegionLines),
 ];
 
 const MINIBUFFER: &[(&str, Command)] = &[

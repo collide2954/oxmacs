@@ -133,6 +133,13 @@ impl Editor {
                 return false;
             }
         }
+        if self
+            .search
+            .as_ref()
+            .is_some_and(|search| !search.step.success)
+        {
+            self.macros.faulted = true;
+        }
         true
     }
 

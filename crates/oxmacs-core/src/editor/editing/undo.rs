@@ -9,6 +9,9 @@ impl Editor {
         command: Command,
         previous: Option<Command>,
     ) {
+        if self.macros.replaying() {
+            return;
+        }
         let typing = command == Command::SelfInsertCommand;
         if typing && previous == Some(command) && self.typed_in_step < TYPING_STEP {
             self.typed_in_step += 1;

@@ -236,9 +236,15 @@ impl Editor {
     }
 
     pub fn mode_line_segments(&self) -> Vec<String> {
-        self.mode_line_segments
-            .iter()
-            .filter_map(|segment| segment(self))
+        self.macros
+            .recording()
+            .then(|| "Recording macro".to_owned())
+            .into_iter()
+            .chain(
+                self.mode_line_segments
+                    .iter()
+                    .filter_map(|segment| segment(self)),
+            )
             .collect()
     }
 

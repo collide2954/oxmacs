@@ -118,6 +118,7 @@ pub struct Editor {
     goal_column: Option<usize>,
     shift_selection: bool,
     typed_in_step: usize,
+    macros: editing::macros::Macros,
     drag_anchor: Option<usize>,
     line_anchor: Option<usize>,
     primary: Option<Range<usize>>,
@@ -213,6 +214,7 @@ impl Editor {
             goal_column: None,
             shift_selection: false,
             typed_in_step: 0,
+            macros: editing::macros::Macros::default(),
             drag_anchor: None,
             line_anchor: None,
             primary: None,
@@ -363,6 +365,9 @@ impl Editor {
     }
 
     pub fn handle_key(&mut self, mut key: Key) {
+        if self.note_macro_key(key) {
+            return;
+        }
         self.message = None;
         if self.transient_key(key)
             || self.answer_question(key)
@@ -417,6 +422,7 @@ impl Editor {
     fn report_undefined(&mut self) {
         let keys = KeySequence::from(mem::take(&mut self.pending));
         self.message = Some(format!("{keys} is undefined"));
+        self.macros.faulted = true;
     }
 
     fn quits_pending_sequence(&self, key: Key) -> bool {

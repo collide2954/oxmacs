@@ -40,6 +40,10 @@ impl Editor {
     }
 
     pub(in crate::editor) fn request_paste(&mut self) {
+        if self.macros.replaying() {
+            self.paste(None);
+            return;
+        }
         self.effects.push(Effect::ReadClipboard);
     }
 

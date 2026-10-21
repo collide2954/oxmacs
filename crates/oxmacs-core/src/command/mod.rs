@@ -221,6 +221,21 @@ pub enum Command {
     #[strum(message = "Show the oxmacs start screen")]
     AboutOxmacs,
     #[strum(
+        message = "Start recording a keyboard macro",
+        detailed_message = "Every key you press is recorded until C-x ) or F4 stops it; F4 or C-x e then plays the keys back. C-g while recording throws the macro away."
+    )]
+    KmacroStartMacro,
+    #[strum(message = "Stop recording the keyboard macro")]
+    KmacroEndMacro,
+    #[strum(message = "Start a macro, or insert its counter while recording")]
+    KmacroStartMacroOrInsertCounter,
+    #[strum(message = "Stop recording, or play back the last keyboard macro")]
+    KmacroEndOrCallMacro,
+    #[strum(message = "Play back the last keyboard macro; e plays it again")]
+    KmacroEndAndCallMacro,
+    #[strum(message = "Play back the last keyboard macro on each line of the region")]
+    ApplyMacroToRegionLines,
+    #[strum(
         message = "Switch to a color theme by name",
         detailed_message = "The list starts on the theme in use, and the whole editor previews whichever theme is selected as you move or type. RET keeps it and C-g puts the old one back. The new theme shows as an unsaved change in *Settings*; save it there with C-x C-s to keep it."
     )]

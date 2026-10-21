@@ -20,6 +20,7 @@ impl Editor {
         }
         let message = format!("Buffer is read-only: {}", buffer.name());
         self.show_message(message);
+        self.macros.faulted = true;
         true
     }
 }
