@@ -11,6 +11,8 @@ workspace = true
 [dependencies]
 oxmacs-core.workspace = true
 oxmacs-gui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 tree-sitter.workspace = true
 tree-sitter-python.workspace = true
 

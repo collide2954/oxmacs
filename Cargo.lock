@@ -4692,6 +4692,8 @@ version = "0.1.0"
 dependencies = [
  "oxmacs-core",
  "oxmacs-gui",
+ "serde",
+ "serde_json",
  "tempfile",
  "tree-sitter",
  "tree-sitter-python",

@@ -36,6 +36,8 @@ static SPEC: LanguageSpec = LanguageSpec {
         Feature::Indentation,
         Feature::Comments,
         Feature::Pairs,
+        Feature::Formatting,
+        Feature::Lint,
         Feature::Motion,
         Feature::Items,
     ],

@@ -1,12 +1,15 @@
 mod indent;
 mod mode;
+mod ruff;
+mod tools;
 
 use oxmacs_core::applet::Applet;
-use oxmacs_core::command::{CommandId, CommandSpec, Scope, ScopeId};
+use oxmacs_core::command::{Command, CommandId, CommandSpec, Scope, ScopeId};
 use oxmacs_core::editor::Editor;
 use oxmacs_gui::applet::GuiApplet;
 
 pub use mode::LANGUAGE;
+pub use tools::{RUFF, Settings, UV};
 
 struct Spec {
     name: &'static str,
@@ -81,7 +84,14 @@ impl Applet for Python {
         let python = editor.add_scope("Python buffers");
         register(editor, Scope::Global.into(), GLOBAL);
         register(editor, python, PYTHON);
+        editor.bind(python, "C-c C-f", Command::FormatBuffer).ok();
         editor.add_language(LANGUAGE, Some(python));
+        editor.add_config_table::<Settings>(tools::TABLE);
+        editor.add_settings(tools::TABLE, tools::SETTINGS);
+        editor.add_managed_tool(RUFF);
+        editor.add_managed_tool(UV);
+        editor.add_formatter(LANGUAGE, ruff::FORMAT);
+        editor.add_linter(LANGUAGE, ruff::LINT);
     }
 }
 
