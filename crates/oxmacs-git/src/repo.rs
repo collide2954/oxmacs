@@ -167,27 +167,44 @@ pub(crate) fn describe(commit: &gix::Commit<'_>) -> Commit {
 
 fn upstream(repository: &gix::Repository) -> Option<Upstream> {
     let head = repository.head_name().ok()??;
+    upstream_of(repository, head.as_ref())
+}
+
+pub(crate) fn upstream_tip(
+    repository: &gix::Repository,
+    branch: &gix::refs::FullNameRef,
+) -> Option<(String, gix::ObjectId)> {
     let fetch = gix::remote::Direction::Fetch;
-    let tracking = if let Some(Ok(tracking)) =
-        repository.branch_remote_tracking_ref_name(head.as_ref(), fetch)
-    {
-        tracking
-    } else {
-        let remote = repository.branch_remote_name(head.shorten(), fetch)?;
-        if remote.as_bstr() != "." {
-            return None;
-        }
-        repository
-            .branch_remote_ref_name(head.as_ref(), fetch)?
-            .ok()?
-    };
-    let theirs = repository
+    let tracking =
+        if let Some(Ok(tracking)) = repository.branch_remote_tracking_ref_name(branch, fetch) {
+            tracking
+        } else {
+            let remote = repository.branch_remote_name(branch.shorten(), fetch)?;
+            if remote.as_bstr() != "." {
+                return None;
+            }
+            repository.branch_remote_ref_name(branch, fetch)?.ok()?
+        };
+    let id = repository
         .find_reference(tracking.as_ref())
         .ok()?
         .peel_to_id()
         .ok()?
         .detach();
-    let ours = repository.head_id().ok()?.detach();
+    Some((tracking.shorten().to_string(), id))
+}
+
+pub(crate) fn upstream_of(
+    repository: &gix::Repository,
+    branch: &gix::refs::FullNameRef,
+) -> Option<Upstream> {
+    let (name, theirs) = upstream_tip(repository, branch)?;
+    let ours = repository
+        .find_reference(branch)
+        .ok()?
+        .peel_to_id()
+        .ok()?
+        .detach();
     let count = |tip: gix::ObjectId, hidden: gix::ObjectId| {
         repository
             .rev_walk([tip])
@@ -196,7 +213,7 @@ fn upstream(repository: &gix::Repository) -> Option<Upstream> {
             .map_or(0, Iterator::count)
     };
     Some(Upstream {
-        name: tracking.shorten().to_string(),
+        name,
         ahead: count(ours, theirs),
         behind: count(theirs, ours),
     })

@@ -1,3 +1,4 @@
+mod branch;
 mod commit;
 mod diff;
 mod graph;
@@ -37,7 +38,7 @@ const GLOBAL: &[Spec] = &[Spec {
     name: "git-status",
     summary: "Show the Git status of the current repository",
     help: Some(
-        "The status lists untracked, unstaged and staged files, stashes and recent commits. n and p move between sections and files, TAB shows or hides a file's changes, a hunk or a whole section, RET visits the file at the line shown and g reads the repository again. s stages and u unstages a file, section, hunk or the lines in the region, and k throws changes away after asking. The diff of the file at point shows beside the status, where t switches to side by side. c opens the commit menu; the message is written beside the staged diff and C-c C-c commits it. l opens the log menu. $ lists the Git commands run and what they printed. The status also refreshes itself when files are saved or the repository changes.",
+        "The status lists untracked, unstaged and staged files, stashes and recent commits. n and p move between sections and files, TAB shows or hides a file's changes, a hunk or a whole section, RET visits the file at the line shown and g reads the repository again. s stages and u unstages a file, section, hunk or the lines in the region, and k throws changes away after asking. The diff of the file at point shows beside the status, where t switches to side by side. c opens the commit menu; the message is written beside the staged diff and C-c C-c commits it. l opens the log menu and b the branch menu. $ lists the Git commands run and what they printed. The status also refreshes itself when files are saved or the repository changes.",
     ),
     keys: &["C-x g"],
     run: view::open,
@@ -120,6 +121,13 @@ const STATUS: &[Spec] = &[
         help: None,
         keys: &["l"],
         run: log::dispatch,
+    },
+    Spec {
+        name: "git-branch",
+        summary: "Check out, create, rename or delete branches",
+        help: None,
+        keys: &["b"],
+        run: branch::dispatch,
     },
 ];
 

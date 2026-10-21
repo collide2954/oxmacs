@@ -332,6 +332,22 @@ pub(crate) fn labels(root: &Path) -> Result<HashMap<ObjectId, Vec<Label>>, Strin
     Ok(found)
 }
 
+pub(crate) fn merged(root: &Path, name: &str) -> Result<bool, String> {
+    let repository = gix::open(root).map_err(failed)?;
+    let full = format!("refs/heads/{name}");
+    let mut reference = repository.find_reference(full.as_str()).map_err(failed)?;
+    let tip = reference.peel_to_id().map_err(failed)?.detach();
+    let target = match repo::upstream_tip(&repository, reference.name()) {
+        Some((_, id)) => id,
+        None => repository.head_id().map_err(failed)?.detach(),
+    };
+    if tip == target {
+        return Ok(true);
+    }
+    let base = repository.merge_base(tip, target).map_err(failed)?;
+    Ok(base.is_some_and(|base| base.detach() == tip))
+}
+
 pub(crate) fn branch_names(root: &Path) -> (Vec<String>, Vec<String>) {
     let Ok(repository) = gix::open(root) else {
         return (Vec::new(), Vec::new());
@@ -510,6 +526,28 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn branches_in_head_are_merged_and_others_are_not() {
+        let dir = branched();
+        git(dir.path(), &["branch", "-q", "old", "HEAD~1"]);
+
+        assert_eq!(merged(dir.path(), "old"), Ok(true));
+        assert_eq!(merged(dir.path(), "feature"), Ok(false));
+        assert!(merged(dir.path(), "nope").is_err());
+    }
+
+    #[test]
+    fn branches_with_an_upstream_are_merged_into_it() {
+        let dir = branched();
+        git(dir.path(), &["branch", "-q", "topic", "feature"]);
+        git(
+            dir.path(),
+            &["branch", "-q", "--set-upstream-to=feature", "topic"],
+        );
+
+        assert_eq!(merged(dir.path(), "topic"), Ok(true));
     }
 
     #[test]
