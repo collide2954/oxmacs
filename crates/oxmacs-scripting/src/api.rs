@@ -45,6 +45,19 @@ pub(crate) fn line(editor: &Editor) -> Dynamic {
     number(buffer.line_of(buffer.point()) + 1)
 }
 
+pub(crate) fn message(editor: &mut Editor, text: String) -> Dynamic {
+    editor.show_message(text);
+    Dynamic::UNIT
+}
+
+pub(crate) fn run(editor: &mut Editor, name: &str) -> Reply {
+    let Some(command) = editor.command_named(name) else {
+        return Err(format!("No command named {name}"));
+    };
+    editor.execute(command);
+    Ok(Dynamic::UNIT)
+}
+
 #[cfg(test)]
 mod tests {
     use oxmacs_core::editor::Editor;
@@ -97,6 +110,34 @@ mod tests {
         assert_eq!(evaluated(&mut editor, "region()"), "\"hello\"");
         editor.buffer_mut().deactivate_mark();
         assert_eq!(evaluated(&mut editor, "region()"), "\"\"");
+    }
+
+    #[test]
+    fn message_shows_text_in_the_echo_area() {
+        let mut editor = holding("");
+
+        assert_eq!(evaluated(&mut editor, "message(\"hello\")"), "()");
+        assert_eq!(editor.message(), Some("hello"));
+    }
+
+    #[test]
+    fn run_runs_any_command_by_name() {
+        let mut editor = holding("ab\ncd");
+
+        assert_eq!(
+            evaluated(&mut editor, "run(\"beginning-of-buffer\"); point()"),
+            "0"
+        );
+    }
+
+    #[test]
+    fn running_an_unknown_command_is_a_script_error() {
+        let mut editor = holding("");
+
+        assert_eq!(
+            evaluated(&mut editor, "run(\"no-such-command\")"),
+            "No command named no-such-command (line 1, column 1)"
+        );
     }
 
     #[test]

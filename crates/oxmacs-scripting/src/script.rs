@@ -9,7 +9,9 @@ use rhai::{Dynamic, Engine, EvalAltResult, INT, Module, Shared};
 use crate::api;
 
 const STOPPED: &str = "The script stopped unexpectedly";
+const NESTED: &str = "Scripts are nested too deeply";
 const GOTO: &str = "goto";
+const MAX_NESTING: usize = 8;
 
 static STANDARD: LazyLock<Shared<Module>> =
     LazyLock::new(|| StandardPackage::new().as_shared_module());
@@ -18,6 +20,9 @@ pub(crate) type Failure = Box<EvalAltResult>;
 pub(crate) type Reply = Result<Dynamic, String>;
 type Job = Box<dyn FnOnce(&mut Editor) -> Reply + Send>;
 type Link = Sender<(Job, Sender<Reply>)>;
+
+#[derive(Debug)]
+struct Nesting(usize);
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct Origin {
@@ -69,13 +74,23 @@ fn with_editor(link: Link) -> Engine {
     engine.register_fn(GOTO, move |position: INT| {
         on_editor(&to, move |editor| Ok(api::goto(editor, position)))
     });
+    let to = link.clone();
     engine.register_fn("line", move || {
-        on_editor(&link, |editor| Ok(api::line(editor)))
+        on_editor(&to, |editor| Ok(api::line(editor)))
+    });
+    let to = link.clone();
+    engine.register_fn("message", move |text: &str| {
+        let text = text.to_owned();
+        on_editor(&to, move |editor| Ok(api::message(editor, text)))
+    });
+    engine.register_fn("run", move |name: &str| {
+        let name = name.to_owned();
+        on_editor(&link, move |editor| api::run(editor, &name))
     });
     engine
 }
 
-fn run(
+fn serve(
     editor: &mut Editor,
     work: impl FnOnce(&Engine) -> Result<Dynamic, Failure> + Send,
 ) -> Result<Dynamic, Failure> {
@@ -88,6 +103,22 @@ fn run(
         }
         worker.join().unwrap_or_else(|_| Err(STOPPED.into()))
     })
+}
+
+fn run(
+    editor: &mut Editor,
+    work: impl FnOnce(&Engine) -> Result<Dynamic, Failure> + Send,
+) -> Result<Dynamic, Failure> {
+    let depth = editor
+        .applet_state::<Nesting>()
+        .map_or(0, |nesting| nesting.0);
+    if depth >= MAX_NESTING {
+        return Err(NESTED.into());
+    }
+    editor.set_applet_state(Nesting(depth + 1));
+    let outcome = serve(editor, work);
+    editor.set_applet_state(Nesting(depth));
+    outcome
 }
 
 pub(crate) fn evaluate(editor: &mut Editor, code: &str) -> Result<Dynamic, Failure> {

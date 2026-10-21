@@ -256,6 +256,15 @@ mod tests {
     }
 
     #[test]
+    fn scripts_that_run_themselves_stop_after_a_few_levels() {
+        let mut editor = with_text("run(\"script-eval-buffer\")");
+
+        m_x(&mut editor, "script-eval-buffer");
+
+        assert_eq!(editor.message(), Some("Scripts are nested too deeply"));
+    }
+
+    #[test]
     fn thrown_values_show_without_a_prefix() {
         let mut editor = with_text("throw \"boom\";");
 
