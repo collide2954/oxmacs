@@ -4516,6 +4516,7 @@ dependencies = [
  "oxmacs-irc",
  "oxmacs-markdown",
  "oxmacs-pdf",
+ "oxmacs-python",
  "oxmacs-scripting",
  "oxmacs-splash",
  "oxmacs-themes",
@@ -4683,6 +4684,17 @@ dependencies = [
  "oxmacs-gui",
  "pdfium-render",
  "tempfile",
+]
+
+[[package]]
+name = "oxmacs-python"
+version = "0.1.0"
+dependencies = [
+ "oxmacs-core",
+ "oxmacs-gui",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-python",
 ]
 
 [[package]]
@@ -6419,6 +6431,16 @@ name = "tree-sitter-md"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2efd398be546456c814598ee56c0f51769a77241511b4a58077815d120afa882"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-python"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bf85fd39652e740bf60f46f4cda9492c3a9ad75880575bf14960f775cb74a1c"
 dependencies = [
  "cc",
  "tree-sitter-language",
