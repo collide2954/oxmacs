@@ -7,13 +7,15 @@ use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::editor::{Editor, Effect, FetchId};
 use crate::external::managed::{self, Checksum, Expected, Install, Managed, Origin, Release};
+use crate::files::paths;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
 const NAME: &str = "*Tools*";
-const HELP: &str = "i installs, u updates, d removes, g checks again, q quits";
+const HELP: &str = "i installs, u updates, d removes, TAB details, g checks again, q quits";
 const NAME_WIDTH: usize = 8;
 const STATE_WIDTH: usize = 20;
+const DETAIL_WIDTH: usize = 11;
 const MEGABYTE: u64 = 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,6 +69,7 @@ impl Toolbox {
 pub(in crate::editor) struct ToolList {
     rows: Vec<(Range<usize>, Managed)>,
     styles: Vec<LineStyle>,
+    open: Vec<Managed>,
 }
 
 impl ToolList {
@@ -363,7 +366,56 @@ impl Editor {
         }
     }
 
-    fn tools_page(&self) -> (Page, Vec<(Range<usize>, Managed)>) {
+    fn tool_details_lines(&self, page: &mut Page, tool: Managed) {
+        let search = env::var_os("PATH");
+        let runs = tool
+            .locate(
+                self.tool_setting(tool),
+                self.tools_root.as_deref(),
+                search.as_deref(),
+            )
+            .map_or_else(
+                || "nothing yet".to_owned(),
+                |(path, origin)| {
+                    let from = match origin {
+                        Origin::Setting => tool.setting.unwrap_or("a setting"),
+                        Origin::Managed => "oxmacs",
+                        Origin::Path => "PATH",
+                    };
+                    format!(
+                        "{} ({from})",
+                        paths::abbreviate(&path, self.home.as_deref())
+                    )
+                },
+            );
+        let detail = |page: &mut Page, label: &str, value: &str| {
+            page.line(&[
+                (
+                    &format!("    {label:<DETAIL_WIDTH$}"),
+                    Some(Highlight::Comment),
+                ),
+                (value, None),
+            ]);
+        };
+        page.line(&[(&format!("    {}", tool.summary), Some(Highlight::Comment))]);
+        detail(page, "Runs from", &runs);
+        detail(page, "Source", &format!("github.com/{}", tool.repository));
+    }
+
+    pub(in crate::editor) fn tool_details(&mut self) {
+        let Some(tool) = self.tool_at_point() else {
+            return;
+        };
+        if let Some(Mode::Tools(list)) = self.buffers.mode_mut(0) {
+            if list.open.contains(&tool) {
+                list.open.retain(|open| *open != tool);
+            } else {
+                list.open.push(tool);
+            }
+        }
+        self.render_tools();
+    }
+    fn tools_page(&self, open: &[Managed]) -> (Page, Vec<(Range<usize>, Managed)>) {
         let tools = &self.toolbox.tools;
         let cells: Vec<_> = tools
             .iter()
@@ -406,13 +458,16 @@ impl Editor {
                 cells.iter().filter(|(tool, ..)| tool.group == group)
             {
                 let line = page.line_count();
-                rows.push((line..line + 1, *tool));
                 page.line(&[
                     (&format!("  {:<name_width$}", tool.name), None),
                     (mark, Some(*highlight)),
                     (&format!(" {state:<state_width$}"), None),
                     (latest, Some(Highlight::Comment)),
                 ]);
+                if open.contains(tool) {
+                    self.tool_details_lines(&mut page, *tool);
+                }
+                rows.push((line..page.line_count(), *tool));
             }
         }
         (page, rows)
@@ -421,7 +476,11 @@ impl Editor {
         let Some(index) = self.tools_index() else {
             return;
         };
-        let (page, rows) = self.tools_page();
+        let open = match self.buffers.mode(index) {
+            Some(Mode::Tools(list)) => list.open.clone(),
+            _ => Vec::new(),
+        };
+        let (page, rows) = self.tools_page(&open);
 
         if let Some((buffer, Mode::Tools(list))) = self.buffers.entry_mut(index) {
             let point = buffer.point();
@@ -533,7 +592,7 @@ mod tests {
         assert_eq!(
             lines(&editor)[..3],
             [
-                "Tools   i installs, u updates, d removes, g checks again, q quits",
+                "Tools   i installs, u updates, d removes, TAB details, g checks again, q quits",
                 "",
                 "R",
             ]
@@ -578,6 +637,32 @@ mod tests {
             air_line(&editor),
             "  air     ✓ 0.12.0 (oxmacs)   latest 0.12.0"
         );
+    }
+    #[test]
+    fn tab_shows_and_hides_the_details_of_a_tool() {
+        let root = tempfile::tempdir().unwrap();
+        place(root.path(), "0.12.0");
+        let mut editor = answered(root.path(), "0.12.0");
+        let before = lines(&editor);
+
+        press(&mut editor, "TAB");
+
+        let shown = lines(&editor);
+        let at = shown
+            .iter()
+            .position(|line| line.starts_with("  air "))
+            .unwrap();
+        assert_eq!(shown[at + 1], "    R formatter");
+        assert!(
+            shown[at + 2].starts_with("    Runs from  ") && shown[at + 2].ends_with("(oxmacs)"),
+            "{}",
+            shown[at + 2]
+        );
+        assert_eq!(shown[at + 3], "    Source     github.com/posit-dev/air");
+        press(&mut editor, "C-n C-n u");
+        assert_eq!(editor.message(), Some("air 0.12.0 is up to date"));
+        press(&mut editor, "TAB");
+        assert_eq!(lines(&editor), before);
     }
     #[test]
     fn i_installs_the_latest_release_for_this_system() {

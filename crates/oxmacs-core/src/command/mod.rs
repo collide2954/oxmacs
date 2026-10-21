@@ -442,6 +442,8 @@ pub enum Command {
         detailed_message = "Opens *Tools*: each tool oxmacs can install itself, such as air for formatting R, with the version installed, the latest release, and which program runs. Opening it, or g, asks GitHub for the latest releases; nothing is downloaded until you press i to install or u to update, and d removes oxmacs's copy."
     )]
     ListTools,
+    #[strum(message = "Show or hide the details of the tool on this line")]
+    ToolDetails,
     #[strum(message = "Install the tool on this line")]
     ToolInstall,
     #[strum(message = "Update the tool on this line to its latest release")]
@@ -614,7 +616,9 @@ impl Command {
             | Self::CompletionAccept
             | Self::CompletionQuit => Scope::Popup,
             Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
-            Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => Scope::Tools,
+            Self::ToolDetails | Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => {
+                Scope::Tools
+            }
             Self::REnvironmentVisit => Scope::Environment,
             Self::RTableNextColumn | Self::RTablePreviousColumn => Scope::Table,
             Self::RPlotNext

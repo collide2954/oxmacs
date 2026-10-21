@@ -109,6 +109,7 @@ impl Editor {
             Command::ListProcesses => self.list_processes(),
             Command::ListLanguages => self.list_languages(),
             Command::ListTools => self.list_tools(),
+            Command::ToolDetails => self.tool_details(),
             Command::ToolInstall => self.tool_install(),
             Command::ToolUpdate => self.tool_update(),
             Command::ToolRemove => self.tool_remove(),

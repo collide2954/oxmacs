@@ -267,6 +267,7 @@ const PROCESSES: &[(&str, Command)] = &[
 ];
 
 const TOOLS: &[(&str, Command)] = &[
+    ("TAB", Command::ToolDetails),
     ("i", Command::ToolInstall),
     ("u", Command::ToolUpdate),
     ("d", Command::ToolRemove),
