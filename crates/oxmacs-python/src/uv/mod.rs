@@ -13,17 +13,19 @@ use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Highlight;
 
 use crate::tools;
-use facts::{Facts, Lock, Probe};
+use facts::{Facts, Installation, Lock, Probe};
 use page::{Last, Rendered, Row};
 
 const NAME: &str = "*uv*";
 const OUTSIDE: &str = "No pyproject.toml here or above";
 const NO_PACKAGE: &str = "No package on this line";
+const NO_PYTHON: &str = "No Python version on this line";
 
 #[derive(Debug, Clone, Copy)]
 enum Query {
     Lock,
     Newer,
+    Pythons,
 }
 
 #[derive(Debug)]
@@ -113,7 +115,7 @@ fn package_at(dashboard: &Dashboard, line: usize) -> Option<String> {
             Probe::Known(newer) => newer.get(*index).map(|package| package.name.clone()),
             Probe::Checking | Probe::Failed(_) => None,
         },
-        Row::Info | Row::Blank | Row::Heading | Row::Output => None,
+        Row::Info | Row::Blank | Row::Heading | Row::Python(_) | Row::Output => None,
     }
 }
 
@@ -154,6 +156,41 @@ pub(crate) fn remove(editor: &mut Editor) {
 pub(crate) fn upgrade(editor: &mut Editor) {
     with_package(editor, |package| {
         words(&["lock", "--upgrade-package", &package])
+    });
+}
+
+fn python_at(dashboard: &Dashboard, line: usize) -> Option<&Installation> {
+    let Row::Python(index) = dashboard.rendered.rows.get(line)? else {
+        return None;
+    };
+    match &dashboard.facts.pythons {
+        Probe::Known(found) => found.get(*index),
+        Probe::Checking | Probe::Failed(_) => None,
+    }
+}
+
+fn with_python(editor: &mut Editor, args: impl FnOnce(&Installation) -> Vec<String>) {
+    let Some(id) = current(editor) else {
+        return;
+    };
+    let line = editor.buffer().line_of(editor.buffer().point());
+    let chosen = editor
+        .applet_buffer::<Dashboard>(id)
+        .and_then(|(_, dashboard)| python_at(dashboard, line))
+        .map(args);
+    match chosen {
+        Some(args) => act(editor, id, args),
+        None => editor.show_message(NO_PYTHON),
+    }
+}
+
+pub(crate) fn install(editor: &mut Editor) {
+    with_python(editor, |python| words(&["python", "install", &python.key]));
+}
+
+pub(crate) fn pin(editor: &mut Editor) {
+    with_python(editor, |python| {
+        words(&["python", "pin", &python.request()])
     });
 }
 
@@ -258,6 +295,7 @@ fn reload(editor: &mut Editor, id: BufferId) {
                 let args = ["pip", "list", "--outdated", "--format", "json"];
                 query(editor, id, &uv, &root, &args, Query::Newer);
             }
+            query(editor, id, &uv, &root, &["python", "list"], Query::Pythons);
         }
         Err(error) => {
             if facts.lock == Lock::Checking {
@@ -266,6 +304,7 @@ fn reload(editor: &mut Editor, id: BufferId) {
             if facts.newer == Probe::Checking {
                 facts.newer = Probe::Failed(error.clone());
             }
+            facts.pythons = Probe::Failed(error.clone());
             editor.show_message(error);
         }
     }
@@ -296,6 +335,9 @@ fn query(editor: &mut Editor, id: BufferId, uv: &Path, root: &Path, args: &[&str
             match kind {
                 Query::Lock => dashboard.facts.lock = facts::lock(outcome, &output),
                 Query::Newer => dashboard.facts.newer = facts::newer(outcome, &output),
+                Query::Pythons => {
+                    dashboard.facts.pythons = facts::installations(outcome, &output);
+                }
             }
             render(editor, id);
         }
@@ -476,7 +518,7 @@ mod tests {
             project.editor.pane().line_pills(at),
             [(20..24, Highlight::Success)]
         );
-        assert_eq!(spawned(&mut project.editor).len(), 2);
+        assert_eq!(spawned(&mut project.editor).len(), 3);
     }
 
     #[test]
@@ -528,6 +570,80 @@ mod tests {
         assert_eq!(arguments(&spawned(&mut project.editor)), [vec!["lock"]]);
     }
 
+    fn with_pythons() -> super::testing::Project {
+        let mut project = full();
+        let jobs = opened(&mut project);
+        for job in &jobs {
+            let listed: &[&str] = if job.args[0] == "python" {
+                &[
+                    "cpython-3.13.0-windows-x86_64-none    <download available>",
+                    "pypy-3.10.14-windows-x86_64-none      C:\\pypy\\python.exe",
+                ]
+            } else {
+                &["[]"]
+            };
+            finish(&mut project.editor, job, 0, listed);
+        }
+        project
+    }
+
+    #[test]
+    fn python_versions_are_listed_and_i_installs_the_one_at_point() {
+        let mut project = with_pythons();
+        let shown = lines(&project.editor);
+        assert!(
+            shown.contains(&"Python versions (2)".to_owned()),
+            "{shown:?}"
+        );
+
+        on_line(
+            &mut project.editor,
+            "  cpython-3.13.0-windows-x86_64-none  available",
+        );
+        press(&mut project.editor, "i");
+
+        assert_eq!(
+            arguments(&spawned(&mut project.editor)),
+            [vec![
+                "python",
+                "install",
+                "cpython-3.13.0-windows-x86_64-none"
+            ]]
+        );
+    }
+
+    #[test]
+    fn p_pins_the_python_at_point() {
+        let mut project = with_pythons();
+
+        on_line(
+            &mut project.editor,
+            "  pypy-3.10.14-windows-x86_64-none    installed  C:\\pypy\\python.exe",
+        );
+        press(&mut project.editor, "p");
+
+        assert_eq!(
+            arguments(&spawned(&mut project.editor)),
+            [vec!["python", "pin", "pypy@3.10.14"]]
+        );
+    }
+
+    #[test]
+    fn i_and_p_off_a_python_line_say_so() {
+        let mut project = with_pythons();
+
+        for key in ["M-< i", "p"] {
+            press(&mut project.editor, key);
+
+            assert_eq!(
+                project.editor.message(),
+                Some("No Python version on this line"),
+                "{key}"
+            );
+        }
+        assert_eq!(spawned(&mut project.editor), []);
+    }
+
     #[test]
     fn actions_need_uv() {
         let mut project = ready();
@@ -565,7 +681,8 @@ mod tests {
             commands,
             [
                 vec!["lock", "--check"],
-                vec!["pip", "list", "--outdated", "--format", "json"]
+                vec!["pip", "list", "--outdated", "--format", "json"],
+                vec!["python", "list"]
             ]
         );
         assert!(
@@ -638,11 +755,11 @@ mod tests {
         press(&mut project.editor, "g");
 
         assert!(lines(&project.editor).contains(&"  httpx".to_owned()));
-        assert_eq!(spawned(&mut project.editor).len(), 2);
+        assert_eq!(spawned(&mut project.editor).len(), 3);
     }
 
     #[test]
-    fn without_a_lock_or_a_venv_there_is_nothing_to_check() {
+    fn without_a_lock_or_a_venv_only_python_versions_are_checked() {
         let mut project = project(&[("pyproject.toml", PYPROJECT)]);
 
         let jobs = opened(&mut project);
@@ -650,7 +767,7 @@ mod tests {
         let shown = lines(&project.editor);
         assert_eq!(line_with(&shown, "Lock:"), Some("Lock:     no uv.lock"));
         assert_eq!(line_with(&shown, "Python:"), Some("Python:   no .venv"));
-        assert_eq!(jobs, []);
+        assert_eq!(arguments(&jobs), [vec!["python", "list"]]);
     }
 
     #[test]

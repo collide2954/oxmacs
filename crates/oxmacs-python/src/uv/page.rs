@@ -9,7 +9,8 @@ use oxmacs_core::theme::Highlight;
 use crate::uv::facts::{Facts, Lock, Probe};
 
 const LABEL: usize = 10;
-const HELP: &str = "a add · d remove · u upgrade · s sync · l lock · g refresh · q quit";
+const HELP: &str =
+    "a add · d remove · u upgrade · s sync · l lock · i install · p pin · g refresh · q quit";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Row {
@@ -19,6 +20,7 @@ pub(crate) enum Row {
     Required(usize),
     Locked(usize),
     Newer(usize),
+    Python(usize),
     Output,
 }
 
@@ -176,21 +178,28 @@ fn dependencies(out: &mut Rendered, facts: &Facts) {
     }
 }
 
-fn newer(out: &mut Rendered, facts: &Facts) {
-    let newer = match &facts.newer {
+fn known<'a, T>(out: &mut Rendered, title: &str, probe: &'a Probe<Vec<T>>) -> Option<&'a [T]> {
+    let found = match probe {
         Probe::Checking => {
-            out.heading("Newer", None);
+            out.heading(title, None);
             out.note("checking…");
-            return;
+            return None;
         }
         Probe::Failed(error) => {
-            out.heading("Newer", None);
+            out.heading(title, None);
             out.note(error);
-            return;
+            return None;
         }
-        Probe::Known(newer) => newer,
+        Probe::Known(found) => found,
     };
-    out.heading("Newer", Some(newer.len()));
+    out.heading(title, Some(found.len()));
+    Some(found)
+}
+
+fn newer(out: &mut Rendered, facts: &Facts) {
+    let Some(newer) = known(out, "Newer", &facts.newer) else {
+        return;
+    };
     if newer.is_empty() {
         out.note("everything is up to date");
     }
@@ -204,6 +213,33 @@ fn newer(out: &mut Rendered, facts: &Facts) {
         line.push(" → ", Some(Highlight::Comment));
         line.pill(&package.latest, Highlight::Success);
         out.add(Row::Newer(index), line);
+    }
+}
+
+fn pythons(out: &mut Rendered, facts: &Facts) {
+    let Some(found) = known(out, "Python versions", &facts.pythons) else {
+        return;
+    };
+    if found.is_empty() {
+        out.note("none");
+    }
+    let width = widest(found.iter().map(|python| &python.key));
+    for (index, python) in found.iter().enumerate() {
+        let mut line = Line::default();
+        line.push("  ", None);
+        line.push(&python.key, None);
+        line.pad(2 + width + 2);
+        match &python.path {
+            Some(path) => {
+                line.pill("installed", Highlight::Success);
+                line.push("  ", None);
+                line.push(path, Some(Highlight::Comment));
+            }
+            None => {
+                line.push("available", Some(Highlight::Comment));
+            }
+        }
+        out.add(Row::Python(index), line);
     }
 }
 
@@ -237,6 +273,7 @@ pub(crate) fn render(facts: &Facts, last: Option<&Last>, home: Option<&Path>) ->
     header(&mut out, facts, home);
     dependencies(&mut out, facts);
     newer(&mut out, facts);
+    pythons(&mut out, facts);
     if let Some(last) = last {
         command(&mut out, last);
     }
@@ -270,6 +307,7 @@ mod tests {
                 version: "2.32.3".to_owned(),
                 latest: "2.33.0".to_owned(),
             }]),
+            pythons: Probe::Checking,
         }
     }
 
@@ -289,7 +327,7 @@ mod tests {
                 "Python:   3.12.4",
                 &venv,
                 "Lock:     up to date",
-                "a add · d remove · u upgrade · s sync · l lock · g refresh · q quit",
+                "a add · d remove · u upgrade · s sync · l lock · i install · p pin · g refresh · q quit",
                 "",
                 "Required (2)",
                 "  requests>=2.31",
@@ -301,6 +339,9 @@ mod tests {
                 "",
                 "Newer (1)",
                 "  requests  2.32.3 → 2.33.0",
+                "",
+                "Python versions",
+                "  checking…",
             ]
         );
         assert_eq!(rendered.rows.len(), rendered.styles.len());
@@ -346,7 +387,7 @@ mod tests {
                 "Python:   no .venv",
                 "Venv:     none",
                 "Lock:     out of date",
-                "a add · d remove · u upgrade · s sync · l lock · g refresh · q quit",
+                "a add · d remove · u upgrade · s sync · l lock · i install · p pin · g refresh · q quit",
                 "",
                 "Required (0)",
                 "  none",
@@ -355,6 +396,9 @@ mod tests {
                 "  none",
                 "",
                 "Newer",
+                "  checking…",
+                "",
+                "Python versions",
                 "  checking…",
             ]
         );
@@ -373,7 +417,7 @@ mod tests {
 
         let shown = lines(&rendered);
         assert_eq!(shown[3], "Lock:     uv is not installed");
-        assert_eq!(shown.last(), Some(&"  no .venv"));
+        assert!(shown.contains(&"  no .venv"), "{shown:?}");
         assert!(
             rendered.styles[3]
                 .spans
@@ -415,5 +459,40 @@ mod tests {
         let failed = render(&sample(), Some(&last(Some(Outcome::Exited(Some(2))))), None);
         assert_eq!(lines(&failed)[at], "uv sync  exit 2");
         assert_eq!(failed.pills[at], [(9..15, Highlight::Error)]);
+    }
+
+    #[test]
+    fn python_versions_say_which_are_installed() {
+        use crate::uv::facts::Installation;
+
+        let facts = Facts {
+            pythons: Probe::Known(vec![
+                Installation {
+                    key: "cpython-3.13.0-x".to_owned(),
+                    path: Some("C:\\py\\python.exe".to_owned()),
+                },
+                Installation {
+                    key: "pypy-3.10.14-x".to_owned(),
+                    path: None,
+                },
+            ]),
+            ..Facts::default()
+        };
+
+        let rendered = render(&facts, None, None);
+
+        let shown = lines(&rendered);
+        assert_eq!(
+            shown[shown.len() - 3..],
+            [
+                "Python versions (2)",
+                "  cpython-3.13.0-x  installed  C:\\py\\python.exe",
+                "  pypy-3.10.14-x    available"
+            ]
+        );
+        let at = rendered.rows.len() - 2;
+        assert_eq!(rendered.rows[at], Row::Python(0));
+        assert_eq!(rendered.rows[at + 1], Row::Python(1));
+        assert_eq!(rendered.pills[at], [(20..29, Highlight::Success)]);
     }
 }

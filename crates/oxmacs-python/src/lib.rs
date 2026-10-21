@@ -94,7 +94,7 @@ const PYTHON: &[Spec] = &[
         name: "python-uv-dashboard",
         summary: "Show the project's uv dashboard",
         help: Some(
-            "The dashboard in *uv* shows the project from pyproject.toml, the Python in its .venv, whether uv.lock is up to date, and the required, locked and newer packages. uv checks run in the background; g reads everything again.",
+            "The dashboard in *uv* shows the project from pyproject.toml, the Python in its .venv, whether uv.lock is up to date, the required, locked and newer packages, and the Python versions uv knows. uv checks and commands run in the background, and the last command's output shows at the bottom; g reads everything again.",
         ),
         keys: &["C-c C-u"],
         run: uv::open,
@@ -138,6 +138,20 @@ const DASHBOARD: &[Spec] = &[
         help: None,
         keys: &["l"],
         run: uv::lock,
+    },
+    Spec {
+        name: "uv-python-install",
+        summary: "Install the Python version at point with uv python install",
+        help: None,
+        keys: &["i"],
+        run: uv::install,
+    },
+    Spec {
+        name: "uv-python-pin",
+        summary: "Pin the project to the Python version at point with uv python pin",
+        help: None,
+        keys: &["p"],
+        run: uv::pin,
     },
     Spec {
         name: "uv-refresh",

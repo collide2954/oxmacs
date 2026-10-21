@@ -49,6 +49,27 @@ pub(crate) struct Newer {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Installation {
+    pub(crate) key: String,
+    pub(crate) path: Option<String>,
+}
+
+impl Installation {
+    pub(crate) fn version(&self) -> &str {
+        self.key.split('-').nth(1).unwrap_or(&self.key)
+    }
+
+    pub(crate) fn request(&self) -> String {
+        let implementation = self.key.split('-').next().unwrap_or_default();
+        if implementation == "cpython" {
+            self.version().to_owned()
+        } else {
+            format!("{implementation}@{}", self.version())
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Lock {
     Missing,
     Checking,
@@ -72,6 +93,7 @@ pub(crate) struct Facts {
     pub(crate) venv: Option<PathBuf>,
     pub(crate) lock: Lock,
     pub(crate) newer: Probe<Vec<Newer>>,
+    pub(crate) pythons: Probe<Vec<Installation>>,
 }
 
 impl Default for Facts {
@@ -83,8 +105,28 @@ impl Default for Facts {
             venv: None,
             lock: Lock::Missing,
             newer: Probe::Checking,
+            pythons: Probe::Checking,
         }
     }
+}
+
+pub(crate) fn installations(outcome: &Outcome, output: &[String]) -> Probe<Vec<Installation>> {
+    if *outcome != Outcome::Exited(Some(0)) {
+        return Probe::Failed(reason(outcome, output));
+    }
+    Probe::Known(
+        output
+            .iter()
+            .filter_map(|line| {
+                let (key, location) = line.trim().split_once(char::is_whitespace)?;
+                let location = location.trim();
+                key.contains('-').then(|| Installation {
+                    key: key.to_owned(),
+                    path: (location != "<download available>").then(|| location.to_owned()),
+                })
+            })
+            .collect(),
+    )
 }
 
 pub(crate) fn normalized(name: &str) -> String {
@@ -209,6 +251,7 @@ pub(crate) fn read(root: &Path) -> Facts {
         locked: pinned,
         python,
         venv,
+        pythons: Probe::Checking,
     }
 }
 
@@ -337,6 +380,37 @@ source = { registry = "https://pypi.org/simple" }
         assert_eq!(
             lock(&Outcome::Exited(Some(2)), &["error: No network".to_owned()]),
             Lock::Failed("error: No network".to_owned())
+        );
+    }
+
+    #[test]
+    fn python_versions_come_from_python_list() {
+        let output = [
+            "cpython-3.13.0-windows-x86_64-none    C:\\Users\\ada\\python.exe",
+            "cpython-3.12.4-windows-x86_64-none    <download available>",
+            "pypy-3.10.14-windows-x86_64-none      <download available>",
+        ]
+        .map(str::to_owned);
+
+        let Probe::Known(found) = installations(&Outcome::Exited(Some(0)), &output) else {
+            panic!("no versions");
+        };
+
+        assert_eq!(
+            found[0],
+            Installation {
+                key: "cpython-3.13.0-windows-x86_64-none".to_owned(),
+                path: Some("C:\\Users\\ada\\python.exe".to_owned()),
+            }
+        );
+        assert_eq!(found[1].path, None);
+        assert_eq!(found.len(), 3);
+        assert_eq!(found[0].version(), "3.13.0");
+        assert_eq!(found[0].request(), "3.13.0");
+        assert_eq!(found[2].request(), "pypy@3.10.14");
+        assert_eq!(
+            installations(&Outcome::Exited(Some(2)), &["error: offline".to_owned()]),
+            Probe::Failed("error: offline".to_owned())
         );
     }
 
