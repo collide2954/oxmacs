@@ -79,10 +79,88 @@ impl Compiler<'_> {
         self.load(value, target, form.span)
     }
 
+    fn here(&self, span: Span) -> Result<u32, Error> {
+        u32::try_from(self.code.ops.len()).map_err(|_| Error::at(span, "This function is too long"))
+    }
+
+    fn patch(&mut self, jump: usize, to: u32) {
+        if let Some(Op::Jump { to: target } | Op::JumpUnless { to: target, .. }) =
+            self.code.ops.get_mut(jump)
+        {
+            *target = to;
+        }
+    }
+
+    fn special(
+        &mut self,
+        head: &Syntax,
+        rest: &[Syntax],
+        target: Register,
+        span: Span,
+    ) -> Option<Result<(), Error>> {
+        let Datum::Symbol(name) = &head.datum else {
+            return None;
+        };
+        match name.as_str() {
+            "if" => Some(self.branch(rest, target, span)),
+            "do" => Some(self.sequence(rest, target, span)),
+            _ => None,
+        }
+    }
+
+    fn branch(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let (test, then, otherwise) = match parts {
+            [test, then] => (test, then, None),
+            [test, then, otherwise] => (test, then, Some(otherwise)),
+            _ => {
+                return Err(Error::at(
+                    span,
+                    "if takes a test, a then form and an optional else form",
+                ));
+            }
+        };
+        let condition = self.reserve(1, span)?;
+        self.expression(test, condition)?;
+        let skip = self.code.ops.len();
+        self.emit(
+            Op::JumpUnless {
+                test: condition,
+                to: 0,
+            },
+            span,
+        );
+        self.top = condition;
+        self.expression(then, target)?;
+        let finish = self.code.ops.len();
+        self.emit(Op::Jump { to: 0 }, span);
+        let alternative = self.here(span)?;
+        self.patch(skip, alternative);
+        match otherwise {
+            Some(otherwise) => self.expression(otherwise, target)?,
+            None => self.load(Value::Nil, target, span)?,
+        }
+        let end = self.here(span)?;
+        self.patch(finish, end);
+        Ok(())
+    }
+
+    fn sequence(&mut self, forms: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        if forms.is_empty() {
+            return self.load(Value::Nil, target, span);
+        }
+        for form in forms {
+            self.expression(form, target)?;
+        }
+        Ok(())
+    }
+
     fn call(&mut self, items: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
         let Some((callee, arguments)) = items.split_first() else {
             return self.load(Value::Nil, target, span);
         };
+        if let Some(done) = self.special(callee, arguments, target, span) {
+            return done;
+        }
         let count = u16::try_from(arguments.len())
             .map_err(|_| Error::at(span, "This call has too many arguments"))?;
         let base = self.reserve(1 + arguments.len(), span)?;

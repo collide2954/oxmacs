@@ -44,6 +44,12 @@ impl Runtime {
                         .call(registers[base], arguments)
                         .map_err(|error| error.or_at(code.spans[at]))?;
                 }
+                Op::Jump { to } => pc = to as usize,
+                Op::JumpUnless { test, to } => {
+                    if !registers[usize::from(test)].truthy() {
+                        pc = to as usize;
+                    }
+                }
                 Op::Return { from } => return Ok(registers[usize::from(from)]),
             }
         }

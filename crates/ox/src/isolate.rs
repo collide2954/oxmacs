@@ -167,6 +167,42 @@ mod tests {
     }
 
     #[test]
+    fn if_chooses_a_branch_by_truth() {
+        all(&[
+            ("(if true 1 2)", "1"),
+            ("(if false 1 2)", "2"),
+            ("(if nil 1 2)", "2"),
+            ("(if 0 1 2)", "1"),
+            (r#"(if "" 1 2)"#, "1"),
+            ("(if () 1 2)", "2"),
+            ("(if false 1)", "nil"),
+            ("(if (< 1 2) (+ 1 1) (/ 1 0))", "2"),
+            ("(if (> 1 2) (/ 1 0) (* 3 3))", "9"),
+            ("(+ 1 (if true 10 20))", "11"),
+        ]);
+    }
+
+    #[test]
+    fn do_runs_its_forms_in_order_and_gives_the_last() {
+        all(&[
+            ("(do 1 2 3)", "3"),
+            ("(do)", "nil"),
+            ("(do (+ 1 1))", "2"),
+            ("(+ 1 (do 5 6))", "7"),
+        ]);
+    }
+
+    #[test]
+    fn malformed_ifs_are_reported() {
+        let message = "error: if takes a test, a then form and an optional else form";
+        all(&[
+            ("(if)", message),
+            ("(if 1)", message),
+            ("(if 1 2 3 4)", message),
+        ]);
+    }
+
+    #[test]
     fn rust_functions_can_be_called_from_ox() {
         let mut isolate = Isolate::new();
         isolate.define_native("twice", 1, Some(1), |_, arguments| match arguments {

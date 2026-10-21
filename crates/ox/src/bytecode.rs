@@ -10,6 +10,8 @@ pub enum Op {
     Global { to: Register, name: Sym },
     Move { to: Register, from: Register },
     Call { base: Register, count: u16 },
+    Jump { to: u32 },
+    JumpUnless { test: Register, to: u32 },
     Return { from: Register },
 }
 
