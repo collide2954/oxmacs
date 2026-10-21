@@ -19,6 +19,7 @@ jiff = "0.2.38"
 keyring = "4.2.0"
 oxmacs-atlas = { path = "crates/oxmacs-atlas" }
 oxmacs-core = { path = "crates/oxmacs-core" }
+oxmacs-database = { path = "crates/oxmacs-database" }
 oxmacs-demo = { path = "crates/oxmacs-demo" }
 oxmacs-dired = { path = "crates/oxmacs-dired" }
 oxmacs-git = { path = "crates/oxmacs-git" }
@@ -37,6 +38,7 @@ open = "5.4.4"
 regex = "1.13.1"
 ring = "0.17.14"
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
