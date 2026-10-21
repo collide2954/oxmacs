@@ -18,6 +18,12 @@ pub(crate) struct Cell {
     pub(crate) column: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Pill {
+    Filter(usize),
+    Sort(usize),
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Loaded {
     pub(crate) rows: Vec<Vec<Value>>,
@@ -550,6 +556,53 @@ impl Grid {
         true
     }
 
+    pub(crate) fn pills(&self) -> Vec<(Pill, String)> {
+        let filters = self
+            .query
+            .filters
+            .iter()
+            .enumerate()
+            .map(|(at, condition)| (Pill::Filter(at), condition.clone()));
+        let sorts = self
+            .query
+            .sort
+            .iter()
+            .enumerate()
+            .map(|(at, (name, descending))| {
+                let arrow = if *descending { '↓' } else { '↑' };
+                (Pill::Sort(at), format!("{arrow} {name}"))
+            });
+        filters.chain(sorts).collect()
+    }
+
+    pub(crate) fn unpill(&mut self, pill: Pill) -> bool {
+        let removed = match pill {
+            Pill::Filter(at) if at < self.query.filters.len() => {
+                self.query.filters.remove(at);
+                true
+            }
+            Pill::Sort(at) if at < self.query.sort.len() => {
+                self.query.sort.remove(at);
+                true
+            }
+            Pill::Filter(_) | Pill::Sort(_) => false,
+        };
+        if removed {
+            self.requery();
+        }
+        removed
+    }
+
+    pub(crate) fn clear_pills(&mut self) -> bool {
+        if self.query.filters.is_empty() && self.query.sort.is_empty() {
+            return false;
+        }
+        self.query.filters.clear();
+        self.query.sort.clear();
+        self.requery();
+        true
+    }
+
     fn fit_headings(&mut self) {
         let wanted: Vec<usize> = self
             .columns
@@ -936,6 +989,47 @@ mod tests {
         assert!(!grid.filter("n > 3"));
         assert!(!grid.filter("   "));
         assert_eq!(grid.query.filters, ["n > 3"]);
+    }
+
+    #[test]
+    fn pills_list_filters_then_sorts_and_come_off_one_by_one() {
+        let mut grid = sized(100);
+        grid.sort(1, false);
+        grid.sort(0, true);
+        grid.sort(0, true);
+        grid.filter("n > 3");
+        assert_eq!(
+            grid.pills(),
+            [
+                (Pill::Filter(0), "n > 3".to_owned()),
+                (Pill::Sort(0), "↑ label".to_owned()),
+                (Pill::Sort(1), "↓ n".to_owned()),
+            ]
+        );
+        grid.insert(0, numbers(10, 0));
+        grid.go(Cell { row: 5, column: 1 });
+
+        assert!(grid.unpill(Pill::Sort(0)));
+        assert_eq!(sorts(&grid), [("n", true)]);
+        assert_eq!(grid.cursor, Cell { row: 0, column: 1 });
+        assert!(grid.pages.is_empty());
+        assert!(grid.unpill(Pill::Filter(0)));
+        assert_eq!(grid.query.filters, Vec::<String>::new());
+        assert!(!grid.unpill(Pill::Filter(0)));
+        assert!(!grid.unpill(Pill::Sort(4)));
+    }
+
+    #[test]
+    fn clearing_pills_drops_every_sort_and_filter() {
+        let mut grid = sized(100);
+        assert!(!grid.clear_pills());
+        grid.sort(1, false);
+        grid.filter("n > 3");
+
+        assert!(grid.clear_pills());
+
+        assert_eq!(grid.pills(), []);
+        assert_eq!(grid.wanted(), [0]);
     }
 
     #[test]

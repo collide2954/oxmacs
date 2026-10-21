@@ -362,6 +362,41 @@ pub(crate) fn prompt_filter(editor: &mut Editor) {
     );
 }
 
+const ALL_PILLS: &str = "All sorts and filters";
+
+pub(crate) fn prompt_remove(editor: &mut Editor) {
+    let Some(id) = current(editor) else {
+        return;
+    };
+    let pills = editor
+        .applet_buffer::<GridView>(id)
+        .map(|(_, view)| view.grid.pills())
+        .unwrap_or_default();
+    if pills.is_empty() {
+        editor.show_message("No sorts or filters");
+        return;
+    }
+    let offers: Vec<Offer> = pills
+        .iter()
+        .map(|(_, label)| Offer::from(label.clone()))
+        .chain([Offer::from(ALL_PILLS)])
+        .collect();
+    editor.prompt_pick(
+        "Remove: ",
+        move |_| offers.clone(),
+        move |editor, picked| {
+            let Picked::Offered(index) = picked else {
+                return;
+            };
+            if let Some((pill, _)) = pills.get(index) {
+                requery(editor, id, |grid| grid.unpill(*pill));
+            } else {
+                requery(editor, id, Grid::clear_pills);
+            }
+        },
+    );
+}
+
 pub(crate) fn refresh(editor: &mut Editor) {
     let Some(id) = current(editor) else {
         return;
@@ -466,7 +501,7 @@ mod tests {
 
     use super::*;
     use crate::driver::Value;
-    use crate::driver::fixtures::database;
+    use crate::driver::fixtures::{database, query};
     use crate::service::{Request, Service};
     use crate::testing::{installed, press, pump, requests, type_text};
 
@@ -917,6 +952,60 @@ mod tests {
         assert_eq!(grid.query.filters, ["nope = 1"]);
         assert!(grid.error.as_deref().unwrap_or_default().contains("nope"));
         assert!(editor.message().unwrap_or_default().contains("nope"));
+    }
+
+    #[test]
+    fn shift_f_removes_a_sort_or_filter_or_all_of_them() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+        press(&mut editor, "F");
+        assert_eq!(editor.message(), Some("No sorts or filters"));
+        assert!(editor.minibuffer().is_none());
+        press(&mut editor, "C-f s");
+        pump(&mut editor, &mut service);
+        press(&mut editor, "C-f =");
+        pump(&mut editor, &mut service);
+
+        press(&mut editor, "F");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Remove: ");
+        assert_eq!(
+            offered(&editor),
+            [
+                noted("artist_id = 2", None),
+                noted("↑ title", None),
+                noted("All sorts and filters", None),
+            ]
+        );
+        type_text(&mut editor, "title");
+        press(&mut editor, "RET");
+        pump(&mut editor, &mut service);
+        assert_eq!(sorts(&editor), []);
+        assert_eq!(titles(&editor), ["Balls to the Wall", "Restless and Wild"]);
+
+        press(&mut editor, "s F");
+        type_text(&mut editor, "all");
+        press(&mut editor, "RET");
+        pump(&mut editor, &mut service);
+        assert_eq!(view(&editor).query, query("albums"));
+        assert_eq!(view(&editor).total, Some(4));
+    }
+
+    #[test]
+    fn a_rejected_condition_can_be_removed() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+        press(&mut editor, "f");
+        type_text(&mut editor, "nope = 1");
+        press(&mut editor, "RET");
+        pump(&mut editor, &mut service);
+
+        press(&mut editor, "F RET");
+        pump(&mut editor, &mut service);
+
+        let grid = view(&editor);
+        assert_eq!(grid.error, None);
+        assert_eq!(grid.query.filters, Vec::<String>::new());
+        assert_eq!(grid.total, Some(4));
     }
 
     #[test]

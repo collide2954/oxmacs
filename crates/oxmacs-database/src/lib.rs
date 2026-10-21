@@ -243,6 +243,13 @@ const GRID: &[Spec] = &[
         keys: &["f"],
         run: table::prompt_filter,
     },
+    Spec {
+        name: "database-remove-filter",
+        summary: "Remove a sort or filter, or all of them",
+        help: None,
+        keys: &["F"],
+        run: table::prompt_remove,
+    },
 ];
 
 fn register(editor: &mut Editor, scope: ScopeId, specs: &[Spec]) -> Vec<CommandId> {
