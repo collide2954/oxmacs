@@ -1,3 +1,4 @@
+mod language;
 mod script;
 
 use oxmacs_core::applet::Applet;
@@ -53,7 +54,7 @@ impl Applet for Scripting {
     }
 
     fn install(&self, editor: &mut Editor) {
-        editor.add_command(CommandSpec {
+        let buffer = editor.add_command(CommandSpec {
             name: "script-eval-buffer",
             summary: "Evaluate the buffer as a Rhai script",
             help: Some(
@@ -62,7 +63,7 @@ impl Applet for Scripting {
             scope: Scope::Global.into(),
             run: eval_buffer,
         });
-        editor.add_command(CommandSpec {
+        let region = editor.add_command(CommandSpec {
             name: "script-eval-region",
             summary: "Evaluate the selected code as a Rhai script",
             help: Some(
@@ -71,6 +72,11 @@ impl Applet for Scripting {
             scope: Scope::Global.into(),
             run: eval_region,
         });
+        let rhai = editor.add_scope("Rhai buffers");
+        editor.add_language(language::LANGUAGE, Some(rhai));
+        editor.set_highlighter(language::LANGUAGE, language::highlight);
+        editor.bind(rhai, "C-c C-c", buffer).ok();
+        editor.bind(rhai, "C-c C-r", region).ok();
     }
 }
 
@@ -118,11 +124,22 @@ pub(crate) mod testing {
         editor.buffer_mut().insert(text);
         editor
     }
+
+    pub(crate) fn opened(name: &str, text: &str) -> (tempfile::TempDir, Editor) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(name);
+        std::fs::write(&path, text).unwrap();
+        let mut editor = installed();
+        editor.open_file(&path);
+        (dir, editor)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::{installed, m_x, press, with_text};
+    use oxmacs_core::theme::Highlight;
+
+    use crate::testing::{installed, m_x, opened, press, with_text};
 
     #[test]
     fn the_applet_is_opt_in_with_its_own_version() {
@@ -203,6 +220,36 @@ mod tests {
         m_x(&mut editor, "script-eval-region");
 
         assert_eq!(editor.message(), Some("Select the code to evaluate"));
+    }
+
+    #[test]
+    fn rhai_files_evaluate_with_c_c_c_c_and_c_c_c_r() {
+        let (_dir, mut editor) = opened("answer.rhai", "let a = 40;\na + 2\n");
+        assert!(
+            editor.mode_line().ends_with("(Rhai)"),
+            "{}",
+            editor.mode_line()
+        );
+
+        press(&mut editor, "C-c C-c");
+        assert_eq!(editor.message(), Some("42"));
+
+        press(&mut editor, "M-< M-f M-f M-f M-b C-SPC M-f C-c C-r");
+        assert_eq!(editor.message(), Some("40"));
+    }
+
+    #[test]
+    fn rhai_files_are_highlighted_and_comment_with_two_slashes() {
+        let (_dir, mut editor) = opened("note.rhai", "let x = 1;\n");
+        assert_eq!(editor.line_style(0).spans, [(0..3, Highlight::Keyword)]);
+
+        press(&mut editor, "C-x C-;");
+
+        assert!(
+            editor.buffer().contents().starts_with("// let x = 1;"),
+            "{}",
+            editor.buffer().contents()
+        );
     }
 
     #[test]

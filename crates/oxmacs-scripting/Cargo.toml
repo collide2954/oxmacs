@@ -12,3 +12,6 @@ workspace = true
 oxmacs-core.workspace = true
 oxmacs-gui.workspace = true
 rhai.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
