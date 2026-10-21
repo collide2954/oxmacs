@@ -676,6 +676,28 @@ mod tests {
     }
 
     #[test]
+    fn equal_values_hash_alike() {
+        all(&[
+            ("(= (hash [1 2]) (hash (list 1 2)))", "true"),
+            ("(= (hash [1 [2]]) (hash (list 1 (list 2))))", "true"),
+            ("(= (hash []) (hash nil))", "true"),
+            (r#"(= (hash "ab") (hash (str "a" "b")))"#, "true"),
+            (
+                "(= (hash 100000000000000000000) (hash (* 10000000000 10000000000)))",
+                "true",
+            ),
+            ("(= (hash :a) (hash :a))", "true"),
+            ("(= (hash 1) (hash 2))", "false"),
+            ("(= (hash [1 2]) (hash [2 1]))", "false"),
+            ("(= (hash [1]) (hash 1))", "false"),
+            (
+                "(def big (* 1e308 10)) (= (hash (- big big)) (hash (- big big)))",
+                "true",
+            ),
+        ]);
+    }
+
+    #[test]
     fn equality_on_floats_is_an_equivalence() {
         let not_a_number = "(def big (* 1e308 10)) (def x (- big big))";
         all(&[

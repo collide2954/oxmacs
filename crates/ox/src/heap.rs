@@ -1,4 +1,5 @@
 use std::fmt;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 
 use num_bigint::BigInt;
@@ -27,6 +28,7 @@ pub struct Pair {
 struct OxString {
     text: Box<str>,
     length: usize,
+    hash: u64,
 }
 
 #[derive(Debug)]
@@ -93,9 +95,12 @@ fn reference(value: Value, kind: Kind) -> Option<u32> {
 
 impl Heap {
     pub fn string(&mut self, text: &str) -> Result<Value, HeapFull> {
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
         let index = self.strings.alloc(OxString {
             text: text.into(),
             length: text.chars().count(),
+            hash: hasher.finish(),
         })?;
         Ok(Value::Ref(Ref {
             kind: Kind::String,
@@ -113,6 +118,12 @@ impl Heap {
         self.strings
             .get(reference(value, Kind::String)?)
             .map(|string| string.length)
+    }
+
+    pub fn string_hash(&self, value: Value) -> Option<u64> {
+        self.strings
+            .get(reference(value, Kind::String)?)
+            .map(|string| string.hash)
     }
 
     pub fn pair(&mut self, head: Value, tail: Value) -> Result<Value, HeapFull> {

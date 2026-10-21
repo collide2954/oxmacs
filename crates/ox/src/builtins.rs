@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::io::{self, Write};
 
 use crate::collections;
-use crate::equal::{equal, identical};
+use crate::equal::{equal, hash, identical};
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
@@ -112,6 +112,11 @@ pub fn install(isolate: &mut Isolate) {
     });
     isolate.define_native("identical?", 2, Some(2), |_, arguments| {
         Ok(Value::Bool(identical(arguments[0], arguments[1])))
+    });
+    isolate.define_native("hash", 1, Some(1), |heap, arguments| {
+        Ok(Value::Int(i64::from_ne_bytes(
+            hash(heap, arguments[0]).to_ne_bytes(),
+        )))
     });
     isolate.define_native("==", 1, None, |heap, arguments| {
         chain(heap, "==", arguments, Ordering::is_eq)

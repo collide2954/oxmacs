@@ -1,8 +1,112 @@
+use std::hash::{DefaultHasher, Hash, Hasher};
+
 use crate::heap::Heap;
 use crate::value::{Kind, Value};
 use crate::vector::Vector;
 
 type Pending = Vec<(Value, Value)>;
+
+const SEQUENCE: u64 = 0x9e37_79b9_7f4a_7c15;
+const DOTTED: u64 = 0x2545_f491_4f6c_dd1d;
+
+enum Task {
+    Hash(Value),
+    Sequence { count: usize, dotted: bool },
+}
+
+fn mix(bits: u64) -> u64 {
+    let mut bits = bits;
+    bits ^= bits >> 30;
+    bits = bits.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    bits ^= bits >> 27;
+    bits = bits.wrapping_mul(0x94d0_49bb_1331_11eb);
+    bits ^ (bits >> 31)
+}
+
+fn tagged(tag: u64, bits: u64) -> u64 {
+    mix(bits ^ tag.wrapping_mul(SEQUENCE))
+}
+
+fn digest(value: impl Hash) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn scalar(heap: &Heap, value: Value) -> u64 {
+    match value {
+        Value::Nil => SEQUENCE,
+        Value::Bool(flag) => tagged(1, u64::from(flag)),
+        Value::Int(number) => tagged(2, u64::from_ne_bytes(number.to_ne_bytes())),
+        Value::Float(number) => tagged(
+            3,
+            if number.is_nan() {
+                u64::MAX
+            } else {
+                number.to_bits()
+            },
+        ),
+        Value::Char(character) => tagged(4, u64::from(character)),
+        Value::Symbol(name) => tagged(5, digest(name)),
+        Value::Keyword(name) => tagged(6, digest(name)),
+        Value::Ref(reference) => {
+            if let Some(hash) = heap.string_hash(value) {
+                tagged(7, hash)
+            } else if let Some(number) = heap.bigint_of(value) {
+                tagged(8, digest(number))
+            } else {
+                tagged(9, digest(reference))
+            }
+        }
+    }
+}
+
+fn sequence_items(heap: &Heap, value: Value) -> Option<(Vec<Value>, Option<Value>)> {
+    if let Some(vector) = heap.vector_of(value) {
+        return Some((vector.items(heap), None));
+    }
+    heap.pair_of(value)?;
+    let mut items = Vec::new();
+    let mut rest = value;
+    while let Some(pair) = heap.pair_of(rest) {
+        items.push(pair.head);
+        rest = pair.tail;
+    }
+    Some((items, (rest != Value::Nil).then_some(rest)))
+}
+
+pub fn hash(heap: &Heap, value: Value) -> u64 {
+    let mut tasks = vec![Task::Hash(value)];
+    let mut results = Vec::new();
+    while let Some(task) = tasks.pop() {
+        match task {
+            Task::Hash(value) => {
+                let Some((items, tail)) = sequence_items(heap, value) else {
+                    results.push(scalar(heap, value));
+                    continue;
+                };
+                tasks.push(Task::Sequence {
+                    count: items.len() + usize::from(tail.is_some()),
+                    dotted: tail.is_some(),
+                });
+                tasks.extend(tail.map(Task::Hash));
+                tasks.extend(items.into_iter().rev().map(Task::Hash));
+            }
+            Task::Sequence { count, dotted } => {
+                let start = results.len().saturating_sub(count);
+                let combined = results.drain(start..).fold(SEQUENCE, |total, item| {
+                    mix(total.wrapping_mul(31).wrapping_add(item))
+                });
+                results.push(if dotted {
+                    mix(combined ^ DOTTED)
+                } else {
+                    combined
+                });
+            }
+        }
+    }
+    results.pop().unwrap_or(SEQUENCE)
+}
 
 fn same_contents(heap: &Heap, a: Value, b: Value) -> bool {
     match (a, b) {
@@ -79,21 +183,47 @@ pub fn identical(a: Value, b: Value) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::equal;
+    use super::{equal, hash};
     use crate::heap::Heap;
     use crate::value::Value;
+
+    fn deep(heap: &mut Heap) -> Value {
+        let long = heap.list((0..100_000).map(Value::Int)).unwrap();
+        (0..100_000)
+            .try_fold(long, |inner, _| heap.pair(inner, Value::Nil))
+            .unwrap()
+    }
 
     #[test]
     fn long_and_deeply_nested_lists_compare_without_recursion() {
         let mut heap = Heap::default();
-        let build = |heap: &mut Heap| {
-            let long = heap.list((0..100_000).map(Value::Int)).unwrap();
-            (0..100_000).try_fold(long, |inner, _| heap.pair(inner, Value::Nil))
-        };
 
-        let a = build(&mut heap).unwrap();
-        let b = build(&mut heap).unwrap();
+        let a = deep(&mut heap);
+        let b = deep(&mut heap);
 
         assert!(equal(&heap, a, b));
+    }
+
+    #[test]
+    fn long_and_deeply_nested_lists_hash_without_recursion() {
+        let mut heap = Heap::default();
+
+        let a = deep(&mut heap);
+        let b = deep(&mut heap);
+
+        assert_eq!(hash(&heap, a), hash(&heap, b));
+    }
+
+    #[test]
+    fn dotted_pairs_hash_by_their_head_and_tail() {
+        let mut heap = Heap::default();
+        let a = heap.pair(Value::Int(1), Value::Int(2)).unwrap();
+        let b = heap.pair(Value::Int(1), Value::Int(2)).unwrap();
+        let list = heap
+            .list([Value::Int(1), Value::Int(2)].into_iter())
+            .unwrap();
+
+        assert_eq!(hash(&heap, a), hash(&heap, b));
+        assert_ne!(hash(&heap, a), hash(&heap, list));
     }
 }
