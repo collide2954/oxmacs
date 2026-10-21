@@ -1,11 +1,11 @@
 use oxmacs_core::applet::AppletBuffer;
 use oxmacs_core::command::ScopeId;
-use oxmacs_core::editor::{Editor, Tiling, WindowId};
+use oxmacs_core::editor::{Editor, Offer, Picked, Tiling, WindowId};
 use oxmacs_core::text::BufferId;
 
 use crate::driver::Query;
-use crate::grid::{Cell, Grid, PAGE};
-use crate::open::{DatabaseState, TreeView};
+use crate::grid::{Cell, Grid, PAGE, identifier};
+use crate::open::{DatabaseState, TreeView, tree_of};
 use crate::service::{DbId, Reply, Request};
 use crate::text::thousands;
 use crate::tree::{Row, State};
@@ -81,6 +81,9 @@ fn load(editor: &mut Editor, id: BufferId) {
     let Some((_, view)) = editor.applet_buffer_mut::<GridView>(id) else {
         return;
     };
+    if view.grid.error.is_some() {
+        return;
+    }
     let db = view.grid.db;
     let query = view.grid.query.clone();
     let wanted = view.grid.wanted();
@@ -282,7 +285,81 @@ pub(crate) fn filter_cell(editor: &mut Editor, negate: bool) {
         editor.show_message("This row has not loaded yet");
         return;
     };
-    requery(editor, id, |grid| grid.filter(&condition));
+    add_filter(editor, id, &condition);
+}
+
+const ANY_CONDITION: &str = "Any condition…";
+
+fn declared_types(editor: &Editor, db: DbId, table: &str) -> Vec<(String, String)> {
+    let Some((_, tree)) = tree_of(editor, db).and_then(|id| editor.applet_buffer::<TreeView>(id))
+    else {
+        return Vec::new();
+    };
+    let State::Ready(schema) = &tree.state else {
+        return Vec::new();
+    };
+    schema
+        .tables
+        .iter()
+        .find(|found| found.name == table)
+        .map(|found| {
+            found
+                .columns
+                .iter()
+                .map(|column| (column.name.clone(), column.declared.clone()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn column_offers(columns: &[String], types: &[(String, String)]) -> Vec<Offer> {
+    columns
+        .iter()
+        .map(|name| {
+            let declared = types
+                .iter()
+                .find(|(column, _)| column == name)
+                .map_or("", |(_, declared)| declared.as_str());
+            if declared.is_empty() {
+                Offer::from(name.clone())
+            } else {
+                Offer::noted(name.clone(), declared)
+            }
+        })
+        .chain([Offer::from(ANY_CONDITION)])
+        .collect()
+}
+
+fn add_filter(editor: &mut Editor, id: BufferId, condition: &str) {
+    requery(editor, id, |grid| grid.filter(condition));
+}
+
+pub(crate) fn prompt_filter(editor: &mut Editor) {
+    let Some(id) = current(editor) else {
+        return;
+    };
+    let Some((_, view)) = editor.applet_buffer::<GridView>(id) else {
+        return;
+    };
+    let columns = view.grid.columns.clone();
+    let types = declared_types(editor, view.grid.db, &view.grid.query.table);
+    let offers = column_offers(&columns, &types);
+    editor.prompt_pick(
+        "Filter column: ",
+        move |_| offers.clone(),
+        move |editor, picked| match picked {
+            Picked::Offered(index) => {
+                let start = columns
+                    .get(index)
+                    .map(|name| format!("{} ", identifier(name)))
+                    .unwrap_or_default();
+                editor.prompt_with_text("Filter: ", &start, move |editor, condition| {
+                    add_filter(editor, id, &condition);
+                });
+            }
+            Picked::Typed(condition) => add_filter(editor, id, &condition),
+        },
+    );
 }
 
 pub(crate) fn refresh(editor: &mut Editor) {
@@ -391,7 +468,7 @@ mod tests {
     use crate::driver::Value;
     use crate::driver::fixtures::database;
     use crate::service::{Request, Service};
-    use crate::testing::{installed, press, pump, requests};
+    use crate::testing::{installed, press, pump, requests, type_text};
 
     fn with_numbers(path: &Path) {
         let connection = rusqlite::Connection::open(path).unwrap();
@@ -751,6 +828,95 @@ mod tests {
 
         assert_eq!(editor.message(), Some("This row has not loaded yet"));
         assert_eq!(view(&editor).query.filters, Vec::<String>::new());
+    }
+
+    fn offered(editor: &Editor) -> Vec<(String, Option<String>)> {
+        editor
+            .completions()
+            .into_iter()
+            .map(|completion| (completion.label, completion.annotation))
+            .collect()
+    }
+
+    fn noted(label: &str, note: Option<&str>) -> (String, Option<String>) {
+        (label.to_owned(), note.map(str::to_owned))
+    }
+
+    #[test]
+    fn f_offers_typed_columns_then_starts_the_condition() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+
+        press(&mut editor, "f");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Filter column: ");
+        assert_eq!(
+            offered(&editor),
+            [
+                noted("id", Some("INTEGER")),
+                noted("title", Some("TEXT")),
+                noted("artist_id", Some("INTEGER")),
+                noted("cover", Some("BLOB")),
+                noted("price", Some("REAL")),
+                noted("Any condition…", None),
+            ]
+        );
+        type_text(&mut editor, "price");
+        press(&mut editor, "RET");
+        let minibuffer = editor.minibuffer().unwrap();
+        assert_eq!(minibuffer.prompt(), "Filter: ");
+        assert_eq!(minibuffer.input().contents(), "price ");
+        type_text(&mut editor, "> 8");
+        press(&mut editor, "RET");
+        pump(&mut editor, &mut service);
+
+        assert_eq!(view(&editor).query.filters, ["price > 8"]);
+        assert_eq!(
+            titles(&editor),
+            ["For Those About To Rock", "Balls to the Wall"]
+        );
+    }
+
+    #[test]
+    fn f_takes_any_condition_or_text_typed_at_once() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+
+        press(&mut editor, "f");
+        type_text(&mut editor, "any");
+        press(&mut editor, "RET");
+        assert_eq!(editor.minibuffer().unwrap().input().contents(), "");
+        type_text(&mut editor, "id < 3");
+        press(&mut editor, "RET");
+        press(&mut editor, "f");
+        type_text(&mut editor, "id > 1");
+        press(&mut editor, "RET");
+        press(&mut editor, "f");
+        type_text(&mut editor, "id > 1");
+        press(&mut editor, "RET");
+        pump(&mut editor, &mut service);
+
+        assert_eq!(view(&editor).query.filters, ["id < 3", "id > 1"]);
+        assert_eq!(titles(&editor), ["Balls to the Wall"]);
+    }
+
+    #[test]
+    fn a_condition_sqlite_rejects_shows_its_error_once() {
+        let (_dir, mut editor, mut service) = opened();
+        table(&mut editor, &mut service, "");
+
+        press(&mut editor, "f");
+        type_text(&mut editor, "nope = 1");
+        press(&mut editor, "RET");
+        for request in requests(&mut editor) {
+            let reply = service.handle(request);
+            editor.deliver(&Payload::new(reply));
+        }
+
+        assert_eq!(requests(&mut editor), []);
+        let grid = view(&editor);
+        assert_eq!(grid.query.filters, ["nope = 1"]);
+        assert!(grid.error.as_deref().unwrap_or_default().contains("nope"));
+        assert!(editor.message().unwrap_or_default().contains("nope"));
     }
 
     #[test]

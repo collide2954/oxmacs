@@ -236,6 +236,13 @@ const GRID: &[Spec] = &[
         keys: &["!"],
         run: |editor| table::filter_cell(editor, true),
     },
+    Spec {
+        name: "database-filter",
+        summary: "Keep only the rows matching a condition on a column",
+        help: None,
+        keys: &["f"],
+        run: table::prompt_filter,
+    },
 ];
 
 fn register(editor: &mut Editor, scope: ScopeId, specs: &[Spec]) -> Vec<CommandId> {
