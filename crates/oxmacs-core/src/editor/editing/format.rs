@@ -3,6 +3,7 @@ use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
+use crate::command::Command;
 use crate::editor::Editor;
 use crate::external::managed::AIR;
 use crate::external::tools;
@@ -55,6 +56,9 @@ impl Editor {
     pub fn add_formatter(&mut self, language: crate::syntax::Language, formatter: Formatter) {
         self.formatters.retain(|(known, _)| *known != language);
         self.formatters.push((language, formatter));
+        if let Some(scope) = self.registered(language).and_then(|known| known.scope) {
+            self.bind(scope, "C-c C-f", Command::FormatBuffer).ok();
+        }
     }
 
     pub(in crate::editor) fn formatter_for(&self, index: usize) -> Option<Formatter> {
@@ -323,6 +327,27 @@ mod tests {
 
         assert_eq!(editor.buffer().contents(), "HELLO untitled.shout");
         assert_eq!(editor.message(), Some("Formatted with shout"));
+    }
+
+    #[test]
+    fn languages_from_applets_format_on_c_c_c_f_in_their_scope() {
+        let shouty = Language::new(&SHOUTY);
+        let mut editor = editor_with("hello", 0);
+        let scope = editor.add_scope("Shouty buffers");
+        editor.add_language(shouty, Some(scope));
+        editor.add_formatter(
+            shouty,
+            Formatter {
+                name: "shout",
+                format: |_, request: &FormatRequest<'_>| Ok(request.text.to_uppercase()),
+                regions: false,
+            },
+        );
+        editor.set_major_mode(Some(shouty));
+
+        press(&mut editor, "C-c C-f");
+
+        assert_eq!(editor.buffer().contents(), "HELLO");
     }
 
     fn saving(format_on_save: bool) -> String {

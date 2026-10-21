@@ -200,7 +200,6 @@ impl Applet for Python {
         let python = editor.add_scope("Python buffers");
         register(editor, Scope::Global.into(), GLOBAL);
         register(editor, python, PYTHON);
-        editor.bind(python, "C-c C-f", Command::FormatBuffer).ok();
         editor.add_language(LANGUAGE, Some(python));
         editor.add_config_table::<Settings>(tools::TABLE);
         editor.add_settings(tools::TABLE, tools::SETTINGS);
