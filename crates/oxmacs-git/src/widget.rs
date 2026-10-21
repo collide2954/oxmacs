@@ -34,6 +34,8 @@ const PILL_PADDING: f32 = 0.35;
 const NODE: f32 = 0.22;
 const EDGE: f32 = 2.0;
 const AUTHOR: usize = 20;
+const DATE: usize = 15;
+const GAP: usize = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LogViewport {
@@ -105,6 +107,14 @@ impl Geometry {
 
     pub(crate) fn graph_width(&self, lanes: usize) -> f32 {
         self.cell.width + self.lane_width() * to_f32(lanes.max(1))
+    }
+
+    pub(crate) fn author_x(&self) -> f32 {
+        self.origin.x + self.size.width - self.cell.width * to_f32(1 + DATE + GAP + AUTHOR)
+    }
+
+    pub(crate) fn subject_width(&self, start: f32) -> f32 {
+        (self.author_x() - start - self.cell.width * to_f32(GAP)).max(0.0)
     }
 
     pub(crate) fn row_top(&self, offset: usize) -> f32 {
@@ -502,11 +512,11 @@ impl LogWidget<'_> {
         let author = status::shorten(&entry.author, AUTHOR);
         let right = bounds.x + bounds.width - cell.width;
         let ago_x = right - to_f32(ago.chars().count()) * cell.width;
-        let author_x = right - to_f32(AUTHOR + 12) * cell.width;
+        let author_x = geometry.author_x();
         let mut x = bounds.x + geometry.graph_width(lanes);
         let row = Rectangle::new(
             Point::new(x, top),
-            Size::new(author_x - x, geometry.row_height),
+            Size::new(geometry.subject_width(x), geometry.row_height),
         );
         for label in self.view.labels.get(&entry.id).into_iter().flatten() {
             let width = to_f32(label.name.chars().count()) * cell.width;
@@ -709,6 +719,15 @@ mod tests {
         assert_eq!(geometry.lane_x(0), 20.0);
         assert_eq!(geometry.lane_x(1), 40.0);
         assert_eq!(geometry.graph_width(2), 50.0);
+    }
+
+    #[test]
+    fn the_author_column_leaves_room_for_the_longest_date() {
+        let geometry = Geometry::new(Point::new(5.0, 0.0), Size::new(500.0, 300.0), CELL, false);
+
+        assert_eq!(geometry.author_x(), 125.0);
+        assert_eq!(geometry.subject_width(65.0), 40.0);
+        assert_eq!(geometry.subject_width(200.0), 0.0);
     }
 
     #[test]
