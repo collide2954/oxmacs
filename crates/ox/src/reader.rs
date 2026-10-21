@@ -28,11 +28,14 @@ pub struct ReadError {
 }
 
 const MAX_DEPTH: usize = 1000;
+const MAX_INTERPOLATION: usize = 16;
 
 pub fn read(source: &str) -> (Vec<Syntax>, Vec<ReadError>) {
     let mut reader = Reader {
         source,
         at: 0,
+        end: source.len(),
+        depth: 0,
         errors: Vec::new(),
         frames: Vec::new(),
         top: Vec::new(),
@@ -57,6 +60,8 @@ enum Frame {
 struct Reader<'a> {
     source: &'a str,
     at: usize,
+    end: usize,
+    depth: usize,
     errors: Vec<ReadError>,
     frames: Vec<Frame>,
     top: Vec<Syntax>,
@@ -80,7 +85,7 @@ fn delimiter(character: char) -> bool {
 
 impl<'a> Reader<'a> {
     fn rest(&self) -> &'a str {
-        &self.source[self.at..]
+        &self.source[self.at..self.end]
     }
 
     fn error(&mut self, start: usize, message: impl Into<String>) {
@@ -179,11 +184,48 @@ impl<'a> Reader<'a> {
                     self.error(start, format!("Unexpected {first}"));
                 }
                 _ => {
-                    let datum = atom(self.token());
+                    let token = self.token();
+                    let datum = self.fields(token, start).unwrap_or_else(|| atom(token));
                     self.push(datum, start);
                 }
             }
         }
+    }
+
+    fn fields(&mut self, token: &str, start: usize) -> Option<Datum> {
+        if !token.contains('.')
+            || numeric(token)
+            || token.starts_with([':', '.'])
+            || token.ends_with('.')
+        {
+            return None;
+        }
+        if token.split('.').any(str::is_empty) {
+            self.error(start, format!("Empty field name in {token}"));
+            return Some(Datum::Symbol(token.to_owned()));
+        }
+        let mut offset = start;
+        let mut parts = Vec::new();
+        for (index, part) in token.split('.').enumerate() {
+            let span = Span::new(offset, offset + part.len());
+            if index == 0 {
+                parts.push(Syntax {
+                    datum: Datum::Symbol(".".to_owned()),
+                    span: Span::new(span_end(span), span_end(span) + 1),
+                });
+                parts.push(Syntax {
+                    datum: Datum::Symbol(part.to_owned()),
+                    span,
+                });
+            } else {
+                parts.push(Syntax {
+                    datum: Datum::Keyword(part.to_owned()),
+                    span,
+                });
+            }
+            offset += part.len() + 1;
+        }
+        Some(Datum::List(parts))
     }
 
     fn push(&mut self, datum: Datum, start: usize) {
@@ -331,21 +373,120 @@ impl<'a> Reader<'a> {
     fn string(&mut self, start: usize) -> Datum {
         self.at += 1;
         let mut text = String::new();
-        loop {
-            let escape = self.at;
+        let mut pieces = Vec::new();
+        let mut piece_start = self.at;
+        let mut interpolated = false;
+        let piece_end = loop {
+            let here = self.at;
             match self.next_char() {
                 None => {
                     self.error(start, "This string is never closed");
-                    break;
+                    break self.at;
                 }
-                Some('"') => break,
-                Some('\\') => text.extend(self.escape(escape)),
+                Some('"') => break here,
+                Some('\\') => text.extend(self.escape(here)),
+                Some('{') if self.rest().starts_with('{') => {
+                    self.at += 1;
+                    text.push('{');
+                }
+                Some('}') if self.rest().starts_with('}') => {
+                    self.at += 1;
+                    text.push('}');
+                }
+                Some('{') => {
+                    interpolated = true;
+                    if !text.is_empty() {
+                        pieces.push(Syntax {
+                            datum: Datum::Str(std::mem::take(&mut text)),
+                            span: Span::new(piece_start, here),
+                        });
+                    }
+                    pieces.extend(self.interpolation(here));
+                    piece_start = self.at;
+                }
                 Some(other) => text.push(other),
             }
+        };
+        if !interpolated {
+            return Datum::Str(text);
         }
-        Datum::Str(text)
+        if !text.is_empty() {
+            pieces.push(Syntax {
+                datum: Datum::Str(text),
+                span: Span::new(piece_start, piece_end),
+            });
+        }
+        let head = Syntax {
+            datum: Datum::Symbol("str".to_owned()),
+            span: Span::new(start, start + 1),
+        };
+        Datum::List(std::iter::once(head).chain(pieces).collect())
     }
 
+    fn interpolation(&mut self, open: usize) -> Option<Syntax> {
+        let Some(close) = self.matching_brace() else {
+            self.error_at(Span::new(open, open + 1), "This { is never closed");
+            self.at = self.end;
+            return None;
+        };
+        let braces = Span::new(open, close + 1);
+        if self.depth >= MAX_INTERPOLATION {
+            self.error_at(braces, "Strings nested too deeply");
+            self.at = close + 1;
+            return None;
+        }
+        let mut inner = Reader {
+            source: self.source,
+            at: self.at,
+            end: close,
+            depth: self.depth + 1,
+            errors: Vec::new(),
+            frames: Vec::new(),
+            top: Vec::new(),
+        };
+        inner.read_all();
+        self.errors.append(&mut inner.errors);
+        self.at = close + 1;
+        let mut found = inner.top.into_iter();
+        match (found.next(), found.next()) {
+            (Some(only), None) => Some(only),
+            (None, _) => {
+                self.error_at(braces, "Put an expression inside the braces");
+                None
+            }
+            (Some(first), Some(_)) => {
+                self.error_at(braces, "Put one expression inside the braces");
+                Some(first)
+            }
+        }
+    }
+
+    fn matching_brace(&self) -> Option<usize> {
+        let mut depth = 0_usize;
+        let mut characters = self.rest().char_indices();
+        while let Some((offset, character)) = characters.next() {
+            match character {
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' => depth = depth.saturating_sub(1),
+                '}' if depth == 0 => return Some(self.at + offset),
+                '}' => depth -= 1,
+                '"' => loop {
+                    match characters.next()? {
+                        (_, '\\') => {
+                            characters.next();
+                        }
+                        (_, '"') => break,
+                        _ => {}
+                    }
+                },
+                '\\' => {
+                    characters.next();
+                }
+                _ => {}
+            }
+        }
+        None
+    }
     fn escape(&mut self, start: usize) -> Option<char> {
         let character = self.next_char()?;
         let escaped = match character {
@@ -403,6 +544,10 @@ impl<'a> Reader<'a> {
         };
         Datum::Char(character)
     }
+}
+
+fn span_end(span: Span) -> usize {
+    span.end as usize
 }
 
 fn named(name: &str) -> Option<char> {
@@ -751,6 +896,82 @@ mod tests {
             [
                 ("Unknown form #x".to_owned(), Span::new(0, 2)),
                 ("This comment is never closed".to_owned(), Span::new(5, 12)),
+            ]
+        );
+    }
+    #[test]
+    fn dots_inside_symbols_read_fields() {
+        assert_eq!(
+            shapes("city.name a.b.c ... .5 x. :a.b 1.5"),
+            [
+                "(. city :name)",
+                "(. a :b :c)",
+                "...",
+                ".5",
+                "x.",
+                ":a.b",
+                "1.5",
+            ]
+        );
+        let (data, _) = read("city.name");
+        let Datum::List(parts) = &data[0].datum else {
+            panic!("expected a field access");
+        };
+        assert_eq!(data[0].span, Span::new(0, 9));
+        assert_eq!(parts[1].span, Span::new(0, 4));
+        assert_eq!(parts[2].span, Span::new(5, 9));
+    }
+
+    #[test]
+    fn empty_field_names_are_reported() {
+        assert_eq!(
+            errors("a..b"),
+            [("Empty field name in a..b".to_owned(), Span::new(0, 4))]
+        );
+    }
+
+    #[test]
+    fn strings_interpolate_expressions_in_braces() {
+        assert_eq!(
+            shapes(r#""Hi {name}!" "{{x}} {(+ 1 2)}" "{city.name}" "plain}""#),
+            [
+                r#"(str "Hi " name "!")"#,
+                r#"(str "{x} " (+ 1 2))"#,
+                "(str (. city :name))",
+                r#""plain}""#,
+            ]
+        );
+    }
+
+    #[test]
+    fn interpolated_expressions_keep_their_spans_and_may_hold_strings() {
+        let source = r#""a{(f "}")}b""#;
+        let (data, errors) = read(source);
+        let Datum::List(pieces) = &data[0].datum else {
+            panic!("expected an interpolation");
+        };
+
+        assert_eq!(errors, []);
+        assert_eq!(shape(&data[0]), r#"(str "a" (f "}") "b")"#);
+        assert_eq!(data[0].span, Span::new(0, 13));
+        assert_eq!(pieces[2].span, Span::new(3, 10));
+    }
+
+    #[test]
+    fn interpolation_mistakes_are_reported() {
+        assert_eq!(
+            errors(r#""{}" "{a b}" "{open""#),
+            [
+                (
+                    "Put an expression inside the braces".to_owned(),
+                    Span::new(1, 3)
+                ),
+                (
+                    "Put one expression inside the braces".to_owned(),
+                    Span::new(6, 11)
+                ),
+                ("This { is never closed".to_owned(), Span::new(14, 15)),
+                ("This string is never closed".to_owned(), Span::new(13, 20)),
             ]
         );
     }
