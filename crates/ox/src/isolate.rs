@@ -279,6 +279,35 @@ mod tests {
     }
 
     #[test]
+    fn let_binds_names_in_order_for_its_body() {
+        all(&[
+            ("(let [x 1 y 2] (+ x y))", "3"),
+            ("(let [x 1 y (+ x 1)] (* x y))", "2"),
+            ("(let [x 1] (let [x (+ x 10)] x))", "11"),
+            ("(let [x 1] (let [x 5] x) x)", "1"),
+            ("(def x 100) (let [x 1] x)", "1"),
+            ("(def x 100) (let [y 1] x)", "100"),
+            ("(let [] 5)", "5"),
+            ("(let [x 2] 0 (+ x x))", "4"),
+            ("(def (f a) (let [b (* a 2)] (+ a b))) (f 3)", "9"),
+            ("(+ 1 (let [x 2] (* x 10)) (let [y 3] y))", "24"),
+        ]);
+    }
+
+    #[test]
+    fn malformed_lets_are_reported() {
+        all(&[
+            ("(let)", "error: let takes a binding vector and a body"),
+            ("(let x 1)", "error: let takes a binding vector and a body"),
+            (
+                "(let [x] x)",
+                "error: let bindings come in name and value pairs",
+            ),
+            ("(let [1 2] 3)", "error: Bindings must be names"),
+        ]);
+    }
+
+    #[test]
     fn rust_functions_can_be_called_from_ox() {
         let mut isolate = Isolate::new();
         isolate.define_native("twice", 1, Some(1), |_, arguments| match arguments {

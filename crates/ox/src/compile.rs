@@ -127,6 +127,7 @@ impl<'a> Compiler<'a> {
             "do" => Some(self.sequence(rest, target, span)),
             "def" => Some(self.define(rest, target, span)),
             "fn" => Some(self.function(rest, target, span)),
+            "let" => Some(self.binding(rest, target, span)),
             _ => None,
         }
     }
@@ -169,6 +170,39 @@ impl<'a> Compiler<'a> {
         };
         self.emit(Op::DefineGlobal { name, from: target }, span);
         self.load(Value::Symbol(name), target, span)
+    }
+
+    fn binding(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let Some((
+            Syntax {
+                datum: Datum::Vector(bindings),
+                ..
+            },
+            body,
+        )) = parts.split_first()
+        else {
+            return Err(Error::at(span, "let takes a binding vector and a body"));
+        };
+        if bindings.len() % 2 == 1 {
+            return Err(Error::at(span, "let bindings come in name and value pairs"));
+        }
+        let top = self.top;
+        let locals = self.locals.len();
+        for pair in bindings.chunks(2) {
+            let [name, value] = pair else {
+                continue;
+            };
+            let Datum::Symbol(name) = &name.datum else {
+                return Err(Error::at(name.span, "Bindings must be names"));
+            };
+            let register = self.reserve(1, span)?;
+            self.expression(value, register)?;
+            self.locals.push((Sym::intern(name), register));
+        }
+        self.sequence(body, target, span)?;
+        self.locals.truncate(locals);
+        self.top = top;
+        Ok(())
     }
 
     fn function(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
