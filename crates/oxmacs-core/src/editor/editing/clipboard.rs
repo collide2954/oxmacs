@@ -7,6 +7,16 @@ impl Editor {
         &self.clipboard_history
     }
 
+    pub fn copy_text(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        if text.is_empty() {
+            return;
+        }
+        self.line_copy = None;
+        self.remember(text.clone());
+        self.effects.push(Effect::WriteClipboard(text));
+    }
+
     pub(in crate::editor) fn copy(&mut self, cut: bool) {
         self.shift_selection = false;
         let buffer = self.current_mut();
@@ -191,6 +201,17 @@ mod tests {
             assert_eq!(editor.buffer().contents(), "hello world");
             assert_eq!(editor.buffer().selection(), None);
         }
+    }
+
+    #[test]
+    fn applets_copy_text_of_their_own() {
+        let mut editor = editor_with("", 0);
+
+        editor.copy_text("a\tb\nc\td");
+        editor.copy_text("");
+
+        assert_eq!(clipboard_writes(&mut editor), ["a\tb\nc\td"]);
+        assert_eq!(editor.clipboard_history(), ["a\tb\nc\td"]);
     }
 
     #[test]
