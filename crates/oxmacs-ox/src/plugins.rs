@@ -11,8 +11,6 @@ use oxmacs_core::editor::Editor;
 
 use crate::{commands, log};
 
-pub const BUNDLED: &[Bundle] = &[];
-
 #[derive(Debug, Clone, Copy)]
 pub struct Bundle {
     pub name: &'static str,
@@ -253,6 +251,21 @@ fn bundled_files(plugin: &str, files: &[(&str, &str)]) -> Vec<(String, String, S
         .collect()
 }
 
+fn add_sources(
+    isolate: &mut Isolate,
+    plugin: &str,
+    entry: &str,
+    files: &[(String, String, String)],
+) {
+    for (file_name, file, text) in files {
+        if file_name == "plugin.ox" || file_name == entry {
+            continue;
+        }
+        let stem = file_name.trim_end_matches(".ox");
+        isolate.add_source(&format!("{plugin}/{stem}"), file, text);
+    }
+}
+
 fn stub(editor: &mut Editor, plugin: &str, command: &str, summary: &str) {
     let (plugin, queued) = (plugin.to_owned(), command.to_owned());
     editor.add_dynamic_command(DynamicSpec {
@@ -290,6 +303,7 @@ pub fn discover(
             continue;
         };
         if let Some(manifest) = read_manifest(isolate, editor, file, text) {
+            add_sources(isolate, bundle.name, &manifest.entry, &files);
             known.push(Plugin {
                 manifest,
                 origin: Origin::Bundled(bundle.files),
@@ -524,13 +538,7 @@ fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) {
         Origin::Bundled(files) => bundled_files(name, files),
         Origin::Folder(folder) => folder_files(folder),
     };
-    for (file_name, file, text) in &files {
-        if file_name == "plugin.ox" || *file_name == plugin.manifest.entry {
-            continue;
-        }
-        let stem = file_name.trim_end_matches(".ox");
-        isolate.add_source(&format!("{name}/{stem}"), file, text);
-    }
+    add_sources(isolate, name, &plugin.manifest.entry, &files);
     let Some((_, file, text)) = files
         .iter()
         .find(|(file_name, _, _)| *file_name == plugin.manifest.entry)

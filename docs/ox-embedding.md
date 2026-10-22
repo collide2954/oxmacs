@@ -35,6 +35,10 @@ A plugin is a folder with a manifest and its modules:
 
 The manifest is read as quoted data. Its commands exist from startup and wake the plugin when first run. The entry file loads as the module `weather`, and the plugin's other files as `weather/<file>`, so `(import (weather forecast))` works. Each plugin module gets a `setting` function for its own settings.
 
+## Weather
+
+The first bundled plugin lives in `crates/oxmacs-ox/plugins/weather`: `plugin.ox`, the entry `weather.ox` (state in a `defonce` atom, fetching in a spawned task, commands, the mode line and its refresh), `forecast.ox` (URLs, parsing Open-Meteo JSON and formatting) and `page.ox` (the view, a pure function of the state). Its tests feed recorded Open-Meteo replies to the modules and read the drawn view as lines.
+
 ## Slices
 
 Each slice is a tested, gated commit; about three go in each cycle.

@@ -1,3 +1,4 @@
+mod bundled;
 mod commands;
 mod log;
 mod natives;
@@ -43,7 +44,7 @@ impl Default for Ox {
 
 impl Ox {
     pub fn new() -> Self {
-        Self::with_bundled(plugins::BUNDLED)
+        Self::with_bundled(bundled::BUNDLED)
     }
 
     pub fn with_bundled(bundled: &'static [Bundle]) -> Self {
