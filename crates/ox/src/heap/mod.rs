@@ -7,6 +7,9 @@ use num_bigint::BigInt;
 
 use crate::bytecode::Code;
 use crate::native::Native;
+use crate::read::Marks;
+use crate::span::Span;
+use crate::symbol::Sym;
 use crate::value::map::{Map, Node};
 use crate::value::record::{Record, RecordType};
 use crate::value::vector::Vector;
@@ -44,6 +47,13 @@ struct OxString {
     text: Box<str>,
     length: usize,
     hash: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct Identifier {
+    pub name: Sym,
+    pub marks: Marks,
+    pub span: Span,
 }
 
 #[derive(Debug)]
@@ -138,6 +148,7 @@ pub struct Heap {
     record_types: Arena<RecordType>,
     records: Arena<Record>,
     atoms: Arena<Value>,
+    identifiers: Arena<Identifier>,
     roots: Vec<Weak<Cell<Value>>>,
     next_collection: usize,
 }
@@ -339,6 +350,18 @@ impl Heap {
         };
         found.constructor = constructor;
         true
+    }
+
+    pub fn identifier(&mut self, identifier: Identifier) -> Result<Value, HeapFull> {
+        let index = self.identifiers.alloc(identifier)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Identifier,
+            index,
+        }))
+    }
+
+    pub fn identifier_of(&self, value: Value) -> Option<&Identifier> {
+        self.identifiers.get(reference(value, Kind::Identifier)?)
     }
 
     pub fn atom(&mut self, value: Value) -> Result<Value, HeapFull> {

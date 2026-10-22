@@ -51,6 +51,8 @@ fn write_into(heap: &Heap, value: Value, out: &mut String) {
                 record(heap, fields, out);
             } else if let Some(kind) = heap.record_type_of(value) {
                 let _ = write!(out, "#<record {}>", kind.name.name());
+            } else if let Some(identifier) = heap.identifier_of(value) {
+                out.push_str(identifier.name.name());
             } else if let Some(held) = heap.atom_get(value) {
                 out.push_str("#<atom ");
                 write_into(heap, held, out);

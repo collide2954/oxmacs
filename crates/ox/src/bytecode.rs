@@ -21,6 +21,10 @@ pub enum Op {
         name: Sym,
         from: Register,
     },
+    DefineMacro {
+        name: Sym,
+        from: Register,
+    },
     SetGlobal {
         name: Sym,
         from: Register,

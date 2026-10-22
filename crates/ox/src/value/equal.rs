@@ -1,6 +1,7 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::heap::Heap;
+use crate::symbol::Sym;
 use crate::value::vector::Vector;
 use crate::value::{Kind, Value};
 
@@ -52,7 +53,9 @@ fn scalar(heap: &Heap, value: Value) -> u64 {
         Value::Symbol(name) => tagged(5, digest(name)),
         Value::Keyword(name) => tagged(6, digest(name)),
         Value::Ref(reference) => {
-            if let Some(hash) = heap.string_hash(value) {
+            if let Some(identifier) = heap.identifier_of(value) {
+                tagged(5, digest(identifier.name))
+            } else if let Some(hash) = heap.string_hash(value) {
                 tagged(7, hash)
             } else if let Some(number) = heap.bigint_of(value) {
                 tagged(8, digest(number))
@@ -157,7 +160,17 @@ pub fn hash(heap: &Heap, value: Value) -> u64 {
     results.pop().unwrap_or(SEQUENCE)
 }
 
+fn symbol_name(heap: &Heap, value: Value) -> Option<Sym> {
+    match value {
+        Value::Symbol(name) => Some(name),
+        _ => heap.identifier_of(value).map(|identifier| identifier.name),
+    }
+}
+
 fn same_contents(heap: &Heap, a: Value, b: Value) -> bool {
+    if let (Some(left), Some(right)) = (symbol_name(heap, a), symbol_name(heap, b)) {
+        return left == right;
+    }
     match (a, b) {
         (Value::Float(left), Value::Float(right)) => left.is_nan() && right.is_nan(),
         (Value::Ref(left), Value::Ref(right)) => match (left.kind, right.kind) {

@@ -3,10 +3,14 @@ use crate::read::{Datum, Syntax};
 
 #[derive(Default)]
 pub struct Parameters<'s> {
-    pub required: Vec<&'s str>,
-    pub optional: Vec<(&'s str, Option<&'s Syntax>)>,
-    pub rest: Option<&'s str>,
-    pub keywords: Vec<(&'s str, &'s Syntax)>,
+    pub required: Vec<&'s Syntax>,
+    pub optional: Vec<(&'s Syntax, Option<&'s Syntax>)>,
+    pub rest: Option<&'s Syntax>,
+    pub keywords: Vec<(&'s Syntax, &'s Syntax)>,
+}
+
+fn is_name(syntax: &Syntax) -> bool {
+    matches!(&syntax.datum, Datum::Symbol(name) if name != "&")
 }
 
 pub fn parse_parameters(list: &[Syntax]) -> Result<Parameters<'_>, Error> {
@@ -16,11 +20,7 @@ pub fn parse_parameters(list: &[Syntax]) -> Result<Parameters<'_>, Error> {
         let at = |message: &str| Error::at(item.span, message);
         match &item.datum {
             Datum::Symbol(name) if name == "&" => {
-                let Some(Syntax {
-                    datum: Datum::Symbol(rest),
-                    ..
-                }) = items.next()
-                else {
+                let Some(rest) = items.next().filter(|rest| is_name(rest)) else {
                     return Err(at("& takes one name for the rest of the arguments"));
                 };
                 found.rest = Some(rest);
@@ -33,26 +33,15 @@ pub fn parse_parameters(list: &[Syntax]) -> Result<Parameters<'_>, Error> {
                     ));
                 }
             }
-            Datum::Symbol(name) => {
+            Datum::Symbol(_) => {
                 if !found.optional.is_empty() || found.rest.is_some() {
                     return Err(at("Required parameters come before optional ones"));
                 }
-                found.required.push(name);
+                found.required.push(item);
             }
             Datum::List(parts) => match parts.as_slice() {
-                [
-                    Syntax {
-                        datum: Datum::Symbol(name),
-                        ..
-                    },
-                ] => found.optional.push((name, None)),
-                [
-                    Syntax {
-                        datum: Datum::Symbol(name),
-                        ..
-                    },
-                    default,
-                ] => found.optional.push((name, Some(default))),
+                [name] if is_name(name) => found.optional.push((name, None)),
+                [name, default] if is_name(name) => found.optional.push((name, Some(default))),
                 _ => return Err(at("Parameters must be names")),
             },
             Datum::Map(pairs) => {
@@ -60,16 +49,12 @@ pub fn parse_parameters(list: &[Syntax]) -> Result<Parameters<'_>, Error> {
                     return Err(at("Keyword parameters come last"));
                 }
                 for pair in pairs.chunks(2) {
-                    let [
-                        Syntax {
-                            datum: Datum::Symbol(name),
-                            ..
-                        },
-                        default,
-                    ] = pair
-                    else {
+                    let [name, default] = pair else {
                         return Err(at("Parameters must be names"));
                     };
+                    if !is_name(name) {
+                        return Err(at("Parameters must be names"));
+                    }
                     found.keywords.push((name, default));
                 }
             }

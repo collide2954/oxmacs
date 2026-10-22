@@ -23,6 +23,7 @@ impl Heap {
             + self.record_types.in_use()
             + self.records.in_use()
             + self.atoms.in_use()
+            + self.identifiers.in_use()
     }
 
     pub fn wants_collection(&self) -> bool {
@@ -76,6 +77,7 @@ impl Heap {
         self.record_types.unmark();
         self.records.unmark();
         self.atoms.unmark();
+        self.identifiers.unmark();
     }
 
     fn sweep(&mut self) -> usize {
@@ -93,6 +95,7 @@ impl Heap {
             + self.record_types.sweep()
             + self.records.sweep()
             + self.atoms.sweep()
+            + self.identifiers.sweep()
     }
 
     fn trace(&mut self, value: Value, gray: &mut Vec<Value>, codes: &mut Vec<Rc<Code>>) {
@@ -109,6 +112,9 @@ impl Heap {
             }
             Kind::Native => {
                 self.natives.mark(index);
+            }
+            Kind::Identifier => {
+                self.identifiers.mark(index);
             }
             Kind::Pair => {
                 if self.pairs.mark(index)

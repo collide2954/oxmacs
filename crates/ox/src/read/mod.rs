@@ -1,7 +1,7 @@
 mod syntax;
 
 use crate::span::Span;
-pub use syntax::{Datum, Syntax};
+pub use syntax::{Datum, Marks, Syntax};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReadError {
@@ -248,15 +248,18 @@ impl<'a> Reader<'a> {
                 parts.push(Syntax {
                     datum: Datum::Symbol(".".to_owned()),
                     span: Span::new(span_end(span), span_end(span) + 1),
+                    marks: Marks::default(),
                 });
                 parts.push(Syntax {
                     datum: Datum::Symbol(part.to_owned()),
                     span,
+                    marks: Marks::default(),
                 });
             } else {
                 parts.push(Syntax {
                     datum: Datum::Keyword(part.to_owned()),
                     span,
+                    marks: Marks::default(),
                 });
             }
             offset += part.len() + 1;
@@ -268,6 +271,7 @@ impl<'a> Reader<'a> {
         self.place(Syntax {
             datum,
             span: Span::new(start, self.at),
+            marks: Marks::default(),
         });
     }
 
@@ -292,9 +296,11 @@ impl<'a> Reader<'a> {
                             Syntax {
                                 datum: Datum::Symbol(name.to_owned()),
                                 span: head,
+                                marks: Marks::default(),
                             },
                             syntax,
                         ]),
+                        marks: Marks::default(),
                     };
                 }
                 None => {
@@ -401,7 +407,11 @@ impl<'a> Reader<'a> {
                 Datum::Record(name, items)
             }
         };
-        self.place(Syntax { datum, span });
+        self.place(Syntax {
+            datum,
+            span,
+            marks: Marks::default(),
+        });
     }
 
     fn skip_balanced(&mut self) {
@@ -446,6 +456,7 @@ impl<'a> Reader<'a> {
                         pieces.push(Syntax {
                             datum: Datum::Str(std::mem::take(&mut text)),
                             span: Span::new(piece_start, here),
+                            marks: Marks::default(),
                         });
                     }
                     pieces.extend(self.interpolation(here));
@@ -461,11 +472,13 @@ impl<'a> Reader<'a> {
             pieces.push(Syntax {
                 datum: Datum::Str(text),
                 span: Span::new(piece_start, piece_end),
+                marks: Marks::default(),
             });
         }
         let head = Syntax {
             datum: Datum::Symbol("str".to_owned()),
             span: Span::new(start, start + 1),
+            marks: Marks::default(),
         };
         Datum::List(std::iter::once(head).chain(pieces).collect())
     }

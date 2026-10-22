@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use crate::compile::compile;
 use crate::error::Error;
+use crate::expand::expand;
 use crate::heap::{Heap, Rooted};
 use crate::library;
 use crate::native::Native;
@@ -45,7 +46,8 @@ impl Isolate {
         }
         let mut result = Value::Nil;
         for form in &forms {
-            let code = Rc::new(compile(&mut self.runtime.heap, form)?);
+            let expanded = expand(&mut self.runtime, form)?;
+            let code = Rc::new(compile(&mut self.runtime.heap, &expanded)?);
             result = self.runtime.run(&code)?;
         }
         Ok(result)

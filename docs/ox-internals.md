@@ -126,8 +126,8 @@ pub struct Ref { kind: Kind, index: u32 }
 
 ## Expander
 
-- **Hygiene.** By sets of scopes (Flatt 2016). Each identifier carries a set of scopes. A binding is recorded as (symbol, scope set) to target, and resolution picks the binding whose scope set is the largest subset of the identifier's.
-- **Expansion.** Each macro expansion adds a use-site scope and flips a fresh introduction scope, so names a macro introduces never capture the user's names, and the reverse.
+- **Hygiene.** By marks. Each identifier carries a set of marks, empty for code you write. A local binding is recorded with its name and marks, and a reference resolves only to a binding with the same name and the same marks; a reference no local matches is a global. Special form names stay reserved, so a macro's `if` is always `if`.
+- **Expansion.** A separate pass before compiling, so the compiler sees only core forms and finds every `set!`. A macro receives its argument forms as data whose names are identifier objects that keep their marks. Plain symbols in what it returns are the names it introduced and get a fresh mark, so they never capture the user's names, and the reverse. Expansion stops with an error 256 levels deep.
 - **Core forms.** After expansion only these remain: `quote`, `def`, `fn`, `let`, `if`, `do`, `set!`, `.`, `try`, `raise`, `await`, `yield`, `match`, `with-param`, `module`, `import` and `export`. Everything else is a macro, most of them in the prelude: `cond`, `when`, `unless`, `and`, `or`, `when-let`, `if-let`, `->`, `->>`, `for`, `defrecord`, `defcommand` (in phase 2) and `quasiquote`. `cond` takes `[test body…]` clauses ending in `[else …]`, the same shape as `match`.
 - **Macros.** `defmacro` defines a procedural macro: a function from syntax to syntax, run at expansion time in the compiling isolate, which may import other modules. `syntax-rules` is a macro that builds such a function from patterns and templates. Ox has no separate run-time and compile-time phases; a macro sees whatever its module imports.
 

@@ -4,7 +4,7 @@ use num_bigint::BigInt;
 
 use crate::error::Error;
 use crate::heap::{Heap, HeapFull};
-use crate::read::{Datum, Syntax};
+use crate::read::{Datum, Marks, Syntax};
 use crate::span::Span;
 use crate::value::Value;
 use crate::vm::build::{make_map, make_set, make_vector};
@@ -64,6 +64,7 @@ fn symbol(name: &str, span: Span) -> Syntax {
     Syntax {
         datum: Datum::Symbol(name.to_owned()),
         span,
+        marks: Marks::default(),
     }
 }
 
@@ -73,6 +74,7 @@ fn call(name: &str, arguments: Vec<Syntax>, span: Span) -> Syntax {
     Syntax {
         datum: Datum::List(items),
         span,
+        marks: Marks::default(),
     }
 }
 
@@ -81,6 +83,7 @@ fn quoted(syntax: Syntax) -> Syntax {
     Syntax {
         datum: Datum::List(vec![symbol("quote", span), syntax]),
         span,
+        marks: Marks::default(),
     }
 }
 
@@ -142,6 +145,7 @@ fn sequence(items: &[Syntax], level: usize, span: Span, shape: Shape) -> Result<
             Shape::Vector => Syntax {
                 datum: Datum::Vector(expanded),
                 span,
+                marks: Marks::default(),
             },
         });
     }
@@ -153,6 +157,7 @@ fn sequence(items: &[Syntax], level: usize, span: Span, shape: Shape) -> Result<
                 segments.push(Syntax {
                     datum: Datum::Vector(mem::take(&mut run)),
                     span,
+                    marks: Marks::default(),
                 });
             }
             segments.push(inner);
@@ -164,6 +169,7 @@ fn sequence(items: &[Syntax], level: usize, span: Span, shape: Shape) -> Result<
         segments.push(Syntax {
             datum: Datum::Vector(run),
             span,
+            marks: Marks::default(),
         });
     }
     let joined = call("#concat", segments, span);
@@ -199,10 +205,12 @@ pub fn quasiquote(template: &Syntax, level: usize) -> Result<Syntax, Error> {
         Datum::Map(items) => Ok(Syntax {
             datum: Datum::Map(expand_all(items, level)?),
             span,
+            marks: Marks::default(),
         }),
         Datum::Set(items) => Ok(Syntax {
             datum: Datum::Set(expand_all(items, level)?),
             span,
+            marks: Marks::default(),
         }),
         _ => Err(Error::at(span, "A record literal cannot be quoted")),
     }

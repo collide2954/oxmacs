@@ -42,6 +42,7 @@ pub enum Kind {
     RecordType,
     Record,
     Atom,
+    Identifier,
 }
 
 impl Value {

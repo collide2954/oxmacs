@@ -11,6 +11,7 @@ use crate::bytecode::{Capture, Code, Op};
 use crate::error::Error;
 use crate::heap::{Closure, Heap};
 use crate::library::collections;
+use crate::span::Span;
 use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::record::Record;
@@ -24,6 +25,8 @@ pub struct Runtime {
     pub globals: HashMap<Sym, Value>,
     pub field_scans: usize,
     pub apply: Value,
+    pub macros: HashMap<Sym, Value>,
+    marks: u32,
 }
 
 struct Frame {
@@ -194,6 +197,9 @@ impl Runtime {
                     .copied()
                     .ok_or_else(|| Error::new(format!("{} is not defined", name.name())))?;
                 machine.set(to, value);
+            }
+            Op::DefineMacro { name, from } => {
+                self.macros.insert(name, machine.get(from));
             }
             Op::DefineGlobal { name, from } => {
                 self.globals.insert(name, machine.get(from));
@@ -403,8 +409,42 @@ impl Runtime {
 
     fn base_roots(&self) -> Vec<Value> {
         let mut roots: Vec<Value> = self.globals.values().copied().collect();
+        roots.extend(self.macros.values().copied());
         roots.push(self.apply);
         roots
+    }
+
+    pub fn fresh_mark(&mut self) -> u32 {
+        self.marks += 1;
+        self.marks
+    }
+
+    pub fn invoke(
+        &mut self,
+        function: Value,
+        arguments: &[Value],
+        span: Span,
+    ) -> Result<Value, Error> {
+        let count = u16::try_from(arguments.len())
+            .map_err(|_| Error::at(span, "This call has too many arguments"))?;
+        let mut constants = vec![function];
+        constants.extend_from_slice(arguments);
+        let mut ops: Vec<Op> = (0..=count)
+            .map(|register| Op::Constant {
+                to: register,
+                index: u32::from(register),
+            })
+            .collect();
+        ops.push(Op::Call { base: 0, count });
+        ops.push(Op::Return { from: 0 });
+        let code = Code {
+            registers: count + 1,
+            spans: vec![span; ops.len()],
+            ops,
+            constants,
+            ..Code::default()
+        };
+        self.run(&Rc::new(code))
     }
 
     pub fn collect(&mut self) -> usize {

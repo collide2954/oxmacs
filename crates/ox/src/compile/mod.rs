@@ -7,9 +7,9 @@ use std::rc::Rc;
 
 use crate::bytecode::{Arity, Capture, Code, Op, Register};
 use crate::error::Error;
-use crate::expand::quote::{datum_value, quasiquote};
+use crate::expand::quote::datum_value;
 use crate::heap::Heap;
-use crate::read::{Datum, Syntax};
+use crate::read::{Datum, Marks, Syntax};
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -42,6 +42,7 @@ struct Variable {
 
 struct Local {
     name: Sym,
+    marks: Marks,
     register: Register,
     boxed: bool,
 }
@@ -51,8 +52,8 @@ struct Function {
     code: Code,
     top: Register,
     locals: Vec<Local>,
-    captured: Vec<(Sym, bool)>,
-    itself: Option<Sym>,
+    captured: Vec<(Sym, Marks, bool)>,
+    itself: Option<(Sym, Marks)>,
 }
 
 struct Compiler<'a> {
@@ -97,6 +98,13 @@ fn assigned_in(forms: &[Syntax], name: &str) -> bool {
     forms.iter().any(|form| assigns(form, name))
 }
 
+fn text(syntax: &Syntax) -> &str {
+    match &syntax.datum {
+        Datum::Symbol(name) => name,
+        _ => "",
+    }
+}
+
 impl Compiler<'_> {
     fn function_at(&mut self, depth: usize) -> Option<&mut Function> {
         if depth == self.outer.len() {
@@ -106,42 +114,46 @@ impl Compiler<'_> {
         }
     }
 
-    fn resolve(&mut self, name: Sym) -> Option<Variable> {
-        self.resolve_at(self.outer.len(), name)
+    fn resolve(&mut self, name: Sym, marks: &Marks) -> Option<Variable> {
+        self.resolve_at(self.outer.len(), name, marks)
     }
 
-    fn resolve_at(&mut self, depth: usize, name: Sym) -> Option<Variable> {
+    fn resolve_at(&mut self, depth: usize, name: Sym, marks: &Marks) -> Option<Variable> {
         let function = self.function_at(depth)?;
         if let Some(local) = function
             .locals
             .iter()
             .rev()
-            .find(|local| local.name == name)
+            .find(|local| local.name == name && local.marks == *marks)
         {
             return Some(Variable {
                 place: Place::Register(local.register),
                 boxed: local.boxed,
             });
         }
-        if let Some((index, (_, boxed))) = (0_u16..)
+        if let Some((index, (_, _, boxed))) = (0_u16..)
             .zip(&function.captured)
-            .find(|(_, (captured, _))| *captured == name)
+            .find(|(_, (captured, captured_marks, _))| *captured == name && captured_marks == marks)
         {
             return Some(Variable {
                 place: Place::Captured(index),
                 boxed: *boxed,
             });
         }
-        if function.itself == Some(name) {
+        if function
+            .itself
+            .as_ref()
+            .is_some_and(|(itself, itself_marks)| *itself == name && itself_marks == marks)
+        {
             return Some(Variable {
                 place: Place::Itself,
                 boxed: false,
             });
         }
-        let outside = self.resolve_at(depth.checked_sub(1)?, name)?;
+        let outside = self.resolve_at(depth.checked_sub(1)?, name, marks)?;
         let function = self.function_at(depth)?;
         let index = u16::try_from(function.captured.len()).ok()?;
-        function.captured.push((name, outside.boxed));
+        function.captured.push((name, marks.clone(), outside.boxed));
         function.code.captures.push(match outside.place {
             Place::Register(register) => Capture::Register(register),
             Place::Captured(index) => Capture::Captured(index),
@@ -192,14 +204,16 @@ impl Compiler<'_> {
     fn form(&mut self, form: &Syntax, target: Register, tail: bool) -> Result<(), Error> {
         match &form.datum {
             Datum::Symbol(name) => {
-                self.variable(Sym::intern(name), target, form.span);
+                self.variable(Sym::intern(name), &form.marks, target, form.span);
                 Ok(())
             }
             Datum::List(items) => self.call(items, target, form.span, tail),
             Datum::Vector(items) => self.vector(items, target, form.span),
             Datum::Map(items) => self.map(items, target, form.span),
             Datum::Set(items) => self.set(items, target, form.span),
-            Datum::Record(name, items) => self.record_literal(name, items, target, form.span),
+            Datum::Record(name, items) => {
+                self.record_literal(name, &form.marks, items, target, form.span)
+            }
             Datum::Nil
             | Datum::Bool(_)
             | Datum::Int(_)
@@ -222,22 +236,8 @@ impl Compiler<'_> {
         self.load(value, target, span)
     }
 
-    fn template(
-        &mut self,
-        parts: &[Syntax],
-        target: Register,
-        span: Span,
-        tail: bool,
-    ) -> Result<(), Error> {
-        let [template] = parts else {
-            return Err(Error::at(span, "quasiquote takes one form"));
-        };
-        let expanded = quasiquote(template, 1)?;
-        self.form(&expanded, target, tail)
-    }
-
-    fn variable(&mut self, name: Sym, target: Register, span: Span) {
-        let Some(variable) = self.resolve(name) else {
+    fn variable(&mut self, name: Sym, marks: &Marks, target: Register, span: Span) {
+        let Some(variable) = self.resolve(name, marks) else {
             self.emit(Op::Global { to: target, name }, span);
             return;
         };
@@ -311,7 +311,7 @@ impl Compiler<'_> {
             "." => Some(self.field(rest, target, span)),
             "defrecord" => Some(self.record(rest, target, span)),
             "quote" => Some(self.quote(rest, target, span)),
-            "quasiquote" => Some(self.template(rest, target, span, tail)),
+            "defmacro" => Some(self.macro_definition(rest, target, span)),
             "unquote" => Some(Err(Error::at(
                 span,
                 "~ is only allowed inside a quasiquote",
@@ -359,7 +359,7 @@ impl Compiler<'_> {
                     Some(name),
                     parameters,
                     Body::Forms(body),
-                    false,
+                    None,
                     target,
                     span,
                 )?;
@@ -395,7 +395,7 @@ impl Compiler<'_> {
             .copied()
             .chain(parameters.optional.iter().map(|(field, _)| *field))
             .chain(parameters.keywords.iter().map(|(field, _)| *field))
-            .map(Sym::intern)
+            .map(|field| Sym::intern(text(field)))
             .collect();
         let count = u16::try_from(names.len())
             .map_err(|_| Error::at(span, "This record has too many fields"))?;
@@ -412,7 +412,7 @@ impl Compiler<'_> {
             record,
             fields: count,
         };
-        self.lambda(Some(name), fields, body, false, target, span)?;
+        self.lambda(Some(name), fields, body, None, target, span)?;
         let index = self.constant(record, span)?;
         self.emit(
             Op::DefineRecord {
@@ -423,6 +423,42 @@ impl Compiler<'_> {
         );
         self.load(record, target, span)?;
         self.emit(Op::DefineGlobal { name, from: target }, span);
+        self.load(Value::Symbol(name), target, span)
+    }
+
+    fn macro_definition(
+        &mut self,
+        parts: &[Syntax],
+        target: Register,
+        span: Span,
+    ) -> Result<(), Error> {
+        let [
+            Syntax {
+                datum: Datum::Symbol(name),
+                ..
+            },
+            Syntax {
+                datum: Datum::Vector(parameters),
+                ..
+            },
+            body @ ..,
+        ] = parts
+        else {
+            return Err(Error::at(
+                span,
+                "defmacro takes a name, a parameter vector and a body",
+            ));
+        };
+        let name = Sym::intern(name);
+        self.lambda(
+            Some(name),
+            parameters,
+            Body::Forms(body),
+            None,
+            target,
+            span,
+        )?;
+        self.emit(Op::DefineMacro { name, from: target }, span);
         self.load(Value::Symbol(name), target, span)
     }
 
@@ -454,7 +490,7 @@ impl Compiler<'_> {
 
     fn assign(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
         let [
-            Syntax {
+            assigned @ Syntax {
                 datum: Datum::Symbol(name),
                 ..
             },
@@ -465,7 +501,7 @@ impl Compiler<'_> {
         };
         let name = Sym::intern(name);
         self.expression(value, target)?;
-        let Some(variable) = self.resolve(name) else {
+        let Some(variable) = self.resolve(name, &assigned.marks) else {
             self.emit(Op::SetGlobal { name, from: target }, span);
             return Ok(());
         };
@@ -524,8 +560,9 @@ impl Compiler<'_> {
             let [name, value] = pair else {
                 continue;
             };
-            let Datum::Symbol(name) = &name.datum else {
-                return Err(Error::at(name.span, "Bindings must be names"));
+            let binder = name;
+            let Datum::Symbol(name) = &binder.datum else {
+                return Err(Error::at(binder.span, "Bindings must be names"));
             };
             let scope = &bindings[(index + 1) * 2..];
             let boxed = assigned_in(scope, name) || assigned_in(body, name);
@@ -536,6 +573,7 @@ impl Compiler<'_> {
             }
             self.current.locals.push(Local {
                 name: Sym::intern(name),
+                marks: binder.marks.clone(),
                 register,
                 boxed,
             });
@@ -549,12 +587,12 @@ impl Compiler<'_> {
     fn function(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
         let (name, parts) = match parts {
             [
-                Syntax {
+                named @ Syntax {
                     datum: Datum::Symbol(name),
                     ..
                 },
                 rest @ ..,
-            ] => (Some(Sym::intern(name)), rest),
+            ] => (Some((Sym::intern(name), named.marks.clone())), rest),
             _ => (None, parts),
         };
         let Some((
@@ -567,7 +605,9 @@ impl Compiler<'_> {
         else {
             return Err(Error::at(span, "fn takes a parameter vector and a body"));
         };
-        self.lambda(name, parameters, Body::Forms(body), true, target, span)
+        let itself = name.as_ref().map(|(_, marks)| marks.clone());
+        let name = name.map(|(name, _)| name);
+        self.lambda(name, parameters, Body::Forms(body), itself, target, span)
     }
 
     fn body(&mut self, body: Body<'_>, result: Register, span: Span) -> Result<(), Error> {
@@ -594,7 +634,7 @@ impl Compiler<'_> {
         name: Option<Sym>,
         parameters: &[Syntax],
         body: Body<'_>,
-        itself: bool,
+        itself: Option<Marks>,
         target: Register,
         span: Span,
     ) -> Result<(), Error> {
@@ -606,7 +646,7 @@ impl Compiler<'_> {
         let parent = std::mem::take(&mut self.current);
         self.outer.push(parent);
         self.current.code.name = name;
-        self.current.itself = name.filter(|_| itself);
+        self.current.itself = name.zip(itself);
         let defaults = parameters.optional.len() + parameters.keywords.len();
         if defaults > 64 {
             return Err(Error::at(
@@ -614,7 +654,7 @@ impl Compiler<'_> {
                 "This function has too many optional and keyword parameters",
             ));
         }
-        let mut order: Vec<(&str, Option<&Syntax>)> = Vec::new();
+        let mut order: Vec<(&Syntax, Option<&Syntax>)> = Vec::new();
         order.extend(parameters.required.iter().map(|name| (*name, None)));
         order.extend(parameters.optional.iter().copied());
         order.extend(parameters.rest.iter().map(|name| (*name, None)));
@@ -627,9 +667,10 @@ impl Compiler<'_> {
         let mut registers = Vec::new();
         for (parameter, _) in &order {
             let register = self.reserve(1, span)?;
-            let boxed = assigned_in(forms, parameter);
+            let boxed = assigned_in(forms, text(parameter));
             self.current.locals.push(Local {
-                name: Sym::intern(parameter),
+                name: Sym::intern(text(parameter)),
+                marks: parameter.marks.clone(),
                 register,
                 boxed,
             });
@@ -642,7 +683,7 @@ impl Compiler<'_> {
             keywords: parameters
                 .keywords
                 .iter()
-                .map(|(name, _)| Sym::intern(name))
+                .map(|(name, _)| Sym::intern(text(name)))
                 .collect(),
         };
         let first_default = parameters.required.len();
@@ -761,6 +802,7 @@ impl Compiler<'_> {
     fn record_literal(
         &mut self,
         name: &str,
+        marks: &Marks,
         items: &[Syntax],
         target: Register,
         span: Span,
@@ -768,7 +810,7 @@ impl Compiler<'_> {
         let count = u16::try_from(items.len() + 1)
             .map_err(|_| Error::at(span, "This literal has too many items"))?;
         let base = self.reserve(items.len() + 1, span)?;
-        self.variable(Sym::intern(name), base, span);
+        self.variable(Sym::intern(name), marks, base, span);
         for (offset, item) in (1..).zip(items) {
             self.expression(item, base + offset)?;
         }
