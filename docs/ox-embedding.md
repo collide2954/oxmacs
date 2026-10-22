@@ -13,7 +13,7 @@ How oxmacs hosts Ox, and the slices that take the weather plugin from nothing to
 - **Lazy wake-ups.** At startup only the `plugin.ox` manifests are read. A plugin loads on its first command or key, or at startup when a config key its manifest names is on (`:startup-when :mode-line`).
 - **Errors.** Every Ox error, with its traceback and the time, is added to `*ox log*`, and the echo area gets one line. An error in `init.ox` opens the log beside the editor; the forms before it still apply.
 - **Mode line.** A plugin pushes its text with `(set-mode-line :weather "☀ 21°")`; drawing never runs Ox.
-- **Views.** A plugin buffer shows a view: Ox functions such as `column`, `row`, `text` and `button` build a widget tree that the GUI renders with Iced. A view reads atoms, and changing an atom it read (`(reset! forecast …)` from a spawned task, say) redraws it. Buttons call Ox functions directly.
+- **Views.** `(open-view "*Weather*" view-fn :keys {g: 'weather-refresh q: 'quit-window})` opens a buffer drawn from `view-fn`. The widgets come from `(ox ui)`: `column` and `row` (with `:spacing`), `text` (with `:face` and `:size`), `button` (with `:on-press`), `space` and `scrollable`. They are Rust nodes that Ox holds, and the GUI draws them with Iced in the editor's font, so padded text lines up. After any atom changes, open views are rendered again and the screen updates only when the tree differs; tracking which atoms a view read can come later. Buttons call their Ox function directly.
 
 ## Plugins
 

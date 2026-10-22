@@ -19,6 +19,7 @@ use oxmacs_core::external::net::{self, Connection};
 use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::external::tools::{Probe, Tool};
 use oxmacs_core::external::usage::Usage;
+use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
 use oxmacs_ox::{Ox, Pace};
 
@@ -82,6 +83,7 @@ pub enum Message {
     ToolInstalled(Managed, Result<PathBuf, String>),
     AppletEvent(Payload),
     OxTick,
+    OxPress(BufferId, usize),
 }
 
 pub fn load_config() -> Result<Config, ConfigError> {
@@ -445,6 +447,32 @@ mod tests {
         let _ = app.start_ox(Some(home.path()));
 
         assert!(app.editor().command_named("greet").is_some());
+    }
+
+    #[test]
+    fn ox_views_draw_in_their_buffer_and_buttons_run_ox() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("init.ox"),
+            r#"(module (import (ox ui :only [column text button])))
+(def count (atom 0))
+(open-view "*counter*" (fn [] (column (text "Forecast" :face :heading) (text "Count {@count}") (button "More" :on-press (fn [] (swap! count inc))))))"#,
+        )
+        .unwrap();
+        let mut app = App::default();
+        let _ = app.start_ox(Some(home.path()));
+
+        let mut ui = iced_test::simulator(app.view());
+        assert!(ui.find("Forecast").is_ok());
+        assert!(ui.find("Count 0").is_ok());
+        ui.click("More").unwrap();
+        let messages: Vec<Message> = ui.into_messages().collect();
+        for message in messages {
+            let _ = app.update(message);
+        }
+
+        let mut ui = iced_test::simulator(app.view());
+        assert!(ui.find("Count 1").is_ok());
     }
 
     #[derive(Debug)]

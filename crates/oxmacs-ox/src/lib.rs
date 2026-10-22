@@ -2,6 +2,7 @@ mod commands;
 mod log;
 mod natives;
 mod plugins;
+pub mod views;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,6 +10,7 @@ use std::time::Duration;
 
 use ox::{Error, Isolate};
 use oxmacs_core::editor::Editor;
+use oxmacs_core::text::BufferId;
 pub use plugins::Bundle;
 
 const BUDGET: Duration = Duration::from_millis(4);
@@ -49,6 +51,7 @@ impl Ox {
         natives::install(&mut isolate);
         commands::install(&mut isolate);
         plugins::install(&mut isolate);
+        views::install(&mut isolate);
         if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
             panic!("The oxmacs prelude failed to load: {error}");
         }
@@ -60,6 +63,11 @@ impl Ox {
         self.run_init(editor, home);
         plugins::wake_at_startup(&self.isolate, editor);
         plugins::wake_waiting(&mut self.isolate, editor);
+        views::refresh(&mut self.isolate, editor);
+    }
+
+    pub fn press(&mut self, editor: &mut Editor, buffer: BufferId, slot: usize) {
+        views::press(&mut self.isolate, editor, buffer, slot);
     }
 
     fn run_init(&mut self, editor: &mut Editor, home: Option<&Path>) {
@@ -100,6 +108,7 @@ impl Ox {
                 log::report(editor, &error, None);
             }
         }
+        views::refresh(&mut self.isolate, editor);
         self.pace()
     }
 }

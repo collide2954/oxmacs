@@ -3,6 +3,7 @@ pub mod completions;
 pub mod divider;
 pub mod echo_area;
 pub mod mode_line;
+pub mod ox_view;
 pub mod popup;
 pub mod powerline;
 pub mod transient;

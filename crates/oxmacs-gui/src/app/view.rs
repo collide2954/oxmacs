@@ -5,13 +5,14 @@ use iced::{Border, Color, ContentFit, Element, Length};
 use oxmacs_core::clock;
 use oxmacs_core::editor::{Axis, GalleryView, Pane, PlotView, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
+use oxmacs_ox::views::ViewBuffer;
 
 use super::{App, Message};
 use crate::applet::Context;
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
 use crate::widgets::mode_line::{self, Look};
-use crate::widgets::{completions, echo_area, transient};
+use crate::widgets::{completions, echo_area, ox_view, transient};
 use crate::{style, units};
 impl App {
     pub fn view(&self) -> Element<'_, Message> {
@@ -184,6 +185,25 @@ impl App {
     }
 
     fn body<'a>(&'a self, pane: Pane<'a>, window: WindowId, faces: Faces) -> Element<'a, Message> {
+        let buffer = pane.buffer().id();
+        if let Some((_, shown)) = self.editor.applet_buffer::<ViewBuffer>(buffer) {
+            let look = ox_view::Look {
+                faces,
+                font: self.font,
+                size: self.text_size,
+            };
+            let drawn = ox_view::view(&shown.node, look, move |slot| {
+                Message::OxPress(buffer, slot)
+            });
+            return mouse_area(
+                container(drawn)
+                    .padding([4, 8])
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+            )
+            .on_press(Message::FocusWindow(window))
+            .into();
+        }
         let context = self.context(faces);
         if let Some(drawn) = self
             .applets

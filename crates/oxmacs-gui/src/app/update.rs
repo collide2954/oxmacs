@@ -181,6 +181,7 @@ impl App {
                 self.editor.connection_event(id, event);
             }
             Message::AppletEvent(event) => self.editor.deliver(&event),
+            Message::OxPress(buffer, slot) => self.ox.press(&mut self.editor, buffer, slot),
         }
         self.ox.tick(&mut self.editor);
         self.settle();

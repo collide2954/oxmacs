@@ -167,6 +167,7 @@ pub struct Heap {
     roots: Vec<Weak<Cell<Value>>>,
     held: HashMap<Hold, Value>,
     next_hold: u64,
+    atom_writes: u64,
     jobs: Vec<jobs::Job>,
     signal: Arc<Signal>,
     next_collection: usize,
@@ -416,7 +417,12 @@ impl Heap {
             return false;
         };
         *slot = value;
+        self.atom_writes += 1;
         true
+    }
+
+    pub fn atom_writes(&self) -> u64 {
+        self.atom_writes
     }
 
     pub fn set_family(&mut self, kind: Value, family: Family) -> bool {
