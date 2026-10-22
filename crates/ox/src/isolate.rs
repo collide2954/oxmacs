@@ -639,6 +639,30 @@ mod tests {
     }
 
     #[test]
+    fn fields_are_read_with_dots() {
+        all(&[
+            (
+                r#"(def city {name: "Lyon" size: 3}) city.name"#,
+                r#""Lyon""#,
+            ),
+            (r#"(def city {name: "Lyon"}) city.missing"#, "nil"),
+            ("(def a {b: {c: {d: 4}}}) a.b.c.d", "4"),
+            ("(def a {b: nil}) a.b.c.d", "nil"),
+            ("(def a nil) a.b", "nil"),
+            (
+                r#"(def city {name: "Lyon"}) "Hi {city.name}!""#,
+                r#""Hi Lyon!""#,
+            ),
+            ("(let [p {x: 1 y: 2}] (+ p.x p.y))", "3"),
+            ("(def (f m) m.k) (f {k: :v})", ":v"),
+            ("(def n 5) n.x", "error: 5 has no field x"),
+            (r#"(def s "abc") s.x"#, r#"error: "abc" has no field x"#),
+            ("(. {a: 1})", "error: . takes a value and field names"),
+            (r#"(. {a: 1} "a")"#, "error: Field names must be names"),
+        ]);
+    }
+
+    #[test]
     fn maps_are_read_by_key() {
         all(&[
             ("(get {a: 1} :a)", "1"),

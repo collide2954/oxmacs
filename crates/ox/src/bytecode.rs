@@ -54,6 +54,11 @@ pub enum Op {
         base: Register,
         count: u16,
     },
+    Field {
+        to: Register,
+        from: Register,
+        name: Sym,
+    },
     CellGet {
         to: Register,
         cell: Register,

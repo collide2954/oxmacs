@@ -350,6 +350,7 @@ impl Compiler<'_> {
             "fn" => Some(self.function(rest, target, span)),
             "let" => Some(self.binding(rest, target, span, tail)),
             "set!" => Some(self.assign(rest, target, span)),
+            "." => Some(self.field(rest, target, span)),
             _ => None,
         }
     }
@@ -392,6 +393,28 @@ impl Compiler<'_> {
         };
         self.emit(Op::DefineGlobal { name, from: target }, span);
         self.load(Value::Symbol(name), target, span)
+    }
+
+    fn field(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let Some((object, names)) = parts.split_first().filter(|(_, names)| !names.is_empty())
+        else {
+            return Err(Error::at(span, ". takes a value and field names"));
+        };
+        self.expression(object, target)?;
+        for name in names {
+            let Datum::Keyword(field) = &name.datum else {
+                return Err(Error::at(name.span, "Field names must be names"));
+            };
+            self.emit(
+                Op::Field {
+                    to: target,
+                    from: target,
+                    name: Sym::intern(field),
+                },
+                name.span,
+            );
+        }
+        Ok(())
     }
 
     fn assign(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {

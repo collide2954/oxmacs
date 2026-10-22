@@ -160,6 +160,20 @@ fn full(error: crate::heap::HeapFull) -> Error {
     Error::new(error.to_string())
 }
 
+fn field(heap: &Heap, value: Value, name: Sym) -> Result<Value, Error> {
+    if value == Value::Nil {
+        return Ok(Value::Nil);
+    }
+    if let Some(map) = heap.map_of(value) {
+        return Ok(map.get(heap, Value::Keyword(name)).unwrap_or(Value::Nil));
+    }
+    Err(Error::new(format!(
+        "{} has no field {}",
+        print::write(heap, value),
+        name.name()
+    )))
+}
+
 fn make_vector(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
     let vector = Vector::from_items(heap, items).map_err(full)?;
     heap.vector(vector).map_err(full)
@@ -258,6 +272,10 @@ impl Runtime {
             }
             Op::MakeMap { to, base, count } => {
                 let value = make_map(&mut self.heap, machine.items(base, count))?;
+                machine.set(to, value);
+            }
+            Op::Field { to, from, name } => {
+                let value = field(&self.heap, machine.get(from), name)?;
                 machine.set(to, value);
             }
             Op::MakeSet { to, base, count } => {
