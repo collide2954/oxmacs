@@ -3186,6 +3186,7 @@ dependencies = [
  "jiff",
  "num-bigint",
  "num-traits",
+ "regex",
  "serde",
  "serde_json",
  "tempfile",

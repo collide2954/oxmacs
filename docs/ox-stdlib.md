@@ -52,7 +52,8 @@ Companion to [ox-design.md](ox-design.md) and [ox-internals.md](ox-internals.md)
   | Literal | Meaning |
   | --- | --- |
   | `#{:red :green}` | a set |
-  | `#"\d+-\w+"` | a regex, compiled once at load, with no doubled backslashes |
+  | `#"\d+-\w+"` | a regex, compiled once and cached, with no doubled backslashes |
+  | `#r"C:\notes\{draft}"`, `#r#"{"a": 1}"#` | a raw string: no escapes and no interpolation; add `#`s around the quotes to put quotes inside |
   | `#t"2026-10-21"`, `#t"2026-10-21T09:30-05:00"` | a date or instant, checked when read |
   | `#p"~/notes/plan.atlas"` | a path; `~` expands and separators are normalized on every system |
 
@@ -90,7 +91,7 @@ Modules are imported with aliases and called qualified:
 | Module | Contents |
 | --- | --- |
 | `ox string` | `to-number split join trim trim-start trim-end upper lower capitalize replace starts-with? ends-with? includes? index-of pad-start pad-end lines words chars reverse blank? truncate` |
-| `ox regex` | `find find-all matches? replace split`; named captures come back as maps |
+| `ox regex` | `find find-all matches? replace split`; each match is `{text start end groups named}`, with character positions, numbered groups in `groups` and named ones in `named`; `replace` expands `$1` and `${name}`; patterns can be `#"…"` regexes or strings |
 | `ox math` | `sqrt pow exp log log10 sin cos tan atan2 pi e clamp lerp random random-int random-pick` |
 | `ox json` | `read write`; objects read with keyword keys, and keywords are written back as strings |
 | `ox toml` | `read write` |

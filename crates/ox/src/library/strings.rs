@@ -110,6 +110,28 @@ fn slice(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     heap.string(&part).map_err(full)
 }
 
+fn install_shaping(isolate: &mut Isolate) {
+    isolate.define_native_in(MODULE, "words", 1, Some(1), |heap, arguments| {
+        let parts: Vec<String> = text(heap, "words", arguments[0])?
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect();
+        strings(heap, &parts)
+    });
+    unary(isolate, "reverse", |text| text.chars().rev().collect());
+    isolate.define_native_in(MODULE, "truncate", 2, Some(2), |heap, arguments| {
+        let whole = text(heap, "truncate", arguments[0])?.to_owned();
+        let width = count(heap, "truncate", arguments[1])?;
+        let cut = if whole.chars().count() <= width {
+            whole
+        } else {
+            let kept: String = whole.chars().take(width.saturating_sub(1)).collect();
+            format!("{kept}…")
+        };
+        heap.string(&cut).map_err(full)
+    });
+}
+
 pub fn install(isolate: &mut Isolate) {
     unary(isolate, "trim", |text| text.trim().to_owned());
     unary(isolate, "trim-start", |text| text.trim_start().to_owned());
@@ -143,6 +165,7 @@ pub fn install(isolate: &mut Isolate) {
         };
         strings(heap, &parts)
     });
+    install_shaping(isolate);
     isolate.define_native_in(MODULE, "lines", 1, Some(1), |heap, arguments| {
         let parts: Vec<String> = text(heap, "lines", arguments[0])?
             .lines()

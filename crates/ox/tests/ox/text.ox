@@ -17,3 +17,12 @@
 ;; padding lines things up in columns
 (module (import (ox string))) [(string/pad-start "7" 3) (string/pad-end "Mon" 5) (string/pad-start "7" 3 "0") (string/pad-start "long" 2)] ;=> ["  7" "Mon  " "007" "long"]
 (module (import (ox string))) (string/pad-start 5 3) ;! string/pad-start expects a string, got 5
+
+;; words, reversing and truncating
+(module (import (ox string))) [(string/words "  one two	three  ") (string/reverse "héllo") (string/truncate "hello world" 8) (string/truncate "short" 8)] ;=> [["one" "two" "three"] "olléh" "hello w…" "short"]
+
+;; raw strings keep braces, backslashes and quotes as they are
+#r"C:\Users\{name}" ;=> "C:\\Users\\{{name}}"
+#r#"{"a": "b"}"# ;=> "{{\"a\": \"b\"}}"
+#r##"say "#hi"#"## ;=> "say \"#hi\"#"
+(count #r"\n") ;=> 2

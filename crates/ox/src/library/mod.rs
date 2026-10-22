@@ -8,6 +8,7 @@ mod ordering;
 pub(crate) mod paths;
 mod patterns;
 mod process;
+mod regex;
 mod rules;
 mod strings;
 mod tasks;
@@ -79,6 +80,7 @@ pub fn install(isolate: &mut Isolate) {
     paths::install(isolate);
     files::install(isolate);
     process::install(isolate);
+    regex::install(isolate);
     isolate.define_native("=", 1, None, |heap, arguments| {
         Ok(Value::Bool(all_equal(heap, arguments)))
     });

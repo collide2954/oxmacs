@@ -216,3 +216,142 @@
 
 (def (every ms f)
   (spawn ((fn tick [] (sleep ms) (unless (= (f) :stop) (tick))))))
+
+(def (take n coll)
+  (if (generator? coll)
+    ((fn pull [i out]
+       (if (< i n)
+         (let [item (next coll)]
+           (if (done? coll) out (pull (+ i 1) (conj out item))))
+         out))
+     0 [])
+    (let [items (vec coll)
+          end (min n (count items))]
+      ((fn step [i out] (if (< i end) (step (+ i 1) (conj out (nth items i))) out)) 0 []))))
+
+(def (drop n coll)
+  (let [items (vec coll)
+        total (count items)]
+    ((fn step [i out] (if (< i total) (step (+ i 1) (conj out (nth items i))) out)) (min n total) [])))
+
+(def (take-while keep? coll)
+  (if (generator? coll)
+    ((fn pull [out]
+       (let [item (next coll)]
+         (if (or (done? coll) (not (keep? item))) out (pull (conj out item)))))
+     [])
+    (let [items (vec coll)
+          total (count items)]
+      ((fn step [i out]
+         (if (and (< i total) (keep? (nth items i))) (step (+ i 1) (conj out (nth items i))) out))
+       0 []))))
+
+(def (drop-while drop? coll)
+  (let [items (vec coll)
+        total (count items)
+        start ((fn skip [i] (if (and (< i total) (drop? (nth items i))) (skip (+ i 1)) i)) 0)]
+    (drop start items)))
+
+(def (iterate f x)
+  (gen ((fn step [value] (yield value) (step (f value))) x)))
+
+(def (chunk n coll)
+  (let [items (vec coll)
+        total (count items)]
+    ((fn step [i out]
+       (if (< i total)
+         (step (+ i n) (conj out (take n (drop i items))))
+         out))
+     0 [])))
+
+(def (partition n coll)
+  (filter (fn [group] (= (count group) n)) (chunk n coll)))
+
+(def (flatten coll)
+  (reduce (fn [out item]
+            (if (or (vector? item) (list? item))
+              (into out (flatten item))
+              (conj out item)))
+          [] (vec coll)))
+
+(def (find pred coll)
+  (when-let [found (some (fn [item] (when (pred item) [item])) coll)]
+    (first found)))
+
+(def (frequencies coll)
+  (reduce (fn [counts item] (assoc counts item (+ 1 (get counts item 0)))) {} coll))
+
+(def (group-by key coll)
+  (reduce (fn [groups item]
+            (let [k (key item)]
+              (assoc groups k (conj (get groups k []) item))))
+          {} coll))
+
+(def (zip & colls)
+  (apply map vector colls))
+
+(def (interleave & colls)
+  (mapcat identity (apply zip colls)))
+
+(def (repeat n x)
+  (map (fn [i] x) (range n)))
+
+(def (get-in m path & default)
+  (let [found (reduce (fn [value key] (if (nil? value) nil (get value key))) m path)]
+    (if (and (nil? found) (not (empty? default))) (first default) found)))
+
+(def (assoc-in m path value)
+  (let [key (first path)
+        more (rest path)]
+    (if (empty? more)
+      (assoc m key value)
+      (assoc m key (assoc-in (get m key {}) more value)))))
+
+(def (update-in m path f & args)
+  (assoc-in m path (apply f (get-in m path) args)))
+
+(def (merge & maps)
+  (reduce (fn [out m]
+            (if (nil? m)
+              out
+              (reduce (fn [out key] (assoc out key (get m key))) (or out {}) (keys m))))
+          nil maps))
+
+(def (merge-with f & maps)
+  (reduce (fn [out m]
+            (if (nil? m)
+              out
+              (reduce (fn [out key]
+                        (assoc out key (if (contains? out key) (f (get out key) (get m key)) (get m key))))
+                      (or out {}) (keys m))))
+          nil maps))
+
+(def (select-keys m wanted)
+  (reduce (fn [out key] (if (contains? m key) (assoc out key (get m key)) out)) {} wanted))
+
+(def (juxt & fs)
+  (fn [& args] (vec (map (fn [f] (apply f args)) fs))))
+
+(def (memoize f)
+  (let [seen (atom {})]
+    (fn [& args]
+      (let [key (vec args)]
+        (if (contains? @seen key)
+          (get @seen key)
+          (let [value (apply f args)]
+            (swap! seen assoc key value)
+            value))))))
+
+(defmacro some-> [value & forms]
+  (if (empty? forms)
+    value
+    (let [form (first forms)
+          step (if (list? form) `(~(first form) it ~@(rest form)) (list form 'it))]
+      `(let [it ~value]
+         (if (nil? it) nil (some-> ~step ~@(rest forms)))))))
+
+(defmacro as-> [value name & forms]
+  (if (empty? forms)
+    value
+    `(let [~name ~value]
+       (as-> ~(first forms) ~name ~@(rest forms)))))

@@ -189,6 +189,14 @@ impl<'a> Reader<'a> {
                 }
                 '~' => self.prefix(Some("unquote"), "~", start),
                 '@' => self.prefix(Some("deref"), "@", start),
+                '#' if self.rest().starts_with("#r\"") || self.rest().starts_with("#r#") => {
+                    let datum = self.raw_string(start);
+                    self.push(datum, start);
+                }
+                '#' if self.rest().starts_with("#\"") => {
+                    let datum = self.regex(start);
+                    self.push(datum, start);
+                }
                 '#' if self.rest().starts_with("#;") => self.prefix(None, "#;", start),
                 '#' if self.rest().starts_with("#{") => self.opening(Opener::Set, start),
                 '#' => {
@@ -471,6 +479,63 @@ impl<'a> Reader<'a> {
             marks: Marks::default(),
         };
         Datum::List(std::iter::once(head).chain(pieces).collect())
+    }
+
+    fn raw_string(&mut self, start: usize) -> Datum {
+        self.at += 2;
+        let hashes = self
+            .rest()
+            .chars()
+            .take_while(|character| *character == '#')
+            .count();
+        self.at += hashes;
+        if !self.rest().starts_with('"') {
+            self.error(start, "Write a raw string as #r\"…\" or #r#\"…\"#");
+            return Datum::Str(String::new());
+        }
+        self.at += 1;
+        let closing = format!("\"{}", "#".repeat(hashes));
+        if let Some(length) = self.rest().find(&closing) {
+            let text = self.rest()[..length].to_owned();
+            self.at += length + closing.len();
+            return Datum::Str(text);
+        }
+        self.unfinished(
+            Span::new(start, self.end),
+            "This raw string is never closed",
+        );
+        self.at = self.end;
+        Datum::Str(String::new())
+    }
+
+    fn regex(&mut self, start: usize) -> Datum {
+        self.at += 2;
+        let content = self.at;
+        let mut escaped = false;
+        let length = self.rest().char_indices().find_map(|(offset, character)| {
+            let closes = character == '"' && !escaped;
+            escaped = character == '\\' && !escaped;
+            closes.then_some(offset)
+        });
+        let Some(length) = length else {
+            self.unfinished(Span::new(start, self.end), "This regex is never closed");
+            self.at = self.end;
+            return Datum::Str(String::new());
+        };
+        let pattern = self.rest()[..length].to_owned();
+        self.at += length + 1;
+        Datum::List(vec![
+            Syntax {
+                datum: Datum::Symbol("regex".to_owned()),
+                span: Span::new(start, start + 1),
+                marks: Marks::default(),
+            },
+            Syntax {
+                datum: Datum::Str(pattern),
+                span: Span::new(content, content + length),
+                marks: Marks::default(),
+            },
+        ])
     }
 
     fn interpolation(&mut self, open: usize) -> Option<Syntax> {
