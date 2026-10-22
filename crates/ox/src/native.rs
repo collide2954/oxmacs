@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::fmt;
 use std::rc::Rc;
 
@@ -6,7 +7,7 @@ use crate::heap::Heap;
 use crate::symbol::Sym;
 use crate::value::Value;
 
-pub type NativeFn = dyn Fn(&mut Heap, &[Value]) -> Result<Value, Error>;
+pub type NativeFn = dyn Fn(&mut Heap, &mut dyn Any, &[Value]) -> Result<Value, Error>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Control {

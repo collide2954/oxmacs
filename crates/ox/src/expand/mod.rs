@@ -516,7 +516,7 @@ impl Expander<'_> {
             .collect::<Result<Vec<_>, _>>()?;
         let produced = self
             .runtime
-            .invoke(transformer, &values, form.span)
+            .invoke(transformer, &values, form.span, &mut ())
             .map_err(|error| error.or_at(form.span))?;
         let mark = self.runtime.fresh_mark(home);
         let expansion =

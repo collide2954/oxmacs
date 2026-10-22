@@ -20,6 +20,7 @@ use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::external::tools::{Probe, Tool};
 use oxmacs_core::external::usage::Usage;
 use oxmacs_core::theme::Theme as Faces;
+use oxmacs_ox::{Ox, Pace};
 
 use crate::applet::GuiApplet;
 use crate::watcher::Watched;
@@ -47,6 +48,7 @@ pub struct App {
     jobs: Vec<(JobId, Handle)>,
     connections: Vec<(ConnectionId, Connection)>,
     applets: Vec<Box<dyn GuiApplet>>,
+    ox: Ox,
 }
 
 #[derive(Debug, Clone)]
@@ -79,6 +81,7 @@ pub enum Message {
     ToolsProbed(Vec<(Tool, Probe)>),
     ToolInstalled(Managed, Result<PathBuf, String>),
     AppletEvent(Payload),
+    OxTick,
 }
 
 pub fn load_config() -> Result<Config, ConfigError> {
@@ -119,6 +122,7 @@ impl App {
             jobs: Vec::new(),
             connections: Vec::new(),
             applets: Vec::new(),
+            ox: Ox::new(),
         };
         app.configure(&config);
         app
@@ -239,8 +243,13 @@ impl App {
         } else {
             Subscription::none()
         };
-        let frames = if self.is_animating() {
+        let frames = if self.is_animating() || self.ox.pace() == Pace::Running {
             window::frames().map(Message::Tick)
+        } else {
+            Subscription::none()
+        };
+        let waiting = if self.ox.pace() == Pace::Waiting {
+            ticker::ticks(Some(OX_POLL)).map(|()| Message::OxTick)
         } else {
             Subscription::none()
         };
@@ -272,6 +281,7 @@ impl App {
             signature,
             processes,
             frames,
+            waiting,
         ])
     }
 
@@ -303,6 +313,7 @@ pub fn animations_enabled(configured: bool, reduced_motion: bool) -> bool {
 const AUTO_SAVE_DELAY: Duration = Duration::from_millis(1500);
 const AUTO_COMPLETE_DELAY: Duration = Duration::from_millis(250);
 const SIGNATURE_DELAY: Duration = Duration::from_millis(400);
+const OX_POLL: Duration = Duration::from_millis(100);
 
 fn transition(state: bool, duration: Duration) -> Animation<bool> {
     Animation::new(state)

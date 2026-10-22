@@ -3246,9 +3246,18 @@ dependencies = [
  "notify",
  "open",
  "oxmacs-core",
+ "oxmacs-ox",
  "skrifa 0.48.0",
  "tempfile",
  "ureq",
+]
+
+[[package]]
+name = "oxmacs-ox"
+version = "0.13.0"
+dependencies = [
+ "ox",
+ "oxmacs-core",
 ]
 
 [[package]]

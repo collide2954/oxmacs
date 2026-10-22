@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::{Rc, Weak};
@@ -28,6 +29,9 @@ pub struct HeapFull;
 
 #[derive(Debug, Clone)]
 pub struct Rooted(Rc<Cell<Value>>);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Hold(u64);
 
 impl Rooted {
     #[must_use]
@@ -160,6 +164,8 @@ pub struct Heap {
     channels: Arena<Arc<Channel>>,
     foreigns: Arena<Foreign>,
     roots: Vec<Weak<Cell<Value>>>,
+    held: HashMap<Hold, Value>,
+    next_hold: u64,
     next_collection: usize,
 }
 
@@ -171,6 +177,21 @@ fn reference(value: Value, kind: Kind) -> Option<u32> {
 }
 
 impl Heap {
+    pub fn hold(&mut self, value: Value) -> Hold {
+        self.next_hold += 1;
+        let hold = Hold(self.next_hold);
+        self.held.insert(hold, value);
+        hold
+    }
+
+    pub fn held(&self, hold: Hold) -> Option<Value> {
+        self.held.get(&hold).copied()
+    }
+
+    pub fn release(&mut self, hold: Hold) -> Option<Value> {
+        self.held.remove(&hold)
+    }
+
     pub fn root(&mut self, value: Value) -> Rooted {
         let cell = Rc::new(Cell::new(value));
         self.roots.push(Rc::downgrade(&cell));

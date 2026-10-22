@@ -131,7 +131,7 @@ impl App {
                     self.sync_reveal();
                 }
             }
-            Message::Keyboard(_) | Message::Opened(Ok(())) | Message::Clock => {}
+            Message::Keyboard(_) | Message::Opened(Ok(())) | Message::Clock | Message::OxTick => {}
             Message::View(window, event) => self.handle_view_event(window, event),
             Message::Divider { path, index, delta } => {
                 if let Some(at) = self.editor.tiling().boundary(&path, index) {
@@ -182,6 +182,7 @@ impl App {
             }
             Message::AppletEvent(event) => self.editor.deliver(&event),
         }
+        self.ox.tick(&mut self.editor);
         self.settle();
         let plots = self.load_plots();
         self.fade_theme_from(shown);

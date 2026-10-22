@@ -11,6 +11,7 @@ use build::{
     record_literal,
 };
 
+use std::any::Any;
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -147,16 +148,16 @@ fn interrupted() -> Error {
 }
 
 impl Runtime {
-    pub fn run(&mut self, entry: &Rc<Code>) -> Result<Value, Error> {
+    pub fn run(&mut self, entry: &Rc<Code>, host: &mut dyn Any) -> Result<Value, Error> {
         let mut fiber = Fiber::new(Machine::new(entry));
         let mut first = None;
         loop {
-            match self.drive(&mut fiber, None, first.take())? {
+            match self.drive(&mut fiber, None, first.take(), host)? {
                 Stop::Finished(value) => return Ok(value),
                 Stop::Paused => {}
                 Stop::Blocked(wait, landing) => {
                     self.parked.push((fiber, wait.clone()));
-                    let step = self.wait_for(&wait, landing);
+                    let step = self.wait_for(&wait, landing, host);
                     let Some((parked, _)) = self.parked.pop() else {
                         return Err(Error::new("A waiting evaluation was lost"));
                     };
@@ -172,6 +173,7 @@ impl Runtime {
         fiber: &mut Fiber,
         deadline: Option<Instant>,
         first: Option<Step>,
+        host: &mut dyn Any,
     ) -> Result<Stop, Error> {
         let mut countdown = CHECK_EVERY;
         let mut pending = first;
@@ -197,7 +199,7 @@ impl Runtime {
                     return Err(Error::new("The code ended without returning"));
                 };
                 fiber.machine.pc += 1;
-                self.execute(&mut fiber.machine, op)
+                self.execute(&mut fiber.machine, op, host)
             };
             let outcome = match step {
                 Ok(Flow::Next) => continue,
@@ -360,7 +362,7 @@ impl Runtime {
         }
     }
 
-    fn execute(&mut self, machine: &mut Machine, op: Op) -> Step {
+    fn execute(&mut self, machine: &mut Machine, op: Op, host: &mut dyn Any) -> Step {
         match op {
             Op::Constant { to, index } => {
                 let value = machine.code.constants[index as usize];
@@ -426,8 +428,8 @@ impl Runtime {
                     return Err(Error::new("A variable lost its cell"));
                 }
             }
-            Op::Call { base, count } => return self.call(machine, base, count),
-            Op::TailCall { base, count } => return self.tail_call(machine, base, count),
+            Op::Call { base, count } => return self.call(machine, base, count, host),
+            Op::TailCall { base, count } => return self.tail_call(machine, base, count, host),
             Op::Jump { to } => machine.pc = to as usize,
             Op::JumpIfSupplied { bit, to } => {
                 if machine.missing & (1 << bit) == 0 {
@@ -501,7 +503,7 @@ impl Runtime {
         Ok(())
     }
 
-    fn call(&mut self, machine: &mut Machine, base: u16, count: u16) -> Step {
+    fn call(&mut self, machine: &mut Machine, base: u16, count: u16, host: &mut dyn Any) -> Step {
         let slot = machine.base + usize::from(base);
         let count = self.spread(machine, slot, usize::from(count))?;
         let callee = self.constructor_of(machine.stack[slot]);
@@ -513,7 +515,7 @@ impl Runtime {
             if let Some(control) = self.control_of(callee, count)? {
                 return self.control(machine, control, slot, count, Landing::Register(slot));
             }
-            let result = self.call_native(callee, &machine.stack[slot + 1..=slot + count])?;
+            let result = self.call_native(callee, &machine.stack[slot + 1..=slot + count], host)?;
             machine.stack[slot] = result;
             return Ok(Flow::Next);
         };
@@ -526,7 +528,13 @@ impl Runtime {
         Ok(Flow::Next)
     }
 
-    fn tail_call(&mut self, machine: &mut Machine, base: u16, count: u16) -> Step {
+    fn tail_call(
+        &mut self,
+        machine: &mut Machine,
+        base: u16,
+        count: u16,
+        host: &mut dyn Any,
+    ) -> Step {
         let slot = machine.base + usize::from(base);
         let count = self.spread(machine, slot, usize::from(count))?;
         let callee = self.constructor_of(machine.stack[slot]);
@@ -538,7 +546,7 @@ impl Runtime {
             if let Some(control) = self.control_of(callee, count)? {
                 return self.control(machine, control, slot, count, Landing::Leave);
             }
-            let result = self.call_native(callee, &machine.stack[slot + 1..=slot + count])?;
+            let result = self.call_native(callee, &machine.stack[slot + 1..=slot + count], host)?;
             return Ok(machine.leave(result).map_or(Flow::Next, Flow::Return));
         };
         let binding = bind(
@@ -746,9 +754,10 @@ impl Runtime {
         function: Value,
         arguments: &[Value],
         span: Span,
+        host: &mut dyn Any,
     ) -> Result<Value, Error> {
         let code = Self::call_code(function, arguments, span)?;
-        self.run(&Rc::new(code))
+        self.run(&Rc::new(code), host)
     }
 
     fn call_code(function: Value, arguments: &[Value], span: Span) -> Result<Code, Error> {
@@ -834,11 +843,16 @@ impl Runtime {
         self.heap.set_constructor(kind, machine.get(constructor));
     }
 
-    fn call_native(&mut self, callee: Value, arguments: &[Value]) -> Result<Value, Error> {
+    fn call_native(
+        &mut self,
+        callee: Value,
+        arguments: &[Value],
+        host: &mut dyn Any,
+    ) -> Result<Value, Error> {
         let Some(native) = self.heap.native_of(callee).cloned() else {
             return call_data(&self.heap, callee, arguments);
         };
         native.check(arguments.len())?;
-        (native.function)(&mut self.heap, arguments)
+        (native.function)(&mut self.heap, host, arguments)
     }
 }

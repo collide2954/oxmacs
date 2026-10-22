@@ -12,6 +12,7 @@ workspace = true
 iced.workspace = true
 jiff.workspace = true
 oxmacs-core.workspace = true
+oxmacs-ox.workspace = true
 native-theme.workspace = true
 notify.workspace = true
 open.workspace = true

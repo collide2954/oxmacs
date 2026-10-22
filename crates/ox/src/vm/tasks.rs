@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -98,16 +99,24 @@ impl Runtime {
         true
     }
 
-    pub fn run_tasks(&mut self, budget: Duration) -> Report {
-        self.schedule(Instant::now() + budget);
+    pub fn runnable(&self) -> usize {
+        self.tasks.len()
+    }
+
+    pub fn pending(&self) -> usize {
+        self.tasks.len() + self.blocked.len() + self.workers.len()
+    }
+
+    pub fn run_tasks(&mut self, budget: Duration, host: &mut dyn Any) -> Report {
+        self.schedule(Instant::now() + budget, host);
         Report {
             finished: std::mem::take(&mut self.finished),
             unhandled: std::mem::take(&mut self.unhandled),
-            pending: self.tasks.len() + self.blocked.len() + self.workers.len(),
+            pending: self.pending(),
         }
     }
 
-    fn schedule(&mut self, deadline: Instant) {
+    fn schedule(&mut self, deadline: Instant, host: &mut dyn Any) {
         loop {
             self.wake();
             let now = Instant::now();
@@ -121,7 +130,7 @@ impl Runtime {
             let turn = now + (deadline - now) / waiting;
             let first = task.resume.take();
             self.running = task.promise;
-            let outcome = self.drive(&mut task.fiber, Some(turn), first);
+            let outcome = self.drive(&mut task.fiber, Some(turn), first, host);
             self.running = None;
             match outcome {
                 Ok(Stop::Paused) => self.tasks.push_back(task),
@@ -239,7 +248,7 @@ impl Runtime {
             })
     }
 
-    pub(super) fn wait_for(&mut self, wait: &Wait, landing: Landing) -> Step {
+    pub(super) fn wait_for(&mut self, wait: &Wait, landing: Landing, host: &mut dyn Any) -> Step {
         loop {
             self.wake();
             if let Some(step) = self.attempt(wait, landing) {
@@ -249,7 +258,7 @@ impl Runtime {
                 return Err(interrupted());
             }
             if !self.tasks.is_empty() {
-                self.schedule(Instant::now() + WAITING_SLICE);
+                self.schedule(Instant::now() + WAITING_SLICE, host);
                 continue;
             }
             if !self.outside_help(wait) {

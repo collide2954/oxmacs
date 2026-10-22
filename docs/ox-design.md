@@ -159,7 +159,7 @@ Each of Emacs's bottlenecks has a planned answer in Ox:
       (draw-path (temperature-curve state.days) :stroke 'accent :width 2))))
 ```
 
-- **Views.** A plugin buffer or panel has a `view` function from its state to a tree of widgets: `column`, `row`, `text`, `rich-text`, `button`, `input`, `scrollable`, `stack`, `table`, `image` and `canvas`. Events become messages, and an `update` function turns a message and the state into a new state, Elm-style, like Iced itself. Rust diffs the trees and renders them, so a plugin never blocks a frame.
+- **Views.** A plugin buffer or panel has a `view` function from its state to a tree of widgets: `column`, `row`, `text`, `rich-text`, `button`, `input`, `scrollable`, `stack`, `table`, `image` and `canvas`. A view reads atoms, and changing an atom it read redraws it, so a spawned task that does `(reset! forecast (await …))` updates the screen; buttons call Ox functions directly. Rust diffs the trees and renders them, so a plugin never blocks a frame.
 - **Canvas.** Draw lists of paths, fills, strokes, text runs, images and clip regions, with hit testing for clicks and drags. This is enough to port the database grid, the git log graph and the PDF pages.
 - **Buffer decorations.** Faces on ranges, overlays, virtual text, gutters, pills, fringe marks and inline widgets. They are applied as data and rendered natively.
 - **Placement.** Buffers, side panes, the area above the echo area, pop-ups and transient menus.
@@ -179,7 +179,7 @@ Each of Emacs's bottlenecks has a planned answer in Ox:
 
 - **Wake-ups.** The manifest names what wakes the plugin: commands, file types, keys, hooks, mode-line segments, or startup. Before that, only the manifest is read.
 - **Versions.** Plugins have semver versions and `:requires` constraints, checked when they load. `M-x list-plugins` shows each plugin's version, source, load state and load time.
-- **Sources.** Bundled plugins ship with oxmacs, under `plugins/` beside the binary. Your own live in `~/.oxmacs/plugins`. `(use-plugin "github:someone/ox-thing" :version "^1.2")` clones a plugin and pins its commit in `~/.oxmacs/plugins.lock`.
+- **Sources.** Bundled plugins are built into the binary, and one of the same name in `~/.oxmacs/plugins` overrides it. Your own live there too. `(use-plugin "github:someone/ox-thing" :version "^1.2")` clones a plugin and pins its commit in `~/.oxmacs/plugins.lock`.
 - **Live reload.** Saving a plugin's file reloads its module, and the REPL can redefine anything at run time.
 
 ## Configuration
@@ -228,7 +228,7 @@ Caches (compiled bytecode, installed tools such as air, ruff and PDFium) live in
 | --- | --- | --- |
 | 1. The `ox` crate | Reader with spans, expander, compiler, stackless VM, GC v1, core library, module loader, bytecode cache. Its own test suite of `.ox` programs, plus a benchmark harness. | Ox programs run at their benchmark budgets. Independent of the editor, so it builds fast. |
 | 2. Embedding | The bridge in core: UI isolate, scheduler, editor API v1, `init.ox`, plugin manifests and lazy loading, `M-x ox-repl`, `C-x C-e`, eval-buffer, an `.ox` mode. | A plugin adds a command, key, setting and mode-line segment, and live reload works. |
-| 3. Proof | Port weather (HTTP, JSON, settings, mode line, a forecast buffer), then delete `oxmacs-weather`. | Weather works the same, and is faster to change. |
+| 3. Proof | Port weather (HTTP, JSON, settings, mode line, a forecast view). Phases 2 and 3 are sliced in [ox-embedding.md](ox-embedding.md). | Weather works the same, and is faster to change. |
 | 4. GUI API | Views, canvas and decorations. Port the start screen (canvas animation) and demo. | The animated start screen runs as a plugin. |
 | 5. Applets | Rebuild themes, glow, dired, markdown, atlas, irc, git, database, pdf and python as plugins, one at a time. | No applet crates left; no cargo features. |
 | 6. Built-ins | Rust, TOML and R modes (with the R console), doctor, customize and list-tools become bundled plugins. | The core is the engine alone. |

@@ -9,7 +9,7 @@ use std::time::Duration;
 use crate::compile::compile;
 use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
-use crate::heap::{Heap, Rooted};
+use crate::heap::{Heap, Hold, Rooted};
 use crate::library;
 use crate::native::{Control, Native, NativeFn};
 use crate::portable::{Failure, Portable};
@@ -97,7 +97,7 @@ impl Isolate {
         library::install(&mut isolate);
         let apply = isolate.runtime.lookup(PRELUDE, Sym::intern("apply"));
         isolate.runtime.apply = apply.unwrap_or(Value::Nil);
-        if let Err(error) = isolate.eval_in(PRELUDE, "prelude/core.ox", PRELUDE_SOURCE) {
+        if let Err(error) = isolate.eval_in(PRELUDE, "prelude/core.ox", PRELUDE_SOURCE, &mut ()) {
             panic!("The Ox prelude failed to load: {error}");
         }
         let found: Vec<(ErrorKind, Value)> = ErrorKind::NAMES
@@ -117,11 +117,40 @@ impl Isolate {
     }
 
     pub fn eval(&mut self, source: &str) -> Result<Value, Error> {
-        self.eval_in(USER, "<input>", source)
+        self.eval_in(USER, "<input>", source, &mut ())
+    }
+
+    pub fn eval_with(&mut self, host: &mut dyn Any, source: &str) -> Result<Value, Error> {
+        self.eval_in(USER, "<input>", source, host)
     }
 
     pub fn eval_named(&mut self, name: &str, source: &str) -> Result<Value, Error> {
-        self.eval_in(USER, name, source)
+        self.eval_in(USER, name, source, &mut ())
+    }
+
+    pub fn eval_named_with(
+        &mut self,
+        host: &mut dyn Any,
+        name: &str,
+        source: &str,
+    ) -> Result<Value, Error> {
+        self.eval_in(USER, name, source, host)
+    }
+
+    pub fn hold(&mut self, value: Value) -> Hold {
+        self.runtime.heap.hold(value)
+    }
+
+    pub fn held(&self, hold: Hold) -> Option<Value> {
+        self.runtime.heap.held(hold)
+    }
+
+    pub fn extend_prelude(&mut self, name: &str, source: &str) -> Result<Value, Error> {
+        self.eval_in(PRELUDE, name, source, &mut ())
+    }
+
+    pub fn release(&mut self, hold: Hold) -> Option<Value> {
+        self.runtime.heap.release(hold)
     }
 
     pub fn add_root(&mut self, root: impl Into<PathBuf>) {
@@ -137,7 +166,17 @@ impl Isolate {
     }
 
     pub fn call(&mut self, function: Value, arguments: &[Value]) -> Result<Value, Error> {
-        self.runtime.invoke(function, arguments, Span::new(0, 0))
+        self.call_with(&mut (), function, arguments)
+    }
+
+    pub fn call_with(
+        &mut self,
+        host: &mut dyn Any,
+        function: Value,
+        arguments: &[Value],
+    ) -> Result<Value, Error> {
+        self.runtime
+            .invoke(function, arguments, Span::new(0, 0), host)
     }
 
     pub fn foreign<T: Any>(&mut self, name: &str, value: T) -> Result<Value, Error> {
@@ -153,7 +192,7 @@ impl Isolate {
     }
 
     fn job(&mut self, module: &str, function: Sym, arguments: &[Portable]) -> Result<Value, Error> {
-        let id = self.load_module(module)?;
+        let id = self.load_module(module, &mut ())?;
         let callee = self
             .runtime
             .modules
@@ -174,10 +213,16 @@ impl Isolate {
     }
 
     pub fn load(&mut self, name: &str) -> Result<(), Error> {
-        self.load_module(name).map(|_| ())
+        self.load_module(name, &mut ()).map(|_| ())
     }
 
-    fn eval_in(&mut self, module: ModuleId, name: &str, source: &str) -> Result<Value, Error> {
+    fn eval_in(
+        &mut self,
+        module: ModuleId,
+        name: &str,
+        source: &str,
+        host: &mut dyn Any,
+    ) -> Result<Value, Error> {
         let text = Rc::new(Source {
             name: name.to_owned(),
             text: source.to_owned(),
@@ -189,7 +234,7 @@ impl Isolate {
         let mut result = Value::Nil;
         for form in &forms {
             if let Some(clauses) = header(form) {
-                self.header(module, clauses)?;
+                self.header(module, clauses, host)?;
                 result = Value::Nil;
                 continue;
             }
@@ -206,12 +251,12 @@ impl Isolate {
                 module,
                 module_name,
             )?);
-            result = self.runtime.run(&code)?;
+            result = self.runtime.run(&code, host)?;
         }
         Ok(result)
     }
 
-    fn load_module(&mut self, name: &str) -> Result<ModuleId, Error> {
+    fn load_module(&mut self, name: &str, host: &mut dyn Any) -> Result<ModuleId, Error> {
         if let Some(start) = self.loading.iter().position(|loading| loading == name) {
             let mut chain = self.loading[start..].to_vec();
             chain.push(name.to_owned());
@@ -232,12 +277,17 @@ impl Isolate {
             found.exports = None;
         }
         self.loading.push(name.to_owned());
-        let result = self.eval_in(module, &path.display().to_string(), &source);
+        let result = self.eval_in(module, &path.display().to_string(), &source, host);
         self.loading.pop();
         result.map(|_| module)
     }
 
-    fn header(&mut self, module: ModuleId, clauses: &[Syntax]) -> Result<(), Error> {
+    fn header(
+        &mut self,
+        module: ModuleId,
+        clauses: &[Syntax],
+        host: &mut dyn Any,
+    ) -> Result<(), Error> {
         for clause in clauses {
             let malformed = || {
                 Error::at(
@@ -254,7 +304,7 @@ impl Isolate {
             match symbol(head) {
                 Some("import") => {
                     for spec in rest {
-                        self.import(module, spec)?;
+                        self.import(module, spec, host)?;
                     }
                 }
                 Some("export") => {
@@ -270,7 +320,7 @@ impl Isolate {
         Ok(())
     }
 
-    fn import(&mut self, module: ModuleId, spec: &Syntax) -> Result<(), Error> {
+    fn import(&mut self, module: ModuleId, spec: &Syntax, host: &mut dyn Any) -> Result<(), Error> {
         let malformed = || Error::at(spec.span, "import takes (module name …) lists");
         let Datum::List(items) = &spec.datum else {
             return Err(malformed());
@@ -299,7 +349,7 @@ impl Isolate {
         let id = match loaded {
             Some(id) if !self.loading.contains(&name) => id,
             _ => self
-                .load_module(&name)
+                .load_module(&name, host)
                 .map_err(|error| error.or_at(spec.span))?,
         };
         if let Some(found) = self.runtime.modules.get_mut(module) {
@@ -320,7 +370,25 @@ impl Isolate {
         most: Option<usize>,
         function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
     ) {
-        self.install_native(name, least, most, Rc::new(function), None);
+        let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
+        self.install_native(name, least, most, function, None);
+    }
+
+    pub fn define_host_native<T: Any>(
+        &mut self,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        function: impl Fn(&mut Heap, &mut T, &[Value]) -> Result<Value, Error> + 'static,
+    ) {
+        let missing = format!("{name} isn't available here");
+        let function: Rc<NativeFn> = Rc::new(move |heap, host, arguments| {
+            let Some(host) = host.downcast_mut::<T>() else {
+                return Err(Error::new(missing.clone()));
+            };
+            function(heap, host, arguments)
+        });
+        self.install_native(name, least, most, function, None);
     }
 
     pub(crate) fn define_control(
@@ -331,7 +399,7 @@ impl Isolate {
         control: Control,
     ) {
         let message = format!("{name} can only be called from Ox");
-        let function: Rc<NativeFn> = Rc::new(move |_, _| Err(Error::new(message.clone())));
+        let function: Rc<NativeFn> = Rc::new(move |_, _, _| Err(Error::new(message.clone())));
         self.install_native(name, least, most, function, Some(control));
     }
 
@@ -375,7 +443,19 @@ impl Isolate {
     }
 
     pub fn run(&mut self, budget: Duration) -> Report {
-        self.runtime.run_tasks(budget)
+        self.runtime.run_tasks(budget, &mut ())
+    }
+
+    pub fn runnable(&self) -> usize {
+        self.runtime.runnable()
+    }
+
+    pub fn pending(&self) -> usize {
+        self.runtime.pending()
+    }
+
+    pub fn run_with(&mut self, host: &mut dyn Any, budget: Duration) -> Report {
+        self.runtime.run_tasks(budget, host)
     }
 
     pub fn cancel(&mut self, task: TaskId) -> bool {
