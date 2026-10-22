@@ -4,6 +4,10 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Removed
+
+- The applets and their Cargo features: dired, markdown and weather, which were built by default, and animated-splash, atlas, database, demo, extra-themes, git, glow, irc, pdf, python and scripting. They return as Ox plugins.
+
 ### Security
 
 - Updated rustls-webpki and webpki-roots, which check the certificates of IRC servers and downloads, for RUSTSEC-2026-0381 and RUSTSEC-2026-0382.

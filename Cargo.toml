@@ -13,37 +13,18 @@ bitflags = "2.13.2"
 dirs = "7.0.0"
 iced = { version = "0.14.0", features = ["advanced", "canvas", "image", "markdown"] }
 iced_test = "0.14.0"
-gix = { version = "0.89.0", default-features = false, features = ["max-performance-safe", "sha1", "status", "revision", "blob-diff", "blame", "mailmap"] }
 indexmap = "2.14.2"
 jiff = "0.2.38"
-keyring = "4.2.0"
-oxmacs-atlas = { path = "crates/oxmacs-atlas" }
 oxmacs-core = { path = "crates/oxmacs-core" }
-oxmacs-database = { path = "crates/oxmacs-database" }
-oxmacs-demo = { path = "crates/oxmacs-demo" }
-oxmacs-dired = { path = "crates/oxmacs-dired" }
-oxmacs-git = { path = "crates/oxmacs-git" }
-oxmacs-glow = { path = "crates/oxmacs-glow" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
-oxmacs-irc = { path = "crates/oxmacs-irc" }
-oxmacs-markdown = { path = "crates/oxmacs-markdown" }
-oxmacs-pdf = { path = "crates/oxmacs-pdf" }
-oxmacs-python = { path = "crates/oxmacs-python" }
-oxmacs-scripting = { path = "crates/oxmacs-scripting" }
-oxmacs-splash = { path = "crates/oxmacs-splash" }
-oxmacs-themes = { path = "crates/oxmacs-themes" }
-oxmacs-weather = { path = "crates/oxmacs-weather" }
-pdfium-render = { version = "0.9.4", default-features = false, features = ["pdfium_latest", "thread_safe"] }
 native-theme = { version = "0.6.1", default-features = false }
 notify = "8.2.0"
 num-bigint = "0.4.8"
 num-traits = "0.2.19"
 open = "5.4.4"
 regex = "1.13.1"
-rhai = { version = "1.26.1", features = ["sync"] }
 ring = "0.17.14"
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
-rusqlite = { version = "0.40.2", features = ["bundled"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
@@ -55,10 +36,7 @@ tempfile = "3.27.0"
 thiserror = "2.0.21"
 toml = "1.1.8"
 toml_edit = "0.25.17"
-trash = { version = "5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }
 tree-sitter = "0.27.1"
-tree-sitter-md = "0.5.3"
-tree-sitter-python = "0.25.0"
 tree-sitter-r = "1.3.0"
 tree-sitter-rust = "0.24.2"
 tree-sitter-toml-ng = "0.7.0"

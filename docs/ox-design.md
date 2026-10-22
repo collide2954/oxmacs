@@ -22,7 +22,7 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
 | Engine | Our own VM in Rust: a new `ox` crate with reader, hygienic expander, bytecode compiler, register VM and GC. A Cranelift JIT tier may come later. |
 | Threads | The UI isolate runs editor code in small time-boxed slices. Slow work runs in worker isolates with their own heaps, which talk by messages and read buffers as immutable rope snapshots. async/await for I/O. |
 | Native code | Core primitives only. The core provides fast native building blocks; plugins are pure Ox and nothing is feature-gated. |
-| Migration | Prove it, then port: the VM and editor bindings first, then weather end to end, then one applet at a time, deleting each Rust crate as its plugin lands. |
+| Migration | The applet crates were removed on 2026-10-21 to speed up builds. Prove Ox first: the VM and editor bindings, then weather end to end as a plugin, then the other applets one at a time. |
 | Dialect | Ox's own dialect, Scheme-flavored and free to break compatibility where that makes it cleaner. |
 | Words | Short modern words: `def`, `fn`, `let [x 1]`, `if`, `cond`, `match`, `do`, `set!`. |
 | Additions | Modules with explicit imports and exports; hygienic `syntax-rules` and procedural macros; lexical scope only; `[ ]` vectors, `{ }` maps, `:keywords`, string interpolation; `match`, records, destructuring. |
@@ -230,9 +230,9 @@ Caches (compiled bytecode, installed tools such as air, ruff and PDFium) live in
 | 2. Embedding | The bridge in core: UI isolate, scheduler, editor API v1, `init.ox`, plugin manifests and lazy loading, `M-x ox-repl`, `C-x C-e`, eval-buffer, an `.ox` mode. | A plugin adds a command, key, setting and mode-line segment, and live reload works. |
 | 3. Proof | Port weather (HTTP, JSON, settings, mode line, a forecast buffer), then delete `oxmacs-weather`. | Weather works the same, and is faster to change. |
 | 4. GUI API | Views, canvas and decorations. Port the start screen (canvas animation) and demo. | The animated start screen runs as a plugin. |
-| 5. Applets | Port themes, glow, dired, markdown, atlas, irc, git, database, pdf and python, one at a time, each deleting its crate. | No applet crates left; no cargo features. |
+| 5. Applets | Rebuild themes, glow, dired, markdown, atlas, irc, git, database, pdf and python as plugins, one at a time. | No applet crates left; no cargo features. |
 | 6. Built-ins | Rust, TOML and R modes (with the R console), doctor, customize and list-tools become bundled plugins. | The core is the engine alone. |
-| 7. Cleanup | Remove `config.toml` support after migrating it, the Rhai applet, the routine parser and every feature flag. | One binary plus plugins. |
+| 7. Cleanup | Remove `config.toml` support after migrating it, and the routine parser. | One binary plus plugins. |
 
 Work paused for Ox continues later as Ox plugins: the list-tools and doctor reorganization, database and git slices, and the Vim-style modal editing idea.
 
