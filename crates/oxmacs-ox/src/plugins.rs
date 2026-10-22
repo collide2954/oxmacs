@@ -9,7 +9,7 @@ use ox::{Error, Isolate};
 use oxmacs_core::command::{DynamicSpec, Scope};
 use oxmacs_core::editor::Editor;
 
-use crate::{commands, log};
+use crate::{commands, log, views};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Bundle {
@@ -509,6 +509,51 @@ pub fn wake_at_startup(isolate: &Isolate, editor: &mut Editor) {
         .map(|plugin| plugin.manifest.name.clone())
         .collect();
     plugins.waking.extend(woken);
+}
+
+pub fn reload_file(
+    isolate: &mut Isolate,
+    editor: &mut Editor,
+    name: &str,
+    file_name: &str,
+    path: &Path,
+) {
+    let plugin = editor
+        .applet_state::<Plugins>()
+        .and_then(|plugins| {
+            plugins
+                .known
+                .iter()
+                .find(|plugin| plugin.manifest.name == name)
+        })
+        .cloned();
+    let Some(plugin) = plugin.filter(|plugin| plugin.loaded) else {
+        return;
+    };
+    if file_name == "plugin.ox" {
+        editor.show_message(format!(
+            "{name}'s plugin.ox is read again when oxmacs starts"
+        ));
+        return;
+    }
+    let Ok(text) = fs::read_to_string(path) else {
+        return;
+    };
+    let file = path.display().to_string();
+    let module = if file_name == plugin.manifest.entry {
+        name.to_owned()
+    } else {
+        let module = format!("{name}/{}", file_name.trim_end_matches(".ox"));
+        isolate.add_source(&module, &file, &text);
+        module
+    };
+    match isolate.eval_module_with(editor, &module, &file, &text) {
+        Ok(()) => {
+            views::redraw(editor);
+            editor.show_message(format!("Reloaded {module}"));
+        }
+        Err(error) => log::report(editor, &error, Some((&file, &text))),
+    }
 }
 
 pub fn wake_waiting(isolate: &mut Isolate, editor: &mut Editor) {

@@ -420,6 +420,12 @@ fn render(
     Ok((node, callbacks))
 }
 
+pub fn redraw(editor: &mut Editor) {
+    if let Some(views) = editor.applet_state_mut::<Views>() {
+        views.dirty = true;
+    }
+}
+
 pub fn refresh(isolate: &mut Isolate, editor: &mut Editor) {
     let writes = isolate.heap().atom_writes();
     let Some(views) = editor.applet_state_mut::<Views>() else {

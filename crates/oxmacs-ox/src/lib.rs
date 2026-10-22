@@ -1,8 +1,10 @@
 mod bundled;
 mod commands;
 mod log;
+mod mode;
 mod natives;
 mod plugins;
+mod tools;
 pub mod views;
 
 use std::fs;
@@ -34,6 +36,7 @@ pub enum Pace {
 pub struct Ox {
     isolate: Isolate,
     bundled: &'static [Bundle],
+    home: Option<PathBuf>,
 }
 
 impl Default for Ox {
@@ -56,10 +59,16 @@ impl Ox {
         if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
             panic!("The oxmacs prelude failed to load: {error}");
         }
-        Self { isolate, bundled }
+        Self {
+            isolate,
+            bundled,
+            home: None,
+        }
     }
 
     pub fn start(&mut self, editor: &mut Editor, home: Option<&Path>) {
+        self.home = home.map(Path::to_path_buf);
+        tools::install(editor);
         plugins::discover(&mut self.isolate, editor, self.bundled, home);
         self.run_init(editor, home);
         plugins::wake_at_startup(&self.isolate, editor);
@@ -71,18 +80,20 @@ impl Ox {
         views::press(&mut self.isolate, editor, buffer, slot);
     }
 
-    fn run_init(&mut self, editor: &mut Editor, home: Option<&Path>) {
+    fn run_init(&mut self, editor: &mut Editor, home: Option<&Path>) -> bool {
         let Some(path) = home.map(|home| home.join("init.ox")) else {
-            return;
+            return false;
         };
         let Ok(source) = fs::read_to_string(&path) else {
-            return;
+            return false;
         };
         let name = path.display().to_string();
         if let Err(error) = self.isolate.eval_named_with(editor, &name, &source) {
             log::report(editor, &error, Some((&name, &source)));
             log::show(editor);
+            return false;
         }
+        true
     }
 
     pub fn eval(&mut self, editor: &mut Editor, source: &str) -> Result<String, Error> {
@@ -101,6 +112,7 @@ impl Ox {
     }
 
     pub fn tick(&mut self, editor: &mut Editor) -> Pace {
+        self.handle_requests(editor);
         plugins::wake_waiting(&mut self.isolate, editor);
         commands::run_waiting(&mut self.isolate, editor);
         if self.isolate.pending() > 0 {
