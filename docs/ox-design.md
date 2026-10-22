@@ -20,7 +20,7 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
 | Topic | Decision |
 | --- | --- |
 | Engine | Our own VM in Rust: a new `ox` crate with reader, hygienic expander, bytecode compiler, register VM and GC. A Cranelift JIT tier may come later. |
-| Threads | The UI isolate runs editor code in small time-boxed slices. Slow work runs in worker isolates with their own heaps, which talk by messages and read buffers as immutable rope snapshots. async/await for I/O. |
+| Threads | The UI isolate runs editor code in small time-boxed slices. Slow work runs in worker isolates with their own heaps, which talk by messages and read buffers as immutable rope snapshots. Promises and `await` for I/O. |
 | Native code | Core primitives only. The core provides fast native building blocks; plugins are pure Ox and nothing is feature-gated. |
 | Migration | The applet crates were removed on 2026-10-21 to speed up builds. Prove Ox first: the VM and editor bindings, then weather end to end as a plugin, then the other applets one at a time. |
 | Dialect | Ox's own dialect, Scheme-flavored and free to break compatibility where that makes it cleaner. |
@@ -29,7 +29,7 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
 | Types | Gradual with inference: annotations are optional, but the checker infers through unannotated code and reports definite errors as you type, in `ox check` and in the gate. Nil safety, generics, map shapes, unions and aliases, and exhaustive `match`. |
 | Tests | Built in: inline `(test …)` blocks with an `expect` that explains failures, doc examples, property tests, snapshot tests, `ox test` and an editor runner. |
 | Data | Immutable by default: persistent vectors, maps and strings. Atoms and buffers are mutable. |
-| Control | Proper tail calls, async/await, generators and green tasks. No `call/cc`. |
+| Control | Proper tail calls, `await` anywhere (tasks are stackful, so nothing is marked `async`), generators and green tasks. No `call/cc`. |
 | Errors | Exceptions with typed error records and clickable tracebacks. A failing hook is reported, never fatal. |
 | GUI | Declarative, Elm-style view trees mapped onto Iced widgets; a canvas draw-list API; buffer decorations. Rust diffs and renders. |
 | Config | `~/.oxmacs/init.ox` is the only config file. `M-x customize` writes `custom.ox`. `config.toml` is migrated once. |
@@ -75,7 +75,7 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
 - **Strings.** Immutable UTF-8; large ones are ropes. Characters are Unicode scalar values.
 - **Collections.** Persistent vectors (RRB trees), maps and sets (HAMT). Updates share structure; `transient` batches edits inside one function.
 - **Mutation.** `atom` cells and editor objects (buffers, windows) are the mutable things.
-- **Control.** Tail calls are guaranteed. `async`/`await`, generators (`yield`) and `spawn` for green tasks.
+- **Control.** Tail calls are guaranteed. `await` works anywhere, generators (`gen`, `yield`, `next`) and `spawn` for green tasks.
 - **Errors.** `raise` any record value; `(try (fetch city) (catch http-error e (log e.status)) (finally (close conn)))` catches by record type, and the checker knows the fields of `e`. The REPL and echo area show tracebacks you can click.
 
 ## Runtime and speed

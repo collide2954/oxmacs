@@ -9,13 +9,14 @@ use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
 use crate::heap::{Heap, Rooted};
 use crate::library;
-use crate::native::Native;
+use crate::native::{Control, Native, NativeFn};
 use crate::read::{self, Datum, Syntax};
 use crate::span::Source;
 use crate::symbol::Sym;
 use crate::task::{Interrupter, Report, TaskId};
 use crate::value::Value;
 use crate::value::print;
+use crate::value::promise::Promise;
 use crate::value::record::Family;
 use crate::vm::Runtime;
 use crate::vm::modules::{Import, ModuleId, PRELUDE, USER};
@@ -230,15 +231,54 @@ impl Isolate {
         most: Option<usize>,
         function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
     ) {
+        self.install_native(name, least, most, Rc::new(function), None);
+    }
+
+    pub(crate) fn define_control(
+        &mut self,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        control: Control,
+    ) {
+        let message = format!("{name} can only be called from Ox");
+        let function: Rc<NativeFn> = Rc::new(move |_, _| Err(Error::new(message.clone())));
+        self.install_native(name, least, most, function, Some(control));
+    }
+
+    fn install_native(
+        &mut self,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        function: Rc<NativeFn>,
+        control: Option<Control>,
+    ) {
         let name = Sym::intern(name);
         if let Ok(value) = self.runtime.heap.native(Native {
             name,
             least,
             most,
-            function: Rc::new(function),
+            function,
+            control,
         }) {
             self.runtime.define(PRELUDE, name, value);
         }
+    }
+
+    pub fn promise(&mut self) -> Result<Value, Error> {
+        self.runtime.promise()
+    }
+
+    pub fn resolve(&mut self, promise: Value, value: Value) -> bool {
+        self.runtime.settle(promise, Promise::Delivered(value))
+    }
+
+    pub fn reject(&mut self, promise: Value, message: &str) -> bool {
+        let Ok(error) = self.runtime.error_value(&Error::new(message)) else {
+            return false;
+        };
+        self.runtime.settle(promise, Promise::Failed(error))
     }
 
     pub fn spawn(&mut self, function: Value, arguments: &[Value]) -> Result<TaskId, Error> {

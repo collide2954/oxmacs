@@ -2,6 +2,7 @@ pub(crate) mod equal;
 pub(crate) mod map;
 pub(crate) mod number;
 pub mod print;
+pub(crate) mod promise;
 pub(crate) mod record;
 pub(crate) mod vector;
 
@@ -43,6 +44,8 @@ pub enum Kind {
     Record,
     Atom,
     Identifier,
+    Generator,
+    Promise,
 }
 
 impl Value {

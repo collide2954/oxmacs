@@ -44,7 +44,8 @@ crates/ox/src/
   vm/               the interpreter loop, frames, calls and tail calls
     bind.rs         binding arguments to parameters
     build.rs        building literals, reading fields, calling data
-    tasks.rs        spawning, cancelling and the round-robin scheduler
+    machine.rs      a machine's stack, frames and handlers; fibers and generators
+    tasks.rs        spawning, cancelling, waiting on promises and the scheduler
   heap/             typed arenas and rooted handles
     gc.rs           mark and sweep
   value/            Value, Ref and Kind, and the data types
@@ -54,9 +55,11 @@ crates/ox/src/
     record.rs       record types and instances
     equal.rs        structural equality and hashing
     print.rs        display and write
+    promise.rs      promise states
   library/          natives, grouped by area, and the Ox prelude
     numbers.rs      arithmetic and comparison
     collections.rs  sequences, vectors, maps, sets, records
+    tasks.rs        generators, promises and spawn
     prelude/*.ox    the parts of the core library written in Ox
   bin/ox.rs         `ox file.ox` and the REPL
 crates/ox/tests/
@@ -130,7 +133,7 @@ pub struct Ref { kind: Kind, index: u32 }
 
 - **Hygiene.** By marks. Each identifier carries a set of marks, empty for code you write. A local binding is recorded with its name and marks, and a reference resolves only to a binding with the same name and the same marks; a reference no local matches is a global. Special form names stay reserved, so a macro's `if` is always `if`.
 - **Expansion.** A separate pass before compiling, so the compiler sees only core forms and finds every `set!`. A macro receives its argument forms as data whose names are identifier objects that keep their marks. Plain symbols in what it returns are the names it introduced and get a fresh mark, so they never capture the user's names, and the reverse. Expansion stops with an error 256 levels deep.
-- **Core forms.** After expansion only these remain: `quote`, `def`, `fn`, `let`, `if`, `do`, `set!`, `.`, `try`, `raise`, `await`, `yield`, `match`, `with-param`, `module`, `import` and `export`. Everything else is a macro, most of them in the prelude: `cond`, `when`, `unless`, `and`, `or`, `when-let`, `if-let`, `->`, `->>`, `for`, `defrecord`, `defcommand` (in phase 2) and `quasiquote`. `cond` takes `[test body…]` clauses ending in `[else …]`, the same shape as `match`.
+- **Core forms.** After expansion only these remain: `quote`, `def`, `fn`, `let`, `if`, `do`, `set!`, `.`, `try`, `raise`, `match`, `with-param`, `module`, `import` and `export`. Everything else is a macro, most of them in the prelude: `cond`, `when`, `unless`, `and`, `or`, `when-let`, `if-let`, `->`, `->>`, `for`, `gen`, `spawn`, `defrecord`, `defcommand` (in phase 2) and `quasiquote`. `cond` takes `[test body…]` clauses ending in `[else …]`, the same shape as `match`.
 - **Macros.** `defmacro` defines a procedural macro: a function from syntax to syntax, run at expansion time in the compiling isolate, which may import other modules. `syntax-rules` is a macro that builds such a function from patterns and templates. Ox has no separate run-time and compile-time phases; a macro sees whatever its module imports.
 
 ## Compiler
@@ -161,7 +164,7 @@ pub struct Ref { kind: Kind, index: u32 }
 - **Tasks.** A task owns a `Vec<Value>` register stack, a `Vec<Frame>` (code, closure, base and return slot) and a handler stack. Calling Ox never recurses on the Rust stack: deep recursion only grows the task's vectors.
 - **Calls.** `CALL a b c` calls `r[a]` with arguments `r[a+1 ..= a+b]` and leaves the result in `r[a]`. Keyword arguments arrive as trailing pairs that the callee's prologue sorts into slots; with none, there is no prologue cost.
 - **Inline caches.** Global references are linked to slot indices when a module loads, so there are no hash lookups at run time. Field access caches (record type, field index) per instruction.
-- **Preemption.** Every 1,024 instructions the VM checks the clock and the interrupt flag. When a task's turn is over, it stops with the task left exactly where it was. An interrupt (`C-g`, or `cancel` on one task) raises an `Interrupted` error that no `catch` clause catches, not even `_`, while `finally` blocks still run. `eval` checks the flag too, so runaway code at the REPL can be stopped.
+- **Preemption.** Every 1,024 instructions the VM collects garbage if the heap has grown enough, and checks the clock and the interrupt flag. When a task's turn is over, it stops with the task left exactly where it was. An interrupt (`C-g`, or `cancel` on one task) raises an `Interrupted` error that no `catch` clause catches, not even `_`, while `finally` blocks still run. `eval` checks the flag too, so runaway code at the REPL can be stopped.
 - **Natives.** A native is a Rust function over `&mut Ctx` and its arguments. Higher-order functions that call back into Ox (`map`, `filter`, `reduce`, `sort-by`) are written in the Ox prelude, so the VM never needs a Rust re-entry.
 
 ## Errors
@@ -173,10 +176,10 @@ pub struct Ref { kind: Kind, index: u32 }
 
 ## Concurrency
 
-- **Generators.** `(gen … (yield x) …)` creates a task with its own stack, and `next` resumes it. Switching between tasks is a change of the VM's current task, not a Rust call.
-- **Promises.** `async` functions return promises. `await` on a pending promise suspends the task, and when the host resolves the promise (`isolate.resolve(p, v)`) the waiting tasks become runnable.
-- **Green tasks.** `spawn` creates one.
-- **Scheduler.** The host starts tasks with `isolate.spawn(f, args)` and runs them with `isolate.run(budget) -> Report { finished, pending }`. Tasks take turns, each with an equal share of what is left of the budget, and a task that pauses goes to the back of the queue. The editor calls it once per frame with about 4 ms; the `ox` tool calls it in a loop.
+- **Generators.** `(gen …)` is `(generator (fn [] …))`, which gives the function its own machine (stack, frames and handlers). A task runs a fiber: the current machine plus the machines waiting on `next`. `next` pushes the caller and switches to the generator's machine, and `yield` switches back, so `yield` works from any function the generator calls. Switching is a change of machine inside the interpreter loop, not a Rust call. An error that leaves a generator ends it and is raised in the caller.
+- **Promises.** `yield`, `next`, `await`, `generator` and `spawn-call` are control natives: ordinary function values that the interpreter handles itself, so they can be passed around and called in tail position. `await` on a pending promise blocks the whole task, and when it is delivered (by `deliver`, by a finished task, or by the host with `isolate.resolve(p, v)` or `isolate.reject(p, message)`) the task becomes runnable again. `eval` runs other tasks while it waits, and raises "Nothing can deliver this promise" when none are left.
+- **Green tasks.** `(spawn …)` is `(spawn-call (fn [] …))`, which starts a task and returns a promise of its result. A failure that nothing is waiting for is listed in the report's `unhandled`.
+- **Scheduler.** The host starts tasks with `isolate.spawn(f, args)` and runs them with `isolate.run(budget) -> Report { finished, unhandled, pending }`. Tasks take turns, each with an equal share of what is left of the budget, and a task that pauses goes to the back of the queue. The editor calls it once per frame with about 4 ms; the `ox` tool calls it in a loop.
 - **Workers.** `spawn-worker` starts another isolate on a thread. Messages are deep-copied into a heap-independent `Portable` form, with strings in `Arc<str>`, and rebuilt in the receiving heap. A shared frozen arena for large values can come after phase 1 if the benchmarks call for it.
 
 ## Modules and the cache

@@ -3,6 +3,7 @@ use std::fmt::Write as _;
 use crate::heap::Heap;
 use crate::value::Value;
 use crate::value::map::Map;
+use crate::value::promise::Promise;
 use crate::value::record::Record;
 use crate::value::vector::Vector;
 
@@ -57,6 +58,18 @@ fn write_into(heap: &Heap, value: Value, out: &mut String) {
                 out.push_str("#<atom ");
                 write_into(heap, held, out);
                 out.push('>');
+            } else if heap.generator_of(value).is_some() {
+                out.push_str("#<generator>");
+            } else if let Some(promise) = heap.promise_of(value) {
+                match promise {
+                    Promise::Pending { .. } => out.push_str("#<promise>"),
+                    Promise::Delivered(held) => {
+                        out.push_str("#<promise ");
+                        write_into(heap, held, out);
+                        out.push('>');
+                    }
+                    Promise::Failed(_) => out.push_str("#<promise failed>"),
+                }
             } else if let Some(native) = heap.native_of(value) {
                 let _ = write!(out, "#<native {}>", native.name.name());
             } else if let Some(closure) = heap.closure_of(value) {

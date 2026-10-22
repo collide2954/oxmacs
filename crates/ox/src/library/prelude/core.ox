@@ -110,6 +110,16 @@
 (def (mapcat f coll & colls)
   (apply concat (apply map f coll colls)))
 
+(def vec
+  (let [items vec]
+    (fn vec [coll]
+      (if (generator? coll)
+        ((fn drain [out]
+           (let [item (next coll)]
+             (if (done? coll) out (drain (conj out item)))))
+         [])
+        (items coll)))))
+
 (defmacro when [test & body]
   `(if ~test (do ~@body) nil))
 
@@ -176,3 +186,9 @@
 
 (defmacro maybe [form]
   `(try ~form (catch error e nil)))
+
+(defmacro gen [& body]
+  `(generator (fn [] ~@body)))
+
+(defmacro spawn [& body]
+  `(spawn-call (fn [] ~@body)))

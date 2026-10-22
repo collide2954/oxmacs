@@ -10,6 +10,7 @@ pub struct TaskId(pub(crate) u64);
 #[derive(Debug, Default)]
 pub struct Report {
     pub finished: Vec<(TaskId, Result<Value, Error>)>,
+    pub unhandled: Vec<Error>,
     pub pending: usize,
 }
 

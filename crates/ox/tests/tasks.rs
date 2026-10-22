@@ -96,6 +96,126 @@ fn a_cancelled_task_ends_with_an_interrupt() {
 }
 
 #[test]
+fn tasks_wait_for_promises_the_host_resolves() {
+    let mut isolate = Isolate::new();
+    let promise = isolate.promise().unwrap();
+    let held = isolate.root(promise);
+    let wait = isolate.eval("(fn [p] (+ 1 (await p)))").unwrap();
+
+    let task = isolate.spawn(wait, &[promise]).unwrap();
+    assert_eq!(isolate.run(Duration::from_millis(2)).pending, 1);
+    assert_eq!(isolate.run(Duration::from_millis(2)).pending, 1);
+    assert!(isolate.resolve(held.get(), Value::Int(41)));
+
+    assert_eq!(finish(&mut isolate, task).0, Ok("42".to_owned()));
+    assert!(!isolate.resolve(held.get(), Value::Int(0)));
+}
+
+#[test]
+fn rejected_promises_raise_in_the_tasks_that_wait() {
+    let mut isolate = Isolate::new();
+    let promise = isolate.promise().unwrap();
+    let held = isolate.root(promise);
+    let wait = isolate
+        .eval("(fn [p] (try (await p) (catch error e e.message)))")
+        .unwrap();
+
+    let task = isolate.spawn(wait, &[promise]).unwrap();
+    isolate.run(Duration::from_millis(1));
+    assert!(isolate.reject(held.get(), "offline"));
+
+    assert_eq!(finish(&mut isolate, task).0, Ok("\"offline\"".to_owned()));
+}
+
+#[test]
+fn a_waiting_task_can_be_cancelled() {
+    let mut isolate = Isolate::new();
+    let promise = isolate.promise().unwrap();
+    let _held = isolate.root(promise);
+    let wait = isolate.eval("(fn [p] (await p))").unwrap();
+
+    let task = isolate.spawn(wait, &[promise]).unwrap();
+    isolate.run(Duration::from_millis(1));
+    assert!(isolate.cancel(task));
+
+    assert_eq!(finish(&mut isolate, task).0, Err("Interrupted".to_owned()));
+}
+
+#[test]
+fn host_tasks_that_finish_while_eval_waits_are_still_reported() {
+    let mut isolate = Isolate::new();
+    let quick = isolate.eval("(fn [] :quick)").unwrap();
+    let task = isolate.spawn(quick, &[]).unwrap();
+
+    let waited = isolate.eval("(await (spawn :inner))").unwrap();
+    assert_eq!(isolate.write(waited), ":inner");
+
+    let report = isolate.run(Duration::from_millis(1));
+    let finished: Vec<(TaskId, String)> = report
+        .finished
+        .into_iter()
+        .map(|(id, result)| (id, isolate.write(result.unwrap())))
+        .collect();
+    assert_eq!(finished, [(task, ":quick".to_owned())]);
+}
+
+#[test]
+fn failures_nothing_waits_for_are_reported_as_unhandled() {
+    let mut isolate = Isolate::new();
+    isolate
+        .eval("(spawn (raise (error \"lost\"))) (def awaited (spawn (raise (error \"seen\"))))")
+        .unwrap();
+    isolate
+        .eval("(try (await awaited) (catch error e nil))")
+        .unwrap();
+
+    let report = isolate.run(Duration::from_millis(1));
+    let unhandled: Vec<String> = report
+        .unhandled
+        .into_iter()
+        .map(|error| error.message)
+        .collect();
+    assert_eq!(unhandled, ["lost"]);
+}
+
+#[test]
+fn suspended_generators_and_waiting_tasks_survive_collection() {
+    let mut isolate = Isolate::new();
+    isolate
+        .eval("(def g (gen (let [s (str \"kept\" \"!\")] (yield 1) (yield s)))) (next g)")
+        .unwrap();
+    let promise = isolate.promise().unwrap();
+    let held = isolate.root(promise);
+    let wait = isolate
+        .eval("(fn [p] (let [v [(str \"a\" \"b\")]] (await p) v))")
+        .unwrap();
+    let task = isolate.spawn(wait, &[promise]).unwrap();
+    isolate.run(Duration::from_millis(1));
+
+    isolate.collect();
+    isolate
+        .eval("(def junk (map (fn [i] [i (str i)]) (range 2000))) (def junk nil)")
+        .unwrap();
+    isolate.collect();
+
+    let next = isolate.eval("(next g)").unwrap();
+    assert_eq!(isolate.write(next), "\"kept!\"");
+    isolate.resolve(held.get(), Value::Nil);
+    assert_eq!(finish(&mut isolate, task).0, Ok("[\"ab\"]".to_owned()));
+}
+
+#[test]
+fn callers_of_a_generator_survive_collections_while_it_runs() {
+    let mut isolate = Isolate::new();
+
+    let kept = isolate
+        .eval("(def (churn n) (if (< n 1) :done (do [n n] (str n) (churn (- n 1))))) (let [s (str \"x\" \"y\") g (gen (churn 150000) (yield 1))] (next g) s)")
+        .unwrap();
+
+    assert_eq!(isolate.write(kept), "\"xy\"");
+}
+
+#[test]
 fn errors_in_tasks_are_reported() {
     let mut isolate = Isolate::new();
     let divide = isolate.eval("(fn [] (/ 1 0))").unwrap();

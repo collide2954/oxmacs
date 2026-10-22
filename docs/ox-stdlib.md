@@ -64,7 +64,7 @@ Companion to [ox-design.md](ox-design.md) and [ox-internals.md](ox-internals.md)
 | Comparing | `= not= compare identical? hash` |
 | Logic | `not and or if when unless cond case if-let when-let some-> -> ->> as->` |
 | Types | `nil? some? bool? number? int? float? string? char? keyword? symbol? vector? map? set? list? fn? type` |
-| Sequences | `count empty? first second last rest next nth get contains? conj cons concat into vec set list map filter remove keep reduce some every? take drop take-while drop-while partition chunk group-by sort sort-by reverse distinct frequencies range repeat iterate zip interleave flatten mapcat find iter` |
+| Sequences | `count empty? first second last rest nth get contains? conj cons concat into vec set list map filter remove keep reduce some every? take drop take-while drop-while partition chunk group-by sort sort-by reverse distinct frequencies range repeat iterate zip interleave flatten mapcat find iter` |
 | Maps | `assoc dissoc update merge merge-with select-keys keys vals entries get-in assoc-in update-in` |
 | Strings | `str name keyword symbol` (the rest are in `ox string`) |
 | Functions | `identity constantly comp partial apply juxt memoize` |
@@ -72,7 +72,8 @@ Companion to [ox-design.md](ox-design.md) and [ox-internals.md](ox-internals.md)
 | Records and protocols | `defrecord with defprotocol extend satisfies?` |
 | Errors | `raise try catch maybe deferror error` |
 | Output | `print println pr prn` |
-| Async | `async await spawn sleep` |
+| Generators | `gen generator yield next done?` |
+| Async | `spawn await promise deliver fail sleep` |
 | Tests | `test expect for-all expect-snapshot` |
 
 ## Modules
@@ -105,7 +106,8 @@ Modules are imported with aliases and called qualified:
 
 ## Concurrency
 
-- **Promises.** `async` functions return promises, and `await` waits for one.
+- **Promises.** `(spawn expr)` runs code as a green task and returns a promise of its result. `await` waits for a promise anywhere, with no `async` marking, because tasks are stackful. `promise`, `deliver` and `fail` make promises by hand.
+- **Generators.** `(gen …)` makes a generator. `yield` works from any function the generator calls, `next` gives nil at the end, and `done?` tells the end apart from a yielded nil. Generators work with `map`, `filter`, `reduce` and `vec`.
 - **Channels.** `chan`, `send`, `receive` and `select` (with timeouts) carry streams between tasks and between worker isolates.
 - **Timers.** `sleep` and `every`.
 - **Fairness.** All of these cooperate with the UI isolate's time slices, so waiting never blocks a keystroke.

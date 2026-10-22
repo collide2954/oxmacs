@@ -3,7 +3,9 @@ use std::rc::{Rc, Weak};
 
 use super::Heap;
 use crate::bytecode::Code;
+use crate::value::promise::Promise;
 use crate::value::{Kind, Value};
+use crate::vm::machine::Generator;
 
 const MINIMUM: usize = 100_000;
 
@@ -24,6 +26,8 @@ impl Heap {
             + self.records.in_use()
             + self.atoms.in_use()
             + self.identifiers.in_use()
+            + self.generators.in_use()
+            + self.promises.in_use()
     }
 
     pub fn wants_collection(&self) -> bool {
@@ -78,6 +82,8 @@ impl Heap {
         self.records.unmark();
         self.atoms.unmark();
         self.identifiers.unmark();
+        self.generators.unmark();
+        self.promises.unmark();
     }
 
     fn sweep(&mut self) -> usize {
@@ -96,6 +102,8 @@ impl Heap {
             + self.records.sweep()
             + self.atoms.sweep()
             + self.identifiers.sweep()
+            + self.generators.sweep()
+            + self.promises.sweep()
     }
 
     fn trace(&mut self, value: Value, gray: &mut Vec<Value>, codes: &mut Vec<Rc<Code>>) {
@@ -195,6 +203,27 @@ impl Heap {
                     gray.extend(record.fields.iter().copied());
                 }
             }
+            Kind::Generator | Kind::Promise => self.trace_task(reference.kind, index, gray, codes),
+        }
+    }
+
+    fn trace_task(
+        &mut self,
+        kind: Kind,
+        index: u32,
+        gray: &mut Vec<Value>,
+        codes: &mut Vec<Rc<Code>>,
+    ) {
+        if kind == Kind::Generator {
+            if self.generators.mark(index)
+                && let Some(Generator::Ready(machine, _)) = self.generators.get(index)
+            {
+                machine.roots(gray, codes);
+            }
+        } else if self.promises.mark(index)
+            && let Some(Promise::Delivered(held) | Promise::Failed(held)) = self.promises.get(index)
+        {
+            gray.push(*held);
         }
     }
 }

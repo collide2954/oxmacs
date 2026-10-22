@@ -8,12 +8,22 @@ use crate::value::Value;
 
 pub type NativeFn = dyn Fn(&mut Heap, &[Value]) -> Result<Value, Error>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Control {
+    Yield,
+    Next,
+    Await,
+    Generator,
+    Spawn,
+}
+
 #[derive(Clone)]
 pub struct Native {
     pub name: Sym,
     pub least: usize,
     pub most: Option<usize>,
     pub function: Rc<NativeFn>,
+    pub control: Option<Control>,
 }
 
 impl fmt::Debug for Native {

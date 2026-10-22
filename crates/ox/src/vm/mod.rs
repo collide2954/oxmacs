@@ -1,5 +1,6 @@
 pub(crate) mod bind;
 pub(crate) mod build;
+pub(crate) mod machine;
 pub(crate) mod modules;
 mod tasks;
 
@@ -17,18 +18,20 @@ use crate::bytecode::{Capture, Code, Op};
 use crate::error::{Error, ErrorKind, Frame as Trace};
 use crate::heap::{Closure, Heap};
 use crate::library::collections;
+use crate::native::Control;
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::task::{Interrupter, TaskId};
 use crate::value::Value;
 use crate::value::equal::identical;
 use crate::value::map::Map;
+use crate::value::print;
+use crate::value::promise::Promise;
 use crate::value::record::Record;
-use crate::vm::bind::{Binding, bind};
+use crate::vm::bind::bind;
+use machine::{Caller, Fiber, Generator, Landing, Machine};
 use modules::{Module, ModuleId};
 use tasks::Task;
-
-const MAX_FRAMES: usize = 400_000;
 
 #[derive(Debug)]
 pub struct Runtime {
@@ -43,11 +46,34 @@ pub struct Runtime {
     marks: u32,
     pub interrupter: Interrupter,
     tasks: VecDeque<Task>,
+    blocked: Vec<Task>,
+    parked: Vec<(Fiber, Value)>,
+    finished: Vec<(TaskId, Result<Value, Error>)>,
+    unhandled: Vec<Error>,
     next_task: u64,
-    running: Option<TaskId>,
+    running: Option<Value>,
 }
 
 const CHECK_EVERY: u32 = 1024;
+
+#[derive(Debug, Clone, Copy)]
+enum Flow {
+    Next,
+    Return(Value),
+    Land(Landing, Value),
+    Yield(Value, Landing),
+    Resume(Value, Landing),
+    Await(Value, Landing),
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Stop {
+    Finished(Value),
+    Paused,
+    Blocked(Value, Landing),
+}
+
+type Step = Result<Flow, Error>;
 
 impl Default for Runtime {
     fn default() -> Self {
@@ -63,6 +89,10 @@ impl Default for Runtime {
             marks: 0,
             interrupter: Interrupter::default(),
             tasks: VecDeque::new(),
+            blocked: Vec::new(),
+            parked: Vec::new(),
+            finished: Vec::new(),
+            unhandled: Vec::new(),
             next_task: 0,
             running: None,
         };
@@ -76,246 +106,187 @@ fn not_defined(name: Sym) -> Error {
     Error::new(format!("{} is not defined", modules::display(name))).of(ErrorKind::Name)
 }
 
-#[derive(Debug)]
-struct Frame {
-    code: Rc<Code>,
-    closure: Value,
-    missing: u64,
-    pc: usize,
-    base: usize,
-    result: usize,
-}
-
-#[derive(Debug)]
-struct Handler {
-    frames: usize,
-    to: usize,
-    register: u16,
-}
-
-#[derive(Debug)]
-struct Machine {
-    stack: Vec<Value>,
-    frames: Vec<Frame>,
-    handlers: Vec<Handler>,
-    code: Rc<Code>,
-    closure: Value,
-    missing: u64,
-    pc: usize,
-    base: usize,
-}
-
-impl Machine {
-    fn new(entry: &Rc<Code>) -> Self {
-        Self {
-            stack: vec![Value::Nil; usize::from(entry.registers)],
-            frames: vec![Frame {
-                code: Rc::clone(entry),
-                closure: Value::Nil,
-                missing: 0,
-                pc: 0,
-                base: 0,
-                result: 0,
-            }],
-            handlers: Vec::new(),
-            code: Rc::clone(entry),
-            closure: Value::Nil,
-            missing: 0,
-            pc: 0,
-            base: 0,
-        }
-    }
-
-    fn get(&self, register: u16) -> Value {
-        self.stack[self.base + usize::from(register)]
-    }
-
-    fn set(&mut self, register: u16, value: Value) {
-        self.stack[self.base + usize::from(register)] = value;
-    }
-
-    fn items(&self, base: u16, count: u16) -> &[Value] {
-        let start = self.base + usize::from(base);
-        &self.stack[start..start + usize::from(count)]
-    }
-
-    fn place(&mut self, start: usize, function: &Code, binding: Binding) -> u64 {
-        let needed = start + usize::from(function.registers);
-        if self.stack.len() < needed {
-            self.stack.resize(needed, Value::Nil);
-        }
-        match binding {
-            Binding::Direct => 0,
-            Binding::Bound { values, missing } => {
-                self.stack[start..start + values.len()].copy_from_slice(&values);
-                missing
-            }
-        }
-    }
-
-    fn enter(
-        &mut self,
-        function: Rc<Code>,
-        closure: Value,
-        slot: usize,
-        binding: Binding,
-    ) -> Result<(), Error> {
-        if self.frames.len() >= MAX_FRAMES {
-            return Err(Error::new("Stack overflow"));
-        }
-        if let Some(frame) = self.frames.last_mut() {
-            frame.pc = self.pc;
-        }
-        let start = slot + 1;
-        let missing = self.place(start, &function, binding);
-        self.frames.push(Frame {
-            code: Rc::clone(&function),
-            closure,
-            missing,
-            pc: 0,
-            base: start,
-            result: slot,
-        });
-        self.code = function;
-        self.closure = closure;
-        self.missing = missing;
-        self.pc = 0;
-        self.base = start;
-        Ok(())
-    }
-
-    fn replace(
-        &mut self,
-        function: Rc<Code>,
-        closure: Value,
-        slot: usize,
-        count: usize,
-        binding: Binding,
-    ) {
-        if matches!(binding, Binding::Direct) {
-            self.stack.copy_within(slot + 1..=slot + count, self.base);
-        }
-        let missing = self.place(self.base, &function, binding);
-        if let Some(frame) = self.frames.last_mut() {
-            frame.code = Rc::clone(&function);
-            frame.closure = closure;
-            frame.missing = missing;
-        }
-        self.code = function;
-        self.closure = closure;
-        self.missing = missing;
-        self.pc = 0;
-    }
-
-    fn traceback(&self, at: usize) -> Vec<Trace> {
-        let fallback = Span::new(0, 0);
-        let mut frames = vec![Trace {
-            function: self.code.name,
-            span: self.code.spans.get(at).copied().unwrap_or(fallback),
-            source: self.code.source.clone(),
-        }];
-        let callers = self.frames.len().saturating_sub(1);
-        for frame in self.frames[..callers].iter().rev() {
-            let call = frame.pc.saturating_sub(1);
-            frames.push(Trace {
-                function: frame.code.name,
-                span: frame.code.spans.get(call).copied().unwrap_or(fallback),
-                source: frame.code.source.clone(),
-            });
-        }
-        frames
-    }
-
-    fn unwind(&mut self) -> Option<Handler> {
-        while let Some(handler) = self.handlers.pop() {
-            if handler.frames == 0 || handler.frames > self.frames.len() {
-                continue;
-            }
-            self.frames.truncate(handler.frames);
-            let frame = self.frames.last()?;
-            self.code = Rc::clone(&frame.code);
-            self.closure = frame.closure;
-            self.missing = frame.missing;
-            self.base = frame.base;
-            self.pc = handler.to;
-            return Some(handler);
-        }
-        None
-    }
-
-    fn leave(&mut self, value: Value) -> Option<Value> {
-        let Some(finished) = self.frames.pop() else {
-            return Some(value);
-        };
-        let Some(caller) = self.frames.last() else {
-            return Some(value);
-        };
-        self.stack[finished.result] = value;
-        self.code = Rc::clone(&caller.code);
-        self.closure = caller.closure;
-        self.missing = caller.missing;
-        self.pc = caller.pc;
-        self.base = caller.base;
-        None
-    }
+fn interrupted() -> Error {
+    Error::new("Interrupted").of(ErrorKind::Interrupt)
 }
 
 impl Runtime {
     pub fn run(&mut self, entry: &Rc<Code>) -> Result<Value, Error> {
-        let mut machine = Machine::new(entry);
-        self.drive(&mut machine, None, false)?
-            .ok_or_else(|| Error::new("The code paused without a scheduler"))
-    }
-
-    fn drive(
-        &mut self,
-        machine: &mut Machine,
-        deadline: Option<Instant>,
-        interrupt: bool,
-    ) -> Result<Option<Value>, Error> {
-        let mut countdown = if interrupt { 0 } else { CHECK_EVERY };
-        let mut forced = interrupt;
+        let mut fiber = Fiber::new(Machine::new(entry));
+        let mut first = None;
         loop {
-            let at = machine.pc;
-            let outcome = if countdown == 0 {
-                countdown = CHECK_EVERY;
-                if std::mem::take(&mut forced) || self.interrupter.take() {
-                    Err(Error::new("Interrupted").of(ErrorKind::Interrupt))
-                } else if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-                    return Ok(None);
-                } else {
-                    Ok(None)
-                }
-            } else {
-                countdown -= 1;
-                let Some(&op) = machine.code.ops.get(at) else {
-                    return Err(Error::new("The code ended without returning"));
-                };
-                machine.pc += 1;
-                self.execute(machine, op)
-            };
-            match outcome {
-                Ok(Some(value)) => return Ok(Some(value)),
-                Ok(None) => {}
-                Err(error) => {
-                    let mut error = error.or_at(machine.code.spans[at]);
-                    if error.traceback.is_empty() {
-                        error.traceback = self
-                            .reraised(&error)
-                            .unwrap_or_else(|| machine.traceback(at));
-                    }
-                    let Some(handler) = machine.unwind() else {
-                        return Err(error);
+            match self.drive(&mut fiber, None, first.take())? {
+                Stop::Finished(value) => return Ok(value),
+                Stop::Paused => {}
+                Stop::Blocked(promise, landing) => {
+                    self.parked.push((fiber, promise));
+                    let step = self.wait_for(promise, landing);
+                    let Some((parked, _)) = self.parked.pop() else {
+                        return Err(Error::new("A waiting evaluation was lost"));
                     };
-                    let value = self.error_value(&error)?;
-                    self.last_raised = Some((value, error.traceback.clone()));
-                    machine.set(handler.register, value);
+                    fiber = parked;
+                    first = Some(step);
                 }
             }
         }
     }
 
-    fn execute(&mut self, machine: &mut Machine, op: Op) -> Result<Option<Value>, Error> {
+    fn drive(
+        &mut self,
+        fiber: &mut Fiber,
+        deadline: Option<Instant>,
+        first: Option<Step>,
+    ) -> Result<Stop, Error> {
+        let mut countdown = CHECK_EVERY;
+        let mut pending = first;
+        loop {
+            let at = fiber.machine.pc;
+            let step = if let Some(step) = pending.take() {
+                step
+            } else if countdown == 0 {
+                countdown = CHECK_EVERY;
+                if self.heap.wants_collection() {
+                    self.collect_with(fiber);
+                }
+                if self.interrupter.take() {
+                    Err(interrupted())
+                } else if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                    return Ok(Stop::Paused);
+                } else {
+                    continue;
+                }
+            } else {
+                countdown -= 1;
+                let Some(&op) = fiber.machine.code.ops.get(at) else {
+                    return Err(Error::new("The code ended without returning"));
+                };
+                fiber.machine.pc += 1;
+                self.execute(&mut fiber.machine, op)
+            };
+            let outcome = match step {
+                Ok(Flow::Next) => continue,
+                Ok(flow) => self.switch(fiber, flow),
+                Err(error) => Err(error),
+            };
+            match outcome {
+                Ok(None) => {}
+                Ok(Some(ending)) => return Ok(ending),
+                Err(error) => self.recover(fiber, error, at)?,
+            }
+        }
+    }
+
+    fn switch(&mut self, fiber: &mut Fiber, flow: Flow) -> Result<Option<Stop>, Error> {
+        let mut flow = flow;
+        loop {
+            flow = match flow {
+                Flow::Next => return Ok(None),
+                Flow::Land(landing, value) => fiber
+                    .machine
+                    .land(landing, value)
+                    .map_or(Flow::Next, Flow::Return),
+                Flow::Return(value) => {
+                    let Some(caller) = fiber.callers.pop() else {
+                        return Ok(Some(Stop::Finished(value)));
+                    };
+                    self.finish_generator(caller.generator);
+                    fiber.machine = caller.machine;
+                    Flow::Land(caller.landing, Value::Nil)
+                }
+                Flow::Yield(value, landing) => {
+                    let Some(caller) = fiber.callers.pop() else {
+                        return Err(Error::new("yield is only allowed inside a generator"));
+                    };
+                    let machine = std::mem::replace(&mut fiber.machine, caller.machine);
+                    if let Some(generator) = self.heap.generator_mut(caller.generator) {
+                        *generator = Generator::Ready(Box::new(machine), landing);
+                    }
+                    Flow::Land(caller.landing, value)
+                }
+                Flow::Resume(generator, landing) => match self.take_generator(generator)? {
+                    None => Flow::Land(landing, Value::Nil),
+                    Some((machine, resumed)) => {
+                        let machine = std::mem::replace(&mut fiber.machine, machine);
+                        fiber.callers.push(Caller {
+                            machine,
+                            landing,
+                            generator,
+                        });
+                        Flow::Land(resumed, Value::Nil)
+                    }
+                },
+                Flow::Await(promise, landing) => match self.heap.promise_of(promise) {
+                    Some(Promise::Delivered(value)) => Flow::Land(landing, value),
+                    Some(Promise::Failed(value)) => return Err(raised(&self.heap, value)),
+                    Some(Promise::Pending { .. }) => {
+                        self.heap
+                            .set_promise(promise, Promise::Pending { awaited: true });
+                        return Ok(Some(Stop::Blocked(promise, landing)));
+                    }
+                    None => {
+                        return Err(Error::new(format!(
+                            "await expects a promise, got {}",
+                            print::write(&self.heap, promise)
+                        ))
+                        .of(ErrorKind::Type));
+                    }
+                },
+            };
+        }
+    }
+
+    fn take_generator(&mut self, value: Value) -> Result<Option<(Machine, Landing)>, Error> {
+        let Some(generator) = self.heap.generator_mut(value) else {
+            return Err(Error::new(format!(
+                "next expects a generator, got {}",
+                print::write(&self.heap, value)
+            ))
+            .of(ErrorKind::Type));
+        };
+        match std::mem::replace(generator, Generator::Running) {
+            Generator::Ready(machine, landing) => Ok(Some((*machine, landing))),
+            Generator::Running => Err(Error::new("This generator is already running")),
+            Generator::Done => {
+                *generator = Generator::Done;
+                Ok(None)
+            }
+        }
+    }
+
+    fn finish_generator(&mut self, value: Value) {
+        if let Some(generator) = self.heap.generator_mut(value) {
+            *generator = Generator::Done;
+        }
+    }
+
+    fn recover(&mut self, fiber: &mut Fiber, error: Error, at: usize) -> Result<(), Error> {
+        let mut error = match fiber.machine.span(at) {
+            Some(span) => error.or_at(span),
+            None => error,
+        };
+        if error.traceback.is_empty() {
+            error.traceback = self
+                .reraised(&error)
+                .unwrap_or_else(|| fiber.machine.traceback(at));
+        }
+        loop {
+            if let Some(handler) = fiber.machine.unwind() {
+                let value = self.error_value(&error)?;
+                self.last_raised = Some((value, error.traceback.clone()));
+                fiber.machine.set(handler.register, value);
+                return Ok(());
+            }
+            let Some(caller) = fiber.callers.pop() else {
+                return Err(error);
+            };
+            self.finish_generator(caller.generator);
+            fiber.machine = caller.machine;
+            let call = fiber.machine.pc.saturating_sub(1);
+            error.traceback.extend(fiber.machine.traceback(call));
+        }
+    }
+
+    fn execute(&mut self, machine: &mut Machine, op: Op) -> Step {
         match op {
             Op::Constant { to, index } => {
                 let value = machine.code.constants[index as usize];
@@ -381,7 +352,7 @@ impl Runtime {
                     return Err(Error::new("A variable lost its cell"));
                 }
             }
-            Op::Call { base, count } => self.call(machine, base, count)?,
+            Op::Call { base, count } => return self.call(machine, base, count),
             Op::TailCall { base, count } => return self.tail_call(machine, base, count),
             Op::Jump { to } => machine.pc = to as usize,
             Op::JumpIfSupplied { bit, to } => {
@@ -394,9 +365,13 @@ impl Runtime {
                     machine.pc = to as usize;
                 }
             }
-            Op::Return { from } => return Ok(machine.leave(machine.get(from))),
+            Op::Return { from } => {
+                return Ok(machine
+                    .leave(machine.get(from))
+                    .map_or(Flow::Next, Flow::Return));
+            }
         }
-        Ok(None)
+        Ok(Flow::Next)
     }
 
     fn build(&mut self, machine: &mut Machine, op: Op) -> Result<(), Error> {
@@ -434,7 +409,7 @@ impl Runtime {
                 return Ok(());
             }
             Op::PushHandler { register, to } => {
-                machine.handlers.push(Handler {
+                machine.handlers.push(machine::Handler {
                     frames: machine.frames.len(),
                     to: to as usize,
                     register,
@@ -452,10 +427,7 @@ impl Runtime {
         Ok(())
     }
 
-    fn call(&mut self, machine: &mut Machine, base: u16, count: u16) -> Result<(), Error> {
-        if self.heap.wants_collection() {
-            self.collect_running(machine);
-        }
+    fn call(&mut self, machine: &mut Machine, base: u16, count: u16) -> Step {
         let slot = machine.base + usize::from(base);
         let count = self.spread(machine, slot, usize::from(count))?;
         let callee = self.constructor_of(machine.stack[slot]);
@@ -464,27 +436,23 @@ impl Runtime {
             .closure_of(callee)
             .map(|closure| Rc::clone(&closure.code))
         else {
+            if let Some(control) = self.control_of(callee, count)? {
+                return self.control(machine, control, slot, count, Landing::Register(slot));
+            }
             let result = self.call_native(callee, &machine.stack[slot + 1..=slot + count])?;
             machine.stack[slot] = result;
-            return Ok(());
+            return Ok(Flow::Next);
         };
         let binding = bind(
             &mut self.heap,
             &function,
             &machine.stack[slot + 1..=slot + count],
         )?;
-        machine.enter(function, callee, slot, binding)
+        machine.enter(function, callee, slot, binding)?;
+        Ok(Flow::Next)
     }
 
-    fn tail_call(
-        &mut self,
-        machine: &mut Machine,
-        base: u16,
-        count: u16,
-    ) -> Result<Option<Value>, Error> {
-        if self.heap.wants_collection() {
-            self.collect_running(machine);
-        }
+    fn tail_call(&mut self, machine: &mut Machine, base: u16, count: u16) -> Step {
         let slot = machine.base + usize::from(base);
         let count = self.spread(machine, slot, usize::from(count))?;
         let callee = self.constructor_of(machine.stack[slot]);
@@ -493,8 +461,11 @@ impl Runtime {
             .closure_of(callee)
             .map(|closure| Rc::clone(&closure.code))
         else {
+            if let Some(control) = self.control_of(callee, count)? {
+                return self.control(machine, control, slot, count, Landing::Leave);
+            }
             let result = self.call_native(callee, &machine.stack[slot + 1..=slot + count])?;
-            return Ok(machine.leave(result));
+            return Ok(machine.leave(result).map_or(Flow::Next, Flow::Return));
         };
         let binding = bind(
             &mut self.heap,
@@ -502,7 +473,40 @@ impl Runtime {
             &machine.stack[slot + 1..=slot + count],
         )?;
         machine.replace(function, callee, slot, count, binding);
-        Ok(None)
+        Ok(Flow::Next)
+    }
+
+    fn control_of(&self, callee: Value, count: usize) -> Result<Option<Control>, Error> {
+        let Some(native) = self.heap.native_of(callee) else {
+            return Ok(None);
+        };
+        let Some(control) = native.control else {
+            return Ok(None);
+        };
+        native.check(count)?;
+        Ok(Some(control))
+    }
+
+    fn control(
+        &mut self,
+        machine: &Machine,
+        control: Control,
+        slot: usize,
+        count: usize,
+        landing: Landing,
+    ) -> Step {
+        let argument = if count == 0 {
+            Value::Nil
+        } else {
+            machine.stack[slot + 1]
+        };
+        Ok(match control {
+            Control::Yield => Flow::Yield(argument, landing),
+            Control::Next => Flow::Resume(argument, landing),
+            Control::Await => Flow::Await(argument, landing),
+            Control::Generator => Flow::Land(landing, self.make_generator(argument)?),
+            Control::Spawn => Flow::Land(landing, self.spawn_promise(argument)?),
+        })
     }
 
     fn close(&mut self, machine: &Machine, function: u32) -> Result<Value, Error> {
@@ -558,17 +562,18 @@ impl Runtime {
             .ok_or_else(|| no_field(record.type_name(&self.heap), name))
     }
 
-    fn base_roots(&self) -> Vec<Value> {
-        let mut roots: Vec<Value> = self
-            .modules
-            .iter()
-            .flat_map(|module| module.globals.values().chain(module.macros.values()))
-            .copied()
-            .collect();
+    fn base_roots(&self, roots: &mut Vec<Value>, codes: &mut Vec<Rc<Code>>) {
+        roots.extend(
+            self.modules
+                .iter()
+                .flat_map(|module| module.globals.values().chain(module.macros.values()))
+                .copied(),
+        );
         roots.extend(self.error_types.values().copied());
         roots.extend(self.last_raised.as_ref().map(|(value, _)| *value));
         roots.push(self.apply);
-        roots
+        roots.extend(self.running);
+        self.task_roots(roots, codes);
     }
 
     fn reraised(&self, error: &Error) -> Option<Vec<Trace>> {
@@ -612,7 +617,7 @@ impl Runtime {
         make_vector(&mut self.heap, &items)
     }
 
-    fn error_value(&mut self, error: &Error) -> Result<Value, Error> {
+    pub(crate) fn error_value(&mut self, error: &Error) -> Result<Value, Error> {
         if error.kind == ErrorKind::Interrupt {
             return Ok(interrupt_marker());
         }
@@ -690,32 +695,18 @@ impl Runtime {
         })
     }
 
-    fn machine_roots(machine: &Machine, roots: &mut Vec<Value>, codes: &mut Vec<Rc<Code>>) {
-        roots.extend(machine.stack.iter().copied());
-        roots.push(machine.closure);
-        roots.extend(machine.frames.iter().map(|frame| frame.closure));
-        codes.push(Rc::clone(&machine.code));
-        codes.extend(machine.frames.iter().map(|frame| Rc::clone(&frame.code)));
-    }
-
-    fn task_roots(&self, roots: &mut Vec<Value>, codes: &mut Vec<Rc<Code>>) {
-        for task in &self.tasks {
-            Self::machine_roots(&task.machine, roots, codes);
-        }
-    }
-
     pub fn collect(&mut self) -> usize {
-        let mut roots = self.base_roots();
+        let mut roots = Vec::new();
         let mut codes = Vec::new();
-        self.task_roots(&mut roots, &mut codes);
+        self.base_roots(&mut roots, &mut codes);
         self.heap.collect(&roots, &codes)
     }
 
-    fn collect_running(&mut self, machine: &Machine) {
-        let mut roots = self.base_roots();
+    fn collect_with(&mut self, fiber: &Fiber) {
+        let mut roots = Vec::new();
         let mut codes = Vec::new();
-        Self::machine_roots(machine, &mut roots, &mut codes);
-        self.task_roots(&mut roots, &mut codes);
+        self.base_roots(&mut roots, &mut codes);
+        fiber.roots(&mut roots, &mut codes);
         self.heap.collect(&roots, &codes);
     }
 

@@ -11,9 +11,11 @@ use crate::read::Marks;
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::value::map::{Map, Node};
+use crate::value::promise::Promise;
 use crate::value::record::{Family, Record, RecordType};
 use crate::value::vector::Vector;
 use crate::value::{Kind, Ref, Value};
+use crate::vm::machine::Generator;
 
 mod gc;
 
@@ -149,6 +151,8 @@ pub struct Heap {
     records: Arena<Record>,
     atoms: Arena<Value>,
     identifiers: Arena<Identifier>,
+    generators: Arena<Generator>,
+    promises: Arena<Promise>,
     roots: Vec<Weak<Cell<Value>>>,
     next_collection: usize,
 }
@@ -416,6 +420,44 @@ impl Heap {
 
     pub fn record_of(&self, value: Value) -> Option<&Record> {
         self.records.get(reference(value, Kind::Record)?)
+    }
+
+    pub(crate) fn generator(&mut self, generator: Generator) -> Result<Value, HeapFull> {
+        let index = self.generators.alloc(generator)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Generator,
+            index,
+        }))
+    }
+
+    pub(crate) fn generator_of(&self, value: Value) -> Option<&Generator> {
+        self.generators.get(reference(value, Kind::Generator)?)
+    }
+
+    pub(crate) fn generator_mut(&mut self, value: Value) -> Option<&mut Generator> {
+        self.generators.get_mut(reference(value, Kind::Generator)?)
+    }
+
+    pub(crate) fn promise(&mut self, promise: Promise) -> Result<Value, HeapFull> {
+        let index = self.promises.alloc(promise)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Promise,
+            index,
+        }))
+    }
+
+    pub(crate) fn promise_of(&self, value: Value) -> Option<Promise> {
+        self.promises.get(reference(value, Kind::Promise)?).copied()
+    }
+
+    pub(crate) fn set_promise(&mut self, value: Value, promise: Promise) -> bool {
+        let Some(slot) =
+            reference(value, Kind::Promise).and_then(|index| self.promises.get_mut(index))
+        else {
+            return false;
+        };
+        *slot = promise;
+        true
     }
 
     pub fn list(

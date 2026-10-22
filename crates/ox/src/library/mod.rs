@@ -3,6 +3,7 @@ mod errors;
 mod numbers;
 mod patterns;
 mod rules;
+mod tasks;
 mod types;
 
 use std::io::{self, Write};
@@ -61,6 +62,7 @@ pub fn install(isolate: &mut Isolate) {
     patterns::install(isolate);
     rules::install(isolate);
     types::install(isolate);
+    tasks::install(isolate);
     isolate.define_native("=", 1, None, |heap, arguments| {
         Ok(Value::Bool(all_equal(heap, arguments)))
     });
