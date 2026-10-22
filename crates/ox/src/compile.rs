@@ -1,11 +1,10 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use num_bigint::BigInt;
-
 use crate::bytecode::{Arity, Capture, Code, Op, Register};
 use crate::error::Error;
 use crate::heap::Heap;
+use crate::quote::{datum_value, quasiquote};
 use crate::reader::{Datum, Syntax};
 use crate::record::RecordType;
 use crate::span::Span;
@@ -256,38 +255,50 @@ impl Compiler<'_> {
     }
 
     fn form(&mut self, form: &Syntax, target: Register, tail: bool) -> Result<(), Error> {
-        let value = match &form.datum {
+        match &form.datum {
             Datum::Symbol(name) => {
                 self.variable(Sym::intern(name), target, form.span);
-                return Ok(());
+                Ok(())
             }
-            Datum::List(items) => return self.call(items, target, form.span, tail),
-            Datum::Vector(items) => return self.vector(items, target, form.span),
-            Datum::Nil => Value::Nil,
-            Datum::Bool(flag) => Value::Bool(*flag),
-            Datum::Int(number) => Value::Int(*number),
-            Datum::Float(number) => Value::Float(*number),
-            Datum::Char(character) => Value::Char(*character),
-            Datum::Keyword(name) => Value::keyword(name),
-            Datum::Str(text) => self
-                .heap
-                .string(text)
-                .map_err(|full| Error::at(form.span, full.to_string()))?,
-            Datum::BigInt(digits) => {
-                let number = digits
-                    .parse::<BigInt>()
-                    .map_err(|_| Error::at(form.span, format!("{digits} is not a number")))?;
-                self.heap
-                    .bigint(number)
-                    .map_err(|full| Error::at(form.span, full.to_string()))?
+            Datum::List(items) => self.call(items, target, form.span, tail),
+            Datum::Vector(items) => self.vector(items, target, form.span),
+            Datum::Map(items) => self.map(items, target, form.span),
+            Datum::Set(items) => self.set(items, target, form.span),
+            Datum::Record(name, items) => self.record_literal(name, items, target, form.span),
+            Datum::Nil
+            | Datum::Bool(_)
+            | Datum::Int(_)
+            | Datum::Float(_)
+            | Datum::Char(_)
+            | Datum::Keyword(_)
+            | Datum::Str(_)
+            | Datum::BigInt(_) => {
+                let value = datum_value(self.heap, form)?;
+                self.load(value, target, form.span)
             }
-            Datum::Map(items) => return self.map(items, target, form.span),
-            Datum::Set(items) => return self.set(items, target, form.span),
-            Datum::Record(name, items) => {
-                return self.record_literal(name, items, target, form.span);
-            }
+        }
+    }
+
+    fn quote(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let [form] = parts else {
+            return Err(Error::at(span, "quote takes one form"));
         };
-        self.load(value, target, form.span)
+        let value = datum_value(self.heap, form)?;
+        self.load(value, target, span)
+    }
+
+    fn template(
+        &mut self,
+        parts: &[Syntax],
+        target: Register,
+        span: Span,
+        tail: bool,
+    ) -> Result<(), Error> {
+        let [template] = parts else {
+            return Err(Error::at(span, "quasiquote takes one form"));
+        };
+        let expanded = quasiquote(template, 1)?;
+        self.form(&expanded, target, tail)
     }
 
     fn variable(&mut self, name: Sym, target: Register, span: Span) {
@@ -363,6 +374,16 @@ impl Compiler<'_> {
             "set!" => Some(self.assign(rest, target, span)),
             "." => Some(self.field(rest, target, span)),
             "defrecord" => Some(self.record(rest, target, span)),
+            "quote" => Some(self.quote(rest, target, span)),
+            "quasiquote" => Some(self.template(rest, target, span, tail)),
+            "unquote" => Some(Err(Error::at(
+                span,
+                "~ is only allowed inside a quasiquote",
+            ))),
+            "unquote-splicing" => Some(Err(Error::at(
+                span,
+                "~@ is only allowed inside a quasiquote",
+            ))),
             _ => None,
         }
     }

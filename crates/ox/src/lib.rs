@@ -11,6 +11,7 @@ mod map;
 pub mod native;
 mod number;
 pub mod print;
+mod quote;
 pub mod reader;
 mod record;
 pub mod span;

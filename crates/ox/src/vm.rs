@@ -267,12 +267,12 @@ fn record_literal(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
     .map_err(full)
 }
 
-fn make_vector(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
+pub fn make_vector(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
     let vector = Vector::from_items(heap, items).map_err(full)?;
     heap.vector(vector).map_err(full)
 }
 
-fn make_map(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
+pub fn make_map(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
     let mut map = Map::EMPTY;
     for pair in items.chunks(2) {
         let [key, value] = pair else {
@@ -290,7 +290,7 @@ fn make_map(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
     heap.map(map).map_err(full)
 }
 
-fn make_set(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
+pub fn make_set(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
     let mut set = Map::EMPTY;
     for item in items {
         let grown = set.assoc(heap, *item, Value::Bool(true)).map_err(full)?;

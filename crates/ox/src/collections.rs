@@ -410,6 +410,19 @@ pub fn install(isolate: &mut Isolate) {
         contains(heap, arguments[0], arguments[1])
     });
     isolate.define_native("set", 1, Some(1), |heap, arguments| set(heap, arguments[0]));
+    isolate.define_native("#list", 0, None, |heap, arguments| {
+        heap.list(arguments.iter().copied()).map_err(full)
+    });
+    isolate.define_native("#vec", 1, Some(1), |heap, arguments| {
+        vec(heap, arguments[0])
+    });
+    isolate.define_native("#concat", 0, None, |heap, arguments| {
+        let mut items = Vec::new();
+        for value in arguments {
+            items.extend(sequence(heap, "~@", *value)?);
+        }
+        heap.list(items.into_iter()).map_err(full)
+    });
     isolate.define_native("with", 1, None, |heap, arguments| {
         with(heap, arguments[0], &arguments[1..])
     });
