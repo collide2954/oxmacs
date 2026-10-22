@@ -20,7 +20,7 @@ use oxmacs_core::external::tools::{Probe, Tool};
 use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_ox::{Ox, Pace};
+use oxmacs_ox::{Ox, Pace, idle, takeover};
 
 use crate::watcher::Watched;
 use crate::widgets::buffer_view::ViewEvent;
@@ -47,6 +47,8 @@ pub struct App {
     jobs: Vec<(JobId, Handle)>,
     connections: Vec<(ConnectionId, Connection)>,
     ox: Ox,
+    takeover_size: Option<iced::Size>,
+    focused_since: Option<Instant>,
 }
 
 #[derive(Debug, Clone)]
@@ -80,6 +82,10 @@ pub enum Message {
     ToolInstalled(Managed, Result<PathBuf, String>),
     OxTick,
     OxPress(BufferId, usize),
+    TakeoverSized(iced::Size),
+    EndTakeover,
+    Focus(bool),
+    Idle,
 }
 
 pub fn load_config() -> Result<Config, ConfigError> {
@@ -120,6 +126,8 @@ impl App {
             jobs: Vec::new(),
             connections: Vec::new(),
             ox: Ox::new(),
+            takeover_size: None,
+            focused_since: Some(Instant::now()),
         };
         app.configure(&config);
         app
@@ -198,7 +206,17 @@ impl App {
             .theme_fade
             .as_ref()
             .is_some_and(|(_, fade)| fade.is_animating(self.now));
-        fading || self.reveal.is_animating(self.now)
+        fading || self.reveal.is_animating(self.now) || takeover::current(&self.editor).is_some()
+    }
+
+    fn rested_since(&self) -> Option<Instant> {
+        self.focused_since
+            .map(|focused| focused.max(self.last_input))
+    }
+
+    pub fn idle_wait(&self) -> Option<(Duration, Instant)> {
+        let since = self.rested_since()?;
+        idle::next(&self.editor, since).map(|wait| (wait, since))
     }
 
     pub fn completion_opacity(&self) -> f32 {
@@ -231,6 +249,11 @@ impl App {
         } else {
             Subscription::none()
         };
+        let resting = self
+            .idle_wait()
+            .map_or_else(Subscription::none, |(wait, since)| {
+                ticker::once_after(wait, since).map(|()| Message::Idle)
+            });
         let waiting = if self.ox.pace() == Pace::Waiting {
             ticker::ticks(Some(OX_POLL)).map(|()| Message::OxTick)
         } else {
@@ -244,7 +267,7 @@ impl App {
                 directories: self.editor.watched_directories(),
             })
             .map(|()| Message::DiskChanged),
-            event::listen_with(focus_gained),
+            event::listen_with(focus_changes),
             ticker::ticks(self.clock.as_deref().map(|format| {
                 if clock::shows_seconds(format) {
                     ticker::SECOND
@@ -259,6 +282,7 @@ impl App {
             processes,
             frames,
             waiting,
+            resting,
         ])
     }
 
@@ -302,8 +326,12 @@ fn transition(state: bool, duration: Duration) -> Animation<bool> {
     clippy::needless_pass_by_value,
     reason = "event::listen_with requires this signature"
 )]
-fn focus_gained(event: Event, _: event::Status, _: window::Id) -> Option<Message> {
-    matches!(event, Event::Window(window::Event::Focused)).then_some(Message::DiskChanged)
+fn focus_changes(event: Event, _: event::Status, _: window::Id) -> Option<Message> {
+    match event {
+        Event::Window(window::Event::Focused) => Some(Message::Focus(true)),
+        Event::Window(window::Event::Unfocused) => Some(Message::Focus(false)),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -439,6 +467,91 @@ mod tests {
 
         assert!(ui.find("☂ bring one").is_ok());
     }
+
+    fn taken_over() -> App {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("init.ox"),
+            r#"(take-over (fn [frame] [[:rect 0 0 frame.width frame.height :link]])
+                         :on-end (fn [] (message "back")))"#,
+        )
+        .unwrap();
+        let mut app = App::default();
+        let _ = app.start_ox(Some(home.path()));
+        app
+    }
+
+    #[test]
+    fn a_takeover_covers_the_windows_but_keeps_a_mode_line_and_the_echo_area() {
+        let mut app = taken_over();
+        app.ox
+            .eval(
+                &mut app.editor,
+                r#"(module (import (ox ui :only [text])))
+(open-view "*hidden*" (fn [] (text "under the screensaver")))"#,
+            )
+            .unwrap();
+        app.ox.tick(&mut app.editor);
+        app.editor
+            .add_mode_line_segment(|_| Some("☂ bring one".to_owned()));
+        app.editor.show_message("still here");
+
+        let mut ui = iced_test::simulator(app.view());
+
+        assert!(ui.find("under the screensaver").is_err());
+        assert!(ui.find("☂ bring one").is_ok());
+        assert!(ui.find("still here").is_ok());
+    }
+
+    #[test]
+    fn frames_draw_the_takeover_at_its_size() {
+        use oxmacs_core::theme::Highlight;
+        use oxmacs_ox::shapes::{Ink, Paint, Shape};
+
+        let mut app = taken_over();
+        assert!(app.is_animating());
+
+        let _ = app.update(Message::TakeoverSized(iced::Size::new(300.0, 200.0)));
+        let _ = app.update(Message::Tick(Instant::now()));
+
+        let shown = takeover::current(app.editor()).unwrap();
+        assert_eq!(
+            shown.shapes,
+            [Shape::Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 300.0,
+                height: 200.0,
+                paint: Paint {
+                    ink: Ink::Face(Highlight::Link),
+                    alpha: 1.0,
+                },
+            }]
+        );
+    }
+
+    #[test]
+    fn the_first_key_ends_a_takeover_and_does_nothing_else() {
+        let mut app = taken_over();
+
+        press(&mut app, "x", Modifiers::empty());
+
+        assert!(takeover::current(app.editor()).is_none());
+        assert_eq!(app.editor().buffer().contents(), "");
+        assert_eq!(app.editor().message(), Some("back"));
+        press(&mut app, "y", Modifiers::empty());
+        assert_eq!(app.editor().buffer().contents(), "y");
+    }
+
+    #[test]
+    fn a_click_ends_a_takeover() {
+        let mut app = taken_over();
+
+        let _ = app.update(Message::EndTakeover);
+
+        assert!(takeover::current(app.editor()).is_none());
+    }
+
     #[test]
     fn view_echoes_the_editor_message() {
         let mut app = App::default();
@@ -787,9 +900,9 @@ mod tests {
     }
 
     #[test]
-    fn regaining_focus_checks_the_disk() {
+    fn the_window_reports_gaining_and_losing_focus() {
         let check = |event| {
-            focus_gained(
+            focus_changes(
                 Event::Window(event),
                 event::Status::Ignored,
                 window::Id::unique(),
@@ -798,9 +911,63 @@ mod tests {
 
         assert!(matches!(
             check(window::Event::Focused),
-            Some(Message::DiskChanged)
+            Some(Message::Focus(true))
         ));
-        assert!(check(window::Event::Unfocused).is_none());
+        assert!(matches!(
+            check(window::Event::Unfocused),
+            Some(Message::Focus(false))
+        ));
+        assert!(check(window::Event::Closed).is_none());
+    }
+
+    #[test]
+    fn regaining_focus_checks_the_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.txt");
+        std::fs::write(&path, "old").unwrap();
+        let mut app = App::default();
+        app.start(&[visit(&path)], true);
+        std::fs::write(&path, "new text").unwrap();
+
+        let _ = app.update(Message::Focus(true));
+
+        assert_eq!(app.editor().buffer().contents(), "new text");
+    }
+
+    #[test]
+    fn idle_hooks_wait_for_a_rest_while_the_window_has_focus() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("init.ox"),
+            r#"(on-idle :nap 60 (fn [] (message "napping")))"#,
+        )
+        .unwrap();
+        let mut app = App::default();
+        let _ = app.start_ox(Some(home.path()));
+        let long_ago = Instant::now().checked_sub(Duration::from_secs(61)).unwrap();
+
+        let _ = app.update(Message::Focus(true));
+        assert_eq!(
+            app.idle_wait().map(|(wait, _)| wait),
+            Some(Duration::from_secs(60))
+        );
+        let _ = app.update(Message::Focus(false));
+        assert_eq!(app.idle_wait(), None);
+        app.last_input = long_ago;
+        let _ = app.update(Message::Idle);
+        assert_ne!(app.editor().message(), Some("napping"));
+
+        let _ = app.update(Message::Focus(true));
+        app.focused_since = Some(long_ago);
+        let _ = app.update(Message::Idle);
+        assert_eq!(app.editor().message(), Some("napping"));
+        assert_eq!(app.idle_wait(), None);
+
+        press(&mut app, "x", Modifiers::empty());
+        assert_eq!(
+            app.idle_wait().map(|(wait, _)| wait),
+            Some(Duration::from_secs(60))
+        );
     }
 
     #[test]

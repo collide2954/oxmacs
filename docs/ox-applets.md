@@ -28,6 +28,21 @@ The second bundled plugin lives in `crates/oxmacs-ox/plugins/dired`: `plugin.ox`
 
 The third bundled plugin lives in `crates/oxmacs-ox/plugins/git`: `plugin.ox`, the entry `git.ox` (status state in a `defonce` atom keyed by buffer, keys, folding, visiting, staging and refresh), `repo.ox` (running git and reading `git status --porcelain=v2`, numstat, stashes and the log), `diff.ox` (hunks from unified diffs) and `status.ox` (rendering, a pure function of the snapshot and folds). Reads run their git commands at the same time with `--no-optional-locks`, so a refresh never holds the index lock. `pane.ox` draws the diff beside the status, unified or side by side, with changed words picked out by a token LCS, and `commit.ox` holds the message template, recall and highlighting. Hunks and the region's lines are staged by piping a patch built from the diff to `git apply --cached`, and commits pass the message to `git commit -F -`. Its tests drive real repositories made in temporary folders.
 
+## Screensaver
+
+The fourth bundled plugin lives in `crates/oxmacs-ox/plugins/screensaver`. It is off until you set its `idle` time, `(use-plugin screensaver :config {idle: 300})`: after that many seconds without input, while oxmacs has focus, a screensaver takes over the window area, leaving one mode line and the minibuffer. The first key or click ends it and does nothing else. `kind` picks `:starfield`, `:matrix` or `:random` (the default), and `M-x screensaver-preview` shows either one at any time. The plugin is `plugin.ox`, the entry `screensaver.ox` (the preview command and the idle hook), `noise.ox` (repeatable random numbers from `hash`) and one file per screensaver, each a pure function from the frame to its shapes, so a frame never depends on the one before.
+
+- **Canvas draw lists.** A drawing is a vector of shapes, `[:rect x y width height color]`, `[:circle x y radius color]`, `[:line x1 y1 x2 y2 color width]` and `[:text x y "text" color size]`, in pixels. A color is a face keyword such as `:success`, `:foreground` or `:background`, or `"#rrggbb"`, optionally with an alpha, `[:success 0.4]`. `(canvas shapes :height 120)` puts a drawing in a view.
+- **Taking over.** `(take-over draw :background color :on-end f :fps 15)` calls `draw` with `{time width height font-size}` up to `:fps` times a second (30 at most, the default) and draws what it returns over every window; `(end-take-over)` or any input ends it. Drawing happens in the update step, never while the screen paints. The matrix asks for 15 frames a second: its glyphs move a whole row at a time, and building a frame's shapes costs about 9 ms in a release build.
+- **Idle.** `(on-idle :key seconds f)` calls `f` once each time oxmacs has had focus and no input for that long. Like `on-disk-change`, a key registered again replaces its handler, so reloading a plugin never doubles it.
+- **Choices.** `(await (prompt "Screensaver: " :choices {starfield: "Stars rushing toward you" matrix: "Glyphs raining down the screen"}))` completes from the names and shows each note; a vector of names works too.
+
+Screensaver slices 1 to 4 are done:
+
+1. **Shapes and the takeover in the bridge,** and the `canvas` widget.
+2. **Draw the takeover in the GUI** over the windows, keeping a mode line and the minibuffer, with any input ending it.
+3. **Idle hooks** that fire once per idle stretch while oxmacs has focus.
+4. **The screensaver plugin:** starfield, matrix rain, `M-x screensaver-preview` and the `idle` and `kind` settings.
 ## Slices
 
 Slices 1 to 11 are done.

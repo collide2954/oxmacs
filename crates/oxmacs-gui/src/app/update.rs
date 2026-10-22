@@ -14,6 +14,8 @@ use oxmacs_core::external::process;
 use oxmacs_core::external::tools::{self, Probe, Tool};
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
+use oxmacs_ox::takeover;
+
 use super::{App, Message, transition};
 use crate::keys::{self, Platform};
 use crate::widgets::buffer_view::ViewEvent;
@@ -92,6 +94,32 @@ impl App {
         {
             self.theme_fade = None;
         }
+        if let Some(size) = self.takeover_size {
+            self.ox.frame(
+                &mut self.editor,
+                now,
+                (size.width, size.height),
+                self.text_size,
+            );
+        }
+    }
+
+    fn focus_changed(&mut self, focused: bool) {
+        self.focused_since = focused.then_some(self.now);
+        if focused {
+            self.editor.check_disk_changes();
+        }
+    }
+
+    fn idle(&mut self) {
+        if let Some(since) = self.rested_since() {
+            self.ox.idle(&mut self.editor, since, self.now);
+        }
+    }
+
+    fn end_takeover(&mut self) {
+        self.last_input = self.now;
+        self.ox.end_take_over(&mut self.editor);
     }
 
     fn reject_font(&mut self) {
@@ -117,6 +145,11 @@ impl App {
         }
         let shown = self.faces();
         match message {
+            Message::Keyboard(keyboard::Event::KeyPressed { .. }) | Message::EndTakeover
+                if takeover::current(&self.editor).is_some() =>
+            {
+                self.end_takeover();
+            }
             Message::Keyboard(keyboard::Event::KeyPressed {
                 key,
                 modified_key,
@@ -131,7 +164,11 @@ impl App {
                     self.sync_reveal();
                 }
             }
-            Message::Keyboard(_) | Message::Opened(Ok(())) | Message::Clock | Message::OxTick => {}
+            Message::Keyboard(_)
+            | Message::Opened(Ok(()))
+            | Message::Clock
+            | Message::OxTick
+            | Message::EndTakeover => {}
             Message::View(window, event) => self.handle_view_event(window, event),
             Message::Divider { path, index, delta } => {
                 if let Some(at) = self.editor.tiling().boundary(&path, index) {
@@ -181,6 +218,9 @@ impl App {
                 self.editor.connection_event(id, event);
             }
             Message::OxPress(buffer, slot) => self.ox.press(&mut self.editor, buffer, slot),
+            Message::TakeoverSized(size) => self.takeover_size = Some(size),
+            Message::Focus(focused) => self.focus_changed(focused),
+            Message::Idle => self.idle(),
         }
         self.ox.tick(&mut self.editor);
         self.settle();

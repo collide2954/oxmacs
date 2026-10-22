@@ -1,15 +1,18 @@
 use iced::widget::{
-    Column, Row, column, container, image, mouse_area, responsive, sensor, space, stack, text,
+    Column, Row, canvas, column, container, image, mouse_area, responsive, sensor, space, stack,
+    text,
 };
 use iced::{Border, Color, ContentFit, Element, Length};
 use oxmacs_core::clock;
 use oxmacs_core::editor::{Axis, GalleryView, Pane, PlotView, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
+use oxmacs_ox::takeover::{self, Takeover};
 use oxmacs_ox::views::ViewBuffer;
 
 use super::{App, Message};
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
+use crate::widgets::drawing::Drawing;
 use crate::widgets::mode_line::{self, Look};
 use crate::widgets::{completions, echo_area, ox_view, transient};
 use crate::{style, units};
@@ -17,8 +20,12 @@ impl App {
     pub fn view(&self) -> Element<'_, Message> {
         let faces = self.faces();
         let offered = self.editor.completions();
+        let windows = match takeover::current(&self.editor) {
+            Some(shown) => self.takeover(shown, faces),
+            None => self.tile(self.editor.tiling(), Vec::new(), faces),
+        };
         column![
-            self.tile(self.editor.tiling(), Vec::new(), faces),
+            windows,
             transient::view(&self.editor, faces, self.font, self.text_size),
             echo_area::view(
                 &self.editor,
@@ -35,6 +42,44 @@ impl App {
                 self.text_size,
                 self.completion_opacity()
             ),
+        ]
+        .into()
+    }
+
+    fn takeover<'a>(&'a self, shown: &'a Takeover, faces: Faces) -> Element<'a, Message> {
+        let drawing = canvas(Drawing {
+            shapes: &shown.shapes,
+            background: Some(shown.background),
+            faces,
+            font: self.font,
+            size: self.text_size,
+        })
+        .width(Length::Fill)
+        .height(Length::Fill);
+        let covered = mouse_area(
+            sensor(drawing)
+                .on_show(Message::TakeoverSized)
+                .on_resize(Message::TakeoverSized),
+        )
+        .on_press(Message::EndTakeover);
+        let Some(pane) = self.editor.pane_of(self.editor.selected_window()) else {
+            return covered.into();
+        };
+        let extras: Vec<String> = self
+            .editor
+            .mode_line_segments()
+            .into_iter()
+            .chain(self.clock.as_deref().map(clock::now))
+            .collect();
+        let look = Look {
+            faces,
+            active: true,
+            font: self.font,
+            size: self.text_size,
+        };
+        column![
+            covered,
+            mode_line::view(&pane.status(), &extras, self.mode_line_style, look)
         ]
         .into()
     }

@@ -39,6 +39,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Screensavers, a bundled plugin that is off until you set (use-plugin screensaver :config {idle: 300}): after that many seconds without input, while oxmacs has focus, a starfield or matrix rain fills the window area, keeping the mode line and minibuffer, until the first key or click, which does nothing else. kind picks :starfield, :matrix or :random, and M-x screensaver-preview shows either at any time.
+- Ox can draw rectangles, circles, lines and text in theme or hex colors, in a view with canvas or over every window with 	ake-over, and can run code after a stretch without input with on-idle. prompt takes :choices to complete from names with notes.
 - Ox tests: `(test "name" (expect …))` blocks sit next to the code they test, are skipped when a file or plugin loads, and run with `ox test PATH…`, which prints each result and explains a failed `expect` with the value of each argument and where it failed.
 - Ox gains `(atomically …)`, which runs its body without letting another task in, and `pr-str`.
 - A plugin manifest can name its file modes with `:modes`, so opening such a file wakes the plugin; a `COMMIT_EDITMSG` opened from a terminal `git commit` gets the Git commit mode.

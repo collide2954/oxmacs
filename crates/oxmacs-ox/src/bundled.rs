@@ -1,6 +1,29 @@
 use crate::plugins::Bundle;
 
-pub const BUNDLED: &[Bundle] = &[WEATHER, DIRED, GIT];
+pub const BUNDLED: &[Bundle] = &[WEATHER, DIRED, GIT, SCREENSAVER];
+
+const SCREENSAVER: Bundle = Bundle {
+    name: "screensaver",
+    files: &[
+        (
+            "plugin.ox",
+            include_str!("../plugins/screensaver/plugin.ox"),
+        ),
+        (
+            "screensaver.ox",
+            include_str!("../plugins/screensaver/screensaver.ox"),
+        ),
+        ("noise.ox", include_str!("../plugins/screensaver/noise.ox")),
+        (
+            "starfield.ox",
+            include_str!("../plugins/screensaver/starfield.ox"),
+        ),
+        (
+            "matrix.ox",
+            include_str!("../plugins/screensaver/matrix.ox"),
+        ),
+    ],
+};
 
 const GIT: Bundle = Bundle {
     name: "git",
@@ -119,7 +142,7 @@ mod tests {
             }
             Node::Text { text, .. } => out.push(text.clone()),
             Node::Button { label, .. } => out.push(label.clone()),
-            Node::Space { .. } => {}
+            Node::Space { .. } | Node::Canvas { .. } => {}
             Node::Scrollable(child) => lines(child, out),
         }
     }
@@ -272,6 +295,9 @@ mod tests {
 
 #[cfg(test)]
 mod git;
+
+#[cfg(test)]
+mod screensaver;
 
 #[cfg(test)]
 mod dired {

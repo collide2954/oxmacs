@@ -8,6 +8,7 @@ use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Highlight, NICK_COLORS};
 
 use crate::log;
+use crate::shapes::{self, Shape};
 
 const UI: &str = "ox/ui";
 
@@ -40,6 +41,10 @@ pub enum Node {
         size: Option<f32>,
     },
     Scrollable(Box<Node>),
+    Canvas {
+        shapes: Vec<Shape>,
+        height: Option<f32>,
+    },
 }
 
 #[derive(Debug)]
@@ -281,6 +286,25 @@ pub fn install(isolate: &mut Isolate) {
             .next()
             .unwrap_or(Node::Space { size: None });
         widget(heap, "scrollable", Node::Scrollable(Box::new(child)))
+    });
+    isolate.define_native_in(UI, "canvas", 1, None, |heap, arguments| {
+        let drawn = shapes::shapes(heap, arguments[0])?;
+        let (found, rest) = options(heap, "canvas", &arguments[1..], &["height"])?;
+        if let Some(extra) = rest.first() {
+            return Err(wrong(heap, "canvas", "options after its shapes", *extra));
+        }
+        let mut height = None;
+        for (_, value) in found {
+            height = Some(size(heap, "canvas", value)?);
+        }
+        widget(
+            heap,
+            "canvas",
+            Node::Canvas {
+                shapes: drawn,
+                height,
+            },
+        )
     });
     isolate.define_host_native::<Editor>("open-view", 2, None, open);
 }

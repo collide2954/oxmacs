@@ -1,9 +1,10 @@
-use iced::widget::{Column, Row, button, scrollable, space, text};
+use iced::widget::{Column, Row, button, canvas, scrollable, space, text};
 use iced::{Element, Font, Length};
 use oxmacs_core::theme::Theme as Faces;
 use oxmacs_ox::views::{Node, Press};
 
 use crate::style;
+use crate::widgets::drawing::Drawing;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Look {
@@ -53,6 +54,16 @@ pub fn view<'a, Message: Clone + 'a>(
         }
         Node::Space { size: Some(size) } => space().width(*size).height(*size).into(),
         Node::Space { size: None } => space().width(Length::Fill).into(),
+        Node::Canvas { shapes, height } => canvas(Drawing {
+            shapes,
+            background: None,
+            faces: look.faces,
+            font: look.font,
+            size: look.size,
+        })
+        .width(Length::Fill)
+        .height(height.map_or(Length::Fill, Length::Fixed))
+        .into(),
         Node::Scrollable(child) => scrollable(view(child, look, press))
             .height(Length::Fill)
             .into(),

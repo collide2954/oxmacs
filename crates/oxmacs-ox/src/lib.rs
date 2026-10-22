@@ -2,12 +2,15 @@ mod buffers;
 mod bundled;
 mod commands;
 mod hooks;
+pub mod idle;
 mod log;
 mod mode;
 mod modes;
 mod natives;
 mod plugins;
 mod prompts;
+pub mod shapes;
+pub mod takeover;
 #[cfg(test)]
 mod testing;
 mod tools;
@@ -16,7 +19,7 @@ pub mod views;
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ox::{Error, Isolate};
 use oxmacs_core::editor::Editor;
@@ -68,6 +71,8 @@ impl Ox {
         hooks::install(&mut isolate);
         transients::install(&mut isolate);
         modes::install(&mut isolate);
+        takeover::install(&mut isolate);
+        idle::install(&mut isolate);
         let answers = prompts::Inbox::default();
         prompts::install(&mut isolate, &answers);
         if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
@@ -90,6 +95,18 @@ impl Ox {
         plugins::wake_at_startup(&self.isolate, editor);
         plugins::wake_waiting(&mut self.isolate, editor);
         views::refresh(&mut self.isolate, editor);
+    }
+
+    pub fn frame(&mut self, editor: &mut Editor, now: Instant, size: (f32, f32), font_size: f32) {
+        takeover::frame(&mut self.isolate, editor, now, size, font_size);
+    }
+
+    pub fn idle(&mut self, editor: &mut Editor, since: Instant, now: Instant) {
+        idle::run(&mut self.isolate, editor, since, now);
+    }
+
+    pub fn end_take_over(&mut self, editor: &mut Editor) {
+        takeover::finish(&mut self.isolate, editor);
     }
 
     pub fn press(&mut self, editor: &mut Editor, buffer: BufferId, slot: usize) {
@@ -137,6 +154,7 @@ impl Ox {
         buffers::watch(&mut self.isolate, editor);
         commands::run_waiting(&mut self.isolate, editor);
         transients::run_waiting(&mut self.isolate, editor);
+        takeover::run_endings(&mut self.isolate, editor);
         prompts::deliver(&mut self.isolate, &self.answers);
         if self.isolate.pending() > 0 {
             let report = self.isolate.run_with(editor, BUDGET);

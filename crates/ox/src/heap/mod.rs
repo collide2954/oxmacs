@@ -564,6 +564,10 @@ impl Heap {
             .try_fold(Value::Nil, |tail, head| self.pair(head, tail))
     }
 
+    pub fn map_from(&mut self, items: &[Value]) -> Result<Value, crate::error::Error> {
+        crate::vm::build::make_map(self, items)
+    }
+
     pub fn vector_from(&mut self, items: &[Value]) -> Result<Value, HeapFull> {
         let vector = Vector::from_items(self, items)?;
         self.vector(vector)

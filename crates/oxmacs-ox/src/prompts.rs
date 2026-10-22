@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Editor, Offer};
 
 #[derive(Debug)]
 pub(crate) enum Answer {
@@ -57,6 +57,31 @@ fn reply(heap: &mut Heap, inbox: &Inbox) -> Result<(Value, Reply), Error> {
     ))
 }
 
+fn offers(heap: &Heap, value: Value) -> Result<Vec<Offer>, Error> {
+    let name = |value: Value| match value {
+        Value::Keyword(name) | Value::Symbol(name) => Some(name.name().to_owned()),
+        _ => heap.text(value).map(str::to_owned),
+    };
+    let found = match heap.entries(value) {
+        Some(entries) => entries
+            .into_iter()
+            .map(|(key, note)| Some(Offer::noted(name(key)?, print::display(heap, note))))
+            .collect(),
+        None => heap.elements(value).and_then(|items| {
+            items
+                .into_iter()
+                .map(|item| name(item).map(Offer::from))
+                .collect()
+        }),
+    };
+    found.ok_or_else(|| {
+        Error::new(format!(
+            ":choices must be a vector of names or a map of names to notes, got {}",
+            print::write(heap, value)
+        ))
+    })
+}
+
 fn prompt(
     heap: &mut Heap,
     editor: &mut Editor,
@@ -65,23 +90,29 @@ fn prompt(
 ) -> Result<Value, Error> {
     let question = print::display(heap, arguments[0]);
     let mut initial = String::new();
+    let mut choices = None;
     for pair in arguments[1..].chunks(2) {
         match pair {
             [Value::Keyword(option), value] if option.name() == "initial" => {
                 initial = print::display(heap, *value);
             }
+            [Value::Keyword(option), value] if option.name() == "choices" => {
+                choices = Some(offers(heap, *value)?);
+            }
             _ => {
                 return Err(Error::new(format!(
-                    "prompt takes :initial, not {}",
+                    "prompt takes :initial and :choices, not {}",
                     print::write(heap, pair[0])
                 )));
             }
         }
     }
     let (promise, reply) = reply(heap, inbox)?;
-    editor.prompt_with_text(&question, &initial, move |_, text| {
-        reply.send(Answer::Text(text));
-    });
+    let done = move |_: &mut Editor, text| reply.send(Answer::Text(text));
+    match choices {
+        Some(offered) => editor.prompt_with(&question, move |_| offered.clone(), done),
+        None => editor.prompt_with_text(&question, &initial, done),
+    }
     Ok(promise)
 }
 
@@ -175,6 +206,48 @@ mod tests {
         press(&mut editor, &mut ox, "x RET");
 
         assert_eq!(editor.message(), Some("to oldx"));
+    }
+
+    #[test]
+    fn prompts_can_offer_choices_with_notes() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+
+        run(
+            &mut editor,
+            &mut ox,
+            r#"(defcommand pick "Pick" (message (str "picked " (await (prompt "Kind: " :choices {starfield: "Stars" matrix: "Rain"})))))"#,
+            "pick",
+        );
+        let offered: Vec<(String, Option<String>)> = editor
+            .completions()
+            .into_iter()
+            .map(|completion| (completion.label, completion.annotation))
+            .collect();
+        assert_eq!(
+            offered,
+            [
+                ("starfield".to_owned(), Some("Stars".to_owned())),
+                ("matrix".to_owned(), Some("Rain".to_owned()))
+            ]
+        );
+        press(&mut editor, &mut ox, "m a RET");
+        assert_eq!(editor.message(), Some("picked matrix"));
+
+        run(
+            &mut editor,
+            &mut ox,
+            r#"(defcommand plain "Plain" (message (await (prompt "Fruit: " :choices ["apple" :banana]))))"#,
+            "plain",
+        );
+        press(&mut editor, &mut ox, "b RET");
+        assert_eq!(editor.message(), Some("banana"));
+        assert_eq!(
+            ox.eval(&mut editor, r#"(prompt "Fruit: " :choices 5)"#)
+                .unwrap_err()
+                .to_string(),
+            ":choices must be a vector of names or a map of names to notes, got 5"
+        );
     }
 
     #[test]
