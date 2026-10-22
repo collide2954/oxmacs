@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::span::Span;
@@ -58,6 +59,7 @@ pub enum Op {
         to: Register,
         from: Register,
         name: Sym,
+        cache: u16,
     },
     MakeRecord {
         to: Register,
@@ -135,5 +137,6 @@ pub struct Code {
     pub constants: Vec<Value>,
     pub functions: Vec<Rc<Code>>,
     pub captures: Vec<Capture>,
+    pub caches: Vec<Cell<Option<(Value, usize)>>>,
     pub spans: Vec<Span>,
 }

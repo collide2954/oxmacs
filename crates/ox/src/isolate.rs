@@ -1089,6 +1089,27 @@ mod tests {
     }
 
     #[test]
+    fn each_field_site_scans_a_record_type_once() {
+        let mut isolate = Isolate::new();
+        isolate
+            .eval(
+                "(defrecord P [a b c d]) (def (sum p n total) (if (< n 1) total (sum p (- n 1) (+ total p.d))))",
+            )
+            .unwrap();
+
+        assert_eq!(isolate.eval("(sum (P 1 2 3 4) 100 0)"), Ok(Value::Int(400)));
+        assert_eq!(isolate.runtime.field_scans, 1);
+    }
+
+    #[test]
+    fn field_sites_follow_a_change_of_record_type() {
+        all(&[(
+            "(defrecord A [x y]) (defrecord B [y x]) (def (gety r) r.y) [(gety (A 1 2)) (gety (B 3 4)) (gety (A 5 6)) (gety {y: 7})]",
+            "[2 3 6 7]",
+        )]);
+    }
+
+    #[test]
     fn rust_functions_can_be_called_from_ox() {
         let mut isolate = Isolate::new();
         isolate.define_native("twice", 1, Some(1), |_, arguments| match arguments {

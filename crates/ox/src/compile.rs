@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::rc::Rc;
 
 use num_bigint::BigInt;
@@ -471,11 +472,15 @@ impl Compiler<'_> {
             let Datum::Keyword(field) = &name.datum else {
                 return Err(Error::at(name.span, "Field names must be names"));
             };
+            let cache = u16::try_from(self.current.code.caches.len())
+                .map_err(|_| Error::at(name.span, "This function reads too many fields"))?;
+            self.current.code.caches.push(Cell::new(None));
             self.emit(
                 Op::Field {
                     to: target,
                     from: target,
                     name: Sym::intern(field),
+                    cache,
                 },
                 name.span,
             );

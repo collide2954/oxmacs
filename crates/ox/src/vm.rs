@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -20,6 +21,7 @@ const MAX_FRAMES: usize = 400_000;
 pub struct Runtime {
     pub heap: Heap,
     pub globals: HashMap<Sym, Value>,
+    pub field_scans: usize,
 }
 
 struct Frame {
@@ -163,6 +165,10 @@ fn full(error: crate::heap::HeapFull) -> Error {
     Error::new(error.to_string())
 }
 
+fn no_field(owner: &str, name: Sym) -> Error {
+    Error::new(format!("{owner} has no field {}", name.name()))
+}
+
 fn field(heap: &Heap, value: Value, name: Sym) -> Result<Value, Error> {
     if value == Value::Nil {
         return Ok(Value::Nil);
@@ -170,20 +176,7 @@ fn field(heap: &Heap, value: Value, name: Sym) -> Result<Value, Error> {
     if let Some(map) = heap.map_of(value) {
         return Ok(map.get(heap, Value::Keyword(name)).unwrap_or(Value::Nil));
     }
-    if let Some(record) = heap.record_of(value) {
-        return record.get(heap, name).ok_or_else(|| {
-            Error::new(format!(
-                "{} has no field {}",
-                record.type_name(heap),
-                name.name()
-            ))
-        });
-    }
-    Err(Error::new(format!(
-        "{} has no field {}",
-        print::write(heap, value),
-        name.name()
-    )))
+    Err(no_field(&print::write(heap, value), name))
 }
 
 fn call_data(heap: &Heap, callee: Value, given: &[Value]) -> Result<Value, Error> {
@@ -366,39 +359,13 @@ impl Runtime {
                 let cell = self.heap.cell(machine.get(register)).map_err(full)?;
                 machine.set(register, cell);
             }
-            Op::MakeVector { to, base, count } => {
-                let value = make_vector(&mut self.heap, machine.items(base, count))?;
-                machine.set(to, value);
-            }
-            Op::MakeMap { to, base, count } => {
-                let value = make_map(&mut self.heap, machine.items(base, count))?;
-                machine.set(to, value);
-            }
-            Op::MakeRecord {
-                to,
-                record,
-                base,
-                count,
-            } => {
-                let value = self.make_record(machine, record, base, count)?;
-                machine.set(to, value);
-            }
-            Op::DefineRecord {
-                record,
-                constructor,
-            } => self.define_record(machine, record, constructor),
-            Op::MakeRecordFrom { to, base, count } => {
-                let value = record_literal(&mut self.heap, machine.items(base, count))?;
-                machine.set(to, value);
-            }
-            Op::Field { to, from, name } => {
-                let value = field(&self.heap, machine.get(from), name)?;
-                machine.set(to, value);
-            }
-            Op::MakeSet { to, base, count } => {
-                let value = make_set(&mut self.heap, machine.items(base, count))?;
-                machine.set(to, value);
-            }
+            Op::MakeVector { .. }
+            | Op::MakeMap { .. }
+            | Op::MakeSet { .. }
+            | Op::MakeRecord { .. }
+            | Op::MakeRecordFrom { .. }
+            | Op::DefineRecord { .. }
+            | Op::Field { .. } => self.build(machine, op)?,
             Op::CellGet { to, cell } => {
                 let value = self
                     .heap
@@ -427,6 +394,46 @@ impl Runtime {
             Op::Return { from } => return Ok(machine.leave(machine.get(from))),
         }
         Ok(None)
+    }
+
+    fn build(&mut self, machine: &mut Machine, op: Op) -> Result<(), Error> {
+        let (to, value) = match op {
+            Op::MakeVector { to, base, count } => {
+                (to, make_vector(&mut self.heap, machine.items(base, count))?)
+            }
+            Op::MakeMap { to, base, count } => {
+                (to, make_map(&mut self.heap, machine.items(base, count))?)
+            }
+            Op::MakeSet { to, base, count } => {
+                (to, make_set(&mut self.heap, machine.items(base, count))?)
+            }
+            Op::MakeRecord {
+                to,
+                record,
+                base,
+                count,
+            } => (to, self.make_record(machine, record, base, count)?),
+            Op::MakeRecordFrom { to, base, count } => (
+                to,
+                record_literal(&mut self.heap, machine.items(base, count))?,
+            ),
+            Op::Field {
+                to,
+                from,
+                name,
+                cache,
+            } => (to, self.field(machine, machine.get(from), name, cache)?),
+            Op::DefineRecord {
+                record,
+                constructor,
+            } => {
+                self.define_record(machine, record, constructor);
+                return Ok(());
+            }
+            _ => return Ok(()),
+        };
+        machine.set(to, value);
+        Ok(())
     }
 
     fn call(&mut self, machine: &mut Machine, base: u16, count: u16) -> Result<(), Error> {
@@ -495,6 +502,37 @@ impl Runtime {
             .and_then(|closure| closure.captured.get(usize::from(index)))
             .copied()
             .ok_or_else(|| Error::new("A closure lost a captured variable"))
+    }
+
+    fn field(
+        &mut self,
+        machine: &Machine,
+        value: Value,
+        name: Sym,
+        cache: u16,
+    ) -> Result<Value, Error> {
+        let Some(record) = self.heap.record_of(value) else {
+            return field(&self.heap, value, name);
+        };
+        let site = machine.code.caches.get(usize::from(cache));
+        let slot = match site.and_then(Cell::get) {
+            Some((kind, slot)) if kind == record.kind => slot,
+            _ => {
+                self.field_scans += 1;
+                let slot = record
+                    .slot(&self.heap, name)
+                    .ok_or_else(|| no_field(record.type_name(&self.heap), name))?;
+                if let Some(site) = site {
+                    site.set(Some((record.kind, slot)));
+                }
+                slot
+            }
+        };
+        record
+            .fields
+            .get(slot)
+            .copied()
+            .ok_or_else(|| no_field(record.type_name(&self.heap), name))
     }
 
     fn constructor_of(&self, callee: Value) -> Value {
