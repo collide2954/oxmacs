@@ -27,6 +27,8 @@ impl Isolate {
             runtime: Runtime::default(),
         };
         builtins::install(&mut isolate);
+        let apply = isolate.runtime.globals.get(&Sym::intern("apply")).copied();
+        isolate.runtime.apply = apply.unwrap_or(Value::Nil);
         isolate
     }
 
@@ -1085,6 +1087,32 @@ mod tests {
             ("(identical? :a :a)", "true"),
             ("(identical? 1 1)", "true"),
             ("(identical? 1 1.0)", "false"),
+        ]);
+    }
+
+    #[test]
+    fn apply_spreads_its_last_argument() {
+        let f = "(def (f a (b 2) & more) [a b more])";
+        all(&[
+            ("(apply + [1 2 3])", "6"),
+            ("(apply + 1 2 [3 4])", "10"),
+            ("(apply + 1 (list 2))", "3"),
+            ("(apply + nil)", "0"),
+            ("(apply vector 1 #{2})", "[1 2]"),
+            (&format!("{f} (apply f [1])"), "[1 2 nil]"),
+            (&format!("{f} (apply f 1 [5 6 7])"), "[1 5 (6 7)]"),
+            (
+                "(def (down n) (if (< n 1) :done (apply down [(- n 1)]))) (down 1000)",
+                ":done",
+            ),
+            ("(apply :a [{a: 1}])", "1"),
+            ("(apply apply [+ [1 2]])", "3"),
+            ("(apply + 1)", "error: apply expects a collection, got 1"),
+            (
+                "(apply +)",
+                "error: apply takes at least 2 arguments, got 1",
+            ),
+            ("(apply 5 [1])", "error: 5 is not a function"),
         ]);
     }
 

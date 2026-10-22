@@ -1,7 +1,8 @@
 use crate::symbol::Sym;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Value {
+    #[default]
     Nil,
     Bool(bool),
     Int(i64),

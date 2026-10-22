@@ -81,7 +81,7 @@ fn members(heap: &Heap, set: Map) -> Vec<Value> {
         .collect()
 }
 
-fn sequence(heap: &mut Heap, name: &str, collection: Value) -> Result<Vec<Value>, Error> {
+pub fn sequence(heap: &mut Heap, name: &str, collection: Value) -> Result<Vec<Value>, Error> {
     if let Some(vector) = heap.vector_of(collection) {
         return Ok(vector.items(heap));
     }
@@ -410,6 +410,9 @@ pub fn install(isolate: &mut Isolate) {
         contains(heap, arguments[0], arguments[1])
     });
     isolate.define_native("set", 1, Some(1), |heap, arguments| set(heap, arguments[0]));
+    isolate.define_native("apply", 2, None, |_, _| {
+        Err(Error::new("apply is handled by the VM"))
+    });
     isolate.define_native("#list", 0, None, |heap, arguments| {
         heap.list(arguments.iter().copied()).map_err(full)
     });

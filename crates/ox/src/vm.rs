@@ -22,6 +22,7 @@ pub struct Runtime {
     pub heap: Heap,
     pub globals: HashMap<Sym, Value>,
     pub field_scans: usize,
+    pub apply: Value,
 }
 
 struct Frame {
@@ -439,7 +440,7 @@ impl Runtime {
 
     fn call(&mut self, machine: &mut Machine, base: u16, count: u16) -> Result<(), Error> {
         let slot = machine.base + usize::from(base);
-        let count = usize::from(count);
+        let count = self.spread(machine, slot, usize::from(count))?;
         let callee = self.constructor_of(machine.stack[slot]);
         let Some(function) = self
             .heap
@@ -465,7 +466,7 @@ impl Runtime {
         count: u16,
     ) -> Result<Option<Value>, Error> {
         let slot = machine.base + usize::from(base);
-        let count = usize::from(count);
+        let count = self.spread(machine, slot, usize::from(count))?;
         let callee = self.constructor_of(machine.stack[slot]);
         let Some(function) = self
             .heap
@@ -535,6 +536,28 @@ impl Runtime {
             .get(slot)
             .copied()
             .ok_or_else(|| no_field(record.type_name(&self.heap), name))
+    }
+
+    fn spread(&mut self, machine: &mut Machine, slot: usize, count: usize) -> Result<usize, Error> {
+        let mut count = count;
+        while self.apply != Value::Nil && machine.stack[slot] == self.apply {
+            if count < 2 {
+                return Err(Error::new(format!(
+                    "apply takes at least 2 arguments, got {count}"
+                )));
+            }
+            let items =
+                collections::sequence(&mut self.heap, "apply", machine.stack[slot + count])?;
+            machine.stack.copy_within(slot + 1..slot + count, slot);
+            let start = slot + count - 1;
+            let needed = start + items.len() + 1;
+            if machine.stack.len() < needed {
+                machine.stack.resize(needed, Value::Nil);
+            }
+            machine.stack[start..start + items.len()].copy_from_slice(&items);
+            count = count - 2 + items.len();
+        }
+        Ok(count)
     }
 
     fn constructor_of(&self, callee: Value) -> Value {
