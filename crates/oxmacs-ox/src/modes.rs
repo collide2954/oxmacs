@@ -22,6 +22,111 @@ struct Mode {
     language: Language,
     scope: ScopeId,
     highlight: Option<Hold>,
+    plugin: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Declared {
+    title: String,
+    extensions: Vec<String>,
+    file_names: Vec<String>,
+    comment: Option<String>,
+}
+
+pub fn declared(heap: &Heap, value: Value) -> Result<Vec<Declared>, String> {
+    let wrong =
+        || ":modes must be a vector of maps with a name, extensions and file-names".to_owned();
+    let names = |value: Value| texts(heap, value).map_err(|error| error.message);
+    heap.elements(value)
+        .ok_or_else(wrong)?
+        .into_iter()
+        .map(|item| {
+            let entries = heap.entries(item).ok_or_else(wrong)?;
+            let mut found = Declared::default();
+            for (key, value) in entries {
+                match key {
+                    Value::Keyword(key) if key.name() == "name" => {
+                        found.title = print::display(heap, value);
+                    }
+                    Value::Keyword(key) if key.name() == "extensions" => {
+                        found.extensions = names(value)?;
+                    }
+                    Value::Keyword(key) if key.name() == "file-names" => {
+                        found.file_names = names(value)?;
+                    }
+                    Value::Keyword(key) if key.name() == "comment" => {
+                        found.comment = Some(print::display(heap, value));
+                    }
+                    _ => {}
+                }
+            }
+            if found.title.is_empty() {
+                return Err(wrong());
+            }
+            Ok(found)
+        })
+        .collect()
+}
+
+fn spec(title: &str, alias: String, declared: Declared) -> Language {
+    Language::new(Box::leak(Box::new(LanguageSpec {
+        name: leak(title.to_owned()),
+        extensions: leak_all(declared.extensions),
+        file_names: leak_all(declared.file_names),
+        aliases: leak_all(vec![alias]),
+        line_comment: declared.comment.map(leak),
+        pairs: &[],
+        indentation: Indentation::KEEP,
+        grammar: None,
+        grammars: &[],
+        outline: Outline::NONE,
+        features: FEATURES,
+    })))
+}
+
+pub fn declare(editor: &mut Editor, plugin: &str, declared: &Declared) {
+    let known = editor.plugin_state::<Modes>().is_some_and(|modes| {
+        modes
+            .defined
+            .iter()
+            .any(|mode| mode.language.name() == declared.title)
+    });
+    if known {
+        return;
+    }
+    let alias = declared.title.to_lowercase().replace(' ', "-");
+    let language = spec(&declared.title, alias, declared.clone());
+    let scope = editor.add_scope(leak(declared.title.clone()));
+    editor.add_language(language, Some(scope));
+    if let Some(modes) = modes(editor) {
+        modes.defined.push(Mode {
+            language,
+            scope,
+            highlight: None,
+            plugin: Some(plugin.to_owned()),
+        });
+    }
+}
+
+pub fn wakes(editor: &Editor) -> Vec<String> {
+    let Some(modes) = editor.plugin_state::<Modes>() else {
+        return Vec::new();
+    };
+    let mut found: Vec<String> = editor
+        .buffer_ids()
+        .into_iter()
+        .filter_map(|id| editor.buffer_language(id))
+        .filter_map(|language| {
+            modes
+                .defined
+                .iter()
+                .find(|mode| mode.language == language && mode.highlight.is_none())
+                .and_then(|mode| mode.plugin.clone())
+        })
+        .collect();
+    found.sort();
+    found.dedup();
+    found
 }
 
 #[derive(Debug, Default)]
@@ -136,20 +241,16 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
             .map(|mode| (mode.language, mode.scope))
     });
     let (language, scope) = known.unwrap_or_else(|| {
-        let spec = Box::leak(Box::new(LanguageSpec {
-            name: leak(title.clone()),
-            extensions: leak_all(given.extensions),
-            file_names: leak_all(given.file_names),
-            aliases: leak_all(vec![alias]),
-            line_comment: given.comment.map(leak),
-            pairs: &[],
-            indentation: Indentation::KEEP,
-            grammar: None,
-            grammars: &[],
-            outline: Outline::NONE,
-            features: FEATURES,
-        }));
-        (Language::new(spec), editor.add_scope(leak(title.clone())))
+        let declared = Declared {
+            title: title.clone(),
+            extensions: given.extensions,
+            file_names: given.file_names,
+            comment: given.comment,
+        };
+        (
+            spec(&title, alias, declared),
+            editor.add_scope(leak(title.clone())),
+        )
     });
     editor.add_language(language, Some(scope));
     for (keys, command) in given.keys {
@@ -182,6 +283,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
             language,
             scope,
             highlight,
+            plugin: None,
         }),
     }
     Ok(Value::Nil)
@@ -338,6 +440,41 @@ mod tests {
 
         press(&mut editor, &mut ox, "C-c C-c");
         assert_eq!(ox.eval(&mut editor, "@ran").unwrap(), "1");
+    }
+
+    const NOTES_PLUGIN: crate::Bundle = crate::Bundle {
+        name: "notes",
+        files: &[
+            (
+                "plugin.ox",
+                r#"(plugin notes
+  :commands {note-shout: "Shout"}
+  :modes [{name: "Notes" extensions: ["note"]}])"#,
+            ),
+            (
+                "notes.ox",
+                r##"(module (import (ox string)))
+(defcommand note-shout "Shout" (message "shout"))
+(defmode notes "Notes" :extensions ["note"]
+  :highlight (fn [line text] (if (string/starts-with? text "#") [[0 (string/length text) :comment]] [])))"##,
+            ),
+        ],
+    };
+
+    #[test]
+    fn opening_a_file_of_a_declared_mode_wakes_its_plugin() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.note");
+        std::fs::write(&path, "# heading\nplain").unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::with_bundled(&[NOTES_PLUGIN]);
+        ox.start(&mut editor, Some(dir.path()));
+
+        editor.open_file(&path);
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(editor.language().map(Language::name), Some("Notes"));
+        assert_eq!(editor.line_style(0).spans, [(0..9, Highlight::Comment)]);
     }
 
     #[test]

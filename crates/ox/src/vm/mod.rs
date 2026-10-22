@@ -78,6 +78,7 @@ enum Flow {
     Send(Value, Value, Landing),
     Receive(Value, Landing),
     Sleep(Value, Landing),
+    Atomic(bool, Landing),
 }
 
 #[derive(Debug, Clone)]
@@ -186,7 +187,9 @@ impl Runtime {
                 }
                 if self.interrupter.take() {
                     Err(interrupted())
-                } else if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                } else if fiber.atomic == 0
+                    && deadline.is_some_and(|deadline| Instant::now() >= deadline)
+                {
                     return Ok(Stop::Paused);
                 } else {
                     continue;
@@ -251,6 +254,21 @@ impl Runtime {
                         Flow::Land(resumed, Value::Nil)
                     }
                 },
+                Flow::Atomic(entering, landing) => {
+                    fiber.atomic = if entering {
+                        fiber.atomic + 1
+                    } else {
+                        fiber.atomic.saturating_sub(1)
+                    };
+                    Flow::Land(landing, Value::Nil)
+                }
+                Flow::Await(..) | Flow::Send(..) | Flow::Receive(..) | Flow::Sleep(..)
+                    if fiber.atomic > 0 =>
+                {
+                    return Err(Error::new(
+                        "atomically blocks can't wait; await outside the block",
+                    ));
+                }
                 Flow::Await(..) | Flow::Send(..) | Flow::Receive(..) | Flow::Sleep(..) => {
                     let (wait, landing) = self.wait_of(flow)?;
                     let Some(step) = self.attempt(&wait, landing) else {
@@ -607,6 +625,8 @@ impl Runtime {
             Control::Receive => Flow::Receive(argument, landing),
             Control::Worker => Flow::Land(landing, self.start_worker(arguments)?),
             Control::Sleep => Flow::Sleep(argument, landing),
+            Control::AtomicEnter => Flow::Atomic(true, landing),
+            Control::AtomicLeave => Flow::Atomic(false, landing),
         })
     }
 

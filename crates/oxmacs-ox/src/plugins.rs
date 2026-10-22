@@ -9,7 +9,7 @@ use ox::{Error, Isolate};
 use oxmacs_core::command::{DynamicSpec, Scope};
 use oxmacs_core::editor::Editor;
 
-use crate::{commands, hooks, log, views};
+use crate::{commands, hooks, log, modes, views};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Bundle {
@@ -49,6 +49,7 @@ struct Manifest {
     keys: Vec<(String, String)>,
     start_screen: Vec<(String, String)>,
     opens_directories: bool,
+    modes: Vec<modes::Declared>,
 }
 
 #[derive(Debug, Clone)]
@@ -200,6 +201,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
         keys: Vec::new(),
         start_screen: Vec::new(),
         opens_directories: false,
+        modes: Vec::new(),
     };
     for pair in options.chunks(2) {
         let [key, value] = pair else {
@@ -231,6 +233,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
                 )?;
             }
             Some("opens-directories") => manifest.opens_directories = value.truthy(),
+            Some("modes") => manifest.modes = modes::declared(heap, *value)?,
             _ => {}
         }
     }
@@ -341,6 +344,9 @@ fn stubs(editor: &mut Editor, plugin: &Plugin) {
     }
     if plugin.manifest.opens_directories {
         hooks::open_directories(editor, &plugin.manifest.name);
+    }
+    for declared in &plugin.manifest.modes {
+        modes::declare(editor, &plugin.manifest.name, declared);
     }
 }
 

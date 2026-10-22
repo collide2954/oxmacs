@@ -58,3 +58,9 @@
 (def (f) (/ 1 0)) (try (try (f) (catch type-error e :no)) (catch error e (count e.traceback))) ;=> 2
 (def (f) (/ 1 0)) (try (try (f) (catch error e (raise e))) (catch error e (count e.traceback))) ;=> 2
 (deferror oops []) (try (raise (oops)) (catch oops e (vector? e.traceback))) ;=> true
+
+;; expect passes quietly and explains what failed
+[(expect (= 1 1)) (expect true)] ;=> [true true]
+(try (expect (= (+ 1 1) 3)) (catch expectation-failed e e.message)) ;=> "(= (+ 1 1) 3)\n  (+ 1 1) => 2"
+(try (expect (and true false)) (catch expectation-failed e e.message)) ;=> "(and true false)"
+(pr-str ["a" :b 1]) ;=> "[\"a\" :b 1]"

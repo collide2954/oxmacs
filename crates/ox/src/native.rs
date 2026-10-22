@@ -20,6 +20,8 @@ pub enum Control {
     Receive,
     Worker,
     Sleep,
+    AtomicEnter,
+    AtomicLeave,
 }
 
 #[derive(Clone)]

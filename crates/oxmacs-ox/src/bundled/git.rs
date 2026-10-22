@@ -1162,3 +1162,26 @@ fn long_summaries_comments_and_trailers_are_highlighted() {
         "[[[0 14 :keyword]] []]"
     );
 }
+
+#[test]
+fn commit_messages_opened_elsewhere_get_their_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("COMMIT_EDITMSG");
+    fs::write(&path, format!("{}\n\n# comment\n", "x".repeat(55))).unwrap();
+    let mut session = opened(dir.path());
+
+    session.editor.open_file(&path);
+    settle(&mut session.editor, &mut session.ox);
+
+    assert_eq!(
+        session
+            .editor
+            .language()
+            .map(oxmacs_core::syntax::Language::name),
+        Some("Git commit")
+    );
+    assert_eq!(
+        session.editor.line_style(0).spans,
+        [(0..50, Highlight::Heading), (50..55, Highlight::Warning)]
+    );
+}

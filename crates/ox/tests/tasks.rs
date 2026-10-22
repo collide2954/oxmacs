@@ -89,6 +89,57 @@ fn swaps_from_tasks_that_share_time_never_lose_updates() {
     assert_eq!(isolate.write(total), "60");
 }
 
+fn interleaving(atomic: bool) -> String {
+    let mut isolate = Isolate::new();
+    let (open, close) = if atomic {
+        ("(atomically", ")")
+    } else {
+        ("(do", ")")
+    };
+    let long = isolate
+        .eval(&format!(
+            "(def log (atom []))
+             (def (spin n) (if (< n 1) nil (spin (- n 1))))
+             (fn [] {open} (reset! log (conj @log :start)) (spin 200000) (reset! log (conj @log :end)){close})"
+        ))
+        .unwrap();
+    let short = isolate
+        .eval("(fn [] (reset! log (conj @log :other)))")
+        .unwrap();
+    isolate.spawn(long, &[]).unwrap();
+    isolate.spawn(short, &[]).unwrap();
+    for _ in 0..100_000 {
+        if isolate.run(Duration::from_micros(50)).pending == 0 {
+            break;
+        }
+    }
+    let entries = isolate.eval("@log").unwrap();
+    isolate.write(entries)
+}
+
+#[test]
+fn atomic_blocks_finish_before_another_task_runs() {
+    assert_eq!(interleaving(false), "[:start :other :end]");
+    assert_eq!(interleaving(true), "[:start :end :other]");
+}
+
+#[test]
+fn atomic_blocks_cannot_wait_and_end_cleanly_when_they_fail() {
+    let mut isolate = Isolate::new();
+    let waits = isolate
+        .eval("(fn [] (try (atomically (await (promise))) (catch error e e.message)))")
+        .unwrap();
+    let task = isolate.spawn(waits, &[]).unwrap();
+
+    let (result, _) = finish(&mut isolate, task);
+
+    assert_eq!(
+        result,
+        Ok(r#""atomically blocks can't wait; await outside the block""#.to_owned())
+    );
+    assert_eq!(interleaving(false), "[:start :other :end]");
+}
+
 #[test]
 fn an_interrupt_stops_a_runaway_task_through_catch_but_not_finally() {
     let mut isolate = Isolate::new();

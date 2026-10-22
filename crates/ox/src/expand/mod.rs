@@ -1,13 +1,14 @@
 pub(crate) mod patterns;
 pub(crate) mod quote;
 
+use std::collections::HashMap;
+
 use crate::error::Error;
 use crate::heap::{Heap, HeapFull, Identifier};
 use crate::read::{Datum, Marks, Syntax};
 use crate::span::Span;
 use crate::symbol::Sym;
-use crate::value::Value;
-use crate::value::print;
+use crate::value::{Ref, Value, print};
 use crate::vm::Runtime;
 use crate::vm::build::{make_map, make_set, make_vector};
 use crate::vm::modules::{ModuleId, reference};
@@ -73,12 +74,22 @@ fn full(span: Span) -> impl Fn(HeapFull) -> Error {
     move |error| Error::at(span, error.to_string())
 }
 
-fn quote_syntax(heap: &mut Heap, syntax: &Syntax) -> Result<Value, Error> {
+type Spans = HashMap<Ref, Span>;
+
+fn quote_syntax(heap: &mut Heap, syntax: &Syntax, spans: &mut Spans) -> Result<Value, Error> {
+    let quoted = quote_datum(heap, syntax, spans)?;
+    if let Value::Ref(reference) = quoted {
+        spans.insert(reference, syntax.span);
+    }
+    Ok(quoted)
+}
+
+fn quote_datum(heap: &mut Heap, syntax: &Syntax, spans: &mut Spans) -> Result<Value, Error> {
     let span = syntax.span;
-    let values = |heap: &mut Heap, items: &[Syntax]| {
+    let mut values = |heap: &mut Heap, items: &[Syntax]| {
         items
             .iter()
-            .map(|item| quote_syntax(heap, item))
+            .map(|item| quote_syntax(heap, item, spans))
             .collect::<Result<Vec<_>, _>>()
     };
     match &syntax.datum {
@@ -102,10 +113,10 @@ fn quote_syntax(heap: &mut Heap, syntax: &Syntax) -> Result<Value, Error> {
             for entry in patterns::entries(items)? {
                 let key = match entry.key {
                     patterns::Key::Shorthand(name) => Value::keyword(name),
-                    patterns::Key::Literal(key) => quote_syntax(heap, key)?,
+                    patterns::Key::Literal(key) => quote_syntax(heap, key, spans)?,
                 };
                 pairs.push(key);
-                pairs.push(quote_syntax(heap, entry.pattern)?);
+                pairs.push(quote_syntax(heap, entry.pattern, spans)?);
             }
             make_map(heap, &pairs).map_err(|error| error.or_at(span))
         }
@@ -125,8 +136,18 @@ fn quote_syntax(heap: &mut Heap, syntax: &Syntax) -> Result<Value, Error> {
     }
 }
 
-fn syntax_of(heap: &Heap, value: Value, mark: u32, span: Span) -> Result<Syntax, Value> {
-    let plain = |datum| Syntax::new(datum, span);
+fn syntax_of(
+    heap: &Heap,
+    value: Value,
+    mark: u32,
+    span: Span,
+    spans: &Spans,
+) -> Result<Syntax, Value> {
+    let own = match value {
+        Value::Ref(reference) => spans.get(&reference).copied().unwrap_or(span),
+        _ => span,
+    };
+    let plain = |datum| Syntax::new(datum, own);
     if let Some(identifier) = heap.identifier_of(value) {
         return Ok(Syntax {
             datum: Datum::Symbol(identifier.name.name().to_owned()),
@@ -137,7 +158,7 @@ fn syntax_of(heap: &Heap, value: Value, mark: u32, span: Span) -> Result<Syntax,
     let all = |items: Vec<Value>| {
         items
             .into_iter()
-            .map(|item| syntax_of(heap, item, mark, span))
+            .map(|item| syntax_of(heap, item, mark, span, spans))
             .collect::<Result<Vec<_>, _>>()
     };
     let datum = match value {
@@ -510,9 +531,10 @@ impl Expander<'_> {
                 format!("Macro expansion went too deep in {name}"),
             ));
         }
+        let mut spans = Spans::new();
         let values = arguments
             .iter()
-            .map(|argument| quote_syntax(&mut self.runtime.heap, argument))
+            .map(|argument| quote_syntax(&mut self.runtime.heap, argument, &mut spans))
             .collect::<Result<Vec<_>, _>>()?;
         let produced = self
             .runtime
@@ -520,7 +542,7 @@ impl Expander<'_> {
             .map_err(|error| error.or_at(form.span))?;
         let mark = self.runtime.fresh_mark(home);
         let expansion =
-            syntax_of(&self.runtime.heap, produced, mark, form.span).map_err(|bad| {
+            syntax_of(&self.runtime.heap, produced, mark, form.span, &spans).map_err(|bad| {
                 Error::at(
                     form.span,
                     format!(

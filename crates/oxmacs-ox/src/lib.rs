@@ -129,6 +129,9 @@ impl Ox {
 
     pub fn tick(&mut self, editor: &mut Editor) -> Pace {
         self.handle_requests(editor);
+        for plugin in modes::wakes(editor) {
+            plugins::request_wake(editor, &plugin);
+        }
         plugins::wake_waiting(&mut self.isolate, editor);
         hooks::run(&mut self.isolate, editor);
         buffers::watch(&mut self.isolate, editor);

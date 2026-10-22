@@ -123,6 +123,11 @@ pub fn install(isolate: &mut Isolate) {
         )))
     });
     isolate.define_native("str", 0, None, join);
+    isolate.define_native("pr-str", 1, Some(1), |heap, arguments| {
+        let shown = print::write(heap, arguments[0]);
+        heap.string(&shown)
+            .map_err(|full| Error::new(full.to_string()))
+    });
     collections::install(isolate);
 
     isolate.define_native("print", 0, None, |heap, arguments| {

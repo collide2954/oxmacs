@@ -5,6 +5,7 @@
 (deferror range-error [])
 (deferror zero-division-error [])
 (deferror no-match-error [])
+(deferror expectation-failed [])
 (def (identity x) x)
 
 (def (constantly x)
@@ -208,6 +209,10 @@
 (defmacro maybe [form]
   `(try ~form (catch error e nil)))
 
+(defmacro atomically [& body]
+  `(do (atomic-enter)
+       (try (do ~@body) (finally (atomic-leave)))))
+
 (defmacro gen [& body]
   `(generator (fn [] ~@body)))
 
@@ -355,3 +360,33 @@
     value
     `(let [~name ~value]
        (as-> ~(first forms) ~name ~@(rest forms)))))
+
+(def registered-tests (atom []))
+
+(defmacro test [title & body]
+  `(do (swap! registered-tests conj {name: ~title run: (fn [] ~@body)})
+       nil))
+
+(def (shown-plainly? form)
+  (or (number? form) (string? form) (keyword? form) (nil? form) (bool? form) (char? form)))
+
+(def (explain form values)
+  (apply str (pr-str form)
+         (map (fn [pair]
+                (if (shown-plainly? (nth pair 0))
+                  ""
+                  "\n  {(pr-str (nth pair 0))} => {(pr-str (nth pair 1))}"))
+              (zip (rest form) values))))
+
+(def plain-heads #{"and" "or" "not" "if" "when" "unless" "cond" "let" "do" "match" "try"})
+
+(defmacro expect [form]
+  (if (and (list? form)
+           (not (empty? form))
+           (symbol? (first form))
+           (not (contains? plain-heads (name (first form)))))
+    `(let [values (vector ~@(rest form))]
+       (if (apply ~(first form) values)
+         true
+         (raise (expectation-failed (explain '~form values)))))
+    `(if ~form true (raise (expectation-failed (pr-str '~form))))))

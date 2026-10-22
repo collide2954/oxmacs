@@ -69,13 +69,13 @@ Companion to [ox-design.md](ox-design.md) and [ox-internals.md](ox-internals.md)
 | Maps | `assoc dissoc update merge merge-with select-keys keys vals entries get-in assoc-in update-in` |
 | Strings | `str name keyword symbol` (the rest are in `ox string`) |
 | Functions | `identity constantly comp partial apply juxt memoize` |
-| State | `atom deref reset! swap! compare-and-set!`; `swap!` retries until no other task changed the atom meanwhile |
+| State | `atom deref reset! swap! compare-and-set! atomically`; `swap!` retries until no other task changed the atom meanwhile, and `(atomically …)` runs its body without letting another task in (it cannot wait inside) |
 | Records and protocols | `defrecord with defprotocol extend satisfies?` |
 | Errors | `raise try catch maybe deferror error` |
 | Output | `print println pr prn` |
 | Generators | `gen generator yield next done?` |
 | Async | `spawn await promise deliver fail worker chan send receive close chan? sleep` |
-| Tests | `test expect for-all expect-snapshot` |
+| Tests | `test expect for-all expect-snapshot`; `test` blocks are registered and skipped on load, `ox test PATH…` runs them, and a failed `expect` shows the value of each argument |
 
 ## Modules
 

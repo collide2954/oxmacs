@@ -62,6 +62,7 @@ pub(crate) struct Caller {
 pub(crate) struct Fiber {
     pub(crate) machine: Machine,
     pub(crate) callers: Vec<Caller>,
+    pub(crate) atomic: u32,
 }
 
 impl Fiber {
@@ -69,6 +70,7 @@ impl Fiber {
         Self {
             machine,
             callers: Vec::new(),
+            atomic: 0,
         }
     }
 

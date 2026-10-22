@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Errors in code passed through an Ox macro, such as the body of a `defcommand`, point at that code instead of the macro call.
 - Pressing `g` repeatedly in dired no longer makes the cursor jump to the start of the line and back; plugin buffers keep point where it was when they redraw, and marks made while a listing refreshes are kept.
 - `swap!` no longer loses updates when tasks switch in the middle of it.
 
@@ -38,6 +39,9 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Ox tests: `(test "name" (expect …))` blocks sit next to the code they test, are skipped when a file or plugin loads, and run with `ox test PATH…`, which prints each result and explains a failed `expect` with the value of each argument and where it failed.
+- Ox gains `(atomically …)`, which runs its body without letting another task in, and `pr-str`.
+- A plugin manifest can name its file modes with `:modes`, so opening such a file wakes the plugin; a `COMMIT_EDITMSG` opened from a terminal `git commit` gets the Git commit mode.
 - Ox gains `take`, `drop`, `take-while` and `drop-while` (which read generators lazily), `iterate`, `partition`, `chunk`, `flatten`, `find`, `frequencies`, `group-by`, `zip`, `interleave`, `repeat`, `get-in`, `assoc-in`, `update-in`, `merge`, `merge-with`, `select-keys`, `juxt`, `memoize`, `keyword`, `name`, `symbol`, `type`, `some->` and `as->`; `string/words`, `string/reverse` and `string/truncate`; raw strings, `#r"…"` and `#r#"…"#`; regex literals, `#"…"`; and the `ox regex` module with `matches?`, `find`, `find-all`, `replace` and `split`.
 - Git shows the diff of the file at point beside the status, following point. `t` switches it between unified and side by side, which refits to the window, and changed words stand out. `s`, `u` and `k` work on hunks and on the region's lines, in the status and in the diff, and `RET` in the diff visits the line. `c` opens the commit transient (`-a`, `-e`, `-n`, `-s`; commit, amend, extend, reword), whose message buffer shows the staged changes beside it, flags a summary over 50 characters, and takes `C-c C-c`, `C-c C-k`, `M-p` and `M-n`.
 - Plugins can define file modes with keys and highlighting (`defmode`) and transient menus (`transient`), open buffers beside the current one that follow point and width, and read and replace the current buffer's text. Ox gains `distinct` and `compare-and-set!`.
