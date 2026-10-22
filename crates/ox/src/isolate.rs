@@ -756,6 +756,30 @@ mod tests {
     }
 
     #[test]
+    fn maps_with_the_same_entries_are_equal_in_any_order() {
+        let ten = "{a: 1 b: 2 c: 3 d: 4 e: 5 f: 6 g: 7 h: 8 i: 9 j: 10}";
+        let backwards = "{j: 10 i: 9 h: 8 g: 7 f: 6 e: 5 d: 4 c: 3 b: 2 a: 1}";
+        all(&[
+            ("(= {a: 1 b: 2} {b: 2 a: 1})", "true"),
+            (&format!("(= {ten} {backwards})"), "true"),
+            ("(= {a: 1} {a: 1 b: 2})", "false"),
+            ("(= {a: 1 b: 2} {a: 1})", "false"),
+            ("(= {a: 1} {a: 2})", "false"),
+            ("(= {a: 1} {b: 1})", "false"),
+            ("(= {a: [1 2]} {a: (list 1 2)})", "true"),
+            ("(= {} {})", "true"),
+            ("(= {} nil)", "false"),
+            ("(= {} [])", "false"),
+            ("(= (dissoc {a: 1 b: 2} :a) {b: 2})", "true"),
+            ("(= (hash {a: 1 b: 2}) (hash {b: 2 a: 1}))", "true"),
+            (&format!("(= (hash {ten}) (hash {backwards}))"), "true"),
+            ("(= (hash {a: 1}) (hash {a: 2}))", "false"),
+            ("(= (hash {a: 1 b: 2}) (hash [[:a 1] [:b 2]]))", "false"),
+            ("(get {{a: 1 b: 2} :found} {b: 2 a: 1})", ":found"),
+        ]);
+    }
+
+    #[test]
     fn equal_values_hash_alike() {
         all(&[
             ("(= (hash [1 2]) (hash (list 1 2)))", "true"),
