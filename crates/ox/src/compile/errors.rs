@@ -144,20 +144,21 @@ impl Compiler<'_> {
     ) -> Result<usize, Error> {
         let top = self.current.top;
         let locals = self.current.locals.len();
-        let mut skip = None;
-        if text(catch.kind) != "_" {
+        let flag = self.reserve(1, span)?;
+        if text(catch.kind) == "_" {
+            self.internal("#catchable?", &[Operand::Register(raised)], flag, span)?;
+        } else {
             let kind = self.reserve(1, span)?;
             self.variable(Sym::intern(text(catch.kind)), &catch.kind.marks, kind, span);
-            let flag = self.reserve(1, span)?;
             self.internal(
                 "#catches?",
                 &[Operand::Register(raised), Operand::Register(kind)],
                 flag,
                 span,
             )?;
-            skip = Some(self.current.code.ops.len());
-            self.emit(Op::JumpUnless { test: flag, to: 0 }, span);
         }
+        let skip = self.current.code.ops.len();
+        self.emit(Op::JumpUnless { test: flag, to: 0 }, span);
         let bound = self.reserve(1, span)?;
         self.emit(
             Op::Move {
@@ -178,10 +179,8 @@ impl Compiler<'_> {
         self.emit(Op::Jump { to: 0 }, span);
         self.current.locals.truncate(locals);
         self.release(top);
-        if let Some(skip) = skip {
-            let next = self.here(span)?;
-            self.patch(skip, next);
-        }
+        let next = self.here(span)?;
+        self.patch(skip, next);
         Ok(done)
     }
 

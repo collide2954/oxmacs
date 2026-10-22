@@ -116,7 +116,14 @@ pub fn record_literal(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> 
     .map_err(full)
 }
 
+pub fn interrupt_marker() -> Value {
+    Value::Keyword(Sym::intern("\u{0}interrupted"))
+}
+
 pub fn raised(heap: &Heap, value: Value) -> Error {
+    if value == interrupt_marker() {
+        return Error::new("Interrupted").of(ErrorKind::Interrupt);
+    }
     let message = heap
         .record_of(value)
         .and_then(|record| record.get(heap, Sym::intern("message")))

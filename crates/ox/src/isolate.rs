@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::time::Duration;
 
 use crate::compile::compile;
 use crate::error::{Error, ErrorKind};
@@ -12,6 +13,7 @@ use crate::native::Native;
 use crate::read::{self, Datum, Syntax};
 use crate::span::Source;
 use crate::symbol::Sym;
+use crate::task::{Interrupter, Report, TaskId};
 use crate::value::Value;
 use crate::value::print;
 use crate::value::record::Family;
@@ -237,6 +239,22 @@ impl Isolate {
         }) {
             self.runtime.define(PRELUDE, name, value);
         }
+    }
+
+    pub fn spawn(&mut self, function: Value, arguments: &[Value]) -> Result<TaskId, Error> {
+        self.runtime.spawn(function, arguments)
+    }
+
+    pub fn run(&mut self, budget: Duration) -> Report {
+        self.runtime.run_tasks(budget)
+    }
+
+    pub fn cancel(&mut self, task: TaskId) -> bool {
+        self.runtime.cancel(task)
+    }
+
+    pub fn interrupter(&self) -> Interrupter {
+        self.runtime.interrupter.clone()
     }
 
     pub fn collect(&mut self) -> usize {

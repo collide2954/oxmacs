@@ -9,6 +9,7 @@ pub mod native;
 pub mod read;
 pub mod span;
 pub mod symbol;
+pub mod task;
 pub mod value;
 mod vm;
 

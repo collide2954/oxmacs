@@ -32,6 +32,7 @@ crates/ox/src/
   isolate.rs        Isolate: the public API (eval, define natives, root, collect)
   span.rs           Span and line and column lookup
   symbol.rs         process-wide interner: Sym for symbols and keywords
+  task.rs           TaskId, Report and Interrupter for the host
   error.rs          Error with an optional span
   bytecode.rs       instructions, Code objects, constant pools, span tables
   native.rs         native functions and their arity checks
@@ -43,6 +44,7 @@ crates/ox/src/
   vm/               the interpreter loop, frames, calls and tail calls
     bind.rs         binding arguments to parameters
     build.rs        building literals, reading fields, calling data
+    tasks.rs        spawning, cancelling and the round-robin scheduler
   heap/             typed arenas and rooted handles
     gc.rs           mark and sweep
   value/            Value, Ref and Kind, and the data types
@@ -159,7 +161,7 @@ pub struct Ref { kind: Kind, index: u32 }
 - **Tasks.** A task owns a `Vec<Value>` register stack, a `Vec<Frame>` (code, closure, base and return slot) and a handler stack. Calling Ox never recurses on the Rust stack: deep recursion only grows the task's vectors.
 - **Calls.** `CALL a b c` calls `r[a]` with arguments `r[a+1 ..= a+b]` and leaves the result in `r[a]`. Keyword arguments arrive as trailing pairs that the callee's prologue sorts into slots; with none, there is no prologue cost.
 - **Inline caches.** Global references are linked to slot indices when a module loads, so there are no hash lookups at run time. Field access caches (record type, field index) per instruction.
-- **Preemption.** Each task runs with an instruction budget, decremented on calls and backward jumps. When it runs out, `run` returns `Yielded` with the task left exactly where it stopped. An interrupt flag, set by `C-g`, is checked at the same points and raises `interrupted`.
+- **Preemption.** Every 1,024 instructions the VM checks the clock and the interrupt flag. When a task's turn is over, it stops with the task left exactly where it was. An interrupt (`C-g`, or `cancel` on one task) raises an `Interrupted` error that no `catch` clause catches, not even `_`, while `finally` blocks still run. `eval` checks the flag too, so runaway code at the REPL can be stopped.
 - **Natives.** A native is a Rust function over `&mut Ctx` and its arguments. Higher-order functions that call back into Ox (`map`, `filter`, `reduce`, `sort-by`) are written in the Ox prelude, so the VM never needs a Rust re-entry.
 
 ## Errors
@@ -174,7 +176,7 @@ pub struct Ref { kind: Kind, index: u32 }
 - **Generators.** `(gen … (yield x) …)` creates a task with its own stack, and `next` resumes it. Switching between tasks is a change of the VM's current task, not a Rust call.
 - **Promises.** `async` functions return promises. `await` on a pending promise suspends the task, and when the host resolves the promise (`isolate.resolve(p, v)`) the waiting tasks become runnable.
 - **Green tasks.** `spawn` creates one.
-- **Scheduler.** The isolate's scheduler is `isolate.run(budget) -> Report { ran, idle, next_timer }`. The editor calls it once per frame with about 4 ms; the `ox` tool calls it in a loop.
+- **Scheduler.** The host starts tasks with `isolate.spawn(f, args)` and runs them with `isolate.run(budget) -> Report { finished, pending }`. Tasks take turns, each with an equal share of what is left of the budget, and a task that pauses goes to the back of the queue. The editor calls it once per frame with about 4 ms; the `ox` tool calls it in a loop.
 - **Workers.** `spawn-worker` starts another isolate on a thread. Messages are deep-copied into a heap-independent `Portable` form, with strings in `Arc<str>`, and rebuilt in the receiving heap. A shared frozen arena for large values can come after phase 1 if the benchmarks call for it.
 
 ## Modules and the cache

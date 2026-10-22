@@ -1,14 +1,17 @@
 pub(crate) mod bind;
 pub(crate) mod build;
 pub(crate) mod modules;
+mod tasks;
 
 use build::{
-    call_data, field, full, make_map, make_set, make_vector, no_field, raised, record_literal,
+    call_data, field, full, interrupt_marker, make_map, make_set, make_vector, no_field, raised,
+    record_literal,
 };
 
 use std::cell::Cell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
+use std::time::Instant;
 
 use crate::bytecode::{Capture, Code, Op};
 use crate::error::{Error, ErrorKind, Frame as Trace};
@@ -16,12 +19,14 @@ use crate::heap::{Closure, Heap};
 use crate::library::collections;
 use crate::span::Span;
 use crate::symbol::Sym;
+use crate::task::{Interrupter, TaskId};
 use crate::value::Value;
 use crate::value::equal::identical;
 use crate::value::map::Map;
 use crate::value::record::Record;
 use crate::vm::bind::{Binding, bind};
 use modules::{Module, ModuleId};
+use tasks::Task;
 
 const MAX_FRAMES: usize = 400_000;
 
@@ -36,7 +41,13 @@ pub struct Runtime {
     mark_modules: HashMap<u32, ModuleId>,
     last_raised: Option<(Value, Vec<Trace>)>,
     marks: u32,
+    pub interrupter: Interrupter,
+    tasks: VecDeque<Task>,
+    next_task: u64,
+    running: Option<TaskId>,
 }
+
+const CHECK_EVERY: u32 = 1024;
 
 impl Default for Runtime {
     fn default() -> Self {
@@ -50,6 +61,10 @@ impl Default for Runtime {
             mark_modules: HashMap::new(),
             last_raised: None,
             marks: 0,
+            interrupter: Interrupter::default(),
+            tasks: VecDeque::new(),
+            next_task: 0,
+            running: None,
         };
         runtime.module_named("ox");
         runtime.module_named("user");
@@ -61,6 +76,7 @@ fn not_defined(name: Sym) -> Error {
     Error::new(format!("{} is not defined", modules::display(name))).of(ErrorKind::Name)
 }
 
+#[derive(Debug)]
 struct Frame {
     code: Rc<Code>,
     closure: Value,
@@ -70,12 +86,14 @@ struct Frame {
     result: usize,
 }
 
+#[derive(Debug)]
 struct Handler {
     frames: usize,
     to: usize,
     register: u16,
 }
 
+#[derive(Debug)]
 struct Machine {
     stack: Vec<Value>,
     frames: Vec<Frame>,
@@ -245,15 +263,39 @@ impl Machine {
 impl Runtime {
     pub fn run(&mut self, entry: &Rc<Code>) -> Result<Value, Error> {
         let mut machine = Machine::new(entry);
+        self.drive(&mut machine, None, false)?
+            .ok_or_else(|| Error::new("The code paused without a scheduler"))
+    }
+
+    fn drive(
+        &mut self,
+        machine: &mut Machine,
+        deadline: Option<Instant>,
+        interrupt: bool,
+    ) -> Result<Option<Value>, Error> {
+        let mut countdown = if interrupt { 0 } else { CHECK_EVERY };
+        let mut forced = interrupt;
         loop {
             let at = machine.pc;
-            let Some(&op) = machine.code.ops.get(at) else {
-                return Err(Error::new("The code ended without returning"));
+            let outcome = if countdown == 0 {
+                countdown = CHECK_EVERY;
+                if std::mem::take(&mut forced) || self.interrupter.take() {
+                    Err(Error::new("Interrupted").of(ErrorKind::Interrupt))
+                } else if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                    return Ok(None);
+                } else {
+                    Ok(None)
+                }
+            } else {
+                countdown -= 1;
+                let Some(&op) = machine.code.ops.get(at) else {
+                    return Err(Error::new("The code ended without returning"));
+                };
+                machine.pc += 1;
+                self.execute(machine, op)
             };
-            machine.pc += 1;
-            let outcome = self.execute(&mut machine, op);
             match outcome {
-                Ok(Some(value)) => return Ok(value),
+                Ok(Some(value)) => return Ok(Some(value)),
                 Ok(None) => {}
                 Err(error) => {
                     let mut error = error.or_at(machine.code.spans[at]);
@@ -571,6 +613,9 @@ impl Runtime {
     }
 
     fn error_value(&mut self, error: &Error) -> Result<Value, Error> {
+        if error.kind == ErrorKind::Interrupt {
+            return Ok(interrupt_marker());
+        }
         let value = if let Some(value) = error.raised {
             value
         } else {
@@ -619,6 +664,11 @@ impl Runtime {
         arguments: &[Value],
         span: Span,
     ) -> Result<Value, Error> {
+        let code = Self::call_code(function, arguments, span)?;
+        self.run(&Rc::new(code))
+    }
+
+    fn call_code(function: Value, arguments: &[Value], span: Span) -> Result<Code, Error> {
         let count = u16::try_from(arguments.len())
             .map_err(|_| Error::at(span, "This call has too many arguments"))?;
         let mut constants = vec![function];
@@ -631,28 +681,41 @@ impl Runtime {
             .collect();
         ops.push(Op::Call { base: 0, count });
         ops.push(Op::Return { from: 0 });
-        let code = Code {
+        Ok(Code {
             registers: count + 1,
             spans: vec![span; ops.len()],
             ops,
             constants,
             ..Code::default()
-        };
-        self.run(&Rc::new(code))
+        })
+    }
+
+    fn machine_roots(machine: &Machine, roots: &mut Vec<Value>, codes: &mut Vec<Rc<Code>>) {
+        roots.extend(machine.stack.iter().copied());
+        roots.push(machine.closure);
+        roots.extend(machine.frames.iter().map(|frame| frame.closure));
+        codes.push(Rc::clone(&machine.code));
+        codes.extend(machine.frames.iter().map(|frame| Rc::clone(&frame.code)));
+    }
+
+    fn task_roots(&self, roots: &mut Vec<Value>, codes: &mut Vec<Rc<Code>>) {
+        for task in &self.tasks {
+            Self::machine_roots(&task.machine, roots, codes);
+        }
     }
 
     pub fn collect(&mut self) -> usize {
-        let roots = self.base_roots();
-        self.heap.collect(&roots, &[])
+        let mut roots = self.base_roots();
+        let mut codes = Vec::new();
+        self.task_roots(&mut roots, &mut codes);
+        self.heap.collect(&roots, &codes)
     }
 
     fn collect_running(&mut self, machine: &Machine) {
         let mut roots = self.base_roots();
-        roots.extend(machine.stack.iter().copied());
-        roots.push(machine.closure);
-        roots.extend(machine.frames.iter().map(|frame| frame.closure));
-        let mut codes = vec![Rc::clone(&machine.code)];
-        codes.extend(machine.frames.iter().map(|frame| Rc::clone(&frame.code)));
+        let mut codes = Vec::new();
+        Self::machine_roots(machine, &mut roots, &mut codes);
+        self.task_roots(&mut roots, &mut codes);
         self.heap.collect(&roots, &codes);
     }
 
