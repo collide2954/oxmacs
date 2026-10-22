@@ -12,7 +12,7 @@ const DOTTED: u64 = 0x2545_f491_4f6c_dd1d;
 enum Task {
     Hash(Value),
     Sequence { count: usize, dotted: bool },
-    Unordered { count: usize },
+    Unordered { count: usize, tag: u64 },
 }
 
 fn mix(bits: u64) -> u64 {
@@ -82,10 +82,20 @@ pub fn hash(heap: &Heap, value: Value) -> u64 {
     while let Some(task) = tasks.pop() {
         match task {
             Task::Hash(value) => {
+                if let Some(set) = heap.set_of(value) {
+                    let items = set.entries(heap);
+                    tasks.push(Task::Unordered {
+                        count: items.len(),
+                        tag: 11,
+                    });
+                    tasks.extend(items.into_iter().map(|(item, _)| Task::Hash(item)));
+                    continue;
+                }
                 if let Some(map) = heap.map_of(value) {
                     let entries = map.entries(heap);
                     tasks.push(Task::Unordered {
                         count: entries.len(),
+                        tag: 10,
                     });
                     for (key, value) in entries.into_iter().rev() {
                         tasks.push(Task::Sequence {
@@ -119,10 +129,10 @@ pub fn hash(heap: &Heap, value: Value) -> u64 {
                     combined
                 });
             }
-            Task::Unordered { count } => {
+            Task::Unordered { count, tag } => {
                 let start = results.len().saturating_sub(count);
                 let combined = results.drain(start..).fold(0, u64::wrapping_add);
-                results.push(tagged(10, combined));
+                results.push(tagged(tag, combined));
             }
         }
     }
@@ -172,6 +182,17 @@ fn sequences(heap: &Heap, a: Value, b: Value, pending: &mut Pending) -> Option<b
     }
 }
 
+fn sets(heap: &Heap, a: Value, b: Value) -> Option<bool> {
+    let (left, right) = (heap.set_of(a)?, heap.set_of(b)?);
+    Some(
+        left.count == right.count
+            && left
+                .entries(heap)
+                .into_iter()
+                .all(|(item, _)| right.get(heap, item).is_some()),
+    )
+}
+
 fn maps(heap: &Heap, a: Value, b: Value, pending: &mut Pending) -> Option<bool> {
     let (left, right) = (heap.map_of(a)?, heap.map_of(b)?);
     if left.count != right.count {
@@ -198,6 +219,7 @@ pub fn equal(heap: &Heap, a: Value, b: Value) -> bool {
             }
             let same = sequences(heap, a, b, &mut pending)
                 .or_else(|| maps(heap, a, b, &mut pending))
+                .or_else(|| sets(heap, a, b))
                 .unwrap_or_else(|| same_contents(heap, a, b));
             if !same {
                 return false;

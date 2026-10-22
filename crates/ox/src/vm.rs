@@ -66,6 +66,11 @@ impl Machine {
         self.stack[self.base + usize::from(register)] = value;
     }
 
+    fn items(&self, base: u16, count: u16) -> &[Value] {
+        let start = self.base + usize::from(base);
+        &self.stack[start..start + usize::from(count)]
+    }
+
     fn place(&mut self, start: usize, function: &Code, binding: Binding) -> u64 {
         let needed = start + usize::from(function.registers);
         if self.stack.len() < needed {
@@ -155,6 +160,44 @@ fn full(error: crate::heap::HeapFull) -> Error {
     Error::new(error.to_string())
 }
 
+fn make_vector(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
+    let vector = Vector::from_items(heap, items).map_err(full)?;
+    heap.vector(vector).map_err(full)
+}
+
+fn make_map(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
+    let mut map = Map::EMPTY;
+    for pair in items.chunks(2) {
+        let [key, value] = pair else {
+            continue;
+        };
+        let grown = map.assoc(heap, *key, *value).map_err(full)?;
+        if grown.count == map.count {
+            return Err(Error::new(format!(
+                "Duplicate key {} in a map literal",
+                print::write(heap, *key)
+            )));
+        }
+        map = grown;
+    }
+    heap.map(map).map_err(full)
+}
+
+fn make_set(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
+    let mut set = Map::EMPTY;
+    for item in items {
+        let grown = set.assoc(heap, *item, Value::Bool(true)).map_err(full)?;
+        if grown.count == set.count {
+            return Err(Error::new(format!(
+                "Duplicate item {} in a set literal",
+                print::write(heap, *item)
+            )));
+        }
+        set = grown;
+    }
+    heap.set(set).map_err(full)
+}
+
 impl Runtime {
     pub fn run(&mut self, entry: &Rc<Code>) -> Result<Value, Error> {
         let mut machine = Machine::new(entry);
@@ -210,30 +253,15 @@ impl Runtime {
                 machine.set(register, cell);
             }
             Op::MakeVector { to, base, count } => {
-                let start = machine.base + usize::from(base);
-                let items = &machine.stack[start..start + usize::from(count)];
-                let vector = Vector::from_items(&mut self.heap, items).map_err(full)?;
-                let value = self.heap.vector(vector).map_err(full)?;
+                let value = make_vector(&mut self.heap, machine.items(base, count))?;
                 machine.set(to, value);
             }
             Op::MakeMap { to, base, count } => {
-                let start = machine.base + usize::from(base);
-                let items = &machine.stack[start..start + usize::from(count)];
-                let mut map = Map::EMPTY;
-                for pair in items.chunks(2) {
-                    let [key, value] = pair else {
-                        continue;
-                    };
-                    let grown = map.assoc(&mut self.heap, *key, *value).map_err(full)?;
-                    if grown.count == map.count {
-                        return Err(Error::new(format!(
-                            "Duplicate key {} in a map literal",
-                            print::write(&self.heap, *key)
-                        )));
-                    }
-                    map = grown;
-                }
-                let value = self.heap.map(map).map_err(full)?;
+                let value = make_map(&mut self.heap, machine.items(base, count))?;
+                machine.set(to, value);
+            }
+            Op::MakeSet { to, base, count } => {
+                let value = make_set(&mut self.heap, machine.items(base, count))?;
                 machine.set(to, value);
             }
             Op::CellGet { to, cell } => {

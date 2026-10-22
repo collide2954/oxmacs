@@ -30,6 +30,7 @@ pub enum Kind {
     VecNode,
     Map,
     MapNode,
+    Set,
 }
 
 impl Value {

@@ -49,6 +49,11 @@ pub enum Op {
         base: Register,
         count: u16,
     },
+    MakeSet {
+        to: Register,
+        base: Register,
+        count: u16,
+    },
     CellGet {
         to: Register,
         cell: Register,

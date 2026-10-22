@@ -87,6 +87,7 @@ pub struct Heap {
     nodes: Arena<Box<[Value]>>,
     maps: Arena<Map>,
     map_nodes: Arena<Node>,
+    sets: Arena<Map>,
 }
 
 fn reference(value: Value, kind: Kind) -> Option<u32> {
@@ -246,6 +247,18 @@ impl Heap {
 
     pub fn map_node_of(&self, value: Value) -> Option<&Node> {
         self.map_nodes.get(reference(value, Kind::MapNode)?)
+    }
+
+    pub fn set(&mut self, set: Map) -> Result<Value, HeapFull> {
+        let index = self.sets.alloc(set)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Set,
+            index,
+        }))
+    }
+
+    pub fn set_of(&self, value: Value) -> Option<Map> {
+        self.sets.get(reference(value, Kind::Set)?).copied()
     }
 
     pub fn list(

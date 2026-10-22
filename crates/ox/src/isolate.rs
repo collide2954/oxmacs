@@ -579,6 +579,66 @@ mod tests {
     }
 
     #[test]
+    fn set_literals_evaluate_and_print_in_insertion_order() {
+        all(&[
+            ("#{}", "#{}"),
+            ("#{3 1 2}", "#{3 1 2}"),
+            (r#"#{[1] :a "s"}"#, r#"#{[1] :a "s"}"#),
+            ("(let [x 5] #{x (+ x 1)})", "#{5 6}"),
+            ("#{1 2 1}", "error: Duplicate item 1 in a set literal"),
+            (
+                "#{[1] (list 1)}",
+                "error: Duplicate item (1) in a set literal",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn sets_are_built_read_and_changed_without_changing_the_original() {
+        all(&[
+            ("(set [1 2 1 3])", "#{1 2 3}"),
+            ("(set (list :a :b))", "#{:a :b}"),
+            ("(set nil)", "#{}"),
+            (r#"(set "aba")"#, r"#{\a \b}"),
+            ("(set {a: 1})", "#{[:a 1]}"),
+            ("(set 5)", "error: set expects a collection, got 5"),
+            ("(set? #{})", "true"),
+            ("(set? {})", "false"),
+            ("(map? #{})", "false"),
+            ("(count #{1 2})", "2"),
+            ("(contains? #{1 2} 2)", "true"),
+            ("(contains? #{1 2} 3)", "false"),
+            ("(contains? #{[1 2]} (list 1 2))", "true"),
+            ("(get #{[1 2]} (list 1 2))", "[1 2]"),
+            ("(get #{1 2} 3 :none)", ":none"),
+            ("(conj #{1} 2 1 3)", "#{1 2 3}"),
+            ("(def s #{1}) (conj s 2) s", "#{1}"),
+            ("(disj #{1 2 3} 2)", "#{1 3}"),
+            ("(disj #{1 2 3} 1 3 9)", "#{2}"),
+            ("(disj nil 1)", "nil"),
+            ("(disj [1] 1)", "error: disj expects a set, got [1]"),
+            ("(vec #{2 1})", "[2 1]"),
+        ]);
+    }
+
+    #[test]
+    fn sets_with_the_same_items_are_equal_in_any_order() {
+        all(&[
+            ("(= #{1 2} #{2 1})", "true"),
+            ("(= #{1 2} #{1 2 3})", "false"),
+            ("(= #{1 2} #{1 3})", "false"),
+            ("(= #{[1]} #{(list 1)})", "true"),
+            ("(= #{} {})", "false"),
+            ("(= #{} [])", "false"),
+            ("(= #{} nil)", "false"),
+            ("(= (hash #{1 2}) (hash #{2 1}))", "true"),
+            ("(= (hash #{1 2}) (hash [1 2]))", "false"),
+            ("(= (hash #{}) (hash {}))", "false"),
+            ("(get {#{1 2} :found} #{2 1})", ":found"),
+        ]);
+    }
+
+    #[test]
     fn maps_are_read_by_key() {
         all(&[
             ("(get {a: 1} :a)", "1"),
@@ -593,7 +653,7 @@ mod tests {
             ("(contains? nil :a)", "false"),
             (
                 "(contains? [1] 0)",
-                "error: contains? expects a map, got [1]",
+                "error: contains? expects a map or set, got [1]",
             ),
             ("(keys {b: 1 a: 2})", "[:b :a]"),
             ("(vals {b: 1 a: 2})", "[1 2]"),

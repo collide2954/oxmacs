@@ -246,6 +246,12 @@ impl Map {
         self.dissoc_by(heap, key, hash)
     }
 
+    pub fn entry(self, heap: &Heap, key: Value) -> Option<(Value, Value)> {
+        let position = self.position(heap, key, hash)?;
+        let entry = self.entries.get(heap, position)?;
+        heap.pair_of(entry).map(|pair| (pair.head, pair.tail))
+    }
+
     fn get_by(self, heap: &Heap, key: Value, hasher: Hasher) -> Option<Value> {
         let position = self.position(heap, key, hasher)?;
         let entry = self.entries.get(heap, position)?;

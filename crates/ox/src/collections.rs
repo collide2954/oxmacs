@@ -60,12 +60,86 @@ fn map_or_nil(heap: &Heap, name: &str, collection: Value) -> Result<Map, Error> 
         .ok_or_else(|| expected(heap, name, "a map", collection))
 }
 
-fn entries(heap: &mut Heap, map: Map) -> Result<Value, Error> {
+fn pairs(heap: &mut Heap, map: Map) -> Result<Vec<Value>, Error> {
     let mut pairs = Vec::with_capacity(map.count);
     for (key, value) in map.entries(heap) {
         pairs.push(vector_of(heap, &[key, value])?);
     }
+    Ok(pairs)
+}
+
+fn entries(heap: &mut Heap, map: Map) -> Result<Value, Error> {
+    let pairs = pairs(heap, map)?;
     vector_of(heap, &pairs)
+}
+
+fn members(heap: &Heap, set: Map) -> Vec<Value> {
+    set.entries(heap)
+        .into_iter()
+        .map(|(item, _)| item)
+        .collect()
+}
+
+fn sequence(heap: &mut Heap, name: &str, collection: Value) -> Result<Vec<Value>, Error> {
+    if let Some(vector) = heap.vector_of(collection) {
+        return Ok(vector.items(heap));
+    }
+    if let Some(set) = heap.set_of(collection) {
+        return Ok(members(heap, set));
+    }
+    if let Some(map) = heap.map_of(collection) {
+        return pairs(heap, map);
+    }
+    if let Some(text) = heap.text(collection) {
+        return Ok(text.chars().map(Value::Char).collect());
+    }
+    if is_list(heap, collection) {
+        return Ok(heap.items(collection));
+    }
+    Err(expected(heap, name, "a collection", collection))
+}
+
+fn store_set(heap: &mut Heap, set: Map) -> Result<Value, Error> {
+    heap.set(set).map_err(full)
+}
+
+fn add(heap: &mut Heap, set: Map, items: &[Value]) -> Result<Map, Error> {
+    items
+        .iter()
+        .try_fold(set, |set, item| set.assoc(heap, *item, Value::Bool(true)))
+        .map_err(full)
+}
+
+fn set(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
+    if heap.set_of(collection).is_some() {
+        return Ok(collection);
+    }
+    let items = sequence(heap, "set", collection)?;
+    let set = add(heap, Map::EMPTY, &items)?;
+    store_set(heap, set)
+}
+
+fn disj(heap: &mut Heap, collection: Value, items: &[Value]) -> Result<Value, Error> {
+    if collection == Value::Nil {
+        return Ok(Value::Nil);
+    }
+    let Some(mut set) = heap.set_of(collection) else {
+        return Err(expected(heap, "disj", "a set", collection));
+    };
+    for item in items {
+        set = set.dissoc(heap, *item).map_err(full)?;
+    }
+    store_set(heap, set)
+}
+
+fn contains(heap: &Heap, collection: Value, key: Value) -> Result<Value, Error> {
+    if collection == Value::Nil {
+        return Ok(Value::Bool(false));
+    }
+    let Some(map) = heap.map_of(collection).or_else(|| heap.set_of(collection)) else {
+        return Err(expected(heap, "contains?", "a map or set", collection));
+    };
+    Ok(Value::Bool(map.get(heap, key).is_some()))
 }
 
 fn dissoc(heap: &mut Heap, collection: Value, keys: &[Value]) -> Result<Value, Error> {
@@ -110,7 +184,7 @@ fn count(heap: &Heap, value: Value) -> Result<Value, Error> {
     if let Some(vector) = heap.vector_of(value) {
         return Ok(int(vector.count));
     }
-    if let Some(map) = heap.map_of(value) {
+    if let Some(map) = heap.map_of(value).or_else(|| heap.set_of(value)) {
         return Ok(int(map.count));
     }
     if is_list(heap, value) {
@@ -153,6 +227,9 @@ fn get(heap: &Heap, arguments: &[Value]) -> Value {
     if let Some(map) = heap.map_of(*collection) {
         return map.get(heap, *key).unwrap_or(fallback);
     }
+    if let Some(set) = heap.set_of(*collection) {
+        return set.entry(heap, *key).map_or(fallback, |(item, _)| item);
+    }
     let Value::Int(wanted) = key else {
         return fallback;
     };
@@ -173,18 +250,8 @@ fn vec(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
     if heap.vector_of(collection).is_some() {
         return Ok(collection);
     }
-    if let Some(map) = heap.map_of(collection) {
-        return entries(heap, map);
-    }
-    let items: Vec<Value> = if let Some(text) = heap.text(collection) {
-        text.chars().map(Value::Char).collect()
-    } else if is_list(heap, collection) {
-        heap.items(collection)
-    } else {
-        return Err(expected(heap, "vec", "a collection", collection));
-    };
-    let vector = Vector::from_items(heap, &items).map_err(full)?;
-    store(heap, vector)
+    let items = sequence(heap, "vec", collection)?;
+    vector_of(heap, &items)
 }
 
 fn conj(heap: &mut Heap, collection: Value, items: &[Value]) -> Result<Value, Error> {
@@ -197,6 +264,10 @@ fn conj(heap: &mut Heap, collection: Value, items: &[Value]) -> Result<Value, Er
     }
     if let Some(map) = heap.map_of(collection) {
         return conj_entries(heap, map, items);
+    }
+    if let Some(set) = heap.set_of(collection) {
+        let grown = add(heap, set, items)?;
+        return store_set(heap, grown);
     }
     if is_list(heap, collection) {
         return items
@@ -291,8 +362,14 @@ pub fn install(isolate: &mut Isolate) {
         dissoc(heap, arguments[0], &arguments[1..])
     });
     isolate.define_native("contains?", 2, Some(2), |heap, arguments| {
-        let map = map_or_nil(heap, "contains?", arguments[0])?;
-        Ok(Value::Bool(map.get(heap, arguments[1]).is_some()))
+        contains(heap, arguments[0], arguments[1])
+    });
+    isolate.define_native("set", 1, Some(1), |heap, arguments| set(heap, arguments[0]));
+    isolate.define_native("set?", 1, Some(1), |heap, arguments| {
+        Ok(Value::Bool(heap.set_of(arguments[0]).is_some()))
+    });
+    isolate.define_native("disj", 1, None, |heap, arguments| {
+        disj(heap, arguments[0], &arguments[1..])
     });
     isolate.define_native("keys", 1, Some(1), |heap, arguments| {
         let map = map_or_nil(heap, "keys", arguments[0])?;

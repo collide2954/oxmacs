@@ -44,6 +44,8 @@ fn write_into(heap: &Heap, value: Value, out: &mut String) {
                 vector(heap, items, out);
             } else if let Some(entries) = heap.map_of(value) {
                 map(heap, entries, out);
+            } else if let Some(items) = heap.set_of(value) {
+                set(heap, items, out);
             } else if let Some(native) = heap.native_of(value) {
                 let _ = write!(out, "#<native {}>", native.name.name());
             } else if let Some(closure) = heap.closure_of(value) {
@@ -154,6 +156,17 @@ fn map(heap: &Heap, map: Map, out: &mut String) {
         }
         out.push(' ');
         write_into(heap, value, out);
+    }
+    out.push('}');
+}
+
+fn set(heap: &Heap, set: Map, out: &mut String) {
+    out.push_str("#{");
+    for (index, (item, _)) in set.entries(heap).into_iter().enumerate() {
+        if index > 0 {
+            out.push(' ');
+        }
+        write_into(heap, item, out);
     }
     out.push('}');
 }

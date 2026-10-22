@@ -274,7 +274,7 @@ impl Compiler<'_> {
                     .map_err(|full| Error::at(form.span, full.to_string()))?
             }
             Datum::Map(items) => return self.map(items, target, form.span),
-            Datum::Set(_) => return Err(Error::at(form.span, "This form is not supported yet")),
+            Datum::Set(items) => return self.set(items, target, form.span),
         };
         self.load(value, target, form.span)
     }
@@ -660,6 +660,20 @@ impl Compiler<'_> {
             self.expression(item, base + offset)?;
         }
         Ok((base, count))
+    }
+
+    fn set(&mut self, items: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let (base, count) = self.gather(items, span)?;
+        self.emit(
+            Op::MakeSet {
+                to: target,
+                base,
+                count,
+            },
+            span,
+        );
+        self.release(base);
+        Ok(())
     }
 
     fn map(&mut self, items: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
