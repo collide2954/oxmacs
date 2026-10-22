@@ -10,6 +10,8 @@ use crate::value::Value;
 use crate::vm::Runtime;
 use crate::{print, reader};
 
+const PRELUDE: &str = include_str!("prelude.ox");
+
 #[derive(Debug)]
 pub struct Isolate {
     runtime: Runtime,
@@ -29,6 +31,9 @@ impl Isolate {
         builtins::install(&mut isolate);
         let apply = isolate.runtime.globals.get(&Sym::intern("apply")).copied();
         isolate.runtime.apply = apply.unwrap_or(Value::Nil);
+        if let Err(error) = isolate.eval(PRELUDE) {
+            panic!("The Ox prelude failed to load: {error}");
+        }
         isolate
     }
 
@@ -1087,6 +1092,20 @@ mod tests {
             ("(identical? :a :a)", "true"),
             ("(identical? 1 1)", "true"),
             ("(identical? 1 1.0)", "false"),
+        ]);
+    }
+
+    #[test]
+    fn swap_and_update_come_from_the_prelude() {
+        all(&[
+            ("(def a (atom 1)) (swap! a + 10)", "11"),
+            ("(def a (atom 1)) (swap! a + 10) @a", "11"),
+            ("(def a (atom [1])) (swap! a conj 2 3) @a", "[1 2 3]"),
+            ("(update {n: 1} :n + 5)", "{n: 6}"),
+            ("(update [1 2 3] 0 -)", "[-1 2 3]"),
+            ("(defrecord P [x]) (update (P 1) :x * 3)", "#P{x: 3}"),
+            ("(update {} :n (fn [x] (if x x 0)))", "{n: 0}"),
+            ("(swap! 5 +)", "error: deref expects an atom, got 5"),
         ]);
     }
 
