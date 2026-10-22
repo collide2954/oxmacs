@@ -73,7 +73,9 @@ fn assigns(form: &Syntax, name: &str) -> bool {
             );
             assigned || items.iter().any(|item| assigns(item, name))
         }
-        Datum::Vector(items) | Datum::Map(items) => items.iter().any(|item| assigns(item, name)),
+        Datum::Vector(items) | Datum::Map(items) | Datum::Set(items) => {
+            items.iter().any(|item| assigns(item, name))
+        }
         _ => false,
     }
 }
@@ -272,6 +274,7 @@ impl Compiler<'_> {
                     .map_err(|full| Error::at(form.span, full.to_string()))?
             }
             Datum::Map(items) => return self.map(items, target, form.span),
+            Datum::Set(_) => return Err(Error::at(form.span, "This form is not supported yet")),
         };
         self.load(value, target, form.span)
     }

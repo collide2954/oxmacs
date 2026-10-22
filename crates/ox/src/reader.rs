@@ -14,6 +14,7 @@ pub enum Datum {
     List(Vec<Syntax>),
     Vector(Vec<Syntax>),
     Map(Vec<Syntax>),
+    Set(Vec<Syntax>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -74,6 +75,14 @@ fn closer(opener: char) -> char {
         '(' => ')',
         '[' => ']',
         _ => '}',
+    }
+}
+
+fn opener(bracket: char) -> String {
+    if bracket == '#' {
+        "#{".to_owned()
+    } else {
+        bracket.to_string()
     }
 }
 
@@ -186,6 +195,7 @@ impl<'a> Reader<'a> {
                 '~' => self.prefix(Some("unquote"), "~", start),
                 '@' => self.prefix(Some("deref"), "@", start),
                 '#' if self.rest().starts_with("#;") => self.prefix(None, "#;", start),
+                '#' if self.rest().starts_with("#{") => self.opening('#', start),
                 '#' => {
                     let token = self.token();
                     self.error(start, format!("Unknown form {token}"));
@@ -309,7 +319,7 @@ impl<'a> Reader<'a> {
             self.skip_balanced();
             return;
         }
-        self.at += 1;
+        self.at += opener(bracket).len();
         self.frames.push(Frame::Collection {
             bracket,
             start,
@@ -349,8 +359,8 @@ impl<'a> Reader<'a> {
     fn abandon(&mut self, frame: Frame, at_end: bool) {
         let (span, message) = match &frame {
             Frame::Collection { bracket, start, .. } => (
-                Span::new(*start, start + 1),
-                format!("This {bracket} is never closed"),
+                Span::new(*start, start + opener(*bracket).len()),
+                format!("This {} is never closed", opener(*bracket)),
             ),
             Frame::Prefix { mark, start, .. } => (
                 Span::new(*start, start + mark.len()),
@@ -377,6 +387,7 @@ impl<'a> Reader<'a> {
         let datum = match bracket {
             '(' => Datum::List(items),
             '[' => Datum::Vector(items),
+            '#' => Datum::Set(items),
             _ => {
                 if items.len() % 2 == 1 {
                     self.error_at(span, "This map has a key without a value");
@@ -790,6 +801,7 @@ mod tests {
             Datum::List(items) => format!("({})", join(items)),
             Datum::Vector(items) => format!("[{}]", join(items)),
             Datum::Map(items) => format!("{{{}}}", join(items)),
+            Datum::Set(items) => format!("#{{{}}}", join(items)),
         }
     }
 
@@ -840,6 +852,20 @@ mod tests {
             ]
         );
         assert_eq!(shapes("(a ] b) }"), ["(a b)"]);
+    }
+
+    #[test]
+    fn sets_are_read_from_hash_braces() {
+        assert_eq!(errors("#{1 [2] :a} #{} (f #{x})"), []);
+        assert_eq!(
+            shapes("#{1 [2] :a} #{} (f #{x})"),
+            ["#{1 [2] :a}", "#{}", "(f #{x})"]
+        );
+        assert_eq!(data("#{}")[0].1, Span::new(0, 3));
+        assert_eq!(
+            errors("#{1"),
+            [("This #{ is never closed".to_owned(), Span::new(0, 2))]
+        );
     }
 
     #[test]
