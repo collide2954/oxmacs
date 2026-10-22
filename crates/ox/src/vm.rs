@@ -3,9 +3,11 @@ use std::rc::Rc;
 
 use crate::bind::{Binding, bind};
 use crate::bytecode::{Capture, Code, Op};
+use crate::collections;
 use crate::error::Error;
 use crate::heap::{Closure, Heap};
 use crate::map::Map;
+use crate::native::arguments;
 use crate::print;
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -172,6 +174,38 @@ fn field(heap: &Heap, value: Value, name: Sym) -> Result<Value, Error> {
         print::write(heap, value),
         name.name()
     )))
+}
+
+fn call_data(heap: &Heap, callee: Value, given: &[Value]) -> Result<Value, Error> {
+    let most = if matches!(callee, Value::Keyword(_)) || heap.map_of(callee).is_some() {
+        2
+    } else if heap.set_of(callee).is_some() {
+        1
+    } else {
+        return Err(Error::new(format!(
+            "{} is not a function",
+            print::write(heap, callee)
+        )));
+    };
+    let Some(first) = given.first().filter(|_| given.len() <= most) else {
+        let wanted = if most == 1 {
+            arguments(1)
+        } else {
+            "1 to 2 arguments".to_owned()
+        };
+        return Err(Error::new(format!(
+            "{} takes {wanted}, got {}",
+            print::write(heap, callee),
+            given.len()
+        )));
+    };
+    let fallback = given.get(1).copied().unwrap_or(Value::Nil);
+    let lookup = if matches!(callee, Value::Keyword(_)) {
+        [*first, callee, fallback]
+    } else {
+        [callee, *first, fallback]
+    };
+    Ok(collections::get(heap, &lookup))
 }
 
 fn make_vector(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
@@ -382,10 +416,7 @@ impl Runtime {
 
     fn call_native(&mut self, callee: Value, arguments: &[Value]) -> Result<Value, Error> {
         let Some(native) = self.heap.native_of(callee).cloned() else {
-            return Err(Error::new(format!(
-                "{} is not a function",
-                print::write(&self.heap, callee)
-            )));
+            return call_data(&self.heap, callee, arguments);
         };
         native.check(arguments.len())?;
         (native.function)(&mut self.heap, arguments)

@@ -219,7 +219,7 @@ fn nth(heap: &Heap, collection: Value, wanted: Value) -> Result<Value, Error> {
         .ok_or_else(|| out_of_range(wanted, "list", items.len(), "item"))
 }
 
-fn get(heap: &Heap, arguments: &[Value]) -> Value {
+pub fn get(heap: &Heap, arguments: &[Value]) -> Value {
     let fallback = arguments.get(2).copied().unwrap_or(Value::Nil);
     let (Some(collection), Some(key)) = (arguments.first(), arguments.get(1)) else {
         return fallback;

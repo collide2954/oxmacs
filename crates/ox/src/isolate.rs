@@ -639,6 +639,28 @@ mod tests {
     }
 
     #[test]
+    fn keywords_maps_and_sets_can_be_called() {
+        all(&[
+            ("(:a {a: 1})", "1"),
+            ("(:b {a: 1})", "nil"),
+            ("(:b {a: 1} 0)", "0"),
+            ("(:a nil)", "nil"),
+            ("(:a 5)", "nil"),
+            ("({a: 1} :a)", "1"),
+            ("({a: 1} :b :none)", ":none"),
+            ("(#{:a :b} :a)", ":a"),
+            ("(#{:a :b} :c)", "nil"),
+            ("(#{[1]} (list 1))", "[1]"),
+            ("(def (twice f x) (f (f x))) (twice :a {a: {a: 5}})", "5"),
+            ("(def (pick m) (:a m)) (pick {a: 7})", "7"),
+            ("(:a)", "error: :a takes 1 to 2 arguments, got 0"),
+            ("({} 1 2 3)", "error: {} takes 1 to 2 arguments, got 3"),
+            ("(#{} 1 2)", "error: #{} takes 1 argument, got 2"),
+            ("([1 2] 0)", "error: [1 2] is not a function"),
+        ]);
+    }
+
+    #[test]
     fn fields_are_read_with_dots() {
         all(&[
             (
