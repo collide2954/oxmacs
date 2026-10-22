@@ -31,6 +31,8 @@ pub enum Kind {
     Map,
     MapNode,
     Set,
+    RecordType,
+    Record,
 }
 
 impl Value {

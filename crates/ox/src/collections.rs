@@ -3,6 +3,7 @@ use crate::heap::{Heap, HeapFull};
 use crate::isolate::Isolate;
 use crate::map::Map;
 use crate::print;
+use crate::record::Record;
 use crate::value::Value;
 use crate::vector::Vector;
 
@@ -142,6 +143,41 @@ fn contains(heap: &Heap, collection: Value, key: Value) -> Result<Value, Error> 
     Ok(Value::Bool(map.get(heap, key).is_some()))
 }
 
+fn with(heap: &mut Heap, value: Value, pairs: &[Value]) -> Result<Value, Error> {
+    let Some(record) = heap.record_of(value).cloned() else {
+        return Err(expected(heap, "with", "a record", value));
+    };
+    if pairs.len() % 2 == 1 {
+        return Err(Error::new("with takes a record and field value pairs"));
+    }
+    let mut fields = record.fields.to_vec();
+    for pair in pairs.chunks(2) {
+        let [key, field] = pair else {
+            continue;
+        };
+        let slot = match key {
+            Value::Keyword(name) => record.slot(heap, *name),
+            _ => None,
+        };
+        let Some(place) = slot.and_then(|slot| fields.get_mut(slot)) else {
+            let name = match key {
+                Value::Keyword(name) => name.name().to_owned(),
+                other => print::write(heap, *other),
+            };
+            return Err(Error::new(format!(
+                "{} has no field {name}",
+                record.type_name(heap)
+            )));
+        };
+        *place = *field;
+    }
+    heap.record(Record {
+        kind: record.kind,
+        fields: fields.into(),
+    })
+    .map_err(full)
+}
+
 fn dissoc(heap: &mut Heap, collection: Value, keys: &[Value]) -> Result<Value, Error> {
     if collection == Value::Nil {
         return Ok(Value::Nil);
@@ -224,6 +260,12 @@ pub fn get(heap: &Heap, arguments: &[Value]) -> Value {
     let (Some(collection), Some(key)) = (arguments.first(), arguments.get(1)) else {
         return fallback;
     };
+    if let Some(record) = heap.record_of(*collection) {
+        let Value::Keyword(name) = key else {
+            return fallback;
+        };
+        return record.get(heap, *name).unwrap_or(fallback);
+    }
     if let Some(map) = heap.map_of(*collection) {
         return map.get(heap, *key).unwrap_or(fallback);
     }
@@ -281,6 +323,9 @@ fn conj(heap: &mut Heap, collection: Value, items: &[Value]) -> Result<Value, Er
 fn assoc(heap: &mut Heap, collection: Value, pairs: &[Value]) -> Result<Value, Error> {
     if pairs.len() % 2 == 1 {
         return Err(Error::new("assoc takes a collection and key value pairs"));
+    }
+    if heap.record_of(collection).is_some() {
+        return with(heap, collection, pairs);
     }
     let map = if collection == Value::Nil {
         Some(Map::EMPTY)
@@ -365,6 +410,12 @@ pub fn install(isolate: &mut Isolate) {
         contains(heap, arguments[0], arguments[1])
     });
     isolate.define_native("set", 1, Some(1), |heap, arguments| set(heap, arguments[0]));
+    isolate.define_native("with", 1, None, |heap, arguments| {
+        with(heap, arguments[0], &arguments[1..])
+    });
+    isolate.define_native("record?", 1, Some(1), |heap, arguments| {
+        Ok(Value::Bool(heap.record_of(arguments[0]).is_some()))
+    });
     isolate.define_native("set?", 1, Some(1), |heap, arguments| {
         Ok(Value::Bool(heap.set_of(arguments[0]).is_some()))
     });

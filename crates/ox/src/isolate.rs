@@ -639,6 +639,120 @@ mod tests {
     }
 
     #[test]
+    fn records_are_defined_built_and_read() {
+        let point = "(defrecord Point [x y])";
+        let full = "(defrecord Point [x y (z 0) {label nil}])";
+        all(&[
+            (point, "Point"),
+            (&format!("{point} Point"), "#<record Point>"),
+            (&format!("{point} (Point 1 2)"), "#Point{x: 1 y: 2}"),
+            (
+                &format!("{full} (Point 1 2)"),
+                "#Point{x: 1 y: 2 z: 0 label: nil}",
+            ),
+            (
+                &format!(r#"{full} (Point 1 2 3 label: "a")"#),
+                r#"#Point{x: 1 y: 2 z: 3 label: "a"}"#,
+            ),
+            (
+                "(defrecord Point [x (y (* x 2))]) (Point 3)",
+                "#Point{x: 3 y: 6}",
+            ),
+            (&format!("{point} (def p (Point 1 2)) (+ p.x p.y)"), "3"),
+            (&format!("{point} (:y (Point 1 2))"), "2"),
+            (&format!("{point} (get (Point 1 2) :x)"), "1"),
+            (&format!("{point} (get (Point 1 2) :w :none)"), ":none"),
+            (&format!("{point} (record? (Point 1 2))"), "true"),
+            ("(record? {x: 1})", "false"),
+            (
+                &format!("{point} (Point 1)"),
+                "error: Point takes 2 arguments, got 1",
+            ),
+            (
+                &format!("{point} (def p (Point 1 2)) p.z"),
+                "error: Point has no field z",
+            ),
+            (
+                "(defrecord Point [x & more])",
+                "error: Records have no rest field",
+            ),
+            (
+                "(defrecord Point x)",
+                "error: defrecord takes a name and a field vector",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn records_change_by_copying() {
+        let point = "(defrecord Point [x y])";
+        all(&[
+            (
+                &format!("{point} (with (Point 1 2) :x 10)"),
+                "#Point{x: 10 y: 2}",
+            ),
+            (
+                &format!("{point} (with (Point 1 2) :x 10 :y 20)"),
+                "#Point{x: 10 y: 20}",
+            ),
+            (
+                &format!("{point} (assoc (Point 1 2) :y 5)"),
+                "#Point{x: 1 y: 5}",
+            ),
+            (
+                &format!("{point} (def p (Point 1 2)) (with p :x 10) p"),
+                "#Point{x: 1 y: 2}",
+            ),
+            (
+                &format!("{point} (with (Point 1 2) :color :red)"),
+                "error: Point has no field color",
+            ),
+            (
+                &format!("{point} (assoc (Point 1 2) :color :red)"),
+                "error: Point has no field color",
+            ),
+            (
+                &format!("{point} (with (Point 1 2) :x)"),
+                "error: with takes a record and field value pairs",
+            ),
+            (
+                "(with {a: 1} :a 2)",
+                "error: with expects a record, got {a: 1}",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn records_are_equal_by_type_and_fields() {
+        let point = "(defrecord Point [x y])";
+        all(&[
+            (&format!("{point} (= (Point 1 2) (Point 1 2))"), "true"),
+            (&format!("{point} (= (Point 1 2) (Point 1 3))"), "false"),
+            (&format!("{point} (= (Point 1 2) {{x: 1 y: 2}})"), "false"),
+            (
+                &format!("{point} (defrecord Pair [x y]) (= (Point 1 2) (Pair 1 2))"),
+                "false",
+            ),
+            (
+                &format!("{point} (= (Point [1] 2) (Point (list 1) 2))"),
+                "true",
+            ),
+            (
+                &format!("{point} (= (hash (Point 1 2)) (hash (Point 1 2)))"),
+                "true",
+            ),
+            (
+                &format!("{point} (= (hash (Point 1 2)) (hash [1 2]))"),
+                "false",
+            ),
+            (
+                &format!("{point} (get {{(Point 1 2) :found}} (Point 1 2))"),
+                ":found",
+            ),
+        ]);
+    }
+
+    #[test]
     fn keywords_maps_and_sets_can_be_called() {
         all(&[
             ("(:a {a: 1})", "1"),

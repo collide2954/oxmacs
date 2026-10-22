@@ -59,6 +59,16 @@ pub enum Op {
         from: Register,
         name: Sym,
     },
+    MakeRecord {
+        to: Register,
+        record: u32,
+        base: Register,
+        count: u16,
+    },
+    DefineRecord {
+        record: u32,
+        constructor: Register,
+    },
     CellGet {
         to: Register,
         cell: Register,

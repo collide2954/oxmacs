@@ -2,6 +2,7 @@ use std::fmt::Write as _;
 
 use crate::heap::Heap;
 use crate::map::Map;
+use crate::record::Record;
 use crate::value::Value;
 use crate::vector::Vector;
 
@@ -46,6 +47,10 @@ fn write_into(heap: &Heap, value: Value, out: &mut String) {
                 map(heap, entries, out);
             } else if let Some(items) = heap.set_of(value) {
                 set(heap, items, out);
+            } else if let Some(fields) = heap.record_of(value) {
+                record(heap, fields, out);
+            } else if let Some(kind) = heap.record_type_of(value) {
+                let _ = write!(out, "#<record {}>", kind.name.name());
             } else if let Some(native) = heap.native_of(value) {
                 let _ = write!(out, "#<native {}>", native.name.name());
             } else if let Some(closure) = heap.closure_of(value) {
@@ -167,6 +172,24 @@ fn set(heap: &Heap, set: Map, out: &mut String) {
             out.push(' ');
         }
         write_into(heap, item, out);
+    }
+    out.push('}');
+}
+
+fn record(heap: &Heap, record: &Record, out: &mut String) {
+    out.push('#');
+    out.push_str(record.type_name(heap));
+    out.push('{');
+    let names: &[_] = heap
+        .record_type_of(record.kind)
+        .map_or(&[], |kind| &kind.fields);
+    for (index, (name, value)) in names.iter().zip(&record.fields).enumerate() {
+        if index > 0 {
+            out.push(' ');
+        }
+        out.push_str(name.name());
+        out.push_str(": ");
+        write_into(heap, *value, out);
     }
     out.push('}');
 }

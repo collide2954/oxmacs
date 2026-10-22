@@ -6,6 +6,7 @@ use crate::bytecode::{Arity, Capture, Code, Op, Register};
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::reader::{Datum, Syntax};
+use crate::record::RecordType;
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -78,6 +79,12 @@ fn assigns(form: &Syntax, name: &str) -> bool {
         }
         _ => false,
     }
+}
+
+#[derive(Clone, Copy)]
+enum Body<'s> {
+    Forms(&'s [Syntax]),
+    Record { record: Value, fields: u16 },
 }
 
 #[derive(Default)]
@@ -351,6 +358,7 @@ impl Compiler<'_> {
             "let" => Some(self.binding(rest, target, span, tail)),
             "set!" => Some(self.assign(rest, target, span)),
             "." => Some(self.field(rest, target, span)),
+            "defrecord" => Some(self.record(rest, target, span)),
             _ => None,
         }
     }
@@ -386,11 +394,66 @@ impl Compiler<'_> {
                     return Err(malformed());
                 };
                 let name = Sym::intern(name);
-                self.lambda(Some(name), parameters, body, target, span)?;
+                self.lambda(Some(name), parameters, Body::Forms(body), target, span)?;
                 name
             }
             _ => return Err(malformed()),
         };
+        self.emit(Op::DefineGlobal { name, from: target }, span);
+        self.load(Value::Symbol(name), target, span)
+    }
+
+    fn record(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let [
+            Syntax {
+                datum: Datum::Symbol(name),
+                ..
+            },
+            Syntax {
+                datum: Datum::Vector(fields),
+                ..
+            },
+        ] = parts
+        else {
+            return Err(Error::at(span, "defrecord takes a name and a field vector"));
+        };
+        let parameters = parse_parameters(fields)?;
+        if parameters.rest.is_some() {
+            return Err(Error::at(span, "Records have no rest field"));
+        }
+        let names: Box<[Sym]> = parameters
+            .required
+            .iter()
+            .copied()
+            .chain(parameters.optional.iter().map(|(field, _)| *field))
+            .chain(parameters.keywords.iter().map(|(field, _)| *field))
+            .map(Sym::intern)
+            .collect();
+        let count = u16::try_from(names.len())
+            .map_err(|_| Error::at(span, "This record has too many fields"))?;
+        let name = Sym::intern(name);
+        let record = self
+            .heap
+            .record_type(RecordType {
+                name,
+                fields: names,
+                constructor: Value::Nil,
+            })
+            .map_err(|full| Error::at(span, full.to_string()))?;
+        let body = Body::Record {
+            record,
+            fields: count,
+        };
+        self.lambda(Some(name), fields, body, target, span)?;
+        let index = self.constant(record, span)?;
+        self.emit(
+            Op::DefineRecord {
+                record: index,
+                constructor: target,
+            },
+            span,
+        );
+        self.load(record, target, span)?;
         self.emit(Op::DefineGlobal { name, from: target }, span);
         self.load(Value::Symbol(name), target, span)
     }
@@ -519,18 +582,41 @@ impl Compiler<'_> {
         else {
             return Err(Error::at(span, "fn takes a parameter vector and a body"));
         };
-        self.lambda(None, parameters, body, target, span)
+        self.lambda(None, parameters, Body::Forms(body), target, span)
+    }
+
+    fn body(&mut self, body: Body<'_>, result: Register, span: Span) -> Result<(), Error> {
+        match body {
+            Body::Forms(forms) => self.sequence(forms, result, span, true),
+            Body::Record { record, fields } => {
+                let index = self.constant(record, span)?;
+                self.emit(
+                    Op::MakeRecord {
+                        to: result,
+                        record: index,
+                        base: 0,
+                        count: fields,
+                    },
+                    span,
+                );
+                Ok(())
+            }
+        }
     }
 
     fn lambda(
         &mut self,
         name: Option<Sym>,
         parameters: &[Syntax],
-        body: &[Syntax],
+        body: Body<'_>,
         target: Register,
         span: Span,
     ) -> Result<(), Error> {
         let parameters = parse_parameters(parameters)?;
+        let forms = match body {
+            Body::Forms(forms) => forms,
+            Body::Record { .. } => &[],
+        };
         let parent = std::mem::take(&mut self.current);
         self.outer.push(parent);
         self.current.code.name = name;
@@ -554,7 +640,7 @@ impl Compiler<'_> {
         let mut registers = Vec::new();
         for (parameter, _) in &order {
             let register = self.reserve(1, span)?;
-            let boxed = assigned_in(body, parameter);
+            let boxed = assigned_in(forms, parameter);
             self.current.locals.push(Local {
                 name: Sym::intern(parameter),
                 register,
@@ -595,7 +681,7 @@ impl Compiler<'_> {
             }
         }
         let result = self.reserve(1, span)?;
-        self.sequence(body, result, span, true)?;
+        self.body(body, result, span)?;
         self.emit(Op::Return { from: result }, span);
         let parent = self
             .outer

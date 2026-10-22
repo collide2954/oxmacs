@@ -7,6 +7,7 @@ use num_bigint::BigInt;
 use crate::bytecode::Code;
 use crate::map::{Map, Node};
 use crate::native::Native;
+use crate::record::{Record, RecordType};
 use crate::value::{Kind, Ref, Value};
 use crate::vector::Vector;
 
@@ -88,6 +89,8 @@ pub struct Heap {
     maps: Arena<Map>,
     map_nodes: Arena<Node>,
     sets: Arena<Map>,
+    record_types: Arena<RecordType>,
+    records: Arena<Record>,
 }
 
 fn reference(value: Value, kind: Kind) -> Option<u32> {
@@ -259,6 +262,40 @@ impl Heap {
 
     pub fn set_of(&self, value: Value) -> Option<Map> {
         self.sets.get(reference(value, Kind::Set)?).copied()
+    }
+
+    pub fn record_type(&mut self, kind: RecordType) -> Result<Value, HeapFull> {
+        let index = self.record_types.alloc(kind)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::RecordType,
+            index,
+        }))
+    }
+
+    pub fn record_type_of(&self, value: Value) -> Option<&RecordType> {
+        self.record_types.get(reference(value, Kind::RecordType)?)
+    }
+
+    pub fn set_constructor(&mut self, kind: Value, constructor: Value) -> bool {
+        let Some(found) =
+            reference(kind, Kind::RecordType).and_then(|index| self.record_types.get_mut(index))
+        else {
+            return false;
+        };
+        found.constructor = constructor;
+        true
+    }
+
+    pub fn record(&mut self, record: Record) -> Result<Value, HeapFull> {
+        let index = self.records.alloc(record)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Record,
+            index,
+        }))
+    }
+
+    pub fn record_of(&self, value: Value) -> Option<&Record> {
+        self.records.get(reference(value, Kind::Record)?)
     }
 
     pub fn list(

@@ -12,6 +12,7 @@ pub mod native;
 mod number;
 pub mod print;
 pub mod reader;
+mod record;
 pub mod span;
 pub mod symbol;
 pub mod value;

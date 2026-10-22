@@ -9,6 +9,7 @@ use crate::heap::{Closure, Heap};
 use crate::map::Map;
 use crate::native::arguments;
 use crate::print;
+use crate::record::Record;
 use crate::symbol::Sym;
 use crate::value::Value;
 use crate::vector::Vector;
@@ -169,6 +170,15 @@ fn field(heap: &Heap, value: Value, name: Sym) -> Result<Value, Error> {
     if let Some(map) = heap.map_of(value) {
         return Ok(map.get(heap, Value::Keyword(name)).unwrap_or(Value::Nil));
     }
+    if let Some(record) = heap.record_of(value) {
+        return record.get(heap, name).ok_or_else(|| {
+            Error::new(format!(
+                "{} has no field {}",
+                record.type_name(heap),
+                name.name()
+            ))
+        });
+    }
     Err(Error::new(format!(
         "{} has no field {}",
         print::write(heap, value),
@@ -308,6 +318,19 @@ impl Runtime {
                 let value = make_map(&mut self.heap, machine.items(base, count))?;
                 machine.set(to, value);
             }
+            Op::MakeRecord {
+                to,
+                record,
+                base,
+                count,
+            } => {
+                let value = self.make_record(machine, record, base, count)?;
+                machine.set(to, value);
+            }
+            Op::DefineRecord {
+                record,
+                constructor,
+            } => self.define_record(machine, record, constructor),
             Op::Field { to, from, name } => {
                 let value = field(&self.heap, machine.get(from), name)?;
                 machine.set(to, value);
@@ -349,7 +372,7 @@ impl Runtime {
     fn call(&mut self, machine: &mut Machine, base: u16, count: u16) -> Result<(), Error> {
         let slot = machine.base + usize::from(base);
         let count = usize::from(count);
-        let callee = machine.stack[slot];
+        let callee = self.constructor_of(machine.stack[slot]);
         let Some(function) = self
             .heap
             .closure_of(callee)
@@ -375,7 +398,7 @@ impl Runtime {
     ) -> Result<Option<Value>, Error> {
         let slot = machine.base + usize::from(base);
         let count = usize::from(count);
-        let callee = machine.stack[slot];
+        let callee = self.constructor_of(machine.stack[slot]);
         let Some(function) = self
             .heap
             .closure_of(callee)
@@ -412,6 +435,29 @@ impl Runtime {
             .and_then(|closure| closure.captured.get(usize::from(index)))
             .copied()
             .ok_or_else(|| Error::new("A closure lost a captured variable"))
+    }
+
+    fn constructor_of(&self, callee: Value) -> Value {
+        self.heap
+            .record_type_of(callee)
+            .map_or(callee, |kind| kind.constructor)
+    }
+
+    fn make_record(
+        &mut self,
+        machine: &Machine,
+        record: u32,
+        base: u16,
+        count: u16,
+    ) -> Result<Value, Error> {
+        let kind = machine.code.constants[record as usize];
+        let fields = machine.items(base, count).into();
+        self.heap.record(Record { kind, fields }).map_err(full)
+    }
+
+    fn define_record(&mut self, machine: &Machine, record: u32, constructor: u16) {
+        let kind = machine.code.constants[record as usize];
+        self.heap.set_constructor(kind, machine.get(constructor));
     }
 
     fn call_native(&mut self, callee: Value, arguments: &[Value]) -> Result<Value, Error> {
