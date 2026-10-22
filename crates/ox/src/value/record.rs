@@ -2,11 +2,19 @@ use crate::heap::Heap;
 use crate::symbol::Sym;
 use crate::value::Value;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Family {
+    Plain,
+    Error,
+    AnyError,
+}
+
 #[derive(Debug, Clone)]
 pub struct RecordType {
     pub name: Sym,
     pub fields: Box<[Sym]>,
     pub constructor: Value,
+    pub family: Family,
 }
 
 #[derive(Debug, Clone)]

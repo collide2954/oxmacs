@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::heap::{Heap, HeapFull};
 use crate::isolate::Isolate;
 use crate::value::Value;
@@ -20,6 +20,7 @@ fn expected(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
         "{name} expects {what}, got {}",
         print::write(heap, value)
     ))
+    .of(ErrorKind::Type)
 }
 
 fn out_of_range(index: i64, kind: &str, count: usize, unit: &str) -> Error {
@@ -27,6 +28,7 @@ fn out_of_range(index: i64, kind: &str, count: usize, unit: &str) -> Error {
     Error::new(format!(
         "Index {index} is out of range for a {kind} of {count} {unit}{plural}"
     ))
+    .of(ErrorKind::Range)
 }
 
 fn index(heap: &Heap, name: &str, value: Value) -> Result<i64, Error> {

@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::heap::{Heap, HeapFull};
 use crate::isolate::Isolate;
 use crate::value::Value;
@@ -88,9 +88,9 @@ pub fn install(isolate: &mut Isolate) {
         ))
     });
     isolate.define_native("#no-match", 1, Some(1), |heap, arguments| {
-        Err(Error::new(format!(
-            "No match for {}",
-            print::write(heap, arguments[0])
-        )))
+        Err(
+            Error::new(format!("No match for {}", print::write(heap, arguments[0])))
+                .of(ErrorKind::NoMatch),
+        )
     });
 }

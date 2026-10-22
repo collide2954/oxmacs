@@ -1,3 +1,10 @@
+(deferror error [])
+(deferror type-error [])
+(deferror arity-error [])
+(deferror name-error [])
+(deferror range-error [])
+(deferror zero-division-error [])
+(deferror no-match-error [])
 (def (identity x) x)
 
 (def (constantly x)
@@ -166,3 +173,6 @@
 (defmacro defrules [name literals & rules]
   `(defmacro ~name [& form]
      (expand-rules '~name '~literals '~(vec rules) form)))
+
+(defmacro maybe [form]
+  `(try ~form (catch error e nil)))

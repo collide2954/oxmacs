@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::value::Value;
@@ -38,9 +38,9 @@ fn reduce(
     step: Step,
 ) -> Result<Value, Error> {
     let Some((first, rest)) = arguments.split_first() else {
-        return Err(Error::new(format!(
-            "{name} takes at least 1 argument, got 0"
-        )));
+        return Err(
+            Error::new(format!("{name} takes at least 1 argument, got 0")).of(ErrorKind::Arity),
+        );
     };
     let first = Number::of(heap, name, *first)?;
     if rest.is_empty() {

@@ -1,7 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
 
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -45,6 +45,6 @@ impl Native {
             Some(most) => format!("{} to {most} arguments", self.least),
             None => format!("at least {}", arguments(self.least)),
         };
-        Err(Error::new(format!("{name} takes {wanted}, got {count}")))
+        Err(Error::new(format!("{name} takes {wanted}, got {count}")).of(ErrorKind::Arity))
     }
 }

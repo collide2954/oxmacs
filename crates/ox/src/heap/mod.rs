@@ -11,7 +11,7 @@ use crate::read::Marks;
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::value::map::{Map, Node};
-use crate::value::record::{Record, RecordType};
+use crate::value::record::{Family, Record, RecordType};
 use crate::value::vector::Vector;
 use crate::value::{Kind, Ref, Value};
 
@@ -382,6 +382,16 @@ impl Heap {
             return false;
         };
         *slot = value;
+        true
+    }
+
+    pub fn set_family(&mut self, kind: Value, family: Family) -> bool {
+        let Some(found) =
+            reference(kind, Kind::RecordType).and_then(|index| self.record_types.get_mut(index))
+        else {
+            return false;
+        };
+        found.family = family;
         true
     }
 

@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::library::collections;
 use crate::native::arguments;
@@ -33,10 +33,10 @@ pub fn call_data(heap: &Heap, callee: Value, given: &[Value]) -> Result<Value, E
     } else if heap.set_of(callee).is_some() {
         1
     } else {
-        return Err(Error::new(format!(
-            "{} is not a function",
-            print::write(heap, callee)
-        )));
+        return Err(
+            Error::new(format!("{} is not a function", print::write(heap, callee)))
+                .of(ErrorKind::Type),
+        );
     };
     let Some(first) = given.first().filter(|_| given.len() <= most) else {
         let wanted = if most == 1 {
@@ -48,7 +48,8 @@ pub fn call_data(heap: &Heap, callee: Value, given: &[Value]) -> Result<Value, E
             "{} takes {wanted}, got {}",
             print::write(heap, callee),
             given.len()
-        )));
+        ))
+        .of(ErrorKind::Arity));
     };
     let fallback = given.get(1).copied().unwrap_or(Value::Nil);
     let lookup = if matches!(callee, Value::Keyword(_)) {
@@ -113,6 +114,15 @@ pub fn record_literal(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> 
         fields,
     })
     .map_err(full)
+}
+
+pub fn raised(heap: &Heap, value: Value) -> Error {
+    let message = heap
+        .record_of(value)
+        .and_then(|record| record.get(heap, Sym::intern("message")))
+        .and_then(|message| heap.text(message).map(str::to_owned))
+        .unwrap_or_else(|| format!("Raised {}", print::write(heap, value)));
+    Error::raised(message, value)
 }
 
 pub fn make_vector(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {

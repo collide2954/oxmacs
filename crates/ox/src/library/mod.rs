@@ -1,4 +1,5 @@
 pub(crate) mod collections;
+mod errors;
 mod numbers;
 mod patterns;
 mod rules;
@@ -6,7 +7,7 @@ mod types;
 
 use std::io::{self, Write};
 
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::value::Value;
@@ -45,6 +46,7 @@ fn not_an_atom(heap: &Heap, name: &str, value: Value) -> Error {
         "{name} expects an atom, got {}",
         print::write(heap, value)
     ))
+    .of(ErrorKind::Type)
 }
 
 fn all_equal(heap: &Heap, arguments: &[Value]) -> bool {
@@ -55,6 +57,7 @@ fn all_equal(heap: &Heap, arguments: &[Value]) -> bool {
 
 pub fn install(isolate: &mut Isolate) {
     numbers::install(isolate);
+    errors::install(isolate);
     patterns::install(isolate);
     rules::install(isolate);
     types::install(isolate);

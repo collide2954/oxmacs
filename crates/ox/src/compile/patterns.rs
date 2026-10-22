@@ -16,15 +16,15 @@ pub enum Mode {
     Bind,
 }
 
-enum Operand {
+pub(super) enum Operand {
     Register(Register),
     Value(Value),
 }
 
 pub struct Binder {
-    name: Sym,
-    marks: Marks,
-    register: Register,
+    pub(super) name: Sym,
+    pub(super) marks: Marks,
+    pub(super) register: Register,
 }
 
 pub struct Matching {
@@ -64,7 +64,7 @@ fn literal(heap: &mut Heap, syntax: &Syntax) -> Result<Value, Error> {
 }
 
 impl Compiler<'_> {
-    fn internal(
+    pub(super) fn internal(
         &mut self,
         name: &str,
         arguments: &[Operand],

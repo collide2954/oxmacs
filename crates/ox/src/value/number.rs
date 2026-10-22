@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use num_bigint::BigInt;
 use num_traits::{ToPrimitive, Zero};
 
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::value::Value;
 use crate::value::print;
@@ -40,6 +40,7 @@ impl Number {
                         "{name} expects numbers, got {}",
                         print::write(heap, other)
                     ))
+                    .of(ErrorKind::Type)
                 }),
         }
     }
@@ -102,14 +103,14 @@ impl Number {
 
     pub fn divide(&self, other: &Self) -> Result<Self, Error> {
         if other.is_zero() {
-            return Err(Error::new("Division by zero"));
+            return Err(Error::new("Division by zero").of(ErrorKind::ZeroDivision));
         }
         Ok(Self::Float(self.float() / other.float()))
     }
 
     pub fn floor_divide(&self, other: &Self) -> Result<Self, Error> {
         if other.is_zero() {
-            return Err(Error::new("Division by zero"));
+            return Err(Error::new("Division by zero").of(ErrorKind::ZeroDivision));
         }
         Ok(self.exact(
             other,

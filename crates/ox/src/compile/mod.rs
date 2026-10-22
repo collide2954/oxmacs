@@ -1,3 +1,4 @@
+mod errors;
 mod parameters;
 mod patterns;
 
@@ -16,7 +17,7 @@ use crate::read::{Datum, Marks, Syntax};
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::value::Value;
-use crate::value::record::RecordType;
+use crate::value::record::{Family, RecordType};
 
 pub fn compile(heap: &mut Heap, form: &Syntax) -> Result<Code, Error> {
     let mut compiler = Compiler {
@@ -299,7 +300,8 @@ impl Compiler<'_> {
         if let Some(
             Op::Jump { to: target }
             | Op::JumpUnless { to: target, .. }
-            | Op::JumpIfSupplied { to: target, .. },
+            | Op::JumpIfSupplied { to: target, .. }
+            | Op::PushHandler { to: target, .. },
         ) = self.current.code.ops.get_mut(jump)
         {
             *target = to;
@@ -329,6 +331,10 @@ impl Compiler<'_> {
             "quote" => Some(self.quote(rest, target, span)),
             "defmacro" => Some(self.macro_definition(rest, target, span)),
             "match" => Some(self.match_form(rest, target, span, tail)),
+            "try" => Some(self.try_form(rest, target, span)),
+            "deferror" => Some(self.error_definition(rest, target, span)),
+            "catch" => Some(Err(Error::at(span, "catch belongs inside try"))),
+            "finally" => Some(Err(Error::at(span, "finally belongs inside try"))),
             "unquote" => Some(Err(Error::at(
                 span,
                 "~ is only allowed inside a quasiquote",
@@ -402,6 +408,17 @@ impl Compiler<'_> {
         else {
             return Err(Error::at(span, "defrecord takes a name and a field vector"));
         };
+        self.define_record(name, fields, Family::Plain, target, span)
+    }
+
+    fn define_record(
+        &mut self,
+        name: &str,
+        fields: &[Syntax],
+        family: Family,
+        target: Register,
+        span: Span,
+    ) -> Result<(), Error> {
         let parameters = parse_parameters(fields)?;
         if parameters.rest.is_some() {
             return Err(Error::at(span, "Records have no rest field"));
@@ -423,6 +440,7 @@ impl Compiler<'_> {
                 name,
                 fields: names,
                 constructor: Value::Nil,
+                family,
             })
             .map_err(|full| Error::at(span, full.to_string()))?;
         let body = Body::Record {

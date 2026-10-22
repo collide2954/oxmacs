@@ -1,5 +1,5 @@
 use crate::bytecode::Code;
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::native::arguments;
 use crate::symbol::Sym;
@@ -28,7 +28,7 @@ pub fn arity_error(code: &Code, count: usize) -> Error {
     } else {
         arguments(required)
     };
-    Error::new(format!("{} takes {wanted}, got {count}", name(code)))
+    Error::new(format!("{} takes {wanted}, got {count}", name(code))).of(ErrorKind::Arity)
 }
 
 fn unknown_keyword(heap: &Heap, code: &Code, value: Value) -> Error {
@@ -37,6 +37,7 @@ fn unknown_keyword(heap: &Heap, code: &Code, value: Value) -> Error {
         name(code),
         print::write(heap, value)
     ))
+    .of(ErrorKind::Arity)
 }
 
 pub fn bind(heap: &mut Heap, code: &Code, arguments: &[Value]) -> Result<Binding, Error> {
@@ -96,7 +97,8 @@ pub fn bind(heap: &mut Heap, code: &Code, arguments: &[Value]) -> Result<Binding
                     "{} was given :{} without a value",
                     name(code),
                     keyword.name()
-                )));
+                ))
+                .of(ErrorKind::Arity));
             }
             [other, ..] => return Err(unknown_keyword(heap, code, *other)),
             [] => {}

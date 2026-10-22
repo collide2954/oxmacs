@@ -13,7 +13,7 @@ use crate::vm::build::{make_map, make_set, make_vector};
 
 const MAX_DEPTH: usize = 256;
 
-const SPECIAL: [&str; 14] = [
+const SPECIAL: [&str; 18] = [
     "if",
     "do",
     "def",
@@ -28,6 +28,10 @@ const SPECIAL: [&str; 14] = [
     "unquote",
     "unquote-splicing",
     "match",
+    "try",
+    "catch",
+    "finally",
+    "deferror",
 ];
 
 pub fn expand(runtime: &mut Runtime, form: &Syntax) -> Result<Syntax, Error> {
@@ -247,6 +251,8 @@ impl Expander<'_> {
             "defrecord" => self.record(form, items),
             "let" => self.binding(form, items),
             "match" => self.match_form(form, items),
+            "try" => self.try_form(form, items),
+            "deferror" => self.error_form(form, items),
             "." => {
                 let mut out = items.to_vec();
                 if let Some(object) = items.get(1) {
@@ -394,6 +400,40 @@ impl Expander<'_> {
             rebuilt(&items[1], Datum::Vector(expanded)),
         ];
         out.extend(self.all(&items[2..])?);
+        self.locals.truncate(saved);
+        Ok(rebuilt(form, Datum::List(out)))
+    }
+
+    fn try_form(&mut self, form: &Syntax, items: &[Syntax]) -> Result<Syntax, Error> {
+        let mut out = vec![items[0].clone()];
+        for item in &items[1..] {
+            let expanded = match &item.datum {
+                Datum::List(parts)
+                    if parts.len() >= 3 && parts.first().and_then(symbol) == Some("catch") =>
+                {
+                    let saved = self.locals.len();
+                    self.bind(&parts[2]);
+                    let mut clause = parts[..3].to_vec();
+                    clause.extend(self.all(&parts[3..])?);
+                    self.locals.truncate(saved);
+                    rebuilt(item, Datum::List(clause))
+                }
+                _ => self.form(item)?,
+            };
+            out.push(expanded);
+        }
+        Ok(rebuilt(form, Datum::List(out)))
+    }
+
+    fn error_form(&mut self, form: &Syntax, items: &[Syntax]) -> Result<Syntax, Error> {
+        let saved = self.locals.len();
+        let mut out = items.to_vec();
+        if let Some(fields) = items.get(2) {
+            out[2] = self.vector_parameters(fields)?;
+        }
+        if let Some(template) = items.get(3) {
+            out[3] = self.form(template)?;
+        }
         self.locals.truncate(saved);
         Ok(rebuilt(form, Datum::List(out)))
     }

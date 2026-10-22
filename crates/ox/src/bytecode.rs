@@ -110,6 +110,14 @@ pub enum Op {
         bit: u8,
         to: u32,
     },
+    PushHandler {
+        register: Register,
+        to: u32,
+    },
+    PopHandler,
+    Raise {
+        from: Register,
+    },
     Return {
         from: Register,
     },

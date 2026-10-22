@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::compile::compile;
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
 use crate::heap::{Heap, Rooted};
 use crate::library;
@@ -10,6 +10,7 @@ use crate::read;
 use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::print;
+use crate::value::record::Family;
 use crate::vm::Runtime;
 
 const PRELUDE: &str = include_str!("library/prelude/core.ox");
@@ -35,6 +36,19 @@ impl Isolate {
         isolate.runtime.apply = apply.unwrap_or(Value::Nil);
         if let Err(error) = isolate.eval(PRELUDE) {
             panic!("The Ox prelude failed to load: {error}");
+        }
+        let found: Vec<(ErrorKind, Value)> = ErrorKind::NAMES
+            .iter()
+            .filter_map(|(kind, name)| {
+                let value = isolate.runtime.globals.get(&Sym::intern(name))?;
+                Some((*kind, *value))
+            })
+            .collect();
+        for (kind, value) in found {
+            if kind == ErrorKind::Other {
+                isolate.runtime.heap.set_family(value, Family::AnyError);
+            }
+            isolate.runtime.error_types.insert(kind, value);
         }
         isolate
     }

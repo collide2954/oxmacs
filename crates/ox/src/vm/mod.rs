@@ -1,14 +1,16 @@
 pub(crate) mod bind;
 pub(crate) mod build;
 
-use build::{call_data, field, full, make_map, make_set, make_vector, no_field, record_literal};
+use build::{
+    call_data, field, full, make_map, make_set, make_vector, no_field, raised, record_literal,
+};
 
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::bytecode::{Capture, Code, Op};
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::heap::{Closure, Heap};
 use crate::library::collections;
 use crate::span::Span;
@@ -26,6 +28,7 @@ pub struct Runtime {
     pub field_scans: usize,
     pub apply: Value,
     pub macros: HashMap<Sym, Value>,
+    pub error_types: HashMap<ErrorKind, Value>,
     marks: u32,
 }
 
@@ -38,9 +41,16 @@ struct Frame {
     result: usize,
 }
 
+struct Handler {
+    frames: usize,
+    to: usize,
+    register: u16,
+}
+
 struct Machine {
     stack: Vec<Value>,
     frames: Vec<Frame>,
+    handlers: Vec<Handler>,
     code: Rc<Code>,
     closure: Value,
     missing: u64,
@@ -60,6 +70,7 @@ impl Machine {
                 base: 0,
                 result: 0,
             }],
+            handlers: Vec::new(),
             code: Rc::clone(entry),
             closure: Value::Nil,
             missing: 0,
@@ -149,6 +160,23 @@ impl Machine {
         self.pc = 0;
     }
 
+    fn unwind(&mut self) -> Option<Handler> {
+        while let Some(handler) = self.handlers.pop() {
+            if handler.frames == 0 || handler.frames > self.frames.len() {
+                continue;
+            }
+            self.frames.truncate(handler.frames);
+            let frame = self.frames.last()?;
+            self.code = Rc::clone(&frame.code);
+            self.closure = frame.closure;
+            self.missing = frame.missing;
+            self.base = frame.base;
+            self.pc = handler.to;
+            return Some(handler);
+        }
+        None
+    }
+
     fn leave(&mut self, value: Value) -> Option<Value> {
         let Some(finished) = self.frames.pop() else {
             return Some(value);
@@ -179,7 +207,14 @@ impl Runtime {
             match outcome {
                 Ok(Some(value)) => return Ok(value),
                 Ok(None) => {}
-                Err(error) => return Err(error.or_at(machine.code.spans[at])),
+                Err(error) => {
+                    let error = error.or_at(machine.code.spans[at]);
+                    let Some(handler) = machine.unwind() else {
+                        return Err(error);
+                    };
+                    let value = self.error_value(&error)?;
+                    machine.set(handler.register, value);
+                }
             }
         }
     }
@@ -191,11 +226,9 @@ impl Runtime {
                 machine.set(to, value);
             }
             Op::Global { to, name } => {
-                let value = self
-                    .globals
-                    .get(&name)
-                    .copied()
-                    .ok_or_else(|| Error::new(format!("{} is not defined", name.name())))?;
+                let value = self.globals.get(&name).copied().ok_or_else(|| {
+                    Error::new(format!("{} is not defined", name.name())).of(ErrorKind::Name)
+                })?;
                 machine.set(to, value);
             }
             Op::DefineMacro { name, from } => {
@@ -206,7 +239,9 @@ impl Runtime {
             }
             Op::SetGlobal { name, from } => {
                 let Some(slot) = self.globals.get_mut(&name) else {
-                    return Err(Error::new(format!("{} is not defined", name.name())));
+                    return Err(
+                        Error::new(format!("{} is not defined", name.name())).of(ErrorKind::Name)
+                    );
                 };
                 *slot = machine.get(from);
             }
@@ -230,7 +265,10 @@ impl Runtime {
             | Op::MakeRecord { .. }
             | Op::MakeRecordFrom { .. }
             | Op::DefineRecord { .. }
-            | Op::Field { .. } => self.build(machine, op)?,
+            | Op::Field { .. }
+            | Op::PushHandler { .. }
+            | Op::PopHandler
+            | Op::Raise { .. } => self.build(machine, op)?,
             Op::CellGet { to, cell } => {
                 let value = self
                     .heap
@@ -295,6 +333,19 @@ impl Runtime {
                 self.define_record(machine, record, constructor);
                 return Ok(());
             }
+            Op::PushHandler { register, to } => {
+                machine.handlers.push(Handler {
+                    frames: machine.frames.len(),
+                    to: to as usize,
+                    register,
+                });
+                return Ok(());
+            }
+            Op::PopHandler => {
+                machine.handlers.pop();
+                return Ok(());
+            }
+            Op::Raise { from } => return Err(raised(&self.heap, machine.get(from))),
             _ => return Ok(()),
         };
         machine.set(to, value);
@@ -410,8 +461,30 @@ impl Runtime {
     fn base_roots(&self) -> Vec<Value> {
         let mut roots: Vec<Value> = self.globals.values().copied().collect();
         roots.extend(self.macros.values().copied());
+        roots.extend(self.error_types.values().copied());
         roots.push(self.apply);
         roots
+    }
+
+    fn error_value(&mut self, error: &Error) -> Result<Value, Error> {
+        if let Some(value) = error.raised {
+            return Ok(value);
+        }
+        let message = self.heap.string(&error.message).map_err(full)?;
+        let kind = self
+            .error_types
+            .get(&error.kind)
+            .or_else(|| self.error_types.get(&ErrorKind::Other))
+            .copied();
+        let Some(kind) = kind else {
+            return Ok(message);
+        };
+        self.heap
+            .record(Record {
+                kind,
+                fields: Box::new([message, Value::Nil]),
+            })
+            .map_err(full)
     }
 
     pub fn fresh_mark(&mut self) -> u32 {
@@ -466,9 +539,10 @@ impl Runtime {
         let mut count = count;
         while self.apply != Value::Nil && machine.stack[slot] == self.apply {
             if count < 2 {
-                return Err(Error::new(format!(
-                    "apply takes at least 2 arguments, got {count}"
-                )));
+                return Err(
+                    Error::new(format!("apply takes at least 2 arguments, got {count}"))
+                        .of(ErrorKind::Arity),
+                );
             }
             let items =
                 collections::sequence(&mut self.heap, "apply", machine.stack[slot + count])?;
