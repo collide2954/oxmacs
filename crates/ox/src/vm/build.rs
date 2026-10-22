@@ -121,6 +121,9 @@ pub fn make_vector(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
 }
 
 pub fn make_map(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
+    if items.len() % 2 == 1 {
+        return Err(Error::new("This map has a key without a value"));
+    }
     let mut map = Map::EMPTY;
     for pair in items.chunks(2) {
         let [key, value] = pair else {

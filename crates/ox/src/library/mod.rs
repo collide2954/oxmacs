@@ -1,5 +1,6 @@
 pub(crate) mod collections;
 mod numbers;
+mod patterns;
 mod rules;
 mod types;
 
@@ -54,6 +55,7 @@ fn all_equal(heap: &Heap, arguments: &[Value]) -> bool {
 
 pub fn install(isolate: &mut Isolate) {
     numbers::install(isolate);
+    patterns::install(isolate);
     rules::install(isolate);
     types::install(isolate);
     isolate.define_native("=", 1, None, |heap, arguments| {

@@ -33,7 +33,7 @@ pub fn parse_parameters(list: &[Syntax]) -> Result<Parameters<'_>, Error> {
                     ));
                 }
             }
-            Datum::Symbol(_) => {
+            Datum::Symbol(_) | Datum::Vector(_) | Datum::Record(..) => {
                 if !found.optional.is_empty() || found.rest.is_some() {
                     return Err(at("Required parameters come before optional ones"));
                 }

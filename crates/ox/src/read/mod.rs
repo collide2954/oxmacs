@@ -394,18 +394,8 @@ impl<'a> Reader<'a> {
             Opener::List => Datum::List(items),
             Opener::Vector => Datum::Vector(items),
             Opener::Set => Datum::Set(items),
-            Opener::Map => {
-                if items.len() % 2 == 1 {
-                    self.error_at(span, "This map has a key without a value");
-                }
-                Datum::Map(items)
-            }
-            Opener::Record(name) => {
-                if items.len() % 2 == 1 {
-                    self.error_at(span, "This record has a field without a value");
-                }
-                Datum::Record(name, items)
-            }
+            Opener::Map => Datum::Map(items),
+            Opener::Record(name) => Datum::Record(name, items),
         };
         self.place(Syntax {
             datum,
@@ -900,13 +890,8 @@ mod tests {
             errors("#Point{x: 1"),
             [("This #Point{ is never closed".to_owned(), Span::new(0, 7))]
         );
-        assert_eq!(
-            errors("#Point{x:}"),
-            [(
-                "This record has a field without a value".to_owned(),
-                Span::new(0, 10)
-            )]
-        );
+        assert_eq!(errors("#Point{x y z}"), []);
+        assert_eq!(shapes("#Point{x y z}"), ["#Point{x y z}"]);
         assert_eq!(
             errors("#Point"),
             [("Unknown form #Point".to_owned(), Span::new(0, 6))]
@@ -914,13 +899,11 @@ mod tests {
     }
 
     #[test]
-    fn maps_need_a_value_for_every_key() {
+    fn maps_with_an_odd_number_of_items_still_read() {
+        assert_eq!(errors("{a: 1 b:} {name age city}"), []);
         assert_eq!(
-            errors("{a: 1 b:}"),
-            [(
-                "This map has a key without a value".to_owned(),
-                Span::new(0, 9)
-            )]
+            shapes("{a: 1 b:} {name age city}"),
+            ["{:a 1 :b}", "{name age city}"]
         );
     }
 

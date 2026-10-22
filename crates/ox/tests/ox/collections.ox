@@ -168,3 +168,7 @@
 (into {} [[:a 1]]) ;=> {a: 1}
 (min 3 1 2) ;=> 1
 (max 3 1 2.5) ;=> 3
+
+;; map and record literals need a value for every key
+{a: 1 b:} ;! This map has a key without a value
+(defrecord P [x y]) #P{x: 1 y:} ;! This record literal has a field without a value

@@ -1,3 +1,4 @@
+pub(crate) mod patterns;
 pub(crate) mod quote;
 
 use crate::error::Error;
@@ -12,7 +13,7 @@ use crate::vm::build::{make_map, make_set, make_vector};
 
 const MAX_DEPTH: usize = 256;
 
-const SPECIAL: [&str; 13] = [
+const SPECIAL: [&str; 14] = [
     "if",
     "do",
     "def",
@@ -26,6 +27,7 @@ const SPECIAL: [&str; 13] = [
     "quasiquote",
     "unquote",
     "unquote-splicing",
+    "match",
 ];
 
 pub fn expand(runtime: &mut Runtime, form: &Syntax) -> Result<Syntax, Error> {
@@ -85,6 +87,18 @@ fn quote_syntax(heap: &mut Heap, syntax: &Syntax) -> Result<Value, Error> {
         Datum::Vector(items) => {
             let items = values(heap, items)?;
             make_vector(heap, &items).map_err(|error| error.or_at(span))
+        }
+        Datum::Map(items) if items.len() % 2 == 1 => {
+            let mut pairs = Vec::with_capacity(items.len() + 1);
+            for entry in patterns::entries(items)? {
+                let key = match entry.key {
+                    patterns::Key::Shorthand(name) => Value::keyword(name),
+                    patterns::Key::Literal(key) => quote_syntax(heap, key)?,
+                };
+                pairs.push(key);
+                pairs.push(quote_syntax(heap, entry.pattern)?);
+            }
+            make_map(heap, &pairs).map_err(|error| error.or_at(span))
         }
         Datum::Map(items) => {
             let items = values(heap, items)?;
@@ -232,6 +246,7 @@ impl Expander<'_> {
             "def" | "defmacro" => self.definition(form, items),
             "defrecord" => self.record(form, items),
             "let" => self.binding(form, items),
+            "match" => self.match_form(form, items),
             "." => {
                 let mut out = items.to_vec();
                 if let Some(object) = items.get(1) {
@@ -264,6 +279,12 @@ impl Expander<'_> {
                     }
                     _ => out.push(item.clone()),
                 },
+                Datum::Vector(_) | Datum::Record(..) => {
+                    for binder in patterns::names(item) {
+                        self.bind(binder);
+                    }
+                    out.push(item.clone());
+                }
                 Datum::Map(pairs) => {
                     let mut expanded = Vec::with_capacity(pairs.len());
                     for pair in pairs.chunks(2) {
@@ -360,7 +381,9 @@ impl Expander<'_> {
         for pair in bindings.chunks(2) {
             if let [name, value] = pair {
                 let value = self.form(value)?;
-                self.bind(name);
+                for binder in patterns::names(name) {
+                    self.bind(binder);
+                }
                 expanded.extend([name.clone(), value]);
             } else {
                 expanded.extend(pair.iter().cloned());
@@ -372,6 +395,31 @@ impl Expander<'_> {
         ];
         out.extend(self.all(&items[2..])?);
         self.locals.truncate(saved);
+        Ok(rebuilt(form, Datum::List(out)))
+    }
+
+    fn match_form(&mut self, form: &Syntax, items: &[Syntax]) -> Result<Syntax, Error> {
+        let mut out = vec![items[0].clone()];
+        if let Some(scrutinee) = items.get(1) {
+            out.push(self.form(scrutinee)?);
+        }
+        for clause in items.get(2..).unwrap_or_default() {
+            let Datum::Vector(parts) = &clause.datum else {
+                out.push(clause.clone());
+                continue;
+            };
+            let saved = self.locals.len();
+            let mut expanded = Vec::with_capacity(parts.len());
+            if let Some((pattern, rest)) = parts.split_first() {
+                for binder in patterns::names(pattern) {
+                    self.bind(binder);
+                }
+                expanded.push(pattern.clone());
+                expanded.extend(self.all(rest)?);
+            }
+            self.locals.truncate(saved);
+            out.push(rebuilt(clause, Datum::Vector(expanded)));
+        }
         Ok(rebuilt(form, Datum::List(out)))
     }
 

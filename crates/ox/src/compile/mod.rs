@@ -1,12 +1,15 @@
 mod parameters;
+mod patterns;
 
-use parameters::parse_parameters;
+use parameters::{Parameters, parse_parameters};
+use patterns::{Matching, Mode};
 
 use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::bytecode::{Arity, Capture, Code, Op, Register};
 use crate::error::Error;
+use crate::expand::patterns::is_pattern;
 use crate::expand::quote::datum_value;
 use crate::heap::Heap;
 use crate::read::{Datum, Marks, Syntax};
@@ -96,6 +99,19 @@ enum Body<'s> {
 
 fn assigned_in(forms: &[Syntax], name: &str) -> bool {
     forms.iter().any(|form| assigns(form, name))
+}
+
+fn arity(parameters: &Parameters<'_>) -> Arity {
+    Arity {
+        required: u16::try_from(parameters.required.len()).unwrap_or(u16::MAX),
+        optional: u16::try_from(parameters.optional.len()).unwrap_or(u16::MAX),
+        rest: parameters.rest.is_some(),
+        keywords: parameters
+            .keywords
+            .iter()
+            .map(|(name, _)| Sym::intern(text(name)))
+            .collect(),
+    }
 }
 
 fn text(syntax: &Syntax) -> &str {
@@ -312,6 +328,7 @@ impl Compiler<'_> {
             "defrecord" => Some(self.record(rest, target, span)),
             "quote" => Some(self.quote(rest, target, span)),
             "defmacro" => Some(self.macro_definition(rest, target, span)),
+            "match" => Some(self.match_form(rest, target, span, tail)),
             "unquote" => Some(Err(Error::at(
                 span,
                 "~ is only allowed inside a quasiquote",
@@ -557,14 +574,21 @@ impl Compiler<'_> {
         let top = self.current.top;
         let locals = self.current.locals.len();
         for (index, pair) in bindings.chunks(2).enumerate() {
-            let [name, value] = pair else {
+            let [binder, value] = pair else {
                 continue;
             };
-            let binder = name;
+            let scope = &bindings[(index + 1) * 2..];
+            if is_pattern(binder) {
+                let register = self.reserve(1, span)?;
+                self.expression(value, register)?;
+                let mut matching = Matching::new(Mode::Bind);
+                self.pattern(binder, register, &mut matching)?;
+                self.bind_names(matching.binders, &[scope, body], span);
+                continue;
+            }
             let Datum::Symbol(name) = &binder.datum else {
                 return Err(Error::at(binder.span, "Bindings must be names"));
             };
-            let scope = &bindings[(index + 1) * 2..];
             let boxed = assigned_in(scope, name) || assigned_in(body, name);
             let register = self.reserve(1, span)?;
             self.expression(value, register)?;
@@ -665,8 +689,14 @@ impl Compiler<'_> {
                 .map(|(name, default)| (*name, Some(*default))),
         );
         let mut registers = Vec::new();
+        let mut destructured = Vec::new();
         for (parameter, _) in &order {
             let register = self.reserve(1, span)?;
+            if is_pattern(parameter) {
+                destructured.push((*parameter, register));
+                registers.push((register, false));
+                continue;
+            }
             let boxed = assigned_in(forms, text(parameter));
             self.current.locals.push(Local {
                 name: Sym::intern(text(parameter)),
@@ -676,16 +706,8 @@ impl Compiler<'_> {
             });
             registers.push((register, boxed));
         }
-        self.current.code.arity = Arity {
-            required: u16::try_from(parameters.required.len()).unwrap_or(u16::MAX),
-            optional: u16::try_from(parameters.optional.len()).unwrap_or(u16::MAX),
-            rest: parameters.rest.is_some(),
-            keywords: parameters
-                .keywords
-                .iter()
-                .map(|(name, _)| Sym::intern(text(name)))
-                .collect(),
-        };
+        self.current.code.arity = arity(&parameters);
+
         let first_default = parameters.required.len();
         let rest_slot = parameters
             .rest
@@ -707,6 +729,11 @@ impl Compiler<'_> {
             if boxed {
                 self.emit(Op::MakeCell { register }, span);
             }
+        }
+        for (parameter, register) in destructured {
+            let mut matching = Matching::new(Mode::Bind);
+            self.pattern(parameter, register, &mut matching)?;
+            self.bind_names(matching.binders, &[forms], span);
         }
         let result = self.reserve(1, span)?;
         self.body(body, result, span)?;
@@ -807,6 +834,12 @@ impl Compiler<'_> {
         target: Register,
         span: Span,
     ) -> Result<(), Error> {
+        if items.len() % 2 == 1 {
+            return Err(Error::at(
+                span,
+                "This record literal has a field without a value",
+            ));
+        }
         let count = u16::try_from(items.len() + 1)
             .map_err(|_| Error::at(span, "This literal has too many items"))?;
         let base = self.reserve(items.len() + 1, span)?;
@@ -841,6 +874,9 @@ impl Compiler<'_> {
     }
 
     fn map(&mut self, items: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        if items.len() % 2 == 1 {
+            return Err(Error::at(span, "This map has a key without a value"));
+        }
         let (base, count) = self.gather(items, span)?;
         self.emit(
             Op::MakeMap {
