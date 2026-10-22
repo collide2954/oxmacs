@@ -1,7 +1,7 @@
 mod update;
 mod view;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use iced::animation::Easing;
 use iced::theme::Mode;
@@ -177,6 +177,11 @@ impl App {
         if visits.is_empty() && splash {
             self.editor.about();
         }
+    }
+
+    pub fn start_ox(&mut self, home: Option<&Path>) -> Task<Message> {
+        self.ox.start(&mut self.editor, home);
+        self.pending_effects()
     }
 
     pub fn editor(&self) -> &Editor {
@@ -425,6 +430,21 @@ mod tests {
             app.editor().message(),
             Some("Moved weather-location to [weather] in config.toml")
         );
+    }
+
+    #[test]
+    fn ox_starts_from_init_ox_in_the_home_folder() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("init.ox"),
+            r#"(defcommand greet "Say hello" (message "Hello"))"#,
+        )
+        .unwrap();
+        let mut app = App::default();
+
+        let _ = app.start_ox(Some(home.path()));
+
+        assert!(app.editor().command_named("greet").is_some());
     }
 
     #[derive(Debug)]

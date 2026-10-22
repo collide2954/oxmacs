@@ -160,3 +160,55 @@ fn reloading_a_module_redefines_it_in_place() {
     assert_eq!(evaluated(&mut isolate, "(counter/greet)"), "\"hi\"");
     assert_eq!(evaluated(&mut isolate, "@counter/hits"), "1");
 }
+
+#[test]
+fn modules_can_come_from_memory_ahead_of_files() {
+    let (_dir, mut isolate) = with_root(&[("kit/words.ox", "(def hello \"from disk\")")]);
+    isolate.add_source("kit/words", "kit/words.ox", "(def hello \"from memory\")");
+
+    isolate
+        .eval_module_with(
+            &mut (),
+            "kit",
+            "kit.ox",
+            "(module (import (kit words))) (def greeting words/hello)",
+        )
+        .unwrap();
+
+    assert_eq!(
+        evaluated(&mut isolate, "(module (import (kit))) kit/greeting"),
+        "\"from memory\""
+    );
+}
+
+#[test]
+fn hosts_can_look_inside_collections() {
+    let mut isolate = Isolate::new();
+    let list = isolate.eval("'(a :b \"c\")").unwrap();
+    let map = isolate.eval("{x: 1 y: [2 3]}").unwrap();
+    let heap = isolate.heap();
+
+    let items: Vec<String> = heap
+        .elements(list)
+        .unwrap()
+        .into_iter()
+        .map(|item| isolate.write(item))
+        .collect();
+    let entries: Vec<(String, String)> = heap
+        .entries(map)
+        .unwrap()
+        .into_iter()
+        .map(|(key, value)| (isolate.write(key), isolate.write(value)))
+        .collect();
+
+    assert_eq!(items, ["a", ":b", "\"c\""]);
+    assert_eq!(
+        entries,
+        [
+            (":x".to_owned(), "1".to_owned()),
+            (":y".to_owned(), "[2 3]".to_owned())
+        ]
+    );
+    assert_eq!(heap.elements(map), None);
+    assert_eq!(heap.entries(list), None);
+}

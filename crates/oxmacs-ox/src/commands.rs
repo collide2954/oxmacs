@@ -7,6 +7,8 @@ use ox::{Error, Isolate};
 use oxmacs_core::command::{DynamicSpec, Scope};
 use oxmacs_core::editor::Editor;
 
+use crate::log;
+
 #[derive(Debug, Default)]
 pub struct Commands {
     defined: HashMap<String, Hold>,
@@ -69,6 +71,21 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>("bind-key", 2, Some(2), bind);
 }
 
+pub fn queue(editor: &mut Editor, name: &str) {
+    if editor.applet_state::<Commands>().is_none() {
+        editor.set_applet_state(Commands::default());
+    }
+    if let Some(commands) = editor.applet_state_mut::<Commands>() {
+        commands.waiting.push(name.to_owned());
+    }
+}
+
+pub fn defined(editor: &Editor, name: &str) -> bool {
+    editor
+        .applet_state::<Commands>()
+        .is_some_and(|commands| commands.defined.contains_key(name))
+}
+
 pub fn run_waiting(isolate: &mut Isolate, editor: &mut Editor) {
     let waiting = editor
         .applet_state_mut::<Commands>()
@@ -83,7 +100,7 @@ pub fn run_waiting(isolate: &mut Isolate, editor: &mut Editor) {
             continue;
         };
         if let Err(error) = isolate.call_with(editor, function, &[]) {
-            editor.show_message(format!("Ox: {}", error.message));
+            log::report(editor, &error, None);
         }
     }
 }

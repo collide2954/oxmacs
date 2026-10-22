@@ -9,5 +9,10 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+dirs.workspace = true
+jiff.workspace = true
 ox.workspace = true
 oxmacs-core.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

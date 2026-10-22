@@ -14,7 +14,7 @@ pub use iced::Result;
 
 use app::App;
 use applet::GuiApplet;
-use iced::{Size, window};
+use iced::{Size, Task, window};
 use oxmacs_core::cli::Visit;
 use oxmacs_core::config::{self, WindowMode};
 use oxmacs_core::theme;
@@ -34,8 +34,9 @@ pub fn run(visits: Vec<Visit>, applets: fn() -> Vec<Box<dyn GuiApplet>>) -> Resu
     iced::application(
         move || {
             let (mut app, task) = App::boot(&config, &visits, applets());
+            let started = app.start_ox(oxmacs_ox::home().as_deref());
             app.note(note.clone());
-            (app, task)
+            (app, Task::batch([task, started]))
         },
         App::update,
         App::view,

@@ -3256,8 +3256,11 @@ dependencies = [
 name = "oxmacs-ox"
 version = "0.13.0"
 dependencies = [
+ "dirs",
+ "jiff",
  "ox",
  "oxmacs-core",
+ "tempfile",
 ]
 
 [[package]]

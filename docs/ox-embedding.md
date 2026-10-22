@@ -8,11 +8,32 @@ How oxmacs hosts Ox, and the slices that take the weather plugin from nothing to
 - **Reaching the editor.** Natives get the editor during each call, so `(insert "x")` and `(buffer-text)` act immediately, as in Emacs Lisp. `ox` passes an opaque host (`&mut dyn Any`) through every call, and `define_host_native::<Editor>` downcasts it. Ox runs on the UI thread in time-boxed slices, so this never blocks a frame for long.
 - **Commands.** An Ox command is an editor dynamic command whose handler queues a request; the GUI hands the request to the bridge, which runs the Ox function with the editor lent to it.
 - **Asynchronous work.** Natives that start work outside the isolate (a fetch, a timer) hold their promise with `heap.hold`, which gives a plain id that can travel in a `Send` callback, and resolve it when the result comes back.
-- **Configuration.** `~/.oxmacs/init.ox` (moved with `OXMACS_HOME`) is the only place plugins are configured: `(use-plugin weather :config {location: "Berlin" units: :metric mode-line: true})`. A plugin declares its settings with `defsetting` and reads them with `(setting :location)`; unknown keys and wrong types are reported.
-- **Bundled plugins.** Their files are embedded in the binary at build time. A plugin of the same name in `~/.oxmacs/plugins` overrides the bundled one, which is how you edit one live.
+- **Configuration.** `~/.oxmacs/init.ox` (moved with `OXMACS_HOME`) is the only place plugins are configured: `(use-plugin weather :config {location: "Berlin" units: :metric mode-line: true})`, or `:disabled true` to turn one off. A plugin declares its settings in `plugin.ox` and reads them with `(setting :location)`; unknown keys and wrong types are logged and the defaults stay.
+- **Bundled plugins.** Their files are embedded in the binary at build time, and they are on unless `use-plugin` turns them off. Other plugins in `~/.oxmacs/plugins` stay off until `use-plugin` names them, except that one with a bundled plugin's name replaces it, which is how you edit one live.
 - **Lazy wake-ups.** At startup only the `plugin.ox` manifests are read. A plugin loads on its first command or key, or at startup when a config key its manifest names is on (`:startup-when :mode-line`).
+- **Errors.** Every Ox error, with its traceback and the time, is added to `*ox log*`, and the echo area gets one line. An error in `init.ox` opens the log beside the editor; the forms before it still apply.
 - **Mode line.** A plugin pushes its text with `(set-mode-line :weather "☀ 21°")`; drawing never runs Ox.
 - **Views.** A plugin buffer shows a view: Ox functions such as `column`, `row`, `text` and `button` build a widget tree that the GUI renders with Iced. A view reads atoms, and changing an atom it read (`(reset! forecast …)` from a spawned task, say) redraws it. Buttons call Ox functions directly.
+
+## Plugins
+
+A plugin is a folder with a manifest and its modules:
+
+```clojure
+; plugin.ox
+(plugin weather
+  :version "0.2.0"
+  :summary "Forecasts from Open-Meteo"
+  :commands {weather: "Show the weather for your location"
+             weather-refresh: "Fetch the forecast again"}
+  :settings {location: {type: :string doc: "City, such as Berlin"}
+             units: {type: [:metric :imperial] default: :metric}
+             mode-line: {type: :bool default: false}}
+  :startup-when :mode-line
+  :entry "weather.ox")
+```
+
+The manifest is read as quoted data. Its commands exist from startup and wake the plugin when first run. The entry file loads as the module `weather`, and the plugin's other files as `weather/<file>`, so `(import (weather forecast))` works. Each plugin module gets a `setting` function for its own settings.
 
 ## Slices
 

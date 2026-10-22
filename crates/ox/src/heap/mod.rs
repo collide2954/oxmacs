@@ -551,6 +551,26 @@ impl Heap {
             .try_fold(Value::Nil, |tail, head| self.pair(head, tail))
     }
 
+    pub fn elements(&self, value: Value) -> Option<Vec<Value>> {
+        if value == Value::Nil || self.pair_of(value).is_some() {
+            return Some(self.items(value));
+        }
+        if let Some(vector) = self.vector_of(value) {
+            return Some(vector.items(self));
+        }
+        let set = self.set_of(value)?;
+        Some(
+            set.entries(self)
+                .into_iter()
+                .map(|(item, _)| item)
+                .collect(),
+        )
+    }
+
+    pub fn entries(&self, value: Value) -> Option<Vec<(Value, Value)>> {
+        Some(self.map_of(value)?.entries(self))
+    }
+
     pub fn items(&self, list: Value) -> Vec<Value> {
         let mut items = Vec::new();
         let mut rest = list;

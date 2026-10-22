@@ -1,13 +1,24 @@
 mod commands;
+mod log;
 mod natives;
+mod plugins;
 
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use ox::{Error, Isolate};
 use oxmacs_core::editor::Editor;
+pub use plugins::Bundle;
 
 const BUDGET: Duration = Duration::from_millis(4);
 const PRELUDE: &str = include_str!("prelude.ox");
+
+pub fn home() -> Option<PathBuf> {
+    std::env::var_os("OXMACS_HOME")
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|home| home.join(".oxmacs")))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pace {
@@ -19,6 +30,7 @@ pub enum Pace {
 #[derive(Debug)]
 pub struct Ox {
     isolate: Isolate,
+    bundled: &'static [Bundle],
 }
 
 impl Default for Ox {
@@ -29,13 +41,39 @@ impl Default for Ox {
 
 impl Ox {
     pub fn new() -> Self {
+        Self::with_bundled(plugins::BUNDLED)
+    }
+
+    pub fn with_bundled(bundled: &'static [Bundle]) -> Self {
         let mut isolate = Isolate::new();
         natives::install(&mut isolate);
         commands::install(&mut isolate);
+        plugins::install(&mut isolate);
         if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
             panic!("The oxmacs prelude failed to load: {error}");
         }
-        Self { isolate }
+        Self { isolate, bundled }
+    }
+
+    pub fn start(&mut self, editor: &mut Editor, home: Option<&Path>) {
+        plugins::discover(&mut self.isolate, editor, self.bundled, home);
+        self.run_init(editor, home);
+        plugins::wake_at_startup(&self.isolate, editor);
+        plugins::wake_waiting(&mut self.isolate, editor);
+    }
+
+    fn run_init(&mut self, editor: &mut Editor, home: Option<&Path>) {
+        let Some(path) = home.map(|home| home.join("init.ox")) else {
+            return;
+        };
+        let Ok(source) = fs::read_to_string(&path) else {
+            return;
+        };
+        let name = path.display().to_string();
+        if let Err(error) = self.isolate.eval_named_with(editor, &name, &source) {
+            log::report(editor, &error, Some((&name, &source)));
+            log::show(editor);
+        }
     }
 
     pub fn eval(&mut self, editor: &mut Editor, source: &str) -> Result<String, Error> {
@@ -54,11 +92,12 @@ impl Ox {
     }
 
     pub fn tick(&mut self, editor: &mut Editor) -> Pace {
+        plugins::wake_waiting(&mut self.isolate, editor);
         commands::run_waiting(&mut self.isolate, editor);
         if self.isolate.pending() > 0 {
             let report = self.isolate.run_with(editor, BUDGET);
             for error in report.unhandled {
-                editor.show_message(format!("Ox: {}", error.message));
+                log::report(editor, &error, None);
             }
         }
         self.pace()
@@ -70,7 +109,7 @@ mod tests {
     use oxmacs_core::editor::Editor;
     use oxmacs_core::input::KeySequence;
 
-    use super::{Ox, Pace};
+    use super::{Ox, Pace, log};
 
     #[test]
     fn ox_code_shows_messages_in_the_echo_area() {
@@ -224,6 +263,64 @@ mod tests {
             "{}",
             malformed.message
         );
+    }
+
+    fn home_with(files: &[(&str, &str)]) -> tempfile::TempDir {
+        let home = tempfile::tempdir().unwrap();
+        for (name, text) in files {
+            let path = home.path().join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        home
+    }
+
+    #[test]
+    fn init_ox_runs_when_the_editor_starts() {
+        let home = home_with(&[(
+            "init.ox",
+            r#"(defcommand greet "Say hello" (message "Hello")) (bind-key "C-c g" 'greet)"#,
+        )]);
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+
+        ox.start(&mut editor, Some(home.path()));
+        press(&mut editor, "C-c g");
+        ox.tick(&mut editor);
+
+        assert_eq!(editor.message(), Some("Hello"));
+        assert_eq!(editor.buffer_named(log::LOG), None);
+    }
+
+    #[test]
+    fn a_failing_init_ox_keeps_what_ran_and_shows_the_log() {
+        let home = home_with(&[(
+            "init.ox",
+            "(defcommand greet \"Say hello\" (message \"Hello\"))\n(/ 1 0)\n(defcommand later \"Never\" (message \"no\"))",
+        )]);
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+
+        ox.start(&mut editor, Some(home.path()));
+
+        assert!(editor.command_named("greet").is_some());
+        assert!(editor.command_named("later").is_none());
+        let log = editor.buffer_named(log::LOG).unwrap();
+        assert!(editor.buffer_shown(log));
+        let text = editor.buffer_by_id(log).unwrap().contents();
+        assert!(text.contains("init.ox:2:1: Division by zero"), "{text}");
+    }
+
+    #[test]
+    fn starting_without_a_home_or_init_ox_is_quiet() {
+        let home = home_with(&[]);
+        let mut editor = Editor::new();
+
+        Ox::new().start(&mut editor, Some(home.path()));
+        Ox::new().start(&mut editor, None);
+
+        assert_eq!(editor.buffer_named(log::LOG), None);
+        assert_eq!(editor.message(), None);
     }
 
     #[test]

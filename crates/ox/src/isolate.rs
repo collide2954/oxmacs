@@ -1,5 +1,5 @@
 use std::any::Any;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -66,6 +66,7 @@ pub(crate) fn work(
 pub struct Isolate {
     runtime: Runtime,
     loading: Vec<String>,
+    sources: HashMap<String, (String, String)>,
 }
 
 impl Default for Isolate {
@@ -93,6 +94,7 @@ impl Isolate {
         let mut isolate = Self {
             runtime: Runtime::default(),
             loading: Vec::new(),
+            sources: HashMap::new(),
         };
         library::install(&mut isolate);
         let apply = isolate.runtime.lookup(PRELUDE, Sym::intern("apply"));
@@ -151,6 +153,29 @@ impl Isolate {
 
     pub fn release(&mut self, hold: Hold) -> Option<Value> {
         self.runtime.heap.release(hold)
+    }
+
+    pub fn add_source(&mut self, module: &str, file: &str, text: &str) {
+        self.sources
+            .insert(module.to_owned(), (file.to_owned(), text.to_owned()));
+    }
+
+    pub fn eval_module_with(
+        &mut self,
+        host: &mut dyn Any,
+        module: &str,
+        file: &str,
+        source: &str,
+    ) -> Result<(), Error> {
+        self.evaluate_module(module, file, source, host).map(|_| ())
+    }
+
+    pub fn heap(&self) -> &Heap {
+        &self.runtime.heap
+    }
+
+    pub fn heap_mut(&mut self) -> &mut Heap {
+        &mut self.runtime.heap
     }
 
     pub fn add_root(&mut self, root: impl Into<PathBuf>) {
@@ -262,6 +287,9 @@ impl Isolate {
             chain.push(name.to_owned());
             return Err(Error::new(format!("Import cycle: {}", chain.join(" → "))));
         }
+        if let Some((file, source)) = self.sources.get(name).cloned() {
+            return self.evaluate_module(name, &file, &source, host);
+        }
         let path = self
             .runtime
             .roots
@@ -271,13 +299,23 @@ impl Isolate {
             .ok_or_else(|| Error::new(format!("No module named {name}")))?;
         let source = fs::read_to_string(&path)
             .map_err(|error| Error::new(format!("{}: {error}", path.display())))?;
+        self.evaluate_module(name, &path.display().to_string(), &source, host)
+    }
+
+    fn evaluate_module(
+        &mut self,
+        name: &str,
+        file: &str,
+        source: &str,
+        host: &mut dyn Any,
+    ) -> Result<ModuleId, Error> {
         let module = self.runtime.module_named(name);
         if let Some(found) = self.runtime.modules.get_mut(module) {
             found.imports.clear();
             found.exports = None;
         }
         self.loading.push(name.to_owned());
-        let result = self.eval_in(module, &path.display().to_string(), &source, host);
+        let result = self.eval_in(module, file, source, host);
         self.loading.pop();
         result.map(|_| module)
     }
