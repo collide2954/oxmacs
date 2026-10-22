@@ -102,3 +102,67 @@
 
 (def (mapcat f coll & colls)
   (apply concat (apply map f coll colls)))
+
+(defmacro when [test & body]
+  `(if ~test (do ~@body) nil))
+
+(defmacro unless [test & body]
+  `(if ~test nil (do ~@body)))
+
+(defmacro and [& forms]
+  (if (empty? forms)
+    true
+    (if (empty? (rest forms))
+      (first forms)
+      `(let [value ~(first forms)]
+         (if value (and ~@(rest forms)) value)))))
+
+(defmacro or [& forms]
+  (if (empty? forms)
+    nil
+    (if (empty? (rest forms))
+      (first forms)
+      `(let [value ~(first forms)]
+         (if value value (or ~@(rest forms)))))))
+
+(defmacro cond [& clauses]
+  (if (empty? clauses)
+    nil
+    (let [clause (first clauses)
+          test (first clause)
+          body (rest clause)]
+      (if (= test 'else)
+        `(do ~@body)
+        `(if ~test (do ~@body) (cond ~@(rest clauses)))))))
+
+(defmacro -> [value & forms]
+  (reduce (fn [acc form]
+            (if (list? form)
+              `(~(first form) ~acc ~@(rest form))
+              (list form acc)))
+          value
+          forms))
+
+(defmacro ->> [value & forms]
+  (reduce (fn [acc form]
+            (if (list? form)
+              `(~@form ~acc)
+              (list form acc)))
+          value
+          forms))
+
+(defmacro if-let [binding then & otherwise]
+  `(let [value ~(second binding)]
+     (if value (let [~(first binding) value] ~then) ~@otherwise)))
+
+(defmacro when-let [binding & body]
+  `(let [value ~(second binding)]
+     (if value (let [~(first binding) value] ~@body) nil)))
+
+(defmacro defrule [pattern template]
+  `(defmacro ~(first pattern) [& form]
+     (expand-rules '~(first pattern) [] '[[~pattern ~template]] form)))
+
+(defmacro defrules [name literals & rules]
+  `(defmacro ~name [& form]
+     (expand-rules '~name '~literals '~(vec rules) form)))

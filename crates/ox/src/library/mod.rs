@@ -1,5 +1,7 @@
 pub(crate) mod collections;
 mod numbers;
+mod rules;
+mod types;
 
 use std::io::{self, Write};
 
@@ -52,6 +54,8 @@ fn all_equal(heap: &Heap, arguments: &[Value]) -> bool {
 
 pub fn install(isolate: &mut Isolate) {
     numbers::install(isolate);
+    rules::install(isolate);
+    types::install(isolate);
     isolate.define_native("=", 1, None, |heap, arguments| {
         Ok(Value::Bool(all_equal(heap, arguments)))
     });

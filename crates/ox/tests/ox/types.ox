@@ -1,0 +1,26 @@
+;; type predicates
+(int? 1) ;=> true
+(int? 99999999999999999999) ;=> true
+(int? 1.0) ;=> false
+(float? 1.0) ;=> true
+(float? 1) ;=> false
+(number? 1) ;=> true
+(number? 2.5) ;=> true
+(number? "1") ;=> false
+(string? "a") ;=> true
+(string? \a) ;=> false
+(char? \a) ;=> true
+(keyword? :a) ;=> true
+(keyword? 'a) ;=> false
+(symbol? 'a) ;=> true
+(symbol? :a) ;=> false
+(bool? false) ;=> true
+(bool? nil) ;=> false
+(list? (list 1)) ;=> true
+(list? nil) ;=> true
+(list? [1]) ;=> false
+(fn? inc) ;=> true
+(fn? +) ;=> true
+(fn? (fn [] 1)) ;=> true
+(fn? :a) ;=> false
+(defmacro sym? [x] (symbol? x)) (sym? y) ;=> true
