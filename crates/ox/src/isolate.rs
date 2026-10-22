@@ -3,7 +3,7 @@ use std::rc::Rc;
 use crate::builtins;
 use crate::compile::compile;
 use crate::error::Error;
-use crate::heap::Heap;
+use crate::heap::{Heap, Rooted};
 use crate::native::Native;
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -66,6 +66,14 @@ impl Isolate {
         }) {
             self.runtime.globals.insert(name, value);
         }
+    }
+
+    pub fn collect(&mut self) -> usize {
+        self.runtime.collect()
+    }
+
+    pub fn root(&mut self, value: Value) -> Rooted {
+        self.runtime.heap.root(value)
     }
 
     pub fn write(&self, value: Value) -> String {
@@ -1333,6 +1341,74 @@ mod tests {
             "(defrecord A [x y]) (defrecord B [y x]) (def (gety r) r.y) [(gety (A 1 2)) (gety (B 3 4)) (gety (A 5 6)) (gety {y: 7})]",
             "[2 3 6 7]",
         )]);
+    }
+
+    #[test]
+    fn collection_keeps_everything_reachable_from_globals() {
+        let mut isolate = Isolate::new();
+        isolate
+            .eval(
+                r#"(defrecord P [x]) (def keep {v: [1 (list "s" #{:k 99999999999999999999})] r: (P (atom [2])) f: (let [n (str "capt" "ured")] (fn [] n))})"#,
+            )
+            .unwrap();
+        isolate.collect();
+        isolate
+            .eval("(def junk (map (fn [i] [i i]) (range 1000))) (def junk nil)")
+            .unwrap();
+        isolate.collect();
+
+        let kept = isolate.eval("keep").unwrap();
+        assert_eq!(
+            isolate.write(kept),
+            r#"{v: [1 ("s" #{:k 99999999999999999999})] r: #P{x: #<atom [2]>} f: #<fn>}"#
+        );
+        let captured = isolate.eval("((:f keep))").unwrap();
+        assert_eq!(isolate.write(captured), r#""captured""#);
+        let record = isolate.eval("(P 5)").unwrap();
+        assert_eq!(isolate.write(record), "#P{x: 5}");
+    }
+
+    #[test]
+    fn garbage_from_a_long_loop_is_collected_while_it_runs() {
+        let mut isolate = Isolate::new();
+        let before = isolate.runtime.heap.in_use();
+
+        let done = isolate.eval(
+            "(def (churn n) (if (< n 1) :done (do [n n n] (str n) (list n n) (churn (- n 1))))) (churn 100000)",
+        );
+
+        assert_eq!(done, Ok(Value::keyword("done")));
+        assert!(isolate.runtime.heap.in_use() < before + 200_000);
+    }
+
+    #[test]
+    fn data_built_while_collections_run_survives_them() {
+        let mut isolate = Isolate::new();
+        isolate
+            .eval("(def (build n acc) (if (< n 1) acc (build (- n 1) (assoc acc n [n (str n) (list n)])))) (def big (build 30000 {}))")
+            .unwrap();
+
+        let total = isolate
+            .eval("(reduce + (map (fn [k] (first (get big k))) (keys big)))")
+            .unwrap();
+        let one = isolate.eval("(get big 12345)").unwrap();
+
+        assert_eq!(total, Value::Int(450_015_000));
+        assert_eq!(isolate.write(one), r#"[12345 "12345" (12345)]"#);
+    }
+
+    #[test]
+    fn rust_keeps_values_alive_with_rooted_handles() {
+        let mut isolate = Isolate::new();
+        let value = isolate.eval(r#"(str "he" "ld")"#).unwrap();
+        let handle = isolate.root(value);
+
+        isolate.collect();
+        assert_eq!(isolate.write(handle.get()), r#""held""#);
+
+        drop(handle);
+        isolate.collect();
+        assert_eq!(isolate.runtime.heap.text(value), None);
     }
 
     #[test]

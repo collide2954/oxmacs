@@ -207,6 +207,22 @@ fn leaves(heap: &Heap, root: Value) -> Vec<Leaf> {
     found
 }
 
+impl Node {
+    pub fn children(&self, out: &mut Vec<Value>) {
+        match self {
+            Self::Branch { slots, .. } => {
+                for slot in slots {
+                    match slot {
+                        Slot::Entry(leaf) => out.push(leaf.key),
+                        Slot::Child(child) => out.push(*child),
+                    }
+                }
+            }
+            Self::Collision(leaves) => out.extend(leaves.iter().map(|leaf| leaf.key)),
+        }
+    }
+}
+
 impl Map {
     pub const EMPTY: Self = Self {
         count: 0,
@@ -223,6 +239,11 @@ impl Map {
             heap.pair_of(entry)
                 .is_some_and(|pair| equal(heap, pair.head, key))
         })
+    }
+
+    pub fn children(self) -> [Value; 3] {
+        let [root, tail] = self.entries.children();
+        [root, tail, self.index]
     }
 
     pub fn entries(self, heap: &Heap) -> Vec<(Value, Value)> {

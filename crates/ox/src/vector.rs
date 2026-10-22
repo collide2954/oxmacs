@@ -85,6 +85,10 @@ impl Vector {
         })
     }
 
+    pub fn children(self) -> [Value; 2] {
+        [self.root, self.tail]
+    }
+
     fn tail_offset(self) -> usize {
         if self.count < WIDTH {
             0

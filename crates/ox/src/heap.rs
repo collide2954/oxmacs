@@ -1,6 +1,7 @@
+use std::cell::Cell;
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use num_bigint::BigInt;
 
@@ -11,8 +12,20 @@ use crate::record::{Record, RecordType};
 use crate::value::{Kind, Ref, Value};
 use crate::vector::Vector;
 
+mod gc;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeapFull;
+
+#[derive(Debug, Clone)]
+pub struct Rooted(Rc<Cell<Value>>);
+
+impl Rooted {
+    #[must_use]
+    pub fn get(&self) -> Value {
+        self.0.get()
+    }
+}
 
 impl fmt::Display for HeapFull {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -43,6 +56,7 @@ pub struct Closure {
 struct Arena<T> {
     slots: Vec<Option<T>>,
     free: Vec<u32>,
+    marks: Vec<bool>,
 }
 
 impl<T> Default for Arena<T> {
@@ -50,6 +64,7 @@ impl<T> Default for Arena<T> {
         Self {
             slots: Vec::new(),
             free: Vec::new(),
+            marks: Vec::new(),
         }
     }
 }
@@ -74,6 +89,37 @@ impl<T> Arena<T> {
     fn get_mut(&mut self, index: u32) -> Option<&mut T> {
         self.slots.get_mut(index as usize)?.as_mut()
     }
+
+    fn in_use(&self) -> usize {
+        self.slots.len() - self.free.len()
+    }
+
+    fn unmark(&mut self) {
+        self.marks.clear();
+        self.marks.resize(self.slots.len(), false);
+    }
+
+    fn mark(&mut self, index: u32) -> bool {
+        match self.marks.get_mut(index as usize) {
+            Some(mark) if !*mark => {
+                *mark = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn sweep(&mut self) -> usize {
+        let mut freed = 0;
+        for (index, (slot, marked)) in (0_u32..).zip(self.slots.iter_mut().zip(&self.marks)) {
+            if slot.is_some() && !*marked {
+                *slot = None;
+                self.free.push(index);
+                freed += 1;
+            }
+        }
+        freed
+    }
 }
 
 #[derive(Debug, Default)]
@@ -92,6 +138,8 @@ pub struct Heap {
     record_types: Arena<RecordType>,
     records: Arena<Record>,
     atoms: Arena<Value>,
+    roots: Vec<Weak<Cell<Value>>>,
+    next_collection: usize,
 }
 
 fn reference(value: Value, kind: Kind) -> Option<u32> {
@@ -102,6 +150,12 @@ fn reference(value: Value, kind: Kind) -> Option<u32> {
 }
 
 impl Heap {
+    pub fn root(&mut self, value: Value) -> Rooted {
+        let cell = Rc::new(Cell::new(value));
+        self.roots.push(Rc::downgrade(&cell));
+        Rooted(cell)
+    }
+
     pub fn string(&mut self, text: &str) -> Result<Value, HeapFull> {
         let mut hasher = DefaultHasher::new();
         text.hash(&mut hasher);

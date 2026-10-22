@@ -439,6 +439,9 @@ impl Runtime {
     }
 
     fn call(&mut self, machine: &mut Machine, base: u16, count: u16) -> Result<(), Error> {
+        if self.heap.wants_collection() {
+            self.collect_running(machine);
+        }
         let slot = machine.base + usize::from(base);
         let count = self.spread(machine, slot, usize::from(count))?;
         let callee = self.constructor_of(machine.stack[slot]);
@@ -465,6 +468,9 @@ impl Runtime {
         base: u16,
         count: u16,
     ) -> Result<Option<Value>, Error> {
+        if self.heap.wants_collection() {
+            self.collect_running(machine);
+        }
         let slot = machine.base + usize::from(base);
         let count = self.spread(machine, slot, usize::from(count))?;
         let callee = self.constructor_of(machine.stack[slot]);
@@ -536,6 +542,27 @@ impl Runtime {
             .get(slot)
             .copied()
             .ok_or_else(|| no_field(record.type_name(&self.heap), name))
+    }
+
+    fn base_roots(&self) -> Vec<Value> {
+        let mut roots: Vec<Value> = self.globals.values().copied().collect();
+        roots.push(self.apply);
+        roots
+    }
+
+    pub fn collect(&mut self) -> usize {
+        let roots = self.base_roots();
+        self.heap.collect(&roots, &[])
+    }
+
+    fn collect_running(&mut self, machine: &Machine) {
+        let mut roots = self.base_roots();
+        roots.extend(machine.stack.iter().copied());
+        roots.push(machine.closure);
+        roots.extend(machine.frames.iter().map(|frame| frame.closure));
+        let mut codes = vec![Rc::clone(&machine.code)];
+        codes.extend(machine.frames.iter().map(|frame| Rc::clone(&frame.code)));
+        self.heap.collect(&roots, &codes);
     }
 
     fn spread(&mut self, machine: &mut Machine, slot: usize, count: usize) -> Result<usize, Error> {
