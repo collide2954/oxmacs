@@ -384,3 +384,11 @@
          true
          (raise (expectation-failed (explain '~form values)))))
     `(if ~form true (raise (expectation-failed (pr-str '~form))))))
+
+(def (profile work)
+  (let [mine (profiler-start)]
+    (try (work) (catch error e (when mine (profiler-stop)) (raise e)))
+    (if mine (profiler-stop) (profiler-snapshot))))
+
+(def (profile-report found)
+  (print (get found :report)))

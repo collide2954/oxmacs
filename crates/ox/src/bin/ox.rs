@@ -11,6 +11,14 @@ fn main() -> ExitCode {
     let mut args = env::args_os().skip(1);
     match args.next() {
         Some(first) if first == "test" => run_tests(&args.map(PathBuf::from).collect::<Vec<_>>()),
+        Some(first) if first == "profile" => {
+            if let Some(path) = args.next() {
+                profile_file(&PathBuf::from(path))
+            } else {
+                eprintln!("usage: ox profile FILE");
+                ExitCode::FAILURE
+            }
+        }
         Some(path) => {
             let path = PathBuf::from(path);
             let mut isolate = Isolate::new();
@@ -37,6 +45,17 @@ fn place(error: &Error, path: &Path, source: &str) -> String {
         }
         (None, None) => path.display().to_string(),
     }
+}
+
+fn profile_file(path: &Path) -> ExitCode {
+    let mut isolate = Isolate::new();
+    isolate.add_root(path.parent().unwrap_or(Path::new(".")));
+    isolate.start_profiling();
+    let code = run_file(&mut isolate, path);
+    if let Some(profile) = isolate.stop_profiling() {
+        print!("{}", profile.report());
+    }
+    code
 }
 
 fn run_file(isolate: &mut Isolate, path: &Path) -> ExitCode {

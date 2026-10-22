@@ -22,6 +22,9 @@ pub enum Control {
     Sleep,
     AtomicEnter,
     AtomicLeave,
+    ProfileStart,
+    ProfileStop,
+    ProfileSnapshot,
 }
 
 #[derive(Clone)]

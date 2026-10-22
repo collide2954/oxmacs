@@ -25,6 +25,7 @@ use crate::isolate::Isolate;
 use crate::library::collections;
 use crate::native::{Control, NativeFn};
 use crate::portable::Portable;
+use crate::profile::{Profile, Profiler};
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::task::{Interrupter, TaskId};
@@ -45,6 +46,7 @@ pub struct Runtime {
     pub heap: Heap,
     pub field_scans: usize,
     pub global_lookups: usize,
+    pub(crate) profiler: Option<Box<Profiler>>,
     epoch: u64,
     pub apply: Value,
     pub error_types: HashMap<ErrorKind, Value>,
@@ -68,6 +70,7 @@ pub struct Runtime {
 }
 
 const CHECK_EVERY: u32 = 1024;
+const PROFILED_EVERY: u32 = 128;
 
 #[derive(Debug, Clone, Copy)]
 enum Flow {
@@ -111,7 +114,7 @@ type Step = Result<Flow, Error>;
 
 enum Target {
     Code(Rc<Code>),
-    Native(Rc<NativeFn>),
+    Native(Rc<NativeFn>, Sym),
     Control(Control),
     Data,
 }
@@ -122,6 +125,7 @@ impl Default for Runtime {
             heap: Heap::default(),
             field_scans: 0,
             global_lookups: 0,
+            profiler: None,
             epoch: 0,
             apply: Value::Nil,
             error_types: HashMap::new(),
@@ -185,15 +189,31 @@ impl Runtime {
         first: Option<Step>,
         host: &mut dyn Any,
     ) -> Result<Stop, Error> {
+        if let Some(profiler) = &mut self.profiler {
+            profiler.resume();
+        }
+        let stopped = self.step_through(fiber, deadline, first, host);
+        self.sample_profile(fiber, true);
+        stopped
+    }
+
+    fn step_through(
+        &mut self,
+        fiber: &mut Fiber,
+        deadline: Option<Instant>,
+        first: Option<Step>,
+        host: &mut dyn Any,
+    ) -> Result<Stop, Error> {
         if let Some(step) = first
             && let Some(ending) = self.conclude(fiber, step, fiber.machine.pc)?
         {
             return Ok(ending);
         }
-        let mut countdown = CHECK_EVERY;
+        let mut countdown = self.check_every();
         loop {
             if countdown == 0 {
-                countdown = CHECK_EVERY;
+                countdown = self.check_every();
+                self.sample_profile(fiber, false);
                 if self.heap.wants_collection() {
                     self.collect_with(fiber);
                 }
@@ -612,7 +632,7 @@ impl Runtime {
         native.check(count)?;
         Ok(match native.control {
             Some(control) => Target::Control(control),
-            None => Target::Native(Rc::clone(&native.function)),
+            None => Target::Native(Rc::clone(&native.function), native.name),
         })
     }
 
@@ -623,11 +643,16 @@ impl Runtime {
         let arguments = slot + 1..=slot + count;
         match self.target(callee, count)? {
             Target::Code(function) => {
+                if let Some(profiler) = &mut self.profiler {
+                    profiler.called(&function, &self.modules);
+                }
                 let binding = bind(&mut self.heap, &function, &machine.stack[arguments])?;
                 machine.enter(function, callee, slot, binding)?;
             }
-            Target::Native(function) => {
+            Target::Native(function, name) => {
+                let started = self.profiler.is_some().then(Instant::now);
                 machine.stack[slot] = function(&mut self.heap, host, &machine.stack[arguments])?;
+                self.timed(name, started, machine);
             }
             Target::Control(control) => {
                 return self.control(machine, control, slot, count, Landing::Register(slot));
@@ -652,11 +677,19 @@ impl Runtime {
         let arguments = slot + 1..=slot + count;
         let result = match self.target(callee, count)? {
             Target::Code(function) => {
+                if let Some(profiler) = &mut self.profiler {
+                    profiler.called(&function, &self.modules);
+                }
                 let binding = bind(&mut self.heap, &function, &machine.stack[arguments])?;
                 machine.replace(function, callee, slot, count, binding);
                 return Ok(Flow::Next);
             }
-            Target::Native(function) => function(&mut self.heap, host, &machine.stack[arguments])?,
+            Target::Native(function, name) => {
+                let started = self.profiler.is_some().then(Instant::now);
+                let result = function(&mut self.heap, host, &machine.stack[arguments])?;
+                self.timed(name, started, machine);
+                result
+            }
             Target::Control(control) => {
                 return self.control(machine, control, slot, count, Landing::Leave);
             }
@@ -691,7 +724,64 @@ impl Runtime {
             Control::Sleep => Flow::Sleep(argument, landing),
             Control::AtomicEnter => Flow::Atomic(true, landing),
             Control::AtomicLeave => Flow::Atomic(false, landing),
+            Control::ProfileStart => Flow::Land(landing, Value::Bool(self.start_profiling())),
+            Control::ProfileStop => {
+                let profile = self.stop_profiling();
+                Flow::Land(landing, self.profile_value(profile.as_ref())?)
+            }
+            Control::ProfileSnapshot => {
+                let profile = self.profiler.as_ref().map(|profiler| profiler.profile());
+                Flow::Land(landing, self.profile_value(profile.as_ref())?)
+            }
         })
+    }
+
+    pub fn start_profiling(&mut self) -> bool {
+        if self.profiler.is_some() {
+            return false;
+        }
+        self.profiler = Some(Box::new(Profiler::new()));
+        true
+    }
+
+    pub fn stop_profiling(&mut self) -> Option<Profile> {
+        self.profiler.take().map(|profiler| profiler.profile())
+    }
+
+    fn profile_value(&mut self, profile: Option<&Profile>) -> Result<Value, Error> {
+        profile.map_or(Ok(Value::Nil), |profile| profile.to_value(&mut self.heap))
+    }
+
+    fn timed(&mut self, name: Sym, started: Option<Instant>, machine: &Machine) {
+        if let (Some(started), Some(profiler)) = (started, &mut self.profiler) {
+            profiler.native(name, started.elapsed(), &machine.frames, &self.modules);
+        }
+    }
+
+    fn check_every(&self) -> u32 {
+        if self.profiler.is_some() {
+            PROFILED_EVERY
+        } else {
+            CHECK_EVERY
+        }
+    }
+
+    fn sample_profile(&mut self, fiber: &Fiber, pausing: bool) {
+        let Some(profiler) = &mut self.profiler else {
+            return;
+        };
+        let stack: Vec<&Rc<Code>> = fiber
+            .callers
+            .iter()
+            .map(|caller| &caller.machine)
+            .chain([&fiber.machine])
+            .flat_map(|machine| machine.frames.iter().map(|frame| &frame.code))
+            .collect();
+        if pausing {
+            profiler.pause(&stack, &self.modules);
+        } else {
+            profiler.sample(&stack, &self.modules);
+        }
     }
 
     fn close(&mut self, machine: &Machine, function: u32) -> Result<Value, Error> {

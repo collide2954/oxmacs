@@ -7,6 +7,7 @@ mod isolate;
 mod library;
 pub mod native;
 mod portable;
+pub mod profile;
 pub mod read;
 pub mod span;
 pub mod symbol;

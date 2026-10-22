@@ -75,6 +75,7 @@ Companion to [ox-design.md](ox-design.md) and [ox-internals.md](ox-internals.md)
 | Output | `print println pr prn` |
 | Generators | `gen generator yield next done?` |
 | Async | `spawn await promise deliver fail worker chan send receive close chan? sleep` |
+| Profiling | `profile profile-report profiler-start profiler-stop profiler-snapshot`; `(profile f)` runs `f` and returns where the time went, and `ox profile FILE` prints the same report for a file |
 | Tests | `test expect for-all expect-snapshot`; `test` blocks are registered and skipped on load, `ox test PATH…` runs them, and a failed `expect` shows the value of each argument |
 
 ## Modules

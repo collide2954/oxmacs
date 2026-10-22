@@ -1,6 +1,18 @@
 use crate::plugins::Bundle;
 
-pub const BUNDLED: &[Bundle] = &[WEATHER, DIRED, GIT, SCREENSAVER];
+pub const BUNDLED: &[Bundle] = &[WEATHER, DIRED, GIT, SCREENSAVER, PROFILER];
+
+const PROFILER: Bundle = Bundle {
+    name: "profiler",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/profiler/plugin.ox")),
+        (
+            "profiler.ox",
+            include_str!("../plugins/profiler/profiler.ox"),
+        ),
+        ("report.ox", include_str!("../plugins/profiler/report.ox")),
+    ],
+};
 
 const SCREENSAVER: Bundle = Bundle {
     name: "screensaver",
@@ -298,6 +310,9 @@ mod git;
 
 #[cfg(test)]
 mod screensaver;
+
+#[cfg(test)]
+mod profiler;
 
 #[cfg(test)]
 mod dired {

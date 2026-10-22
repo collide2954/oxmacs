@@ -13,6 +13,7 @@ use crate::heap::{Heap, Hold, Rooted};
 use crate::library;
 use crate::native::{Control, Native, NativeFn};
 use crate::portable::{Failure, Portable};
+use crate::profile::Profile;
 use crate::read::{self, Datum, Syntax};
 use crate::span::{Source, Span};
 use crate::symbol::Sym;
@@ -533,6 +534,31 @@ impl Isolate {
 
     pub fn interrupter(&self) -> Interrupter {
         self.runtime.interrupter.clone()
+    }
+
+    pub fn profiling(&self) -> bool {
+        self.runtime.profiler.is_some()
+    }
+
+    pub fn start_profiling(&mut self) -> bool {
+        self.runtime.start_profiling()
+    }
+
+    pub fn stop_profiling(&mut self) -> Option<Profile> {
+        self.runtime.stop_profiling()
+    }
+
+    pub fn profile_snapshot(&self) -> Option<Profile> {
+        self.runtime
+            .profiler
+            .as_ref()
+            .map(|profiler| profiler.profile())
+    }
+
+    pub fn record_tick(&mut self, kind: &str, took: Duration) {
+        if let Some(profiler) = &mut self.runtime.profiler {
+            profiler.tick(kind, took);
+        }
     }
 
     pub fn collect(&mut self) -> usize {

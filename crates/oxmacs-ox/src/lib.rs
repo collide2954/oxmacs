@@ -98,7 +98,15 @@ impl Ox {
     }
 
     pub fn frame(&mut self, editor: &mut Editor, now: Instant, size: (f32, f32), font_size: f32) {
+        let started = self.isolate.profiling().then(Instant::now);
         takeover::frame(&mut self.isolate, editor, now, size, font_size);
+        self.timed("frame", started);
+    }
+
+    fn timed(&mut self, kind: &str, started: Option<Instant>) {
+        if let Some(started) = started {
+            self.isolate.record_tick(kind, started.elapsed());
+        }
     }
 
     pub fn idle(&mut self, editor: &mut Editor, since: Instant, now: Instant) {
@@ -145,6 +153,7 @@ impl Ox {
     }
 
     pub fn tick(&mut self, editor: &mut Editor) -> Pace {
+        let started = self.isolate.profiling().then(Instant::now);
         self.handle_requests(editor);
         for plugin in modes::wakes(editor) {
             plugins::request_wake(editor, &plugin);
@@ -167,8 +176,13 @@ impl Ox {
             }
         }
         buffers::watch(&mut self.isolate, editor);
+        let highlighting = self.isolate.profiling().then(Instant::now);
         modes::highlight(&mut self.isolate, editor);
+        self.timed("highlight", highlighting);
+        let refreshing = self.isolate.profiling().then(Instant::now);
         views::refresh(&mut self.isolate, editor);
+        self.timed("views", refreshing);
+        self.timed("tick", started);
         self.pace()
     }
 }

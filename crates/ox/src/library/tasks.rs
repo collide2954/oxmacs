@@ -42,6 +42,9 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_control("sleep", 1, Some(1), Control::Sleep);
     isolate.define_control("atomic-enter", 0, Some(0), Control::AtomicEnter);
     isolate.define_control("atomic-leave", 0, Some(0), Control::AtomicLeave);
+    isolate.define_control("profiler-start", 0, Some(0), Control::ProfileStart);
+    isolate.define_control("profiler-stop", 0, Some(0), Control::ProfileStop);
+    isolate.define_control("profiler-snapshot", 0, Some(0), Control::ProfileSnapshot);
     isolate.define_native("chan", 0, Some(1), |heap, arguments| {
         let size = match arguments.first() {
             None => 32,

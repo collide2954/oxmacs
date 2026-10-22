@@ -45,18 +45,17 @@ Screensaver slices 1 to 4 are done:
 4. **The screensaver plugin:** starfield, matrix rain, `M-x screensaver-preview` and the `idle` and `kind` settings.
 ## Profiler
 
-Profiling tools for anyone writing Ox for oxmacs: where the time goes in plugins, init.ox, views, modes and frames.
+Profiling tools for anyone writing Ox for oxmacs: where the time goes in plugins, init.ox, views, modes and frames. The VM collects; the report in oxmacs is the bundled `profiler` plugin, written in Ox.
 
-- **Samples and call counts.** While the profiler runs, the VM records the Ox call stack at its safe points, every 128 instructions instead of 1024, weighted by the time since the last sample, and counts every call to each Ox function. Calls to natives are timed exactly and show as leaves under their caller. When the profiler is off this costs one branch per call.
-- **Grouped by plugin.** A function belongs to its module, and a module to its plugin (`git/status` to git), so the report opens on how much each plugin, init.ox and Ox's own library took.
-- **Editor timing.** In oxmacs the profile also records how long each Ox tick, frame and view refresh took, and the report starts with the slowest ones.
+- **Samples and call counts.** While the profiler runs, the VM records the Ox call stack at its safe points, every 128 instructions instead of 1024, weighted by the time since the last sample, and counts every call to each Ox function. Calls to natives are timed one by one and show as leaves under their caller. Collection only adds to the node of the current stack, found through a cache keyed by the stack's code; totals and the flat table are worked out when a profile is taken. Profiling slows Ox down about two times, most in code that calls many natives; when it is off it costs one branch per call.
+- **Grouped by plugin.** A function belongs to its module, and a module to its plugin (`git/status` to git), so the report opens on how much each plugin, `user` (init.ox and the REPL) and Ox's own library took. A tail call replaces its caller's frame, so a function reached by tail calls shows under the caller that started the chain.
+- **Editor timing.** In oxmacs the profile also records how long each Ox tick, takeover frame, view refresh and highlighting pass took, and the report starts with the slowest ones.
 - **Entry points.**
   - `M-x ox-profiler-start`, `M-x ox-profiler-stop` and `M-x ox-profiler-report` profile everything Ox does in the editor.
   - `ox profile FILE` runs a file and prints the report.
-  - `(profile (fn [] …))` returns the profile as data, and `(profile-report profile)` prints it, for a plugin or a test that profiles one piece of work.
-- **The report.** `*ox profile*` shows a call tree, total and self time, their share and the call count on each line; `TAB` folds, `f` switches to a flat table sorted by self time, `RET` visits the function's source and `g` takes a fresh report while profiling continues.
+  - `(profile (fn [] …))` returns the profile as data, `{wall busy samples tree functions ticks report}` with times in milliseconds, and `(profile-report found)` prints it. `profiler-start`, `profiler-stop` and `profiler-snapshot` are the controls underneath.
+- **The report.** `*ox profile*` shows a call tree with total and self time, their share and the call count on each line; `TAB` folds, `f` switches to the functions by self time, `RET` visits the function's source and `g` takes a fresh report while profiling continues.
 - **Native profiling.** `ox-perf` (see [ox-internals.md](ox-internals.md)) samples the Rust side for work on the VM itself.
-
 ## Slices
 
 Slices 1 to 11 are done.
