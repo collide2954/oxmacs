@@ -684,6 +684,39 @@ mod tests {
     }
 
     #[test]
+    fn record_literals_read_back_what_records_print() {
+        let point = "(defrecord Point [x y])";
+        all(&[
+            (&format!("{point} #Point{{x: 1 y: 2}}"), "#Point{x: 1 y: 2}"),
+            (
+                &format!("{point} (= #Point{{y: 2 x: 1}} (Point 1 2))"),
+                "true",
+            ),
+            (
+                &format!("{point} (let [a 5] #Point{{x: a y: (* a 2)}})"),
+                "#Point{x: 5 y: 10}",
+            ),
+            (
+                &format!("{point} #Point{{x: 1}}"),
+                "error: This Point literal is missing field y",
+            ),
+            (
+                &format!("{point} #Point{{x: 1 y: 2 z: 3}}"),
+                "error: Point has no field z",
+            ),
+            (
+                &format!("{point} #Point{{x: 1 x: 2 y: 3}}"),
+                "error: Duplicate field x in a Point literal",
+            ),
+            ("#Nothing{}", "error: Nothing is not defined"),
+            (
+                "(def Nothing 5) #Nothing{}",
+                "error: 5 is not a record type",
+            ),
+        ]);
+    }
+
+    #[test]
     fn records_change_by_copying() {
         let point = "(defrecord Point [x y])";
         all(&[

@@ -218,6 +218,62 @@ fn call_data(heap: &Heap, callee: Value, given: &[Value]) -> Result<Value, Error
     Ok(collections::get(heap, &lookup))
 }
 
+fn record_literal(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
+    let Some((kind, pairs)) = items.split_first() else {
+        return Err(Error::new("A record literal lost its type"));
+    };
+    let Some(record_type) = heap.record_type_of(*kind) else {
+        return Err(Error::new(format!(
+            "{} is not a record type",
+            print::write(heap, *kind)
+        )));
+    };
+    let name = record_type.name.name();
+    let names = record_type.fields.clone();
+    let mut fields: Vec<Option<Value>> = vec![None; names.len()];
+    for pair in pairs.chunks(2) {
+        let [key, value] = pair else {
+            continue;
+        };
+        let Value::Keyword(field) = key else {
+            return Err(Error::new(format!(
+                "{name} has no field {}",
+                print::write(heap, *key)
+            )));
+        };
+        let Some(place) = names
+            .iter()
+            .position(|known| known == field)
+            .and_then(|slot| fields.get_mut(slot))
+        else {
+            return Err(Error::new(format!("{name} has no field {}", field.name())));
+        };
+        if place.replace(*value).is_some() {
+            return Err(Error::new(format!(
+                "Duplicate field {} in a {name} literal",
+                field.name()
+            )));
+        }
+    }
+    let fields = fields
+        .into_iter()
+        .zip(&names)
+        .map(|(value, field)| {
+            value.ok_or_else(|| {
+                Error::new(format!(
+                    "This {name} literal is missing field {}",
+                    field.name()
+                ))
+            })
+        })
+        .collect::<Result<Box<[Value]>, Error>>()?;
+    heap.record(Record {
+        kind: *kind,
+        fields,
+    })
+    .map_err(full)
+}
+
 fn make_vector(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
     let vector = Vector::from_items(heap, items).map_err(full)?;
     heap.vector(vector).map_err(full)
@@ -331,6 +387,10 @@ impl Runtime {
                 record,
                 constructor,
             } => self.define_record(machine, record, constructor),
+            Op::MakeRecordFrom { to, base, count } => {
+                let value = record_literal(&mut self.heap, machine.items(base, count))?;
+                machine.set(to, value);
+            }
             Op::Field { to, from, name } => {
                 let value = field(&self.heap, machine.get(from), name)?;
                 machine.set(to, value);

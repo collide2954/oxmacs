@@ -15,6 +15,7 @@ pub enum Datum {
     Vector(Vec<Syntax>),
     Map(Vec<Syntax>),
     Set(Vec<Syntax>),
+    Record(String, Vec<Syntax>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,9 +48,38 @@ pub fn read(source: &str) -> (Vec<Syntax>, Vec<ReadError>) {
     (reader.top, reader.errors)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Opener {
+    List,
+    Vector,
+    Map,
+    Set,
+    Record(String),
+}
+
+impl Opener {
+    fn closer(&self) -> char {
+        match self {
+            Self::List => ')',
+            Self::Vector => ']',
+            Self::Map | Self::Set | Self::Record(_) => '}',
+        }
+    }
+
+    fn text(&self) -> String {
+        match self {
+            Self::List => "(".to_owned(),
+            Self::Vector => "[".to_owned(),
+            Self::Map => "{".to_owned(),
+            Self::Set => "#{".to_owned(),
+            Self::Record(name) => format!("#{name}{{"),
+        }
+    }
+}
+
 enum Frame {
     Collection {
-        bracket: char,
+        opener: Opener,
         start: usize,
         items: Vec<Syntax>,
     },
@@ -68,22 +98,6 @@ struct Reader<'a> {
     errors: Vec<ReadError>,
     frames: Vec<Frame>,
     top: Vec<Syntax>,
-}
-
-fn closer(opener: char) -> char {
-    match opener {
-        '(' => ')',
-        '[' => ']',
-        _ => '}',
-    }
-}
-
-fn opener(bracket: char) -> String {
-    if bracket == '#' {
-        "#{".to_owned()
-    } else {
-        bracket.to_string()
-    }
 }
 
 fn separator(character: char) -> bool {
@@ -177,7 +191,9 @@ impl<'a> Reader<'a> {
                 return;
             };
             match first {
-                '(' | '[' | '{' => self.opening(first, start),
+                '(' => self.opening(Opener::List, start),
+                '[' => self.opening(Opener::Vector, start),
+                '{' => self.opening(Opener::Map, start),
                 ')' | ']' | '}' => self.closing(first, start),
                 '"' => {
                     let datum = self.string(start);
@@ -195,10 +211,15 @@ impl<'a> Reader<'a> {
                 '~' => self.prefix(Some("unquote"), "~", start),
                 '@' => self.prefix(Some("deref"), "@", start),
                 '#' if self.rest().starts_with("#;") => self.prefix(None, "#;", start),
-                '#' if self.rest().starts_with("#{") => self.opening('#', start),
+                '#' if self.rest().starts_with("#{") => self.opening(Opener::Set, start),
                 '#' => {
                     let token = self.token();
-                    self.error(start, format!("Unknown form {token}"));
+                    match token.get(1..) {
+                        Some(name) if !name.is_empty() && self.rest().starts_with('{') => {
+                            self.opening(Opener::Record(name.to_owned()), start);
+                        }
+                        _ => self.error(start, format!("Unknown form {token}")),
+                    }
                 }
                 _ if delimiter(first) => {
                     self.at += first.len_utf8();
@@ -310,7 +331,7 @@ impl<'a> Reader<'a> {
         self.frames.push(Frame::Prefix { name, mark, start });
     }
 
-    fn opening(&mut self, bracket: char, start: usize) {
+    fn opening(&mut self, opener: Opener, start: usize) {
         if self.frames.len() >= MAX_DEPTH {
             self.error_at(
                 Span::new(start, start + 1),
@@ -319,9 +340,9 @@ impl<'a> Reader<'a> {
             self.skip_balanced();
             return;
         }
-        self.at += opener(bracket).len();
+        self.at = start + opener.text().len();
         self.frames.push(Frame::Collection {
-            bracket,
+            opener,
             start,
             items: Vec::new(),
         });
@@ -329,7 +350,7 @@ impl<'a> Reader<'a> {
 
     fn closing(&mut self, bracket: char, start: usize) {
         let Some(position) = self.frames.iter().rposition(
-            |frame| matches!(frame, Frame::Collection { bracket: opener, .. } if closer(*opener) == bracket),
+            |frame| matches!(frame, Frame::Collection { opener, .. } if opener.closer() == bracket),
         ) else {
             while matches!(self.frames.last(), Some(Frame::Prefix { .. })) {
                 if let Some(frame) = self.frames.pop() {
@@ -347,20 +368,20 @@ impl<'a> Reader<'a> {
         }
         self.at += 1;
         if let Some(Frame::Collection {
-            bracket,
+            opener,
             start,
             items,
         }) = self.frames.pop()
         {
-            self.finish(bracket, start, items);
+            self.finish(opener, start, items);
         }
     }
 
     fn abandon(&mut self, frame: Frame, at_end: bool) {
         let (span, message) = match &frame {
-            Frame::Collection { bracket, start, .. } => (
-                Span::new(*start, start + opener(*bracket).len()),
-                format!("This {} is never closed", opener(*bracket)),
+            Frame::Collection { opener, start, .. } => (
+                Span::new(*start, start + opener.text().len()),
+                format!("This {} is never closed", opener.text()),
             ),
             Frame::Prefix { mark, start, .. } => (
                 Span::new(*start, start + mark.len()),
@@ -373,26 +394,32 @@ impl<'a> Reader<'a> {
             self.error_at(span, message);
         }
         if let Frame::Collection {
-            bracket,
+            opener,
             start,
             items,
         } = frame
         {
-            self.finish(bracket, start, items);
+            self.finish(opener, start, items);
         }
     }
 
-    fn finish(&mut self, bracket: char, start: usize, items: Vec<Syntax>) {
+    fn finish(&mut self, opener: Opener, start: usize, items: Vec<Syntax>) {
         let span = Span::new(start, self.at);
-        let datum = match bracket {
-            '(' => Datum::List(items),
-            '[' => Datum::Vector(items),
-            '#' => Datum::Set(items),
-            _ => {
+        let datum = match opener {
+            Opener::List => Datum::List(items),
+            Opener::Vector => Datum::Vector(items),
+            Opener::Set => Datum::Set(items),
+            Opener::Map => {
                 if items.len() % 2 == 1 {
                     self.error_at(span, "This map has a key without a value");
                 }
                 Datum::Map(items)
+            }
+            Opener::Record(name) => {
+                if items.len() % 2 == 1 {
+                    self.error_at(span, "This record has a field without a value");
+                }
+                Datum::Record(name, items)
             }
         };
         self.place(Syntax { datum, span });
@@ -802,6 +829,7 @@ mod tests {
             Datum::Vector(items) => format!("[{}]", join(items)),
             Datum::Map(items) => format!("{{{}}}", join(items)),
             Datum::Set(items) => format!("#{{{}}}", join(items)),
+            Datum::Record(name, items) => format!("#{name}{{{}}}", join(items)),
         }
     }
 
@@ -865,6 +893,31 @@ mod tests {
         assert_eq!(
             errors("#{1"),
             [("This #{ is never closed".to_owned(), Span::new(0, 2))]
+        );
+    }
+
+    #[test]
+    fn records_are_read_from_a_name_and_braces() {
+        assert_eq!(errors("#Point{x: 1 y: [2]} (f #Pair{})"), []);
+        assert_eq!(
+            shapes("#Point{x: 1 y: [2]} (f #Pair{})"),
+            ["#Point{:x 1 :y [2]}", "(f #Pair{})"]
+        );
+        assert_eq!(data("#Pair{}")[0].1, Span::new(0, 7));
+        assert_eq!(
+            errors("#Point{x: 1"),
+            [("This #Point{ is never closed".to_owned(), Span::new(0, 7))]
+        );
+        assert_eq!(
+            errors("#Point{x:}"),
+            [(
+                "This record has a field without a value".to_owned(),
+                Span::new(0, 10)
+            )]
+        );
+        assert_eq!(
+            errors("#Point"),
+            [("Unknown form #Point".to_owned(), Span::new(0, 6))]
         );
     }
 

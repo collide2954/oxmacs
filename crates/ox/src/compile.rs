@@ -74,7 +74,7 @@ fn assigns(form: &Syntax, name: &str) -> bool {
             );
             assigned || items.iter().any(|item| assigns(item, name))
         }
-        Datum::Vector(items) | Datum::Map(items) | Datum::Set(items) => {
+        Datum::Vector(items) | Datum::Map(items) | Datum::Set(items) | Datum::Record(_, items) => {
             items.iter().any(|item| assigns(item, name))
         }
         _ => false,
@@ -282,6 +282,9 @@ impl Compiler<'_> {
             }
             Datum::Map(items) => return self.map(items, target, form.span),
             Datum::Set(items) => return self.set(items, target, form.span),
+            Datum::Record(name, items) => {
+                return self.record_literal(name, items, target, form.span);
+            }
         };
         self.load(value, target, form.span)
     }
@@ -769,6 +772,32 @@ impl Compiler<'_> {
             self.expression(item, base + offset)?;
         }
         Ok((base, count))
+    }
+
+    fn record_literal(
+        &mut self,
+        name: &str,
+        items: &[Syntax],
+        target: Register,
+        span: Span,
+    ) -> Result<(), Error> {
+        let count = u16::try_from(items.len() + 1)
+            .map_err(|_| Error::at(span, "This literal has too many items"))?;
+        let base = self.reserve(items.len() + 1, span)?;
+        self.variable(Sym::intern(name), base, span);
+        for (offset, item) in (1..).zip(items) {
+            self.expression(item, base + offset)?;
+        }
+        self.emit(
+            Op::MakeRecordFrom {
+                to: target,
+                base,
+                count,
+            },
+            span,
+        );
+        self.release(base);
+        Ok(())
     }
 
     fn set(&mut self, items: &[Syntax], target: Register, span: Span) -> Result<(), Error> {

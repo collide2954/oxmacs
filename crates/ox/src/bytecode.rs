@@ -69,6 +69,11 @@ pub enum Op {
         record: u32,
         constructor: Register,
     },
+    MakeRecordFrom {
+        to: Register,
+        base: Register,
+        count: u16,
+    },
     CellGet {
         to: Register,
         cell: Register,
