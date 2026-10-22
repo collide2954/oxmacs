@@ -307,7 +307,7 @@ fn stub(editor: &mut Editor, plugin: &str, command: &str, summary: &str) {
         summary: summary.to_owned(),
         scope: Scope::Global.into(),
         run: Arc::new(move |editor: &mut Editor| {
-            if let Some(plugins) = editor.applet_state_mut::<Plugins>() {
+            if let Some(plugins) = editor.plugin_state_mut::<Plugins>() {
                 plugins.waking.push(plugin.clone());
             }
             commands::queue(editor, &queued);
@@ -345,7 +345,7 @@ fn stubs(editor: &mut Editor, plugin: &Plugin) {
 }
 
 pub fn request_wake(editor: &mut Editor, name: &str) {
-    if let Some(plugins) = editor.applet_state_mut::<Plugins>() {
+    if let Some(plugins) = editor.plugin_state_mut::<Plugins>() {
         plugins.waking.push(name.to_owned());
     }
 }
@@ -413,7 +413,7 @@ pub fn discover(
     for plugin in known.iter().filter(|plugin| plugin.active) {
         stubs(editor, plugin);
     }
-    editor.set_applet_state(Plugins {
+    editor.set_plugin_state(Plugins {
         known,
         waking: Vec::new(),
     });
@@ -496,9 +496,9 @@ fn configure(
 
 fn enable(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
     let name = name_of(heap, arguments[0]);
-    let mut plugins = editor.take_applet_state::<Plugins>().unwrap_or_default();
+    let mut plugins = editor.take_plugin_state::<Plugins>().unwrap_or_default();
     let problems = configure(heap, editor, &mut plugins, &name, &arguments[1..]);
-    editor.set_applet_state(plugins);
+    editor.set_plugin_state(plugins);
     for problem in problems {
         log::report(editor, &Error::new(problem), None);
     }
@@ -508,7 +508,7 @@ fn setting(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<
     let name = name_of(heap, arguments[0]);
     let key = keyword(arguments[1]).map_or_else(|| name_of(heap, arguments[1]), str::to_owned);
     let plugin = editor
-        .applet_state::<Plugins>()
+        .plugin_state::<Plugins>()
         .and_then(|plugins| {
             plugins
                 .known
@@ -540,7 +540,7 @@ pub fn install(isolate: &mut Isolate) {
 }
 
 pub fn wake_at_startup(isolate: &Isolate, editor: &mut Editor) {
-    let Some(plugins) = editor.applet_state_mut::<Plugins>() else {
+    let Some(plugins) = editor.plugin_state_mut::<Plugins>() else {
         return;
     };
     let woken: Vec<String> = plugins
@@ -579,7 +579,7 @@ pub fn reload_file(
     path: &Path,
 ) {
     let plugin = editor
-        .applet_state::<Plugins>()
+        .plugin_state::<Plugins>()
         .and_then(|plugins| {
             plugins
                 .known
@@ -618,7 +618,7 @@ pub fn reload_file(
 
 pub fn wake_waiting(isolate: &mut Isolate, editor: &mut Editor) {
     let waking = editor
-        .applet_state_mut::<Plugins>()
+        .plugin_state_mut::<Plugins>()
         .map(|plugins| std::mem::take(&mut plugins.waking))
         .unwrap_or_default();
     for name in waking {
@@ -627,7 +627,7 @@ pub fn wake_waiting(isolate: &mut Isolate, editor: &mut Editor) {
 }
 
 fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) {
-    let Some(plugins) = editor.applet_state_mut::<Plugins>() else {
+    let Some(plugins) = editor.plugin_state_mut::<Plugins>() else {
         return;
     };
     let Some(plugin) = plugins

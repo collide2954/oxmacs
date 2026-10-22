@@ -8,7 +8,7 @@ struct ModeLine(Vec<(String, String)>);
 
 fn segment(editor: &Editor) -> Option<String> {
     let texts: Vec<&str> = editor
-        .applet_state::<ModeLine>()?
+        .plugin_state::<ModeLine>()?
         .0
         .iter()
         .map(|(_, text)| text.as_str())
@@ -19,11 +19,11 @@ fn segment(editor: &Editor) -> Option<String> {
 fn set_mode_line(heap: &Heap, editor: &mut Editor, arguments: &[Value]) {
     let key = print::display(heap, arguments[0]);
     let text = (arguments[1] != Value::Nil).then(|| print::display(heap, arguments[1]));
-    if editor.applet_state::<ModeLine>().is_none() {
-        editor.set_applet_state(ModeLine::default());
+    if editor.plugin_state::<ModeLine>().is_none() {
+        editor.set_plugin_state(ModeLine::default());
         editor.add_mode_line_segment(segment);
     }
-    let Some(segments) = editor.applet_state_mut::<ModeLine>() else {
+    let Some(segments) = editor.plugin_state_mut::<ModeLine>() else {
         return;
     };
     match (segments.0.iter_mut().find(|(known, _)| *known == key), text) {

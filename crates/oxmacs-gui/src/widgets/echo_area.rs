@@ -14,7 +14,6 @@ pub fn view<'a, Message: 'a>(
     faces: Faces,
     font: Font,
     size: f32,
-    frame: Option<container::Style>,
 ) -> Element<'a, Message> {
     let content: Element<'a, Message> = match (editor.question(), editor.minibuffer()) {
         (None, None) if let Some(replace) = editor.replacing() => {
@@ -93,11 +92,10 @@ pub fn view<'a, Message: 'a>(
             .size(size)
             .into(),
     };
-    let area = container(content).width(Length::Fill).padding([1, 4]);
-    match frame {
-        Some(frame) => area.style(move |_| frame).into(),
-        None => area.into(),
-    }
+    container(content)
+        .width(Length::Fill)
+        .padding([1, 4])
+        .into()
 }
 
 fn search_spans(search: &Search, faces: Faces) -> [Span<'static, (), Font>; 5] {

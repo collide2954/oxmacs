@@ -1,4 +1,3 @@
-pub mod applet;
 pub mod cli;
 pub mod clock;
 pub mod command;
@@ -8,7 +7,7 @@ pub mod editor;
 pub mod external;
 pub mod files;
 pub mod input;
-pub mod routine;
+pub mod plugin;
 pub mod search;
 pub mod syntax;
 pub mod text;

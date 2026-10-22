@@ -141,14 +141,14 @@ mod tests {
             JobEvent::Output(text) => format!("output {text}"),
             JobEvent::Finished(outcome) => format!("finished {outcome:?}"),
         };
-        if let Some(state) = editor.applet_state_mut::<Heard>() {
+        if let Some(state) = editor.plugin_state_mut::<Heard>() {
             state.0.push(heard);
         }
     }
 
     fn heard(editor: &Editor) -> Vec<String> {
         editor
-            .applet_state::<Heard>()
+            .plugin_state::<Heard>()
             .map(|state| state.0.clone())
             .unwrap_or_default()
     }
@@ -156,7 +156,7 @@ mod tests {
     #[test]
     fn jobs_tell_their_handler_each_line_and_how_they_ended() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Heard::default());
+        editor.set_plugin_state(Heard::default());
 
         let id = editor.start_job(spec(false), listen);
 
@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn interactive_jobs_take_input_and_stream_output() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Heard::default());
+        editor.set_plugin_state(Heard::default());
 
         let id = editor.start_job(spec(true), listen);
         editor.send_job(id, "print(1)\n");

@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ox::read;
-use oxmacs_core::applet::AppletBuffer;
 use oxmacs_core::command::{CommandId, DynamicSpec, Scope, ScopeId};
 use oxmacs_core::editor::{Editor, InputLine};
+use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
 
 use crate::{Ox, log, mode, plugins};
@@ -37,7 +37,7 @@ struct ReplView {
     input: InputLine,
 }
 
-impl AppletBuffer for ReplView {
+impl PluginBuffer for ReplView {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -48,7 +48,7 @@ impl AppletBuffer for ReplView {
 }
 
 fn queue(editor: &mut Editor, request: Request) {
-    if let Some(requests) = editor.applet_state_mut::<Requests>() {
+    if let Some(requests) = editor.plugin_state_mut::<Requests>() {
         requests.waiting.push(request);
     }
 }
@@ -84,7 +84,7 @@ fn saved(editor: &mut Editor, id: BufferId) {
 pub fn install(editor: &mut Editor) {
     let mode_scope = editor.add_scope("Ox");
     let repl_scope = editor.add_scope("Ox REPL");
-    editor.set_applet_state(Requests {
+    editor.set_plugin_state(Requests {
         waiting: Vec::new(),
         repl: Some(repl_scope),
     });
@@ -160,17 +160,17 @@ fn source_name(editor: &Editor) -> String {
 }
 
 fn open_repl(editor: &mut Editor) {
-    if let Some(id) = editor.applet_buffers::<ReplView>().first().copied() {
+    if let Some(id) = editor.plugin_buffers::<ReplView>().first().copied() {
         editor.show_buffer(id);
         return;
     }
     let Some(scope) = editor
-        .applet_state::<Requests>()
+        .plugin_state::<Requests>()
         .and_then(|requests| requests.repl)
     else {
         return;
     };
-    let id = editor.add_applet_buffer_with(REPL, |buffer| {
+    let id = editor.add_plugin_buffer_with(REPL, |buffer| {
         buffer.insert_at(0, &format!("{GREETING}{PROMPT}"));
         let input = InputLine::new(buffer);
         buffer.set_point(buffer.len_chars());
@@ -180,10 +180,10 @@ fn open_repl(editor: &mut Editor) {
 }
 
 fn recall(editor: &mut Editor, older: bool) {
-    let Some(id) = editor.applet_buffers::<ReplView>().first().copied() else {
+    let Some(id) = editor.plugin_buffers::<ReplView>().first().copied() else {
         return;
     };
-    if let Some((buffer, view)) = editor.applet_buffer_mut::<ReplView>(id)
+    if let Some((buffer, view)) = editor.plugin_buffer_mut::<ReplView>(id)
         && let Some(text) = view.input.recall(older)
     {
         view.input.replace(buffer, &text);
@@ -193,7 +193,7 @@ fn recall(editor: &mut Editor, older: bool) {
 impl Ox {
     pub(crate) fn handle_requests(&mut self, editor: &mut Editor) {
         let waiting = editor
-            .applet_state_mut::<Requests>()
+            .plugin_state_mut::<Requests>()
             .map(|requests| std::mem::take(&mut requests.waiting))
             .unwrap_or_default();
         for request in waiting {
@@ -255,10 +255,10 @@ impl Ox {
     }
 
     fn send(&mut self, editor: &mut Editor) {
-        let Some(id) = editor.applet_buffers::<ReplView>().first().copied() else {
+        let Some(id) = editor.plugin_buffers::<ReplView>().first().copied() else {
             return;
         };
-        let Some((buffer, view)) = editor.applet_buffer_mut::<ReplView>(id) else {
+        let Some((buffer, view)) = editor.plugin_buffer_mut::<ReplView>(id) else {
             return;
         };
         let input = view.input.text(buffer).unwrap_or_default();
@@ -274,7 +274,7 @@ impl Ox {
                 Ok(value) => self.isolate.write(value),
                 Err(error) => format!("error: {}", error.message),
             });
-        let Some((buffer, view)) = editor.applet_buffer_mut::<ReplView>(id) else {
+        let Some((buffer, view)) = editor.plugin_buffer_mut::<ReplView>(id) else {
             return;
         };
         let mut text = String::from("\n");

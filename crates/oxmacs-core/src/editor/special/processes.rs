@@ -30,7 +30,7 @@ pub struct ProcessSpec {
 pub(in crate::editor) enum Source {
     Job(JobId),
     Connection(ConnectionId),
-    Applet(ProcessKey),
+    Plugin(ProcessKey),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -316,7 +316,7 @@ impl Editor {
             .iter()
             .rev()
             .find_map(|entry| match entry.source {
-                Source::Applet(key)
+                Source::Plugin(key)
                     if entry.kind == spec.kind
                         && entry.name == spec.name
                         && !entry.status.finished() =>
@@ -326,7 +326,7 @@ impl Editor {
                 _ => None,
             });
         if let Some(key) = running {
-            self.update_tracked(Source::Applet(key), |entry| {
+            self.update_tracked(Source::Plugin(key), |entry| {
                 entry.pid = spec.pid.or(entry.pid);
             });
             return key;
@@ -334,7 +334,7 @@ impl Editor {
         let key = ProcessKey(self.processes.next_key);
         self.processes.next_key += 1;
         self.track(Tracked {
-            source: Source::Applet(key),
+            source: Source::Plugin(key),
             kind: spec.kind,
             name: spec.name,
             detail: spec.detail,
@@ -351,7 +351,7 @@ impl Editor {
     }
 
     pub fn process_ended(&mut self, key: ProcessKey) {
-        self.end_tracked(Source::Applet(key), Status::Exited(Some(0)));
+        self.end_tracked(Source::Plugin(key), Status::Exited(Some(0)));
     }
 
     fn update_tracked(&mut self, source: Source, change: impl FnOnce(&mut Tracked)) {
@@ -531,7 +531,7 @@ impl Editor {
         match source {
             Source::Job(job) => self.effects.push(Effect::Kill(job)),
             Source::Connection(id) => self.stop_connection(id),
-            Source::Applet(key) => {
+            Source::Plugin(key) => {
                 let stop = self
                     .processes
                     .tracked
@@ -732,7 +732,7 @@ mod tests {
             detail: "oxmacs sync".to_owned(),
             pid,
             stop: Some(|editor| {
-                if let Some(stopped) = editor.applet_state_mut::<Stopped>() {
+                if let Some(stopped) = editor.plugin_state_mut::<Stopped>() {
                     stopped.0 += 1;
                 }
             }),
@@ -740,9 +740,9 @@ mod tests {
     }
 
     #[test]
-    fn applets_track_their_own_processes_once_and_can_stop_them() {
+    fn plugins_track_their_own_processes_once_and_can_stop_them() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Stopped::default());
+        editor.set_plugin_state(Stopped::default());
 
         let first = editor.track_process(daemon(None));
         let again = editor.track_process(daemon(Some(321)));
@@ -758,7 +758,7 @@ mod tests {
         press(&mut editor, "M-< C-n C-n C-n C-n k y");
 
         assert_eq!(
-            editor.applet_state::<Stopped>().map(|stopped| stopped.0),
+            editor.plugin_state::<Stopped>().map(|stopped| stopped.0),
             Some(1)
         );
         assert!(lines(&editor)[4].contains("exited"), "{:?}", lines(&editor));

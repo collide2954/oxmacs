@@ -88,10 +88,7 @@ fn editable_text(value: Option<Value>) -> String {
     }
 }
 
-type Entry = (Option<&'static str>, &'static Setting);
-
 struct Listed {
-    table: Option<&'static str>,
     setting: &'static Setting,
     value: Option<Value>,
     changed: bool,
@@ -113,16 +110,13 @@ fn page(entries: &[Listed], state: &Customize, location: &str) -> (Page, Vec<Row
         page.line(&[(problem, Some(Highlight::Error))]);
     }
     let mut rows = Vec::new();
-    let mut group = ("", None);
+    let mut group = "";
     for (index, entry) in entries.iter().enumerate() {
         let setting = entry.setting;
-        if (setting.group, entry.table) != group {
-            group = (setting.group, entry.table);
+        if setting.group != group {
+            group = setting.group;
             page.line(&[]);
-            match entry.table {
-                Some(table) => page.heading(&format!("{}  [{table}]", setting.group)),
-                None => page.heading(setting.group),
-            }
+            page.heading(setting.group);
         }
         let value = shown(setting, entry.value.as_ref());
         let changed = entry.changed;
@@ -225,15 +219,12 @@ impl Editor {
         let Some(Mode::Customize(state)) = self.buffers.mode(index) else {
             return;
         };
-        let entries: Vec<Listed> = self
-            .setting_list()
-            .into_iter()
-            .map(|(table, setting)| Listed {
-                table,
+        let entries: Vec<Listed> = SETTINGS
+            .iter()
+            .map(|setting| Listed {
                 setting,
-                value: self.setting_value(table, setting.key),
-                changed: self.config.value(table, setting.key)
-                    != state.saved.value(table, setting.key),
+                value: self.config.get(setting.key),
+                changed: self.config.get(setting.key) != state.saved.get(setting.key),
             })
             .collect();
         let (page, rows) = page(&entries, state, &location);
@@ -275,7 +266,7 @@ impl Editor {
         };
         let buffer = self.buffers.current_mut();
         buffer.set_point(buffer.line_start(line) + value.0);
-        if let Some((_, setting)) = self.setting_list().get(setting) {
+        if let Some(setting) = SETTINGS.get(setting) {
             self.show_message(setting.hint);
         }
     }
@@ -302,33 +293,15 @@ impl Editor {
             .map(|row| row.setting)
     }
 
-    fn setting_list(&self) -> Vec<Entry> {
-        SETTINGS
-            .iter()
-            .map(|setting| (None, setting))
-            .chain(
-                self.applet_settings
-                    .iter()
-                    .map(|(table, setting)| (Some(*table), *setting)),
-            )
-            .collect()
-    }
-
-    fn setting_value(&self, table: Option<&str>, key: &str) -> Option<Value> {
-        self.config
-            .value(table, key)
-            .or_else(|| table.and_then(|table| self.config_default(table, key)))
-    }
-
     pub(in crate::editor) fn change_setting(&mut self, index: usize) {
-        let Some((table, setting)) = self.setting_list().get(index).copied() else {
+        let Some(setting) = SETTINGS.get(index) else {
             return;
         };
-        let current = self.setting_value(table, setting.key);
+        let current = self.config.get(setting.key);
         match setting.kind {
             Kind::Toggle => {
                 let on = matches!(current, Some(Value::Boolean(true)));
-                self.set_setting(table, setting, Some(Value::Boolean(!on)));
+                self.change_config(setting.key, Some(Value::Boolean(!on)));
             }
             Kind::Choice(values) => {
                 let options: Vec<Option<&str>> = setting
@@ -344,7 +317,7 @@ impl Editor {
                     .unwrap_or(0);
                 let next = options[(at + 1) % options.len()];
                 let next = next.map(|value| Value::String(value.to_owned()));
-                self.set_setting(table, setting, next);
+                self.change_config(setting.key, next);
             }
             Kind::Theme => self.load_theme(),
             Kind::Integer | Kind::Number | Kind::Text => {
@@ -356,7 +329,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn set_setting_from(&mut self, index: usize, input: &str) {
-        let Some((table, setting)) = self.setting_list().get(index).copied() else {
+        let Some(setting) = SETTINGS.get(index) else {
             return;
         };
         let value = match setting.kind {
@@ -376,7 +349,7 @@ impl Editor {
             }
         };
         match value {
-            Ok(value) => self.set_setting(table, setting, value),
+            Ok(value) => self.change_config(setting.key, value),
             Err(expected) => self.show_message(format!("{} needs {expected}", setting.key)),
         }
     }
@@ -420,15 +393,6 @@ impl Editor {
         self.set_saved_settings(saved, problem);
     }
 
-    pub(in crate::editor) fn note_saved_settings(&mut self, change: impl FnOnce(&mut Config)) {
-        if let Some(index) = self.settings_index()
-            && let Some(Mode::Customize(state)) = self.buffers.mode_mut(index)
-        {
-            change(&mut state.saved);
-        }
-        self.render_settings();
-    }
-
     fn set_saved_settings(&mut self, saved: Config, problem: Option<String>) {
         if let Some(index) = self.settings_index()
             && let Some(Mode::Customize(state)) = self.buffers.mode_mut(index)
@@ -437,61 +401,6 @@ impl Editor {
             state.problem = problem;
         }
         self.render_settings();
-    }
-
-    pub fn edit_config_file(
-        &mut self,
-        edit: impl FnOnce(&mut toml_edit::DocumentMut) -> Result<(), String>,
-    ) -> Result<(), String> {
-        let path = self
-            .config_path
-            .clone()
-            .ok_or("No config directory to save in")?;
-        let shown = paths::abbreviate(&path, self.home.as_deref());
-        let (old, format) = if path.exists() {
-            let loaded = files::load(&path).map_err(|error| error.to_string())?;
-            (loaded.text, loaded.format)
-        } else {
-            (String::new(), files::Format::default())
-        };
-        let mut document: toml_edit::DocumentMut = old
-            .parse()
-            .map_err(|error: toml_edit::TomlError| format!("{shown}: {}", error.message()))?;
-        edit(&mut document)?;
-        let text = document.to_string();
-        let before = Config::parse(&old).map_err(|error| format!("{shown}: {error}"))?;
-        let after = Config::parse(&text).map_err(|error| format!("{shown}: {error}"))?;
-        for name in after.applet_tables() {
-            self.check_config_table(&after, name)?;
-        }
-        if let Some(directory) = path.parent() {
-            fs::create_dir_all(directory).map_err(|error| error.to_string())?;
-        }
-        files::save(&path, &text, format).map_err(|error| error.to_string())?;
-        let changed: Vec<(String, Option<toml::Table>)> = before
-            .applet_tables()
-            .into_iter()
-            .chain(after.applet_tables())
-            .filter(|name| before.applets.get(*name) != after.applets.get(*name))
-            .map(|name| (name.to_owned(), after.applets.get(name).cloned()))
-            .collect();
-        let apply = |config: &mut Config| {
-            for (name, table) in &changed {
-                match table {
-                    Some(table) => {
-                        config.applets.insert(name.clone(), table.clone());
-                    }
-                    None => {
-                        config.applets.remove(name);
-                    }
-                }
-            }
-        };
-        let mut live = self.config.clone();
-        apply(&mut live);
-        self.reconfigure(&live);
-        self.note_saved_settings(apply);
-        Ok(())
     }
 
     pub(in crate::editor) fn find_config_file(&mut self) {
@@ -515,25 +424,6 @@ impl Editor {
         }
     }
 
-    fn set_setting(&mut self, table: Option<&str>, setting: &Setting, value: Option<Value>) {
-        let Some(name) = table else {
-            self.change_config(setting.key, value);
-            return;
-        };
-        let changed = self
-            .config
-            .with_value(table, setting.key, value)
-            .map_err(|error| error.to_string())
-            .and_then(|config| self.check_config_table(&config, name).map(|()| config));
-        match changed {
-            Ok(config) => {
-                self.reconfigure(&config);
-                self.render_settings();
-            }
-            Err(error) => self.show_message(error),
-        }
-    }
-
     pub(in crate::editor) fn change_config(&mut self, key: &str, value: Option<Value>) {
         match self.config.with(key, value) {
             Ok(config) => {
@@ -550,10 +440,9 @@ mod tests {
     use std::fs;
 
     use crate::command::Command;
-    use serde::{Deserialize, Serialize};
 
     use crate::config::Config;
-    use crate::config::schema::{Kind, SETTINGS, Setting};
+    use crate::config::schema::SETTINGS;
     use crate::editor::test_support::{at_point, lines, minibuffer_input, press, type_text};
     use crate::editor::{Cell, Clicks, Editor, Effect};
 
@@ -606,128 +495,6 @@ mod tests {
         );
         assert!(editor.mode_line().starts_with("%% *Settings*"));
         assert!(row(&editor, "clock").starts_with("  clock"));
-    }
-
-    #[derive(Debug, PartialEq, Serialize, Deserialize)]
-    #[serde(default, deny_unknown_fields)]
-    struct Dice {
-        sides: u8,
-        loaded: bool,
-    }
-
-    impl Default for Dice {
-        fn default() -> Self {
-            Self {
-                sides: 6,
-                loaded: false,
-            }
-        }
-    }
-
-    const DICE: &[Setting] = &[
-        Setting {
-            key: "sides",
-            group: "Dice",
-            kind: Kind::Integer,
-            unset: None,
-            hint: "Sides on the die",
-        },
-        Setting {
-            key: "loaded",
-            group: "Dice",
-            kind: Kind::Toggle,
-            unset: None,
-            hint: "Always roll the top face",
-        },
-    ];
-
-    fn dice(text: Option<&str>) -> (tempfile::TempDir, Editor) {
-        settings_with(text, |editor| {
-            editor.add_config_table::<Dice>("dice");
-            editor.add_settings("dice", DICE);
-        })
-    }
-
-    #[test]
-    fn applet_settings_show_under_their_table_with_their_defaults() {
-        let (_dir, editor) = dice(None);
-
-        assert!(lines(&editor).iter().any(|line| line == "Dice  [dice]"));
-        assert!(row(&editor, "sides").ends_with(" 6"));
-        assert!(row(&editor, "loaded").ends_with(" [ ]"));
-    }
-
-    #[test]
-    fn applet_settings_change_are_checked_and_save_into_their_table() {
-        let (dir, mut editor) = dice(Some("tab-width = 4\n"));
-
-        on(&mut editor, "loaded");
-        press(&mut editor, "RET");
-        assert!(editor.applet_config::<Dice>("dice").loaded);
-        assert!(row(&editor, "loaded").starts_with("* loaded"));
-
-        on(&mut editor, "sides");
-        press(&mut editor, "RET C-a C-k 3 0 0 RET");
-        let message = editor.message().unwrap_or_default().to_owned();
-        assert!(message.starts_with("[dice] "), "{message}");
-        assert_eq!(editor.applet_config::<Dice>("dice").sides, 6);
-
-        press(&mut editor, "RET C-a C-k 2 0 RET");
-        assert_eq!(editor.applet_config::<Dice>("dice").sides, 20);
-
-        press(&mut editor, "C-x C-s");
-        assert_eq!(
-            config_text(&dir),
-            "tab-width = 4\n\n[dice]\nloaded = true\nsides = 20\n"
-        );
-    }
-
-    #[test]
-    fn applets_edit_config_toml_and_the_change_counts_as_saved() {
-        let (dir, mut editor) = dice(Some("# mine\ntab-width = 4\n"));
-
-        editor
-            .edit_config_file(|document| {
-                document["dice"] = toml_edit::table();
-                document["dice"]["sides"] = toml_edit::value(12);
-                Ok(())
-            })
-            .unwrap();
-
-        assert_eq!(
-            config_text(&dir),
-            "# mine\ntab-width = 4\n\n[dice]\nsides = 12\n"
-        );
-        assert_eq!(editor.applet_config::<Dice>("dice").sides, 12);
-        assert!(row(&editor, "sides").starts_with("  sides"));
-        assert!(editor.mode_line().starts_with("%% *Settings*"));
-
-        let refused = editor.edit_config_file(|document| {
-            document["dice"]["sides"] = toml_edit::value(300);
-            Ok(())
-        });
-        assert!(refused.unwrap_err().starts_with("[dice] "));
-        assert!(config_text(&dir).contains("sides = 12"));
-    }
-
-    #[test]
-    fn the_config_file_can_be_pointed_elsewhere() {
-        let (_dir, mut editor) = dice(None);
-        let other = tempfile::tempdir().unwrap();
-        let path = other.path().join("elsewhere.toml");
-
-        editor.set_config_path(Some(path.clone()));
-        editor
-            .edit_config_file(|document| {
-                document["dice"] = toml_edit::table();
-                document["dice"]["sides"] = toml_edit::value(8);
-                Ok(())
-            })
-            .unwrap();
-
-        assert_eq!(fs::read_to_string(path).unwrap(), "[dice]\nsides = 8\n");
-        editor.set_config_path(None);
-        assert!(editor.edit_config_file(|_| Ok(())).is_err());
     }
 
     #[test]

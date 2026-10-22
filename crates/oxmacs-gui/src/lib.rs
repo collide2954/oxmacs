@@ -1,6 +1,5 @@
 pub mod animation;
 pub mod app;
-pub mod applet;
 mod fetch;
 pub mod fonts;
 pub mod keys;
@@ -13,19 +12,11 @@ pub mod widgets;
 pub use iced::Result;
 
 use app::App;
-use applet::GuiApplet;
 use iced::{Size, Task, window};
 use oxmacs_core::cli::Visit;
-use oxmacs_core::config::{self, WindowMode};
-use oxmacs_core::theme;
+use oxmacs_core::config::WindowMode;
 
-pub fn run(visits: Vec<Visit>, applets: fn() -> Vec<Box<dyn GuiApplet>>) -> Result {
-    for applet in applets() {
-        theme::register(applet.themes());
-    }
-    let note = config::default_path().and_then(|path| {
-        config::migrate_file(&path).unwrap_or_else(|error| Some(error.to_string()))
-    });
+pub fn run(visits: Vec<Visit>) -> Result {
     let config = app::load_config();
     let mode = config
         .as_ref()
@@ -33,9 +24,8 @@ pub fn run(visits: Vec<Visit>, applets: fn() -> Vec<Box<dyn GuiApplet>>) -> Resu
         .unwrap_or_default();
     iced::application(
         move || {
-            let (mut app, task) = App::boot(&config, &visits, applets());
+            let (mut app, task) = App::boot(&config, &visits);
             let started = app.start_ox(oxmacs_ox::home().as_deref());
-            app.note(note.clone());
             (app, Task::batch([task, started]))
         },
         App::update,

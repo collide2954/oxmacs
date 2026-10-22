@@ -494,7 +494,7 @@ mod tests {
     }
 
     #[test]
-    fn languages_from_applets_lint_their_files_on_save() {
+    fn languages_from_plugins_lint_their_files_on_save() {
         let dir = tempfile::tempdir().unwrap();
         let mut editor = Editor::new();
         let path = shouting(&mut editor, dir.path());

@@ -14,10 +14,10 @@ struct Transients {
 }
 
 fn state(editor: &mut Editor) -> Option<&mut Transients> {
-    if editor.applet_state::<Transients>().is_none() {
-        editor.set_applet_state(Transients::default());
+    if editor.plugin_state::<Transients>().is_none() {
+        editor.set_plugin_state(Transients::default());
     }
-    editor.applet_state_mut::<Transients>()
+    editor.plugin_state_mut::<Transients>()
 }
 
 fn queue(editor: &mut Editor, hold: Hold, flags: &[String]) {

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::editor::prompts::applet::Answer;
+use crate::editor::prompts::callbacks::Answer;
 use crate::editor::special::processes::Source;
 use crate::editor::{Editor, is_keyboard_quit};
 use crate::external::managed::Managed;
@@ -32,7 +32,7 @@ enum Pending {
     SaveOver,
     StopProcess(Source),
     RemoveTool(Managed),
-    Applet,
+    Callback,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,7 +63,7 @@ impl Editor {
             return false;
         };
         if is_keyboard_quit(key) {
-            self.applet_answer = None;
+            self.pending_answer = None;
             self.show_message("Quit");
             return true;
         }
@@ -196,8 +196,8 @@ impl Editor {
                     self.finish_tool_removal(tool);
                 }
             }
-            Pending::Applet => {
-                if let Some(then) = self.applet_answer.take() {
+            Pending::Callback => {
+                if let Some(then) = self.pending_answer.take() {
                     then.give(self, answer);
                 }
             }
@@ -246,7 +246,7 @@ impl Editor {
         });
     }
 
-    pub(in crate::editor) fn ask_for_applet(
+    pub(in crate::editor) fn ask_for_callback(
         &mut self,
         prompt: &str,
         shown: &str,
@@ -254,12 +254,12 @@ impl Editor {
         typed: bool,
         then: Answer,
     ) {
-        self.applet_answer = Some(then);
+        self.pending_answer = Some(then);
         self.question = Some(Question {
             prompt: format!("{prompt} ({shown}) "),
             choices,
             typed: typed.then(String::new),
-            pending: Pending::Applet,
+            pending: Pending::Callback,
         });
     }
 

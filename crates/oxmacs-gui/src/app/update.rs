@@ -180,7 +180,6 @@ impl App {
                 }
                 self.editor.connection_event(id, event);
             }
-            Message::AppletEvent(event) => self.editor.deliver(&event),
             Message::OxPress(buffer, slot) => self.ox.press(&mut self.editor, buffer, slot),
         }
         self.ox.tick(&mut self.editor);
@@ -203,9 +202,6 @@ impl App {
 
     fn settle(&mut self) {
         self.editor.prepare_display();
-        for applet in &mut self.applets {
-            applet.tick(&self.editor, self.now);
-        }
     }
 
     fn sample_processes(&mut self) {
@@ -323,11 +319,6 @@ impl App {
                 }
                 Task::none()
             }
-            Effect::Applet(effect) => self
-                .applets
-                .iter_mut()
-                .find_map(|applet| applet.perform(&effect))
-                .map_or_else(Task::none, |task| task.map(Message::AppletEvent)),
         }
     }
 

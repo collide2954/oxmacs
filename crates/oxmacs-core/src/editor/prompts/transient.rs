@@ -249,7 +249,7 @@ mod tests {
 
     fn note(editor: &mut Editor, what: &str, flags: &[String]) {
         let line = format!("{what} {}", flags.join(" "));
-        if let Some(ran) = editor.applet_state_mut::<Ran>() {
+        if let Some(ran) = editor.plugin_state_mut::<Ran>() {
             ran.0.push(line.trim().to_owned());
         }
     }
@@ -272,14 +272,14 @@ mod tests {
     }
     fn ran(editor: &Editor) -> Vec<String> {
         editor
-            .applet_state::<Ran>()
+            .plugin_state::<Ran>()
             .map(|ran| ran.0.clone())
             .unwrap_or_default()
     }
 
     fn opened() -> Editor {
         let mut editor = Editor::new();
-        editor.set_applet_state(Ran::default());
+        editor.set_plugin_state(Ran::default());
         editor.open_transient(commit());
         editor
     }

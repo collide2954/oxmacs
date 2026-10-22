@@ -1,9 +1,9 @@
 use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
-use oxmacs_core::applet::AppletBuffer;
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::Editor;
+use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Highlight, NICK_COLORS};
 
@@ -48,7 +48,7 @@ pub struct ViewBuffer {
     pub node: Node,
 }
 
-impl AppletBuffer for ViewBuffer {
+impl PluginBuffer for ViewBuffer {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -328,7 +328,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     for (_, value) in found {
         bindings = keys(heap, value)?;
     }
-    let mut views = editor.take_applet_state::<Views>().unwrap_or_default();
+    let mut views = editor.take_plugin_state::<Views>().unwrap_or_default();
     let (alive, closed): (Vec<Open>, Vec<Open>) = std::mem::take(&mut views.open)
         .into_iter()
         .partition(|view| editor.buffer_by_id(view.buffer).is_some());
@@ -346,7 +346,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         index
     } else {
         let scope = editor.add_scope(Box::leak(name.clone().into_boxed_str()));
-        let buffer = editor.add_applet_buffer_with(&name, |buffer| {
+        let buffer = editor.add_plugin_buffer_with(&name, |buffer| {
             buffer.set_read_only(true);
             ViewBuffer {
                 scope,
@@ -367,7 +367,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     };
     let (buffer, scope) = (views.open[index].buffer, views.open[index].scope);
     views.dirty = true;
-    editor.set_applet_state(views);
+    editor.set_plugin_state(views);
     for (keys, command) in bindings {
         let id = editor
             .command_named(&command)
@@ -436,14 +436,14 @@ fn render(
 }
 
 pub fn redraw(editor: &mut Editor) {
-    if let Some(views) = editor.applet_state_mut::<Views>() {
+    if let Some(views) = editor.plugin_state_mut::<Views>() {
         views.dirty = true;
     }
 }
 
 pub fn refresh(isolate: &mut Isolate, editor: &mut Editor) {
     let writes = isolate.heap().atom_writes();
-    let Some(views) = editor.applet_state_mut::<Views>() else {
+    let Some(views) = editor.plugin_state_mut::<Views>() else {
         return;
     };
     if !views.dirty && views.seen == writes {
@@ -467,28 +467,28 @@ pub fn refresh(isolate: &mut Isolate, editor: &mut Editor) {
             }
         };
         if let Some(view) = editor
-            .applet_state_mut::<Views>()
+            .plugin_state_mut::<Views>()
             .and_then(|views| views.open.iter_mut().find(|view| view.buffer == buffer))
         {
             for old in std::mem::replace(&mut view.callbacks, callbacks) {
                 isolate.release(old);
             }
         }
-        if let Some((_, shown)) = editor.applet_buffer_mut::<ViewBuffer>(buffer)
+        if let Some((_, shown)) = editor.plugin_buffer_mut::<ViewBuffer>(buffer)
             && shown.node != node
         {
             shown.node = node;
         }
     }
     let writes = isolate.heap().atom_writes();
-    if let Some(views) = editor.applet_state_mut::<Views>() {
+    if let Some(views) = editor.plugin_state_mut::<Views>() {
         views.seen = writes;
     }
 }
 
 pub fn press(isolate: &mut Isolate, editor: &mut Editor, buffer: BufferId, slot: usize) {
     let callback = editor
-        .applet_state::<Views>()
+        .plugin_state::<Views>()
         .and_then(|views| views.open.iter().find(|view| view.buffer == buffer))
         .and_then(|view| view.callbacks.get(slot).copied())
         .and_then(|hold| isolate.held(hold));
@@ -514,7 +514,7 @@ mod tests {
     fn shown(editor: &Editor, name: &str) -> Node {
         let id = editor.buffer_named(name).unwrap();
         editor
-            .applet_buffer::<ViewBuffer>(id)
+            .plugin_buffer::<ViewBuffer>(id)
             .unwrap()
             .1
             .node

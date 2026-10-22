@@ -72,7 +72,7 @@ mod tests {
     struct Log(Vec<String>);
 
     fn note(editor: &mut Editor, text: String) {
-        if let Some(log) = editor.applet_state_mut::<Log>() {
+        if let Some(log) = editor.plugin_state_mut::<Log>() {
             log.0.push(text);
         }
     }
@@ -98,7 +98,7 @@ mod tests {
 
     fn logged(editor: &Editor) -> Vec<String> {
         editor
-            .applet_state::<Log>()
+            .plugin_state::<Log>()
             .map(|log| log.0.clone())
             .unwrap_or_default()
     }
@@ -106,7 +106,7 @@ mod tests {
     #[test]
     fn connections_carry_lines_and_report_events_to_their_owner() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Log::default());
+        editor.set_plugin_state(Log::default());
 
         let id = editor.connect(endpoint(), spec());
         editor.transmit(id, vec!["NICK me".to_owned()]);
@@ -131,7 +131,7 @@ mod tests {
     #[test]
     fn connections_show_in_processes_where_they_can_be_visited_and_stopped() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Log::default());
+        editor.set_plugin_state(Log::default());
         let id = editor.connect(endpoint(), spec());
         editor.connection_event(id, Event::Connected);
         press(&mut editor, "M-x");

@@ -2,8 +2,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use oxmacs_core::applet::AppletBuffer;
 use oxmacs_core::editor::Editor;
+use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::theme::Highlight;
 
 use crate::Ox;
@@ -124,7 +124,7 @@ impl Session {
 
     fn pills(&self, line: usize) -> Vec<(std::ops::Range<usize>, Highlight)> {
         let id = self.editor.buffer().id();
-        let (_, view) = self.editor.applet_buffer::<LinesBuffer>(id).unwrap();
+        let (_, view) = self.editor.plugin_buffer::<LinesBuffer>(id).unwrap();
         view.pills(line)
     }
 

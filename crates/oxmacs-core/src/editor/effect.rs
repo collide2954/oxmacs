@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::{fmt, mem};
 
-use crate::applet::Payload;
 use crate::editor::{Editor, Job, JobId};
 use crate::external::managed::Install;
 use crate::external::net::Endpoint;
@@ -45,27 +44,12 @@ pub enum Effect {
     Disconnect(ConnectionId),
     ProbeTools(Vec<Tool>),
     InstallTool(Box<Install>),
-    Applet(Payload),
 }
 
 impl Editor {
     pub fn take_effects(&mut self) -> Vec<Effect> {
         self.start_due_lint();
         mem::take(&mut self.effects)
-    }
-
-    pub fn request<T: std::any::Any + Send + Sync>(&mut self, effect: T) {
-        self.effects.push(Effect::Applet(Payload::new(effect)));
-    }
-
-    pub fn on_event<T: std::any::Any + Send + Sync>(&mut self, handler: fn(&mut Editor, &T)) {
-        self.event_handlers.add(handler);
-    }
-
-    pub fn deliver(&mut self, event: &Payload) {
-        if let Some(handler) = self.event_handlers.find(event) {
-            handler(self, event);
-        }
     }
 
     pub fn fetch(

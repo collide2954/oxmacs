@@ -1,7 +1,6 @@
 use std::any::Any;
 use std::ops::Range;
 
-use crate::applet::AppletBuffer;
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
 use crate::editor::buffers::Mode;
 use crate::editor::motion::movement::display_column;
@@ -9,6 +8,7 @@ use crate::editor::windows::status::{BufferState, Status};
 use crate::editor::{Editor, GalleryView, Gutter, PlotView, PopupView};
 use crate::external::diagnostics::Severity;
 use crate::files::LineEnding;
+use crate::plugin::PluginBuffer;
 use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::Highlight;
@@ -149,8 +149,8 @@ impl<'a> Pane<'a> {
         matches!(self.editor.buffers.mode(self.index), Some(Mode::Splash(_)))
     }
 
-    pub fn applet_buffer<T: AppletBuffer>(&self) -> Option<&'a T> {
-        let Some(Mode::Applet(view)) = self.editor.buffers.mode(self.index) else {
+    pub fn plugin_buffer<T: PluginBuffer>(&self) -> Option<&'a T> {
+        let Some(Mode::Plugin(view)) = self.editor.buffers.mode(self.index) else {
             return None;
         };
         let any: &dyn Any = view.as_ref();
@@ -206,7 +206,7 @@ impl<'a> Pane<'a> {
 
     pub fn line_pills(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
         match self.editor.buffers.mode(self.index) {
-            Some(Mode::Applet(view)) => view.pills(line),
+            Some(Mode::Plugin(view)) => view.pills(line),
             _ => Vec::new(),
         }
     }
@@ -241,7 +241,7 @@ impl<'a> Pane<'a> {
             line: buffer.line_of(self.point) + 1,
             column: display_column(buffer, self.point, self.editor.tab_width),
             position: match self.editor.buffers.mode(self.index) {
-                Some(Mode::Applet(view)) => view.position(),
+                Some(Mode::Plugin(view)) => view.position(),
                 _ => None,
             },
             crlf: buffer

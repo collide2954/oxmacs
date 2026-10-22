@@ -9,7 +9,6 @@ use iced::time::{Duration, Instant};
 use iced::widget;
 use iced::{Animation, Event, Font, Subscription, Task, Theme, event, keyboard, system, window};
 use native_theme::detect::prefers_reduced_motion;
-use oxmacs_core::applet::Payload;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{self, Config, ConfigError, ModeLineStyle};
@@ -23,7 +22,6 @@ use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
 use oxmacs_ox::{Ox, Pace};
 
-use crate::applet::GuiApplet;
 use crate::watcher::Watched;
 use crate::widgets::buffer_view::ViewEvent;
 use crate::{animation, fonts, style, ticker, watcher};
@@ -48,7 +46,6 @@ pub struct App {
     usage: Usage,
     jobs: Vec<(JobId, Handle)>,
     connections: Vec<(ConnectionId, Connection)>,
-    applets: Vec<Box<dyn GuiApplet>>,
     ox: Ox,
 }
 
@@ -81,7 +78,6 @@ pub enum Message {
     Connection(ConnectionId, net::Event),
     ToolsProbed(Vec<(Tool, Probe)>),
     ToolInstalled(Managed, Result<PathBuf, String>),
-    AppletEvent(Payload),
     OxTick,
     OxPress(BufferId, usize),
 }
@@ -123,24 +119,15 @@ impl App {
             usage: Usage::new(),
             jobs: Vec::new(),
             connections: Vec::new(),
-            applets: Vec::new(),
             ox: Ox::new(),
         };
         app.configure(&config);
         app
     }
 
-    pub fn boot(
-        config: &Result<Config, ConfigError>,
-        visits: &[Visit],
-        applets: Vec<Box<dyn GuiApplet>>,
-    ) -> (Self, Task<Message>) {
+    pub fn boot(config: &Result<Config, ConfigError>, visits: &[Visit]) -> (Self, Task<Message>) {
         let splash = config.as_ref().map_or(true, |config| config.splash);
         let mut app = Self::new(config.as_ref());
-        for applet in &applets {
-            app.editor.install(applet.as_ref());
-        }
-        app.applets = applets;
         app.start(visits, splash);
         app.reduced_motion = prefers_reduced_motion();
         app.configure(&app.editor.config().clone());
@@ -190,12 +177,6 @@ impl App {
         &self.editor
     }
 
-    pub fn note(&mut self, note: Option<String>) {
-        if let Some(note) = note {
-            self.editor.show_message(note);
-        }
-    }
-
     pub fn text_size(&self) -> f32 {
         self.text_size
     }
@@ -217,12 +198,7 @@ impl App {
             .theme_fade
             .as_ref()
             .is_some_and(|(_, fade)| fade.is_animating(self.now));
-        let applets = self.animations
-            && self
-                .applets
-                .iter()
-                .any(|applet| applet.animating(&self.editor));
-        fading || applets || self.reveal.is_animating(self.now)
+        fading || self.reveal.is_animating(self.now)
     }
 
     pub fn completion_opacity(&self) -> f32 {
@@ -260,14 +236,8 @@ impl App {
         } else {
             Subscription::none()
         };
-        let applets = Subscription::batch(
-            self.applets
-                .iter()
-                .map(|applet| applet.subscription(&self.editor).map(Message::AppletEvent)),
-        );
         Subscription::batch([
             keyboard::listen().map(Message::Keyboard),
-            applets,
             system::theme_changes().map(Message::AppearanceChanged),
             watcher::changes(Watched {
                 files: self.editor.visited_files(),
@@ -419,22 +389,6 @@ mod tests {
     }
 
     #[test]
-    fn startup_notes_show_in_the_echo_area() {
-        let mut app = App::default();
-
-        app.note(None);
-        assert_eq!(app.editor().message(), None);
-
-        app.note(Some(
-            "Moved weather-location to [weather] in config.toml".to_owned(),
-        ));
-        assert_eq!(
-            app.editor().message(),
-            Some("Moved weather-location to [weather] in config.toml")
-        );
-    }
-
-    #[test]
     fn ox_starts_from_init_ox_in_the_home_folder() {
         let home = tempfile::tempdir().unwrap();
         std::fs::write(
@@ -475,125 +429,16 @@ mod tests {
         assert!(ui.find("Count 1").is_ok());
     }
 
-    #[derive(Debug)]
-    struct Umbrella;
-
-    impl oxmacs_core::applet::Applet for Umbrella {
-        fn name(&self) -> &'static str {
-            "umbrella"
-        }
-
-        fn version(&self) -> &'static str {
-            "1.0.0"
-        }
-
-        fn install(&self, editor: &mut Editor) {
-            editor.add_mode_line_segment(|_| Some("☂ bring one".to_owned()));
-        }
-    }
-
-    impl GuiApplet for Umbrella {}
-
     #[test]
-    fn applet_segments_show_in_the_mode_line() {
-        let (app, _) = App::boot(&Ok(Config::default()), &[], vec![Box::new(Umbrella)]);
+    fn plugin_segments_show_in_the_mode_line() {
+        let (mut app, _) = App::boot(&Ok(Config::default()), &[]);
+        app.editor
+            .add_mode_line_segment(|_| Some("☂ bring one".to_owned()));
 
         let mut ui = iced_test::simulator(app.view());
 
         assert!(ui.find("☂ bring one").is_ok());
     }
-
-    #[derive(Debug)]
-    struct Beacon;
-
-    impl oxmacs_core::applet::Applet for Beacon {
-        fn name(&self) -> &'static str {
-            "beacon"
-        }
-
-        fn version(&self) -> &'static str {
-            "1.0.0"
-        }
-
-        fn install(&self, _editor: &mut Editor) {}
-    }
-
-    impl GuiApplet for Beacon {
-        fn minibuffer_style(
-            &self,
-            editor: &Editor,
-            context: &crate::applet::Context,
-        ) -> Option<widget::container::Style> {
-            editor.prompting().then(|| widget::container::Style {
-                background: Some(style::color(context.faces.minibuffer_prompt).into()),
-                ..widget::container::Style::default()
-            })
-        }
-    }
-
-    #[test]
-    fn applets_can_style_the_minibuffer_while_a_prompt_waits() {
-        let (mut app, _) = App::boot(&Ok(Config::default()), &[], vec![Box::new(Beacon)]);
-        assert!(app.minibuffer_style().is_none());
-
-        press(&mut app, "x", Modifiers::ALT);
-
-        assert_eq!(
-            app.minibuffer_style().and_then(|style| style.background),
-            Some(style::color(app.faces().minibuffer_prompt).into())
-        );
-    }
-    #[derive(Debug)]
-    struct Sign(oxmacs_core::command::ScopeId);
-
-    impl oxmacs_core::applet::AppletBuffer for Sign {
-        fn scope(&self) -> oxmacs_core::command::ScopeId {
-            self.0
-        }
-    }
-
-    #[derive(Debug)]
-    struct Billboard;
-
-    impl oxmacs_core::applet::Applet for Billboard {
-        fn name(&self) -> &'static str {
-            "billboard"
-        }
-
-        fn version(&self) -> &'static str {
-            "1.0.0"
-        }
-
-        fn install(&self, editor: &mut Editor) {
-            let scope = editor.add_scope("Billboard");
-            editor.open_applet_buffer("*Billboard*", Sign(scope));
-        }
-    }
-
-    impl GuiApplet for Billboard {
-        fn body<'a>(
-            &'a self,
-            _editor: &'a Editor,
-            pane: oxmacs_core::editor::Pane<'a>,
-            _window: WindowId,
-            context: &crate::applet::Context,
-        ) -> Option<iced::Element<'a, Payload>> {
-            pane.applet_buffer::<Sign>()?;
-            Some(widget::text(format!("billboard at {}", context.size)).into())
-        }
-    }
-
-    #[test]
-    fn applets_can_draw_their_own_buffers() {
-        let (mut app, _) = App::boot(&Ok(Config::default()), &[], vec![Box::new(Billboard)]);
-        let id = app.editor.buffer_named("*Billboard*").unwrap();
-        app.editor.show_buffer(id);
-
-        let mut ui = iced_test::simulator(app.view());
-
-        assert!(ui.find(format!("billboard at {}", app.text_size())).is_ok());
-    }
-
     #[test]
     fn view_echoes_the_editor_message() {
         let mut app = App::default();

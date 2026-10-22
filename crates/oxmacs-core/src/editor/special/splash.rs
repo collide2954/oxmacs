@@ -386,7 +386,7 @@ mod tests {
     }
 
     #[test]
-    fn applets_add_lines_that_run_their_commands_and_can_reword_them() {
+    fn plugins_add_lines_that_run_their_commands_and_can_reword_them() {
         let mut editor = Editor::new();
         let command = editor.add_command(CommandSpec {
             name: "wave-hello",

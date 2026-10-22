@@ -25,15 +25,15 @@ pub struct Hooks {
 }
 
 fn hooks(editor: &mut Editor) -> Option<&mut Hooks> {
-    if editor.applet_state::<Hooks>().is_none() {
-        editor.set_applet_state(Hooks::default());
+    if editor.plugin_state::<Hooks>().is_none() {
+        editor.set_plugin_state(Hooks::default());
     }
-    editor.applet_state_mut::<Hooks>()
+    editor.plugin_state_mut::<Hooks>()
 }
 
 fn open_directory(editor: &mut Editor, path: &Path) -> bool {
     let Some(opener) = editor
-        .applet_state::<Hooks>()
+        .plugin_state::<Hooks>()
         .and_then(|hooks| hooks.opener.clone())
     else {
         return false;
@@ -87,7 +87,7 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
         let (handlers, arguments) = match event {
             Waiting::OpenDirectory(path) => {
                 let handler = editor
-                    .applet_state::<Hooks>()
+                    .plugin_state::<Hooks>()
                     .and_then(|hooks| hooks.directory);
                 let Ok(path) = isolate.heap_mut().string(&path.display().to_string()) else {
                     continue;
@@ -96,7 +96,7 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
             }
             Waiting::DiskChanged => (
                 editor
-                    .applet_state::<Hooks>()
+                    .plugin_state::<Hooks>()
                     .map(|hooks| hooks.disk.iter().map(|(_, hold)| *hold).collect())
                     .unwrap_or_default(),
                 Vec::new(),
@@ -107,7 +107,7 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
                 };
                 (
                     editor
-                        .applet_state::<Hooks>()
+                        .plugin_state::<Hooks>()
                         .map(|hooks| hooks.saved.iter().map(|(_, hold)| *hold).collect())
                         .unwrap_or_default(),
                     vec![path],

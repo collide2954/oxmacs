@@ -300,7 +300,7 @@ mod tests {
     };
 
     #[test]
-    fn languages_from_applets_format_through_their_formatter() {
+    fn languages_from_plugins_format_through_their_formatter() {
         let shouty = Language::new(&SHOUTY);
         let mut editor = editor_with("hello", 0);
         editor.add_language(shouty, None);
@@ -330,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn languages_from_applets_format_on_c_c_c_f_in_their_scope() {
+    fn languages_from_plugins_format_on_c_c_c_f_in_their_scope() {
         let shouty = Language::new(&SHOUTY);
         let mut editor = editor_with("hello", 0);
         let scope = editor.add_scope("Shouty buffers");

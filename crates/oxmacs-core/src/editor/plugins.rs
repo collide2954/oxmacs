@@ -1,42 +1,17 @@
 use std::any::Any;
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-
-use crate::applet::{AppletBuffer, DoctorLine};
 use crate::command::{Command, CommandId};
-use crate::config::Config;
-use crate::config::schema::Setting;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::editor::{Editor, Effect};
 use crate::input::{KeySequence, Lookup};
+use crate::plugin::PluginBuffer;
 use crate::text::{Buffer, BufferId};
-
-#[derive(Debug, Clone, Copy)]
-pub(super) struct ConfigTable {
-    name: &'static str,
-    check: fn(&Config, &str) -> Result<(), String>,
-    defaults: fn() -> Option<toml::Table>,
-}
-
-pub(super) type DoctorSection = fn(&Editor) -> Vec<DoctorLine>;
 
 pub(super) type Segment = fn(&Editor) -> Option<String>;
 
-fn check<T: DeserializeOwned + Default>(config: &Config, name: &str) -> Result<(), String> {
-    config.applet::<T>(name).map(|_| ())
-}
-
-fn defaults<T: Serialize + Default>() -> Option<toml::Table> {
-    match toml::Value::try_from(T::default()).ok()? {
-        toml::Value::Table(table) => Some(table),
-        _ => None,
-    }
-}
-
-fn downcast<T: AppletBuffer>(view: &dyn AppletBuffer) -> Option<&T> {
+fn downcast<T: PluginBuffer>(view: &dyn PluginBuffer) -> Option<&T> {
     let any: &dyn Any = view;
     any.downcast_ref()
 }
@@ -248,71 +223,15 @@ impl Editor {
             .collect()
     }
 
-    pub fn add_doctor_section(&mut self, title: &'static str, lines: DoctorSection) {
-        self.doctor_sections.push((title, lines));
-    }
-
-    pub fn add_config_table<T: Serialize + DeserializeOwned + Default>(
-        &mut self,
-        name: &'static str,
-    ) {
-        self.config_tables.push(ConfigTable {
-            name,
-            check: check::<T>,
-            defaults: defaults::<T>,
-        });
-        self.check_config_tables();
-    }
-
-    pub fn add_settings(&mut self, table: &'static str, settings: &'static [Setting]) {
-        self.applet_settings
-            .extend(settings.iter().map(|setting| (table, setting)));
-    }
-
-    pub(super) fn check_config_table(&self, config: &Config, name: &str) -> Result<(), String> {
-        self.config_tables
-            .iter()
-            .filter(|table| table.name == name)
-            .try_for_each(|table| (table.check)(config, name))
-    }
-
-    pub(super) fn config_default(&self, name: &str, key: &str) -> Option<toml::Value> {
-        let table = self.config_tables.iter().find(|table| table.name == name)?;
-        (table.defaults)()?.remove(key)
-    }
-
-    pub fn applet_config<T: DeserializeOwned + Default>(&self, name: &str) -> T {
-        self.config.applet(name).unwrap_or_default()
-    }
-
-    pub fn unclaimed_config_tables(&self) -> Vec<&str> {
-        self.config
-            .applet_tables()
-            .into_iter()
-            .filter(|table| self.config_tables.iter().all(|known| known.name != *table))
-            .collect()
-    }
-
-    pub(super) fn check_config_tables(&mut self) {
-        let problems: Vec<String> = self
-            .config_tables
-            .iter()
-            .filter_map(|table| (table.check)(&self.config, table.name).err())
-            .collect();
-        if !problems.is_empty() {
-            self.show_message(problems.join("; "));
-        }
-    }
-
-    pub fn open_applet_buffer(&mut self, name: &str, view: impl AppletBuffer) -> BufferId {
+    pub fn open_plugin_buffer(&mut self, name: &str, view: impl PluginBuffer) -> BufferId {
         let mut buffer = Buffer::with_text(name, "");
         buffer.set_read_only(true);
         let id = buffer.id();
-        self.add_buffer_with(buffer, Mode::Applet(Box::new(view)));
+        self.add_buffer_with(buffer, Mode::Plugin(Box::new(view)));
         id
     }
 
-    pub fn add_applet_buffer_with<T: AppletBuffer>(
+    pub fn add_plugin_buffer_with<T: PluginBuffer>(
         &mut self,
         name: &str,
         make: impl FnOnce(&mut Buffer) -> T,
@@ -321,7 +240,7 @@ impl Editor {
         let view = make(&mut buffer);
         let id = buffer.id();
         self.buffers
-            .push_back_with(buffer, Mode::Applet(Box::new(view)));
+            .push_back_with(buffer, Mode::Plugin(Box::new(view)));
         self.name_file_buffers();
         id
     }
@@ -330,7 +249,7 @@ impl Editor {
         if !command.modifies_text() {
             return false;
         }
-        let Some((buffer, Mode::Applet(view))) = self.buffers.entry_mut(0) else {
+        let Some((buffer, Mode::Plugin(view))) = self.buffers.entry_mut(0) else {
             return false;
         };
         let Some(start) = view.input_line().and_then(|input| input.start(buffer)) else {
@@ -346,20 +265,20 @@ impl Editor {
             )
     }
 
-    pub fn with_applet_state<T: Any + Send, R>(
+    pub fn with_plugin_state<T: Any + Send, R>(
         &mut self,
         work: impl FnOnce(&mut Editor, &mut T) -> R,
     ) -> Option<R> {
-        let mut state = self.applet_states.take::<T>()?;
+        let mut state = self.plugin_states.take::<T>()?;
         let result = work(self, &mut state);
-        self.applet_states.set(state);
+        self.plugin_states.set(state);
         Some(result)
     }
 
-    pub fn applet_buffers<T: AppletBuffer>(&self) -> Vec<BufferId> {
+    pub fn plugin_buffers<T: PluginBuffer>(&self) -> Vec<BufferId> {
         (0..self.buffers.len())
             .filter(|index| {
-                matches!(self.buffers.mode(*index), Some(Mode::Applet(view)) if downcast::<T>(view.as_ref()).is_some())
+                matches!(self.buffers.mode(*index), Some(Mode::Plugin(view)) if downcast::<T>(view.as_ref()).is_some())
             })
             .filter_map(|index| self.buffers.get(index).map(Buffer::id))
             .collect()
@@ -380,31 +299,31 @@ impl Editor {
         }
     }
 
-    pub fn find_applet_buffer<T: AppletBuffer>(
+    pub fn find_plugin_buffer<T: PluginBuffer>(
         &self,
         matches: impl Fn(&T) -> bool,
     ) -> Option<BufferId> {
         let index = self.buffers.find_mode(|mode| match mode {
-            Mode::Applet(view) => downcast::<T>(view.as_ref()).is_some_and(&matches),
+            Mode::Plugin(view) => downcast::<T>(view.as_ref()).is_some_and(&matches),
             _ => false,
         })?;
         self.buffers.get(index).map(Buffer::id)
     }
 
-    pub fn applet_buffer<T: AppletBuffer>(&self, id: BufferId) -> Option<(&Buffer, &T)> {
+    pub fn plugin_buffer<T: PluginBuffer>(&self, id: BufferId) -> Option<(&Buffer, &T)> {
         let index = self.buffers.position(|buffer| buffer.id() == id)?;
-        let Some(Mode::Applet(view)) = self.buffers.mode(index) else {
+        let Some(Mode::Plugin(view)) = self.buffers.mode(index) else {
             return None;
         };
         Some((self.buffers.get(index)?, downcast(view.as_ref())?))
     }
 
-    pub fn applet_buffer_mut<T: AppletBuffer>(
+    pub fn plugin_buffer_mut<T: PluginBuffer>(
         &mut self,
         id: BufferId,
     ) -> Option<(&mut Buffer, &mut T)> {
         let index = self.buffers.position(|buffer| buffer.id() == id)?;
-        let (buffer, Mode::Applet(view)) = self.buffers.entry_mut(index)? else {
+        let (buffer, Mode::Plugin(view)) = self.buffers.entry_mut(index)? else {
             return None;
         };
         let any: &mut dyn Any = view.as_mut();

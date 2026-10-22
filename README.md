@@ -26,7 +26,7 @@ oxmacs is moving its features into Ox, an extension language of its own: a moder
 cargo run -p ox -- hello.ox
 ```
 
-The applets that used to be Cargo features (dired, Markdown, weather, Atlas, IRC, git, the database browser, the PDF viewer, Python, the themes and the animated start screen) have been removed while Ox is built; they return as Ox plugins.
+Dired, git and weather are back as bundled Ox plugins. The rest of the former Cargo-feature applets (Markdown, Atlas, IRC, the database browser, the PDF viewer, Python, the extra themes and the animated start screen) return the same way.
 ## Configuration
 
 Settings live in `config.toml` in the oxmacs config folder (for example `~/.config/oxmacs/config.toml` on Linux and `%APPDATA%\oxmacs\config.toml` on Windows). `M-x customize` edits them in a settings buffer, `M-x find-config-file` opens the file itself, and `M-x oxmacs-doctor` reports what oxmacs found on your system.

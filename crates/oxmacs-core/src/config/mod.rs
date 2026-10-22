@@ -1,16 +1,14 @@
 pub mod schema;
 
-use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use toml::Spanned;
 use toml::de::{DeTable, DeValue};
 
-use crate::{clock, files, theme};
+use crate::{clock, theme};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
@@ -43,53 +41,8 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub air_program: Option<String>,
     #[serde(skip)]
-    pub(crate) applets: BTreeMap<String, toml::Table>,
+    pub(crate) ignored: Vec<String>,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Moved {
-    pub from: &'static str,
-    pub table: &'static str,
-    pub key: &'static str,
-}
-
-const MOVED: &[Moved] = &[
-    Moved {
-        from: "weather-location",
-        table: "weather",
-        key: "location",
-    },
-    Moved {
-        from: "weather-units",
-        table: "weather",
-        key: "units",
-    },
-    Moved {
-        from: "mode-line-weather",
-        table: "weather",
-        key: "mode-line",
-    },
-    Moved {
-        from: "irc-server",
-        table: "irc",
-        key: "server",
-    },
-    Moved {
-        from: "irc-bouncer",
-        table: "irc",
-        key: "bouncer",
-    },
-    Moved {
-        from: "atlas-vault",
-        table: "atlas",
-        key: "vault",
-    },
-    Moved {
-        from: "delete-to-trash",
-        table: "dired",
-        key: "delete-to-trash",
-    },
-];
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -160,7 +113,7 @@ impl Default for Config {
             mode_line_style: ModeLineStyle::default(),
             r_program: None,
             air_program: None,
-            applets: BTreeMap::new(),
+            ignored: Vec::new(),
         }
     }
 }
@@ -179,8 +132,7 @@ pub enum ConfigError {
     ClockFormat(String),
     #[error("{}: {source}", path.display())]
     Read { path: PathBuf, source: io::Error },
-    #[error("{}: {reason}", path.display())]
-    Migrate { path: PathBuf, reason: String },
+
     #[error("{}: {source}", path.display())]
     Invalid {
         path: PathBuf,
@@ -190,93 +142,26 @@ pub enum ConfigError {
 
 impl Config {
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
-        Self::parse_with(text, MOVED)
-    }
-
-    fn parse_with(text: &str, moved: &[Moved]) -> Result<Self, ConfigError> {
         let root = DeTable::parse(text).map_err(|error| syntax_error(text, &error))?;
         let span = root.span();
         let mut core = DeTable::new();
-        let mut names = Vec::new();
-        let mut relocated = Vec::new();
+        let mut ignored = Vec::new();
         for (key, value) in root.into_inner() {
-            let name: &str = key.get_ref();
-            if let Some(entry) = moved.iter().find(|entry| entry.from == name) {
-                relocated.push(*entry);
-            } else if matches!(value.get_ref(), DeValue::Table(_)) {
-                names.push(name.to_owned());
+            if is_table(value.get_ref()) {
+                ignored.push(key.get_ref().to_string());
             } else {
                 core.insert(key, value);
             }
         }
         let mut config = Self::deserialize(toml::de::Deserializer::from(Spanned::new(span, core)))
             .map_err(|error| syntax_error(text, &error))?;
-        if !names.is_empty() || !relocated.is_empty() {
-            let mut all: toml::Table =
-                toml::from_str(text).map_err(|error| syntax_error(text, &error))?;
-            for name in names {
-                if let Some(toml::Value::Table(table)) = all.remove(&name) {
-                    config.applets.insert(name, table);
-                }
-            }
-            for entry in relocated {
-                if let Some(value) = all.remove(entry.from) {
-                    config
-                        .applets
-                        .entry(entry.table.to_owned())
-                        .or_default()
-                        .entry(entry.key)
-                        .or_insert(value);
-                }
-            }
-        }
+        config.ignored = ignored;
         config.validate()?;
         Ok(config)
     }
 
-    pub fn value(&self, table: Option<&str>, key: &str) -> Option<toml::Value> {
-        match table {
-            None => self.get(key),
-            Some(table) => self.applets.get(table)?.get(key).cloned(),
-        }
-    }
-
-    pub fn with_value(
-        &self,
-        table: Option<&str>,
-        key: &str,
-        value: Option<toml::Value>,
-    ) -> Result<Self, ConfigError> {
-        let Some(name) = table else {
-            return self.with(key, value);
-        };
-        let mut config = self.clone();
-        let entries = config.applets.entry(name.to_owned()).or_default();
-        match value {
-            Some(value) => {
-                entries.insert(key.to_owned(), value);
-            }
-            None => {
-                entries.remove(key);
-            }
-        }
-        if entries.is_empty() {
-            config.applets.remove(name);
-        }
-        Ok(config)
-    }
-
-    pub fn applet_tables(&self) -> Vec<&str> {
-        self.applets.keys().map(String::as_str).collect()
-    }
-
-    pub fn applet<T: DeserializeOwned + Default>(&self, name: &str) -> Result<T, String> {
-        match self.applets.get(name) {
-            None => Ok(T::default()),
-            Some(table) => toml::Value::Table(table.clone())
-                .try_into()
-                .map_err(|error: toml::de::Error| format!("[{name}] {}", error.message())),
-        }
+    pub fn ignored_tables(&self) -> &[String] {
+        &self.ignored
     }
 
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
@@ -315,7 +200,7 @@ impl Config {
             .try_into()
             .map_err(|error: toml::de::Error| ConfigError::Syntax(error.message().to_owned()))?;
         config.validate()?;
-        config.applets.clone_from(&self.applets);
+        config.ignored.clone_from(&self.ignored);
         Ok(config)
     }
 
@@ -335,70 +220,6 @@ impl Config {
         clock::text(&self.clock_format, &sample).map_err(ConfigError::ClockFormat)?;
         Ok(())
     }
-}
-
-pub fn migrate_file(path: &Path) -> Result<Option<String>, ConfigError> {
-    migrate_file_with(path, MOVED)
-}
-
-fn migrate_file_with(path: &Path, moved: &[Moved]) -> Result<Option<String>, ConfigError> {
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let failed = |reason: String| ConfigError::Migrate {
-        path: path.to_owned(),
-        reason,
-    };
-    let loaded = files::load(path).map_err(|error| failed(error.to_string()))?;
-    let Some((text, entries)) = migrate_with(&loaded.text, moved) else {
-        return Ok(None);
-    };
-    files::save(path, &text, loaded.format).map_err(|error| failed(error.to_string()))?;
-    let mut tables: Vec<(&str, Vec<&str>)> = Vec::new();
-    for entry in &entries {
-        match tables.iter_mut().find(|(table, _)| *table == entry.table) {
-            Some((_, keys)) => keys.push(entry.from),
-            None => tables.push((entry.table, vec![entry.from])),
-        }
-    }
-    let parts: Vec<String> = tables
-        .iter()
-        .map(|(table, keys)| format!("{} to [{table}]", keys.join(", ")))
-        .collect();
-    let name = path.file_name().map_or_else(
-        || path.display().to_string(),
-        |name| name.to_string_lossy().into_owned(),
-    );
-    Ok(Some(format!("Moved {} in {name}", parts.join("; "))))
-}
-
-fn migrate_with(text: &str, moved: &[Moved]) -> Option<(String, Vec<Moved>)> {
-    let mut document: toml_edit::DocumentMut = text.parse().ok()?;
-    let mut done = Vec::new();
-    for entry in moved {
-        let Some((key, item)) = document.remove_entry(entry.from) else {
-            continue;
-        };
-        done.push(*entry);
-        if !document.contains_key(entry.table) {
-            let mut table = toml_edit::Table::new();
-            table.set_implicit(true);
-            document.insert(entry.table, toml_edit::Item::Table(table));
-        }
-        let Some(table) = document
-            .get_mut(entry.table)
-            .and_then(toml_edit::Item::as_table_mut)
-        else {
-            continue;
-        };
-        if table.contains_key(entry.key) {
-            continue;
-        }
-        let mut renamed = toml_edit::Key::new(entry.key);
-        *renamed.leaf_decor_mut() = key.leaf_decor().clone();
-        table.insert_formatted(&renamed, item);
-    }
-    (!done.is_empty()).then(|| (document.to_string(), done))
 }
 
 pub fn default_path() -> Option<PathBuf> {
@@ -424,41 +245,6 @@ pub fn rewrite(text: &str, config: &Config) -> Result<String, ConfigError> {
             .and_then(toml_edit::Item::as_value);
         document[setting.key] = toml_edit::Item::Value(edited(&wanted, old)?);
     }
-    let empty = toml::Table::new();
-    let names: BTreeSet<&String> = config
-        .applets
-        .keys()
-        .chain(on_disk.applets.keys())
-        .collect();
-    for name in names {
-        let wanted = config.applets.get(name).unwrap_or(&empty);
-        let found = on_disk.applets.get(name).unwrap_or(&empty);
-        let keys: BTreeSet<&String> = wanted.keys().chain(found.keys()).collect();
-        for key in keys {
-            if wanted.get(key) == found.get(key) {
-                continue;
-            }
-            if !document.contains_key(name) {
-                document.insert(name, toml_edit::table());
-            }
-            let Some(table) = document
-                .get_mut(name)
-                .and_then(toml_edit::Item::as_table_like_mut)
-            else {
-                continue;
-            };
-            match wanted.get(key) {
-                None => {
-                    table.remove(key);
-                }
-                Some(value) => {
-                    let old = table.get(key).and_then(toml_edit::Item::as_value);
-                    let value = edited(value, old)?;
-                    table.insert(key, toml_edit::Item::Value(value));
-                }
-            }
-        }
-    }
     Ok(document.to_string())
 }
 
@@ -476,6 +262,19 @@ fn edited(
     Ok(value)
 }
 
+fn is_table(value: &DeValue<'_>) -> bool {
+    match value {
+        DeValue::Table(_) => true,
+        DeValue::Array(items) => {
+            !items.is_empty()
+                && items
+                    .iter()
+                    .all(|item| matches!(item.get_ref(), DeValue::Table(_)))
+        }
+        _ => false,
+    }
+}
+
 fn syntax_error(text: &str, error: &toml::de::Error) -> ConfigError {
     let line = error
         .span()
@@ -491,101 +290,23 @@ fn syntax_error(text: &str, error: &toml::de::Error) -> ConfigError {
 mod tests {
     use super::*;
 
-    #[derive(Debug, Default, PartialEq, Deserialize)]
-    #[serde(default, deny_unknown_fields)]
-    struct Dice {
-        sides: u8,
-    }
-
     #[test]
-    fn tables_core_does_not_know_are_kept_for_applets() {
-        let config =
-            Config::parse("tab-width = 4\n\n[dice]\nsides = 8\n\n[elsewhere]\nx = 1\n").unwrap();
+    fn tables_are_left_alone_and_named_as_not_read() {
+        let config = Config::parse(
+            "tab-width = 4\n\n[weather]\nlocation = \"Oslo\"\n\n[[irc-server]]\nname = \"libera\"\n",
+        )
+        .unwrap();
 
         assert_eq!(config.tab_width, 4);
-        assert_eq!(config.applet::<Dice>("dice"), Ok(Dice { sides: 8 }));
-        assert_eq!(config.applet::<Dice>("absent"), Ok(Dice::default()));
-        assert!(config.applet::<Dice>("elsewhere").is_err());
-        assert_eq!(config.applet_tables(), ["dice", "elsewhere"]);
+        assert_eq!(config.ignored_tables(), ["irc-server", "weather"]);
         assert_eq!(
             config
                 .with("tab-width", Some(toml::Value::Integer(2)))
                 .unwrap()
-                .applet::<Dice>("dice"),
-            Ok(Dice { sides: 8 })
+                .ignored_tables(),
+            ["irc-server", "weather"]
         );
     }
-
-    const MOVES: &[Moved] = &[
-        Moved {
-            from: "dice-sides",
-            table: "dice",
-            key: "sides",
-        },
-        Moved {
-            from: "dice-color",
-            table: "dice",
-            key: "color",
-        },
-    ];
-
-    #[test]
-    fn moved_keys_still_work_from_their_old_place() {
-        let config = Config::parse_with("tab-width = 2\ndice-sides = 8\n", MOVES).unwrap();
-        assert_eq!(config.tab_width, 2);
-        assert_eq!(config.applet::<Dice>("dice"), Ok(Dice { sides: 8 }));
-
-        let both = Config::parse_with("dice-sides = 8\n\n[dice]\nsides = 12\n", MOVES).unwrap();
-        assert_eq!(both.applet::<Dice>("dice"), Ok(Dice { sides: 12 }));
-    }
-
-    #[test]
-    fn migrating_moves_old_keys_into_their_table_with_their_comments() {
-        let text = "# mine\ntab-width = 2\n# how many\ndice-sides = 8 # big\n";
-
-        let (rewritten, moved) = migrate_with(text, MOVES).unwrap();
-
-        assert_eq!(moved, [MOVES[0]]);
-        assert_eq!(
-            rewritten,
-            "# mine\ntab-width = 2\n\n[dice]\n# how many\nsides = 8 # big\n"
-        );
-        assert_eq!(migrate_with(&rewritten, MOVES), None);
-        assert_eq!(migrate_with("not = [valid", MOVES), None);
-    }
-
-    #[test]
-    fn migrating_keeps_a_value_already_in_the_table() {
-        let (rewritten, _) = migrate_with("dice-sides = 8\n\n[dice]\nsides = 12\n", MOVES).unwrap();
-
-        assert!(!rewritten.contains("dice-sides"), "{rewritten}");
-        assert!(rewritten.contains("sides = 12"), "{rewritten}");
-        assert!(!rewritten.contains("sides = 8"), "{rewritten}");
-    }
-
-    #[test]
-    fn config_files_are_migrated_once_with_a_note_of_what_moved() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("config.toml");
-        fs::write(&path, "dice-color = \"red\"\ndice-sides = 8\n").unwrap();
-
-        let note = migrate_file_with(&path, MOVES).unwrap();
-
-        assert_eq!(
-            note.as_deref(),
-            Some("Moved dice-sides, dice-color to [dice] in config.toml")
-        );
-        assert_eq!(
-            fs::read_to_string(&path).unwrap(),
-            "[dice]\nsides = 8\ncolor = \"red\"\n"
-        );
-        assert_eq!(migrate_file_with(&path, MOVES).unwrap(), None);
-        assert_eq!(
-            migrate_file_with(&dir.path().join("missing.toml"), MOVES).unwrap(),
-            None
-        );
-    }
-
     #[test]
     fn unknown_plain_keys_are_still_mistakes() {
         assert!(Config::parse("dice = 8\n").is_err());
@@ -625,19 +346,6 @@ mod tests {
             OnDiskChange::Ignore
         );
         assert!(read("on-disk-change = \"panic\"").is_err());
-    }
-
-    #[test]
-    fn the_old_trash_setting_moves_into_the_dired_table() {
-        let text = "delete-to-trash = false\n";
-
-        let config = Config::parse(text).unwrap();
-        let (rewritten, moved) = migrate_with(text, MOVED).unwrap();
-
-        let expected: toml::Table = toml::from_str("delete-to-trash = false\n").unwrap();
-        assert_eq!(config.applets.get("dired"), Some(&expected));
-        assert_eq!(moved.len(), 1);
-        assert_eq!(rewritten, "[dired]\ndelete-to-trash = false\n");
     }
 
     #[test]
@@ -848,58 +556,6 @@ mod tests {
             );
         }
         assert!(read("mode-line-style = \"fancy\"").is_err());
-    }
-
-    #[test]
-    fn the_old_atlas_vaults_move_into_the_atlas_table() {
-        let text = "[[atlas-vault]]\nname = \"personal\" # mine\npath = \"~/Atlas\"\n\n[[atlas-vault]]\nname = \"work\"\npath = \"C:/Work\"\ncolor = \"blue\"\n";
-
-        let (rewritten, moved) = migrate_with(text, MOVED).unwrap();
-
-        assert_eq!(moved.len(), 1);
-        assert_eq!(
-            rewritten,
-            "[[atlas.vault]]\nname = \"personal\" # mine\npath = \"~/Atlas\"\n\n[[atlas.vault]]\nname = \"work\"\npath = \"C:/Work\"\ncolor = \"blue\"\n"
-        );
-        assert_eq!(
-            Config::parse(&rewritten).unwrap().applets,
-            Config::parse(text).unwrap().applets
-        );
-    }
-
-    #[test]
-    fn the_old_irc_keys_move_into_the_irc_table() {
-        let text = "theme = \"adwaita\"\n\n[[irc-server]]\nname = \"libera\" # main\nhost = \"irc.libera.chat\"\nnick = \"me\"\n\n[irc-bouncer]\nmode = \"local\"\n";
-
-        let (rewritten, moved) = migrate_with(text, MOVED).unwrap();
-
-        assert_eq!(moved.len(), 2);
-        assert_eq!(
-            rewritten,
-            "theme = \"adwaita\"\n\n[[irc.server]]\nname = \"libera\" # main\nhost = \"irc.libera.chat\"\nnick = \"me\"\n\n[irc.bouncer]\nmode = \"local\"\n"
-        );
-        assert_eq!(
-            Config::parse(&rewritten).unwrap().applets,
-            Config::parse(text).unwrap().applets
-        );
-    }
-
-    #[test]
-    fn the_old_weather_keys_move_into_the_weather_table() {
-        let text = "weather-location = \"Berlin\"\nweather-units = \"imperial\"\nmode-line-weather = true\n";
-
-        let config = Config::parse(text).unwrap();
-        let (rewritten, moved) = migrate_with(text, MOVED).unwrap();
-
-        let expected: toml::Table =
-            toml::from_str("location = \"Berlin\"\nunits = \"imperial\"\nmode-line = true\n")
-                .unwrap();
-        assert_eq!(config.applets.get("weather"), Some(&expected));
-        assert_eq!(moved.len(), 3);
-        assert_eq!(
-            rewritten,
-            "[weather]\nlocation = \"Berlin\"\nunits = \"imperial\"\nmode-line = true\n"
-        );
     }
 
     #[test]

@@ -31,11 +31,11 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     let name = name_of(heap, arguments[0])?;
     let summary = print::display(heap, arguments[1]);
     let hold = heap.hold(arguments[2]);
-    if editor.applet_state::<Commands>().is_none() {
-        editor.set_applet_state(Commands::default());
+    if editor.plugin_state::<Commands>().is_none() {
+        editor.set_plugin_state(Commands::default());
     }
     let replaced = editor
-        .applet_state_mut::<Commands>()
+        .plugin_state_mut::<Commands>()
         .and_then(|commands| commands.defined.insert(name.clone(), hold));
     if let Some(old) = replaced {
         heap.release(old);
@@ -46,7 +46,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
         summary,
         scope: Scope::Global.into(),
         run: Arc::new(move |editor: &mut Editor| {
-            if let Some(commands) = editor.applet_state_mut::<Commands>() {
+            if let Some(commands) = editor.plugin_state_mut::<Commands>() {
                 commands.waiting.push(queued.clone());
             }
         }),
@@ -72,28 +72,28 @@ pub fn install(isolate: &mut Isolate) {
 }
 
 pub fn queue(editor: &mut Editor, name: &str) {
-    if editor.applet_state::<Commands>().is_none() {
-        editor.set_applet_state(Commands::default());
+    if editor.plugin_state::<Commands>().is_none() {
+        editor.set_plugin_state(Commands::default());
     }
-    if let Some(commands) = editor.applet_state_mut::<Commands>() {
+    if let Some(commands) = editor.plugin_state_mut::<Commands>() {
         commands.waiting.push(name.to_owned());
     }
 }
 
 pub fn defined(editor: &Editor, name: &str) -> bool {
     editor
-        .applet_state::<Commands>()
+        .plugin_state::<Commands>()
         .is_some_and(|commands| commands.defined.contains_key(name))
 }
 
 pub fn run_waiting(isolate: &mut Isolate, editor: &mut Editor) {
     let waiting = editor
-        .applet_state_mut::<Commands>()
+        .plugin_state_mut::<Commands>()
         .map(|commands| std::mem::take(&mut commands.waiting))
         .unwrap_or_default();
     for name in waiting {
         let function = editor
-            .applet_state::<Commands>()
+            .plugin_state::<Commands>()
             .and_then(|commands| commands.defined.get(&name))
             .and_then(|hold| isolate.held(*hold));
         let Some(function) = function else {

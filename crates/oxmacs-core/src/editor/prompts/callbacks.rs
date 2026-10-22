@@ -76,22 +76,22 @@ impl fmt::Debug for Answer {
     }
 }
 
-pub(in crate::editor) struct AppletPrompt {
+pub(in crate::editor) struct CallbackPrompt {
     offer: Option<Offers>,
     done: Done,
     style: Option<InputStyle>,
 }
 
-impl fmt::Debug for AppletPrompt {
+impl fmt::Debug for CallbackPrompt {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("AppletPrompt")
+            .debug_struct("CallbackPrompt")
             .field("offers", &self.offer.is_some())
             .finish_non_exhaustive()
     }
 }
 
-impl AppletPrompt {
+impl CallbackPrompt {
     pub(in crate::editor) fn answer_path(self, editor: &mut Editor, path: PathBuf) {
         match self.done {
             Done::Path(done) => done(editor, path),
@@ -107,10 +107,10 @@ impl Editor {
         prompt: &str,
         done: impl FnOnce(&mut Editor, String) + Send + 'static,
     ) {
-        self.open_applet_prompt(
+        self.open_callback_prompt(
             prompt,
             false,
-            AppletPrompt {
+            CallbackPrompt {
                 offer: None,
                 done: Done::Text(Box::new(done)),
                 style: None,
@@ -128,7 +128,7 @@ impl Editor {
         if self
             .minibuffer
             .as_ref()
-            .is_some_and(|minibuffer| minibuffer.applet.is_some())
+            .is_some_and(|minibuffer| minibuffer.callback.is_some())
         {
             self.set_minibuffer_input(text);
         }
@@ -139,10 +139,10 @@ impl Editor {
         prompt: &str,
         done: impl FnOnce(&mut Editor, String) + Send + 'static,
     ) {
-        self.open_applet_prompt(
+        self.open_callback_prompt(
             prompt,
             true,
-            AppletPrompt {
+            CallbackPrompt {
                 offer: None,
                 done: Done::Text(Box::new(done)),
                 style: None,
@@ -156,10 +156,10 @@ impl Editor {
         offer: impl Fn(&Editor) -> Vec<Offer> + Send + 'static,
         done: impl FnOnce(&mut Editor, String) + Send + 'static,
     ) {
-        self.open_applet_prompt(
+        self.open_callback_prompt(
             prompt,
             false,
-            AppletPrompt {
+            CallbackPrompt {
                 offer: Some(Box::new(offer)),
                 done: Done::Text(Box::new(done)),
                 style: None,
@@ -173,10 +173,10 @@ impl Editor {
         offer: impl Fn(&Editor) -> Vec<Offer> + Send + 'static,
         done: impl FnOnce(&mut Editor, Picked) + Send + 'static,
     ) {
-        self.open_applet_prompt(
+        self.open_callback_prompt(
             prompt,
             false,
-            AppletPrompt {
+            CallbackPrompt {
                 offer: Some(Box::new(offer)),
                 done: Done::Pick(Box::new(done)),
                 style: None,
@@ -190,10 +190,10 @@ impl Editor {
         directories: bool,
         done: impl FnOnce(&mut Editor, PathBuf) + Send + 'static,
     ) {
-        if self.open_file_prompt(prompt, Purpose::AppletPath { directories })
+        if self.open_file_prompt(prompt, Purpose::CallbackPath { directories })
             && let Some(minibuffer) = &mut self.minibuffer
         {
-            minibuffer.applet = Some(AppletPrompt {
+            minibuffer.callback = Some(CallbackPrompt {
                 offer: None,
                 done: Done::Path(Box::new(done)),
                 style: None,
@@ -207,10 +207,10 @@ impl Editor {
         style: InputStyle,
         done: impl FnOnce(&mut Editor, String) + Send + 'static,
     ) {
-        self.open_applet_prompt(
+        self.open_callback_prompt(
             prompt,
             false,
-            AppletPrompt {
+            CallbackPrompt {
                 offer: None,
                 done: Done::Text(Box::new(done)),
                 style: Some(style),
@@ -223,16 +223,16 @@ impl Editor {
             return Vec::new();
         };
         minibuffer
-            .applet
+            .callback
             .as_ref()
-            .and_then(|applet| applet.style)
+            .and_then(|callback| callback.style)
             .map_or_else(Vec::new, |style| {
                 style(self, &minibuffer.input().contents())
             })
     }
 
     pub fn ask(&mut self, prompt: &str, then: impl FnOnce(&mut Editor, bool) + Send + 'static) {
-        self.ask_for_applet(
+        self.ask_for_callback(
             prompt,
             "y or n",
             YES_NO,
@@ -246,7 +246,7 @@ impl Editor {
         prompt: &str,
         then: impl FnOnce(&mut Editor, bool) + Send + 'static,
     ) {
-        self.ask_for_applet(
+        self.ask_for_callback(
             prompt,
             "yes or no",
             YES_NO,
@@ -262,7 +262,7 @@ impl Editor {
         then: impl FnOnce(&mut Editor, char) + Send + 'static,
     ) {
         let shown: Vec<String> = choices.iter().map(char::to_string).collect();
-        self.ask_for_applet(
+        self.ask_for_callback(
             prompt,
             &shown.join(", "),
             choices,
@@ -271,24 +271,24 @@ impl Editor {
         );
     }
 
-    fn open_applet_prompt(&mut self, prompt: &str, secret: bool, applet: AppletPrompt) {
-        let completes = applet.offer.is_some();
-        if self.open_minibuffer(prompt, Purpose::Applet { completes, secret })
+    fn open_callback_prompt(&mut self, prompt: &str, secret: bool, callback: CallbackPrompt) {
+        let completes = callback.offer.is_some();
+        if self.open_minibuffer(prompt, Purpose::Callback { completes, secret })
             && let Some(minibuffer) = &mut self.minibuffer
         {
-            minibuffer.applet = Some(applet);
+            minibuffer.callback = Some(callback);
         }
     }
 
-    pub(in crate::editor) fn applet_completions(
+    pub(in crate::editor) fn callback_completions(
         &self,
         matches: impl Fn(&str) -> bool,
     ) -> Vec<Completion> {
         let Some(offer) = self
             .minibuffer
             .as_ref()
-            .and_then(|minibuffer| minibuffer.applet.as_ref())
-            .and_then(|applet| applet.offer.as_ref())
+            .and_then(|minibuffer| minibuffer.callback.as_ref())
+            .and_then(|callback| callback.offer.as_ref())
         else {
             return Vec::new();
         };
@@ -305,21 +305,21 @@ impl Editor {
             .collect()
     }
 
-    pub(in crate::editor) fn exit_applet_prompt(&mut self, typed: bool) {
+    pub(in crate::editor) fn exit_callback_prompt(&mut self, typed: bool) {
         let input = self.minibuffer_input();
         let selected = if typed {
             None
         } else {
             self.selected_completion()
         };
-        let applet = self
+        let callback = self
             .minibuffer
             .take()
-            .and_then(|minibuffer| minibuffer.applet);
-        let Some(applet) = applet else {
+            .and_then(|minibuffer| minibuffer.callback);
+        let Some(callback) = callback else {
             return;
         };
-        match applet.done {
+        match callback.done {
             Done::Text(done) => done(self, selected.map_or(input, |completion| completion.label)),
             Done::Path(done) => done(self, PathBuf::from(input)),
             Done::Pick(done) => {

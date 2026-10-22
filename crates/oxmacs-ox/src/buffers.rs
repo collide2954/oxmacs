@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
-use oxmacs_core::applet::AppletBuffer;
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::display::LineStyle;
 use oxmacs_core::editor::Editor;
+use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Highlight;
 
@@ -28,7 +28,7 @@ pub struct LinesBuffer {
     seen_width: Option<usize>,
 }
 
-impl AppletBuffer for LinesBuffer {
+impl PluginBuffer for LinesBuffer {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -175,7 +175,7 @@ fn render(heap: &Heap, name: &str, lines: Value) -> Result<Rendered, Error> {
 
 fn plugin_buffer(editor: &Editor, name: &str) -> Option<BufferId> {
     editor
-        .applet_buffers::<LinesBuffer>()
+        .plugin_buffers::<LinesBuffer>()
         .into_iter()
         .find(|id| {
             editor
@@ -194,7 +194,7 @@ fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<us
     if buffer.contents() != rendered.text {
         editor.fill_buffer(id, &rendered.text);
     }
-    if let Some((buffer, view)) = editor.applet_buffer_mut::<LinesBuffer>(id) {
+    if let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) {
         view.styles = rendered.styles;
         view.pills = rendered.pills;
         let line = line.min(buffer.len_lines().saturating_sub(1));
@@ -273,7 +273,7 @@ fn hold(heap: &mut Heap, old: Option<Hold>, value: Option<Value>) -> Option<Hold
 
 fn bind(editor: &mut Editor, id: BufferId, bindings: Vec<(String, String)>) -> Result<(), Error> {
     let Some(scope) = editor
-        .applet_buffer::<LinesBuffer>(id)
+        .plugin_buffer::<LinesBuffer>(id)
         .map(|(_, view)| view.scope)
     else {
         return Ok(());
@@ -305,7 +305,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     let mut given = options(heap, &arguments[2..])?;
     let id = plugin_buffer(editor, &name).unwrap_or_else(|| {
         let scope = editor.add_scope(Box::leak(name.clone().into_boxed_str()));
-        editor.add_applet_buffer_with(&name, |buffer| {
+        editor.add_plugin_buffer_with(&name, |buffer| {
             buffer.set_read_only(true);
             LinesBuffer {
                 scope,
@@ -321,7 +321,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         })
     });
     fill(editor, id, rendered, given.line.take());
-    if let Some((buffer, view)) = editor.applet_buffer_mut::<LinesBuffer>(id) {
+    if let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) {
         view.seen_line = Some(buffer.line_of(buffer.point()));
         if given.directory.is_some() {
             view.directory = given.directory;
@@ -340,9 +340,9 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
 pub fn watch(isolate: &mut Isolate, editor: &mut Editor) {
     let mut calls: Vec<(Hold, usize)> = Vec::new();
     let current = editor.buffer().id();
-    for id in editor.applet_buffers::<LinesBuffer>() {
+    for id in editor.plugin_buffers::<LinesBuffer>() {
         let width = editor.buffer_width(id);
-        let Some((buffer, view)) = editor.applet_buffer_mut::<LinesBuffer>(id) else {
+        let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) else {
             continue;
         };
         let line = buffer.line_of(buffer.point());
@@ -499,10 +499,10 @@ pub fn install(isolate: &mut Isolate) {
 
 #[cfg(test)]
 mod tests {
-    use oxmacs_core::applet::AppletBuffer;
     use oxmacs_core::display::LineStyle;
     use oxmacs_core::editor::Editor;
     use oxmacs_core::input::KeySequence;
+    use oxmacs_core::plugin::PluginBuffer;
     use oxmacs_core::theme::Highlight;
 
     use crate::Ox;
@@ -626,7 +626,7 @@ mod tests {
             [(6..10, Highlight::Link), (11..14, Highlight::Nick(3))]
         );
         let id = editor.buffer().id();
-        let (_, view) = editor.applet_buffer::<super::LinesBuffer>(id).unwrap();
+        let (_, view) = editor.plugin_buffer::<super::LinesBuffer>(id).unwrap();
         assert_eq!(view.pills(0), [(6..10, Highlight::Link)]);
         assert_eq!(editor.default_directory(), folder.path());
         assert!(editor.watched_directories().contains(&metadata));

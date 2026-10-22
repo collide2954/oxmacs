@@ -11,6 +11,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Removed
 
+- What was left of the applet system: the applet and GUI applet interfaces, command-line subcommands, applet effects and events, applet sections in `M-x oxmacs-doctor`, applet tables in `config.toml` with their settings in `M-x customize`, and the one-time moves of old weather, IRC, Atlas and dired settings into those tables. Plugins use the same building blocks under plugin names. Tables in `config.toml` are left alone, and the doctor names them as no longer read.
+- The unfinished routines parser, superseded by Ox.
 - The applets and their Cargo features: dired, markdown and weather, which were built by default, and animated-splash, atlas, database, demo, extra-themes, git, glow, irc, pdf, python and scripting. They return as Ox plugins.
 
 ### Security

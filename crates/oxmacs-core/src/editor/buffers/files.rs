@@ -97,17 +97,17 @@ impl Editor {
                 None => self.resolve_path(&input),
             }
         };
-        let applet = self
+        let callback = self
             .minibuffer
             .take()
-            .and_then(|minibuffer| minibuffer.applet);
+            .and_then(|minibuffer| minibuffer.callback);
         match purpose {
             Purpose::WriteFile => self.write_file_to(path),
             Purpose::SavePlot => self.save_plot_to(&path),
-            Purpose::AppletPath { .. } => {
-                if let Some(applet) = applet {
+            Purpose::CallbackPath { .. } => {
+                if let Some(callback) = callback {
                     let path = self.absolute(&path);
-                    applet.answer_path(self, path);
+                    callback.answer_path(self, path);
                 }
             }
             _ => {

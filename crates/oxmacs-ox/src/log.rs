@@ -2,9 +2,9 @@ use std::fmt::Write as _;
 
 use ox::Error;
 use ox::span::line_column;
-use oxmacs_core::applet::AppletBuffer;
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::editor::Editor;
+use oxmacs_core::plugin::PluginBuffer;
 
 pub const LOG: &str = "*ox log*";
 
@@ -13,7 +13,7 @@ struct LogView {
     scope: ScopeId,
 }
 
-impl AppletBuffer for LogView {
+impl PluginBuffer for LogView {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -46,35 +46,35 @@ fn now() -> String {
 }
 
 fn scope(editor: &mut Editor) -> ScopeId {
-    if let Some(scope) = editor.applet_state::<Log>().and_then(|log| log.scope) {
+    if let Some(scope) = editor.plugin_state::<Log>().and_then(|log| log.scope) {
         return scope;
     }
     let scope = editor.add_scope("ox log");
     editor.bind(scope, "q", Command::QuitWindow).ok();
-    if let Some(log) = editor.applet_state_mut::<Log>() {
+    if let Some(log) = editor.plugin_state_mut::<Log>() {
         log.scope = Some(scope);
     }
     scope
 }
 
 fn append(editor: &mut Editor, entry: &str) {
-    if editor.applet_state::<Log>().is_none() {
-        editor.set_applet_state(Log::default());
+    if editor.plugin_state::<Log>().is_none() {
+        editor.set_plugin_state(Log::default());
     }
     let scope = scope(editor);
     let text = editor
-        .applet_state_mut::<Log>()
+        .plugin_state_mut::<Log>()
         .map(|log| {
             log.text.push_str(entry);
             log.text.clone()
         })
         .unwrap_or_default();
     let id = editor
-        .applet_buffers::<LogView>()
+        .plugin_buffers::<LogView>()
         .first()
         .copied()
         .unwrap_or_else(|| {
-            editor.add_applet_buffer_with(LOG, |buffer| {
+            editor.add_plugin_buffer_with(LOG, |buffer| {
                 buffer.set_read_only(true);
                 LogView { scope }
             })

@@ -584,7 +584,7 @@ mod tests {
     }
 
     #[test]
-    fn applets_add_patterns_that_make_their_errors_clickable() {
+    fn plugins_add_patterns_that_make_their_errors_clickable() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("a.py"), "x = 1\nprint(y)\n").unwrap();
         let mut editor = Editor::new();

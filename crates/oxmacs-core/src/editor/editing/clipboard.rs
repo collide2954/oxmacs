@@ -208,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn applets_copy_text_of_their_own() {
+    fn plugins_copy_text_of_their_own() {
         let mut editor = editor_with("", 0);
 
         editor.copy_text("a\tb\nc\td");

@@ -8,7 +8,6 @@ use oxmacs_core::theme::Theme as Faces;
 use oxmacs_ox::views::ViewBuffer;
 
 use super::{App, Message};
-use crate::applet::Context;
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
 use crate::widgets::mode_line::{self, Look};
@@ -26,8 +25,7 @@ impl App {
                 offered.len(),
                 faces,
                 self.font,
-                self.text_size,
-                self.minibuffer_style()
+                self.text_size
             ),
             completions::view(
                 &self.editor,
@@ -39,13 +37,6 @@ impl App {
             ),
         ]
         .into()
-    }
-
-    pub fn minibuffer_style(&self) -> Option<container::Style> {
-        let context = self.context(self.faces());
-        self.applets
-            .iter()
-            .find_map(|applet| applet.minibuffer_style(&self.editor, &context))
     }
 
     fn tile<'a>(
@@ -120,7 +111,7 @@ impl App {
             ]
             .into();
         }
-        let body = self.decorated(pane, self.body(pane, window, faces), faces);
+        let body = self.body(pane, window, faces);
         let last = self.editor.tiling().windows().last() == Some(&window);
         let segments = if last {
             self.editor.mode_line_segments()
@@ -142,51 +133,9 @@ impl App {
         .into()
     }
 
-    fn decorated<'a>(
-        &'a self,
-        pane: Pane<'a>,
-        body: Element<'a, Message>,
-        faces: Faces,
-    ) -> Element<'a, Message> {
-        let context = self.context(faces);
-        let above: Vec<Element<'a, Message>> = self
-            .applets
-            .iter()
-            .filter_map(|applet| applet.above(&self.editor, pane, &context))
-            .map(|element| element.map(Message::AppletEvent))
-            .collect();
-        let beside: Vec<Element<'a, Message>> = self
-            .applets
-            .iter()
-            .filter_map(|applet| applet.beside(&self.editor, pane, &context))
-            .map(|element| element.map(Message::AppletEvent))
-            .collect();
-        let body = if above.is_empty() {
-            body
-        } else {
-            Column::with_children(above).push(body).into()
-        };
-        if beside.is_empty() {
-            body
-        } else {
-            Row::with_children(std::iter::once(body).chain(beside)).into()
-        }
-    }
-
-    fn context(&self, faces: Faces) -> Context {
-        Context {
-            faces,
-            palette: self.theme().palette(),
-            font: self.font,
-            size: self.text_size,
-            now: self.now,
-            animations: self.animations,
-        }
-    }
-
     fn body<'a>(&'a self, pane: Pane<'a>, window: WindowId, faces: Faces) -> Element<'a, Message> {
         let buffer = pane.buffer().id();
-        if let Some((_, shown)) = self.editor.applet_buffer::<ViewBuffer>(buffer) {
+        if let Some((_, shown)) = self.editor.plugin_buffer::<ViewBuffer>(buffer) {
             let look = ox_view::Look {
                 faces,
                 font: self.font,
@@ -204,16 +153,7 @@ impl App {
             .on_press(Message::FocusWindow(window))
             .into();
         }
-        let context = self.context(faces);
-        if let Some(drawn) = self
-            .applets
-            .iter()
-            .find_map(|applet| applet.body(&self.editor, pane, window, &context))
-        {
-            return mouse_area(drawn.map(Message::AppletEvent))
-                .on_press(Message::FocusWindow(window))
-                .into();
-        }
+
         container(BufferView::new(
             pane,
             window,

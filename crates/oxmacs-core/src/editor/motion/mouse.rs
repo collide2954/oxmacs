@@ -66,7 +66,7 @@ impl Editor {
             return;
         }
         if clicks == Clicks::Double
-            && matches!(self.buffers.mode(0), Some(Mode::Applet(_)))
+            && matches!(self.buffers.mode(0), Some(Mode::Plugin(_)))
             && let Some(command) = self.bound_command("RET")
         {
             let buffer = self.buffers.current_mut();

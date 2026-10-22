@@ -293,7 +293,7 @@ impl Editor {
     pub(in crate::editor) fn recall_input(&mut self, older: bool) {
         let input = match self.buffers.entry_mut(0) {
             Some((buffer, Mode::Console(console))) => Some((buffer, &mut console.input)),
-            Some((buffer, Mode::Applet(view))) => view.input_line().map(|input| (buffer, input)),
+            Some((buffer, Mode::Plugin(view))) => view.input_line().map(|input| (buffer, input)),
             _ => None,
         };
         let Some((buffer, input)) = input else {
@@ -323,13 +323,13 @@ mod tests {
             .buffer_by_id(id)
             .map(|buffer| buffer.name().to_owned())
             .unwrap_or_default();
-        if let Some(state) = editor.applet_state_mut::<Heard>() {
+        if let Some(state) = editor.plugin_state_mut::<Heard>() {
             state.0.push(format!("{name} {kind} {payload}"));
         }
     }
 
     fn idle(editor: &mut Editor, _id: BufferId) {
-        if let Some(state) = editor.applet_state_mut::<Heard>() {
+        if let Some(state) = editor.plugin_state_mut::<Heard>() {
             state.0.push("idle".to_owned());
         }
     }
@@ -361,7 +361,7 @@ mod tests {
     }
 
     fn start(mut editor: Editor, spec: ConsoleSpec) -> (Editor, BufferId, JobId) {
-        editor.set_applet_state(Heard::default());
+        editor.set_plugin_state(Heard::default());
         let id = editor.start_console(spec, None);
         let job = editor
             .take_effects()
@@ -405,7 +405,7 @@ mod tests {
 
     fn heard_so_far(editor: &Editor) -> Vec<String> {
         editor
-            .applet_state::<Heard>()
+            .plugin_state::<Heard>()
             .map(|state| state.0.clone())
             .unwrap_or_default()
     }

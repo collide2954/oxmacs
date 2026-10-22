@@ -128,7 +128,7 @@ mod tests {
         let id = editor.buffer_named(name).unwrap();
         let mut out = Vec::new();
         lines(
-            &editor.applet_buffer::<ViewBuffer>(id).unwrap().1.node,
+            &editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node,
             &mut out,
         );
         out

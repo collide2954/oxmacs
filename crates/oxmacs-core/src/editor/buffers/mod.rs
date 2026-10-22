@@ -6,7 +6,6 @@ pub(super) mod read_only;
 
 use std::path::Path;
 
-use crate::applet::AppletBuffer;
 use crate::display::{ScreenLine, Viewport};
 use crate::editor::build::compile::Compilation;
 use crate::editor::build::diagnostics_list::DiagnosticsList;
@@ -23,6 +22,7 @@ use crate::editor::special::splash::Splash;
 use crate::editor::special::toolbox::ToolList;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
+use crate::plugin::PluginBuffer;
 use crate::syntax::{Language, Syntax};
 use crate::text::Buffer;
 
@@ -43,7 +43,7 @@ pub(super) enum Mode {
     Tools(ToolList),
     Environment(EnvironmentView),
     Table(TableView),
-    Applet(Box<dyn AppletBuffer>),
+    Plugin(Box<dyn PluginBuffer>),
 }
 
 #[derive(Debug)]
@@ -114,19 +114,19 @@ impl BufferList {
     pub(super) fn location(&self, index: usize) -> Option<(&Path, bool)> {
         let entry = self.entries.get(index)?;
         match &entry.mode {
-            Mode::Applet(view) => view.directory().map(|directory| (directory, true)),
+            Mode::Plugin(view) => view.directory().map(|directory| (directory, true)),
             Mode::Text(_) => entry.buffer.file().map(|file| (file.path.as_path(), false)),
             _ => None,
         }
     }
 
     pub(super) fn fixed_name(&self, index: usize) -> bool {
-        matches!(self.mode(index), Some(Mode::Applet(view)) if view.fixed_name())
+        matches!(self.mode(index), Some(Mode::Plugin(view)) if view.fixed_name())
     }
 
     pub(super) fn watched(&self, index: usize) -> Option<&Path> {
         match self.mode(index)? {
-            Mode::Applet(view) => view.watched(),
+            Mode::Plugin(view) => view.watched(),
             _ => None,
         }
     }

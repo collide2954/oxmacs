@@ -11,7 +11,7 @@ impl Editor {
     pub fn visited_files(&self) -> Vec<PathBuf> {
         let mut files: Vec<PathBuf> = (0..self.buffers.len())
             .filter_map(|index| match self.buffers.mode(index) {
-                Some(Mode::Applet(view)) => view.file().map(Path::to_path_buf),
+                Some(Mode::Plugin(view)) => view.file().map(Path::to_path_buf),
                 _ => self
                     .buffers
                     .get(index)?
@@ -130,7 +130,7 @@ impl Editor {
             self.oxmacs_doctor();
             return;
         }
-        if matches!(self.buffers.mode(0), Some(Mode::Applet(_))) {
+        if matches!(self.buffers.mode(0), Some(Mode::Plugin(_))) {
             if let Some(command) = self.bound_command("g")
                 && command.core() != Some(Command::RevertBuffer)
             {

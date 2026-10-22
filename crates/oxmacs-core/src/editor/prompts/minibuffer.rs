@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::command::{Command, CommandId, Scope};
 use crate::editor::Editor;
-use crate::editor::prompts::applet::AppletPrompt;
+use crate::editor::prompts::callbacks::CallbackPrompt;
 use crate::files::Entry;
 use crate::syntax::Item;
 use crate::text::Buffer;
@@ -27,20 +27,20 @@ pub(in crate::editor) enum Purpose {
     Setting(usize),
     RHelp,
     SavePlot,
-    Applet { completes: bool, secret: bool },
-    AppletPath { directories: bool },
+    Callback { completes: bool, secret: bool },
+    CallbackPath { directories: bool },
 }
 
 impl Purpose {
     pub(in crate::editor) fn takes_path(self) -> bool {
         matches!(
             self,
-            Self::FindFile | Self::WriteFile | Self::SavePlot | Self::AppletPath { .. }
+            Self::FindFile | Self::WriteFile | Self::SavePlot | Self::CallbackPath { .. }
         )
     }
 
     fn lists_only_directories(self) -> bool {
-        matches!(self, Self::AppletPath { directories: true })
+        matches!(self, Self::CallbackPath { directories: true })
     }
 
     fn takes_text(self) -> bool {
@@ -50,7 +50,7 @@ impl Purpose {
                 | Self::ReplaceTo(_)
                 | Self::Compile
                 | Self::Setting(_)
-                | Self::Applet {
+                | Self::Callback {
                     completes: false,
                     ..
                 }
@@ -79,7 +79,7 @@ pub struct Minibuffer {
     pub(in crate::editor) from: String,
     pub(in crate::editor) items: Vec<Item>,
     pub(in crate::editor) default: Option<String>,
-    pub(in crate::editor) applet: Option<AppletPrompt>,
+    pub(in crate::editor) callback: Option<CallbackPrompt>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,7 +113,7 @@ impl Minibuffer {
             from: String::new(),
             items: Vec::new(),
             default: None,
-            applet: None,
+            callback: None,
         }
     }
 
@@ -138,7 +138,7 @@ impl Minibuffer {
     }
 
     pub fn is_secret(&self) -> bool {
-        matches!(self.purpose, Purpose::Applet { secret: true, .. })
+        matches!(self.purpose, Purpose::Callback { secret: true, .. })
     }
 }
 
@@ -181,7 +181,7 @@ impl Editor {
             Purpose::FindFile
             | Purpose::WriteFile
             | Purpose::SavePlot
-            | Purpose::AppletPath { .. } => file_completions(minibuffer),
+            | Purpose::CallbackPath { .. } => file_completions(minibuffer),
             Purpose::SwitchBuffer | Purpose::KillBuffer => {
                 self.buffer_completions(minibuffer.purpose, matches)
             }
@@ -192,7 +192,7 @@ impl Editor {
             | Purpose::RHelp
             | Purpose::Setting(_) => Vec::new(),
             Purpose::Item => self.item_completions(matches),
-            Purpose::Applet { .. } => self.applet_completions(matches),
+            Purpose::Callback { .. } => self.callback_completions(matches),
         }
     }
 
@@ -283,8 +283,8 @@ impl Editor {
     pub(in crate::editor) fn exit_minibuffer_with_input(&mut self) {
         let input = self.minibuffer_input();
         match self.minibuffer_purpose() {
-            Some(Purpose::Applet { .. }) if !input.trim().is_empty() => {
-                self.exit_applet_prompt(true);
+            Some(Purpose::Callback { .. }) if !input.trim().is_empty() => {
+                self.exit_callback_prompt(true);
             }
             Some(purpose) if purpose.takes_path() => self.exit_file_prompt(true),
             Some(purpose) if purpose.takes_buffer() && !input.is_empty() => {
@@ -309,8 +309,8 @@ impl Editor {
             self.exit_file_prompt(false);
             return;
         }
-        if let Purpose::Applet { .. } = purpose {
-            self.exit_applet_prompt(false);
+        if let Purpose::Callback { .. } = purpose {
+            self.exit_callback_prompt(false);
             return;
         }
         if purpose == Purpose::Compile {

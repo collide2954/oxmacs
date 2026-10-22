@@ -1,4 +1,3 @@
-mod applets;
 mod buffers;
 mod build;
 mod connections;
@@ -12,6 +11,7 @@ mod motion;
 #[cfg(test)]
 mod opening;
 mod page;
+mod plugins;
 mod prompts;
 mod search;
 mod special;
@@ -31,7 +31,7 @@ pub use languages::r_plots::{GalleryView, PlotView};
 pub use languages::registry::LineHighlighter;
 pub use motion::mouse::{Cell, Clicks};
 pub use page::{Page, clip, fill};
-pub use prompts::applet::{InputStyle, Offer, Picked};
+pub use prompts::callbacks::{InputStyle, Offer, Picked};
 pub use prompts::input_line::InputLine;
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
 pub use prompts::popup::PopupView;
@@ -54,13 +54,13 @@ use std::{env, mem};
 
 use buffers::{BufferList, Mode};
 
-use crate::applet::{Applet, Handlers, Installed, States};
 use crate::command::{Command, CommandId, CommandSpec, Commands, DynamicSpec, Scope, ScopeId};
 use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::external::tools;
 use crate::input::bindings::Keymaps;
 use crate::input::{Key, KeyCode, KeyParseError, KeySequence, Keymap, Lookup, Modifiers};
+use crate::plugin::States;
 use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::{self, Appearance, Highlight, Theme};
@@ -111,10 +111,8 @@ pub struct Editor {
     last_command: Option<Command>,
     command_history: Vec<CommandId>,
     commands: Commands,
-    applets: Vec<Installed>,
-    applet_states: States,
-    applet_answer: Option<prompts::applet::Answer>,
-    event_handlers: Handlers,
+    plugin_states: States,
+    pending_answer: Option<prompts::callbacks::Answer>,
     goal_column: Option<usize>,
     shift_selection: bool,
     typed_in_step: usize,
@@ -136,10 +134,7 @@ pub struct Editor {
     configured_theme: Option<&'static Theme>,
     themes: Vec<&'static Theme>,
     splash_entries: Vec<(CommandId, String)>,
-    config_tables: Vec<applets::ConfigTable>,
-    applet_settings: Vec<(&'static str, &'static config::schema::Setting)>,
-    doctor_sections: Vec<(&'static str, applets::DoctorSection)>,
-    mode_line_segments: Vec<applets::Segment>,
+    mode_line_segments: Vec<plugins::Segment>,
     configured_handlers: Vec<fn(&mut Editor)>,
     quit_handlers: Vec<fn(&mut Editor)>,
     display_handlers: Vec<fn(&mut Editor)>,
@@ -207,10 +202,8 @@ impl Editor {
             last_command: None,
             command_history: Vec::new(),
             commands: Commands::default(),
-            applets: Vec::new(),
-            applet_states: States::default(),
-            applet_answer: None,
-            event_handlers: Handlers::default(),
+            plugin_states: States::default(),
+            pending_answer: None,
             goal_column: None,
             shift_selection: false,
             typed_in_step: 0,
@@ -232,9 +225,7 @@ impl Editor {
             configured_theme: None,
             themes: theme::builtin().to_vec(),
             splash_entries: Vec::new(),
-            config_tables: Vec::new(),
-            applet_settings: Vec::new(),
-            doctor_sections: Vec::new(),
+
             mode_line_segments: Vec::new(),
             configured_handlers: Vec::new(),
             quit_handlers: Vec::new(),
@@ -281,7 +272,6 @@ impl Editor {
         self.settings = Settings::from(config);
         self.configured_theme = config.theme.as_deref().and_then(theme::find);
         self.config = config.clone();
-        self.check_config_tables();
         self.tell_configured();
     }
 
@@ -476,7 +466,7 @@ impl Editor {
 
     fn buffer_scope(&self) -> ScopeId {
         match self.buffers.mode(0) {
-            Some(Mode::Applet(view)) => view.scope(),
+            Some(Mode::Plugin(view)) => view.scope(),
             Some(Mode::Console(console)) => console.scope.unwrap_or_else(|| Scope::Console.into()),
             Some(Mode::Text(Some(syntax))) => self
                 .registered(syntax.language())
@@ -500,7 +490,7 @@ impl Editor {
             Some(Mode::Environment(_)) => Scope::Environment,
             Some(Mode::Table(_)) => Scope::Table,
             Some(Mode::Console(_)) => Scope::Console,
-            Some(Mode::Text(_) | Mode::Applet(_)) | None => Scope::Global,
+            Some(Mode::Text(_) | Mode::Plugin(_)) | None => Scope::Global,
         }
     }
 
@@ -525,7 +515,7 @@ impl Editor {
             Some(Mode::Tools(list)) => list.line_style(line),
             Some(Mode::Environment(view)) => view.line_style(line),
             Some(Mode::Table(view)) => view.line_style(line),
-            Some(Mode::Applet(view)) => view.line_style(line),
+            Some(Mode::Plugin(view)) => view.line_style(line),
             Some(Mode::Text(Some(syntax))) => LineStyle {
                 background: None,
                 spans: match self
@@ -584,34 +574,20 @@ impl Editor {
         self.commands.find(name)
     }
 
-    pub fn install(&mut self, applet: &dyn Applet) {
-        self.applets.push(Installed {
-            name: applet.name(),
-            version: applet.version(),
-            opt_in: applet.opt_in(),
-        });
-        self.add_themes(applet.themes());
-        applet.install(self);
+    pub fn plugin_state<T: Any + Send>(&self) -> Option<&T> {
+        self.plugin_states.get()
     }
 
-    pub fn installed(&self) -> &[Installed] {
-        &self.applets
+    pub fn plugin_state_mut<T: Any + Send>(&mut self) -> Option<&mut T> {
+        self.plugin_states.get_mut()
     }
 
-    pub fn applet_state<T: Any + Send>(&self) -> Option<&T> {
-        self.applet_states.get()
+    pub fn set_plugin_state<T: Any + Send>(&mut self, state: T) {
+        self.plugin_states.set(state);
     }
 
-    pub fn applet_state_mut<T: Any + Send>(&mut self) -> Option<&mut T> {
-        self.applet_states.get_mut()
-    }
-
-    pub fn set_applet_state<T: Any + Send>(&mut self, state: T) {
-        self.applet_states.set(state);
-    }
-
-    pub fn take_applet_state<T: Any + Send>(&mut self) -> Option<T> {
-        self.applet_states.take()
+    pub fn take_plugin_state<T: Any + Send>(&mut self) -> Option<T> {
+        self.plugin_states.take()
     }
 
     pub fn add_scope(&mut self, label: &'static str) -> ScopeId {

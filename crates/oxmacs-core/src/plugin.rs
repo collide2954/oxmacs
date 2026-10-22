@@ -3,16 +3,15 @@ use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
 use std::path::Path;
-use std::sync::Arc;
 
 use crate::command::ScopeId;
 use crate::display::LineStyle;
-use crate::editor::{Editor, InputLine};
-use crate::theme::{Highlight, Theme};
+use crate::editor::InputLine;
+use crate::theme::Highlight;
 
 pub use crate::editor::Offer;
 
-pub trait AppletBuffer: Any + Send + fmt::Debug {
+pub trait PluginBuffer: Any + Send + fmt::Debug {
     fn scope(&self) -> ScopeId;
 
     fn line_style(&self, _line: usize) -> LineStyle {
@@ -46,125 +45,6 @@ pub trait AppletBuffer: Any + Send + fmt::Debug {
     fn pills(&self, _line: usize) -> Vec<(Range<usize>, Highlight)> {
         Vec::new()
     }
-}
-
-pub trait Applet {
-    fn name(&self) -> &'static str;
-
-    fn version(&self) -> &'static str;
-
-    fn opt_in(&self) -> bool {
-        false
-    }
-
-    fn themes(&self) -> &'static [Theme] {
-        &[]
-    }
-
-    fn subcommands(&self) -> &'static [Subcommand] {
-        &[]
-    }
-
-    fn install(&self, editor: &mut Editor);
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Subcommand {
-    pub name: &'static str,
-    pub summary: &'static str,
-    pub run: fn() -> Result<(), String>,
-}
-
-pub fn subcommand<'a>(
-    applets: impl IntoIterator<Item = &'a dyn Applet>,
-    name: &str,
-) -> Option<&'static Subcommand> {
-    applets
-        .into_iter()
-        .flat_map(Applet::subcommands)
-        .find(|subcommand| subcommand.name == name)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Finding {
-    Info,
-    Good,
-    Warning,
-    Problem,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DoctorLine {
-    pub label: String,
-    pub finding: Finding,
-    pub text: String,
-}
-
-#[derive(Clone)]
-pub struct Payload(Arc<dyn Any + Send + Sync>);
-
-impl Payload {
-    pub fn new<T: Any + Send + Sync>(value: T) -> Self {
-        Self(Arc::new(value))
-    }
-
-    pub fn get<T: Any>(&self) -> Option<&T> {
-        self.0.downcast_ref()
-    }
-
-    pub fn kind(&self) -> TypeId {
-        Any::type_id(&*self.0)
-    }
-}
-
-impl PartialEq for Payload {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl Eq for Payload {}
-
-impl fmt::Debug for Payload {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("Payload")
-    }
-}
-
-type Handler = Arc<dyn Fn(&mut Editor, &Payload) + Send + Sync>;
-
-#[derive(Default)]
-pub struct Handlers(HashMap<TypeId, Handler>);
-
-impl fmt::Debug for Handlers {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("Handlers")
-            .field("count", &self.0.len())
-            .finish()
-    }
-}
-
-impl Handlers {
-    pub fn add<T: Any + Send + Sync>(&mut self, handler: fn(&mut Editor, &T)) {
-        let handler: Handler = Arc::new(move |editor: &mut Editor, payload: &Payload| {
-            if let Some(event) = payload.get::<T>() {
-                handler(editor, event);
-            }
-        });
-        self.0.insert(TypeId::of::<T>(), handler);
-    }
-
-    pub fn find(&self, payload: &Payload) -> Option<Handler> {
-        self.0.get(&payload.kind()).cloned()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Installed {
-    pub name: &'static str,
-    pub version: &'static str,
-    pub opt_in: bool,
 }
 
 #[derive(Default)]
@@ -203,14 +83,15 @@ impl States {
 
 #[cfg(test)]
 mod tests {
-    use super::Payload;
     use crate::command::{CommandSpec, Scope, ScopeId};
     use crate::config::Config;
     use crate::display::LineStyle;
     use crate::editor::Page;
     use crate::editor::{Editor, InputLine, Question};
     use crate::input::KeySequence;
-    use crate::theme::{self, ADWAITA, ADWAITA_DARK, Highlight};
+    use std::sync::Arc;
+
+    use crate::theme::{self, ADWAITA, ADWAITA_DARK, Highlight, Theme};
 
     use super::*;
 
@@ -218,58 +99,34 @@ mod tests {
     struct Count(usize);
 
     fn count(editor: &mut Editor) {
-        if let Some(count) = editor.applet_state_mut::<Count>() {
+        if let Some(count) = editor.plugin_state_mut::<Count>() {
             count.0 += 1;
         }
     }
 
-    struct Counter;
-
-    impl Applet for Counter {
-        fn name(&self) -> &'static str {
-            "counter"
-        }
-
-        fn version(&self) -> &'static str {
-            "0.2.0"
-        }
-
-        fn opt_in(&self) -> bool {
-            true
-        }
-
-        fn install(&self, editor: &mut Editor) {
-            let command = editor.add_command(CommandSpec {
-                name: "count-up",
-                summary: "Count one more",
-                help: None,
-                scope: Scope::Global.into(),
-                run: count,
-            });
-            editor.set_applet_state(Count::default());
-            editor.bind(Scope::Global, "C-c +", command).ok();
-        }
+    fn install_counter(editor: &mut Editor) {
+        let command = editor.add_command(CommandSpec {
+            name: "count-up",
+            summary: "Count one more",
+            help: None,
+            scope: Scope::Global.into(),
+            run: count,
+        });
+        editor.set_plugin_state(Count::default());
+        editor.bind(Scope::Global, "C-c +", command).ok();
     }
 
     #[test]
-    fn installed_applets_add_commands_keys_and_state() {
+    fn plugins_add_commands_keys_and_state() {
         let mut editor = Editor::new();
 
-        editor.install(&Counter);
+        install_counter(&mut editor);
         let keys: KeySequence = "C-c + C-c +".parse().unwrap();
         for key in keys.keys() {
             editor.handle_key(*key);
         }
 
-        assert_eq!(editor.applet_state::<Count>().map(|count| count.0), Some(2));
-        assert_eq!(
-            editor.installed(),
-            [Installed {
-                name: "counter",
-                version: "0.2.0",
-                opt_in: true
-            }]
-        );
+        assert_eq!(editor.plugin_state::<Count>().map(|count| count.0), Some(2));
     }
 
     #[derive(Debug)]
@@ -279,7 +136,7 @@ mod tests {
         styles: Vec<LineStyle>,
     }
 
-    impl AppletBuffer for Greeter {
+    impl PluginBuffer for Greeter {
         fn scope(&self) -> ScopeId {
             self.scope
         }
@@ -290,10 +147,10 @@ mod tests {
     }
 
     fn greet_open(editor: &mut Editor) {
-        let Some(scope) = editor.applet_state::<GreeterScope>().map(|known| known.0) else {
+        let Some(scope) = editor.plugin_state::<GreeterScope>().map(|known| known.0) else {
             return;
         };
-        let id = editor.open_applet_buffer(
+        let id = editor.open_plugin_buffer(
             "*Greeter*",
             Greeter {
                 scope,
@@ -305,17 +162,17 @@ mod tests {
     }
 
     fn greet_more(editor: &mut Editor) {
-        let Some(id) = editor.find_applet_buffer::<Greeter>(|_| true) else {
+        let Some(id) = editor.find_plugin_buffer::<Greeter>(|_| true) else {
             return;
         };
-        if let Some((_, greeter)) = editor.applet_buffer_mut::<Greeter>(id) {
+        if let Some((_, greeter)) = editor.plugin_buffer_mut::<Greeter>(id) {
             greeter.count += 1;
         }
         render_greeter(editor, id);
     }
 
     fn render_greeter(editor: &mut Editor, id: crate::text::BufferId) {
-        let Some((_, greeter)) = editor.applet_buffer_mut::<Greeter>(id) else {
+        let Some((_, greeter)) = editor.plugin_buffer_mut::<Greeter>(id) else {
             return;
         };
         let mut page = Page::default();
@@ -328,37 +185,25 @@ mod tests {
     #[derive(Debug)]
     struct GreeterScope(ScopeId);
 
-    struct Greetings;
-
-    impl Applet for Greetings {
-        fn name(&self) -> &'static str {
-            "greetings"
-        }
-
-        fn version(&self) -> &'static str {
-            "0.1.0"
-        }
-
-        fn install(&self, editor: &mut Editor) {
-            let scope = editor.add_scope("*Greeter*");
-            editor.set_applet_state(GreeterScope(scope));
-            let open = editor.add_command(CommandSpec {
-                name: "greet",
-                summary: "Open the greeter",
-                help: None,
-                scope: Scope::Global.into(),
-                run: greet_open,
-            });
-            let more = editor.add_command(CommandSpec {
-                name: "greet-more",
-                summary: "Greet once more",
-                help: None,
-                scope,
-                run: greet_more,
-            });
-            editor.bind(Scope::Global, "C-c g", open).ok();
-            editor.bind(scope, "+", more).ok();
-        }
+    fn install_greetings(editor: &mut Editor) {
+        let scope = editor.add_scope("*Greeter*");
+        editor.set_plugin_state(GreeterScope(scope));
+        let open = editor.add_command(CommandSpec {
+            name: "greet",
+            summary: "Open the greeter",
+            help: None,
+            scope: Scope::Global.into(),
+            run: greet_open,
+        });
+        let more = editor.add_command(CommandSpec {
+            name: "greet-more",
+            summary: "Greet once more",
+            help: None,
+            scope,
+            run: greet_more,
+        });
+        editor.bind(Scope::Global, "C-c g", open).ok();
+        editor.bind(scope, "+", more).ok();
     }
 
     fn type_keys(editor: &mut Editor, notation: &str) {
@@ -369,9 +214,9 @@ mod tests {
     }
 
     #[test]
-    fn applet_buffers_have_their_own_keys_text_and_styles() {
+    fn plugin_buffers_have_their_own_keys_text_and_styles() {
         let mut editor = Editor::new();
-        editor.install(&Greetings);
+        install_greetings(&mut editor);
 
         type_keys(&mut editor, "C-c g + +");
 
@@ -388,15 +233,15 @@ mod tests {
     struct Answers(Vec<String>);
 
     fn note(editor: &mut Editor, answer: String) {
-        if let Some(answers) = editor.applet_state_mut::<Answers>() {
+        if let Some(answers) = editor.plugin_state_mut::<Answers>() {
             answers.0.push(answer);
         }
     }
 
     #[test]
-    fn applets_prompt_with_their_own_completions_and_ask_questions() {
+    fn plugins_prompt_with_their_own_completions_and_ask_questions() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
 
         editor.prompt_with(
             "Fruit: ",
@@ -429,7 +274,7 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec![
                 "banana".to_owned(),
@@ -444,7 +289,7 @@ mod tests {
     #[test]
     fn offers_carry_notes_and_secret_prompts_hide_what_is_typed() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
 
         editor.prompt_with(
             "Server: ",
@@ -471,49 +316,9 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["s3cr3t".to_owned()])
-        );
-    }
-
-    #[derive(Debug)]
-    struct Fetch(String);
-
-    #[derive(Debug)]
-    struct Fetched(String);
-
-    fn fetched(editor: &mut Editor, event: &Fetched) {
-        note(editor, event.0.clone());
-    }
-
-    #[test]
-    fn applets_request_effects_and_get_typed_events_back() {
-        let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
-        editor.on_event(fetched);
-
-        editor.request(Fetch("weather".to_owned()));
-        let requested: Vec<String> = editor
-            .take_effects()
-            .into_iter()
-            .filter_map(|effect| match effect {
-                crate::editor::Effect::Applet(payload) => {
-                    payload.get::<Fetch>().map(|fetch| fetch.0.clone())
-                }
-                _ => None,
-            })
-            .collect();
-        assert_eq!(requested, ["weather"]);
-
-        editor.deliver(&Payload::new(Fetched("sunny".to_owned())));
-        editor.deliver(&Payload::new(7_u8));
-
-        assert_eq!(
-            editor
-                .applet_state::<Answers>()
-                .map(|answers| answers.0.clone()),
-            Some(vec!["sunny".to_owned()])
         );
     }
 
@@ -528,29 +333,11 @@ mod tests {
         },
     ];
 
-    struct Palette;
-
-    impl Applet for Palette {
-        fn name(&self) -> &'static str {
-            "palette"
-        }
-
-        fn version(&self) -> &'static str {
-            "1.0.0"
-        }
-
-        fn themes(&self) -> &'static [Theme] {
-            &PALETTE
-        }
-
-        fn install(&self, _editor: &mut Editor) {}
-    }
-
     #[test]
-    fn applet_themes_can_be_loaded_configured_and_toggled() {
+    fn added_themes_can_be_loaded_configured_and_toggled() {
         let mut editor = Editor::new();
 
-        editor.install(&Palette);
+        editor.add_themes(&PALETTE);
         type_keys(&mut editor, "M-x l o a d - t h e m e RET");
         let labels: Vec<String> = editor
             .completions()
@@ -572,55 +359,6 @@ mod tests {
         assert_eq!(theme::counterpart(&PALETTE[1]).name, "palette-light");
     }
 
-    #[derive(Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
-    #[serde(default, deny_unknown_fields)]
-    struct Greeting {
-        text: String,
-    }
-
-    struct Hello;
-
-    impl Applet for Hello {
-        fn name(&self) -> &'static str {
-            "hello"
-        }
-
-        fn version(&self) -> &'static str {
-            "1.0.0"
-        }
-
-        fn install(&self, editor: &mut Editor) {
-            editor.add_config_table::<Greeting>("hello");
-        }
-    }
-
-    #[test]
-    fn applets_read_their_own_config_table_and_mistakes_are_reported() {
-        let mut editor = Editor::new();
-        editor.install(&Hello);
-
-        editor.apply_config(&Config::parse("[hello]\ntext = \"hi\"\n\n[other]\nx = 1\n").unwrap());
-        assert_eq!(
-            editor.applet_config::<Greeting>("hello"),
-            Greeting {
-                text: "hi".to_owned()
-            }
-        );
-        assert_eq!(editor.unclaimed_config_tables(), ["other"]);
-
-        editor.apply_config(&Config::parse("tab-width = 2\n[hello]\ntxt = \"hi\"\n").unwrap());
-        let message = editor.message().unwrap_or_default();
-        assert!(
-            message.starts_with("[hello] unknown field `txt`"),
-            "{message}"
-        );
-        assert_eq!(
-            editor.applet_config::<Greeting>("hello"),
-            Greeting::default()
-        );
-        assert_eq!(editor.tab_width(), 2);
-    }
-
     fn fetch_effects(editor: &mut Editor) -> Vec<(crate::editor::FetchId, String)> {
         editor
             .take_effects()
@@ -633,12 +371,12 @@ mod tests {
     }
 
     #[test]
-    fn applets_fetch_urls_and_get_the_answer_once() {
+    fn plugins_fetch_urls_and_get_the_answer_once() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
 
         editor.fetch("https://example.org/a", |editor, result| {
-            if let Some(answers) = editor.applet_state_mut::<Answers>() {
+            if let Some(answers) = editor.plugin_state_mut::<Answers>() {
                 answers.0.push(result.unwrap_or_else(|error| error));
             }
         });
@@ -652,14 +390,14 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["body".to_owned()])
         );
     }
 
     #[test]
-    fn applets_add_mode_line_segments_in_order() {
+    fn plugins_add_mode_line_segments_in_order() {
         let mut editor = Editor::new();
 
         let counted = |editor: &Editor| Some(format!("{} buffers", editor.buffer_names().len()));
@@ -672,15 +410,15 @@ mod tests {
 
     fn remember_tab_width(editor: &mut Editor) {
         let width = editor.tab_width().to_string();
-        if let Some(answers) = editor.applet_state_mut::<Answers>() {
+        if let Some(answers) = editor.plugin_state_mut::<Answers>() {
             answers.0.push(width);
         }
     }
 
     #[test]
-    fn applets_hear_about_every_config_change() {
+    fn plugins_hear_about_every_config_change() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
         editor.on_configured(remember_tab_width);
 
         editor.apply_config(&Config::parse("tab-width = 2\n").unwrap());
@@ -688,18 +426,18 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["2".to_owned(), "3".to_owned()])
         );
     }
 
     #[test]
-    fn applets_say_goodbye_when_the_editor_quits() {
+    fn plugins_say_goodbye_when_the_editor_quits() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
         editor.on_quit(|editor| {
-            if let Some(answers) = editor.applet_state_mut::<Answers>() {
+            if let Some(answers) = editor.plugin_state_mut::<Answers>() {
                 answers.0.push("bye".to_owned());
             }
         });
@@ -708,7 +446,7 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["bye".to_owned()])
         );
@@ -720,7 +458,7 @@ mod tests {
         input: InputLine,
     }
 
-    impl AppletBuffer for Shell {
+    impl PluginBuffer for Shell {
         fn scope(&self) -> ScopeId {
             self.scope
         }
@@ -732,7 +470,7 @@ mod tests {
 
     fn send(editor: &mut Editor) {
         let id = editor.buffer().id();
-        let Some((buffer, shell)) = editor.applet_buffer_mut::<Shell>(id) else {
+        let Some((buffer, shell)) = editor.plugin_buffer_mut::<Shell>(id) else {
             return;
         };
         let text = shell.input.text(buffer).unwrap_or_default();
@@ -742,9 +480,9 @@ mod tests {
     }
 
     #[test]
-    fn applet_buffers_can_take_input_after_a_prompt_with_history() {
+    fn plugin_buffers_can_take_input_after_a_prompt_with_history() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
         let scope = editor.add_scope("*Shell*");
         let command = editor.add_command(CommandSpec {
             name: "shell-send",
@@ -757,7 +495,7 @@ mod tests {
         editor
             .bind(scope, "M-p", crate::command::Command::ComintPreviousInput)
             .unwrap();
-        let id = editor.add_applet_buffer_with("*Shell*", |buffer| {
+        let id = editor.add_plugin_buffer_with("*Shell*", |buffer| {
             buffer.insert_at(0, "> ");
             Shell {
                 scope,
@@ -778,7 +516,7 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["hi".to_owned()])
         );
@@ -790,9 +528,9 @@ mod tests {
     }
 
     #[test]
-    fn applets_add_commands_made_at_run_time_and_find_commands_by_name() {
+    fn plugins_add_commands_made_at_run_time_and_find_commands_by_name() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
         let id = editor.add_dynamic_command(crate::command::DynamicSpec {
             name: "note-hi".to_owned(),
             summary: "Note hi".to_owned(),
@@ -813,16 +551,16 @@ mod tests {
         assert_eq!(editor.command_named("note-hi"), None);
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["hi".to_owned(), "hi".to_owned()])
         );
     }
 
     #[test]
-    fn applet_commands_know_when_they_run_again_right_away() {
+    fn plugin_commands_know_when_they_run_again_right_away() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
         let command = editor.add_command(CommandSpec {
             name: "count-repeats",
             summary: "Note whether this repeats",
@@ -836,7 +574,7 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec![
                 "false".to_owned(),
@@ -849,19 +587,19 @@ mod tests {
     #[derive(Debug)]
     struct Board(ScopeId);
 
-    impl AppletBuffer for Board {
+    impl PluginBuffer for Board {
         fn scope(&self) -> ScopeId {
             self.0
         }
     }
 
     #[test]
-    fn applets_see_where_their_buffers_show_and_hear_before_each_display() {
+    fn plugins_see_where_their_buffers_show_and_hear_before_each_display() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
         editor.on_display(|editor| note(editor, "display".to_owned()));
         let scope = editor.add_scope("*Board*");
-        let id = editor.add_applet_buffer_with("*Board*", |buffer| {
+        let id = editor.add_plugin_buffer_with("*Board*", |buffer| {
             buffer.insert_at(0, "one\ntwo\nthree");
             Board(scope)
         });
@@ -881,19 +619,19 @@ mod tests {
         editor.prepare_display();
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["display".to_owned(), "display".to_owned()])
         );
     }
 
     #[test]
-    fn applets_hear_after_each_command_and_around_each_save() {
+    fn plugins_hear_after_each_command_and_around_each_save() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("plan.txt");
         std::fs::write(&path, "one\n").unwrap();
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
         editor.on_command(|editor| note(editor, "command".to_owned()));
         editor.on_save(|editor, id| {
             if let Some(buffer) = editor.buffer_by_id_mut(id) {
@@ -917,14 +655,14 @@ mod tests {
         });
         editor.bind(Scope::Global, "C-c s", shout).unwrap();
         editor.open_file(&path);
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
 
         type_keys(&mut editor, "C-e x C-c s C-x C-s");
 
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "# onex\n");
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec![
                 "command".to_owned(),
@@ -938,7 +676,7 @@ mod tests {
     }
 
     #[test]
-    fn applets_reach_files_by_path_and_save_them() {
+    fn plugins_reach_files_by_path_and_save_them() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("plan.txt");
         std::fs::write(&path, "one\ntwo\nthree\n").unwrap();
@@ -970,7 +708,7 @@ mod tests {
     #[derive(Debug)]
     struct Folder(ScopeId, std::path::PathBuf);
 
-    impl AppletBuffer for Folder {
+    impl PluginBuffer for Folder {
         fn scope(&self) -> ScopeId {
             self.0
         }
@@ -981,14 +719,14 @@ mod tests {
     }
 
     #[test]
-    fn applet_buffers_can_show_a_directory() {
+    fn plugin_buffers_can_show_a_directory() {
         let dir = tempfile::tempdir().unwrap();
         let docs = dir.path().join("docs");
         std::fs::create_dir_all(&docs).unwrap();
         let mut editor = Editor::new();
         let scope = editor.add_scope("*Folder*");
 
-        let id = editor.add_applet_buffer_with("*Folder*", |_| Folder(scope, docs.clone()));
+        let id = editor.add_plugin_buffer_with("*Folder*", |_| Folder(scope, docs.clone()));
         editor.show_buffer(id);
 
         assert_eq!(editor.default_directory(), docs);
@@ -1002,7 +740,7 @@ mod tests {
     #[derive(Debug)]
     struct Repository(ScopeId, std::path::PathBuf, std::path::PathBuf);
 
-    impl AppletBuffer for Repository {
+    impl PluginBuffer for Repository {
         fn scope(&self) -> ScopeId {
             self.0
         }
@@ -1021,14 +759,14 @@ mod tests {
     }
 
     #[test]
-    fn applet_buffers_can_keep_their_name_and_watch_another_directory() {
+    fn plugin_buffers_can_keep_their_name_and_watch_another_directory() {
         let dir = tempfile::tempdir().unwrap();
         let metadata = dir.path().join(".git");
         std::fs::create_dir_all(&metadata).unwrap();
         let mut editor = Editor::new();
         let scope = editor.add_scope("*Repository*");
 
-        let id = editor.add_applet_buffer_with("git: project", |_| {
+        let id = editor.add_plugin_buffer_with("git: project", |_| {
             Repository(scope, dir.path().to_owned(), metadata.clone())
         });
         editor.show_buffer(id);
@@ -1042,10 +780,10 @@ mod tests {
     }
 
     #[test]
-    fn applets_hear_about_disk_changes_and_open_directories() {
+    fn plugins_hear_about_disk_changes_and_open_directories() {
         let dir = tempfile::tempdir().unwrap();
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
         editor.on_disk_change(|editor| note(editor, "disk".to_owned()));
         editor.on_open_directory(|editor, path| {
             note(editor, format!("open {}", path.display()));
@@ -1057,7 +795,7 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec![
                 "disk".to_owned(),
@@ -1073,7 +811,7 @@ mod tests {
         std::fs::create_dir_all(dir.path().join("sub")).unwrap();
         let mut editor = Editor::new();
         editor.set_working_directory(dir.path().to_owned());
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
 
         editor.prompt_path("Copy to: ", false, |editor, path| {
             note(editor, path.display().to_string());
@@ -1090,7 +828,7 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec![
                 dir.path().join("notes.txt").display().to_string(),
@@ -1100,9 +838,9 @@ mod tests {
     }
 
     #[test]
-    fn applets_ask_typed_and_multiple_choice_questions() {
+    fn plugins_ask_typed_and_multiple_choice_questions() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
 
         editor.ask_typed("Delete it?", |editor, yes| note(editor, yes.to_string()));
         assert_eq!(
@@ -1128,7 +866,7 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["true".to_owned(), "!".to_owned()])
         );
@@ -1148,7 +886,7 @@ mod tests {
         file: std::path::PathBuf,
     }
 
-    impl AppletBuffer for Viewer {
+    impl PluginBuffer for Viewer {
         fn scope(&self) -> ScopeId {
             self.scope
         }
@@ -1171,12 +909,12 @@ mod tests {
     }
 
     #[test]
-    fn applet_buffers_show_their_own_position_and_watch_their_file() {
+    fn plugin_buffers_show_their_own_position_and_watch_their_file() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("paper.pdf");
         let mut editor = Editor::new();
         let scope = editor.add_scope("viewer");
-        let id = editor.add_applet_buffer_with("paper.pdf", |_| Viewer {
+        let id = editor.add_plugin_buffer_with("paper.pdf", |_| Viewer {
             scope,
             file: file.clone(),
         });
@@ -1188,7 +926,7 @@ mod tests {
         assert_eq!(editor.visited_files(), [file]);
     }
     #[test]
-    fn applets_open_the_file_types_they_claim() {
+    fn plugins_open_the_file_types_they_claim() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("paper.PDF"), b"%PDF\xFF").unwrap();
         std::fs::write(dir.path().join("notes.txt"), "plain").unwrap();
@@ -1223,13 +961,13 @@ mod tests {
     }
 
     #[test]
-    fn g_bound_to_revert_buffer_in_an_applet_buffer_does_not_loop() {
+    fn g_bound_to_revert_buffer_in_a_plugin_buffer_does_not_loop() {
         let mut editor = Editor::new();
         let scope = editor.add_scope("*Board*");
         editor
             .bind(scope, "g", crate::command::Command::RevertBuffer)
             .unwrap();
-        let id = editor.add_applet_buffer_with("*Board*", |_| Board(scope));
+        let id = editor.add_plugin_buffer_with("*Board*", |_| Board(scope));
         editor.show_buffer(id);
 
         editor.execute(crate::command::Command::RevertBuffer);
@@ -1237,9 +975,9 @@ mod tests {
         assert_eq!(editor.buffer().name(), "*Board*");
     }
     #[test]
-    fn reverting_an_applet_buffer_runs_what_g_runs() {
+    fn reverting_a_plugin_buffer_runs_what_g_runs() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
         let scope = editor.add_scope("*Board*");
         let refresh = editor.add_command(CommandSpec {
             name: "board-refresh",
@@ -1249,23 +987,23 @@ mod tests {
             run: |editor| note(editor, "refreshed".to_owned()),
         });
         editor.bind(scope, "g", refresh).unwrap();
-        let id = editor.add_applet_buffer_with("*Board*", |_| Board(scope));
+        let id = editor.add_plugin_buffer_with("*Board*", |_| Board(scope));
         editor.show_buffer(id);
 
         editor.execute(crate::command::Command::RevertBuffer);
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["refreshed".to_owned()])
         );
     }
 
     #[test]
-    fn double_clicks_in_applet_buffers_run_what_return_runs() {
+    fn double_clicks_in_plugin_buffers_run_what_return_runs() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
         let scope = editor.add_scope("*Board*");
         let pick = editor.add_command(CommandSpec {
             name: "board-pick",
@@ -1278,7 +1016,7 @@ mod tests {
             },
         });
         editor.bind(scope, "RET", pick).unwrap();
-        let id = editor.add_applet_buffer_with("*Board*", |buffer| {
+        let id = editor.add_plugin_buffer_with("*Board*", |buffer| {
             buffer.insert_at(0, "one\ntwo\nthree");
             Board(scope)
         });
@@ -1294,14 +1032,14 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["line 1".to_owned()])
         );
     }
 
     #[test]
-    fn applets_open_links_outside_and_hide_buffers_they_showed() {
+    fn plugins_open_links_outside_and_hide_buffers_they_showed() {
         let mut editor = Editor::new();
         editor.open_externally("https://example.org");
         assert_eq!(
@@ -1311,7 +1049,7 @@ mod tests {
             )]
         );
         let scope = editor.add_scope("*Board*");
-        let id = editor.add_applet_buffer_with("*Board*", |_| Board(scope));
+        let id = editor.add_plugin_buffer_with("*Board*", |_| Board(scope));
         let origin = editor.selected_window();
         editor.show_buffer_beside(id);
         editor.select_window(origin);
@@ -1337,7 +1075,7 @@ mod tests {
             );
         }
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
 
         ask(&mut editor);
         type_keys(&mut editor, "C-n RET");
@@ -1348,7 +1086,7 @@ mod tests {
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec![
                 "Offered(1)".to_owned(),
@@ -1361,14 +1099,14 @@ mod tests {
     #[test]
     fn m_ret_answers_a_prompt_with_what_was_typed() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Answers::default());
+        editor.set_plugin_state(Answers::default());
         editor.prompt_with("Server: ", |_| vec![Offer::from("libera")], note);
 
         type_keys(&mut editor, "l i M-RET");
 
         assert_eq!(
             editor
-                .applet_state::<Answers>()
+                .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
             Some(vec!["li".to_owned()])
         );
@@ -1391,76 +1129,43 @@ mod tests {
         assert_eq!(editor.minibuffer_highlights(), []);
     }
 
-    struct Syncer;
-
-    impl Applet for Syncer {
-        fn name(&self) -> &'static str {
-            "syncer"
-        }
-
-        fn version(&self) -> &'static str {
-            "1.0.0"
-        }
-
-        fn subcommands(&self) -> &'static [Subcommand] {
-            &[Subcommand {
-                name: "sync-daemon",
-                summary: "Run the sync daemon without the editor",
-                run: || Err("not today".to_owned()),
-            }]
-        }
-
-        fn install(&self, _editor: &mut Editor) {}
-    }
-
     #[test]
-    fn applets_can_add_command_line_subcommands() {
-        let applets: [&dyn Applet; 2] = [&Counter, &Syncer];
-
-        let found = subcommand(applets, "sync-daemon").unwrap();
-
-        assert_eq!(found.summary, "Run the sync daemon without the editor");
-        assert_eq!((found.run)(), Err("not today".to_owned()));
-        assert!(subcommand(applets, "notes.txt").is_none());
-    }
-
-    #[test]
-    fn applets_borrow_their_state_while_they_change_the_editor() {
+    fn plugins_borrow_their_state_while_they_change_the_editor() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Count(1));
+        editor.set_plugin_state(Count(1));
 
-        let hidden = editor.with_applet_state(|editor, count: &mut Count| {
+        let hidden = editor.with_plugin_state(|editor, count: &mut Count| {
             count.0 += 1;
             editor.show_message("busy");
-            editor.applet_state::<Count>().is_none()
+            editor.plugin_state::<Count>().is_none()
         });
 
         assert_eq!(hidden, Some(true));
-        assert_eq!(editor.applet_state::<Count>().map(|count| count.0), Some(2));
+        assert_eq!(editor.plugin_state::<Count>().map(|count| count.0), Some(2));
         assert_eq!(editor.message(), Some("busy"));
-        assert_eq!(editor.with_applet_state(|_, _: &mut String| ()), None);
+        assert_eq!(editor.with_plugin_state(|_, _: &mut String| ()), None);
     }
 
     #[test]
-    fn applets_take_their_state_out_until_they_set_it_again() {
+    fn plugins_take_their_state_out_until_they_set_it_again() {
         let mut editor = Editor::new();
-        editor.set_applet_state(Count(1));
+        editor.set_plugin_state(Count(1));
 
-        let taken = editor.take_applet_state::<Count>();
+        let taken = editor.take_plugin_state::<Count>();
 
         assert_eq!(taken.map(|count| count.0), Some(1));
-        assert!(editor.applet_state::<Count>().is_none());
-        assert!(editor.take_applet_state::<Count>().is_none());
+        assert!(editor.plugin_state::<Count>().is_none());
+        assert!(editor.take_plugin_state::<Count>().is_none());
     }
 
     #[test]
-    fn applets_find_list_and_close_their_buffers() {
+    fn plugins_find_list_and_close_their_buffers() {
         let mut editor = Editor::new();
         let scope = editor.add_scope("*Board*");
-        let first = editor.add_applet_buffer_with("*Board one*", |_| Board(scope));
-        let second = editor.add_applet_buffer_with("*Board two*", |_| Board(scope));
+        let first = editor.add_plugin_buffer_with("*Board one*", |_| Board(scope));
+        let second = editor.add_plugin_buffer_with("*Board two*", |_| Board(scope));
 
-        assert_eq!(editor.applet_buffers::<Board>(), [first, second]);
+        assert_eq!(editor.plugin_buffers::<Board>(), [first, second]);
         assert_eq!(editor.buffer_named("*Board two*"), Some(second));
         assert_eq!(editor.buffer_named("*Board three*"), None);
 
@@ -1469,7 +1174,7 @@ mod tests {
         assert_eq!(editor.buffer().contents(), "hello");
         editor.close_buffer(first);
 
-        assert_eq!(editor.applet_buffers::<Board>(), [second]);
+        assert_eq!(editor.plugin_buffers::<Board>(), [second]);
         assert_ne!(editor.buffer().id(), first);
     }
 

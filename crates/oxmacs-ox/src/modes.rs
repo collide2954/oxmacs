@@ -31,10 +31,10 @@ struct Modes {
 }
 
 fn modes(editor: &mut Editor) -> Option<&mut Modes> {
-    if editor.applet_state::<Modes>().is_none() {
-        editor.set_applet_state(Modes::default());
+    if editor.plugin_state::<Modes>().is_none() {
+        editor.set_plugin_state(Modes::default());
     }
-    editor.applet_state_mut::<Modes>()
+    editor.plugin_state_mut::<Modes>()
 }
 
 fn leak(text: String) -> &'static str {
@@ -117,7 +117,7 @@ fn unknown(heap: &Heap, option: Value) -> Error {
 
 fn cached(editor: &Editor, id: BufferId, line: usize) -> Spans {
     editor
-        .applet_state::<Modes>()
+        .plugin_state::<Modes>()
         .and_then(|modes| modes.cache.get(&id))
         .and_then(|(_, lines)| lines.get(line))
         .cloned()
@@ -128,7 +128,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     let alias = name_of(heap, arguments[0]);
     let title = print::display(heap, arguments[1]);
     let given = options(heap, &arguments[2..])?;
-    let known = editor.applet_state::<Modes>().and_then(|modes| {
+    let known = editor.plugin_state::<Modes>().and_then(|modes| {
         modes
             .defined
             .iter()
@@ -250,7 +250,7 @@ fn highlight_lines(
 }
 
 pub fn highlight(isolate: &mut Isolate, editor: &mut Editor) {
-    let Some(defined) = editor.applet_state::<Modes>().map(|modes| {
+    let Some(defined) = editor.plugin_state::<Modes>().map(|modes| {
         modes
             .defined
             .iter()
@@ -273,7 +273,7 @@ pub fn highlight(isolate: &mut Isolate, editor: &mut Editor) {
         };
         let revision = buffer.revision();
         let fresh = editor
-            .applet_state::<Modes>()
+            .plugin_state::<Modes>()
             .and_then(|modes| modes.cache.get(id))
             .is_some_and(|(seen, _)| *seen == revision);
         if !fresh {
