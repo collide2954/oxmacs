@@ -1089,6 +1089,31 @@ mod tests {
     }
 
     #[test]
+    fn named_functions_can_call_themselves() {
+        all(&[
+            (
+                "((fn fact [n] (if (< n 2) 1 (* n (fact (- n 1))))) 10)",
+                "3628800",
+            ),
+            ("(fn named [x] x)", "#<fn named>"),
+            (
+                "((fn count-down [n] (if (< n 1) :done (count-down (- n 1)))) 100000)",
+                ":done",
+            ),
+            (
+                "((fn outer [n] ((fn [] (if (< n 1) :done (outer (- n 1)))))) 5)",
+                ":done",
+            ),
+            ("(let [f (fn me [] me)] (= (f) f))", "true"),
+            ("((fn me [me] me) 5)", "5"),
+            (
+                "(fn me [] (set! me 1))",
+                "error: set! cannot change a function's own name",
+            ),
+        ]);
+    }
+
+    #[test]
     fn quote_gives_the_form_as_data() {
         all(&[
             ("'a", "a"),

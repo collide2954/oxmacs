@@ -351,6 +351,7 @@ impl Runtime {
                 let value = self.close(machine, function)?;
                 machine.set(to, value);
             }
+            Op::Itself { to } => machine.set(to, machine.closure),
             Op::Captured { to, index } => {
                 let value = self.captured(machine.closure, index)?;
                 machine.set(to, value);
@@ -491,6 +492,7 @@ impl Runtime {
             .map(|capture| match *capture {
                 Capture::Register(register) => Ok(machine.get(register)),
                 Capture::Captured(index) => self.captured(machine.closure, index),
+                Capture::Itself => Ok(machine.closure),
             })
             .collect::<Result<Box<[Value]>, Error>>()?;
         self.heap.closure(Closure { code, captured }).map_err(full)

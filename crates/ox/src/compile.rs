@@ -27,6 +27,7 @@ pub fn compile(heap: &mut Heap, form: &Syntax) -> Result<Code, Error> {
 enum Place {
     Register(Register),
     Captured(u16),
+    Itself,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -47,6 +48,7 @@ struct Function {
     top: Register,
     locals: Vec<Local>,
     captured: Vec<(Sym, bool)>,
+    itself: Option<Sym>,
 }
 
 struct Compiler<'a> {
@@ -204,6 +206,12 @@ impl Compiler<'_> {
                 boxed: *boxed,
             });
         }
+        if function.itself == Some(name) {
+            return Some(Variable {
+                place: Place::Itself,
+                boxed: false,
+            });
+        }
         let outside = self.resolve_at(depth.checked_sub(1)?, name)?;
         let function = self.function_at(depth)?;
         let index = u16::try_from(function.captured.len()).ok()?;
@@ -211,6 +219,7 @@ impl Compiler<'_> {
         function.code.captures.push(match outside.place {
             Place::Register(register) => Capture::Register(register),
             Place::Captured(index) => Capture::Captured(index),
+            Place::Itself => Capture::Itself,
         });
         Some(Variable {
             place: Place::Captured(index),
@@ -326,6 +335,7 @@ impl Compiler<'_> {
                 span,
             ),
             Place::Captured(index) => self.emit(Op::Captured { to: target, index }, span),
+            Place::Itself => self.emit(Op::Itself { to: target }, span),
         }
         if variable.boxed {
             self.emit(
@@ -419,7 +429,14 @@ impl Compiler<'_> {
                     return Err(malformed());
                 };
                 let name = Sym::intern(name);
-                self.lambda(Some(name), parameters, Body::Forms(body), target, span)?;
+                self.lambda(
+                    Some(name),
+                    parameters,
+                    Body::Forms(body),
+                    false,
+                    target,
+                    span,
+                )?;
                 name
             }
             _ => return Err(malformed()),
@@ -469,7 +486,7 @@ impl Compiler<'_> {
             record,
             fields: count,
         };
-        self.lambda(Some(name), fields, body, target, span)?;
+        self.lambda(Some(name), fields, body, false, target, span)?;
         let index = self.constant(record, span)?;
         self.emit(
             Op::DefineRecord {
@@ -541,6 +558,9 @@ impl Compiler<'_> {
                 },
                 span,
             ),
+            (Place::Itself, _) => {
+                return Err(Error::at(span, "set! cannot change a function's own name"));
+            }
             (Place::Captured(index), _) => {
                 let top = self.current.top;
                 let cell = self.reserve(1, span)?;
@@ -601,6 +621,16 @@ impl Compiler<'_> {
     }
 
     fn function(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let (name, parts) = match parts {
+            [
+                Syntax {
+                    datum: Datum::Symbol(name),
+                    ..
+                },
+                rest @ ..,
+            ] => (Some(Sym::intern(name)), rest),
+            _ => (None, parts),
+        };
         let Some((
             Syntax {
                 datum: Datum::Vector(parameters),
@@ -611,7 +641,7 @@ impl Compiler<'_> {
         else {
             return Err(Error::at(span, "fn takes a parameter vector and a body"));
         };
-        self.lambda(None, parameters, Body::Forms(body), target, span)
+        self.lambda(name, parameters, Body::Forms(body), true, target, span)
     }
 
     fn body(&mut self, body: Body<'_>, result: Register, span: Span) -> Result<(), Error> {
@@ -638,6 +668,7 @@ impl Compiler<'_> {
         name: Option<Sym>,
         parameters: &[Syntax],
         body: Body<'_>,
+        itself: bool,
         target: Register,
         span: Span,
     ) -> Result<(), Error> {
@@ -649,6 +680,7 @@ impl Compiler<'_> {
         let parent = std::mem::take(&mut self.current);
         self.outer.push(parent);
         self.current.code.name = name;
+        self.current.itself = name.filter(|_| itself);
         let defaults = parameters.optional.len() + parameters.keywords.len();
         if defaults > 64 {
             return Err(Error::at(

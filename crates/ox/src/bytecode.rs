@@ -37,6 +37,9 @@ pub enum Op {
         to: Register,
         index: u16,
     },
+    Itself {
+        to: Register,
+    },
     MakeCell {
         register: Register,
     },
@@ -112,6 +115,7 @@ pub enum Op {
 pub enum Capture {
     Register(Register),
     Captured(u16),
+    Itself,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
