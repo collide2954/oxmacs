@@ -80,6 +80,18 @@ fn pad(heap: &mut Heap, name: &str, arguments: &[Value], start: bool) -> Result<
     heap.string(&padded).map_err(full)
 }
 
+fn number(text: &str) -> Value {
+    let text = text.trim();
+    if let Ok(whole) = text.parse::<i64>() {
+        return Value::Int(whole);
+    }
+    let digits = text.chars().any(|character| character.is_ascii_digit());
+    text.parse::<f64>()
+        .ok()
+        .filter(|number| digits && number.is_finite())
+        .map_or(Value::Nil, Value::Float)
+}
+
 fn slice(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let whole = text(heap, "slice", arguments[0])?.to_owned();
     let length = whole.chars().count();
@@ -119,10 +131,16 @@ pub fn install(isolate: &mut Isolate) {
         let length = text(heap, "length", arguments[0])?.chars().count();
         Ok(Value::Int(i64::try_from(length).unwrap_or(i64::MAX)))
     });
-    isolate.define_native_in(MODULE, "split", 2, Some(2), |heap, arguments| {
+    isolate.define_native_in(MODULE, "split", 2, Some(3), |heap, arguments| {
         let whole = text(heap, "split", arguments[0])?;
         let separator = text(heap, "split", arguments[1])?;
-        let parts: Vec<String> = whole.split(separator).map(str::to_owned).collect();
+        let parts: Vec<String> = match arguments.get(2) {
+            Some(limit) => whole
+                .splitn(count(heap, "split", *limit)?, separator)
+                .map(str::to_owned)
+                .collect(),
+            None => whole.split(separator).map(str::to_owned).collect(),
+        };
         strings(heap, &parts)
     });
     isolate.define_native_in(MODULE, "lines", 1, Some(1), |heap, arguments| {
@@ -180,6 +198,9 @@ pub fn install(isolate: &mut Isolate) {
         heap.string(&repeated).map_err(full)
     });
     isolate.define_native_in(MODULE, "slice", 2, Some(3), slice);
+    isolate.define_native_in(MODULE, "to-number", 1, Some(1), |heap, arguments| {
+        Ok(number(text(heap, "to-number", arguments[0])?))
+    });
     isolate.define_native_in(MODULE, "pad-start", 2, Some(3), |heap, arguments| {
         pad(heap, "pad-start", arguments, true)
     });

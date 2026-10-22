@@ -9,18 +9,39 @@ The applets removed on 2026-10-21 come back one at a time as bundled Ox plugins,
 - **Prompts.** `(await (prompt "Rename to: " :initial name))` and `(await (yes-or-no "Delete 3 files?"))` wait in a task while the minibuffer is open; `C-g` makes the await raise "Quit".
 - **Commands run as tasks.** A command's function runs in its own task, so it can await a prompt or a fetch without holding up typing. Its error goes to `*ox log*` when it finishes.
 - **Files.** `ox file` is asynchronous like the rest of the I/O; `file/trash` uses the `trash` crate.
-- **Hooks.** A manifest can bind global keys (`:keys {"C-x d" dired}`), add start-screen lines (`:start-screen {dired: "Browse a directory"}`) and claim opening directories (`:opens-directories true`); each wakes the plugin lazily. `(on-open-directory f)` receives the path, and `(on-disk-change :key f)` runs after the editor notices changes on disk, once per key.
+- **Hooks.** A manifest can bind global keys (`:keys {"C-x d" dired}`), add start-screen lines (`:start-screen {dired: "Browse a directory"}`) and claim opening directories (`:opens-directories true`); each wakes the plugin lazily. `(on-open-directory f)` receives the path, `(on-disk-change :key f)` runs after the editor notices changes on disk and `(on-saved :key f)` after a file is saved, once per key.
+- **Plugin buffers keep their names.** Core names file and directory buffers after their paths, but a plugin finds its buffers by name, so plugin buffers never get renamed.
+
+- **Git reads and writes with the CLI.** Git runs through `ox process`, so the plugin is pure Ox over porcelain output; `git status` stays fast with git's own caches, and gix leaves the build. `process/run` resolves `{status stdout stderr}` whatever the exit status, and only a missing program raises.
+- **Git's diff is text.** The diff beside the status is a styled text buffer, unified or side by side, with a faint line-number gutter, Added and Removed backgrounds and word highlights, so search, the region and copying work and the region picks lines to stage.
+- **Transients come from Ox.** A menu is data with switches and functions; the chosen function runs as a task with the switches that are on.
+- **Git is on.** Like dired it costs nothing until `C-x g`; the repository mode line is a `mode-line` setting, off by default, that wakes it at startup.
 
 ## Dired
 
 The second bundled plugin lives in `crates/oxmacs-ox/plugins/dired`: `plugin.ox`, the entry `dired.ox` (listings in a `defonce` atom keyed by directory, the listing keys, commands and file operations) and `listing.ox` (sizes, dates, sorting and rendering, pure functions of a listing). Listings are text buffers that watch their directory, so they follow changes on disk. Its tests drive a real temporary folder with keys, ticking until Ox is idle or waiting on a prompt.
 
+## Git
+
+The third bundled plugin lives in `crates/oxmacs-ox/plugins/git`: `plugin.ox`, the entry `git.ox` (status state in a `defonce` atom keyed by buffer, keys, folding, visiting, staging and refresh), `repo.ox` (running git and reading `git status --porcelain=v2`, numstat, stashes and the log), `diff.ox` (hunks from unified diffs) and `status.ox` (rendering, a pure function of the snapshot and folds). Reads run their git commands at the same time with `--no-optional-locks`, so a refresh never holds the index lock. Its tests drive real repositories made in temporary folders.
+
 ## Slices
 
-Slices 1 to 5 are done.
+Slices 1 to 8 are done.
 
 1. **List, read, write, rename, copy, remove and trash files, and work with paths** (`ox file`, `ox path`).
 2. **Show plugin text buffers with styled lines** and move between their lines.
 3. **Prompt for text and yes-or-no answers,** and run commands as tasks.
 4. **Hook into the editor:** opening a directory, opening files, opening externally, disk changes and the start screen.
 5. **Port dired:** listings with sorting and hidden details, marks and flags, delete, rename, copy, new directories, and refresh.
+6. **Run programs** (`ox process`): `(await (process/run "git" ["status"] :cwd root :env {…} :input text))`, and `process/env`.
+7. **Git status** on `C-x g`: Head and Upstream, untracked, unstaged and staged files with status letters and +/− counts, stashes and recent commits. `n` and `p` move, `TAB` folds sections and opens a file's hunks in place, `RET` visits the file at the line shown, `g` refreshes, and it follows `.git` and saved files.
+8. **Stage, unstage and discard** files and sections with `s`, `u` and `k`, asking before discarding and trashing untracked files.
+9. **The diff beside the status:** unified with line numbers, `t` for side by side with word highlights, and `s`, `u` and `k` on hunks and the region's lines.
+10. **Transients from Ox,** with switches and functions.
+11. **Commit:** the `c` transient, the message buffer (`C-c C-c`, `C-c C-k`, `M-p`, `M-n`, the subject length) and the staged diff beside it.
+12. **The repository mode line** (`main ↑2 ↓0 ●`) and the `$` process buffer.
+13. **The log:** commits with a lane graph, labels, authors and dates, the commit below and its diff beside.
+14. **Branches:** a filterable tree and the `b` transient.
+
+Later: blame, margin markers, file history and compare; push, pull and fetch; stash, cherry-pick, revert, tags, worktrees and bisect; the merge tool and interactive rebase.

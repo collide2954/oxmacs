@@ -4,6 +4,7 @@ use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
 use oxmacs_core::editor::Editor;
+use oxmacs_core::text::BufferId;
 
 use crate::{log, plugins};
 
@@ -11,6 +12,7 @@ use crate::{log, plugins};
 enum Waiting {
     OpenDirectory(PathBuf),
     DiskChanged,
+    Saved(PathBuf),
 }
 
 #[derive(Debug, Default)]
@@ -18,6 +20,7 @@ pub struct Hooks {
     directory: Option<Hold>,
     opener: Option<String>,
     disk: Vec<(String, Hold)>,
+    saved: Vec<(String, Hold)>,
     waiting: Vec<Waiting>,
 }
 
@@ -50,9 +53,23 @@ fn disk_changed(editor: &mut Editor) {
     }
 }
 
+fn saved(editor: &mut Editor, id: BufferId) {
+    let Some(path) = editor
+        .buffer_by_id(id)
+        .and_then(|buffer| buffer.file())
+        .map(|file| file.path.clone())
+    else {
+        return;
+    };
+    if let Some(hooks) = hooks(editor) {
+        hooks.waiting.push(Waiting::Saved(path));
+    }
+}
+
 pub fn watch(editor: &mut Editor) {
     hooks(editor);
     editor.on_disk_change(disk_changed);
+    editor.on_saved(saved);
 }
 
 pub fn open_directories(editor: &mut Editor, plugin: &str) {
@@ -84,6 +101,18 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
                     .unwrap_or_default(),
                 Vec::new(),
             ),
+            Waiting::Saved(path) => {
+                let Ok(path) = isolate.heap_mut().string(&path.display().to_string()) else {
+                    continue;
+                };
+                (
+                    editor
+                        .applet_state::<Hooks>()
+                        .map(|hooks| hooks.saved.iter().map(|(_, hold)| *hold).collect())
+                        .unwrap_or_default(),
+                    vec![path],
+                )
+            }
         };
         for hold in handlers {
             let Some(handler) = isolate.held(hold) else {
@@ -121,18 +150,15 @@ fn on_open_directory(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) 
     }
 }
 
-fn on_disk_change(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
+fn keyed(heap: &mut Heap, handlers: &mut Vec<(String, Hold)>, arguments: &[Value]) {
     let key = print::display(heap, arguments[0]);
     let hold = heap.hold(arguments[1]);
-    let Some(hooks) = hooks(editor) else {
-        return;
-    };
-    match hooks.disk.iter_mut().find(|(known, _)| *known == key) {
+    match handlers.iter_mut().find(|(known, _)| *known == key) {
         Some((_, existing)) => {
             let old = std::mem::replace(existing, hold);
             heap.release(old);
         }
-        None => hooks.disk.push((key, hold)),
+        None => handlers.push((key, hold)),
     }
 }
 
@@ -151,10 +177,18 @@ pub fn install(isolate: &mut Isolate) {
         2,
         Some(2),
         |heap, editor, arguments| {
-            on_disk_change(heap, editor, arguments);
+            if let Some(hooks) = hooks(editor) {
+                keyed(heap, &mut hooks.disk, arguments);
+            }
             Ok(Value::Nil)
         },
     );
+    isolate.define_host_native::<Editor>("on-saved", 2, Some(2), |heap, editor, arguments| {
+        if let Some(hooks) = hooks(editor) {
+            keyed(heap, &mut hooks.saved, arguments);
+        }
+        Ok(Value::Nil)
+    });
     isolate.define_host_native::<Editor>("open-file", 1, Some(1), |heap, editor, arguments| {
         let path = path_of(heap, "open-file", arguments[0])?;
         Ok(Value::Bool(editor.open_file(&path)))
@@ -267,6 +301,24 @@ mod tests {
         ox.tick(&mut editor);
 
         assert_eq!(ox.eval(&mut editor, "@seen").unwrap(), "10");
+    }
+
+    #[test]
+    fn saves_reach_their_handlers_with_the_path() {
+        let home = tempfile::tempdir().unwrap();
+        let file = home.path().join("notes.txt");
+        std::fs::write(&file, "hello").unwrap();
+        let (mut editor, mut ox) = started(home.path());
+        ox.eval(
+            &mut editor,
+            "(module (import (ox path))) (def seen (atom nil)) (on-saved :seen (fn [path] (reset! seen (path/name path))))",
+        )
+        .unwrap();
+        editor.open_file(&file);
+
+        press(&mut editor, &mut ox, "x C-x C-s");
+
+        assert_eq!(ox.eval(&mut editor, "@seen").unwrap(), r#""notes.txt""#);
     }
 
     #[test]

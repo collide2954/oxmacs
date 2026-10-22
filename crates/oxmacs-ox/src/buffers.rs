@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use ox::heap::Heap;
@@ -12,11 +13,15 @@ use oxmacs_core::theme::Highlight;
 
 use crate::views::face_named;
 
+type Pills = Vec<(Range<usize>, Highlight)>;
+
 #[derive(Debug)]
 pub struct LinesBuffer {
     scope: ScopeId,
     styles: Vec<LineStyle>,
+    pills: Vec<Pills>,
     directory: Option<PathBuf>,
+    watched: Option<PathBuf>,
 }
 
 impl AppletBuffer for LinesBuffer {
@@ -29,17 +34,32 @@ impl AppletBuffer for LinesBuffer {
     }
 
     fn watched(&self) -> Option<&Path> {
-        self.directory.as_deref()
+        self.watched.as_deref().or(self.directory.as_deref())
+    }
+
+    fn fixed_name(&self) -> bool {
+        true
     }
 
     fn line_style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
+    }
+
+    fn pills(&self, line: usize) -> Pills {
+        self.pills.get(line).cloned().unwrap_or_default()
     }
 }
 
 struct Rendered {
     text: String,
     styles: Vec<LineStyle>,
+    pills: Vec<Pills>,
+}
+
+struct Line {
+    column: usize,
+    style: LineStyle,
+    pills: Pills,
 }
 
 fn segment(
@@ -47,31 +67,36 @@ fn segment(
     name: &str,
     value: Value,
     text: &mut String,
-    column: &mut usize,
-    style: &mut LineStyle,
+    line: &mut Line,
 ) -> Result<(), Error> {
-    let pair = heap
+    let parts = heap
         .text(value)
         .is_none()
         .then(|| heap.elements(value))
         .flatten();
-    let (shown, face) = match pair.as_deref() {
-        Some([shown, face]) => (*shown, Some(*face)),
+    let (shown, face, pill) = match parts.as_deref() {
+        Some([shown, face]) => (*shown, Some(*face), false),
+        Some([shown, face, Value::Keyword(pill)]) if pill.name() == "pill" => {
+            (*shown, Some(*face), true)
+        }
         Some(_) => {
             return Err(Error::new(format!(
-                "{name} expects text or [text face] in a line, got {}",
+                "{name} expects text, [text face] or [text face :pill] in a line, got {}",
                 print::write(heap, value)
             )));
         }
-        None => (value, None),
+        None => (value, None, false),
     };
     let shown = print::display(heap, shown);
-    let start = *column;
-    *column += shown.chars().count();
+    let start = line.column;
+    line.column += shown.chars().count();
     text.push_str(&shown);
     if let Some(given) = face {
         let highlight = self::face(heap, name, given)?;
-        style.spans.push((start..*column, highlight));
+        line.style.spans.push((start..line.column, highlight));
+        if pill {
+            line.pills.push((start..line.column, highlight));
+        }
     }
     Ok(())
 }
@@ -98,41 +123,50 @@ fn render(heap: &Heap, name: &str, lines: Value) -> Result<Rendered, Error> {
     })?;
     let mut text = String::new();
     let mut styles = Vec::with_capacity(lines.len());
-    for (index, line) in lines.into_iter().enumerate() {
+    let mut pills = Vec::with_capacity(lines.len());
+    for (index, given) in lines.into_iter().enumerate() {
         if index > 0 {
             text.push('\n');
         }
-        let mut style = LineStyle::default();
-        let mut column = 0;
-        let mut line = line;
-        if let Some(fields) = heap.entries(line) {
-            line = Value::Nil;
+        let mut line = Line {
+            column: 0,
+            style: LineStyle::default(),
+            pills: Vec::new(),
+        };
+        let mut shown = given;
+        if let Some(fields) = heap.entries(given) {
+            shown = Value::Nil;
             for (key, value) in fields {
                 match key {
-                    Value::Keyword(key) if key.name() == "line" => line = value,
+                    Value::Keyword(key) if key.name() == "line" => shown = value,
                     Value::Keyword(key) if key.name() == "background" && value != Value::Nil => {
-                        style.background = Some(face(heap, name, value)?);
+                        line.style.background = Some(face(heap, name, value)?);
                     }
                     _ => {}
                 }
             }
         }
         match heap
-            .text(line)
+            .text(shown)
             .is_none()
-            .then(|| heap.elements(line))
+            .then(|| heap.elements(shown))
             .flatten()
         {
             Some(segments) => {
                 for part in segments {
-                    segment(heap, name, part, &mut text, &mut column, &mut style)?;
+                    segment(heap, name, part, &mut text, &mut line)?;
                 }
             }
-            None => text.push_str(&print::display(heap, line)),
+            None => text.push_str(&print::display(heap, shown)),
         }
-        styles.push(style);
+        styles.push(line.style);
+        pills.push(line.pills);
     }
-    Ok(Rendered { text, styles })
+    Ok(Rendered {
+        text,
+        styles,
+        pills,
+    })
 }
 
 fn plugin_buffer(editor: &Editor, name: &str) -> Option<BufferId> {
@@ -153,6 +187,7 @@ fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered) {
     editor.fill_buffer(id, &rendered.text);
     if let Some((buffer, view)) = editor.applet_buffer_mut::<LinesBuffer>(id) {
         view.styles = rendered.styles;
+        view.pills = rendered.pills;
         let line = line.min(buffer.len_lines().saturating_sub(1));
         let start = buffer.line_start(line);
         buffer.set_point(start);
@@ -184,6 +219,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     let rendered = render(heap, "open-buffer", arguments[1])?;
     let mut bindings = Vec::new();
     let mut directory = None;
+    let mut watched = None;
     for pair in arguments[2..].chunks(2) {
         match pair {
             [Value::Keyword(option), value] if option.name() == "keys" => {
@@ -192,9 +228,12 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             [Value::Keyword(option), value] if option.name() == "directory" => {
                 directory = Some(PathBuf::from(print::display(heap, *value)));
             }
+            [Value::Keyword(option), value] if option.name() == "watch" => {
+                watched = Some(PathBuf::from(print::display(heap, *value)));
+            }
             _ => {
                 return Err(Error::new(format!(
-                    "open-buffer takes :keys and :directory, not {}",
+                    "open-buffer takes :keys, :directory and :watch, not {}",
                     print::write(heap, pair[0])
                 )));
             }
@@ -207,15 +246,20 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             LinesBuffer {
                 scope,
                 styles: Vec::new(),
+                pills: Vec::new(),
                 directory: None,
+                watched: None,
             }
         })
     });
     fill(editor, id, rendered);
-    if let Some((_, view)) = editor.applet_buffer_mut::<LinesBuffer>(id)
-        && directory.is_some()
-    {
-        view.directory = directory;
+    if let Some((_, view)) = editor.applet_buffer_mut::<LinesBuffer>(id) {
+        if directory.is_some() {
+            view.directory = directory;
+        }
+        if watched.is_some() {
+            view.watched = watched;
+        }
     }
     let scope = editor
         .applet_buffer::<LinesBuffer>(id)
@@ -281,6 +325,15 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>("set-lines", 2, Some(2), set_lines);
     isolate.define_host_native::<Editor>("current-line", 0, Some(0), current_line);
     isolate.define_host_native::<Editor>("goto-line", 1, Some(2), goto_line);
+    isolate.define_host_native::<Editor>(
+        "buffer-exists?",
+        1,
+        Some(1),
+        |heap, editor, arguments| {
+            let name = print::display(heap, arguments[0]);
+            Ok(Value::Bool(editor.buffer_named(&name).is_some()))
+        },
+    );
     isolate.define_host_native::<Editor>("buffer-name", 0, Some(0), |heap, editor, _| {
         heap.string(editor.buffer().name())
             .map_err(|full| Error::new(full.to_string()))
@@ -289,6 +342,7 @@ pub fn install(isolate: &mut Isolate) {
 
 #[cfg(test)]
 mod tests {
+    use oxmacs_core::applet::AppletBuffer;
     use oxmacs_core::display::LineStyle;
     use oxmacs_core::editor::Editor;
     use oxmacs_core::input::KeySequence;
@@ -390,6 +444,48 @@ mod tests {
     }
 
     #[test]
+    fn segments_can_be_pills_and_buffers_can_watch_another_folder_too() {
+        let folder = tempfile::tempdir().unwrap();
+        let metadata = folder.path().join(".git");
+        std::fs::create_dir(&metadata).unwrap();
+        let (editor, _) = opened(&format!(
+            r#"(open-buffer "*pills*" [["Head: " ["main" :link :pill] " " ["Ada" :nick-3]]] :directory {:?} :watch {:?})"#,
+            folder.path().display().to_string(),
+            metadata.display().to_string()
+        ));
+
+        assert_eq!(
+            editor.line_style(0).spans,
+            [(6..10, Highlight::Link), (11..14, Highlight::Nick(3))]
+        );
+        let id = editor.buffer().id();
+        let (_, view) = editor.applet_buffer::<super::LinesBuffer>(id).unwrap();
+        assert_eq!(view.pills(0), [(6..10, Highlight::Link)]);
+        assert_eq!(editor.default_directory(), folder.path());
+        assert!(editor.watched_directories().contains(&metadata));
+    }
+
+    #[test]
+    fn plugin_buffers_keep_their_names_when_files_are_saved() {
+        let folder = tempfile::tempdir().unwrap();
+        let file = folder.path().join("notes.txt");
+        std::fs::write(&file, "hello").unwrap();
+        let (mut editor, mut ox) = opened(&format!(
+            r#"(open-buffer "*mine*" ["a"] :directory {:?})"#,
+            folder.path().display().to_string()
+        ));
+        editor.open_file(&file);
+
+        press(&mut editor, &mut ox, "x C-x C-s");
+
+        assert!(
+            editor.buffer_names().contains(&"*mine*"),
+            "{:?}",
+            editor.buffer_names()
+        );
+    }
+
+    #[test]
     fn mistakes_in_lines_are_errors() {
         let mut editor = Editor::new();
         let mut ox = Ox::new();
@@ -403,6 +499,14 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(face.message, "open-buffer doesn't know the face :nope");
+        assert_eq!(
+            ox.eval(
+                &mut editor,
+                r#"[(buffer-exists? "*scratch*") (buffer-exists? "*nowhere*")]"#
+            )
+            .unwrap(),
+            "[true false]"
+        );
         assert!(line.is_ok());
         assert_eq!(missing.message, "There is no plugin buffer named *nowhere*");
     }

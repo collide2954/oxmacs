@@ -89,7 +89,7 @@ Modules are imported with aliases and called qualified:
 
 | Module | Contents |
 | --- | --- |
-| `ox string` | `split join trim trim-start trim-end upper lower capitalize replace starts-with? ends-with? includes? index-of pad-start pad-end lines words chars reverse blank? truncate` |
+| `ox string` | `to-number split join trim trim-start trim-end upper lower capitalize replace starts-with? ends-with? includes? index-of pad-start pad-end lines words chars reverse blank? truncate` |
 | `ox regex` | `find find-all matches? replace split`; named captures come back as maps |
 | `ox math` | `sqrt pow exp log log10 sin cos tan atan2 pi e clamp lerp random random-int random-pick` |
 | `ox json` | `read write`; objects read with keyword keys, and keywords are written back as strings |

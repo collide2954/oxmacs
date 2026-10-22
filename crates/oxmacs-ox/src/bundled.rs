@@ -1,6 +1,17 @@
 use crate::plugins::Bundle;
 
-pub const BUNDLED: &[Bundle] = &[WEATHER, DIRED];
+pub const BUNDLED: &[Bundle] = &[WEATHER, DIRED, GIT];
+
+const GIT: Bundle = Bundle {
+    name: "git",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/git/plugin.ox")),
+        ("git.ox", include_str!("../plugins/git/git.ox")),
+        ("repo.ox", include_str!("../plugins/git/repo.ox")),
+        ("diff.ox", include_str!("../plugins/git/diff.ox")),
+        ("status.ox", include_str!("../plugins/git/status.ox")),
+    ],
+};
 
 const DIRED: Bundle = Bundle {
     name: "dired",
@@ -258,17 +269,18 @@ mod tests {
 }
 
 #[cfg(test)]
+mod git;
+
+#[cfg(test)]
 mod dired {
     use std::fs;
     use std::path::{MAIN_SEPARATOR, Path};
-    use std::thread;
-    use std::time::{Duration, Instant};
 
     use oxmacs_core::editor::Editor;
-    use oxmacs_core::input::KeySequence;
     use oxmacs_core::theme::Highlight;
 
-    use crate::{Ox, Pace};
+    use crate::Ox;
+    use crate::testing::{at_point, press, question, settle, typed};
 
     fn workspace() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -294,30 +306,6 @@ mod dired {
         (home, editor, ox)
     }
 
-    fn settle(editor: &mut Editor, ox: &mut Ox) {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while ox.tick(editor) != Pace::Idle
-            && editor.minibuffer().is_none()
-            && editor.question().is_none()
-            && Instant::now() < deadline
-        {
-            thread::sleep(Duration::from_millis(1));
-        }
-    }
-
-    fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
-        let keys: KeySequence = notation.parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-            settle(editor, ox);
-        }
-    }
-
-    fn typed(editor: &mut Editor, ox: &mut Ox, text: &str) {
-        let notation: Vec<String> = text.chars().map(|c| c.to_string()).collect();
-        press(editor, ox, &notation.join(" "));
-    }
-
     fn lines(editor: &Editor) -> Vec<String> {
         editor
             .buffer()
@@ -326,12 +314,6 @@ mod dired {
             .skip(1)
             .map(str::to_owned)
             .collect()
-    }
-
-    fn at_point(editor: &Editor) -> String {
-        let buffer = editor.buffer();
-        let line = buffer.line_of(buffer.point());
-        buffer.text_in(buffer.point()..buffer.line_end(line))
     }
 
     #[test]
@@ -435,9 +417,7 @@ mod dired {
 
         press(&mut editor, &mut ox, "p d d x");
         assert_eq!(
-            editor
-                .question()
-                .map(|question| question.prompt().to_owned()),
+            question(&editor),
             Some("Delete a.txt and b.txt? (y or n) ".to_owned())
         );
         press(&mut editor, &mut ox, "y");

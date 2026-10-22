@@ -5,7 +5,7 @@ use oxmacs_core::applet::AppletBuffer;
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::text::BufferId;
-use oxmacs_core::theme::Highlight;
+use oxmacs_core::theme::{Highlight, NICK_COLORS};
 
 use crate::log;
 
@@ -94,6 +94,13 @@ const FACES: &[(&str, Highlight)] = &[
 ];
 
 pub(crate) fn face_named(name: &str) -> Option<Highlight> {
+    if let Some(number) = name.strip_prefix("nick-") {
+        return number
+            .parse::<u8>()
+            .ok()
+            .filter(|number| *number < NICK_COLORS)
+            .map(Highlight::Nick);
+    }
     FACES
         .iter()
         .find(|(face, _)| *face == name)

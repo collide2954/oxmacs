@@ -7,6 +7,8 @@ mod mode;
 mod natives;
 mod plugins;
 mod prompts;
+#[cfg(test)]
+mod testing;
 mod tools;
 pub mod views;
 
