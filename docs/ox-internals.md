@@ -24,34 +24,44 @@ Companion to [ox-design.md](ox-design.md). This is how the language is built. Ph
 
 ## Layout
 
+The source is grouped by stage, in the order a form passes through them.
+
 ```
 crates/ox/src/
-  lib.rs          Isolate: the public API (eval, load, define natives, run tasks)
-  span.rs         SourceId, Span, SourceMap (line and column on demand)
-  lexer.rs        tokens with spans
-  reader.rs       tokens to Syntax, with error recovery
-  syntax.rs       Syntax objects: datum, span, scope set
-  symbol.rs       process-wide interner: Sym for symbols and keywords
-  value.rs        Value, Ref, Kind
-  heap/           typed arenas, roots, collector (mark, sweep, young list, incremental)
-  string.rs       OxString: UTF-8 with character count and sparse index
-  vector.rs       persistent vector (32-way trie plus tail)
-  map.rs          persistent hash map and set (HAMT)
-  number.rs       Int, Float, BigInt arithmetic and promotion
-  record.rs       record types and instances
-  expand/         scopes, binding table, core forms, macro expansion, syntax-rules
-  compile/        IR, closure and assignment conversion, register allocation, codegen
-  bytecode.rs     instructions, Code objects, constant pools, span tables
-  vm/             interpreter loop, tasks, frames, handlers, scheduler, promises
-  module.rs       modules, loader, live redefinition, bytecode cache
-  native.rs       native functions: FromOx and IntoOx, arity adapters, foreign values
-  prelude/        the core library, mostly written in Ox (.ox files embedded)
-  print.rs        display and write
-  bin/ox.rs       `ox file.ox` and the REPL
+  lib.rs            module list and the public re-exports
+  isolate.rs        Isolate: the public API (eval, define natives, root, collect)
+  span.rs           Span and line and column lookup
+  symbol.rs         process-wide interner: Sym for symbols and keywords
+  error.rs          Error with an optional span
+  bytecode.rs       instructions, Code objects, constant pools, span tables
+  native.rs         native functions and their arity checks
+  read/             source text to Syntax, with error recovery
+    syntax.rs       Datum and Syntax (and the marks hygiene adds)
+  expand/           macro expansion; quote.rs turns quoted forms into data
+  compile/          Syntax to bytecode: scopes, captures, register allocation
+    parameters.rs   parameter lists: required, optional, rest and keyword
+  vm/               the interpreter loop, frames, calls and tail calls
+    bind.rs         binding arguments to parameters
+    build.rs        building literals, reading fields, calling data
+  heap/             typed arenas and rooted handles
+    gc.rs           mark and sweep
+  value/            Value, Ref and Kind, and the data types
+    number.rs       Int, Float and BigInt arithmetic and promotion
+    vector.rs       persistent vector (32-way trie plus tail)
+    map.rs          insertion-ordered persistent map and set (HAMT index)
+    record.rs       record types and instances
+    equal.rs        structural equality and hashing
+    print.rs        display and write
+  library/          natives, grouped by area, and the Ox prelude
+    numbers.rs      arithmetic and comparison
+    collections.rs  sequences, vectors, maps, sets, records
+    prelude/*.ox    the parts of the core library written in Ox
+  bin/ox.rs         `ox file.ox` and the REPL
 crates/ox/tests/
-  corpus.rs       runs tests/ox/*.ox: each `;=> value` or `;! error` line is checked
-  ox/*.ox         the language test corpus
-  budgets.rs      benchmarks against the budgets (run in pre-push)
+  corpus.rs         runs tests/ox/*.ox: each `;=> value` or `;! error` line is checked
+  ox/*.ox           the language test corpus
+  cli.rs            the `ox` command line
+  budgets.rs        benchmarks against the budgets (run in pre-push)
 ```
 
 ## Values

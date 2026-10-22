@@ -1,7 +1,7 @@
-use crate::equal::{equal, hash};
 use crate::heap::{Heap, HeapFull};
 use crate::value::Value;
-use crate::vector::Vector;
+use crate::value::equal::{equal, hash};
+use crate::value::vector::Vector;
 
 const FLAT: usize = 8;
 const BITS: u32 = 5;
@@ -396,9 +396,9 @@ impl Map {
 #[cfg(test)]
 mod tests {
     use super::{Hasher, Map};
-    use crate::equal::{equal, hash, identical};
     use crate::heap::Heap;
     use crate::value::Value;
+    use crate::value::equal::{equal, hash, identical};
 
     fn colliding(heap: &Heap, key: Value) -> u64 {
         hash(heap, key) % 4

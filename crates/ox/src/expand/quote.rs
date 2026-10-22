@@ -4,10 +4,10 @@ use num_bigint::BigInt;
 
 use crate::error::Error;
 use crate::heap::{Heap, HeapFull};
-use crate::reader::{Datum, Syntax};
+use crate::read::{Datum, Syntax};
 use crate::span::Span;
 use crate::value::Value;
-use crate::vm::{make_map, make_set, make_vector};
+use crate::vm::build::{make_map, make_set, make_vector};
 
 #[derive(Clone, Copy)]
 enum Shape {

@@ -1,8 +1,8 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::heap::Heap;
+use crate::value::vector::Vector;
 use crate::value::{Kind, Value};
-use crate::vector::Vector;
 
 type Pending = Vec<(Value, Value)>;
 

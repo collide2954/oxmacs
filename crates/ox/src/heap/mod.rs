@@ -6,11 +6,11 @@ use std::rc::{Rc, Weak};
 use num_bigint::BigInt;
 
 use crate::bytecode::Code;
-use crate::map::{Map, Node};
 use crate::native::Native;
-use crate::record::{Record, RecordType};
+use crate::value::map::{Map, Node};
+use crate::value::record::{Record, RecordType};
+use crate::value::vector::Vector;
 use crate::value::{Kind, Ref, Value};
-use crate::vector::Vector;
 
 mod gc;
 

@@ -2,9 +2,9 @@ use crate::bytecode::Code;
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::native::arguments;
-use crate::print;
 use crate::symbol::Sym;
 use crate::value::Value;
+use crate::value::print;
 
 pub enum Binding {
     Direct,

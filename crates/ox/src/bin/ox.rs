@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::{env, fs};
 
 use ox::span::line_column;
-use ox::{Isolate, reader};
+use ox::{Isolate, read};
 
 fn main() -> ExitCode {
     let mut isolate = Isolate::new();
@@ -55,11 +55,7 @@ fn repl(isolate: &mut Isolate) -> ExitCode {
             pending.clear();
             continue;
         }
-        if reader::read(&pending)
-            .1
-            .iter()
-            .any(|error| error.incomplete)
-        {
+        if read::read(&pending).1.iter().any(|error| error.incomplete) {
             continue;
         }
         match isolate.eval(&pending) {

@@ -1,11 +1,11 @@
 use crate::error::Error;
 use crate::heap::{Heap, HeapFull};
 use crate::isolate::Isolate;
-use crate::map::Map;
-use crate::print;
-use crate::record::Record;
 use crate::value::Value;
-use crate::vector::Vector;
+use crate::value::map::Map;
+use crate::value::print;
+use crate::value::record::Record;
+use crate::value::vector::Vector;
 
 fn full(error: HeapFull) -> Error {
     Error::new(error.to_string())

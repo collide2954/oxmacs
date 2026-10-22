@@ -1,16 +1,17 @@
 use std::rc::Rc;
 
-use crate::builtins;
 use crate::compile::compile;
 use crate::error::Error;
 use crate::heap::{Heap, Rooted};
+use crate::library;
 use crate::native::Native;
+use crate::read;
 use crate::symbol::Sym;
 use crate::value::Value;
+use crate::value::print;
 use crate::vm::Runtime;
-use crate::{print, reader};
 
-const PRELUDE: &str = include_str!("prelude.ox");
+const PRELUDE: &str = include_str!("library/prelude/core.ox");
 
 #[derive(Debug)]
 pub struct Isolate {
@@ -28,7 +29,7 @@ impl Isolate {
         let mut isolate = Self {
             runtime: Runtime::default(),
         };
-        builtins::install(&mut isolate);
+        library::install(&mut isolate);
         let apply = isolate.runtime.globals.get(&Sym::intern("apply")).copied();
         isolate.runtime.apply = apply.unwrap_or(Value::Nil);
         if let Err(error) = isolate.eval(PRELUDE) {
@@ -38,7 +39,7 @@ impl Isolate {
     }
 
     pub fn eval(&mut self, source: &str) -> Result<Value, Error> {
-        let (forms, errors) = reader::read(source);
+        let (forms, errors) = read::read(source);
         if let Some(error) = errors.into_iter().next() {
             return Err(Error::at(error.span, error.message));
         }

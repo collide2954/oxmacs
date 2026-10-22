@@ -1,3 +1,10 @@
+pub(crate) mod equal;
+pub(crate) mod map;
+pub(crate) mod number;
+pub mod print;
+pub(crate) mod record;
+pub(crate) mod vector;
+
 use crate::symbol::Sym;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

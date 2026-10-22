@@ -1,10 +1,10 @@
 use std::fmt::Write as _;
 
 use crate::heap::Heap;
-use crate::map::Map;
-use crate::record::Record;
 use crate::value::Value;
-use crate::vector::Vector;
+use crate::value::map::Map;
+use crate::value::record::Record;
+use crate::value::vector::Vector;
 
 pub fn write(heap: &Heap, value: Value) -> String {
     let mut out = String::new();

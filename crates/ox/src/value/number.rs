@@ -5,8 +5,8 @@ use num_traits::{ToPrimitive, Zero};
 
 use crate::error::Error;
 use crate::heap::Heap;
-use crate::print;
 use crate::value::Value;
+use crate::value::print;
 
 #[derive(Debug, Clone)]
 pub enum Number {
