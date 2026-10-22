@@ -1096,6 +1096,91 @@ mod tests {
     }
 
     #[test]
+    fn sequences_are_taken_apart_and_built() {
+        all(&[
+            ("(first [1 2 3])", "1"),
+            ("(first (list 1 2))", "1"),
+            ("(first nil)", "nil"),
+            ("(first [])", "nil"),
+            (r#"(first "abc")"#, r"\a"),
+            ("(first {a: 1})", "[:a 1]"),
+            ("(first #{5 6})", "5"),
+            ("(second [1 2 3])", "2"),
+            ("(last [1 2 3])", "3"),
+            ("(last nil)", "nil"),
+            ("(rest [1 2 3])", "[2 3]"),
+            ("(rest (list 1 2 3))", "(2 3)"),
+            ("(rest [1])", "[]"),
+            ("(rest nil)", "nil"),
+            ("(empty? [])", "true"),
+            ("(empty? nil)", "true"),
+            (r#"(empty? "")"#, "true"),
+            ("(empty? {a: 1})", "false"),
+            ("(range 4)", "[0 1 2 3]"),
+            ("(range 2 5)", "[2 3 4]"),
+            ("(range 0 10 3)", "[0 3 6 9]"),
+            ("(range 3 0 -1)", "[3 2 1]"),
+            (
+                "(range 0 1 0)",
+                "error: range needs a step that is not zero",
+            ),
+            ("(range :a)", "error: range expects integers, got :a"),
+            ("(concat [1] (list 2) nil #{3})", "[1 2 3]"),
+            ("(reverse (list 1 2 3))", "[3 2 1]"),
+            ("(cons 0 (list 1 2))", "(0 1 2)"),
+            ("(cons 0 [1 2])", "(0 1 2)"),
+            ("(into [] (list 1 2))", "[1 2]"),
+            ("(into #{} [1 1 2])", "#{1 2}"),
+            ("(into {} [[:a 1]])", "{a: 1}"),
+            ("(min 3 1 2)", "1"),
+            ("(max 3 1 2.5)", "3"),
+        ]);
+    }
+
+    #[test]
+    fn the_prelude_maps_filters_and_reduces() {
+        all(&[
+            ("(map inc [1 2 3])", "[2 3 4]"),
+            ("(map + [1 2 3] [10 20])", "[11 22]"),
+            ("(map :a [{a: 1} {a: 2}])", "[1 2]"),
+            ("(filter (fn [x] (> x 1)) [1 2 3])", "[2 3]"),
+            ("(remove (fn [x] (> x 1)) (list 1 2 3))", "[1]"),
+            ("(reduce + [1 2 3])", "6"),
+            ("(reduce + 10 [1 2 3])", "16"),
+            ("(reduce + [])", "0"),
+            ("(reduce conj [] (list 1 2))", "[1 2]"),
+            ("(some (fn [x] (> x 1)) [1 2 3])", "true"),
+            ("(some #{3} [1 2 3])", "3"),
+            ("(some #{4} [1 2 3])", "nil"),
+            ("(every? (fn [x] (> x 0)) [1 2])", "true"),
+            ("(every? (fn [x] (> x 1)) [1 2])", "false"),
+            ("(keep :a [{a: 1} {b: 2} {a: 3}])", "[1 3]"),
+            ("(mapcat (fn [x] [x x]) [1 2])", "[1 1 2 2]"),
+            ("(count (map inc (range 10000)))", "10000"),
+        ]);
+    }
+
+    #[test]
+    fn the_prelude_builds_functions_from_functions() {
+        all(&[
+            ("(identity 5)", "5"),
+            ("((constantly 7) 1 2)", "7"),
+            ("((comp inc inc) 1)", "3"),
+            ("((comp str inc) 1)", r#""2""#),
+            ("((comp) 5)", "5"),
+            ("((partial + 1 2) 3 4)", "10"),
+            ("((complement nil?) 1)", "true"),
+            ("(not nil)", "true"),
+            ("(not 0)", "false"),
+            ("(nil? nil)", "true"),
+            ("(nil? [])", "false"),
+            ("(some? false)", "true"),
+            ("(inc 1)", "2"),
+            ("(dec 1)", "0"),
+        ]);
+    }
+
+    #[test]
     fn swap_and_update_come_from_the_prelude() {
         all(&[
             ("(def a (atom 1)) (swap! a + 10)", "11"),

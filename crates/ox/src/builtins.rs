@@ -70,6 +70,27 @@ fn chain(
     ))
 }
 
+fn extreme(
+    heap: &Heap,
+    name: &str,
+    arguments: &[Value],
+    better: fn(Ordering) -> bool,
+) -> Result<Value, Error> {
+    let mut best = Value::Nil;
+    let mut best_number: Option<Number> = None;
+    for value in arguments {
+        let number = Number::of(heap, name, *value)?;
+        let wins = best_number
+            .as_ref()
+            .is_none_or(|current| number.compare(current).is_some_and(better));
+        if wins {
+            best = *value;
+            best_number = Some(number);
+        }
+    }
+    Ok(best)
+}
+
 fn output(heap: &Heap, arguments: &[Value], newline: bool) -> Result<Value, Error> {
     let mut text = arguments
         .iter()
@@ -183,6 +204,12 @@ pub fn install(isolate: &mut Isolate) {
     });
     isolate.define_native("//", 2, Some(2), |heap, arguments| {
         reduce(heap, "//", arguments, Ok, |a, b| a.floor_divide(&b))
+    });
+    isolate.define_native("min", 1, None, |heap, arguments| {
+        extreme(heap, "min", arguments, Ordering::is_lt)
+    });
+    isolate.define_native("max", 1, None, |heap, arguments| {
+        extreme(heap, "max", arguments, Ordering::is_gt)
     });
     isolate.define_native("<", 1, None, |heap, arguments| {
         chain(heap, "<", arguments, Ordering::is_lt)

@@ -389,7 +389,107 @@ fn peek(heap: &Heap, collection: Value) -> Result<Value, Error> {
     Err(expected(heap, "peek", "a vector or list", collection))
 }
 
+fn first(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
+    if let Some(pair) = heap.pair_of(collection) {
+        return Ok(pair.head);
+    }
+    if let Some(vector) = heap.vector_of(collection) {
+        return Ok(vector.get(heap, 0).unwrap_or(Value::Nil));
+    }
+    let items = sequence(heap, "first", collection)?;
+    Ok(items.first().copied().unwrap_or(Value::Nil))
+}
+
+fn rest(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
+    if is_list(heap, collection) {
+        return Ok(heap
+            .pair_of(collection)
+            .map_or(Value::Nil, |pair| pair.tail));
+    }
+    let items = sequence(heap, "rest", collection)?;
+    vector_of(heap, items.get(1..).unwrap_or_default())
+}
+
+fn range(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let mut numbers = Vec::with_capacity(arguments.len());
+    for value in arguments {
+        let Value::Int(number) = value else {
+            return Err(expected(heap, "range", "integers", *value));
+        };
+        numbers.push(*number);
+    }
+    let (start, end, step) = match numbers.as_slice() {
+        [end] => (0, *end, 1),
+        [start, end] => (*start, *end, 1),
+        [start, end, step] => (*start, *end, *step),
+        _ => (0, 0, 1),
+    };
+    if step == 0 {
+        return Err(Error::new("range needs a step that is not zero"));
+    }
+    let mut items = Vec::new();
+    let mut at = start;
+    while (step > 0 && at < end) || (step < 0 && at > end) {
+        items.push(Value::Int(at));
+        let Some(next) = at.checked_add(step) else {
+            break;
+        };
+        at = next;
+    }
+    vector_of(heap, &items)
+}
+
+fn cons(heap: &mut Heap, item: Value, collection: Value) -> Result<Value, Error> {
+    if is_list(heap, collection) {
+        return heap.pair(item, collection).map_err(full);
+    }
+    let mut items = vec![item];
+    items.extend(sequence(heap, "cons", collection)?);
+    heap.list(items.into_iter()).map_err(full)
+}
+
+fn install_sequences(isolate: &mut Isolate) {
+    isolate.define_native("first", 1, Some(1), |heap, arguments| {
+        first(heap, arguments[0])
+    });
+    isolate.define_native("second", 1, Some(1), |heap, arguments| {
+        let items = sequence(heap, "second", arguments[0])?;
+        Ok(items.get(1).copied().unwrap_or(Value::Nil))
+    });
+    isolate.define_native("last", 1, Some(1), |heap, arguments| {
+        let items = sequence(heap, "last", arguments[0])?;
+        Ok(items.last().copied().unwrap_or(Value::Nil))
+    });
+    isolate.define_native("rest", 1, Some(1), |heap, arguments| {
+        rest(heap, arguments[0])
+    });
+    isolate.define_native("empty?", 1, Some(1), |heap, arguments| {
+        Ok(Value::Bool(count(heap, arguments[0])? == Value::Int(0)))
+    });
+    isolate.define_native("range", 1, Some(3), range);
+    isolate.define_native("concat", 0, None, |heap, arguments| {
+        let mut items = Vec::new();
+        for value in arguments {
+            items.extend(sequence(heap, "concat", *value)?);
+        }
+        vector_of(heap, &items)
+    });
+    isolate.define_native("reverse", 1, Some(1), |heap, arguments| {
+        let mut items = sequence(heap, "reverse", arguments[0])?;
+        items.reverse();
+        vector_of(heap, &items)
+    });
+    isolate.define_native("cons", 2, Some(2), |heap, arguments| {
+        cons(heap, arguments[0], arguments[1])
+    });
+    isolate.define_native("into", 2, Some(2), |heap, arguments| {
+        let items = sequence(heap, "into", arguments[1])?;
+        conj(heap, arguments[0], &items)
+    });
+}
+
 pub fn install(isolate: &mut Isolate) {
+    install_sequences(isolate);
     isolate.define_native("count", 1, Some(1), |heap, arguments| {
         count(heap, arguments[0])
     });
