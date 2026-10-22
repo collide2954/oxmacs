@@ -106,6 +106,15 @@ pub fn install(isolate: &mut Isolate) {
             Err(not_an_atom(heap, "reset!", arguments[0]))
         }
     });
+    isolate.define_native("compare-and-set!", 3, Some(3), |heap, arguments| {
+        let current = heap
+            .atom_get(arguments[0])
+            .ok_or_else(|| not_an_atom(heap, "compare-and-set!", arguments[0]))?;
+        if !identical(current, arguments[1]) {
+            return Ok(Value::Bool(false));
+        }
+        Ok(Value::Bool(heap.atom_set(arguments[0], arguments[2])))
+    });
     isolate.define_native("hash", 1, Some(1), |heap, arguments| {
         Ok(Value::Int(i64::from_ne_bytes(
             hash(heap, arguments[0]).to_ne_bytes(),

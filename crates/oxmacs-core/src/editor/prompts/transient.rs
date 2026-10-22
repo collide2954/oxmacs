@@ -1,52 +1,110 @@
 use std::collections::HashMap;
+use std::fmt;
+use std::sync::Arc;
 
 use crate::editor::Editor;
 use crate::input::{Key, KeyCode, Modifiers};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub type Run = Arc<dyn Fn(&mut Editor, &[String]) + Send + Sync>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Switch {
     pub key: char,
-    pub flag: &'static str,
-    pub summary: &'static str,
+    pub flag: String,
+    pub summary: String,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct Action {
     pub key: char,
-    pub summary: &'static str,
-    pub run: fn(&mut Editor, &[&'static str]),
+    pub summary: String,
+    pub run: Run,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl fmt::Debug for Action {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Action")
+            .field("key", &self.key)
+            .field("summary", &self.summary)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Group {
-    pub title: &'static str,
-    pub switches: &'static [Switch],
-    pub actions: &'static [Action],
+    pub title: String,
+    pub switches: Vec<Switch>,
+    pub actions: Vec<Action>,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl Group {
+    pub fn new(title: &str) -> Self {
+        Self {
+            title: title.to_owned(),
+            switches: Vec::new(),
+            actions: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn switch(mut self, key: char, flag: &str, summary: &str) -> Self {
+        self.switches.push(Switch {
+            key,
+            flag: flag.to_owned(),
+            summary: summary.to_owned(),
+        });
+        self
+    }
+
+    #[must_use]
+    pub fn action(
+        mut self,
+        key: char,
+        summary: &str,
+        run: impl Fn(&mut Editor, &[String]) + Send + Sync + 'static,
+    ) -> Self {
+        self.actions.push(Action {
+            key,
+            summary: summary.to_owned(),
+            run: Arc::new(run),
+        });
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Transient {
-    pub title: &'static str,
-    pub groups: &'static [Group],
+    pub title: String,
+    pub groups: Vec<Group>,
+}
+
+impl Transient {
+    pub fn new(title: &str, groups: Vec<Group>) -> Self {
+        Self {
+            title: title.to_owned(),
+            groups,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntryView {
     pub key: String,
-    pub summary: &'static str,
-    pub flag: Option<&'static str>,
+    pub summary: String,
+    pub flag: Option<String>,
     pub on: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroupView {
-    pub title: &'static str,
+    pub title: String,
     pub entries: Vec<EntryView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransientView {
-    pub title: &'static str,
+    pub title: String,
     pub groups: Vec<GroupView>,
     pub switching: bool,
 }
@@ -54,13 +112,13 @@ pub struct TransientView {
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Transients {
     open: Option<Open>,
-    remembered: HashMap<&'static str, Vec<&'static str>>,
+    remembered: HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug)]
 struct Open {
-    transient: &'static Transient,
-    on: Vec<&'static str>,
+    transient: Transient,
+    on: Vec<String>,
     switching: bool,
 }
 
@@ -74,11 +132,11 @@ fn plain(key: Key) -> Option<char> {
 }
 
 impl Editor {
-    pub fn open_transient(&mut self, transient: &'static Transient) {
+    pub fn open_transient(&mut self, transient: Transient) {
         let on = self
             .transients
             .remembered
-            .get(transient.title)
+            .get(&transient.title)
             .cloned()
             .unwrap_or_default();
         self.transients.open = Some(Open {
@@ -95,19 +153,19 @@ impl Editor {
             .groups
             .iter()
             .map(|group| GroupView {
-                title: group.title,
+                title: group.title.clone(),
                 entries: group
                     .switches
                     .iter()
                     .map(|switch| EntryView {
                         key: format!("-{}", switch.key),
-                        summary: switch.summary,
-                        flag: Some(switch.flag),
+                        summary: switch.summary.clone(),
+                        flag: Some(switch.flag.clone()),
                         on: open.on.contains(&switch.flag),
                     })
                     .chain(group.actions.iter().map(|action| EntryView {
                         key: action.key.to_string(),
-                        summary: action.summary,
+                        summary: action.summary.clone(),
                         flag: None,
                         on: false,
                     }))
@@ -115,7 +173,7 @@ impl Editor {
             })
             .collect();
         Some(TransientView {
-            title: open.transient.title,
+            title: open.transient.title.clone(),
             groups,
             switching: open.switching,
         })
@@ -135,19 +193,21 @@ impl Editor {
             self.show_message(format!("{key} is undefined here"));
             return true;
         };
-        let groups = open.transient.groups;
         if open.switching {
             open.switching = false;
-            let found = groups
+            let found = open
+                .transient
+                .groups
                 .iter()
-                .flat_map(|group| group.switches)
-                .find(|switch| switch.key == character);
+                .flat_map(|group| &group.switches)
+                .find(|switch| switch.key == character)
+                .map(|switch| switch.flag.clone());
             match found {
-                Some(switch) => {
-                    if let Some(at) = open.on.iter().position(|flag| *flag == switch.flag) {
+                Some(flag) => {
+                    if let Some(at) = open.on.iter().position(|on| *on == flag) {
                         open.on.remove(at);
                     } else {
-                        open.on.push(switch.flag);
+                        open.on.push(flag);
                     }
                 }
                 None => self.show_message(format!("-{character} is undefined here")),
@@ -158,12 +218,14 @@ impl Editor {
             open.switching = true;
             return true;
         }
-        let found = groups
+        let found = open
+            .transient
+            .groups
             .iter()
-            .flat_map(|group| group.actions)
+            .flat_map(|group| &group.actions)
             .find(|action| action.key == character)
-            .copied();
-        let Some(action) = found else {
+            .map(|action| action.run.clone());
+        let Some(run) = found else {
             self.show_message(format!("{character} is undefined here"));
             return true;
         };
@@ -173,11 +235,10 @@ impl Editor {
         self.transients
             .remembered
             .insert(open.transient.title, open.on.clone());
-        (action.run)(self, &open.on);
+        run(self, &open.on);
         true
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,53 +247,29 @@ mod tests {
     #[derive(Debug, Default)]
     struct Ran(Vec<String>);
 
-    fn note(editor: &mut Editor, what: &str, flags: &[&'static str]) {
+    fn note(editor: &mut Editor, what: &str, flags: &[String]) {
         let line = format!("{what} {}", flags.join(" "));
         if let Some(ran) = editor.applet_state_mut::<Ran>() {
             ran.0.push(line.trim().to_owned());
         }
     }
 
-    static COMMIT: Transient = Transient {
-        title: "Commit",
-        groups: &[
-            Group {
-                title: "Arguments",
-                switches: &[
-                    Switch {
-                        key: 'a',
-                        flag: "--all",
-                        summary: "Stage all modified and deleted files",
-                    },
-                    Switch {
-                        key: 'n',
-                        flag: "--no-verify",
-                        summary: "Skip the commit hooks",
-                    },
-                ],
-                actions: &[],
-            },
-            Group {
-                title: "Create",
-                switches: &[],
-                actions: &[Action {
-                    key: 'c',
-                    summary: "Commit",
-                    run: |editor, flags| note(editor, "commit", flags),
-                }],
-            },
-            Group {
-                title: "Edit HEAD",
-                switches: &[],
-                actions: &[Action {
-                    key: 'a',
-                    summary: "Amend",
-                    run: |editor, flags| note(editor, "amend", flags),
-                }],
-            },
-        ],
-    };
-
+    fn commit() -> Transient {
+        Transient::new(
+            "Commit",
+            vec![
+                Group::new("Arguments")
+                    .switch('a', "--all", "Stage all modified and deleted files")
+                    .switch('n', "--no-verify", "Skip the commit hooks"),
+                Group::new("Create").action('c', "Commit", |editor, flags| {
+                    note(editor, "commit", flags);
+                }),
+                Group::new("Edit HEAD").action('a', "Amend", |editor, flags| {
+                    note(editor, "amend", flags);
+                }),
+            ],
+        )
+    }
     fn ran(editor: &Editor) -> Vec<String> {
         editor
             .applet_state::<Ran>()
@@ -243,7 +280,7 @@ mod tests {
     fn opened() -> Editor {
         let mut editor = Editor::new();
         editor.set_applet_state(Ran::default());
-        editor.open_transient(&COMMIT);
+        editor.open_transient(commit());
         editor
     }
 
@@ -266,7 +303,7 @@ mod tests {
             })
             .collect();
         assert_eq!(keys, [vec!["-a", "-n"], vec!["c"], vec!["a"]]);
-        assert_eq!(view.groups[0].entries[0].flag, Some("--all"));
+        assert_eq!(view.groups[0].entries[0].flag.as_deref(), Some("--all"));
         assert!(!view.groups[0].entries[0].on);
     }
 
@@ -299,7 +336,7 @@ mod tests {
         let mut editor = opened();
         press(&mut editor, "- n a");
 
-        editor.open_transient(&COMMIT);
+        editor.open_transient(commit());
 
         assert!(editor.transient().unwrap().groups[0].entries[1].on);
         press(&mut editor, "c");
@@ -328,6 +365,28 @@ mod tests {
         assert!(editor.transient().is_some());
         press(&mut editor, "- z");
         assert_eq!(editor.message(), Some("-z is undefined here"));
+    }
+
+    #[test]
+    fn transients_can_be_built_at_runtime_with_closures() {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let noted = seen.clone();
+        let mut editor = Editor::new();
+        editor.open_transient(Transient::new(
+            "Push",
+            vec![
+                Group::new("Arguments").switch('f', "--force-with-lease", "Force safely"),
+                Group::new("Push to").action('p', "pushRemote", move |_, flags| {
+                    noted.lock().unwrap().push(flags.join(" "));
+                }),
+            ],
+        ));
+
+        assert_eq!(editor.transient().unwrap().title, "Push");
+        press(&mut editor, "- f p");
+
+        assert_eq!(*seen.lock().unwrap(), ["--force-with-lease"]);
+        assert!(editor.transient().is_none());
     }
 
     #[test]

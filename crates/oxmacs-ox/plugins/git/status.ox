@@ -2,7 +2,7 @@
   (import (ox string)
           (git repo :as repo)
           (git diff :as diff))
-  (export render ago shorten author-face))
+  (export render ago shorten author-face stats))
 
 (def path-column 60)
 (def summary-column 50)
@@ -99,11 +99,12 @@
       segments)))
 
 (def (diff-line line)
-  (cond
-    [(= line.kind :added) {line: [["+" :success] line.text] background: :added}]
-    [(= line.kind :removed) {line: [["-" :error] line.text] background: :removed}]
-    [(= line.kind :note) [[line.text :comment]]]
-    [else [" " line.text]]))
+  (let [text (diff/shown line.text)]
+    (cond
+      [(= line.kind :added) {line: [["+" :success] text] background: :added}]
+      [(= line.kind :removed) {line: [["-" :error] text] background: :removed}]
+      [(= line.kind :note) [[text :comment]]]
+      [else [" " text]])))
 
 (def (hunks out section path found folds)
   (reduce (fn [out i]

@@ -161,6 +161,9 @@
 (range :a) ;! range expects integers, got :a
 (concat [1] (list 2) nil #{3}) ;=> [1 2 3]
 (reverse (list 1 2 3)) ;=> [3 2 1]
+
+;; distinct keeps the first of each value, in order
+[(distinct [3 1 3 2 1]) (distinct (list :a :a)) (distinct []) (distinct [[1 "x"] [1 "x"] [2 "x"]])] ;=> [[3 1 2] [:a] [] [[1 "x"] [2 "x"]]]
 (cons 0 (list 1 2)) ;=> (0 1 2)
 (cons 0 [1 2]) ;=> (0 1 2)
 (into [] (list 1 2)) ;=> [1 2]

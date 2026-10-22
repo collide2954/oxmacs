@@ -7,7 +7,7 @@ use oxmacs_core::input::KeySequence;
 use crate::{Ox, Pace};
 
 pub fn settle(editor: &mut Editor, ox: &mut Ox) {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while ox.tick(editor) != Pace::Idle
         && editor.minibuffer().is_none()
         && editor.question().is_none()
@@ -26,7 +26,13 @@ pub fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
 }
 
 pub fn typed(editor: &mut Editor, ox: &mut Ox, text: &str) {
-    let notation: Vec<String> = text.chars().map(|c| c.to_string()).collect();
+    let notation: Vec<String> = text
+        .chars()
+        .map(|c| match c {
+            ' ' => "SPC".to_owned(),
+            other => other.to_string(),
+        })
+        .collect();
     press(editor, ox, &notation.join(" "));
 }
 

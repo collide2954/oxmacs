@@ -4,6 +4,10 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- `swap!` no longer loses updates when tasks switch in the middle of it.
+
 ### Removed
 
 - The applets and their Cargo features: dired, markdown and weather, which were built by default, and animated-splash, atlas, database, demo, extra-themes, git, glow, irc, pdf, python and scripting. They return as Ox plugins.
@@ -31,6 +35,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Git shows the diff of the file at point beside the status, following point. `t` switches it between unified and side by side, which refits to the window, and changed words stand out. `s`, `u` and `k` work on hunks and on the region's lines, in the status and in the diff, and `RET` in the diff visits the line. `c` opens the commit transient (`-a`, `-e`, `-n`, `-s`; commit, amend, extend, reword), whose message buffer shows the staged changes beside it, flags a summary over 50 characters, and takes `C-c C-c`, `C-c C-k`, `M-p` and `M-n`.
+- Plugins can define file modes with keys and highlighting (`defmode`) and transient menus (`transient`), open buffers beside the current one that follow point and width, and read and replace the current buffer's text. Ox gains `distinct` and `compare-and-set!`.
 - Git is back as a bundled Ox plugin, starting with the status: `C-x g` shows the branch and its upstream with ahead and behind counts, untracked, unstaged and staged files with status letters and +/− counts, stashes and recent commits. `n` and `p` move, `TAB` folds sections and shows a file's hunks in place, `RET` visits the file at the line shown, and `g` refreshes; the status also follows `.git`, the work tree and saved files. `s` stages, `u` unstages and `k` discards files and whole sections, asking first. Discarded untracked files go to the trash unless you set `(use-plugin git :config {discard-to-trash: false})`.
 - Ox can run programs with `ox process` (`process/run` and `process/env`) and read numbers with `string/to-number`, and `string/split` takes a limit. Plugin text buffers can show pills, watch another folder with `:watch` and keep their names, and plugins can follow saves with `on-saved`.
 - Dired is back as a bundled Ox plugin: `C-x d` or opening a directory lists it with sizes and dates. `(` hides them, `s` sorts by name, newest or largest, `RET` and `^` move between directories, and `C-x C-j` lists the current file's directory. `m`, `d`, `u`, `t` and `U` mark and flag; `x` and `D` delete, `R` renames or moves, `C` copies, `+` makes a directory and `W` opens with the usual app. Listings follow changes on disk. Turn off the trash with `(use-plugin dired :config {delete-to-trash: false})`; the `[dired]` table in `config.toml` is no longer read.

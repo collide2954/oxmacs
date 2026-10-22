@@ -1,7 +1,7 @@
 (module
   (import (ox process) (ox string) (ox path) (ox file)
           (git diff :as diff))
-  (export run git locate read-status files-of diffs listed?))
+  (export run git git-with locate read-status files-of find-change located diffs))
 
 (def base ["--no-pager" "--no-optional-locks" "-c" "color.ui=false" "-c" "core.quotepath=false"])
 
@@ -23,6 +23,9 @@
 
 (def (git root args)
   (output (await (run root args))))
+
+(def (git-with root args input)
+  (output (await (process/run "git" (vec (concat base args)) :cwd root :input input))))
 
 (def (locate directory)
   (let [ran (await (run directory ["rev-parse" "--show-toplevel" "--absolute-git-dir"]))]
@@ -170,8 +173,10 @@
 (def (find-change snapshot section path)
   (first (filter (fn [change] (= change.path path)) (files-of snapshot section))))
 
-(def (listed? snapshot section path)
-  (some? (find-change snapshot section path)))
+(def (located snapshot key)
+  (let [path (nth key 1)]
+    (first (keep (fn [section] (when (find-change snapshot section path) [section path]))
+                 [(nth key 0) :unstaged :staged :untracked]))))
 
 (def (file-diff root section change)
   (cond

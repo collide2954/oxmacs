@@ -16,6 +16,9 @@ The applets removed on 2026-10-21 come back one at a time as bundled Ox plugins,
 - **Git's diff is text.** The diff beside the status is a styled text buffer, unified or side by side, with a faint line-number gutter, Added and Removed backgrounds and word highlights, so search, the region and copying work and the region picks lines to stage.
 - **Transients come from Ox.** A menu is data with switches and functions; the chosen function runs as a task with the switches that are on.
 - **Git is on.** Like dired it costs nothing until `C-x g`; the repository mode line is a `mode-line` setting, off by default, that wakes it at startup.
+- **Plugins define modes.** `(defmode git-commit "Git commit" :file-names ["COMMIT_EDITMSG"] :comment "#" :keys {…} :highlight f)` adds a file mode with its own keys. After each edit Ox highlights the buffer's lines into a cache, and drawing only reads the cache, so drawing never runs Ox. Markdown and other language plugins build on it.
+- **Plugin buffers follow point and width.** `open-buffer` takes `:beside` (shown in another window, keeping focus), `:on-move` (called with the line when point moves to another one) and `:on-resize` (called with the new width), so the diff follows the status and side-by-side diffs refit.
+- **Tasks share state safely.** Tasks are switched in the middle of Ox code, so `swap!` retries with `compare-and-set!` until no other task changed the atom meanwhile; a plugin updates only the fields it owns, never writing back a whole state it read before an `await`.
 
 ## Dired
 
@@ -23,11 +26,11 @@ The second bundled plugin lives in `crates/oxmacs-ox/plugins/dired`: `plugin.ox`
 
 ## Git
 
-The third bundled plugin lives in `crates/oxmacs-ox/plugins/git`: `plugin.ox`, the entry `git.ox` (status state in a `defonce` atom keyed by buffer, keys, folding, visiting, staging and refresh), `repo.ox` (running git and reading `git status --porcelain=v2`, numstat, stashes and the log), `diff.ox` (hunks from unified diffs) and `status.ox` (rendering, a pure function of the snapshot and folds). Reads run their git commands at the same time with `--no-optional-locks`, so a refresh never holds the index lock. Its tests drive real repositories made in temporary folders.
+The third bundled plugin lives in `crates/oxmacs-ox/plugins/git`: `plugin.ox`, the entry `git.ox` (status state in a `defonce` atom keyed by buffer, keys, folding, visiting, staging and refresh), `repo.ox` (running git and reading `git status --porcelain=v2`, numstat, stashes and the log), `diff.ox` (hunks from unified diffs) and `status.ox` (rendering, a pure function of the snapshot and folds). Reads run their git commands at the same time with `--no-optional-locks`, so a refresh never holds the index lock. `pane.ox` draws the diff beside the status, unified or side by side, with changed words picked out by a token LCS, and `commit.ox` holds the message template, recall and highlighting. Hunks and the region's lines are staged by piping a patch built from the diff to `git apply --cached`, and commits pass the message to `git commit -F -`. Its tests drive real repositories made in temporary folders.
 
 ## Slices
 
-Slices 1 to 8 are done.
+Slices 1 to 11 are done.
 
 1. **List, read, write, rename, copy, remove and trash files, and work with paths** (`ox file`, `ox path`).
 2. **Show plugin text buffers with styled lines** and move between their lines.

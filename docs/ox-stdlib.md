@@ -68,7 +68,7 @@ Companion to [ox-design.md](ox-design.md) and [ox-internals.md](ox-internals.md)
 | Maps | `assoc dissoc update merge merge-with select-keys keys vals entries get-in assoc-in update-in` |
 | Strings | `str name keyword symbol` (the rest are in `ox string`) |
 | Functions | `identity constantly comp partial apply juxt memoize` |
-| State | `atom deref reset! swap!` |
+| State | `atom deref reset! swap! compare-and-set!`; `swap!` retries until no other task changed the atom meanwhile |
 | Records and protocols | `defrecord with defprotocol extend satisfies?` |
 | Errors | `raise try catch maybe deferror error` |
 | Output | `print println pr prn` |

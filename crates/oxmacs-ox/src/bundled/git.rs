@@ -127,6 +127,35 @@ impl Session {
         let (_, view) = self.editor.applet_buffer::<LinesBuffer>(id).unwrap();
         view.pills(line)
     }
+
+    fn resize(&mut self, columns: usize) {
+        for window in self.editor.tiling().windows() {
+            self.editor.resize_pane(window, 30, columns);
+        }
+        self.editor.prepare_display();
+        settle(&mut self.editor, &mut self.ox);
+    }
+
+    fn pane(&self) -> String {
+        let id = self
+            .editor
+            .buffer_names()
+            .iter()
+            .find(|name| name.starts_with("git diff: "))
+            .and_then(|name| self.editor.buffer_named(name))
+            .expect("a diff pane");
+        self.editor.buffer_by_id(id).unwrap().contents()
+    }
+
+    fn evaluated(&mut self, source: &str) -> String {
+        let source = format!(
+            "(module (import (git pane :as pane) (git diff :as diff) (git commit :as commit))) {source}"
+        );
+        match self.ox.eval(&mut self.editor, &source) {
+            Ok(shown) => shown,
+            Err(error) => format!("error: {}", error.message),
+        }
+    }
 }
 
 fn folder_name(dir: &Path) -> String {
@@ -596,4 +625,540 @@ fn a_closed_status_is_forgotten_quietly() {
     settle(&mut session.editor, &mut session.ox);
 
     assert_eq!(session.editor.message(), None);
+}
+
+const SAMPLE: &str = r#"(diff/parse "@@ -1,3 +1,4 @@\n one\n-two\n+TWO\n three\n+four\n")"#;
+
+fn rendered(layout: &str, width: usize) -> Session {
+    let dir = tempfile::tempdir().unwrap();
+    let mut session = opened(dir.path());
+    let shown = session.evaluated(&format!(
+        r#"(let [out (pane/render {{section: :unstaged path: "a.txt" counted: [2 1]}} {SAMPLE} {layout} {width})] (open-buffer "*pane*" out.lines) (count out.rows))"#
+    ));
+    assert!(!shown.starts_with("error"), "{shown}");
+    session
+}
+
+#[test]
+fn unified_diffs_number_both_sides() {
+    let session = rendered(":unified", 80);
+
+    assert_eq!(
+        session.lines(),
+        [
+            "Unstaged  a.txt  +2 -1",
+            "",
+            "@@ -1,3 +1,4 @@",
+            "1 1  one",
+            "2   -two",
+            "  2 +TWO",
+            "3 3  three",
+            "  4 +four",
+        ]
+    );
+    assert_eq!(session.pills(0), [(0..8, Highlight::Link)]);
+    assert_eq!(
+        session.editor.line_style(4).background,
+        Some(Highlight::Removed)
+    );
+    assert_eq!(
+        session.editor.line_style(5).background,
+        Some(Highlight::Added)
+    );
+}
+
+#[test]
+fn split_diffs_put_old_and_new_side_by_side() {
+    let session = rendered(":split", 40);
+
+    assert_eq!(
+        session.lines()[3..],
+        [
+            "1 one              │ 1 one             ",
+            "2 two              │ 2 TWO             ",
+            "3 three            │ 3 three           ",
+            "                   │ 4 four            ",
+        ]
+    );
+    assert_eq!(
+        session.pills(4),
+        [(0..18, Highlight::Error), (21..39, Highlight::Success)]
+    );
+    assert_eq!(session.pills(3), []);
+}
+
+#[test]
+fn long_lines_are_cut_short_in_split_diffs() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut session = opened(dir.path());
+    session.evaluated(&format!(
+        r#"(let [out (pane/render {{section: :unstaged path: "a.txt" counted: [1 1]}} (diff/parse "@@ -1 +1 @@\n-a\n+{}\n") :split 40)] (open-buffer "*pane*" out.lines))"#,
+        "x".repeat(50)
+    ));
+
+    assert!(
+        session.lines()[3].ends_with(&format!("{}…", "x".repeat(15))),
+        "{:?}",
+        session.lines()
+    );
+}
+
+#[test]
+fn removed_and_added_runs_pair_up_in_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut session = opened(dir.path());
+
+    let pairs = session.evaluated(
+        r#"(pane/pairs (first (diff/parse "@@ -1,4 +1,5 @@\n a\n-b\n-c\n+B\n d\n+E\n+F\n")))"#,
+    );
+
+    assert_eq!(pairs, "[[0 0] [1 3] [2 nil] [4 4] [nil 5] [nil 6]]");
+}
+
+#[test]
+fn changed_words_stand_out_when_lines_share_others() {
+    let mut session = rendered(":unified", 80);
+    session.evaluated(
+        r#"(let [out (pane/render {section: :unstaged path: "a.txt" counted: [1 1]} (diff/parse "@@ -1 +1 @@\n-the quick fox\n+the slow fox\n") :unified 80)] (open-buffer "*words*" out.lines))"#,
+    );
+
+    assert_eq!(session.lines()[3], "1   -the quick fox");
+    assert_eq!(session.pills(3), [(9..14, Highlight::Error)]);
+    assert_eq!(session.pills(4), [(9..13, Highlight::Success)]);
+}
+
+fn paned() -> (tempfile::TempDir, Session) {
+    let dir = repository();
+    fs::write(dir.path().join("a.txt"), "one\nTWO\nthree\nfour\n").unwrap();
+    fs::write(dir.path().join("b.txt"), "bee bee\n").unwrap();
+    let mut session = opened(dir.path());
+    session.resize(160);
+    session.press("C-x g");
+    (dir, session)
+}
+
+#[test]
+fn the_status_opens_the_diff_beside_it_and_keeps_focus() {
+    let (_dir, session) = paned();
+
+    assert!(session.editor.buffer().name().starts_with("git: "));
+    assert_eq!(session.editor.tiling().windows().len(), 2);
+    assert!(
+        session.pane().starts_with("Unstaged  a.txt  +2 -1\n"),
+        "{}",
+        session.pane()
+    );
+}
+
+#[test]
+fn the_diff_follows_the_file_at_point() {
+    let (_dir, mut session) = paned();
+
+    session.press("C-n");
+
+    assert_eq!(session.at_point(), "  M  b.txt  +1 -1");
+    assert!(
+        session.pane().starts_with("Unstaged  b.txt  +1 -1\n"),
+        "{}",
+        session.pane()
+    );
+}
+
+#[test]
+fn t_in_the_diff_switches_to_side_by_side() {
+    let (_dir, mut session) = paned();
+    session.press("C-x o");
+
+    session.press("t");
+    assert!(session.pane().contains(" │ "), "{}", session.pane());
+
+    session.press("t");
+    assert!(!session.pane().contains(" │ "));
+}
+
+#[test]
+fn s_in_the_diff_stages_and_the_diff_moves_with_the_file() {
+    let (dir, mut session) = paned();
+    session.press("C-x o");
+
+    session.press("n s");
+
+    assert_eq!(staged(dir.path(), "a.txt"), "one\nTWO\nthree\nfour\n");
+    assert!(
+        session.pane().starts_with("Staged  a.txt  +2 -1\n"),
+        "{}",
+        session.pane()
+    );
+}
+
+#[test]
+fn a_region_in_a_side_by_side_diff_stages_its_lines() {
+    let (dir, mut session) = paned();
+    session.press("C-x o");
+    session.press("t n C-n C-n");
+    assert!(
+        session.at_point().starts_with("2 two"),
+        "{}",
+        session.at_point()
+    );
+
+    session.press("C-SPC C-e s");
+
+    assert_eq!(staged(dir.path(), "a.txt"), "one\nTWO\nthree\n");
+}
+
+#[test]
+fn side_by_side_diffs_refit_when_their_window_changes_width() {
+    let (_dir, mut session) = paned();
+    session.press("C-x o t");
+
+    session.resize(50);
+
+    let id = session.editor.buffer().id();
+    let width = session.editor.buffer_width(id).unwrap();
+    let longest = session
+        .pane()
+        .lines()
+        .skip(3)
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap();
+    assert!(longest <= width, "{longest} > {width}");
+    assert!(longest + 4 > width, "{longest} is far below {width}");
+}
+
+#[test]
+fn return_in_the_diff_visits_the_new_line() {
+    let (dir, mut session) = paned();
+    session.press("C-x o");
+
+    session.press("n C-n C-n C-n RET");
+
+    assert_eq!(
+        session.editor.buffer().file().unwrap().path,
+        dir.path().join("a.txt")
+    );
+    let buffer = session.editor.buffer();
+    assert_eq!(buffer.line_of(buffer.point()), 1);
+}
+
+#[test]
+fn s_on_a_hunk_line_stages_the_whole_hunk() {
+    let (dir, mut session) = edited("");
+
+    session.press("C-x g n n TAB n C-n");
+    assert_eq!(session.at_point(), " one", "{:?}", session.lines());
+    session.press("s");
+
+    assert_eq!(
+        staged(dir.path(), "a.txt"),
+        "one\nTWO\nthree\nfour\n",
+        "{:?} {:?}",
+        session.editor.message(),
+        session.lines()
+    );
+}
+
+#[test]
+fn a_region_stages_only_its_lines() {
+    let (dir, mut session) = edited("");
+    session.press("C-x g n n TAB n C-n C-n C-n C-n C-n");
+    assert_eq!(session.at_point(), "+four");
+
+    session.press("C-SPC C-e s");
+
+    assert_eq!(staged(dir.path(), "a.txt"), "one\ntwo\nthree\nfour\n");
+    assert!(session.editor.buffer().selection().is_none());
+}
+
+#[test]
+fn a_region_in_an_untracked_file_stages_part_of_it() {
+    let (dir, mut session) = edited("");
+    session.press("C-x g TAB n C-n");
+    assert_eq!(session.at_point(), "+new");
+
+    session.press("C-SPC C-e s");
+
+    assert_eq!(staged(dir.path(), "c.txt"), "new\n");
+}
+
+#[test]
+fn u_unstages_hunks_and_lines() {
+    let (dir, mut session) = edited("");
+    git(dir.path(), &["add", "a.txt"]);
+    session.press("C-x g");
+    session.go_to("  M  a.txt  +2 -1");
+
+    session.press("TAB n C-n C-n C-SPC C-n C-n");
+    let before = (session.at_point(), session.lines());
+    session.press("u");
+    assert_eq!(
+        staged(dir.path(), "a.txt"),
+        "one\ntwo\nthree\nfour\n",
+        "{:?} {before:?}",
+        session.editor.message()
+    );
+
+    session.go_to("  M  a.txt  +1");
+    session.press("u");
+    assert_eq!(staged(dir.path(), "a.txt"), "one\ntwo\nthree\n");
+}
+
+#[test]
+fn k_on_selected_lines_discards_only_them() {
+    let (dir, mut session) = edited("");
+    session.press("C-x g n n TAB n C-n C-n C-n C-n C-n C-SPC C-e k");
+    assert_eq!(
+        question(&session.editor),
+        Some("Discard the selected lines? (y or n) ".to_owned())
+    );
+
+    session.press("y");
+
+    assert_eq!(
+        fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+        "one\nTWO\nthree\n"
+    );
+}
+
+fn head(dir: &Path) -> String {
+    git(dir, &["log", "-1", "--format=%B"])
+        .trim_end()
+        .to_owned()
+}
+
+fn commits(dir: &Path) -> String {
+    git(dir, &["rev-list", "--count", "HEAD"]).trim().to_owned()
+}
+
+fn staged_change() -> (tempfile::TempDir, Session) {
+    let dir = repository();
+    fs::write(dir.path().join("a.txt"), "one\nTWO\nthree\n").unwrap();
+    git(dir.path(), &["add", "a.txt"]);
+    let mut session = opened(dir.path());
+    session.press("C-x g");
+    (dir, session)
+}
+
+impl Session {
+    fn typed(&mut self, text: &str) {
+        crate::testing::typed(&mut self.editor, &mut self.ox, text);
+    }
+}
+
+#[test]
+fn c_c_writes_a_message_that_c_c_c_c_commits() {
+    let (dir, mut session) = staged_change();
+
+    session.press("c c");
+    assert_eq!(session.editor.buffer().name(), "COMMIT_EDITMSG");
+    assert_eq!(session.editor.buffer().point(), 0);
+    let text = session.editor.buffer().contents();
+    assert!(
+        text.contains("# Changes to be committed:\n#   a.txt\n"),
+        "{text}"
+    );
+    session.typed("Shout the second line");
+    session.press("C-c C-c");
+
+    assert_eq!(head(dir.path()), "Shout the second line");
+    assert_eq!(commits(dir.path()), "2");
+    assert!(session.editor.buffer().name().starts_with("git: "));
+    let message = session.editor.message().unwrap_or_default().to_owned();
+    assert!(message.starts_with("Committed "), "{message}");
+    assert!(message.ends_with(" Shout the second line"), "{message}");
+    assert_eq!(session.editor.buffer_named("COMMIT_EDITMSG"), None);
+    assert!(!session.shows("Staged changes (1)"));
+}
+
+#[test]
+fn the_message_shows_the_staged_changes_beside_it() {
+    let (_dir, mut session) = staged_change();
+
+    session.press("c c");
+
+    assert_eq!(session.editor.buffer().name(), "COMMIT_EDITMSG");
+    let pane = session
+        .editor
+        .buffer_names()
+        .iter()
+        .find(|name| name.starts_with("git diff: "))
+        .and_then(|name| session.editor.buffer_named(name))
+        .unwrap();
+    assert!(session.editor.buffer_shown(pane));
+    assert!(
+        session.pane().starts_with("Staged  a.txt  +1 -1\n"),
+        "{}",
+        session.pane()
+    );
+}
+
+#[test]
+fn the_commit_transient_shows_its_switches_and_actions() {
+    let (_dir, mut session) = staged_change();
+
+    session.press("c");
+
+    let view = session.editor.transient().unwrap();
+    assert_eq!(view.title, "Commit");
+    let keys: Vec<String> = view
+        .groups
+        .iter()
+        .flat_map(|group| group.entries.iter().map(|entry| entry.key.clone()))
+        .collect();
+    assert_eq!(keys, ["-a", "-e", "-n", "-s", "c", "a", "e", "w"]);
+}
+
+#[test]
+fn nothing_staged_says_so() {
+    let dir = repository();
+    let mut session = opened(dir.path());
+
+    session.press("C-x g c c");
+
+    assert_eq!(
+        session.editor.message(),
+        Some("Nothing staged to commit; stage changes with s or use -a")
+    );
+    assert!(session.editor.buffer().name().starts_with("git: "));
+}
+
+#[test]
+fn the_all_switch_commits_unstaged_changes_too() {
+    let dir = repository();
+    fs::write(dir.path().join("b.txt"), "bee bee\n").unwrap();
+    let mut session = opened(dir.path());
+
+    session.press("C-x g c - a c");
+    session.typed("Buzz");
+    session.press("C-c C-c");
+
+    assert_eq!(head(dir.path()), "Buzz");
+    assert_eq!(git(dir.path(), &["show", "HEAD:b.txt"]), "bee bee\n");
+}
+
+#[test]
+fn c_c_c_k_cancels_without_committing() {
+    let (dir, mut session) = staged_change();
+    session.press("c c");
+    session.typed("Never mind");
+
+    session.press("C-c C-k");
+
+    assert_eq!(head(dir.path()), "First commit");
+    assert!(session.editor.buffer().name().starts_with("git: "));
+    assert_eq!(session.editor.message(), Some("Commit canceled"));
+    assert_eq!(session.editor.buffer_named("COMMIT_EDITMSG"), None);
+}
+
+#[test]
+fn an_empty_message_is_refused() {
+    let (dir, mut session) = staged_change();
+
+    session.press("c c C-c C-c");
+
+    assert_eq!(
+        session.editor.message(),
+        Some("Write a commit message first")
+    );
+    assert_eq!(commits(dir.path()), "1");
+    assert_eq!(session.editor.buffer().name(), "COMMIT_EDITMSG");
+}
+
+#[test]
+fn amending_starts_from_the_head_message() {
+    let (dir, mut session) = staged_change();
+
+    session.press("c a");
+    assert!(
+        session
+            .editor
+            .buffer()
+            .contents()
+            .starts_with("First commit\n")
+    );
+    session.press("C-e");
+    session.typed(" again");
+    session.press("C-c C-c");
+
+    assert_eq!(head(dir.path()), "First commit again");
+    assert_eq!(commits(dir.path()), "1");
+    assert_eq!(
+        git(dir.path(), &["show", "HEAD:a.txt"]),
+        "one\nTWO\nthree\n"
+    );
+}
+
+#[test]
+fn extending_adds_the_staged_changes_without_asking() {
+    let (dir, mut session) = staged_change();
+
+    session.press("c e");
+
+    assert_eq!(head(dir.path()), "First commit");
+    assert_eq!(commits(dir.path()), "1");
+    assert_eq!(
+        git(dir.path(), &["show", "HEAD:a.txt"]),
+        "one\nTWO\nthree\n"
+    );
+}
+
+#[test]
+fn rewording_keeps_the_staged_changes_staged() {
+    let (dir, mut session) = staged_change();
+
+    session.press("c w C-e");
+    session.typed("!");
+    session.press("C-c C-c");
+
+    assert_eq!(head(dir.path()), "First commit!");
+    assert_eq!(
+        git(dir.path(), &["diff", "--cached", "--name-only"]),
+        "a.txt\n"
+    );
+}
+
+#[test]
+fn m_p_and_m_n_walk_through_earlier_messages() {
+    let (_dir, mut session) = staged_change();
+
+    session.press("c c M-p");
+    assert!(
+        session
+            .editor
+            .buffer()
+            .contents()
+            .starts_with("First commit\n")
+    );
+
+    session.press("M-n");
+    assert!(
+        session
+            .editor
+            .buffer()
+            .contents()
+            .starts_with("\n\n# Write")
+    );
+}
+
+#[test]
+fn long_summaries_comments_and_trailers_are_highlighted() {
+    let (_dir, mut session) = staged_change();
+    session.press("c c");
+
+    session.typed(&"x".repeat(55));
+
+    assert_eq!(
+        session.editor.line_style(0).spans,
+        [(0..50, Highlight::Heading), (50..55, Highlight::Warning)]
+    );
+    let comment = session.editor.line_style(2).spans;
+    assert_eq!(comment.len(), 1);
+    assert_eq!(comment[0].1, Highlight::Comment);
+    assert_eq!(
+        session.evaluated(
+            r#"[(commit/highlight 3 "Signed-off-by: Ada <ada@example.com>") (commit/highlight 3 "Not a trailer: really")]"#
+        ),
+        "[[[0 14 :keyword]] []]"
+    );
 }

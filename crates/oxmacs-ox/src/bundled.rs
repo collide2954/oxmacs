@@ -10,6 +10,8 @@ const GIT: Bundle = Bundle {
         ("repo.ox", include_str!("../plugins/git/repo.ox")),
         ("diff.ox", include_str!("../plugins/git/diff.ox")),
         ("status.ox", include_str!("../plugins/git/status.ox")),
+        ("pane.ox", include_str!("../plugins/git/pane.ox")),
+        ("commit.ox", include_str!("../plugins/git/commit.ox")),
     ],
 };
 

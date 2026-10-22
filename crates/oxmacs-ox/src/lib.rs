@@ -4,12 +4,14 @@ mod commands;
 mod hooks;
 mod log;
 mod mode;
+mod modes;
 mod natives;
 mod plugins;
 mod prompts;
 #[cfg(test)]
 mod testing;
 mod tools;
+mod transients;
 pub mod views;
 
 use std::fs;
@@ -64,6 +66,8 @@ impl Ox {
         views::install(&mut isolate);
         buffers::install(&mut isolate);
         hooks::install(&mut isolate);
+        transients::install(&mut isolate);
+        modes::install(&mut isolate);
         let answers = prompts::Inbox::default();
         prompts::install(&mut isolate, &answers);
         if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
@@ -127,7 +131,9 @@ impl Ox {
         self.handle_requests(editor);
         plugins::wake_waiting(&mut self.isolate, editor);
         hooks::run(&mut self.isolate, editor);
+        buffers::watch(&mut self.isolate, editor);
         commands::run_waiting(&mut self.isolate, editor);
+        transients::run_waiting(&mut self.isolate, editor);
         prompts::deliver(&mut self.isolate, &self.answers);
         if self.isolate.pending() > 0 {
             let report = self.isolate.run_with(editor, BUDGET);
@@ -139,6 +145,8 @@ impl Ox {
                 log::report(editor, &error, None);
             }
         }
+        buffers::watch(&mut self.isolate, editor);
+        modes::highlight(&mut self.isolate, editor);
         views::refresh(&mut self.isolate, editor);
         self.pace()
     }

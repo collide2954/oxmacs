@@ -66,6 +66,30 @@ fn several_tasks_share_the_time() {
 }
 
 #[test]
+fn swaps_from_tasks_that_share_time_never_lose_updates() {
+    let mut isolate = Isolate::new();
+    let bump = isolate
+        .eval(
+            "(def total (atom 0))
+             (def (slow n k) (if (< k 1) (+ n 1) (slow n (- k 1))))
+             (fn [] (swap! total slow 300) (swap! total slow 300) (swap! total slow 300))",
+        )
+        .unwrap();
+    for _ in 0..20 {
+        isolate.spawn(bump, &[]).unwrap();
+    }
+
+    for _ in 0..100_000 {
+        if isolate.run(Duration::from_micros(50)).pending == 0 {
+            break;
+        }
+    }
+
+    let total = isolate.eval("@total").unwrap();
+    assert_eq!(isolate.write(total), "60");
+}
+
+#[test]
 fn an_interrupt_stops_a_runaway_task_through_catch_but_not_finally() {
     let mut isolate = Isolate::new();
     let stubborn = isolate

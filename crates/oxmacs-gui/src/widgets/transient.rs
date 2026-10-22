@@ -45,9 +45,9 @@ fn entry<'a, Message: 'a>(
 ) -> Element<'a, Message> {
     let mut spans: Vec<Span<'a, (), Font>> = vec![
         span(format!("{:>3} ", entry.key)).color(style::color(colors.key)),
-        span(entry.summary).color(style::color(colors.text)),
+        span(entry.summary.clone()).color(style::color(colors.text)),
     ];
-    if let Some(flag) = entry.flag {
+    if let Some(flag) = &entry.flag {
         let color = if entry.on { colors.on } else { colors.off };
         spans.push(span(format!(" ({flag})")).color(style::color(color)));
     }
@@ -60,7 +60,7 @@ fn group<'a, Message: 'a>(
     font: Font,
     size: f32,
 ) -> Element<'a, Message> {
-    let title = text(group.title)
+    let title = text(group.title.clone())
         .font(font)
         .size(size)
         .color(style::color(colors.heading));
@@ -88,7 +88,7 @@ pub fn view<'a, Message: 'a>(
     let title = if view.switching {
         format!("{}  -", view.title)
     } else {
-        view.title.to_owned()
+        view.title.clone()
     };
     let (switches, actions): (Vec<&GroupView>, Vec<&GroupView>) = view
         .groups

@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use ox::heap::Heap;
+use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
 use oxmacs_core::applet::AppletBuffer;
@@ -22,6 +22,10 @@ pub struct LinesBuffer {
     pills: Vec<Pills>,
     directory: Option<PathBuf>,
     watched: Option<PathBuf>,
+    moved: Option<Hold>,
+    resized: Option<Hold>,
+    seen_line: Option<usize>,
+    seen_width: Option<usize>,
 }
 
 impl AppletBuffer for LinesBuffer {
@@ -180,10 +184,12 @@ fn plugin_buffer(editor: &Editor, name: &str) -> Option<BufferId> {
         })
 }
 
-fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered) {
-    let line = editor
-        .buffer_by_id(id)
-        .map_or(0, |buffer| buffer.line_of(buffer.point()));
+fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<usize>) {
+    let line = placed.unwrap_or_else(|| {
+        editor
+            .buffer_by_id(id)
+            .map_or(0, |buffer| buffer.line_of(buffer.point()))
+    });
     editor.fill_buffer(id, &rendered.text);
     if let Some((buffer, view)) = editor.applet_buffer_mut::<LinesBuffer>(id) {
         view.styles = rendered.styles;
@@ -214,31 +220,86 @@ fn keys(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, Error> {
         })
 }
 
+#[derive(Default)]
+struct Options {
+    bindings: Vec<(String, String)>,
+    directory: Option<PathBuf>,
+    watched: Option<PathBuf>,
+    beside: bool,
+    moved: Option<Value>,
+    resized: Option<Value>,
+    line: Option<usize>,
+}
+
+fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
+    let mut found = Options::default();
+    for pair in given.chunks(2) {
+        match pair {
+            [Value::Keyword(option), value] => match option.name() {
+                "keys" => found.bindings = keys(heap, *value)?,
+                "directory" => found.directory = Some(PathBuf::from(print::display(heap, *value))),
+                "watch" => found.watched = Some(PathBuf::from(print::display(heap, *value))),
+                "beside" => found.beside = value.truthy(),
+                "on-move" => found.moved = Some(*value),
+                "on-resize" => found.resized = Some(*value),
+                "line" => found.line = Some(number(heap, *value)?),
+                _ => return Err(unknown(heap, pair[0])),
+            },
+            _ => return Err(unknown(heap, pair[0])),
+        }
+    }
+    Ok(found)
+}
+
+fn unknown(heap: &Heap, option: Value) -> Error {
+    Error::new(format!(
+        "open-buffer takes :keys, :directory, :watch, :beside, :on-move, :on-resize and :line, not {}",
+        print::write(heap, option)
+    ))
+}
+
+fn hold(heap: &mut Heap, old: Option<Hold>, value: Option<Value>) -> Option<Hold> {
+    let Some(value) = value else {
+        return old;
+    };
+    if let Some(old) = old {
+        heap.release(old);
+    }
+    Some(heap.hold(value))
+}
+
+fn bind(editor: &mut Editor, id: BufferId, bindings: Vec<(String, String)>) -> Result<(), Error> {
+    let Some(scope) = editor
+        .applet_buffer::<LinesBuffer>(id)
+        .map(|(_, view)| view.scope)
+    else {
+        return Ok(());
+    };
+    for (keys, command) in bindings {
+        let command_id = editor
+            .command_named(&command)
+            .ok_or_else(|| Error::new(format!("There is no command named {command}")))?;
+        editor
+            .bind(scope, &keys, command_id)
+            .map_err(|error| Error::new(format!("{keys}: {error}")))?;
+    }
+    Ok(())
+}
+
+fn reveal(editor: &mut Editor, id: BufferId, beside: bool) {
+    if !beside {
+        editor.show_buffer(id);
+    } else if !editor.buffer_shown(id) {
+        let origin = editor.selected_window();
+        editor.show_buffer_beside(id);
+        editor.select_window(origin);
+    }
+}
+
 fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = crate::views::buffer_name(heap, "open-buffer", arguments[0])?;
     let rendered = render(heap, "open-buffer", arguments[1])?;
-    let mut bindings = Vec::new();
-    let mut directory = None;
-    let mut watched = None;
-    for pair in arguments[2..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "keys" => {
-                bindings = keys(heap, *value)?;
-            }
-            [Value::Keyword(option), value] if option.name() == "directory" => {
-                directory = Some(PathBuf::from(print::display(heap, *value)));
-            }
-            [Value::Keyword(option), value] if option.name() == "watch" => {
-                watched = Some(PathBuf::from(print::display(heap, *value)));
-            }
-            _ => {
-                return Err(Error::new(format!(
-                    "open-buffer takes :keys, :directory and :watch, not {}",
-                    print::write(heap, pair[0])
-                )));
-            }
-        }
-    }
+    let mut given = options(heap, &arguments[2..])?;
     let id = plugin_buffer(editor, &name).unwrap_or_else(|| {
         let scope = editor.add_scope(Box::leak(name.clone().into_boxed_str()));
         editor.add_applet_buffer_with(&name, |buffer| {
@@ -249,41 +310,71 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
                 pills: Vec::new(),
                 directory: None,
                 watched: None,
+                moved: None,
+                resized: None,
+                seen_line: None,
+                seen_width: None,
             }
         })
     });
-    fill(editor, id, rendered);
-    if let Some((_, view)) = editor.applet_buffer_mut::<LinesBuffer>(id) {
-        if directory.is_some() {
-            view.directory = directory;
+    fill(editor, id, rendered, given.line.take());
+    if let Some((buffer, view)) = editor.applet_buffer_mut::<LinesBuffer>(id) {
+        view.seen_line = Some(buffer.line_of(buffer.point()));
+        if given.directory.is_some() {
+            view.directory = given.directory;
         }
-        if watched.is_some() {
-            view.watched = watched;
+        if given.watched.is_some() {
+            view.watched = given.watched;
         }
+        view.moved = hold(heap, view.moved, given.moved);
+        view.resized = hold(heap, view.resized, given.resized);
     }
-    let scope = editor
-        .applet_buffer::<LinesBuffer>(id)
-        .map(|(_, view)| view.scope);
-    if let Some(scope) = scope {
-        for (keys, command) in bindings {
-            let command_id = editor
-                .command_named(&command)
-                .ok_or_else(|| Error::new(format!("There is no command named {command}")))?;
-            editor
-                .bind(scope, &keys, command_id)
-                .map_err(|error| Error::new(format!("{keys}: {error}")))?;
-        }
-    }
-    editor.show_buffer(id);
+    bind(editor, id, given.bindings)?;
+    reveal(editor, id, given.beside);
     Ok(Value::Nil)
 }
 
+pub fn watch(isolate: &mut Isolate, editor: &mut Editor) {
+    let mut calls: Vec<(Hold, usize)> = Vec::new();
+    let current = editor.buffer().id();
+    for id in editor.applet_buffers::<LinesBuffer>() {
+        let width = editor.buffer_width(id);
+        let Some((buffer, view)) = editor.applet_buffer_mut::<LinesBuffer>(id) else {
+            continue;
+        };
+        let line = buffer.line_of(buffer.point());
+        if id == current && view.seen_line != Some(line) {
+            view.seen_line = Some(line);
+            calls.extend(view.moved.map(|moved| (moved, line)));
+        }
+        if let Some(width) = width
+            && view.seen_width != Some(width)
+        {
+            view.seen_width = Some(width);
+            calls.extend(view.resized.map(|resized| (resized, width)));
+        }
+    }
+    for (hold, number) in calls {
+        let Some(handler) = isolate.held(hold) else {
+            continue;
+        };
+        let argument = Value::Int(i64::try_from(number).unwrap_or(i64::MAX));
+        if let Err(error) = isolate.spawn(handler, &[argument]) {
+            crate::log::report(editor, &error, None);
+        }
+    }
+}
 fn set_lines(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = crate::views::buffer_name(heap, "set-lines", arguments[0])?;
     let id = plugin_buffer(editor, &name)
         .ok_or_else(|| Error::new(format!("There is no plugin buffer named {name}")))?;
     let rendered = render(heap, "set-lines", arguments[1])?;
-    fill(editor, id, rendered);
+    let line = match &arguments[2..] {
+        [] => None,
+        [Value::Keyword(option), value] if option.name() == "line" => Some(number(heap, *value)?),
+        _ => return Err(Error::new("set-lines takes only :line")),
+    };
+    fill(editor, id, rendered, line);
     Ok(Value::Nil)
 }
 
@@ -320,9 +411,23 @@ fn goto_line(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
     Ok(Value::Nil)
 }
 
+fn region_lines(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Error> {
+    let buffer = editor.buffer();
+    let Some(selection) = buffer.selection() else {
+        return Ok(Value::Nil);
+    };
+    let first = buffer.line_of(selection.start);
+    let last = buffer
+        .line_of(selection.end.max(selection.start + 1) - 1)
+        .max(first);
+    let number = |line: usize| Value::Int(i64::try_from(line).unwrap_or(i64::MAX));
+    heap.vector_from(&[number(first), number(last)])
+        .map_err(|full| Error::new(full.to_string()))
+}
+
 pub fn install(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>("open-buffer", 2, None, open);
-    isolate.define_host_native::<Editor>("set-lines", 2, Some(2), set_lines);
+    isolate.define_host_native::<Editor>("set-lines", 2, Some(4), set_lines);
     isolate.define_host_native::<Editor>("current-line", 0, Some(0), current_line);
     isolate.define_host_native::<Editor>("goto-line", 1, Some(2), goto_line);
     isolate.define_host_native::<Editor>(
@@ -332,6 +437,55 @@ pub fn install(isolate: &mut Isolate) {
         |heap, editor, arguments| {
             let name = print::display(heap, arguments[0]);
             Ok(Value::Bool(editor.buffer_named(&name).is_some()))
+        },
+    );
+    isolate.define_host_native::<Editor>("buffer-width", 1, Some(1), |heap, editor, arguments| {
+        let name = print::display(heap, arguments[0]);
+        Ok(editor
+            .buffer_named(&name)
+            .and_then(|id| editor.buffer_width(id))
+            .map_or(Value::Nil, |width| {
+                Value::Int(i64::try_from(width).unwrap_or(i64::MAX))
+            }))
+    });
+    isolate.define_host_native::<Editor>("region-lines", 0, Some(0), region_lines);
+    isolate.define_host_native::<Editor>("buffer-shown?", 1, Some(1), |heap, editor, arguments| {
+        let name = print::display(heap, arguments[0]);
+        Ok(Value::Bool(
+            editor
+                .buffer_named(&name)
+                .is_some_and(|id| editor.buffer_shown(id)),
+        ))
+    });
+    isolate.define_host_native::<Editor>("deactivate-mark", 0, Some(0), |_, editor, _| {
+        editor.buffer_mut().deactivate_mark();
+        Ok(Value::Nil)
+    });
+    isolate.define_host_native::<Editor>(
+        "switch-to-buffer",
+        1,
+        Some(1),
+        |heap, editor, arguments| {
+            let name = print::display(heap, arguments[0]);
+            let id = editor
+                .buffer_named(&name)
+                .ok_or_else(|| Error::new(format!("There is no buffer named {name}")))?;
+            editor.show_buffer(id);
+            Ok(Value::Nil)
+        },
+    );
+    isolate.define_host_native::<Editor>("buffer-text", 0, Some(0), |heap, editor, _| {
+        heap.string(&editor.buffer().contents())
+            .map_err(|full| Error::new(full.to_string()))
+    });
+    isolate.define_host_native::<Editor>(
+        "set-buffer-text",
+        1,
+        Some(1),
+        |heap, editor, arguments| {
+            let text = print::display(heap, arguments[0]);
+            editor.buffer_mut().replace_text(&text);
+            Ok(Value::Nil)
         },
     );
     isolate.define_host_native::<Editor>("buffer-name", 0, Some(0), |heap, editor, _| {
@@ -396,6 +550,16 @@ mod tests {
         ox.eval(&mut editor, r#"(set-lines "*list*" ["only"])"#)
             .unwrap();
         assert_eq!(ox.eval(&mut editor, "(current-line)").unwrap(), "0");
+
+        ox.eval(&mut editor, r#"(set-lines "*list*" ["a" "b" "c"] :line 2)"#)
+            .unwrap();
+        assert_eq!(ox.eval(&mut editor, "(current-line)").unwrap(), "2");
+        ox.eval(
+            &mut editor,
+            r#"(open-buffer "*list*" ["a" "b" "c"] :line 1)"#,
+        )
+        .unwrap();
+        assert_eq!(ox.eval(&mut editor, "(current-line)").unwrap(), "1");
         assert_eq!(
             ox.eval(&mut editor, "(buffer-name)").unwrap(),
             r#""*list*""#
@@ -483,6 +647,88 @@ mod tests {
             "{:?}",
             editor.buffer_names()
         );
+    }
+
+    #[test]
+    fn buffers_can_open_beside_and_follow_point_and_width() {
+        let (mut editor, mut ox) = opened(
+            r#"(def moves (atom [])) (def widths (atom []))
+               (open-buffer "*main*" ["a" "b" "c"] :on-move (fn [line] (swap! moves conj line)))
+               (open-buffer "*side*" ["x"] :beside true :on-resize (fn [width] (swap! widths conj width)))"#,
+        );
+        assert_eq!(editor.buffer().name(), "*main*");
+        assert_eq!(editor.tiling().windows().len(), 2);
+        let side = editor.buffer_named("*side*").unwrap();
+        assert!(editor.buffer_shown(side));
+        assert_eq!(
+            ox.eval(
+                &mut editor,
+                r#"[(buffer-shown? "*side*") (buffer-shown? "*scratch*")]"#
+            )
+            .unwrap(),
+            "[true false]"
+        );
+
+        press(&mut editor, &mut ox, "C-n");
+        press(&mut editor, &mut ox, "C-n");
+        press(&mut editor, &mut ox, "C-e");
+        assert_eq!(ox.eval(&mut editor, "@moves").unwrap(), "[1 2]");
+
+        for window in editor.tiling().windows() {
+            editor.resize_pane(window, 30, 60);
+        }
+        editor.prepare_display();
+        ox.tick(&mut editor);
+        let width = ox.eval(&mut editor, r#"(buffer-width "*side*")"#).unwrap();
+        assert_ne!(width, "nil");
+        assert_eq!(ox.eval(&mut editor, "(last @widths)").unwrap(), width);
+        assert_eq!(
+            ox.eval(&mut editor, r#"(buffer-width "*nowhere*")"#)
+                .unwrap(),
+            "nil"
+        );
+    }
+
+    #[test]
+    fn the_region_reads_as_lines_until_it_is_deactivated() {
+        let (mut editor, mut ox) = opened(r#"(open-buffer "*lines*" ["a" "b" "c" "d"])"#);
+        assert_eq!(ox.eval(&mut editor, "(region-lines)").unwrap(), "nil");
+
+        press(&mut editor, &mut ox, "C-n C-SPC C-n C-e");
+        assert_eq!(ox.eval(&mut editor, "(region-lines)").unwrap(), "[1 2]");
+        press(&mut editor, &mut ox, "C-a");
+        assert_eq!(ox.eval(&mut editor, "(region-lines)").unwrap(), "[1 1]");
+
+        ox.eval(&mut editor, "(deactivate-mark)").unwrap();
+        assert_eq!(ox.eval(&mut editor, "(region-lines)").unwrap(), "nil");
+    }
+
+    #[test]
+    fn the_current_buffer_text_can_be_read_and_replaced() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        press(&mut editor, &mut ox, "h i");
+        assert_eq!(ox.eval(&mut editor, "(buffer-text)").unwrap(), r#""hi""#);
+
+        ox.eval(&mut editor, r#"(set-buffer-text "bye")"#).unwrap();
+        assert_eq!(editor.buffer().contents(), "bye");
+        assert!(editor.buffer().is_modified());
+
+        press(&mut editor, &mut ox, "C-/");
+        assert_eq!(editor.buffer().contents(), "hi");
+    }
+
+    #[test]
+    fn plugins_switch_to_buffers_by_name() {
+        let (mut editor, mut ox) = opened(
+            r#"(open-buffer "*a*" ["a"]) (open-buffer "*b*" ["b"]) (switch-to-buffer "*a*")"#,
+        );
+        assert_eq!(editor.buffer().name(), "*a*");
+
+        let missing = ox
+            .eval(&mut editor, r#"(switch-to-buffer "*nowhere*")"#)
+            .unwrap_err();
+        assert_eq!(missing.message, "There is no buffer named *nowhere*");
     }
 
     #[test]

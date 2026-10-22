@@ -42,7 +42,11 @@
   (fn [& more] (apply f (concat fixed more))))
 
 (def (swap! a f & args)
-  (reset! a (apply f @a args)))
+  (let [old @a
+        new (apply f old args)]
+    (if (compare-and-set! a old new)
+      new
+      (apply swap! a f args))))
 
 (def (update coll k f & args)
   (assoc coll k (apply f (get coll k) args)))
@@ -106,6 +110,18 @@
            (step (+ i 1) (if (nil? value) out (conj out value))))
          out))
      0 [])))
+
+(def (distinct coll)
+  (let [items (vec coll)
+        n (count items)]
+    ((fn step [i seen out]
+       (if (< i n)
+         (let [item (nth items i)]
+           (if (contains? seen item)
+             (step (+ i 1) seen out)
+             (step (+ i 1) (conj seen item) (conj out item))))
+         out))
+     0 (set []) [])))
 
 (def (sort-by key coll)
   (let [items (vec coll)]

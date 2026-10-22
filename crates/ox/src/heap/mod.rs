@@ -564,6 +564,11 @@ impl Heap {
             .try_fold(Value::Nil, |tail, head| self.pair(head, tail))
     }
 
+    pub fn vector_from(&mut self, items: &[Value]) -> Result<Value, HeapFull> {
+        let vector = Vector::from_items(self, items)?;
+        self.vector(vector)
+    }
+
     pub fn elements(&self, value: Value) -> Option<Vec<Value>> {
         if value == Value::Nil || self.pair_of(value).is_some() {
             return Some(self.items(value));
