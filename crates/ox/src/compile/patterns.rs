@@ -75,10 +75,12 @@ impl Compiler<'_> {
         let count = u16::try_from(arguments.len())
             .map_err(|_| Error::at(span, "This call has too many arguments"))?;
         let base = self.reserve(1 + arguments.len(), span)?;
+        let cache = self.global_cache();
         self.emit(
             Op::Global {
                 to: base,
                 name: Sym::intern(name),
+                cache,
             },
             span,
         );

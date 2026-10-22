@@ -20,12 +20,6 @@
 (def (some? x)
   (not (nil? x)))
 
-(def (inc n)
-  (+ n 1))
-
-(def (dec n)
-  (- n 1))
-
 (def (complement f)
   (fn [& args] (not (apply f args))))
 
@@ -57,15 +51,15 @@
     (let [items (vec coll)
           n (count items)]
       ((fn step [i out]
-         (if (< i n) (step (+ i 1) (conj out (f (nth items i)))) out))
-       0 []))
+         (if (< i n) (step (+ i 1) (cons (f (nth items i)) out)) (reverse out)))
+       0 nil))
     (let [all (reduce (fn [vectors c] (conj vectors (vec c))) [] (cons coll colls))
           n (apply min (reduce (fn [counts c] (conj counts (count c))) [] all))]
       ((fn step [i out]
          (if (< i n)
-           (step (+ i 1) (conj out (apply f (reduce (fn [items c] (conj items (nth c i))) [] all))))
-           out))
-       0 []))))
+           (step (+ i 1) (cons (apply f (reduce (fn [items c] (conj items (nth c i))) [] all)) out))
+           (reverse out)))
+       0 nil))))
 
 (def (filter keep? coll)
   (let [items (vec coll)
@@ -73,9 +67,9 @@
     ((fn step [i out]
        (if (< i n)
          (let [item (nth items i)]
-           (step (+ i 1) (if (keep? item) (conj out item) out)))
-         out))
-     0 [])))
+           (step (+ i 1) (if (keep? item) (cons item out) out)))
+         (reverse out)))
+     0 nil)))
 
 (def (remove drop? coll)
   (filter (complement drop?) coll))
@@ -108,9 +102,9 @@
     ((fn step [i out]
        (if (< i n)
          (let [value (f (nth items i))]
-           (step (+ i 1) (if (nil? value) out (conj out value))))
-         out))
-     0 [])))
+           (step (+ i 1) (if (nil? value) out (cons value out))))
+         (reverse out)))
+     0 nil)))
 
 (def (distinct coll)
   (let [items (vec coll)
@@ -120,9 +114,9 @@
          (let [item (nth items i)]
            (if (contains? seen item)
              (step (+ i 1) seen out)
-             (step (+ i 1) (conj seen item) (conj out item))))
-         out))
-     0 (set []) [])))
+             (step (+ i 1) (conj seen item) (cons item out))))
+         (reverse out)))
+     0 (set []) nil)))
 
 (def (sort-by key coll)
   (let [items (vec coll)]
@@ -138,8 +132,8 @@
       (if (generator? coll)
         ((fn drain [out]
            (let [item (next coll)]
-             (if (done? coll) out (drain (conj out item)))))
-         [])
+             (if (done? coll) (reverse out) (drain (cons item out)))))
+         nil)
         (items coll)))))
 
 (defmacro when [test & body]
@@ -227,29 +221,29 @@
     ((fn pull [i out]
        (if (< i n)
          (let [item (next coll)]
-           (if (done? coll) out (pull (+ i 1) (conj out item))))
-         out))
-     0 [])
+           (if (done? coll) (reverse out) (pull (+ i 1) (cons item out))))
+         (reverse out)))
+     0 nil)
     (let [items (vec coll)
           end (min n (count items))]
-      ((fn step [i out] (if (< i end) (step (+ i 1) (conj out (nth items i))) out)) 0 []))))
+      ((fn step [i out] (if (< i end) (step (+ i 1) (cons (nth items i) out)) (reverse out))) 0 nil))))
 
 (def (drop n coll)
   (let [items (vec coll)
         total (count items)]
-    ((fn step [i out] (if (< i total) (step (+ i 1) (conj out (nth items i))) out)) (min n total) [])))
+    ((fn step [i out] (if (< i total) (step (+ i 1) (cons (nth items i) out)) (reverse out))) (min n total) nil)))
 
 (def (take-while keep? coll)
   (if (generator? coll)
     ((fn pull [out]
        (let [item (next coll)]
-         (if (or (done? coll) (not (keep? item))) out (pull (conj out item)))))
-     [])
+         (if (or (done? coll) (not (keep? item))) (reverse out) (pull (cons item out)))))
+     nil)
     (let [items (vec coll)
           total (count items)]
       ((fn step [i out]
-         (if (and (< i total) (keep? (nth items i))) (step (+ i 1) (conj out (nth items i))) out))
-       0 []))))
+         (if (and (< i total) (keep? (nth items i))) (step (+ i 1) (cons (nth items i) out)) (reverse out)))
+       0 nil))))
 
 (def (drop-while drop? coll)
   (let [items (vec coll)

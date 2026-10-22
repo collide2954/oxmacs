@@ -318,7 +318,7 @@ impl Isolate {
         host: &mut dyn Any,
     ) -> Result<ModuleId, Error> {
         let module = self.runtime.module_named(name);
-        if let Some(found) = self.runtime.modules.get_mut(module) {
+        if let Some(found) = self.runtime.module_mut(module) {
             found.imports.clear();
             found.exports = None;
         }
@@ -356,7 +356,7 @@ impl Isolate {
                 Some("export") => {
                     let names: HashSet<Sym> =
                         rest.iter().filter_map(symbol).map(Sym::intern).collect();
-                    if let Some(found) = self.runtime.modules.get_mut(module) {
+                    if let Some(found) = self.runtime.module_mut(module) {
                         found.exports.get_or_insert_with(HashSet::new).extend(names);
                     }
                 }
@@ -398,7 +398,7 @@ impl Isolate {
                 .load_module(&name, host)
                 .map_err(|error| error.or_at(spec.span))?,
         };
-        if let Some(found) = self.runtime.modules.get_mut(module) {
+        if let Some(found) = self.runtime.module_mut(module) {
             found.imports.retain(|import| import.module != id);
             found.imports.push(Import {
                 module: id,
@@ -604,6 +604,18 @@ mod tests {
 
         assert_eq!(isolate.eval("(sum (P 1 2 3 4) 100 0)"), Ok(Value::Int(400)));
         assert_eq!(isolate.runtime.field_scans, 1);
+    }
+
+    #[test]
+    fn each_global_site_looks_its_name_up_once_while_globals_stay_put() {
+        let mut isolate = Isolate::new();
+        isolate
+            .eval("(def (count-down n) (if (< n 1) :done (count-down (- n 1))))")
+            .unwrap();
+        let before = isolate.runtime.global_lookups;
+
+        assert_eq!(isolate.eval("(count-down 100)"), Ok(Value::keyword("done")));
+        assert!(isolate.runtime.global_lookups - before < 10);
     }
 
     #[test]

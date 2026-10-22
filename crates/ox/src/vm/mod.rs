@@ -23,7 +23,7 @@ use crate::error::{Error, ErrorKind, Frame as Trace};
 use crate::heap::{Closure, Heap};
 use crate::isolate::Isolate;
 use crate::library::collections;
-use crate::native::Control;
+use crate::native::{Control, NativeFn};
 use crate::portable::Portable;
 use crate::span::Span;
 use crate::symbol::Sym;
@@ -44,6 +44,8 @@ use tasks::Task;
 pub struct Runtime {
     pub heap: Heap,
     pub field_scans: usize,
+    pub global_lookups: usize,
+    epoch: u64,
     pub apply: Value,
     pub error_types: HashMap<ErrorKind, Value>,
     pub modules: Vec<Module>,
@@ -107,11 +109,20 @@ enum Stop {
 
 type Step = Result<Flow, Error>;
 
+enum Target {
+    Code(Rc<Code>),
+    Native(Rc<NativeFn>),
+    Control(Control),
+    Data,
+}
+
 impl Default for Runtime {
     fn default() -> Self {
         let mut runtime = Self {
             heap: Heap::default(),
             field_scans: 0,
+            global_lookups: 0,
+            epoch: 0,
             apply: Value::Nil,
             error_types: HashMap::new(),
             modules: Vec::new(),
@@ -174,43 +185,62 @@ impl Runtime {
         first: Option<Step>,
         host: &mut dyn Any,
     ) -> Result<Stop, Error> {
+        if let Some(step) = first
+            && let Some(ending) = self.conclude(fiber, step, fiber.machine.pc)?
+        {
+            return Ok(ending);
+        }
         let mut countdown = CHECK_EVERY;
-        let mut pending = first;
         loop {
-            let at = fiber.machine.pc;
-            let step = if let Some(step) = pending.take() {
-                step
-            } else if countdown == 0 {
+            if countdown == 0 {
                 countdown = CHECK_EVERY;
                 if self.heap.wants_collection() {
                     self.collect_with(fiber);
                 }
                 if self.interrupter.take() {
-                    Err(interrupted())
-                } else if fiber.atomic == 0
-                    && deadline.is_some_and(|deadline| Instant::now() >= deadline)
-                {
-                    return Ok(Stop::Paused);
-                } else {
+                    if let Some(ending) =
+                        self.conclude(fiber, Err(interrupted()), fiber.machine.pc)?
+                    {
+                        return Ok(ending);
+                    }
                     continue;
                 }
-            } else {
-                countdown -= 1;
-                let Some(&op) = fiber.machine.code.ops.get(at) else {
-                    return Err(Error::new("The code ended without returning"));
-                };
-                fiber.machine.pc += 1;
-                self.execute(&mut fiber.machine, op, host)
+                if fiber.atomic == 0 && deadline.is_some_and(|deadline| Instant::now() >= deadline)
+                {
+                    return Ok(Stop::Paused);
+                }
+            }
+            countdown -= 1;
+            let at = fiber.machine.pc;
+            let Some(&op) = fiber.machine.code.ops.get(at) else {
+                return Err(Error::new("The code ended without returning"));
             };
-            let outcome = match step {
-                Ok(Flow::Next) => continue,
-                Ok(flow) => self.switch(fiber, flow),
-                Err(error) => Err(error),
-            };
-            match outcome {
-                Ok(None) => {}
-                Ok(Some(ending)) => return Ok(ending),
-                Err(error) => self.recover(fiber, error, at)?,
+            fiber.machine.pc += 1;
+            let step = self.execute(&mut fiber.machine, op, host);
+            if !matches!(step, Ok(Flow::Next))
+                && let Some(ending) = self.conclude(fiber, step, at)?
+            {
+                return Ok(ending);
+            }
+        }
+    }
+
+    #[inline(never)]
+    fn conclude(
+        &mut self,
+        fiber: &mut Fiber,
+        step: Step,
+        at: usize,
+    ) -> Result<Option<Stop>, Error> {
+        let outcome = match step {
+            Ok(flow) => self.switch(fiber, flow),
+            Err(error) => Err(error),
+        };
+        match outcome {
+            Ok(ending) => Ok(ending),
+            Err(error) => {
+                self.recover(fiber, error, at)?;
+                Ok(None)
             }
         }
     }
@@ -400,12 +430,45 @@ impl Runtime {
                 let value = machine.code.constants[index as usize];
                 machine.set(to, value);
             }
-            Op::Global { to, name } => {
-                let value = self
-                    .lookup(machine.code.module, name)
-                    .ok_or_else(|| not_defined(name))?;
+            Op::Global { to, name, cache } => {
+                let cached = machine
+                    .code
+                    .globals
+                    .get(usize::from(cache))
+                    .and_then(Cell::get);
+                let value = match cached {
+                    Some((epoch, value)) if epoch == self.epoch => value,
+                    _ => self.global(machine, name, cache)?,
+                };
                 machine.set(to, value);
             }
+            Op::Move { to, from } => machine.set(to, machine.get(from)),
+            Op::Itself { to } => machine.set(to, machine.closure),
+            Op::Captured { to, index } => {
+                let value = self.captured(machine.closure, index)?;
+                machine.set(to, value);
+            }
+            Op::Call { base, count } => return self.call(machine, base, count, host),
+            Op::TailCall { base, count } => return self.tail_call(machine, base, count, host),
+            Op::Jump { to } => machine.pc = to as usize,
+            Op::JumpUnless { test, to } => {
+                if !machine.get(test).truthy() {
+                    machine.pc = to as usize;
+                }
+            }
+            Op::Return { from } => {
+                return Ok(machine
+                    .leave(machine.get(from))
+                    .map_or(Flow::Next, Flow::Return));
+            }
+            _ => self.rare(machine, op)?,
+        }
+        Ok(Flow::Next)
+    }
+
+    #[inline(never)]
+    fn rare(&mut self, machine: &mut Machine, op: Op) -> Result<(), Error> {
+        match op {
             Op::DefineMacro { name, from } => {
                 self.define_macro(machine.code.module, name, machine.get(from));
             }
@@ -424,14 +487,8 @@ impl Runtime {
                     machine.pc = to as usize;
                 }
             }
-            Op::Move { to, from } => machine.set(to, machine.get(from)),
             Op::Closure { to, function } => {
                 let value = self.close(machine, function)?;
-                machine.set(to, value);
-            }
-            Op::Itself { to } => machine.set(to, machine.closure),
-            Op::Captured { to, index } => {
-                let value = self.captured(machine.closure, index)?;
                 machine.set(to, value);
             }
             Op::MakeCell { register } => {
@@ -460,26 +517,23 @@ impl Runtime {
                     return Err(Error::new("A variable lost its cell"));
                 }
             }
-            Op::Call { base, count } => return self.call(machine, base, count, host),
-            Op::TailCall { base, count } => return self.tail_call(machine, base, count, host),
-            Op::Jump { to } => machine.pc = to as usize,
             Op::JumpIfSupplied { bit, to } => {
                 if machine.missing & (1 << bit) == 0 {
                     machine.pc = to as usize;
                 }
             }
-            Op::JumpUnless { test, to } => {
-                if !machine.get(test).truthy() {
-                    machine.pc = to as usize;
-                }
-            }
-            Op::Return { from } => {
-                return Ok(machine
-                    .leave(machine.get(from))
-                    .map_or(Flow::Next, Flow::Return));
-            }
+            Op::Constant { .. }
+            | Op::Global { .. }
+            | Op::Move { .. }
+            | Op::Itself { .. }
+            | Op::Captured { .. }
+            | Op::Call { .. }
+            | Op::TailCall { .. }
+            | Op::Jump { .. }
+            | Op::JumpUnless { .. }
+            | Op::Return { .. } => {}
         }
-        Ok(Flow::Next)
+        Ok(())
     }
 
     fn build(&mut self, machine: &mut Machine, op: Op) -> Result<(), Error> {
@@ -535,28 +589,53 @@ impl Runtime {
         Ok(())
     }
 
+    fn arguments(
+        &mut self,
+        machine: &mut Machine,
+        slot: usize,
+        count: u16,
+    ) -> Result<usize, Error> {
+        let count = usize::from(count);
+        if self.apply != Value::Nil && machine.stack[slot] == self.apply {
+            return self.spread(machine, slot, count);
+        }
+        Ok(count)
+    }
+
+    fn target(&self, callee: Value, count: usize) -> Result<Target, Error> {
+        if let Some(closure) = self.heap.closure_of(callee) {
+            return Ok(Target::Code(Rc::clone(&closure.code)));
+        }
+        let Some(native) = self.heap.native_of(callee) else {
+            return Ok(Target::Data);
+        };
+        native.check(count)?;
+        Ok(match native.control {
+            Some(control) => Target::Control(control),
+            None => Target::Native(Rc::clone(&native.function)),
+        })
+    }
+
     fn call(&mut self, machine: &mut Machine, base: u16, count: u16, host: &mut dyn Any) -> Step {
         let slot = machine.base + usize::from(base);
-        let count = self.spread(machine, slot, usize::from(count))?;
+        let count = self.arguments(machine, slot, count)?;
         let callee = self.constructor_of(machine.stack[slot]);
-        let Some(function) = self
-            .heap
-            .closure_of(callee)
-            .map(|closure| Rc::clone(&closure.code))
-        else {
-            if let Some(control) = self.control_of(callee, count)? {
+        let arguments = slot + 1..=slot + count;
+        match self.target(callee, count)? {
+            Target::Code(function) => {
+                let binding = bind(&mut self.heap, &function, &machine.stack[arguments])?;
+                machine.enter(function, callee, slot, binding)?;
+            }
+            Target::Native(function) => {
+                machine.stack[slot] = function(&mut self.heap, host, &machine.stack[arguments])?;
+            }
+            Target::Control(control) => {
                 return self.control(machine, control, slot, count, Landing::Register(slot));
             }
-            let result = self.call_native(callee, &machine.stack[slot + 1..=slot + count], host)?;
-            machine.stack[slot] = result;
-            return Ok(Flow::Next);
-        };
-        let binding = bind(
-            &mut self.heap,
-            &function,
-            &machine.stack[slot + 1..=slot + count],
-        )?;
-        machine.enter(function, callee, slot, binding)?;
+            Target::Data => {
+                machine.stack[slot] = call_data(&self.heap, callee, &machine.stack[arguments])?;
+            }
+        }
         Ok(Flow::Next)
     }
 
@@ -568,37 +647,22 @@ impl Runtime {
         host: &mut dyn Any,
     ) -> Step {
         let slot = machine.base + usize::from(base);
-        let count = self.spread(machine, slot, usize::from(count))?;
+        let count = self.arguments(machine, slot, count)?;
         let callee = self.constructor_of(machine.stack[slot]);
-        let Some(function) = self
-            .heap
-            .closure_of(callee)
-            .map(|closure| Rc::clone(&closure.code))
-        else {
-            if let Some(control) = self.control_of(callee, count)? {
+        let arguments = slot + 1..=slot + count;
+        let result = match self.target(callee, count)? {
+            Target::Code(function) => {
+                let binding = bind(&mut self.heap, &function, &machine.stack[arguments])?;
+                machine.replace(function, callee, slot, count, binding);
+                return Ok(Flow::Next);
+            }
+            Target::Native(function) => function(&mut self.heap, host, &machine.stack[arguments])?,
+            Target::Control(control) => {
                 return self.control(machine, control, slot, count, Landing::Leave);
             }
-            let result = self.call_native(callee, &machine.stack[slot + 1..=slot + count], host)?;
-            return Ok(machine.leave(result).map_or(Flow::Next, Flow::Return));
+            Target::Data => call_data(&self.heap, callee, &machine.stack[arguments])?,
         };
-        let binding = bind(
-            &mut self.heap,
-            &function,
-            &machine.stack[slot + 1..=slot + count],
-        )?;
-        machine.replace(function, callee, slot, count, binding);
-        Ok(Flow::Next)
-    }
-
-    fn control_of(&self, callee: Value, count: usize) -> Result<Option<Control>, Error> {
-        let Some(native) = self.heap.native_of(callee) else {
-            return Ok(None);
-        };
-        let Some(control) = native.control else {
-            return Ok(None);
-        };
-        native.check(count)?;
-        Ok(Some(control))
+        Ok(machine.leave(result).map_or(Flow::Next, Flow::Return))
     }
 
     fn control(
@@ -642,6 +706,19 @@ impl Runtime {
             })
             .collect::<Result<Box<[Value]>, Error>>()?;
         self.heap.closure(Closure { code, captured }).map_err(full)
+    }
+
+    #[inline(never)]
+    fn global(&mut self, machine: &Machine, name: Sym, cache: u16) -> Result<Value, Error> {
+        let site = machine.code.globals.get(usize::from(cache));
+        self.global_lookups += 1;
+        let value = self
+            .lookup(machine.code.module, name)
+            .ok_or_else(|| not_defined(name))?;
+        if let Some(site) = site {
+            site.set(Some((self.epoch, value)));
+        }
+        Ok(value)
     }
 
     fn captured(&self, closure: Value, index: u16) -> Result<Value, Error> {
@@ -876,18 +953,5 @@ impl Runtime {
     fn define_record(&mut self, machine: &Machine, record: u32, constructor: u16) {
         let kind = machine.code.constants[record as usize];
         self.heap.set_constructor(kind, machine.get(constructor));
-    }
-
-    fn call_native(
-        &mut self,
-        callee: Value,
-        arguments: &[Value],
-        host: &mut dyn Any,
-    ) -> Result<Value, Error> {
-        let Some(native) = self.heap.native_of(callee).cloned() else {
-            return call_data(&self.heap, callee, arguments);
-        };
-        native.check(arguments.len())?;
-        (native.function)(&mut self.heap, host, arguments)
     }
 }

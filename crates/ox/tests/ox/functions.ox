@@ -108,3 +108,8 @@
 ({} 1 2 3) ;! {} takes 1 to 2 arguments, got 3
 (#{} 1 2) ;! #{} takes 1 argument, got 2
 ([1 2] 0) ;! [1 2] is not a function
+
+;; calls see each global as it is now: redefined, set! or shadowing the prelude
+(def (base) 1) (def (caller) (base)) (def first (caller)) (def (base) 2) [first (caller)] ;=> [1 2]
+(def level 1) (def (read-level) level) (def before (read-level)) (set! level 5) [before (read-level)] ;=> [1 5]
+(def (bump x) (inc x)) (def before (bump 1)) (def (inc x) 100) [before (bump 1)] ;=> [2 100]

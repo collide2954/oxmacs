@@ -4,7 +4,7 @@ use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::value::Value;
-use crate::value::number::Number;
+use crate::value::number::{Number, to_float};
 
 type Step = fn(Number, Number) -> Result<Number, Error>;
 
@@ -49,21 +49,61 @@ fn reduce(
     fold(heap, name, first, rest, step)
 }
 
+fn quick(
+    arguments: &[Value],
+    small: fn(i64, i64) -> Option<i64>,
+    inexact: fn(f64, f64) -> f64,
+) -> Option<Value> {
+    let [a, b] = arguments else {
+        return None;
+    };
+    match (*a, *b) {
+        (Value::Int(a), Value::Int(b)) => small(a, b).map(Value::Int),
+        (Value::Float(a), Value::Float(b)) => Some(Value::Float(inexact(a, b))),
+        (Value::Int(a), Value::Float(b)) => Some(Value::Float(inexact(to_float(a), b))),
+        (Value::Float(a), Value::Int(b)) => Some(Value::Float(inexact(a, to_float(b)))),
+        _ => None,
+    }
+}
+
+fn quick_holds(a: Value, b: Value, holds: fn(Ordering) -> bool) -> Option<bool> {
+    let order = match (a, b) {
+        (Value::Int(a), Value::Int(b)) => Some(a.cmp(&b)),
+        (Value::Float(a), Value::Float(b)) => a.partial_cmp(&b),
+        (Value::Int(a), Value::Float(b)) => to_float(a).partial_cmp(&b),
+        (Value::Float(a), Value::Int(b)) => a.partial_cmp(&to_float(b)),
+        _ => return None,
+    };
+    Some(order.is_some_and(holds))
+}
 fn chain(
     heap: &Heap,
     name: &str,
     arguments: &[Value],
     holds: fn(Ordering) -> bool,
 ) -> Result<Value, Error> {
-    let numbers = arguments
-        .iter()
-        .map(|value| Number::of(heap, name, *value))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(Value::Bool(
-        numbers
-            .windows(2)
-            .all(|pair| pair[0].compare(&pair[1]).is_some_and(holds)),
-    ))
+    if let [a, b] = arguments
+        && let Some(held) = quick_holds(*a, *b, holds)
+    {
+        return Ok(Value::Bool(held));
+    }
+    let mut holding = true;
+    let mut previous: Option<Number> = None;
+    for value in arguments {
+        let number = Number::of(heap, name, *value)?;
+        if let Some(before) = &previous {
+            holding = holding && before.compare(&number).is_some_and(holds);
+        }
+        previous = Some(number);
+    }
+    Ok(Value::Bool(holding))
+}
+
+fn step(heap: &mut Heap, name: &str, value: Value, by: i64) -> Result<Value, Error> {
+    if let Some(stepped) = quick(&[value, Value::Int(by)], i64::checked_add, |a, b| a + b) {
+        return Ok(stepped);
+    }
+    one(heap, name, value, |number| Ok(number.add(&Number::Int(by))))
 }
 
 fn extreme(
@@ -173,14 +213,29 @@ pub fn install(isolate: &mut Isolate) {
         chain(heap, "==", arguments, Ordering::is_eq)
     });
     isolate.define_native("+", 0, None, |heap, arguments| {
+        if let Some(sum) = quick(arguments, i64::checked_add, |a, b| a + b) {
+            return Ok(sum);
+        }
         fold(heap, "+", Number::Int(0), arguments, |a, b| Ok(a.add(&b)))
     });
     isolate.define_native("*", 0, None, |heap, arguments| {
+        if let Some(product) = quick(arguments, i64::checked_mul, |a, b| a * b) {
+            return Ok(product);
+        }
         fold(heap, "*", Number::Int(1), arguments, |a, b| {
             Ok(a.multiply(&b))
         })
     });
+    isolate.define_native("inc", 1, Some(1), |heap, arguments| {
+        step(heap, "inc", arguments[0], 1)
+    });
+    isolate.define_native("dec", 1, Some(1), |heap, arguments| {
+        step(heap, "dec", arguments[0], -1)
+    });
     isolate.define_native("-", 1, None, |heap, arguments| {
+        if let Some(difference) = quick(arguments, i64::checked_sub, |a, b| a - b) {
+            return Ok(difference);
+        }
         reduce(
             heap,
             "-",

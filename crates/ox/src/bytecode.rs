@@ -16,6 +16,7 @@ pub enum Op {
     Global {
         to: Register,
         name: Sym,
+        cache: u16,
     },
     DefineGlobal {
         name: Sym,
@@ -158,6 +159,7 @@ pub struct Code {
     pub functions: Vec<Rc<Code>>,
     pub captures: Vec<Capture>,
     pub caches: Vec<Cell<Option<(Value, usize)>>>,
+    pub globals: Vec<Cell<Option<(u64, Value)>>>,
     pub source: Option<Rc<Source>>,
     pub module: usize,
     pub spans: Vec<Span>,

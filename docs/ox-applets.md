@@ -43,6 +43,20 @@ Screensaver slices 1 to 4 are done:
 2. **Draw the takeover in the GUI** over the windows, keeping a mode line and the minibuffer, with any input ending it.
 3. **Idle hooks** that fire once per idle stretch while oxmacs has focus.
 4. **The screensaver plugin:** starfield, matrix rain, `M-x screensaver-preview` and the `idle` and `kind` settings.
+## Profiler
+
+Profiling tools for anyone writing Ox for oxmacs: where the time goes in plugins, init.ox, views, modes and frames.
+
+- **Samples and call counts.** While the profiler runs, the VM records the Ox call stack at its safe points, every 128 instructions instead of 1024, weighted by the time since the last sample, and counts every call to each Ox function. Calls to natives are timed exactly and show as leaves under their caller. When the profiler is off this costs one branch per call.
+- **Grouped by plugin.** A function belongs to its module, and a module to its plugin (`git/status` to git), so the report opens on how much each plugin, init.ox and Ox's own library took.
+- **Editor timing.** In oxmacs the profile also records how long each Ox tick, frame and view refresh took, and the report starts with the slowest ones.
+- **Entry points.**
+  - `M-x ox-profiler-start`, `M-x ox-profiler-stop` and `M-x ox-profiler-report` profile everything Ox does in the editor.
+  - `ox profile FILE` runs a file and prints the report.
+  - `(profile (fn [] …))` returns the profile as data, and `(profile-report profile)` prints it, for a plugin or a test that profiles one piece of work.
+- **The report.** `*ox profile*` shows a call tree, total and self time, their share and the call count on each line; `TAB` folds, `f` switches to a flat table sorted by self time, `RET` visits the function's source and `g` takes a fresh report while profiling continues.
+- **Native profiling.** `ox-perf` (see [ox-internals.md](ox-internals.md)) samples the Rust side for work on the VM itself.
+
 ## Slices
 
 Slices 1 to 11 are done.

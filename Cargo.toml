@@ -1,5 +1,12 @@
 [workspace]
 members = ["crates/*"]
+default-members = [
+    "crates/ox",
+    "crates/oxmacs",
+    "crates/oxmacs-core",
+    "crates/oxmacs-gui",
+    "crates/oxmacs-ox",
+]
 resolver = "3"
 
 [workspace.package]
@@ -46,6 +53,7 @@ tree-sitter-toml-ng = "0.7.0"
 unicode-width = "0.2.2"
 ureq = "3.4.2"
 webpki-roots = "1.0.9"
+windows-sys = "0.61.2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -70,3 +78,7 @@ debug = false
 [profile.release]
 codegen-units = 1
 lto = "fat"
+
+[profile.profiling]
+inherits = "release"
+debug = "limited"

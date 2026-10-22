@@ -125,14 +125,19 @@ impl Runtime {
         self.find(module, name, true)
     }
 
+    pub fn module_mut(&mut self, module: ModuleId) -> Option<&mut Module> {
+        self.epoch += 1;
+        self.modules.get_mut(module)
+    }
+
     pub fn define(&mut self, module: ModuleId, name: Sym, value: Value) {
-        if let Some(found) = self.modules.get_mut(module) {
+        if let Some(found) = self.module_mut(module) {
             found.globals.insert(name, value);
         }
     }
 
     pub fn define_macro(&mut self, module: ModuleId, name: Sym, value: Value) {
-        if let Some(found) = self.modules.get_mut(module) {
+        if let Some(found) = self.module_mut(module) {
             found.macros.insert(name, value);
         }
     }
@@ -145,7 +150,7 @@ impl Runtime {
 
     pub fn assignable(&mut self, module: ModuleId, name: Sym) -> Option<&mut Value> {
         let (target, short) = self.referenced(name).unwrap_or((module, name));
-        self.modules.get_mut(target)?.globals.get_mut(&short)
+        self.module_mut(target)?.globals.get_mut(&short)
     }
 
     pub fn module_of_mark(&self, mark: u32) -> Option<ModuleId> {

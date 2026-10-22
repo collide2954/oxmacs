@@ -22,6 +22,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- Ox code runs two to three times faster: function lookups are cached, calls and arithmetic do less work, comparisons and hashing no longer allocate, and `map`, `filter`, `keep`, `take`, `drop` and `distinct` build their results without copying. A frame of the matrix screensaver takes about half as long.
 - `M-x list-tools` is a compact table: one line per tool, grouped by what uses it (R, Python, PDF), with the version that runs and where it comes from, and the latest release; `TAB` opens a tool's summary, the full path it runs from and its source.
 - `RET` leaves the line it ends alone in languages that keep the previous line's indentation, such as TOML and Markdown, instead of re-indenting it to match the line above.
 - Weather settings now live in a `[weather]` table: `location`, `units` and `mode-line`. oxmacs moves `weather-location`, `weather-units` and `mode-line-weather` there the first time it starts, keeping comments, and says so.
@@ -39,6 +40,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `ox-perf`, a developer tool outside the default build, benchmarks Ox code and, on Windows, samples the VM's native stack to show where its time goes.
 - Screensavers, a bundled plugin that is off until you set (use-plugin screensaver :config {idle: 300}): after that many seconds without input, while oxmacs has focus, a starfield or matrix rain fills the window area, keeping the mode line and minibuffer, until the first key or click, which does nothing else. kind picks :starfield, :matrix or :random, and M-x screensaver-preview shows either at any time.
 - Ox can draw rectangles, circles, lines and text in theme or hex colors, in a view with canvas or over every window with 	ake-over, and can run code after a stretch without input with on-idle. prompt takes :choices to complete from names with notes.
 - Ox tests: `(test "name" (expect …))` blocks sit next to the code they test, are skipped when a file or plugin loads, and run with `ox test PATH…`, which prints each result and explains a failed `expect` with the value of each argument and where it failed.

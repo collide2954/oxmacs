@@ -83,6 +83,12 @@ fn sequence_items(heap: &Heap, value: Value) -> Option<(Vec<Value>, Option<Value
 }
 
 pub fn hash(heap: &Heap, value: Value) -> u64 {
+    if !matches!(value, Value::Ref(_)) {
+        return scalar(heap, value);
+    }
+    if let Some(hash) = heap.string_hash(value) {
+        return tagged(7, hash);
+    }
     let mut tasks = vec![Task::Hash(value)];
     let mut results = Vec::new();
     while let Some(task) = tasks.pop() {

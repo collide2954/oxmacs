@@ -3195,6 +3195,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ox-perf"
+version = "0.1.0"
+dependencies = [
+ "ox",
+ "tempfile",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "oxmacs"
 version = "0.13.0"
 dependencies = [

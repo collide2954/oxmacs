@@ -267,9 +267,26 @@ impl Compiler<'_> {
         self.load(value, target, span)
     }
 
+    pub(super) fn global_cache(&mut self) -> u16 {
+        let globals = &mut self.current.code.globals;
+        let cache = u16::try_from(globals.len()).unwrap_or(u16::MAX);
+        if cache < u16::MAX {
+            globals.push(Cell::new(None));
+        }
+        cache
+    }
+
     fn variable(&mut self, name: Sym, marks: &Marks, target: Register, span: Span) {
         let Some(variable) = self.resolve(name, marks) else {
-            self.emit(Op::Global { to: target, name }, span);
+            let cache = self.global_cache();
+            self.emit(
+                Op::Global {
+                    to: target,
+                    name,
+                    cache,
+                },
+                span,
+            );
             return;
         };
         match variable.place {
