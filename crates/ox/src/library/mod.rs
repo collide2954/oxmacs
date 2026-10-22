@@ -1,8 +1,10 @@
 pub(crate) mod collections;
 mod errors;
+mod files;
 mod http;
 mod json;
 mod numbers;
+pub(crate) mod paths;
 mod patterns;
 mod rules;
 mod strings;
@@ -71,6 +73,8 @@ pub fn install(isolate: &mut Isolate) {
     json::install(isolate);
     http::install(isolate);
     strings::install(isolate);
+    paths::install(isolate);
+    files::install(isolate);
     isolate.define_native("=", 1, None, |heap, arguments| {
         Ok(Value::Bool(all_equal(heap, arguments)))
     });

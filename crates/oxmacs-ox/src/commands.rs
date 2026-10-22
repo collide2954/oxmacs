@@ -99,7 +99,7 @@ pub fn run_waiting(isolate: &mut Isolate, editor: &mut Editor) {
         let Some(function) = function else {
             continue;
         };
-        if let Err(error) = isolate.call_with(editor, function, &[]) {
+        if let Err(error) = isolate.spawn(function, &[]) {
             log::report(editor, &error, None);
         }
     }

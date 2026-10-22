@@ -92,6 +92,13 @@ const FACES: &[(&str, Highlight)] = &[
     ("region", Highlight::Region),
 ];
 
+pub(crate) fn face_named(name: &str) -> Option<Highlight> {
+    FACES
+        .iter()
+        .find(|(face, _)| *face == name)
+        .map(|(_, highlight)| *highlight)
+}
+
 fn wrong(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects {wanted}, got {}",
@@ -209,10 +216,7 @@ fn text(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
             continue;
         }
         let known = match value {
-            Value::Keyword(name) => FACES
-                .iter()
-                .find(|(face, _)| *face == name.name())
-                .map(|(_, highlight)| *highlight),
+            Value::Keyword(name) => face_named(name.name()),
             _ => None,
         };
         face = Some(known.ok_or_else(|| {
@@ -295,11 +299,14 @@ fn keys(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, Error> {
         })
 }
 
+pub(crate) fn buffer_name(heap: &Heap, native: &str, value: Value) -> Result<String, Error> {
+    heap.text(value)
+        .map(str::to_owned)
+        .ok_or_else(|| wrong(heap, native, "a buffer name", value))
+}
+
 fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
-    let name = heap
-        .text(arguments[0])
-        .ok_or_else(|| wrong(heap, "open-view", "a buffer name", arguments[0]))?
-        .to_owned();
+    let name = buffer_name(heap, "open-view", arguments[0])?;
     let (found, rest) = options(heap, "open-view", &arguments[2..], &["keys"])?;
     if let Some(extra) = rest.first() {
         return Err(wrong(
@@ -480,7 +487,7 @@ pub fn press(isolate: &mut Isolate, editor: &mut Editor, buffer: BufferId, slot:
     let Some(callback) = callback else {
         return;
     };
-    if let Err(error) = isolate.call_with(editor, callback, &[]) {
+    if let Err(error) = isolate.spawn(callback, &[]) {
         log::report(editor, &error, None);
     }
 }

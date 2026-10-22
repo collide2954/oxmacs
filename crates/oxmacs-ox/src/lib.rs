@@ -1,9 +1,11 @@
+mod buffers;
 mod bundled;
 mod commands;
 mod log;
 mod mode;
 mod natives;
 mod plugins;
+mod prompts;
 mod tools;
 pub mod views;
 
@@ -37,6 +39,7 @@ pub struct Ox {
     isolate: Isolate,
     bundled: &'static [Bundle],
     home: Option<PathBuf>,
+    answers: prompts::Inbox,
 }
 
 impl Default for Ox {
@@ -56,6 +59,9 @@ impl Ox {
         commands::install(&mut isolate);
         plugins::install(&mut isolate);
         views::install(&mut isolate);
+        buffers::install(&mut isolate);
+        let answers = prompts::Inbox::default();
+        prompts::install(&mut isolate, &answers);
         if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
             panic!("The oxmacs prelude failed to load: {error}");
         }
@@ -63,6 +69,7 @@ impl Ox {
             isolate,
             bundled,
             home: None,
+            answers,
         }
     }
 
@@ -115,9 +122,14 @@ impl Ox {
         self.handle_requests(editor);
         plugins::wake_waiting(&mut self.isolate, editor);
         commands::run_waiting(&mut self.isolate, editor);
+        prompts::deliver(&mut self.isolate, &self.answers);
         if self.isolate.pending() > 0 {
             let report = self.isolate.run_with(editor, BUDGET);
-            for error in report.unhandled {
+            let failed = report
+                .finished
+                .into_iter()
+                .filter_map(|(_, result)| result.err());
+            for error in report.unhandled.into_iter().chain(failed) {
                 log::report(editor, &error, None);
             }
         }

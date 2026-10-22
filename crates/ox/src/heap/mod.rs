@@ -474,6 +474,10 @@ impl Heap {
         self.generators.get_mut(reference(value, Kind::Generator)?)
     }
 
+    pub fn new_promise(&mut self) -> Result<Value, HeapFull> {
+        self.promise(Promise::Pending { awaited: false })
+    }
+
     pub(crate) fn promise(&mut self, promise: Promise) -> Result<Value, HeapFull> {
         let index = self.promises.alloc(promise)?;
         Ok(Value::Ref(Ref {
