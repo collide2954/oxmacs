@@ -91,6 +91,7 @@ pub struct Heap {
     sets: Arena<Map>,
     record_types: Arena<RecordType>,
     records: Arena<Record>,
+    atoms: Arena<Value>,
 }
 
 fn reference(value: Value, kind: Kind) -> Option<u32> {
@@ -283,6 +284,27 @@ impl Heap {
             return false;
         };
         found.constructor = constructor;
+        true
+    }
+
+    pub fn atom(&mut self, value: Value) -> Result<Value, HeapFull> {
+        let index = self.atoms.alloc(value)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Atom,
+            index,
+        }))
+    }
+
+    pub fn atom_get(&self, atom: Value) -> Option<Value> {
+        self.atoms.get(reference(atom, Kind::Atom)?).copied()
+    }
+
+    pub fn atom_set(&mut self, atom: Value, value: Value) -> bool {
+        let Some(slot) = reference(atom, Kind::Atom).and_then(|index| self.atoms.get_mut(index))
+        else {
+            return false;
+        };
+        *slot = value;
         true
     }
 

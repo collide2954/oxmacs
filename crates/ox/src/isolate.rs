@@ -1089,6 +1089,27 @@ mod tests {
     }
 
     #[test]
+    fn atoms_hold_a_value_that_can_change() {
+        all(&[
+            ("(atom 1)", "#<atom 1>"),
+            ("(deref (atom 1))", "1"),
+            ("@(atom [1 2])", "[1 2]"),
+            ("(def a (atom 1)) (reset! a 5)", "5"),
+            ("(def a (atom 1)) (reset! a 5) @a", "5"),
+            (
+                "(def a (atom 0)) (def (bump) (reset! a (+ @a 1))) (bump) (bump) @a",
+                "2",
+            ),
+            ("(atom? (atom nil))", "true"),
+            ("(atom? 5)", "false"),
+            ("(= (atom 1) (atom 1))", "false"),
+            ("(def a (atom 1)) (= a a)", "true"),
+            ("(deref 5)", "error: deref expects an atom, got 5"),
+            ("(reset! 5 1)", "error: reset! expects an atom, got 5"),
+        ]);
+    }
+
+    #[test]
     fn each_field_site_scans_a_record_type_once() {
         let mut isolate = Isolate::new();
         isolate

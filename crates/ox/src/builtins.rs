@@ -97,6 +97,13 @@ fn join(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         .map_err(|full| Error::new(full.to_string()))
 }
 
+fn not_an_atom(heap: &Heap, name: &str, value: Value) -> Error {
+    Error::new(format!(
+        "{name} expects an atom, got {}",
+        print::write(heap, value)
+    ))
+}
+
 fn all_equal(heap: &Heap, arguments: &[Value]) -> bool {
     arguments
         .windows(2)
@@ -112,6 +119,24 @@ pub fn install(isolate: &mut Isolate) {
     });
     isolate.define_native("identical?", 2, Some(2), |_, arguments| {
         Ok(Value::Bool(identical(arguments[0], arguments[1])))
+    });
+    isolate.define_native("atom", 1, Some(1), |heap, arguments| {
+        heap.atom(arguments[0])
+            .map_err(|full| Error::new(full.to_string()))
+    });
+    isolate.define_native("atom?", 1, Some(1), |heap, arguments| {
+        Ok(Value::Bool(heap.atom_get(arguments[0]).is_some()))
+    });
+    isolate.define_native("deref", 1, Some(1), |heap, arguments| {
+        heap.atom_get(arguments[0])
+            .ok_or_else(|| not_an_atom(heap, "deref", arguments[0]))
+    });
+    isolate.define_native("reset!", 2, Some(2), |heap, arguments| {
+        if heap.atom_set(arguments[0], arguments[1]) {
+            Ok(arguments[1])
+        } else {
+            Err(not_an_atom(heap, "reset!", arguments[0]))
+        }
     });
     isolate.define_native("hash", 1, Some(1), |heap, arguments| {
         Ok(Value::Int(i64::from_ne_bytes(

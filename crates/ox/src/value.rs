@@ -33,6 +33,7 @@ pub enum Kind {
     Set,
     RecordType,
     Record,
+    Atom,
 }
 
 impl Value {
