@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use ox::heap::Heap;
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
@@ -6,6 +8,7 @@ use oxmacs_core::command::ScopeId;
 use oxmacs_core::display::LineStyle;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::text::BufferId;
+use oxmacs_core::theme::Highlight;
 
 use crate::views::face_named;
 
@@ -13,11 +16,20 @@ use crate::views::face_named;
 pub struct LinesBuffer {
     scope: ScopeId,
     styles: Vec<LineStyle>,
+    directory: Option<PathBuf>,
 }
 
 impl AppletBuffer for LinesBuffer {
     fn scope(&self) -> ScopeId {
         self.scope
+    }
+
+    fn directory(&self) -> Option<&Path> {
+        self.directory.as_deref()
+    }
+
+    fn watched(&self) -> Option<&Path> {
+        self.directory.as_deref()
     }
 
     fn line_style(&self, line: usize) -> LineStyle {
@@ -57,20 +69,24 @@ fn segment(
     let start = *column;
     *column += shown.chars().count();
     text.push_str(&shown);
-    if let Some(face) = face {
-        let highlight = match face {
-            Value::Keyword(face) => face_named(face.name()),
-            _ => None,
-        }
-        .ok_or_else(|| {
-            Error::new(format!(
-                "{name} doesn't know the face {}",
-                print::write(heap, face)
-            ))
-        })?;
+    if let Some(given) = face {
+        let highlight = self::face(heap, name, given)?;
         style.spans.push((start..*column, highlight));
     }
     Ok(())
+}
+
+fn face(heap: &Heap, name: &str, value: Value) -> Result<Highlight, Error> {
+    match value {
+        Value::Keyword(face) => face_named(face.name()),
+        _ => None,
+    }
+    .ok_or_else(|| {
+        Error::new(format!(
+            "{name} doesn't know the face {}",
+            print::write(heap, value)
+        ))
+    })
 }
 
 fn render(heap: &Heap, name: &str, lines: Value) -> Result<Rendered, Error> {
@@ -88,6 +104,19 @@ fn render(heap: &Heap, name: &str, lines: Value) -> Result<Rendered, Error> {
         }
         let mut style = LineStyle::default();
         let mut column = 0;
+        let mut line = line;
+        if let Some(fields) = heap.entries(line) {
+            line = Value::Nil;
+            for (key, value) in fields {
+                match key {
+                    Value::Keyword(key) if key.name() == "line" => line = value,
+                    Value::Keyword(key) if key.name() == "background" && value != Value::Nil => {
+                        style.background = Some(face(heap, name, value)?);
+                    }
+                    _ => {}
+                }
+            }
+        }
         match heap
             .text(line)
             .is_none()
@@ -154,14 +183,18 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     let name = crate::views::buffer_name(heap, "open-buffer", arguments[0])?;
     let rendered = render(heap, "open-buffer", arguments[1])?;
     let mut bindings = Vec::new();
+    let mut directory = None;
     for pair in arguments[2..].chunks(2) {
         match pair {
             [Value::Keyword(option), value] if option.name() == "keys" => {
                 bindings = keys(heap, *value)?;
             }
+            [Value::Keyword(option), value] if option.name() == "directory" => {
+                directory = Some(PathBuf::from(print::display(heap, *value)));
+            }
             _ => {
                 return Err(Error::new(format!(
-                    "open-buffer takes :keys, not {}",
+                    "open-buffer takes :keys and :directory, not {}",
                     print::write(heap, pair[0])
                 )));
             }
@@ -174,10 +207,16 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             LinesBuffer {
                 scope,
                 styles: Vec::new(),
+                directory: None,
             }
         })
     });
     fill(editor, id, rendered);
+    if let Some((_, view)) = editor.applet_buffer_mut::<LinesBuffer>(id)
+        && directory.is_some()
+    {
+        view.directory = directory;
+    }
     let scope = editor
         .applet_buffer::<LinesBuffer>(id)
         .map(|(_, view)| view.scope);
@@ -214,16 +253,26 @@ fn current_line(_: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value,
     Ok(Value::Int(i64::try_from(line).unwrap_or(i64::MAX)))
 }
 
+fn number(heap: &Heap, value: Value) -> Result<usize, Error> {
+    match value {
+        Value::Int(number) => Ok(usize::try_from(number).unwrap_or(0)),
+        _ => Err(Error::new(format!(
+            "goto-line expects whole numbers, got {}",
+            print::write(heap, value)
+        ))),
+    }
+}
+
 fn goto_line(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
-    let Value::Int(line) = arguments[0] else {
-        return Err(Error::new(format!(
-            "goto-line expects a line number, got {}",
-            print::write(heap, arguments[0])
-        )));
+    let line = number(heap, arguments[0])?;
+    let column = match arguments.get(1) {
+        Some(column) => number(heap, *column)?,
+        None => 0,
     };
     let buffer = editor.buffer_mut();
-    let start = buffer.line_start(usize::try_from(line).unwrap_or(0));
-    buffer.set_point(start);
+    let start = buffer.line_start(line);
+    let end = buffer.line_end(line);
+    buffer.set_point((start + column).min(end));
     Ok(Value::Nil)
 }
 
@@ -231,7 +280,7 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>("open-buffer", 2, None, open);
     isolate.define_host_native::<Editor>("set-lines", 2, Some(2), set_lines);
     isolate.define_host_native::<Editor>("current-line", 0, Some(0), current_line);
-    isolate.define_host_native::<Editor>("goto-line", 1, Some(1), goto_line);
+    isolate.define_host_native::<Editor>("goto-line", 1, Some(2), goto_line);
     isolate.define_host_native::<Editor>("buffer-name", 0, Some(0), |heap, editor, _| {
         heap.string(editor.buffer().name())
             .map_err(|full| Error::new(full.to_string()))
@@ -309,6 +358,35 @@ mod tests {
         press(&mut editor, &mut ox, "n");
 
         assert_eq!(ox.eval(&mut editor, "(current-line)").unwrap(), "2");
+    }
+
+    #[test]
+    fn lines_can_carry_a_background_and_buffers_a_directory() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = format!("{:?}", folder.path().display().to_string());
+        let (mut editor, mut ox) = opened(&format!(
+            r#"(open-buffer "*dir*" [{{line: "marked" background: :marked}} {{line: ["  " ["x" :link]] background: :flagged}} "plain"] :directory {path}) (goto-line 1 2)"#
+        ));
+
+        assert_eq!(editor.line_style(0).background, Some(Highlight::Marked));
+        assert_eq!(editor.line_style(1).background, Some(Highlight::Flagged));
+        assert_eq!(editor.line_style(1).spans, [(2..3, Highlight::Link)]);
+        assert_eq!(editor.buffer().point(), editor.buffer().line_start(1) + 2);
+        assert!(
+            editor
+                .watched_directories()
+                .contains(&folder.path().to_path_buf())
+        );
+        assert_eq!(editor.default_directory(), folder.path());
+        assert_eq!(
+            ox.eval(
+                &mut editor,
+                r#"(open-buffer "*bad*" [{line: "x" background: :nope}])"#
+            )
+            .unwrap_err()
+            .message,
+            "open-buffer doesn't know the face :nope"
+        );
     }
 
     #[test]

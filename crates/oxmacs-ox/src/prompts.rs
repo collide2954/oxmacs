@@ -90,6 +90,18 @@ pub fn install(isolate: &mut Isolate, inbox: &Inbox) {
     isolate.define_host_native::<Editor>("prompt", 1, None, move |heap, editor, arguments| {
         prompt(heap, editor, arguments, &asking)
     });
+    let locating = Arc::clone(inbox);
+    isolate.define_host_native::<Editor>("prompt-path", 1, None, move |heap, editor, arguments| {
+        let question = print::display(heap, arguments[0]);
+        let directories = arguments[1..]
+            .chunks(2)
+            .any(|pair| matches!(pair, [Value::Keyword(option), value] if option.name() == "directories" && value.truthy()));
+        let (promise, reply) = reply(heap, &locating)?;
+        editor.prompt_path(&question, directories, move |_, path| {
+            reply.send(Answer::Text(path.display().to_string()));
+        });
+        Ok(promise)
+    });
     let deciding = Arc::clone(inbox);
     isolate.define_host_native::<Editor>(
         "yes-or-no",
@@ -185,6 +197,27 @@ mod tests {
         ox.tick(&mut editor);
         press(&mut editor, &mut ox, "n");
         assert_eq!(editor.message(), Some("no"));
+    }
+
+    #[test]
+    fn paths_are_asked_for_with_completion() {
+        let folder = tempfile::tempdir().unwrap();
+        std::fs::create_dir(folder.path().join("inner")).unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&folder.path().join("scratch.txt"));
+        let mut ox = Ox::new();
+
+        run(
+            &mut editor,
+            &mut ox,
+            r#"(defcommand where "Where" (message (str "at " (await (prompt-path "Directory: " :directories true)))))"#,
+            "where",
+        );
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Directory: ");
+        press(&mut editor, &mut ox, "i n n e r RET RET");
+
+        let expected = format!("at {}", folder.path().join("inner").display());
+        assert_eq!(editor.message(), Some(expected.as_str()));
     }
 
     #[test]

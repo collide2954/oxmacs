@@ -1,6 +1,15 @@
 use crate::plugins::Bundle;
 
-pub const BUNDLED: &[Bundle] = &[WEATHER];
+pub const BUNDLED: &[Bundle] = &[WEATHER, DIRED];
+
+const DIRED: Bundle = Bundle {
+    name: "dired",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/dired/plugin.ox")),
+        ("dired.ox", include_str!("../plugins/dired/dired.ox")),
+        ("listing.ox", include_str!("../plugins/dired/listing.ox")),
+    ],
+};
 
 const WEATHER: Bundle = Bundle {
     name: "weather",
@@ -245,5 +254,266 @@ mod tests {
         assert_eq!(shown(&editor, "*Weather*"), page);
         press(&mut editor, &mut ox, "q");
         assert_ne!(editor.buffer().name(), "*Weather*");
+    }
+}
+
+#[cfg(test)]
+mod dired {
+    use std::fs;
+    use std::path::{MAIN_SEPARATOR, Path};
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    use oxmacs_core::editor::Editor;
+    use oxmacs_core::input::KeySequence;
+    use oxmacs_core::theme::Highlight;
+
+    use crate::{Ox, Pace};
+
+    fn workspace() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.txt"), "hello").unwrap();
+        fs::write(dir.path().join("b.txt"), "bee").unwrap();
+        fs::create_dir(dir.path().join("sub")).unwrap();
+        fs::write(dir.path().join("sub").join("c.txt"), "sea").unwrap();
+        dir
+    }
+
+    fn listed(dir: &Path) -> (tempfile::TempDir, Editor, Ox) {
+        let home = tempfile::tempdir().unwrap();
+        fs::write(
+            home.path().join("init.ox"),
+            "(use-plugin dired :config {delete-to-trash: false})",
+        )
+        .unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        ox.start(&mut editor, Some(home.path()));
+        editor.open_file(dir);
+        settle(&mut editor, &mut ox);
+        (home, editor, ox)
+    }
+
+    fn settle(editor: &mut Editor, ox: &mut Ox) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while ox.tick(editor) != Pace::Idle
+            && editor.minibuffer().is_none()
+            && editor.question().is_none()
+            && Instant::now() < deadline
+        {
+            thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
+        let keys: KeySequence = notation.parse().unwrap();
+        for key in keys.keys() {
+            editor.handle_key(*key);
+            settle(editor, ox);
+        }
+    }
+
+    fn typed(editor: &mut Editor, ox: &mut Ox, text: &str) {
+        let notation: Vec<String> = text.chars().map(|c| c.to_string()).collect();
+        press(editor, ox, &notation.join(" "));
+    }
+
+    fn lines(editor: &Editor) -> Vec<String> {
+        editor
+            .buffer()
+            .contents()
+            .lines()
+            .skip(1)
+            .map(str::to_owned)
+            .collect()
+    }
+
+    fn at_point(editor: &Editor) -> String {
+        let buffer = editor.buffer();
+        let line = buffer.line_of(buffer.point());
+        buffer.text_in(buffer.point()..buffer.line_end(line))
+    }
+
+    #[test]
+    fn directories_open_in_a_listing_with_details() {
+        let dir = workspace();
+        let (_home, editor, _) = listed(dir.path());
+
+        assert_eq!(editor.buffer().name(), dir.path().display().to_string());
+        let lines = lines(&editor);
+        assert_eq!(lines.len(), 4);
+        assert!(lines[0].ends_with(".."), "{lines:?}");
+        assert!(lines[1].starts_with("   -  "), "{lines:?}");
+        assert!(
+            lines[1].ends_with(&format!("  sub{MAIN_SEPARATOR}")),
+            "{lines:?}"
+        );
+        assert!(
+            lines[2].starts_with("  5B  ") && lines[2].ends_with("  a.txt"),
+            "{lines:?}"
+        );
+        assert!(
+            lines[3].starts_with("  3B  ") && lines[3].ends_with("  b.txt"),
+            "{lines:?}"
+        );
+        assert_eq!(at_point(&editor), format!("sub{MAIN_SEPARATOR}"));
+        assert_eq!(
+            editor.line_style(2).spans.last().map(|span| span.1),
+            Some(Highlight::Link)
+        );
+    }
+
+    #[test]
+    fn listings_move_sort_and_hide_details() {
+        let dir = workspace();
+        let (_home, mut editor, mut ox) = listed(dir.path());
+
+        press(&mut editor, &mut ox, "(");
+        assert_eq!(
+            lines(&editor),
+            [
+                "  ..",
+                &format!("  sub{MAIN_SEPARATOR}"),
+                "  a.txt",
+                "  b.txt"
+            ]
+        );
+        press(&mut editor, &mut ox, "n n n");
+        assert_eq!(at_point(&editor), "b.txt");
+        press(&mut editor, &mut ox, "p");
+        assert_eq!(at_point(&editor), "a.txt");
+        press(&mut editor, &mut ox, "s");
+        assert!(
+            editor
+                .buffer()
+                .contents()
+                .lines()
+                .next()
+                .unwrap()
+                .ends_with("(newest first):")
+        );
+        assert_eq!(at_point(&editor), "a.txt");
+    }
+
+    #[test]
+    fn return_enters_directories_and_caret_comes_back() {
+        let dir = workspace();
+        let (_home, mut editor, mut ox) = listed(dir.path());
+
+        press(&mut editor, &mut ox, "RET");
+        assert_eq!(
+            editor.buffer().name(),
+            dir.path().join("sub").display().to_string()
+        );
+        assert!(lines(&editor).iter().any(|line| line.ends_with("c.txt")));
+        assert_eq!(editor.buffer_named(&dir.path().display().to_string()), None);
+
+        press(&mut editor, &mut ox, "^");
+        assert_eq!(editor.buffer().name(), dir.path().display().to_string());
+        assert_eq!(at_point(&editor), format!("sub{MAIN_SEPARATOR}"));
+
+        press(&mut editor, &mut ox, "n RET");
+        assert_eq!(editor.buffer().contents(), "hello");
+    }
+
+    #[test]
+    fn marks_and_flags_show_and_x_deletes_after_asking() {
+        let dir = workspace();
+        let (_home, mut editor, mut ox) = listed(dir.path());
+
+        press(&mut editor, &mut ox, "n m");
+        assert!(lines(&editor)[2].starts_with('*'));
+        assert_eq!(editor.line_style(3).background, Some(Highlight::Marked));
+        assert_eq!(at_point(&editor), "b.txt");
+        press(&mut editor, &mut ox, "d");
+        assert!(lines(&editor)[3].starts_with('D'));
+        press(&mut editor, &mut ox, "t");
+        assert!(lines(&editor)[2].starts_with(' '));
+        assert!(lines(&editor)[1].starts_with('*'));
+        press(&mut editor, &mut ox, "U x");
+        assert_eq!(editor.message(), Some("(No deletions requested)"));
+
+        press(&mut editor, &mut ox, "p d d x");
+        assert_eq!(
+            editor
+                .question()
+                .map(|question| question.prompt().to_owned()),
+            Some("Delete a.txt and b.txt? (y or n) ".to_owned())
+        );
+        press(&mut editor, &mut ox, "y");
+
+        assert!(!dir.path().join("a.txt").exists());
+        assert!(!dir.path().join("b.txt").exists());
+        assert_eq!(lines(&editor).len(), 2);
+        assert_eq!(editor.message(), Some("Deleted 2 files"));
+    }
+
+    #[test]
+    fn files_are_renamed_copied_and_directories_made() {
+        let dir = workspace();
+        let (_home, mut editor, mut ox) = listed(dir.path());
+
+        press(&mut editor, &mut ox, "n R");
+        assert_eq!(editor.minibuffer().unwrap().prompt(), "Rename a.txt to: ");
+        typed(&mut editor, &mut ox, "moved.txt");
+        press(&mut editor, &mut ox, "RET");
+        assert!(dir.path().join("moved.txt").exists());
+        assert!(!dir.path().join("a.txt").exists());
+        assert_eq!(editor.message(), Some("Moved 1 file"));
+
+        press(&mut editor, &mut ox, "g");
+        let line = lines(&editor)
+            .iter()
+            .position(|line| line.ends_with("b.txt"))
+            .unwrap();
+        let start = editor.buffer().line_start(line + 1);
+        editor.buffer_mut().set_point(start);
+        press(&mut editor, &mut ox, "C");
+        typed(&mut editor, &mut ox, "sub");
+        press(&mut editor, &mut ox, "RET RET");
+        assert_eq!(
+            fs::read_to_string(dir.path().join("sub").join("b.txt")).unwrap(),
+            "bee"
+        );
+        assert_eq!(editor.message(), Some("Copied 1 file"));
+
+        press(&mut editor, &mut ox, "+");
+        typed(&mut editor, &mut ox, "fresh");
+        press(&mut editor, &mut ox, "RET");
+        assert!(dir.path().join("fresh").is_dir());
+        assert_eq!(at_point(&editor), format!("fresh{MAIN_SEPARATOR}"));
+    }
+
+    #[test]
+    fn listings_follow_changes_on_disk() {
+        let dir = workspace();
+        let (_home, mut editor, mut ox) = listed(dir.path());
+        assert!(
+            editor
+                .watched_directories()
+                .contains(&dir.path().to_path_buf())
+        );
+
+        fs::write(dir.path().join("later.txt"), "new").unwrap();
+        editor.check_disk_changes();
+        settle(&mut editor, &mut ox);
+
+        assert!(
+            lines(&editor)
+                .iter()
+                .any(|line| line.ends_with("later.txt"))
+        );
+    }
+
+    #[test]
+    fn dired_jump_lists_the_current_file() {
+        let dir = workspace();
+        let (_home, mut editor, mut ox) = listed(dir.path());
+        editor.open_file(&dir.path().join("b.txt"));
+
+        press(&mut editor, &mut ox, "C-x C-j");
+
+        assert_eq!(editor.buffer().name(), dir.path().display().to_string());
+        assert_eq!(at_point(&editor), "b.txt");
     }
 }

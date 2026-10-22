@@ -107,6 +107,11 @@
          out))
      0 [])))
 
+(def (sort-by key coll)
+  (let [items (vec coll)]
+    (map (fn [pair] (nth items (nth pair 1)))
+         (sort (map (fn [i] [(key (nth items i)) i]) (range (count items)))))))
+
 (def (mapcat f coll & colls)
   (apply concat (apply map f coll colls)))
 

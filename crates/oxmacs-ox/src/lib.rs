@@ -1,6 +1,7 @@
 mod buffers;
 mod bundled;
 mod commands;
+mod hooks;
 mod log;
 mod mode;
 mod natives;
@@ -60,6 +61,7 @@ impl Ox {
         plugins::install(&mut isolate);
         views::install(&mut isolate);
         buffers::install(&mut isolate);
+        hooks::install(&mut isolate);
         let answers = prompts::Inbox::default();
         prompts::install(&mut isolate, &answers);
         if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
@@ -76,6 +78,7 @@ impl Ox {
     pub fn start(&mut self, editor: &mut Editor, home: Option<&Path>) {
         self.home = home.map(Path::to_path_buf);
         tools::install(editor);
+        hooks::watch(editor);
         plugins::discover(&mut self.isolate, editor, self.bundled, home);
         self.run_init(editor, home);
         plugins::wake_at_startup(&self.isolate, editor);
@@ -121,6 +124,7 @@ impl Ox {
     pub fn tick(&mut self, editor: &mut Editor) -> Pace {
         self.handle_requests(editor);
         plugins::wake_waiting(&mut self.isolate, editor);
+        hooks::run(&mut self.isolate, editor);
         commands::run_waiting(&mut self.isolate, editor);
         prompts::deliver(&mut self.isolate, &self.answers);
         if self.isolate.pending() > 0 {

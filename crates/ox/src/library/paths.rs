@@ -79,6 +79,19 @@ pub fn install(isolate: &mut Isolate) {
         };
         shown(heap, Some(&expanded))
     });
+    isolate.define_native_in(MODULE, "separator", 0, Some(0), |heap, _| {
+        heap.string(std::path::MAIN_SEPARATOR_STR).map_err(full)
+    });
+    isolate.define_native_in(MODULE, "abbreviate", 1, Some(1), |heap, arguments| {
+        let path = PathBuf::from(text(heap, "path/abbreviate", arguments[0])?);
+        let shown =
+            match home().and_then(|home| path.strip_prefix(&home).ok().map(Path::to_path_buf)) {
+                Some(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
+                Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+                None => path.display().to_string(),
+            };
+        heap.string(&shown).map_err(full)
+    });
     isolate.define_native_in(MODULE, "absolute?", 1, Some(1), |heap, arguments| {
         Ok(Value::Bool(
             Path::new(text(heap, "path/absolute?", arguments[0])?).is_absolute(),

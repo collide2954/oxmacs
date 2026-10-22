@@ -38,6 +38,12 @@ fn modified(metadata: &Metadata) -> Portable {
 }
 
 fn entry(path: &Path, metadata: &Metadata, link: bool) -> Portable {
+    let target = link
+        .then(|| fs::read_link(path).ok())
+        .flatten()
+        .map_or(Portable::Nil, |target| {
+            string(&target.display().to_string())
+        });
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
@@ -52,6 +58,7 @@ fn entry(path: &Path, metadata: &Metadata, link: bool) -> Portable {
         (keyword("path"), string(&path.display().to_string())),
         (keyword("dir"), Portable::Bool(metadata.is_dir())),
         (keyword("link"), Portable::Bool(link)),
+        (keyword("target"), target),
         (keyword("hidden"), Portable::Bool(name.starts_with('.'))),
         (keyword("size"), size),
         (keyword("modified"), modified(metadata)),

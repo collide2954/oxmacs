@@ -33,6 +33,27 @@ fn parse(heap: &mut Heap, value: Value) -> Result<Value, Error> {
                 print::write(heap, value)
             ))
         })?;
+    fields(heap, time)
+}
+
+fn local(heap: &mut Heap, value: Value) -> Result<Value, Error> {
+    let Value::Int(millis) = value else {
+        return Err(Error::new(format!(
+            "time/local expects milliseconds, got {}",
+            print::write(heap, value)
+        ))
+        .of(ErrorKind::Type));
+    };
+    let moment = jiff::Timestamp::from_millisecond(millis).map_err(|error| {
+        Error::new(format!("time/local can't use {millis}: {error}")).of(ErrorKind::Range)
+    })?;
+    fields(
+        heap,
+        moment.to_zoned(jiff::tz::TimeZone::system()).datetime(),
+    )
+}
+
+fn fields(heap: &mut Heap, time: DateTime) -> Result<Value, Error> {
     let fields = [
         ("year", Value::Int(i64::from(time.year()))),
         ("month", Value::Int(i64::from(time.month()))),
@@ -70,6 +91,9 @@ pub fn install(isolate: &mut Isolate) {
     });
     isolate.define_native_in(MODULE, "parse", 1, Some(1), |heap, arguments| {
         parse(heap, arguments[0])
+    });
+    isolate.define_native_in(MODULE, "local", 1, Some(1), |heap, arguments| {
+        local(heap, arguments[0])
     });
     for (name, factor) in [
         ("millis", 1),

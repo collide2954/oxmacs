@@ -38,6 +38,38 @@ fn directories_are_listed_by_name_with_their_details() {
     );
 }
 
+#[cfg(unix)]
+fn link(target: &Path, at: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, at)
+}
+
+#[cfg(windows)]
+fn link(target: &Path, at: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_file(target, at)
+}
+
+#[test]
+fn links_in_listings_say_where_they_point() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("real.txt");
+    fs::write(&target, "hello").unwrap();
+    if link(&target, &dir.path().join("shortcut")).is_err() {
+        return;
+    }
+    let mut isolate = Isolate::new();
+
+    let listed = evaluated(
+        &mut isolate,
+        &format!(
+            "(map (fn [entry] [entry.name entry.link (if entry.target (= entry.target {}) nil)]) (await (file/list {})))",
+            literal(&target),
+            literal(dir.path())
+        ),
+    );
+
+    assert_eq!(listed, r#"[["real.txt" false nil] ["shortcut" true true]]"#);
+}
+
 #[test]
 fn files_are_written_read_renamed_copied_and_removed() {
     let dir = tempfile::tempdir().unwrap();

@@ -73,6 +73,7 @@ struct Views {
 const FACES: &[(&str, Highlight)] = &[
     ("heading", Highlight::Heading),
     ("link", Highlight::Link),
+    ("symlink", Highlight::Symlink),
     ("comment", Highlight::Comment),
     ("doc-comment", Highlight::DocComment),
     ("keyword", Highlight::Keyword),

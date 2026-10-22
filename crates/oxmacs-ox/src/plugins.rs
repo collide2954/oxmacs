@@ -9,7 +9,7 @@ use ox::{Error, Isolate};
 use oxmacs_core::command::{DynamicSpec, Scope};
 use oxmacs_core::editor::Editor;
 
-use crate::{commands, log, views};
+use crate::{commands, hooks, log, views};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Bundle {
@@ -46,6 +46,9 @@ struct Manifest {
     settings: Vec<Setting>,
     startup_when: Option<String>,
     entry: String,
+    keys: Vec<(String, String)>,
+    start_screen: Vec<(String, String)>,
+    opens_directories: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -79,6 +82,23 @@ fn commands_of(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, Strin
             let name = keyword(name).ok_or_else(wrong)?;
             let summary = heap.text(summary).ok_or_else(wrong)?;
             Ok((name.to_owned(), summary.to_owned()))
+        })
+        .collect()
+}
+
+fn pairs_of(heap: &Heap, value: Value, wrong: &str) -> Result<Vec<(String, String)>, String> {
+    let text = |value: Value| match value {
+        Value::Keyword(name) | Value::Symbol(name) => Some(name.name().to_owned()),
+        _ => heap.text(value).map(str::to_owned),
+    };
+    heap.entries(value)
+        .ok_or_else(|| wrong.to_owned())?
+        .into_iter()
+        .map(|(key, item)| {
+            Ok((
+                text(key).ok_or_else(|| wrong.to_owned())?,
+                text(item).ok_or_else(|| wrong.to_owned())?,
+            ))
         })
         .collect()
 }
@@ -177,6 +197,9 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
         commands: Vec::new(),
         settings: Vec::new(),
         startup_when: None,
+        keys: Vec::new(),
+        start_screen: Vec::new(),
+        opens_directories: false,
     };
     for pair in options.chunks(2) {
         let [key, value] = pair else {
@@ -197,6 +220,17 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
                     .ok_or_else(|| ":entry must be a file name".to_owned())?;
                 entry.clone_into(&mut manifest.entry);
             }
+            Some("keys") => {
+                manifest.keys = pairs_of(heap, *value, ":keys must be a map of keys to commands")?;
+            }
+            Some("start-screen") => {
+                manifest.start_screen = pairs_of(
+                    heap,
+                    *value,
+                    ":start-screen must be a map of commands to descriptions",
+                )?;
+            }
+            Some("opens-directories") => manifest.opens_directories = value.truthy(),
             _ => {}
         }
     }
@@ -282,11 +316,37 @@ fn stub(editor: &mut Editor, plugin: &str, command: &str, summary: &str) {
 }
 
 fn stubs(editor: &mut Editor, plugin: &Plugin) {
-    if plugin.loaded {
-        return;
+    if !plugin.loaded {
+        for (command, summary) in &plugin.manifest.commands {
+            stub(editor, &plugin.manifest.name, command, summary);
+        }
     }
-    for (command, summary) in &plugin.manifest.commands {
-        stub(editor, &plugin.manifest.name, command, summary);
+    for (keys, command) in &plugin.manifest.keys {
+        let Some(id) = editor.command_named(command) else {
+            let missing = format!(
+                "{}'s key {keys} names no command {command}",
+                plugin.manifest.name
+            );
+            log::report(editor, &Error::new(missing), None);
+            continue;
+        };
+        if let Err(error) = editor.bind(Scope::Global, keys, id) {
+            log::report(editor, &Error::new(format!("{keys}: {error}")), None);
+        }
+    }
+    for (command, description) in &plugin.manifest.start_screen {
+        if let Some(id) = editor.command_named(command) {
+            editor.set_splash_entry(id, description.clone());
+        }
+    }
+    if plugin.manifest.opens_directories {
+        hooks::open_directories(editor, &plugin.manifest.name);
+    }
+}
+
+pub fn request_wake(editor: &mut Editor, name: &str) {
+    if let Some(plugins) = editor.applet_state_mut::<Plugins>() {
+        plugins.waking.push(name.to_owned());
     }
 }
 
