@@ -19,14 +19,21 @@ use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::record::{Family, RecordType};
 
-pub fn compile(heap: &mut Heap, form: &Syntax, source: Option<Rc<Source>>) -> Result<Code, Error> {
+pub fn compile(
+    heap: &mut Heap,
+    form: &Syntax,
+    source: Option<Rc<Source>>,
+    module: usize,
+) -> Result<Code, Error> {
     let mut compiler = Compiler {
         heap,
         current: Function::default(),
         outer: Vec::new(),
         source,
+        module,
     };
     compiler.current.code.source.clone_from(&compiler.source);
+    compiler.current.code.module = module;
     let target = compiler.reserve(1, form.span)?;
     compiler.expression(form, target)?;
     compiler.emit(Op::Return { from: target }, form.span);
@@ -67,6 +74,7 @@ struct Compiler<'a> {
     current: Function,
     outer: Vec<Function>,
     source: Option<Rc<Source>>,
+    module: usize,
 }
 
 fn assigns(form: &Syntax, name: &str) -> bool {
@@ -304,7 +312,8 @@ impl Compiler<'_> {
             Op::Jump { to: target }
             | Op::JumpUnless { to: target, .. }
             | Op::JumpIfSupplied { to: target, .. }
-            | Op::PushHandler { to: target, .. },
+            | Op::PushHandler { to: target, .. }
+            | Op::JumpIfDefined { to: target, .. },
         ) = self.current.code.ops.get_mut(jump)
         {
             *target = to;
@@ -335,6 +344,11 @@ impl Compiler<'_> {
             "defmacro" => Some(self.macro_definition(rest, target, span)),
             "match" => Some(self.match_form(rest, target, span, tail)),
             "try" => Some(self.try_form(rest, target, span)),
+            "defonce" => Some(self.define_once(rest, target, span)),
+            "module" => Some(Err(Error::at(
+                span,
+                "module headers belong at the top level of a file",
+            ))),
             "deferror" => Some(self.error_definition(rest, target, span)),
             "catch" => Some(Err(Error::at(span, "catch belongs inside try"))),
             "finally" => Some(Err(Error::at(span, "finally belongs inside try"))),
@@ -461,6 +475,27 @@ impl Compiler<'_> {
         );
         self.load(record, target, span)?;
         self.emit(Op::DefineGlobal { name, from: target }, span);
+        self.load(Value::Symbol(name), target, span)
+    }
+
+    fn define_once(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let [
+            Syntax {
+                datum: Datum::Symbol(name),
+                ..
+            },
+            value,
+        ] = parts
+        else {
+            return Err(Error::at(span, "defonce takes a name and a value"));
+        };
+        let name = Sym::intern(name);
+        let skip = self.current.code.ops.len();
+        self.emit(Op::JumpIfDefined { name, to: 0 }, span);
+        self.expression(value, target)?;
+        self.emit(Op::DefineGlobal { name, from: target }, span);
+        let end = self.here(span)?;
+        self.patch(skip, end);
         self.load(Value::Symbol(name), target, span)
     }
 
@@ -692,6 +727,7 @@ impl Compiler<'_> {
         self.outer.push(parent);
         self.current.code.name = name;
         self.current.code.source.clone_from(&self.source);
+        self.current.code.module = self.module;
         self.current.itself = name.zip(itself);
         let defaults = parameters.optional.len() + parameters.keywords.len();
         if defaults > 64 {

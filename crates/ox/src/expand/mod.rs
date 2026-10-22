@@ -10,10 +10,11 @@ use crate::value::Value;
 use crate::value::print;
 use crate::vm::Runtime;
 use crate::vm::build::{make_map, make_set, make_vector};
+use crate::vm::modules::{ModuleId, reference};
 
 const MAX_DEPTH: usize = 256;
 
-const SPECIAL: [&str; 18] = [
+const SPECIAL: [&str; 20] = [
     "if",
     "do",
     "def",
@@ -32,11 +33,14 @@ const SPECIAL: [&str; 18] = [
     "catch",
     "finally",
     "deferror",
+    "defonce",
+    "module",
 ];
 
-pub fn expand(runtime: &mut Runtime, form: &Syntax) -> Result<Syntax, Error> {
+pub fn expand(runtime: &mut Runtime, form: &Syntax, module: ModuleId) -> Result<Syntax, Error> {
     Expander {
         runtime,
+        module,
         locals: Vec::new(),
         depth: 0,
     }
@@ -45,6 +49,7 @@ pub fn expand(runtime: &mut Runtime, form: &Syntax) -> Result<Syntax, Error> {
 
 struct Expander<'r> {
     runtime: &'r mut Runtime,
+    module: ModuleId,
     locals: Vec<(Sym, Marks)>,
     depth: usize,
 }
@@ -188,8 +193,30 @@ fn syntax_of(heap: &Heap, value: Value, mark: u32, span: Span) -> Result<Syntax,
 }
 
 impl Expander<'_> {
+    fn module_for(&self, marks: &Marks) -> ModuleId {
+        marks
+            .last()
+            .and_then(|mark| self.runtime.module_of_mark(mark))
+            .unwrap_or(self.module)
+    }
+
+    fn reference(&self, form: &Syntax, name: &str) -> Syntax {
+        let home = self.module_for(&form.marks);
+        if home == self.module || self.bound(name, &form.marks) {
+            return form.clone();
+        }
+        match self.runtime.modules.get(home) {
+            Some(module) => rebuilt(
+                form,
+                Datum::Symbol(reference(&module.name, name).name().to_owned()),
+            ),
+            None => form.clone(),
+        }
+    }
+
     fn form(&mut self, form: &Syntax) -> Result<Syntax, Error> {
         match &form.datum {
+            Datum::Symbol(name) => Ok(self.reference(form, name)),
             Datum::List(items) => self.list(form, items),
             Datum::Vector(items) => Ok(rebuilt(form, Datum::Vector(self.all(items)?))),
             Datum::Map(items) => Ok(rebuilt(form, Datum::Map(self.all(items)?))),
@@ -229,16 +256,18 @@ impl Expander<'_> {
             return self.special(form, name, items);
         }
         if !self.bound(name, &head.marks)
-            && let Some(transformer) = self.runtime.macros.get(&Sym::intern(name)).copied()
+            && let Some((transformer, home)) = self
+                .runtime
+                .lookup_macro(self.module_for(&head.marks), Sym::intern(name))
         {
-            return self.call_macro(form, name, transformer, rest);
+            return self.call_macro(form, name, transformer, home, rest);
         }
         Ok(rebuilt(form, Datum::List(self.all(items)?)))
     }
 
     fn special(&mut self, form: &Syntax, name: &str, items: &[Syntax]) -> Result<Syntax, Error> {
         match name {
-            "quote" | "unquote" | "unquote-splicing" => Ok(form.clone()),
+            "quote" | "unquote" | "unquote-splicing" | "module" => Ok(form.clone()),
             "quasiquote" => {
                 let [_, template] = items else {
                     return Err(Error::at(form.span, "quasiquote takes one form"));
@@ -260,7 +289,11 @@ impl Expander<'_> {
                 }
                 Ok(rebuilt(form, Datum::List(out)))
             }
-            _ => Ok(rebuilt(form, Datum::List(self.all(items)?))),
+            _ => {
+                let mut out = vec![items[0].clone()];
+                out.extend(self.all(&items[1..])?);
+                Ok(rebuilt(form, Datum::List(out)))
+            }
         }
     }
 
@@ -468,6 +501,7 @@ impl Expander<'_> {
         form: &Syntax,
         name: &str,
         transformer: Value,
+        home: ModuleId,
         arguments: &[Syntax],
     ) -> Result<Syntax, Error> {
         if self.depth >= MAX_DEPTH {
@@ -484,7 +518,7 @@ impl Expander<'_> {
             .runtime
             .invoke(transformer, &values, form.span)
             .map_err(|error| error.or_at(form.span))?;
-        let mark = self.runtime.fresh_mark();
+        let mark = self.runtime.fresh_mark(home);
         let expansion =
             syntax_of(&self.runtime.heap, produced, mark, form.span).map_err(|bad| {
                 Error::at(

@@ -80,3 +80,13 @@ nil ;=> nil
 (set!) ;! set! takes a name and a value
 (set! x) ;! set! takes a name and a value
 (set! 1 2) ;! set! takes a name and a value
+
+;; globals can be redefined and defonce defines only once
+(def (g) 1) (def (f) (g)) (def (g) 2) (f) ;=> 2
+(defonce x 1) (defonce x 2) x ;=> 1
+(def x 1) (defonce x (/ 1 0)) x ;=> 1
+(defonce y 5) ;=> y
+
+;; module headers name what a file imports
+(module (import (nowhere))) ;! No module named nowhere
+(do (module)) ;! module headers belong at the top level of a file

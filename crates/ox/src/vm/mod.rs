@@ -1,5 +1,6 @@
 pub(crate) mod bind;
 pub(crate) mod build;
+pub(crate) mod modules;
 
 use build::{
     call_data, field, full, make_map, make_set, make_vector, no_field, raised, record_literal,
@@ -20,19 +21,44 @@ use crate::value::equal::identical;
 use crate::value::map::Map;
 use crate::value::record::Record;
 use crate::vm::bind::{Binding, bind};
+use modules::{Module, ModuleId};
 
 const MAX_FRAMES: usize = 400_000;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Runtime {
     pub heap: Heap,
-    pub globals: HashMap<Sym, Value>,
     pub field_scans: usize,
     pub apply: Value,
-    pub macros: HashMap<Sym, Value>,
     pub error_types: HashMap<ErrorKind, Value>,
+    pub modules: Vec<Module>,
+    pub module_ids: HashMap<String, ModuleId>,
+    mark_modules: HashMap<u32, ModuleId>,
     last_raised: Option<(Value, Vec<Trace>)>,
     marks: u32,
+}
+
+impl Default for Runtime {
+    fn default() -> Self {
+        let mut runtime = Self {
+            heap: Heap::default(),
+            field_scans: 0,
+            apply: Value::Nil,
+            error_types: HashMap::new(),
+            modules: Vec::new(),
+            module_ids: HashMap::new(),
+            mark_modules: HashMap::new(),
+            last_raised: None,
+            marks: 0,
+        };
+        runtime.module_named("ox");
+        runtime.module_named("user");
+        runtime
+    }
+}
+
+fn not_defined(name: Sym) -> Error {
+    Error::new(format!("{} is not defined", modules::display(name))).of(ErrorKind::Name)
 }
 
 struct Frame {
@@ -254,24 +280,28 @@ impl Runtime {
                 machine.set(to, value);
             }
             Op::Global { to, name } => {
-                let value = self.globals.get(&name).copied().ok_or_else(|| {
-                    Error::new(format!("{} is not defined", name.name())).of(ErrorKind::Name)
-                })?;
+                let value = self
+                    .lookup(machine.code.module, name)
+                    .ok_or_else(|| not_defined(name))?;
                 machine.set(to, value);
             }
             Op::DefineMacro { name, from } => {
-                self.macros.insert(name, machine.get(from));
+                self.define_macro(machine.code.module, name, machine.get(from));
             }
             Op::DefineGlobal { name, from } => {
-                self.globals.insert(name, machine.get(from));
+                self.define(machine.code.module, name, machine.get(from));
             }
             Op::SetGlobal { name, from } => {
-                let Some(slot) = self.globals.get_mut(&name) else {
-                    return Err(
-                        Error::new(format!("{} is not defined", name.name())).of(ErrorKind::Name)
-                    );
+                let value = machine.get(from);
+                let Some(slot) = self.assignable(machine.code.module, name) else {
+                    return Err(not_defined(name));
                 };
-                *slot = machine.get(from);
+                *slot = value;
+            }
+            Op::JumpIfDefined { name, to } => {
+                if self.defined(machine.code.module, name) {
+                    machine.pc = to as usize;
+                }
             }
             Op::Move { to, from } => machine.set(to, machine.get(from)),
             Op::Closure { to, function } => {
@@ -487,8 +517,12 @@ impl Runtime {
     }
 
     fn base_roots(&self) -> Vec<Value> {
-        let mut roots: Vec<Value> = self.globals.values().copied().collect();
-        roots.extend(self.macros.values().copied());
+        let mut roots: Vec<Value> = self
+            .modules
+            .iter()
+            .flat_map(|module| module.globals.values().chain(module.macros.values()))
+            .copied()
+            .collect();
         roots.extend(self.error_types.values().copied());
         roots.extend(self.last_raised.as_ref().map(|(value, _)| *value));
         roots.push(self.apply);
@@ -573,8 +607,9 @@ impl Runtime {
         Ok(value)
     }
 
-    pub fn fresh_mark(&mut self) -> u32 {
+    pub fn fresh_mark(&mut self, module: ModuleId) -> u32 {
         self.marks += 1;
+        self.mark_modules.insert(self.marks, module);
         self.marks
     }
 

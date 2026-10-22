@@ -102,6 +102,10 @@ pub enum Op {
     Jump {
         to: u32,
     },
+    JumpIfDefined {
+        name: Sym,
+        to: u32,
+    },
     JumpUnless {
         test: Register,
         to: u32,
@@ -155,5 +159,6 @@ pub struct Code {
     pub captures: Vec<Capture>,
     pub caches: Vec<Cell<Option<(Value, usize)>>>,
     pub source: Option<Rc<Source>>,
+    pub module: usize,
     pub spans: Vec<Span>,
 }

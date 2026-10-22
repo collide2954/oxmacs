@@ -8,9 +8,13 @@ use ox::{Isolate, read};
 
 fn main() -> ExitCode {
     let mut isolate = Isolate::new();
-    match env::args_os().nth(1) {
-        Some(path) => run_file(&mut isolate, Path::new(&path)),
-        None => repl(&mut isolate),
+    if let Some(path) = env::args_os().nth(1) {
+        let path = Path::new(&path);
+        isolate.add_root(path.parent().unwrap_or(Path::new(".")));
+        run_file(&mut isolate, path)
+    } else {
+        isolate.add_root(".");
+        repl(&mut isolate)
     }
 }
 

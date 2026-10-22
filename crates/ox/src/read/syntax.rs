@@ -22,6 +22,10 @@ pub enum Datum {
 pub struct Marks(Vec<u32>);
 
 impl Marks {
+    pub fn last(&self) -> Option<u32> {
+        self.0.last().copied()
+    }
+
     #[must_use]
     pub fn flipped(&self, mark: u32) -> Self {
         let mut marks = self.0.clone();
