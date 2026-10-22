@@ -1,7 +1,9 @@
+use std::any::Any;
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::compile::compile;
@@ -10,8 +12,9 @@ use crate::expand::expand;
 use crate::heap::{Heap, Rooted};
 use crate::library;
 use crate::native::{Control, Native, NativeFn};
+use crate::portable::{Failure, Portable};
 use crate::read::{self, Datum, Syntax};
-use crate::span::Source;
+use crate::span::{Source, Span};
 use crate::symbol::Sym;
 use crate::task::{Interrupter, Report, TaskId};
 use crate::value::Value;
@@ -19,14 +22,49 @@ use crate::value::print;
 use crate::value::promise::Promise;
 use crate::value::record::Family;
 use crate::vm::Runtime;
+use crate::vm::build::full;
 use crate::vm::modules::{Import, ModuleId, PRELUDE, USER};
 
 const PRELUDE_SOURCE: &str = include_str!("library/prelude/core.ox");
 
+pub(crate) fn work(
+    roots: &[PathBuf],
+    setup: Option<fn(&mut Isolate)>,
+    module: &str,
+    function: Sym,
+    arguments: &[Portable],
+) -> Result<Portable, Failure> {
+    let mut isolate = Isolate::new();
+    if let Some(setup) = setup {
+        setup(&mut isolate);
+        isolate.set_worker_setup(setup);
+    }
+    for root in roots {
+        isolate.add_root(root.clone());
+    }
+    let failed = |isolate: &mut Isolate, error: Error| {
+        let value = isolate
+            .runtime
+            .error_value(&error)
+            .ok()
+            .and_then(|value| isolate.runtime.portable(value, "from a worker").ok());
+        Failure {
+            value,
+            message: error.message,
+        }
+    };
+    match isolate.job(module, function, arguments) {
+        Ok(value) => isolate
+            .runtime
+            .portable(value, "from a worker")
+            .map_err(|error| failed(&mut isolate, error)),
+        Err(error) => Err(failed(&mut isolate, error)),
+    }
+}
+
 #[derive(Debug)]
 pub struct Isolate {
     runtime: Runtime,
-    roots: Vec<PathBuf>,
     loading: Vec<String>,
 }
 
@@ -54,7 +92,6 @@ impl Isolate {
     pub fn new() -> Self {
         let mut isolate = Self {
             runtime: Runtime::default(),
-            roots: Vec::new(),
             loading: Vec::new(),
         };
         library::install(&mut isolate);
@@ -88,7 +125,52 @@ impl Isolate {
     }
 
     pub fn add_root(&mut self, root: impl Into<PathBuf>) {
-        self.roots.push(root.into());
+        self.runtime.roots.push(root.into());
+    }
+
+    pub fn set_worker_setup(&mut self, setup: fn(&mut Isolate)) {
+        self.runtime.worker_setup = Some(setup);
+    }
+
+    pub fn define(&mut self, name: &str, value: Value) {
+        self.runtime.define(PRELUDE, Sym::intern(name), value);
+    }
+
+    pub fn call(&mut self, function: Value, arguments: &[Value]) -> Result<Value, Error> {
+        self.runtime.invoke(function, arguments, Span::new(0, 0))
+    }
+
+    pub fn foreign<T: Any>(&mut self, name: &str, value: T) -> Result<Value, Error> {
+        self.runtime.heap.foreign(name, value).map_err(full)
+    }
+
+    pub fn shared<T: Any + Send + Sync>(
+        &mut self,
+        name: &str,
+        value: Arc<T>,
+    ) -> Result<Value, Error> {
+        self.runtime.heap.shared(name, value).map_err(full)
+    }
+
+    fn job(&mut self, module: &str, function: Sym, arguments: &[Portable]) -> Result<Value, Error> {
+        let id = self.load_module(module)?;
+        let callee = self
+            .runtime
+            .modules
+            .get(id)
+            .and_then(|found| found.globals.get(&function))
+            .copied()
+            .ok_or_else(|| {
+                Error::new(format!(
+                    "{module} has no function named {}",
+                    function.name()
+                ))
+            })?;
+        let arguments = arguments
+            .iter()
+            .map(|argument| self.runtime.rebuild(argument))
+            .collect::<Result<Vec<_>, Error>>()?;
+        self.call(callee, &arguments)
     }
 
     pub fn load(&mut self, name: &str) -> Result<(), Error> {
@@ -112,11 +194,17 @@ impl Isolate {
                 continue;
             }
             let expanded = expand(&mut self.runtime, form, module)?;
+            let module_name = self
+                .runtime
+                .modules
+                .get(module)
+                .map_or_else(|| Sym::intern("user"), |found| Sym::intern(&found.name));
             let code = Rc::new(compile(
                 &mut self.runtime.heap,
                 &expanded,
                 Some(Rc::clone(&text)),
                 module,
+                module_name,
             )?);
             result = self.runtime.run(&code)?;
         }
@@ -130,6 +218,7 @@ impl Isolate {
             return Err(Error::new(format!("Import cycle: {}", chain.join(" → "))));
         }
         let path = self
+            .runtime
             .roots
             .iter()
             .map(|root| root.join(format!("{name}.ox")))

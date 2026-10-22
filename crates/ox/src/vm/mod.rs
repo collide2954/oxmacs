@@ -1,8 +1,10 @@
 pub(crate) mod bind;
 pub(crate) mod build;
+mod convert;
 pub(crate) mod machine;
 pub(crate) mod modules;
 mod tasks;
+mod workers;
 
 use build::{
     call_data, field, full, interrupt_marker, make_map, make_set, make_vector, no_field, raised,
@@ -11,14 +13,18 @@ use build::{
 
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::bytecode::{Capture, Code, Op};
 use crate::error::{Error, ErrorKind, Frame as Trace};
 use crate::heap::{Closure, Heap};
+use crate::isolate::Isolate;
 use crate::library::collections;
 use crate::native::Control;
+use crate::portable::{Portable, Signal};
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::task::{Interrupter, TaskId};
@@ -32,6 +38,7 @@ use crate::vm::bind::bind;
 use machine::{Caller, Fiber, Generator, Landing, Machine};
 use modules::{Module, ModuleId};
 use tasks::Task;
+use workers::Worker;
 
 #[derive(Debug)]
 pub struct Runtime {
@@ -47,11 +54,17 @@ pub struct Runtime {
     pub interrupter: Interrupter,
     tasks: VecDeque<Task>,
     blocked: Vec<Task>,
-    parked: Vec<(Fiber, Value)>,
+    parked: Vec<(Fiber, Wait)>,
     finished: Vec<(TaskId, Result<Value, Error>)>,
     unhandled: Vec<Error>,
     next_task: u64,
     running: Option<Value>,
+    pub(crate) roots: Vec<PathBuf>,
+    pub(crate) worker_setup: Option<fn(&mut Isolate)>,
+    signal: Arc<Signal>,
+    workers: Vec<Worker>,
+    stand_ins: HashMap<(Sym, Sym), Value>,
+    channels: HashMap<usize, Value>,
 }
 
 const CHECK_EVERY: u32 = 1024;
@@ -64,13 +77,30 @@ enum Flow {
     Yield(Value, Landing),
     Resume(Value, Landing),
     Await(Value, Landing),
+    Send(Value, Value, Landing),
+    Receive(Value, Landing),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
+enum Wait {
+    Promise(Value),
+    Receive(Value),
+    Send(Value, Portable),
+}
+
+impl Wait {
+    fn value(&self) -> Value {
+        match self {
+            Self::Promise(value) | Self::Receive(value) | Self::Send(value, _) => *value,
+        }
+    }
+}
+
+#[derive(Debug)]
 enum Stop {
     Finished(Value),
     Paused,
-    Blocked(Value, Landing),
+    Blocked(Wait, Landing),
 }
 
 type Step = Result<Flow, Error>;
@@ -95,6 +125,12 @@ impl Default for Runtime {
             unhandled: Vec::new(),
             next_task: 0,
             running: None,
+            roots: Vec::new(),
+            worker_setup: None,
+            signal: Arc::default(),
+            workers: Vec::new(),
+            stand_ins: HashMap::new(),
+            channels: HashMap::new(),
         };
         runtime.module_named("ox");
         runtime.module_named("user");
@@ -118,9 +154,9 @@ impl Runtime {
             match self.drive(&mut fiber, None, first.take())? {
                 Stop::Finished(value) => return Ok(value),
                 Stop::Paused => {}
-                Stop::Blocked(promise, landing) => {
-                    self.parked.push((fiber, promise));
-                    let step = self.wait_for(promise, landing);
+                Stop::Blocked(wait, landing) => {
+                    self.parked.push((fiber, wait.clone()));
+                    let step = self.wait_for(&wait, landing);
                     let Some((parked, _)) = self.parked.pop() else {
                         return Err(Error::new("A waiting evaluation was lost"));
                     };
@@ -215,33 +251,71 @@ impl Runtime {
                         Flow::Land(resumed, Value::Nil)
                     }
                 },
-                Flow::Await(promise, landing) => match self.heap.promise_of(promise) {
-                    Some(Promise::Delivered(value)) => Flow::Land(landing, value),
-                    Some(Promise::Failed(value)) => return Err(raised(&self.heap, value)),
-                    Some(Promise::Pending { .. }) => {
-                        self.heap
-                            .set_promise(promise, Promise::Pending { awaited: true });
-                        return Ok(Some(Stop::Blocked(promise, landing)));
-                    }
-                    None => {
-                        return Err(Error::new(format!(
-                            "await expects a promise, got {}",
-                            print::write(&self.heap, promise)
-                        ))
-                        .of(ErrorKind::Type));
-                    }
-                },
+                Flow::Await(..) | Flow::Send(..) | Flow::Receive(..) => {
+                    let (wait, landing) = self.wait_of(flow)?;
+                    let Some(step) = self.attempt(&wait, landing) else {
+                        self.blocked_on(&wait);
+                        return Ok(Some(Stop::Blocked(wait, landing)));
+                    };
+                    step?
+                }
             };
         }
     }
 
+    fn expected(&self, name: &str, wanted: &str, value: Value) -> Error {
+        Error::new(format!(
+            "{name} expects {wanted}, got {}",
+            print::write(&self.heap, value)
+        ))
+        .of(ErrorKind::Type)
+    }
+
+    fn wait_of(&self, flow: Flow) -> Result<(Wait, Landing), Error> {
+        match flow {
+            Flow::Await(promise, landing) => {
+                self.heap
+                    .promise_of(promise)
+                    .ok_or_else(|| self.expected("await", "a promise", promise))?;
+                Ok((Wait::Promise(promise), landing))
+            }
+            Flow::Receive(channel, landing) => {
+                self.heap
+                    .channel_of(channel)
+                    .ok_or_else(|| self.expected("receive", "a channel", channel))?;
+                Ok((Wait::Receive(channel), landing))
+            }
+            Flow::Send(channel, item, landing) => {
+                self.heap
+                    .channel_of(channel)
+                    .ok_or_else(|| self.expected("send", "a channel", channel))?;
+                let item = self.portable(item, "through a channel")?;
+                Ok((Wait::Send(channel, item), landing))
+            }
+            _ => Err(Error::new("Only promises and channels can be waited on")),
+        }
+    }
+
+    fn blocked_on(&mut self, wait: &Wait) {
+        match wait {
+            Wait::Promise(promise) => {
+                self.heap
+                    .set_promise(*promise, Promise::Pending { awaited: true });
+            }
+            Wait::Receive(channel) | Wait::Send(channel, _) => {
+                if let Some(channel) = self.heap.channel_of(*channel) {
+                    channel.watch(&self.signal);
+                }
+            }
+        }
+    }
+
     fn take_generator(&mut self, value: Value) -> Result<Option<(Machine, Landing)>, Error> {
+        if self.heap.generator_of(value).is_none() {
+            return Err(self.expected("next", "a generator", value));
+        }
         let Some(generator) = self.heap.generator_mut(value) else {
-            return Err(Error::new(format!(
-                "next expects a generator, got {}",
-                print::write(&self.heap, value)
-            ))
-            .of(ErrorKind::Type));
+            return Ok(None);
         };
         match std::mem::replace(generator, Generator::Running) {
             Generator::Ready(machine, landing) => Ok(Some((*machine, landing))),
@@ -495,17 +569,21 @@ impl Runtime {
         count: usize,
         landing: Landing,
     ) -> Step {
-        let argument = if count == 0 {
-            Value::Nil
-        } else {
-            machine.stack[slot + 1]
-        };
+        let arguments = &machine.stack[slot + 1..=slot + count];
+        let argument = arguments.first().copied().unwrap_or(Value::Nil);
         Ok(match control {
             Control::Yield => Flow::Yield(argument, landing),
             Control::Next => Flow::Resume(argument, landing),
             Control::Await => Flow::Await(argument, landing),
             Control::Generator => Flow::Land(landing, self.make_generator(argument)?),
             Control::Spawn => Flow::Land(landing, self.spawn_promise(argument)?),
+            Control::Send => Flow::Send(
+                argument,
+                arguments.get(1).copied().unwrap_or(Value::Nil),
+                landing,
+            ),
+            Control::Receive => Flow::Receive(argument, landing),
+            Control::Worker => Flow::Land(landing, self.start_worker(arguments)?),
         })
     }
 

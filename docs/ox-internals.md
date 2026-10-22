@@ -33,6 +33,7 @@ crates/ox/src/
   span.rs           Span and line and column lookup
   symbol.rs         process-wide interner: Sym for symbols and keywords
   task.rs           TaskId, Report and Interrupter for the host
+  portable.rs       values copied between isolates, channels and the wake-up signal
   error.rs          Error with an optional span
   bytecode.rs       instructions, Code objects, constant pools, span tables
   native.rs         native functions and their arity checks
@@ -45,7 +46,9 @@ crates/ox/src/
     bind.rs         binding arguments to parameters
     build.rs        building literals, reading fields, calling data
     machine.rs      a machine's stack, frames and handlers; fibers and generators
-    tasks.rs        spawning, cancelling, waiting on promises and the scheduler
+    tasks.rs        spawning, cancelling, waiting on promises and channels, and the scheduler
+    convert.rs      turning values into their portable form and back
+    workers.rs      starting worker threads and collecting their results
   heap/             typed arenas and rooted handles
     gc.rs           mark and sweep
   value/            Value, Ref and Kind, and the data types
@@ -56,6 +59,7 @@ crates/ox/src/
     equal.rs        structural equality and hashing
     print.rs        display and write
     promise.rs      promise states
+    foreign.rs      Rust values held by Ox
   library/          natives, grouped by area, and the Ox prelude
     numbers.rs      arithmetic and comparison
     collections.rs  sequences, vectors, maps, sets, records
@@ -89,7 +93,7 @@ pub struct Ref { kind: Kind, index: u32 }
 ```
 
 - **Size.** A value is 16 bytes and `Copy`. Code outside `value.rs` uses constructors and accessors only, so a NaN-boxed 8-byte form can replace it later.
-- **Heap kinds.** `Kind` names the arena: String, Pair, BigInt, Vector, VecNode, Map, MapNode, Record, RecordType, Closure, Code, Atom, Cell (a captured variable that is assigned), Native, Foreign, Task, Promise, Syntax.
+- **Heap kinds.** `Kind` names the arena: String, Pair, BigInt, Vector, VecNode, Map, MapNode, Record, RecordType, Closure, Code, Atom, Cell (a captured variable that is assigned), Native, Foreign, Generator, Promise, Channel, Identifier.
 - **Equality.** `=` is structural for strings, lists, vectors, maps and records, and a list equals a vector with the same items, so `nil`, the empty list, equals `[]`. On floats `=` is an equivalence: NaN equals NaN, and `0.0` differs from `-0.0`. `==` compares numbers by IEEE value. `identical?` compares references.
 - **Hashing.** Structural and consistent with `=`, so a list and a vector with the same items hash alike. Strings cache their hash.
 - **Symbols and keywords.** Interned once per process (a read-mostly `RwLock` table of leaked names), so a symbol means the same thing in every isolate.
@@ -180,7 +184,10 @@ pub struct Ref { kind: Kind, index: u32 }
 - **Promises.** `yield`, `next`, `await`, `generator` and `spawn-call` are control natives: ordinary function values that the interpreter handles itself, so they can be passed around and called in tail position. `await` on a pending promise blocks the whole task, and when it is delivered (by `deliver`, by a finished task, or by the host with `isolate.resolve(p, v)` or `isolate.reject(p, message)`) the task becomes runnable again. `eval` runs other tasks while it waits, and raises "Nothing can deliver this promise" when none are left.
 - **Green tasks.** `(spawn …)` is `(spawn-call (fn [] …))`, which starts a task and returns a promise of its result. A failure that nothing is waiting for is listed in the report's `unhandled`.
 - **Scheduler.** The host starts tasks with `isolate.spawn(f, args)` and runs them with `isolate.run(budget) -> Report { finished, unhandled, pending }`. Tasks take turns, each with an equal share of what is left of the budget, and a task that pauses goes to the back of the queue. The editor calls it once per frame with about 4 ms; the `ox` tool calls it in a loop.
-- **Workers.** `spawn-worker` starts another isolate on a thread. Messages are deep-copied into a heap-independent `Portable` form, with strings in `Arc<str>`, and rebuilt in the receiving heap. A shared frozen arena for large values can come after phase 1 if the benchmarks call for it.
+- **Workers.** `(worker 'module 'function args…)` starts a fresh isolate on its own thread, with the same module roots and the host's worker setup (`isolate.set_worker_setup`, which installs natives). It loads the module, calls the function and returns a promise of its result. The worker ends when the function returns, along with any tasks it started, and C-g does not reach it.
+- **Messages.** Arguments, results and channel items are deep-copied into a heap-independent `Portable` form, with strings in `Arc<str>`, and rebuilt in the receiving heap. Records come back as the receiver's own type when it has loaded the module that defines it, and otherwise as a stand-in type with the same name and fields. Channels and shared Rust values cross by reference. Functions, atoms, generators, promises and local Rust values can't be copied. A shared frozen arena for large values can come after phase 1 if the benchmarks call for it.
+- **Channels.** `(chan n)` holds up to n items (32 by default) behind a mutex, so isolates on different threads can share one. `send` waits while it is full and `receive` while it is empty. After `close`, `receive` gives nil once the items run out, and `done?` turns true. Within one isolate a channel copies its items too, so a channel behaves the same whoever is on the other end.
+- **Waiting on other threads.** An isolate with nothing runnable sleeps on a condition variable that channels and finished workers signal. It raises "Nothing can send to this channel" (or the matching message) only when no worker is running and no other isolate holds the channel.
 
 ## Modules and the cache
 
@@ -201,7 +208,7 @@ isolate.define("ox string", "upcase", native(|_: &mut Ctx, s: Str| Ok(s.to_upper
 ```
 
 - **Conversions.** `FromOx` and `IntoOx` are implemented for `i64`, `f64`, `bool`, `char`, `String`, `Str` (a rooted string handle), `Value`, `Vec<T>`, `Option<T>` and `Result`. Arity adapters for 0 to 6 arguments are generated by `macro_rules`, with no procedural macro and so no build cost.
-- **Foreign values.** `ctx.foreign(T)` wraps any `T: Any + Send` (in phase 2, editor objects such as buffers and windows), and `ctx.foreign_ref::<T>(v)` gets it back with a type check.
+- **Foreign values.** `isolate.foreign(name, T)` (or `heap.foreign` inside a native) wraps any `T: Any` as an opaque handle that prints as `#<name>`, and `heap.foreign_of::<T>(v)` gets it back with a type check. `isolate.shared(name, Arc<T>)` wraps a `T: Send + Sync` that can also cross to workers, such as a buffer snapshot. Handles compare by identity and drop the Rust value when collected. Fields and methods come with the editor API in phase 2. `isolate.define(name, value)` and `isolate.call(f, args)` pass values between the host and Ox.
 
 ## Testing and benchmarks
 

@@ -59,6 +59,8 @@ fn scalar(heap: &Heap, value: Value) -> u64 {
                 tagged(7, hash)
             } else if let Some(number) = heap.bigint_of(value) {
                 tagged(8, digest(number))
+            } else if let Some(address) = heap.address_of(value) {
+                tagged(12, digest(address))
             } else {
                 tagged(9, digest(reference))
             }
@@ -176,6 +178,9 @@ fn same_contents(heap: &Heap, a: Value, b: Value) -> bool {
         (Value::Ref(left), Value::Ref(right)) => match (left.kind, right.kind) {
             (Kind::String, Kind::String) => heap.text(a) == heap.text(b),
             (Kind::BigInt, Kind::BigInt) => heap.bigint_of(a) == heap.bigint_of(b),
+            (Kind::Channel, Kind::Channel) | (Kind::Foreign, Kind::Foreign) => {
+                heap.address_of(a) == heap.address_of(b)
+            }
             _ => false,
         },
         _ => false,

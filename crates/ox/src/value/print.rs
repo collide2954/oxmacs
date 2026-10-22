@@ -58,6 +58,10 @@ fn write_into(heap: &Heap, value: Value, out: &mut String) {
                 out.push_str("#<atom ");
                 write_into(heap, held, out);
                 out.push('>');
+            } else if heap.channel_of(value).is_some() {
+                out.push_str("#<chan>");
+            } else if let Some(foreign) = heap.foreign_entry(value) {
+                let _ = write!(out, "#<{}>", foreign.name.name());
             } else if heap.generator_of(value).is_some() {
                 out.push_str("#<generator>");
             } else if let Some(promise) = heap.promise_of(value) {

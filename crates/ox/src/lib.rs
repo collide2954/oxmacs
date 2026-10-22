@@ -6,6 +6,7 @@ pub mod heap;
 mod isolate;
 mod library;
 pub mod native;
+mod portable;
 pub mod read;
 pub mod span;
 pub mod symbol;

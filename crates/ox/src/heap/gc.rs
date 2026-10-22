@@ -28,6 +28,8 @@ impl Heap {
             + self.identifiers.in_use()
             + self.generators.in_use()
             + self.promises.in_use()
+            + self.channels.in_use()
+            + self.foreigns.in_use()
     }
 
     pub fn wants_collection(&self) -> bool {
@@ -84,6 +86,8 @@ impl Heap {
         self.identifiers.unmark();
         self.generators.unmark();
         self.promises.unmark();
+        self.channels.unmark();
+        self.foreigns.unmark();
     }
 
     fn sweep(&mut self) -> usize {
@@ -104,6 +108,8 @@ impl Heap {
             + self.identifiers.sweep()
             + self.generators.sweep()
             + self.promises.sweep()
+            + self.channels.sweep()
+            + self.foreigns.sweep()
     }
 
     fn trace(&mut self, value: Value, gray: &mut Vec<Value>, codes: &mut Vec<Rc<Code>>) {
@@ -203,7 +209,9 @@ impl Heap {
                     gray.extend(record.fields.iter().copied());
                 }
             }
-            Kind::Generator | Kind::Promise => self.trace_task(reference.kind, index, gray, codes),
+            Kind::Generator | Kind::Promise | Kind::Channel | Kind::Foreign => {
+                self.trace_task(reference.kind, index, gray, codes);
+            }
         }
     }
 
@@ -214,16 +222,28 @@ impl Heap {
         gray: &mut Vec<Value>,
         codes: &mut Vec<Rc<Code>>,
     ) {
-        if kind == Kind::Generator {
-            if self.generators.mark(index)
-                && let Some(Generator::Ready(machine, _)) = self.generators.get(index)
-            {
-                machine.roots(gray, codes);
+        match kind {
+            Kind::Generator => {
+                if self.generators.mark(index)
+                    && let Some(Generator::Ready(machine, _)) = self.generators.get(index)
+                {
+                    machine.roots(gray, codes);
+                }
             }
-        } else if self.promises.mark(index)
-            && let Some(Promise::Delivered(held) | Promise::Failed(held)) = self.promises.get(index)
-        {
-            gray.push(*held);
+            Kind::Promise => {
+                if self.promises.mark(index)
+                    && let Some(Promise::Delivered(held) | Promise::Failed(held)) =
+                        self.promises.get(index)
+                {
+                    gray.push(*held);
+                }
+            }
+            Kind::Channel => {
+                self.channels.mark(index);
+            }
+            _ => {
+                self.foreigns.mark(index);
+            }
         }
     }
 }

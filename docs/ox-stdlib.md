@@ -73,7 +73,7 @@ Companion to [ox-design.md](ox-design.md) and [ox-internals.md](ox-internals.md)
 | Errors | `raise try catch maybe deferror error` |
 | Output | `print println pr prn` |
 | Generators | `gen generator yield next done?` |
-| Async | `spawn await promise deliver fail sleep` |
+| Async | `spawn await promise deliver fail worker chan send receive close chan? sleep` |
 | Tests | `test expect for-all expect-snapshot` |
 
 ## Modules
@@ -99,7 +99,7 @@ Modules are imported with aliases and called qualified:
 | `ox file` | `read write append lines exists? list glob walk remove rename copy metadata watch` (all async) |
 | `ox process` | `run`, which awaits `{status stdout stderr}`; `spawn`, with line streams; `which`, `env` |
 | `ox http` | `get post put patch delete request` (all async), each awaiting `{status headers body}`; JSON bodies are encoded and decoded automatically |
-| `ox async` | `chan send receive select timeout every all race` |
+| `ox async` | `select timeout every all race` |
 | `ox test` | the runner's API: run, filter and report; the test forms themselves are in the prelude |
 | `ox editor` | the editor API (phase 2) |
 | `ox ui` | views, the canvas and decorations (phase 2) |
@@ -108,7 +108,8 @@ Modules are imported with aliases and called qualified:
 
 - **Promises.** `(spawn expr)` runs code as a green task and returns a promise of its result. `await` waits for a promise anywhere, with no `async` marking, because tasks are stackful. `promise`, `deliver` and `fail` make promises by hand.
 - **Generators.** `(gen …)` makes a generator. `yield` works from any function the generator calls, `next` gives nil at the end, and `done?` tells the end apart from a yielded nil. Generators work with `map`, `filter`, `reduce` and `vec`.
-- **Channels.** `chan`, `send`, `receive` and `select` (with timeouts) carry streams between tasks and between worker isolates.
+- **Channels.** `chan`, `send`, `receive` and `close` carry streams between tasks and between worker isolates; `(chan)` holds 32 items, `send` waits when it is full, and after `close` `receive` gives nil and `done?` turns true. `select` (with timeouts) comes with `ox async`.
+- **Workers.** `(worker 'module 'function args…)` runs a module's function in its own isolate on another thread and returns a promise of the result. Only data, records, channels and shared Rust values can be sent.
 - **Timers.** `sleep` and `every`.
 - **Fairness.** All of these cooperate with the UI isolate's time slices, so waiting never blocks a keystroke.
 

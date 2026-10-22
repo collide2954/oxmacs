@@ -1,15 +1,19 @@
+use std::any::Any;
 use std::cell::Cell;
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
 use num_bigint::BigInt;
 
 use crate::bytecode::Code;
 use crate::native::Native;
+use crate::portable::Channel;
 use crate::read::Marks;
 use crate::span::Span;
 use crate::symbol::Sym;
+use crate::value::foreign::{Foreign, Holder};
 use crate::value::map::{Map, Node};
 use crate::value::promise::Promise;
 use crate::value::record::{Family, Record, RecordType};
@@ -153,6 +157,8 @@ pub struct Heap {
     identifiers: Arena<Identifier>,
     generators: Arena<Generator>,
     promises: Arena<Promise>,
+    channels: Arena<Arc<Channel>>,
+    foreigns: Arena<Foreign>,
     roots: Vec<Weak<Cell<Value>>>,
     next_collection: usize,
 }
@@ -448,6 +454,61 @@ impl Heap {
 
     pub(crate) fn promise_of(&self, value: Value) -> Option<Promise> {
         self.promises.get(reference(value, Kind::Promise)?).copied()
+    }
+
+    pub(crate) fn channel(&mut self, channel: Arc<Channel>) -> Result<Value, HeapFull> {
+        let index = self.channels.alloc(channel)?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Channel,
+            index,
+        }))
+    }
+
+    pub(crate) fn channel_of(&self, value: Value) -> Option<&Arc<Channel>> {
+        self.channels.get(reference(value, Kind::Channel)?)
+    }
+
+    fn holding(&mut self, name: Sym, holder: Holder) -> Result<Value, HeapFull> {
+        let index = self.foreigns.alloc(Foreign { name, holder })?;
+        Ok(Value::Ref(Ref {
+            kind: Kind::Foreign,
+            index,
+        }))
+    }
+
+    pub fn foreign<T: Any>(&mut self, name: &str, value: T) -> Result<Value, HeapFull> {
+        self.holding(Sym::intern(name), Holder::Local(Rc::new(value)))
+    }
+
+    pub fn shared<T: Any + Send + Sync>(
+        &mut self,
+        name: &str,
+        value: Arc<T>,
+    ) -> Result<Value, HeapFull> {
+        self.holding(Sym::intern(name), Holder::Shared(value))
+    }
+
+    pub(crate) fn shared_foreign(
+        &mut self,
+        name: Sym,
+        value: Arc<dyn Any + Send + Sync>,
+    ) -> Result<Value, HeapFull> {
+        self.holding(name, Holder::Shared(value))
+    }
+
+    pub fn foreign_of<T: Any>(&self, value: Value) -> Option<&T> {
+        self.foreign_entry(value)?.get()
+    }
+
+    pub(crate) fn foreign_entry(&self, value: Value) -> Option<&Foreign> {
+        self.foreigns.get(reference(value, Kind::Foreign)?)
+    }
+
+    pub(crate) fn address_of(&self, value: Value) -> Option<usize> {
+        if let Some(channel) = self.channel_of(value) {
+            return Some(Arc::as_ptr(channel).addr());
+        }
+        self.foreign_entry(value).map(Foreign::address)
     }
 
     pub(crate) fn set_promise(&mut self, value: Value, promise: Promise) -> bool {

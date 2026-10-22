@@ -15,6 +15,9 @@ pub enum Control {
     Await,
     Generator,
     Spawn,
+    Send,
+    Receive,
+    Worker,
 }
 
 #[derive(Clone)]

@@ -1,10 +1,12 @@
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::machine::{Fiber, Generator, Landing, Machine};
-use super::{Flow, Runtime, Step, Stop, interrupted};
+use super::{Flow, Runtime, Step, Stop, Wait, interrupted};
 use crate::bytecode::Code;
 use crate::error::{Error, ErrorKind};
+use crate::portable::{Received, Sent};
 use crate::span::Span;
 use crate::task::{Report, TaskId};
 use crate::value::Value;
@@ -12,6 +14,7 @@ use crate::value::promise::Promise;
 use crate::vm::build::{full, raised};
 
 const WAITING_SLICE: Duration = Duration::from_millis(10);
+const OUTSIDE_WAIT: Duration = Duration::from_millis(50);
 
 #[derive(Debug)]
 pub struct Task {
@@ -19,7 +22,11 @@ pub struct Task {
     fiber: Fiber,
     promise: Option<Value>,
     resume: Option<Step>,
-    waiting: Option<(Value, Landing)>,
+    waiting: Option<(Wait, Landing)>,
+}
+
+fn closed() -> Error {
+    Error::new("This channel is closed")
 }
 
 impl Runtime {
@@ -96,7 +103,7 @@ impl Runtime {
         Report {
             finished: std::mem::take(&mut self.finished),
             unhandled: std::mem::take(&mut self.unhandled),
-            pending: self.tasks.len() + self.blocked.len(),
+            pending: self.tasks.len() + self.blocked.len() + self.workers.len(),
         }
     }
 
@@ -118,8 +125,8 @@ impl Runtime {
             self.running = None;
             match outcome {
                 Ok(Stop::Paused) => self.tasks.push_back(task),
-                Ok(Stop::Blocked(promise, landing)) => {
-                    task.waiting = Some((promise, landing));
+                Ok(Stop::Blocked(wait, landing)) => {
+                    task.waiting = Some((wait, landing));
                     self.blocked.push(task);
                 }
                 Ok(Stop::Finished(value)) => self.complete(&task, Ok(value)),
@@ -128,28 +135,52 @@ impl Runtime {
         }
     }
 
-    fn outcome_of(&self, promise: Value, landing: Landing) -> Option<Step> {
-        match self.heap.promise_of(promise)? {
-            Promise::Pending { .. } => None,
-            Promise::Delivered(value) => Some(Ok(Flow::Land(landing, value))),
-            Promise::Failed(value) => Some(Err(raised(&self.heap, value))),
+    pub(super) fn attempt(&mut self, wait: &Wait, landing: Landing) -> Option<Step> {
+        match wait {
+            Wait::Promise(promise) => match self.heap.promise_of(*promise)? {
+                Promise::Pending { .. } => None,
+                Promise::Delivered(value) => Some(Ok(Flow::Land(landing, value))),
+                Promise::Failed(value) => Some(Err(raised(&self.heap, value))),
+            },
+            Wait::Receive(channel) => {
+                let channel = Arc::clone(self.heap.channel_of(*channel)?);
+                match channel.receive() {
+                    Received::Item(item) => {
+                        Some(self.rebuild(&item).map(|value| Flow::Land(landing, value)))
+                    }
+                    Received::Closed => Some(Ok(Flow::Land(landing, Value::Nil))),
+                    Received::Empty => None,
+                }
+            }
+            Wait::Send(channel, item) => {
+                let channel = self.heap.channel_of(*channel)?;
+                if !channel.has_room() {
+                    return None;
+                }
+                match channel.send(item.clone()) {
+                    Sent::Done => Some(Ok(Flow::Land(landing, Value::Nil))),
+                    Sent::Closed => Some(Err(closed())),
+                    Sent::Full => None,
+                }
+            }
         }
     }
 
     fn wake(&mut self) {
+        self.poll_workers();
         let mut index = 0;
         while index < self.blocked.len() {
-            let ready = self.blocked[index]
-                .waiting
-                .and_then(|(promise, landing)| self.outcome_of(promise, landing));
-            match ready {
-                Some(step) => {
-                    let mut task = self.blocked.remove(index);
-                    task.waiting = None;
-                    task.resume = Some(step);
-                    self.tasks.push_back(task);
-                }
-                None => index += 1,
+            let Some((wait, landing)) = self.blocked[index].waiting.take() else {
+                index += 1;
+                continue;
+            };
+            if let Some(step) = self.attempt(&wait, landing) {
+                let mut task = self.blocked.remove(index);
+                task.resume = Some(step);
+                self.tasks.push_back(task);
+            } else {
+                self.blocked[index].waiting = Some((wait, landing));
+                index += 1;
             }
         }
     }
@@ -169,29 +200,67 @@ impl Runtime {
                 } else {
                     error
                 };
-                let awaited = matches!(
-                    self.heap.promise_of(promise),
-                    Some(Promise::Pending { awaited: true })
-                );
-                let value = self.error_value(&error).unwrap_or(Value::Nil);
-                self.heap.set_promise(promise, Promise::Failed(value));
-                if !awaited {
-                    self.unhandled.push(error);
-                }
+                self.fail_promise(promise, error, None);
             }
         }
     }
 
-    pub(super) fn wait_for(&mut self, promise: Value, landing: Landing) -> Step {
+    pub(super) fn fail_promise(&mut self, promise: Value, error: Error, value: Option<Value>) {
+        let awaited = matches!(
+            self.heap.promise_of(promise),
+            Some(Promise::Pending { awaited: true })
+        );
+        let value = value
+            .or_else(|| self.error_value(&error).ok())
+            .unwrap_or(Value::Nil);
+        self.heap.set_promise(promise, Promise::Failed(value));
+        if !awaited {
+            self.unhandled.push(error);
+        }
+    }
+
+    fn shared(&self, wait: &Wait) -> bool {
+        match wait {
+            Wait::Promise(_) => false,
+            Wait::Receive(channel) | Wait::Send(channel, _) => self
+                .heap
+                .channel_of(*channel)
+                .is_some_and(|channel| Arc::strong_count(channel) > 1),
+        }
+    }
+
+    fn outside_help(&self, wait: &Wait) -> bool {
+        !self.workers.is_empty()
+            || self.shared(wait)
+            || self.blocked.iter().any(|task| {
+                task.waiting
+                    .as_ref()
+                    .is_some_and(|(waiting, _)| self.shared(waiting))
+            })
+    }
+
+    pub(super) fn wait_for(&mut self, wait: &Wait, landing: Landing) -> Step {
         loop {
-            if let Some(step) = self.outcome_of(promise, landing) {
+            self.wake();
+            if let Some(step) = self.attempt(wait, landing) {
                 return step;
             }
-            self.wake();
-            if self.tasks.is_empty() {
-                return Err(Error::new("Nothing can deliver this promise"));
+            if self.interrupter.take() {
+                return Err(interrupted());
             }
-            self.schedule(Instant::now() + WAITING_SLICE);
+            if !self.tasks.is_empty() {
+                self.schedule(Instant::now() + WAITING_SLICE);
+                continue;
+            }
+            if !self.outside_help(wait) {
+                return Err(Error::new(match wait {
+                    Wait::Promise(_) => "Nothing can deliver this promise",
+                    Wait::Receive(_) => "Nothing can send to this channel",
+                    Wait::Send(..) => "Nothing can receive from this channel",
+                }));
+            }
+            self.blocked_on(wait);
+            self.signal.wait(OUTSIDE_WAIT);
         }
     }
 
@@ -199,19 +268,21 @@ impl Runtime {
         for task in self.tasks.iter().chain(&self.blocked) {
             task.fiber.roots(roots, codes);
             roots.extend(task.promise);
-            roots.extend(task.waiting.map(|(promise, _)| promise));
+            roots.extend(task.waiting.as_ref().map(|(wait, _)| wait.value()));
             if let Some(Ok(Flow::Land(_, value))) = &task.resume {
                 roots.push(*value);
             }
         }
-        for (fiber, promise) in &self.parked {
+        for (fiber, wait) in &self.parked {
             fiber.roots(roots, codes);
-            roots.push(*promise);
+            roots.push(wait.value());
         }
         for (_, result) in &self.finished {
             if let Ok(value) = result {
                 roots.push(*value);
             }
         }
+        roots.extend(self.workers.iter().map(|worker| worker.promise));
+        roots.extend(self.stand_ins.values().copied());
     }
 }

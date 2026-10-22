@@ -15,6 +15,7 @@ pub struct RecordType {
     pub fields: Box<[Sym]>,
     pub constructor: Value,
     pub family: Family,
+    pub module: Sym,
 }
 
 #[derive(Debug, Clone)]

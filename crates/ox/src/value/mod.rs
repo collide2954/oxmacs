@@ -1,4 +1,5 @@
 pub(crate) mod equal;
+pub(crate) mod foreign;
 pub(crate) mod map;
 pub(crate) mod number;
 pub mod print;
@@ -46,6 +47,8 @@ pub enum Kind {
     Identifier,
     Generator,
     Promise,
+    Channel,
+    Foreign,
 }
 
 impl Value {

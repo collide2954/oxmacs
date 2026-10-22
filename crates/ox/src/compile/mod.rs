@@ -24,6 +24,7 @@ pub fn compile(
     form: &Syntax,
     source: Option<Rc<Source>>,
     module: usize,
+    module_name: Sym,
 ) -> Result<Code, Error> {
     let mut compiler = Compiler {
         heap,
@@ -31,6 +32,7 @@ pub fn compile(
         outer: Vec::new(),
         source,
         module,
+        module_name,
     };
     compiler.current.code.source.clone_from(&compiler.source);
     compiler.current.code.module = module;
@@ -75,6 +77,7 @@ struct Compiler<'a> {
     outer: Vec<Function>,
     source: Option<Rc<Source>>,
     module: usize,
+    module_name: Sym,
 }
 
 fn assigns(form: &Syntax, name: &str) -> bool {
@@ -458,6 +461,7 @@ impl Compiler<'_> {
                 fields: names,
                 constructor: Value::Nil,
                 family,
+                module: self.module_name,
             })
             .map_err(|full| Error::at(span, full.to_string()))?;
         let body = Body::Record {
