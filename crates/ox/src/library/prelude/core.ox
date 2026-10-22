@@ -192,3 +192,6 @@
 
 (defmacro spawn [& body]
   `(spawn-call (fn [] ~@body)))
+
+(def (every ms f)
+  (spawn ((fn tick [] (sleep ms) (unless (= (f) :stop) (tick))))))

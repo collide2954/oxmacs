@@ -10,7 +10,7 @@ use num_bigint::BigInt;
 
 use crate::bytecode::Code;
 use crate::native::Native;
-use crate::portable::Channel;
+use crate::portable::{Channel, Signal};
 use crate::read::Marks;
 use crate::span::Span;
 use crate::symbol::Sym;
@@ -23,6 +23,7 @@ use crate::value::{Kind, Ref, Value};
 use crate::vm::machine::Generator;
 
 mod gc;
+mod jobs;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeapFull;
@@ -166,6 +167,8 @@ pub struct Heap {
     roots: Vec<Weak<Cell<Value>>>,
     held: HashMap<Hold, Value>,
     next_hold: u64,
+    jobs: Vec<jobs::Job>,
+    signal: Arc<Signal>,
     next_collection: usize,
 }
 

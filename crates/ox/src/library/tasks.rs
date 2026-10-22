@@ -39,6 +39,7 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_control("send", 2, Some(2), Control::Send);
     isolate.define_control("receive", 1, Some(1), Control::Receive);
     isolate.define_control("worker", 2, None, Control::Worker);
+    isolate.define_control("sleep", 1, Some(1), Control::Sleep);
     isolate.define_native("chan", 0, Some(1), |heap, arguments| {
         let size = match arguments.first() {
             None => 32,

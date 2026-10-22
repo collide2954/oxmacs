@@ -66,6 +66,7 @@ impl Heap {
             .filter_map(Weak::upgrade)
             .map(|cell| cell.get())
             .chain(self.held.values().copied())
+            .chain(self.job_promises())
             .collect()
     }
 

@@ -1,9 +1,13 @@
 pub(crate) mod collections;
 mod errors;
+mod http;
+mod json;
 mod numbers;
 mod patterns;
 mod rules;
+mod strings;
 mod tasks;
+mod time;
 mod types;
 
 use std::io::{self, Write};
@@ -63,6 +67,10 @@ pub fn install(isolate: &mut Isolate) {
     rules::install(isolate);
     types::install(isolate);
     tasks::install(isolate);
+    time::install(isolate);
+    json::install(isolate);
+    http::install(isolate);
+    strings::install(isolate);
     isolate.define_native("=", 1, None, |heap, arguments| {
         Ok(Value::Bool(all_equal(heap, arguments)))
     });

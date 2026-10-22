@@ -27,6 +27,14 @@ use crate::vm::modules::{Import, ModuleId, PRELUDE, USER};
 
 const PRELUDE_SOURCE: &str = include_str!("library/prelude/core.ox");
 
+fn shown_name(module: &str, name: &str) -> String {
+    match module.rsplit_once('/') {
+        _ if module == "ox" => name.to_owned(),
+        Some((_, last)) => format!("{last}/{name}"),
+        None => format!("{module}/{name}"),
+    }
+}
+
 pub(crate) fn work(
     roots: &[PathBuf],
     setup: Option<fn(&mut Isolate)>,
@@ -408,8 +416,19 @@ impl Isolate {
         most: Option<usize>,
         function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
     ) {
+        self.define_native_in("ox", name, least, most, function);
+    }
+
+    pub fn define_native_in(
+        &mut self,
+        module: &str,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
+    ) {
         let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
-        self.install_native(name, least, most, function, None);
+        self.install_native(module, name, least, most, function, None);
     }
 
     pub fn define_host_native<T: Any>(
@@ -419,14 +438,25 @@ impl Isolate {
         most: Option<usize>,
         function: impl Fn(&mut Heap, &mut T, &[Value]) -> Result<Value, Error> + 'static,
     ) {
-        let missing = format!("{name} isn't available here");
+        self.define_host_native_in::<T>("ox", name, least, most, function);
+    }
+
+    pub fn define_host_native_in<T: Any>(
+        &mut self,
+        module: &str,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        function: impl Fn(&mut Heap, &mut T, &[Value]) -> Result<Value, Error> + 'static,
+    ) {
+        let missing = format!("{} isn't available here", shown_name(module, name));
         let function: Rc<NativeFn> = Rc::new(move |heap, host, arguments| {
             let Some(host) = host.downcast_mut::<T>() else {
                 return Err(Error::new(missing.clone()));
             };
             function(heap, host, arguments)
         });
-        self.install_native(name, least, most, function, None);
+        self.install_native(module, name, least, most, function, None);
     }
 
     pub(crate) fn define_control(
@@ -438,26 +468,27 @@ impl Isolate {
     ) {
         let message = format!("{name} can only be called from Ox");
         let function: Rc<NativeFn> = Rc::new(move |_, _, _| Err(Error::new(message.clone())));
-        self.install_native(name, least, most, function, Some(control));
+        self.install_native("ox", name, least, most, function, Some(control));
     }
 
     fn install_native(
         &mut self,
+        module: &str,
         name: &str,
         least: usize,
         most: Option<usize>,
         function: Rc<NativeFn>,
         control: Option<Control>,
     ) {
-        let name = Sym::intern(name);
+        let place = self.runtime.module_named(module);
         if let Ok(value) = self.runtime.heap.native(Native {
-            name,
+            name: Sym::intern(&shown_name(module, name)),
             least,
             most,
             function,
             control,
         }) {
-            self.runtime.define(PRELUDE, name, value);
+            self.runtime.define(place, Sym::intern(name), value);
         }
     }
 

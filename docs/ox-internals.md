@@ -51,6 +51,7 @@ crates/ox/src/
     workers.rs      starting worker threads and collecting their results
   heap/             typed arenas and rooted handles
     gc.rs           mark and sweep
+    jobs.rs         background work on threads that settles promises
   value/            Value, Ref and Kind, and the data types
     number.rs       Int, Float and BigInt arithmetic and promotion
     vector.rs       persistent vector (32-way trie plus tail)
@@ -63,7 +64,11 @@ crates/ox/src/
   library/          natives, grouped by area, and the Ox prelude
     numbers.rs      arithmetic and comparison
     collections.rs  sequences, vectors, maps, sets, records
-    tasks.rs        generators, promises and spawn
+    tasks.rs        generators, promises, channels, timers and spawn
+    time.rs         ox time: now, durations and parsing
+    json.rs         ox json: read and write
+    http.rs         ox http: get and percent-encoding
+    strings.rs      ox string
     prelude/*.ox    the parts of the core library written in Ox
   bin/ox.rs         `ox file.ox` and the REPL
 crates/ox/tests/

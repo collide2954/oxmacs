@@ -19,6 +19,7 @@ pub enum Control {
     Send,
     Receive,
     Worker,
+    Sleep,
 }
 
 #[derive(Clone)]

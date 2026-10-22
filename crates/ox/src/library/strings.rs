@@ -1,0 +1,189 @@
+use crate::error::{Error, ErrorKind};
+use crate::heap::Heap;
+use crate::isolate::Isolate;
+use crate::value::Value;
+use crate::value::print;
+use crate::vm::build::{full, make_vector};
+
+const MODULE: &str = "ox/string";
+
+fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> {
+    heap.text(value).ok_or_else(|| {
+        Error::new(format!(
+            "string/{name} expects a string, got {}",
+            print::write(heap, value)
+        ))
+        .of(ErrorKind::Type)
+    })
+}
+
+fn count(heap: &Heap, name: &str, value: Value) -> Result<usize, Error> {
+    match value {
+        Value::Int(number) => usize::try_from(number).map_err(|_| {
+            Error::new(format!(
+                "string/{name} expects a count of 0 or more, got {number}"
+            ))
+            .of(ErrorKind::Range)
+        }),
+        _ => Err(Error::new(format!(
+            "string/{name} expects a whole number, got {}",
+            print::write(heap, value)
+        ))
+        .of(ErrorKind::Type)),
+    }
+}
+
+fn strings(heap: &mut Heap, parts: &[String]) -> Result<Value, Error> {
+    let values = parts
+        .iter()
+        .map(|part| heap.string(part).map_err(full))
+        .collect::<Result<Vec<_>, _>>()?;
+    make_vector(heap, &values)
+}
+
+fn unary(isolate: &mut Isolate, name: &'static str, change: fn(&str) -> String) {
+    isolate.define_native_in(MODULE, name, 1, Some(1), move |heap, arguments| {
+        let changed = change(text(heap, name, arguments[0])?);
+        heap.string(&changed).map_err(full)
+    });
+}
+
+fn test(isolate: &mut Isolate, name: &'static str, holds: fn(&str, &str) -> bool) {
+    isolate.define_native_in(MODULE, name, 2, Some(2), move |heap, arguments| {
+        let whole = text(heap, name, arguments[0])?;
+        let part = text(heap, name, arguments[1])?;
+        Ok(Value::Bool(holds(whole, part)))
+    });
+}
+
+fn capitalize(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
+fn pad(heap: &mut Heap, name: &str, arguments: &[Value], start: bool) -> Result<Value, Error> {
+    let original = text(heap, name, arguments[0])?.to_owned();
+    let width = count(heap, name, arguments[1])?;
+    let fill = match arguments.get(2) {
+        Some(fill) => text(heap, name, *fill)?.to_owned(),
+        None => " ".to_owned(),
+    };
+    let missing = width.saturating_sub(original.chars().count());
+    let padding: String = fill.chars().cycle().take(missing).collect();
+    let padded = if start {
+        padding + &original
+    } else {
+        original + &padding
+    };
+    heap.string(&padded).map_err(full)
+}
+
+fn slice(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let whole = text(heap, "slice", arguments[0])?.to_owned();
+    let length = whole.chars().count();
+    let start = count(heap, "slice", arguments[1])?;
+    let end = match arguments.get(2) {
+        Some(end) => count(heap, "slice", *end)?,
+        None => length,
+    };
+    if start > end || end > length {
+        return Err(Error::new(format!(
+            "string/slice goes past the end of a {length}-character string"
+        ))
+        .of(ErrorKind::Range));
+    }
+    let part: String = whole.chars().skip(start).take(end - start).collect();
+    heap.string(&part).map_err(full)
+}
+
+pub fn install(isolate: &mut Isolate) {
+    unary(isolate, "trim", |text| text.trim().to_owned());
+    unary(isolate, "trim-start", |text| text.trim_start().to_owned());
+    unary(isolate, "trim-end", |text| text.trim_end().to_owned());
+    unary(isolate, "upper", str::to_uppercase);
+    unary(isolate, "lower", str::to_lowercase);
+    unary(isolate, "capitalize", capitalize);
+    test(isolate, "starts-with?", |whole, part| {
+        whole.starts_with(part)
+    });
+    test(isolate, "ends-with?", |whole, part| whole.ends_with(part));
+    test(isolate, "includes?", |whole, part| whole.contains(part));
+    isolate.define_native_in(MODULE, "blank?", 1, Some(1), |heap, arguments| {
+        Ok(Value::Bool(
+            text(heap, "blank?", arguments[0])?.trim().is_empty(),
+        ))
+    });
+    isolate.define_native_in(MODULE, "length", 1, Some(1), |heap, arguments| {
+        let length = text(heap, "length", arguments[0])?.chars().count();
+        Ok(Value::Int(i64::try_from(length).unwrap_or(i64::MAX)))
+    });
+    isolate.define_native_in(MODULE, "split", 2, Some(2), |heap, arguments| {
+        let whole = text(heap, "split", arguments[0])?;
+        let separator = text(heap, "split", arguments[1])?;
+        let parts: Vec<String> = whole.split(separator).map(str::to_owned).collect();
+        strings(heap, &parts)
+    });
+    isolate.define_native_in(MODULE, "lines", 1, Some(1), |heap, arguments| {
+        let parts: Vec<String> = text(heap, "lines", arguments[0])?
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        strings(heap, &parts)
+    });
+    isolate.define_native_in(MODULE, "chars", 1, Some(1), |heap, arguments| {
+        let chars: Vec<Value> = text(heap, "chars", arguments[0])?
+            .chars()
+            .map(Value::Char)
+            .collect();
+        make_vector(heap, &chars)
+    });
+    isolate.define_native_in(MODULE, "join", 1, Some(2), |heap, arguments| {
+        let (separator, items) = match arguments {
+            [items] => (String::new(), *items),
+            [separator, items, ..] => (text(heap, "join", *separator)?.to_owned(), *items),
+            [] => return Ok(Value::Nil),
+        };
+        let parts: Vec<String> = heap
+            .elements(items)
+            .ok_or_else(|| {
+                Error::new(format!(
+                    "string/join expects a sequence, got {}",
+                    print::write(heap, items)
+                ))
+                .of(ErrorKind::Type)
+            })?
+            .into_iter()
+            .map(|item| print::display(heap, item))
+            .collect();
+        heap.string(&parts.join(&separator)).map_err(full)
+    });
+    isolate.define_native_in(MODULE, "replace", 3, Some(3), |heap, arguments| {
+        let whole = text(heap, "replace", arguments[0])?;
+        let from = text(heap, "replace", arguments[1])?;
+        let to = text(heap, "replace", arguments[2])?;
+        let replaced = whole.replace(from, to);
+        heap.string(&replaced).map_err(full)
+    });
+    isolate.define_native_in(MODULE, "index-of", 2, Some(2), |heap, arguments| {
+        let whole = text(heap, "index-of", arguments[0])?;
+        let part = text(heap, "index-of", arguments[1])?;
+        Ok(whole.find(part).map_or(Value::Nil, |at| {
+            Value::Int(i64::try_from(whole[..at].chars().count()).unwrap_or(i64::MAX))
+        }))
+    });
+    isolate.define_native_in(MODULE, "repeat", 2, Some(2), |heap, arguments| {
+        let part = text(heap, "repeat", arguments[0])?;
+        let times = count(heap, "repeat", arguments[1])?;
+        let repeated = part.repeat(times);
+        heap.string(&repeated).map_err(full)
+    });
+    isolate.define_native_in(MODULE, "slice", 2, Some(3), slice);
+    isolate.define_native_in(MODULE, "pad-start", 2, Some(3), |heap, arguments| {
+        pad(heap, "pad-start", arguments, true)
+    });
+    isolate.define_native_in(MODULE, "pad-end", 2, Some(3), |heap, arguments| {
+        pad(heap, "pad-end", arguments, false)
+    });
+}

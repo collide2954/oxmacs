@@ -16,8 +16,7 @@ use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::bytecode::{Capture, Code, Op};
 use crate::error::{Error, ErrorKind, Frame as Trace};
@@ -25,13 +24,14 @@ use crate::heap::{Closure, Heap};
 use crate::isolate::Isolate;
 use crate::library::collections;
 use crate::native::Control;
-use crate::portable::{Portable, Signal};
+use crate::portable::Portable;
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::task::{Interrupter, TaskId};
 use crate::value::Value;
 use crate::value::equal::identical;
 use crate::value::map::Map;
+use crate::value::number::to_float;
 use crate::value::print;
 use crate::value::promise::Promise;
 use crate::value::record::Record;
@@ -39,7 +39,6 @@ use crate::vm::bind::bind;
 use machine::{Caller, Fiber, Generator, Landing, Machine};
 use modules::{Module, ModuleId};
 use tasks::Task;
-use workers::Worker;
 
 #[derive(Debug)]
 pub struct Runtime {
@@ -62,8 +61,6 @@ pub struct Runtime {
     running: Option<Value>,
     pub(crate) roots: Vec<PathBuf>,
     pub(crate) worker_setup: Option<fn(&mut Isolate)>,
-    signal: Arc<Signal>,
-    workers: Vec<Worker>,
     stand_ins: HashMap<(Sym, Sym), Value>,
     channels: HashMap<usize, Value>,
 }
@@ -80,6 +77,7 @@ enum Flow {
     Await(Value, Landing),
     Send(Value, Value, Landing),
     Receive(Value, Landing),
+    Sleep(Value, Landing),
 }
 
 #[derive(Debug, Clone)]
@@ -87,12 +85,14 @@ enum Wait {
     Promise(Value),
     Receive(Value),
     Send(Value, Portable),
+    Until(Instant),
 }
 
 impl Wait {
     fn value(&self) -> Value {
         match self {
             Self::Promise(value) | Self::Receive(value) | Self::Send(value, _) => *value,
+            Self::Until(_) => Value::Nil,
         }
     }
 }
@@ -128,8 +128,6 @@ impl Default for Runtime {
             running: None,
             roots: Vec::new(),
             worker_setup: None,
-            signal: Arc::default(),
-            workers: Vec::new(),
             stand_ins: HashMap::new(),
             channels: HashMap::new(),
         };
@@ -253,7 +251,7 @@ impl Runtime {
                         Flow::Land(resumed, Value::Nil)
                     }
                 },
-                Flow::Await(..) | Flow::Send(..) | Flow::Receive(..) => {
+                Flow::Await(..) | Flow::Send(..) | Flow::Receive(..) | Flow::Sleep(..) => {
                     let (wait, landing) = self.wait_of(flow)?;
                     let Some(step) = self.attempt(&wait, landing) else {
                         self.blocked_on(&wait);
@@ -294,7 +292,22 @@ impl Runtime {
                 let item = self.portable(item, "through a channel")?;
                 Ok((Wait::Send(channel, item), landing))
             }
-            _ => Err(Error::new("Only promises and channels can be waited on")),
+            Flow::Sleep(time, landing) => {
+                let millis = match time {
+                    Value::Int(millis) => to_float(millis),
+                    Value::Float(millis) => millis,
+                    _ => return Err(self.expected("sleep", "a number of milliseconds", time)),
+                };
+                let delay =
+                    Duration::try_from_secs_f64(millis.max(0.0) / 1000.0).unwrap_or(Duration::MAX);
+                let until = Instant::now()
+                    .checked_add(delay)
+                    .unwrap_or_else(Instant::now);
+                Ok((Wait::Until(until), landing))
+            }
+            _ => Err(Error::new(
+                "Only promises, channels and timers can be waited on",
+            )),
         }
     }
 
@@ -304,9 +317,10 @@ impl Runtime {
                 self.heap
                     .set_promise(*promise, Promise::Pending { awaited: true });
             }
+            Wait::Until(_) => {}
             Wait::Receive(channel) | Wait::Send(channel, _) => {
                 if let Some(channel) = self.heap.channel_of(*channel) {
-                    channel.watch(&self.signal);
+                    channel.watch(self.heap.signal());
                 }
             }
         }
@@ -592,6 +606,7 @@ impl Runtime {
             ),
             Control::Receive => Flow::Receive(argument, landing),
             Control::Worker => Flow::Land(landing, self.start_worker(arguments)?),
+            Control::Sleep => Flow::Sleep(argument, landing),
         })
     }
 

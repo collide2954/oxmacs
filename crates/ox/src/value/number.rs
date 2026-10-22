@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use num_bigint::BigInt;
-use num_traits::{ToPrimitive, Zero};
+use num_traits::{FromPrimitive, ToPrimitive, Zero};
 
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
@@ -134,6 +134,48 @@ impl Number {
             },
             |a, b| (a / b).floor(),
         ))
+    }
+
+    pub fn modulo(&self, other: &Self) -> Result<Self, Error> {
+        let quotient = self.floor_divide(other)?;
+        Ok(self.subtract(&other.multiply(&quotient)))
+    }
+
+    pub fn remainder(&self, other: &Self) -> Result<Self, Error> {
+        if other.is_zero() {
+            return Err(Error::new("Division by zero").of(ErrorKind::ZeroDivision));
+        }
+        Ok(self.exact(other, i64::checked_rem, |a, b| a % b, |a, b| a % b))
+    }
+
+    pub fn whole(&self, name: &str, how: fn(f64) -> f64) -> Result<Self, Error> {
+        let Self::Float(number) = self else {
+            return Ok(self.clone());
+        };
+        let rounded = how(*number);
+        if !rounded.is_finite() {
+            let shown = if rounded.is_nan() {
+                "nan"
+            } else if rounded > 0.0 {
+                "inf"
+            } else {
+                "-inf"
+            };
+            return Err(Error::new(format!("{name} can't make {shown} whole")).of(ErrorKind::Range));
+        }
+        Ok(BigInt::from_f64(rounded).map_or(Self::Float(rounded), shrink))
+    }
+
+    pub fn even(&self) -> Option<bool> {
+        match self {
+            Self::Int(number) => Some(number % 2 == 0),
+            Self::Big(number) => Some((number % 2_u8).is_zero()),
+            Self::Float(_) => None,
+        }
+    }
+
+    pub fn sign(&self) -> Option<Ordering> {
+        self.compare(&Self::Int(0))
     }
 
     pub fn negate(&self) -> Self {

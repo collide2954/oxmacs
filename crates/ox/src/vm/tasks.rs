@@ -104,7 +104,7 @@ impl Runtime {
     }
 
     pub fn pending(&self) -> usize {
-        self.tasks.len() + self.blocked.len() + self.workers.len()
+        self.tasks.len() + self.blocked.len() + self.heap.job_count()
     }
 
     pub fn run_tasks(&mut self, budget: Duration, host: &mut dyn Any) -> Report {
@@ -146,6 +146,9 @@ impl Runtime {
 
     pub(super) fn attempt(&mut self, wait: &Wait, landing: Landing) -> Option<Step> {
         match wait {
+            Wait::Until(deadline) => {
+                (Instant::now() >= *deadline).then_some(Ok(Flow::Land(landing, Value::Nil)))
+            }
             Wait::Promise(promise) => match self.heap.promise_of(*promise)? {
                 Promise::Pending { .. } => None,
                 Promise::Delivered(value) => Some(Ok(Flow::Land(landing, value))),
@@ -176,7 +179,7 @@ impl Runtime {
     }
 
     fn wake(&mut self) {
-        self.poll_workers();
+        self.poll_jobs();
         let mut index = 0;
         while index < self.blocked.len() {
             let Some((wait, landing)) = self.blocked[index].waiting.take() else {
@@ -231,6 +234,7 @@ impl Runtime {
     fn shared(&self, wait: &Wait) -> bool {
         match wait {
             Wait::Promise(_) => false,
+            Wait::Until(_) => true,
             Wait::Receive(channel) | Wait::Send(channel, _) => self
                 .heap
                 .channel_of(*channel)
@@ -239,7 +243,7 @@ impl Runtime {
     }
 
     fn outside_help(&self, wait: &Wait) -> bool {
-        !self.workers.is_empty()
+        self.heap.job_count() > 0
             || self.shared(wait)
             || self.blocked.iter().any(|task| {
                 task.waiting
@@ -266,10 +270,27 @@ impl Runtime {
                     Wait::Promise(_) => "Nothing can deliver this promise",
                     Wait::Receive(_) => "Nothing can send to this channel",
                     Wait::Send(..) => "Nothing can receive from this channel",
+                    Wait::Until(_) => "Nothing can wake this timer",
                 }));
             }
             self.blocked_on(wait);
-            self.signal.wait(OUTSIDE_WAIT);
+            let deadline = std::iter::once(wait)
+                .chain(
+                    self.blocked
+                        .iter()
+                        .filter_map(|task| task.waiting.as_ref().map(|(waiting, _)| waiting)),
+                )
+                .filter_map(|waiting| match waiting {
+                    Wait::Until(deadline) => Some(*deadline),
+                    _ => None,
+                })
+                .min();
+            let timeout = deadline.map_or(OUTSIDE_WAIT, |deadline| {
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(OUTSIDE_WAIT)
+            });
+            self.heap.signal().wait(timeout);
         }
     }
 
@@ -291,7 +312,6 @@ impl Runtime {
                 roots.push(*value);
             }
         }
-        roots.extend(self.workers.iter().map(|worker| worker.promise));
         roots.extend(self.stand_ins.values().copied());
     }
 }
