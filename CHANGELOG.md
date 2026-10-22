@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Pressing `g` repeatedly in dired no longer makes the cursor jump to the start of the line and back; plugin buffers keep point where it was when they redraw, and marks made while a listing refreshes are kept.
 - `swap!` no longer loses updates when tasks switch in the middle of it.
 
 ### Removed

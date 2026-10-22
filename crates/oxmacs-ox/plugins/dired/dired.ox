@@ -19,32 +19,30 @@
                      (max (l/first-entry-line listing) (min line (l/last-entry-line listing)))))]
     (goto-line target (l/name-column listing))))
 
-(def (redisplay listing focus)
-  (swap! listings assoc listing.directory listing)
-  (set-lines listing.directory (l/render listing (time/now)))
-  (place listing focus))
+(def (change directory edit focus)
+  (swap! listings update directory (fn [listing] (when listing (edit listing))))
+  (when-let [listing (get @listings directory)]
+    (set-lines directory (l/render listing (time/now)))
+    (when (= (buffer-name) directory)
+      (place listing focus))))
 
-(def (update change)
+(def (update-here edit)
   (when-let [listing (current)]
-    (redisplay (change listing) (focused listing))))
+    (change listing.directory edit (focused listing))))
 
 (def (keep-marks marks entries)
   (let [names (set (map :name entries))]
     (reduce (fn [kept name] (if (contains? names name) (assoc kept name (get marks name)) kept))
             {} (keys marks))))
 
-(def (reread listing)
-  (let [entries (l/sorted (await (file/list listing.directory)) listing.order)]
-    (assoc listing :entries entries :marks (keep-marks listing.marks entries))))
-
 (def (refresh directory)
-  (let [listing (get @listings directory)
-        fresh (reread listing)]
-    (if (= (buffer-name) directory)
-      (redisplay fresh (focused listing))
-      (do
-        (swap! listings assoc directory fresh)
-        (set-lines directory (l/render fresh (time/now)))))))
+  (let [entries (await (file/list directory))
+        shown (get @listings directory)]
+    (change directory
+            (fn [listing]
+              (let [sorted (l/sorted entries listing.order)]
+                (assoc listing :entries sorted :marks (keep-marks listing.marks sorted))))
+            (when (and shown (= (buffer-name) directory)) (focused shown)))))
 
 (def (refresh-all)
   (map (fn [directory]
@@ -123,20 +121,22 @@
   (when-let [listing (current)] (quietly (fn [] (refresh listing.directory)))))
 
 (defcommand dired-cycle-sort "Sort by name, newest or largest"
-  (update (fn [listing]
+  (update-here (fn [listing]
             (let [order (l/next-order listing.order)]
               (assoc listing :order order :entries (l/sorted listing.entries order))))))
 
 (defcommand dired-hide-details-mode "Show or hide sizes and dates"
-  (update (fn [listing] (assoc listing :details (not listing.details)))))
+  (update-here (fn [listing] (assoc listing :details (not listing.details)))))
 
 (def (mark-here mark)
   (when-let [listing (current)]
     (when-let [entry (l/entry-at listing (current-line))]
-      (redisplay (assoc listing :marks (if mark
-                                          (assoc listing.marks entry.name mark)
-                                          (dissoc listing.marks entry.name)))
-                 entry.name))))
+      (change listing.directory
+              (fn [listing]
+                (assoc listing :marks (if mark
+                                        (assoc listing.marks entry.name mark)
+                                        (dissoc listing.marks entry.name))))
+              entry.name))))
 
 (defcommand dired-mark "Mark this file and move on" (mark-here :marked) (step 1))
 (defcommand dired-flag-file-deletion "Flag this file for deletion and move on" (mark-here :flagged) (step 1))
@@ -144,10 +144,10 @@
 (defcommand dired-unmark-backward "Move back and remove that file's mark" (step -1) (mark-here nil))
 
 (defcommand dired-unmark-all-marks "Remove every mark and deletion flag"
-  (update (fn [listing] (assoc listing :marks {}))))
+  (update-here (fn [listing] (assoc listing :marks {}))))
 
 (defcommand dired-toggle-marks "Mark the unmarked files and unmark the marked ones"
-  (update (fn [listing]
+  (update-here (fn [listing]
             (assoc listing :marks
                    (reduce (fn [marks entry]
                              (let [mark (get listing.marks entry.name)]

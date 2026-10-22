@@ -185,18 +185,21 @@ fn plugin_buffer(editor: &Editor, name: &str) -> Option<BufferId> {
 }
 
 fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<usize>) {
-    let line = placed.unwrap_or_else(|| {
-        editor
-            .buffer_by_id(id)
-            .map_or(0, |buffer| buffer.line_of(buffer.point()))
-    });
-    editor.fill_buffer(id, &rendered.text);
+    let Some(buffer) = editor.buffer_by_id(id) else {
+        return;
+    };
+    let here = buffer.line_of(buffer.point());
+    let column = buffer.point() - buffer.line_start(here);
+    let (line, column) = placed.map_or((here, column), |line| (line, 0));
+    if buffer.contents() != rendered.text {
+        editor.fill_buffer(id, &rendered.text);
+    }
     if let Some((buffer, view)) = editor.applet_buffer_mut::<LinesBuffer>(id) {
         view.styles = rendered.styles;
         view.pills = rendered.pills;
         let line = line.min(buffer.len_lines().saturating_sub(1));
         let start = buffer.line_start(line);
-        buffer.set_point(start);
+        buffer.set_point((start + column).min(buffer.line_end(line)));
     }
 }
 
@@ -716,6 +719,27 @@ mod tests {
 
         press(&mut editor, &mut ox, "C-/");
         assert_eq!(editor.buffer().contents(), "hi");
+    }
+
+    #[test]
+    fn replacing_the_lines_keeps_point_where_it_was_on_its_line() {
+        let (mut editor, mut ox) =
+            opened(r#"(open-buffer "*list*" ["alpha" "beta" "gamma"]) (goto-line 1 3)"#);
+        let before = editor.buffer().point();
+
+        ox.eval(
+            &mut editor,
+            r#"(set-lines "*list*" ["alpha" "beta" "gamma"])"#,
+        )
+        .unwrap();
+        assert_eq!(editor.buffer().point(), before);
+
+        ox.eval(
+            &mut editor,
+            r#"(set-lines "*list*" ["alpha" "be" "gamma"])"#,
+        )
+        .unwrap();
+        assert_eq!(editor.buffer().point(), editor.buffer().line_start(1) + 2);
     }
 
     #[test]

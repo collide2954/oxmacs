@@ -467,6 +467,21 @@ mod dired {
     }
 
     #[test]
+    fn marks_made_while_a_listing_refreshes_are_kept() {
+        let dir = workspace();
+        let (_home, mut editor, mut ox) = listed(dir.path());
+        press(&mut editor, &mut ox, "n");
+
+        for key in ["g", "m"] {
+            let key: oxmacs_core::input::KeySequence = key.parse().unwrap();
+            editor.handle_key(key.keys()[0]);
+        }
+        settle(&mut editor, &mut ox);
+
+        assert!(lines(&editor)[2].starts_with('*'), "{:?}", lines(&editor));
+    }
+
+    #[test]
     fn listings_follow_changes_on_disk() {
         let dir = workspace();
         let (_home, mut editor, mut ox) = listed(dir.path());
