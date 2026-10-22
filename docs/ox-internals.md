@@ -104,7 +104,7 @@ pub struct Ref { kind: Kind, index: u32 }
 - **Numbers.** `Int(i64)` arithmetic is checked and promotes to a heap `BigInt` (num-bigint) on overflow; a `BigInt` that fits again demotes. `Float` is f64. `/` returns a float, `//` the floor, and `mod` and `rem` follow the floor and truncation rules.
 - **Vectors.** Clojure's persistent vector: a header (count, shift, root, tail) over 32-way `VecNode`s, which are ordinary heap objects. `get` and `assoc` take O(log32 n), and `conj` is amortized constant time through the tail. `transient` versions mutate nodes they own while being built.
 - **Maps and sets.** Keys keep insertion order, so printing, iteration, JSON round-trips and snapshots are predictable. A map is a persistent vector of entries in insertion order plus a HAMT (bitmap-indexed 32-way nodes and collision nodes) from each key to its entry. Removing a key leaves a hole that iteration skips, and the map is compacted when holes outnumber entries. Keyword keys print with the literal shorthand, `{name: "Ana" age: 3}`. A set is a map whose values are `true`. Small maps (up to 8 entries) are flat arrays scanned in order, which keep records-as-maps and keyword arguments cheap.
-- **Records.** Fields are declared with parameter syntax: `(defrecord Point [x y (z 0) {label nil}])` has required, optional and keyword fields, so `(Point 1 2)` and `(Point 1 2 3 label: "a")` both build one. It creates a `RecordType` (its name and fields) and instances with a field array. Records are immutable; `(with r :high 30)` copies one. `r.day` compiles to a field access with an inline cache keyed by record type; on a map it is `get`.
+- **Records.** Fields are declared with parameter syntax: `(defrecord Point [x y (z 0) {label nil}])` has required, optional and keyword fields, so `(Point 1 2)` and `(Point 1 2 3 label: "a")` both build one. It creates a `RecordType` (its name and fields) and instances with a field array. Records are immutable; `(with r :high 30)` copies one, and `assoc` of a field the record does not declare is an error ("Point has no field color"), so a record always has exactly its fields. A record prints as `#Point{x: 1 y: 2}`, which reads back as a record literal. `r.day` compiles to a field access with an inline cache keyed by record type; on a map it is `get`, and on `nil` it gives `nil`.
 - **Lists.** Immutable pairs. `()` is `nil`.
 - **Atoms.** The mutable cells: `atom`, `@a` (deref), `reset!` and `swap!`.
 
@@ -118,7 +118,7 @@ pub struct Ref { kind: Kind, index: u32 }
 
 - **Hygiene.** By sets of scopes (Flatt 2016). Each identifier carries a set of scopes. A binding is recorded as (symbol, scope set) to target, and resolution picks the binding whose scope set is the largest subset of the identifier's.
 - **Expansion.** Each macro expansion adds a use-site scope and flips a fresh introduction scope, so names a macro introduces never capture the user's names, and the reverse.
-- **Core forms.** After expansion only these remain: `quote`, `def`, `fn`, `let`, `if`, `do`, `set!`, `.`, `try`, `raise`, `await`, `yield`, `match`, `with-param`, `module`, `import` and `export`. Everything else is a macro, most of them in the prelude: `cond`, `when`, `unless`, `and`, `or`, `when-let`, `if-let`, `->`, `->>`, `for`, `defrecord`, `defcommand` (in phase 2) and `quasiquote`.
+- **Core forms.** After expansion only these remain: `quote`, `def`, `fn`, `let`, `if`, `do`, `set!`, `.`, `try`, `raise`, `await`, `yield`, `match`, `with-param`, `module`, `import` and `export`. Everything else is a macro, most of them in the prelude: `cond`, `when`, `unless`, `and`, `or`, `when-let`, `if-let`, `->`, `->>`, `for`, `defrecord`, `defcommand` (in phase 2) and `quasiquote`. `cond` takes `[test body…]` clauses ending in `[else …]`, the same shape as `match`.
 - **Macros.** `defmacro` defines a procedural macro: a function from syntax to syntax, run at expansion time in the compiling isolate, which may import other modules. `syntax-rules` is a macro that builds such a function from patterns and templates. Ox has no separate run-time and compile-time phases; a macro sees whatever its module imports.
 
 ## Compiler
@@ -169,7 +169,7 @@ pub struct Ref { kind: Kind, index: u32 }
 
 ## Modules and the cache
 
-- **Modules.** A file is a module, introduced by `(module name (import …) (export …))`. `(import (ox editor) (http :as h) (json :only [read]))` makes `h/get` and `read` available. Built-in modules (`ox core`, `ox string` and so on) are native or prelude modules. Plugin modules resolve relative to the plugin folder. Cyclic imports are an error that names the cycle.
+- **Modules.** A file is a module named by its path, introduced by `(module (import …) (export …))`. `(import (ox editor) (http :as h) (json :only [read]))` makes `h/get` and `read` available. Built-in modules (`ox core`, `ox string` and so on) are native or prelude modules. Plugin modules resolve relative to the plugin folder. Cyclic imports are an error that names the cycle.
 - **Live reload.** Reloading a module re-runs it into the same global slots, so its importers see the new definitions at once.
 - **Bytecode cache.** A compiled module serializes to a small versioned binary format:
   - constants, as data;

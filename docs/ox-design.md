@@ -44,7 +44,7 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
 ## The language
 
 ```clojure
-(module weather
+(module
   (import (ox editor) (ox http) (ox json) (ox ui))
   (export weather weather-refresh))
 
@@ -66,8 +66,8 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
 
 - **Reading.** `( )` lists, `[ ]` vectors, `{k: v}` maps, `:key` keywords, `"…{expr}…"` interpolation with `a.b` field access inside braces, and `#;` datum comments. Numbers can be written `0xff`, `0b1010`, `0o755` and `1_000_000`; `500ms`, `2s`, `5min` and `1h` are durations; `50%` reads as 0.5, and `#ff8800` as a color. The reader keeps exact source spans, so errors, tracebacks and highlighting point at the right characters.
 - **Documentation.** A string right after a definition's signature is its documentation, and its examples run as tests. An optional map after it holds metadata such as `{since: "0.2" deprecated: "use fetch"}`; help shows it, and the checker warns about uses of deprecated definitions.
-- **Definitions.** `def` for values and functions, `fn` for lambdas, and `let` with vector bindings and destructuring: `(let [{name: n} city] …)`.
-- **Modules.** Each file is one module with explicit imports and exports. There is no single global namespace; plugins see only what they import.
+- **Definitions.** `def` for values and functions, `fn` for lambdas, and `let` with vector bindings and destructuring: `(let [{name age} person] …)` binds `name` and `age` from `:name` and `:age`, `{name: n}` renames, and other keys match literally, as in `{"a b" x}`.
+- **Modules.** Each file is one module with explicit imports and exports, named by its path: `plugins/weather/forecast.ox` is `weather/forecast`, and its `(module …)` header lists only imports and exports. There is no single global namespace; plugins see only what they import. A module may define a name the prelude has, such as its own `count`; it wins inside that module only, and the checker warns unless the module says so with `(def ^:shadow count …)` or `(import (ox) :exclude [count])`.
 - **Macros.** Hygienic `syntax-rules`, plus procedural `defmacro` with hygiene helpers for anything harder.
 - **Scope.** Lexical only. Parameters (`with-param`) replace dynamic variables, with fast lookup.
 - **Types.** Annotations are optional; see "Types" below.
@@ -76,7 +76,7 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
 - **Collections.** Persistent vectors (RRB trees), maps and sets (HAMT). Updates share structure; `transient` batches edits inside one function.
 - **Mutation.** `atom` cells and editor objects (buffers, windows) are the mutable things.
 - **Control.** Tail calls are guaranteed. `async`/`await`, generators (`yield`) and `spawn` for green tasks.
-- **Errors.** `raise` any record value; `try`/`catch` matches on its type. The REPL and echo area show tracebacks you can click.
+- **Errors.** `raise` any record value; `(try (fetch city) (catch http-error e (log e.status)) (finally (close conn)))` catches by record type, and the checker knows the fields of `e`. The REPL and echo area show tracebacks you can click.
 
 ## Runtime and speed
 
@@ -312,7 +312,7 @@ oxmacs's support for Ox should be the best place to write Ox. The compiler, chec
 - **Live development, like CIDER.** Code evaluates in the running editor:
   - `C-x C-e` shows the result inline beside the form;
   - `C-c C-k` reloads the file in place;
-  - results are live values you can open and explore;
+  - results are live values you can open and explore. Large values are shortened to their first 100 items and 10 levels, as in `[1 2 3 … 9,997 more]`, and clicking opens the inspector; `prn` and `str` always print everything;
   - errors jump to source.
 
   A scratch worker isolate is one key away, for experiments that should not touch the editor.
