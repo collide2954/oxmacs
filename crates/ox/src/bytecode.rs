@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use crate::span::Span;
+use crate::span::{Source, Span};
 use crate::symbol::Sym;
 use crate::value::Value;
 
@@ -154,5 +154,6 @@ pub struct Code {
     pub functions: Vec<Rc<Code>>,
     pub captures: Vec<Capture>,
     pub caches: Vec<Cell<Option<(Value, usize)>>>,
+    pub source: Option<Rc<Source>>,
     pub spans: Vec<Span>,
 }

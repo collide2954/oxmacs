@@ -10,12 +10,14 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::bytecode::{Capture, Code, Op};
-use crate::error::{Error, ErrorKind};
+use crate::error::{Error, ErrorKind, Frame as Trace};
 use crate::heap::{Closure, Heap};
 use crate::library::collections;
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::value::Value;
+use crate::value::equal::identical;
+use crate::value::map::Map;
 use crate::value::record::Record;
 use crate::vm::bind::{Binding, bind};
 
@@ -29,6 +31,7 @@ pub struct Runtime {
     pub apply: Value,
     pub macros: HashMap<Sym, Value>,
     pub error_types: HashMap<ErrorKind, Value>,
+    last_raised: Option<(Value, Vec<Trace>)>,
     marks: u32,
 }
 
@@ -160,6 +163,25 @@ impl Machine {
         self.pc = 0;
     }
 
+    fn traceback(&self, at: usize) -> Vec<Trace> {
+        let fallback = Span::new(0, 0);
+        let mut frames = vec![Trace {
+            function: self.code.name,
+            span: self.code.spans.get(at).copied().unwrap_or(fallback),
+            source: self.code.source.clone(),
+        }];
+        let callers = self.frames.len().saturating_sub(1);
+        for frame in self.frames[..callers].iter().rev() {
+            let call = frame.pc.saturating_sub(1);
+            frames.push(Trace {
+                function: frame.code.name,
+                span: frame.code.spans.get(call).copied().unwrap_or(fallback),
+                source: frame.code.source.clone(),
+            });
+        }
+        frames
+    }
+
     fn unwind(&mut self) -> Option<Handler> {
         while let Some(handler) = self.handlers.pop() {
             if handler.frames == 0 || handler.frames > self.frames.len() {
@@ -208,11 +230,17 @@ impl Runtime {
                 Ok(Some(value)) => return Ok(value),
                 Ok(None) => {}
                 Err(error) => {
-                    let error = error.or_at(machine.code.spans[at]);
+                    let mut error = error.or_at(machine.code.spans[at]);
+                    if error.traceback.is_empty() {
+                        error.traceback = self
+                            .reraised(&error)
+                            .unwrap_or_else(|| machine.traceback(at));
+                    }
                     let Some(handler) = machine.unwind() else {
                         return Err(error);
                     };
                     let value = self.error_value(&error)?;
+                    self.last_raised = Some((value, error.traceback.clone()));
                     machine.set(handler.register, value);
                 }
             }
@@ -462,29 +490,87 @@ impl Runtime {
         let mut roots: Vec<Value> = self.globals.values().copied().collect();
         roots.extend(self.macros.values().copied());
         roots.extend(self.error_types.values().copied());
+        roots.extend(self.last_raised.as_ref().map(|(value, _)| *value));
         roots.push(self.apply);
         roots
     }
 
-    fn error_value(&mut self, error: &Error) -> Result<Value, Error> {
-        if let Some(value) = error.raised {
-            return Ok(value);
+    fn reraised(&self, error: &Error) -> Option<Vec<Trace>> {
+        let (value, frames) = self.last_raised.as_ref()?;
+        error
+            .raised
+            .is_some_and(|raised| identical(raised, *value))
+            .then(|| frames.clone())
+    }
+
+    fn frames_value(&mut self, frames: &[Trace]) -> Result<Value, Error> {
+        let mut items = Vec::with_capacity(frames.len());
+        for frame in frames {
+            let (line, column) = frame.line_column();
+            let function = match frame.function {
+                Some(name) => self.heap.string(name.name()).map_err(full)?,
+                None => Value::Nil,
+            };
+            let file = match &frame.source {
+                Some(source) => self.heap.string(&source.name).map_err(full)?,
+                None => Value::Nil,
+            };
+            let fields = [
+                (Value::keyword("fn"), function),
+                (Value::keyword("file"), file),
+                (
+                    Value::keyword("line"),
+                    Value::Int(i64::try_from(line).unwrap_or(0)),
+                ),
+                (
+                    Value::keyword("column"),
+                    Value::Int(i64::try_from(column).unwrap_or(0)),
+                ),
+            ];
+            let mut map = Map::EMPTY;
+            for (key, value) in fields {
+                map = map.assoc(&mut self.heap, key, value).map_err(full)?;
+            }
+            items.push(self.heap.map(map).map_err(full)?);
         }
-        let message = self.heap.string(&error.message).map_err(full)?;
-        let kind = self
-            .error_types
-            .get(&error.kind)
-            .or_else(|| self.error_types.get(&ErrorKind::Other))
-            .copied();
-        let Some(kind) = kind else {
-            return Ok(message);
+        make_vector(&mut self.heap, &items)
+    }
+
+    fn error_value(&mut self, error: &Error) -> Result<Value, Error> {
+        let value = if let Some(value) = error.raised {
+            value
+        } else {
+            let message = self.heap.string(&error.message).map_err(full)?;
+            let kind = self
+                .error_types
+                .get(&error.kind)
+                .or_else(|| self.error_types.get(&ErrorKind::Other))
+                .copied();
+            let Some(kind) = kind else {
+                return Ok(message);
+            };
+            self.heap
+                .record(Record {
+                    kind,
+                    fields: Box::new([message, Value::Nil]),
+                })
+                .map_err(full)?
         };
-        self.heap
-            .record(Record {
-                kind,
-                fields: Box::new([message, Value::Nil]),
-            })
-            .map_err(full)
+        let slot = self
+            .heap
+            .record_of(value)
+            .and_then(|record| record.slot(&self.heap, Sym::intern("traceback")))
+            .filter(|slot| {
+                self.heap
+                    .record_of(value)
+                    .and_then(|record| record.fields.get(*slot))
+                    == Some(&Value::Nil)
+            });
+        if let Some(slot) = slot {
+            let traceback = self.frames_value(&error.traceback)?;
+            self.heap.record_set(value, slot, traceback);
+        }
+        Ok(value)
     }
 
     pub fn fresh_mark(&mut self) -> u32 {

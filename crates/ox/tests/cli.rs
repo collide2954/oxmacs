@@ -58,6 +58,24 @@ fn errors_name_the_file_line_and_column() {
 }
 
 #[test]
+fn errors_inside_functions_print_each_frame() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("deep.ox");
+    fs::write(&path, "(def (f)\n  (/ 1 0))\n(f)\n").unwrap();
+
+    let output = ox().arg(&path).output().unwrap();
+
+    let file = path.display();
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        text(&output.stderr),
+        format!(
+            "{file}:2:3: Division by zero\n  in f at {file}:2:3\n  in top level at {file}:3:1\n"
+        )
+    );
+}
+
+#[test]
 fn missing_files_are_reported() {
     let output = ox().arg("no-such-file.ox").output().unwrap();
 

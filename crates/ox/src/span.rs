@@ -21,6 +21,12 @@ impl Span {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct Source {
+    pub name: String,
+    pub text: String,
+}
+
 fn offset(at: usize) -> u32 {
     u32::try_from(at).unwrap_or(u32::MAX)
 }

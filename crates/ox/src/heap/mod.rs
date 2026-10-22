@@ -403,6 +403,17 @@ impl Heap {
         }))
     }
 
+    pub fn record_set(&mut self, value: Value, slot: usize, field: Value) -> bool {
+        let Some(place) = reference(value, Kind::Record)
+            .and_then(|index| self.records.get_mut(index))
+            .and_then(|record| record.fields.get_mut(slot))
+        else {
+            return false;
+        };
+        *place = field;
+        true
+    }
+
     pub fn record_of(&self, value: Value) -> Option<&Record> {
         self.records.get(reference(value, Kind::Record)?)
     }

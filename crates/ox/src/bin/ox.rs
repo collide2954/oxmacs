@@ -22,15 +22,24 @@ fn run_file(isolate: &mut Isolate, path: &Path) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let Err(error) = isolate.eval(&source) else {
+    let Err(error) = isolate.eval_named(&path.display().to_string(), &source) else {
         return ExitCode::SUCCESS;
     };
-    match error.span {
-        Some(span) => {
+    match (error.traceback.first(), error.span) {
+        (Some(frame), _) => {
+            let (line, column) = frame.line_column();
+            eprintln!("{}:{line}:{column}: {}", frame.file(), error.message);
+        }
+        (None, Some(span)) => {
             let (line, column) = line_column(&source, span.start);
             eprintln!("{}:{line}:{column}: {}", path.display(), error.message);
         }
-        None => eprintln!("{}: {}", path.display(), error.message),
+        (None, None) => eprintln!("{}: {}", path.display(), error.message),
+    }
+    if error.traceback.len() > 1 {
+        for frame in &error.traceback {
+            eprintln!("  in {frame}");
+        }
     }
     ExitCode::FAILURE
 }

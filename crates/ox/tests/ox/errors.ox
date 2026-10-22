@@ -47,3 +47,14 @@
 ;; mistakes in try are reported
 (try 1 (catch error)) ;! catch takes a type, a name and a body
 (catch error e 1) ;! catch belongs inside try
+
+;; errors carry a traceback, innermost frame first
+(def (inner) (raise (error "deep"))) (def (outer) (+ 1 (inner))) (try (outer) (catch error e (map :fn e.traceback))) ;=> ["inner" "outer" nil]
+(try (/ 1 0) (catch error e (first e.traceback))) ;=> {fn: nil file: "<input>" line: 1 column: 6}
+(def (f)
+  (/ 1 0))
+(try (f) (catch error e (map :line e.traceback)))
+;=> [2 3]
+(def (f) (/ 1 0)) (try (try (f) (catch type-error e :no)) (catch error e (count e.traceback))) ;=> 2
+(def (f) (/ 1 0)) (try (try (f) (catch error e (raise e))) (catch error e (count e.traceback))) ;=> 2
+(deferror oops []) (try (raise (oops)) (catch oops e (vector? e.traceback))) ;=> true

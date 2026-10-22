@@ -7,6 +7,7 @@ use crate::heap::{Heap, Rooted};
 use crate::library;
 use crate::native::Native;
 use crate::read;
+use crate::span::Source;
 use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::print;
@@ -34,7 +35,7 @@ impl Isolate {
         library::install(&mut isolate);
         let apply = isolate.runtime.globals.get(&Sym::intern("apply")).copied();
         isolate.runtime.apply = apply.unwrap_or(Value::Nil);
-        if let Err(error) = isolate.eval(PRELUDE) {
+        if let Err(error) = isolate.eval_named("prelude/core.ox", PRELUDE) {
             panic!("The Ox prelude failed to load: {error}");
         }
         let found: Vec<(ErrorKind, Value)> = ErrorKind::NAMES
@@ -54,6 +55,14 @@ impl Isolate {
     }
 
     pub fn eval(&mut self, source: &str) -> Result<Value, Error> {
+        self.eval_named("<input>", source)
+    }
+
+    pub fn eval_named(&mut self, name: &str, source: &str) -> Result<Value, Error> {
+        let text = Rc::new(Source {
+            name: name.to_owned(),
+            text: source.to_owned(),
+        });
         let (forms, errors) = read::read(source);
         if let Some(error) = errors.into_iter().next() {
             return Err(Error::at(error.span, error.message));
@@ -61,7 +70,11 @@ impl Isolate {
         let mut result = Value::Nil;
         for form in &forms {
             let expanded = expand(&mut self.runtime, form)?;
-            let code = Rc::new(compile(&mut self.runtime.heap, &expanded)?);
+            let code = Rc::new(compile(
+                &mut self.runtime.heap,
+                &expanded,
+                Some(Rc::clone(&text)),
+            )?);
             result = self.runtime.run(&code)?;
         }
         Ok(result)
@@ -221,6 +234,18 @@ mod tests {
         drop(handle);
         isolate.collect();
         assert_eq!(isolate.runtime.heap.text(value), None);
+    }
+
+    #[test]
+    fn uncaught_errors_carry_their_frames() {
+        let mut isolate = Isolate::new();
+
+        let error = isolate
+            .eval_named("demo.ox", "(def (f)\n  (/ 1 0))\n(f)")
+            .unwrap_err();
+
+        let frames: Vec<String> = error.traceback.iter().map(ToString::to_string).collect();
+        assert_eq!(frames, ["f at demo.ox:2:3", "top level at demo.ox:3:1"]);
     }
 
     #[test]

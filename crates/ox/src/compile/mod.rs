@@ -14,17 +14,19 @@ use crate::expand::patterns::is_pattern;
 use crate::expand::quote::datum_value;
 use crate::heap::Heap;
 use crate::read::{Datum, Marks, Syntax};
-use crate::span::Span;
+use crate::span::{Source, Span};
 use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::record::{Family, RecordType};
 
-pub fn compile(heap: &mut Heap, form: &Syntax) -> Result<Code, Error> {
+pub fn compile(heap: &mut Heap, form: &Syntax, source: Option<Rc<Source>>) -> Result<Code, Error> {
     let mut compiler = Compiler {
         heap,
         current: Function::default(),
         outer: Vec::new(),
+        source,
     };
+    compiler.current.code.source.clone_from(&compiler.source);
     let target = compiler.reserve(1, form.span)?;
     compiler.expression(form, target)?;
     compiler.emit(Op::Return { from: target }, form.span);
@@ -64,6 +66,7 @@ struct Compiler<'a> {
     heap: &'a mut Heap,
     current: Function,
     outer: Vec<Function>,
+    source: Option<Rc<Source>>,
 }
 
 fn assigns(form: &Syntax, name: &str) -> bool {
@@ -688,6 +691,7 @@ impl Compiler<'_> {
         let parent = std::mem::take(&mut self.current);
         self.outer.push(parent);
         self.current.code.name = name;
+        self.current.code.source.clone_from(&self.source);
         self.current.itself = name.zip(itself);
         let defaults = parameters.optional.len() + parameters.keywords.len();
         if defaults > 64 {

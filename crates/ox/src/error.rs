@@ -1,6 +1,8 @@
 use std::fmt;
+use std::rc::Rc;
 
-use crate::span::Span;
+use crate::span::{Source, Span, line_column};
+use crate::symbol::Sym;
 use crate::value::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -28,11 +30,41 @@ impl ErrorKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Frame {
+    pub function: Option<Sym>,
+    pub span: Span,
+    pub source: Option<Rc<Source>>,
+}
+
+impl Frame {
+    pub fn file(&self) -> &str {
+        self.source
+            .as_ref()
+            .map_or("?", |source| source.name.as_str())
+    }
+
+    pub fn line_column(&self) -> (usize, usize) {
+        self.source
+            .as_ref()
+            .map_or((0, 0), |source| line_column(&source.text, self.span.start))
+    }
+}
+
+impl fmt::Display for Frame {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (line, column) = self.line_column();
+        let name = self.function.map_or("top level", Sym::name);
+        write!(formatter, "{name} at {}:{line}:{column}", self.file())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Error {
     pub message: String,
     pub span: Option<Span>,
     pub kind: ErrorKind,
     pub raised: Option<Value>,
+    pub traceback: Vec<Frame>,
 }
 
 impl Error {
@@ -42,6 +74,7 @@ impl Error {
             span: None,
             kind: ErrorKind::Other,
             raised: None,
+            traceback: Vec::new(),
         }
     }
 
