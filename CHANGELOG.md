@@ -10,6 +10,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Pressing `g` repeatedly in dired no longer makes the cursor jump to the start of the line and back; plugin buffers keep point where it was when they redraw, and marks made while a listing refreshes are kept.
 - `swap!` no longer loses updates when tasks switch in the middle of it.
 - Tracebacks of errors in Ox tasks no longer end with a frame at `?:0:0`.
+- Git status keeps the path you opened it from instead of the one Git resolves through symlinks, so visiting a file from it doesn't open a second buffer for a file that is already open, as happened on macOS.
 
 ### Removed
 

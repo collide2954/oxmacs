@@ -183,6 +183,28 @@ fn c_x_g_shows_the_status_with_point_on_the_first_file() {
 }
 
 #[test]
+fn c_x_g_in_a_subfolder_shows_the_whole_repository_by_the_path_you_came_from() {
+    let dir = repository();
+    let inner = dir.path().join("docs").join("notes");
+    fs::create_dir_all(&inner).unwrap();
+    let mut session = opened(&inner);
+
+    session.press("C-x g");
+
+    assert_eq!(
+        session.editor.buffer().name(),
+        format!("git: {}", folder_name(dir.path()))
+    );
+    assert_eq!(session.editor.default_directory(), dir.path());
+    assert!(
+        session
+            .editor
+            .watched_directories()
+            .contains(&dir.path().join(".git"))
+    );
+}
+
+#[test]
 fn outside_a_repository_c_x_g_says_so() {
     let dir = tempfile::tempdir().unwrap();
     let mut session = opened(dir.path());

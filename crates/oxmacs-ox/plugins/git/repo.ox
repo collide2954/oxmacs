@@ -27,11 +27,21 @@
 (def (git-with root args input)
   (output (await (process/run "git" (vec (concat base args)) :cwd root :input input))))
 
+(def (climb directory cdup)
+  (reduce (fn [dir part] (if (= part "..") (path/parent dir) dir))
+          directory (string/split cdup "/")))
+
 (def (locate directory)
-  (let [ran (await (run directory ["rev-parse" "--show-toplevel" "--absolute-git-dir"]))]
+  (let [ran (await (run directory ["rev-parse" "--show-cdup" "--git-dir"]))]
     (when (= ran.status 0)
-      (let [found (string/lines ran.stdout)]
-        {root: (native (nth found 0)) metadata: (native (nth found 1))}))))
+      (let [found (string/lines ran.stdout)
+            root (climb directory (nth found 0))
+            metadata (nth found 1)]
+        {root: root
+         metadata: (cond
+                     [(not (path/absolute? metadata)) (path/join directory metadata)]
+                     [(= (path/name metadata) ".git") (path/join root ".git")]
+                     [else (native metadata)])}))))
 
 (def (records text)
   (vec (filter (fn [record] (not (= record ""))) (string/split text "\0"))))
