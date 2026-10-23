@@ -80,6 +80,14 @@ The calendar is the bundled `calendar` plugin in `crates/oxmacs-ox/plugins/calen
 - **Invitations.** `M-x calendar-import` adds the events of an `.ics` file. For an invitation, `a`, `x` and `?` in the event accept, decline or answer maybe for the guest whose address is `email`, and write a `METHOD:REPLY` file beside the event to send to the organizer; oxmacs sends no mail.
 - **CalDAV.** `M-x calendar-sync` (or `s`) first sends local changes, `PUT` with `If-None-Match: *` for new events and `If-Match` with the known ETag otherwise, and `DELETE` for removed ones, then asks the server for every event with a `calendar-query` `REPORT` and brings in what changed, moving events the server dropped to the trash. A change made on both sides keeps the server's copy and says so. The login comes from the vault entry `:login` names. `.sync.json` in the calendar's folder remembers ETags and pending changes.
 
+## Life
+
+Conway's Game of Life is the bundled `life` plugin in `crates/oxmacs-ox/plugins/life`, the one written from scratch in the demo video. It is small enough to read as an example of a plugin: `rules.ox` holds the rules as pure functions over a set of live cells, and the entry `life.ox` draws them on a relative canvas and runs them with `every`.
+
+- **Off by default.** Its manifest says `:opt-in true`, so it stays off, with no `M-x life`, until `(use-plugin life)` in `init.ox`.
+- **Keys.** `SPC` pauses and carries on, `n` shows one more generation, `r` starts again and `q` closes it. Hiding the buffer pauses it, so nothing runs out of sight.
+- **Settings.** `pattern` picks `:acorn` (the default), `:r-pentomino`, `:glider` or `:random`, and `speed` the milliseconds between generations (100).
+
 ## Profiler
 
 Profiling tools for anyone writing Ox for oxmacs: where the time goes in plugins, init.ox, views, modes and frames. The VM collects; the report in oxmacs is the bundled `profiler` plugin, written in Ox.

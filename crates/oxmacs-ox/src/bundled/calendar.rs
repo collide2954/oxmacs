@@ -197,6 +197,12 @@ fn the_month_and_week_views_show_the_events() {
 
     run(&mut editor, &mut ox, "calendar-week");
     assert_eq!(editor.buffer().name(), "*Calendar week*");
+    let id = editor.buffer_named("*Calendar week*").unwrap();
+    let (_, view) = editor
+        .plugin_buffer::<crate::views::ViewBuffer>(id)
+        .unwrap();
+    let drawn = format!("{:?}", view.node);
+    assert!(drawn.contains("Lunch"), "{drawn} {:?}", editor.message());
 }
 
 #[test]

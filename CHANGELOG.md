@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- `ui/column` and `ui/row` take `:spacing` after their children as well as before, so the calendar's week view draws again.
 - A plugin you are writing starts the first time you load one of its files with `C-c C-k`, without restarting oxmacs, and `C-x C-e` in a plugin's files evaluates in that plugin's module, so its own definitions are there.
 - Ox highlighting is complete: calls, namespaced names such as `ui/text`, fields such as `entry.title`, quoted symbols, `@` and quasiquotes, docstrings and command summaries, and `{…}` inside strings each get their face, and strings and docstrings that span lines no longer turn the lines after them into code.
 - Plugins that start with oxmacs load just after the window opens, so boot stays at about 5 ms with the calendar's reminders on.
@@ -54,6 +55,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Conway's Game of Life, the bundled `life` plugin, off until `(use-plugin life)`: `M-x life` draws an acorn growing, with `SPC` to pause, `n` to step, `r` to start again and settings for the pattern and speed. Bundled plugins can be opt-in with `:opt-in true` in their manifest.
 - A calendar, the bundled `calendar` plugin. `M-x calendar` shows an agenda of the coming two weeks, `m` a month and `w` a week as a grid of hours. Events are `.ics` files, one per event, in folders under `~/.oxmacs/calendar`, with time zones, repeats (`RRULE` with exceptions), reminders in the echo area and on the desktop, invitations you can accept, decline or answer maybe with a reply file, and CalDAV sync whose password comes from the vault.
 - `ui/canvas` takes `:relative true` for drawings that fill the width they get, and `time/zone` names the local time zone.
 - An IRCv3 client in the style of ERC, the bundled `irc` plugin. `M-x irc-setup` adds a network, keeping its SASL password in the vault, and `M-x irc` connects. Messages line up beside a nick column and wrap under themselves, with colored nicks, mIRC formatting, links, history from the server, replies, reactions, read markers, mention highlights and desktop notifications, a nick list on `C-c C-n`, `C-c C-SPC` for the next buffer with news, joins and parts only for people who spoke lately, multiline pastes after asking, and searchable logs. It has no bouncer of its own.

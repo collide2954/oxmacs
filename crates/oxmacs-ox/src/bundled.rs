@@ -10,7 +10,17 @@ pub const BUNDLED: &[Bundle] = &[
     VAULT,
     IRC,
     CALENDAR,
+    LIFE,
 ];
+
+const LIFE: Bundle = Bundle {
+    name: "life",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/life/plugin.ox")),
+        ("life.ox", include_str!("../plugins/life/life.ox")),
+        ("rules.ox", include_str!("../plugins/life/rules.ox")),
+    ],
+};
 
 const CALENDAR: Bundle = Bundle {
     name: "calendar",
@@ -393,6 +403,9 @@ mod irc;
 
 #[cfg(test)]
 mod calendar;
+
+#[cfg(test)]
+mod life;
 
 #[cfg(test)]
 mod dired {

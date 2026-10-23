@@ -195,7 +195,14 @@ fn widget(heap: &mut Heap, name: &str, node: Node) -> Result<Value, Error> {
 }
 
 fn stack(heap: &mut Heap, name: &str, arguments: &[Value], row: bool) -> Result<Value, Error> {
-    let (found, rest) = options(heap, name, arguments, &["spacing"])?;
+    let trailing = match arguments {
+        [.., Value::Keyword(key), _] if key.name() == "spacing" => 2,
+        _ => 0,
+    };
+    let (inside, last) = arguments.split_at(arguments.len() - trailing);
+    let mut given = last.to_vec();
+    given.extend_from_slice(inside);
+    let (found, rest) = options(heap, name, &given, &["spacing"])?;
     let mut spacing = 0.0;
     for (_, value) in found {
         spacing = size(heap, name, value)?;
@@ -601,6 +608,20 @@ mod tests {
                     Node::Space { size: Some(8.0) },
                     Node::Scrollable(Box::new(text("long"))),
                 ],
+            }
+        );
+    }
+
+    #[test]
+    fn stacks_take_their_spacing_after_their_children_too() {
+        let (editor, _) =
+            opened(r#"(open-view "*after*" (fn [] (row (text "a") (text "b") :spacing 3)))"#);
+
+        assert_eq!(
+            shown(&editor, "*after*"),
+            Node::Row {
+                spacing: 3.0,
+                children: vec![text("a"), text("b")],
             }
         );
     }

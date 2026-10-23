@@ -26,7 +26,7 @@ oxmacs is moving its features into Ox, an extension language of its own: a moder
 cargo run -p ox-cli -- hello.ox
 ```
 
-Dired, git and weather are back as bundled Ox plugins. The rest of the former Cargo-feature applets (Markdown, Atlas, IRC, the database browser, the PDF viewer, Python, the extra themes and the animated start screen) return the same way.
+Dired, git, weather, an IRC client, a calendar, a password vault and the screensavers are bundled Ox plugins. Conway's Game of Life is bundled too, as a small example plugin that stays off until `(use-plugin life)` in `init.ox`. The rest of the former Cargo-feature applets (Markdown, Atlas, the database browser, the PDF viewer, Python, the extra themes and the animated start screen) return the same way.
 
 ## Configuration
 

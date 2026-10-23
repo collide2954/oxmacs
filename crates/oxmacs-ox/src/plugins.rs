@@ -51,6 +51,7 @@ struct Manifest {
     keys: Vec<(String, String)>,
     start_screen: Vec<(String, String)>,
     opens_directories: bool,
+    opt_in: bool,
     modes: Vec<modes::Declared>,
 }
 
@@ -216,6 +217,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
         keys: Vec::new(),
         start_screen: Vec::new(),
         opens_directories: false,
+        opt_in: false,
         modes: Vec::new(),
     };
     for pair in options.chunks(2) {
@@ -248,6 +250,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
                 )?;
             }
             Some("opens-directories") => manifest.opens_directories = value.truthy(),
+            Some("opt-in") => manifest.opt_in = value.truthy(),
             Some("modes") => manifest.modes = modes::declared(heap, *value)?,
             _ => {}
         }
@@ -385,10 +388,11 @@ pub fn discover(
         };
         if let Some(manifest) = read_manifest(isolate, editor, file, text) {
             add_sources(isolate, bundle.name, &manifest.entry, &files);
+            let active = !manifest.opt_in;
             known.push(Plugin {
                 manifest,
                 origin: Origin::Bundled(bundle.files),
-                active: true,
+                active,
                 loaded: false,
                 config: Vec::new(),
                 saved: Vec::new(),
@@ -1224,6 +1228,31 @@ mod tests {
             "{log}"
         );
         assert_eq!(editor.message(), Some("Hello world"));
+    }
+
+    const OPT_IN: Bundle = Bundle {
+        name: "toy",
+        files: &[
+            (
+                "plugin.ox",
+                "(plugin toy :commands {play: \"Play\"} :opt-in true :entry \"toy.ox\")",
+            ),
+            ("toy.ox", "(defcommand play \"Play\" (message \"Playing\"))"),
+        ],
+    };
+
+    #[test]
+    fn opt_in_plugins_wait_for_use_plugin() {
+        let home = home_with(&[]);
+        let (editor, _) = started(&[OPT_IN], home.path());
+        assert!(editor.command_named("play").is_none());
+
+        let home = home_with(&[("init.ox", "(use-plugin toy)")]);
+        let (mut editor, mut ox) = started(&[OPT_IN], home.path());
+        run(&mut editor, &mut ox, "play");
+
+        assert_eq!(editor.message(), Some("Playing"));
+        assert_eq!(logged(&editor), "");
     }
 
     #[test]
