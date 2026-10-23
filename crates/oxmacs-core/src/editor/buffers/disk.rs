@@ -122,10 +122,6 @@ impl Editor {
             self.check_tool_releases();
             return;
         }
-        if matches!(self.buffers.mode(0), Some(Mode::Doctor(_))) {
-            self.oxmacs_doctor();
-            return;
-        }
         if matches!(self.buffers.mode(0), Some(Mode::Plugin(_))) {
             if let Some(command) = self.bound_command("g")
                 && command.core() != Some(Command::RevertBuffer)

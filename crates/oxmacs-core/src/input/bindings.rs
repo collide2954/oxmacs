@@ -163,8 +163,6 @@ const SPLASH: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
-const DOCTOR: &[(&str, Command)] = &[("g", Command::RevertBuffer), ("q", Command::QuitWindow)];
-
 const RUST: &[(&str, Command)] = &[
     ("C-c C-f", Command::FormatBuffer),
     ("C-c C-c C-k", Command::RustCheck),
@@ -353,7 +351,6 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::Minibuffer => MINIBUFFER,
         Scope::Search => SEARCH,
         Scope::Splash => SPLASH,
-        Scope::Doctor => DOCTOR,
         Scope::Rust => RUST,
         Scope::R => R,
         Scope::Console => CONSOLE,

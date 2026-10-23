@@ -4,7 +4,6 @@ use std::{fmt, mem};
 use crate::editor::{Editor, Job, JobId, ServerId};
 use crate::external::lsp::Launch;
 use crate::external::managed::Install;
-use crate::external::tools::Tool;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FetchId(pub u64);
@@ -36,7 +35,6 @@ pub enum Effect {
     Kill(JobId),
     Reconfigure,
     Fetch(FetchId, String),
-    ProbeTools(Vec<Tool>),
     InstallTool(Box<Install>),
     StartServer(ServerId, Launch),
     ToServer(ServerId, String),

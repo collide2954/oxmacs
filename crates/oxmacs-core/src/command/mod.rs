@@ -253,11 +253,6 @@ pub enum Command {
     RMode,
     #[strum(message = "Edit the buffer as plain text")]
     TextMode,
-    #[strum(
-        message = "Check the config, font, languages and tools",
-        detailed_message = "Opens *oxmacs-doctor*, a report on config.toml, the font in use, how many languages there are (M-x list-languages shows what works in each), and external tools such as cargo, rustfmt and R. g refreshes it and q closes it."
-    )]
-    OxmacsDoctor,
     #[strum(message = "Split the window into top and bottom")]
     SplitWindowBelow,
     #[strum(message = "Split the window into left and right")]
@@ -670,7 +665,6 @@ pub enum Scope {
     Minibuffer,
     Search,
     Splash,
-    Doctor,
     Rust,
     R,
     Console,
@@ -693,7 +687,6 @@ impl Scope {
             Self::Minibuffer => Some("the minibuffer"),
             Self::Search => Some("searches"),
             Self::Splash => Some("the start screen"),
-            Self::Doctor => Some("*oxmacs-doctor*"),
             Self::Rust => Some("Rust buffers"),
             Self::R => Some("R buffers"),
             Self::Console => Some("consoles"),

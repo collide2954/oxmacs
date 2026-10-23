@@ -14,7 +14,6 @@ use crate::editor::languages::r_environment::EnvironmentView;
 use crate::editor::languages::r_plots::Plots;
 use crate::editor::languages::r_table::TableView;
 use crate::editor::prompts::minibuffer::Purpose;
-use crate::editor::special::doctor::Doctor;
 use crate::editor::special::help::Help;
 use crate::editor::special::locations::Locations;
 use crate::editor::special::processes::ProcessList;
@@ -32,7 +31,6 @@ pub(super) const SCRATCH: &str = "*scratch*";
 pub(super) enum Mode {
     Text(Option<Syntax>),
     Splash(Splash),
-    Doctor(Doctor),
     Compilation(Compilation),
     Diagnostics(DiagnosticsList),
     Console(Console),

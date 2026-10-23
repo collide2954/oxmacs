@@ -4,8 +4,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::{env, fs, thread};
 
-use crate::external::managed::Managed;
-
 const EDITIONS: &[&str] = &["2015", "2018", "2021", "2024"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,64 +11,6 @@ pub enum Probe {
     Found { path: PathBuf, version: String },
     Broken { path: PathBuf, error: String },
     Missing,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Tool {
-    Program(&'static str),
-    R(Option<String>),
-    Managed {
-        tool: Managed,
-        configured: Option<String>,
-        root: Option<PathBuf>,
-    },
-}
-
-pub fn probe_all(tools: Vec<Tool>) -> Vec<(Tool, Probe)> {
-    thread::scope(|scope| {
-        let probes: Vec<_> = tools
-            .into_iter()
-            .map(|tool| {
-                scope.spawn(move || {
-                    let probe = match &tool {
-                        Tool::Program(name) => probe(name),
-                        Tool::R(configured) => probe_r(configured.as_deref()),
-                        Tool::Managed {
-                            tool,
-                            configured,
-                            root,
-                        } => probe_managed(*tool, configured.as_deref(), root.as_deref()),
-                    };
-                    (tool, probe)
-                })
-            })
-            .collect();
-        probes
-            .into_iter()
-            .filter_map(|probe| probe.join().ok())
-            .collect()
-    })
-}
-
-fn probe_managed(tool: Managed, configured: Option<&str>, root: Option<&Path>) -> Probe {
-    let search = env::var_os("PATH");
-    let Some((path, _)) = tool.locate(configured, root, search.as_deref()) else {
-        return Probe::Missing;
-    };
-    match version(&path) {
-        Ok(version) => Probe::Found { path, version },
-        Err(error) => Probe::Broken { path, error },
-    }
-}
-
-pub fn probe(program: &str) -> Probe {
-    let Some(path) = find(program, env::var_os("PATH").as_deref()) else {
-        return Probe::Missing;
-    };
-    match version(&path) {
-        Ok(version) => Probe::Found { path, version },
-        Err(error) => Probe::Broken { path, error },
-    }
 }
 
 pub fn find(program: &str, search_path: Option<&OsStr>) -> Option<PathBuf> {
@@ -376,28 +316,6 @@ mod tests {
         assert_eq!(find("tool", Some(&search)), Some(second.path().join(name)));
         assert_eq!(find("other", Some(&search)), None);
         assert_eq!(find("tool", None), None);
-    }
-
-    #[test]
-    fn missing_programs_are_reported() {
-        assert_eq!(probe("oxmacs-no-such-tool"), Probe::Missing);
-    }
-
-    #[test]
-    fn tools_are_probed_together_and_answered_in_order() {
-        let tools = vec![
-            Tool::Program("oxmacs-no-such-tool"),
-            Tool::R(Some("oxmacs-no-such-r".to_owned())),
-            Tool::Program("oxmacs-other-missing-tool"),
-        ];
-
-        assert_eq!(
-            probe_all(tools.clone()),
-            tools
-                .into_iter()
-                .map(|tool| (tool, Probe::Missing))
-                .collect::<Vec<_>>()
-        );
     }
 
     #[test]

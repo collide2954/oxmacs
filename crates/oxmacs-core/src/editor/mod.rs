@@ -162,13 +162,11 @@ pub struct Editor {
     repeated: bool,
     working_directory: PathBuf,
     home: Option<PathBuf>,
-    tool_report: special::doctor::ToolReport,
     find_r: fn(Option<&str>) -> Option<PathBuf>,
     formatters: Vec<(Language, Formatter)>,
     linters: Vec<(Language, Linter)>,
     error_patterns: Vec<ErrorPattern>,
     tools_root: Option<PathBuf>,
-    font_note: Option<String>,
     init_path: Option<PathBuf>,
     next_fetch: u64,
     fetches: effect::Fetches,
@@ -255,7 +253,6 @@ impl Editor {
             repeated: false,
             working_directory: env::current_dir().unwrap_or_default(),
             home: dirs::home_dir(),
-            tool_report: special::doctor::ToolReport::default(),
             find_r: tools::find_r,
             formatters: vec![
                 (Language::RUST, editing::format::RUSTFMT),
@@ -264,7 +261,6 @@ impl Editor {
             linters: vec![(Language::RUST, build::lint::CARGO_LINT)],
             error_patterns: build::errors::BUILT_IN.to_vec(),
             tools_root: dirs::data_dir().map(|data| data.join("oxmacs").join("tools")),
-            font_note: None,
             init_path: None,
             next_fetch: 0,
             fetches: effect::Fetches::default(),
@@ -495,7 +491,6 @@ impl Editor {
     fn core_scope(&self) -> Scope {
         match self.buffers.mode(0) {
             Some(Mode::Splash(_)) => Scope::Splash,
-            Some(Mode::Doctor(_)) => Scope::Doctor,
             Some(Mode::Compilation(_)) => Scope::Compilation,
             Some(Mode::Diagnostics(_)) => Scope::Diagnostics,
             Some(Mode::Help(_)) => Scope::Help,
@@ -517,7 +512,6 @@ impl Editor {
     fn line_style_at(&self, index: usize, line: usize) -> LineStyle {
         match self.buffers.mode(index) {
             Some(Mode::Splash(splash)) => splash.line_style(line),
-            Some(Mode::Doctor(doctor)) => doctor.line_style(line),
             Some(Mode::Compilation(compilation)) => self
                 .buffers
                 .get(index)

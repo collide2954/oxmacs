@@ -1,8 +1,7 @@
 use std::path::{Path, PathBuf};
-use std::thread;
 
 use iced::font::Family;
-use iced::futures::channel::{mpsc, oneshot};
+use iced::futures::channel::mpsc;
 use iced::theme::Mode;
 use iced::time::Instant;
 use iced::widget::image;
@@ -12,7 +11,6 @@ use oxmacs_core::editor::{Effect, Job, Outcome, ServerId, WindowId};
 use oxmacs_core::external::lsp;
 use oxmacs_core::external::notify;
 use oxmacs_core::external::process;
-use oxmacs_core::external::tools::{self, Probe, Tool};
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
 use oxmacs_ox::takeover;
@@ -133,10 +131,6 @@ impl App {
                 "{name} is not a monospaced font; using {}",
                 fonts::EDITOR_FAMILY
             ));
-            self.editor.set_font_note(format!(
-                "{name} is not monospaced; using {}",
-                fonts::EDITOR_FAMILY
-            ));
         }
         self.font = fonts::EDITOR;
     }
@@ -212,7 +206,6 @@ impl App {
                 self.editor.job_finished(job, &outcome);
             }
             Message::Fetched(id, result) => self.editor.fetched(id, result),
-            Message::ToolsProbed(probes) => self.editor.tools_probed(probes),
             Message::ToolInstalled(tool, result) => self.editor.tool_installed(tool, result),
             Message::Server(id, event) => {
                 if matches!(event, lsp::Event::Exited(_)) {
@@ -341,7 +334,6 @@ impl App {
             Effect::Fetch(id, url) => {
                 Task::perform(fetch::get(url), move |result| Message::Fetched(id, result))
             }
-            Effect::ProbeTools(tools) => Task::perform(probe_tools(tools), Message::ToolsProbed),
             Effect::InstallTool(install) => {
                 let tool = install.tool;
                 Task::perform(fetch::install(*install), move |result| {
@@ -422,12 +414,6 @@ pub fn shown_plot<'a, T>(loaded: &'a [(PathBuf, T)], path: &Path) -> Option<&'a 
         .find(|(known, _)| known == path)
         .or_else(|| loaded.last())
         .map(|(_, item)| item)
-}
-
-async fn probe_tools(tools: Vec<Tool>) -> Vec<(Tool, Probe)> {
-    let (sender, receiver) = oneshot::channel();
-    thread::spawn(move || sender.send(tools::probe_all(tools)));
-    receiver.await.unwrap_or_default()
 }
 
 fn open_externally(path: &Path) -> Result<(), String> {

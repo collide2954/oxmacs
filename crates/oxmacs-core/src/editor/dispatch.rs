@@ -144,7 +144,6 @@ impl Editor {
             Command::ComintPreviousInput => self.recall_input(true),
             Command::ComintNextInput => self.recall_input(false),
             Command::TextMode => self.set_major_mode(None),
-            Command::OxmacsDoctor => self.oxmacs_doctor(),
             Command::SplitWindowBelow => self.split_window(Axis::Rows),
             Command::SplitWindowRight => self.split_window(Axis::Columns),
             Command::OtherWindow => self.other_window(),

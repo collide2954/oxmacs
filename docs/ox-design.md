@@ -10,7 +10,7 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
 
 ## Goals
 
-- **Lean core, everything else a plugin.** The Rust core is the engine. Language modes, applets, themes, the start screen, doctor, customize and list-tools all become bundled Ox plugins, each with its own version.
+- **Lean core, everything else a plugin.** The Rust core is the engine. Language modes, applets, themes, the start screen, customize and list-tools all become bundled Ox plugins, each with its own version.
 - **Blazing fast, without Emacs's bottlenecks.** Emacs runs all Lisp on one thread that blocks typing, pauses for garbage collection, interprets slowly, and runs hooks synchronously on every keystroke. Ox avoids each of these by design (see "Speed").
 - **Full integration.** Ox reaches everything the editor can do: buffers, keys, commands, the minibuffer, windows, processes, the mode line, and the GUI down to the canvas and text level.
 - **Configuration in Ox.** `~/.oxmacs/init.ox` replaces `config.toml`.
@@ -135,7 +135,7 @@ Each of Emacs's bottlenecks has a planned answer in Ox:
 - **Minibuffer.** `prompt`, `pick` with async completion sources, `yes-or-no`, and file and buffer pickers.
 - **Processes.** `spawn-process` with async line streams, consoles (REPL buffers), `*compilation*`, error patterns and timers.
 - **Progress.** `with-progress` shows a quiet indicator in the mode line and lists the job in `M-x list-processes`, where `C-g` or `k` cancels it cleanly.
-- **Settings.** `defsetting` declares a setting with a type, a default and documentation, which feed `M-x customize`, `custom.ox` and doctor findings. A setting can apply:
+- **Settings.** `defsetting` declares a setting with a type, a default and documentation, which feed `M-x customize` and `custom.ox`. A setting can apply:
   - everywhere;
   - per language: `(set! tab-width 2 :in python)`;
   - per project;
@@ -238,10 +238,10 @@ Built on 2026-10-23, with these decisions:
 | 3. Proof | Port weather (HTTP, JSON, settings, mode line, a forecast view). Phases 2 and 3 are sliced in [ox-embedding.md](ox-embedding.md). | Weather works the same, and is faster to change. |
 | 4. GUI API | Views, canvas and decorations. Port the start screen (canvas animation) and demo. | The animated start screen runs as a plugin. |
 | 5. Applets | Rebuild themes, glow, dired, markdown, atlas, irc, git, database, pdf and python as plugins, one at a time. | No applet crates left; no cargo features. |
-| 6. Built-ins | Rust, TOML and R modes (with the R console), doctor, customize and list-tools become bundled plugins. | The core is the engine alone. |
+| 6. Built-ins | Rust, TOML and R modes (with the R console), customize and list-tools become bundled plugins. | The core is the engine alone. |
 | 7. Cleanup | Remove `config.toml` support (done, without a migration) and the routine parser (done). | One binary plus plugins. |
 
-Work paused for Ox continues later as Ox plugins: the list-tools and doctor reorganization, database and git slices, and the Vim-style modal editing idea.
+Work paused for Ox continues later as Ox plugins: the list-tools reorganization, database and git slices, and the Vim-style modal editing idea.
 
 ## Speed budgets
 

@@ -16,7 +16,6 @@ use oxmacs_core::editor::{Editor, FetchId, JobId, SERVERS, ServerId, WindowId};
 use oxmacs_core::external::lsp;
 use oxmacs_core::external::managed::Managed;
 use oxmacs_core::external::process::{self, Handle};
-use oxmacs_core::external::tools::{Probe, Tool};
 use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
@@ -79,7 +78,6 @@ pub enum Message {
     PlotLoaded(PathBuf, Option<widget::image::Allocation>),
     Fetched(FetchId, Result<String, String>),
     Server(ServerId, lsp::Event),
-    ToolsProbed(Vec<(Tool, Probe)>),
     ToolInstalled(Managed, Result<PathBuf, String>),
     OxTick,
     OxPress(BufferId, usize),
@@ -159,12 +157,7 @@ impl App {
                 .clone()
                 .map_or(fonts::EDITOR, |family| Font::with_name(family.leak()));
         }
-        self.editor.set_font_note(
-            config
-                .font_family
-                .clone()
-                .unwrap_or_else(|| format!("{} (bundled)", fonts::EDITOR_FAMILY)),
-        );
+
         self.text_size = points_to_pixels(config.font_size);
         self.animations = animations_enabled(config.animations, self.reduced_motion);
         self.blink_interval = Duration::from_millis(config.cursor_blink_interval);
@@ -1023,7 +1016,7 @@ mod tests {
     }
 
     #[test]
-    fn the_doctor_names_the_font_in_use() {
+    fn a_proportional_font_is_named_and_replaced() {
         let config = configured(&json!({"font-family": "Comic Sans MS"}));
         let mut app = App::new(&config);
         let _ = app.update(Message::View(
@@ -1031,17 +1024,9 @@ mod tests {
             ViewEvent::FontNotMonospaced,
         ));
 
-        press(&mut app, "x", Modifiers::ALT);
-        for c in "oxmacs-doctor".chars() {
-            press(&mut app, &c.to_string(), Modifiers::empty());
-        }
-        enter(&mut app);
-
-        assert!(
-            app.editor()
-                .buffer()
-                .contents()
-                .contains("Comic Sans MS is not monospaced; using JetBrains Mono")
+        assert_eq!(
+            app.editor().message(),
+            Some("Comic Sans MS is not a monospaced font; using JetBrains Mono")
         );
     }
 

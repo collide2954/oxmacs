@@ -49,7 +49,7 @@ oxmacs is configured in Ox, in `~/.oxmacs/init.ox` (`OXMACS_HOME` moves the fold
 (bind-key "C-c w" 'weather)
 ```
 
-`M-x customize` changes settings in a form and saves them to `~/.oxmacs/custom.ox`, which runs before `init.ox`, so `init.ox` wins. `M-x find-init-file` opens `init.ox`, saving it applies it at once, and `M-x oxmacs-doctor` reports what oxmacs found on your system.
+`M-x customize` changes settings in a form and saves them to `~/.oxmacs/custom.ox`, which runs before `init.ox`, so `init.ox` wins. `M-x find-init-file` opens `init.ox`, and saving it applies it at once.
 
 ## Development
 

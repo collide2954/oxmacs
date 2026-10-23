@@ -1,4 +1,3 @@
-pub(super) mod doctor;
 pub(super) mod help;
 pub(super) mod languages;
 pub(super) mod locations;
