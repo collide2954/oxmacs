@@ -38,6 +38,24 @@ fn directories_are_listed_by_name_with_their_details() {
     );
 }
 
+#[test]
+fn appending_adds_to_the_end_and_makes_missing_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("log.txt");
+    let mut isolate = Isolate::new();
+
+    let done = evaluated(
+        &mut isolate,
+        &format!(
+            "(await (file/append {path} \"one\\n\")) (await (file/append {path} \"two\\n\"))",
+            path = literal(&path)
+        ),
+    );
+
+    assert_eq!(done, "nil");
+    assert_eq!(fs::read_to_string(&path).unwrap(), "one\ntwo\n");
+}
+
 #[cfg(unix)]
 fn link(target: &Path, at: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(target, at)

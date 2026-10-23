@@ -16,3 +16,17 @@
 (module (import (ox time))) (time/parse "2026-10-25") ;=> {year: 2026 month: 10 day: 25 hour: 0 minute: 0 second: 0 weekday: :sunday}
 (module (import (ox time))) (time/parse "soon") ;! time/parse can't read "soon" as a date or a time
 (module (import (ox time))) (time/parse) ;! time/parse takes 1 argument, got 0
+
+;; moments in time zones, civil arithmetic and formatting
+(module (import (ox time))) (time/instant "2026-10-23T05:43:15.656Z") ;=> 1792734195656
+(module (import (ox time))) (time/instant "2026-10-23T09:30:00+02:00") ;=> 1792740600000
+(module (import (ox time))) (time/instant "2026-10-23T09:30" :zone "Europe/Paris") ;=> 1792740600000
+(module (import (ox time))) (time/instant {year: 2026 month: 10 day: 23 hour: 9 minute: 30} :zone "Europe/Paris") ;=> 1792740600000
+(module (import (ox time))) (time/instant "soon") ;! time/instant can't read "soon" as a moment
+(module (import (ox time))) (time/local 1792740600000 "UTC") ;=> {year: 2026 month: 10 day: 23 hour: 7 minute: 30 second: 0 weekday: :friday}
+(module (import (ox time))) (time/local 0 "Mars/Base") ;! There is no time zone called Mars/Base
+(module (import (ox time))) (time/add 1774744200000 {days: 1} :zone "Europe/Paris") ;=> 1774827000000
+(module (import (ox time))) (time/add 1769860800000 {months: 1 hours: 2} :zone "UTC") ;=> 1772287200000
+(module (import (ox time))) (time/add 0 {fortnights: 1}) ;! time/add takes years, months, weeks, days, hours, minutes and seconds, not :fortnights
+(module (import (ox time))) (time/format 1792740600000 "%H:%M %A" :zone "Europe/Paris") ;=> "09:30 Friday"
+(module (import (ox time))) [(time/days-in-month 2028 2) (time/days-in-month 2026 4)] ;=> [29 30]

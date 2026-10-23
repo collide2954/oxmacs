@@ -290,6 +290,24 @@ impl Editor {
         self.console_send(id, &format!("{input}\n"));
     }
 
+    fn input_start_here(&mut self) -> Option<usize> {
+        let (buffer, mode) = self.buffers.entry_mut(0)?;
+        let start = match mode {
+            Mode::Console(console) => console.input.start(buffer),
+            Mode::Plugin(view) => view.input_line().and_then(|input| input.start(buffer)),
+            _ => None,
+        }?;
+        let point = buffer.point();
+        (point > start && buffer.line_of(point) == buffer.line_of(start)).then_some(start)
+    }
+
+    pub(in crate::editor) fn beginning_of_line_or_input(&mut self) {
+        match self.input_start_here() {
+            Some(start) => self.move_point(move |_, _| start),
+            None => self.move_point(crate::text::motion::beginning_of_line),
+        }
+    }
+
     pub(in crate::editor) fn recall_input(&mut self, older: bool) {
         let input = match self.buffers.entry_mut(0) {
             Some((buffer, Mode::Console(console))) => Some((buffer, &mut console.input)),
@@ -436,6 +454,19 @@ mod tests {
         assert_eq!(contents(&editor, id), "$ ls\n");
         press(&mut editor, "M-p");
         assert!(contents(&editor, id).ends_with("ls"));
+    }
+
+    #[test]
+    fn the_start_of_the_input_line_is_after_the_prompt() {
+        let (mut editor, id, job) = started();
+        editor.session_output(job, &format!("old output\n{PROMPT}"));
+
+        type_text(&mut editor, "ls");
+        press(&mut editor, "C-a x");
+
+        assert_eq!(contents(&editor, id), "old output\n$ xls");
+        press(&mut editor, "C-p C-e C-a");
+        assert_eq!(editor.buffer().point(), 0);
     }
 
     #[test]

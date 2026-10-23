@@ -1,6 +1,27 @@
 use crate::plugins::Bundle;
 
-pub const BUNDLED: &[Bundle] = &[WEATHER, DIRED, GIT, SCREENSAVER, PROFILER, CUSTOMIZE, VAULT];
+pub const BUNDLED: &[Bundle] = &[
+    WEATHER,
+    DIRED,
+    GIT,
+    SCREENSAVER,
+    PROFILER,
+    CUSTOMIZE,
+    VAULT,
+    IRC,
+];
+
+const IRC: Bundle = Bundle {
+    name: "irc",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/irc/plugin.ox")),
+        ("irc.ox", include_str!("../plugins/irc/irc.ox")),
+        ("client.ox", include_str!("../plugins/irc/client.ox")),
+        ("protocol.ox", include_str!("../plugins/irc/protocol.ox")),
+        ("format.ox", include_str!("../plugins/irc/format.ox")),
+        ("logs.ox", include_str!("../plugins/irc/logs.ox")),
+    ],
+};
 
 const VAULT: Bundle = Bundle {
     name: "vault",
@@ -346,6 +367,9 @@ mod customize;
 
 #[cfg(test)]
 mod vault;
+
+#[cfg(test)]
+mod irc;
 
 #[cfg(test)]
 mod dired {

@@ -4,7 +4,7 @@
 
 (def help "RET change  C-x C-s save  g revert  q quit")
 
-(def plugin-types {string: :text int: :integer number: :number bool: :toggle choice: :choice})
+(def plugin-types {string: :text int: :integer number: :number bool: :toggle choice: :choice list: :data})
 
 (def (core-entry setting now saved custom)
   (let [value (get now setting.key)
@@ -49,6 +49,7 @@
       ((nil? value) (str "(" unset ")"))
       ((= value true) "[x]")
       ((= value false) "[ ]")
+      ((= entry.type :data) (str "(" (count value) " in init.ox)"))
       ((chosen? entry) (str "[" (name value) "]"))
       (else (str value)))))
 

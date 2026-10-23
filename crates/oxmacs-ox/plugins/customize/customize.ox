@@ -99,6 +99,7 @@
       (cond ((= entry.type :toggle) (change entry (not (form/effective entry))))
         ((= entry.type :choice) (change entry (next-choice entry)))
         ((= entry.type :theme) (run-command 'load-theme))
+        ((= entry.type :data) (message "{(name entry.key)} is a list; change it in init.ox with use-plugin"))
         (else (ask entry))))
     (message "No setting here")))
 

@@ -29,6 +29,7 @@ enum Kind {
     Int,
     Number,
     Flag,
+    List,
     Choice(Vec<Sym>),
 }
 
@@ -113,6 +114,7 @@ fn kind_of(heap: &Heap, value: Value) -> Result<Kind, String> {
         Some("int") => Ok(Kind::Int),
         Some("number") => Ok(Kind::Number),
         Some("bool") => Ok(Kind::Flag),
+        Some("list") => Ok(Kind::List),
         _ => heap
             .elements(value)
             .and_then(|items| {
@@ -126,7 +128,8 @@ fn kind_of(heap: &Heap, value: Value) -> Result<Kind, String> {
             })
             .map(Kind::Choice)
             .ok_or_else(|| {
-                ":type must be :string, :int, :number, :bool or a vector of keywords".to_owned()
+                ":type must be :string, :int, :number, :bool, :list or a vector of keywords"
+                    .to_owned()
             }),
     }
 }
@@ -137,6 +140,7 @@ fn fits(heap: &Heap, kind: &Kind, value: Value) -> bool {
         Kind::Int => matches!(value, Value::Int(_)),
         Kind::Number => matches!(value, Value::Int(_) | Value::Float(_)),
         Kind::Flag => matches!(value, Value::Bool(_)),
+        Kind::List => heap.text(value).is_none() && heap.elements(value).is_some(),
         Kind::Choice(options) => matches!(value, Value::Keyword(name) if options.contains(&name)),
     }
 }
@@ -147,6 +151,7 @@ fn describe(kind: &Kind) -> String {
         Kind::Int => "a whole number".to_owned(),
         Kind::Number => "a number".to_owned(),
         Kind::Flag => "true or false".to_owned(),
+        Kind::List => "a vector".to_owned(),
         Kind::Choice(options) => {
             let names: Vec<String> = options
                 .iter()
@@ -528,6 +533,7 @@ fn kind_value(heap: &mut Heap, kind: &Kind) -> Result<(Value, Value), Error> {
         Kind::Int => (Value::keyword("int"), Value::Nil),
         Kind::Number => (Value::keyword("number"), Value::Nil),
         Kind::Flag => (Value::keyword("bool"), Value::Nil),
+        Kind::List => (Value::keyword("list"), Value::Nil),
         Kind::Choice(options) => {
             let options: Vec<Value> = options.iter().map(|name| Value::Keyword(*name)).collect();
             (Value::keyword("choice"), made(heap.vector_from(&options))?)
@@ -1040,7 +1046,8 @@ mod tests {
   :settings {name: {type: :string default: "world"}
              shout: {type: :bool default: false}
              style: {type: [:plain :fancy] default: :plain}
-             chatty: {type: :bool default: false}}
+             chatty: {type: :bool default: false}
+             friends: {type: :list default: []}}
   :startup-when :chatty)"#;
 
     const CONFIGURED: Bundle = Bundle {
@@ -1105,6 +1112,28 @@ mod tests {
 
         assert_eq!(editor.message(), Some("Hello world"));
         assert_eq!(logged(&editor), "");
+    }
+
+    #[test]
+    fn list_settings_hold_vectors_of_any_data() {
+        let home = home_with(&[(
+            "init.ox",
+            "(use-plugin greeter :config {friends: [\"Bo\" {name: \"Cy\" port: 6697}]})",
+        )]);
+        let (mut editor, mut ox) = started(&[CONFIGURED], home.path());
+
+        assert_eq!(
+            ox.eval(&mut editor, "(plugin-setting 'greeter :friends)")
+                .unwrap(),
+            r#"["Bo" {name: "Cy" port: 6697}]"#
+        );
+        ox.eval(&mut editor, "(configure-plugin 'greeter {friends: 5})")
+            .unwrap();
+        let log = logged(&editor);
+        assert!(
+            log.contains("greeter's friends must be a vector, got 5"),
+            "{log}"
+        );
     }
 
     #[test]

@@ -164,6 +164,7 @@
 
 (file/read path) "A promise of the contents of the file at path, as a string. Use await to get it."
 (file/write path text) "Writes text to the file at path, replacing what was there, and returns a promise that settles when it is done."
+(file/append path text) "Adds text to the end of the file at path, making the file when it is missing, and returns a promise that settles when it is done."
 (file/exists? path) "A promise of whether anything exists at path."
 (file/list folder) "A promise of the entries in folder, each a map of :name, :path, :dir, :link, :target, :hidden, :size and :modified."
 (file/metadata path) "A promise of a map describing path, with the same fields file/list gives."
@@ -201,7 +202,11 @@
 (csv/read text {header false}) "The rows of comma-separated text as vectors of strings, with quoted fields that may hold commas, quotes and new lines. With :header true the first row names the fields and each other row becomes a map from those names."
 
 (time/now) "Milliseconds since the start of 1970, UTC."
-(time/local millis) "The local date and time of a moment, as a map of :year, :month, :day, :hour, :minute, :second and :weekday."
+(time/local millis (zone)) "The local date and time of a moment, or its time in zone such as \"UTC\" or \"Europe/Paris\", as a map of :year, :month, :day, :hour, :minute, :second and :weekday."
+(time/instant given {zone nil}) "The moment, in milliseconds since 1970, that given names: text like 2026-10-23T05:43:15Z or with an offset, or a date and time like 2026-10-23T09:30 or a map like time/local gives, read in :zone or the local zone."
+(time/add millis amounts {zone nil}) "The moment amounts after millis, with amounts a map of :years, :months, :weeks, :days, :hours, :minutes and :seconds, any of them negative. Days and longer follow the calendar of :zone or the local zone, so a day across a daylight saving change is still a day."
+(time/format millis pattern {zone nil}) "The moment written with a strftime pattern such as \"%H:%M\" or \"%A %e %B %Y\", in :zone or the local zone."
+(time/days-in-month year month) "How many days month has in year."
 (time/parse text) "The date or date and time that text spells, such as 2026-10-22 or 2026-10-22T09:30, as a map like time/local gives."
 (time/millis n) "n milliseconds, in milliseconds."
 (time/seconds n) "n seconds, in milliseconds: (sleep (time/seconds 2))."

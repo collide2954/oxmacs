@@ -334,6 +334,27 @@ impl Buffer {
         );
     }
 
+    pub fn insert_unrecorded(&mut self, at: usize, text: &str) {
+        if !text.is_empty() {
+            self.apply_insert(at.min(self.len_chars()), text);
+            self.forget_history();
+        }
+    }
+
+    pub fn delete_unrecorded(&mut self, range: Range<usize>) {
+        let end = range.end.min(self.len_chars());
+        let start = range.start.min(end);
+        if start < end {
+            self.apply_delete(start, end);
+            self.forget_history();
+        }
+    }
+
+    fn forget_history(&mut self) {
+        self.history = History::default();
+        self.saved = self.history.current();
+    }
+
     pub fn close_undo_step(&mut self) {
         self.history.close();
     }
@@ -546,6 +567,23 @@ fn position_after_removal(position: usize, start: usize, end: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unrecorded_edits_shift_markers_and_cannot_be_undone() {
+        let mut buffer = Buffer::with_text("t", "log\n> ");
+        let input = buffer.add_marker(6);
+        buffer.set_point(6);
+        buffer.insert("hi");
+
+        buffer.insert_unrecorded(4, "more\n");
+        buffer.delete_unrecorded(0..4);
+
+        assert_eq!(buffer.contents(), "more\n> hi");
+        assert_eq!(buffer.marker(input), Some(7));
+        assert_eq!(buffer.point(), 9);
+        assert!(!buffer.undo());
+        assert!(!buffer.is_modified());
+    }
 
     #[test]
     fn replacing_text_changes_only_the_differing_middle() {

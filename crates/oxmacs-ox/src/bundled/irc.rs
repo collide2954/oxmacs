@@ -1,0 +1,542 @@
+use std::cell::RefCell;
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpListener, TcpStream};
+use std::path::Path;
+use std::sync::mpsc::{self, Receiver};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+
+use ox::Isolate;
+use ox::value::print;
+use oxmacs_core::editor::Editor;
+use oxmacs_core::input::KeySequence;
+use oxmacs_core::text::Buffer;
+
+use crate::Ox;
+use crate::testing::settle;
+
+struct Fake {
+    port: u16,
+    heard: Receiver<String>,
+    log: RefCell<Vec<String>>,
+    out: Arc<Mutex<Option<TcpStream>>>,
+}
+
+impl Fake {
+    fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (sender, heard) = mpsc::channel();
+        let out = Arc::new(Mutex::new(None));
+        let writer = Arc::clone(&out);
+        thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            *writer.lock().unwrap() = Some(stream.try_clone().unwrap());
+            for line in BufReader::new(stream).lines() {
+                let Ok(line) = line else { break };
+                if sender.send(line).is_err() {
+                    break;
+                }
+            }
+        });
+        Self {
+            port,
+            heard,
+            log: RefCell::new(Vec::new()),
+            out,
+        }
+    }
+
+    fn say(&self, line: &str) {
+        let mut out = self.out.lock().unwrap();
+        let stream = out.as_mut().expect("nobody connected yet");
+        write!(stream, "{line}\r\n").unwrap();
+        stream.flush().unwrap();
+    }
+
+    fn drain(&self) {
+        while let Ok(line) = self.heard.try_recv() {
+            self.log.borrow_mut().push(line);
+        }
+    }
+
+    fn expect(&self, editor: &mut Editor, ox: &mut Ox, wanted: &str) {
+        let heard = pump(editor, ox, |_, _| {
+            self.drain();
+            self.log.borrow().iter().any(|line| line == wanted)
+        });
+        assert!(
+            heard,
+            "never heard {wanted:?}, only {:?}",
+            self.log.borrow()
+        );
+        self.log.borrow_mut().retain(|line| line != wanted);
+    }
+}
+
+fn pump(
+    editor: &mut Editor,
+    ox: &mut Ox,
+    mut done: impl FnMut(&mut Editor, &mut Ox) -> bool,
+) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        ox.tick(editor);
+        if done(editor, ox) {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(2));
+    }
+    false
+}
+
+fn keys(editor: &mut Editor, ox: &mut Ox, notation: &str) {
+    let keys: KeySequence = notation.parse().unwrap();
+    for key in keys.keys() {
+        editor.handle_key(*key);
+        for _ in 0..5 {
+            ox.tick(editor);
+        }
+    }
+}
+
+fn type_in(editor: &mut Editor, ox: &mut Ox, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    let notation: Vec<String> = text
+        .chars()
+        .map(|c| match c {
+            ' ' => "SPC".to_owned(),
+            other => other.to_string(),
+        })
+        .collect();
+    keys(editor, ox, &notation.join(" "));
+}
+
+fn run(editor: &mut Editor, ox: &mut Ox, command: &str) {
+    let id = editor.command_named(command).unwrap();
+    editor.execute(id);
+    for _ in 0..5 {
+        ox.tick(editor);
+    }
+}
+
+fn contents(editor: &Editor, name: &str) -> String {
+    editor
+        .buffer_named(name)
+        .and_then(|id| editor.buffer_by_id(id))
+        .map(Buffer::contents)
+        .unwrap_or_default()
+}
+
+fn wait_for_text(editor: &mut Editor, ox: &mut Ox, buffer: &str, wanted: &str) {
+    let seen = pump(editor, ox, |editor, _| {
+        contents(editor, buffer).contains(wanted)
+    });
+    assert!(
+        seen,
+        "{buffer} never showed {wanted:?}: {}",
+        contents(editor, buffer)
+    );
+}
+
+fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
+    let home = tempfile::tempdir().unwrap();
+    fs::write(home.path().join("init.ox"), init).unwrap();
+    let mut editor = Editor::new();
+    let mut ox = Ox::new();
+    ox.start(&mut editor, Some(home.path()));
+    settle(&mut editor, &mut ox);
+    (home, editor, ox)
+}
+
+fn network(port: u16, extra: &str) -> String {
+    format!(
+        r##"(use-plugin irc :config {{networks: [{{name: "Test" host: "127.0.0.1" port: {port} tls: false nick: "ana" channels: ["#oxmacs"] {extra}}}] notify: false logs: false}})"##
+    )
+}
+
+const CAPS: &str = "server-time message-tags echo-message batch draft/chathistory multi-prefix";
+
+fn joined() -> (Fake, tempfile::TempDir, Editor, Ox) {
+    let fake = Fake::start();
+    let (home, mut editor, mut ox) = started(&network(fake.port, ""));
+    run(&mut editor, &mut ox, "irc");
+    fake.expect(&mut editor, &mut ox, "CAP LS 302");
+    fake.expect(&mut editor, &mut ox, "NICK ana");
+    fake.expect(&mut editor, &mut ox, "USER ana 0 * ana");
+    fake.say(&format!(":srv CAP * LS :{CAPS} sts"));
+    fake.expect(&mut editor, &mut ox, &format!("CAP REQ :{CAPS}"));
+    fake.say(&format!(":srv CAP ana ACK :{CAPS}"));
+    fake.expect(&mut editor, &mut ox, "CAP END");
+    fake.say(":srv 001 ana :Welcome to the Test network, ana");
+    fake.say(":srv 005 ana PREFIX=(ov)@+ NETWORK=Test :are supported by this server");
+    fake.expect(&mut editor, &mut ox, "JOIN #oxmacs");
+    fake.say(":ana!a@host JOIN #oxmacs");
+    fake.say(":srv 353 ana = #oxmacs :@bo ana +cy");
+    fake.say(":srv 366 ana #oxmacs :End of /NAMES list.");
+    fake.expect(&mut editor, &mut ox, "CHATHISTORY LATEST #oxmacs * 50");
+    (fake, home, editor, ox)
+}
+
+fn eval(editor: &mut Editor, ox: &mut Ox, source: &str) -> String {
+    ox.eval(editor, source).unwrap()
+}
+
+#[test]
+fn lines_are_parsed_with_their_tags_source_and_params() {
+    let (_home, mut editor, mut ox) = started("");
+
+    assert_eq!(
+        eval(
+            &mut editor,
+            &mut ox,
+            r#"(module (import (irc protocol :as p)))
+               (let [l (p/parse-line "@time=2026-10-23T05:43:15.656Z;msgid=a\\sb\\:c :bo!b@host PRIVMSG #oxmacs :hi there")]
+                 [l.nick l.user l.host l.command l.params (get l.tags "msgid") (get l.tags "time")])"#
+        ),
+        r##"["bo" "b" "host" "PRIVMSG" ["#oxmacs" "hi there"] "a b;c" "2026-10-23T05:43:15.656Z"]"##
+    );
+    assert_eq!(
+        eval(
+            &mut editor,
+            &mut ox,
+            r##"(module (import (irc protocol :as p)))
+               [(p/format-line "PRIVMSG" ["#oxmacs" "hi there"] :tags {"+draft/reply" "x;y z"})
+                (p/format-line "NICK" ["ana"])
+                (p/format-line "PRIVMSG" ["#c" ":)"])
+                (get (p/parse-line "PING :tok") :params)
+                (get (p/parse-line ":srv 001 ana :Welcome") :command)]"##
+        ),
+        r#"["@+draft/reply=x\\:y\\sz PRIVMSG #oxmacs :hi there" "NICK ana" "PRIVMSG #c ::)" ["tok"] "001"]"#
+    );
+}
+
+#[test]
+fn ctcp_formatting_and_nicks_are_understood() {
+    let (_home, mut editor, mut ox) = started("");
+
+    assert_eq!(
+        eval(
+            &mut editor,
+            &mut ox,
+            r##"(module (import (irc protocol :as p)))
+               [(p/action "\u{1}ACTION waves\u{1}") (p/ctcp "\u{1}VERSION\u{1}") (p/action "hi")
+                (p/styled "\u{2}bold\u{2} \u{3}4,1red\u{f} plain") (p/plain-text "\u{3}12blue\u{3} done")
+                (p/same-nick? "Ana[m]" "ana{{m}") (p/channel? "#x") (p/channel? "bo")
+                (p/sasl-plain "ana" "pw") (p/split-message "aaa bbb ccc" 7)
+                (= (p/nick-face "Bo") (p/nick-face "bo"))]"##
+        ),
+        r#"["waves" ["VERSION" ""] nil [["bold" :heading] " " ["red" :error] " plain"] "blue done" true true false "YW5hAGFuYQBwdw==" ["aaa bbb" "ccc"] true]"#
+    );
+}
+
+#[test]
+fn messages_fill_the_width_beside_an_aligned_nick_column() {
+    let (_home, mut editor, mut ox) = started("");
+
+    eval(
+        &mut editor,
+        &mut ox,
+        r#"(module (import (irc format :as f) (ox time)))
+           (def at (time/instant "2026-10-23T09:30:00Z"))
+           (def first-one (f/message-lines {kind: :privmsg time: at nick: "bo" text: "hi https://example.org/a. and some more words to wrap"} (f/fresh-context) 60 6))
+           (def second-one (f/message-lines {kind: :privmsg time: (+ at 1000) nick: "bo" text: "again" mention: true} first-one.context 60 6))
+           (open-buffer "*t*" (concat first-one.lines second-one.lines))"#,
+    );
+
+    let clock = eval(
+        &mut editor,
+        &mut ox,
+        r#"(module (import (irc format :as f) (ox time))) (f/clock (time/instant "2026-10-23T09:30:00Z"))"#,
+    );
+    let clock = clock.trim_matches('"');
+    let lines: Vec<String> = contents(&editor, "*t*")
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert!(lines[0].starts_with("─── "), "{lines:?}");
+    assert_eq!(
+        lines[1],
+        format!("{clock}     bo hi https://example.org/a. and some more words")
+    );
+    assert_eq!(lines[2], "             to wrap");
+    assert_eq!(lines[3], "             again");
+    let spans = editor.line_style(1).spans;
+    assert!(
+        spans.contains(&(16..37, oxmacs_core::theme::Highlight::Link)),
+        "{spans:?}"
+    );
+    assert_eq!(
+        editor.line_style(3).background,
+        Some(oxmacs_core::theme::Highlight::Marked)
+    );
+}
+
+#[test]
+fn connecting_negotiates_capabilities_joins_and_shows_history() {
+    let (fake, _home, mut editor, mut ox) = joined();
+
+    fake.say(":srv BATCH +h1 chathistory #oxmacs");
+    fake.say(
+        "@batch=h1;time=2026-10-23T08:00:00.000Z;msgid=m1 :bo!b@host PRIVMSG #oxmacs :good morning",
+    );
+    fake.say(":srv BATCH -h1");
+    wait_for_text(&mut editor, &mut ox, "#oxmacs", "good morning");
+    assert_eq!(editor.buffer().name(), "*irc Test*");
+    assert!(contents(&editor, "*irc Test*").contains("Welcome to the Test network"));
+
+    fake.say("@time=2026-10-23T08:05:00.000Z;msgid=m2 :cy!c@host PRIVMSG #oxmacs :ana: see https://example.org");
+    wait_for_text(&mut editor, &mut ox, "#oxmacs", "see https://example.org");
+    assert!(contents(&editor, "#oxmacs").contains(" new "));
+    assert!(
+        editor.mode_line_segments().join(" ").contains("[#oxmacs!]"),
+        "{:?} {}",
+        editor.mode_line_segments(),
+        contents(&editor, "*ox log*")
+    );
+
+    fake.say("PING :token");
+    fake.expect(&mut editor, &mut ox, "PONG token");
+}
+
+#[test]
+fn typing_sends_messages_commands_and_completes_nicks() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    fake.say(":bo!b@host PRIVMSG #oxmacs :hello ana");
+    wait_for_text(&mut editor, &mut ox, "#oxmacs", "hello ana");
+
+    run(&mut editor, &mut ox, "irc-next-active");
+    assert_eq!(editor.buffer().name(), "#oxmacs");
+    assert!(editor.buffer().contents().ends_with("#oxmacs> "));
+    assert!(!editor.mode_line_segments().join(" ").contains("#oxmacs"));
+
+    type_in(&mut editor, &mut ox, "hi there");
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(&mut editor, &mut ox, "PRIVMSG #oxmacs :hi there");
+    fake.say(":ana!a@host PRIVMSG #oxmacs :hi there");
+    wait_for_text(&mut editor, &mut ox, "#oxmacs", "ana hi there");
+
+    type_in(&mut editor, &mut ox, "/me waves");
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(
+        &mut editor,
+        &mut ox,
+        "PRIVMSG #oxmacs :\u{1}ACTION waves\u{1}",
+    );
+
+    type_in(&mut editor, &mut ox, "c");
+    keys(&mut editor, &mut ox, "TAB");
+    assert_eq!(eval(&mut editor, &mut ox, "(input-text)"), r#""cy: ""#);
+    keys(&mut editor, &mut ox, "C-a C-k");
+    type_in(&mut editor, &mut ox, "/topic coffee");
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(&mut editor, &mut ox, "TOPIC #oxmacs coffee");
+
+    run(&mut editor, &mut ox, "irc-nicks");
+    let nicks = contents(&editor, "*irc nicks*");
+    for wanted in [
+        "3 people",
+        "Operators 1",
+        "@bo",
+        "Voiced 1",
+        "+cy",
+        "Everyone 1",
+        "ana",
+    ] {
+        assert!(nicks.contains(wanted), "{wanted} missing from {nicks}");
+    }
+}
+
+#[test]
+fn joins_and_parts_of_quiet_people_stay_hidden_until_asked_for() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    fake.say(":bo!b@host PRIVMSG #oxmacs :I talk");
+    fake.say(":dee!d@host JOIN #oxmacs");
+    fake.say(":bo!b@host PART #oxmacs :bye");
+    wait_for_text(&mut editor, &mut ox, "#oxmacs", "bo left (bye)");
+    assert!(!contents(&editor, "#oxmacs").contains("dee joined"));
+
+    run(&mut editor, &mut ox, "irc-toggle-noise");
+    wait_for_text(&mut editor, &mut ox, "#oxmacs", "dee joined");
+}
+
+#[test]
+fn replies_and_reactions_point_at_the_message_they_answer() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    fake.say("@msgid=m9 :bo!b@host PRIVMSG #oxmacs :lunch?");
+    wait_for_text(&mut editor, &mut ox, "#oxmacs", "lunch?");
+    run(&mut editor, &mut ox, "irc-next-active");
+
+    run(&mut editor, &mut ox, "irc-reply");
+    assert!(editor.buffer().contents().ends_with("↪ bo #oxmacs> "));
+    type_in(&mut editor, &mut ox, "sure");
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(
+        &mut editor,
+        &mut ox,
+        "@+draft/reply=m9 PRIVMSG #oxmacs sure",
+    );
+    assert!(editor.buffer().contents().ends_with("\n#oxmacs> "));
+
+    run(&mut editor, &mut ox, "irc-react");
+    assert!(pump(&mut editor, &mut ox, |editor, _| editor
+        .minibuffer()
+        .is_some()));
+    type_in(&mut editor, &mut ox, "👍");
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(
+        &mut editor,
+        &mut ox,
+        "@+draft/react=👍;+draft/reply=m9 TAGMSG #oxmacs",
+    );
+    fake.say("@+draft/react=🎉;+draft/reply=m9 :cy!c@host TAGMSG #oxmacs");
+    wait_for_text(&mut editor, &mut ox, "#oxmacs", "🎉 1");
+}
+
+#[test]
+fn pasted_lines_are_sent_one_by_one_after_asking() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    run(&mut editor, &mut ox, "irc-switch");
+    type_in(&mut editor, &mut ox, "#oxmacs");
+    keys(&mut editor, &mut ox, "RET");
+    eval(
+        &mut editor,
+        &mut ox,
+        "(set-input \"#oxmacs\" \"one\ntwo\n\")",
+    );
+
+    keys(&mut editor, &mut ox, "RET");
+    assert!(pump(&mut editor, &mut ox, |editor, _| editor
+        .question()
+        .is_some()));
+    keys(&mut editor, &mut ox, "y");
+
+    fake.expect(&mut editor, &mut ox, "PRIVMSG #oxmacs one");
+    fake.expect(&mut editor, &mut ox, "PRIVMSG #oxmacs two");
+}
+
+#[test]
+fn messages_are_logged_by_day_and_found_again() {
+    let fake = Fake::start();
+    let (home, mut editor, mut ox) =
+        started(&network(fake.port, "").replace("logs: false", "logs: true"));
+    run(&mut editor, &mut ox, "irc");
+    fake.expect(&mut editor, &mut ox, "CAP LS 302");
+    fake.say(":srv 001 ana :Welcome");
+    fake.expect(&mut editor, &mut ox, "JOIN #oxmacs");
+    fake.say(":ana!a@host JOIN #oxmacs");
+    fake.say("@time=2026-10-23T09:00:00.000Z :bo!b@host PRIVMSG #oxmacs :the build is green");
+    let folder = home
+        .path()
+        .join("irc")
+        .join("logs")
+        .join("Test")
+        .join("#oxmacs");
+    let logged = pump(&mut editor, &mut ox, |_, _| {
+        fs::read_dir(&folder).is_ok_and(|mut entries| entries.next().is_some())
+    });
+    assert!(logged, "nothing was logged under {}", folder.display());
+
+    run(&mut editor, &mut ox, "irc-search");
+    type_in(&mut editor, &mut ox, "GREEN");
+    keys(&mut editor, &mut ox, "RET");
+    wait_for_text(
+        &mut editor,
+        &mut ox,
+        "*irc search*",
+        "<bo> the build is green",
+    );
+    keys(&mut editor, &mut ox, "RET");
+    assert!(pump(&mut editor, &mut ox, |editor, _| editor
+        .buffer()
+        .contents()
+        .contains("<bo> the build is green")));
+    assert!(editor.buffer().file().is_some());
+}
+
+#[test]
+fn setup_writes_the_network_to_init_ox() {
+    let (home, mut editor, mut ox) = started("");
+
+    run(&mut editor, &mut ox, "irc-setup");
+    let answer = |editor: &mut Editor, ox: &mut Ox, text: &str| {
+        assert!(pump(editor, ox, |editor, _| editor.minibuffer().is_some()));
+        type_in(editor, ox, text);
+        keys(editor, ox, "RET");
+    };
+    let decide = |editor: &mut Editor, ox: &mut Ox, key: &str| {
+        assert!(pump(editor, ox, |editor, _| editor.question().is_some()));
+        keys(editor, ox, key);
+    };
+    answer(&mut editor, &mut ox, "");
+    answer(&mut editor, &mut ox, "");
+    answer(&mut editor, &mut ox, "");
+    decide(&mut editor, &mut ox, "y");
+    answer(&mut editor, &mut ox, "ana");
+    decide(&mut editor, &mut ox, "n");
+    answer(&mut editor, &mut ox, "");
+    decide(&mut editor, &mut ox, "n");
+    pump(&mut editor, &mut ox, |editor, _| {
+        editor.question().is_none()
+    });
+    let init = fs::read_to_string(home.path().join("init.ox")).unwrap();
+    assert_eq!(
+        init,
+        "(use-plugin irc :config {networks: [{name: \"Libera\" host: \"irc.libera.chat\" port: 6697 tls: true nick: \"ana\" channels: [\"#oxmacs\"]}]})\n"
+    );
+    assert_eq!(
+        eval(
+            &mut editor,
+            &mut ox,
+            "(get (first (plugin-setting 'irc :networks)) :nick)"
+        ),
+        r#""ana""#
+    );
+}
+
+fn cheap_vault(home: &Path) {
+    let mut isolate = Isolate::new();
+    let made = isolate
+        .eval(
+            r#"(module (import (ox crypto) (ox json)))
+(let [salt (crypto/random 16)
+      key (await (crypto/derive-key "master" salt :memory 64 :iterations 1 :parallelism 1))]
+  (json/write {version: 1 salt: salt memory: 64 iterations: 1 parallelism: 1
+               sealed: (crypto/seal key (json/write {entries: [{id: "1" title: "IRC Test" username: "ana" password: "pw" url: "" totp: "" notes: ""}]}))}))"#,
+        )
+        .unwrap();
+    fs::write(
+        home.join("vault.json"),
+        print::display(isolate.heap(), made),
+    )
+    .unwrap();
+}
+
+#[test]
+fn sasl_logs_in_with_the_password_from_the_vault() {
+    let fake = Fake::start();
+    let (home, mut editor, mut ox) = started(&network(fake.port, r#"login: "IRC Test""#));
+    cheap_vault(home.path());
+
+    run(&mut editor, &mut ox, "irc");
+    assert!(pump(&mut editor, &mut ox, |editor, _| editor
+        .minibuffer()
+        .is_some()));
+    assert_eq!(editor.minibuffer().unwrap().prompt(), "Vault password: ");
+    type_in(&mut editor, &mut ox, "master");
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(&mut editor, &mut ox, "CAP LS 302");
+    fake.say(":srv CAP * LS :sasl server-time");
+    fake.expect(&mut editor, &mut ox, "CAP REQ :server-time sasl");
+    fake.say(":srv CAP ana ACK :server-time sasl");
+    fake.expect(&mut editor, &mut ox, "AUTHENTICATE PLAIN");
+    fake.say("AUTHENTICATE +");
+    fake.expect(&mut editor, &mut ox, "AUTHENTICATE YW5hAGFuYQBwdw==");
+    fake.say(":srv 903 ana :SASL authentication successful");
+    fake.expect(&mut editor, &mut ox, "CAP END");
+    wait_for_text(&mut editor, &mut ox, "*irc Test*", "Logged in");
+}

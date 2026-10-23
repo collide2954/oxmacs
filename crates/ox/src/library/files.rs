@@ -1,5 +1,5 @@
 use std::fs::{self, Metadata};
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -145,7 +145,21 @@ fn write(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     })
 }
 
+fn append(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let path = PathBuf::from(text(heap, "file/append", arguments[0])?);
+    let contents = text(heap, "file/append", arguments[1])?.to_owned();
+    heap.background("ox file/append", move || {
+        let written = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .and_then(|mut file| file.write_all(contents.as_bytes()));
+        done(written, "append to", &path)
+    })
+}
+
 pub fn install(isolate: &mut Isolate) {
+    isolate.define_native_in(MODULE, "append", 2, Some(2), append);
     single(isolate, "list", |path| list(&path));
     single(isolate, "read", |path| {
         fs::read_to_string(&path)

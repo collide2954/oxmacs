@@ -32,7 +32,7 @@ impl Editor {
             Command::BackwardChar => self.move_point(|_, p| text::motion::backward_char(p, 1)),
             Command::NextLine => self.move_vertically(1, goal_column),
             Command::PreviousLine => self.move_vertically(-1, goal_column),
-            Command::MoveBeginningOfLine => self.move_point(text::motion::beginning_of_line),
+            Command::MoveBeginningOfLine => self.beginning_of_line_or_input(),
             Command::MoveEndOfLine => self.move_point(text::motion::end_of_line),
             Command::ForwardWord => self.move_point(text::motion::forward_word),
             Command::BackwardWord => self.move_point(text::motion::backward_word),

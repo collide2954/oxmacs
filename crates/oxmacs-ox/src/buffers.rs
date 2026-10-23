@@ -4,16 +4,22 @@ use std::path::{Path, PathBuf};
 use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
-use oxmacs_core::command::ScopeId;
+use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::display::LineStyle;
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Editor, InputLine};
 use oxmacs_core::plugin::PluginBuffer;
-use oxmacs_core::text::BufferId;
+use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
 use crate::views::face_named;
 
 type Pills = Vec<(Range<usize>, Highlight)>;
+
+#[derive(Debug)]
+struct Chat {
+    input: InputLine,
+    prompt: String,
+}
 
 #[derive(Debug)]
 pub struct LinesBuffer {
@@ -27,11 +33,16 @@ pub struct LinesBuffer {
     seen_line: Option<usize>,
     seen_width: Option<usize>,
     unsaved: bool,
+    chat: Option<Chat>,
 }
 
 impl PluginBuffer for LinesBuffer {
     fn scope(&self) -> ScopeId {
         self.scope
+    }
+
+    fn input_line(&mut self) -> Option<&mut InputLine> {
+        self.chat.as_mut().map(|chat| &mut chat.input)
     }
 
     fn directory(&self) -> Option<&Path> {
@@ -189,7 +200,244 @@ fn plugin_buffer(editor: &Editor, name: &str) -> Option<BufferId> {
         })
 }
 
+fn prompt_start(buffer: &Buffer, chat: &Chat) -> usize {
+    chat.input
+        .start(buffer)
+        .unwrap_or_else(|| buffer.len_chars())
+        .saturating_sub(chat.prompt.chars().count())
+}
+
+fn prompt_style(prompt: &str) -> LineStyle {
+    LineStyle {
+        background: None,
+        spans: vec![(0..prompt.chars().count(), Highlight::Keyword)],
+    }
+}
+
+fn transcript(rendered: &Rendered) -> String {
+    if rendered.styles.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", rendered.text)
+    }
+}
+
+fn replace_unrecorded(buffer: &mut Buffer, end: usize, text: &str) {
+    let old = buffer.text_in(0..end);
+    if old == text {
+        return;
+    }
+    let prefix = old
+        .chars()
+        .zip(text.chars())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let suffix = old
+        .chars()
+        .rev()
+        .zip(text.chars().rev())
+        .take_while(|(a, b)| a == b)
+        .count()
+        .min(end - prefix)
+        .min(text.chars().count() - prefix);
+    buffer.delete_unrecorded(prefix..end - suffix);
+    let middle: String = text
+        .chars()
+        .skip(prefix)
+        .take(text.chars().count() - prefix - suffix)
+        .collect();
+    buffer.insert_unrecorded(prefix, &middle);
+}
+
+fn start_chat(editor: &mut Editor, id: BufferId, prompt: String) {
+    let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) else {
+        return;
+    };
+    if let Some(chat) = &mut view.chat {
+        if chat.prompt != prompt {
+            let from = prompt_start(buffer, chat);
+            let from_end = (buffer.point() >= from).then(|| buffer.len_chars() - buffer.point());
+            buffer.delete_unrecorded(from..from + chat.prompt.chars().count());
+            buffer.insert_unrecorded(from, &prompt);
+            buffer.set_marker(chat.input.mark(), from + prompt.chars().count());
+            if let Some(from_end) = from_end {
+                buffer.set_point(buffer.len_chars() - from_end);
+            }
+            if let Some(style) = view.styles.last_mut() {
+                *style = prompt_style(&prompt);
+            }
+            chat.prompt = prompt;
+        }
+        return;
+    }
+    buffer.set_read_only(false);
+    let end = buffer.len_chars();
+    let added = if end > 0 {
+        format!("\n{prompt}")
+    } else {
+        prompt.clone()
+    };
+    buffer.insert_unrecorded(end, &added);
+    let input = InputLine::new(buffer);
+    buffer.set_point(buffer.len_chars());
+    view.styles.push(prompt_style(&prompt));
+    view.pills.push(Vec::new());
+    view.chat = Some(Chat { input, prompt });
+    let scope = view.scope;
+    editor.bind(scope, "M-p", Command::ComintPreviousInput).ok();
+    editor.bind(scope, "M-n", Command::ComintNextInput).ok();
+}
+
+fn fill_chat(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<usize>) {
+    let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) else {
+        return;
+    };
+    let Some(chat) = &view.chat else {
+        return;
+    };
+    let end = prompt_start(buffer, chat);
+    let prompt = prompt_style(&chat.prompt);
+    let point = buffer.point();
+    let here = (point < end).then(|| {
+        let line = buffer.line_of(point);
+        (line, point - buffer.line_start(line))
+    });
+    let text = transcript(&rendered);
+    replace_unrecorded(buffer, end, &text);
+    let lines = rendered.styles.len();
+    view.styles = rendered.styles;
+    view.styles.push(prompt);
+    view.pills = rendered.pills;
+    view.pills.push(Vec::new());
+    let wanted = placed.map(|line| (line, 0)).or(here);
+    if let Some((line, column)) = wanted {
+        let line = line.min(lines.saturating_sub(1));
+        let start = buffer.line_start(line);
+        buffer.set_point((start + column).min(buffer.line_end(line)));
+    }
+}
+
+fn append(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let name = crate::views::buffer_name(heap, "append-lines", arguments[0])?;
+    let id = plugin_buffer(editor, &name)
+        .ok_or_else(|| Error::new(format!("There is no plugin buffer named {name}")))?;
+    let rendered = render(heap, "append-lines", arguments[1])?;
+    if rendered.styles.is_empty() {
+        return Ok(Value::Nil);
+    }
+    let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) else {
+        return Ok(Value::Nil);
+    };
+    let (at, text, index) = match &view.chat {
+        Some(chat) => (
+            prompt_start(buffer, chat),
+            transcript(&rendered),
+            view.styles.len().saturating_sub(1),
+        ),
+        None if buffer.len_chars() == 0 && view.styles.is_empty() => (0, rendered.text.clone(), 0),
+        None => (
+            buffer.len_chars(),
+            format!("\n{}", rendered.text),
+            view.styles.len(),
+        ),
+    };
+    buffer.insert_unrecorded(at, &text);
+    let following = at + text.chars().count();
+    view.styles.splice(index..index, rendered.styles);
+    view.pills.splice(index..index, rendered.pills);
+    if view.chat.is_some() {
+        editor.move_points(id, |point, _| (point >= following).then_some(point));
+    }
+    Ok(Value::Nil)
+}
+
+fn chat_of(editor: &mut Editor, id: BufferId) -> Option<(&mut Buffer, &mut Chat)> {
+    let (buffer, view) = editor.plugin_buffer_mut::<LinesBuffer>(id)?;
+    Some((buffer, view.chat.as_mut()?))
+}
+
+fn take_input(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Error> {
+    let id = editor.buffer().id();
+    let Some((buffer, chat)) = chat_of(editor, id) else {
+        return Ok(Value::Nil);
+    };
+    let text = chat.input.text(buffer).unwrap_or_default();
+    chat.input.remember(&text);
+    let start = chat
+        .input
+        .start(buffer)
+        .unwrap_or_else(|| buffer.len_chars());
+    buffer.delete_unrecorded(start..buffer.len_chars());
+    buffer.set_point(buffer.len_chars());
+    heap.string(&text)
+        .map_err(|full| Error::new(full.to_string()))
+}
+
+fn input_text(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let id = match arguments.first() {
+        Some(name) => editor.buffer_named(&print::display(heap, *name)),
+        None => Some(editor.buffer().id()),
+    };
+    let Some((buffer, chat)) = id.and_then(|id| chat_of(editor, id)) else {
+        return Ok(Value::Nil);
+    };
+    let text = chat.input.text(buffer).unwrap_or_default();
+    heap.string(&text)
+        .map_err(|full| Error::new(full.to_string()))
+}
+
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "natives return results even when they cannot fail"
+)]
+fn input_point(_: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Error> {
+    let id = editor.buffer().id();
+    let Some((buffer, chat)) = chat_of(editor, id) else {
+        return Ok(Value::Nil);
+    };
+    let start = chat
+        .input
+        .start(buffer)
+        .unwrap_or_else(|| buffer.len_chars());
+    Ok(buffer
+        .point()
+        .checked_sub(start)
+        .map_or(Value::Nil, |offset| {
+            Value::Int(i64::try_from(offset).unwrap_or(i64::MAX))
+        }))
+}
+
+fn set_input(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let name = crate::views::buffer_name(heap, "set-input", arguments[0])?;
+    let text = print::display(heap, arguments[1]);
+    let point = match arguments.get(2..) {
+        Some([Value::Keyword(option), value]) if option.name() == "point" => {
+            Some(number(heap, *value)?)
+        }
+        Some([]) | None => None,
+        Some(_) => return Err(Error::new("set-input takes :point")),
+    };
+    let id = editor
+        .buffer_named(&name)
+        .ok_or_else(|| Error::new(format!("There is no buffer named {name}")))?;
+    let Some((buffer, chat)) = chat_of(editor, id) else {
+        return Err(Error::new(format!("{name} has no input line")));
+    };
+    chat.input.replace(buffer, &text);
+    if let (Some(point), Some(start)) = (point, chat.input.start(buffer)) {
+        buffer.set_point((start + point).min(buffer.len_chars()));
+    }
+    Ok(Value::Nil)
+}
+
 fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<usize>) {
+    if editor
+        .plugin_buffer::<LinesBuffer>(id)
+        .is_some_and(|(_, view)| view.chat.is_some())
+    {
+        fill_chat(editor, id, rendered, placed);
+        return;
+    }
     let Some(buffer) = editor.buffer_by_id(id) else {
         return;
     };
@@ -238,6 +486,8 @@ struct Options {
     resized: Option<Value>,
     line: Option<usize>,
     unsaved: Option<bool>,
+    input: Option<String>,
+    hidden: bool,
 }
 
 fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
@@ -253,6 +503,8 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
                 "on-resize" => found.resized = Some(*value),
                 "line" => found.line = Some(number(heap, *value)?),
                 "unsaved" => found.unsaved = Some(value.truthy()),
+                "input" => found.input = Some(print::display(heap, *value)),
+                "show" => found.hidden = !value.truthy(),
                 _ => return Err(unknown(heap, pair[0])),
             },
             _ => return Err(unknown(heap, pair[0])),
@@ -263,7 +515,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
-        "open-buffer takes :keys, :directory, :watch, :beside, :on-move, :on-resize, :line and :unsaved, not {}",
+        "open-buffer takes :keys, :directory, :watch, :beside, :on-move, :on-resize, :line, :unsaved, :input and :show, not {}",
         print::write(heap, option)
     ))
 }
@@ -325,9 +577,13 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
                 seen_line: None,
                 seen_width: None,
                 unsaved: false,
+                chat: None,
             }
         })
     });
+    if let Some(prompt) = given.input.take() {
+        start_chat(editor, id, prompt);
+    }
     fill(editor, id, rendered, given.line.take());
     if let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) {
         view.seen_line = Some(buffer.line_of(buffer.point()));
@@ -344,7 +600,9 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         }
     }
     bind(editor, id, given.bindings)?;
-    reveal(editor, id, given.beside);
+    if !given.hidden {
+        reveal(editor, id, given.beside);
+    }
     Ok(Value::Nil)
 }
 
@@ -456,6 +714,26 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>("open-buffer", 2, None, open);
     isolate.define_host_native::<Editor>("set-lines", 2, Some(6), set_lines);
     isolate.define_host_native::<Editor>("current-line", 0, Some(0), current_line);
+    isolate.define_host_native::<Editor>("append-lines", 2, Some(2), append);
+    isolate.define_host_native::<Editor>("take-input", 0, Some(0), take_input);
+    isolate.define_host_native::<Editor>("input-text", 0, Some(1), input_text);
+    isolate.define_host_native::<Editor>("input-point", 0, Some(0), input_point);
+    isolate.define_host_native::<Editor>("set-input", 2, Some(4), set_input);
+    isolate.define_host_native::<Editor>("current-column", 0, Some(0), |_, editor, _| {
+        let buffer = editor.buffer();
+        let point = buffer.point();
+        let column = point - buffer.line_start(buffer.line_of(point));
+        Ok(Value::Int(i64::try_from(column).unwrap_or(i64::MAX)))
+    });
+    isolate.define_host_native::<Editor>("line-text", 1, Some(1), |heap, editor, arguments| {
+        let line = number(heap, arguments[0])?;
+        let buffer = editor.buffer();
+        if line >= buffer.len_lines() {
+            return Ok(Value::Nil);
+        }
+        heap.string(&buffer.line_text(line))
+            .map_err(|full| Error::new(full.to_string()))
+    });
     isolate.define_host_native::<Editor>("goto-line", 1, Some(2), goto_line);
     isolate.define_host_native::<Editor>(
         "buffer-exists?",
@@ -777,6 +1055,88 @@ mod tests {
             .eval(&mut editor, r#"(switch-to-buffer "*nowhere*")"#)
             .unwrap_err();
         assert_eq!(missing.message, "There is no buffer named *nowhere*");
+    }
+
+    #[test]
+    fn chat_buffers_keep_typed_input_below_their_lines() {
+        let (mut editor, mut ox) = opened(r#"(open-buffer "*chat*" ["one" "two"] :input "> ")"#);
+        assert_eq!(editor.buffer().contents(), "one\ntwo\n> ");
+
+        press(&mut editor, &mut ox, "h i");
+        ox.eval(
+            &mut editor,
+            r#"(append-lines "*chat*" ["three" ["four " ["x" :link]]])"#,
+        )
+        .unwrap();
+        assert_eq!(editor.buffer().contents(), "one\ntwo\nthree\nfour x\n> hi");
+        assert_eq!(editor.line_style(3).spans, [(5..6, Highlight::Link)]);
+        assert_eq!(editor.buffer().point(), editor.buffer().len_chars());
+
+        ox.eval(&mut editor, r#"(set-lines "*chat*" ["fresh"])"#)
+            .unwrap();
+        assert_eq!(editor.buffer().contents(), "fresh\n> hi");
+        assert_eq!(
+            ox.eval(&mut editor, "[(input-text) (input-point) (take-input)]")
+                .unwrap(),
+            r#"["hi" 2 "hi"]"#
+        );
+        assert_eq!(editor.buffer().contents(), "fresh\n> ");
+
+        press(&mut editor, &mut ox, "M-< x");
+        assert_eq!(editor.buffer().contents(), "fresh\n> x");
+        press(&mut editor, &mut ox, "M-<");
+        assert_eq!(ox.eval(&mut editor, "(input-point)").unwrap(), "nil");
+        press(&mut editor, &mut ox, "M-> DEL M-p");
+        assert_eq!(editor.buffer().contents(), "fresh\n> hi");
+
+        ox.eval(
+            &mut editor,
+            r#"(open-buffer "*chat*" ["fresh"] :input ">> ")"#,
+        )
+        .unwrap();
+        assert_eq!(editor.buffer().contents(), "fresh\n>> hi");
+        assert_eq!(
+            ox.eval(&mut editor, "[(input-text) (input-point)]")
+                .unwrap(),
+            r#"["hi" 2]"#
+        );
+    }
+
+    #[test]
+    fn buffers_can_be_made_without_showing_them() {
+        let (editor, _) = opened(r#"(open-buffer "*quiet*" ["a"] :input "> " :show false)"#);
+
+        assert_eq!(editor.buffer().name(), "*scratch*");
+        let id = editor.buffer_named("*quiet*").unwrap();
+        assert_eq!(editor.buffer_by_id(id).unwrap().contents(), "a\n> ");
+        assert!(!editor.buffer_shown(id));
+    }
+
+    #[test]
+    fn plugins_set_the_input_and_read_the_text_around_point() {
+        let (mut editor, mut ox) = opened(
+            r##"(open-buffer "*chat*" ["alpha beta" "gamma"] :input "#oxmacs> ")
+               (set-input "*chat*" "hello wor" :point 5)"##,
+        );
+
+        assert_eq!(
+            editor.buffer().contents(),
+            "alpha beta\ngamma\n#oxmacs> hello wor"
+        );
+        assert_eq!(ox.eval(&mut editor, "(input-point)").unwrap(), "5");
+        ox.eval(&mut editor, "(goto-line 0 6)").unwrap();
+        assert_eq!(
+            ox.eval(
+                &mut editor,
+                "[(current-column) (line-text 0) (line-text 1) (input-text \"*chat*\")]"
+            )
+            .unwrap(),
+            r#"[6 "alpha beta" "gamma" "hello wor"]"#
+        );
+        assert_eq!(
+            ox.eval(&mut editor, r#"(input-text "*scratch*")"#).unwrap(),
+            "nil"
+        );
     }
 
     #[test]
