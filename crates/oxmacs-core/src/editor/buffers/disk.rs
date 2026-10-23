@@ -102,10 +102,6 @@ impl Editor {
     }
 
     pub(in crate::editor) fn revert_buffer(&mut self) {
-        if self.customizing().is_some() {
-            self.revert_settings();
-            return;
-        }
         if self.in_diagnostics_list() {
             self.recheck();
             return;
@@ -191,6 +187,8 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
+    use serde_json::json;
+
     use crate::command::Command;
     use crate::config::Config;
     use crate::editor::Editor;
@@ -263,7 +261,9 @@ mod tests {
     }
 
     fn with_mode(editor: &mut Editor, mode: &str) {
-        let config = Config::parse(&format!("on-disk-change = \"{mode}\"")).unwrap();
+        let config = Config::default()
+            .with("on-disk-change", json!(mode))
+            .unwrap();
         editor.apply_config(&config);
     }
 

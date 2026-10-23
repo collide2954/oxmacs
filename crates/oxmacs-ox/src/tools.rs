@@ -39,6 +39,7 @@ enum Request {
     Send,
     Recall(bool),
     Saved(PathBuf),
+    ReloadInit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -188,6 +189,16 @@ impl PluginBuffer for ReplView {
     fn input_line(&mut self) -> Option<&mut InputLine> {
         Some(&mut self.input)
     }
+}
+
+pub(crate) fn requests_waiting(editor: &Editor) -> bool {
+    editor
+        .plugin_state::<Requests>()
+        .is_some_and(|requests| !requests.waiting.is_empty())
+}
+
+pub(crate) fn reload_init(editor: &mut Editor) {
+    queue(editor, Request::ReloadInit);
 }
 
 fn queue(editor: &mut Editor, request: Request) {
@@ -480,6 +491,10 @@ impl Ox {
                 Request::Saved(path) => {
                     self.reload(editor, &path);
                 }
+                Request::ReloadInit => {
+                    let home = self.home.clone();
+                    self.run_init(editor, home.as_deref());
+                }
             }
         }
     }
@@ -706,7 +721,7 @@ impl Ox {
 
     fn reloads(&self, path: &Path) -> bool {
         self.home.as_ref().is_some_and(|home| {
-            same_file(path, &home.join("init.ox")) || plugin_file(home, path).is_some()
+            init_file(home, path).is_some() || plugin_file(home, path).is_some()
         })
     }
 
@@ -714,9 +729,9 @@ impl Ox {
         let Some(home) = self.home.clone() else {
             return false;
         };
-        if same_file(path, &home.join("init.ox")) {
+        if let Some(name) = init_file(&home, path) {
             if self.run_init(editor, Some(&home)) {
-                editor.show_message("Reloaded init.ox");
+                editor.show_message(format!("Reloaded {name}"));
             }
             return true;
         }
@@ -726,6 +741,12 @@ impl Ox {
         plugins::reload_file(&mut self.isolate, editor, &plugin, &file, path);
         true
     }
+}
+
+fn init_file(home: &Path, path: &Path) -> Option<&'static str> {
+    ["init.ox", "custom.ox"]
+        .into_iter()
+        .find(|name| same_file(path, &home.join(name)))
 }
 
 pub(crate) fn plugin_file(home: &Path, path: &Path) -> Option<(String, String)> {
@@ -1079,6 +1100,47 @@ mod tests {
 
         assert_eq!(editor.message(), Some("Howdy 2"));
         assert_eq!(logged(&editor), "");
+    }
+
+    #[test]
+    fn reloading_init_ox_starts_settings_from_their_defaults() {
+        let home = home_with(&[
+            ("custom.ox", "(settings {clock: false})"),
+            ("init.ox", "(settings {tab-width: 4})"),
+        ]);
+        let (mut editor, mut ox) = visiting(home.path(), "init.ox");
+        assert_eq!(editor.config().tab_width, 4);
+
+        ox.eval(&mut editor, "(settings {line-numbers: :off})")
+            .unwrap();
+        rewrite(&mut editor, &mut ox, "(def quiet true)");
+
+        assert_eq!(editor.config().tab_width, 8);
+        assert!(!editor.config().clock);
+        assert_eq!(
+            editor.config().line_numbers,
+            oxmacs_core::config::LineNumbers::Absolute
+        );
+        assert_eq!(editor.message(), Some("Reloaded init.ox"));
+    }
+
+    #[test]
+    fn saving_custom_ox_runs_both_files_again() {
+        let home = home_with(&[
+            ("custom.ox", "(settings {clock: false})"),
+            ("init.ox", "(settings {tab-width: 4})"),
+        ]);
+        let (mut editor, mut ox) = visiting(home.path(), "custom.ox");
+
+        rewrite(
+            &mut editor,
+            &mut ox,
+            "(settings {tab-width: 2 splash: false})",
+        );
+
+        assert!(editor.config().clock);
+        assert!(!editor.config().splash);
+        assert_eq!(editor.config().tab_width, 4);
     }
 
     #[test]

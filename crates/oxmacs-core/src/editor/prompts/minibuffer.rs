@@ -24,7 +24,6 @@ pub(in crate::editor) enum Purpose {
     ReplaceTo(bool),
     Item,
     Compile,
-    Setting(usize),
     RHelp,
     SavePlot,
     Callback { completes: bool, secret: bool },
@@ -49,7 +48,6 @@ impl Purpose {
             Self::ReplaceFrom(_)
                 | Self::ReplaceTo(_)
                 | Self::Compile
-                | Self::Setting(_)
                 | Self::Callback {
                     completes: false,
                     ..
@@ -186,11 +184,9 @@ impl Editor {
                 self.buffer_completions(minibuffer.purpose, matches)
             }
             Purpose::LoadTheme => self.theme_completions(matches),
-            Purpose::ReplaceFrom(_)
-            | Purpose::ReplaceTo(_)
-            | Purpose::Compile
-            | Purpose::RHelp
-            | Purpose::Setting(_) => Vec::new(),
+            Purpose::ReplaceFrom(_) | Purpose::ReplaceTo(_) | Purpose::Compile | Purpose::RHelp => {
+                Vec::new()
+            }
             Purpose::Item => self.item_completions(matches),
             Purpose::Callback { .. } => self.callback_completions(matches),
         }
@@ -329,9 +325,6 @@ impl Editor {
             self.r_help_on(&input, default);
             return;
         }
-        if self.exit_entry_prompt(purpose) {
-            return;
-        }
         if purpose.takes_text() {
             self.exit_replace_prompt(purpose);
             return;
@@ -364,18 +357,6 @@ impl Editor {
             Choice::Item(position) => self.jump_to_item(position),
             Choice::Entry(_) | Choice::Offered(_) => {}
         }
-    }
-
-    fn exit_entry_prompt(&mut self, purpose: Purpose) -> bool {
-        let input = self.minibuffer_input();
-        match purpose {
-            Purpose::Setting(index) => {
-                self.minibuffer = None;
-                self.set_setting_from(index, &input);
-            }
-            _ => return false,
-        }
-        true
     }
 
     pub(in crate::editor) fn note_no_match(&mut self) {

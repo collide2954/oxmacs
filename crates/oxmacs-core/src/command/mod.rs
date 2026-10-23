@@ -368,15 +368,10 @@ pub enum Command {
     #[strum(message = "Visit the error on this line")]
     CompileGotoError,
     #[strum(
-        message = "Change settings in a form",
-        detailed_message = "Opens *Settings*, grouped by section. n and p move between settings; RET or a click toggles a switch, cycles a choice or asks for a value. Changes apply at once, C-x C-s writes them to config.toml and g discards them."
+        message = "Open init.ox; saving it runs it again",
+        detailed_message = "Opens init.ox in the oxmacs home folder, empty if the file does not exist yet. (settings {…}) there sets the editor's settings and (use-plugin …) configures plugins; saving runs it again, after custom.ox. M-x customize offers a form instead."
     )]
-    Customize,
-    #[strum(
-        message = "Open config.toml; saving it applies the settings",
-        detailed_message = "Opens config.toml as a TOML buffer, empty if the file does not exist yet. Saving applies the settings at once; invalid settings are reported and the old ones kept. M-x customize offers a form instead."
-    )]
-    FindConfigFile,
+    FindInitFile,
     #[strum(
         message = "Explain a command, its keys and where it works",
         detailed_message = "Lists every command with its key and what it does. RET opens *Help* beside the current window with the full description; q closes it."
@@ -396,12 +391,6 @@ pub enum Command {
         detailed_message = "Affects only the current buffer. The line-numbers setting chooses the default for every file buffer."
     )]
     DisplayLineNumbersMode,
-    #[strum(message = "Move to the next setting")]
-    WidgetForward,
-    #[strum(message = "Move to the previous setting")]
-    WidgetBackward,
-    #[strum(message = "Change the setting on this line")]
-    WidgetButtonPress,
     #[strum(message = "Move to the next key line")]
     ForwardButton,
     #[strum(message = "Move to the previous key line")]
@@ -576,9 +565,6 @@ impl Command {
             | Self::MinibufferDeleteBackward
             | Self::ExitMinibufferWithInput => Scope::Minibuffer,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
-            Self::WidgetForward | Self::WidgetBackward | Self::WidgetButtonPress => {
-                Scope::Customize
-            }
             Self::RustCheck
             | Self::RustCompile
             | Self::RustTest
@@ -647,7 +633,6 @@ pub enum Scope {
     R,
     Console,
     Compilation,
-    Customize,
     Diagnostics,
     Help,
     Popup,
@@ -670,7 +655,6 @@ impl Scope {
             Self::R => Some("R buffers"),
             Self::Console => Some("consoles"),
             Self::Compilation => Some("*compilation*"),
-            Self::Customize => Some("*Settings*"),
             Self::Diagnostics => Some("*Diagnostics*"),
             Self::Help => Some("*Help*"),
             Self::Popup => Some("the completion popup"),

@@ -3274,8 +3274,6 @@ dependencies = [
  "sysinfo",
  "tempfile",
  "thiserror 2.0.21",
- "toml",
- "toml_edit",
  "tree-sitter",
  "tree-sitter-r",
  "tree-sitter-rust",
@@ -3296,6 +3294,7 @@ dependencies = [
  "open",
  "oxmacs-core",
  "oxmacs-ox",
+ "serde_json",
  "skrifa 0.48.0",
  "tempfile",
  "ureq",
@@ -3309,6 +3308,7 @@ dependencies = [
  "jiff",
  "ox",
  "oxmacs-core",
+ "serde_json",
  "tempfile",
 ]
 
@@ -4694,7 +4694,6 @@ dependencies = [
  "indexmap 2.14.2",
  "toml_datetime",
  "toml_parser",
- "toml_writer",
  "winnow",
 ]
 

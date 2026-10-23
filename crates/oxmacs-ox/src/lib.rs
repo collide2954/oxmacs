@@ -11,6 +11,7 @@ mod modes;
 mod natives;
 mod plugins;
 mod prompts;
+mod settings;
 pub mod shapes;
 mod stacktrace;
 pub mod takeover;
@@ -26,6 +27,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use ox::{Error, Isolate};
+use oxmacs_core::config::Config;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::text::BufferId;
 pub use plugins::Bundle;
@@ -43,6 +45,7 @@ pub fn home() -> Option<PathBuf> {
 fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     let mut isolate = Isolate::new();
     natives::install(&mut isolate);
+    settings::install(&mut isolate);
     commands::install(&mut isolate);
     plugins::install(&mut isolate);
     views::install(&mut isolate);
@@ -108,6 +111,7 @@ impl Ox {
 
     pub fn start(&mut self, editor: &mut Editor, home: Option<&Path>) {
         self.home = home.map(Path::to_path_buf);
+        editor.set_init_path(home.map(|home| home.join("init.ox")));
         tools::install(editor);
         hooks::watch(editor);
         plugins::discover(&mut self.isolate, editor, self.bundled, home);
@@ -149,11 +153,26 @@ impl Ox {
     }
 
     fn run_init(&mut self, editor: &mut Editor, home: Option<&Path>) -> bool {
-        let Some(path) = home.map(|home| home.join("init.ox")) else {
+        let Some(home) = home else {
             return false;
         };
-        let Ok(source) = fs::read_to_string(&path) else {
-            return false;
+        if editor.config() != &Config::default() {
+            editor.reconfigure(&Config::default());
+        }
+        plugins::reset_configs(self.isolate.heap_mut(), editor);
+        let custom = self.run_file(editor, &home.join("custom.ox"));
+        settings::mark_custom(editor);
+        plugins::mark_custom(self.isolate.heap_mut(), editor);
+        let init = self.run_file(editor, &home.join("init.ox"));
+        settings::mark_saved(editor);
+        plugins::mark_saved(self.isolate.heap_mut(), editor);
+        hooks::settings_changed(editor);
+        custom && init
+    }
+
+    fn run_file(&mut self, editor: &mut Editor, path: &Path) -> bool {
+        let Ok(source) = fs::read_to_string(path) else {
+            return true;
         };
         let name = path.display().to_string();
         if let Err(error) = self.isolate.eval_named_with(editor, &name, &source) {
@@ -218,6 +237,9 @@ impl Ox {
         help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         help::eldoc(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         self.timed("tick", started);
+        if tools::requests_waiting(editor) {
+            return Pace::Running;
+        }
         self.pace()
     }
 }
@@ -415,6 +437,43 @@ mod tests {
 
         assert_eq!(editor.message(), Some("Hello"));
         assert_eq!(editor.buffer_named(log::LOG), None);
+    }
+
+    #[test]
+    fn custom_ox_runs_before_init_ox_and_init_ox_wins() {
+        let home = home_with(&[
+            ("custom.ox", "(settings {tab-width: 2 clock: false})"),
+            ("init.ox", "(settings {tab-width: 4})"),
+        ]);
+        let mut editor = Editor::new();
+
+        Ox::new().start(&mut editor, Some(home.path()));
+
+        assert_eq!(editor.config().tab_width, 4);
+        assert!(!editor.config().clock);
+        assert_eq!(
+            editor.init_path(),
+            Some(home.path().join("init.ox").as_path())
+        );
+    }
+
+    #[test]
+    fn a_failing_custom_ox_is_logged_and_init_ox_still_runs() {
+        let home = home_with(&[
+            ("custom.ox", "(settings {tab-width: 0})"),
+            ("init.ox", "(settings {clock: false})"),
+        ]);
+        let mut editor = Editor::new();
+
+        Ox::new().start(&mut editor, Some(home.path()));
+
+        assert!(!editor.config().clock);
+        let log = editor.buffer_named(log::LOG).unwrap();
+        let text = editor.buffer_by_id(log).unwrap().contents();
+        assert!(
+            text.contains("custom.ox:1:1: tab-width must be at least 1"),
+            "{text}"
+        );
     }
 
     #[test]

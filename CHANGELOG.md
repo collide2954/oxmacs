@@ -15,6 +15,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Removed
 
+- `config.toml`. oxmacs no longer reads it, and the toml and toml_edit crates are gone; settings move to `(settings {…})` in `~/.oxmacs/init.ox`. The old file is left where it was.
 - What was left of the applet system: the applet and GUI applet interfaces, command-line subcommands, applet effects and events, applet sections in `M-x oxmacs-doctor`, applet tables in `config.toml` with their settings in `M-x customize`, and the one-time moves of old weather, IRC, Atlas and dired settings into those tables. Plugins use the same building blocks under plugin names. Tables in `config.toml` are left alone, and the doctor names them as no longer read.
 - The unfinished routines parser, superseded by Ox.
 - The applets and their Cargo features: dired, markdown and weather, which were built by default, and animated-splash, atlas, database, demo, extra-themes, git, glow, irc, pdf, python and scripting. They return as Ox plugins.
@@ -25,6 +26,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- Settings are Ox: `(settings {theme: :adwaita-dark tab-width: 4})` in `~/.oxmacs/init.ox` sets them, and plugins take theirs from `use-plugin`'s `:config`. `custom.ox` and `init.ox` run before the window opens, so the theme, font and window mode apply from the first frame, and saving either runs both again from fresh settings. `M-x find-init-file` replaces `find-config-file`.
+- `M-x customize` is a bundled Ox plugin and lists plugin settings too. `C-x C-s` writes `~/.oxmacs/custom.ox`, which runs before `init.ox`, so `init.ox` wins; a setting `init.ox` overrides says so.
 - oxmacs is open source, under either the MIT License or the Apache License 2.0, at your option.
 - Ox and its `ox` command share the oxmacs version number.
 - Ox code runs two to three times faster: function lookups are cached, calls and arithmetic do less work, comparisons and hashing no longer allocate, and `map`, `filter`, `keep`, `take`, `drop` and `distinct` build their results without copying. A frame of the matrix screensaver takes about half as long.

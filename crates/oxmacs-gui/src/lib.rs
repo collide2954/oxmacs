@@ -11,22 +11,23 @@ pub mod widgets;
 
 pub use iced::Result;
 
+use std::cell::Cell;
+
 use app::App;
-use iced::{Size, Task, window};
+use iced::{Size, window};
 use oxmacs_core::cli::Visit;
 use oxmacs_core::config::WindowMode;
 
 pub fn run(visits: Vec<Visit>) -> Result {
-    let config = app::load_config();
-    let mode = config
-        .as_ref()
-        .map(|config| config.window_mode)
-        .unwrap_or_default();
+    let home = oxmacs_ox::home();
+    let booted = App::boot(&visits, home.as_deref());
+    let mode = booted.0.editor().config().window_mode;
+    let booted = Cell::new(Some(booted));
     iced::application(
         move || {
-            let (mut app, task) = App::boot(&config, &visits);
-            let started = app.start_ox(oxmacs_ox::home().as_deref());
-            (app, Task::batch([task, started]))
+            booted
+                .take()
+                .unwrap_or_else(|| App::boot(&visits, home.as_deref()))
         },
         App::update,
         App::view,

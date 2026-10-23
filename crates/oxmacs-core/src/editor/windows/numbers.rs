@@ -80,24 +80,26 @@ impl Editor {
 mod tests {
     use std::fs;
 
+    use serde_json::{Value, json};
+
     use super::Gutter;
     use crate::config::{Config, LineNumbers};
     use crate::editor::Editor;
     use crate::editor::test_support::{press, type_text};
 
-    fn visiting(lines: usize, config: &str) -> (tempfile::TempDir, Editor) {
+    fn visiting(lines: usize, config: &Value) -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a.txt");
         fs::write(&path, "line\n".repeat(lines)).unwrap();
         let mut editor = Editor::new();
-        editor.apply_config(&Config::parse(config).unwrap());
+        editor.apply_config(&Config::from_settings(config).unwrap());
         editor.open_file(&path);
         (dir, editor)
     }
 
     #[test]
     fn file_buffers_number_their_lines() {
-        let (_dir, editor) = visiting(3, "");
+        let (_dir, editor) = visiting(3, &json!({}));
 
         let gutter = editor.pane().gutter().unwrap();
 
@@ -109,23 +111,23 @@ mod tests {
 
     #[test]
     fn the_separator_is_drawn_only_when_configured() {
-        let (_dir, editor) = visiting(3, "");
+        let (_dir, editor) = visiting(3, &json!({}));
         assert!(!editor.pane().gutter().unwrap().has_separator());
 
-        let (_dir, editor) = visiting(3, "line-number-separator = true");
+        let (_dir, editor) = visiting(3, &json!({"line-number-separator": true}));
         assert!(editor.pane().gutter().unwrap().has_separator());
     }
 
     #[test]
     fn the_gutter_widens_with_the_line_count() {
-        let (_dir, editor) = visiting(120, "");
+        let (_dir, editor) = visiting(120, &json!({}));
 
         assert_eq!(editor.pane().gutter().unwrap().label(4), "  5");
     }
 
     #[test]
     fn relative_numbers_count_from_the_current_line() {
-        let (_dir, mut editor) = visiting(6, "line-numbers = \"relative\"");
+        let (_dir, mut editor) = visiting(6, &json!({"line-numbers": "relative"}));
         press(&mut editor, "C-n C-n");
 
         let gutter = editor.pane().gutter().unwrap();
@@ -147,9 +149,13 @@ mod tests {
 
     #[test]
     fn the_setting_can_turn_numbers_off() {
-        let (_dir, mut editor) = visiting(3, "");
+        let (_dir, mut editor) = visiting(3, &json!({}));
 
-        editor.reconfigure(&Config::parse("line-numbers = \"off\"").unwrap());
+        editor.reconfigure(
+            &Config::default()
+                .with("line-numbers", json!("off"))
+                .unwrap(),
+        );
 
         assert_eq!(editor.pane().gutter(), None);
     }

@@ -14,7 +14,6 @@ use crate::editor::languages::r_environment::EnvironmentView;
 use crate::editor::languages::r_plots::Plots;
 use crate::editor::languages::r_table::TableView;
 use crate::editor::prompts::minibuffer::Purpose;
-use crate::editor::special::customize::Customize;
 use crate::editor::special::doctor::Doctor;
 use crate::editor::special::help::Help;
 use crate::editor::special::processes::ProcessList;
@@ -34,7 +33,6 @@ pub(super) enum Mode {
     Splash(Splash),
     Doctor(Doctor),
     Compilation(Compilation),
-    Customize(Box<Customize>),
     Diagnostics(DiagnosticsList),
     Console(Console),
     Help(Help),

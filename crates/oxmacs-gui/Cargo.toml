@@ -27,5 +27,6 @@ native-theme = { workspace = true, features = ["macos"] }
 
 [dev-dependencies]
 iced_test.workspace = true
+serde_json.workspace = true
 skrifa.workspace = true
 tempfile.workspace = true

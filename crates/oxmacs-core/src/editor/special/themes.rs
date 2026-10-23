@@ -65,7 +65,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn use_theme(&mut self, theme: Option<&'static Theme>) {
-        let name = theme.map(|theme| toml::Value::String(theme.name.to_owned()));
+        let name = theme.map(|theme| serde_json::Value::from(theme.name));
         self.change_config("theme", name);
     }
 }

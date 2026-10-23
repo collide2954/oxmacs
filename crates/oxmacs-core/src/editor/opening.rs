@@ -22,7 +22,7 @@ fn start(folder: &Path, language: Option<Language>, text: &str) -> Editor {
     let mut editor = editor_with(text, 0);
     editor.set_major_mode(language);
     editor.set_working_directory(folder.to_owned());
-    editor.config_path = Some(folder.join("config.toml"));
+    editor.init_path = Some(folder.join("init.ox"));
     editor
 }
 

@@ -8,11 +8,12 @@ use oxmacs_core::text::BufferId;
 
 use crate::{log, plugins};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Waiting {
     OpenDirectory(PathBuf),
     DiskChanged,
     Saved(PathBuf),
+    Configured,
 }
 
 #[derive(Debug, Default)]
@@ -21,6 +22,7 @@ pub struct Hooks {
     opener: Option<String>,
     disk: Vec<(String, Hold)>,
     saved: Vec<(String, Hold)>,
+    configured: Vec<(String, Hold)>,
     waiting: Vec<Waiting>,
 }
 
@@ -66,10 +68,19 @@ fn saved(editor: &mut Editor, id: BufferId) {
     }
 }
 
+pub fn settings_changed(editor: &mut Editor) {
+    if let Some(hooks) = hooks(editor)
+        && !hooks.waiting.contains(&Waiting::Configured)
+    {
+        hooks.waiting.push(Waiting::Configured);
+    }
+}
+
 pub fn watch(editor: &mut Editor) {
     hooks(editor);
     editor.on_disk_change(disk_changed);
     editor.on_saved(saved);
+    editor.on_configured(settings_changed);
 }
 
 pub fn open_directories(editor: &mut Editor, plugin: &str) {
@@ -98,6 +109,13 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
                 editor
                     .plugin_state::<Hooks>()
                     .map(|hooks| hooks.disk.iter().map(|(_, hold)| *hold).collect())
+                    .unwrap_or_default(),
+                Vec::new(),
+            ),
+            Waiting::Configured => (
+                editor
+                    .plugin_state::<Hooks>()
+                    .map(|hooks| hooks.configured.iter().map(|(_, hold)| *hold).collect())
                     .unwrap_or_default(),
                 Vec::new(),
             ),
@@ -189,6 +207,17 @@ pub fn install(isolate: &mut Isolate) {
         }
         Ok(Value::Nil)
     });
+    isolate.define_host_native::<Editor>(
+        "on-settings-change",
+        2,
+        Some(2),
+        |heap, editor, arguments| {
+            if let Some(hooks) = hooks(editor) {
+                keyed(heap, &mut hooks.configured, arguments);
+            }
+            Ok(Value::Nil)
+        },
+    );
     isolate.define_host_native::<Editor>("open-file", 1, Some(1), |heap, editor, arguments| {
         let path = path_of(heap, "open-file", arguments[0])?;
         Ok(Value::Bool(editor.open_file(&path)))
@@ -319,6 +348,26 @@ mod tests {
         press(&mut editor, &mut ox, "x C-x C-s");
 
         assert_eq!(ox.eval(&mut editor, "@seen").unwrap(), r#""notes.txt""#);
+    }
+
+    #[test]
+    fn settings_changes_reach_their_handlers_once_per_tick() {
+        let home = tempfile::tempdir().unwrap();
+        let (mut editor, mut ox) = started(home.path());
+        ox.eval(
+            &mut editor,
+            "(def seen (atom 0)) (on-settings-change :count (fn [] (swap! seen inc)))",
+        )
+        .unwrap();
+
+        ox.eval(
+            &mut editor,
+            "(settings {tab-width: 4}) (settings {clock: false})",
+        )
+        .unwrap();
+        ox.tick(&mut editor);
+
+        assert_eq!(ox.eval(&mut editor, "@seen").unwrap(), "1");
     }
 
     #[test]

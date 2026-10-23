@@ -66,9 +66,19 @@ fn bind(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     Ok(Value::Nil)
 }
 
+fn run(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let name = name_of(heap, arguments[0])?;
+    let command = editor
+        .command_named(&name)
+        .ok_or_else(|| Error::new(format!("There is no command named {name}")))?;
+    editor.execute(command);
+    Ok(Value::Nil)
+}
+
 pub fn install(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>("define-command", 3, Some(3), define);
     isolate.define_host_native::<Editor>("bind-key", 2, Some(2), bind);
+    isolate.define_host_native::<Editor>("run-command", 1, Some(1), run);
 }
 
 pub fn queue(editor: &mut Editor, name: &str) {

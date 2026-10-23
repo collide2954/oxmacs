@@ -283,10 +283,6 @@ impl Editor {
     }
 
     pub(in crate::editor) fn save_current_buffer(&mut self) {
-        if self.customizing().is_some() {
-            self.save_settings();
-            return;
-        }
         if self.buffers.is_special(0) {
             self.show_message("(No changes need to be saved)");
             return;
@@ -334,8 +330,7 @@ impl Editor {
         let path = file.path.clone();
         let format = file.format;
         let text = buffer.contents();
-        let configuring = self.config_path.as_ref() == Some(&path);
-        if configuring
+        if self.init_path.as_ref() == Some(&path)
             && let Some(directory) = path.parent()
             && let Err(error) = fs::create_dir_all(directory)
         {
@@ -353,9 +348,6 @@ impl Editor {
                     .map(|error| format!("; {error}"))
                     .unwrap_or_default();
                 self.show_message(format!("Wrote {shown}{warning}"));
-                if configuring {
-                    self.apply_config_file(&text, &shown);
-                }
                 if let Some(language) = self.buffers.language(index) {
                     self.request_lint(language, &path);
                 }

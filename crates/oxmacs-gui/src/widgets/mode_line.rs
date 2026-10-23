@@ -224,7 +224,7 @@ fn position(status: &Status) -> String {
 
 fn marker(state: BufferState) -> Option<&'static str> {
     match state {
-        BufferState::Modified | BufferState::UnsavedSettings => Some("●"),
+        BufferState::Modified | BufferState::Unsaved => Some("●"),
         BufferState::ReadOnly => Some("RO"),
         BufferState::Unmodified => None,
     }
@@ -474,7 +474,7 @@ mod tests {
                 .is_err()
         );
         assert!(
-            shown(ModeLineStyle::Minimal, BufferState::UnsavedSettings)
+            shown(ModeLineStyle::Minimal, BufferState::Unsaved)
                 .find("●")
                 .is_ok()
         );

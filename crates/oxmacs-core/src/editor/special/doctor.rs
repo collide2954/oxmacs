@@ -1,7 +1,5 @@
 use std::env;
-use std::path::Path;
 
-use crate::config::Config;
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
@@ -156,26 +154,24 @@ impl Editor {
         field(page, "Theme", &theme, None);
         let font = self.font_note.as_deref().unwrap_or("unknown");
         field(page, "Font", font, None);
-        match &self.config_path {
+        match &self.init_path {
             Some(path) => {
-                let (status, highlight) = config_status(path);
-                field(page, "Config", &path.display().to_string(), None);
-                field(page, "", &status, Some(highlight));
+                field(page, "Init", &path.display().to_string(), None);
+                if !path.exists() {
+                    field(
+                        page,
+                        "",
+                        "not found; using defaults",
+                        Some(Highlight::Success),
+                    );
+                }
             }
             None => field(
                 page,
-                "Config",
-                "no config directory",
+                "Init",
+                "no oxmacs home folder",
                 Some(Highlight::Warning),
             ),
-        }
-        for table in self.config.ignored_tables() {
-            field(
-                page,
-                "",
-                &format!("[{table}] is not read anymore; plugins take their settings in init.ox"),
-                Some(Highlight::Warning),
-            );
         }
         let data = dirs::data_dir().map(|dir| dir.join("oxmacs").display().to_string());
         field(page, "Data", data.as_deref().unwrap_or("none"), None);
@@ -239,22 +235,11 @@ fn tool(page: &mut Page, name: &str, probe: Option<&Probe>, hint: &str) {
     }
 }
 
-fn config_status(path: &Path) -> (String, Highlight) {
-    if !path.exists() {
-        return ("not found; using defaults".to_owned(), Highlight::Success);
-    }
-    match Config::load(path) {
-        Ok(_) => ("loaded".to_owned(), Highlight::Success),
-        Err(error) => (format!("error: {error}"), Highlight::Error),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use crate::config::Config;
     use crate::editor::test_support::{lines, press, type_text};
     use crate::editor::{Editor, Effect};
     use crate::external::managed::AIR;
@@ -278,7 +263,7 @@ mod tests {
     fn opened() -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();
         let mut editor = Editor::new();
-        editor.config_path = Some(dir.path().join("config.toml"));
+        editor.init_path = Some(dir.path().join("init.ox"));
         editor.tools_root = Some(dir.path().join("tools"));
         editor.set_font_note("JetBrains Mono (bundled)");
         press(&mut editor, "M-x");
@@ -438,34 +423,23 @@ mod tests {
     }
 
     #[test]
-    fn config_tables_that_are_not_read_anymore_are_pointed_out() {
-        let (_dir, mut editor) = doctor();
-        editor.apply_config(&Config::parse("[weather]\nlocation = \"Oslo\"\n").unwrap());
-
-        press(&mut editor, "g");
-
-        assert!(
-            line_with(&editor, "[weather]")
-                .ends_with("[weather] is not read anymore; plugins take their settings in init.ox")
-        );
-    }
-
-    #[test]
-    fn the_config_file_is_checked_on_refresh() {
+    fn init_ox_is_named_and_checked_on_refresh() {
         let (dir, mut editor) = doctor();
+        assert!(line_with(&editor, "Init").ends_with("init.ox"));
         assert!(
             lines(&editor)
                 .iter()
                 .any(|line| line.contains("not found; using defaults"))
         );
 
-        fs::write(dir.path().join("config.toml"), "tab-width = 0").unwrap();
+        fs::write(dir.path().join("init.ox"), "(settings {tab-width: 4})").unwrap();
         press(&mut editor, "g");
-        assert!(line_with(&editor, "error:").contains("tab-width must be at least 1"));
 
-        fs::write(dir.path().join("config.toml"), "tab-width = 4").unwrap();
-        press(&mut editor, "g");
-        assert!(lines(&editor).iter().any(|line| line.trim() == "loaded"));
+        assert!(
+            !lines(&editor)
+                .iter()
+                .any(|line| line.contains("not found; using defaults"))
+        );
     }
 
     #[test]

@@ -11,7 +11,7 @@ use iced::{Animation, Event, Font, Subscription, Task, Theme, event, keyboard, s
 use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
-use oxmacs_core::config::{self, Config, ConfigError, ModeLineStyle};
+use oxmacs_core::config::{Config, ModeLineStyle};
 use oxmacs_core::editor::{ConnectionId, Editor, FetchId, JobId, WindowId};
 use oxmacs_core::external::managed::Managed;
 use oxmacs_core::external::net::{self, Connection};
@@ -88,24 +88,16 @@ pub enum Message {
     Idle,
 }
 
-pub fn load_config() -> Result<Config, ConfigError> {
-    config::default_path().map_or_else(|| Ok(Config::default()), |path| Config::load(&path))
-}
-
 impl Default for App {
     fn default() -> Self {
-        Self::new(Ok(&Config::default()))
+        Self::new(&Config::default())
     }
 }
 
 impl App {
-    pub fn new(config: Result<&Config, &ConfigError>) -> Self {
+    pub fn new(config: &Config) -> Self {
         let mut editor = Editor::new();
-        let config = config.cloned().unwrap_or_else(|error| {
-            editor.show_message(error.to_string());
-            Config::default()
-        });
-        editor.apply_config(&config);
+        editor.apply_config(config);
         let mut app = Self {
             editor,
             font: fonts::EDITOR,
@@ -129,21 +121,31 @@ impl App {
             takeover_size: None,
             focused_since: Some(Instant::now()),
         };
-        app.configure(&config);
+        app.configure(config);
         app
     }
 
-    pub fn boot(config: &Result<Config, ConfigError>, visits: &[Visit]) -> (Self, Task<Message>) {
-        let splash = config.as_ref().map_or(true, |config| config.splash);
-        let mut app = Self::new(config.as_ref());
+    pub fn boot(visits: &[Visit], home: Option<&Path>) -> (Self, Task<Message>) {
+        let mut app = Self::default();
+        let started = app.start_ox(home);
+        let splash = app.editor.config().splash;
         app.start(visits, splash);
         app.reduced_motion = prefers_reduced_motion();
         app.configure(&app.editor.config().clone());
         let effects = app.pending_effects();
         (
             app,
-            Task::batch([system::theme().map(Message::AppearanceChanged), effects]),
+            Task::batch([
+                system::theme().map(Message::AppearanceChanged),
+                started,
+                effects,
+            ]),
         )
+    }
+
+    pub fn start_ox(&mut self, home: Option<&Path>) -> Task<Message> {
+        self.ox.start(&mut self.editor, home);
+        self.pending_effects()
     }
 
     fn configure(&mut self, config: &Config) {
@@ -174,11 +176,6 @@ impl App {
         if visits.is_empty() && splash {
             self.editor.about();
         }
-    }
-
-    pub fn start_ox(&mut self, home: Option<&Path>) -> Task<Message> {
-        self.ox.start(&mut self.editor, home);
-        self.pending_effects()
     }
 
     pub fn editor(&self) -> &Editor {
@@ -345,6 +342,11 @@ mod tests {
     use iced::keyboard::{Key, Location, Modifiers};
     use oxmacs_core::editor::{Cell, Clicks, JobId, Outcome};
     use oxmacs_core::theme::{ADWAITA, ADWAITA_DARK};
+    use serde_json::{Value, json};
+
+    fn configured(settings: &Value) -> Config {
+        Config::from_settings(settings).unwrap()
+    }
 
     fn press(app: &mut App, c: &str, modifiers: Modifiers) {
         let _ = app.update(Message::Keyboard(keyboard::Event::KeyPressed {
@@ -389,8 +391,8 @@ mod tests {
 
     #[test]
     fn the_mode_line_follows_the_configured_style() {
-        let config = Config::parse("mode-line-style = \"minimal\"").unwrap();
-        let mut app = App::new(Ok(&config));
+        let config = configured(&json!({"mode-line-style": "minimal"}));
+        let mut app = App::new(&config);
         {
             let mut ui = iced_test::simulator(app.view());
             assert!(ui.find("*scratch*").is_ok());
@@ -461,7 +463,7 @@ mod tests {
 
     #[test]
     fn plugin_segments_show_in_the_mode_line() {
-        let (mut app, _) = App::boot(&Ok(Config::default()), &[]);
+        let (mut app, _) = App::boot(&[], None);
         app.editor
             .add_mode_line_segment(|_| Some("☂ bring one".to_owned()));
 
@@ -564,18 +566,37 @@ mod tests {
     }
 
     #[test]
-    fn config_errors_fall_back_to_defaults_and_are_reported() {
-        let app = App::new(Err(&ConfigError::TabWidth));
+    fn booting_applies_init_ox_settings_before_anything_shows() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("init.ox"),
+            "(settings {theme: :adwaita-dark font-size: 12 window-mode: :maximized splash: false})",
+        )
+        .unwrap();
 
-        assert_eq!(app.editor().message(), Some("tab-width must be at least 1"));
-        assert_eq!(app.editor().tab_width(), 8);
+        let (app, _) = App::boot(&[], Some(home.path()));
+
+        assert_eq!(app.editor().theme().name, "adwaita-dark");
+        assert!((app.text_size() - 16.0).abs() < f32::EPSILON);
+        assert_eq!(
+            app.editor().config().window_mode,
+            oxmacs_core::config::WindowMode::Maximized
+        );
+        assert_eq!(app.editor().buffer().name(), "*scratch*");
+    }
+
+    #[test]
+    fn booting_without_a_home_shows_the_start_screen() {
+        let (app, _) = App::boot(&[], None);
+
+        assert_eq!(app.editor().buffer().name(), "*oxmacs*");
     }
 
     #[test]
     fn config_sets_theme_and_font_size() {
-        let config = Config::parse("theme = \"adwaita-dark\"\nfont-size = 12").unwrap();
+        let config = configured(&json!({"theme": "adwaita-dark", "font-size": 12}));
 
-        let app = App::new(Ok(&config));
+        let app = App::new(&config);
 
         assert_eq!(app.editor().theme().name, "adwaita-dark");
         assert!((app.text_size() - 16.0).abs() < f32::EPSILON);
@@ -583,8 +604,8 @@ mod tests {
 
     #[test]
     fn proportional_fonts_fall_back_to_the_bundled_font() {
-        let config = Config::parse("font-family = \"Comic Sans MS\"").unwrap();
-        let mut app = App::new(Ok(&config));
+        let config = configured(&json!({"font-family": "Comic Sans MS"}));
+        let mut app = App::new(&config);
         assert_ne!(app.font(), fonts::EDITOR);
 
         let _ = app.update(Message::View(
@@ -700,8 +721,8 @@ mod tests {
 
     #[test]
     fn theme_changes_are_instant_without_animations() {
-        let config = Config::parse("animations = false").unwrap();
-        let mut app = App::new(Ok(&config));
+        let config = configured(&json!({"animations": false}));
+        let mut app = App::new(&config);
 
         let _ = app.update(Message::AppearanceChanged(Mode::Dark));
 
@@ -722,8 +743,8 @@ mod tests {
 
     #[test]
     fn completions_appear_at_once_without_animations() {
-        let config = Config::parse("animations = false").unwrap();
-        let mut app = App::new(Ok(&config));
+        let config = configured(&json!({"animations": false}));
+        let mut app = App::new(&config);
 
         press(&mut app, "x", Modifiers::ALT);
 
@@ -742,8 +763,8 @@ mod tests {
     fn animations_follow_the_config() {
         assert!(App::default().animations());
 
-        let config = Config::parse("animations = false").unwrap();
-        assert!(!App::new(Ok(&config)).animations());
+        let config = configured(&json!({"animations": false}));
+        assert!(!App::new(&config).animations());
     }
 
     #[test]
@@ -779,7 +800,9 @@ mod tests {
     fn reconfiguring_updates_the_view_settings() {
         let mut app = App::default();
 
-        app.configure(&Config::parse("font-size = 12\nclock = false\nanimations = false").unwrap());
+        app.configure(&configured(
+            &json!({"font-size": 12, "clock": false, "animations": false}),
+        ));
 
         assert!((app.text_size() - 16.0).abs() < f32::EPSILON);
         assert_eq!(app.clock_format(), None);
@@ -991,8 +1014,8 @@ mod tests {
 
     #[test]
     fn the_doctor_names_the_font_in_use() {
-        let config = Config::parse("font-family = \"Comic Sans MS\"").unwrap();
-        let mut app = App::new(Ok(&config));
+        let config = configured(&json!({"font-family": "Comic Sans MS"}));
+        let mut app = App::new(&config);
         let _ = app.update(Message::View(
             app.editor().selected_window(),
             ViewEvent::FontNotMonospaced,
@@ -1016,14 +1039,14 @@ mod tests {
     fn the_clock_is_on_unless_turned_off() {
         assert_eq!(App::default().clock_format(), Some("%H:%M"));
 
-        let config = Config::parse("clock = false").unwrap();
-        assert_eq!(App::new(Ok(&config)).clock_format(), None);
+        let config = configured(&json!({"clock": false}));
+        assert_eq!(App::new(&config).clock_format(), None);
     }
 
     #[test]
     fn the_mode_line_shows_the_clock() {
-        let config = Config::parse("clock-format = \"teatime\"").unwrap();
-        let app = App::new(Ok(&config));
+        let config = configured(&json!({"clock-format": "teatime"}));
+        let app = App::new(&config);
         let mut ui = iced_test::simulator(app.view());
 
         assert!(ui.find("teatime").is_ok());

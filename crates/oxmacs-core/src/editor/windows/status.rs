@@ -5,7 +5,7 @@ pub enum BufferState {
     Unmodified,
     Modified,
     ReadOnly,
-    UnsavedSettings,
+    Unsaved,
 }
 
 impl BufferState {
@@ -14,7 +14,7 @@ impl BufferState {
             Self::Unmodified => "--",
             Self::Modified => "**",
             Self::ReadOnly => "%%",
-            Self::UnsavedSettings => "%*",
+            Self::Unsaved => "%*",
         }
     }
 }

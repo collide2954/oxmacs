@@ -229,8 +229,12 @@ impl<'a> Pane<'a> {
 
     pub fn status(&self) -> Status {
         let buffer = self.buffer();
-        let state = if self.editor.unsaved_settings(self.index) {
-            BufferState::UnsavedSettings
+        let unsaved = matches!(
+            self.editor.buffers.mode(self.index),
+            Some(Mode::Plugin(view)) if view.unsaved()
+        );
+        let state = if unsaved {
+            BufferState::Unsaved
         } else if buffer.is_read_only() {
             BufferState::ReadOnly
         } else if buffer.is_modified() && !self.editor.buffers.is_special(self.index) {

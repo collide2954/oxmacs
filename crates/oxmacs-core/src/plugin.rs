@@ -45,6 +45,10 @@ pub trait PluginBuffer: Any + Send + fmt::Debug {
     fn pills(&self, _line: usize) -> Vec<(Range<usize>, Highlight)> {
         Vec::new()
     }
+
+    fn unsaved(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Default)]
@@ -89,6 +93,7 @@ mod tests {
     use crate::editor::Page;
     use crate::editor::{Editor, InputLine, Question};
     use crate::input::KeySequence;
+    use serde_json::json;
     use std::sync::Arc;
 
     use crate::theme::{self, ADWAITA, ADWAITA_DARK, Highlight, Theme};
@@ -355,7 +360,11 @@ mod tests {
                 "system"
             ]
         );
-        assert!(Config::parse("theme = \"palette-dark\"").is_ok());
+        assert!(
+            Config::default()
+                .with("theme", json!("palette-dark"))
+                .is_ok()
+        );
         assert_eq!(theme::counterpart(&PALETTE[1]).name, "palette-light");
     }
 
@@ -421,8 +430,8 @@ mod tests {
         editor.set_plugin_state(Answers::default());
         editor.on_configured(remember_tab_width);
 
-        editor.apply_config(&Config::parse("tab-width = 2\n").unwrap());
-        editor.apply_config(&Config::parse("tab-width = 3\n").unwrap());
+        editor.apply_config(&Config::default().with("tab-width", json!(2)).unwrap());
+        editor.apply_config(&Config::default().with("tab-width", json!(3)).unwrap());
 
         assert_eq!(
             editor

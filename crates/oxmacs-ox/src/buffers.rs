@@ -26,6 +26,7 @@ pub struct LinesBuffer {
     resized: Option<Hold>,
     seen_line: Option<usize>,
     seen_width: Option<usize>,
+    unsaved: bool,
 }
 
 impl PluginBuffer for LinesBuffer {
@@ -51,6 +52,10 @@ impl PluginBuffer for LinesBuffer {
 
     fn pills(&self, line: usize) -> Pills {
         self.pills.get(line).cloned().unwrap_or_default()
+    }
+
+    fn unsaved(&self) -> bool {
+        self.unsaved
     }
 }
 
@@ -232,6 +237,7 @@ struct Options {
     moved: Option<Value>,
     resized: Option<Value>,
     line: Option<usize>,
+    unsaved: Option<bool>,
 }
 
 fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
@@ -246,6 +252,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
                 "on-move" => found.moved = Some(*value),
                 "on-resize" => found.resized = Some(*value),
                 "line" => found.line = Some(number(heap, *value)?),
+                "unsaved" => found.unsaved = Some(value.truthy()),
                 _ => return Err(unknown(heap, pair[0])),
             },
             _ => return Err(unknown(heap, pair[0])),
@@ -256,7 +263,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
-        "open-buffer takes :keys, :directory, :watch, :beside, :on-move, :on-resize and :line, not {}",
+        "open-buffer takes :keys, :directory, :watch, :beside, :on-move, :on-resize, :line and :unsaved, not {}",
         print::write(heap, option)
     ))
 }
@@ -317,6 +324,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
                 resized: None,
                 seen_line: None,
                 seen_width: None,
+                unsaved: false,
             }
         })
     });
@@ -331,6 +339,9 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         }
         view.moved = hold(heap, view.moved, given.moved);
         view.resized = hold(heap, view.resized, given.resized);
+        if let Some(unsaved) = given.unsaved {
+            view.unsaved = unsaved;
+        }
     }
     bind(editor, id, given.bindings)?;
     reveal(editor, id, given.beside);
@@ -372,12 +383,25 @@ fn set_lines(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
     let id = plugin_buffer(editor, &name)
         .ok_or_else(|| Error::new(format!("There is no plugin buffer named {name}")))?;
     let rendered = render(heap, "set-lines", arguments[1])?;
-    let line = match &arguments[2..] {
-        [] => None,
-        [Value::Keyword(option), value] if option.name() == "line" => Some(number(heap, *value)?),
-        _ => return Err(Error::new("set-lines takes only :line")),
-    };
+    let mut line = None;
+    let mut unsaved = None;
+    for pair in arguments[2..].chunks(2) {
+        match pair {
+            [Value::Keyword(option), value] if option.name() == "line" => {
+                line = Some(number(heap, *value)?);
+            }
+            [Value::Keyword(option), value] if option.name() == "unsaved" => {
+                unsaved = Some(value.truthy());
+            }
+            _ => return Err(Error::new("set-lines takes :line and :unsaved")),
+        }
+    }
     fill(editor, id, rendered, line);
+    if let Some(unsaved) = unsaved
+        && let Some((_, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id)
+    {
+        view.unsaved = unsaved;
+    }
     Ok(Value::Nil)
 }
 
@@ -430,7 +454,7 @@ fn region_lines(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Val
 
 pub fn install(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>("open-buffer", 2, None, open);
-    isolate.define_host_native::<Editor>("set-lines", 2, Some(4), set_lines);
+    isolate.define_host_native::<Editor>("set-lines", 2, Some(6), set_lines);
     isolate.define_host_native::<Editor>("current-line", 0, Some(0), current_line);
     isolate.define_host_native::<Editor>("goto-line", 1, Some(2), goto_line);
     isolate.define_host_native::<Editor>(

@@ -56,7 +56,7 @@ use std::{env, mem};
 use buffers::{BufferList, Mode};
 
 use crate::command::{Command, CommandId, CommandSpec, Commands, DynamicSpec, Scope, ScopeId};
-use crate::config::{self, Config, LineNumbers, OnDiskChange, RustLint};
+use crate::config::{Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::external::tools;
 use crate::input::bindings::Keymaps;
@@ -156,7 +156,7 @@ pub struct Editor {
     error_patterns: Vec<ErrorPattern>,
     tools_root: Option<PathBuf>,
     font_note: Option<String>,
-    config_path: Option<PathBuf>,
+    init_path: Option<PathBuf>,
     next_fetch: u64,
     fetches: effect::Fetches,
     job_handlers: job::JobHandlers,
@@ -252,7 +252,7 @@ impl Editor {
             error_patterns: build::errors::BUILT_IN.to_vec(),
             tools_root: dirs::data_dir().map(|data| data.join("oxmacs").join("tools")),
             font_note: None,
-            config_path: config::default_path(),
+            init_path: None,
             next_fetch: 0,
             fetches: effect::Fetches::default(),
             job_handlers: job::JobHandlers::default(),
@@ -484,7 +484,6 @@ impl Editor {
             Some(Mode::Splash(_)) => Scope::Splash,
             Some(Mode::Doctor(_)) => Scope::Doctor,
             Some(Mode::Compilation(_)) => Scope::Compilation,
-            Some(Mode::Customize(_)) => Scope::Customize,
             Some(Mode::Diagnostics(_)) => Scope::Diagnostics,
             Some(Mode::Help(_)) => Scope::Help,
             Some(Mode::Plots(_)) => Scope::Plots,
@@ -511,7 +510,6 @@ impl Editor {
                 .map_or_else(LineStyle::default, |buffer| {
                     compilation.errors.line_style(line, &buffer.line_text(line))
                 }),
-            Some(Mode::Customize(state)) => state.line_style(line),
             Some(Mode::Diagnostics(list)) => list.line_style(line),
             Some(Mode::Help(help)) => help.line_style(line),
             Some(Mode::Processes(list)) => list.line_style(line),
@@ -669,6 +667,8 @@ fn inserts_itself(key: Key) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::test_support::{editor_with, lines, press, type_text};
     use super::*;
 
@@ -956,7 +956,7 @@ mod tests {
     #[test]
     fn configured_theme_overrides_os_appearance() {
         let mut editor = Editor::new();
-        editor.apply_config(&Config::parse("theme = \"adwaita\"").unwrap());
+        editor.apply_config(&Config::default().with("theme", json!("adwaita")).unwrap());
 
         editor.set_appearance(Appearance::Dark);
 
@@ -967,7 +967,7 @@ mod tests {
     fn config_sets_tab_width() {
         let mut editor = editor_with("\tx", 1);
 
-        editor.apply_config(&Config::parse("tab-width = 4").unwrap());
+        editor.apply_config(&Config::default().with("tab-width", json!(4)).unwrap());
 
         assert_eq!(editor.tab_width(), 4);
         assert_eq!(editor.point_display_column(), 4);
@@ -977,8 +977,8 @@ mod tests {
     fn shown_messages_appear_in_the_echo_area() {
         let mut editor = Editor::new();
 
-        editor.show_message("config.toml: line 2: oops");
+        editor.show_message("init.ox:2:1: oops");
 
-        assert_eq!(editor.message(), Some("config.toml: line 2: oops"));
+        assert_eq!(editor.message(), Some("init.ox:2:1: oops"));
     }
 }

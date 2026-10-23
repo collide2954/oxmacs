@@ -205,16 +205,6 @@ const COMPILATION: &[(&str, Command)] = &[
     ("RET", Command::CompileGotoError),
 ];
 
-const CUSTOMIZE: &[(&str, Command)] = &[
-    ("n", Command::WidgetForward),
-    ("TAB", Command::WidgetForward),
-    ("p", Command::WidgetBackward),
-    ("S-TAB", Command::WidgetBackward),
-    ("RET", Command::WidgetButtonPress),
-    ("g", Command::RevertBuffer),
-    ("q", Command::QuitWindow),
-];
-
 const DIAGNOSTICS: &[(&str, Command)] = &[
     ("RET", Command::GotoDiagnostic),
     ("SPC", Command::ShowDiagnostic),
@@ -354,7 +344,6 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::R => R,
         Scope::Console => CONSOLE,
         Scope::Compilation => COMPILATION,
-        Scope::Customize => CUSTOMIZE,
         Scope::Diagnostics => DIAGNOSTICS,
         Scope::Help => HELP,
         Scope::Popup => POPUP,

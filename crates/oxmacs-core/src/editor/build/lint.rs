@@ -440,6 +440,8 @@ mod tests {
 
     use std::path::{Path, PathBuf};
 
+    use serde_json::json;
+
     use super::fixtures::{FINISHED, linting, project, report, reported, save, spawned};
     use crate::config::Config;
     use crate::editor::test_support::{press, type_text};
@@ -585,7 +587,7 @@ mod tests {
     fn clippy_can_replace_check_and_lints_can_be_turned_off() {
         for (setting, expected) in [("clippy", Some("clippy")), ("off", None)] {
             let (_dir, mut editor) = project();
-            editor.apply_config(&Config::parse(&format!("rust-lint = \"{setting}\"")).unwrap());
+            editor.apply_config(&Config::default().with("rust-lint", json!(setting)).unwrap());
 
             save(&mut editor);
 

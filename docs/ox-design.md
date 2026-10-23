@@ -32,7 +32,7 @@ Every non-core feature of oxmacs is a Rust crate behind a cargo feature. Each ch
 | Control | Proper tail calls, `await` anywhere (tasks are stackful, so nothing is marked `async`), generators and green tasks. No `call/cc`. |
 | Errors | Exceptions with typed error records and clickable tracebacks. A failing hook is reported, never fatal. |
 | GUI | Declarative, Elm-style view trees mapped onto Iced widgets; a canvas draw-list API; buffer decorations. Rust diffs and renders. |
-| Config | `~/.oxmacs/init.ox` is the only config file. `M-x customize` writes `custom.ox`. `config.toml` is migrated once. |
+| Config | `~/.oxmacs/init.ox` is the config file, with editor settings in `(settings {…})`. `M-x customize` writes `custom.ox`, which runs first. `config.toml` was dropped without a migration. |
 | Folder | `~/.oxmacs` on every system (`OXMACS_HOME` moves it). Caches go in the platform cache folder. |
 | Plugins | Lazy, versioned folders: `plugin.ox` names what wakes a plugin, and nothing loads before that. |
 | Sources | Bundled plugins, your own in `~/.oxmacs/plugins`, and git URLs pinned in `~/.oxmacs/plugins.lock`. |
@@ -186,8 +186,7 @@ Each of Emacs's bottlenecks has a planned answer in Ox:
 
 ```clojure
 ; ~/.oxmacs/init.ox
-(set! theme 'modus-vivendi)
-(set! tab-width 4)
+(settings {theme: :adwaita-dark tab-width: 4})
 
 (use-plugin git)
 (use-plugin weather :config {location: "Austin" units: 'metric})
@@ -203,7 +202,15 @@ Each of Emacs's bottlenecks has a planned answer in Ox:
   plugins.lock     pinned commits of cloned plugins
 ```
 
-Caches (compiled bytecode, installed tools such as air, ruff and PDFium) live in the platform's cache folder. On first start, `config.toml` is translated into `init.ox`, with a note of what moved.
+Caches (compiled bytecode, installed tools such as air, ruff and PDFium) live in the platform's cache folder.
+
+Built on 2026-10-23, with these decisions:
+
+- **Editor settings.** `(settings {key: value …})` changes the core settings in one step, all or nothing, and raises naming the first mistake; `nil` puts a setting back to its default. `(settings)` reads them back as a map, with choices and themes as keywords.
+- **Order.** `custom.ox` runs, then `init.ox`, before the window opens, so `window-mode`, the theme and the font apply from the first frame. Saving either file, or `g` and `C-x C-s` in `*Settings*`, runs both again starting from default settings and plugin settings.
+- **Plugin settings.** `use-plugin`'s `:config` and `(configure-plugin name {…})` merge key by key, so `custom.ox` and `init.ox` can each set some; `configure-plugin` doesn't turn a plugin on.
+- **Customize.** A bundled Ox plugin. It lists the core settings and every active plugin's, marks changes with `*` and `%*` in the mode line, and writes to `custom.ox` what changed in this session plus what `custom.ox` set before, leaving out defaults. A setting `init.ox` overrides says "set in init.ox".
+- **No migration.** `config.toml` is no longer read and nothing converts it.
 
 ## What stays in the Rust core
 
@@ -232,7 +239,7 @@ Caches (compiled bytecode, installed tools such as air, ruff and PDFium) live in
 | 4. GUI API | Views, canvas and decorations. Port the start screen (canvas animation) and demo. | The animated start screen runs as a plugin. |
 | 5. Applets | Rebuild themes, glow, dired, markdown, atlas, irc, git, database, pdf and python as plugins, one at a time. | No applet crates left; no cargo features. |
 | 6. Built-ins | Rust, TOML and R modes (with the R console), doctor, customize and list-tools become bundled plugins. | The core is the engine alone. |
-| 7. Cleanup | Remove `config.toml` support after migrating it, and the routine parser. | One binary plus plugins. |
+| 7. Cleanup | Remove `config.toml` support (done, without a migration) and the routine parser (done). | One binary plus plugins. |
 
 Work paused for Ox continues later as Ox plugins: the list-tools and doctor reorganization, database and git slices, and the Vim-style modal editing idea.
 

@@ -30,7 +30,15 @@ Dired, git and weather are back as bundled Ox plugins. The rest of the former Ca
 
 ## Configuration
 
-Settings live in `config.toml` in the oxmacs config folder (for example `~/.config/oxmacs/config.toml` on Linux and `%APPDATA%\oxmacs\config.toml` on Windows). `M-x customize` edits them in a settings buffer, `M-x find-config-file` opens the file itself, and `M-x oxmacs-doctor` reports what oxmacs found on your system.
+oxmacs is configured in Ox, in `~/.oxmacs/init.ox` (`OXMACS_HOME` moves the folder):
+
+```clojure
+(settings {theme: :adwaita-dark font-size: 12 tab-width: 4})
+(use-plugin weather :config {location: "Berlin" mode-line: true})
+(bind-key "C-c w" 'weather)
+```
+
+`M-x customize` changes settings in a form and saves them to `~/.oxmacs/custom.ox`, which runs before `init.ox`, so `init.ox` wins. `M-x find-init-file` opens `init.ox`, saving it applies it at once, and `M-x oxmacs-doctor` reports what oxmacs found on your system.
 
 ## Development
 

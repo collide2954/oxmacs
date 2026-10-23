@@ -100,17 +100,12 @@ impl Editor {
     }
 
     pub(in crate::editor) fn save_some_buffers(&mut self, then_quit: bool) {
-        let mut remaining: Vec<PathBuf> = self
+        let remaining: Vec<PathBuf> = self
             .buffers
             .iter()
             .filter(|buffer| buffer.is_modified())
             .filter_map(|buffer| buffer.file().map(|file| file.path.clone()))
             .collect();
-        if let Some(path) = self.unsaved_config_path()
-            && !remaining.contains(&path)
-        {
-            remaining.push(path);
-        }
         if remaining.is_empty() && !then_quit {
             self.show_message("(No files need saving)");
             return;
@@ -292,9 +287,6 @@ impl Editor {
     }
 
     fn save_file(&mut self, path: &Path) -> bool {
-        if self.unsaved_config_path().as_deref() == Some(path) {
-            return self.save_settings();
-        }
         match self
             .buffers
             .position(|buffer| buffer.file().is_some_and(|file| file.path == path))

@@ -40,6 +40,8 @@ impl Editor {
 mod tests {
     use std::fs;
 
+    use serde_json::json;
+
     use crate::config::Config;
     use crate::editor::Editor;
     use crate::editor::build::lint::fixtures::{project, spawned};
@@ -85,7 +87,7 @@ mod tests {
     #[test]
     fn auto_save_can_be_turned_off() {
         let (dir, mut editor) = project();
-        editor.apply_config(&Config::parse("auto-save = false").unwrap());
+        editor.apply_config(&Config::default().with("auto-save", json!(false)).unwrap());
         edited(&mut editor);
 
         editor.auto_save();
@@ -112,7 +114,11 @@ mod tests {
     #[test]
     fn auto_save_does_not_format() {
         let (dir, mut editor) = project();
-        editor.apply_config(&Config::parse("format-on-save = true").unwrap());
+        editor.apply_config(
+            &Config::default()
+                .with("format-on-save", json!(true))
+                .unwrap(),
+        );
         editor.add_formatter(
             crate::syntax::Language::RUST,
             crate::editor::Formatter {
