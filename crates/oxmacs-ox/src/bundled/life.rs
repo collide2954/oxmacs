@@ -81,21 +81,26 @@ fn the_rules_are_conways() {
         .eval(
             &mut editor,
             "(module (import (life rules :as rules)))
-             (let [blinker (set [[0 1] [1 1] [2 1]])
-                   block (set [[0 0] [1 0] [0 1] [1 1]])
-                   glider (set [[1 0] [2 1] [0 2] [1 2] [2 2]])
-                   later (reduce (fn [cells _] (rules/step cells)) glider (range 4))]
-               [(= (rules/step blinker) (set [[1 0] [1 1] [1 2]]))
+             (let [blinker (rules/cells [[0 1] [1 1] [2 1]])
+                   block (rules/cells [[0 0] [1 0] [0 1] [1 1]])
+                   glider (rules/cells [[1 0] [2 1] [0 2] [1 2] [2 2]])
+                   later (reduce (fn [cells _] (rules/step cells)) glider (range 4))
+                   far (rules/cells [[-5000 -7000] [-4999 -7000] [-4998 -7000]])]
+               [(= (rules/step blinker) (rules/cells [[1 0] [1 1] [1 2]]))
                 (= (rules/step (rules/step blinker)) blinker)
                 (= (rules/step block) block)
-                (= later (set (map (fn [[x y]] [(+ x 1) (+ y 1)]) glider)))
-                (empty? (rules/step (set [[0 0]])))
+                (= later (rules/cells (map (fn [[x y]] [(+ x 1) (+ y 1)]) (rules/points glider))))
+                (empty? (rules/step (rules/cells [[0 0]])))
+                (rules/points (rules/step far))
                 (count (rules/seeded :acorn))
                 (<= (count (rules/seeded :random)) (* rules/width rules/height))])",
         )
         .unwrap();
 
-    assert_eq!(checked, "[true true true true true 7 true]");
+    assert_eq!(
+        checked,
+        "[true true true true true [[-4999 -7001] [-4999 -7000] [-4999 -6999]] 7 true]"
+    );
 }
 
 #[test]

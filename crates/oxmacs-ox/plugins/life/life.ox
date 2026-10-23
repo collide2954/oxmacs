@@ -5,7 +5,7 @@
 (def buffer "*Life*")
 (def cell-height 9)
 
-(defonce world (atom {cells: (set []) generation: 0 running: false run: 0}))
+(defonce world (atom {cells: [] generation: 0 running: false run: 0}))
 
 (def (shown? [x y])
   (and (>= x 0) (< x rules/width) (>= y 0) (< y rules/height)))
@@ -18,7 +18,7 @@
              (ui/text (str (if now.running "" "Paused   ") "SPC pauses  n steps  r restarts  q quits") :face :comment))
      (ui/canvas (vec (map (fn [[x y]]
                             [:rect (/ x rules/width) (* y cell-height) (/ 0.9 rules/width) (dec cell-height) :success])
-                          (filter shown? now.cells)))
+                          (filter shown? (rules/points now.cells))))
                 :height (* rules/height cell-height) :relative true)
      :spacing 6)))
 
