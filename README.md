@@ -18,6 +18,17 @@ To install the `oxmacs` binary:
 cargo install --path crates/oxmacs
 ```
 
+## Installing on Fedora
+
+Fedora 44 and 45 have a package repository, built by CI:
+
+```sh
+sudo dnf config-manager addrepo --from-repofile=https://collide2954.github.io/oxmacs/rpm/oxmacs.repo
+sudo dnf install oxmacs
+```
+
+`oxmacs-nightly.repo` in the same folder has a build of every change on master.
+
 ## Extending oxmacs
 
 oxmacs is moving its features into Ox, an extension language of its own: a modern Scheme with a fast bytecode VM, built in [crates/ox](crates/ox) and designed in [docs/ox-design.md](docs/ox-design.md). The `ox` command runs `.ox` files and opens a REPL, and `ox check`, `ox test`, `ox profile` and `ox perf` check, test, profile and benchmark Ox code:

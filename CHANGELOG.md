@@ -6,6 +6,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Ox reads files that start with a byte order mark, as Windows tools often save them, instead of failing on the first form.
+- `ox --help` lists the subcommands and `ox --version` prints the version, instead of looking for a file called `--help`.
 - `ui/column` and `ui/row` take `:spacing` after their children as well as before, so the calendar's week view draws again.
 - A plugin you are writing starts the first time you load one of its files with `C-c C-k`, without restarting oxmacs, and `C-x C-e` in a plugin's files evaluates in that plugin's module, so its own definitions are there.
 - Ox highlighting is complete: calls, namespaced names such as `ui/text`, fields such as `entry.title`, quoted symbols, `@` and quasiquotes, docstrings and command summaries, and `{…}` inside strings each get their face, and strings and docstrings that span lines no longer turn the lines after them into code.
@@ -58,6 +60,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Fedora 44 and 45 packages, built by CI. A version tag publishes them to a dnf repository on GitHub Pages and attaches them to the release; every push to master publishes to a separate nightly repository. The package installs `oxmacs`, `ox` and a desktop entry, and on Linux the window carries the app id `io.github.collide2954.oxmacs`, so desktops match it to the entry.
 - A hands-on tutorial and the Ox manual, in the bundled `manual` plugin. `C-h t` opens your own copy of the tutorial where you left it: moving, editing, files, windows, search, a first Ox command and your configuration. `C-h i` opens the manual, an Info-style reader with a guide to the language, extending oxmacs, writing plugins and the `ox` command, and a reference of every library module and the editor API built from their documentation. `RET` follows links, `l` and `r` go back and forward, `n` and `p` turn pages, `s` searches, `i` looks up a name and `x` runs an example in the REPL. Every example in the guide is tested.
 - A `markdown` plugin. `M-x markdown-preview` shows a Markdown buffer rendered beside it and wrapped to the window, with headings, lists, `code`, highlighted Ox examples and links that `RET` follows, and refreshes when the file is saved. Other plugins render Markdown with its `(markdown render)` module. Plugins can also ask for the reference of the Ox library and the editor API with `ox-reference`, highlight Ox code with `ox-highlight` and run code in the REPL with `run-in-repl`.
 - A remote file browser instead of TRAMP, the bundled `remote` plugin. `M-x remote` lists the hosts in `~/.ssh/config` and the ones you save, and opens a dired-like browser on each over ssh, sftp or ftp, or through any command that opens a shell, such as `docker exec` or `wsl`. Files open as local copies that go back when saved, `C` and `U` copy files either way, `!` runs a command in the folder shown, `/` searches the files below it and `s` opens a shell there. One connection stays open per host, and logging in is left to ssh and its keys. `(ox file)` gained `file/read-base64` and `file/write-base64` for binary files.

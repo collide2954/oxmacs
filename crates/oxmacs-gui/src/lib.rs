@@ -42,13 +42,29 @@ pub fn run(visits: Vec<Visit>) -> Result {
     .run()
 }
 
+pub const APP_ID: &str = "io.github.collide2954.oxmacs";
+
 fn window_settings(mode: WindowMode) -> window::Settings {
     window::Settings {
         size: Size::new(960.0, 720.0),
         maximized: mode == WindowMode::Maximized,
         fullscreen: mode == WindowMode::Fullscreen,
+        platform_specific: platform(),
         ..window::Settings::default()
     }
+}
+
+#[cfg(target_os = "linux")]
+fn platform() -> window::settings::PlatformSpecific {
+    window::settings::PlatformSpecific {
+        application_id: APP_ID.to_owned(),
+        ..window::settings::PlatformSpecific::default()
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn platform() -> window::settings::PlatformSpecific {
+    window::settings::PlatformSpecific::default()
 }
 
 #[cfg(test)]
@@ -65,5 +81,18 @@ mod tests {
 
         assert!(window_settings(WindowMode::Maximized).maximized);
         assert!(window_settings(WindowMode::Fullscreen).fullscreen);
+    }
+
+    #[test]
+    fn the_desktop_entry_is_named_after_the_app_id() {
+        let linux = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/linux");
+        assert!(linux.join(format!("{APP_ID}.desktop")).is_file());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_windows_carry_the_app_id() {
+        let settings = window_settings(WindowMode::Windowed);
+        assert_eq!(settings.platform_specific.application_id, APP_ID);
     }
 }

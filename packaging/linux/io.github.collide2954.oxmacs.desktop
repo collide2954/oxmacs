@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=oxmacs
+GenericName=Text Editor
+Comment=An Emacs-inspired editor, extended in Ox
+Exec=oxmacs %F
+Terminal=false
+StartupNotify=true
+StartupWMClass=io.github.collide2954.oxmacs
+Categories=Development;TextEditor;Utility;
+Keywords=emacs;editor;text;code;ox;
+MimeType=text/plain;text/markdown;text/x-rust;text/x-r;application/toml;
