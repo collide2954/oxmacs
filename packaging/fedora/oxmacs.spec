@@ -5,7 +5,7 @@ Name:           oxmacs
 Version:        %{oxmacs_version}
 Release:        1%{?dist}
 Summary:        An Emacs-inspired editor, extended in Ox
-License:        MIT OR Apache-2.0
+License:        Apache-2.0
 URL:            https://github.com/collide2954/oxmacs
 ExclusiveArch:  x86_64
 
@@ -36,13 +36,11 @@ runs, checks, formats and tests Ox code.
 install -Dpm 0755 %{oxmacs_source}/target/release/oxmacs %{buildroot}%{_bindir}/oxmacs
 install -Dpm 0755 %{oxmacs_source}/target/release/ox %{buildroot}%{_bindir}/ox
 install -Dpm 0644 %{oxmacs_source}/packaging/linux/%{app_id}.desktop %{buildroot}%{_datadir}/applications/%{app_id}.desktop
-install -Dpm 0644 %{oxmacs_source}/LICENSE-MIT %{buildroot}%{_datadir}/licenses/%{name}/LICENSE-MIT
 install -Dpm 0644 %{oxmacs_source}/LICENSE-APACHE %{buildroot}%{_datadir}/licenses/%{name}/LICENSE-APACHE
 install -Dpm 0644 %{oxmacs_source}/README.md %{buildroot}%{_docdir}/%{name}/README.md
 install -Dpm 0644 %{oxmacs_source}/CHANGELOG.md %{buildroot}%{_docdir}/%{name}/CHANGELOG.md
 
 %files
-%license %{_datadir}/licenses/%{name}/LICENSE-MIT
 %license %{_datadir}/licenses/%{name}/LICENSE-APACHE
 %doc %{_docdir}/%{name}/README.md
 %doc %{_docdir}/%{name}/CHANGELOG.md
