@@ -384,8 +384,22 @@ impl Compiler<'_> {
         }
     }
 
+    fn document(&mut self, name: Sym, doc: Option<&str>, span: Span) -> Result<(), Error> {
+        let text = match doc {
+            Some(doc) => self
+                .heap
+                .string(doc)
+                .map_err(|full| Error::at(span, full.to_string()))?,
+            None => Value::Nil,
+        };
+        let doc = self.constant(text, span)?;
+        self.emit(Op::Document { name, doc }, span);
+        Ok(())
+    }
+
     fn define(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
         let malformed = || Error::at(span, "def takes a name and a value");
+        let mut doc = None;
         let name = match parts {
             [
                 Syntax {
@@ -394,6 +408,21 @@ impl Compiler<'_> {
                 },
                 value,
             ] => {
+                self.expression(value, target)?;
+                Sym::intern(name)
+            }
+            [
+                Syntax {
+                    datum: Datum::Symbol(name),
+                    ..
+                },
+                Syntax {
+                    datum: Datum::Str(text),
+                    ..
+                },
+                value,
+            ] => {
+                doc = Some(text.as_str());
                 self.expression(value, target)?;
                 Sym::intern(name)
             }
@@ -415,6 +444,8 @@ impl Compiler<'_> {
                     return Err(malformed());
                 };
                 let name = Sym::intern(name);
+                let (found, body) = documented(body);
+                doc = found;
                 self.lambda(
                     Some(name),
                     parameters,
@@ -428,6 +459,7 @@ impl Compiler<'_> {
             _ => return Err(malformed()),
         };
         self.emit(Op::DefineGlobal { name, from: target }, span);
+        self.document(name, doc, span)?;
         self.load(Value::Symbol(name), target, span)
     }
 
@@ -544,6 +576,7 @@ impl Compiler<'_> {
             ));
         };
         let name = Sym::intern(name);
+        let (doc, body) = documented(body);
         self.lambda(
             Some(name),
             parameters,
@@ -553,6 +586,7 @@ impl Compiler<'_> {
             span,
         )?;
         self.emit(Op::DefineMacro { name, from: target }, span);
+        self.document(name, doc, span)?;
         self.load(Value::Symbol(name), target, span)
     }
 
@@ -1020,5 +1054,18 @@ impl Compiler<'_> {
         }
         self.release(base);
         Ok(())
+    }
+}
+
+fn documented(body: &[Syntax]) -> (Option<&str>, &[Syntax]) {
+    match body {
+        [
+            Syntax {
+                datum: Datum::Str(doc),
+                ..
+            },
+            rest @ ..,
+        ] if !rest.is_empty() => (Some(doc.as_str()), rest),
+        _ => (None, body),
     }
 }

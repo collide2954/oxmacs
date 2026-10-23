@@ -1,5 +1,6 @@
 mod buffers;
 mod bundled;
+pub mod checker;
 mod commands;
 mod hooks;
 pub mod idle;
@@ -10,6 +11,7 @@ mod natives;
 mod plugins;
 mod prompts;
 pub mod shapes;
+mod stacktrace;
 pub mod takeover;
 #[cfg(test)]
 mod testing;
@@ -71,6 +73,8 @@ pub struct Ox {
     bundled: &'static [Bundle],
     home: Option<PathBuf>,
     answers: prompts::Inbox,
+    evaluation: tools::Evaluation,
+    checker: checker::Checker,
 }
 
 impl Default for Ox {
@@ -91,6 +95,8 @@ impl Ox {
             bundled,
             home: None,
             answers,
+            evaluation: tools::Evaluation::default(),
+            checker: checker::Checker::default(),
         }
     }
 
@@ -119,6 +125,13 @@ impl Ox {
 
     pub fn idle(&mut self, editor: &mut Editor, since: Instant, now: Instant) {
         idle::run(&mut self.isolate, editor, since, now);
+        self.checker
+            .run(editor, now.saturating_duration_since(since));
+    }
+
+    pub fn idle_wait(&self, editor: &Editor, since: Instant) -> Option<Duration> {
+        let check = self.checker.wait(editor);
+        idle::next(editor, since).into_iter().chain(check).min()
     }
 
     pub fn end_take_over(&mut self, editor: &mut Editor) {
@@ -173,14 +186,20 @@ impl Ox {
         transients::run_waiting(&mut self.isolate, editor);
         takeover::run_endings(&mut self.isolate, editor);
         prompts::deliver(&mut self.isolate, &self.answers);
-        if self.isolate.pending() > 0 {
-            let report = self.isolate.run_with(editor, BUDGET);
-            let failed = report
-                .finished
-                .into_iter()
-                .filter_map(|(_, result)| result.err());
+        let deadline = Instant::now() + BUDGET;
+        while self.isolate.pending() > 0 {
+            let before = self.evaluating();
+            let report = self
+                .isolate
+                .run_with(editor, deadline.saturating_duration_since(Instant::now()));
+            let failed = self.evaluated(editor, report.finished);
             for error in report.unhandled.into_iter().chain(failed) {
                 log::report(editor, &error, None);
+            }
+            self.advance(editor);
+            let after = self.evaluating();
+            if after.is_none() || after == before || Instant::now() >= deadline {
+                break;
             }
         }
         buffers::watch(&mut self.isolate, editor);

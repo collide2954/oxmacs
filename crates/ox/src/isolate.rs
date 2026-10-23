@@ -10,7 +10,7 @@ use crate::check::{self, Diagnostic};
 use crate::compile::compile;
 use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
-use crate::heap::{Heap, Hold, Rooted};
+use crate::heap::{Closure, Heap, Hold, Rooted};
 use crate::library;
 use crate::native::{Control, Native, NativeFn};
 use crate::portable::{Failure, Portable};
@@ -189,7 +189,10 @@ impl Isolate {
     }
 
     pub fn add_root(&mut self, root: impl Into<PathBuf>) {
-        self.runtime.roots.push(root.into());
+        let root = root.into();
+        if !self.runtime.roots.contains(&root) {
+            self.runtime.roots.push(root);
+        }
     }
 
     pub fn set_worker_setup(&mut self, setup: fn(&mut Isolate)) {
@@ -577,8 +580,9 @@ impl Isolate {
     }
 
     pub fn check(&mut self, name: &str, source: &str) -> Vec<Diagnostic> {
-        let module_name = format!("#check{}:{name}", self.runtime.modules.len());
+        let module_name = format!("#check:{name}");
         let module = self.runtime.module_named(&module_name);
+        self.runtime.reset_module(module);
         let text = Rc::new(Source {
             name: name.to_owned(),
             text: source.to_owned(),
@@ -648,6 +652,65 @@ impl Isolate {
         found.sort_by_key(|diagnostic| (diagnostic.span.start, diagnostic.span.end));
         found.dedup();
         found
+    }
+
+    pub fn spawn_eval(&mut self, name: &str, source: &str) -> Result<Option<TaskId>, Error> {
+        self.spawn_eval_with(&mut (), name, source)
+    }
+
+    pub fn spawn_eval_with(
+        &mut self,
+        host: &mut dyn Any,
+        name: &str,
+        source: &str,
+    ) -> Result<Option<TaskId>, Error> {
+        let text = Rc::new(Source {
+            name: name.to_owned(),
+            text: source.to_owned(),
+        });
+        let (forms, errors) = read::read(source);
+        if let Some(error) = errors.into_iter().next() {
+            return Err(Error::at(error.span, error.message));
+        }
+        let mut codes = Vec::new();
+        for form in &forms {
+            if let Some(clauses) = header(form) {
+                self.header(USER, clauses, host)?;
+                continue;
+            }
+            let expanded = expand(&mut self.runtime, form, USER)?;
+            codes.push(compile(
+                &mut self.runtime.heap,
+                &expanded,
+                Some(Rc::clone(&text)),
+                USER,
+                Sym::intern("user"),
+            )?);
+        }
+        let mut codes = codes.into_iter();
+        let Some(code) = codes.next() else {
+            return Ok(None);
+        };
+        if codes.next().is_some() {
+            return Err(Error::new("spawn_eval evaluates one form at a time"));
+        }
+        let function = self
+            .runtime
+            .heap
+            .closure(Closure {
+                code: Rc::new(code),
+                captured: Box::new([]),
+            })
+            .map_err(full)?;
+        self.runtime.spawn(function, &[]).map(Some)
+    }
+
+    pub fn module_count(&self) -> usize {
+        self.runtime.modules.len()
+    }
+
+    pub fn doc(&self, name: &str) -> Option<String> {
+        self.runtime.doc(USER, Sym::intern(name)).map(str::to_owned)
     }
 
     pub fn profiling(&self) -> bool {

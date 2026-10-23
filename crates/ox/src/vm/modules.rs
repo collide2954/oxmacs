@@ -17,6 +17,7 @@ pub struct Module {
     pub name: String,
     pub globals: HashMap<Sym, Value>,
     pub macros: HashMap<Sym, Value>,
+    pub docs: HashMap<Sym, String>,
     pub exports: Option<HashSet<Sym>>,
     pub imports: Vec<Import>,
 }
@@ -125,6 +126,15 @@ impl Runtime {
         self.find(module, name, true)
     }
 
+    pub fn reset_module(&mut self, module: ModuleId) {
+        if let Some(found) = self.module_mut(module) {
+            *found = Module {
+                name: std::mem::take(&mut found.name),
+                ..Module::default()
+            };
+        }
+    }
+
     pub fn module_mut(&mut self, module: ModuleId) -> Option<&mut Module> {
         self.epoch += 1;
         self.modules.get_mut(module)
@@ -140,6 +150,23 @@ impl Runtime {
         if let Some(found) = self.module_mut(module) {
             found.macros.insert(name, value);
         }
+    }
+
+    pub fn document(&mut self, module: ModuleId, name: Sym, doc: Option<String>) {
+        if let Some(found) = self.modules.get_mut(module) {
+            match doc {
+                Some(doc) => found.docs.insert(name, doc),
+                None => found.docs.remove(&name),
+            };
+        }
+    }
+
+    pub fn doc(&self, module: ModuleId, name: Sym) -> Option<&str> {
+        [module, PRELUDE]
+            .into_iter()
+            .filter_map(|module| self.modules.get(module))
+            .find_map(|found| found.docs.get(&name))
+            .map(String::as_str)
     }
 
     pub fn defined(&self, module: ModuleId, name: Sym) -> bool {

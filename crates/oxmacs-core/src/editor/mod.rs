@@ -8,6 +8,7 @@ mod effect;
 mod job;
 mod languages;
 mod motion;
+mod notes;
 #[cfg(test)]
 mod opening;
 mod page;
@@ -166,6 +167,7 @@ pub struct Editor {
     next_job: u64,
     last_compile: Option<String>,
     lints: build::lint::Lints,
+    notes: Vec<notes::Note>,
     errors_from: build::errors::ErrorSource,
     config: Config,
 }
@@ -261,6 +263,7 @@ impl Editor {
             next_job: 0,
             last_compile: None,
             lints: build::lint::Lints::default(),
+            notes: Vec::new(),
             errors_from: build::errors::ErrorSource::default(),
             config: Config::default(),
         }

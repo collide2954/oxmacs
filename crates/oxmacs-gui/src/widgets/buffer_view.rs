@@ -684,6 +684,7 @@ struct DrawnLine<'a> {
     marks: Vec<((usize, Option<usize>), Highlight)>,
     pills: Vec<((usize, Option<usize>), Highlight)>,
     diagnostics: Vec<((usize, Option<usize>), Severity)>,
+    note: Option<(String, Highlight)>,
 }
 
 impl<'a, Message> BufferView<'a, Message> {
@@ -739,6 +740,7 @@ impl<'a, Message> BufferView<'a, Message> {
                 lines.push(DrawnLine {
                     number: row.line,
                     diagnostics,
+                    note: self.pane.line_note(row.line),
                     highlight: selection.as_ref().and_then(|selection| {
                         display::highlight_columns(&text, span, selection, tab_width)
                     }),
@@ -782,6 +784,18 @@ impl<'a, Message> BufferView<'a, Message> {
                 self.text(segment.text, Size::new(f32::INFINITY, rectangle.height)),
                 Point::new(rectangle.x + x, rectangle.y),
                 color,
+                bounds,
+            );
+        }
+        if row.end_column.is_none()
+            && let Some((note, face)) = &line.note
+        {
+            let end = display::display_column(&line.text, line.text.chars().count(), tab_width);
+            let x = to_f32(end.saturating_sub(row.column) + 1) * cell_width;
+            renderer.fill_text(
+                self.text(note.clone(), Size::new(f32::INFINITY, rectangle.height)),
+                Point::new(rectangle.x + x, rectangle.y),
+                style::color(self.faces.highlight(*face)),
                 bounds,
             );
         }

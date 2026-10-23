@@ -9,6 +9,7 @@ use ox::check::{Diagnostic, Severity};
 use ox::span::line_column;
 use ox::value::Value;
 use ox::{Error, Isolate, read};
+use oxmacs_ox::checker;
 
 fn main() -> ExitCode {
     let mut args = env::args_os().skip(1);
@@ -115,23 +116,12 @@ fn check_command(arguments: Vec<OsString>) -> ExitCode {
                 return ExitCode::from(2);
             }
         };
-        let plugin = file
-            .parent()
-            .is_some_and(|folder| folder.join("plugin.ox").is_file());
-        let mut isolate = if plugin || file.file_name().is_some_and(|name| name == "init.ox") {
+        let mut isolate = if checker::editor_code(file) {
             oxmacs_ox::checking_isolate()
         } else {
             Isolate::new()
         };
-        if let Some(folder) = file.parent() {
-            isolate.add_root(folder);
-            if folder.join("plugin.ox").is_file()
-                && let Some(plugins) = folder.parent()
-            {
-                isolate.add_root(plugins);
-            }
-        }
-        for root in &roots {
+        for root in checker::check_roots(file).iter().chain(&roots) {
             isolate.add_root(root);
         }
         let name = file.display().to_string();

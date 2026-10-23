@@ -119,6 +119,17 @@ impl Editor {
         self.linters.push((language, linter));
     }
 
+    pub fn replace_diagnostics(&mut self, path: &Path, found: Vec<Diagnostic>) {
+        self.lints
+            .diagnostics
+            .retain(|diagnostic| diagnostic.path != path);
+        self.lints.diagnostics.extend(found);
+        self.lints.diagnostics.sort();
+        self.lints.current = None;
+        self.mark_diagnostics();
+        self.render_diagnostics_list();
+    }
+
     pub(in crate::editor) fn has_linter(&self, language: Language) -> bool {
         self.linters.iter().any(|(known, _)| *known == language)
     }
@@ -684,6 +695,46 @@ mod tests {
             ]
         );
         assert_eq!(editor.pane().line_diagnostics(1), []);
+    }
+
+    #[test]
+    fn plugins_can_replace_the_diagnostics_of_one_file() {
+        let (dir, mut editor) = project();
+        reported(&mut editor);
+        let main = dir.path().join("src").join("main.rs");
+        let found = |start, end, severity, message: &str| Diagnostic {
+            path: main.clone(),
+            start,
+            end,
+            severity,
+            message: message.to_owned(),
+        };
+
+        editor.replace_diagnostics(
+            &main,
+            vec![
+                found((1, 4), (1, 8), Severity::Error, "from a plugin"),
+                found((1, 10), (1, 11), Severity::Warning, "and another"),
+            ],
+        );
+
+        assert_eq!(
+            editor.pane().line_diagnostics(0),
+            [(3..7, Severity::Error), (9..10, Severity::Warning)]
+        );
+        assert_eq!(editor.pane().status().lint.as_deref(), Some("E1 W1"));
+        press(&mut editor, "C-a C-f C-f C-f C-f");
+        assert_eq!(editor.diagnostic_at_point(), Some("from a plugin"));
+        editor.open_file(&dir.path().join("src").join("other.rs"));
+        assert_eq!(
+            editor.pane().line_diagnostics(1),
+            [(0..2, Severity::Warning)]
+        );
+
+        editor.replace_diagnostics(&main, Vec::new());
+        editor.open_file(&main);
+        assert_eq!(editor.pane().line_diagnostics(0), []);
+        assert_eq!(editor.pane().status().lint, None);
     }
 
     #[test]

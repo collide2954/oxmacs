@@ -26,6 +26,10 @@ pub enum Op {
         name: Sym,
         from: Register,
     },
+    Document {
+        name: Sym,
+        doc: u32,
+    },
     SetGlobal {
         name: Sym,
         from: Register,

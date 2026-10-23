@@ -204,6 +204,10 @@ impl<'a> Pane<'a> {
         self.editor.diagnostics_on_line(self.index, line)
     }
 
+    pub fn line_note(&self, line: usize) -> Option<(String, Highlight)> {
+        self.editor.note_on_line(self.index, line)
+    }
+
     pub fn line_pills(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
         match self.editor.buffers.mode(self.index) {
             Some(Mode::Plugin(view)) => view.pills(line),
@@ -250,7 +254,6 @@ impl<'a> Pane<'a> {
             mode: language.map(Language::name),
             lint: buffer
                 .file()
-                .filter(|_| language.is_some_and(|language| self.editor.has_linter(language)))
                 .and_then(|file| self.editor.lint_status(&file.path)),
         }
     }

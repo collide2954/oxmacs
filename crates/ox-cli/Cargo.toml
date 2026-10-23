@@ -1,6 +1,6 @@
 [package]
 name = "ox-cli"
-version = "0.1.0"
+version.workspace = true
 description = "The ox command: run, test, check and profile Ox code"
 edition.workspace = true
 rust-version.workspace = true

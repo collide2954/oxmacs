@@ -3181,7 +3181,7 @@ dependencies = [
 
 [[package]]
 name = "ox"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "jiff",
  "num-bigint",
@@ -3196,7 +3196,7 @@ dependencies = [
 
 [[package]]
 name = "ox-cli"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "ox",
  "oxmacs-ox",
@@ -3206,7 +3206,7 @@ dependencies = [
 
 [[package]]
 name = "ox-perf"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "ox",
  "tempfile",

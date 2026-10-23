@@ -217,6 +217,7 @@ impl Machine {
                 source: frame.code.source.clone(),
             });
         }
+        frames.retain(|frame| frame.source.is_some());
         frames
     }
 

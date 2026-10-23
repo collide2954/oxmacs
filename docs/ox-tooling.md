@@ -16,7 +16,7 @@ Tools for writing Ox: a checker, interactive development in oxmacs in the style 
 ## Phases
 
 1. **Checker core.** Undefined names with suggestions, wrong argument counts and keyword arguments, unused bindings and imports, malformed forms; `ox check` with exit codes, `--format json` and `--format github`, and `--strict`; plugins and init.ox checked with the editor's natives known.
-2. **Docstrings and evaluation.** Docstrings; `C-M-x` and `C-x C-e` showing `=> value` beside the form; `C-c C-k` loads the file; errors open `*ox stacktrace*`, whose frames jump to source; `C-c C-c` interrupts; checker findings underlined in Ox buffers.
+2. **Docstrings and evaluation.** Docstrings; `C-M-x` and `C-x C-e` showing `=> value` beside the form; `C-c C-k` loads the file; errors open `*ox stacktrace*`, whose frames jump to source; `C-c C-c` interrupts; checker findings underlined in Ox buffers. The library's own functions get docstrings in phase 3, when `C-c C-d` shows them.
 3. **Live docs, completion and `M-.`.** The signature at point in the echo area, `C-c C-d` docs with their examples, completion from the running image, `M-.` and `M-,` into the library and plugins, and usages.
 4. **`ox fmt`.** One canonical style, `C-c C-f` and formatting on save.
 5. **`ox lsp`.** The `ox-lsp` crate: diagnostics, completion, hover, signature help, definitions, references, rename and formatting.
@@ -41,3 +41,13 @@ Phase 1 slices:
 4. **Plugins and init.ox** checked with the editor known.
 
 Phase 1 slices 1 to 4 are done.
+
+## Interactive development
+
+- **Evaluation runs as tasks.** `C-x C-e`, `C-M-x`, `C-c C-b` and `C-c C-k` read the forms in the buffer and evaluate them one at a time with `Isolate::spawn_eval_with`, each as a task, so the editor stays responsive and `C-c C-c` can cancel a runaway form. A form is expanded only after the one before it finishes, so macros defined earlier in the buffer work. Forms keep their place in the file: the text before them is replaced by spaces and newlines, so errors and frames point at the right line and column.
+- **Results beside the form.** The value appears faintly after the form's last line, as `=> value`, and stays until that buffer changes; long values are cut, and the whole value is in the echo area. Errors show `!! message` in the error color.
+- **Keys.** `C-c C-b` evaluates the buffer, as before, rather than interrupting as in CIDER; `C-c C-c` interrupts. `C-c C-k` saves first; for init.ox and plugin files, saving reloads them.
+- **Stack traces.** An error with more than one frame opens `*ox stacktrace*` beside the code: the message, the error type, and each frame's function and place. `RET` visits a frame in the other window, opening code that has no file, such as bundled plugins, read-only from its source; `n` and `p` move and `q` closes. A single frame would only repeat the note, so it opens nothing.
+- **Checking while typing.** Half a second after the last key in an Ox file, the checker runs on the buffer's text in its own isolate, kept apart from the running one, and its findings replace that file's diagnostics, underlined, echoed at point and counted in the mode line. Plugin files and init.ox are checked with the editor's natives known, as `ox check` does. Each file is checked in one module that is cleared each time.
+
+Phase 2 is done.

@@ -492,6 +492,13 @@ impl Runtime {
             Op::DefineMacro { name, from } => {
                 self.define_macro(machine.code.module, name, machine.get(from));
             }
+            Op::Document { name, doc } => {
+                let text = self
+                    .heap
+                    .text(machine.code.constants[doc as usize])
+                    .map(str::to_owned);
+                self.document(machine.code.module, name, text);
+            }
             Op::DefineGlobal { name, from } => {
                 self.define(machine.code.module, name, machine.get(from));
             }

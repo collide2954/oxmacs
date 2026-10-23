@@ -1,28 +1,109 @@
+use std::collections::VecDeque;
 use std::fs;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 
-use ox::read;
+use ox::span::Span;
+use ox::task::TaskId;
+use ox::value::Value;
+use ox::{Error, read};
 use oxmacs_core::command::{CommandId, DynamicSpec, Scope, ScopeId};
 use oxmacs_core::editor::{Editor, InputLine};
 use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
+use oxmacs_core::theme::Highlight;
 
-use crate::{Ox, log, mode, plugins};
+use crate::{Ox, log, mode, plugins, stacktrace};
 
 pub const REPL: &str = "*ox repl*";
 const PROMPT: &str = "ox> ";
 const GREETING: &str =
     "Ox. Type an expression and press RET; M-p and M-n step through what you typed.\n";
+const NOTE_LIMIT: usize = 200;
 
 #[derive(Debug, Clone)]
 enum Request {
     EvalLastForm,
+    EvalTopForm,
     EvalBuffer,
+    LoadFile,
+    Interrupt,
     OpenRepl,
     Send,
     Recall(bool),
     Saved(PathBuf),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Finish {
+    Quietly,
+    Note,
+    Echo,
+    Loaded(String),
+}
+
+#[derive(Debug)]
+struct Form {
+    buffer: BufferId,
+    revision: u64,
+    name: String,
+    text: Rc<str>,
+    span: Range<usize>,
+    end: usize,
+    finish: Finish,
+}
+
+impl Form {
+    fn new(editor: &Editor, text: &Rc<str>, span: Range<usize>, finish: Finish) -> Self {
+        let buffer = editor.buffer();
+        Self {
+            buffer: buffer.id(),
+            revision: buffer.revision(),
+            name: source_name(editor),
+            end: buffer.byte_to_char(span.end),
+            text: Rc::clone(text),
+            span,
+            finish,
+        }
+    }
+
+    fn source(&self) -> String {
+        let padding: String = self.text[..self.span.start]
+            .chars()
+            .map(|character| if character == '\n' { '\n' } else { ' ' })
+            .collect();
+        format!("{padding}{}", &self.text[self.span.clone()])
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct Evaluation {
+    waiting: VecDeque<Form>,
+    running: Option<(TaskId, Form)>,
+    interrupted: bool,
+}
+
+fn bytes(span: Span, text: &str) -> Range<usize> {
+    let end = usize::try_from(span.end).unwrap_or(0).min(text.len());
+    let start = usize::try_from(span.start).unwrap_or(0).min(end);
+    start..end
+}
+
+fn note(editor: &mut Editor, form: &Form, text: &str, face: Highlight) {
+    if editor
+        .buffer_by_id(form.buffer)
+        .is_some_and(|buffer| buffer.revision() == form.revision)
+    {
+        let line = text.lines().next().unwrap_or_default();
+        let shown: String = if line.chars().count() > NOTE_LIMIT || line.len() < text.len() {
+            line.chars().take(NOTE_LIMIT).chain(['…']).collect()
+        } else {
+            line.to_owned()
+        };
+        editor.set_inline_note(form.buffer, form.end, &shown, face);
+    }
 }
 
 #[derive(Debug, Default)]
@@ -96,12 +177,33 @@ pub fn install(editor: &mut Editor) {
         mode_scope,
         Request::EvalLastForm,
     );
+    let top = command(
+        editor,
+        "ox-eval-top-form",
+        "Evaluate the top-level Ox form around point",
+        mode_scope,
+        Request::EvalTopForm,
+    );
     let whole = command(
         editor,
         "ox-eval-buffer",
         "Evaluate this Ox buffer",
         mode_scope,
         Request::EvalBuffer,
+    );
+    let load = command(
+        editor,
+        "ox-load-file",
+        "Save this Ox file and load it",
+        mode_scope,
+        Request::LoadFile,
+    );
+    let interrupt = command(
+        editor,
+        "ox-interrupt",
+        "Stop the Ox evaluation that is running",
+        mode_scope,
+        Request::Interrupt,
     );
     let repl = command(
         editor,
@@ -133,7 +235,10 @@ pub fn install(editor: &mut Editor) {
     );
     for (scope, keys, id) in [
         (mode_scope, "C-x C-e", last),
+        (mode_scope, "C-M-x", top),
         (mode_scope, "C-c C-b", whole),
+        (mode_scope, "C-c C-k", load),
+        (mode_scope, "C-c C-c", interrupt),
         (mode_scope, "C-c C-z", repl),
         (repl_scope, "RET", send),
         (repl_scope, "M-p", previous),
@@ -199,7 +304,10 @@ impl Ox {
         for request in waiting {
             match request {
                 Request::EvalLastForm => self.eval_last_form(editor),
+                Request::EvalTopForm => self.eval_top_form(editor),
                 Request::EvalBuffer => self.eval_buffer(editor),
+                Request::LoadFile => self.load_file(editor),
+                Request::Interrupt => self.interrupt(editor),
                 Request::OpenRepl => open_repl(editor),
                 Request::Send => self.send(editor),
                 Request::Recall(older) => recall(editor, older),
@@ -210,37 +318,158 @@ impl Ox {
         }
     }
 
-    fn evaluate_and_show(&mut self, editor: &mut Editor, name: &str, source: &str) {
-        match self.isolate.eval_named_with(editor, name, source) {
-            Ok(value) => {
-                let shown = self.isolate.write(value);
-                editor.show_message(format!("=> {shown}"));
+    fn evaluate(&mut self, editor: &mut Editor, forms: Vec<Form>) {
+        self.evaluation.waiting.extend(forms);
+        self.advance(editor);
+    }
+
+    pub(crate) fn advance(&mut self, editor: &mut Editor) {
+        while self.evaluation.running.is_none() {
+            let Some(form) = self.evaluation.waiting.pop_front() else {
+                return;
+            };
+            match self
+                .isolate
+                .spawn_eval_with(editor, &form.name, &form.source())
+            {
+                Ok(Some(task)) => self.evaluation.running = Some((task, form)),
+                Ok(None) => self.succeeded(editor, &form, Value::Nil),
+                Err(error) => self.failed(editor, &form, &error),
             }
-            Err(error) => log::report(editor, &error, Some((name, source))),
         }
     }
 
+    pub(crate) fn evaluating(&self) -> Option<TaskId> {
+        self.evaluation.running.as_ref().map(|(task, _)| *task)
+    }
+
+    pub(crate) fn evaluated(
+        &mut self,
+        editor: &mut Editor,
+        finished: Vec<(TaskId, Result<Value, Error>)>,
+    ) -> Vec<Error> {
+        let mut others = Vec::new();
+        for (task, result) in finished {
+            let Some((_, form)) = self
+                .evaluation
+                .running
+                .take_if(|(running, _)| *running == task)
+            else {
+                others.extend(result.err());
+                continue;
+            };
+            if std::mem::take(&mut self.evaluation.interrupted) {
+                editor.show_message("Evaluation interrupted");
+                continue;
+            }
+            match result {
+                Ok(value) => self.succeeded(editor, &form, value),
+                Err(error) => self.failed(editor, &form, &error),
+            }
+        }
+        others
+    }
+
+    fn succeeded(&mut self, editor: &mut Editor, form: &Form, value: Value) {
+        let shown = || format!("=> {}", self.isolate.write(value));
+        match &form.finish {
+            Finish::Quietly => {}
+            Finish::Note => {
+                let shown = shown();
+                note(editor, form, &shown, Highlight::Comment);
+                editor.show_message(shown);
+            }
+            Finish::Echo => editor.show_message(shown()),
+            Finish::Loaded(name) => editor.show_message(format!("Loaded {name}")),
+        }
+    }
+
+    fn failed(&mut self, editor: &mut Editor, form: &Form, error: &Error) {
+        self.evaluation.waiting.clear();
+        note(
+            editor,
+            form,
+            &format!("!! {}", error.message),
+            Highlight::Error,
+        );
+        log::report(editor, error, Some((&form.name, &form.source())));
+        stacktrace::show(editor, error);
+    }
+
+    fn interrupt(&mut self, editor: &mut Editor) {
+        let Some(task) = self.evaluating() else {
+            editor.show_message("Nothing is being evaluated");
+            return;
+        };
+        self.evaluation.waiting.clear();
+        self.evaluation.interrupted = self.isolate.cancel(task);
+    }
+
     fn eval_last_form(&mut self, editor: &mut Editor) {
-        let name = source_name(editor);
         let buffer = editor.buffer();
-        let before = buffer.text_in(0..buffer.point());
+        let before: Rc<str> = buffer.text_in(0..buffer.point()).into();
         let (forms, _) = read::read(&before);
-        let Some(form) = forms.last() else {
+        let Some(last) = forms.last() else {
             editor.show_message("There is no Ox form before point");
             return;
         };
-        let start = usize::try_from(form.span.start)
-            .unwrap_or(0)
-            .min(before.len());
-        let end = usize::try_from(form.span.end)
-            .unwrap_or(0)
-            .clamp(start, before.len());
-        let padding: String = before[..start]
-            .chars()
-            .map(|character| if character == '\n' { '\n' } else { ' ' })
+        let form = Form::new(editor, &before, bytes(last.span, &before), Finish::Note);
+        self.evaluate(editor, vec![form]);
+    }
+
+    fn eval_top_form(&mut self, editor: &mut Editor) {
+        let buffer = editor.buffer();
+        let text: Rc<str> = buffer.contents().into();
+        let point = buffer.char_to_byte(buffer.point());
+        let (forms, _) = read::read(&text);
+        let spans: Vec<Range<usize>> = forms.iter().map(|form| bytes(form.span, &text)).collect();
+        let Some(span) = spans
+            .iter()
+            .find(|span| span.contains(&point))
+            .or_else(|| spans.iter().rfind(|span| span.end <= point))
+        else {
+            editor.show_message("There is no Ox form at point");
+            return;
+        };
+        let form = Form::new(editor, &text, span.clone(), Finish::Note);
+        self.evaluate(editor, vec![form]);
+    }
+
+    fn evaluate_all(&mut self, editor: &mut Editor, finish: Finish) {
+        let text: Rc<str> = editor.buffer().contents().into();
+        let (forms, errors) = read::read(&text);
+        if let Some(error) = errors.into_iter().next() {
+            let form = Form::new(editor, &text, bytes(error.span, &text), Finish::Quietly);
+            note(
+                editor,
+                &form,
+                &format!("!! {}", error.message),
+                Highlight::Error,
+            );
+            let error = Error::at(error.span, error.message);
+            log::report(editor, &error, Some((&form.name, &text)));
+            return;
+        }
+        let Some(last) = forms.len().checked_sub(1) else {
+            match finish {
+                Finish::Loaded(name) => editor.show_message(format!("Loaded {name}")),
+                _ => editor.show_message("There are no Ox forms here"),
+            }
+            return;
+        };
+        let forms = forms
+            .iter()
+            .enumerate()
+            .map(|(index, form)| {
+                let finish = if index == last {
+                    finish.clone()
+                } else {
+                    Finish::Quietly
+                };
+                Form::new(editor, &text, bytes(form.span, &text), finish)
+            })
             .collect();
-        let source = format!("{padding}{}", &before[start..end]);
-        self.evaluate_and_show(editor, &name, &source);
+        self.evaluate(editor, forms);
     }
 
     fn eval_buffer(&mut self, editor: &mut Editor) {
@@ -249,9 +478,29 @@ impl Ox {
         {
             return;
         }
-        let name = source_name(editor);
-        let source = editor.buffer().contents();
-        self.evaluate_and_show(editor, &name, &source);
+        self.evaluate_all(editor, Finish::Echo);
+    }
+
+    fn load_file(&mut self, editor: &mut Editor) {
+        let buffer = editor.buffer();
+        let (id, modified) = (buffer.id(), buffer.is_modified());
+        let Some(path) = buffer.file().map(|file| file.path.clone()) else {
+            let name = buffer.name().to_owned();
+            self.evaluate_all(editor, Finish::Loaded(name));
+            return;
+        };
+        let saved = modified && editor.save_buffer(id);
+        if self.reloads(&path) {
+            if !saved {
+                self.reload(editor, &path);
+            }
+            return;
+        }
+        let name = path.file_name().map_or_else(
+            || path.display().to_string(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        self.evaluate_all(editor, Finish::Loaded(name));
     }
 
     fn send(&mut self, editor: &mut Editor) {
@@ -290,6 +539,12 @@ impl Ox {
         buffer.set_point(end);
     }
 
+    fn reloads(&self, path: &Path) -> bool {
+        self.home.as_ref().is_some_and(|home| {
+            same_file(path, &home.join("init.ox")) || plugin_file(home, path).is_some()
+        })
+    }
+
     fn reload(&mut self, editor: &mut Editor, path: &Path) -> bool {
         let Some(home) = self.home.clone() else {
             return false;
@@ -325,9 +580,11 @@ mod tests {
     use oxmacs_core::editor::Editor;
     use oxmacs_core::input::KeySequence;
     use oxmacs_core::text::Buffer;
+    use oxmacs_core::theme::Highlight;
 
     use super::REPL;
-    use crate::{Ox, log};
+    use crate::stacktrace::STACKTRACE;
+    use crate::{Ox, Pace, log};
 
     fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
         let keys: KeySequence = notation.parse().unwrap();
@@ -391,21 +648,56 @@ mod tests {
             .unwrap_or_default()
     }
 
+    fn note(editor: &Editor, line: usize) -> Option<(String, Highlight)> {
+        editor.pane().line_note(line)
+    }
+
+    fn noted(text: &str) -> (String, Highlight) {
+        (text.to_owned(), Highlight::Comment)
+    }
+
+    fn failed(text: &str) -> (String, Highlight) {
+        (text.to_owned(), Highlight::Error)
+    }
+
     #[test]
-    fn c_x_c_e_evaluates_the_form_before_point() {
+    fn c_x_c_e_evaluates_the_form_before_point_and_notes_its_value() {
         let home = home_with(&[("scratch.ox", "(def x 5)\n(* x 2)")]);
         let (mut editor, mut ox) = visiting(home.path(), "scratch.ox");
 
         press(&mut editor, &mut ox, "C-x C-e");
         assert_eq!(editor.message(), Some("Ox: x is not defined"));
+        assert_eq!(note(&editor, 1), Some(failed("!! x is not defined")));
 
         editor.buffer_mut().set_point(9);
         press(&mut editor, &mut ox, "C-x C-e");
         assert_eq!(editor.message(), Some("=> x"));
+        assert_eq!(note(&editor, 0), Some(noted("=> x")));
         let end = editor.buffer().len_chars();
         editor.buffer_mut().set_point(end);
         press(&mut editor, &mut ox, "C-x C-e");
         assert_eq!(editor.message(), Some("=> 10"));
+        assert_eq!(note(&editor, 1), Some(noted("=> 10")));
+
+        editor.buffer_mut().insert_at(0, " ");
+        assert_eq!(note(&editor, 1), None);
+    }
+
+    #[test]
+    fn c_m_x_evaluates_the_top_level_form_around_point() {
+        let home = home_with(&[("scratch.ox", "(def (área w h)\n  (* w h))\n\n(área 2 3)\n")]);
+        let (mut editor, mut ox) = visiting(home.path(), "scratch.ox");
+
+        editor.buffer_mut().set_point(20);
+        press(&mut editor, &mut ox, "C-M-x");
+        assert_eq!(editor.message(), Some("=> área"));
+        assert_eq!(note(&editor, 1), Some(noted("=> área")));
+
+        editor.buffer_mut().set_point(29);
+        press(&mut editor, &mut ox, "C-M-x");
+        assert_eq!(editor.message(), Some("=> 6"));
+        assert_eq!(note(&editor, 3), Some(noted("=> 6")));
+        assert_eq!(note(&editor, 1), Some(noted("=> área")));
     }
 
     #[test]
@@ -420,6 +712,116 @@ mod tests {
 
         assert_eq!(editor.message(), Some("=> 3"));
         assert!(editor.command_named("hello").is_some());
+    }
+
+    #[test]
+    fn an_error_stops_the_buffer_where_it_happened() {
+        let home = home_with(&[("scratch.ox", "(def a 1)\n(/ a 0)\n(def b 2)")]);
+        let (mut editor, mut ox) = visiting(home.path(), "scratch.ox");
+
+        press(&mut editor, &mut ox, "C-c C-b");
+
+        assert_eq!(editor.message(), Some("Ox: Division by zero"));
+        assert_eq!(note(&editor, 1), Some(failed("!! Division by zero")));
+        assert_eq!(ox.eval(&mut editor, "a").unwrap(), "1");
+        assert!(ox.eval(&mut editor, "b").is_err());
+    }
+
+    fn trace(editor: &Editor) -> Vec<String> {
+        let id = editor.buffer_named(STACKTRACE).unwrap();
+        let buffer = editor.buffer_by_id(id).unwrap();
+        buffer.contents().lines().map(str::to_owned).collect()
+    }
+
+    #[test]
+    fn errors_from_calls_open_a_stacktrace_whose_frames_visit_their_source() {
+        let home = home_with(&[(
+            "scratch.ox",
+            "(def (inner x)\n  (/ x 0))\n(def (outer) (+ 1 (inner 1)))\n(outer)",
+        )]);
+        let (mut editor, mut ox) = visiting(home.path(), "scratch.ox");
+
+        press(&mut editor, &mut ox, "C-c C-b");
+
+        assert_eq!(editor.buffer().name(), STACKTRACE);
+        assert_eq!(
+            trace(&editor),
+            [
+                "Division by zero",
+                "zero-division-error",
+                "",
+                "  inner      scratch.ox:2:3",
+                "  outer      scratch.ox:3:19",
+                "  top level  scratch.ox:4:1",
+            ]
+        );
+        press(&mut editor, &mut ox, "RET");
+        assert_eq!(editor.buffer().name(), "scratch.ox");
+        assert_eq!(editor.buffer().point(), 17);
+
+        press(&mut editor, &mut ox, "C-x o");
+        press(&mut editor, &mut ox, "n");
+        press(&mut editor, &mut ox, "RET");
+        assert_eq!(editor.buffer().point(), 44);
+
+        press(&mut editor, &mut ox, "C-x o");
+        press(&mut editor, &mut ox, "q");
+        let shown = editor.buffer_named(STACKTRACE).unwrap();
+        assert!(!editor.buffer_shown(shown));
+    }
+
+    #[test]
+    fn frames_without_a_file_open_their_source_read_only() {
+        let home = home_with(&[("scratch.ox", "(helper 1)")]);
+        let (mut editor, mut ox) = visiting(home.path(), "scratch.ox");
+        ox.isolate
+            .eval_named("lib/helper.ox", "(def (helper x)\n  (/ x 0))")
+            .unwrap();
+
+        press(&mut editor, &mut ox, "C-x C-e");
+        assert_eq!(trace(&editor)[3], "  helper     lib/helper.ox:2:3");
+        press(&mut editor, &mut ox, "RET");
+
+        assert_eq!(editor.buffer().name(), "lib/helper.ox");
+        assert_eq!(editor.buffer().contents(), "(def (helper x)\n  (/ x 0))");
+        assert!(editor.buffer().is_read_only());
+        assert_eq!(editor.buffer().point(), 18);
+    }
+
+    #[test]
+    fn c_c_c_k_saves_and_loads_the_file() {
+        let home = home_with(&[("scratch.ox", "")]);
+        let (mut editor, mut ox) = visiting(home.path(), "scratch.ox");
+        editor
+            .buffer_mut()
+            .insert_at(0, "(def (double x) (* x 2))\n(double 21)");
+
+        press(&mut editor, &mut ox, "C-c C-k");
+
+        assert_eq!(editor.message(), Some("Loaded scratch.ox"));
+        assert!(!editor.buffer().is_modified());
+        assert_eq!(
+            std::fs::read_to_string(home.path().join("scratch.ox")).unwrap(),
+            "(def (double x) (* x 2))\n(double 21)"
+        );
+        assert_eq!(ox.eval(&mut editor, "(double 4)").unwrap(), "8");
+    }
+
+    #[test]
+    fn c_c_c_c_interrupts_a_runaway_evaluation() {
+        let home = home_with(&[("scratch.ox", "(def (spin) (spin))\n(spin)\n(def after 1)")]);
+        let (mut editor, mut ox) = visiting(home.path(), "scratch.ox");
+
+        press(&mut editor, &mut ox, "C-c C-b");
+        assert_eq!(ox.tick(&mut editor), Pace::Running);
+
+        press(&mut editor, &mut ox, "C-c C-c");
+        assert_eq!(editor.message(), Some("Evaluation interrupted"));
+        assert_eq!(ox.pace(), Pace::Idle);
+        assert!(ox.eval(&mut editor, "after").is_err());
+
+        press(&mut editor, &mut ox, "C-c C-c");
+        assert_eq!(editor.message(), Some("Nothing is being evaluated"));
     }
 
     #[test]

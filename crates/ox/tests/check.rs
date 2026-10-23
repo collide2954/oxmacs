@@ -53,6 +53,25 @@ fn undefined_names_are_errors_that_suggest_a_close_name() {
 }
 
 #[test]
+fn checking_a_file_again_forgets_what_it_defined_before() {
+    let mut isolate = Isolate::new();
+    let modules = isolate.module_count();
+
+    assert_eq!(
+        isolate.check(
+            "sample.ox",
+            "(def (helper) 1)\n(defmacro twice [x] `(do ~x ~x))"
+        ),
+        []
+    );
+    let again = isolate.check("sample.ox", "(helper)\n(twice 1)");
+
+    let messages: Vec<&str> = again.iter().map(|found| found.message.as_str()).collect();
+    assert_eq!(messages, ["helper is not defined", "twice is not defined"]);
+    assert_eq!(isolate.module_count(), modules + 1);
+}
+
+#[test]
 fn checking_runs_nothing_but_macro_definitions() {
     let source = "(defmacro twice [x] `(do ~x ~x))
 (def boom (raise (error \"ran\")))

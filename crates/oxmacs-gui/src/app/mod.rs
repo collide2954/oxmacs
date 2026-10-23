@@ -20,7 +20,7 @@ use oxmacs_core::external::tools::{Probe, Tool};
 use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_ox::{Ox, Pace, idle, takeover};
+use oxmacs_ox::{Ox, Pace, takeover};
 
 use crate::watcher::Watched;
 use crate::widgets::buffer_view::ViewEvent;
@@ -216,7 +216,9 @@ impl App {
 
     pub fn idle_wait(&self) -> Option<(Duration, Instant)> {
         let since = self.rested_since()?;
-        idle::next(&self.editor, since).map(|wait| (wait, since))
+        self.ox
+            .idle_wait(&self.editor, since)
+            .map(|wait| (wait, since))
     }
 
     pub fn completion_opacity(&self) -> f32 {

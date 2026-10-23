@@ -1,6 +1,6 @@
 [package]
 name = "ox-perf"
-version = "0.1.0"
+version.workspace = true
 description = "Benchmarks and a native sampling profiler for the Ox VM"
 edition.workspace = true
 rust-version.workspace = true

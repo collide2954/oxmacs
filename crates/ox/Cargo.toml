@@ -1,6 +1,6 @@
 [package]
 name = "ox"
-version = "0.1.0"
+version.workspace = true
 description = "Ox, the extension language of oxmacs"
 edition.workspace = true
 rust-version.workspace = true
