@@ -759,6 +759,7 @@ pub fn reload_file(
         })
         .cloned();
     let Some(plugin) = plugin.filter(|plugin| plugin.loaded) else {
+        start_now(isolate, editor, path);
         return;
     };
     if file_name == "plugin.ox" {
@@ -808,20 +809,20 @@ pub fn wake_waiting(isolate: &mut Isolate, editor: &mut Editor) {
         .map(|plugins| std::mem::take(&mut plugins.waking))
         .unwrap_or_default();
     for name in waking {
-        wake(isolate, editor, &name);
+        let _ = wake(isolate, editor, &name);
     }
 }
 
-fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) {
+fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) -> bool {
     let Some(plugins) = editor.plugin_state_mut::<Plugins>() else {
-        return;
+        return false;
     };
     let Some(plugin) = plugins
         .known
         .iter_mut()
         .find(|plugin| plugin.manifest.name == name && plugin.active && !plugin.loaded)
     else {
-        return;
+        return false;
     };
     plugin.loaded = true;
     let plugin = plugin.clone();
@@ -836,7 +837,7 @@ fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) {
     else {
         let missing = format!("{name} has no entry file {}", plugin.manifest.entry);
         log::report(editor, &Error::new(missing), None);
-        return;
+        return false;
     };
     let preamble = format!("(def (setting key) (plugin-setting '{name} key))");
     let loaded = isolate
@@ -844,13 +845,79 @@ fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) {
         .and_then(|()| isolate.eval_module_with(editor, name, file, text));
     if let Err(error) = loaded {
         log::report(editor, &error, Some((file, text)));
-        return;
+        return false;
     }
+    let mut complete = true;
     for (command, _) in &plugin.manifest.commands {
         if !commands::defined(editor, command) {
             let forgotten = format!("{name} didn't define the command {command}");
             log::report(editor, &Error::new(forgotten), None);
+            complete = false;
         }
+    }
+    complete
+}
+
+fn start_now(isolate: &mut Isolate, editor: &mut Editor, path: &Path) {
+    let Some(folder) = path.parent() else {
+        return;
+    };
+    let manifest_path = folder.join("plugin.ox");
+    let Ok(text) = fs::read_to_string(&manifest_path) else {
+        editor.show_message("A plugin starts once its folder has a plugin.ox");
+        return;
+    };
+    let Some(manifest) =
+        read_manifest(isolate, editor, &manifest_path.display().to_string(), &text)
+    else {
+        return;
+    };
+    let name = manifest.name.clone();
+    if !folder.join(&manifest.entry).is_file() {
+        editor.show_message(format!(
+            "The {name} plugin starts once {} exists",
+            manifest.entry
+        ));
+        return;
+    }
+    let origin = Origin::Folder(folder.to_path_buf());
+    let Some(plugins) = editor.plugin_state_mut::<Plugins>() else {
+        return;
+    };
+    match plugins
+        .known
+        .iter_mut()
+        .find(|plugin| plugin.manifest.name == name)
+    {
+        Some(known) => {
+            known.manifest = manifest;
+            known.origin = origin;
+            known.active = true;
+        }
+        None => plugins.known.push(Plugin {
+            manifest,
+            origin,
+            active: true,
+            loaded: false,
+            config: Vec::new(),
+            saved: Vec::new(),
+            custom: Vec::new(),
+        }),
+    }
+    let Some(plugin) = plugins
+        .known
+        .iter()
+        .find(|plugin| plugin.manifest.name == name)
+        .cloned()
+    else {
+        return;
+    };
+    stubs(editor, &plugin);
+    if wake(isolate, editor, &name) {
+        views::redraw(editor);
+        editor.show_message(format!(
+            "Started the {name} plugin; (use-plugin {name}) in init.ox keeps it on"
+        ));
     }
 }
 #[cfg(test)]

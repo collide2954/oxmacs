@@ -38,6 +38,24 @@ fn forms_can_be_evaluated_as_tasks_one_after_another() {
 }
 
 #[test]
+fn forms_can_be_evaluated_inside_a_module() {
+    let mut isolate = Isolate::new();
+    isolate
+        .eval_module_with(&mut (), "shapes", "shapes.ox", "(def (area w h) (* w h))")
+        .unwrap();
+
+    isolate
+        .spawn_eval_in(&mut (), "shapes", "shapes.ox", "(area 2 3)")
+        .unwrap();
+    assert_eq!(finished(&mut isolate), [Ok("6".to_owned())]);
+    isolate.spawn_eval("scratch.ox", "(area 2 3)").unwrap();
+    assert_eq!(
+        finished(&mut isolate),
+        [Err("area is not defined".to_owned())]
+    );
+}
+
+#[test]
 fn tracebacks_of_tasks_show_only_code_with_a_source() {
     let mut isolate = Isolate::new();
     isolate

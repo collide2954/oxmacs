@@ -6,6 +6,9 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- A plugin you are writing starts the first time you load one of its files with `C-c C-k`, without restarting oxmacs, and `C-x C-e` in a plugin's files evaluates in that plugin's module, so its own definitions are there.
+- Ox highlighting is complete: calls, namespaced names such as `ui/text`, fields such as `entry.title`, quoted symbols, `@` and quasiquotes, docstrings and command summaries, and `{…}` inside strings each get their face, and strings and docstrings that span lines no longer turn the lines after them into code.
+- Plugins that start with oxmacs load just after the window opens, so boot stays at about 5 ms with the calendar's reminders on.
 - Typing is fast again: a key takes about half a millisecond in an ordinary file, down from 13, because oxmacs no longer looks for a missing language server on every keystroke; it looks again after 30 seconds or when you install one.
 - Typing in very large files no longer waits for the whole file to be parsed again after each key, down from 655 ms to 6 ms a key in a 20,000-line Rust file. Syntax highlighting catches up a quarter of a second after you stop typing.
 - Ox timers no longer wake oxmacs ten times a second: while plugins only sleep, the window waits for the next timer.

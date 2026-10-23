@@ -55,6 +55,7 @@ struct Form {
     buffer: BufferId,
     revision: u64,
     name: String,
+    module: String,
     text: Rc<str>,
     span: Range<usize>,
     end: usize,
@@ -68,6 +69,7 @@ impl Form {
             buffer: buffer.id(),
             revision: buffer.revision(),
             name: source_name(editor),
+            module: "user".to_owned(),
             end: buffer.byte_to_char(span.end),
             text: Rc::clone(text),
             span,
@@ -499,7 +501,11 @@ impl Ox {
         }
     }
 
-    fn evaluate(&mut self, editor: &mut Editor, forms: Vec<Form>) {
+    fn evaluate(&mut self, editor: &mut Editor, mut forms: Vec<Form>) {
+        let module = help::module(editor, self.home.as_deref());
+        for form in &mut forms {
+            form.module.clone_from(&module);
+        }
         self.evaluation.waiting.extend(forms);
         self.advance(editor);
     }
@@ -511,7 +517,7 @@ impl Ox {
             };
             match self
                 .isolate
-                .spawn_eval_with(editor, &form.name, &form.source())
+                .spawn_eval_in(editor, &form.module, &form.name, &form.source())
             {
                 Ok(Some(task)) => self.evaluation.running = Some((task, form)),
                 Ok(None) => self.succeeded(editor, &form, Value::Nil),
@@ -1101,6 +1107,48 @@ mod tests {
 
         assert_eq!(editor.message(), Some("Howdy 2"));
         assert_eq!(logged(&editor), "");
+    }
+
+    #[test]
+    fn loading_a_new_plugin_file_starts_its_plugin() {
+        let home = home_with(&[("init.ox", "")]);
+        let (mut editor, mut ox) = started(home.path());
+        let folder = home.path().join("plugins").join("greeter");
+        std::fs::create_dir_all(&folder).unwrap();
+        editor.open_file(&folder.join("plugin.ox"));
+        editor.buffer_mut().insert_at(
+            0,
+            "(plugin greeter :commands {greet: \"Say hello\"} :entry \"greeter.ox\")",
+        );
+        press(&mut editor, &mut ox, "C-x C-s");
+        assert_eq!(
+            editor.message(),
+            Some("The greeter plugin starts once greeter.ox exists")
+        );
+        assert_eq!(logged(&editor), "");
+        std::fs::write(
+            folder.join("greeter.ox"),
+            "(def (twice x) (* 2 x))\n(defcommand greet \"Say hello\" (message \"Hello\"))\n(twice 4)",
+        )
+        .unwrap();
+        editor.open_file(&folder.join("greeter.ox"));
+        assert!(editor.command_named("greet").is_none());
+
+        press(&mut editor, &mut ox, "C-c C-k");
+
+        assert_eq!(
+            editor.message(),
+            Some("Started the greeter plugin; (use-plugin greeter) in init.ox keeps it on")
+        );
+        assert_eq!(logged(&editor), "");
+        let end = editor.buffer().len_chars();
+        editor.buffer_mut().set_point(end);
+        press(&mut editor, &mut ox, "C-x C-e");
+        assert_eq!(editor.message(), Some("=> 8"));
+        let greet = editor.command_named("greet").unwrap();
+        editor.execute(greet);
+        ox.tick(&mut editor);
+        assert_eq!(editor.message(), Some("Hello"));
     }
 
     #[test]

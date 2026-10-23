@@ -675,6 +675,18 @@ impl Isolate {
         name: &str,
         source: &str,
     ) -> Result<Option<TaskId>, Error> {
+        self.spawn_eval_in(host, "user", name, source)
+    }
+
+    pub fn spawn_eval_in(
+        &mut self,
+        host: &mut dyn Any,
+        module: &str,
+        name: &str,
+        source: &str,
+    ) -> Result<Option<TaskId>, Error> {
+        let id = self.module_id(module);
+        let module = Sym::intern(if id == USER { "user" } else { module });
         let text = Rc::new(Source {
             name: name.to_owned(),
             text: source.to_owned(),
@@ -686,16 +698,16 @@ impl Isolate {
         let mut codes = Vec::new();
         for form in &forms {
             if let Some(clauses) = header(form) {
-                self.header(USER, clauses, host)?;
+                self.header(id, clauses, host)?;
                 continue;
             }
-            let expanded = expand(&mut self.runtime, form, USER)?;
+            let expanded = expand(&mut self.runtime, form, id)?;
             codes.push(compile(
                 &mut self.runtime.heap,
                 &expanded,
                 Some(Rc::clone(&text)),
-                USER,
-                Sym::intern("user"),
+                id,
+                module,
             )?);
         }
         let mut codes = codes.into_iter();

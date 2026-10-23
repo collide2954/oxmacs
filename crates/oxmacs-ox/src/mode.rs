@@ -89,27 +89,137 @@ pub(crate) fn starts_symbol(character: char) -> bool {
     !delimits(character) && !"'`~@#,\\".contains(character)
 }
 
-fn word_face(word: &str, after_paren: bool, defining: bool) -> Option<Highlight> {
-    let number = word
-        .trim_start_matches(['-', '+'])
-        .starts_with(|character: char| character.is_ascii_digit());
-    if word.starts_with(':') || word.ends_with(':') || number || CONSTANTS.contains(&word) {
-        Some(Highlight::Constant)
-    } else if defining {
-        Some(Highlight::Function)
-    } else if after_paren && SPECIAL.contains(&word) {
-        Some(Highlight::Keyword)
-    } else {
-        None
+type Spans = Vec<(Range<usize>, Highlight)>;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct State {
+    in_string: bool,
+    after_def: bool,
+}
+
+fn number(word: &str) -> bool {
+    word.trim_start_matches(['-', '+'])
+        .starts_with(|character: char| character.is_ascii_digit())
+}
+
+fn word_spans(word: &str, start: usize, after_paren: bool, defining: bool) -> Spans {
+    let end = start + word.chars().count();
+    let offset = |index: usize| start + word[..index].chars().count();
+    if word.starts_with(':') || word.ends_with(':') || number(word) || CONSTANTS.contains(&word) {
+        return vec![(start..end, Highlight::Constant)];
+    }
+    if defining {
+        return vec![(start..end, Highlight::Function)];
+    }
+    if after_paren && SPECIAL.contains(&word) {
+        return vec![(start..end, Highlight::Keyword)];
+    }
+    if let Some(slash) = word
+        .find('/')
+        .filter(|slash| *slash > 0 && slash + 1 < word.len())
+    {
+        let mut spans = vec![(start..offset(slash + 1), Highlight::Type)];
+        if after_paren {
+            spans.push((offset(slash + 1)..end, Highlight::Function));
+        }
+        return spans;
+    }
+    if after_paren {
+        return vec![(start..end, Highlight::Function)];
+    }
+    match word.find('.').filter(|dot| *dot > 0) {
+        Some(dot) => vec![(offset(dot)..end, Highlight::Attribute)],
+        None => Vec::new(),
     }
 }
 
-pub fn highlight_line(text: &str) -> Vec<(Range<usize>, Highlight)> {
+fn string_end(chars: &[char], from: usize) -> (usize, bool) {
+    let mut at = from;
+    while at < chars.len() {
+        match chars[at] {
+            '\\' => at += 2,
+            '"' => return (at + 1, true),
+            _ => at += 1,
+        }
+    }
+    (chars.len(), false)
+}
+
+fn string_spans(chars: &[char], start: usize, end: usize, face: Highlight, spans: &mut Spans) {
+    let mut piece = start;
+    let mut at = start;
+    while at < end {
+        match chars[at] {
+            '\\' => at += 2,
+            '{' if chars.get(at + 1) == Some(&'{') => at += 2,
+            '{' => match (at + 1..end).find(|index| chars[*index] == '}') {
+                Some(close) => {
+                    if piece < at {
+                        spans.push((piece..at, face));
+                    }
+                    spans.push((at..close + 1, Highlight::Attribute));
+                    at = close + 1;
+                    piece = at;
+                }
+                None => at += 1,
+            },
+            _ => at += 1,
+        }
+    }
+    if piece < end {
+        spans.push((piece..end, face));
+    }
+}
+
+const SUMMARIZED: &[&str] = &["defcommand", "defmode"];
+
+fn word_end(chars: &[char], from: usize) -> usize {
+    (from..chars.len())
+        .find(|index| delimits(chars[*index]))
+        .unwrap_or(chars.len())
+}
+
+fn reader_token(chars: &[char], at: usize) -> Option<(usize, Highlight)> {
+    let next = chars.get(at + 1).copied();
+    match chars[at] {
+        '\\' if next.is_some() => Some((word_end(chars, at + 2), Highlight::Constant)),
+        '\'' if next.is_some_and(starts_symbol) => {
+            Some((word_end(chars, at + 1), Highlight::Constant))
+        }
+        '~' if next == Some('@') => Some((at + 2, Highlight::Macro)),
+        '\'' | '`' | '~' | '@' => Some((at + 1, Highlight::Macro)),
+        _ => None,
+    }
+}
+
+fn highlight_with(text: &str, state: State) -> (Spans, State) {
     let chars: Vec<char> = text.chars().collect();
     let mut spans = Vec::new();
     let mut at = 0;
     let mut defining = false;
+    let mut summary = false;
+    let mut head: Option<String> = None;
     let mut after_paren = false;
+    let mut first = true;
+    let next = State {
+        in_string: false,
+        after_def: text.trim_start().starts_with("(def"),
+    };
+    if state.in_string {
+        let (end, closed) = string_end(&chars, 0);
+        string_spans(&chars, 0, end, Highlight::String, &mut spans);
+        if !closed {
+            return (
+                spans,
+                State {
+                    in_string: true,
+                    after_def: false,
+                },
+            );
+        }
+        at = end;
+        first = false;
+    }
     while at < chars.len() {
         let character = chars[at];
         let start = at;
@@ -118,22 +228,30 @@ pub fn highlight_line(text: &str) -> Vec<(Range<usize>, Highlight)> {
             break;
         }
         if character == '"' {
-            at += 1;
-            while at < chars.len() && chars[at] != '"' {
-                at += if chars[at] == '\\' { 2 } else { 1 };
+            let (end, closed) = string_end(&chars, at + 1);
+            let face = if summary || (first && state.after_def) {
+                Highlight::DocComment
+            } else {
+                Highlight::String
+            };
+            string_spans(&chars, start, end, face, &mut spans);
+            if !closed {
+                return (
+                    spans,
+                    State {
+                        in_string: true,
+                        after_def: false,
+                    },
+                );
             }
-            at = (at + 1).min(chars.len());
-            spans.push((start..at, Highlight::String));
-            after_paren = false;
+            at = end;
+            (after_paren, summary, defining, first) = (false, false, false, false);
             continue;
         }
-        if character == '\\' && at + 1 < chars.len() {
-            at += 2;
-            while at < chars.len() && !delimits(chars[at]) {
-                at += 1;
-            }
-            spans.push((start..at, Highlight::Constant));
-            after_paren = false;
+        if let Some((end, face)) = reader_token(&chars, at) {
+            spans.push((start..end, face));
+            at = end;
+            (after_paren, first) = (false, false);
             continue;
         }
         if starts_symbol(character) {
@@ -141,26 +259,68 @@ pub fn highlight_line(text: &str) -> Vec<(Range<usize>, Highlight)> {
                 at += 1;
             }
             let word: String = chars[start..at].iter().collect();
-            if let Some(face) = word_face(&word, after_paren, defining) {
-                spans.push((start..at, face));
-            }
+            spans.extend(word_spans(&word, start, after_paren, defining));
+            summary = defining
+                && head
+                    .as_deref()
+                    .is_some_and(|head| SUMMARIZED.contains(&head));
             defining = after_paren && DEFINING.contains(&word.as_str());
-            after_paren = false;
+            if defining {
+                head = Some(word);
+            }
+            (after_paren, first) = (false, false);
             continue;
         }
         after_paren = character == '(';
+        if !character.is_whitespace() {
+            first = false;
+        }
         at += 1;
     }
-    spans
+    (spans, next)
 }
 
-fn highlight(editor: &Editor, id: BufferId, line: usize) -> Vec<(Range<usize>, Highlight)> {
-    editor
-        .buffer_by_id(id)
-        .map(|buffer| highlight_line(&buffer.line_text(line)))
-        .unwrap_or_default()
+#[cfg(test)]
+pub(crate) fn highlight_line(text: &str) -> Spans {
+    highlight_with(text, State::default()).0
 }
 
+#[cfg(test)]
+pub(crate) fn highlight_lines(lines: &[&str]) -> Vec<Spans> {
+    let mut state = State::default();
+    lines
+        .iter()
+        .map(|line| {
+            let (spans, next) = highlight_with(line, state);
+            state = next;
+            spans
+        })
+        .collect()
+}
+
+const HIGHLIGHT_LOOK_BACK: usize = 300;
+
+fn top_level(line: &str) -> bool {
+    ["(def", "(module", "(plugin", "(use-plugin"]
+        .iter()
+        .any(|head| line.starts_with(head))
+}
+
+fn highlight(editor: &Editor, id: BufferId, line: usize) -> Spans {
+    let Some(buffer) = editor.buffer_by_id(id) else {
+        return Vec::new();
+    };
+    let floor = line.saturating_sub(HIGHLIGHT_LOOK_BACK);
+    let first = (floor..line)
+        .rev()
+        .find(|candidate| top_level(&buffer.line_text(*candidate)))
+        .unwrap_or(floor);
+    let mut state = State::default();
+    for earlier in first..line {
+        state = highlight_with(&buffer.line_text(earlier), state).1;
+    }
+    highlight_with(&buffer.line_text(line), state).0
+}
 const LOOK_BACK: usize = 2000;
 
 const OX_FMT: Formatter = Formatter {
@@ -271,11 +431,65 @@ mod tests {
             [
                 (1..4, Highlight::Keyword),
                 (6..11, Highlight::Function),
-                (23..34, Highlight::String),
+                (19..22, Highlight::Function),
+                (23..27, Highlight::String),
+                (27..33, Highlight::Attribute),
+                (33..34, Highlight::String),
                 (35..40, Highlight::Constant),
                 (41..43, Highlight::Constant),
                 (44..47, Highlight::Constant),
                 (50..58, Highlight::Comment),
+            ]
+        );
+    }
+
+    #[test]
+    fn calls_namespaces_fields_quotes_and_derefs_are_told_apart() {
+        assert_eq!(
+            highlight_line("(ui/text (str now.gen) :face 'quit @world)"),
+            [
+                (1..4, Highlight::Type),
+                (4..8, Highlight::Function),
+                (10..13, Highlight::Function),
+                (17..21, Highlight::Attribute),
+                (23..28, Highlight::Constant),
+                (29..34, Highlight::Constant),
+                (35..36, Highlight::Macro),
+            ]
+        );
+        assert_eq!(
+            highlight_line("(* x 0.5)"),
+            [(1..2, Highlight::Function), (5..8, Highlight::Constant)]
+        );
+        assert_eq!(
+            highlight_line(r#""{{literal}""#),
+            [(0..12, Highlight::String)]
+        );
+    }
+
+    #[test]
+    fn strings_and_docstrings_carry_across_lines() {
+        let lines = super::highlight_lines(&[
+            "(def query \"<a>",
+            "(not code)",
+            "</a>\")",
+            "(def (step cells)",
+            "  \"The next generation.\"",
+            "  cells)",
+            "(defcommand life \"Watch it\" (go))",
+        ]);
+
+        assert_eq!(lines[1], [(0..10, Highlight::String)]);
+        assert_eq!(lines[2], [(0..5, Highlight::String)]);
+        assert_eq!(lines[4], [(2..24, Highlight::DocComment)]);
+        assert_eq!(lines[5], Vec::new());
+        assert_eq!(
+            lines[6],
+            [
+                (1..11, Highlight::Keyword),
+                (12..16, Highlight::Function),
+                (17..27, Highlight::DocComment),
+                (29..31, Highlight::Function),
             ]
         );
     }
