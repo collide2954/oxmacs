@@ -23,6 +23,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- oxmacs is open source, under either the MIT License or the Apache License 2.0, at your option.
 - Ox and its `ox` command share the oxmacs version number.
 - Ox code runs two to three times faster: function lookups are cached, calls and arithmetic do less work, comparisons and hashing no longer allocate, and `map`, `filter`, `keep`, `take`, `drop` and `distinct` build their results without copying. A frame of the matrix screensaver takes about half as long.
 - `M-x list-tools` is a compact table: one line per tool, grouped by what uses it (R, Python, PDF), with the version that runs and where it comes from, and the latest release; `TAB` opens a tool's summary, the full path it runs from and its source.

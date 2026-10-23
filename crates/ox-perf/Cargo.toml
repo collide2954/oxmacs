@@ -5,6 +5,7 @@ description = "ox perf: benchmarks and a native sampling profiler for the Ox VM"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 ox.workspace = true

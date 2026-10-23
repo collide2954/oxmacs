@@ -20,21 +20,24 @@ cargo install --path crates/oxmacs
 
 ## Extending oxmacs
 
-oxmacs is moving its features into Ox, an extension language of its own: a modern Scheme with a fast bytecode VM, built in [crates/ox](crates/ox) and designed in [docs/ox-design.md](docs/ox-design.md). The `ox` command runs `.ox` files and opens a REPL:
+oxmacs is moving its features into Ox, an extension language of its own: a modern Scheme with a fast bytecode VM, built in [crates/ox](crates/ox) and designed in [docs/ox-design.md](docs/ox-design.md). The `ox` command runs `.ox` files and opens a REPL, and `ox check`, `ox test`, `ox profile` and `ox perf` check, test, profile and benchmark Ox code:
 
 ```sh
-cargo run -p ox -- hello.ox
+cargo run -p ox-cli -- hello.ox
 ```
 
 Dired, git and weather are back as bundled Ox plugins. The rest of the former Cargo-feature applets (Markdown, Atlas, IRC, the database browser, the PDF viewer, Python, the extra themes and the animated start screen) return the same way.
+
 ## Configuration
 
 Settings live in `config.toml` in the oxmacs config folder (for example `~/.config/oxmacs/config.toml` on Linux and `%APPDATA%\oxmacs\config.toml` on Windows). `M-x customize` edits them in a settings buffer, `M-x find-config-file` opens the file itself, and `M-x oxmacs-doctor` reports what oxmacs found on your system.
 
 ## Development
 
-```sh
-git config core.hooksPath .githooks
-```
+Run `cargo fmt --all` and `cargo clippy --workspace --all-targets --all-features -- -D warnings` before committing. CI runs clippy, a build and the tests on Linux, macOS and Windows for pushes to master and pull requests. Changes are recorded in CHANGELOG.md.
 
-The pre-commit and pre-push hooks run `cargo fmt --check`, `cargo clippy` and the tests, which takes a minute or two once built. Changes are recorded in CHANGELOG.md.
+## License
+
+oxmacs is licensed under either of the [Apache License, Version 2.0](LICENSE-APACHE) or the [MIT License](LICENSE-MIT), at your option. Contributions are accepted under the same terms.
+
+The bundled JetBrains Mono font is under the [SIL Open Font License 1.1](crates/oxmacs-gui/fonts/JetBrainsMono-OFL.txt), and the highlight queries adapted from tree-sitter grammars keep their [MIT notices](crates/oxmacs-core/queries/NOTICE.md).

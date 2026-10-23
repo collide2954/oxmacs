@@ -1,10 +1,11 @@
 [package]
 name = "ox-cli"
 version.workspace = true
-description = "The ox command: run, test, check and profile Ox code"
+description = "The ox command: run, test, check, profile and benchmark Ox code"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [[bin]]
 name = "ox"
