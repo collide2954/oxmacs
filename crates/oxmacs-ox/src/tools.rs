@@ -15,7 +15,7 @@ use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Highlight;
 
-use crate::{Ox, help, log, mode, plugins, stacktrace};
+use crate::{Ox, help, log, mode, plugins, stacktrace, xref};
 
 pub const REPL: &str = "*ox repl*";
 const PROMPT: &str = "ox> ";
@@ -33,6 +33,8 @@ enum Request {
     Doc,
     Complete(bool),
     IndentOrComplete,
+    FindDefinition,
+    Usages,
     OpenRepl,
     Send,
     Recall(bool),
@@ -231,7 +233,53 @@ enum Home {
 
 type Keys = &'static [(Home, &'static str)];
 
-fn commands() -> [(&'static str, &'static str, Home, Request, Keys); 12] {
+type Spec = (&'static str, &'static str, Home, Request, Keys);
+
+fn looking_up() -> [Spec; 5] {
+    [
+        (
+            "ox-find-definition",
+            "Go to the definition of the Ox name at point; M-, comes back",
+            Home::Everywhere,
+            Request::FindDefinition,
+            &[(Home::Mode, "M-."), (Home::Repl, "M-.")],
+        ),
+        (
+            "ox-usages",
+            "List the usages of the Ox name at point",
+            Home::Everywhere,
+            Request::Usages,
+            &[(Home::Mode, "M-?"), (Home::Repl, "M-?")],
+        ),
+        (
+            "ox-doc",
+            "Show the docs of the Ox name at point",
+            Home::Everywhere,
+            Request::Doc,
+            &[(Home::Mode, "C-c C-d"), (Home::Repl, "C-c C-d")],
+        ),
+        (
+            "ox-complete",
+            "Complete the Ox name before point",
+            Home::Everywhere,
+            Request::Complete(true),
+            &[
+                (Home::Mode, "C-M-i"),
+                (Home::Repl, "C-M-i"),
+                (Home::Repl, "TAB"),
+            ],
+        ),
+        (
+            "ox-indent-or-complete",
+            "Complete the Ox name before point, or indent",
+            Home::Mode,
+            Request::IndentOrComplete,
+            &[(Home::Mode, "TAB")],
+        ),
+    ]
+}
+
+fn evaluating() -> [Spec; 5] {
     [
         (
             "ox-eval-last-form",
@@ -268,24 +316,11 @@ fn commands() -> [(&'static str, &'static str, Home, Request, Keys); 12] {
             Request::Interrupt,
             &[(Home::Mode, "C-c C-c")],
         ),
-        (
-            "ox-doc",
-            "Show the docs of the Ox name at point",
-            Home::Everywhere,
-            Request::Doc,
-            &[(Home::Mode, "C-c C-d"), (Home::Repl, "C-c C-d")],
-        ),
-        (
-            "ox-complete",
-            "Complete the Ox name before point",
-            Home::Everywhere,
-            Request::Complete(true),
-            &[
-                (Home::Mode, "C-M-i"),
-                (Home::Repl, "C-M-i"),
-                (Home::Repl, "TAB"),
-            ],
-        ),
+    ]
+}
+
+fn repl_commands() -> [Spec; 4] {
+    [
         (
             "ox-repl",
             "Open a REPL for Ox",
@@ -314,13 +349,6 @@ fn commands() -> [(&'static str, &'static str, Home, Request, Keys); 12] {
             Request::Recall(false),
             &[(Home::Repl, "M-n")],
         ),
-        (
-            "ox-indent-or-complete",
-            "Complete the Ox name before point, or indent",
-            Home::Mode,
-            Request::IndentOrComplete,
-            &[(Home::Mode, "TAB")],
-        ),
     ]
 }
 
@@ -337,7 +365,11 @@ pub fn install(editor: &mut Editor) {
         Home::Repl => repl_scope,
         Home::Everywhere => Scope::Global.into(),
     };
-    for (name, summary, home, request, keys) in commands() {
+    let specs = evaluating()
+        .into_iter()
+        .chain(looking_up())
+        .chain(repl_commands());
+    for (name, summary, home, request, keys) in specs {
         let id = match request {
             Request::IndentOrComplete => editor.add_dynamic_command(DynamicSpec {
                 name: name.to_owned(),
@@ -435,6 +467,10 @@ impl Ox {
                     help::complete(&self.isolate, editor, self.home.as_deref(), explicit);
                 }
                 Request::IndentOrComplete => indent_or_complete(editor),
+                Request::FindDefinition => {
+                    xref::find_definition(&self.isolate, editor, self.home.as_deref());
+                }
+                Request::Usages => xref::show_usages(editor, self.home.as_deref()),
                 Request::OpenRepl => open_repl(editor),
                 Request::Send => self.send(editor),
                 Request::Recall(older) => recall(editor, older),

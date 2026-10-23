@@ -64,8 +64,13 @@ Decided on 2026-10-22 while the user was away, taking the recommended option eac
 - **`C-x C-e`** evaluates the expression just before point, even inside an unfinished list, as Emacs does.
 - **Completion.** Names come from the running image: the module's own definitions, the prelude, special forms, `alias/name` for every import with an alias, and the names of `:only` imports. `C-M-i` completes in Ox buffers and the REPL; `TAB` completes the name before point and otherwise indents, until Ox has real indentation; and three typed characters of a name offer completions quietly, as in R, but not in strings or comments. A single answer is inserted; several open the popup. Locals aren't offered yet; the checker's walk could add them.
 
+- **`M-.` and `M-,`.** `M-.` goes to where the name at point was defined, as the running image recorded it: a file opens at the line, and code without a file, such as the prelude and bundled plugins, opens read-only from its source. `M-,` comes back. Natives and special forms say so and point at `C-c C-d`.
+- **Usages.** `M-?` lists every place the name at point is used in `*ox usages*`, where `RET` visits one, `n` and `p` move and `q` closes. It reads the code, so strings and comments don't count but `alias/name` does, and searches open Ox buffers, with their unsaved text, then the `.ox` files under the current file's folder and the oxmacs home. It matches by name, so a local with the same name in another module counts too; the checker's walk could tell them apart later.
+
 Phase 3 slices:
 
 1. **Describing names,** docs for the whole library, the signature at point and `C-c C-d`. Done.
 2. **Completion** from the running image. Done.
-3. **`M-.` and `M-,`** into the library and plugins, and usages.
+3. **`M-.` and `M-,`** into the library and plugins, and usages. Done.
+
+Phase 3 is done.

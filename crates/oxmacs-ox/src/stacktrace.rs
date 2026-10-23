@@ -15,16 +15,17 @@ pub const STACKTRACE: &str = "*ox stacktrace*";
 const FIRST_FRAME: usize = 3;
 
 #[derive(Debug, Clone)]
-struct Place {
-    file: String,
-    line: usize,
-    column: usize,
-    text: Option<Arc<str>>,
+pub(crate) struct Place {
+    pub file: String,
+    pub line: usize,
+    pub column: usize,
+    pub text: Option<Arc<str>>,
 }
 
 #[derive(Debug)]
-struct TraceView {
+struct PlacesView {
     scope: ScopeId,
+    first: usize,
     places: Vec<Place>,
 }
 
@@ -57,7 +58,7 @@ fn places(frames: &[Frame]) -> Vec<Place> {
         .collect()
 }
 
-impl PluginBuffer for TraceView {
+impl PluginBuffer for PlacesView {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -84,11 +85,11 @@ fn scopes(editor: &mut Editor) -> Scopes {
     if let Some(scopes) = editor.plugin_state::<Scopes>() {
         return *scopes;
     }
-    let trace = editor.add_scope("ox stacktrace");
+    let trace = editor.add_scope("ox places");
     let source = editor.add_scope("ox source");
     let visit = editor.add_dynamic_command(DynamicSpec {
-        name: "ox-stacktrace-visit".to_owned(),
-        summary: "Visit the source of the frame at point".to_owned(),
+        name: "ox-visit-place".to_owned(),
+        summary: "Visit the place on this line".to_owned(),
         scope: trace,
         run: Arc::new(visit),
     });
@@ -145,23 +146,41 @@ pub fn show(editor: &mut Editor, error: &Error) {
     if error.traceback.len() < 2 {
         return;
     }
-    let scope = scopes(editor).trace;
     let places = places(&error.traceback);
-    let id = if let Some(id) = editor.plugin_buffers::<TraceView>().first().copied() {
-        if let Some((_, view)) = editor.plugin_buffer_mut::<TraceView>(id) {
+    show_places(editor, STACKTRACE, &render(error), FIRST_FRAME, places);
+}
+
+pub(crate) fn show_places(
+    editor: &mut Editor,
+    name: &str,
+    text: &str,
+    first: usize,
+    places: Vec<Place>,
+) {
+    let scope = scopes(editor).trace;
+    let existing = editor
+        .buffer_named(name)
+        .filter(|id| editor.plugin_buffer::<PlacesView>(*id).is_some());
+    let id = if let Some(id) = existing {
+        if let Some((_, view)) = editor.plugin_buffer_mut::<PlacesView>(id) {
             view.places = places;
+            view.first = first;
         }
         id
     } else {
-        editor.add_plugin_buffer_with(STACKTRACE, |buffer| {
+        editor.add_plugin_buffer_with(name, |buffer| {
             buffer.set_read_only(true);
-            TraceView { scope, places }
+            PlacesView {
+                scope,
+                first,
+                places,
+            }
         })
     };
-    editor.fill_buffer(id, &render(error));
-    if let Some((buffer, _)) = editor.plugin_buffer_mut::<TraceView>(id) {
-        let first = buffer.line_start(FIRST_FRAME);
-        buffer.set_point(first);
+    editor.fill_buffer(id, text);
+    if let Some((buffer, _)) = editor.plugin_buffer_mut::<PlacesView>(id) {
+        let start = buffer.line_start(first);
+        buffer.set_point(start);
     }
     editor.show_buffer_beside(id);
 }
@@ -177,31 +196,47 @@ fn source_buffer(editor: &mut Editor, name: &str, text: &str) -> BufferId {
 
 fn visit(editor: &mut Editor) {
     let buffer = editor.buffer();
-    let index = buffer.line_of(buffer.point()).checked_sub(FIRST_FRAME);
-    let Some(place) = index.and_then(|index| {
-        editor
-            .plugin_buffer::<TraceView>(buffer.id())
-            .and_then(|(_, view)| view.places.get(index).cloned())
-    }) else {
+    let line = buffer.line_of(buffer.point());
+    let Some(place) = editor
+        .plugin_buffer::<PlacesView>(buffer.id())
+        .and_then(|(_, view)| {
+            let index = line.checked_sub(view.first)?;
+            view.places.get(index).cloned()
+        })
+    else {
         return;
     };
     editor.execute(Command::OtherWindow);
-    if Path::new(&place.file).is_file() {
-        editor.visit(&Visit {
-            path: place.file.into(),
-            line: Some(place.line),
-            column: Some(place.column),
-        });
-        return;
+    if !open_place(
+        editor,
+        &place.file,
+        (place.line, place.column),
+        place.text.as_deref(),
+    ) {
+        editor.show_message(format!("Can't find {}", place.file));
     }
-    let target = match (editor.buffer_named(&place.file), &place.text) {
+}
+
+pub(crate) fn open_place(
+    editor: &mut Editor,
+    file: &str,
+    (line, column): (usize, usize),
+    text: Option<&str>,
+) -> bool {
+    if Path::new(file).is_file() {
+        editor.visit(&Visit {
+            path: file.into(),
+            line: Some(line),
+            column: Some(column),
+        });
+        return true;
+    }
+    let target = match (editor.buffer_named(file), text) {
         (Some(id), _) => id,
-        (None, Some(text)) => source_buffer(editor, &place.file, text),
-        (None, None) => {
-            editor.show_message(format!("Can't find {}", place.file));
-            return;
-        }
+        (None, Some(text)) => source_buffer(editor, file, text),
+        (None, None) => return false,
     };
     editor.show_buffer(target);
-    editor.go_to_line(place.line, place.column);
+    editor.go_to_line(line, column);
+    true
 }

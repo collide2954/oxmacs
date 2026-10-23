@@ -19,6 +19,7 @@ mod testing;
 mod tools;
 mod transients;
 pub mod views;
+mod xref;
 
 use std::fs;
 use std::path::{Path, PathBuf};
