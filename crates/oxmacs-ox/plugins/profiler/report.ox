@@ -28,8 +28,8 @@
 
 (def (face kind)
   (cond ((= kind :plugin) :heading)
-        ((= kind :native) :constant)
-        (else :function)))
+    ((= kind :native) :constant)
+    (else :function)))
 
 (def (columns label kind first second calls row)
   [[(string/pad-end label 44) (face kind)]
@@ -54,25 +54,25 @@
   (if (empty? found.ticks)
     []
     (concat
-      [{line: [["Slowest ticks" :heading]]}]
-      (map (fn [tick] {line: [(str "  " (string/pad-start (shown tick.took) 10) "  " tick.kind " at " (shown tick.at))]})
-           (take 8 found.ticks))
-      [{line: []}])))
+     [{line: [["Slowest ticks" :heading]]}]
+     (map (fn [tick] {line: [(str "  " (string/pad-start (shown tick.took) 10) "  " tick.kind " at " (shown tick.at))]})
+          (take 8 found.ticks))
+     [{line: []}])))
 
 (def (branch-rows branches depth path folded busy)
   (mapcat
-    (fn [branch]
-      (let [here (conj path branch.name)
-            open (not (contains? folded here))
-            marker (cond ((empty? branch.children) "  ") (open "▾ ") (else "▸ "))
-            calls (if (= branch.kind :plugin) "" (str branch.calls))
-            line (columns (str (string/repeat "  " depth) marker branch.name) branch.kind
-                          (percent branch.total busy) (percent branch.self busy) calls branch)]
-        (if (< (share branch.total busy) shown-share)
-          []
-          (concat [{line: line path: here file: branch.file line-number: branch.line}]
-                  (if open (branch-rows branch.children (+ depth 1) here folded busy) [])))))
-    branches))
+   (fn [branch]
+     (let [here (conj path branch.name)
+           open (not (contains? folded here))
+           marker (cond ((empty? branch.children) "  ") (open "▾ ") (else "▸ "))
+           calls (if (= branch.kind :plugin) "" (str branch.calls))
+           line (columns (str (string/repeat "  " depth) marker branch.name) branch.kind
+                         (percent branch.total busy) (percent branch.self busy) calls branch)]
+       (if (< (share branch.total busy) shown-share)
+         []
+         (concat [{line: line path: here file: branch.file line-number: branch.line}]
+                 (if open (branch-rows branch.children (+ depth 1) here folded busy) [])))))
+   branches))
 
 (def (function-rows found)
   (map (fn [function]

@@ -1,5 +1,5 @@
 (plugin weather
-  :version "0.2.0"
+  :version "0.2.1"
   :summary "Forecasts from Open-Meteo"
   :commands {weather: "Show the weather for your location"
              weather-refresh: "Fetch the forecast again"}

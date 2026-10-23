@@ -307,7 +307,10 @@ impl Editor {
     }
 
     pub(in crate::editor) fn save_buffer_at(&mut self, index: usize) -> bool {
-        self.write_buffer_at(index, self.settings.format_on_save)
+        let always = self
+            .formatter_for(index)
+            .is_some_and(|formatter| formatter.on_save);
+        self.write_buffer_at(index, self.settings.format_on_save || always)
     }
 
     pub(in crate::editor) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {

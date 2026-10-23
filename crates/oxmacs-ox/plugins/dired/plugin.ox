@@ -1,5 +1,5 @@
 (plugin dired
-  :version "0.2.1"
+  :version "0.2.2"
   :summary "List directories and manage their files"
   :commands {dired: "List a directory to manage its files"
              dired-jump: "List the directory of the current file"}

@@ -122,8 +122,8 @@
 
 (defcommand dired-cycle-sort "Sort by name, newest or largest"
   (update-here (fn [listing]
-            (let [order (l/next-order listing.order)]
-              (assoc listing :order order :entries (l/sorted listing.entries order))))))
+                 (let [order (l/next-order listing.order)]
+                   (assoc listing :order order :entries (l/sorted listing.entries order))))))
 
 (defcommand dired-hide-details-mode "Show or hide sizes and dates"
   (update-here (fn [listing] (assoc listing :details (not listing.details)))))
@@ -148,14 +148,14 @@
 
 (defcommand dired-toggle-marks "Mark the unmarked files and unmark the marked ones"
   (update-here (fn [listing]
-            (assoc listing :marks
-                   (reduce (fn [marks entry]
-                             (let [mark (get listing.marks entry.name)]
-                               (cond
-                                 [(= mark :marked) (dissoc marks entry.name)]
-                                 [(nil? mark) (assoc marks entry.name :marked)]
-                                 [else marks])))
-                           listing.marks listing.entries)))))
+                 (assoc listing :marks
+                        (reduce (fn [marks entry]
+                                  (let [mark (get listing.marks entry.name)]
+                                    (cond
+                                      [(= mark :marked) (dissoc marks entry.name)]
+                                      [(nil? mark) (assoc marks entry.name :marked)]
+                                      [else marks])))
+                                listing.marks listing.entries)))))
 
 (def (targets listing mark at-point)
   (let [marked (filter (fn [entry] (= (get listing.marks entry.name) mark)) listing.entries)]
@@ -182,14 +182,14 @@
         (let [trash (setting :delete-to-trash)
               names (map :name found)]
           (quietly
-            (fn []
-              (when (await (yes-or-no "{(if trash "Trash" "Delete")} {(describe names)}?"))
-                (map (fn [entry]
-                       (let [target (path/join listing.directory entry.name)]
-                         (await (if trash (file/trash target) (file/remove target)))))
-                     found)
-                (refresh-all)
-                (message "{(if trash "Trashed" "Deleted")} {(files (count found))}")))))))))
+           (fn []
+             (when (await (yes-or-no "{(if trash "Trash" "Delete")} {(describe names)}?"))
+               (map (fn [entry]
+                      (let [target (path/join listing.directory entry.name)]
+                        (await (if trash (file/trash target) (file/remove target)))))
+                    found)
+               (refresh-all)
+               (message "{(if trash "Trashed" "Deleted")} {(files (count found))}")))))))))
 
 (defcommand dired-do-flagged-delete "Delete the files flagged for deletion" (delete true))
 (defcommand dired-do-delete "Delete the marked files, or this one" (delete false))
@@ -205,22 +205,22 @@
       (if (nil? question)
         (message "No file on this line")
         (quietly
-          (fn []
-            (let [target (await (prompt-path question))
-                  into (await (file/exists? target))
-                  into (and into (get (await (file/metadata target)) :dir))]
-              (if (and (> (count found) 1) (not into))
-                (message "Target must be a directory: {(path/abbreviate target)}")
-                (do
-                  (map (fn [entry]
-                         (let [from (path/join listing.directory entry.name)
-                               to (if into (path/join target entry.name) target)]
-                           (when (or (not (await (file/exists? to)))
-                                     (await (yes-or-no "Overwrite {(path/abbreviate to)}?")))
-                             (await (if moving (file/rename from to) (file/copy from to))))))
-                       found)
-                  (refresh-all)
-                  (message "{(if moving "Moved" "Copied")} {(files (count found))}"))))))))))
+         (fn []
+           (let [target (await (prompt-path question))
+                 into (await (file/exists? target))
+                 into (and into (get (await (file/metadata target)) :dir))]
+             (if (and (> (count found) 1) (not into))
+               (message "Target must be a directory: {(path/abbreviate target)}")
+               (do
+                 (map (fn [entry]
+                        (let [from (path/join listing.directory entry.name)
+                              to (if into (path/join target entry.name) target)]
+                          (when (or (not (await (file/exists? to)))
+                                    (await (yes-or-no "Overwrite {(path/abbreviate to)}?")))
+                            (await (if moving (file/rename from to) (file/copy from to))))))
+                      found)
+                 (refresh-all)
+                 (message "{(if moving "Moved" "Copied")} {(files (count found))}"))))))))))
 
 (defcommand dired-do-rename "Rename or move the marked files, or this one" (transfer true))
 (defcommand dired-do-copy "Copy the marked files, or this one" (transfer false))
@@ -228,15 +228,15 @@
 (defcommand dired-create-directory "Create a directory"
   (when-let [listing (current)]
     (quietly
-      (fn []
-        (let [target (await (prompt-path "Create directory: " :directories true))]
-          (if (await (file/exists? target))
-            (message "{(path/abbreviate target)} already exists")
-            (do
-              (await (file/make-dir target))
-              (refresh listing.directory)
-              (when (= (path/parent target) listing.directory)
-                (place (current) (path/name target))))))))))
+     (fn []
+       (let [target (await (prompt-path "Create directory: " :directories true))]
+         (if (await (file/exists? target))
+           (message "{(path/abbreviate target)} already exists")
+           (do
+             (await (file/make-dir target))
+             (refresh listing.directory)
+             (when (= (path/parent target) listing.directory)
+               (place (current) (path/name target))))))))))
 
 (defcommand dired-do-open "Open the marked files, or this one, with their usual apps"
   (when-let [listing (current)]

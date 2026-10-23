@@ -47,7 +47,7 @@
 (defcommand ox-profiler-refresh "Take a fresh report while profiling continues"
   (if-let [found (profiler-snapshot)]
     (do (swap! state assoc :found found)
-        (draw false))
+      (draw false))
     (message "The profiler isn't running; this report is final")))
 
 (defcommand ox-profiler-toggle "Fold or unfold the branch at point"

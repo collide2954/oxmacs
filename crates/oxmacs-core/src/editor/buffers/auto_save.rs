@@ -119,6 +119,7 @@ mod tests {
                 name: "upper",
                 format: |_, request| Ok(request.text.to_uppercase()),
                 regions: false,
+                on_save: false,
             },
         );
         edited(&mut editor);

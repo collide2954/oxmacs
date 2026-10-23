@@ -16,9 +16,9 @@
 
 (def (digits hunks)
   (string/length
-    (str (apply max 1 (map (fn [hunk] (max (+ hunk.old-start hunk.old-count)
-                                           (+ hunk.new-start hunk.new-count)))
-                           hunks)))))
+   (str (apply max 1 (map (fn [hunk] (max (+ hunk.old-start hunk.old-count)
+                                          (+ hunk.new-start hunk.new-count)))
+                          hunks)))))
 
 (def (numbered value width)
   (if (nil? value) (string/repeat " " width) (string/pad-start (str value) width)))

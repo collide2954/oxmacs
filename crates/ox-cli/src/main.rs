@@ -19,6 +19,7 @@ fn main() -> ExitCode {
     match args.next() {
         Some(first) if first == "test" => run_tests(&args.map(PathBuf::from).collect::<Vec<_>>()),
         Some(first) if first == "check" => check_command(args.collect()),
+        Some(first) if first == "fmt" => fmt_command(args.collect()),
         Some(first) if first == "perf" => {
             ox_perf::main(args.map(|argument| argument.to_string_lossy().into_owned()))
         }
@@ -166,6 +167,67 @@ fn check_command(arguments: Vec<OsString>) -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+const FMT_USAGE: &str = "usage: ox fmt [--check] PATH...";
+
+fn fmt_command(arguments: Vec<OsString>) -> ExitCode {
+    let mut check = false;
+    let mut files = Vec::new();
+    for argument in arguments {
+        if argument == "--check" {
+            check = true;
+        } else {
+            ox_files(Path::new(&argument), &mut files);
+        }
+    }
+    if files.is_empty() {
+        eprintln!("{FMT_USAGE}");
+        return ExitCode::from(2);
+    }
+    let mut changed = 0;
+    let mut failed = false;
+    for file in &files {
+        let source = match fs::read_to_string(file) {
+            Ok(source) => source,
+            Err(error) => {
+                eprintln!("{}: {error}", file.display());
+                failed = true;
+                continue;
+            }
+        };
+        let formatted = match ox::format::format(&source) {
+            Ok(formatted) => formatted,
+            Err(problem) => {
+                eprintln!("{}:{problem}", file.display());
+                failed = true;
+                continue;
+            }
+        };
+        if formatted == source {
+            continue;
+        }
+        changed += 1;
+        if check {
+            println!("{}", file.display());
+        } else if let Err(error) = fs::write(file, formatted) {
+            eprintln!("{}: {error}", file.display());
+            failed = true;
+        }
+    }
+    if failed {
+        return ExitCode::from(2);
+    }
+    if check {
+        return if changed > 0 {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        };
+    }
+    let plural = if files.len() == 1 { "" } else { "s" };
+    println!("Formatted {changed} of {} file{plural}", files.len());
+    ExitCode::SUCCESS
 }
 
 fn profile_file(path: &Path) -> ExitCode {

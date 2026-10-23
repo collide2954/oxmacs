@@ -151,7 +151,6 @@
                            ["  " [stash.name :constant] "  " stash.summary])))
                   out (range (count stashes))))))))
 
-
 (def (recent-section out snapshot folds now)
   (let [recent snapshot.recent]
     (if (empty? recent)

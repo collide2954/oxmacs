@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use oxmacs_core::command::ScopeId;
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Editor, Formatter};
 use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Highlight;
@@ -161,9 +161,33 @@ fn highlight(editor: &Editor, id: BufferId, line: usize) -> Vec<(Range<usize>, H
         .unwrap_or_default()
 }
 
+const LOOK_BACK: usize = 2000;
+
+const OX_FMT: Formatter = Formatter {
+    name: "ox fmt",
+    format: |_, request| {
+        ox::format::format(request.text).map_err(|problem| format!("ox fmt: {problem}"))
+    },
+    regions: false,
+    on_save: true,
+};
+
+fn indent(editor: &Editor, id: BufferId, line: usize) -> Option<usize> {
+    let buffer = editor.buffer_by_id(id)?;
+    let floor = line.saturating_sub(LOOK_BACK);
+    let first = (floor..line)
+        .rev()
+        .find(|candidate| buffer.line_text(*candidate).starts_with('('))
+        .unwrap_or(floor);
+    let before = buffer.text_in(buffer.line_start(first)..buffer.line_start(line));
+    ox::format::indentation(&before)
+}
+
 pub fn install(editor: &mut Editor, scope: ScopeId) {
     editor.add_language(language(), Some(scope));
     editor.set_highlighter(language(), highlight);
+    editor.set_indenter(language(), indent);
+    editor.add_formatter(language(), OX_FMT);
 }
 
 #[cfg(test)]
@@ -193,6 +217,48 @@ mod tests {
                 (5..6, Highlight::Function),
                 (7..8, Highlight::Constant)
             ]
+        );
+    }
+
+    fn opened(text: &str) -> (tempfile::TempDir, Editor) {
+        let home = tempfile::tempdir().unwrap();
+        let path = home.path().join("tools.ox");
+        std::fs::write(&path, text).unwrap();
+        let mut editor = Editor::new();
+        Ox::new().start(&mut editor, Some(home.path()));
+        editor.open_file(&path);
+        (home, editor)
+    }
+
+    fn press(editor: &mut Editor, notation: &str) {
+        let keys: oxmacs_core::input::KeySequence = notation.parse().unwrap();
+        for key in keys.keys() {
+            editor.handle_key(*key);
+        }
+    }
+
+    #[test]
+    fn tab_and_return_indent_like_the_clojure_style_guide() {
+        let (_home, mut editor) = opened("(def (f x)\nx)\n(foo bar");
+
+        press(&mut editor, "C-n TAB");
+        assert_eq!(editor.buffer().line_text(1), "  x)");
+        press(&mut editor, "M-> RET");
+        assert_eq!(editor.buffer().line_text(3), "     ");
+    }
+
+    #[test]
+    fn ox_files_format_on_c_c_c_f_and_on_every_save() {
+        let (home, mut editor) = opened("(def (f x)\nx)\n");
+
+        press(&mut editor, "C-c C-f");
+        assert_eq!(editor.buffer().contents(), "(def (f x)\n  x)\n");
+        assert_eq!(editor.message(), Some("Formatted with ox fmt"));
+
+        press(&mut editor, "M-> ( g SPC SPC ) C-x C-s");
+        assert_eq!(
+            std::fs::read_to_string(home.path().join("tools.ox")).unwrap(),
+            "(def (f x)\n  x)\n(g)\n"
         );
     }
 

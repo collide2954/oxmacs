@@ -74,3 +74,14 @@ Phase 3 slices:
 3. **`M-.` and `M-,`** into the library and plugins, and usages. Done.
 
 Phase 3 is done.
+
+## `ox fmt`
+
+Settled with the user on 2026-10-23.
+
+- **Style.** The Clojure style guide, keeping the author's line breaks. Bodies of `def`, `defmacro`, `fn`, `let`, `when`, `if`, `do`, `try`, `catch`, `match`, `cond`, `module`, `test` and the like, and of any form whose name starts with `def`, `with-`, `when-` or `if-`, indent 2 from their opening bracket. A call's arguments line up under its first argument, or indent 1 when no argument shares the line with the function. Items of vectors, maps, sets and data lists line up under the first item.
+- **Tidying.** No spaces just inside brackets, one space where two forms touch, closing brackets on their own line move up to the line before unless it ends in a comment, at most one blank line in a row, no trailing whitespace, and one newline at the end. Runs of spaces between forms on a line stay, so hand-aligned tables survive.
+- **Safety.** Strings, interpolations inside them, raw strings, regexes and comments are never touched. The formatter reads its own output and refuses any result that reads differently from the input, and it leaves code with syntax errors alone.
+- **Where it runs.** `ox fmt PATH…` formats files and folders in place; `ox fmt --check` lists files that need it and fails, for CI. In oxmacs, `TAB` and `RET` indent with the same rules, `TAB` completes once the line is indented, `C-c C-f` formats the buffer, and every save of an `.ox` file formats it first, like gofmt.
+
+Phase 4 is done.

@@ -493,7 +493,7 @@ mod tests {
     }
 
     #[test]
-    fn tab_completes_the_name_before_point_and_indents_elsewhere() {
+    fn tab_indents_first_and_completes_once_the_line_is_indented() {
         let home = tempfile::tempdir().unwrap();
         let (mut editor, mut ox) = visiting(home.path());
 
@@ -501,11 +501,12 @@ mod tests {
         press(&mut editor, &mut ox, "TAB");
         assert!(editor.buffer().contents().ends_with("(limit"));
 
-        at_end(&mut editor, " ");
-        let before = editor.buffer().contents();
+        at_end(&mut editor, "\n(foo bar\nlim");
         press(&mut editor, &mut ox, "TAB");
-        assert_ne!(editor.buffer().contents(), before);
+        assert!(editor.buffer().contents().ends_with("\n     lim"));
         assert_eq!(editor.pane().popup(), None);
+        press(&mut editor, &mut ox, "TAB");
+        assert!(editor.buffer().contents().ends_with("\n     limit"));
     }
 
     #[test]

@@ -115,8 +115,8 @@
 (def (render listing now)
   (let [width (size-width listing)]
     (vec (concat
-           [[[(header listing) :heading]]]
-           (if (has-parent listing)
-             [[(string/repeat " " (name-column listing)) [".." :link]]]
-             [])
-           (map (fn [entry] (entry-line listing entry width now)) listing.entries)))))
+          [[[(header listing) :heading]]]
+          (if (has-parent listing)
+            [[(string/repeat " " (name-column listing)) [".." :link]]]
+            [])
+          (map (fn [entry] (entry-line listing entry width now)) listing.entries)))))

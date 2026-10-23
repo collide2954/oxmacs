@@ -238,7 +238,7 @@
 (defmacro atomically [& body]
   "Evaluates body without letting other tasks run in between."
   `(do (atomic-enter)
-       (try (do ~@body) (finally (atomic-leave)))))
+     (try (do ~@body) (finally (atomic-leave)))))
 
 (defmacro gen [& body]
   "A generator that runs body, pausing at each yield: (vec (gen (yield 1) (yield 2))) is [1 2]."
@@ -420,7 +420,7 @@
 (defmacro test [title & body]
   "Registers a test called title that ox test runs; it passes unless body raises, and expect raises on a false check."
   `(do (swap! registered-tests conj {name: ~title run: (fn [] ~@body)})
-       nil))
+     nil))
 
 (def (shown-plainly? form)
   "True when form reads the same as its value, so expect doesn't repeat it."

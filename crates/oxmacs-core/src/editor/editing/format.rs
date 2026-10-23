@@ -20,6 +20,7 @@ pub struct Formatter {
     pub name: &'static str,
     pub format: fn(&Editor, &FormatRequest<'_>) -> Result<String, String>,
     pub regions: bool,
+    pub on_save: bool,
 }
 
 impl fmt::Debug for Formatter {
@@ -40,6 +41,7 @@ pub(in crate::editor) const RUSTFMT: Formatter = Formatter {
             .map_err(|error| format!("rustfmt: {error}"))
     },
     regions: false,
+    on_save: false,
 };
 
 pub(in crate::editor) const AIR_FORMAT: Formatter = Formatter {
@@ -50,6 +52,7 @@ pub(in crate::editor) const AIR_FORMAT: Formatter = Formatter {
             .map_err(|error| format!("air: {error}"))
     },
     regions: true,
+    on_save: false,
 };
 
 impl Editor {
@@ -225,6 +228,7 @@ mod tests {
         name: "rustfmt",
         format: |_, request| Ok(request.text.replace("  ", " ")),
         regions: false,
+        on_save: false,
     };
 
     fn rust(text: &str, point: usize) -> Editor {
@@ -264,6 +268,7 @@ mod tests {
                 name: "rustfmt",
                 format: |_, _| Err("rustfmt: error: expected `{`".to_owned()),
                 regions: false,
+                on_save: false,
             },
         );
 
@@ -317,6 +322,7 @@ mod tests {
                     ))
                 },
                 regions: false,
+                on_save: false,
             },
         );
         editor.set_major_mode(Some(shouty));
@@ -341,6 +347,7 @@ mod tests {
                 name: "shout",
                 format: |_, request: &FormatRequest<'_>| Ok(request.text.to_uppercase()),
                 regions: false,
+                on_save: false,
             },
         );
         editor.set_major_mode(Some(shouty));
@@ -350,7 +357,7 @@ mod tests {
         assert_eq!(editor.buffer().contents(), "HELLO");
     }
 
-    fn saving(format_on_save: bool) -> String {
+    fn saving(format_on_save: bool, formatter: Formatter) -> String {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a.rs");
         fs::write(&path, "fn a() {}").unwrap();
@@ -359,7 +366,7 @@ mod tests {
             format_on_save,
             ..Config::default()
         });
-        editor.add_formatter(Language::RUST, SQUEEZE);
+        editor.add_formatter(Language::RUST, formatter);
         editor.open_file(&path);
         type_text(&mut editor, "  ");
 
@@ -370,14 +377,25 @@ mod tests {
 
     #[test]
     fn saving_formats_first_when_asked_to() {
-        assert_eq!(saving(true), " fn a() {}");
-        assert_eq!(saving(false), "  fn a() {}");
+        assert_eq!(saving(true, SQUEEZE), " fn a() {}");
+        assert_eq!(saving(false, SQUEEZE), "  fn a() {}");
+    }
+
+    #[test]
+    fn formatters_that_own_their_style_format_on_every_save() {
+        let always = Formatter {
+            on_save: true,
+            ..SQUEEZE
+        };
+
+        assert_eq!(saving(false, always), " fn a() {}");
     }
 
     const SPACE_ARROWS: Formatter = Formatter {
         name: "air",
         format: |_, request| Ok(request.text.replace("<-", " <- ")),
         regions: true,
+        on_save: false,
     };
 
     fn with_air(air_program: &str) -> Config {

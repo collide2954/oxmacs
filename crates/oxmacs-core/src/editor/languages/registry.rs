@@ -8,12 +8,14 @@ use crate::text::BufferId;
 use crate::theme::Highlight;
 
 pub type LineHighlighter = fn(&Editor, BufferId, usize) -> Vec<(Range<usize>, Highlight)>;
+pub type LineIndenter = fn(&Editor, BufferId, usize) -> Option<usize>;
 
 #[derive(Debug, Clone, Copy)]
 pub(in crate::editor) struct Registered {
     pub(in crate::editor) language: Language,
     pub(in crate::editor) scope: Option<ScopeId>,
     pub(in crate::editor) highlight: Option<LineHighlighter>,
+    pub(in crate::editor) indent: Option<LineIndenter>,
 }
 
 pub(in crate::editor) fn built_in() -> Vec<Registered> {
@@ -27,6 +29,7 @@ pub(in crate::editor) fn built_in() -> Vec<Registered> {
         language,
         scope: scope.map(ScopeId::from),
         highlight: None,
+        indent: None,
     })
     .collect()
 }
@@ -43,6 +46,7 @@ impl Editor {
                 language,
                 scope,
                 highlight: None,
+                indent: None,
             }),
         }
     }
@@ -55,6 +59,21 @@ impl Editor {
         {
             known.highlight = Some(highlight);
         }
+    }
+
+    pub fn set_indenter(&mut self, language: Language, indent: LineIndenter) {
+        if let Some(known) = self
+            .languages
+            .iter_mut()
+            .find(|known| known.language == language)
+        {
+            known.indent = Some(indent);
+        }
+    }
+
+    pub(in crate::editor) fn indenter(&self) -> Option<LineIndenter> {
+        let language = self.buffers.language(0)?;
+        self.registered(language)?.indent
     }
 
     pub fn languages(&self) -> Vec<Language> {
@@ -165,6 +184,20 @@ mod tests {
 
         assert_eq!(editor.line_style(0).spans, [(0..1, Highlight::Keyword)]);
         assert_eq!(editor.line_style(1).spans, [(0..2, Highlight::Keyword)]);
+    }
+
+    #[test]
+    fn indenters_indent_the_lines_of_their_language() {
+        let mut editor = Editor::new();
+        editor.add_language(notes(), None);
+        editor.set_indenter(notes(), |_, _, line| Some(line * 2));
+        let _dir = opened(&mut editor, "plan.notes", "a\nb");
+
+        press(&mut editor, "C-n TAB");
+        assert_eq!(editor.buffer().contents(), "a\n  b");
+        press(&mut editor, "C-e RET");
+        assert_eq!(editor.buffer().contents(), "a\n  b\n    ");
+        assert_eq!(editor.buffer().point(), 10);
     }
 
     #[test]

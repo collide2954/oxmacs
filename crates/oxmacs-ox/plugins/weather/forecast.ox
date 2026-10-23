@@ -123,12 +123,12 @@
       (let [low (apply min known)
             high (apply max known)]
         (string/join
-          (map (fn [value]
-                 (cond
-                   [(nil? value) " "]
-                   [(< (abs (- high low)) 0.000001) (nth bars 3)]
-                   [else (nth bars (round (* (/ (- value low) (- high low)) 7)))]))
-               values))))))
+         (map (fn [value]
+                (cond
+                  [(nil? value) " "]
+                  [(< (abs (- high low)) 0.000001) (nth bars 3)]
+                  [else (nth bars (round (* (/ (- value low) (- high low)) 7)))]))
+              values))))))
 
 (def (degrees value)
   (if (nil? value) "–" "{(round value)}°"))

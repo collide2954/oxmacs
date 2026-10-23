@@ -9,12 +9,12 @@
 
 (def (start kind)
   (cond ((= kind :matrix) (take-over rain/draw :fps 15))
-        (else (take-over stars/draw))))
+    (else (take-over stars/draw))))
 
 (def (chosen)
   (let [kind (setting :kind)]
     (cond ((= kind :random) (if (even? (time/now)) :starfield :matrix))
-          (else kind))))
+      (else kind))))
 
 (defcommand screensaver-preview "Show a screensaver until the next key or click"
   (let [answer (await (prompt "Screensaver: " :choices notes))

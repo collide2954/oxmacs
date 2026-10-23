@@ -183,10 +183,10 @@
 
 (defcommand git-status "Show the Git status of the current repository"
   (quietly
-    (fn []
-      (if-let [found (repo/locate (default-directory))]
-        (show found)
-        (message "Not inside a Git repository")))))
+   (fn []
+     (if-let [found (repo/locate (default-directory))]
+       (show found)
+       (message "Not inside a Git repository")))))
 (def (step kinds forward)
   (when-let [found (here)]
     (let [line (current-line)
@@ -224,21 +224,21 @@
       (let [name state.name
             hunk {kind: :hunk section: row.section path: row.path hunk: row.hunk}]
         (quietly
-          (fn []
-            (cond
-              [(= row.kind :section)
-               (fold name :closed (fn [closed] (flip closed row.section)))
-               (redraw name nil)]
-              [(= row.kind :file)
-               (fold name :open (fn [open] (flip open [row.section row.path])))
-               (redraw name nil)]
-              [(= row.kind :hunk)
-               (fold name :hidden (fn [hidden] (flip hidden [row.section row.path row.hunk])))
-               (redraw name hunk)]
-              [(= row.kind :line)
-               (fold name :hidden (fn [hidden] (assoc hidden [row.section row.path row.hunk] true)))
-               (redraw name hunk)]
-              [else nil])))))))
+         (fn []
+           (cond
+             [(= row.kind :section)
+              (fold name :closed (fn [closed] (flip closed row.section)))
+              (redraw name nil)]
+             [(= row.kind :file)
+              (fold name :open (fn [open] (flip open [row.section row.path])))
+              (redraw name nil)]
+             [(= row.kind :hunk)
+              (fold name :hidden (fn [hidden] (flip hidden [row.section row.path row.hunk])))
+              (redraw name hunk)]
+             [(= row.kind :line)
+              (fold name :hidden (fn [hidden] (assoc hidden [row.section row.path row.hunk] true)))
+              (redraw name hunk)]
+             [else nil])))))))
 
 (def (row-line row)
   (if (= row.kind :pair) (or row.right row.left) row.line))
@@ -259,14 +259,14 @@
           row (row-at found.rows (current-line))]
       (if (and row (some? row.path))
         (quietly
-          (fn []
-            (let [target (path/join state.root row.path)
-                  number (line-number state row)]
-              (if (await (file/exists? target))
-                (do
-                  (open-file target)
-                  (when number (goto-line (- number 1))))
-                (message "{row.path} is not in the working tree")))))
+         (fn []
+           (let [target (path/join state.root row.path)
+                 number (line-number state row)]
+             (if (await (file/exists? target))
+               (do
+                 (open-file target)
+                 (when number (goto-line (- number 1))))
+               (message "{row.path} is not in the working tree")))))
         (message "Nothing to visit here")))))
 
 (defcommand git-refresh "Read the repository again"
@@ -494,14 +494,14 @@
       (if (= (commit/message-text text) "")
         (message "Write a commit message first")
         (quietly
-          (fn []
-            (message "Committing…")
-            (repo/git-with found.root found.args text)
-            (swap! pending dissoc file)
-            (close-buffer buffer)
-            (back-to-status found.name)
-            (refresh found.name)
-            (report-commit found.root)))))
+         (fn []
+           (message "Committing…")
+           (repo/git-with found.root found.args text)
+           (swap! pending dissoc file)
+           (close-buffer buffer)
+           (back-to-status found.name)
+           (refresh found.name)
+           (report-commit found.root)))))
     (message "This buffer is not a commit message")))
 
 (defcommand git-commit-cancel "Cancel this commit"

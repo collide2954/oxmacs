@@ -5,7 +5,7 @@ const ELECTRIC: &[char] = &['}', ')', ']'];
 
 impl Editor {
     fn indents(&self) -> bool {
-        self.minibuffer.is_none() && self.buffers.syntax(0).is_some()
+        self.minibuffer.is_none() && (self.buffers.syntax(0).is_some() || self.indenter().is_some())
     }
 
     fn indentation_rules(&self) -> Option<Indentation> {
@@ -50,9 +50,10 @@ impl Editor {
         }
         self.delete_selection();
         let line = self.point_line();
-        if self
-            .indentation_rules()
-            .is_some_and(|rules| rules.continues)
+        if self.indenter().is_some()
+            || self
+                .indentation_rules()
+                .is_some_and(|rules| rules.continues)
         {
             self.indent_line(line);
         }
@@ -101,11 +102,14 @@ impl Editor {
     }
 
     fn indent_line(&mut self, line: usize) {
-        self.sync_syntax();
-        let target = self
-            .buffers
-            .syntax(0)
-            .and_then(|syntax| syntax.indentation(self.buffers.current(), line, self.tab_width));
+        let target = if let Some(indent) = self.indenter() {
+            indent(self, self.buffers.current().id(), line)
+        } else {
+            self.sync_syntax();
+            self.buffers
+                .syntax(0)
+                .and_then(|syntax| syntax.indentation(self.buffers.current(), line, self.tab_width))
+        };
         let Some(target) = target else {
             return;
         };

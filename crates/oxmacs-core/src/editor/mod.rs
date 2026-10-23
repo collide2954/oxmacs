@@ -29,7 +29,7 @@ pub use editing::format::{FormatRequest, Formatter};
 pub use effect::{ConnectionId, Effect, FetchId};
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
 pub use languages::r_plots::{GalleryView, PlotView};
-pub use languages::registry::LineHighlighter;
+pub use languages::registry::{LineHighlighter, LineIndenter};
 pub use motion::mouse::{Cell, Clicks};
 pub use page::{Page, clip, fill};
 pub use prompts::callbacks::{InputStyle, Offer, Picked};

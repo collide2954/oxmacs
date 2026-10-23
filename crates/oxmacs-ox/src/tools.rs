@@ -423,14 +423,17 @@ fn open_repl(editor: &mut Editor) {
 
 fn indent_or_complete(editor: &mut Editor) {
     let buffer = editor.buffer();
+    let before = (buffer.revision(), buffer.point());
+    let selecting = buffer.selection().is_some();
+    editor.execute(Command::IndentForTabCommand);
+    let buffer = editor.buffer();
+    let unchanged = before == (buffer.revision(), buffer.point());
     let after_name = buffer
         .chars_before(buffer.point())
         .next()
         .is_some_and(|character| !mode::delimits(character) && !"'`~@#".contains(character));
-    if after_name && buffer.selection().is_none() {
+    if unchanged && after_name && !selecting {
         queue(editor, Request::Complete(true));
-    } else {
-        editor.execute(Command::IndentForTabCommand);
     }
 }
 
@@ -979,7 +982,7 @@ mod tests {
         assert!(!editor.buffer().is_modified());
         assert_eq!(
             std::fs::read_to_string(home.path().join("scratch.ox")).unwrap(),
-            "(def (double x) (* x 2))\n(double 21)"
+            "(def (double x) (* x 2))\n(double 21)\n"
         );
         assert_eq!(ox.eval(&mut editor, "(double 4)").unwrap(), "8");
     }
