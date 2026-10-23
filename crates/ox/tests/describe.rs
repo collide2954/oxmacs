@@ -147,3 +147,58 @@ fn the_whole_library_is_documented_and_its_docs_match_the_arities() {
 
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
+
+#[test]
+fn the_reference_lists_every_library_module_with_its_documented_names() {
+    let mut isolate = Isolate::new();
+
+    let reference = isolate.reference();
+    let module = |name: &str| {
+        reference
+            .iter()
+            .find(|docs| docs.module == name)
+            .unwrap_or_else(|| panic!("no module {name}"))
+    };
+    let entry = |module_name: &str, name: &str| {
+        module(module_name)
+            .entries
+            .iter()
+            .find(|entry| entry.name == name)
+            .unwrap_or_else(|| panic!("no {name} in {module_name}"))
+            .clone()
+    };
+
+    assert_eq!(reference[0].module, "ox");
+    assert_eq!(entry("ox", "map").kind, Kind::Function);
+    assert!(entry("ox", "map").doc.is_some());
+    assert_eq!(entry("ox", "+").kind, Kind::Native);
+    assert_eq!(entry("ox", "if").kind, Kind::Special);
+    assert_eq!(entry("ox", "when").kind, Kind::Macro);
+    assert_eq!(entry("ox/string", "split").kind, Kind::Native);
+    let names: Vec<&str> = module("ox")
+        .entries
+        .iter()
+        .map(|entry| entry.name.as_str())
+        .collect();
+    let mut sorted = names.clone();
+    sorted.sort_unstable();
+    assert_eq!(names, sorted);
+    assert!(names.iter().all(|name| !name.starts_with('#')));
+    assert!(
+        reference
+            .iter()
+            .all(|docs| docs.module == "ox" || docs.module.starts_with("ox/"))
+    );
+
+    let value = isolate.docs_value(&reference).unwrap();
+    let shown = isolate.write(value);
+    assert!(
+        shown.starts_with("[{module: \"ox\" entries: [{name: "),
+        "{}",
+        &shown[..80]
+    );
+    assert!(
+        shown.contains("{name: \"split\" kind: :native signature: \"(split "),
+        "split is missing"
+    );
+}

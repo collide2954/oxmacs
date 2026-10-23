@@ -31,6 +31,19 @@ impl Place {
     }
 }
 
+impl Kind {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Function => "function",
+            Self::Macro => "macro",
+            Self::Native => "native",
+            Self::Record => "record",
+            Self::Special => "special",
+            Self::Value => "value",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Description {
     pub name: String,
@@ -38,6 +51,12 @@ pub struct Description {
     pub signature: String,
     pub doc: Option<String>,
     pub place: Option<Place>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModuleDocs {
+    pub module: String,
+    pub entries: Vec<Description>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

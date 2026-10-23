@@ -10,7 +10,7 @@ use std::time::Duration;
 use crate::bytecode::Prim;
 use crate::check::{self, Diagnostic};
 use crate::compile::compile;
-use crate::describe::{self, Description, Docs, Kind};
+use crate::describe::{self, Description, Docs, Kind, ModuleDocs};
 use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
 use crate::heap::{Closure, Heap, Hold, Rooted};
@@ -785,6 +785,82 @@ impl Isolate {
             doc: Some(entry.doc.clone()),
             place: None,
         })
+    }
+
+    pub fn reference(&self) -> Vec<ModuleDocs> {
+        let library = |name: &str| name == "ox" || name.starts_with("ox/");
+        let mut found: Vec<ModuleDocs> = self
+            .runtime
+            .modules
+            .iter()
+            .filter(|module| library(&module.name))
+            .map(|module| {
+                let exported = |name: &&Sym| {
+                    !name.name().starts_with('#')
+                        && module
+                            .exports
+                            .as_ref()
+                            .is_none_or(|exports| exports.contains(*name))
+                };
+                let mut entries: Vec<Description> = module
+                    .globals
+                    .keys()
+                    .chain(module.macros.keys())
+                    .filter(exported)
+                    .filter_map(|name| self.describe(&module.name, name.name()))
+                    .collect();
+                if module.name == "ox" {
+                    entries.extend(
+                        self.docs()
+                            .entries
+                            .iter()
+                            .filter(|(_, entry)| entry.special)
+                            .map(|(name, entry)| Description {
+                                name: name.clone(),
+                                kind: Kind::Special,
+                                signature: describe::signature(name, &entry.parameters),
+                                doc: Some(entry.doc.clone()),
+                                place: None,
+                            }),
+                    );
+                }
+                entries.sort_by(|a, b| a.name.cmp(&b.name));
+                entries.dedup_by(|a, b| a.name == b.name);
+                ModuleDocs {
+                    module: module.name.clone(),
+                    entries,
+                }
+            })
+            .collect();
+        found.sort_by(|a, b| (a.module != "ox", &a.module).cmp(&(b.module != "ox", &b.module)));
+        found
+    }
+
+    pub fn docs_value(&mut self, docs: &[ModuleDocs]) -> Result<Value, Error> {
+        let key = |name: &str| Portable::Keyword(Sym::intern(name));
+        let text = |text: &str| Portable::String(text.into());
+        let modules = docs
+            .iter()
+            .map(|docs| {
+                let entries = docs
+                    .entries
+                    .iter()
+                    .map(|entry| {
+                        Portable::Map(vec![
+                            (key("name"), text(&entry.name)),
+                            (key("kind"), key(entry.kind.name())),
+                            (key("signature"), text(&entry.signature)),
+                            (key("doc"), entry.doc.as_deref().map_or(Portable::Nil, text)),
+                        ])
+                    })
+                    .collect();
+                Portable::Map(vec![
+                    (key("module"), text(&docs.module)),
+                    (key("entries"), Portable::Vector(entries)),
+                ])
+            })
+            .collect();
+        self.runtime.rebuild(&Portable::Vector(modules))
     }
 
     fn described(
