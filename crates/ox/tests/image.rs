@@ -484,6 +484,176 @@ fn color_mistakes_are_reported() {
     );
 }
 
+const STRIPES: &str = "(def stripes (image/canvas (image/new 1 1 :color :white) 3 1 :color :black)) (def step (image/canvas (image/new 10 20 :color :white) 20 20 :anchor :left :color :black))";
+
+#[test]
+fn blurs_keep_edges_clean_and_flat_areas_flat() {
+    let isolate = &mut Isolate::new();
+    shown(isolate, HALVES);
+    shown(isolate, STRIPES);
+
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [p (image/pixel (image/blur halves 1) 2 0)] [(nth p 0) (nth p 1) (and (> (nth p 3) 0) (< (nth p 3) 255))])"
+        ),
+        "[255 0 true]"
+    );
+    assert_eq!(
+        adjusted(isolate, "[10 20 30]", "(image/blur 2)"),
+        "[10 20 30 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/blur (image/new 5 5 :color [10 20 30]) 30) 2 2)"
+        ),
+        "[10 20 30 255]"
+    );
+    assert_eq!(
+        shown(isolate, "(image/pixel (image/box-blur stripes 1) 1 0)"),
+        "[85 85 85 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/median (image/canvas (image/new 1 1 :color :white) 3 3 :color :black) 1) 1 1)"
+        ),
+        "[0 0 0 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/pixelate (image/canvas (image/new 1 1 :color :white) 4 1 :anchor :left :color :black) 4) 2 0)"
+        ),
+        "[64 64 64 255]"
+    );
+}
+
+#[test]
+fn sharpening_edges_and_kernels() {
+    let isolate = &mut Isolate::new();
+    shown(isolate, STRIPES);
+    shown(
+        isolate,
+        "(def ridge (image/canvas (image/new 1 1 :color [150 150 150]) 3 1 :color [100 100 100]))",
+    );
+
+    assert_eq!(
+        adjusted(isolate, "[100 100 100]", "(image/sharpen)"),
+        "[100 100 100 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(> (first (image/pixel (image/sharpen ridge) 1 0)) 150)"
+        ),
+        "true"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/unsharp ridge 1 1 :threshold 100) 1 0)"
+        ),
+        "[150 150 150 255]"
+    );
+    assert_eq!(
+        shown(isolate, "(image/pixel (image/edges step) 9 10)"),
+        "[255 255 255 255]"
+    );
+    assert_eq!(
+        shown(isolate, "(image/pixel (image/edges step) 2 10)"),
+        "[0 0 0 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [found (image/edges step :method :canny)] [(image/pixel found 2 10) (or (= (image/pixel found 9 10) [255 255 255 255]) (= (image/pixel found 10 10) [255 255 255 255]))])"
+        ),
+        "[[0 0 0 255] true]"
+    );
+    assert_eq!(
+        adjusted(isolate, "[100 100 100]", "(image/emboss)"),
+        "[100 100 100 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/convolve stripes [[0 0 0] [0 1 0] [0 0 0]]) 1 0)"
+        ),
+        "[255 255 255 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/convolve stripes [[1 1 1]]) 1 0)"
+        ),
+        "[85 85 85 255]"
+    );
+}
+
+#[test]
+fn noise_repeats_and_vignettes_darken_corners() {
+    let isolate = &mut Isolate::new();
+    shown(isolate, "(def gray (image/new 4 4 :color [128 128 128]))");
+
+    assert_eq!(
+        shown(
+            isolate,
+            "(= (image/pixel (image/noise gray 30) 1 1) (image/pixel (image/noise gray 30) 1 1))"
+        ),
+        "true"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(= (image/pixel (image/noise gray 30) 1 1) (image/pixel (image/noise gray 30 :seed 7) 1 1))"
+        ),
+        "false"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [[r g b] (image/pixel (image/noise gray 30 :mono true) 2 2)] (and (= r g) (= g b)))"
+        ),
+        "true"
+    );
+    assert_eq!(
+        shown(isolate, "(image/pixel (image/noise gray 0) 1 1)"),
+        "[128 128 128 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [found (image/vignette (image/new 9 9 :color :white))] [(image/pixel found 4 4) (< (first (image/pixel found 0 0)) 255)])"
+        ),
+        "[[255 255 255 255] true]"
+    );
+}
+
+#[test]
+fn filter_mistakes_are_reported() {
+    let isolate = &mut Isolate::new();
+    shown(isolate, HALVES);
+
+    assert_eq!(
+        failure(isolate, "(image/blur halves -1)"),
+        "image/blur expects a radius of 0 or more, got -1"
+    );
+    assert_eq!(
+        failure(isolate, "(image/edges halves :method :roberts)"),
+        "image/edges takes :method :sobel or :canny, not :roberts"
+    );
+    assert_eq!(
+        failure(isolate, "(image/pixelate halves 0)"),
+        "image/pixelate expects a block size as a whole number above 0, got 0"
+    );
+    assert_eq!(
+        failure(isolate, "(image/convolve halves [[1 1]])"),
+        "image/convolve expects rows of numbers with an odd width and height, got [[1 1]]"
+    );
+}
+
 #[test]
 fn geometry_mistakes_are_reported() {
     let mut isolate = Isolate::new();

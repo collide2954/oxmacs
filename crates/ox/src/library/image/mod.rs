@@ -1,5 +1,6 @@
 mod adjust;
 mod colors;
+mod filters;
 mod geometry;
 mod io;
 
@@ -270,4 +271,5 @@ pub fn install(isolate: &mut Isolate) {
     io::install(isolate);
     geometry::install(isolate);
     adjust::install(isolate);
+    filters::install(isolate);
 }

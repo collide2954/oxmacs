@@ -28,7 +28,7 @@ dirs = "7.0.0"
 iced = { version = "0.14.0", features = ["advanced", "canvas", "image"] }
 iced_test = "0.14.0"
 image = { version = "0.25.10", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "qoi", "tiff", "webp"] }
-imageproc = { version = "0.27.0", default-features = false }
+imageproc = { version = "0.27.0", default-features = false, features = ["rayon"] }
 indexmap = "2.14.2"
 jiff = "0.2.38"
 kamadak-exif = "0.6.1"

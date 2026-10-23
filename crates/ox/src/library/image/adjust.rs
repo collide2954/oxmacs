@@ -32,23 +32,23 @@ const TURN: Matrix = [
     [-0.787, 0.715, 0.072],
 ];
 
-fn narrow(number: f64) -> f32 {
+pub(super) fn narrow(number: f64) -> f32 {
     #[expect(clippy::cast_possible_truncation, reason = "amounts fit in f32")]
     let narrowed = number as f32;
     narrowed
 }
 
-fn unit(channel: u8) -> f32 {
+pub(super) fn unit(channel: u8) -> f32 {
     f32::from(channel) / 255.0
 }
 
-fn byte(value: f32) -> u8 {
+pub(super) fn byte(value: f32) -> u8 {
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
         reason = "clamped to a byte"
     )]
-    let fitted = (value * 255.0).round().clamp(0.0, 255.0) as u8;
+    let fitted = (value * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
     fitted
 }
 
@@ -60,7 +60,7 @@ fn table(curve: impl Fn(f32) -> f32) -> Table {
     out
 }
 
-fn each(pixels: &mut RgbaImage, change: impl Fn(&mut [u8]) + Sync + Send) {
+pub(super) fn each(pixels: &mut RgbaImage, change: impl Fn(&mut [u8]) + Sync + Send) {
     pixels.par_chunks_mut(4 * 4096).for_each(|chunk| {
         chunk
             .as_chunks_mut::<4>()
@@ -107,11 +107,11 @@ fn hue(degrees: f32) -> Matrix {
     })
 }
 
-fn luma(pixel: &[u8]) -> u8 {
+pub(super) fn luma(pixel: &[u8]) -> u8 {
     byte(LUMA[0] * unit(pixel[0]) + LUMA[1] * unit(pixel[1]) + LUMA[2] * unit(pixel[2]))
 }
 
-fn changed(
+pub(super) fn changed(
     heap: &mut Heap,
     name: &'static str,
     image: Arc<Image>,
@@ -124,7 +124,7 @@ fn changed(
     })
 }
 
-fn outside(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
+pub(super) fn outside(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
     Error::new(format!(
         "image/{name} expects {what}, got {}",
         print::write(heap, value)
@@ -132,7 +132,7 @@ fn outside(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
     .of(ErrorKind::Range)
 }
 
-fn factor(heap: &Heap, name: &str, value: Value) -> Result<f32, Error> {
+pub(super) fn factor(heap: &Heap, name: &str, value: Value) -> Result<f32, Error> {
     let found = number(heap, name, "a factor", value)?;
     if found < 0.0 {
         return Err(outside(heap, name, "a factor of 0 or more", value));
@@ -152,7 +152,7 @@ fn any(heap: &Heap, name: &str, value: Value) -> Result<f32, Error> {
     number(heap, name, "an amount", value).map(narrow)
 }
 
-fn strength(heap: &Heap, name: &str, value: Option<&Value>) -> Result<f32, Error> {
+pub(super) fn strength(heap: &Heap, name: &str, value: Option<&Value>) -> Result<f32, Error> {
     let Some(value) = value else {
         return Ok(1.0);
     };
