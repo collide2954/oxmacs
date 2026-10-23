@@ -49,7 +49,7 @@ fn reduce(
     fold(heap, name, first, rest, step)
 }
 
-fn quick(
+pub(crate) fn quick(
     arguments: &[Value],
     small: fn(i64, i64) -> Option<i64>,
     inexact: fn(f64, f64) -> f64,
@@ -66,7 +66,7 @@ fn quick(
     }
 }
 
-fn quick_holds(a: Value, b: Value, holds: fn(Ordering) -> bool) -> Option<bool> {
+pub(crate) fn quick_holds(a: Value, b: Value, holds: fn(Ordering) -> bool) -> Option<bool> {
     let order = match (a, b) {
         (Value::Int(a), Value::Int(b)) => Some(a.cmp(&b)),
         (Value::Float(a), Value::Float(b)) => a.partial_cmp(&b),

@@ -6,7 +6,7 @@ mod files;
 mod http;
 mod json;
 mod net;
-mod numbers;
+pub(crate) mod numbers;
 mod ordering;
 pub(crate) mod paths;
 mod patterns;

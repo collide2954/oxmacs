@@ -3,6 +3,7 @@ pub(crate) mod build;
 mod convert;
 pub(crate) mod machine;
 pub(crate) mod modules;
+mod prims;
 mod tasks;
 mod workers;
 
@@ -18,7 +19,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use crate::bytecode::{Capture, Code, Op};
+use crate::bytecode::{Capture, Code, Op, Prim, Register};
 use crate::describe::Place;
 use crate::error::{Error, ErrorKind, Frame as Trace};
 use crate::heap::{Closure, Heap};
@@ -50,6 +51,7 @@ pub struct Runtime {
     pub(crate) profiler: Option<Box<Profiler>>,
     epoch: u64,
     pub apply: Value,
+    pub(crate) prims: [Value; Prim::ALL.len()],
     pub error_types: HashMap<ErrorKind, Value>,
     pub modules: Vec<Module>,
     pub module_ids: HashMap<String, ModuleId>,
@@ -129,6 +131,7 @@ impl Default for Runtime {
             profiler: None,
             epoch: 0,
             apply: Value::Nil,
+            prims: [Value::Nil; Prim::ALL.len()],
             error_types: HashMap::new(),
             modules: Vec::new(),
             module_ids: HashMap::new(),
@@ -471,6 +474,14 @@ impl Runtime {
             }
             Op::Call { base, count } => return self.call(machine, base, count, host),
             Op::TailCall { base, count } => return self.tail_call(machine, base, count, host),
+            Op::Prim {
+                prim,
+                to,
+                a,
+                b,
+                base,
+                cache,
+            } => return self.prim(machine, prim, [to, a, b, base], cache, host),
             Op::Jump { to } => machine.pc = to as usize,
             Op::JumpUnless { test, to } => {
                 if !machine.get(test).truthy() {
@@ -564,6 +575,7 @@ impl Runtime {
             | Op::Captured { .. }
             | Op::Call { .. }
             | Op::TailCall { .. }
+            | Op::Prim { .. }
             | Op::Jump { .. }
             | Op::JumpUnless { .. }
             | Op::Return { .. } => {}
@@ -653,6 +665,17 @@ impl Runtime {
 
     fn call(&mut self, machine: &mut Machine, base: u16, count: u16, host: &mut dyn Any) -> Step {
         let slot = machine.base + usize::from(base);
+        self.call_into(machine, slot, count, slot, host)
+    }
+
+    fn call_into(
+        &mut self,
+        machine: &mut Machine,
+        slot: usize,
+        count: u16,
+        result: usize,
+        host: &mut dyn Any,
+    ) -> Step {
         let count = self.arguments(machine, slot, count)?;
         let callee = self.constructor_of(machine.stack[slot]);
         let arguments = slot + 1..=slot + count;
@@ -662,21 +685,53 @@ impl Runtime {
                     profiler.called(&function, &self.modules);
                 }
                 let binding = bind(&mut self.heap, &function, &machine.stack[arguments])?;
-                machine.enter(function, callee, slot, binding)?;
+                machine.enter(function, callee, slot, result, binding)?;
             }
             Target::Native(function, name) => {
                 let started = self.profiler.is_some().then(Instant::now);
-                machine.stack[slot] = function(&mut self.heap, host, &machine.stack[arguments])?;
+                machine.stack[result] = function(&mut self.heap, host, &machine.stack[arguments])?;
                 self.timed(name, started, machine);
             }
             Target::Control(control) => {
-                return self.control(machine, control, slot, count, Landing::Register(slot));
+                return self.control(machine, control, slot, count, Landing::Register(result));
             }
             Target::Data => {
-                machine.stack[slot] = call_data(&self.heap, callee, &machine.stack[arguments])?;
+                machine.stack[result] = call_data(&self.heap, callee, &machine.stack[arguments])?;
             }
         }
         Ok(Flow::Next)
+    }
+
+    fn prim(
+        &mut self,
+        machine: &mut Machine,
+        prim: Prim,
+        [to, a, b, base]: [Register; 4],
+        cache: u16,
+        host: &mut dyn Any,
+    ) -> Step {
+        let cached = machine
+            .code
+            .globals
+            .get(usize::from(cache))
+            .and_then(Cell::get);
+        let callee = match cached {
+            Some((epoch, value)) if epoch == self.epoch => value,
+            _ => self.global(machine, Sym::intern(prim.name()), cache)?,
+        };
+        let (first, second) = (machine.get(a), machine.get(b));
+        if callee == self.prims[prim as usize]
+            && let Some(value) = prims::quick_prim(&self.heap, prim, first, second)
+        {
+            machine.set(to, value);
+            return Ok(Flow::Next);
+        }
+        let slot = machine.base + usize::from(base);
+        machine.stack[slot] = callee;
+        machine.stack[slot + 1] = first;
+        machine.stack[slot + 2] = second;
+        let result = machine.base + usize::from(to);
+        self.call_into(machine, slot, 2, result, host)
     }
 
     fn tail_call(
@@ -875,6 +930,7 @@ impl Runtime {
         roots.extend(self.error_types.values().copied());
         roots.extend(self.last_raised.as_ref().map(|(value, _)| *value));
         roots.push(self.apply);
+        roots.extend(self.prims);
         roots.extend(self.running);
         self.task_roots(roots, codes);
     }

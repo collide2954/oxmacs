@@ -8,7 +8,7 @@ use patterns::{Matching, Mode};
 use std::cell::Cell;
 use std::rc::Rc;
 
-use crate::bytecode::{Arity, Capture, Code, Op, Register};
+use crate::bytecode::{Arity, Capture, Code, Op, Prim, Register};
 use crate::error::Error;
 use crate::expand::patterns::is_pattern;
 use crate::expand::quote::datum_value;
@@ -1034,6 +1034,11 @@ impl Compiler<'_> {
         if let Some(done) = self.special(callee, arguments, target, span, tail) {
             return done;
         }
+        if let [first, second] = arguments
+            && let Some(prim) = self.prim(callee)
+        {
+            return self.prim_call(prim, first, second, target, span);
+        }
         let count = u16::try_from(arguments.len())
             .map_err(|_| Error::at(span, "This call has too many arguments"))?;
         let base = self.reserve(1 + arguments.len(), span)?;
@@ -1056,6 +1061,73 @@ impl Compiler<'_> {
                 span,
             );
         }
+        self.release(base);
+        Ok(())
+    }
+
+    fn prim(&mut self, callee: &Syntax) -> Option<Prim> {
+        let Datum::Symbol(name) = &callee.datum else {
+            return None;
+        };
+        let prim = Prim::named(name)?;
+        self.resolve(Sym::intern(name), &callee.marks)
+            .is_none()
+            .then_some(prim)
+    }
+
+    fn local_register(&mut self, form: &Syntax) -> Option<Register> {
+        let Datum::Symbol(name) = &form.datum else {
+            return None;
+        };
+        match self.resolve(Sym::intern(name), &form.marks)? {
+            Variable {
+                place: Place::Register(register),
+                boxed: false,
+            } => Some(register),
+            _ => None,
+        }
+    }
+
+    fn operand(
+        &mut self,
+        form: &Syntax,
+        scratch: Register,
+        direct: bool,
+    ) -> Result<Register, Error> {
+        if direct && let Some(register) = self.local_register(form) {
+            return Ok(register);
+        }
+        self.expression(form, scratch)?;
+        Ok(scratch)
+    }
+
+    fn prim_call(
+        &mut self,
+        prim: Prim,
+        first: &Syntax,
+        second: &Syntax,
+        target: Register,
+        span: Span,
+    ) -> Result<(), Error> {
+        let base = self.reserve(3, span)?;
+        let simple = !matches!(
+            second.datum,
+            Datum::List(_) | Datum::Vector(_) | Datum::Map(_) | Datum::Set(_) | Datum::Record(..)
+        );
+        let a = self.operand(first, base + 1, simple)?;
+        let b = self.operand(second, base + 2, true)?;
+        let cache = self.global_cache();
+        self.emit(
+            Op::Prim {
+                prim,
+                to: target,
+                a,
+                b,
+                base,
+                cache,
+            },
+            span,
+        );
         self.release(base);
         Ok(())
     }

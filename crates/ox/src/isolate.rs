@@ -7,6 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::bytecode::Prim;
 use crate::check::{self, Diagnostic};
 use crate::compile::compile;
 use crate::describe::{self, Description, Docs, Kind};
@@ -118,6 +119,21 @@ impl Isolate {
         isolate.runtime.apply = apply.unwrap_or(Value::Nil);
         if let Err(error) = isolate.eval_in(PRELUDE, "prelude/core.ox", PRELUDE_SOURCE, &mut ()) {
             panic!("The Ox prelude failed to load: {error}");
+        }
+        for prim in Prim::ALL {
+            let found = isolate
+                .runtime
+                .lookup(PRELUDE, Sym::intern(prim.name()))
+                .filter(|value| {
+                    isolate
+                        .runtime
+                        .heap
+                        .native_of(*value)
+                        .is_some_and(|native| {
+                            native.name.name() == prim.name() && native.control.is_none()
+                        })
+                });
+            isolate.runtime.prims[prim as usize] = found.unwrap_or(Value::Nil);
         }
         let found: Vec<(ErrorKind, Value)> = ErrorKind::NAMES
             .iter()

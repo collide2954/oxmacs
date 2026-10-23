@@ -7,6 +7,51 @@ use crate::value::Value;
 
 pub type Register = u16;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Prim {
+    Add,
+    Subtract,
+    Multiply,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    Equal,
+    Nth,
+}
+
+impl Prim {
+    pub const ALL: [Self; 9] = [
+        Self::Add,
+        Self::Subtract,
+        Self::Multiply,
+        Self::Less,
+        Self::LessEqual,
+        Self::Greater,
+        Self::GreaterEqual,
+        Self::Equal,
+        Self::Nth,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Add => "+",
+            Self::Subtract => "-",
+            Self::Multiply => "*",
+            Self::Less => "<",
+            Self::LessEqual => "<=",
+            Self::Greater => ">",
+            Self::GreaterEqual => ">=",
+            Self::Equal => "=",
+            Self::Nth => "nth",
+        }
+    }
+
+    pub fn named(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|prim| prim.name() == name)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Op {
     Constant {
@@ -103,6 +148,14 @@ pub enum Op {
     TailCall {
         base: Register,
         count: u16,
+    },
+    Prim {
+        prim: Prim,
+        to: Register,
+        a: Register,
+        b: Register,
+        base: Register,
+        cache: u16,
     },
     Jump {
         to: u32,

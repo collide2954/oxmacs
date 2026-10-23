@@ -144,6 +144,7 @@ impl Machine {
         function: Rc<Code>,
         closure: Value,
         slot: usize,
+        result: usize,
         binding: Binding,
     ) -> Result<(), Error> {
         if self.frames.len() >= MAX_FRAMES {
@@ -160,7 +161,7 @@ impl Machine {
             missing,
             pc: 0,
             base: start,
-            result: slot,
+            result,
         });
         self.code = function;
         self.closure = closure;
