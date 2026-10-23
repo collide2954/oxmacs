@@ -1,6 +1,5 @@
 mod buffers;
 mod build;
-mod connections;
 mod console;
 mod dispatch;
 mod editing;
@@ -24,10 +23,9 @@ mod windows;
 pub use crate::external::diagnostics::{Diagnostic, LintLine, Severity};
 pub use build::errors::{ErrorAt, ErrorPattern};
 pub use build::lint::{LintRun, Linter};
-pub use connections::ConnectionSpec;
 pub use console::{ConsoleHook, ConsoleSpec, MarkerHook};
 pub use editing::format::{FormatRequest, Formatter};
-pub use effect::{ConnectionId, Effect, FetchId};
+pub use effect::{Effect, FetchId};
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
 pub use languages::r_plots::{GalleryView, PlotView};
 pub use languages::registry::{LineHighlighter, LineIndenter};
@@ -175,8 +173,6 @@ pub struct Editor {
     next_fetch: u64,
     fetches: effect::Fetches,
     job_handlers: job::JobHandlers,
-    next_connection: u64,
-    connections: Vec<(ConnectionId, ConnectionSpec)>,
     languages: Vec<languages::registry::Registered>,
     paren_pair: Option<(usize, usize)>,
     next_job: u64,
@@ -273,8 +269,6 @@ impl Editor {
             next_fetch: 0,
             fetches: effect::Fetches::default(),
             job_handlers: job::JobHandlers::default(),
-            next_connection: 0,
-            connections: Vec::new(),
             languages: languages::registry::built_in(),
             paren_pair: None,
             next_job: 0,

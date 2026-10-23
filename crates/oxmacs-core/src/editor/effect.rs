@@ -4,14 +4,10 @@ use std::{fmt, mem};
 use crate::editor::{Editor, Job, JobId, ServerId};
 use crate::external::lsp::Launch;
 use crate::external::managed::Install;
-use crate::external::net::Endpoint;
 use crate::external::tools::Tool;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FetchId(pub u64);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ConnectionId(pub u64);
 
 type Then = Box<dyn FnOnce(&mut Editor, Result<String, String>) + Send>;
 
@@ -40,9 +36,6 @@ pub enum Effect {
     Kill(JobId),
     Reconfigure,
     Fetch(FetchId, String),
-    Connect(ConnectionId, Endpoint),
-    Transmit(ConnectionId, Vec<String>),
-    Disconnect(ConnectionId),
     ProbeTools(Vec<Tool>),
     InstallTool(Box<Install>),
     StartServer(ServerId, Launch),

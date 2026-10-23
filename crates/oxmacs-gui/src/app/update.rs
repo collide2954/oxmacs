@@ -4,13 +4,12 @@ use std::thread;
 use iced::font::Family;
 use iced::futures::channel::{mpsc, oneshot};
 use iced::theme::Mode;
-use iced::time::{Duration, Instant};
+use iced::time::Instant;
 use iced::widget::image;
 use iced::{Task, clipboard, keyboard};
 use jiff::Timestamp;
-use oxmacs_core::editor::{ConnectionId, Effect, Job, Outcome, ServerId, WindowId};
+use oxmacs_core::editor::{Effect, Job, Outcome, ServerId, WindowId};
 use oxmacs_core::external::lsp;
-use oxmacs_core::external::net::{self, Endpoint};
 use oxmacs_core::external::notify;
 use oxmacs_core::external::process;
 use oxmacs_core::external::tools::{self, Probe, Tool};
@@ -215,12 +214,6 @@ impl App {
             Message::Fetched(id, result) => self.editor.fetched(id, result),
             Message::ToolsProbed(probes) => self.editor.tools_probed(probes),
             Message::ToolInstalled(tool, result) => self.editor.tool_installed(tool, result),
-            Message::Connection(id, event) => {
-                if matches!(event, net::Event::Closed(_)) {
-                    self.connections.retain(|(known, _)| *known != id);
-                }
-                self.editor.connection_event(id, event);
-            }
             Message::Server(id, event) => {
                 if matches!(event, lsp::Event::Exited(_)) {
                     self.servers.retain(|(known, _)| *known != id);
@@ -246,9 +239,6 @@ impl App {
     fn quit(&mut self) {
         self.editor.quitting();
         let _ = self.pending_effects();
-        for (_, connection) in self.connections.drain(..) {
-            connection.wait(FAREWELL);
-        }
         for (_, killer) in self.jobs.drain(..) {
             killer.kill();
         }
@@ -351,17 +341,6 @@ impl App {
             Effect::Fetch(id, url) => {
                 Task::perform(fetch::get(url), move |result| Message::Fetched(id, result))
             }
-            Effect::Connect(id, endpoint) => self.connect(id, &endpoint),
-            Effect::Transmit(id, lines) => {
-                if let Some((_, connection)) =
-                    self.connections.iter().find(|(known, _)| *known == id)
-                {
-                    for line in lines {
-                        connection.send(&line);
-                    }
-                }
-                Task::none()
-            }
             Effect::ProbeTools(tools) => Task::perform(probe_tools(tools), Message::ToolsProbed),
             Effect::InstallTool(install) => {
                 let tool = install.tool;
@@ -387,24 +366,7 @@ impl App {
                 notify::send(&title, &body);
                 Task::none()
             }
-            Effect::Disconnect(id) => {
-                if let Some((_, connection)) =
-                    self.connections.iter().find(|(known, _)| *known == id)
-                {
-                    connection.close();
-                }
-                Task::none()
-            }
         }
-    }
-
-    fn connect(&mut self, id: ConnectionId, endpoint: &Endpoint) -> Task<Message> {
-        let (sender, events) = mpsc::unbounded();
-        let connection = net::connect(endpoint, move |event| {
-            let _ = sender.unbounded_send(event);
-        });
-        self.connections.push((id, connection));
-        Task::run(events, move |event| Message::Connection(id, event))
     }
 
     fn start_server(&mut self, id: ServerId, launch: &lsp::Launch) -> Task<Message> {
@@ -461,7 +423,6 @@ pub fn shown_plot<'a, T>(loaded: &'a [(PathBuf, T)], path: &Path) -> Option<&'a 
         .or_else(|| loaded.last())
         .map(|(_, item)| item)
 }
-const FAREWELL: Duration = Duration::from_secs(1);
 
 async fn probe_tools(tools: Vec<Tool>) -> Vec<(Tool, Probe)> {
     let (sender, receiver) = oneshot::channel();

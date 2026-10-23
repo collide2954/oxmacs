@@ -12,10 +12,9 @@ use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::clock;
 use oxmacs_core::config::{Config, ModeLineStyle};
-use oxmacs_core::editor::{ConnectionId, Editor, FetchId, JobId, SERVERS, ServerId, WindowId};
+use oxmacs_core::editor::{Editor, FetchId, JobId, SERVERS, ServerId, WindowId};
 use oxmacs_core::external::lsp;
 use oxmacs_core::external::managed::Managed;
-use oxmacs_core::external::net::{self, Connection};
 use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::external::tools::{Probe, Tool};
 use oxmacs_core::external::usage::Usage;
@@ -46,7 +45,6 @@ pub struct App {
     plot_loading: Vec<PathBuf>,
     usage: Usage,
     jobs: Vec<(JobId, Handle)>,
-    connections: Vec<(ConnectionId, Connection)>,
     servers: Vec<(ServerId, lsp::Server)>,
     ox: Ox,
     takeover_size: Option<iced::Size>,
@@ -80,7 +78,6 @@ pub enum Message {
     PickPlot(WindowId, usize),
     PlotLoaded(PathBuf, Option<widget::image::Allocation>),
     Fetched(FetchId, Result<String, String>),
-    Connection(ConnectionId, net::Event),
     Server(ServerId, lsp::Event),
     ToolsProbed(Vec<(Tool, Probe)>),
     ToolInstalled(Managed, Result<PathBuf, String>),
@@ -120,7 +117,6 @@ impl App {
             plot_loading: Vec::new(),
             usage: Usage::new(),
             jobs: Vec::new(),
-            connections: Vec::new(),
             servers: Vec::new(),
             ox: Ox::new(),
             takeover_size: None,

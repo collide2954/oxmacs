@@ -5,7 +5,7 @@ use jiff::{SignedDuration, Timestamp};
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::page::{Page, clip};
-use crate::editor::{ConnectionId, ConnectionSpec, Editor, Effect, Job, JobId, Outcome};
+use crate::editor::{Editor, Effect, Job, JobId, Outcome};
 use crate::text::{Buffer, BufferId};
 use crate::theme::Highlight;
 
@@ -29,7 +29,6 @@ pub struct ProcessSpec {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::editor) enum Source {
     Job(JobId),
-    Connection(ConnectionId),
     Plugin(ProcessKey),
 }
 
@@ -39,13 +38,11 @@ enum Status {
     Running,
     Exited(Option<i32>),
     Failed,
-    Connected,
-    Closed,
 }
 
 impl Status {
     fn finished(self) -> bool {
-        matches!(self, Self::Exited(_) | Self::Failed | Self::Closed)
+        matches!(self, Self::Exited(_) | Self::Failed)
     }
 
     fn shown(self) -> (String, Highlight) {
@@ -55,8 +52,6 @@ impl Status {
             Self::Exited(Some(0) | None) => ("exited".to_owned(), Highlight::Comment),
             Self::Exited(Some(code)) => (format!("exit {code}"), Highlight::Error),
             Self::Failed => ("failed".to_owned(), Highlight::Error),
-            Self::Connected => ("connected".to_owned(), Highlight::Success),
-            Self::Closed => ("closed".to_owned(), Highlight::Comment),
         }
     }
 }
@@ -292,23 +287,6 @@ impl Editor {
         });
     }
 
-    pub(in crate::editor) fn track_connection(&mut self, id: ConnectionId, spec: &ConnectionSpec) {
-        self.track(Tracked {
-            source: Source::Connection(id),
-            kind: spec.kind,
-            name: spec.name.clone(),
-            detail: spec.detail.clone(),
-            started: Timestamp::now(),
-            ended: None,
-            pid: None,
-            status: Status::Starting,
-            buffer: None,
-            cpu: None,
-            memory: None,
-            stop: None,
-        });
-    }
-
     pub fn track_process(&mut self, spec: ProcessSpec) -> ProcessKey {
         let running = self
             .processes
@@ -380,16 +358,6 @@ impl Editor {
             Outcome::Failed(_) => Status::Failed,
         };
         self.end_tracked(Source::Job(job), status);
-    }
-
-    pub(in crate::editor) fn connection_changed(&mut self, id: ConnectionId, open: bool) {
-        if open {
-            self.update_tracked(Source::Connection(id), |entry| {
-                entry.status = Status::Connected;
-            });
-        } else {
-            self.end_tracked(Source::Connection(id), Status::Closed);
-        }
     }
 
     fn end_tracked(&mut self, source: Source, status: Status) {
@@ -496,10 +464,6 @@ impl Editor {
         let Some(entry) = self.process_at_point() else {
             return;
         };
-        if let Source::Connection(id) = entry.source {
-            self.visit_connection(id);
-            return;
-        }
         match (entry.kind, entry.buffer) {
             ("lint", _) => self.list_diagnostics(),
             (_, Some(buffer))
@@ -530,7 +494,6 @@ impl Editor {
     pub(in crate::editor) fn finish_stop(&mut self, source: Source) {
         match source {
             Source::Job(job) => self.effects.push(Effect::Kill(job)),
-            Source::Connection(id) => self.stop_connection(id),
             Source::Plugin(key) => {
                 let stop = self
                     .processes

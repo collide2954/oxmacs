@@ -447,8 +447,8 @@ pub enum Command {
     #[strum(message = "Close the completion popup")]
     CompletionQuit,
     #[strum(
-        message = "List the processes and connections oxmacs runs",
-        detailed_message = "Opens *Processes*: every R session, compile, lint, network connection and background process oxmacs started or controls, with its status, process id, running time, CPU and memory. It updates as things change; RET visits an entry's buffer and k stops it."
+        message = "List the processes oxmacs runs",
+        detailed_message = "Opens *Processes*: every R session, compile, lint and background process oxmacs started or controls, with its status, process id, running time, CPU and memory. It updates as things change; RET visits an entry's buffer and k stops it."
     )]
     ListProcesses,
     #[strum(
