@@ -3,6 +3,7 @@ members = ["crates/*"]
 default-members = [
     "crates/ox",
     "crates/ox-cli",
+    "crates/ox-lsp",
     "crates/ox-perf",
     "crates/oxmacs",
     "crates/oxmacs-core",
@@ -25,7 +26,9 @@ iced = { version = "0.14.0", features = ["advanced", "canvas", "image"] }
 iced_test = "0.14.0"
 indexmap = "2.14.2"
 jiff = "0.2.38"
+lsp-server = "0.10.0"
 ox = { path = "crates/ox" }
+ox-lsp = { path = "crates/ox-lsp" }
 ox-perf = { path = "crates/ox-perf" }
 oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }

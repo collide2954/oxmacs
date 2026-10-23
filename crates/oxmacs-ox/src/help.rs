@@ -3,6 +3,7 @@ use std::path::Path;
 
 use ox::Isolate;
 use ox::describe::{Description, Kind};
+use ox::names::{call_head, symbol_at};
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::plugin::PluginBuffer;
@@ -34,78 +35,6 @@ impl PluginBuffer for DocView {
 
 #[derive(Debug, Clone, Copy)]
 struct DocScope(ScopeId);
-
-pub(crate) fn call_head(before: &str) -> Option<String> {
-    let chars: Vec<char> = before.chars().collect();
-    let mut open: Vec<(char, usize)> = Vec::new();
-    let mut quoted = false;
-    let mut at = 0;
-    while at < chars.len() {
-        let character = chars[at];
-        if quoted {
-            match character {
-                '\\' => at += 1,
-                '"' => quoted = false,
-                _ => {}
-            }
-        } else {
-            match character {
-                '"' => quoted = true,
-                ';' => {
-                    while at < chars.len() && chars[at] != '\n' {
-                        at += 1;
-                    }
-                }
-                '\\' => at += 1,
-                '(' | '[' | '{' => open.push((character, at)),
-                ')' | ']' | '}' => {
-                    open.pop();
-                }
-                _ => {}
-            }
-        }
-        at += 1;
-    }
-    if quoted {
-        return None;
-    }
-    let &(bracket, at) = open.last()?;
-    if bracket != '(' {
-        return None;
-    }
-    let head: String = chars[at + 1..]
-        .iter()
-        .take_while(|character| !mode::delimits(**character))
-        .collect();
-    head.chars()
-        .next()
-        .is_some_and(mode::starts_symbol)
-        .then_some(head)
-}
-
-pub(crate) fn symbol_at(line: &str, column: usize) -> Option<String> {
-    let chars: Vec<char> = line.chars().collect();
-    let symbolic = |at: usize| {
-        chars
-            .get(at)
-            .is_some_and(|character| !mode::delimits(*character))
-    };
-    let mut start = column.min(chars.len());
-    while start > 0 && symbolic(start - 1) {
-        start -= 1;
-    }
-    let mut end = column.min(chars.len());
-    while symbolic(end) {
-        end += 1;
-    }
-    let word: String = chars[start..end].iter().collect();
-    let word = word.trim_start_matches(['\'', '`', '~', '@', '#']);
-    let number = word
-        .trim_start_matches(['-', '+'])
-        .starts_with(|character: char| character.is_ascii_digit());
-    let keyword = word.starts_with(':') || (word.len() > 1 && word.ends_with(':'));
-    (!word.is_empty() && !number && !keyword).then(|| word.to_owned())
-}
 
 pub(crate) fn in_ox(editor: &Editor) -> bool {
     editor.language() == Some(mode::language()) || tools::in_repl(editor)
@@ -346,40 +275,9 @@ mod tests {
     use oxmacs_core::editor::Editor;
     use oxmacs_core::input::KeySequence;
 
-    use super::{DOC, call_head, symbol_at};
+    use super::DOC;
     use crate::Ox;
     use crate::testing::typed;
-
-    #[test]
-    fn the_innermost_open_call_names_its_head() {
-        let head = |text: &str| call_head(text);
-
-        assert_eq!(head("(area 2 ").as_deref(), Some("area"));
-        assert_eq!(head("(+ (area 2 3) ").as_deref(), Some("+"));
-        assert_eq!(head("(+ (area 2 3").as_deref(), Some("area"));
-        assert_eq!(head("(s/upper \"a(b\" ").as_deref(), Some("s/upper"));
-        assert_eq!(head("(f \\( ").as_deref(), Some("f"));
-        assert_eq!(head("(f ; (g\n x").as_deref(), Some("f"));
-        assert_eq!(head("(f [1 2 "), None);
-        assert_eq!(head("(f \"open"), None);
-        assert_eq!(head("(f x)"), None);
-        assert_eq!(head("( f"), None);
-        assert_eq!(head("('quoted"), None);
-    }
-
-    #[test]
-    fn the_symbol_at_a_column_skips_quotes_numbers_and_keywords() {
-        assert_eq!(symbol_at("(area 2 3)", 3).as_deref(), Some("area"));
-        assert_eq!(symbol_at("(area 2 3)", 5).as_deref(), Some("area"));
-        assert_eq!(symbol_at("(s/upper x)", 1).as_deref(), Some("s/upper"));
-        assert_eq!(symbol_at("'foo", 2).as_deref(), Some("foo"));
-        assert_eq!(symbol_at("@counter", 0).as_deref(), Some("counter"));
-        assert_eq!(symbol_at("(- 4 1)", 1).as_deref(), Some("-"));
-        assert_eq!(symbol_at("(f -12)", 4), None);
-        assert_eq!(symbol_at("{size: 1}", 2), None);
-        assert_eq!(symbol_at("(f :size)", 4), None);
-        assert_eq!(symbol_at("(f  x)", 3), None);
-    }
 
     const SOURCE: &str = "(def (area w h) \"Width times height. In cells.\" (* w h))
 (test \"area of a unit\" (expect (= (area 1 1) 1)))

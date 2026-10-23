@@ -20,6 +20,7 @@ fn main() -> ExitCode {
         Some(first) if first == "test" => run_tests(&args.map(PathBuf::from).collect::<Vec<_>>()),
         Some(first) if first == "check" => check_command(args.collect()),
         Some(first) if first == "fmt" => fmt_command(args.collect()),
+        Some(first) if first == "lsp" => language_server(),
         Some(first) if first == "perf" => {
             ox_perf::main(args.map(|argument| argument.to_string_lossy().into_owned()))
         }
@@ -166,6 +167,27 @@ fn check_command(arguments: Vec<OsString>) -> ExitCode {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+fn language_server() -> ExitCode {
+    let options = ox_lsp::Options {
+        flavor: |path| {
+            if checker::editor_code(path) {
+                ox_lsp::Flavor::Editor
+            } else {
+                ox_lsp::Flavor::Plain
+            }
+        },
+        editor: oxmacs_ox::checking_isolate,
+        roots: checker::check_roots,
+    };
+    match ox_lsp::serve(&options) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("ox lsp: {error}");
+            ExitCode::FAILURE
+        }
     }
 }
 

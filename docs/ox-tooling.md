@@ -85,3 +85,41 @@ Settled with the user on 2026-10-23.
 - **Where it runs.** `ox fmt PATH…` formats files and folders in place; `ox fmt --check` lists files that need it and fails, for CI. In oxmacs, `TAB` and `RET` indent with the same rules, `TAB` completes once the line is indented, `C-c C-f` formats the buffer, and every save of an `.ox` file formats it first, like gofmt.
 
 Phase 4 is done.
+
+## `ox lsp`
+
+Built on 2026-10-23 while the user was away.
+
+- **What it does.** `ox lsp` speaks the Language Server Protocol over stdio. It publishes `ox check`'s findings as you type, and answers completion, hover (signature and doc), signature help, go to definition, references, rename, formatting with `ox fmt`, and document symbols.
+- **Where answers come from.** The open file's own top-level definitions are read statically (`ox::names::definitions`), so they work before anything runs; everything else comes from a checking isolate, with the editor's natives for plugin files and init.ox exactly as `ox check` decides. Definitions in other open files are found too, and library definitions with a file on disk.
+- **Shared code.** The call at point, the symbol at point, usages and top-level definitions live in `ox::names`, used by both oxmacs and the server.
+- **Crates.** `crates/ox-lsp` on `lsp-server`, the protocol scaffold rust-analyzer uses; responses are plain JSON, so it doesn't depend on `lsp-types`. `ox-cli` passes in how to pick and build isolates, so the server itself only depends on `ox`.
+
+Setting it up elsewhere:
+
+- **Helix** (`languages.toml`):
+
+  ```toml
+  [language-server.ox]
+  command = "ox"
+  args = ["lsp"]
+
+  [[language]]
+  name = "ox"
+  scope = "source.ox"
+  file-types = ["ox"]
+  comment-token = ";"
+  language-servers = ["ox"]
+  ```
+
+- **Neovim** (0.11):
+
+  ```lua
+  vim.filetype.add({ extension = { ox = "ox" } })
+  vim.lsp.config("ox", { cmd = { "ox", "lsp" }, filetypes = { "ox" }, root_markers = { "init.ox", ".git" } })
+  vim.lsp.enable("ox")
+  ```
+
+- **VS Code** needs a small extension to start a server for a new language; that waits for the tree-sitter grammar in phase 9, which also gives the other editors highlighting.
+
+Phase 5 is done.

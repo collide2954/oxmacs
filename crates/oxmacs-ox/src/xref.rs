@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use ox::Isolate;
 use ox::describe::Kind;
-use ox::read::{self, Datum, Syntax};
+use ox::names;
 use ox::span::line_column;
 use oxmacs_core::editor::Editor;
 
@@ -43,39 +43,10 @@ pub(crate) fn find_definition(isolate: &Isolate, editor: &mut Editor, home: Opti
     }
 }
 
-fn short(name: &str) -> &str {
-    match name.split_once('/') {
-        Some((alias, rest)) if !alias.is_empty() && !rest.is_empty() => rest,
-        _ => name,
-    }
-}
-
-fn walk(syntax: &Syntax, wanted: &str, found: &mut Vec<u32>) {
-    match &syntax.datum {
-        Datum::Symbol(name) if short(name) == wanted => found.push(syntax.span.start),
-        Datum::List(items)
-        | Datum::Vector(items)
-        | Datum::Map(items)
-        | Datum::Set(items)
-        | Datum::Record(_, items) => {
-            for item in items {
-                walk(item, wanted, found);
-            }
-        }
-        _ => {}
-    }
-}
-
 fn usages_in(text: &str, wanted: &str) -> Vec<(usize, usize)> {
-    let (forms, _) = read::read(text);
-    let mut starts = Vec::new();
-    for form in &forms {
-        walk(form, wanted, &mut starts);
-    }
-    starts.sort_unstable();
-    starts
+    names::occurrences(text, wanted)
         .into_iter()
-        .map(|start| line_column(text, start))
+        .map(|span| line_column(text, span.start))
         .collect()
 }
 
@@ -187,7 +158,7 @@ pub(crate) fn show_usages(editor: &mut Editor, home: Option<&Path>) {
         editor.show_message("There is no Ox name at point");
         return;
     };
-    let wanted = short(&name).to_owned();
+    let wanted = names::short(&name).to_owned();
     let folder = editor
         .buffer()
         .file()

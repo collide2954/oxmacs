@@ -8,6 +8,7 @@ pub mod format;
 pub mod heap;
 mod isolate;
 mod library;
+pub mod names;
 pub mod native;
 mod portable;
 pub mod profile;

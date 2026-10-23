@@ -45,6 +45,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `ox lsp`, a language server for Ox in other editors such as Helix and Neovim: checker findings as you type, completion, hover docs, signature help, go to definition, references, rename, formatting and document symbols. It uses the `lsp-server` crate.
 - `ox fmt` formats Ox code in the Clojure style, keeping your line breaks, and `ox fmt --check` fails in CI when a file needs it. In oxmacs, `TAB` and `RET` indent Ox the same way, `C-c C-f` formats the buffer, and saving an `.ox` file formats it.
 - In Ox buffers and the Ox REPL, the echo area shows the signature of the call at point with the first sentence of its doc, and `C-c C-d` opens `*ox doc*` for the name at point: what it is, where it is defined, its signature, its doc and the tests named after it as examples.
 - Every function, macro and special form that Ox and the editor provide has docs.
