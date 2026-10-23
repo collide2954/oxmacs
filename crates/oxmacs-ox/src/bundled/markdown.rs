@@ -57,6 +57,20 @@ fn pages_wrap_to_their_width_and_keep_their_links_and_code() {
 }
 
 #[test]
+fn a_link_of_several_words_is_one_link() {
+    let (_home, mut editor, mut ox) = started();
+
+    assert_eq!(
+        eval(
+            &mut editor,
+            &mut ox,
+            r#"(get (md/render "See [the start page](start), then [more](next)." 80) :links)"#
+        ),
+        r#"[{start: 4 end: 18 target: "start" line: 0} {start: 25 end: 29 target: "next" line: 0}]"#
+    );
+}
+
+#[test]
 fn a_markdown_buffer_previews_beside_and_follows_its_links() {
     let (home, mut editor, mut ox) = started();
     let readme = home.path().join("README.md");

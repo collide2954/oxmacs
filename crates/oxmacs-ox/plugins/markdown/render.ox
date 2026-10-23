@@ -46,6 +46,12 @@
 (def (width-of word)
   (reduce + 0 (map (fn [chunk] (string/length chunk.text)) word)))
 
+(def (linked links start end target)
+  (let [previous (peek links)]
+    (if (and previous (= previous.target target) (<= (- start previous.end) 1))
+      (conj (pop links) (assoc previous :end end))
+      (conj links {start: start end: end target: target}))))
+
 (def (lay prefix line)
   (reduce (fn [acc chunk]
             (let [gap (if (and chunk.space (> (count acc.pieces) 1)) 1 0)
@@ -54,7 +60,7 @@
                   pieces (if (= gap 1) (conj acc.pieces " ") acc.pieces)]
               {column: end
                pieces: (conj pieces (if chunk.face [chunk.text chunk.face] chunk.text))
-               links: (if chunk.target (conj acc.links {start: start end: end target: chunk.target}) acc.links)}))
+               links: (if chunk.target (linked acc.links start end chunk.target) acc.links)}))
           {column: (string/length prefix) pieces: [prefix] links: []}
           line))
 
@@ -96,14 +102,21 @@
       [(= para.kind :bullet) (add-lines page (wrap (inline para.text) width :lead "  • " :indent "    "))]
       [else (add-lines page (wrap (inline para.text) width))])))
 
+(def ox-fences #{"" "ox" "clojure"})
+
 (def (code-block page)
   (let [source page.code
         top (count page.lines)
-        shown (map (fn [pieces] (vec (cons "    " pieces))) (ox-highlight source))]
+        ox (contains? ox-fences page.fence)
+        shown (if ox
+                (map (fn [pieces] (vec (cons "    " pieces))) (ox-highlight source))
+                (map (fn [line] ["    " [line :string]]) source))]
     (assoc page
            :code nil
            :lines (into page.lines shown)
-           :blocks (conj page.blocks {first: top last: (+ top (count source) -1) source: (string/join "\n" source)}))))
+           :blocks (if ox
+                     (conj page.blocks {first: top last: (+ top (count source) -1) source: (string/join "\n" source)})
+                     page.blocks))))
 
 (def (heading page text)
   (let [page (blank page)]
@@ -116,7 +129,7 @@
     [(some? page.code) (if (string/starts-with? line "```")
                          (code-block page)
                          (update page :code conj line))]
-    [(string/starts-with? line "```") (assoc (flush page width) :code [])]
+    [(string/starts-with? line "```") (assoc (flush page width) :code [] :fence (string/trim (string/slice line 3)))]
     [(string/blank? line) (blank (flush page width))]
     [(string/starts-with? line "# ") (blank (heading (flush page width) (string/slice line 2)))]
     [(string/starts-with? line "## ") (heading (flush page width) (string/slice line 3))]
@@ -125,9 +138,9 @@
     [else (assoc page :para {kind: :text text: (string/trim line)})]))
 
 (def (render text width)
-  "Renders a page of Markdown at width: a map of :lines for open-buffer, :links with their :line, :start, :end and :target, :headings with their :line and :title, and :blocks of code with their :first and :last line and :source."
+  "Renders a page of Markdown at width: a map of :lines for open-buffer, :links with their :line, :start, :end and :target, :headings with their :line and :title, and :blocks of Ox code with their :first and :last line and :source. Fences marked text, or any language but ox, show as plain text."
   (let [page (reduce (fn [page line] (step page line width))
-                     {lines: [] links: [] headings: [] blocks: [] para: nil code: nil}
+                     {lines: [] links: [] headings: [] blocks: [] para: nil code: nil fence: nil}
                      (string/lines text))
         page (if (some? page.code) (code-block page) (flush page width))]
-    (dissoc page :para :code)))
+    (dissoc page :para :code :fence)))

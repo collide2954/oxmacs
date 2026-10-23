@@ -13,7 +13,25 @@ pub const BUNDLED: &[Bundle] = &[
     LIFE,
     REMOTE,
     MARKDOWN,
+    MANUAL,
 ];
+
+const MANUAL: Bundle = Bundle {
+    name: "manual",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/manual/plugin.ox")),
+        ("manual.ox", include_str!("../plugins/manual/manual.ox")),
+        ("start.ox", include_str!("../plugins/manual/start.ox")),
+        ("language.ox", include_str!("../plugins/manual/language.ox")),
+        ("data.ox", include_str!("../plugins/manual/data.ox")),
+        ("flow.ox", include_str!("../plugins/manual/flow.ox")),
+        ("tasks.ox", include_str!("../plugins/manual/tasks.ox")),
+        ("editor.ox", include_str!("../plugins/manual/editor.ox")),
+        ("plugins.ox", include_str!("../plugins/manual/plugins.ox")),
+        ("tools.ox", include_str!("../plugins/manual/tools.ox")),
+        ("tutorial.ox", include_str!("../plugins/manual/tutorial.ox")),
+    ],
+};
 
 const MARKDOWN: Bundle = Bundle {
     name: "markdown",
@@ -429,6 +447,9 @@ mod remote;
 
 #[cfg(test)]
 mod markdown;
+
+#[cfg(test)]
+mod manual;
 
 #[cfg(test)]
 mod dired {
