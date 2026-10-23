@@ -117,7 +117,7 @@ type Step = Result<Flow, Error>;
 
 enum Target {
     Code(Rc<Code>),
-    Native(Rc<NativeFn>, Sym),
+    Native(Rc<NativeFn>, Sym, bool),
     Control(Control),
     Data,
 }
@@ -659,8 +659,28 @@ impl Runtime {
         native.check(count)?;
         Ok(match native.control {
             Some(control) => Target::Control(control),
-            None => Target::Native(Rc::clone(&native.function), native.name),
+            None => Target::Native(Rc::clone(&native.function), native.name, native.awaits),
         })
+    }
+
+    fn promised(&self, arguments: &[Value]) -> Option<(usize, Value)> {
+        arguments
+            .iter()
+            .position(|argument| self.heap.promise_of(*argument).is_some())
+            .map(|index| (index, arguments[index]))
+    }
+
+    fn await_argument(
+        &self,
+        machine: &mut Machine,
+        slot: usize,
+        arguments: &std::ops::RangeInclusive<usize>,
+    ) -> Flow {
+        let Some((index, promise)) = self.promised(&machine.stack[arguments.clone()]) else {
+            return Flow::Next;
+        };
+        machine.pc -= 1;
+        Flow::Await(promise, Landing::Register(slot + 1 + index))
     }
 
     fn call(&mut self, machine: &mut Machine, base: u16, count: u16, host: &mut dyn Any) -> Step {
@@ -676,6 +696,7 @@ impl Runtime {
         result: usize,
         host: &mut dyn Any,
     ) -> Step {
+        let spread = self.apply != Value::Nil && machine.stack[slot] == self.apply;
         let count = self.arguments(machine, slot, count)?;
         let callee = self.constructor_of(machine.stack[slot]);
         let arguments = slot + 1..=slot + count;
@@ -687,7 +708,12 @@ impl Runtime {
                 let binding = bind(&mut self.heap, &function, &machine.stack[arguments])?;
                 machine.enter(function, callee, slot, result, binding)?;
             }
-            Target::Native(function, name) => {
+            Target::Native(_, _, true)
+                if !spread && self.promised(&machine.stack[arguments.clone()]).is_some() =>
+            {
+                return Ok(self.await_argument(machine, slot, &arguments));
+            }
+            Target::Native(function, name, _) => {
                 let started = self.profiler.is_some().then(Instant::now);
                 machine.stack[result] = function(&mut self.heap, host, &machine.stack[arguments])?;
                 self.timed(name, started, machine);
@@ -742,6 +768,7 @@ impl Runtime {
         host: &mut dyn Any,
     ) -> Step {
         let slot = machine.base + usize::from(base);
+        let spread = self.apply != Value::Nil && machine.stack[slot] == self.apply;
         let count = self.arguments(machine, slot, count)?;
         let callee = self.constructor_of(machine.stack[slot]);
         let arguments = slot + 1..=slot + count;
@@ -754,7 +781,12 @@ impl Runtime {
                 machine.replace(function, callee, slot, count, binding);
                 return Ok(Flow::Next);
             }
-            Target::Native(function, name) => {
+            Target::Native(_, _, true)
+                if !spread && self.promised(&machine.stack[arguments.clone()]).is_some() =>
+            {
+                return Ok(self.await_argument(machine, slot, &arguments));
+            }
+            Target::Native(function, name, _) => {
                 let started = self.profiler.is_some().then(Instant::now);
                 let result = function(&mut self.heap, host, &machine.stack[arguments])?;
                 self.timed(name, started, machine);

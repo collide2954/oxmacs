@@ -34,6 +34,7 @@ pub struct Native {
     pub most: Option<usize>,
     pub function: Rc<NativeFn>,
     pub control: Option<Control>,
+    pub awaits: bool,
 }
 
 impl fmt::Debug for Native {

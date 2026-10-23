@@ -499,6 +499,39 @@ impl Isolate {
         self.install_native("ox", name, least, most, function, Some(control));
     }
 
+    pub fn define_native_awaiting(
+        &mut self,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
+    ) {
+        self.define_native_awaiting_in("ox", name, least, most, function);
+    }
+
+    pub fn define_native_awaiting_in(
+        &mut self,
+        module: &str,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
+    ) {
+        let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
+        self.install(
+            module,
+            name,
+            Native {
+                name: Sym::intern(&shown_name(module, name)),
+                least,
+                most,
+                function,
+                control: None,
+                awaits: true,
+            },
+        );
+    }
+
     fn install_native(
         &mut self,
         module: &str,
@@ -508,14 +541,23 @@ impl Isolate {
         function: Rc<NativeFn>,
         control: Option<Control>,
     ) {
+        self.install(
+            module,
+            name,
+            Native {
+                name: Sym::intern(&shown_name(module, name)),
+                least,
+                most,
+                function,
+                control,
+                awaits: false,
+            },
+        );
+    }
+
+    fn install(&mut self, module: &str, name: &str, native: Native) {
         let place = self.runtime.module_named(module);
-        if let Ok(value) = self.runtime.heap.native(Native {
-            name: Sym::intern(&shown_name(module, name)),
-            least,
-            most,
-            function,
-            control,
-        }) {
+        if let Ok(value) = self.runtime.heap.native(native) {
             self.runtime.define(place, Sym::intern(name), value);
         }
     }
