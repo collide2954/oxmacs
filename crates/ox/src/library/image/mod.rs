@@ -1,0 +1,236 @@
+mod colors;
+mod io;
+
+use std::sync::Arc;
+
+use image::RgbaImage;
+
+pub use colors::set_faces;
+
+use crate::error::{Error, ErrorKind};
+use crate::heap::Heap;
+use crate::isolate::Isolate;
+use crate::portable::{Failure, Portable};
+use crate::symbol::Sym;
+use crate::value::{Value, print};
+use crate::vm::build::{full, make_map, make_vector};
+
+const MODULE: &str = "ox/image";
+const KIND: &str = "image";
+
+#[derive(Debug, Clone)]
+pub struct Image {
+    pub pixels: RgbaImage,
+    pub format: Option<String>,
+    pub alpha: bool,
+    pub exif: Option<Vec<u8>>,
+    pub icc: Option<Vec<u8>>,
+    pub xmp: Option<Vec<u8>>,
+}
+
+impl Image {
+    pub fn new(pixels: RgbaImage) -> Self {
+        Self {
+            pixels,
+            format: None,
+            alpha: true,
+            exif: None,
+            icc: None,
+            xmp: None,
+        }
+    }
+}
+
+pub fn image_of(heap: &Heap, value: Value) -> Option<Arc<Image>> {
+    heap.shared_of::<Image>(value)
+}
+
+fn wanted(heap: &Heap, name: &str, value: Value) -> Result<Arc<Image>, Error> {
+    image_of(heap, value).ok_or_else(|| {
+        Error::new(format!(
+            "image/{name} expects an image, got {}",
+            print::write(heap, value)
+        ))
+        .of(ErrorKind::Type)
+    })
+}
+
+fn stored(heap: &mut Heap, image: Image) -> Result<Value, Error> {
+    heap.shared(KIND, Arc::new(image)).map_err(full)
+}
+
+fn portable(image: Image) -> Portable {
+    Portable::Foreign(Sym::intern(KIND), Arc::new(image))
+}
+
+fn failure(message: String) -> Failure {
+    Failure {
+        value: None,
+        message,
+    }
+}
+
+fn later(
+    heap: &mut Heap,
+    name: &str,
+    work: impl FnOnce() -> Result<Image, String> + Send + 'static,
+) -> Result<Value, Error> {
+    heap.background(&format!("ox image/{name}"), move || {
+        work().map(portable).map_err(failure)
+    })
+}
+
+fn text<'a>(heap: &'a Heap, name: &str, what: &str, value: Value) -> Result<&'a str, Error> {
+    heap.text(value).ok_or_else(|| {
+        Error::new(format!(
+            "image/{name} expects {what}, got {}",
+            print::write(heap, value)
+        ))
+        .of(ErrorKind::Type)
+    })
+}
+
+fn number(heap: &Heap, name: &str, what: &str, value: Value) -> Result<f64, Error> {
+    match value {
+        Value::Int(number) => Ok(crate::value::number::to_float(number)),
+        Value::Float(number) => Ok(number),
+        _ => Err(Error::new(format!(
+            "image/{name} expects {what} as a number, got {}",
+            print::write(heap, value)
+        ))
+        .of(ErrorKind::Type)),
+    }
+}
+
+fn size(heap: &Heap, name: &str, what: &str, value: Value) -> Result<u32, Error> {
+    match value {
+        Value::Int(number) => u32::try_from(number).ok().filter(|size| *size > 0),
+        _ => None,
+    }
+    .ok_or_else(|| {
+        Error::new(format!(
+            "image/{name} expects {what} as a whole number above 0, got {}",
+            print::write(heap, value)
+        ))
+        .of(ErrorKind::Type)
+    })
+}
+
+struct Options<'a> {
+    name: &'static str,
+    pairs: Vec<(&'a str, Value)>,
+}
+
+impl<'a> Options<'a> {
+    fn read(
+        heap: &Heap,
+        name: &'static str,
+        rest: &'a [Value],
+        known: &[&str],
+    ) -> Result<Self, Error> {
+        let mut pairs = Vec::new();
+        for pair in rest.chunks(2) {
+            match pair {
+                [Value::Keyword(key), value] if known.contains(&key.name()) => {
+                    pairs.push((key.name(), *value));
+                }
+                [other, ..] => {
+                    let listed: Vec<String> = known.iter().map(|key| format!(":{key}")).collect();
+                    return Err(Error::new(format!(
+                        "image/{name} takes {}, not {}",
+                        listed.join(", "),
+                        print::write(heap, *other)
+                    ))
+                    .of(ErrorKind::Arity));
+                }
+                [] => {}
+            }
+        }
+        Ok(Self { name, pairs })
+    }
+
+    fn get(&self, key: &str) -> Option<Value> {
+        self.pairs
+            .iter()
+            .rev()
+            .find(|(known, _)| *known == key)
+            .map(|(_, value)| *value)
+    }
+
+    fn number(&self, heap: &Heap, key: &str, default: f64) -> Result<f64, Error> {
+        self.get(key).map_or(Ok(default), |value| {
+            number(heap, self.name, &format!(":{key}"), value)
+        })
+    }
+}
+
+fn keyword_value(name: &str) -> Value {
+    Value::Keyword(Sym::intern(name))
+}
+
+fn int(number: u32) -> Value {
+    Value::Int(i64::from(number))
+}
+
+fn info(heap: &mut Heap, image: &Image) -> Result<Value, Error> {
+    let format = match &image.format {
+        Some(format) => heap.string(format).map_err(full)?,
+        None => Value::Nil,
+    };
+    make_map(
+        heap,
+        &[
+            keyword_value("width"),
+            int(image.pixels.width()),
+            keyword_value("height"),
+            int(image.pixels.height()),
+            keyword_value("format"),
+            format,
+            keyword_value("alpha"),
+            Value::Bool(image.alpha),
+        ],
+    )
+}
+
+fn color_value(heap: &mut Heap, color: image::Rgba<u8>) -> Result<Value, Error> {
+    let channels: Vec<Value> = color
+        .0
+        .iter()
+        .map(|channel| Value::Int(i64::from(*channel)))
+        .collect();
+    make_vector(heap, &channels)
+}
+
+pub fn install(isolate: &mut Isolate) {
+    isolate.define_native_in(MODULE, "image?", 1, Some(1), |heap, arguments| {
+        Ok(Value::Bool(image_of(heap, arguments[0]).is_some()))
+    });
+    isolate.define_native_in(MODULE, "color", 1, Some(1), |heap, arguments| {
+        let color = colors::color(heap, "color", arguments[0])?;
+        color_value(heap, color)
+    });
+    isolate.define_native_in(MODULE, "new", 2, Some(4), |heap, arguments| {
+        let width = size(heap, "new", "a width", arguments[0])?;
+        let height = size(heap, "new", "a height", arguments[1])?;
+        let options = Options::read(heap, "new", &arguments[2..], &["color"])?;
+        let color = match options.get("color") {
+            Some(value) => colors::color(heap, "new", value)?,
+            None => image::Rgba([0, 0, 0, 0]),
+        };
+        stored(
+            heap,
+            Image::new(RgbaImage::from_pixel(width, height, color)),
+        )
+    });
+    isolate.define_native_awaiting_in(MODULE, "info", 1, Some(1), |heap, arguments| {
+        let image = wanted(heap, "info", arguments[0])?;
+        info(heap, &image)
+    });
+    isolate.define_native_awaiting_in(MODULE, "width", 1, Some(1), |heap, arguments| {
+        Ok(int(wanted(heap, "width", arguments[0])?.pixels.width()))
+    });
+    isolate.define_native_awaiting_in(MODULE, "height", 1, Some(1), |heap, arguments| {
+        Ok(int(wanted(heap, "height", arguments[0])?.pixels.height()))
+    });
+    io::install(isolate);
+}

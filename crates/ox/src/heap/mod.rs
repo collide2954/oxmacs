@@ -530,6 +530,13 @@ impl Heap {
         self.holding(name, Holder::Shared(value))
     }
 
+    pub fn shared_of<T: Any + Send + Sync>(&self, value: Value) -> Option<Arc<T>> {
+        match &self.foreign_entry(value)?.holder {
+            Holder::Shared(shared) => Arc::clone(shared).downcast::<T>().ok(),
+            Holder::Local(_) => None,
+        }
+    }
+
     pub fn foreign_of<T: Any>(&self, value: Value) -> Option<&T> {
         self.foreign_entry(value)?.get()
     }

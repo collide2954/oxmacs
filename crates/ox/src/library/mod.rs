@@ -4,6 +4,7 @@ mod csv;
 mod errors;
 mod files;
 mod http;
+pub mod image;
 mod json;
 mod net;
 pub(crate) mod numbers;
@@ -87,6 +88,7 @@ pub fn install(isolate: &mut Isolate) {
     files::install(isolate);
     process::install(isolate);
     regex::install(isolate);
+    image::install(isolate);
     isolate.define_native("=", 1, None, |heap, arguments| {
         Ok(Value::Bool(all_equal(heap, arguments)))
     });
