@@ -4,6 +4,7 @@ use std::thread::{self, JoinHandle};
 use super::Heap;
 use crate::error::Error;
 use crate::portable::{Failure, Portable, Signal};
+use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::promise::Promise;
 
@@ -16,9 +17,43 @@ pub(crate) struct Job {
     thread: JoinHandle<()>,
 }
 
+fn portable(json: serde_json::Value) -> Portable {
+    match json {
+        serde_json::Value::Null => Portable::Nil,
+        serde_json::Value::Bool(flag) => Portable::Bool(flag),
+        serde_json::Value::Number(number) => number.as_i64().map_or_else(
+            || Portable::Float(number.as_f64().unwrap_or(f64::NAN)),
+            Portable::Int,
+        ),
+        serde_json::Value::String(text) => Portable::String(text.into()),
+        serde_json::Value::Array(items) => {
+            Portable::Vector(items.into_iter().map(portable).collect())
+        }
+        serde_json::Value::Object(entries) => Portable::Map(
+            entries
+                .into_iter()
+                .map(|(key, value)| (Portable::Keyword(Sym::intern(&key)), portable(value)))
+                .collect(),
+        ),
+    }
+}
+
 impl Heap {
     pub(crate) fn signal(&self) -> &Arc<Signal> {
         &self.signal
+    }
+
+    pub fn background_json(
+        &mut self,
+        name: &str,
+        work: impl FnOnce() -> Result<serde_json::Value, String> + Send + 'static,
+    ) -> Result<Value, Error> {
+        self.background(name, move || {
+            work().map(portable).map_err(|message| Failure {
+                value: None,
+                message,
+            })
+        })
     }
 
     pub(crate) fn background(

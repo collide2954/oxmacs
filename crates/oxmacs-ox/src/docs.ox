@@ -1,5 +1,8 @@
 (message text) "Shows text in the echo area."
 (set-mode-line key text) "Shows text in the mode line under key, replacing what key showed before; nil takes it away."
+(clipboard-set text) "Puts text on the system clipboard without adding it to the kill ring, for secrets."
+(notify title body) "Shows a desktop notification with title and body."
+(window-focused?) "True while the oxmacs window has the keyboard focus."
 (define-command name summary f) "Adds an M-x command called name that calls f. defcommand is the usual way to write one."
 (bind-key keys command) "Binds a key sequence such as \"C-c g\" to a command everywhere."
 (run-command command) "Runs a command by name, as M-x would, such as (run-command 'load-theme)."

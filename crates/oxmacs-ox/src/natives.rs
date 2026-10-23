@@ -42,11 +42,23 @@ pub fn install(isolate: &mut Isolate) {
         set_mode_line(heap, editor, arguments);
         Ok(Value::Nil)
     });
+    isolate.define_host_native::<Editor>("clipboard-set", 1, Some(1), |heap, editor, arguments| {
+        editor.copy_secret(print::display(heap, arguments[0]));
+        Ok(Value::Nil)
+    });
+    isolate.define_host_native::<Editor>("notify", 2, Some(2), |heap, editor, arguments| {
+        let title = print::display(heap, arguments[0]);
+        editor.notify(title, print::display(heap, arguments[1]));
+        Ok(Value::Nil)
+    });
+    isolate.define_host_native::<Editor>("window-focused?", 0, Some(0), |_, editor, _| {
+        Ok(Value::Bool(editor.focused()))
+    });
 }
 
 #[cfg(test)]
 mod tests {
-    use oxmacs_core::editor::Editor;
+    use oxmacs_core::editor::{Editor, Effect};
 
     use crate::Ox;
 
@@ -72,5 +84,32 @@ mod tests {
         )
         .unwrap();
         assert_eq!(editor.mode_line_segments(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn ox_copies_secrets_notifies_and_knows_about_focus() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        editor.set_focused(false);
+
+        let focused = ox
+            .eval(
+                &mut editor,
+                r##"(clipboard-set "hunter2") (notify "#oxmacs" "ana: hi") (window-focused?)"##,
+            )
+            .unwrap();
+
+        assert_eq!(focused, "false");
+        assert_eq!(
+            editor.take_effects(),
+            [
+                Effect::WriteClipboard("hunter2".to_owned()),
+                Effect::Notify {
+                    title: "#oxmacs".to_owned(),
+                    body: "ana: hi".to_owned()
+                }
+            ]
+        );
+        assert_eq!(editor.clipboard_history(), Vec::<String>::new());
     }
 }

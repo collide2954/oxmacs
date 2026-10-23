@@ -91,3 +91,110 @@ fn query_text_is_percent_encoded() {
         "error: http/get expects a string, got 5"
     );
 }
+
+fn echo() -> (String, thread::JoinHandle<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut seen = Vec::new();
+        let mut chunk = [0_u8; 4096];
+        loop {
+            let read = stream.read(&mut chunk).unwrap();
+            seen.extend_from_slice(&chunk[..read]);
+            let text = String::from_utf8_lossy(&seen).to_string();
+            if let Some((head, body)) = text.split_once("\r\n\r\n") {
+                let wanted = head
+                    .lines()
+                    .find_map(|line| {
+                        line.to_ascii_lowercase()
+                            .strip_prefix("content-length: ")
+                            .map(str::to_owned)
+                    })
+                    .and_then(|length| length.trim().parse::<usize>().ok())
+                    .unwrap_or(0);
+                if body.len() >= wanted || read == 0 {
+                    break;
+                }
+            }
+        }
+        let request = String::from_utf8_lossy(&seen).to_string();
+        let reply = "<multistatus/>";
+        stream
+            .write_all(
+                format!(
+                    "HTTP/1.1 207 Multi-Status\r\nContent-Type: text/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                    reply.len()
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+        request
+    });
+    (format!("http://{address}/calendars/ana/"), server)
+}
+
+#[test]
+fn requests_take_any_method_headers_a_body_and_a_login() {
+    let (url, server) = echo();
+    let mut isolate = Isolate::new();
+
+    let reply = evaluated(
+        &mut isolate,
+        &format!(
+            "(module (import (ox http))) (let [reply (await (http/request :propfind \"{url}\" :headers {{depth: \"1\" content-type: \"application/xml\"}} :body \"<propfind/>\" :user \"ana\" :password \"secret\"))] [reply.status reply.body])"
+        ),
+    );
+
+    assert_eq!(reply, r#"[207 "<multistatus/>"]"#);
+    let request = server.join().unwrap();
+    let lower = request.to_ascii_lowercase();
+    assert!(
+        request.starts_with("PROPFIND /calendars/ana/ HTTP/1.1\r\n"),
+        "{request}"
+    );
+    assert!(lower.contains("\r\ndepth: 1\r\n"), "{request}");
+    assert!(
+        lower.contains("\r\ncontent-type: application/xml\r\n"),
+        "{request}"
+    );
+    assert!(
+        lower.contains("\r\nauthorization: basic yw5honnly3jlda==\r\n"),
+        "{request}"
+    );
+    assert!(request.ends_with("\r\n\r\n<propfind/>"), "{request}");
+}
+
+#[test]
+fn requests_without_a_body_send_none() {
+    let (url, server) = echo();
+    let mut isolate = Isolate::new();
+
+    let reply = evaluated(
+        &mut isolate,
+        &format!(
+            "(module (import (ox http))) (get (await (http/request \"DELETE\" \"{url}\")) :status)"
+        ),
+    );
+
+    assert_eq!(reply, "207");
+    assert!(
+        server
+            .join()
+            .unwrap()
+            .starts_with("DELETE /calendars/ana/ HTTP/1.1\r\n")
+    );
+}
+
+#[test]
+fn request_options_are_checked() {
+    let mut isolate = Isolate::new();
+
+    assert_eq!(
+        evaluated(
+            &mut isolate,
+            "(module (import (ox http))) (http/request :get \"http://localhost/\" :colour \"red\")"
+        ),
+        "error: http/request takes :headers, :body, :user and :password, not :colour"
+    );
+}

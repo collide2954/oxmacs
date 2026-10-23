@@ -48,6 +48,7 @@ pub enum Effect {
     StartServer(ServerId, Launch),
     ToServer(ServerId, String),
     StopServer(ServerId),
+    Notify { title: String, body: String },
 }
 
 impl Editor {

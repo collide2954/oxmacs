@@ -17,6 +17,25 @@ impl Editor {
         self.effects.push(Effect::WriteClipboard(text));
     }
 
+    pub fn copy_secret(&mut self, text: impl Into<String>) {
+        self.effects.push(Effect::WriteClipboard(text.into()));
+    }
+
+    pub fn notify(&mut self, title: impl Into<String>, body: impl Into<String>) {
+        self.effects.push(Effect::Notify {
+            title: title.into(),
+            body: body.into(),
+        });
+    }
+
+    pub fn set_focused(&mut self, focused: bool) {
+        self.focused = focused;
+    }
+
+    pub fn focused(&self) -> bool {
+        self.focused
+    }
+
     pub(in crate::editor) fn copy(&mut self, cut: bool) {
         self.shift_selection = false;
         let buffer = self.current_mut();
@@ -402,5 +421,28 @@ mod tests {
 
         assert_eq!(editor.clipboard_history().len(), 50);
         assert_eq!(editor.clipboard_history()[0], "59\n");
+    }
+
+    #[test]
+    fn secrets_reach_the_clipboard_but_not_the_kill_ring() {
+        let mut editor = Editor::new();
+
+        editor.copy_secret("hunter2");
+        editor.notify("Vault", "Copied for 30 seconds");
+
+        assert_eq!(
+            editor.take_effects(),
+            [
+                Effect::WriteClipboard("hunter2".to_owned()),
+                Effect::Notify {
+                    title: "Vault".to_owned(),
+                    body: "Copied for 30 seconds".to_owned()
+                }
+            ]
+        );
+        assert_eq!(editor.clipboard_history(), Vec::<String>::new());
+        assert!(editor.focused());
+        editor.set_focused(false);
+        assert!(!editor.focused());
     }
 }

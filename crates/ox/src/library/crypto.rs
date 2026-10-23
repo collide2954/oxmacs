@@ -40,7 +40,7 @@ fn unhex(text: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-fn to_base64(bytes: &[u8]) -> String {
+pub(crate) fn to_base64(bytes: &[u8]) -> String {
     let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         let joined = chunk.iter().enumerate().fold(0_u32, |all, (at, byte)| {

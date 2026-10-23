@@ -185,6 +185,7 @@
 
 (http/get url) "A promise of the response to a GET of url, as a map of :status, :headers and :body."
 (http/encode text) "text made safe for a URL, with other characters written as %XX."
+(http/request method url {headers nil body nil user nil password nil}) "A promise of the response to a request with any method, such as :put or :propfind, as a map of :status, :headers and :body. :headers is a map, :body the text to send, and :user and :password log in with HTTP basic authentication."
 (net/connect host port {tls false}) "A promise of a connection to host on port, encrypted with :tls true: a map whose :lines channel gives each line the server sends and is closed when the connection ends."
 (net/send connection line) "Sends line to the server, ending it with CR LF; false when the connection has ended."
 (net/close connection) "Ends the connection once what was sent has gone out."
@@ -196,6 +197,7 @@
 (crypto/sha256 text) "The SHA-256 digest of text, as hex."
 (crypto/to-base64 text) "text written as base64."
 (crypto/from-base64 encoded) "The text that base64 encoded holds."
+(csv/read text {header false}) "The rows of comma-separated text as vectors of strings, with quoted fields that may hold commas, quotes and new lines. With :header true the first row names the fields and each other row becomes a map from those names."
 
 (time/now) "Milliseconds since the start of 1970, UTC."
 (time/local millis) "The local date and time of a moment, as a map of :year, :month, :day, :hour, :minute, :second and :weekday."

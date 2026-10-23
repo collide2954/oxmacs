@@ -1,5 +1,6 @@
 pub(crate) mod collections;
-mod crypto;
+pub(crate) mod crypto;
+mod csv;
 mod errors;
 mod files;
 mod http;
@@ -79,6 +80,7 @@ pub fn install(isolate: &mut Isolate) {
     http::install(isolate);
     net::install(isolate);
     crypto::install(isolate);
+    csv::install(isolate);
     strings::install(isolate);
     ordering::install(isolate);
     paths::install(isolate);

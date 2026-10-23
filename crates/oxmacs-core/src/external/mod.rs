@@ -3,6 +3,7 @@ pub mod diagnostics;
 pub mod lsp;
 pub mod managed;
 pub mod net;
+pub mod notify;
 pub mod process;
 pub mod r;
 pub mod tools;

@@ -103,6 +103,10 @@ impl From<&Config> for Settings {
 }
 
 #[derive(Debug)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "the editor keeps a few independent flags"
+)]
 pub struct Editor {
     buffers: BufferList,
     windows: windows::Windows,
@@ -181,6 +185,7 @@ pub struct Editor {
     notes: Vec<notes::Note>,
     errors_from: build::errors::ErrorSource,
     lsp: lsp::Clients,
+    focused: bool,
     config: Config,
 }
 
@@ -278,6 +283,7 @@ impl Editor {
             notes: Vec::new(),
             errors_from: build::errors::ErrorSource::default(),
             lsp: lsp::Clients::default(),
+            focused: true,
             config: Config::default(),
         }
     }

@@ -69,3 +69,26 @@ fn held_values_survive_collection_until_released() {
     assert_eq!(isolate.write(back), r#""held text""#);
     assert_eq!(isolate.release(hold), None);
 }
+
+#[test]
+fn natives_can_hand_slow_work_to_a_thread_that_answers_with_json() {
+    let mut isolate = Isolate::new();
+    isolate.define_native("slow-lookup", 1, Some(1), |heap, arguments| {
+        let wanted = ox::value::print::display(heap, arguments[0]);
+        heap.background_json("slow-lookup", move || {
+            if wanted == "missing" {
+                return Err(format!("No {wanted} here"));
+            }
+            Ok(serde_json::json!({"name": wanted, "tags": ["a", "b"], "size": 2, "ratio": 0.5, "gone": null}))
+        })
+    });
+
+    let found = isolate
+        .eval(r#"(let [found (await (slow-lookup "mail"))] [found.name found.tags found.size found.ratio found.gone (try (await (slow-lookup "missing")) (catch error e e.message))])"#)
+        .unwrap();
+
+    assert_eq!(
+        isolate.write(found),
+        r#"["mail" ["a" "b"] 2 0.5 nil "No missing here"]"#
+    );
+}

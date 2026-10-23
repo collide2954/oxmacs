@@ -11,6 +11,7 @@ use jiff::Timestamp;
 use oxmacs_core::editor::{ConnectionId, Effect, Job, Outcome, ServerId, WindowId};
 use oxmacs_core::external::lsp;
 use oxmacs_core::external::net::{self, Endpoint};
+use oxmacs_core::external::notify;
 use oxmacs_core::external::process;
 use oxmacs_core::external::tools::{self, Probe, Tool};
 use oxmacs_core::theme::{Appearance, Theme as Faces};
@@ -107,6 +108,7 @@ impl App {
 
     fn focus_changed(&mut self, focused: bool) {
         self.focused_since = focused.then_some(self.now);
+        self.editor.set_focused(focused);
         if focused {
             self.editor.check_disk_changes();
         }
@@ -378,6 +380,10 @@ impl App {
                     let (_, server) = self.servers.remove(at);
                     server.kill();
                 }
+                Task::none()
+            }
+            Effect::Notify { title, body } => {
+                notify::send(&title, &body);
                 Task::none()
             }
             Effect::Disconnect(id) => {
