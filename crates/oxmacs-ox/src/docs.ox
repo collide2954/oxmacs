@@ -62,4 +62,4 @@
 (ui/button label {on-press nil}) "A button that calls :on-press when pressed."
 (ui/space (size)) "Empty space size across, or filling what is left."
 (ui/scrollable child) "child in an area that scrolls."
-(ui/canvas shapes {height nil}) "Draws shapes, :height tall: vectors like [:rect x y width height color], [:circle x y radius color], [:line x1 y1 x2 y2 color width] and [:text x y text color size]."
+(ui/canvas shapes {height nil relative false}) "Draws shapes, :height tall: vectors like [:rect x y width height color], [:circle x y radius color], [:line x1 y1 x2 y2 color width] and [:text x y text color size]. With :relative true, x positions and widths are fractions of the canvas's width, so a drawing fills whatever width it gets."

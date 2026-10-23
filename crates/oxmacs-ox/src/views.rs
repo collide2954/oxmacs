@@ -44,6 +44,7 @@ pub enum Node {
     Canvas {
         shapes: Vec<Shape>,
         height: Option<f32>,
+        relative: bool,
     },
 }
 
@@ -289,13 +290,18 @@ pub fn install(isolate: &mut Isolate) {
     });
     isolate.define_native_in(UI, "canvas", 1, None, |heap, arguments| {
         let drawn = shapes::shapes(heap, arguments[0])?;
-        let (found, rest) = options(heap, "canvas", &arguments[1..], &["height"])?;
+        let (found, rest) = options(heap, "canvas", &arguments[1..], &["height", "relative"])?;
         if let Some(extra) = rest.first() {
             return Err(wrong(heap, "canvas", "options after its shapes", *extra));
         }
         let mut height = None;
-        for (_, value) in found {
-            height = Some(size(heap, "canvas", value)?);
+        let mut relative = false;
+        for (option, value) in found {
+            if option == "relative" {
+                relative = value.truthy();
+            } else {
+                height = Some(size(heap, "canvas", value)?);
+            }
         }
         widget(
             heap,
@@ -303,6 +309,7 @@ pub fn install(isolate: &mut Isolate) {
             Node::Canvas {
                 shapes: drawn,
                 height,
+                relative,
             },
         )
     });

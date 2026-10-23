@@ -283,7 +283,7 @@
 
 (def (title-of html)
   (when-let [match (regex/find "(?is)<title[^>]*>(.*?)</title>" html)]
-    (string/trim (string/replace (get match.groups 1) "\n" " "))))
+    (string/trim (string/replace (first match.groups) "\n" " "))))
 
 (defcommand irc-preview "Fetch the page or image a link at point leads to and say what it is"
   (quietly (fn []

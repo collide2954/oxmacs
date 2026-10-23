@@ -258,6 +258,10 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_native_in(MODULE, "add", 2, Some(4), add);
     isolate.define_native_in(MODULE, "format", 2, Some(4), format);
     isolate.define_native_in(MODULE, "days-in-month", 2, Some(2), days_in_month);
+    isolate.define_native_in(MODULE, "zone", 0, Some(0), |heap, _| {
+        let zone = TimeZone::system();
+        heap.string(zone.iana_name().unwrap_or("UTC")).map_err(full)
+    });
     for (name, factor) in [
         ("millis", 1),
         ("seconds", 1_000),

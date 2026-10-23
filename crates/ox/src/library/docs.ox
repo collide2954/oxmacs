@@ -207,6 +207,7 @@
 (time/add millis amounts {zone nil}) "The moment amounts after millis, with amounts a map of :years, :months, :weeks, :days, :hours, :minutes and :seconds, any of them negative. Days and longer follow the calendar of :zone or the local zone, so a day across a daylight saving change is still a day."
 (time/format millis pattern {zone nil}) "The moment written with a strftime pattern such as \"%H:%M\" or \"%A %e %B %Y\", in :zone or the local zone."
 (time/days-in-month year month) "How many days month has in year."
+(time/zone) "The name of the local time zone, such as \"Europe/Paris\", or \"UTC\" when it has none."
 (time/parse text) "The date or date and time that text spells, such as 2026-10-22 or 2026-10-22T09:30, as a map like time/local gives."
 (time/millis n) "n milliseconds, in milliseconds."
 (time/seconds n) "n seconds, in milliseconds: (sleep (time/seconds 2))."

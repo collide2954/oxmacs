@@ -49,6 +49,7 @@ impl App {
     fn takeover<'a>(&'a self, shown: &'a Takeover, faces: Faces) -> Element<'a, Message> {
         let drawing = canvas(Drawing {
             shapes: &shown.shapes,
+            relative: false,
             background: Some(shown.background),
             faces,
             font: self.font,

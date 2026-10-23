@@ -68,6 +68,18 @@ The IRCv3 client is the bundled `irc` plugin in `crates/oxmacs-ox/plugins/irc`, 
 - **Logs.** With `logs` on, messages go to `irc/logs/<network>/<channel>/<day>.log` in the oxmacs home folder, one line each, and `M-x irc-search` lists the lines holding some text; `RET` visits one.
 - **Later.** Sending typing notifications (other people's typing shows in the mode line), images shown inline, and `CAP NEW` while connected.
 
+## Calendar
+
+The calendar is the bundled `calendar` plugin in `crates/oxmacs-ox/plugins/calendar`: `ics.ox` reads and writes iCalendar, `rrule.ox` expands repeating events, `store.ox` keeps the files, `caldav.ox` syncs, `reminders.ox` reminds, and the entry `calendar.ox` has the views and commands.
+
+- **Files.** Each calendar is a folder under `calendar` in the oxmacs home folder with one `.ics` file per event, as vdir and khal keep them, so other tools can read them and CalDAV maps one resource to one file. `calendars` lists them, `{name: "Work" url: "https://dav.example.com/cal/work/" login: "Work calendar"}`, with a Personal one when it is empty.
+- **Times.** Times keep their zone: events from elsewhere keep their `TZID`, and events made in oxmacs carry the local zone, so a weekly 9:00 meeting stays at 9:00 across daylight saving changes. All-day events are dates. `(ox time)` gained zones for this, through jiff.
+- **Repeats.** `RRULE` with `FREQ` daily, weekly, monthly or yearly, `INTERVAL`, `COUNT`, `UNTIL`, `BYDAY` with ordinals such as `-1FR`, `BYMONTHDAY` and `BYMONTH`, less `EXDATE`s, with changed occurrences (`RECURRENCE-ID`) replacing theirs. Dates are counted in whole days, so months without a 31st skip a monthly event on the 31st, as RFC 5545 says. Deleting one occurrence adds an `EXDATE`.
+- **Views.** `M-x calendar` is an agenda of the next `days` (14) days: `RET` shows an event, `a` adds, `e` edits, `d` deletes, `f` and `b` move a week, `t` comes back to today. `m` is a month grid of text, with `f`, `b`, `n` and `p` moving the selected day and `<` and `>` the month. `w` is a week drawn on a canvas as a grid of hours, with a line at the current time; `ui/canvas` gained `:relative` for it, so the grid fills the window's width.
+- **Reminders.** An event's own `VALARM`s, or `reminder` (10) minutes before, show in the echo area and as a desktop notification, checked every 30 seconds. With `reminders` on, the plugin starts with oxmacs when there are events.
+- **Invitations.** `M-x calendar-import` adds the events of an `.ics` file. For an invitation, `a`, `x` and `?` in the event accept, decline or answer maybe for the guest whose address is `email`, and write a `METHOD:REPLY` file beside the event to send to the organizer; oxmacs sends no mail.
+- **CalDAV.** `M-x calendar-sync` (or `s`) first sends local changes, `PUT` with `If-None-Match: *` for new events and `If-Match` with the known ETag otherwise, and `DELETE` for removed ones, then asks the server for every event with a `calendar-query` `REPORT` and brings in what changed, moving events the server dropped to the trash. A change made on both sides keeps the server's copy and says so. The login comes from the vault entry `:login` names. `.sync.json` in the calendar's folder remembers ETags and pending changes.
+
 ## Profiler
 
 Profiling tools for anyone writing Ox for oxmacs: where the time goes in plugins, init.ox, views, modes and frames. The VM collects; the report in oxmacs is the bundled `profiler` plugin, written in Ox.

@@ -30,3 +30,4 @@
 (module (import (ox time))) (time/add 0 {fortnights: 1}) ;! time/add takes years, months, weeks, days, hours, minutes and seconds, not :fortnights
 (module (import (ox time))) (time/format 1792740600000 "%H:%M %A" :zone "Europe/Paris") ;=> "09:30 Friday"
 (module (import (ox time))) [(time/days-in-month 2028 2) (time/days-in-month 2026 4)] ;=> [29 30]
+(module (import (ox time))) (let [zone (time/zone)] (= (time/local 1792740600000) (time/local 1792740600000 zone))) ;=> true

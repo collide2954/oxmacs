@@ -9,7 +9,27 @@ pub const BUNDLED: &[Bundle] = &[
     CUSTOMIZE,
     VAULT,
     IRC,
+    CALENDAR,
 ];
+
+const CALENDAR: Bundle = Bundle {
+    name: "calendar",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/calendar/plugin.ox")),
+        (
+            "calendar.ox",
+            include_str!("../plugins/calendar/calendar.ox"),
+        ),
+        ("store.ox", include_str!("../plugins/calendar/store.ox")),
+        ("ics.ox", include_str!("../plugins/calendar/ics.ox")),
+        ("rrule.ox", include_str!("../plugins/calendar/rrule.ox")),
+        ("caldav.ox", include_str!("../plugins/calendar/caldav.ox")),
+        (
+            "reminders.ox",
+            include_str!("../plugins/calendar/reminders.ox"),
+        ),
+    ],
+};
 
 const IRC: Bundle = Bundle {
     name: "irc",
@@ -370,6 +390,9 @@ mod vault;
 
 #[cfg(test)]
 mod irc;
+
+#[cfg(test)]
+mod calendar;
 
 #[cfg(test)]
 mod dired {

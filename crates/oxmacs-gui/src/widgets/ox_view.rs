@@ -54,8 +54,13 @@ pub fn view<'a, Message: Clone + 'a>(
         }
         Node::Space { size: Some(size) } => space().width(*size).height(*size).into(),
         Node::Space { size: None } => space().width(Length::Fill).into(),
-        Node::Canvas { shapes, height } => canvas(Drawing {
+        Node::Canvas {
             shapes,
+            height,
+            relative,
+        } => canvas(Drawing {
+            shapes,
+            relative: *relative,
             background: None,
             faces: look.faces,
             font: look.font,

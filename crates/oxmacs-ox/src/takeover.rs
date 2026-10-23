@@ -354,7 +354,19 @@ mod tests {
                     paint: paint(Ink::Face(Highlight::Link), 1.0),
                 }],
                 height: Some(40.0),
+                relative: false,
             }
         );
+
+        ox.eval(
+            &mut editor,
+            r#"(module (import (ox ui :only [canvas])))
+(open-view "*grid*" (fn [] (canvas [[:rect 0.5 0 0.25 10 :link]] :height 40 :relative true)))"#,
+        )
+        .unwrap();
+        ox.tick(&mut editor);
+        let id = editor.buffer_named("*grid*").unwrap();
+        let (_, view) = editor.plugin_buffer::<ViewBuffer>(id).unwrap();
+        assert!(matches!(view.node, Node::Canvas { relative: true, .. }));
     }
 }

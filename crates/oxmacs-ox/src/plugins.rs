@@ -1160,9 +1160,12 @@ mod tests {
     }
 
     #[test]
-    fn a_setting_can_wake_a_plugin_at_startup() {
+    fn a_setting_wakes_a_plugin_once_oxmacs_is_running() {
         let home = home_with(&[("init.ox", "(use-plugin greeter :config {chatty: true})")]);
-        let (editor, _) = started(&[CONFIGURED], home.path());
+        let (mut editor, mut ox) = started(&[CONFIGURED], home.path());
+        assert_eq!(editor.message(), None);
+
+        ox.tick(&mut editor);
 
         assert_eq!(editor.message(), Some("greeter loaded"));
     }

@@ -120,7 +120,6 @@ impl Ox {
         plugins::discover(&mut self.isolate, editor, self.bundled, home);
         self.run_init(editor, home);
         plugins::wake_at_startup(&self.isolate, editor);
-        plugins::wake_waiting(&mut self.isolate, editor);
         views::refresh(&mut self.isolate, editor);
     }
 

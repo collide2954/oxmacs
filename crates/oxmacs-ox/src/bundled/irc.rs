@@ -397,6 +397,47 @@ fn replies_and_reactions_point_at_the_message_they_answer() {
     wait_for_text(&mut editor, &mut ox, "#oxmacs", "🎉 1");
 }
 
+fn one_page(body: &'static str) -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut line = String::new();
+        while reader.read_line(&mut line).is_ok_and(|read| read > 2) {
+            line.clear();
+        }
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+    });
+    port
+}
+
+#[test]
+fn previews_say_the_title_of_the_page_a_link_leads_to() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    let port = one_page("<html><head><title>\n  A fine page </title></head></html>");
+    fake.say(&format!(
+        ":bo!b@host PRIVMSG #oxmacs :look http://127.0.0.1:{port}/x"
+    ));
+    wait_for_text(&mut editor, &mut ox, "#oxmacs", "look http");
+    run(&mut editor, &mut ox, "irc-next-active");
+    keys(&mut editor, &mut ox, "C-p C-e C-b");
+
+    run(&mut editor, &mut ox, "irc-preview");
+
+    assert!(
+        pump(&mut editor, &mut ox, |editor, _| editor.message()
+            == Some("A fine page")),
+        "{:?}",
+        editor.message()
+    );
+}
+
 #[test]
 fn pasted_lines_are_sent_one_by_one_after_asking() {
     let (fake, _home, mut editor, mut ox) = joined();

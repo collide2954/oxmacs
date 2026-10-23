@@ -805,6 +805,7 @@ mod tests {
         let mut editor = Editor::new();
         let mut ox = Ox::new();
         ox.start(&mut editor, Some(home));
+        crate::testing::settle(&mut editor, &mut ox);
         (editor, ox)
     }
 

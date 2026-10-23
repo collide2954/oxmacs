@@ -145,6 +145,7 @@ impl App {
                 system::theme().map(Message::AppearanceChanged),
                 started,
                 effects,
+                Task::done(Message::OxTick),
             ]),
         )
     }
