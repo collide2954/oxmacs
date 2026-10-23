@@ -101,6 +101,22 @@ fn redefining_a_name_moves_its_place() {
 }
 
 #[test]
+fn completions_offer_what_a_module_can_see() {
+    let isolate = shapes();
+
+    assert_eq!(isolate.completions("user", "are"), ["area"]);
+    assert_eq!(isolate.completions("user", "lim"), ["limit"]);
+    assert_eq!(isolate.completions("user", "s/upp"), ["s/upper"]);
+    assert_eq!(
+        isolate.completions("user", "defr"),
+        ["defrecord", "defrule", "defrules"]
+    );
+    assert_eq!(isolate.completions("user", "when"), ["when", "when-let"]);
+    assert_eq!(isolate.completions("user", "#"), Vec::<String>::new());
+    assert_eq!(isolate.completions("ox", "are"), Vec::<String>::new());
+}
+
+#[test]
 fn tests_named_after_a_function_are_its_examples() {
     let mut isolate = shapes();
     isolate

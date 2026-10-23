@@ -137,24 +137,8 @@ impl Editor {
         if !here {
             return;
         }
-        let typed = buffer.text_in(start..point);
-        let candidates: Vec<String> = fields
-            .filter(|candidate| !candidate.is_empty())
-            .filter(|candidate| asked.explicit || *candidate != typed)
-            .map(str::to_owned)
-            .collect();
-        match candidates.as_slice() {
-            [] if asked.explicit => self.show_message("No completions"),
-            [] => {}
-            [sole] if asked.explicit => {
-                let sole = sole.clone();
-                let buffer = self.buffers.current_mut();
-                buffer.delete_range(start..point);
-                buffer.set_point(start);
-                buffer.insert(&sole);
-            }
-            _ => self.open_popup(start, candidates),
-        }
+        let candidates = fields.map(str::to_owned).collect();
+        self.complete_at(start, candidates, asked.explicit);
     }
 }
 

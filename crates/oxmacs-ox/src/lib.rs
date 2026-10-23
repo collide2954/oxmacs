@@ -214,6 +214,7 @@ impl Ox {
         let refreshing = self.isolate.profiling().then(Instant::now);
         views::refresh(&mut self.isolate, editor);
         self.timed("views", refreshing);
+        help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         help::eldoc(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         self.timed("tick", started);
         self.pace()

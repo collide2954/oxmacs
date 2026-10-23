@@ -9,7 +9,7 @@ use ox::span::Span;
 use ox::task::TaskId;
 use ox::value::Value;
 use ox::{Error, read};
-use oxmacs_core::command::{CommandId, DynamicSpec, Scope, ScopeId};
+use oxmacs_core::command::{Command, CommandId, DynamicSpec, Scope, ScopeId};
 use oxmacs_core::editor::{Editor, InputLine};
 use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
@@ -31,6 +31,8 @@ enum Request {
     LoadFile,
     Interrupt,
     Doc,
+    Complete(bool),
+    IndentOrComplete,
     OpenRepl,
     Send,
     Recall(bool),
@@ -220,6 +222,108 @@ fn saved(editor: &mut Editor, id: BufferId) {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum Home {
+    Mode,
+    Repl,
+    Everywhere,
+}
+
+type Keys = &'static [(Home, &'static str)];
+
+fn commands() -> [(&'static str, &'static str, Home, Request, Keys); 12] {
+    [
+        (
+            "ox-eval-last-form",
+            "Evaluate the Ox form before point",
+            Home::Mode,
+            Request::EvalLastForm,
+            &[(Home::Mode, "C-x C-e")],
+        ),
+        (
+            "ox-eval-top-form",
+            "Evaluate the top-level Ox form around point",
+            Home::Mode,
+            Request::EvalTopForm,
+            &[(Home::Mode, "C-M-x")],
+        ),
+        (
+            "ox-eval-buffer",
+            "Evaluate this Ox buffer",
+            Home::Mode,
+            Request::EvalBuffer,
+            &[(Home::Mode, "C-c C-b")],
+        ),
+        (
+            "ox-load-file",
+            "Save this Ox file and load it",
+            Home::Mode,
+            Request::LoadFile,
+            &[(Home::Mode, "C-c C-k")],
+        ),
+        (
+            "ox-interrupt",
+            "Stop the Ox evaluation that is running",
+            Home::Mode,
+            Request::Interrupt,
+            &[(Home::Mode, "C-c C-c")],
+        ),
+        (
+            "ox-doc",
+            "Show the docs of the Ox name at point",
+            Home::Everywhere,
+            Request::Doc,
+            &[(Home::Mode, "C-c C-d"), (Home::Repl, "C-c C-d")],
+        ),
+        (
+            "ox-complete",
+            "Complete the Ox name before point",
+            Home::Everywhere,
+            Request::Complete(true),
+            &[
+                (Home::Mode, "C-M-i"),
+                (Home::Repl, "C-M-i"),
+                (Home::Repl, "TAB"),
+            ],
+        ),
+        (
+            "ox-repl",
+            "Open a REPL for Ox",
+            Home::Everywhere,
+            Request::OpenRepl,
+            &[(Home::Mode, "C-c C-z")],
+        ),
+        (
+            "ox-repl-send",
+            "Evaluate the input, or start a new line while it is unfinished",
+            Home::Repl,
+            Request::Send,
+            &[(Home::Repl, "RET")],
+        ),
+        (
+            "ox-repl-previous",
+            "Recall the previous input",
+            Home::Repl,
+            Request::Recall(true),
+            &[(Home::Repl, "M-p")],
+        ),
+        (
+            "ox-repl-next",
+            "Recall the next input",
+            Home::Repl,
+            Request::Recall(false),
+            &[(Home::Repl, "M-n")],
+        ),
+        (
+            "ox-indent-or-complete",
+            "Complete the Ox name before point, or indent",
+            Home::Mode,
+            Request::IndentOrComplete,
+            &[(Home::Mode, "TAB")],
+        ),
+    ]
+}
+
 pub fn install(editor: &mut Editor) {
     let mode_scope = editor.add_scope("Ox");
     let repl_scope = editor.add_scope("Ox REPL");
@@ -228,90 +332,24 @@ pub fn install(editor: &mut Editor) {
         repl: Some(repl_scope),
     });
     mode::install(editor, mode_scope);
-    let last = command(
-        editor,
-        "ox-eval-last-form",
-        "Evaluate the Ox form before point",
-        mode_scope,
-        Request::EvalLastForm,
-    );
-    let top = command(
-        editor,
-        "ox-eval-top-form",
-        "Evaluate the top-level Ox form around point",
-        mode_scope,
-        Request::EvalTopForm,
-    );
-    let whole = command(
-        editor,
-        "ox-eval-buffer",
-        "Evaluate this Ox buffer",
-        mode_scope,
-        Request::EvalBuffer,
-    );
-    let load = command(
-        editor,
-        "ox-load-file",
-        "Save this Ox file and load it",
-        mode_scope,
-        Request::LoadFile,
-    );
-    let interrupt = command(
-        editor,
-        "ox-interrupt",
-        "Stop the Ox evaluation that is running",
-        mode_scope,
-        Request::Interrupt,
-    );
-    let doc = command(
-        editor,
-        "ox-doc",
-        "Show the docs of the Ox name at point",
-        Scope::Global.into(),
-        Request::Doc,
-    );
-    let repl = command(
-        editor,
-        "ox-repl",
-        "Open a REPL for Ox",
-        Scope::Global.into(),
-        Request::OpenRepl,
-    );
-    let send = command(
-        editor,
-        "ox-repl-send",
-        "Evaluate the input, or start a new line while it is unfinished",
-        repl_scope,
-        Request::Send,
-    );
-    let previous = command(
-        editor,
-        "ox-repl-previous",
-        "Recall the previous input",
-        repl_scope,
-        Request::Recall(true),
-    );
-    let next = command(
-        editor,
-        "ox-repl-next",
-        "Recall the next input",
-        repl_scope,
-        Request::Recall(false),
-    );
-    for (scope, keys, id) in [
-        (mode_scope, "C-x C-e", last),
-        (mode_scope, "C-M-x", top),
-        (mode_scope, "C-c C-b", whole),
-        (mode_scope, "C-c C-k", load),
-        (mode_scope, "C-c C-c", interrupt),
-        (mode_scope, "C-c C-d", doc),
-        (repl_scope, "C-c C-d", doc),
-        (mode_scope, "C-c C-z", repl),
-        (repl_scope, "RET", send),
-        (repl_scope, "M-p", previous),
-        (repl_scope, "M-n", next),
-    ] {
-        editor.bind(scope, keys, id).ok();
+    let scope = |home: Home| match home {
+        Home::Mode => mode_scope,
+        Home::Repl => repl_scope,
+        Home::Everywhere => Scope::Global.into(),
+    };
+    for (name, summary, home, request, keys) in commands() {
+        let id = match request {
+            Request::IndentOrComplete => editor.add_dynamic_command(DynamicSpec {
+                name: name.to_owned(),
+                summary: summary.to_owned(),
+                scope: scope(home),
+                run: Arc::new(indent_or_complete),
+            }),
+            request => command(editor, name, summary, scope(home), request),
+        };
+        for (place, keys) in keys {
+            editor.bind(scope(*place), keys, id).ok();
+        }
     }
     editor.on_saved(saved);
 }
@@ -351,6 +389,19 @@ fn open_repl(editor: &mut Editor) {
     editor.show_buffer(id);
 }
 
+fn indent_or_complete(editor: &mut Editor) {
+    let buffer = editor.buffer();
+    let after_name = buffer
+        .chars_before(buffer.point())
+        .next()
+        .is_some_and(|character| !mode::delimits(character) && !"'`~@#".contains(character));
+    if after_name && buffer.selection().is_none() {
+        queue(editor, Request::Complete(true));
+    } else {
+        editor.execute(Command::IndentForTabCommand);
+    }
+}
+
 pub(crate) fn in_repl(editor: &Editor) -> bool {
     editor.pane().plugin_buffer::<ReplView>().is_some()
 }
@@ -380,6 +431,10 @@ impl Ox {
                 Request::LoadFile => self.load_file(editor),
                 Request::Interrupt => self.interrupt(editor),
                 Request::Doc => help::show_doc(&self.isolate, editor, self.home.as_deref()),
+                Request::Complete(explicit) => {
+                    help::complete(&self.isolate, editor, self.home.as_deref(), explicit);
+                }
+                Request::IndentOrComplete => indent_or_complete(editor),
                 Request::OpenRepl => open_repl(editor),
                 Request::Send => self.send(editor),
                 Request::Recall(older) => recall(editor, older),

@@ -12,11 +12,13 @@ use crate::{mode, plugins, stacktrace, tools};
 
 pub const DOC: &str = "*ox doc*";
 const LOOK_BACK: usize = 400;
+const AUTO_PREFIX: usize = 3;
 
 #[derive(Debug, Default)]
 pub(crate) struct Help {
     seen: Option<((BufferId, u64, usize), Option<String>)>,
     shown: Option<String>,
+    completed: Option<(BufferId, u64)>,
 }
 
 #[derive(Debug)]
@@ -179,6 +181,74 @@ pub(crate) fn eldoc(isolate: &Isolate, editor: &mut Editor, home: Option<&Path>,
     }
 }
 
+fn plain_code(line: &str) -> bool {
+    let mut quoted = false;
+    let mut chars = line.chars();
+    while let Some(character) = chars.next() {
+        match character {
+            '\\' => {
+                chars.next();
+            }
+            '"' => quoted = !quoted,
+            ';' if !quoted => return false,
+            _ => {}
+        }
+    }
+    !quoted
+}
+
+fn typed_name(editor: &Editor) -> (usize, String) {
+    let buffer = editor.buffer();
+    let point = buffer.point();
+    let typed: String = buffer
+        .chars_before(point)
+        .take_while(|character| !mode::delimits(*character) && !"'`~@#".contains(*character))
+        .collect();
+    let typed: String = typed.chars().rev().collect();
+    (point - typed.chars().count(), typed)
+}
+
+pub(crate) fn complete(
+    isolate: &Isolate,
+    editor: &mut Editor,
+    home: Option<&Path>,
+    explicit: bool,
+) {
+    if !in_ox(editor) {
+        return;
+    }
+    let (start, typed) = typed_name(editor);
+    let candidates = isolate.completions(&module(editor, home), &typed);
+    editor.complete_at(start, candidates, explicit);
+}
+
+pub(crate) fn auto_complete(
+    isolate: &Isolate,
+    editor: &mut Editor,
+    home: Option<&Path>,
+    help: &mut Help,
+) {
+    if !editor.just_typed()
+        || editor.minibuffer().is_some()
+        || editor.pane().popup().is_some()
+        || !in_ox(editor)
+    {
+        return;
+    }
+    let buffer = editor.buffer();
+    let key = (buffer.id(), buffer.revision());
+    if help.completed == Some(key) {
+        return;
+    }
+    help.completed = Some(key);
+    let point = buffer.point();
+    let line = buffer.text_in(buffer.line_start(buffer.line_of(point))..point);
+    let (_, typed) = typed_name(editor);
+    if typed.chars().count() >= AUTO_PREFIX && plain_code(&line) {
+        complete(isolate, editor, home, false);
+    }
+}
+
 pub(crate) fn name_at_point(editor: &Editor) -> Option<String> {
     let buffer = editor.buffer();
     let point = buffer.point();
@@ -278,6 +348,7 @@ mod tests {
 
     use super::{DOC, call_head, symbol_at};
     use crate::Ox;
+    use crate::testing::typed;
 
     #[test]
     fn the_innermost_open_call_names_its_head() {
@@ -389,6 +460,72 @@ mod tests {
             editor.buffer().contents(),
             "limit\nA value, defined at shapes.ox:4\n\nNo docs yet: a string first in its definition's body would be its doc.\n"
         );
+    }
+
+    fn offered(editor: &Editor) -> Option<Vec<String>> {
+        editor.pane().popup().map(|view| view.items)
+    }
+
+    fn at_end(editor: &mut Editor, text: &str) {
+        let end = editor.buffer().len_chars();
+        editor.buffer_mut().insert_at(end, text);
+        let end = editor.buffer().len_chars();
+        editor.buffer_mut().set_point(end);
+    }
+
+    #[test]
+    fn c_m_i_completes_names_from_the_running_image() {
+        let home = tempfile::tempdir().unwrap();
+        let (mut editor, mut ox) = visiting(home.path());
+
+        at_end(&mut editor, "(are");
+        press(&mut editor, &mut ox, "C-M-i");
+        assert!(editor.buffer().contents().ends_with("(area"));
+
+        at_end(&mut editor, " (lis");
+        press(&mut editor, &mut ox, "C-M-i");
+        assert_eq!(
+            offered(&editor),
+            Some(vec!["list".to_owned(), "list?".to_owned()])
+        );
+        press(&mut editor, &mut ox, "C-n TAB");
+        assert!(editor.buffer().contents().ends_with("(list?"));
+    }
+
+    #[test]
+    fn tab_completes_the_name_before_point_and_indents_elsewhere() {
+        let home = tempfile::tempdir().unwrap();
+        let (mut editor, mut ox) = visiting(home.path());
+
+        at_end(&mut editor, "(lim");
+        press(&mut editor, &mut ox, "TAB");
+        assert!(editor.buffer().contents().ends_with("(limit"));
+
+        at_end(&mut editor, " ");
+        let before = editor.buffer().contents();
+        press(&mut editor, &mut ox, "TAB");
+        assert_ne!(editor.buffer().contents(), before);
+        assert_eq!(editor.pane().popup(), None);
+    }
+
+    #[test]
+    fn three_typed_characters_of_a_name_offer_completions_quietly() {
+        let home = tempfile::tempdir().unwrap();
+        let (mut editor, mut ox) = visiting(home.path());
+        at_end(&mut editor, "\n");
+
+        typed(&mut editor, &mut ox, "(li");
+        assert_eq!(offered(&editor), None);
+        typed(&mut editor, &mut ox, "m");
+        assert_eq!(offered(&editor), Some(vec!["limit".to_owned()]));
+        assert_eq!(editor.message(), None);
+
+        press(&mut editor, &mut ox, "C-g");
+        typed(&mut editor, &mut ox, " ; lim");
+        assert_eq!(offered(&editor), None);
+        press(&mut editor, &mut ox, "RET");
+        typed(&mut editor, &mut ox, "\"lim");
+        assert_eq!(offered(&editor), None);
     }
 
     #[test]

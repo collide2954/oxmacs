@@ -60,6 +60,33 @@ impl Editor {
         self.popup = (!popup.matching.is_empty()).then_some(popup);
     }
 
+    pub fn complete_at(&mut self, start: usize, candidates: Vec<String>, explicit: bool) {
+        let buffer = self.buffers.current();
+        let point = buffer.point();
+        let typed = buffer.text_in(start.min(point)..point);
+        let candidates: Vec<String> = candidates
+            .into_iter()
+            .filter(|candidate| !candidate.is_empty())
+            .filter(|candidate| explicit || *candidate != typed)
+            .collect();
+        match candidates.as_slice() {
+            [] if explicit => self.show_message("No completions"),
+            [] => {}
+            [sole] if explicit => {
+                let sole = sole.clone();
+                let buffer = self.buffers.current_mut();
+                buffer.delete_range(start..point);
+                buffer.set_point(start);
+                buffer.insert(&sole);
+            }
+            _ => self.open_popup(start, candidates),
+        }
+    }
+
+    pub fn just_typed(&self) -> bool {
+        self.last_command == Some(Command::SelfInsertCommand)
+    }
+
     pub(in crate::editor) fn popup_step(&mut self, forward: bool) {
         let Some(popup) = &mut self.popup else {
             return;
@@ -253,6 +280,45 @@ mod tests {
         assert_eq!(view.items.len(), 10);
         assert_eq!(view.selected, 9);
         assert_eq!(view.items[9], "a12");
+    }
+
+    #[test]
+    fn plugins_complete_with_a_sole_answer_inserted_or_several_offered() {
+        let mut editor = editor_with("x are", 5);
+        editor.complete_at(2, vec!["area".to_owned()], true);
+        assert_eq!(editor.buffer().contents(), "x area");
+        assert_eq!(shown(&editor), None);
+
+        let mut editor = editor_with("x ar", 4);
+        editor.complete_at(2, vec!["area".to_owned(), "arity".to_owned()], true);
+        assert_eq!(shown(&editor), Some(items(&["area", "arity"], 0)));
+
+        let mut editor = editor_with("x zz", 4);
+        editor.complete_at(2, Vec::new(), true);
+        assert_eq!(editor.message(), Some("No completions"));
+    }
+
+    #[test]
+    fn quiet_completion_offers_but_never_inserts_or_complains() {
+        let mut editor = editor_with("x are", 5);
+        editor.complete_at(2, vec!["are".to_owned()], false);
+        assert_eq!(shown(&editor), None);
+        editor.complete_at(2, Vec::new(), false);
+        assert_eq!(editor.message(), None);
+
+        editor.complete_at(2, vec!["area".to_owned()], false);
+        assert_eq!(editor.buffer().contents(), "x are");
+        assert_eq!(shown(&editor), Some(items(&["area"], 0)));
+    }
+
+    #[test]
+    fn typing_a_character_is_just_typing() {
+        let mut editor = editor_with("x", 1);
+        assert!(!editor.just_typed());
+        type_text(&mut editor, "y");
+        assert!(editor.just_typed());
+        press(&mut editor, "C-b");
+        assert!(!editor.just_typed());
     }
 
     #[test]

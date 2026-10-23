@@ -27,7 +27,7 @@ use crate::value::promise::Promise;
 use crate::value::record::Family;
 use crate::vm::Runtime;
 use crate::vm::build::full;
-use crate::vm::modules::{Import, ModuleId, PRELUDE, USER};
+use crate::vm::modules::{Import, Module, ModuleId, PRELUDE, USER};
 
 const PRELUDE_SOURCE: &str = include_str!("library/prelude/core.ox");
 const LIBRARY_DOCS: &str = include_str!("library/docs.ox");
@@ -796,6 +796,57 @@ impl Isolate {
             doc,
             place: self.runtime.place(owner, short).cloned(),
         }
+    }
+
+    pub fn completions(&self, module: &str, prefix: &str) -> Vec<String> {
+        let id = self.module_id(module);
+        let shown = |name: &&Sym| !name.name().starts_with('#');
+        let visible = |module: &Module| -> Vec<String> {
+            let names = module.globals.keys().chain(module.macros.keys());
+            names
+                .filter(shown)
+                .map(|name| name.name().to_owned())
+                .collect()
+        };
+        let mut found: Vec<String> = Vec::new();
+        if id != PRELUDE
+            && let Some(prelude) = self.runtime.modules.get(PRELUDE)
+        {
+            found.extend(visible(prelude));
+        }
+        if let Some(current) = self.runtime.modules.get(id) {
+            found.extend(visible(current));
+            for import in &current.imports {
+                let Some(target) = self.runtime.modules.get(import.module) else {
+                    continue;
+                };
+                let exported = |name: &&Sym| {
+                    shown(name)
+                        && target
+                            .exports
+                            .as_ref()
+                            .is_none_or(|exports| exports.contains(*name))
+                };
+                let names = target.globals.keys().chain(target.macros.keys());
+                found.extend(
+                    names
+                        .filter(exported)
+                        .map(|name| format!("{}/{}", import.alias.name(), name.name())),
+                );
+                found.extend(import.only.iter().map(|name| name.name().to_owned()));
+            }
+        }
+        found.extend(
+            self.docs()
+                .entries
+                .iter()
+                .filter(|(_, entry)| entry.special)
+                .map(|(name, _)| name.clone()),
+        );
+        found.retain(|name| name.starts_with(prefix));
+        found.sort();
+        found.dedup();
+        found
     }
 
     pub fn examples(&self, name: &str) -> Vec<String> {

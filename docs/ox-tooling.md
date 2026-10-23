@@ -62,9 +62,10 @@ Decided on 2026-10-22 while the user was away, taking the recommended option eac
 - **The signature at point.** Moving through a call in an Ox buffer or the REPL shows its signature and the first sentence of its doc in the echo area. It only fills an empty echo area, or replaces a signature it showed, so results and errors stay.
 - **`C-c C-d`.** Shows the name at point, or the call around point, in `*ox doc*`: its kind and place, signature, doc, and examples. Examples are the tests whose title is the name, or starts with the name and a space, shown as written; `q` closes it.
 - **`C-x C-e`** evaluates the expression just before point, even inside an unfinished list, as Emacs does.
+- **Completion.** Names come from the running image: the module's own definitions, the prelude, special forms, `alias/name` for every import with an alias, and the names of `:only` imports. `C-M-i` completes in Ox buffers and the REPL; `TAB` completes the name before point and otherwise indents, until Ox has real indentation; and three typed characters of a name offer completions quietly, as in R, but not in strings or comments. A single answer is inserted; several open the popup. Locals aren't offered yet; the checker's walk could add them.
 
 Phase 3 slices:
 
 1. **Describing names,** docs for the whole library, the signature at point and `C-c C-d`. Done.
-2. **Completion** from the running image.
+2. **Completion** from the running image. Done.
 3. **`M-.` and `M-,`** into the library and plugins, and usages.
