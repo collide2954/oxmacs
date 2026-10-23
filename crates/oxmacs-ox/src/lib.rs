@@ -2,6 +2,7 @@ mod buffers;
 mod bundled;
 pub mod checker;
 mod commands;
+mod help;
 mod hooks;
 pub mod idle;
 mod log;
@@ -30,6 +31,7 @@ pub use plugins::Bundle;
 
 const BUDGET: Duration = Duration::from_millis(4);
 const PRELUDE: &str = include_str!("prelude.ox");
+const DOCS: &str = include_str!("docs.ox");
 
 pub fn home() -> Option<PathBuf> {
     std::env::var_os("OXMACS_HOME")
@@ -50,6 +52,7 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     takeover::install(&mut isolate);
     idle::install(&mut isolate);
     prompts::install(&mut isolate, answers);
+    isolate.add_native_docs(DOCS);
     if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
         panic!("The oxmacs prelude failed to load: {error}");
     }
@@ -75,6 +78,7 @@ pub struct Ox {
     answers: prompts::Inbox,
     evaluation: tools::Evaluation,
     checker: checker::Checker,
+    help: help::Help,
 }
 
 impl Default for Ox {
@@ -97,6 +101,7 @@ impl Ox {
             answers,
             evaluation: tools::Evaluation::default(),
             checker: checker::Checker::default(),
+            help: help::Help::default(),
         }
     }
 
@@ -209,6 +214,7 @@ impl Ox {
         let refreshing = self.isolate.profiling().then(Instant::now);
         views::refresh(&mut self.isolate, editor);
         self.timed("views", refreshing);
+        help::eldoc(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         self.timed("tick", started);
         self.pace()
     }
@@ -232,6 +238,13 @@ mod tests {
 
         assert_eq!(shown, "42");
         assert_eq!(editor.message(), Some("Hello from Ox"));
+    }
+
+    #[test]
+    fn everything_the_editor_adds_to_ox_is_documented() {
+        let problems = super::checking_isolate().undocumented();
+
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 
     #[test]

@@ -81,11 +81,11 @@ pub fn language() -> Language {
     Language::new(&OX)
 }
 
-fn delimits(character: char) -> bool {
+pub(crate) fn delimits(character: char) -> bool {
     character.is_whitespace() || "()[]{}\";".contains(character)
 }
 
-fn starts_symbol(character: char) -> bool {
+pub(crate) fn starts_symbol(character: char) -> bool {
     !delimits(character) && !"'`~@#,\\".contains(character)
 }
 

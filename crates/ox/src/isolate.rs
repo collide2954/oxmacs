@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
@@ -8,6 +9,7 @@ use std::time::Duration;
 
 use crate::check::{self, Diagnostic};
 use crate::compile::compile;
+use crate::describe::{self, Description, Docs, Kind};
 use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
 use crate::heap::{Closure, Heap, Hold, Rooted};
@@ -28,6 +30,7 @@ use crate::vm::build::full;
 use crate::vm::modules::{Import, ModuleId, PRELUDE, USER};
 
 const PRELUDE_SOURCE: &str = include_str!("library/prelude/core.ox");
+const LIBRARY_DOCS: &str = include_str!("library/docs.ox");
 
 fn shown_name(module: &str, name: &str) -> String {
     match module.rsplit_once('/') {
@@ -77,6 +80,8 @@ pub struct Isolate {
     runtime: Runtime,
     loading: Vec<String>,
     sources: HashMap<String, (String, String)>,
+    doc_tables: Vec<&'static str>,
+    docs: OnceCell<Docs>,
 }
 
 impl Default for Isolate {
@@ -105,6 +110,8 @@ impl Isolate {
             runtime: Runtime::default(),
             loading: Vec::new(),
             sources: HashMap::new(),
+            doc_tables: vec![LIBRARY_DOCS],
+            docs: OnceCell::new(),
         };
         library::install(&mut isolate);
         let apply = isolate.runtime.lookup(PRELUDE, Sym::intern("apply"));
@@ -711,6 +718,175 @@ impl Isolate {
 
     pub fn doc(&self, name: &str) -> Option<String> {
         self.runtime.doc(USER, Sym::intern(name)).map(str::to_owned)
+    }
+
+    pub fn add_native_docs(&mut self, table: &'static str) {
+        self.doc_tables.push(table);
+        self.docs = OnceCell::new();
+    }
+
+    fn docs(&self) -> &Docs {
+        self.docs.get_or_init(|| describe::parse(&self.doc_tables))
+    }
+
+    fn module_id(&self, name: &str) -> ModuleId {
+        self.runtime.module_ids.get(name).copied().unwrap_or(USER)
+    }
+
+    pub fn describe(&self, module: &str, name: &str) -> Option<Description> {
+        let module = self.module_id(module);
+        let symbol = Sym::intern(name);
+        for macros in [false, true] {
+            if let Some((value, owner, short)) = self.runtime.resolve(module, symbol, macros) {
+                return Some(self.described(name, value, owner, short, macros));
+            }
+        }
+        let entry = self
+            .docs()
+            .entries
+            .get(name)
+            .filter(|entry| entry.special)?;
+        Some(Description {
+            name: name.to_owned(),
+            kind: Kind::Special,
+            signature: describe::signature(name, &entry.parameters),
+            doc: Some(entry.doc.clone()),
+            place: None,
+        })
+    }
+
+    fn described(
+        &self,
+        name: &str,
+        value: Value,
+        owner: ModuleId,
+        short: Sym,
+        macros: bool,
+    ) -> Description {
+        let heap = &self.runtime.heap;
+        let parameters_of = |value: Value| {
+            heap.closure_of(value)
+                .and_then(|closure| closure.code.parameters.clone())
+        };
+        let mut doc = self.runtime.doc(owner, short).map(str::to_owned);
+        let (kind, parameters) = if let Some(native) = heap.native_of(value) {
+            let entry = self.docs().entries.get(native.name.name());
+            doc = entry.map(|entry| entry.doc.clone());
+            let parameters = entry.map_or_else(
+                || describe::fallback(native.least, native.most),
+                |entry| entry.parameters.clone(),
+            );
+            (Kind::Native, Some(parameters))
+        } else if let Some(record) = heap.record_type_of(value) {
+            let parameters = parameters_of(record.constructor).map(|shown| shown.to_string());
+            (Kind::Record, parameters)
+        } else if let Some(parameters) = parameters_of(value) {
+            let kind = if macros { Kind::Macro } else { Kind::Function };
+            (kind, Some(parameters.to_string()))
+        } else {
+            (Kind::Value, None)
+        };
+        Description {
+            name: name.to_owned(),
+            kind,
+            signature: parameters.map_or_else(
+                || name.to_owned(),
+                |parameters| describe::signature(name, &parameters),
+            ),
+            doc,
+            place: self.runtime.place(owner, short).cloned(),
+        }
+    }
+
+    pub fn examples(&self, name: &str) -> Vec<String> {
+        let heap = &self.runtime.heap;
+        let Some(tests) = self
+            .runtime
+            .lookup(PRELUDE, Sym::intern("registered-tests"))
+            .and_then(|atom| heap.atom_get(atom))
+            .and_then(|tests| heap.elements(tests))
+        else {
+            return Vec::new();
+        };
+        tests
+            .into_iter()
+            .filter_map(|test| {
+                let map = heap.map_of(test)?;
+                let title = heap.text(map.get(heap, Value::keyword("name"))?)?;
+                let named = title == name
+                    || title
+                        .strip_prefix(name)
+                        .is_some_and(|rest| rest.starts_with(' '));
+                if !named {
+                    return None;
+                }
+                let closure = heap.closure_of(map.get(heap, Value::keyword("run"))?)?;
+                let source = closure.code.source.as_ref()?;
+                let at = closure
+                    .code
+                    .spans
+                    .iter()
+                    .filter(|span| span.end > span.start)
+                    .map(|span| span.start)
+                    .min()?;
+                let (forms, _) = read::read(&source.text);
+                let form = forms
+                    .iter()
+                    .find(|form| form.span.start <= at && at < form.span.end)?;
+                source
+                    .text
+                    .get(form.span.start as usize..form.span.end as usize)
+                    .map(str::to_owned)
+            })
+            .collect()
+    }
+
+    pub fn undocumented(&self) -> Vec<String> {
+        let docs = self.docs();
+        let mut problems = docs.broken.clone();
+        let mut natives = HashSet::new();
+        for module in &self.runtime.modules {
+            let library = module.name == "ox" || module.name.starts_with("ox/");
+            for (name, value) in &module.globals {
+                if name.name().starts_with('#') {
+                    continue;
+                }
+                if let Some(native) = self.runtime.heap.native_of(*value) {
+                    let shown = native.name.name();
+                    natives.insert(shown);
+                    match docs.entries.get(shown) {
+                        None => problems.push(format!("{shown} has no doc entry")),
+                        Some(entry) if !entry.fits(native.least, native.most) => {
+                            problems.push(format!(
+                                "{shown} takes {} arguments but its doc entry shows {}",
+                                describe::fallback(native.least, native.most),
+                                describe::fallback(entry.least, entry.most)
+                            ));
+                        }
+                        Some(_) => {}
+                    }
+                } else if library
+                    && self.runtime.heap.closure_of(*value).is_some()
+                    && !module.docs.contains_key(name)
+                {
+                    problems.push(format!("{} has no docstring", name.name()));
+                }
+            }
+            if library {
+                for name in module.macros.keys() {
+                    if !module.docs.contains_key(name) {
+                        problems.push(format!("the macro {} has no docstring", name.name()));
+                    }
+                }
+            }
+        }
+        for (name, entry) in &docs.entries {
+            if !entry.special && !natives.contains(name.as_str()) {
+                problems.push(format!("{name} has a doc entry but is not a native"));
+            }
+        }
+        problems.sort();
+        problems
     }
 
     pub fn profiling(&self) -> bool {

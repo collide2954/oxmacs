@@ -157,6 +157,7 @@ impl Arity {
 pub struct Code {
     pub name: Option<Sym>,
     pub arity: Arity,
+    pub parameters: Option<Rc<str>>,
     pub registers: Register,
     pub ops: Vec<Op>,
     pub constants: Vec<Value>,

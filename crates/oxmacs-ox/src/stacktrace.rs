@@ -106,7 +106,7 @@ fn scopes(editor: &mut Editor) -> Scopes {
     scopes
 }
 
-fn shown_file(file: &str) -> &str {
+pub(crate) fn shown_file(file: &str) -> &str {
     let path = Path::new(file);
     if path.is_absolute() {
         path.file_name()

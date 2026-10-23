@@ -622,6 +622,21 @@ pub fn reload_file(
     }
 }
 
+pub(crate) fn module_of(editor: &Editor, plugin: &str, file_name: &str) -> String {
+    let entry = editor.plugin_state::<Plugins>().and_then(|plugins| {
+        plugins
+            .known
+            .iter()
+            .find(|known| known.manifest.name == plugin)
+            .map(|known| known.manifest.entry.clone())
+    });
+    if entry.as_deref() == Some(file_name) {
+        plugin.to_owned()
+    } else {
+        format!("{plugin}/{}", file_name.trim_end_matches(".ox"))
+    }
+}
+
 pub fn wake_waiting(isolate: &mut Isolate, editor: &mut Editor) {
     let waking = editor
         .plugin_state_mut::<Plugins>()

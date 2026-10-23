@@ -19,6 +19,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use crate::bytecode::{Capture, Code, Op};
+use crate::describe::Place;
 use crate::error::{Error, ErrorKind, Frame as Trace};
 use crate::heap::{Closure, Heap};
 use crate::isolate::Isolate;
@@ -497,7 +498,14 @@ impl Runtime {
                     .heap
                     .text(machine.code.constants[doc as usize])
                     .map(str::to_owned);
-                self.document(machine.code.module, name, text);
+                let span = machine.code.spans.get(machine.pc.saturating_sub(1));
+                let place = machine
+                    .code
+                    .source
+                    .clone()
+                    .zip(span.copied())
+                    .map(|(source, span)| Place { source, span });
+                self.document(machine.code.module, name, text, place);
             }
             Op::DefineGlobal { name, from } => {
                 self.define(machine.code.module, name, machine.get(from));

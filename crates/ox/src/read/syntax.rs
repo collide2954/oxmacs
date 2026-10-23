@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -53,6 +55,40 @@ impl Syntax {
             span,
             marks: Marks::default(),
         }
+    }
+}
+
+fn joined(formatter: &mut fmt::Formatter<'_>, items: &[Syntax]) -> fmt::Result {
+    for (index, item) in items.iter().enumerate() {
+        if index > 0 {
+            formatter.write_str(" ")?;
+        }
+        write!(formatter, "{item}")?;
+    }
+    Ok(())
+}
+
+impl fmt::Display for Syntax {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (open, items, close) = match &self.datum {
+            Datum::Nil => return formatter.write_str("nil"),
+            Datum::Bool(value) => return write!(formatter, "{value}"),
+            Datum::Int(number) => return write!(formatter, "{number}"),
+            Datum::BigInt(digits) => return formatter.write_str(digits),
+            Datum::Float(number) => return write!(formatter, "{number:?}"),
+            Datum::Char(character) => return write!(formatter, "\\{character}"),
+            Datum::Str(text) => return write!(formatter, "{text:?}"),
+            Datum::Symbol(name) => return formatter.write_str(name),
+            Datum::Keyword(name) => return write!(formatter, ":{name}"),
+            Datum::List(items) => ("(".to_owned(), items, ")"),
+            Datum::Vector(items) => ("[".to_owned(), items, "]"),
+            Datum::Map(items) => ("{".to_owned(), items, "}"),
+            Datum::Set(items) => ("#{".to_owned(), items, "}"),
+            Datum::Record(name, items) => (format!("#{name}{{"), items, "}"),
+        };
+        formatter.write_str(&open)?;
+        joined(formatter, items)?;
+        formatter.write_str(close)
     }
 }
 

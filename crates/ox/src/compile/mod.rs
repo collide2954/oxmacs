@@ -528,6 +528,7 @@ impl Compiler<'_> {
         );
         self.load(record, target, span)?;
         self.emit(Op::DefineGlobal { name, from: target }, span);
+        self.document(name, None, span)?;
         self.load(Value::Symbol(name), target, span)
     }
 
@@ -547,6 +548,7 @@ impl Compiler<'_> {
         self.emit(Op::JumpIfDefined { name, to: 0 }, span);
         self.expression(value, target)?;
         self.emit(Op::DefineGlobal { name, from: target }, span);
+        self.document(name, None, span)?;
         let end = self.here(span)?;
         self.patch(skip, end);
         self.load(Value::Symbol(name), target, span)
@@ -773,6 +775,7 @@ impl Compiler<'_> {
         target: Register,
         span: Span,
     ) -> Result<(), Error> {
+        let shown: Vec<String> = parameters.iter().map(ToString::to_string).collect();
         let parameters = parse_parameters(parameters)?;
         let forms = match body {
             Body::Forms(forms) => forms,
@@ -781,6 +784,7 @@ impl Compiler<'_> {
         let parent = std::mem::take(&mut self.current);
         self.outer.push(parent);
         self.current.code.name = name;
+        self.current.code.parameters = Some(shown.join(" ").into());
         self.current.code.source.clone_from(&self.source);
         self.current.code.module = self.module;
         self.current.itself = name.zip(itself);

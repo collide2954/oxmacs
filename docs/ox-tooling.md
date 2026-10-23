@@ -51,3 +51,20 @@ Phase 1 slices 1 to 4 are done.
 - **Checking while typing.** Half a second after the last key in an Ox file, the checker runs on the buffer's text in its own isolate, kept apart from the running one, and its findings replace that file's diagnostics, underlined, echoed at point and counted in the mode line. Plugin files and init.ox are checked with the editor's natives known, as `ox check` does. Each file is checked in one module that is cleared each time.
 
 Phase 2 is done.
+
+## Live docs, completion and `M-.`
+
+Decided on 2026-10-22 while the user was away, taking the recommended option each time; open to change.
+
+- **What Ox knows about a name.** `Isolate::describe(module, name)` answers with its kind (function, macro, native, record, special form or value), its signature as written, its doc and the place it was defined. Functions keep their parameter list as written, and every `def`, `defmacro`, `defrecord` and `defonce` records its place when it runs, so a redefinition moves it.
+- **Docs for the library.** Natives are documented in tables written in Ox syntax, `(inc x) "Adds one to x."`, one for Ox (`crates/ox/src/library/docs.ox`) and one for the editor (`crates/oxmacs-ox/src/docs.ox`), with a `(special …)` section for special forms. The prelude's functions and macros carry docstrings. Tests fail when a native has no entry, an entry names no native, an entry's parameters disagree with the native's arity, or a library function or macro has no docstring.
+- **Names resolve where the code lives.** A plugin file's names are looked up in that plugin's module; everything else in `user`.
+- **The signature at point.** Moving through a call in an Ox buffer or the REPL shows its signature and the first sentence of its doc in the echo area. It only fills an empty echo area, or replaces a signature it showed, so results and errors stay.
+- **`C-c C-d`.** Shows the name at point, or the call around point, in `*ox doc*`: its kind and place, signature, doc, and examples. Examples are the tests whose title is the name, or starts with the name and a space, shown as written; `q` closes it.
+- **`C-x C-e`** evaluates the expression just before point, even inside an unfinished list, as Emacs does.
+
+Phase 3 slices:
+
+1. **Describing names,** docs for the whole library, the signature at point and `C-c C-d`. Done.
+2. **Completion** from the running image.
+3. **`M-.` and `M-,`** into the library and plugins, and usages.

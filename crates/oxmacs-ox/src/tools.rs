@@ -15,7 +15,7 @@ use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Highlight;
 
-use crate::{Ox, log, mode, plugins, stacktrace};
+use crate::{Ox, help, log, mode, plugins, stacktrace};
 
 pub const REPL: &str = "*ox repl*";
 const PROMPT: &str = "ox> ";
@@ -30,6 +30,7 @@ enum Request {
     EvalBuffer,
     LoadFile,
     Interrupt,
+    Doc,
     OpenRepl,
     Send,
     Recall(bool),
@@ -83,6 +84,63 @@ pub(crate) struct Evaluation {
     waiting: VecDeque<Form>,
     running: Option<(TaskId, Form)>,
     interrupted: bool,
+}
+
+fn prefixed(text: &str, at: usize) -> usize {
+    let mut start = at;
+    while text[..start].ends_with(['\'', '`', '~', '@', '#']) {
+        start -= 1;
+    }
+    start
+}
+
+fn last_expression(text: &str) -> Option<Range<usize>> {
+    let mut opens: Vec<usize> = Vec::new();
+    let mut last = None;
+    let mut chars = text.char_indices().peekable();
+    while let Some((at, character)) = chars.next() {
+        match character {
+            ';' => while chars.next_if(|(_, next)| *next != '\n').is_some() {},
+            '"' => {
+                let mut end = text.len();
+                while let Some((inside, next)) = chars.next() {
+                    if next == '\\' {
+                        chars.next();
+                    } else if next == '"' {
+                        end = inside + 1;
+                        break;
+                    }
+                }
+                last = Some(prefixed(text, at)..end);
+            }
+            '(' | '[' | '{' => opens.push(at),
+            ')' | ']' | '}' => {
+                if let Some(open) = opens.pop() {
+                    last = Some(prefixed(text, open)..at + 1);
+                }
+            }
+            _ if mode::delimits(character) => {}
+            _ => {
+                let mut end = at + character.len_utf8();
+                if character == '\\'
+                    && let Some((next_at, next)) = chars.next()
+                {
+                    end = next_at + next.len_utf8();
+                }
+                while let Some((next_at, next)) = chars.peek().copied() {
+                    if mode::delimits(next) {
+                        break;
+                    }
+                    end = next_at + next.len_utf8();
+                    chars.next();
+                }
+                if !text[at..end].chars().all(|found| "'`~@#".contains(found)) {
+                    last = Some(at..end);
+                }
+            }
+        }
+    }
+    last
 }
 
 fn bytes(span: Span, text: &str) -> Range<usize> {
@@ -205,6 +263,13 @@ pub fn install(editor: &mut Editor) {
         mode_scope,
         Request::Interrupt,
     );
+    let doc = command(
+        editor,
+        "ox-doc",
+        "Show the docs of the Ox name at point",
+        Scope::Global.into(),
+        Request::Doc,
+    );
     let repl = command(
         editor,
         "ox-repl",
@@ -239,6 +304,8 @@ pub fn install(editor: &mut Editor) {
         (mode_scope, "C-c C-b", whole),
         (mode_scope, "C-c C-k", load),
         (mode_scope, "C-c C-c", interrupt),
+        (mode_scope, "C-c C-d", doc),
+        (repl_scope, "C-c C-d", doc),
         (mode_scope, "C-c C-z", repl),
         (repl_scope, "RET", send),
         (repl_scope, "M-p", previous),
@@ -284,6 +351,10 @@ fn open_repl(editor: &mut Editor) {
     editor.show_buffer(id);
 }
 
+pub(crate) fn in_repl(editor: &Editor) -> bool {
+    editor.pane().plugin_buffer::<ReplView>().is_some()
+}
+
 fn recall(editor: &mut Editor, older: bool) {
     let Some(id) = editor.plugin_buffers::<ReplView>().first().copied() else {
         return;
@@ -308,6 +379,7 @@ impl Ox {
                 Request::EvalBuffer => self.eval_buffer(editor),
                 Request::LoadFile => self.load_file(editor),
                 Request::Interrupt => self.interrupt(editor),
+                Request::Doc => help::show_doc(&self.isolate, editor, self.home.as_deref()),
                 Request::OpenRepl => open_repl(editor),
                 Request::Send => self.send(editor),
                 Request::Recall(older) => recall(editor, older),
@@ -408,12 +480,11 @@ impl Ox {
     fn eval_last_form(&mut self, editor: &mut Editor) {
         let buffer = editor.buffer();
         let before: Rc<str> = buffer.text_in(0..buffer.point()).into();
-        let (forms, _) = read::read(&before);
-        let Some(last) = forms.last() else {
+        let Some(span) = last_expression(&before) else {
             editor.show_message("There is no Ox form before point");
             return;
         };
-        let form = Form::new(editor, &before, bytes(last.span, &before), Finish::Note);
+        let form = Form::new(editor, &before, span, Finish::Note);
         self.evaluate(editor, vec![form]);
     }
 
@@ -563,7 +634,7 @@ impl Ox {
     }
 }
 
-fn plugin_file(home: &Path, path: &Path) -> Option<(String, String)> {
+pub(crate) fn plugin_file(home: &Path, path: &Path) -> Option<(String, String)> {
     let folder = path.parent()?;
     let plugins = folder.parent()?;
     if !same_file(plugins, &home.join("plugins")) {
@@ -582,7 +653,7 @@ mod tests {
     use oxmacs_core::text::Buffer;
     use oxmacs_core::theme::Highlight;
 
-    use super::REPL;
+    use super::{REPL, last_expression};
     use crate::stacktrace::STACKTRACE;
     use crate::{Ox, Pace, log};
 
@@ -681,6 +752,21 @@ mod tests {
 
         editor.buffer_mut().insert_at(0, " ");
         assert_eq!(note(&editor, 1), None);
+    }
+
+    #[test]
+    fn the_expression_before_point_may_sit_inside_an_unfinished_list() {
+        let last = |text: &str| last_expression(text).map(|span| text[span].to_owned());
+
+        assert_eq!(last("(def x 5)\n(* x 2)").as_deref(), Some("(* x 2)"));
+        assert_eq!(last("(+ (área 2 3)").as_deref(), Some("(área 2 3)"));
+        assert_eq!(last("(+ x").as_deref(), Some("x"));
+        assert_eq!(last("(f '(a b)").as_deref(), Some("'(a b)"));
+        assert_eq!(last("(str \"a)b\"").as_deref(), Some("\"a)b\""));
+        assert_eq!(last("(f \\( ").as_deref(), Some("\\("));
+        assert_eq!(last("(f x) ; (g y)\n").as_deref(), Some("(f x)"));
+        assert_eq!(last("#{1 2}").as_deref(), Some("#{1 2}"));
+        assert_eq!(last("  "), None);
     }
 
     #[test]

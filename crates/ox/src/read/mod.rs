@@ -860,28 +860,8 @@ mod tests {
         );
     }
 
-    fn shape(syntax: &Syntax) -> String {
-        let join = |items: &[Syntax]| items.iter().map(shape).collect::<Vec<_>>().join(" ");
-        match &syntax.datum {
-            Datum::Nil => "nil".to_owned(),
-            Datum::Bool(value) => value.to_string(),
-            Datum::Int(number) => number.to_string(),
-            Datum::BigInt(digits) => digits.clone(),
-            Datum::Float(number) => format!("{number:?}"),
-            Datum::Char(character) => format!("\\{character}"),
-            Datum::Str(text) => format!("{text:?}"),
-            Datum::Symbol(name) => name.clone(),
-            Datum::Keyword(name) => format!(":{name}"),
-            Datum::List(items) => format!("({})", join(items)),
-            Datum::Vector(items) => format!("[{}]", join(items)),
-            Datum::Map(items) => format!("{{{}}}", join(items)),
-            Datum::Set(items) => format!("#{{{}}}", join(items)),
-            Datum::Record(name, items) => format!("#{name}{{{}}}", join(items)),
-        }
-    }
-
     fn shapes(source: &str) -> Vec<String> {
-        read(source).0.iter().map(shape).collect()
+        read(source).0.iter().map(ToString::to_string).collect()
     }
 
     #[test]
@@ -1094,7 +1074,7 @@ mod tests {
         };
 
         assert_eq!(errors, []);
-        assert_eq!(shape(&data[0]), r#"(str "a" (f "}") "b")"#);
+        assert_eq!(data[0].to_string(), r#"(str "a" (f "}") "b")"#);
         assert_eq!(data[0].span, Span::new(0, 13));
         assert_eq!(pieces[2].span, Span::new(3, 10));
     }

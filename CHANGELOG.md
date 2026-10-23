@@ -10,6 +10,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Pressing `g` repeatedly in dired no longer makes the cursor jump to the start of the line and back; plugin buffers keep point where it was when they redraw, and marks made while a listing refreshes are kept.
 - `swap!` no longer loses updates when tasks switch in the middle of it.
 - Tracebacks of errors in Ox tasks no longer end with a frame at `?:0:0`.
+- `C-x C-e` inside an unfinished Ox list evaluates the expression before point instead of failing on the unfinished list.
 - Git status keeps the path you opened it from instead of the one Git resolves through symlinks, so visiting a file from it doesn't open a second buffer for a file that is already open, as happened on macOS.
 
 ### Removed
@@ -44,6 +45,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- In Ox buffers and the Ox REPL, the echo area shows the signature of the call at point with the first sentence of its doc, and `C-c C-d` opens `*ox doc*` for the name at point: what it is, where it is defined, its signature, its doc and the tests named after it as examples.
+- Every function, macro and special form that Ox and the editor provide has docs.
 - Interactive Ox in the style of CIDER. `C-x C-e` evaluates the form before point and `C-M-x` the top-level form around it, showing `=> value` beside the form until you edit the buffer; `C-c C-b` evaluates the buffer and `C-c C-k` saves and loads the file. Evaluation runs between keystrokes, so `C-c C-c` stops a runaway loop. Errors show `!! message` beside the form, and errors from calls open `*ox stacktrace*`, where `RET` visits a frame's source and `q` closes it.
 - Ox files are checked half a second after you stop typing, with `ox check`'s findings underlined, echoed at point and counted in the mode line.
 - Docstrings in Ox: a string first in a `def` or `defmacro` body with more after it describes the name, as in `(def (area w h) "Width times height." (* w h))`.

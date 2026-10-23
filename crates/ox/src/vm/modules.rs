@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::Runtime;
+use crate::describe::Place;
 use crate::symbol::Sym;
 use crate::value::Value;
 
@@ -18,6 +19,7 @@ pub struct Module {
     pub globals: HashMap<Sym, Value>,
     pub macros: HashMap<Sym, Value>,
     pub docs: HashMap<Sym, String>,
+    pub places: HashMap<Sym, Place>,
     pub exports: Option<HashSet<Sym>>,
     pub imports: Vec<Import>,
 }
@@ -85,37 +87,47 @@ impl Runtime {
         found.table(macros).get(&name).map(|value| (*value, module))
     }
 
-    fn find(&self, module: ModuleId, name: Sym, macros: bool) -> Option<(Value, ModuleId)> {
+    pub(crate) fn resolve(
+        &self,
+        module: ModuleId,
+        name: Sym,
+        macros: bool,
+    ) -> Option<(Value, ModuleId, Sym)> {
         if let Some((target, short)) = self.referenced(name) {
             let found = self.modules.get(target)?.table(macros).get(&short)?;
-            return Some((*found, target));
+            return Some((*found, target, short));
         }
         let current = self.modules.get(module)?;
         if let Some(value) = current.table(macros).get(&name) {
-            return Some((*value, module));
+            return Some((*value, module, name));
         }
         if let Some((alias, short)) = qualified(name)
-            && let Some(found) = current
+            && let Some((value, target)) = current
                 .imports
                 .iter()
                 .filter(|import| import.alias == alias)
                 .find_map(|import| self.exported(import.module, short, macros))
         {
-            return Some(found);
+            return Some((value, target, short));
         }
-        if let Some(found) = current
+        if let Some((value, target)) = current
             .imports
             .iter()
             .filter(|import| import.only.contains(&name))
             .find_map(|import| self.exported(import.module, name, macros))
         {
-            return Some(found);
+            return Some((value, target, name));
         }
         if module == PRELUDE {
             return None;
         }
         let found = self.modules.get(PRELUDE)?.table(macros).get(&name)?;
-        Some((*found, PRELUDE))
+        Some((*found, PRELUDE, name))
+    }
+
+    fn find(&self, module: ModuleId, name: Sym, macros: bool) -> Option<(Value, ModuleId)> {
+        self.resolve(module, name, macros)
+            .map(|(value, target, _)| (value, target))
     }
 
     pub fn lookup(&self, module: ModuleId, name: Sym) -> Option<Value> {
@@ -152,13 +164,27 @@ impl Runtime {
         }
     }
 
-    pub fn document(&mut self, module: ModuleId, name: Sym, doc: Option<String>) {
+    pub fn document(
+        &mut self,
+        module: ModuleId,
+        name: Sym,
+        doc: Option<String>,
+        place: Option<Place>,
+    ) {
         if let Some(found) = self.modules.get_mut(module) {
             match doc {
                 Some(doc) => found.docs.insert(name, doc),
                 None => found.docs.remove(&name),
             };
+            match place {
+                Some(place) => found.places.insert(name, place),
+                None => found.places.remove(&name),
+            };
         }
+    }
+
+    pub fn place(&self, module: ModuleId, name: Sym) -> Option<&Place> {
+        self.modules.get(module)?.places.get(&name)
     }
 
     pub fn doc(&self, module: ModuleId, name: Sym) -> Option<&str> {

@@ -1,6 +1,7 @@
 pub mod bytecode;
 pub mod check;
 mod compile;
+pub mod describe;
 pub mod error;
 mod expand;
 pub mod heap;
