@@ -39,7 +39,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - oxmacs is open source, under either the MIT License or the Apache License 2.0, at your option.
 - Ox and its `ox` command share the oxmacs version number.
 - Ox code runs two to three times faster: function lookups are cached, calls and arithmetic do less work, comparisons and hashing no longer allocate, and `map`, `filter`, `keep`, `take`, `drop` and `distinct` build their results without copying. A frame of the matrix screensaver takes about half as long.
-- The Game of Life computes a generation five times faster on a random grid, and no longer slows down as the acorn grows: cells are whole numbers counted by sorting.
+- The Game of Life computes a generation five times faster on a random grid and three and a half times faster once the acorn has grown: cells are whole numbers counted by sorting.
 - Ox runs `+`, `-`, `*`, `<`, `<=`, `>`, `>=`, `=` and `nth` on two values as single instructions, so loops that count, compare and index run two to three times faster. Redefining or shadowing these names still works.
 - `M-x list-tools` is a compact table: one line per tool, grouped by what uses it (R, Python, PDF), with the version that runs and where it comes from, and the latest release; `TAB` opens a tool's summary, the full path it runs from and its source.
 - `RET` leaves the line it ends alone in languages that keep the previous line's indentation, such as TOML and Markdown, instead of re-indenting it to match the line above.
