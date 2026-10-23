@@ -540,11 +540,11 @@ pub fn press(isolate: &mut Isolate, editor: &mut Editor, buffer: BufferId, slot:
 #[cfg(test)]
 mod tests {
     use oxmacs_core::editor::Editor;
-    use oxmacs_core::input::KeySequence;
     use oxmacs_core::text::Buffer;
     use oxmacs_core::theme::Highlight;
 
     use super::{Node, Press, ViewBuffer};
+    use crate::testing::{keys, settle};
     use crate::{Ox, log};
 
     const UI: &str = "(module (import (ox ui :only [column row text button space scrollable])))";
@@ -571,7 +571,7 @@ mod tests {
         let mut editor = Editor::new();
         let mut ox = Ox::new();
         ox.eval(&mut editor, &format!("{UI} {source}")).unwrap();
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
         (editor, ox)
     }
 
@@ -633,7 +633,7 @@ mod tests {
         assert_eq!(shown(&editor, "*count*"), text("0"));
 
         ox.eval(&mut editor, "(reset! count 5)").unwrap();
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         assert_eq!(shown(&editor, "*count*"), text("5"));
     }
@@ -657,7 +657,7 @@ mod tests {
 
         ox.press(&mut editor, id, 0);
         ox.press(&mut editor, id, 0);
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         assert_eq!(
             shown(&editor, "*count*"),
@@ -682,11 +682,8 @@ mod tests {
 
         for notation in ["b", "C-c x"] {
             editor.show_message("");
-            let keys: KeySequence = notation.parse().unwrap();
-            for key in keys.keys() {
-                editor.handle_key(*key);
-            }
-            ox.tick(&mut editor);
+            keys(&mut editor, notation);
+            settle(&mut editor, &mut ox);
             assert_eq!(editor.message(), Some("bumped"), "{notation}");
         }
     }
@@ -697,7 +694,7 @@ mod tests {
 
         ox.eval(&mut editor, r#"(open-view "*v*" (fn [] (text "second")))"#)
             .unwrap();
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         assert_eq!(shown(&editor, "*v*"), text("second"));
         assert_eq!(

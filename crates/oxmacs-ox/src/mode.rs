@@ -358,6 +358,7 @@ mod tests {
 
     use super::highlight_line;
     use crate::Ox;
+    use crate::testing::keys;
 
     #[test]
     fn ox_files_open_in_ox_mode() {
@@ -390,20 +391,13 @@ mod tests {
         (home, editor)
     }
 
-    fn press(editor: &mut Editor, notation: &str) {
-        let keys: oxmacs_core::input::KeySequence = notation.parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-        }
-    }
-
     #[test]
     fn tab_and_return_indent_like_the_clojure_style_guide() {
         let (_home, mut editor) = opened("(def (f x)\nx)\n(foo bar");
 
-        press(&mut editor, "C-n TAB");
+        keys(&mut editor, "C-n TAB");
         assert_eq!(editor.buffer().line_text(1), "  x)");
-        press(&mut editor, "M-> RET");
+        keys(&mut editor, "M-> RET");
         assert_eq!(editor.buffer().line_text(3), "     ");
     }
 
@@ -411,11 +405,11 @@ mod tests {
     fn ox_files_format_on_c_c_c_f_and_on_every_save() {
         let (home, mut editor) = opened("(def (f x)\nx)\n");
 
-        press(&mut editor, "C-c C-f");
+        keys(&mut editor, "C-c C-f");
         assert_eq!(editor.buffer().contents(), "(def (f x)\n  x)\n");
         assert_eq!(editor.message(), Some("Formatted with ox fmt"));
 
-        press(&mut editor, "M-> ( g SPC SPC ) C-x C-s");
+        keys(&mut editor, "M-> ( g SPC SPC ) C-x C-s");
         assert_eq!(
             std::fs::read_to_string(home.path().join("tools.ox")).unwrap(),
             "(def (f x)\n  x)\n(g)\n"

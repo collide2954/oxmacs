@@ -104,6 +104,7 @@ mod tests {
 
     use super::next;
     use crate::Ox;
+    use crate::testing::settle;
 
     const NAPS: &str = r"(def naps (atom []))
 (on-idle :nap 60 (fn [] (swap! naps conj :nap)))
@@ -111,7 +112,7 @@ mod tests {
 
     fn rest(ox: &mut Ox, editor: &mut Editor, since: Instant, seconds: u64) -> String {
         ox.idle(editor, since, since + Duration::from_secs(seconds));
-        ox.tick(editor);
+        settle(editor, ox);
         ox.eval(editor, "@naps").unwrap()
     }
 

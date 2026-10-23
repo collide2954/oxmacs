@@ -803,26 +803,18 @@ pub fn install(isolate: &mut Isolate) {
 mod tests {
     use oxmacs_core::display::LineStyle;
     use oxmacs_core::editor::Editor;
-    use oxmacs_core::input::KeySequence;
     use oxmacs_core::plugin::PluginBuffer;
     use oxmacs_core::theme::Highlight;
 
     use crate::Ox;
+    use crate::testing::{press, settle};
 
     fn opened(source: &str) -> (Editor, Ox) {
         let mut editor = Editor::new();
         let mut ox = Ox::new();
         ox.eval(&mut editor, source).unwrap();
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
         (editor, ox)
-    }
-
-    fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
-        let keys: KeySequence = notation.parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-        }
-        ox.tick(editor);
     }
 
     #[test]
@@ -983,7 +975,7 @@ mod tests {
             editor.resize_pane(window, 30, 60);
         }
         editor.prepare_display();
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
         let width = ox.eval(&mut editor, r#"(buffer-width "*side*")"#).unwrap();
         assert_ne!(width, "nil");
         assert_eq!(ox.eval(&mut editor, "(last @widths)").unwrap(), width);

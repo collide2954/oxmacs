@@ -40,7 +40,7 @@ fn profiled() -> (tempfile::TempDir, Editor, Ox) {
         Some("Profiling Ox; M-x ox-profiler-stop shows where the time went")
     );
     ox.eval(&mut editor, "(work)").unwrap();
-    ox.tick(&mut editor);
+    settle(&mut editor, &mut ox);
     run(&mut editor, &mut ox, "ox-profiler-stop");
     (home, editor, ox)
 }

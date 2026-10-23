@@ -1,8 +1,9 @@
 use std::fs;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use oxmacs_core::editor::Editor;
+use oxmacs_core::input::KeySequence;
 
 use crate::Ox;
 use crate::shapes::Shape;
@@ -19,10 +20,12 @@ fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
     (home, editor, ox)
 }
 
-fn run(editor: &mut Editor, ox: &mut Ox, command: &str) {
-    let id = editor.command_named(command).unwrap();
-    editor.execute(id);
-    settle(editor, ox);
+fn until(editor: &mut Editor, ox: &mut Ox, done: impl Fn(&Editor) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !done(editor) && Instant::now() < deadline {
+        ox.tick(editor);
+        thread::sleep(Duration::from_millis(1));
+    }
 }
 
 fn walk(node: &Node, texts: &mut Vec<String>, cells: &mut usize) {
@@ -100,14 +103,17 @@ fn life_draws_generations_and_takes_keys() {
     let (_home, mut editor, mut ox) =
         started("(use-plugin life :config {speed: 600 pattern: :glider})");
 
-    run(&mut editor, &mut ox, "life");
+    let id = editor.command_named("life").unwrap();
+    editor.execute(id);
+    until(&mut editor, &mut ox, |editor| {
+        editor.buffer_named("*Life*").is_some() && shown(editor).0.starts_with("Generation")
+    });
     assert_eq!(editor.buffer().name(), "*Life*");
     let (text, cells) = shown(&editor);
     assert!(text.starts_with("Generation 0   5 alive"), "{text}");
     assert_eq!(cells, 5);
 
-    thread::sleep(Duration::from_millis(700));
-    settle(&mut editor, &mut ox);
+    until(&mut editor, &mut ox, |editor| generation(editor) >= 1);
     assert!(generation(&editor) >= 1);
 
     press(&mut editor, &mut ox, "SPC");
@@ -121,7 +127,9 @@ fn life_draws_generations_and_takes_keys() {
     assert_eq!(generation(&editor), paused + 1);
     assert_eq!(shown(&editor).1, 5);
 
-    press(&mut editor, &mut ox, "r");
+    let restart: KeySequence = "r".parse().unwrap();
+    editor.handle_key(restart.keys()[0]);
+    until(&mut editor, &mut ox, |editor| generation(editor) == 0);
     assert_eq!(generation(&editor), 0);
     assert!(!shown(&editor).0.contains("Paused"));
 

@@ -177,23 +177,15 @@ pub fn deliver(isolate: &mut Isolate, inbox: &Inbox) {
 #[cfg(test)]
 mod tests {
     use oxmacs_core::editor::Editor;
-    use oxmacs_core::input::KeySequence;
 
     use crate::Ox;
-
-    fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
-        let keys: KeySequence = notation.parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-        }
-        ox.tick(editor);
-    }
+    use crate::testing::{press, settle};
 
     fn run(editor: &mut Editor, ox: &mut Ox, source: &str, command: &str) {
         ox.eval(editor, source).unwrap();
         let id = editor.command_named(command).unwrap();
         editor.execute(id);
-        ox.tick(editor);
+        settle(editor, ox);
     }
 
     #[test]
@@ -288,7 +280,7 @@ mod tests {
 
         let id = editor.command_named("ask").unwrap();
         editor.execute(id);
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
         press(&mut editor, &mut ox, "n");
         assert_eq!(editor.message(), Some("no"));
     }
@@ -343,12 +335,12 @@ mod tests {
         );
         assert_eq!(editor.message(), None);
         ox.eval(&mut editor, r#"(deliver gate "it")"#).unwrap();
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
         assert_eq!(editor.message(), Some("got it"));
 
         let id = editor.command_named("broken").unwrap();
         editor.execute(id);
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
         assert_eq!(editor.message(), Some("Ox: Division by zero"));
     }
 }

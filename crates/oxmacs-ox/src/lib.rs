@@ -253,9 +253,9 @@ impl Ox {
 #[cfg(test)]
 mod tests {
     use oxmacs_core::editor::Editor;
-    use oxmacs_core::input::KeySequence;
 
     use super::{Ox, Pace, log};
+    use crate::testing::{home_with, press, settle};
 
     #[test]
     fn ox_code_shows_messages_in_the_echo_area() {
@@ -319,17 +319,10 @@ mod tests {
         assert_eq!(editor.message(), Some("opened"));
     }
 
-    fn press(editor: &mut Editor, notation: &str) {
-        let keys: KeySequence = notation.parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-        }
-    }
-
     fn run(editor: &mut Editor, ox: &mut Ox, command: &str) {
         let id = editor.command_named(command).unwrap();
         editor.execute(id);
-        ox.tick(editor);
+        settle(editor, ox);
     }
 
     #[test]
@@ -388,8 +381,7 @@ mod tests {
             r#"(defcommand greet "Say hello" (message "Hello")) (bind-key "C-c g" 'greet)"#,
         )
         .unwrap();
-        press(&mut editor, "C-c g");
-        ox.tick(&mut editor);
+        press(&mut editor, &mut ox, "C-c g");
 
         assert_eq!(editor.message(), Some("Hello"));
     }
@@ -418,16 +410,6 @@ mod tests {
         );
     }
 
-    fn home_with(files: &[(&str, &str)]) -> tempfile::TempDir {
-        let home = tempfile::tempdir().unwrap();
-        for (name, text) in files {
-            let path = home.path().join(name);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, text).unwrap();
-        }
-        home
-    }
-
     #[test]
     fn init_ox_runs_when_the_editor_starts() {
         let home = home_with(&[(
@@ -438,8 +420,7 @@ mod tests {
         let mut ox = Ox::new();
 
         ox.start(&mut editor, Some(home.path()));
-        press(&mut editor, "C-c g");
-        ox.tick(&mut editor);
+        press(&mut editor, &mut ox, "C-c g");
 
         assert_eq!(editor.message(), Some("Hello"));
         assert_eq!(editor.buffer_named(log::LOG), None);
@@ -520,7 +501,7 @@ mod tests {
 
         ox.eval(&mut editor, r#"(spawn (raise (error "lost")))"#)
             .unwrap();
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         assert_eq!(editor.message(), Some("Ox: lost"));
     }

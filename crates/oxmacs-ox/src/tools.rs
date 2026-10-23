@@ -770,48 +770,19 @@ mod tests {
     use std::path::Path;
 
     use oxmacs_core::editor::Editor;
-    use oxmacs_core::input::KeySequence;
     use oxmacs_core::text::Buffer;
     use oxmacs_core::theme::Highlight;
 
     use super::{REPL, last_expression};
     use crate::stacktrace::STACKTRACE;
+    use crate::testing::{home_with, keys, press, settle, typed};
     use crate::{Ox, Pace, log};
-
-    fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
-        let keys: KeySequence = notation.parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-        }
-        ox.tick(editor);
-    }
-
-    fn typed(editor: &mut Editor, ox: &mut Ox, text: &str) {
-        let notation: Vec<String> = text
-            .chars()
-            .map(|character| match character {
-                ' ' => "SPC".to_owned(),
-                other => other.to_string(),
-            })
-            .collect();
-        press(editor, ox, &notation.join(" "));
-    }
-
-    fn home_with(files: &[(&str, &str)]) -> tempfile::TempDir {
-        let home = tempfile::tempdir().unwrap();
-        for (name, text) in files {
-            let path = home.path().join(name);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, text).unwrap();
-        }
-        home
-    }
 
     fn started(home: &Path) -> (Editor, Ox) {
         let mut editor = Editor::new();
         let mut ox = Ox::new();
         ox.start(&mut editor, Some(home));
-        crate::testing::settle(&mut editor, &mut ox);
+        settle(&mut editor, &mut ox);
         (editor, ox)
     }
 
@@ -830,7 +801,7 @@ mod tests {
         buffer.insert_at(0, text);
         let id = editor.buffer().id();
         editor.save_buffer(id);
-        ox.tick(editor);
+        settle(editor, ox);
     }
 
     fn logged(editor: &Editor) -> String {
@@ -1020,10 +991,12 @@ mod tests {
         let home = home_with(&[("scratch.ox", "(def (spin) (spin))\n(spin)\n(def after 1)")]);
         let (mut editor, mut ox) = visiting(home.path(), "scratch.ox");
 
-        press(&mut editor, &mut ox, "C-c C-b");
+        keys(&mut editor, "C-c C-b");
+        ox.tick(&mut editor);
         assert_eq!(ox.tick(&mut editor), Pace::Running);
 
-        press(&mut editor, &mut ox, "C-c C-c");
+        keys(&mut editor, "C-c C-c");
+        settle(&mut editor, &mut ox);
         assert_eq!(editor.message(), Some("Evaluation interrupted"));
         assert_eq!(ox.pace(), Pace::Idle);
         assert!(ox.eval(&mut editor, "after").is_err());
@@ -1096,14 +1069,14 @@ mod tests {
         let (mut editor, mut ox) = started(home.path());
         let greet = editor.command_named("greet").unwrap();
         editor.execute(greet);
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
         assert_eq!(editor.message(), Some("Hello 1"));
 
         editor.open_file(&home.path().join("plugins/greeter/words.ox"));
         rewrite(&mut editor, &mut ox, "(def hello \"Howdy\")");
         assert_eq!(editor.message(), Some("Reloaded greeter/words"));
         editor.execute(greet);
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         assert_eq!(editor.message(), Some("Howdy 2"));
         assert_eq!(logged(&editor), "");
@@ -1147,7 +1120,7 @@ mod tests {
         assert_eq!(editor.message(), Some("=> 8"));
         let greet = editor.command_named("greet").unwrap();
         editor.execute(greet);
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
         assert_eq!(editor.message(), Some("Hello"));
     }
 

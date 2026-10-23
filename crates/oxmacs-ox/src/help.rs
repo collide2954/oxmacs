@@ -273,11 +273,10 @@ mod tests {
     use std::path::Path;
 
     use oxmacs_core::editor::Editor;
-    use oxmacs_core::input::KeySequence;
 
     use super::DOC;
     use crate::Ox;
-    use crate::testing::typed;
+    use crate::testing::{press, settle, typed};
 
     const SOURCE: &str = "(def (area w h) \"Width times height. In cells.\" (* w h))
 (test \"area of a unit\" (expect (= (area 1 1) 1)))
@@ -285,23 +284,14 @@ mod tests {
 (def limit 5)
 ";
 
-    fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
-        let keys: KeySequence = notation.parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-        }
-        ox.tick(editor);
-    }
-
     fn visiting(home: &Path) -> (Editor, Ox) {
         std::fs::write(home.join("shapes.ox"), SOURCE).unwrap();
         let mut editor = Editor::new();
         let mut ox = Ox::new();
         ox.start(&mut editor, Some(home));
-        crate::testing::settle(&mut editor, &mut ox);
+        settle(&mut editor, &mut ox);
         editor.open_file(&home.join("shapes.ox"));
         press(&mut editor, &mut ox, "C-c C-b");
-        crate::testing::settle(&mut editor, &mut ox);
         (editor, ox)
     }
 

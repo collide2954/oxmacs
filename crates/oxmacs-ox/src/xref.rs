@@ -203,18 +203,10 @@ mod tests {
     use std::path::Path;
 
     use oxmacs_core::editor::Editor;
-    use oxmacs_core::input::KeySequence;
 
     use super::USAGES;
     use crate::Ox;
-
-    fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
-        let keys: KeySequence = notation.parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-        }
-        ox.tick(editor);
-    }
+    use crate::testing::{press, settle};
 
     fn started(home: &Path, files: &[(&str, &str)], open: &str) -> (Editor, Ox) {
         for (name, text) in files {
@@ -225,6 +217,7 @@ mod tests {
         let mut editor = Editor::new();
         let mut ox = Ox::new();
         ox.start(&mut editor, Some(home));
+        settle(&mut editor, &mut ox);
         editor.open_file(&home.join(open));
         (editor, ox)
     }

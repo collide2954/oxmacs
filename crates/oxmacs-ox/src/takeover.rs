@@ -189,6 +189,7 @@ mod tests {
     use super::current;
     use crate::Ox;
     use crate::shapes::{Ink, Paint, Shape};
+    use crate::testing::settle;
     use crate::views::{Node, ViewBuffer};
 
     fn paint(ink: Ink, alpha: f32) -> Paint {
@@ -304,14 +305,14 @@ mod tests {
         assert!(current(&editor).is_some());
 
         ox.end_take_over(&mut editor);
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         assert!(current(&editor).is_none());
         assert_eq!(ox.eval(&mut editor, "@ended").unwrap(), "true");
 
         ox.eval(&mut editor, DRAW).unwrap();
         ox.eval(&mut editor, "(end-take-over)").unwrap();
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
         assert!(current(&editor).is_none());
         assert_eq!(ox.eval(&mut editor, "@ended").unwrap(), "true");
     }
@@ -340,7 +341,7 @@ mod tests {
 (open-view "*art*" (fn [] (canvas [[:circle 10 10 4 :link]] :height 40)))"#,
         )
         .unwrap();
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         let id = editor.buffer_named("*art*").unwrap();
         let (_, view) = editor.plugin_buffer::<ViewBuffer>(id).unwrap();
@@ -364,7 +365,7 @@ mod tests {
 (open-view "*grid*" (fn [] (canvas [[:rect 0.5 0 0.25 10 :link]] :height 40 :relative true)))"#,
         )
         .unwrap();
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
         let id = editor.buffer_named("*grid*").unwrap();
         let (_, view) = editor.plugin_buffer::<ViewBuffer>(id).unwrap();
         assert!(matches!(view.node, Node::Canvas { relative: true, .. }));

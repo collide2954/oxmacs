@@ -253,8 +253,8 @@ mod tests {
     use std::path::Path;
 
     use oxmacs_core::editor::{Editor, Effect};
-    use oxmacs_core::input::KeySequence;
 
+    use crate::testing::{press, settle};
     use crate::{Bundle, Ox};
 
     const LISTER: Bundle = Bundle {
@@ -284,14 +284,6 @@ mod tests {
         (editor, ox)
     }
 
-    fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
-        let keys: KeySequence = notation.parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-        }
-        ox.tick(editor);
-    }
-
     #[test]
     fn manifests_bind_global_keys_and_add_start_screen_entries() {
         let home = tempfile::tempdir().unwrap();
@@ -314,7 +306,7 @@ mod tests {
         let (mut editor, mut ox) = started(home.path());
 
         assert!(editor.open_file(&folder));
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         assert_eq!(editor.message(), Some("opened projects"));
     }
@@ -327,7 +319,7 @@ mod tests {
             .unwrap();
 
         editor.check_disk_changes();
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         assert_eq!(ox.eval(&mut editor, "@seen").unwrap(), "10");
     }

@@ -30,6 +30,13 @@ pub fn settle(editor: &mut Editor, ox: &mut Ox) {
     }
 }
 
+pub fn keys(editor: &mut Editor, notation: &str) {
+    let keys: KeySequence = notation.parse().unwrap();
+    for key in keys.keys() {
+        editor.handle_key(*key);
+    }
+}
+
 pub fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
     let keys: KeySequence = notation.parse().unwrap();
     for key in keys.keys() {
@@ -50,6 +57,16 @@ pub fn typed(editor: &mut Editor, ox: &mut Ox, text: &str) {
         })
         .collect();
     press(editor, ox, &notation.join(" "));
+}
+
+pub fn home_with(files: &[(&str, &str)]) -> tempfile::TempDir {
+    let home = tempfile::tempdir().unwrap();
+    for (name, text) in files {
+        let path = home.path().join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    home
 }
 
 pub fn at_point(editor: &Editor) -> String {

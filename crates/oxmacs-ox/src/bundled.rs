@@ -165,9 +165,9 @@ const WEATHER: Bundle = Bundle {
 #[cfg(test)]
 mod tests {
     use oxmacs_core::editor::Editor;
-    use oxmacs_core::input::KeySequence;
 
     use crate::Ox;
+    use crate::testing::{press, settle};
     use crate::views::{Node, ViewBuffer};
 
     const PLACES: &str = r#"{"results":[{"id":2950159,"name":"Berlin","latitude":52.52437,"longitude":13.41053,"country_code":"DE","timezone":"Europe/Berlin","country":"Germany","admin1":"Land Berlin"}],"generationtime_ms":0.9}"#;
@@ -259,14 +259,6 @@ mod tests {
         out
     }
 
-    fn press(editor: &mut Editor, ox: &mut Ox, notation: &str) {
-        let keys: KeySequence = notation.parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-        }
-        ox.tick(editor);
-    }
-
     #[test]
     fn the_weather_commands_exist_before_the_plugin_loads() {
         let (_home, editor, _) = started();
@@ -349,7 +341,7 @@ mod tests {
             &mut ox,
             r#"(def forecast (f/parse-forecast FORECAST)) (open-view "*page*" (fn [] (p/page {forecast: forecast place: (f/parse-place PLACES) looked-up: "Berlin"} "Berlin")))"#,
         );
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         assert_eq!(
             shown(&editor, "*page*"),
@@ -377,7 +369,7 @@ mod tests {
         let id = editor.command_named("weather").unwrap();
 
         editor.execute(id);
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         assert_eq!(editor.buffer().name(), "*Weather*");
         let page = shown(&editor, "*Weather*");

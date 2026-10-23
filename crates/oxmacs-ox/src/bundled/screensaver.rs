@@ -66,7 +66,7 @@ fn going_idle_starts_the_chosen_screensaver_until_input() {
             .all(|shape| matches!(shape, Shape::Text { .. }))
     );
     ox.end_take_over(&mut editor);
-    ox.tick(&mut editor);
+    settle(&mut editor, &mut ox);
     assert!(takeover::current(&editor).is_none());
 }
 

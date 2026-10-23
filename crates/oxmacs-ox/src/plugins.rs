@@ -932,6 +932,7 @@ mod tests {
     use oxmacs_core::text::Buffer;
 
     use super::Bundle;
+    use crate::testing::{home_with, settle};
     use crate::{Ox, log};
 
     const MANIFEST: &str = r#"(plugin greeter
@@ -952,16 +953,6 @@ mod tests {
         ],
     };
 
-    fn home_with(files: &[(&str, &str)]) -> tempfile::TempDir {
-        let home = tempfile::tempdir().unwrap();
-        for (name, text) in files {
-            let path = home.path().join(name);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, text).unwrap();
-        }
-        home
-    }
-
     fn started(bundled: &'static [Bundle], home: &Path) -> (Editor, Ox) {
         let mut editor = Editor::new();
         let mut ox = Ox::with_bundled(bundled);
@@ -972,7 +963,7 @@ mod tests {
     fn run(editor: &mut Editor, ox: &mut Ox, command: &str) {
         let id = editor.command_named(command).unwrap();
         editor.execute(id);
-        ox.tick(editor);
+        settle(editor, ox);
     }
 
     fn logged(editor: &Editor) -> String {
@@ -1261,7 +1252,7 @@ mod tests {
         let (mut editor, mut ox) = started(&[CONFIGURED], home.path());
         assert_eq!(editor.message(), None);
 
-        ox.tick(&mut editor);
+        settle(&mut editor, &mut ox);
 
         assert_eq!(editor.message(), Some("greeter loaded"));
     }
