@@ -287,6 +287,203 @@ fn geometry_resizes_crops_pads_and_turns_images() {
     );
 }
 
+fn adjusted(isolate: &mut Isolate, color: &str, change: &str) -> String {
+    shown(
+        isolate,
+        &format!("(-> (image/new 1 1 :color {color}) {change} (image/pixel 0 0))"),
+    )
+}
+
+#[test]
+fn color_adjustments_follow_css_filters() {
+    let isolate = &mut Isolate::new();
+
+    assert_eq!(
+        adjusted(isolate, "[100 50 200]", "(image/brightness 1.5)"),
+        "[150 75 255 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, "[100 200 0]", "(image/contrast 0.5)"),
+        "[114 164 64 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, "[64 0 255]", "(image/gamma 2)"),
+        "[128 0 255 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, "[50 60 70]", "(image/exposure 1)"),
+        "[100 120 140 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, ":red", "(image/hue 180)"),
+        "[0 109 109 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, ":red", "(image/saturation 0)"),
+        "[54 54 54 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, ":red", "(image/grayscale)"),
+        "[54 54 54 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, ":white", "(image/sepia)"),
+        "[255 255 239 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, "[10 20 30 128]", "(image/invert)"),
+        "[245 235 225 128]"
+    );
+    assert_eq!(
+        adjusted(isolate, ":red", "(image/vibrance 2)"),
+        "[255 0 0 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(> (first (-> (image/new 1 1 :color [150 100 100]) (image/vibrance 2) (image/pixel 0 0))) 160)"
+        ),
+        "true"
+    );
+    assert_eq!(
+        adjusted(isolate, ":white", "(image/tint :red)"),
+        "[255 0 0 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, "[50 60 70]", "(image/balance :red 2)"),
+        "[100 60 70 255]"
+    );
+    assert_eq!(
+        adjusted(
+            isolate,
+            "[200 100 50]",
+            "(image/balance :neutral [200 100 50])"
+        ),
+        "[117 117 117 255]"
+    );
+}
+
+#[test]
+fn levels_curves_and_fewer_colors() {
+    let isolate = &mut Isolate::new();
+    shown(isolate, HALVES);
+
+    assert_eq!(
+        adjusted(
+            isolate,
+            "[75 20 200]",
+            "(image/levels :black 50 :white 150)"
+        ),
+        "[64 0 255 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, "[10 20 30]", "(image/curves [[0 255] [255 0]])"),
+        "[245 235 225 255]"
+    );
+    assert_eq!(
+        adjusted(
+            isolate,
+            "[10 20 30]",
+            "(image/curves [[0 255] [255 0]] :channel :red)"
+        ),
+        "[245 20 30 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, "[100 200 30]", "(image/posterize 2)"),
+        "[0 255 0 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, "[100 200 30]", "(image/threshold 128)"),
+        "[255 255 255 255]"
+    );
+    assert_eq!(
+        adjusted(isolate, "[100 100 100]", "(image/threshold)"),
+        "[0 0 0 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [found (image/threshold halves :otsu)] [(image/pixel found 0 0) (image/pixel found 3 1)])"
+        ),
+        "[[255 255 255 255] [0 0 0 0]]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/replace halves :red :blue) 0 0)"
+        ),
+        "[0 0 255 255]"
+    );
+    assert_eq!(
+        adjusted(
+            isolate,
+            "[250 5 0]",
+            "(image/replace :red :blue :tolerance 10)"
+        ),
+        "[0 0 255 255]"
+    );
+    assert_eq!(
+        adjusted(
+            isolate,
+            "[200 5 0]",
+            "(image/replace :red :blue :tolerance 10)"
+        ),
+        "[200 5 0 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [found (image/quantize (image/new 4 4 :color [128 128 128]) [:black :white])] [(image/pixel found 0 0) (image/pixel found 1 0)])"
+        ),
+        "[[255 255 255 255] [0 0 0 255]]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [found (image/quantize (image/new 4 4 :color [128 128 128]) [:black :white] :dither false)] [(image/pixel found 0 0) (image/pixel found 1 0)])"
+        ),
+        "[[255 255 255 255] [255 255 255 255]]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [found (image/quantize (image/canvas (image/new 2 2 :color :red) 4 2 :anchor :left :color :blue) 2)] [(image/pixel found 0 0) (image/pixel found 3 1)])"
+        ),
+        "[[255 0 0 255] [0 0 255 255]]"
+    );
+}
+
+#[test]
+fn color_mistakes_are_reported() {
+    let isolate = &mut Isolate::new();
+    shown(isolate, HALVES);
+
+    assert_eq!(
+        failure(isolate, "(image/brightness halves -1)"),
+        "image/brightness expects a factor of 0 or more, got -1"
+    );
+    assert_eq!(
+        failure(isolate, "(image/sepia halves 2)"),
+        "image/sepia expects a strength from 0 to 1, got 2"
+    );
+    assert_eq!(
+        failure(isolate, "(image/posterize halves 1)"),
+        "image/posterize expects 2 to 256 levels, got 1"
+    );
+    assert_eq!(
+        failure(isolate, "(image/curves halves [[0 0]])"),
+        "image/curves expects two or more [in out] points from 0 to 255, got [[0 0]]"
+    );
+    assert_eq!(
+        failure(isolate, "(image/threshold halves :median)"),
+        "image/threshold expects a level from 0 to 255 or :otsu, got :median"
+    );
+    assert_eq!(
+        failure(isolate, "(image/quantize halves 1)"),
+        "image/quantize expects 2 to 256 colors or a vector of colors, got 1"
+    );
+}
+
 #[test]
 fn geometry_mistakes_are_reported() {
     let mut isolate = Isolate::new();

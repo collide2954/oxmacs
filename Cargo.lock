@@ -3642,6 +3642,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "png",
+ "rayon",
  "regex",
  "resvg",
  "ring",

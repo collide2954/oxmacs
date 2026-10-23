@@ -18,6 +18,7 @@ kamadak-exif.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
 png.workspace = true
+rayon.workspace = true
 regex.workspace = true
 resvg.workspace = true
 ring.workspace = true
