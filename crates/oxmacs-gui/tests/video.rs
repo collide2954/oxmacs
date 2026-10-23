@@ -14,11 +14,11 @@ use oxmacs_gui::fonts;
 
 const SIZE: Size = Size::new(640.0, 640.0);
 
-const MANIFEST: &str = "(plugin life
+const MANIFEST: &str = "(plugin conway
 :version \"0.1.0\"
 :summary \"Conway's Game of Life on a canvas\"
-:commands {life: \"Watch Conway's Game of Life\"}
-:entry \"life.ox\")";
+:commands {conway: \"Watch Conway's Game of Life\"}
+:entry \"conway.ox\")";
 
 const LIFE_START: &str = "(module
 (import (ox ui)))
@@ -48,11 +48,11 @@ const LIFE_END: &str = "(def (draw)
 (ui/canvas (vec (map (fn [[x y]] [:rect (* x 0.0125) (* y 9) 0.011 8 :success]) now.cells))
 :height 540 :relative true))))
 
-(defcommand life \"Watch Conway's Game of Life\"
+(defcommand conway \"Watch Conway's Game of Life\"
 (reset! world {cells: (set (map (fn [[x y]] [(+ x 36) (+ y 26)]) acorn)) generation: 0})
-(open-view \"*Life*\" draw :keys {\"q\" 'quit-window})
+(open-view \"*Conway*\" draw :keys {\"q\" 'quit-window})
 (every 100 (fn []
-(if (buffer-exists? \"*Life*\")
+(if (buffer-exists? \"*Conway*\")
 (do (swap! world (fn [now] {cells: (step now.cells) generation: (inc now.generation)}))
 nil)
 :stop))))";
@@ -316,18 +316,107 @@ fn demo_home() -> PathBuf {
         "{} exists and wasn't made by this demo",
         home.display()
     );
-    fs::create_dir_all(home.join("plugins").join("life")).unwrap();
+    fs::create_dir_all(home.join("plugins").join("conway")).unwrap();
     fs::write(home.join(".oxmacs-demo"), "").unwrap();
-    fs::write(home.join(".gitignore"), ".oxmacs-demo\n").unwrap();
+    fs::write(
+        home.join(".gitignore"),
+        ".oxmacs-demo\ntutorial.txt\ntutorial.place\n",
+    )
+    .unwrap();
     fs::write(
         home.join("init.ox"),
         "(settings {theme: :adwaita-dark mode-line-style: :powerline animations: false font-size: 11})\n",
     )
     .unwrap();
     git(&home, &["init", "-q", "-b", "main"]);
+    git(&home, &["config", "user.name", "Ada Lovelace"]);
+    git(&home, &["config", "user.email", "ada@example.com"]);
+    git(&home, &["config", "commit.gpgsign", "false"]);
     git(&home, &["add", "."]);
     git(&home, &["commit", "-q", "-m", "Start my oxmacs config"]);
+    fs::write(home.join("README.md"), README).unwrap();
+    calendar(&home);
     home
+}
+
+const README: &str = "# My oxmacs setup
+
+Notes on how I use **oxmacs**, kept next to my config.
+
+## Plugins
+
+- `conway` plays the Game of Life
+- the calendar keeps my agenda in `.ics` files
+- the Ox manual is one key away, on `C-h i`
+
+## A key I like
+
+```
+(bind-key \"C-c c\" 'calendar)
+```
+";
+
+fn calendar(home: &Path) {
+    let folder = home.join("calendar").join("Personal");
+    fs::create_dir_all(&folder).unwrap();
+    let today = jiff::Zoned::now().date();
+    let at = |days: i64, hour: i8, minute: i8| {
+        today
+            .checked_add(jiff::Span::new().days(days))
+            .unwrap()
+            .at(hour, minute, 0, 0)
+            .to_zoned(jiff::tz::TimeZone::system())
+            .unwrap()
+            .timestamp()
+            .strftime("%Y%m%dT%H%M%SZ")
+            .to_string()
+    };
+    let day = |days: i64| {
+        today
+            .checked_add(jiff::Span::new().days(days))
+            .unwrap()
+            .strftime("%Y%m%d")
+            .to_string()
+    };
+    let events = [
+        (
+            "standup",
+            format!(
+                "DTSTART:{}\r\nDTEND:{}\r\nRRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR\r\n",
+                at(0, 9, 30),
+                at(0, 9, 45)
+            ),
+            "Team standup",
+        ),
+        (
+            "lunch",
+            format!("DTSTART:{}\r\nDTEND:{}\r\n", at(1, 12, 30), at(1, 13, 30)),
+            "Lunch with Bo",
+        ),
+        (
+            "review",
+            format!("DTSTART:{}\r\nDTEND:{}\r\n", at(2, 15, 0), at(2, 16, 0)),
+            "Plugin review",
+        ),
+        (
+            "release",
+            format!(
+                "DTSTART;VALUE=DATE:{}\r\nDTEND;VALUE=DATE:{}\r\n",
+                day(4),
+                day(5)
+            ),
+            "Release day",
+        ),
+    ];
+    for (uid, times, summary) in events {
+        fs::write(
+            folder.join(format!("{uid}.ics")),
+            format!(
+                "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:{uid}@example.com\r\n{times}SUMMARY:{summary}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+            ),
+        )
+        .unwrap();
+    }
 }
 
 #[test]
@@ -342,17 +431,129 @@ fn demo_video() {
     let (mut app, _) = App::boot(&[], Some(&home));
     settle(&mut app);
     film.shot(&mut app, 2.5);
+    show_tutorial(&mut film, &mut app);
     write_plugin(&mut film, &mut app);
     try_plugin(&mut film, &mut app);
+    read_manual(&mut film, &mut app);
+    preview_markdown(&mut film, &mut app);
+    browse_files(&mut film, &mut app);
     commit_plugin(&mut film, &mut app);
+    show_calendar(&mut film, &mut app);
     show_matrix(&mut film, &mut app);
     film.finish(&out);
+}
+
+fn show_tutorial(film: &mut Film, app: &mut App) {
+    film.mark("tutorial");
+    film.press(app, "C-h t");
+    wait(app, "the tutorial", |app| {
+        app.editor().buffer().name() == "tutorial.txt"
+    });
+    film.shot(app, 2.5);
+    film.press(app, "C-v");
+    film.hold(1.5);
+    film.press(app, "C-x k RET");
+    film.hold(0.5);
+}
+
+fn read_manual(film: &mut Film, app: &mut App) {
+    film.mark("manual");
+    film.press(app, "C-h i");
+    wait(app, "the manual", |app| {
+        app.editor().buffer().name() == "*Ox manual*"
+    });
+    film.shot(app, 2.5);
+    film.press(app, "TAB TAB");
+    film.hold(0.6);
+    film.press(app, "RET");
+    wait(app, "the language page", |app| {
+        app.editor().buffer().contents().starts_with("The language")
+    });
+    film.shot(app, 2.0);
+    film.press(app, "C-s");
+    film.type_slowly(app, "(let [name");
+    film.press(app, "RET");
+    film.hold(0.8);
+    film.mark("example");
+    film.press(app, "x");
+    wait(app, "the example to run", |app| {
+        app.editor()
+            .buffer_named("*ox repl*")
+            .and_then(|id| app.editor().buffer_by_id(id))
+            .is_some_and(|buffer| buffer.contents().contains("new messages"))
+    });
+    film.shot(app, 2.5);
+    film.mark("lookup");
+    film.press(app, "i");
+    film.type_slowly(app, "frequencies");
+    film.press(app, "RET");
+    wait(app, "the reference", |app| {
+        app.editor().buffer().contents().starts_with("Core library")
+    });
+    film.shot(app, 3.0);
+    film.press(app, "C-x 1");
+    film.press(app, "q");
+}
+
+fn preview_markdown(film: &mut Film, app: &mut App) {
+    film.mark("markdown");
+    film.press(app, "C-x C-f");
+    film.type_slowly(app, "~/oxmacs-demo/README.md");
+    film.press(app, "RET");
+    film.hold(0.8);
+    film.press(app, "M-x");
+    film.type_slowly(app, "markdown-preview");
+    film.press(app, "RET");
+    wait(app, "the preview", |app| {
+        app.editor()
+            .buffer_named("*Markdown: README.md*")
+            .is_some_and(|id| app.editor().buffer_shown(id))
+    });
+    film.shot(app, 3.0);
+    film.press(app, "C-x 1");
+}
+
+fn browse_files(film: &mut Film, app: &mut App) {
+    film.mark("dired");
+    film.press(app, "C-x d");
+    film.hold(0.5);
+    film.press(app, "RET");
+    wait(app, "the listing", |app| {
+        app.editor().buffer().contents().contains("README.md")
+    });
+    film.shot(app, 2.0);
+    film.press(app, "n n");
+    film.hold(0.8);
+    film.press(app, "q");
+}
+
+fn show_calendar(film: &mut Film, app: &mut App) {
+    film.mark("calendar");
+    film.press(app, "M-x");
+    film.type_slowly(app, "calendar");
+    film.press(app, "RET");
+    wait(app, "the agenda", |app| {
+        app.editor().buffer().name() == "*Calendar*"
+            && app.editor().buffer().contents().contains("Lunch with Bo")
+    });
+    film.shot(app, 3.0);
+    film.press(app, "m");
+    wait(app, "the month", |app| {
+        app.editor().buffer().name() == "*Calendar month*"
+    });
+    for _ in 0..40 {
+        thread::sleep(Duration::from_millis(10));
+        settle(app);
+    }
+    film.shot(app, 2.5);
+    film.press(app, "q");
+    film.press(app, "q");
 }
 
 fn write_plugin(film: &mut Film, app: &mut App) {
     film.press(app, "C-x C-f");
     film.hold(0.6);
-    film.type_slowly(app, "~/oxmacs-demo/plugins/life/plugin.ox");
+    film.type_slowly(app, "~/oxmacs-demo/plugins/conway/plugin.ox");
     film.hold(0.4);
     film.press(app, "RET");
     film.type_code(app, MANIFEST);
@@ -360,7 +561,7 @@ fn write_plugin(film: &mut Film, app: &mut App) {
     film.hold(1.2);
 
     film.press(app, "C-x C-f");
-    film.type_slowly(app, "life.ox");
+    film.type_slowly(app, "conway.ox");
     film.press(app, "RET");
     film.type_code(app, LIFE_START);
     film.type_code(app, LIFE_END);
@@ -369,7 +570,7 @@ fn write_plugin(film: &mut Film, app: &mut App) {
     wait(app, "the plugin to start", |app| {
         app.editor()
             .message()
-            .is_some_and(|text| text.starts_with("Started the life plugin"))
+            .is_some_and(|text| text.starts_with("Started the conway plugin"))
     });
     film.shot(app, 2.5);
     film.type_slowly(app, BLINKER);
@@ -391,16 +592,16 @@ fn write_plugin(film: &mut Film, app: &mut App) {
     });
     film.shot(app, 3.0);
     film.press(app, "q");
-    assert_eq!(app.editor().buffer().name(), "life.ox");
+    assert_eq!(app.editor().buffer().name(), "conway.ox");
 }
 
 fn try_plugin(film: &mut Film, app: &mut App) {
     film.press(app, "M-x");
-    film.type_slowly(app, "life");
+    film.type_slowly(app, "conway");
     film.hold(0.3);
     film.press(app, "RET");
     wait(app, "the Life view", |app| {
-        app.editor().buffer().name() == "*Life*"
+        app.editor().buffer().name() == "*Conway*"
     });
     film.mark("life");
     for _ in 0..80 {
@@ -418,6 +619,10 @@ fn commit_plugin(film: &mut Film, app: &mut App) {
         app.editor().buffer().contents().contains("Untracked")
     });
     film.shot(app, 2.0);
+    film.press(app, "C-s");
+    film.type_slowly(app, "plugins/");
+    film.press(app, "RET");
+    film.hold(0.4);
     film.press(app, "s");
     wait(app, "staging", |app| {
         app.editor().buffer().contents().contains("Staged")
@@ -435,12 +640,15 @@ fn commit_plugin(film: &mut Film, app: &mut App) {
     film.mark("commit");
     film.press(app, "C-c C-c");
     wait(app, "the commit", |app| {
-        app.editor()
-            .buffer()
-            .contents()
-            .contains("Add a Game of Life plugin")
+        app.editor().buffer().name().starts_with("git:")
+            && app
+                .editor()
+                .buffer()
+                .contents()
+                .contains("Add a Game of Life plugin")
     });
     film.shot(app, 3.0);
+    film.press(app, "C-x 1");
 }
 
 fn show_matrix(film: &mut Film, app: &mut App) {
