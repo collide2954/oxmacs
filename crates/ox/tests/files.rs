@@ -56,6 +56,38 @@ fn appending_adds_to_the_end_and_makes_missing_files() {
     assert_eq!(fs::read_to_string(&path).unwrap(), "one\ntwo\n");
 }
 
+#[test]
+fn files_travel_as_base64_whatever_their_bytes() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("bytes.bin");
+    let copy = dir.path().join("copy.bin");
+    let bytes = [0_u8, 159, 146, 150, 255, 10];
+    fs::write(&source, bytes).unwrap();
+    let mut isolate = Isolate::new();
+
+    let encoded = evaluated(
+        &mut isolate,
+        &format!(
+            "(let [encoded (await (file/read-base64 {}))] (await (file/write-base64 {} encoded)) encoded)",
+            literal(&source),
+            literal(&copy)
+        ),
+    );
+
+    assert_eq!(encoded, r#""AJ+Slv8K""#);
+    assert_eq!(fs::read(&copy).unwrap(), bytes);
+    assert_eq!(
+        evaluated(
+            &mut isolate,
+            &format!(
+                "(await (file/write-base64 {} \"#not base64#\"))",
+                literal(&copy)
+            )
+        ),
+        "error: file/write-base64 got text that isn't base64"
+    );
+}
+
 #[cfg(unix)]
 fn link(target: &Path, at: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(target, at)

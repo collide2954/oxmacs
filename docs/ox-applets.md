@@ -80,6 +80,19 @@ The calendar is the bundled `calendar` plugin in `crates/oxmacs-ox/plugins/calen
 - **Invitations.** `M-x calendar-import` adds the events of an `.ics` file. For an invitation, `a`, `x` and `?` in the event accept, decline or answer maybe for the guest whose address is `email`, and write a `METHOD:REPLY` file beside the event to send to the organizer; oxmacs sends no mail.
 - **CalDAV.** `M-x calendar-sync` (or `s`) first sends local changes, `PUT` with `If-None-Match: *` for new events and `If-Match` with the known ETag otherwise, and `DELETE` for removed ones, then asks the server for every event with a `calendar-query` `REPORT` and brings in what changed, moving events the server dropped to the trash. A change made on both sides keeps the server's copy and says so. The login comes from the vault entry `:login` names. `.sync.json` in the calendar's folder remembers ETags and pending changes.
 
+## Remote
+
+Instead of TRAMP's special paths, other machines are browsed: the bundled `remote` plugin in `crates/oxmacs-ox/plugins/remote` lists hosts and opens a dired-like browser on each. `hosts.ox` reads `~/.ssh/config` and the saved hosts, `shell.ox` keeps a shell open on each host, `ops.ox` lists, reads, writes, copies and searches over ssh, sftp or ftp, and the entry `remote.ox` has the buffers and commands.
+
+- **Hosts.** `M-x remote` lists the hosts `~/.ssh/config` names, leaving out patterns, and the ones in the `hosts` setting: `{name: "box" protocol: :ssh address: "box.example.com" user: "ana"}`, `:sftp` for servers that only speak sftp, or `:ftp` (with `:tls` for FTPS and `:login`, a vault entry, for the password). A host can instead give the command that opens a shell on it, `shell: ["docker" "exec" "-i" "box" "sh"]` or `["wsl" "sh"]`, which reaches containers and WSL the same way, and lets the tests use a local `sh`. `a` saves a host to `init.ox`.
+- **One shell per host.** As TRAMP does, oxmacs keeps one `ssh host sh` open per host and sends each command with a marker that ends its output and carries its exit status, so browsing doesn't pay for a new connection each time. Logging in is ssh's business: keys, the agent and `~/.ssh/config` all apply, and `BatchMode` keeps ssh from asking for a password where nobody can type it.
+- **Browsing.** `RET` enters a folder or opens a file, `^` goes up, `g` lists again, `+` makes a folder, `R` renames and `D` deletes after asking. Listings come from `ls -lAn`, GNU or BSD.
+- **Editing.** A file opens as a local copy under `remote/<host>` in the oxmacs home folder, so every mode and tool works on it, and saving sends it back. Files travel as base64 through the shell, so binary files arrive intact; `file/read-base64` and `file/write-base64` were added to `(ox file)` for this.
+- **Copying.** `C` copies a remote file into a local folder, saying how far it has got for large files, and `U` uploads a local file into the folder shown.
+- **Commands and search.** `!` runs a command in the folder shown and opens `*remote output*` with its status; `/` greps the files below it and opens `*remote search*`, where `RET` visits a line. `s` opens a shell buffer on the host with an input line.
+- **FTP and sftp.** Hosts without a shell use `curl` for FTP, its password given on standard input so it never shows in the process list, and `sftp -b -` for sftp; running commands and search need a shell.
+- **Waking.** Background work nobody awaits no longer keeps Ox awake, so an idle connection, whose exit is such work, lets the window sleep.
+
 ## Life
 
 Conway's Game of Life is the bundled `life` plugin in `crates/oxmacs-ox/plugins/life`, the one written from scratch in the demo video. It is small enough to read as an example of a plugin: `rules.ox` holds the rules as pure functions over a set of live cells, and the entry `life.ox` draws them on a relative canvas and runs them with `every`.

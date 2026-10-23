@@ -108,7 +108,7 @@ impl Runtime {
     }
 
     pub fn next_wake(&self) -> Wake {
-        if !self.tasks.is_empty() || !self.parked.is_empty() || self.heap.job_count() > 0 {
+        if !self.tasks.is_empty() || !self.parked.is_empty() || self.heap.awaited_jobs() {
             return Wake::Soon;
         }
         let mut earliest: Option<Instant> = None;

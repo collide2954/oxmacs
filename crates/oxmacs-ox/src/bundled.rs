@@ -11,7 +11,19 @@ pub const BUNDLED: &[Bundle] = &[
     IRC,
     CALENDAR,
     LIFE,
+    REMOTE,
 ];
+
+const REMOTE: Bundle = Bundle {
+    name: "remote",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/remote/plugin.ox")),
+        ("remote.ox", include_str!("../plugins/remote/remote.ox")),
+        ("hosts.ox", include_str!("../plugins/remote/hosts.ox")),
+        ("shell.ox", include_str!("../plugins/remote/shell.ox")),
+        ("ops.ox", include_str!("../plugins/remote/ops.ox")),
+    ],
+};
 
 const LIFE: Bundle = Bundle {
     name: "life",
@@ -406,6 +418,9 @@ mod calendar;
 
 #[cfg(test)]
 mod life;
+
+#[cfg(test)]
+mod remote;
 
 #[cfg(test)]
 mod dired {

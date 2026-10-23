@@ -59,7 +59,7 @@ pub(crate) fn to_base64(bytes: &[u8]) -> String {
     encoded
 }
 
-fn from_base64(text: &str) -> Option<Vec<u8>> {
+pub(crate) fn from_base64(text: &str) -> Option<Vec<u8>> {
     let mut bits = 0_u32;
     let mut count = 0;
     let mut bytes = Vec::with_capacity(text.len() * 3 / 4);

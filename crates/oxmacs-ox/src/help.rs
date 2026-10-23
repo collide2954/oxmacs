@@ -298,8 +298,10 @@ mod tests {
         let mut editor = Editor::new();
         let mut ox = Ox::new();
         ox.start(&mut editor, Some(home));
+        crate::testing::settle(&mut editor, &mut ox);
         editor.open_file(&home.join("shapes.ox"));
         press(&mut editor, &mut ox, "C-c C-b");
+        crate::testing::settle(&mut editor, &mut ox);
         (editor, ox)
     }
 

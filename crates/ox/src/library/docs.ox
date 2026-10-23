@@ -165,6 +165,8 @@
 (file/read path) "A promise of the contents of the file at path, as a string. Use await to get it."
 (file/write path text) "Writes text to the file at path, replacing what was there, and returns a promise that settles when it is done."
 (file/append path text) "Adds text to the end of the file at path, making the file when it is missing, and returns a promise that settles when it is done."
+(file/read-base64 path) "A promise of the bytes of the file at path, written as base64, for files that aren't text."
+(file/write-base64 path encoded) "Writes the bytes base64 text encodes to the file at path, replacing what was there; returns a promise."
 (file/exists? path) "A promise of whether anything exists at path."
 (file/list folder) "A promise of the entries in folder, each a map of :name, :path, :dir, :link, :target, :hidden, :size and :modified."
 (file/metadata path) "A promise of a map describing path, with the same fields file/list gives."

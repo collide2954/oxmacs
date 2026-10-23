@@ -87,6 +87,15 @@ impl Heap {
         self.jobs.len()
     }
 
+    pub(crate) fn awaited_jobs(&self) -> bool {
+        self.jobs.iter().any(|job| {
+            matches!(
+                self.promise_of(job.promise),
+                Some(Promise::Pending { awaited: true })
+            )
+        })
+    }
+
     pub(crate) fn job_promises(&self) -> impl Iterator<Item = Value> + '_ {
         self.jobs.iter().map(|job| job.promise)
     }

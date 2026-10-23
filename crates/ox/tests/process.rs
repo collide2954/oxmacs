@@ -69,6 +69,30 @@ fn errors_arrive_on_their_own_channel() {
 }
 
 #[test]
+fn processes_nobody_waits_for_let_the_isolate_rest() {
+    let mut isolate = Isolate::new();
+    let long = if cfg!(windows) {
+        r#"(process/start "ping" ["-n" "60" "127.0.0.1"])"#
+    } else {
+        r#"(process/start "sleep" ["60"])"#
+    };
+    isolate
+        .eval(&format!(
+            "(module (import (ox process))) (def running {long}) nil"
+        ))
+        .unwrap();
+    assert_eq!(isolate.next_wake(), ox::task::Wake::Never);
+
+    isolate.eval("(spawn (await running.exit))").unwrap();
+    let _ = isolate.run(std::time::Duration::from_millis(10));
+    assert_eq!(isolate.next_wake(), ox::task::Wake::Soon);
+
+    isolate
+        .eval("(module (import (ox process))) (process/kill running)")
+        .unwrap();
+}
+
+#[test]
 fn started_processes_can_be_killed() {
     let mut isolate = Isolate::new();
     let long = if cfg!(windows) {

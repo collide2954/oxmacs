@@ -6,6 +6,7 @@ use std::time::UNIX_EPOCH;
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
+use crate::library::crypto::{from_base64, to_base64};
 use crate::library::paths::text;
 use crate::portable::{Failure, Portable};
 use crate::symbol::Sym;
@@ -158,8 +159,23 @@ fn append(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     })
 }
 
+fn write_base64(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let path = PathBuf::from(text(heap, "file/write-base64", arguments[0])?);
+    let bytes = from_base64(text(heap, "file/write-base64", arguments[1])?)
+        .ok_or_else(|| Error::new("file/write-base64 got text that isn't base64"))?;
+    heap.background("ox file/write-base64", move || {
+        done(fs::write(&path, bytes), "write", &path)
+    })
+}
+
 pub fn install(isolate: &mut Isolate) {
     isolate.define_native_in(MODULE, "append", 2, Some(2), append);
+    isolate.define_native_in(MODULE, "write-base64", 2, Some(2), write_base64);
+    single(isolate, "read-base64", |path| {
+        fs::read(&path)
+            .map(|bytes| string(&to_base64(&bytes)))
+            .map_err(|error| failed("read", &path, &error))
+    });
     single(isolate, "list", |path| list(&path));
     single(isolate, "read", |path| {
         fs::read_to_string(&path)
