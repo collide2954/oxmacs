@@ -73,6 +73,10 @@ impl Editor {
     }
 
     pub(in crate::editor) fn format_buffer(&mut self) {
+        if self.formatter_for(0).is_none() && self.lsp_formats(0) {
+            self.lsp_format(0, false);
+            return;
+        }
         let Some(formatter) = self.formatter_for(0) else {
             self.show_message("No formatter for this buffer");
             return;

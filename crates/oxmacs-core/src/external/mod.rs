@@ -1,5 +1,6 @@
 pub mod console;
 pub mod diagnostics;
+pub mod lsp;
 pub mod managed;
 pub mod net;
 pub mod process;

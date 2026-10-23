@@ -32,6 +32,8 @@ pub struct Config {
     pub line_number_separator: bool,
     pub window_mode: WindowMode,
     pub mode_line_style: ModeLineStyle,
+    pub language_servers: bool,
+    pub inlay_hints: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r_program: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -105,6 +107,8 @@ impl Default for Config {
             line_number_separator: false,
             window_mode: WindowMode::default(),
             mode_line_style: ModeLineStyle::default(),
+            language_servers: true,
+            inlay_hints: true,
             r_program: None,
             air_program: None,
         }

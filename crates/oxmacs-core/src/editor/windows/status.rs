@@ -28,6 +28,7 @@ pub struct Status {
     pub position: Option<String>,
     pub crlf: bool,
     pub mode: Option<&'static str>,
+    pub server: Option<String>,
     pub lint: Option<String>,
 }
 
@@ -43,6 +44,9 @@ impl fmt::Display for Status {
         }
         if let Some(mode) = self.mode {
             write!(f, "   ({mode})")?;
+        }
+        if let Some(server) = &self.server {
+            write!(f, "   {server}")?;
         }
         if let Some(lint) = &self.lint {
             write!(f, "   {lint}")?;
@@ -76,6 +80,7 @@ mod tests {
                 position: None,
                 crlf: true,
                 mode: Some("Rust"),
+                server: None,
                 lint: None,
             }
         );

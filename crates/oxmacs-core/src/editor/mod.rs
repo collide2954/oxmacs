@@ -7,6 +7,7 @@ mod editing;
 mod effect;
 mod job;
 mod languages;
+mod lsp;
 mod motion;
 mod notes;
 #[cfg(test)]
@@ -30,6 +31,7 @@ pub use effect::{ConnectionId, Effect, FetchId};
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
 pub use languages::r_plots::{GalleryView, PlotView};
 pub use languages::registry::{LineHighlighter, LineIndenter};
+pub use lsp::{SERVERS, ServerId, ServerSpec};
 pub use motion::mouse::{Cell, Clicks};
 pub use page::{Page, clip, fill};
 pub use prompts::callbacks::{InputStyle, Offer, Picked};
@@ -42,6 +44,7 @@ pub use prompts::transient::{
 };
 pub use search::isearch::Search;
 pub use search::replace::Replace;
+pub use special::locations::Place;
 pub use special::processes::{ProcessKey, ProcessSpec};
 pub use windows::numbers::Gutter;
 pub use windows::pane::{Pane, ScreenRow};
@@ -71,12 +74,18 @@ const DEFAULT_ROWS: usize = 24;
 type FileOpener = (&'static [&'static str], fn(&mut Editor, &Path) -> bool);
 
 #[derive(Debug, Clone, Copy)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is its own setting"
+)]
 struct Settings {
     format_on_save: bool,
     rust_lint: RustLint,
     line_numbers: LineNumbers,
     line_number_separator: bool,
     auto_save: bool,
+    language_servers: bool,
+    inlay_hints: bool,
 }
 
 impl From<&Config> for Settings {
@@ -87,6 +96,8 @@ impl From<&Config> for Settings {
             line_numbers: config.line_numbers,
             line_number_separator: config.line_number_separator,
             auto_save: config.auto_save,
+            language_servers: config.language_servers,
+            inlay_hints: config.inlay_hints,
         }
     }
 }
@@ -169,6 +180,7 @@ pub struct Editor {
     lints: build::lint::Lints,
     notes: Vec<notes::Note>,
     errors_from: build::errors::ErrorSource,
+    lsp: lsp::Clients,
     config: Config,
 }
 
@@ -265,6 +277,7 @@ impl Editor {
             lints: build::lint::Lints::default(),
             notes: Vec::new(),
             errors_from: build::errors::ErrorSource::default(),
+            lsp: lsp::Clients::default(),
             config: Config::default(),
         }
     }
@@ -486,6 +499,7 @@ impl Editor {
             Some(Mode::Compilation(_)) => Scope::Compilation,
             Some(Mode::Diagnostics(_)) => Scope::Diagnostics,
             Some(Mode::Help(_)) => Scope::Help,
+            Some(Mode::Locations(_)) => Scope::Locations,
             Some(Mode::Plots(_)) => Scope::Plots,
             Some(Mode::Processes(_)) => Scope::Processes,
             Some(Mode::Tools(_)) => Scope::Tools,
@@ -512,6 +526,7 @@ impl Editor {
                 }),
             Some(Mode::Diagnostics(list)) => list.line_style(line),
             Some(Mode::Help(help)) => help.line_style(line),
+            Some(Mode::Locations(list)) => list.line_style(line),
             Some(Mode::Processes(list)) => list.line_style(line),
             Some(Mode::Tools(list)) => list.line_style(line),
             Some(Mode::Environment(view)) => view.line_style(line),

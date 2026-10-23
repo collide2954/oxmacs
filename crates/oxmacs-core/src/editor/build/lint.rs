@@ -135,7 +135,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn request_lint(&mut self, language: Language, path: &Path) {
-        if self.has_linter(language) {
+        if self.has_linter(language) && !self.serves(language.name(), path) {
             self.lints.due = Some((language, path.to_owned()));
         }
     }

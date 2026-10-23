@@ -256,6 +256,9 @@ impl<'a> Pane<'a> {
                 .file()
                 .is_some_and(|file| file.format.line_ending == LineEnding::CrLf),
             mode: language.map(Language::name),
+            server: language
+                .zip(buffer.file())
+                .and_then(|(language, file)| self.editor.server_label(language.name(), &file.path)),
             lint: buffer
                 .file()
                 .and_then(|file| self.editor.lint_status(&file.path)),

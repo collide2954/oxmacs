@@ -373,6 +373,41 @@ pub enum Command {
     )]
     FindInitFile,
     #[strum(
+        message = "Restart the language server of this buffer",
+        detailed_message = "Stops the language server working on the current buffer, such as rust-analyzer, and starts a fresh one for the project."
+    )]
+    LspRestart,
+    #[strum(
+        message = "Show what the language servers said",
+        detailed_message = "Opens *language servers*: each server's start, its log and error output, and why it stopped, newest at the end."
+    )]
+    LspLog,
+    #[strum(
+        message = "Go to where the name at point is defined",
+        detailed_message = "Asks the buffer's language server where the name at point is defined and goes there; when there are several places they are listed in *xref*. M-, comes back."
+    )]
+    LspFindDefinition,
+    #[strum(
+        message = "List every use of the name at point",
+        detailed_message = "Asks the buffer's language server for every reference to the name at point and lists them in *xref*, grouped by file. RET visits one, n and p step and q quits."
+    )]
+    LspFindReferences,
+    #[strum(
+        message = "Show the documentation of the name at point",
+        detailed_message = "Asks the buffer's language server about the name at point and shows its signature and documentation in *doc* beside the current window; q closes it."
+    )]
+    LspDescribe,
+    #[strum(
+        message = "Rename the name at point everywhere",
+        detailed_message = "Asks for the new name, then has the buffer's language server rename the name at point in every file of the project. Changed files are left unsaved; C-x s saves them."
+    )]
+    LspRename,
+    #[strum(
+        message = "Offer the server's fixes and refactorings here",
+        detailed_message = "Asks the buffer's language server what it can do at point, such as fixing the error on this line, adding an import or extracting code, and runs the one you pick."
+    )]
+    LspCodeActions,
+    #[strum(
         message = "Explain a command, its keys and where it works",
         detailed_message = "Lists every command with its key and what it does. RET opens *Help* beside the current window with the full description; q closes it."
     )]
@@ -391,6 +426,12 @@ pub enum Command {
         detailed_message = "Affects only the current buffer. The line-numbers setting chooses the default for every file buffer."
     )]
     DisplayLineNumbersMode,
+    #[strum(message = "Visit the location on this line")]
+    LocationVisit,
+    #[strum(message = "Move to the next location")]
+    LocationNext,
+    #[strum(message = "Move to the previous location")]
+    LocationPrevious,
     #[strum(message = "Move to the next key line")]
     ForwardButton,
     #[strum(message = "Move to the previous key line")]
@@ -602,6 +643,7 @@ impl Command {
             | Self::CompletionAccept
             | Self::CompletionQuit => Scope::Popup,
             Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
+            Self::LocationVisit | Self::LocationNext | Self::LocationPrevious => Scope::Locations,
             Self::ToolDetails | Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => {
                 Scope::Tools
             }
@@ -635,6 +677,7 @@ pub enum Scope {
     Compilation,
     Diagnostics,
     Help,
+    Locations,
     Popup,
     Plots,
     Processes,
@@ -657,6 +700,7 @@ impl Scope {
             Self::Compilation => Some("*compilation*"),
             Self::Diagnostics => Some("*Diagnostics*"),
             Self::Help => Some("*Help*"),
+            Self::Locations => Some("*xref*"),
             Self::Popup => Some("the completion popup"),
             Self::Plots => Some("R plot windows"),
             Self::Processes => Some("*Processes*"),

@@ -58,7 +58,11 @@ impl Editor {
     }
 
     pub(in crate::editor) fn completion_at_point(&mut self) {
-        self.r_complete(true);
+        if self.in_r() {
+            self.r_complete(true);
+        } else {
+            self.lsp_complete(true);
+        }
     }
 
     fn in_comment(&self) -> bool {
@@ -85,6 +89,9 @@ impl Editor {
     }
 
     pub fn wants_auto_complete(&self) -> bool {
+        if !self.in_r() {
+            return self.lsp_wants_auto_complete() && !self.in_comment();
+        }
         self.last_command == Some(Command::SelfInsertCommand)
             && self.minibuffer.is_none()
             && self.popup.is_none()
@@ -97,6 +104,12 @@ impl Editor {
     }
 
     pub fn auto_complete(&mut self) {
+        if !self.in_r() {
+            if self.wants_auto_complete() {
+                self.lsp_auto_complete();
+            }
+            return;
+        }
         if self.wants_auto_complete() {
             self.set_r_auto_mark(self.auto_mark());
             self.r_complete(false);

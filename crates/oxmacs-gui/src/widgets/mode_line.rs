@@ -282,6 +282,7 @@ fn modern<'a, Message: 'a>(
         .lint
         .iter()
         .cloned()
+        .chain(status.server.clone())
         .chain(status.crlf.then(|| "CRLF".to_owned()))
         .chain(status.mode.map(str::to_owned));
     let mut details: Vec<Element<'a, Message>> = Vec::new();
@@ -334,6 +335,7 @@ fn boxed<'a, Message: 'a>(
         .mode
         .map(str::to_owned)
         .into_iter()
+        .chain(status.server.clone())
         .chain(status.lint.clone())
         .chain(status.crlf.then(|| "CRLF".to_owned()));
     left.extend(words.map(|word| pill(paint.small(word, colors.text), paint)));
@@ -367,9 +369,10 @@ fn powerline<'a, Message: 'a>(
         );
     }
     let words = status
-        .lint
+        .server
         .iter()
         .cloned()
+        .chain(status.lint.clone())
         .chain(status.crlf.then(|| "CRLF".to_owned()))
         .map(|word| {
             container(paint.small(word, colors.dim))
@@ -418,6 +421,7 @@ mod tests {
             position: None,
             crlf: false,
             mode: Some("Rust"),
+            server: Some("rust-analyzer".to_owned()),
             lint: Some("E1 W2".to_owned()),
         }
     }
@@ -436,13 +440,24 @@ mod tests {
     fn classic_is_one_emacs_like_line() {
         let mut ui = shown(ModeLineStyle::Classic, BufferState::Modified);
 
-        assert!(ui.find("** main.rs   L12 C4   (Rust)   E1 W2").is_ok());
+        assert!(
+            ui.find("** main.rs   L12 C4   (Rust)   rust-analyzer   E1 W2")
+                .is_ok()
+        );
         assert!(ui.find("14:05").is_ok());
     }
 
     #[test]
     fn modern_minimal_boxed_and_powerline_split_the_status_into_segments() {
-        let everything = ["●", "main.rs", "12:4", "Rust", "E1 W2", "14:05"];
+        let everything = [
+            "●",
+            "main.rs",
+            "12:4",
+            "Rust",
+            "rust-analyzer",
+            "E1 W2",
+            "14:05",
+        ];
         for style in [
             ModeLineStyle::Modern,
             ModeLineStyle::Boxed,
@@ -464,6 +479,7 @@ mod tests {
         }
         assert!(ui.find("Rust").is_err());
         assert!(ui.find("E1 W2").is_err());
+        assert!(ui.find("rust-analyzer").is_err());
     }
 
     #[test]

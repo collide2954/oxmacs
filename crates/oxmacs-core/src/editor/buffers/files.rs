@@ -306,7 +306,14 @@ impl Editor {
         let always = self
             .formatter_for(index)
             .is_some_and(|formatter| formatter.on_save);
-        self.write_buffer_at(index, self.settings.format_on_save || always)
+        let by_server = self.settings.format_on_save
+            && self.formatter_for(index).is_none()
+            && self.lsp_formats(index);
+        let written = self.write_buffer_at(index, self.settings.format_on_save || always);
+        if written && by_server {
+            self.lsp_format(index, true);
+        }
+        written
     }
 
     pub(in crate::editor) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {
@@ -351,6 +358,7 @@ impl Editor {
                 if let Some(language) = self.buffers.language(index) {
                     self.request_lint(language, &path);
                 }
+                self.server_saved(id);
                 self.tell_saved(id);
                 true
             }

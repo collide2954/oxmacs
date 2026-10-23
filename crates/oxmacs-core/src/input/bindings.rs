@@ -53,6 +53,13 @@ const GLOBAL: &[(&str, Command)] = &[
     ("C-M-d", Command::DownList),
     ("M-g i", Command::Imenu),
     ("M-,", Command::XrefGoBack),
+    ("M-.", Command::LspFindDefinition),
+    ("M-?", Command::LspFindReferences),
+    ("C-c C-d", Command::LspDescribe),
+    ("C-c .", Command::LspCodeActions),
+    ("<f2>", Command::LspRename),
+    ("C-M-i", Command::CompletionAtPoint),
+    ("C-c C-f", Command::FormatBuffer),
     ("M-g n", Command::NextError),
     ("M-g M-n", Command::NextError),
     ("C-x `", Command::NextError),
@@ -220,6 +227,13 @@ const HELP: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
+const LOCATIONS: &[(&str, Command)] = &[
+    ("RET", Command::LocationVisit),
+    ("n", Command::LocationNext),
+    ("p", Command::LocationPrevious),
+    ("q", Command::QuitWindow),
+];
+
 const POPUP: &[(&str, Command)] = &[
     ("C-n", Command::CompletionNext),
     ("<down>", Command::CompletionNext),
@@ -346,6 +360,7 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::Compilation => COMPILATION,
         Scope::Diagnostics => DIAGNOSTICS,
         Scope::Help => HELP,
+        Scope::Locations => LOCATIONS,
         Scope::Popup => POPUP,
         Scope::Plots => PLOTS,
         Scope::Processes => PROCESSES,

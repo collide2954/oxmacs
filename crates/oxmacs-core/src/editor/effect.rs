@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 use std::{fmt, mem};
 
-use crate::editor::{Editor, Job, JobId};
+use crate::editor::{Editor, Job, JobId, ServerId};
+use crate::external::lsp::Launch;
 use crate::external::managed::Install;
 use crate::external::net::Endpoint;
 use crate::external::tools::Tool;
@@ -44,10 +45,14 @@ pub enum Effect {
     Disconnect(ConnectionId),
     ProbeTools(Vec<Tool>),
     InstallTool(Box<Install>),
+    StartServer(ServerId, Launch),
+    ToServer(ServerId, String),
+    StopServer(ServerId),
 }
 
 impl Editor {
     pub fn take_effects(&mut self) -> Vec<Effect> {
+        self.sync_servers();
         self.start_due_lint();
         mem::take(&mut self.effects)
     }

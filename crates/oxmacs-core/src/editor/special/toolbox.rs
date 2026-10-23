@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
-use crate::editor::{Editor, Effect, FetchId};
+use crate::editor::{Editor, Effect, FetchId, ServerSpec};
 use crate::external::managed::{self, Checksum, Expected, Install, Managed, Origin, Release};
 use crate::files::paths;
 use crate::text::Buffer;
@@ -17,6 +17,9 @@ const NAME_WIDTH: usize = 8;
 const STATE_WIDTH: usize = 20;
 const DETAIL_WIDTH: usize = 11;
 const MEGABYTE: u64 = 1024 * 1024;
+
+type ToolRows = Vec<(Range<usize>, Managed)>;
+type ServerRows = Vec<(usize, ServerSpec)>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Latest {
@@ -68,6 +71,7 @@ impl Toolbox {
 #[derive(Debug, Default)]
 pub(in crate::editor) struct ToolList {
     rows: Vec<(Range<usize>, Managed)>,
+    servers: Vec<(usize, ServerSpec)>,
     styles: Vec<LineStyle>,
     open: Vec<Managed>,
 }
@@ -214,7 +218,69 @@ impl Editor {
         tool
     }
 
+    fn server_at_point(&self) -> Option<ServerSpec> {
+        let line = self.point_line();
+        match self.buffers.mode(0) {
+            Some(Mode::Tools(list)) => list
+                .servers
+                .iter()
+                .find(|(row, _)| *row == line)
+                .map(|(_, spec)| *spec),
+            _ => None,
+        }
+    }
+
+    fn install_server(&mut self, spec: ServerSpec) {
+        if self.server_found(&spec).is_some() {
+            self.show_message(format!("{} is already installed", spec.name));
+            return;
+        }
+        if !spec.runs {
+            self.show_message(format!("{}: {}", spec.name, spec.install));
+            return;
+        }
+        let directory = self
+            .home
+            .clone()
+            .unwrap_or_else(|| self.default_directory());
+        self.ask(
+            &format!("Run `{}` to install {}?", spec.install, spec.name),
+            move |editor, yes| {
+                if yes {
+                    editor.start_compile(spec.install.to_owned(), directory);
+                }
+            },
+        );
+    }
+
+    fn server_state(&self, spec: &ServerSpec) -> (&'static str, Highlight, String) {
+        if self.server_running(spec) {
+            return ("✓", Highlight::Success, "running".to_owned());
+        }
+        match self.server_found(spec) {
+            Some(path) => (
+                "✓",
+                Highlight::Success,
+                format!("found {}", paths::abbreviate(&path, self.home.as_deref())),
+            ),
+            None if spec.runs => (
+                "✗",
+                Highlight::Comment,
+                format!("not installed; i runs {}", spec.install),
+            ),
+            None => (
+                "✗",
+                Highlight::Comment,
+                format!("not installed; {}", spec.install),
+            ),
+        }
+    }
+
     pub(in crate::editor) fn tool_install(&mut self) {
+        if let Some(spec) = self.server_at_point() {
+            self.install_server(spec);
+            return;
+        }
         let Some(tool) = self.tool_at_point() else {
             return;
         };
@@ -413,7 +479,7 @@ impl Editor {
         }
         self.render_tools();
     }
-    fn tools_page(&self, open: &[Managed]) -> (Page, Vec<(Range<usize>, Managed)>) {
+    fn tools_page(&self, open: &[Managed]) -> (Page, ToolRows, ServerRows) {
         let tools = &self.toolbox.tools;
         let cells: Vec<_> = tools
             .iter()
@@ -423,9 +489,11 @@ impl Editor {
                 (*tool, self.tool_state(*tool), latest)
             })
             .collect();
+        let specs = self.server_specs();
         let name_width = tools
             .iter()
             .map(|tool| tool.name.chars().count() + 2)
+            .chain(specs.iter().map(|spec| spec.name.chars().count() + 2))
             .max()
             .unwrap_or(0)
             .max(NAME_WIDTH);
@@ -468,7 +536,20 @@ impl Editor {
                 rows.push((line..page.line_count(), *tool));
             }
         }
-        (page, rows)
+        let mut servers = Vec::new();
+        if !specs.is_empty() {
+            page.heading("Language servers");
+        }
+        for spec in specs {
+            let (mark, highlight, state) = self.server_state(&spec);
+            servers.push((page.line_count(), spec));
+            page.line(&[
+                (&format!("  {:<name_width$}", spec.name), None),
+                (mark, Some(highlight)),
+                (&format!(" {state}"), None),
+            ]);
+        }
+        (page, rows, servers)
     }
     pub(in crate::editor) fn render_tools(&mut self) {
         let Some(index) = self.tools_index() else {
@@ -478,7 +559,7 @@ impl Editor {
             Some(Mode::Tools(list)) => list.open.clone(),
             _ => Vec::new(),
         };
-        let (page, rows) = self.tools_page(&open);
+        let (page, rows, servers) = self.tools_page(&open);
 
         if let Some((buffer, Mode::Tools(list))) = self.buffers.entry_mut(index) {
             let point = buffer.point();
@@ -498,6 +579,7 @@ impl Editor {
                 buffer.set_point((start + column).min(buffer.line_end(line)));
             }
             list.rows = rows;
+            list.servers = servers;
             list.styles = page.styles;
         }
     }

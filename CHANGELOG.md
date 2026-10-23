@@ -48,6 +48,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Language servers. Opening a file starts its server when it is installed (rust-analyzer, pyright, taplo, marksman, clangd, gopls or typescript-language-server), in the project's root, with its state in the mode line. Diagnostics as you type, completion, the signature at point, `C-c C-d` docs, `M-.` definitions, `M-?` references in `*xref*`, `<f2>` rename, `C-c .` code actions, formatting, and inlay hints at the end of lines. `M-x list-tools` lists the servers and offers to install missing ones, asking first; `M-x lsp-restart` and `M-x lsp-log` help when one misbehaves; `language-servers` and `inlay-hints` turn them off.
 - `ox lsp`, a language server for Ox in other editors such as Helix and Neovim: checker findings as you type, completion, hover docs, signature help, go to definition, references, rename, formatting and document symbols. It uses the `lsp-server` crate.
 - `ox fmt` formats Ox code in the Clojure style, keeping your line breaks, and `ox fmt --check` fails in CI when a file needs it. In oxmacs, `TAB` and `RET` indent Ox the same way, `C-c C-f` formats the buffer, and saving an `.ox` file formats it.
 - In Ox buffers and the Ox REPL, the echo area shows the signature of the call at point with the first sentence of its doc, and `C-c C-d` opens `*ox doc*` for the name at point: what it is, where it is defined, its signature, its doc and the tests named after it as examples.

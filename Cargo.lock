@@ -3223,6 +3223,7 @@ dependencies = [
  "ox",
  "ox-lsp",
  "ox-perf",
+ "oxmacs-core",
  "oxmacs-ox",
  "serde_json",
  "tempfile",

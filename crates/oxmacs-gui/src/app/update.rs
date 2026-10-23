@@ -8,7 +8,8 @@ use iced::time::{Duration, Instant};
 use iced::widget::image;
 use iced::{Task, clipboard, keyboard};
 use jiff::Timestamp;
-use oxmacs_core::editor::{ConnectionId, Effect, Job, Outcome, WindowId};
+use oxmacs_core::editor::{ConnectionId, Effect, Job, Outcome, ServerId, WindowId};
+use oxmacs_core::external::lsp;
 use oxmacs_core::external::net::{self, Endpoint};
 use oxmacs_core::external::process;
 use oxmacs_core::external::tools::{self, Probe, Tool};
@@ -217,6 +218,12 @@ impl App {
                 }
                 self.editor.connection_event(id, event);
             }
+            Message::Server(id, event) => {
+                if matches!(event, lsp::Event::Exited(_)) {
+                    self.servers.retain(|(known, _)| *known != id);
+                }
+                self.editor.server_event(id, event);
+            }
             Message::OxPress(buffer, slot) => self.ox.press(&mut self.editor, buffer, slot),
             Message::TakeoverSized(size) => self.takeover_size = Some(size),
             Message::Focus(focused) => self.focus_changed(focused),
@@ -227,17 +234,25 @@ impl App {
         let plots = self.load_plots();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {
-            self.editor.quitting();
-            let _ = self.pending_effects();
-            for (_, connection) in self.connections.drain(..) {
-                connection.wait(FAREWELL);
-            }
-            for (_, killer) in self.jobs.drain(..) {
-                killer.kill();
-            }
+            self.quit();
             return iced::exit();
         }
         Task::batch([self.pending_effects(), plots])
+    }
+
+    fn quit(&mut self) {
+        self.editor.quitting();
+        let _ = self.pending_effects();
+        for (_, connection) in self.connections.drain(..) {
+            connection.wait(FAREWELL);
+        }
+        for (_, killer) in self.jobs.drain(..) {
+            killer.kill();
+        }
+        for (_, server) in self.servers.drain(..) {
+            let _ = server.send(EXIT);
+            server.kill();
+        }
     }
 
     fn settle(&mut self) {
@@ -351,6 +366,20 @@ impl App {
                     Message::ToolInstalled(tool, result)
                 })
             }
+            Effect::StartServer(id, launch) => self.start_server(id, &launch),
+            Effect::ToServer(id, body) => {
+                if let Some((_, server)) = self.servers.iter().find(|(known, _)| *known == id) {
+                    let _ = server.send(&body);
+                }
+                Task::none()
+            }
+            Effect::StopServer(id) => {
+                if let Some(at) = self.servers.iter().position(|(known, _)| *known == id) {
+                    let (_, server) = self.servers.remove(at);
+                    server.kill();
+                }
+                Task::none()
+            }
             Effect::Disconnect(id) => {
                 if let Some((_, connection)) =
                     self.connections.iter().find(|(known, _)| *known == id)
@@ -369,6 +398,23 @@ impl App {
         });
         self.connections.push((id, connection));
         Task::run(events, move |event| Message::Connection(id, event))
+    }
+
+    fn start_server(&mut self, id: ServerId, launch: &lsp::Launch) -> Task<Message> {
+        let (sender, events) = mpsc::unbounded();
+        let started = lsp::start(launch, move |event| {
+            let _ = sender.unbounded_send(event);
+        });
+        match started {
+            Ok(server) => {
+                self.servers.push((id, server));
+                Task::run(events, move |event| Message::Server(id, event))
+            }
+            Err(error) => Task::done(Message::Server(
+                id,
+                lsp::Event::Exited(Some(error.to_string())),
+            )),
+        }
     }
 
     fn spawn(&mut self, job: &Job, session: bool) -> Task<Message> {
@@ -397,6 +443,7 @@ impl App {
 }
 
 const HAS_PRIMARY_SELECTION: bool = cfg!(target_os = "linux");
+const EXIT: &str = r#"{"jsonrpc":"2.0","method":"exit"}"#;
 const KEPT_PLOTS: usize = 8;
 
 pub fn shown_plot<'a, T>(loaded: &'a [(PathBuf, T)], path: &Path) -> Option<&'a T> {

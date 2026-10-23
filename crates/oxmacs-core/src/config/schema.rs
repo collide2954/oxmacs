@@ -127,6 +127,18 @@ pub const SETTINGS: &[Setting] = &[
     ),
     setting(
         EDITING,
+        "language-servers",
+        Kind::Toggle,
+        "Start a language server for files that have one installed",
+    ),
+    setting(
+        EDITING,
+        "inlay-hints",
+        Kind::Toggle,
+        "Types and parameter names from the language server, faint at the end of each line",
+    ),
+    setting(
+        EDITING,
         "format-on-save",
         Kind::Toggle,
         "Format Rust with rustfmt and R with air when saving",

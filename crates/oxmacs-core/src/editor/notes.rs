@@ -64,6 +64,10 @@ impl Editor {
                     .is_some_and(|at| buffer.line_of(at) == line)
             })
             .map(|note| (note.text.clone(), note.face))
+            .or_else(|| {
+                self.hint_on_line(buffer.id(), buffer.revision(), line)
+                    .map(|hint| (hint, Highlight::Comment))
+            })
     }
 }
 #[cfg(test)]

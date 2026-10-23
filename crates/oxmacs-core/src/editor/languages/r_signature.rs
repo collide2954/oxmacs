@@ -80,15 +80,19 @@ impl Editor {
     }
 
     pub fn wants_signature(&self) -> bool {
-        self.minibuffer.is_none()
-            && self.popup.is_none()
-            && self.question.is_none()
-            && self.r_running()
-            && self.call_at_point() != self.r_sessions.signature_shown
+        let quiet = self.minibuffer.is_none() && self.popup.is_none() && self.question.is_none();
+        if !self.in_r() {
+            return quiet && self.lsp_wants_signature();
+        }
+        quiet && self.r_running() && self.call_at_point() != self.r_sessions.signature_shown
     }
 
     pub fn show_signature(&mut self) {
         if !self.wants_signature() {
+            return;
+        }
+        if !self.in_r() {
+            self.lsp_signature();
             return;
         }
         let Some(call) = self.call_at_point() else {

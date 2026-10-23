@@ -8,6 +8,7 @@ use crate::text::Buffer;
 use crate::theme::Highlight;
 
 const NAME: &str = "*Help*";
+const DOC: &str = "*doc*";
 const KEYS: &str = "Keys      ";
 const WORKS_IN: &str = "Works in  ";
 const INDENT: &str = "          ";
@@ -19,6 +20,7 @@ pub(in crate::editor) struct Help {
     width: usize,
     styles: Vec<LineStyle>,
     r: bool,
+    doc: bool,
 }
 
 impl Help {
@@ -26,6 +28,13 @@ impl Help {
         Self {
             styles,
             r: true,
+            ..Self::default()
+        }
+    }
+
+    fn doc() -> Self {
+        Self {
+            doc: true,
             ..Self::default()
         }
     }
@@ -116,7 +125,7 @@ impl Editor {
 
     fn help_index(&self) -> Option<usize> {
         self.buffers
-            .find_mode(|mode| matches!(mode, Mode::Help(help) if !help.r))
+            .find_mode(|mode| matches!(mode, Mode::Help(help) if !help.r && !help.doc))
     }
 
     pub(in crate::editor) fn describe(&mut self, command: CommandId) {
@@ -135,6 +144,34 @@ impl Editor {
         }
         self.show_beside(Self::help_index);
         self.render_help();
+        self.buffers.current_mut().set_point(0);
+        self.reveal_point();
+    }
+
+    fn doc_index(&self) -> Option<usize> {
+        self.buffers
+            .find_mode(|mode| matches!(mode, Mode::Help(help) if help.doc))
+    }
+
+    pub(in crate::editor) fn show_doc(&mut self, text: &str) {
+        if self.doc_index().is_none() {
+            self.beside(|editor| {
+                let mut buffer = Buffer::with_text(DOC, "");
+                buffer.set_read_only(true);
+                editor.add_buffer_with(buffer, Mode::Help(Help::doc()));
+            });
+        }
+        let Some(index) = self.doc_index() else {
+            return;
+        };
+        let mut page = Page::default();
+        for line in text.lines() {
+            page.line(&[(line, None)]);
+        }
+        if let Some(buffer) = self.buffers.get_mut(index) {
+            page.fill(buffer);
+        }
+        self.show_beside(Self::doc_index);
         self.buffers.current_mut().set_point(0);
         self.reveal_point();
     }

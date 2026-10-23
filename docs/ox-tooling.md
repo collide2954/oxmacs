@@ -123,3 +123,14 @@ Setting it up elsewhere:
 - **VS Code** needs a small extension to start a server for a new language; that waits for the tree-sitter grammar in phase 9, which also gives the other editors highlighting.
 
 Phase 5 is done.
+
+## The LSP client
+
+Settled with the user on 2026-10-23 and built the same night (phase 10, moved ahead of 6 to 9 because it is one of the editor's fundamentals).
+
+- **Starting.** Opening a file whose language has a server starts it, if it is installed, in the project root: the nearest folder with one of the server's marker files, such as `Cargo.toml`, else the Git root, else the file's folder. One server runs per server and root. The mode line names it, with `…` while it starts and the server's progress, such as `rust-analyzer Indexing (40%)`. The `language-servers` setting turns this off.
+- **Missing servers.** The first file that would use a missing server names it once in the echo area. `M-x list-tools` lists every server under "Language servers" with where it was found or how to get it; `i` on one offers to run its install command, such as `rustup component add rust-analyzer`, and runs it in `*compilation*` only after a yes.
+- **Servers.** rust-analyzer, basedpyright or pyright or pylsp, taplo, marksman, clangd, gopls and typescript-language-server. Rust code adds others with `Editor::add_language_servers`.
+- **Features.** Diagnostics underline as you type and replace cargo check for Rust files the server covers; completion pops up after three letters or a trigger character such as `.`, and `C-M-i` asks; the signature of the call at point shows in the echo area; `C-c C-d` shows the docs in `*doc*`; `M-.` goes to a definition and `M-,` comes back; `M-?` lists references in `*xref*`, where `RET` visits one and `n` and `p` step; `<f2>` renames everywhere, leaving files unsaved; `C-c .` offers the server's code actions; `C-c C-f` formats with the server when oxmacs has no formatter of its own for the language, and so does saving when `format-on-save` is on; inlay hints show faintly at the end of their line, because putting them inside the line would move every column the editor counts (`inlay-hints` turns them off).
+- **Protocol.** The client is in the core (`editor/lsp`), with the process and framing in `external/lsp.rs`; servers run on their own threads and their messages arrive like other events. Positions are UTF-32 when the server agrees, else UTF-16. Documents are sent whole on each change. `M-x lsp-restart` restarts the buffer's server and `M-x lsp-log` shows `*language servers*`, the servers' log and error output. `ox-cli`'s tests drive the client against `ox lsp` end to end.
+- **Later.** Incremental document sync for very large files, inlay hints inside the line, and servers from Ox (`(language-server …)` in init.ox).
