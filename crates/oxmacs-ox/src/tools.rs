@@ -701,7 +701,9 @@ impl Ox {
             return;
         };
         if !editor.buffer_shown(id) {
+            let origin = editor.selected_window();
             editor.show_buffer_beside(id);
+            editor.select_window(origin);
         }
         if let Some((buffer, view)) = editor.plugin_buffer_mut::<ReplView>(id) {
             view.input.replace(buffer, code);

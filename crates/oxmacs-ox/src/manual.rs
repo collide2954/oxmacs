@@ -211,9 +211,11 @@ mod tests {
     fn code_runs_in_the_repl_beside() {
         let (_home, mut editor, mut ox) = started();
 
+        let before = editor.buffer().name().to_owned();
         eval(&mut editor, &mut ox, r#"(run-in-repl "(+ 1 2)")"#);
         settle(&mut editor, &mut ox);
 
+        assert_eq!(editor.buffer().name(), before);
         let id = editor.buffer_named(REPL).expect("a REPL");
         assert!(editor.buffer_shown(id));
         let text = editor.buffer_by_id(id).unwrap().contents();
