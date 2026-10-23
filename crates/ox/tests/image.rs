@@ -654,6 +654,149 @@ fn filter_mistakes_are_reported() {
     );
 }
 
+const BLANK: &str = "(def blank (image/new 10 10 :color :white))";
+
+#[test]
+fn edits_draw_shapes_on_a_private_copy() {
+    let isolate = &mut Isolate::new();
+    shown(isolate, BLANK);
+
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [drawn (image/edit blank (fn [c] (image/rect! c 0 0 5 5 :fill :red)))] [(image/pixel drawn 2 2) (image/pixel drawn 7 7) (image/pixel blank 2 2)])"
+        ),
+        "[[255 0 0 255] [255 255 255 255] [255 255 255 255]]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/rect! blank 0 0 5 5 :fill :red) 2 2)"
+        ),
+        "[255 0 0 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [drawn (image/circle! blank 5 5 3 :fill :blue)] [(image/pixel drawn 5 5) (image/pixel drawn 0 0)])"
+        ),
+        "[[0 0 255 255] [255 255 255 255]]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/line! blank 0 5 10 5 :width 2) 3 4)"
+        ),
+        "[0 0 0 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [drawn (image/rect! blank 1 1 8 8 :stroke :black :width 2)] [(image/pixel drawn 1 5) (image/pixel drawn 5 5)])"
+        ),
+        "[[0 0 0 255] [255 255 255 255]]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [drawn (image/polygon! blank [[0 0] [10 0] [0 10]] :fill :red)] [(image/pixel drawn 1 1) (image/pixel drawn 8 8)])"
+        ),
+        "[[255 0 0 255] [255 255 255 255]]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [[r g b] (image/pixel (image/rect! blank 0 0 10 10 :fill :red :opacity 0.5) 5 5)] [r (< 120 g 136) (< 120 b 136)])"
+        ),
+        "[255 true true]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/edit blank (fn [c] (image/set-pixel! c 3 3 :red))) 3 3)"
+        ),
+        "[255 0 0 255]"
+    );
+    assert_eq!(
+        failure(
+            isolate,
+            "(let [c (image/begin-edit blank)] (image/end-edit c) (image/rect! c 0 0 1 1))"
+        ),
+        "image/rect! was given a canvas whose edit has ended"
+    );
+    assert_eq!(
+        failure(isolate, "(image/rect! 5 0 0 1 1)"),
+        "image/rect! expects an image or a canvas, got 5"
+    );
+}
+
+#[test]
+fn layers_blend_mask_and_tile() {
+    let isolate = &mut Isolate::new();
+    shown(isolate, BLANK);
+    shown(isolate, HALVES);
+    shown(
+        isolate,
+        "(def gray (image/new 2 2 :color [128 128 128])) (def red (image/new 2 2 :color :red)) (def left (image/canvas (image/new 1 2 :color :white) 2 2 :anchor :left :color :black))",
+    );
+    let blended = |isolate: &mut Isolate, mode: &str| {
+        shown(
+            isolate,
+            &format!("(image/pixel (image/paste! gray red 0 0 :blend :{mode}) 0 0)"),
+        )
+    };
+
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [pasted (image/paste! blank red 4 4)] [(image/pixel pasted 5 5) (image/pixel pasted 3 3)])"
+        ),
+        "[[255 0 0 255] [255 255 255 255]]"
+    );
+    assert_eq!(blended(isolate, "multiply"), "[128 0 0 255]");
+    assert_eq!(blended(isolate, "screen"), "[255 128 128 255]");
+    assert_eq!(blended(isolate, "difference"), "[127 128 128 255]");
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/width (image/paste! gray red 0 0 :blend :luminosity))"
+        ),
+        "2"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/paste! gray red 0 0 :opacity 0) 0 0)"
+        ),
+        "[128 128 128 255]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [pasted (image/paste! blank red 0 0 :mask left)] [(image/pixel pasted 0 0) (image/pixel pasted 1 0)])"
+        ),
+        "[[255 0 0 255] [255 255 255 255]]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [masked (image/mask red left)] [(image/pixel masked 0 0) (image/pixel masked 1 0)])"
+        ),
+        "[[255 0 0 255] [255 0 0 0]]"
+    );
+    assert_eq!(
+        shown(
+            isolate,
+            "(let [tiled (image/tile halves 8 4)] [(image/width tiled) (image/height tiled) (image/pixel tiled 4 0) (image/pixel tiled 6 0)])"
+        ),
+        "[8 4 [255 0 0 255] [0 0 0 0]]"
+    );
+    assert_eq!(
+        failure(isolate, "(image/paste! gray red 0 0 :blend :glow)"),
+        "image/paste! takes a :blend mode such as :multiply, :screen or :overlay, not :glow"
+    );
+}
+
 #[test]
 fn geometry_mistakes_are_reported() {
     let mut isolate = Isolate::new();

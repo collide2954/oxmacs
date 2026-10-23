@@ -148,6 +148,12 @@ impl Isolate {
             }
             isolate.runtime.error_types.insert(kind, value);
         }
+        for (module, name, source) in library::SOURCES {
+            let place = isolate.runtime.module_named(module);
+            if let Err(error) = isolate.eval_in(place, name, source, &mut ()) {
+                panic!("The Ox library failed to load {name}: {error}");
+            }
+        }
         isolate
     }
 

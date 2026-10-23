@@ -28,6 +28,12 @@ use crate::value::Value;
 use crate::value::equal::{equal, hash, identical};
 use crate::value::print;
 
+pub(crate) const SOURCES: [(&str, &str, &str); 1] = [(
+    "ox/image",
+    "library/image/edit.ox",
+    include_str!("image/edit.ox"),
+)];
+
 fn output(heap: &Heap, arguments: &[Value], newline: bool) -> Result<Value, Error> {
     let mut text = arguments
         .iter()
