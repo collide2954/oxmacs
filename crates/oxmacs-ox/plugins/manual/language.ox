@@ -88,4 +88,6 @@ Each file is a module. Its header imports other modules and can list what it exp
 ```
 
 Imported names are called with the module's last word or alias: `string/split`, `js/read`. The [reference](ref:ox) lists every module.
+
+Built-in names such as `map` and `str` need no import, and the `ox/...` modules need only the import. Both are written in Rust. Anything more comes from [plugins](plugins), which serve as Ox's standard library.
 "#})

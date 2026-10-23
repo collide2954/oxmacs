@@ -4,10 +4,11 @@ Companion to [ox-design.md](ox-design.md) and [ox-internals.md](ox-internals.md)
 
 ## Principles
 
+- **Plugins are the standard library.** Ox has no library written in Ox. The built-in functions and macros and the `ox/...` modules are primitives, Rust code plugged straight into the runtime through the bridge. Everything else is a plugin: bundled and on by default, bundled and opt-in, or the user's own. The plugin system does two jobs, extending the editor and holding shared Ox code, since one plugin can import another's modules.
 - **Clojure-style names.** The vocabulary is built for immutable data and keywords: `count`, `first`, `rest`, `conj`, `assoc`, `dissoc`, `get`, `update`, `map`, `filter`, `reduce`, `keep`, `str`, `keys`, `vals`.
 - **One sequence interface.** Lists, vectors, maps, sets, strings, ranges and generators all work with the same functions. Results are eager vectors by default. `(iter …)` pipelines stay lazy, for streams and huge data.
 - **Protocols for polymorphism.** `defprotocol` and `extend` give fast, type-checked dispatch on type. The library itself is built on protocols for `=`, `hash`, `print`, `compare` and sequences, so records join in.
-- **Batteries included.** Strings, math, regexes, JSON and TOML, dates and times, paths and files, processes, HTTP and concurrency all come with Ox. Each module sits on the core's native primitives. The editor API is separate, `(ox editor)`.
+- **Batteries included.** Strings, math, regexes, JSON and TOML, dates and times, paths and files, processes, HTTP and concurrency all come with Ox as native `ox/...` modules. The editor API is separate, `(ox editor)`.
 - **Typed and tested.** Every function has a type signature, which feeds inference, and documentation with examples that run as tests.
 - **Failure raises.** Functions that can fail raise a typed error with a clear message, such as `parse-error`, `io-error` or `http-error`. `(maybe expr)` turns any error into `nil` when you would rather check, so no function needs a second "or nil" twin.
 - **Missing keys give `nil`.** `(get m :k)` returns `nil` when the key is absent, and the checker types the result as `V?`, so nil safety makes you handle it. `(get m :k default)` gives a fallback, and field access on a map shape with a required key gives the plain type. `a.b` reads a key the same way, and gives `nil` through `nil`, so `buffer.file.path` is `nil` when there is no file.

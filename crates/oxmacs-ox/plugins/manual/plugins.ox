@@ -7,6 +7,12 @@
 
 A plugin is a folder under `~/.oxmacs/plugins` with a manifest and Ox modules. It costs nothing until it is used: at startup oxmacs reads only the manifest.
 
+## Plugins are the standard library
+
+Ox has no standard library of its own. The built-in functions and the `ox/...` modules, such as `ox/string` and `ox/json`, are primitives: Rust code plugged straight into Ox through the bridge. Everything else is a plugin.
+
+So plugins do two jobs. They extend the editor, and they are where shared Ox code lives. Some bundled plugins, such as dired and git, are on from the start; others, such as life, wait until `use-plugin` turns them on. A plugin can import another plugin's modules, as in `(import (markdown render))`, so a plugin you write can be a library as well as a feature.
+
 ## Make one in four steps
 
 1. Create the folder `~/.oxmacs/plugins/hello`.
