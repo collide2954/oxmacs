@@ -13,10 +13,16 @@ pub struct ReadError {
 const MAX_DEPTH: usize = 1000;
 const MAX_INTERPOLATION: usize = 16;
 
+const BOM: char = '\u{feff}';
+
 pub fn read(source: &str) -> (Vec<Syntax>, Vec<ReadError>) {
     let mut reader = Reader {
         source,
-        at: 0,
+        at: if source.starts_with(BOM) {
+            BOM.len_utf8()
+        } else {
+            0
+        },
         end: source.len(),
         depth: 0,
         errors: Vec::new(),
@@ -731,6 +737,11 @@ mod tests {
                 (symbol("foo"), Span::new(10, 13)),
             ]
         );
+    }
+
+    #[test]
+    fn a_byte_order_mark_at_the_start_is_skipped() {
+        assert_eq!(data("\u{feff}42"), [(Datum::Int(42), Span::new(3, 5))]);
     }
 
     #[test]

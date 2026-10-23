@@ -14,9 +14,32 @@ use oxmacs_ox::checker;
 #[global_allocator]
 static ALLOCATOR: ox_perf::Counting = ox_perf::Counting;
 
+const USAGE: &str = "usage: ox [FILE]
+       ox SUBCOMMAND ...
+
+  ox                     open a REPL
+  ox FILE                run a file
+  ox check PATH...       find mistakes without running anything
+  ox fmt [--check] PATH...
+                         format files, or list the ones that aren't
+  ox test PATH...        run the test blocks in files or folders
+  ox profile FILE        run a file and show where the time went
+  ox perf bench FILE     benchmark the functions a file returns
+  ox lsp                 serve Ox to editors over the Language Server Protocol
+  ox --version           print the version
+";
+
 fn main() -> ExitCode {
     let mut args = env::args_os().skip(1);
     match args.next() {
+        Some(first) if first == "--help" || first == "-h" || first == "help" => {
+            print!("{USAGE}");
+            ExitCode::SUCCESS
+        }
+        Some(first) if first == "--version" || first == "-V" => {
+            println!("ox {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
         Some(first) if first == "test" => run_tests(&args.map(PathBuf::from).collect::<Vec<_>>()),
         Some(first) if first == "check" => check_command(args.collect()),
         Some(first) if first == "fmt" => fmt_command(args.collect()),

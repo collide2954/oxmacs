@@ -43,6 +43,47 @@ fn files_run_and_print() {
 }
 
 #[test]
+fn files_may_start_with_a_byte_order_mark() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("notepad.ox");
+    fs::write(&path, "\u{feff}(println (+ 1 2))").unwrap();
+
+    let output = ox().arg(&path).output().unwrap();
+
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "3\n");
+}
+
+#[test]
+fn help_lists_the_subcommands_and_version_prints_the_version() {
+    for flag in ["--help", "-h", "help"] {
+        let output = ox().arg(flag).output().unwrap();
+        assert!(output.status.success(), "{flag}: {}", text(&output.stderr));
+        let shown = text(&output.stdout);
+        for subcommand in [
+            "ox check",
+            "ox fmt",
+            "ox test",
+            "ox profile",
+            "ox perf",
+            "ox lsp",
+        ] {
+            assert!(
+                shown.contains(subcommand),
+                "{flag} doesn't mention {subcommand}: {shown}"
+            );
+        }
+    }
+
+    let output = ox().arg("--version").output().unwrap();
+    assert!(output.status.success());
+    assert_eq!(
+        text(&output.stdout),
+        format!("ox {}\n", env!("CARGO_PKG_VERSION"))
+    );
+}
+
+#[test]
 fn errors_name_the_file_line_and_column() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("broken.ox");
