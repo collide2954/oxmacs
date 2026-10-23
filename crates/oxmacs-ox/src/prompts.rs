@@ -91,6 +91,7 @@ fn prompt(
     let question = print::display(heap, arguments[0]);
     let mut initial = String::new();
     let mut choices = None;
+    let mut secret = false;
     for pair in arguments[1..].chunks(2) {
         match pair {
             [Value::Keyword(option), value] if option.name() == "initial" => {
@@ -99,9 +100,12 @@ fn prompt(
             [Value::Keyword(option), value] if option.name() == "choices" => {
                 choices = Some(offers(heap, *value)?);
             }
+            [Value::Keyword(option), value] if option.name() == "secret" => {
+                secret = value.truthy();
+            }
             _ => {
                 return Err(Error::new(format!(
-                    "prompt takes :initial and :choices, not {}",
+                    "prompt takes :initial, :choices and :secret, not {}",
                     print::write(heap, pair[0])
                 )));
             }
@@ -110,6 +114,7 @@ fn prompt(
     let (promise, reply) = reply(heap, inbox)?;
     let done = move |_: &mut Editor, text| reply.send(Answer::Text(text));
     match choices {
+        _ if secret => editor.prompt_secret(&question, done),
         Some(offered) => editor.prompt_with(&question, move |_| offered.clone(), done),
         None => editor.prompt_with_text(&question, &initial, done),
     }
@@ -248,6 +253,22 @@ mod tests {
                 .to_string(),
             ":choices must be a vector of names or a map of names to notes, got 5"
         );
+    }
+
+    #[test]
+    fn secret_prompts_take_passwords() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+
+        run(
+            &mut editor,
+            &mut ox,
+            r#"(defcommand unlock "Unlock" (message (str "got " (count (await (prompt "Password: " :secret true))))))"#,
+            "unlock",
+        );
+        press(&mut editor, &mut ox, "p w RET");
+
+        assert_eq!(editor.message(), Some("got 2"));
     }
 
     #[test]

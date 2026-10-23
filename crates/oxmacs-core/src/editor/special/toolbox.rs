@@ -247,6 +247,7 @@ impl Editor {
             &format!("Run `{}` to install {}?", spec.install, spec.name),
             move |editor, yes| {
                 if yes {
+                    editor.retry_servers();
                     editor.start_compile(spec.install.to_owned(), directory);
                 }
             },

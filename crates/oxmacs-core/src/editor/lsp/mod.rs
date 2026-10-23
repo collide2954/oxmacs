@@ -5,6 +5,7 @@ mod servers;
 
 use std::env;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
@@ -18,6 +19,7 @@ use crate::text::{Buffer, BufferId};
 
 const LOG: &str = "*language servers*";
 const LOG_LINES: usize = 2000;
+const RETRY: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ServerId(pub u64);
@@ -67,6 +69,8 @@ pub(in crate::editor) struct Clients {
     running: Vec<Client>,
     next: u64,
     told: Vec<&'static str>,
+    missing: Vec<(&'static str, Instant)>,
+    roots: Vec<(PathBuf, &'static str, PathBuf)>,
     auto_mark: Option<(BufferId, u64)>,
     signature: Option<(BufferId, u64, usize)>,
     signature_shown: Option<String>,
@@ -86,6 +90,8 @@ impl Default for Clients {
             running: Vec::new(),
             next: 0,
             told: Vec::new(),
+            missing: Vec::new(),
+            roots: Vec::new(),
             auto_mark: None,
             signature: None,
             signature_shown: None,
@@ -256,8 +262,24 @@ impl Editor {
         self.close_documents(&seen);
     }
 
+    fn root_for(&mut self, spec: &ServerSpec, path: &Path) -> PathBuf {
+        if let Some((_, _, root)) = self
+            .lsp
+            .roots
+            .iter()
+            .find(|(file, name, _)| file == path && *name == spec.name)
+        {
+            return root.clone();
+        }
+        let root = root_of(spec, path);
+        self.lsp
+            .roots
+            .push((path.to_path_buf(), spec.name, root.clone()));
+        root
+    }
+
     fn sync_buffer(&mut self, spec: ServerSpec, language: &str, index: usize, path: &Path) {
-        let root = root_of(&spec, path);
+        let root = self.root_for(&spec, path);
         let id = match self
             .lsp
             .running
@@ -342,12 +364,20 @@ impl Editor {
     }
 
     fn start_server(&mut self, spec: ServerSpec, root: &Path) -> Option<ServerId> {
+        let now = Instant::now();
+        self.lsp
+            .missing
+            .retain(|(_, since)| now.duration_since(*since) < RETRY);
+        if self.lsp.missing.iter().any(|(name, _)| *name == spec.name) {
+            return None;
+        }
         let find = self.lsp.find;
         let Some((program, args)) = spec
             .programs
             .iter()
             .find_map(|(program, args)| find(program).map(|found| (found, *args)))
         else {
+            self.lsp.missing.push((spec.name, now));
             if !self.lsp.told.contains(&spec.name) {
                 self.lsp.told.push(spec.name);
                 self.show_message(if spec.runs {
@@ -725,7 +755,12 @@ impl Editor {
         }
     }
 
+    pub(in crate::editor) fn retry_servers(&mut self) {
+        self.lsp.missing.clear();
+    }
+
     pub(in crate::editor) fn restart_server(&mut self) {
+        self.retry_servers();
         let buffer = self.buffers.current().id();
         let Some(at) = self
             .lsp

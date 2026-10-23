@@ -43,6 +43,17 @@ Screensaver slices 1 to 4 are done:
 2. **Draw the takeover in the GUI** over the windows, keeping a mode line and the minibuffer, with any input ending it.
 3. **Idle hooks** that fire once per idle stretch while oxmacs has focus.
 4. **The screensaver plugin:** starfield, matrix rain, `M-x screensaver-preview` and the `idle` and `kind` settings.
+## Vault
+
+The password manager is the bundled `vault` plugin in `crates/oxmacs-ox/plugins/vault`: `plugin.ox`, the entry `vault.ox` (the `*Vault*` list, the `*Vault entry*` view and the commands), `store.ox` (the sealed file, unlocking, locking and generators), `import.ox` (KeePass, Bitwarden, 1Password and pass) and `words.ox` (the passphrase words).
+
+- **Its own file.** The vault is `~/.oxmacs/vault.json`: a clear header with the format version, the Argon2id salt and cost (64 MiB, 3 passes), and the entries as one XChaCha20-Poly1305 sealed blob. A wrong password fails to open the seal, so no password check is stored. Writes go to `vault.json.new`, copy the old file to `vault.json.bak` and rename, so a crash never leaves half a vault.
+- **Unlocked in memory only.** The key and entries live in a `defonce` atom while the vault is unlocked. A watcher locks it after `lock-after` minutes unused (10 by default), and `M-x vault-lock` or `L` locks it at once, closing its buffers.
+- **The clipboard.** Passwords and codes go to the system clipboard without entering the kill ring, and are cleared after `clear-clipboard` seconds (30 by default) unless something newer was copied.
+- **Entries.** An entry has a title, user name, password, URL, a one-time code secret or `otpauth://` link, and notes. Adding one with an empty password generates 20 letters, digits and symbols; `M-x vault-generate` also makes 7-word passphrases and 6-digit PINs, all from `crypto/random-below`, so no choice is biased.
+- **Imports.** `M-x vault-import` reads KeePass `.kdbx` files (through the keepass crate, without the recycle bin), Bitwarden and 1Password CSV exports, and the pass store by running `gpg --decrypt` on each file. Entries already in the vault, by title and user name, are skipped.
+- **For other plugins.** `(import (vault store :as vault))` then `(vault/secret "Libera")` returns that entry's password, asking for the master password first when the vault is locked, so IRC and calendar logins never sit in `init.ox`.
+
 ## Profiler
 
 Profiling tools for anyone writing Ox for oxmacs: where the time goes in plugins, init.ox, views, modes and frames. The VM collects; the report in oxmacs is the bundled `profiler` plugin, written in Ox.

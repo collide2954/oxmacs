@@ -21,7 +21,7 @@ use oxmacs_core::external::tools::{Probe, Tool};
 use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_ox::{Ox, Pace, takeover};
+use oxmacs_ox::{Ox, Pace, Wake, takeover};
 
 use crate::watcher::Watched;
 use crate::widgets::buffer_view::ViewEvent;
@@ -73,6 +73,7 @@ pub enum Message {
     AutoSave,
     AutoComplete,
     Signature,
+    Reparse,
     ProcessTick,
     FocusWindow(WindowId),
     PlotSized(WindowId, iced::Size),
@@ -243,6 +244,11 @@ impl App {
         } else {
             Subscription::none()
         };
+        let reparse = if self.editor.wants_reparse() {
+            ticker::once_after(REPARSE_DELAY, self.last_input).map(|()| Message::Reparse)
+        } else {
+            Subscription::none()
+        };
         let processes = if self.editor.wants_process_usage() {
             ticker::ticks(Some(ticker::SECOND)).map(|()| Message::ProcessTick)
         } else {
@@ -258,10 +264,10 @@ impl App {
             .map_or_else(Subscription::none, |(wait, since)| {
                 ticker::once_after(wait, since).map(|()| Message::Idle)
             });
-        let waiting = if self.ox.pace() == Pace::Waiting {
-            ticker::ticks(Some(OX_POLL)).map(|()| Message::OxTick)
-        } else {
-            Subscription::none()
+        let waiting = match (self.ox.pace(), self.ox.next_wake()) {
+            (Pace::Waiting, Wake::Soon) => ticker::ticks(Some(OX_POLL)).map(|()| Message::OxTick),
+            (Pace::Waiting, Wake::At(deadline)) => ticker::at(deadline).map(|()| Message::OxTick),
+            _ => Subscription::none(),
         };
         Subscription::batch([
             keyboard::listen().map(Message::Keyboard),
@@ -283,6 +289,7 @@ impl App {
             idle,
             completing,
             signature,
+            reparse,
             processes,
             frames,
             waiting,
@@ -318,6 +325,7 @@ pub fn animations_enabled(configured: bool, reduced_motion: bool) -> bool {
 const AUTO_SAVE_DELAY: Duration = Duration::from_millis(1500);
 const AUTO_COMPLETE_DELAY: Duration = Duration::from_millis(250);
 const SIGNATURE_DELAY: Duration = Duration::from_millis(400);
+const REPARSE_DELAY: Duration = Duration::from_millis(250);
 const OX_POLL: Duration = Duration::from_millis(100);
 
 fn transition(state: bool, duration: Duration) -> Animation<bool> {

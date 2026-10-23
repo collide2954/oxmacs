@@ -5,6 +5,7 @@ mod commands;
 mod help;
 mod hooks;
 pub mod idle;
+mod keepass;
 mod log;
 mod mode;
 mod modes;
@@ -26,6 +27,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+pub use ox::task::Wake;
 use ox::{Error, Isolate};
 use oxmacs_core::config::Config;
 use oxmacs_core::editor::Editor;
@@ -56,6 +58,7 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     takeover::install(&mut isolate);
     idle::install(&mut isolate);
     prompts::install(&mut isolate, answers);
+    keepass::install(&mut isolate);
     isolate.add_native_docs(DOCS);
     if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
         panic!("The oxmacs prelude failed to load: {error}");
@@ -196,6 +199,10 @@ impl Ox {
         } else {
             Pace::Idle
         }
+    }
+
+    pub fn next_wake(&self) -> Wake {
+        self.isolate.next_wake()
     }
 
     pub fn tick(&mut self, editor: &mut Editor) -> Pace {

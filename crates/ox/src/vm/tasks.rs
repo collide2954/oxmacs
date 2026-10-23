@@ -9,7 +9,7 @@ use crate::bytecode::Code;
 use crate::error::{Error, ErrorKind};
 use crate::portable::{Received, Sent};
 use crate::span::Span;
-use crate::task::{Report, TaskId};
+use crate::task::{Report, TaskId, Wake};
 use crate::value::Value;
 use crate::value::promise::Promise;
 use crate::vm::build::{full, raised};
@@ -105,6 +105,23 @@ impl Runtime {
 
     pub fn pending(&self) -> usize {
         self.tasks.len() + self.blocked.len() + self.heap.job_count()
+    }
+
+    pub fn next_wake(&self) -> Wake {
+        if !self.tasks.is_empty() || !self.parked.is_empty() || self.heap.job_count() > 0 {
+            return Wake::Soon;
+        }
+        let mut earliest: Option<Instant> = None;
+        for (wait, _) in self.blocked.iter().filter_map(|task| task.waiting.as_ref()) {
+            match wait {
+                Wait::Until(deadline) => {
+                    earliest = Some(earliest.map_or(*deadline, |known| known.min(*deadline)));
+                }
+                Wait::Receive(_) | Wait::Send(..) if self.shared(wait) => return Wake::Soon,
+                Wait::Promise(_) | Wait::Receive(_) | Wait::Send(..) => {}
+            }
+        }
+        earliest.map_or(Wake::Never, Wake::At)
     }
 
     pub fn run_tasks(&mut self, budget: Duration, host: &mut dyn Any) -> Report {

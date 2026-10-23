@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use crate::error::Error;
 use crate::value::Value;
@@ -12,6 +13,13 @@ pub struct Report {
     pub finished: Vec<(TaskId, Result<Value, Error>)>,
     pub unhandled: Vec<Error>,
     pub pending: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wake {
+    Soon,
+    At(Instant),
+    Never,
 }
 
 #[derive(Debug, Clone, Default)]

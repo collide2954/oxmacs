@@ -6,6 +6,9 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Typing is fast again: a key takes about half a millisecond in an ordinary file, down from 13, because oxmacs no longer looks for a missing language server on every keystroke; it looks again after 30 seconds or when you install one.
+- Typing in very large files no longer waits for the whole file to be parsed again after each key, down from 655 ms to 6 ms a key in a 20,000-line Rust file. Syntax highlighting catches up a quarter of a second after you stop typing.
+- Ox timers no longer wake oxmacs ten times a second: while plugins only sleep, the window waits for the next timer.
 - Errors in code passed through an Ox macro, such as the body of a `defcommand`, point at that code instead of the macro call.
 - Pressing `g` repeatedly in dired no longer makes the cursor jump to the start of the line and back; plugin buffers keep point where it was when they redraw, and marks made while a listing refreshes are kept.
 - `swap!` no longer loses updates when tasks switch in the middle of it.
@@ -48,6 +51,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- A password vault, the bundled `vault` plugin. `M-x vault` lists your logins in `*Vault*`; the vault is one file, `~/.oxmacs/vault.json`, sealed with XChaCha20-Poly1305 under a key Argon2id derives from your master password, and it locks after 10 minutes unused or on `M-x vault-lock`. `c` copies a password, which skips the kill ring and leaves the clipboard after 30 seconds, `t` copies the current one-time code, `RET` shows an entry with its code counting down, and `M-x vault-generate` makes passwords, passphrases and PINs. `M-x vault-import` brings in KeePass databases, Bitwarden and 1Password CSV exports and the pass store, and other plugins ask it for their logins. New crate: keepass.
+- In path prompts, typing a new root after a separator starts the path over, as in Emacs: `//` goes to the root, `~/` home and, on Windows, `D:` that drive.
 - Ox modules for the coming plugins: `(ox net)` connects over TCP or TLS and streams lines through a channel, `process/start` runs a program with its output and errors as channels and input you write to, `(ox crypto)` has Argon2id keys, XChaCha20-Poly1305 sealing, TOTP codes, random bytes, SHA-256 and base64, `http/request` sends any method with headers, a body and a login, and `(ox csv)` reads comma-separated text. Plugins can also copy a secret without it entering the kill ring, show desktop notifications and ask whether the window has focus. New crates: argon2 and chacha20poly1305.
 - Language servers. Opening a file starts its server when it is installed (rust-analyzer, pyright, taplo, marksman, clangd, gopls or typescript-language-server), in the project's root, with its state in the mode line. Diagnostics as you type, completion, the signature at point, `C-c C-d` docs, `M-.` definitions, `M-?` references in `*xref*`, `<f2>` rename, `C-c .` code actions, formatting, and inlay hints at the end of lines. `M-x list-tools` lists the servers and offers to install missing ones, asking first; `M-x lsp-restart` and `M-x lsp-log` help when one misbehaves; `language-servers` and `inlay-hints` turn them off.
 - `ox lsp`, a language server for Ox in other editors such as Helix and Neovim: checker findings as you type, completion, hover docs, signature help, go to definition, references, rename, formatting and document symbols. It uses the `lsp-server` crate.

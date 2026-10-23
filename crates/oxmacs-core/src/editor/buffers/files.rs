@@ -53,11 +53,16 @@ impl Editor {
         if !minibuffer.purpose.takes_path() {
             return;
         }
-        let input = minibuffer.input.contents();
+        let mut input = minibuffer.input.contents();
+        if let Some(rest) = paths::restart(&input) {
+            input = rest.to_owned();
+            self.set_minibuffer_input(&input);
+        }
         let directory = self.resolve_path(paths::split(&input).0);
-        if minibuffer
-            .listing
+        if self
+            .minibuffer
             .as_ref()
+            .and_then(|minibuffer| minibuffer.listing.as_ref())
             .is_some_and(|listing| listing.directory == directory)
         {
             return;
@@ -576,6 +581,18 @@ mod tests {
             );
             assert_eq!(labels(&editor), ["c.txt"], "{key}");
         }
+    }
+
+    #[test]
+    fn typing_an_absolute_path_starts_over_from_it() {
+        let (dir, mut editor) = find_file_workspace();
+        let target = dir.path().join("sub").join("c.txt");
+
+        type_text(&mut editor, &target.display().to_string());
+        assert_eq!(minibuffer_input(&editor), target.display().to_string());
+        press(&mut editor, "RET");
+
+        assert_eq!(editor.buffer().contents(), "sea");
     }
 
     #[test]

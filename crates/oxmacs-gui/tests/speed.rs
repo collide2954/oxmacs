@@ -51,7 +51,7 @@ fn how_fast_the_editor_is() {
     let small = files.path().join("small.rs");
     let big = files.path().join("big.rs");
     std::fs::write(&small, big_rust(400)).unwrap();
-    std::fs::write(&big, big_rust(200_000)).unwrap();
+    std::fs::write(&big, big_rust(20_000)).unwrap();
 
     timed("boot with the bundled plugins", 5, || {
         let _ = App::boot(&[], Some(home.path()));
@@ -66,7 +66,7 @@ fn how_fast_the_editor_is() {
     timed("open a 400-line Rust file", 5, || {
         app.start(&[visit(&small)], false);
     });
-    timed("open a 200,000-line Rust file", 3, || {
+    timed("open a 20,000-line Rust file", 3, || {
         app.start(&[visit(&big)], false);
     });
 

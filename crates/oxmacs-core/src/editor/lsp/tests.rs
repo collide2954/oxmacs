@@ -759,3 +759,28 @@ fn list_tools_names_the_language_servers_and_offers_to_install_them() {
         Effect::Spawn(job) if job.program == "rustup" && job.args == ["component", "add", "rust-analyzer"]
     )));
 }
+
+#[test]
+fn missing_servers_are_not_searched_for_on_every_keystroke() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static SEARCHES: AtomicUsize = AtomicUsize::new(0);
+    let dir = project();
+    let mut editor = editor();
+    editor.lsp.find = |_| {
+        SEARCHES.fetch_add(1, Ordering::Relaxed);
+        None
+    };
+    editor.open_file(&dir.path().join("src/main.rs"));
+    editor.take_effects();
+    let after_open = SEARCHES.load(Ordering::Relaxed);
+
+    for _ in 0..20 {
+        type_text(&mut editor, "x");
+        editor.take_effects();
+    }
+
+    assert_eq!(SEARCHES.load(Ordering::Relaxed), after_open);
+    editor.retry_servers();
+    editor.take_effects();
+    assert!(SEARCHES.load(Ordering::Relaxed) > after_open);
+}

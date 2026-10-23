@@ -300,6 +300,20 @@ pub fn install(isolate: &mut Isolate) {
         let bytes = random(count)?;
         string(heap, &hex(&bytes))
     });
+    isolate.define_native_in(MODULE, "random-below", 1, Some(1), |heap, arguments| {
+        let bound = counted(heap, "crypto/random-below", arguments[0])?;
+        if bound == 0 {
+            return Err(Error::new("crypto/random-below needs a bound above 0"));
+        }
+        let limit = u64::MAX - u64::MAX % bound;
+        loop {
+            let bytes = random(8)?;
+            let drawn = u64::from_le_bytes(bytes.try_into().unwrap_or([0; 8]));
+            if drawn < limit {
+                return Ok(Value::Int(i64::try_from(drawn % bound).unwrap_or(0)));
+            }
+        }
+    });
     isolate.define_native_in(MODULE, "derive-key", 2, None, derive_key);
     isolate.define_native_in(MODULE, "seal", 2, Some(2), seal);
     isolate.define_native_in(MODULE, "open", 2, Some(2), open);

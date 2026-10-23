@@ -1,6 +1,7 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ox::Isolate;
+use ox::task::Wake;
 use ox::value::Value;
 
 fn finished(isolate: &mut Isolate) -> Vec<Result<String, String>> {
@@ -61,6 +62,26 @@ fn tracebacks_of_tasks_show_only_code_with_a_source() {
             vec!["fail at job.ox:1:18"],
         ]
     );
+}
+
+#[test]
+fn sleeping_tasks_say_when_they_wake_next() {
+    let mut isolate = Isolate::new();
+    assert_eq!(isolate.next_wake(), Wake::Never);
+
+    isolate
+        .eval("(def gate (promise)) (spawn (await gate)) (spawn (sleep 5000)) (spawn (sleep 9000))")
+        .unwrap();
+    let started = Instant::now();
+    let _ = isolate.run(Duration::from_millis(10));
+    let ran = Instant::now();
+    let Wake::At(wake) = isolate.next_wake() else {
+        panic!("{:?}", isolate.next_wake());
+    };
+    assert!(wake >= started + Duration::from_secs(5) && wake <= ran + Duration::from_secs(5));
+
+    isolate.eval("(def (spin) (spin)) (spawn (spin))").unwrap();
+    assert_eq!(isolate.next_wake(), Wake::Soon);
 }
 
 #[test]

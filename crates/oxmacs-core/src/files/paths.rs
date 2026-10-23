@@ -13,6 +13,26 @@ pub fn split(input: &str) -> (&str, &str) {
     }
 }
 
+fn starts_anew(rest: &str) -> bool {
+    let mut chars = rest.chars();
+    match (chars.next(), chars.next()) {
+        (Some(first), _) if is_separator(first) => true,
+        (Some('~'), Some(next)) => is_separator(next),
+        (Some(letter), Some(':')) => cfg!(windows) && letter.is_ascii_alphabetic(),
+        _ => false,
+    }
+}
+
+pub fn restart(input: &str) -> Option<&str> {
+    input
+        .char_indices()
+        .rev()
+        .filter(|&(index, c)| index > 0 && is_separator(c))
+        .map(|(index, c)| index + c.len_utf8())
+        .find(|&start| starts_anew(&input[start..]))
+        .map(|start| &input[start..])
+}
+
 pub fn expand(input: &str, home: Option<&Path>) -> PathBuf {
     if let (Some(rest), Some(home)) = (input.strip_prefix('~'), home)
         && (rest.is_empty() || rest.starts_with(is_separator))
@@ -107,6 +127,27 @@ mod tests {
         assert_eq!(split("~/oxmacs/cr"), ("~/oxmacs/", "cr"));
         assert_eq!(split("dir/"), ("dir/", ""));
         assert_eq!(split("abc"), ("", "abc"));
+    }
+
+    #[test]
+    fn a_new_root_typed_after_a_separator_starts_the_path_over() {
+        let s = SEPARATOR;
+
+        assert_eq!(
+            restart(&format!("~{s}src{s}{s}etc")),
+            Some(format!("{s}etc").as_str())
+        );
+        assert_eq!(
+            restart(&format!("{s}srv{s}x{s}~{s}notes")),
+            Some(format!("~{s}notes").as_str())
+        );
+        assert_eq!(restart(&format!("~{s}src{s}a~b")), None);
+        assert_eq!(restart(&format!("{s}{s}server")), None);
+        assert_eq!(restart(&format!("~{s}x")), None);
+        if cfg!(windows) {
+            assert_eq!(restart(r"C:\Users\ana\D:"), Some("D:"));
+            assert_eq!(restart(r"C:\Users\ana\D:\x"), Some(r"D:\x"));
+        }
     }
 
     #[test]

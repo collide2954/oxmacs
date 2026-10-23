@@ -8,6 +8,7 @@ pub(crate) mod motion;
 mod statements;
 
 use std::fmt;
+use std::time::{Duration, Instant};
 
 use tree_sitter::{InputEdit, Node, Parser, Point, Tree};
 
@@ -17,12 +18,17 @@ pub use language::{Feature, Grammar, Indentation, Language, LanguageSpec, Outlin
 use layers::Layer;
 
 use crate::text::{Buffer, TextChange};
+
+const SLOW: Duration = Duration::from_millis(25);
+
 pub struct Syntax {
     language: Language,
     known: Vec<Language>,
     parser: Option<Parser>,
     tree: Option<Tree>,
     revision: Option<u64>,
+    slow: bool,
+    stale: bool,
     layers: Vec<Layer>,
     injectors: Vec<(&'static Grammar, Parser)>,
 }
@@ -54,6 +60,8 @@ impl Syntax {
             parser,
             tree: None,
             revision: None,
+            slow: false,
+            stale: false,
             layers: Vec::new(),
             injectors: Vec::new(),
         }
@@ -140,13 +148,30 @@ impl Syntax {
     }
 
     pub fn sync(&mut self, buffer: &mut Buffer) {
+        self.sync_with(buffer, false);
+    }
+
+    pub fn sync_lazily(&mut self, buffer: &mut Buffer) {
+        self.sync_with(buffer, true);
+    }
+
+    pub fn stale(&self) -> bool {
+        self.stale
+    }
+
+    #[cfg(test)]
+    pub(crate) fn assume_slow(&mut self) {
+        self.slow = true;
+    }
+
+    fn sync_with(&mut self, buffer: &mut Buffer, lazy: bool) {
         if self.parser.is_none() {
             return;
         }
         buffer.track_changes();
         let changes = buffer.take_changes();
         let revision = buffer.revision();
-        if self.revision == Some(revision) && self.tree.is_some() {
+        if self.revision == Some(revision) && self.tree.is_some() && (lazy || !self.stale) {
             return;
         }
         let incremental = self.revision.is_some_and(|synced| {
@@ -158,6 +183,13 @@ impl Syntax {
                 tree.edit(&input_edit(change));
             }
         }
+        if lazy && self.slow && old.is_some() {
+            self.tree = old;
+            self.revision = Some(revision);
+            self.stale = true;
+            return;
+        }
+        let started = Instant::now();
         let text: &Buffer = buffer;
         self.tree = self.parser.as_mut().and_then(|parser| {
             parser.parse_with_options(
@@ -166,7 +198,11 @@ impl Syntax {
                 None,
             )
         });
+        if old.is_some() {
+            self.slow = started.elapsed() > SLOW;
+        }
         self.revision = Some(revision);
+        self.stale = false;
         self.inject(buffer);
     }
 }
@@ -326,5 +362,41 @@ mod tests {
         syntax.sync(&mut buffer);
 
         assert_eq!(syntax.tree().unwrap().root_node().id(), root);
+    }
+
+    #[test]
+    fn slow_buffers_shift_their_tree_while_typing_and_parse_later() {
+        let (mut buffer, mut syntax) = parsed("fn a() {}\nfn b() {}\n");
+        syntax.assume_slow();
+        buffer.set_point(0);
+
+        buffer.insert("pub ");
+        syntax.sync_lazily(&mut buffer);
+
+        assert!(syntax.stale());
+        let b = syntax
+            .tree()
+            .unwrap()
+            .root_node()
+            .child(1)
+            .unwrap()
+            .start_byte();
+        assert_eq!(b, "pub fn a() {}\n".len());
+        assert_ne!(sexp(&syntax), fresh(&buffer));
+
+        syntax.sync(&mut buffer);
+        assert!(!syntax.stale());
+        assert_eq!(sexp(&syntax), fresh(&buffer));
+    }
+
+    #[test]
+    fn quick_buffers_parse_as_they_change() {
+        let (mut buffer, mut syntax) = parsed("fn a() {}\n");
+
+        buffer.insert("pub ");
+        syntax.sync_lazily(&mut buffer);
+
+        assert!(!syntax.stale());
+        assert_eq!(sexp(&syntax), fresh(&buffer));
     }
 }

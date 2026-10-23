@@ -19,6 +19,21 @@ pub fn once_after(delay: Duration, since: Instant) -> Subscription<()> {
     Subscription::run_with((delay, since), once)
 }
 
+pub fn at(deadline: Instant) -> Subscription<()> {
+    Subscription::run_with(deadline, until)
+}
+
+fn until(deadline: &Instant) -> impl Stream<Item = ()> + use<> {
+    let deadline = *deadline;
+    iced::stream::channel(1, async move |mut sender| {
+        thread::spawn(move || {
+            thread::sleep(deadline.saturating_duration_since(Instant::now()));
+            let _ = sender.try_send(());
+        });
+        future::pending::<()>().await;
+    })
+}
+
 fn once((delay, _): &(Duration, Instant)) -> impl Stream<Item = ()> + use<> {
     let delay = *delay;
     iced::stream::channel(1, async move |mut sender| {

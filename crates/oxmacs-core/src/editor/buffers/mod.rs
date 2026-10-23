@@ -153,6 +153,18 @@ impl BufferList {
         }
     }
 
+    pub(super) fn sync_syntax_lazily(&mut self, index: usize) {
+        if let Some(entry) = self.entries.get_mut(index)
+            && let Mode::Text(Some(syntax)) = &mut entry.mode
+        {
+            syntax.sync_lazily(&mut entry.buffer);
+        }
+    }
+
+    pub(super) fn syntax_stale(&self, index: usize) -> bool {
+        self.syntax(index).is_some_and(Syntax::stale)
+    }
+
     pub(super) fn set_language(
         &mut self,
         index: usize,

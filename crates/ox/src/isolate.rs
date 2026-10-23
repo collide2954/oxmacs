@@ -20,7 +20,7 @@ use crate::profile::Profile;
 use crate::read::{self, Datum, Syntax};
 use crate::span::{Source, Span};
 use crate::symbol::Sym;
-use crate::task::{Interrupter, Report, TaskId};
+use crate::task::{Interrupter, Report, TaskId, Wake};
 use crate::value::Value;
 use crate::value::print;
 use crate::value::promise::Promise;
@@ -533,6 +533,10 @@ impl Isolate {
 
     pub fn pending(&self) -> usize {
         self.runtime.pending()
+    }
+
+    pub fn next_wake(&self) -> Wake {
+        self.runtime.next_wake()
     }
 
     pub fn run_with(&mut self, host: &mut dyn Any, budget: Duration) -> Report {

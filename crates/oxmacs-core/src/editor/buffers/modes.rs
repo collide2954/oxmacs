@@ -13,6 +13,21 @@ impl Editor {
         self.buffers.sync_syntax(0);
     }
 
+    pub fn wants_reparse(&self) -> bool {
+        self.buffers.syntax_stale(0)
+            || self
+                .visible_buffers()
+                .into_iter()
+                .any(|index| self.buffers.syntax_stale(index))
+    }
+
+    pub fn reparse(&mut self) {
+        self.buffers.sync_syntax(0);
+        for index in self.visible_buffers() {
+            self.buffers.sync_syntax(index);
+        }
+    }
+
     pub(in crate::editor) fn syntax_highlights_at(
         &self,
         index: usize,

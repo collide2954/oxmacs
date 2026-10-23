@@ -65,3 +65,17 @@ fn base64_and_sha256_round_trip() {
         r#"["aGkg4pyT" "hi ✓" "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"]"#
     );
 }
+
+#[test]
+fn random_numbers_stay_below_their_bound() {
+    assert_eq!(
+        crypto(
+            "(let [drawn (map (fn [_] (crypto/random-below 6)) (range 600))] [(every? (fn [n] (and (>= n 0) (< n 6))) drawn) (count (distinct drawn))])"
+        ),
+        "[true 6]"
+    );
+    assert_eq!(
+        crypto("(crypto/random-below 0)"),
+        "error: crypto/random-below needs a bound above 0"
+    );
+}

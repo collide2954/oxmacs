@@ -190,6 +190,7 @@
 (net/send connection line) "Sends line to the server, ending it with CR LF; false when the connection has ended."
 (net/close connection) "Ends the connection once what was sent has gone out."
 (crypto/random count) "count random bytes from the system, written as hex."
+(crypto/random-below bound) "A random whole number from 0 up to but not including bound, every one equally likely."
 (crypto/derive-key password salt {memory 65536 iterations 3 parallelism 1}) "A promise of a key made from password and a hex salt with Argon2id, using :memory KiB, as hex. The same password and salt always give the same key."
 (crypto/seal key text) "text encrypted with key using XChaCha20-Poly1305 and a fresh random nonce, as base64."
 (crypto/open key sealed) "The text crypto/seal sealed with key; raises when the key is wrong or the text was changed."

@@ -28,6 +28,7 @@ iced = { version = "0.14.0", features = ["advanced", "canvas", "image"] }
 iced_test = "0.14.0"
 indexmap = "2.14.2"
 jiff = "0.2.38"
+keepass = "0.17.0"
 lsp-server = "0.10.0"
 ox = { path = "crates/ox" }
 ox-lsp = { path = "crates/ox-lsp" }
@@ -89,3 +90,9 @@ lto = "fat"
 [profile.profiling]
 inherits = "release"
 debug = "limited"
+
+[profile.speed]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
