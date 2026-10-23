@@ -133,7 +133,7 @@
         (if (> (or found.size 0) large)
           :large
           [(count (string/lines (await (file/read full)))) 0]))
-      (catch error e :binary))))
+      (catch error _e :binary))))
 
 (def (untracked-counts root paths)
   (let [counted (if (> (count paths) counted-limit)
@@ -194,6 +194,6 @@
   (reduce (fn [found key]
             (let [change (find-change snapshot (nth key 0) (nth key 1))]
               (if change
-                (assoc found key (try (file-diff root (nth key 0) change) (catch error e [])))
+                (assoc found key (try (file-diff root (nth key 0) change) (catch error _e [])))
                 found)))
           {} (keys opened)))

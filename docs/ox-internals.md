@@ -37,6 +37,9 @@ crates/ox/src/
   error.rs          Error with an optional span
   bytecode.rs       instructions, Code objects, constant pools, span tables
   native.rs         native functions and their arity checks
+  check/            the checker: names, arguments and unused code, without running the file
+    report.rs       human, JSON and GitHub output for ox check
+  profile.rs        the profiler: sampled call trees, call counts and timed natives
   read/             source text to Syntax, with error recovery
     syntax.rs       Datum and Syntax (and the marks hygiene adds)
   expand/           macro expansion; quote.rs turns quoted forms into data
@@ -70,13 +73,17 @@ crates/ox/src/
     http.rs         ox http: get and percent-encoding
     strings.rs      ox string
     prelude/*.ox    the parts of the core library written in Ox
-  bin/ox.rs         `ox file.ox` and the REPL
 crates/ox/tests/
   corpus.rs         runs tests/ox/*.ox: each `;=> value` or `;! error` line is checked
   ox/*.ox           the language test corpus
-  cli.rs            the `ox` command line
+  check.rs          the checker's findings
   budgets.rs        benchmarks against the budgets (run in pre-push)
+crates/ox-cli/
+  src/main.rs       the `ox` command: run a file, the REPL, `ox test`, `ox check` and `ox profile`
+  tests/            the command line, processes, and checking and profiling files
 ```
+
+Every tool is a subcommand of `ox`. The command lives in its own crate so it can depend on oxmacs-ox: `ox check` checks files in a plugin folder and `init.ox` with the editor's natives and modules known, and plain Ox files without them.
 
 ## Values
 

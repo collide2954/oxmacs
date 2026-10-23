@@ -1,5 +1,5 @@
 mod errors;
-mod parameters;
+pub(crate) mod parameters;
 mod patterns;
 
 use parameters::{Parameters, parse_parameters};

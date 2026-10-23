@@ -2,6 +2,7 @@
 members = ["crates/*"]
 default-members = [
     "crates/ox",
+    "crates/ox-cli",
     "crates/oxmacs",
     "crates/oxmacs-core",
     "crates/oxmacs-gui",

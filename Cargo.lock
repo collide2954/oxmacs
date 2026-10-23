@@ -3195,6 +3195,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ox-cli"
+version = "0.1.0"
+dependencies = [
+ "ox",
+ "oxmacs-ox",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "ox-perf"
 version = "0.1.0"
 dependencies = [

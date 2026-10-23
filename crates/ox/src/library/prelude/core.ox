@@ -293,7 +293,7 @@
   (mapcat identity (apply zip colls)))
 
 (def (repeat n x)
-  (map (fn [i] x) (range n)))
+  (map (fn [_] x) (range n)))
 
 (def (get-in m path & default)
   (let [found (reduce (fn [value key] (if (nil? value) nil (get value key))) m path)]

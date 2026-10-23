@@ -1,5 +1,5 @@
 (module
-  (import (ox file) (ox path) (ox string) (ox time)
+  (import (ox file) (ox path) (ox time)
           (dired listing :as l)))
 
 (defonce listings (atom {}))
@@ -46,7 +46,7 @@
 
 (def (refresh-all)
   (map (fn [directory]
-         (try (refresh directory) (catch error e (swap! listings dissoc directory))))
+         (try (refresh directory) (catch error _e (swap! listings dissoc directory))))
        (keys @listings))
   nil)
 

@@ -107,7 +107,7 @@
         (if reveal
           (apply open-buffer pane-name out.lines
                  (concat [:keys pane-keys :directory state.root :beside true
-                          :on-resize (fn [width] (resized name))]
+                          :on-resize (fn [_width] (resized name))]
                          placed))
           (apply set-lines pane-name out.lines placed))))))
 
@@ -546,4 +546,4 @@
   :highlight commit/highlight)
 
 (on-disk-change :git (fn [] (refresh-all)))
-(on-saved :git (fn [path] (refresh-all)))
+(on-saved :git (fn [_path] (refresh-all)))

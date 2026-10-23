@@ -35,6 +35,29 @@ pub fn home() -> Option<PathBuf> {
         .or_else(|| dirs::home_dir().map(|home| home.join(".oxmacs")))
 }
 
+fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
+    let mut isolate = Isolate::new();
+    natives::install(&mut isolate);
+    commands::install(&mut isolate);
+    plugins::install(&mut isolate);
+    views::install(&mut isolate);
+    buffers::install(&mut isolate);
+    hooks::install(&mut isolate);
+    transients::install(&mut isolate);
+    modes::install(&mut isolate);
+    takeover::install(&mut isolate);
+    idle::install(&mut isolate);
+    prompts::install(&mut isolate, answers);
+    if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
+        panic!("The oxmacs prelude failed to load: {error}");
+    }
+    isolate
+}
+
+pub fn checking_isolate() -> Isolate {
+    editor_isolate(&prompts::Inbox::default())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pace {
     Idle,
@@ -62,24 +85,9 @@ impl Ox {
     }
 
     pub fn with_bundled(bundled: &'static [Bundle]) -> Self {
-        let mut isolate = Isolate::new();
-        natives::install(&mut isolate);
-        commands::install(&mut isolate);
-        plugins::install(&mut isolate);
-        views::install(&mut isolate);
-        buffers::install(&mut isolate);
-        hooks::install(&mut isolate);
-        transients::install(&mut isolate);
-        modes::install(&mut isolate);
-        takeover::install(&mut isolate);
-        idle::install(&mut isolate);
         let answers = prompts::Inbox::default();
-        prompts::install(&mut isolate, &answers);
-        if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
-            panic!("The oxmacs prelude failed to load: {error}");
-        }
         Self {
-            isolate,
+            isolate: editor_isolate(&answers),
             bundled,
             home: None,
             answers,

@@ -1,4 +1,5 @@
 pub mod bytecode;
+pub mod check;
 mod compile;
 pub mod error;
 mod expand;

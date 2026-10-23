@@ -6,6 +6,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::check::{self, Diagnostic};
 use crate::compile::compile;
 use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
@@ -534,6 +535,119 @@ impl Isolate {
 
     pub fn interrupter(&self) -> Interrupter {
         self.runtime.interrupter.clone()
+    }
+
+    fn check_header(
+        &mut self,
+        module: ModuleId,
+        clauses: &[Syntax],
+        found: &mut Vec<Diagnostic>,
+        unknown: &mut check::Unknown,
+        imports: &mut Vec<check::Import>,
+    ) {
+        for clause in clauses {
+            let specs = match &clause.datum {
+                Datum::List(items) if items.first().and_then(symbol) == Some("import") => {
+                    &items[1..]
+                }
+                _ => {
+                    if let Err(error) = self.header(module, std::slice::from_ref(clause), &mut ()) {
+                        found.push(Diagnostic::error(
+                            "import",
+                            error.message,
+                            error.span.unwrap_or(clause.span),
+                        ));
+                    }
+                    continue;
+                }
+            };
+            for spec in specs {
+                if let Err(error) = self.import(module, spec, &mut ()) {
+                    found.push(Diagnostic::error(
+                        "import",
+                        error.message,
+                        error.span.unwrap_or(spec.span),
+                    ));
+                    unknown.add(spec);
+                } else {
+                    imports.extend(check::Import::of(spec));
+                }
+            }
+        }
+    }
+
+    pub fn check(&mut self, name: &str, source: &str) -> Vec<Diagnostic> {
+        let module_name = format!("#check{}:{name}", self.runtime.modules.len());
+        let module = self.runtime.module_named(&module_name);
+        let text = Rc::new(Source {
+            name: name.to_owned(),
+            text: source.to_owned(),
+        });
+        let (forms, errors) = read::read(source);
+        let mut found: Vec<Diagnostic> = errors
+            .into_iter()
+            .map(|error| Diagnostic::error("syntax", error.message, error.span))
+            .collect();
+        let broken: Vec<Span> = found.iter().map(|diagnostic| diagnostic.span).collect();
+        let mut unknown = check::Unknown::default();
+        let mut imports = Vec::new();
+        let mut expanded = Vec::new();
+        for form in &forms {
+            if broken
+                .iter()
+                .any(|span| form.span.start <= span.start && span.start <= form.span.end)
+            {
+                continue;
+            }
+            if let Some(clauses) = header(form) {
+                self.check_header(module, clauses, &mut found, &mut unknown, &mut imports);
+                continue;
+            }
+            let syntax = match expand(&mut self.runtime, form, module) {
+                Ok(syntax) => syntax,
+                Err(error) => {
+                    found.push(Diagnostic::error(
+                        "macro",
+                        error.message,
+                        error.span.unwrap_or(form.span),
+                    ));
+                    continue;
+                }
+            };
+            let code = match compile(
+                &mut self.runtime.heap,
+                &syntax,
+                Some(Rc::clone(&text)),
+                module,
+                Sym::intern(&module_name),
+            ) {
+                Ok(code) => code,
+                Err(error) => {
+                    found.push(Diagnostic::error(
+                        "malformed",
+                        error.message,
+                        error.span.unwrap_or(form.span),
+                    ));
+                    continue;
+                }
+            };
+            if check::defines_macro(&syntax)
+                && let Err(error) = self.runtime.run(&Rc::new(code), &mut ())
+            {
+                found.push(Diagnostic::error(
+                    "macro",
+                    error.message,
+                    error.span.unwrap_or(form.span),
+                ));
+            }
+            expanded.push(syntax);
+        }
+        found.extend(check::names(&self.runtime, module, &expanded, &unknown));
+        let body: Vec<&Syntax> = forms.iter().filter(|form| header(form).is_none()).collect();
+        found.extend(check::unused_imports(&imports, &body));
+        found.sort_by_key(|diagnostic| (diagnostic.span.start, diagnostic.span.end));
+        found.dedup();
+        found
     }
 
     pub fn profiling(&self) -> bool {

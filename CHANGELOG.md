@@ -40,6 +40,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `ox check` finds mistakes in Ox code without running it: undefined names, suggesting a close one; calls with the wrong number of arguments or unknown keyword arguments; unused bindings and imports, unless named with a leading `_`; and malformed forms. It prints like rustc, or with `--format json` and `--format github` for CI, fails on errors, and on warnings too with `--strict`. Plugins and init.ox are checked with the editor's functions known.
 - Profiling for Ox code: `M-x ox-profiler-start`, `M-x ox-profiler-stop` and `M-x ox-profiler-report` show where the time went, grouped by plugin, as a call tree or as functions by self time, with the slowest editor ticks; `TAB` folds, `f` switches tables and `RET` visits a function. `ox profile FILE` prints the same report, and `(profile f)` returns it as data.
 - `ox-perf`, a developer tool outside the default build, benchmarks Ox code and, on Windows, samples the VM's native stack to show where its time goes.
 - Screensavers, a bundled plugin that is off until you set (use-plugin screensaver :config {idle: 300}): after that many seconds without input, while oxmacs has focus, a starfield or matrix rain fills the window area, keeping the mode line and minibuffer, until the first key or click, which does nothing else. kind picks :starfield, :matrix or :random, and M-x screensaver-preview shows either at any time.

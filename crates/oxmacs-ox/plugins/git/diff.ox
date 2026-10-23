@@ -116,7 +116,7 @@
    (- (count others) 1) 0 (list 0)))
 
 (def (lcs-table items others)
-  (let [zeros (vec (map (fn [i] 0) (range (+ (count others) 1))))]
+  (let [zeros (vec (map (fn [_] 0) (range (+ (count others) 1))))]
     ((fn rows [i acc]
        (if (< i 0)
          (vec acc)

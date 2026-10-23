@@ -9,3 +9,6 @@
 
 (defmacro use-plugin [name & options]
   `(enable-plugin '~name ~@options))
+
+(def (setting _key)
+  (raise (error "setting reads a plugin's own settings, so it only works in a plugin's entry file")))

@@ -1,5 +1,3 @@
-use std::fs;
-use std::process::Command;
 use std::time::Duration;
 
 use ox::Isolate;
@@ -101,22 +99,4 @@ fn ox_code_can_profile_a_piece_of_work_and_read_the_result() {
         "broke"
     );
     assert!(!isolate.profiling());
-}
-
-#[test]
-fn the_ox_command_profiles_a_file() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("busy.ox");
-    fs::write(&path, format!("{BUSY}\n(repeat-branch 200)\n")).unwrap();
-
-    let output = Command::new(env!("CARGO_BIN_EXE_ox"))
-        .arg("profile")
-        .arg(&path)
-        .output()
-        .unwrap();
-
-    let printed = String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n");
-    assert!(output.status.success(), "{printed}");
-    assert!(printed.starts_with("Profile: "), "{printed}");
-    assert!(printed.contains("branch"), "{printed}");
 }
