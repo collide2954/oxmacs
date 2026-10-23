@@ -7,6 +7,7 @@ mod hooks;
 pub mod idle;
 mod keepass;
 mod log;
+mod manual;
 mod mode;
 mod modes;
 mod natives;
@@ -59,6 +60,7 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     idle::install(&mut isolate);
     prompts::install(&mut isolate, answers);
     keepass::install(&mut isolate);
+    manual::install(&mut isolate);
     isolate.add_native_docs(DOCS);
     if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
         panic!("The oxmacs prelude failed to load: {error}");
@@ -217,6 +219,7 @@ impl Ox {
         transients::run_waiting(&mut self.isolate, editor);
         takeover::run_endings(&mut self.isolate, editor);
         prompts::deliver(&mut self.isolate, &self.answers);
+        manual::deliver(&mut self.isolate, editor);
         let deadline = Instant::now() + BUDGET;
         while self.isolate.pending() > 0 {
             let before = self.evaluating();

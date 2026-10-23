@@ -285,7 +285,6 @@ pub(crate) fn highlight_line(text: &str) -> Spans {
     highlight_with(text, State::default()).0
 }
 
-#[cfg(test)]
 pub(crate) fn highlight_lines(lines: &[&str]) -> Vec<Spans> {
     let mut state = State::default();
     lines

@@ -40,6 +40,7 @@ enum Request {
     Recall(bool),
     Saved(PathBuf),
     ReloadInit,
+    Run(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -414,24 +415,29 @@ fn source_name(editor: &Editor) -> String {
     )
 }
 
-fn open_repl(editor: &mut Editor) {
+fn repl(editor: &mut Editor) -> Option<BufferId> {
     if let Some(id) = editor.plugin_buffers::<ReplView>().first().copied() {
-        editor.show_buffer(id);
-        return;
+        return Some(id);
     }
-    let Some(scope) = editor
+    let scope = editor
         .plugin_state::<Requests>()
-        .and_then(|requests| requests.repl)
-    else {
-        return;
-    };
-    let id = editor.add_plugin_buffer_with(REPL, |buffer| {
+        .and_then(|requests| requests.repl)?;
+    Some(editor.add_plugin_buffer_with(REPL, |buffer| {
         buffer.insert_at(0, &format!("{GREETING}{PROMPT}"));
         let input = InputLine::new(buffer);
         buffer.set_point(buffer.len_chars());
         ReplView { scope, input }
-    });
-    editor.show_buffer(id);
+    }))
+}
+
+fn open_repl(editor: &mut Editor) {
+    if let Some(id) = repl(editor) {
+        editor.show_buffer(id);
+    }
+}
+
+pub(crate) fn run_in_repl(editor: &mut Editor, code: String) {
+    queue(editor, Request::Run(code));
 }
 
 fn indent_or_complete(editor: &mut Editor) {
@@ -497,6 +503,7 @@ impl Ox {
                     let home = self.home.clone();
                     self.run_init(editor, home.as_deref());
                 }
+                Request::Run(code) => self.run_in_repl(editor, &code),
             }
         }
     }
@@ -687,6 +694,19 @@ impl Ox {
             |name| name.to_string_lossy().into_owned(),
         );
         self.evaluate_all(editor, Finish::Loaded(name));
+    }
+
+    fn run_in_repl(&mut self, editor: &mut Editor, code: &str) {
+        let Some(id) = repl(editor) else {
+            return;
+        };
+        if !editor.buffer_shown(id) {
+            editor.show_buffer_beside(id);
+        }
+        if let Some((buffer, view)) = editor.plugin_buffer_mut::<ReplView>(id) {
+            view.input.replace(buffer, code);
+        }
+        self.send(editor);
     }
 
     fn send(&mut self, editor: &mut Editor) {

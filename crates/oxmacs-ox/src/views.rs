@@ -99,6 +99,13 @@ const FACES: &[(&str, Highlight)] = &[
     ("region", Highlight::Region),
 ];
 
+pub(crate) fn face_name(highlight: Highlight) -> Option<&'static str> {
+    FACES
+        .iter()
+        .find(|(_, known)| *known == highlight)
+        .map(|(name, _)| *name)
+}
+
 pub(crate) fn face_named(name: &str) -> Option<Highlight> {
     if let Some(number) = name.strip_prefix("nick-") {
         return number

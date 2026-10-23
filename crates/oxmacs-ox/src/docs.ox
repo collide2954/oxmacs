@@ -53,6 +53,9 @@
 (plugin-settings) "The settings of every plugin in use, each a map of :plugin, :key, :type, :choices, :doc, :default, :value, :saved and :custom, the last three being what is in use, what the init files left and what custom.ox set; each is nil when the default applies."
 (oxmacs-home) "The oxmacs home folder holding init.ox and custom.ox, or nil."
 (settings-schema) "Every editor setting as a map of :key, :group, :type, :hint, :unset, :default and :choices, which M-x customize lists."
+(ox-reference) "A promise of the reference of every Ox library module and the editor API, as maps of :module and :entries, each entry a map of :name, :kind, :signature and :doc."
+(ox-highlight lines) "The lines of Ox code highlighted as Ox buffers show them: for each line, a vector of text and [text face] pieces, as open-buffer takes."
+(run-in-repl code) "Shows the Ox REPL beside the current window and evaluates code there, as if it had been typed."
 (take-over draw {background nil on-end nil fps nil}) "Takes over the window area until a key or click: each frame, draw is called with a map of :time, :width, :height and :font-size and returns shapes to paint. :on-end is called afterward."
 (end-take-over) "Gives the windows back after take-over."
 
