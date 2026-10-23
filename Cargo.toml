@@ -3,6 +3,7 @@ members = ["crates/*"]
 default-members = [
     "crates/ox",
     "crates/ox-cli",
+    "crates/ox-perf",
     "crates/oxmacs",
     "crates/oxmacs-core",
     "crates/oxmacs-gui",
@@ -24,6 +25,7 @@ iced_test = "0.14.0"
 indexmap = "2.14.2"
 jiff = "0.2.38"
 ox = { path = "crates/ox" }
+ox-perf = { path = "crates/ox-perf" }
 oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
 oxmacs-ox = { path = "crates/oxmacs-ox" }

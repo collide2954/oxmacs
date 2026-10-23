@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 ox.workspace = true
+ox-perf.workspace = true
 oxmacs-ox.workspace = true
 
 [dev-dependencies]

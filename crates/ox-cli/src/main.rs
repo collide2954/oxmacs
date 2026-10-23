@@ -11,11 +11,17 @@ use ox::value::Value;
 use ox::{Error, Isolate, read};
 use oxmacs_ox::checker;
 
+#[global_allocator]
+static ALLOCATOR: ox_perf::Counting = ox_perf::Counting;
+
 fn main() -> ExitCode {
     let mut args = env::args_os().skip(1);
     match args.next() {
         Some(first) if first == "test" => run_tests(&args.map(PathBuf::from).collect::<Vec<_>>()),
         Some(first) if first == "check" => check_command(args.collect()),
+        Some(first) if first == "perf" => {
+            ox_perf::main(args.map(|argument| argument.to_string_lossy().into_owned()))
+        }
         Some(first) if first == "profile" => {
             if let Some(path) = args.next() {
                 profile_file(&PathBuf::from(path))

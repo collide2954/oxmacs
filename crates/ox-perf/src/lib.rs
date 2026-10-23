@@ -7,11 +7,14 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
 
-#[global_allocator]
-static ALLOCATOR: counting::Counting = counting::Counting;
+pub use counting::Counting;
 
-const USAGE: &str = "usage: ox-perf bench FILE [NAME…] [--root DIR…]
-       ox-perf sample FILE NAME [--seconds N] [--root DIR…]";
+#[cfg(test)]
+#[global_allocator]
+static ALLOCATOR: Counting = Counting;
+
+const USAGE: &str = "usage: ox perf bench FILE [NAME…] [--root DIR…]
+       ox perf sample FILE NAME [--seconds N] [--root DIR…]";
 
 #[derive(Debug, Default)]
 struct Arguments {
@@ -57,8 +60,8 @@ fn run(arguments: &Arguments) -> Result<String, String> {
     }
 }
 
-fn main() -> ExitCode {
-    match parse(std::env::args().skip(1)).and_then(|arguments| run(&arguments)) {
+pub fn main(arguments: impl IntoIterator<Item = String>) -> ExitCode {
+    match parse(arguments).and_then(|arguments| run(&arguments)) {
         Ok(report) => {
             print!("{report}");
             ExitCode::SUCCESS

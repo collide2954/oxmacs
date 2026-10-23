@@ -4,7 +4,7 @@ Companion to [ox-design.md](ox-design.md). This is how the language is built. Ph
 
 ## Constraints
 
-- **Safe Rust only.** The workspace forbids `unsafe`, and the VM is no exception. The one exception is `ox-perf`, a developer tool outside the default build, whose allocation counter and stack sampler can't be written without it. Heap objects live in typed arenas addressed by indices, and the interpreter's bounds checks are the price, to be won back by a JIT later.
+- **Safe Rust only.** The workspace forbids `unsafe`, and the VM is no exception. The one exception is the `ox-perf` crate behind `ox perf`, whose allocation counter and stack sampler can't be written without it. Heap objects live in typed arenas addressed by indices, and the interpreter's bounds checks are the price, to be won back by a JIT later.
 - **Few dependencies.** `num-bigint` (bignums) is the only planned one; everything else is written here.
 - **Speed budgets.**
   - Startup with every bundled plugin: under 100 ms (bytecode cache plus lazy loading).
@@ -232,7 +232,7 @@ isolate.define("ox string", "upcase", native(|_: &mut Ctx, s: Str| Ok(s.to_upper
   - a closure-heavy loop and a float loop;
   - vector and map churn;
   - GC pause percentiles.
-- **ox-perf.** `crates/ox-perf` is a developer tool left out of the default build. `cargo run -p ox-perf --profile profiling -- bench crates/ox-perf/benchmarks/vm.ox` loads a file that ends with a map of names to functions, or to `[count function]` pairs, runs each benchmark for about a second and prints its best time, the time per item and the Rust allocations it made. `sample FILE NAME` samples the native stack while one benchmark runs and ranks self time by function and by line, and total time by function, with inlined functions resolved; it needs x86-64 Windows for now. `--root DIR` adds module roots: `--root crates/oxmacs-ox/plugins` lets `benchmarks/screensavers.ox` draw the screensavers' frames. The sampler copies the stack while the thread is suspended and walks the copy after resuming it, so it never waits on a lock that thread holds.
+- **ox perf.** `crates/ox-perf` is the library behind `ox perf`, built with the `ox` command; it runs only when asked. Its allocation counter is the `ox` binary's allocator, and it counts only once `ox perf` starts measuring. `ox perf bench crates/ox-perf/benchmarks/vm.ox` loads a file that ends with a map of names to functions, or to `[count function]` pairs, runs each benchmark for about a second and prints its best time, the time per item and the Rust allocations it made. `sample FILE NAME` samples the native stack while one benchmark runs and ranks self time by function and by line, and total time by function, with inlined functions resolved; it needs x86-64 Windows for now, and lines and inlined functions need debug info, so build `ox` with `cargo build -p ox-cli --profile profiling` for those. `--root DIR` adds module roots: `--root crates/oxmacs-ox/plugins` lets `benchmarks/screensavers.ox` draw the screensavers' frames. The sampler copies the stack while the thread is suspended and walks the copy after resuming it, so it never waits on a lock that thread holds.
 
 ## Slice plan
 

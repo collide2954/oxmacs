@@ -3199,6 +3199,7 @@ name = "ox-cli"
 version = "0.13.0"
 dependencies = [
  "ox",
+ "ox-perf",
  "oxmacs-ox",
  "serde_json",
  "tempfile",

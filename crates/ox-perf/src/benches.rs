@@ -83,6 +83,7 @@ pub fn measure(
     let function = isolate
         .held(benchmark.thunk)
         .ok_or("A benchmark lost its function")?;
+    counting::start();
     let started = Instant::now();
     let mut measured = Measure {
         best: Duration::MAX,

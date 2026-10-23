@@ -55,7 +55,7 @@ Profiling tools for anyone writing Ox for oxmacs: where the time goes in plugins
   - `ox profile FILE` runs a file and prints the report.
   - `(profile (fn [] …))` returns the profile as data, `{wall busy samples tree functions ticks report}` with times in milliseconds, and `(profile-report found)` prints it. `profiler-start`, `profiler-stop` and `profiler-snapshot` are the controls underneath.
 - **The report.** `*ox profile*` shows a call tree with total and self time, their share and the call count on each line; `TAB` folds, `f` switches to the functions by self time, `RET` visits the function's source and `g` takes a fresh report while profiling continues.
-- **Native profiling.** `ox-perf` (see [ox-internals.md](ox-internals.md)) samples the Rust side for work on the VM itself.
+- **Native profiling.** `ox perf` (see [ox-internals.md](ox-internals.md)) samples the Rust side for work on the VM itself.
 ## Slices
 
 Slices 1 to 11 are done.

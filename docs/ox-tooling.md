@@ -10,7 +10,7 @@ Tools for writing Ox: a checker, interactive development in oxmacs in the style 
 - **Checking.** Names, arity and unused code first, then gradual types.
 - **Integrations.** `ox fmt`, a CI-friendly `ox check` and `ox test`, and a tree-sitter grammar.
 - **Docstrings.** A string first in a body with more forms is the doc: `(def (area w h) "Width times height." (* w h))` and `(def limit "Most retries." 5)`. Tests named after a function are its examples.
-- **One command.** Every tool is a subcommand of `ox`: `ox check`, `ox lsp`, `ox fmt`, `ox test` and `ox profile`.
+- **One command.** Every tool is a subcommand of `ox`: `ox check`, `ox lsp`, `ox fmt`, `ox test`, `ox profile` and `ox perf`.
 - **Severity.** Undefined names, wrong argument counts and unknown keyword arguments are errors; unused bindings and imports are warnings, silenced by a leading `_`. `ox check` fails on errors, and with `--strict` on warnings too.
 
 ## Phases
