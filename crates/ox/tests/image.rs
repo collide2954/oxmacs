@@ -180,3 +180,132 @@ fn mistakes_are_reported() {
         "image/save can't write \"psd\"; use png, jpg, webp, gif, bmp, tiff, ico or qoi"
     );
 }
+
+const HALVES: &str = "(def halves (image/canvas (image/new 2 2 :color :red) 4 2 :anchor :left))";
+
+#[test]
+fn geometry_resizes_crops_pads_and_turns_images() {
+    let mut isolate = Isolate::new();
+    shown(&mut isolate, HALVES);
+    let size = |isolate: &mut Isolate, source: &str| {
+        shown(
+            isolate,
+            &format!("(let [found {source}] [(image/width found) (image/height found)])"),
+        )
+    };
+
+    assert_eq!(
+        shown(
+            &mut isolate,
+            "[(image/pixel halves 0 0) (image/pixel halves 3 1)]"
+        ),
+        "[[255 0 0 255] [0 0 0 0]]"
+    );
+    assert_eq!(size(&mut isolate, "(image/resize halves 8)"), "[8 4]");
+    assert_eq!(
+        size(
+            &mut isolate,
+            "(image/resize halves 8 :height 3 :filter :nearest)"
+        ),
+        "[8 3]"
+    );
+    assert_eq!(
+        size(&mut isolate, "(image/fit (image/new 100 50) 10 10)"),
+        "[10 5]"
+    );
+    assert_eq!(
+        size(&mut isolate, "(image/fill (image/new 100 50) 10 10)"),
+        "[10 10]"
+    );
+    assert_eq!(
+        size(&mut isolate, "(image/thumbnail (image/new 100 50) 20)"),
+        "[20 10]"
+    );
+    assert_eq!(
+        shown(
+            &mut isolate,
+            "(image/pixel (image/crop halves 1 0 2 2) 0 0)"
+        ),
+        "[255 0 0 255]"
+    );
+    assert_eq!(
+        shown(
+            &mut isolate,
+            "(image/pixel (image/crop halves 2 0 2 2) 0 0)"
+        ),
+        "[0 0 0 0]"
+    );
+    assert_eq!(size(&mut isolate, "(image/pad halves 1)"), "[6 4]");
+    assert_eq!(
+        shown(
+            &mut isolate,
+            "(let [padded (image/pad halves 1 :color :white)] [(image/pixel padded 0 0) (image/pixel padded 1 1)])"
+        ),
+        "[[255 255 255 255] [255 0 0 255]]"
+    );
+    assert_eq!(size(&mut isolate, "(image/pad halves 0 :left 2)"), "[6 2]");
+    assert_eq!(
+        shown(
+            &mut isolate,
+            "(image/pixel (image/flip halves :horizontal) 3 0)"
+        ),
+        "[255 0 0 255]"
+    );
+    assert_eq!(size(&mut isolate, "(image/rotate halves 90)"), "[2 4]");
+    assert_eq!(
+        shown(&mut isolate, "(image/pixel (image/rotate halves 90) 0 0)"),
+        "[255 0 0 255]"
+    );
+    assert_eq!(
+        size(&mut isolate, "(image/rotate halves 30 :expand false)"),
+        "[4 2]"
+    );
+    assert_eq!(
+        size(&mut isolate, "(image/rotate (image/new 10 10) 45)"),
+        "[14 14]"
+    );
+    assert_eq!(
+        size(
+            &mut isolate,
+            "(image/trim (image/canvas (image/new 2 2 :color :red) 6 6 :color :white))"
+        ),
+        "[2 2]"
+    );
+    assert_eq!(
+        shown(
+            &mut isolate,
+            "(image/pixel (image/affine halves [1 0 2 0 1 0]) 2 0)"
+        ),
+        "[255 0 0 255]"
+    );
+    assert_eq!(
+        shown(
+            &mut isolate,
+            "(image/pixel (image/perspective halves [[0 0] [4 0] [4 2] [0 2]] [[0 0] [4 0] [4 2] [0 2]]) 0 1)"
+        ),
+        "[255 0 0 255]"
+    );
+}
+
+#[test]
+fn geometry_mistakes_are_reported() {
+    let mut isolate = Isolate::new();
+    shown(&mut isolate, HALVES);
+
+    assert_eq!(
+        failure(&mut isolate, "(image/flip halves :sideways)"),
+        "image/flip takes :horizontal or :vertical, not :sideways"
+    );
+    assert_eq!(
+        failure(&mut isolate, "(image/width (image/crop halves 9 0 1 1))"),
+        "image/crop starts at 9,0, outside a 4×2 image"
+    );
+    assert_eq!(
+        failure(&mut isolate, "(image/resize halves 2 :filter :blurry)"),
+        "image/resize takes :filter :nearest, :linear, :cubic, :gaussian or :lanczos, not :blurry"
+    );
+    assert_eq!(
+        failure(&mut isolate, "(image/pixel halves 4 0)"),
+        "image/pixel expects a point inside the 4×2 image, got 4 0"
+    );
+}

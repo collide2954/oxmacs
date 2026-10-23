@@ -1,4 +1,5 @@
 mod colors;
+mod geometry;
 mod io;
 
 use std::sync::Arc;
@@ -36,6 +37,17 @@ impl Image {
             alpha: true,
             exif: None,
             icc: None,
+            xmp: None,
+        }
+    }
+
+    fn with(&self, pixels: RgbaImage) -> Self {
+        Self {
+            pixels,
+            format: self.format.clone(),
+            alpha: self.alpha,
+            exif: None,
+            icc: self.icc.clone(),
             xmp: None,
         }
     }
@@ -232,5 +244,28 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_native_awaiting_in(MODULE, "height", 1, Some(1), |heap, arguments| {
         Ok(int(wanted(heap, "height", arguments[0])?.pixels.height()))
     });
+    isolate.define_native_awaiting_in(MODULE, "pixel", 3, Some(3), |heap, arguments| {
+        let image = wanted(heap, "pixel", arguments[0])?;
+        let place = |value: Value| match value {
+            Value::Int(number) => u32::try_from(number).ok(),
+            _ => None,
+        };
+        let pixel = place(arguments[1])
+            .zip(place(arguments[2]))
+            .and_then(|(x, y)| image.pixels.get_pixel_checked(x, y))
+            .copied()
+            .ok_or_else(|| {
+                Error::new(format!(
+                    "image/pixel expects a point inside the {}×{} image, got {} {}",
+                    image.pixels.width(),
+                    image.pixels.height(),
+                    print::write(heap, arguments[1]),
+                    print::write(heap, arguments[2])
+                ))
+                .of(ErrorKind::Range)
+            })?;
+        color_value(heap, pixel)
+    });
     io::install(isolate);
+    geometry::install(isolate);
 }
