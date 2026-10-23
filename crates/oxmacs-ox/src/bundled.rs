@@ -12,7 +12,20 @@ pub const BUNDLED: &[Bundle] = &[
     CALENDAR,
     LIFE,
     REMOTE,
+    MARKDOWN,
 ];
+
+const MARKDOWN: Bundle = Bundle {
+    name: "markdown",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/markdown/plugin.ox")),
+        (
+            "markdown.ox",
+            include_str!("../plugins/markdown/markdown.ox"),
+        ),
+        ("render.ox", include_str!("../plugins/markdown/render.ox")),
+    ],
+};
 
 const REMOTE: Bundle = Bundle {
     name: "remote",
@@ -413,6 +426,9 @@ mod life;
 
 #[cfg(test)]
 mod remote;
+
+#[cfg(test)]
+mod markdown;
 
 #[cfg(test)]
 mod dired {
