@@ -1,18 +1,22 @@
-use std::io::Write;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
+use std::time::Duration;
 
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::library::paths::text;
-use crate::portable::{Failure, Portable};
+use crate::portable::{Channel, Failure, Portable, Sent};
 use crate::symbol::Sym;
 use crate::value::{Value, print};
 use crate::vm::build::full;
 
 const MODULE: &str = "ox/process";
+const KEPT_LINES: usize = 4096;
+const POLL: Duration = Duration::from_millis(20);
 
 #[derive(Debug, Default)]
 struct Run {
@@ -55,8 +59,8 @@ fn environment(heap: &Heap, value: Value) -> Result<Vec<(String, Option<String>)
         .collect())
 }
 
-fn parse(heap: &Heap, arguments: &[Value]) -> Result<Run, Error> {
-    let program = text(heap, "process/run", arguments[0])?.to_owned();
+fn parse(heap: &Heap, name: &str, arguments: &[Value]) -> Result<Run, Error> {
+    let program = text(heap, name, arguments[0])?.to_owned();
     let listed = heap
         .text(arguments[1])
         .is_none()
@@ -104,19 +108,11 @@ fn hide_console(command: &mut Command) {
 #[cfg(not(windows))]
 fn hide_console(_: &mut Command) {}
 
-fn execute(run: &Run) -> Result<Portable, Failure> {
-    let failed = |error: &dyn std::fmt::Display| Failure {
-        value: None,
-        message: format!("Couldn't run {}: {error}", run.program),
-    };
+fn command(run: &Run, input: bool) -> Command {
     let mut command = Command::new(&run.program);
     command
         .args(&run.arguments)
-        .stdin(if run.input.is_some() {
-            Stdio::piped()
-        } else {
-            Stdio::null()
-        })
+        .stdin(if input { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if let Some(directory) = &run.directory {
@@ -129,7 +125,17 @@ fn execute(run: &Run) -> Result<Portable, Failure> {
         };
     }
     hide_console(&mut command);
-    let mut child = command.spawn().map_err(|error| failed(&error))?;
+    command
+}
+
+fn execute(run: &Run) -> Result<Portable, Failure> {
+    let failed = |error: &dyn std::fmt::Display| Failure {
+        value: None,
+        message: format!("Couldn't run {}: {error}", run.program),
+    };
+    let mut child = command(run, run.input.is_some())
+        .spawn()
+        .map_err(|error| failed(&error))?;
     let feeding = run.input.clone().and_then(|input| {
         let mut stdin = child.stdin.take()?;
         Some(thread::spawn(move || {
@@ -152,9 +158,133 @@ fn execute(run: &Run) -> Result<Portable, Failure> {
     ]))
 }
 
+#[derive(Debug)]
+struct Started {
+    child: Mutex<Child>,
+    input: Mutex<Option<ChildStdin>>,
+}
+
+fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn stream(reader: impl Read + Send + 'static, lines: Arc<Channel>) {
+    thread::spawn(move || {
+        for line in BufReader::new(reader).lines() {
+            let Ok(line) = line else {
+                break;
+            };
+            let item = Portable::String(line.into());
+            loop {
+                match lines.send(item.clone()) {
+                    Sent::Done | Sent::Closed => break,
+                    Sent::Full => thread::sleep(POLL),
+                }
+            }
+        }
+        lines.close();
+    });
+}
+
+fn exited(started: &Started) -> Result<Portable, Failure> {
+    loop {
+        match locked(&started.child).try_wait() {
+            Ok(Some(status)) => {
+                return Ok(status
+                    .code()
+                    .map_or(Portable::Nil, |code| Portable::Int(i64::from(code))));
+            }
+            Ok(None) => thread::sleep(POLL),
+            Err(error) => {
+                return Err(Failure {
+                    value: None,
+                    message: error.to_string(),
+                });
+            }
+        }
+    }
+}
+
+fn start(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let run = parse(heap, "process/start", arguments)?;
+    let mut child = command(&run, true)
+        .spawn()
+        .map_err(|error| Error::new(format!("Couldn't run {}: {error}", run.program)))?;
+    let lines = Arc::new(Channel::new(KEPT_LINES));
+    let errors = Arc::new(Channel::new(KEPT_LINES));
+    if let Some(output) = child.stdout.take() {
+        stream(output, Arc::clone(&lines));
+    }
+    if let Some(output) = child.stderr.take() {
+        stream(output, Arc::clone(&errors));
+    }
+    let started = Arc::new(Started {
+        input: Mutex::new(child.stdin.take()),
+        child: Mutex::new(child),
+    });
+    let watched = Arc::clone(&started);
+    let exit = heap.background(&format!("ox process/start {}", run.program), move || {
+        exited(&watched)
+    })?;
+    let items = [
+        Value::keyword("lines"),
+        heap.channel(lines).map_err(full)?,
+        Value::keyword("errors"),
+        heap.channel(errors).map_err(full)?,
+        Value::keyword("exit"),
+        exit,
+        Value::keyword("process"),
+        heap.shared("process", started).map_err(full)?,
+    ];
+    heap.map_from(&items)
+}
+
+fn started<'a>(heap: &'a Heap, name: &str, process: Value) -> Result<&'a Started, Error> {
+    heap.entries(process)
+        .and_then(|entries| {
+            entries.into_iter().find_map(|(key, value)| match key {
+                Value::Keyword(key) if key.name() == "process" => Some(value),
+                _ => None,
+            })
+        })
+        .and_then(|value| heap.foreign_of::<Started>(value))
+        .ok_or_else(|| wrong_for(heap, name, process))
+}
+
+fn wrong_for(heap: &Heap, name: &str, value: Value) -> Error {
+    Error::new(format!(
+        "{name} expects a process from process/start, got {}",
+        print::write(heap, value)
+    ))
+    .of(ErrorKind::Type)
+}
+
 pub fn install(isolate: &mut Isolate) {
+    isolate.define_native_in(MODULE, "start", 2, None, start);
+    isolate.define_native_in(MODULE, "write", 2, Some(2), |heap, arguments| {
+        let text = print::display(heap, arguments[1]);
+        let started = started(heap, "process/write", arguments[0])?;
+        let mut input = locked(&started.input);
+        let written = input.as_mut().is_some_and(|stdin| {
+            stdin
+                .write_all(text.as_bytes())
+                .and_then(|()| stdin.flush())
+                .is_ok()
+        });
+        Ok(Value::Bool(written))
+    });
+    isolate.define_native_in(MODULE, "close-input", 1, Some(1), |heap, arguments| {
+        let started = started(heap, "process/close-input", arguments[0])?;
+        locked(&started.input).take();
+        Ok(Value::Nil)
+    });
+    isolate.define_native_in(MODULE, "kill", 1, Some(1), |heap, arguments| {
+        let started = started(heap, "process/kill", arguments[0])?;
+        let _ = locked(&started.child).kill();
+        Ok(Value::Nil)
+    });
     isolate.define_native_in(MODULE, "run", 2, None, |heap, arguments| {
-        let run = parse(heap, arguments)?;
+        let run = parse(heap, "process/run", arguments)?;
         let label = format!("ox process/run {}", run.program);
         heap.background(&label, move || execute(&run))
     });

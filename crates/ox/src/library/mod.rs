@@ -1,8 +1,10 @@
 pub(crate) mod collections;
+mod crypto;
 mod errors;
 mod files;
 mod http;
 mod json;
+mod net;
 mod numbers;
 mod ordering;
 pub(crate) mod paths;
@@ -75,6 +77,8 @@ pub fn install(isolate: &mut Isolate) {
     time::install(isolate);
     json::install(isolate);
     http::install(isolate);
+    net::install(isolate);
+    crypto::install(isolate);
     strings::install(isolate);
     ordering::install(isolate);
     paths::install(isolate);

@@ -175,12 +175,27 @@
 
 (process/run program arguments {cwd nil env nil input nil}) "Runs program with a vector of arguments and returns a promise of a map of :status, :stdout and :stderr. :cwd sets its folder, :env a map of variables to set or, with nil, remove, and :input text for its standard input."
 (process/env name) "The value of the environment variable name, or nil."
+(process/start program arguments {cwd nil env nil input nil}) "Starts program and returns at once a map of :lines and :errors, channels of its output and error lines that close when it ends, and :exit, a promise of its exit status. It raises when the program can't start."
+(process/write process text) "Writes text to the standard input of a started process; false once its input is closed."
+(process/close-input process) "Closes the standard input of a started process, which many programs take as the end of their work."
+(process/kill process) "Stops a started process at once."
 
 (json/read text) "The value that JSON text describes: objects become maps with keyword keys, and arrays vectors."
 (json/write value) "value as JSON text. Map keys must be keywords or strings."
 
 (http/get url) "A promise of the response to a GET of url, as a map of :status, :headers and :body."
 (http/encode text) "text made safe for a URL, with other characters written as %XX."
+(net/connect host port {tls false}) "A promise of a connection to host on port, encrypted with :tls true: a map whose :lines channel gives each line the server sends and is closed when the connection ends."
+(net/send connection line) "Sends line to the server, ending it with CR LF; false when the connection has ended."
+(net/close connection) "Ends the connection once what was sent has gone out."
+(crypto/random count) "count random bytes from the system, written as hex."
+(crypto/derive-key password salt {memory 65536 iterations 3 parallelism 1}) "A promise of a key made from password and a hex salt with Argon2id, using :memory KiB, as hex. The same password and salt always give the same key."
+(crypto/seal key text) "text encrypted with key using XChaCha20-Poly1305 and a fresh random nonce, as base64."
+(crypto/open key sealed) "The text crypto/seal sealed with key; raises when the key is wrong or the text was changed."
+(crypto/totp secret {time nil step 30 digits 6}) "The time-based one-time password for a base32 secret, as authenticator apps show it, for :time in seconds or now."
+(crypto/sha256 text) "The SHA-256 digest of text, as hex."
+(crypto/to-base64 text) "text written as base64."
+(crypto/from-base64 encoded) "The text that base64 encoded holds."
 
 (time/now) "Milliseconds since the start of 1970, UTC."
 (time/local millis) "The local date and time of a moment, as a map of :year, :month, :day, :hour, :minute, :second and :weekday."
