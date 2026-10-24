@@ -12,7 +12,11 @@ const IMPORTS: &str =
 
 fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
     let home = tempfile::tempdir().unwrap();
-    std::fs::write(home.path().join("init.ox"), init).unwrap();
+    std::fs::write(
+        home.path().join("init.ox"),
+        format!("(use-plugin screensaver)\n{init}"),
+    )
+    .unwrap();
     let mut editor = Editor::new();
     let mut ox = Ox::new();
     ox.start(&mut editor, Some(home.path()));

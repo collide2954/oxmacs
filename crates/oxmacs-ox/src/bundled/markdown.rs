@@ -7,7 +7,7 @@ use crate::Ox;
 use crate::testing::{home_with, press, settle};
 
 fn started() -> (tempfile::TempDir, Editor, Ox) {
-    let home = home_with(&[]);
+    let home = home_with(&[("init.ox", "(use-plugin markdown)")]);
     let mut editor = Editor::new();
     let mut ox = Ox::new();
     ox.start(&mut editor, Some(home.path()));

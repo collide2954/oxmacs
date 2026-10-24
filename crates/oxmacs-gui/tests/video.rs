@@ -408,7 +408,7 @@ fn demo_home() -> PathBuf {
     .unwrap();
     fs::write(
         home.join("init.ox"),
-        "(settings {theme: :adwaita-dark mode-line-style: :powerline animations: false font-size: 11})\n",
+        "(settings {theme: :adwaita-dark mode-line-style: :powerline animations: false font-size: 11})\n(use-plugin git)\n(use-plugin markdown)\n(use-plugin calendar)\n(use-plugin screensaver)\n",
     )
     .unwrap();
     git(&home, &["init", "-q", "-b", "main"]);

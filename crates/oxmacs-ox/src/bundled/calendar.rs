@@ -13,7 +13,11 @@ use crate::testing::{press, settle, typed};
 
 fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
     let home = tempfile::tempdir().unwrap();
-    fs::write(home.path().join("init.ox"), init).unwrap();
+    fs::write(
+        home.path().join("init.ox"),
+        format!("(use-plugin calendar)\n{init}"),
+    )
+    .unwrap();
     let mut editor = Editor::new();
     let mut ox = Ox::new();
     ox.start(&mut editor, Some(home.path()));

@@ -1,5 +1,6 @@
 (plugin weather
-  :version "0.2.1"
+  :version "0.3.0"
+  :opt-in true
   :summary "Forecasts from Open-Meteo"
   :commands {weather: "Show the weather for your location"
              weather-refresh: "Fetch the forecast again"}

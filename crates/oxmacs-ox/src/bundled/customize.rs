@@ -8,7 +8,13 @@ use crate::testing::{at_point, press, settle, typed};
 
 fn started(files: &[(&str, &str)]) -> (tempfile::TempDir, Editor, Ox) {
     let home = tempfile::tempdir().unwrap();
+    fs::write(home.path().join("init.ox"), "(use-plugin weather)\n").unwrap();
     for (name, text) in files {
+        let text = if *name == "init.ox" {
+            format!("(use-plugin weather)\n{text}")
+        } else {
+            (*text).to_owned()
+        };
         fs::write(home.path().join(name), text).unwrap();
     }
     let mut editor = Editor::new();

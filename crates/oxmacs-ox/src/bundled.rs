@@ -281,6 +281,7 @@ mod tests {
 
     fn started() -> (tempfile::TempDir, Editor, Ox) {
         let home = tempfile::tempdir().unwrap();
+        std::fs::write(home.path().join("init.ox"), "(use-plugin weather)").unwrap();
         let mut editor = Editor::new();
         let mut ox = Ox::new();
         ox.start(&mut editor, Some(home.path()));

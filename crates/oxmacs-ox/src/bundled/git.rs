@@ -63,7 +63,11 @@ struct Session {
 
 fn session(directory: &Path, init_ox: &str) -> Session {
     let home = tempfile::tempdir().unwrap();
-    fs::write(home.path().join("init.ox"), init_ox).unwrap();
+    fs::write(
+        home.path().join("init.ox"),
+        format!("(use-plugin git)\n{init_ox}"),
+    )
+    .unwrap();
     let mut editor = Editor::new();
     editor.set_home_directory(None);
     editor.set_working_directory(directory.to_path_buf());

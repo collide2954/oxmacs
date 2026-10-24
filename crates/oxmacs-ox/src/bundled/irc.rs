@@ -751,7 +751,7 @@ fn messages_are_logged_by_day_and_found_again() {
 
 #[test]
 fn setup_saves_the_network_in_custom_ox_once() {
-    let (home, mut editor, mut ox) = started("");
+    let (home, mut editor, mut ox) = started("(use-plugin irc)");
     let answer = |editor: &mut Editor, ox: &mut Ox, text: &str| {
         assert!(pump(editor, ox, |editor, _| editor.minibuffer().is_some()));
         type_in(editor, ox, text);
@@ -777,7 +777,10 @@ fn setup_saves_the_network_in_custom_ox_once() {
         });
     }
 
-    assert_eq!(fs::read_to_string(home.path().join("init.ox")).unwrap(), "");
+    assert_eq!(
+        fs::read_to_string(home.path().join("init.ox")).unwrap(),
+        "(use-plugin irc)"
+    );
     assert_eq!(
         fs::read_to_string(home.path().join("custom.ox")).unwrap(),
         ";; Written by M-x customize. Your own settings belong in init.ox,\n;; which runs after this file and wins.\n\n(configure-plugin 'irc {networks: [{name: \"Libera\" host: \"irc.libera.chat\" port: 6697 tls: true nick: \"ana\" channels: [\"#oxmacs\"]}]})\n"

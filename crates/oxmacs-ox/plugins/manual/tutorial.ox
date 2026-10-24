@@ -77,7 +77,7 @@ Here is a quince.
 M-x runs any command by name, with completion: type a few letters and
 TAB. C-h f explains a command. C-h i opens the Ox manual.
 
->> Run M-x calendar, then press q to leave it.
+>> Run M-x list-processes, then press q to leave it.
 
 
 7. OX

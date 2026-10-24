@@ -38,7 +38,7 @@ When code you evaluate fails, the error shows beside the form and in `*ox log*`.
 
 ```
 (settings {tab-width: 4})
-(bind-key "C-c w" 'weather)
+(bind-key "C-c d" 'dired)
 ```
 
 `M-x customize` changes the same settings in a form and saves them to `~/.oxmacs/custom.ox`, which runs before `init.ox`, so `init.ox` wins. When `init.ox` fails, oxmacs keeps what ran before the error and shows `*ox log*`.

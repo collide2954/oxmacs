@@ -49,6 +49,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- The calendar, git, IRC, Markdown, screensaver, vault and weather plugins are opt-in: each stays off until `(use-plugin name)` in `init.ox`. Their modules can still be imported, so the remote file browser keeps using the vault.
 - A plugin's `plugin.ox` must give `:version` as a semantic version such as `1.2.0` and may only use the keys plugins know; a misspelled key or a version like `1.0` keeps the plugin from loading and says why in `*ox log*`.
 - The r plugin renders R Markdown and Quarto documents in an R process of its own, as a background job showing its output beside, so the console stays free while it works.
 - `M-x irc-setup` saves the network in `custom.ox` with `M-x customize`'s writer instead of adding a `use-plugin` form to `init.ox` every time, so setting up a network again replaces it.
