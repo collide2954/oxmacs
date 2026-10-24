@@ -67,6 +67,7 @@ pub struct Runtime {
     unhandled: Vec<Error>,
     next_task: u64,
     running: Option<Value>,
+    pub(crate) budget: Option<(Instant, Duration)>,
     pub(crate) roots: Vec<PathBuf>,
     pub(crate) worker_setup: Option<fn(&mut Isolate)>,
     stand_ins: HashMap<(Sym, Sym), Value>,
@@ -147,6 +148,7 @@ impl Default for Runtime {
             unhandled: Vec::new(),
             next_task: 0,
             running: None,
+            budget: None,
             roots: Vec::new(),
             worker_setup: None,
             stand_ins: HashMap::new(),
@@ -181,6 +183,19 @@ fn guarded(
     )
 }
 
+impl Runtime {
+    pub(crate) fn over_budget(&self) -> Option<Error> {
+        let (deadline, budget) = self.budget?;
+        (Instant::now() >= deadline).then(|| {
+            Error::new(format!(
+                "This took longer than {} ms and was stopped",
+                budget.as_millis()
+            ))
+            .of(ErrorKind::Interrupt)
+        })
+    }
+}
+
 fn interrupted() -> Error {
     Error::new("Interrupted").of(ErrorKind::Interrupt)
 }
@@ -190,9 +205,14 @@ impl Runtime {
         let mut fiber = Fiber::new(Machine::new(entry));
         let mut first = None;
         loop {
-            match self.drive(&mut fiber, None, first.take(), host)? {
+            let deadline = self.budget.map(|(deadline, _)| deadline);
+            match self.drive(&mut fiber, deadline, first.take(), host)? {
                 Stop::Finished(value) => return Ok(value),
-                Stop::Paused => {}
+                Stop::Paused => {
+                    if let Some(error) = self.over_budget() {
+                        return Err(error);
+                    }
+                }
                 Stop::Blocked(wait, landing) => {
                     self.parked.push((fiber, wait.clone()));
                     let step = self.wait_for(&wait, landing, host);

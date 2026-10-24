@@ -783,7 +783,9 @@ pub fn reload_file(
         isolate.add_source(&module, &file, &text);
         module
     };
-    match isolate.eval_module_with(editor, &module, &file, &text) {
+    match isolate.within(crate::PATIENT, |isolate| {
+        isolate.eval_module_with(editor, &module, &file, &text)
+    }) {
         Ok(()) => {
             views::redraw(editor);
             editor.show_message(format!("Reloaded {module}"));
@@ -846,7 +848,11 @@ fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) -> bool {
     let preamble = format!("(def (setting key) (plugin-setting '{name} key))");
     let loaded = isolate
         .eval_module_with(&mut (), name, "<plugin>", &preamble)
-        .and_then(|()| isolate.eval_module_with(editor, name, file, text));
+        .and_then(|()| {
+            isolate.within(crate::PATIENT, |isolate| {
+                isolate.eval_module_with(editor, name, file, text)
+            })
+        });
     if let Err(error) = loaded {
         log::report(editor, &error, Some((file, text)));
         return false;

@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::bytecode::Prim;
 use crate::check::{self, Diagnostic};
@@ -230,6 +230,22 @@ impl Isolate {
 
     pub fn define(&mut self, name: &str, value: Value) {
         self.runtime.define(PRELUDE, Sym::intern(name), value);
+    }
+
+    pub fn within<T>(
+        &mut self,
+        budget: Duration,
+        work: impl FnOnce(&mut Self) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let outer = self.runtime.budget;
+        let deadline = Instant::now() + budget;
+        self.runtime.budget = match outer {
+            Some((earlier, _)) if earlier <= deadline => outer,
+            _ => Some((deadline, budget)),
+        };
+        let result = work(self);
+        self.runtime.budget = outer;
+        result
     }
 
     pub fn call(&mut self, function: Value, arguments: &[Value]) -> Result<Value, Error> {

@@ -164,7 +164,9 @@ pub fn frame(
                 size,
                 font_size,
             )?;
-            let value = isolate.call_with(editor, function, &[frame])?;
+            let value = isolate.within(crate::QUICK, |isolate| {
+                isolate.call_with(editor, function, &[frame])
+            })?;
             shapes::shapes(isolate.heap(), value)
         });
     match drawn {

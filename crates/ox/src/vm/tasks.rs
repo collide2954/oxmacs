@@ -278,6 +278,9 @@ impl Runtime {
             if self.interrupter.take() {
                 return Err(interrupted());
             }
+            if let Some(error) = self.over_budget() {
+                return Err(error);
+            }
             if !self.tasks.is_empty() {
                 self.schedule(Instant::now() + WAITING_SLICE, host);
                 continue;
@@ -301,6 +304,10 @@ impl Runtime {
                     Wait::Until(deadline) => Some(*deadline),
                     _ => None,
                 })
+                .min();
+            let deadline = deadline
+                .into_iter()
+                .chain(self.budget.map(|(deadline, _)| deadline))
                 .min();
             let timeout = deadline.map_or(OUTSIDE_WAIT, |deadline| {
                 deadline

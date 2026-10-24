@@ -345,7 +345,9 @@ fn highlight_lines(
             .string(text)
             .map_err(|full| Error::new(full.to_string()))?;
         let line = Value::Int(i64::try_from(number).unwrap_or(i64::MAX));
-        let result = isolate.call_with(editor, function, &[line, shown])?;
+        let result = isolate.within(crate::QUICK, |isolate| {
+            isolate.call_with(editor, function, &[line, shown])
+        })?;
         found.push(spans(isolate.heap_mut(), title, result)?);
     }
     Ok(found)

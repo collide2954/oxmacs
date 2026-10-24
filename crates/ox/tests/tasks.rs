@@ -319,3 +319,26 @@ fn values_nested_too_deeply_to_send_are_refused_instead_of_crashing() {
         error.message
     );
 }
+
+#[test]
+fn synchronous_work_stops_at_its_budget() {
+    let mut isolate = Isolate::new();
+    isolate.eval("(def (spin) (spin))").unwrap();
+    let spin = isolate.eval("spin").unwrap();
+
+    let error = isolate
+        .within(Duration::from_millis(50), |isolate| isolate.call(spin, &[]))
+        .unwrap_err();
+
+    assert_eq!(error.message, "This took longer than 50 ms and was stopped");
+    let started = std::time::Instant::now();
+    let slept = isolate
+        .within(Duration::from_millis(50), |isolate| {
+            isolate.eval("(sleep 5000)")
+        })
+        .unwrap_err();
+    assert_eq!(slept.message, "This took longer than 50 ms and was stopped");
+    assert!(started.elapsed() < Duration::from_secs(2));
+    let sum = isolate.eval("(+ 1 2)").unwrap();
+    assert_eq!(isolate.write(sum), "3");
+}

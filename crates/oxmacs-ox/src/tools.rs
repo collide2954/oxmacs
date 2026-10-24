@@ -726,11 +726,15 @@ impl Ox {
             return;
         }
         view.input.remember(&input);
-        let shown =
-            (!input.trim().is_empty()).then(|| match self.isolate.eval_with(editor, &input) {
+        let shown = (!input.trim().is_empty()).then(|| {
+            match self
+                .isolate
+                .within(crate::PATIENT, |isolate| isolate.eval_with(editor, &input))
+            {
                 Ok(value) => self.isolate.write(value),
                 Err(error) => format!("error: {}", error.message),
-            });
+            }
+        });
         let Some((buffer, view)) = editor.plugin_buffer_mut::<ReplView>(id) else {
             return;
         };

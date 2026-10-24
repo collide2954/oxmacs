@@ -534,7 +534,9 @@ fn render(
     let function = isolate
         .held(function)
         .ok_or_else(|| Error::new("A view lost its function"))?;
-    let value = isolate.call_with(editor, function, &[])?;
+    let value = isolate.within(crate::QUICK, |isolate| {
+        isolate.call_with(editor, function, &[])
+    })?;
     let node = isolate
         .heap()
         .foreign_of::<Node>(value)
@@ -768,6 +770,18 @@ mod tests {
                 .unwrap_err()
                 .message
                 .contains("image expects an image, got 5")
+        );
+    }
+
+    #[test]
+    fn a_view_that_never_finishes_is_stopped_and_reported() {
+        let (editor, _) =
+            opened(r#"(def (spin) (spin)) (open-view "*spin*" (fn [] (spin) (text "never")))"#);
+
+        assert!(
+            logged(&editor).contains("took longer than 250 ms"),
+            "{}",
+            logged(&editor)
         );
     }
 

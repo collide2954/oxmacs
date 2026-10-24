@@ -37,6 +37,8 @@ use oxmacs_core::text::BufferId;
 pub use plugins::Bundle;
 
 const BUDGET: Duration = Duration::from_millis(4);
+const QUICK: Duration = Duration::from_millis(250);
+const PATIENT: Duration = Duration::from_secs(10);
 const PRELUDE: &str = include_str!("prelude.ox");
 const DOCS: &str = include_str!("docs.ox");
 
@@ -181,7 +183,9 @@ impl Ox {
             return true;
         };
         let name = path.display().to_string();
-        if let Err(error) = self.isolate.eval_named_with(editor, &name, &source) {
+        if let Err(error) = self.isolate.within(PATIENT, |isolate| {
+            isolate.eval_named_with(editor, &name, &source)
+        }) {
             log::report(editor, &error, Some((&name, &source)));
             log::show(editor);
             return false;
