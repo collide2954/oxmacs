@@ -2,6 +2,8 @@ mod buffers;
 mod bundled;
 pub mod checker;
 mod commands;
+mod consoles;
+mod editing;
 mod help;
 mod hooks;
 pub mod idle;
@@ -58,6 +60,8 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     buffers::install(&mut isolate);
     hooks::install(&mut isolate);
     processes::install(&mut isolate);
+    consoles::install(&mut isolate);
+    editing::install(&mut isolate);
     transients::install(&mut isolate);
     modes::install(&mut isolate);
     takeover::install(&mut isolate);
@@ -235,6 +239,7 @@ impl Ox {
         self.timed("views", refreshing);
         help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         help::eldoc(&self.isolate, editor, self.home.as_deref(), &mut self.help);
+        editing::typed(&mut self.isolate, editor);
         self.timed("tick", started);
         if tools::requests_waiting(editor) {
             return Pace::Running;
@@ -250,6 +255,7 @@ impl Ox {
         }
         plugins::wake_waiting(&mut self.isolate, editor);
         hooks::run(&mut self.isolate, editor);
+        consoles::run(&mut self.isolate, editor);
         buffers::watch(&mut self.isolate, editor);
         commands::run_waiting(&mut self.isolate, editor);
         transients::run_waiting(&mut self.isolate, editor);

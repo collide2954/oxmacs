@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::command::{Command, CommandId};
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
-use crate::editor::{Editor, Effect};
+use crate::editor::{Axis, Editor, Effect};
 use crate::input::{KeySequence, Lookup};
 use crate::plugin::PluginBuffer;
 use crate::text::{Buffer, BufferId};
@@ -62,6 +62,28 @@ impl Editor {
 
     pub fn show_buffer_beside(&mut self, id: BufferId) {
         self.show_beside(move |editor| editor.buffers.position(|buffer| buffer.id() == id));
+    }
+
+    pub fn display_buffer(&mut self, id: BufferId, near: Option<(BufferId, Axis)>, select: bool) {
+        if self.window_showing(id).is_none() {
+            let place = move |editor: &mut Self| editor.show_buffer(id);
+            let beside = near.and_then(|(other, axis)| Some((self.window_showing(other)?, axis)));
+            match beside {
+                Some((window, axis)) => self.split_off(window, axis, place),
+                None => self.beside(place),
+            }
+        }
+        if select && let Some(window) = self.window_showing(id) {
+            self.select_window(window);
+        }
+    }
+
+    pub fn insert_text(&mut self, text: &str) -> bool {
+        if self.refuse_read_only() {
+            return false;
+        }
+        self.buffers.current_mut().insert(text);
+        true
     }
 
     pub fn on_command(&mut self, handler: fn(&mut Editor)) {

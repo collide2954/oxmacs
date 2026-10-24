@@ -49,6 +49,7 @@ struct Manifest {
     startup_when: Option<String>,
     entry: String,
     keys: Vec<(String, String)>,
+    mode_keys: ModeKeys,
     start_screen: Vec<(String, String)>,
     opens_directories: bool,
     opt_in: bool,
@@ -105,6 +106,23 @@ fn pairs_of(heap: &Heap, value: Value, wrong: &str) -> Result<Vec<(String, Strin
                 text(key).ok_or_else(|| wrong.to_owned())?,
                 text(item).ok_or_else(|| wrong.to_owned())?,
             ))
+        })
+        .collect()
+}
+
+type ModeKeys = Vec<(String, Vec<(String, String)>)>;
+
+fn mode_keys_of(heap: &Heap, value: Value) -> Result<ModeKeys, String> {
+    let wrong = ":mode-keys must map mode names to maps of keys to commands";
+    heap.entries(value)
+        .ok_or_else(|| wrong.to_owned())?
+        .into_iter()
+        .map(|(mode, keys)| {
+            let mode = match mode {
+                Value::Keyword(name) | Value::Symbol(name) => name.name().to_owned(),
+                _ => heap.text(mode).ok_or_else(|| wrong.to_owned())?.to_owned(),
+            };
+            Ok((mode, pairs_of(heap, keys, wrong)?))
         })
         .collect()
 }
@@ -215,6 +233,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
         settings: Vec::new(),
         startup_when: None,
         keys: Vec::new(),
+        mode_keys: Vec::new(),
         start_screen: Vec::new(),
         opens_directories: false,
         opt_in: false,
@@ -242,6 +261,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
             Some("keys") => {
                 manifest.keys = pairs_of(heap, *value, ":keys must be a map of keys to commands")?;
             }
+            Some("mode-keys") => manifest.mode_keys = mode_keys_of(heap, *value)?,
             Some("start-screen") => {
                 manifest.start_screen = pairs_of(
                     heap,
@@ -365,6 +385,27 @@ fn stubs(editor: &mut Editor, plugin: &Plugin) {
     }
     for declared in &plugin.manifest.modes {
         modes::declare(editor, &plugin.manifest.name, declared);
+    }
+    for (mode, keys) in &plugin.manifest.mode_keys {
+        bind_mode_keys(editor, &plugin.manifest.name, mode, keys);
+    }
+}
+
+fn bind_mode_keys(editor: &mut Editor, plugin: &str, mode: &str, keys: &[(String, String)]) {
+    let Some(scope) = editor.language_scope(mode) else {
+        let missing = format!("{plugin}'s :mode-keys name no mode {mode}");
+        log::report(editor, &Error::new(missing), None);
+        return;
+    };
+    for (keys, command) in keys {
+        let Some(id) = editor.command_named(command) else {
+            let missing = format!("{plugin}'s key {keys} in {mode} names no command {command}");
+            log::report(editor, &Error::new(missing), None);
+            continue;
+        };
+        if let Err(error) = editor.bind(scope, keys, id) {
+            log::report(editor, &Error::new(format!("{keys}: {error}")), None);
+        }
     }
 }
 
@@ -1237,6 +1278,38 @@ mod tests {
             ("toy.ox", "(defcommand play \"Play\" (message \"Playing\"))"),
         ],
     };
+
+    const MODE_KEYS: Bundle = Bundle {
+        name: "shouter",
+        files: &[
+            (
+                "plugin.ox",
+                r#"(plugin shouter :commands {shout: "Shout"} :mode-keys {"R" {"C-c s" shout} "Cobol" {"C-c s" shout}})"#,
+            ),
+            (
+                "shouter.ox",
+                "(defcommand shout \"Shout\" (message \"Shouting in R\"))",
+            ),
+        ],
+    };
+
+    #[test]
+    fn mode_keys_wake_their_plugin_in_buffers_of_that_mode() {
+        let home = home_with(&[]);
+        let (mut editor, mut ox) = started(&[MODE_KEYS], home.path());
+
+        crate::testing::press(&mut editor, &mut ox, "C-c s");
+        assert_eq!(editor.message(), Some("C-c s is undefined"));
+        editor.set_major_mode(Some(oxmacs_core::syntax::Language::R));
+        crate::testing::press(&mut editor, &mut ox, "C-c s");
+
+        assert_eq!(editor.message(), Some("Shouting in R"));
+        assert!(
+            logged(&editor).contains("shouter's :mode-keys name no mode Cobol"),
+            "{}",
+            logged(&editor)
+        );
+    }
 
     #[test]
     fn opt_in_plugins_wait_for_use_plugin() {

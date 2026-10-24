@@ -327,6 +327,69 @@ mod tests {
         );
     }
 
+    #[test]
+    fn plugins_insert_text_unless_the_buffer_is_read_only() {
+        let mut editor = Editor::new();
+
+        assert!(editor.insert_text("ab"));
+        assert_eq!(editor.buffer().contents(), "ab");
+        assert_eq!(editor.buffer().point(), 2);
+        type_keys(&mut editor, "C-x C-q");
+
+        assert!(!editor.insert_text("c"));
+        assert_eq!(editor.buffer().contents(), "ab");
+        assert_eq!(editor.message(), Some("Buffer is read-only: *scratch*"));
+    }
+
+    fn shown_in(editor: &Editor) -> Vec<String> {
+        editor
+            .tiling()
+            .windows()
+            .into_iter()
+            .filter_map(|window| editor.pane_of(window))
+            .map(|pane| pane.buffer().name().to_owned())
+            .collect()
+    }
+
+    fn blank() -> Greeter {
+        Greeter {
+            scope: Scope::Global.into(),
+            count: 0,
+            styles: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn buffers_are_displayed_beside_or_under_another_one() {
+        use crate::editor::Axis;
+
+        let mut editor = Editor::new();
+        let console = editor.open_plugin_buffer("*console*", blank());
+        editor.show_buffer(editor.buffer_named("*scratch*").unwrap());
+        editor.display_buffer(console, None, false);
+        assert_eq!(shown_in(&editor), ["*scratch*", "*console*"]);
+        assert_eq!(editor.buffer().name(), "*scratch*");
+
+        let plots = editor.open_plugin_buffer("*plots*", blank());
+        editor.show_buffer(editor.buffer_named("*scratch*").unwrap());
+        editor.display_buffer(plots, Some((console, Axis::Rows)), false);
+        assert_eq!(shown_in(&editor), ["*scratch*", "*console*", "*plots*"]);
+        let crate::editor::Tiling::Split { parts, .. } = editor.tiling() else {
+            panic!("not split");
+        };
+        assert!(matches!(
+            &parts[1].1,
+            crate::editor::Tiling::Split {
+                axis: Axis::Rows,
+                ..
+            }
+        ));
+
+        editor.display_buffer(plots, None, true);
+        assert_eq!(editor.buffer().name(), "*plots*");
+        assert_eq!(editor.tiling().windows().len(), 3);
+    }
+
     static PALETTE: [Theme; 2] = [
         Theme {
             name: "palette-light",

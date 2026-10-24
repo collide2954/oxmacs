@@ -80,6 +80,13 @@ impl Editor {
         self.languages.iter().map(|known| known.language).collect()
     }
 
+    pub fn language_scope(&self, name: &str) -> Option<ScopeId> {
+        self.languages
+            .iter()
+            .find(|known| known.language.name() == name || known.language.aliases().contains(&name))
+            .and_then(|known| known.scope)
+    }
+
     pub fn language_for(&self, path: &Path) -> Option<Language> {
         language_for(&self.languages(), path)
     }
@@ -160,6 +167,21 @@ mod tests {
         assert_eq!(editor.message(), Some("hey"));
         assert!(editor.languages().contains(&notes()));
         assert_eq!(editor.language_for(Path::new("x.NOTES")), Some(notes()));
+    }
+
+    #[test]
+    fn languages_are_found_by_name_or_alias_with_their_keys() {
+        let mut editor = Editor::new();
+        let scope = editor.add_scope("Notes");
+        editor.add_language(notes(), Some(scope));
+
+        assert_eq!(editor.language_scope("Notes"), Some(scope));
+        assert_eq!(
+            editor.language_scope("r"),
+            Some(crate::command::Scope::R.into())
+        );
+        assert_eq!(editor.language_scope("TOML"), None);
+        assert_eq!(editor.language_scope("Cobol"), None);
     }
 
     #[test]

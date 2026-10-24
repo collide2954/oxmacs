@@ -255,7 +255,7 @@ impl Editor {
         true
     }
 
-    pub(in crate::editor) fn console_input_start(&self) -> Option<usize> {
+    pub fn console_input_start(&self) -> Option<usize> {
         let Some(Mode::Console(console)) = self.buffers.mode(0) else {
             return None;
         };
