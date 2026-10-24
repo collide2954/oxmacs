@@ -764,10 +764,10 @@
       (read-loop! name conn))
     (closed! name conn)))
 
-(def (connect! config {show false})
-  "Connects to the network config describes, logging in with SASL from the vault when it names a :login."
+(def (connect! config {show false sasl nil})
+  "Connects to the network config describes, logging in with SASL from the vault when it names a :login, or with :sasl when given."
   (let [name config.name
-        sasl (credentials config)
+        sasl (or sasl (credentials config))
         buffer (ensure-buffer! name name :server :show show)]
     (change-network! name (fn [old]
                             {config: config conn: nil nick: config.nick registered: false capped: false
@@ -808,7 +808,7 @@
           (if (= attempts 1) (network-buffers name) [(server-buffer name)]))
     (sleep (time/seconds wait))
     (unless (or (connected? name) (get (network name) :quitting))
-      (connect! old.config))))
+      (connect! old.config :sasl old.sasl))))
 
 (def (closed! name conn)
   (when (= (get (network name) :conn) conn)
@@ -834,7 +834,7 @@
     (when conn
       (net/send conn (protocol/format-line "QUIT" ["Reconnecting"]))
       (net/close conn))
-    (connect! old.config)))
+    (connect! old.config :sasl old.sasl)))
 
 (def (join! name channel {show true})
   (when show

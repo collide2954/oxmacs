@@ -819,7 +819,7 @@ fn cheap_vault(home: &Path) {
 }
 
 #[test]
-fn sasl_logs_in_with_the_password_from_the_vault() {
+fn sasl_logs_in_from_the_vault_and_again_after_reconnecting() {
     let fake = Fake::start();
     let (home, mut editor, mut ox) = started(&network(fake.port, r#"login: "IRC Test""#));
     cheap_vault(home.path());
@@ -841,4 +841,19 @@ fn sasl_logs_in_with_the_password_from_the_vault() {
     fake.say(":srv 903 ana :SASL authentication successful");
     fake.expect(&mut editor, &mut ox, "CAP END");
     wait_for_text(&mut editor, &mut ox, "*irc Test*", "Logged in");
+
+    eval(
+        &mut editor,
+        &mut ox,
+        "(module (import (vault store :as v))) (v/lock)",
+    );
+    fake.hang_up();
+    fake.expect(&mut editor, &mut ox, "CAP LS 302");
+    assert!(editor.minibuffer().is_none());
+    fake.say(":srv CAP * LS :sasl server-time");
+    fake.expect(&mut editor, &mut ox, "CAP REQ :server-time sasl");
+    fake.say(":srv CAP ana ACK :server-time sasl");
+    fake.expect(&mut editor, &mut ox, "AUTHENTICATE PLAIN");
+    fake.say("AUTHENTICATE +");
+    fake.expect(&mut editor, &mut ox, "AUTHENTICATE YW5hAGFuYQBwdw==");
 }
