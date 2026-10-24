@@ -8,6 +8,7 @@ use ox::value::{Value, print};
 use ox::{Error, Isolate};
 use oxmacs_core::command::{DynamicSpec, Scope};
 use oxmacs_core::editor::Editor;
+use semver::Version;
 
 use crate::{commands, hooks, log, modes, views};
 
@@ -44,6 +45,8 @@ struct Setting {
 #[derive(Debug, Clone)]
 struct Manifest {
     name: String,
+    version: Version,
+    summary: String,
     commands: Vec<(String, String)>,
     settings: Vec<Setting>,
     startup_when: Option<String>,
@@ -219,6 +222,17 @@ fn settings_of(heap: &mut Heap, value: Value) -> Result<Vec<Setting>, String> {
     Ok(settings)
 }
 
+fn version_of(heap: &Heap, name: &str, value: Value) -> Result<Version, String> {
+    heap.text(value)
+        .and_then(|text| Version::parse(text).ok())
+        .ok_or_else(|| {
+            format!(
+                "{name}'s :version must be a version such as 1.2.0, got {}",
+                print::brief(heap, value)
+            )
+        })
+}
+
 fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
     let items = heap
         .elements(value)
@@ -229,6 +243,8 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
     let name = name.name().to_owned();
     let mut manifest = Manifest {
         entry: format!("{name}.ox"),
+        version: Version::new(0, 0, 0),
+        summary: String::new(),
         name,
         commands: Vec::new(),
         settings: Vec::new(),
@@ -246,6 +262,12 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
             return Err(format!("{} has no value", print::brief(heap, pair[0])));
         };
         match keyword(*key) {
+            Some("version") => manifest.version = version_of(heap, &manifest.name, *value)?,
+            Some("summary") => {
+                heap.text(*value)
+                    .ok_or_else(|| ":summary must be text".to_owned())?
+                    .clone_into(&mut manifest.summary);
+            }
             Some("commands") => manifest.commands = commands_of(heap, *value)?,
             Some("settings") => manifest.settings = settings_of(heap, *value)?,
             Some("startup-when") => {
@@ -286,7 +308,13 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
                     })
                     .ok_or_else(|| ":wakes-for must be a vector of mode names".to_owned())?;
             }
-            _ => {}
+            _ => {
+                return Err(format!(
+                    "{}'s plugin.ox has no key {}",
+                    manifest.name,
+                    print::brief(heap, *key)
+                ));
+            }
         }
     }
     Ok(manifest)
@@ -1396,6 +1424,46 @@ mod tests {
 
         assert_eq!(editor.message(), Some("Playing"));
         assert_eq!(logged(&editor), "");
+    }
+
+    const LOOSE: Bundle = Bundle {
+        name: "loose",
+        files: &[
+            (
+                "plugin.ox",
+                "(plugin loose :version \"1.0\" :commands {lax: \"Lax\"})",
+            ),
+            ("loose.ox", "(defcommand lax \"Lax\" (message \"lax\"))"),
+        ],
+    };
+
+    const TYPO: Bundle = Bundle {
+        name: "typo",
+        files: &[
+            (
+                "plugin.ox",
+                "(plugin typo :version \"1.0.0\" :descripton \"Oops\" :commands {oops: \"Oops\"})",
+            ),
+            ("typo.ox", "(defcommand oops \"Oops\" (message \"oops\"))"),
+        ],
+    };
+
+    #[test]
+    fn manifests_need_a_semantic_version_and_known_keys() {
+        let home = home_with(&[]);
+        let (editor, _) = started(&[LOOSE, TYPO], home.path());
+
+        assert!(editor.command_named("lax").is_none());
+        assert!(editor.command_named("oops").is_none());
+        let shown = logged(&editor);
+        assert!(
+            shown.contains("loose's :version must be a version such as 1.2.0, got \"1.0\""),
+            "{shown}"
+        );
+        assert!(
+            shown.contains("typo's plugin.ox has no key :descripton"),
+            "{shown}"
+        );
     }
 
     #[test]

@@ -54,6 +54,7 @@ ring = "0.17.14"
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0.229", features = ["derive"] }
+semver = "1.0.28"
 serde_json = "1.0.154"
 skrifa = "0.48.0"
 streaming-iterator = "0.1.9"

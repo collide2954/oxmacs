@@ -3752,6 +3752,7 @@ dependencies = [
  "ox",
  "oxmacs-core",
  "regex",
+ "semver",
  "serde_json",
  "tempfile",
 ]
