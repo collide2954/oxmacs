@@ -24,8 +24,6 @@ pub(in crate::editor) enum Purpose {
     ReplaceTo(bool),
     Item,
     Compile,
-    RHelp,
-    SavePlot,
     Callback { completes: bool, secret: bool },
     CallbackPath { directories: bool },
 }
@@ -34,7 +32,7 @@ impl Purpose {
     pub(in crate::editor) fn takes_path(self) -> bool {
         matches!(
             self,
-            Self::FindFile | Self::WriteFile | Self::SavePlot | Self::CallbackPath { .. }
+            Self::FindFile | Self::WriteFile | Self::CallbackPath { .. }
         )
     }
 
@@ -76,7 +74,6 @@ pub struct Minibuffer {
     pub(in crate::editor) listing: Option<PathListing>,
     pub(in crate::editor) from: String,
     pub(in crate::editor) items: Vec<Item>,
-    pub(in crate::editor) default: Option<String>,
     pub(in crate::editor) callback: Option<CallbackPrompt>,
 }
 
@@ -110,7 +107,6 @@ impl Minibuffer {
             listing: None,
             from: String::new(),
             items: Vec::new(),
-            default: None,
             callback: None,
         }
     }
@@ -176,17 +172,14 @@ impl Editor {
                 })
                 .filter(|completion| matches(&completion.label))
                 .collect(),
-            Purpose::FindFile
-            | Purpose::WriteFile
-            | Purpose::SavePlot
-            | Purpose::CallbackPath { .. } => file_completions(minibuffer),
+            Purpose::FindFile | Purpose::WriteFile | Purpose::CallbackPath { .. } => {
+                file_completions(minibuffer)
+            }
             Purpose::SwitchBuffer | Purpose::KillBuffer => {
                 self.buffer_completions(minibuffer.purpose, matches)
             }
             Purpose::LoadTheme => self.theme_completions(matches),
-            Purpose::ReplaceFrom(_) | Purpose::ReplaceTo(_) | Purpose::Compile | Purpose::RHelp => {
-                Vec::new()
-            }
+            Purpose::ReplaceFrom(_) | Purpose::ReplaceTo(_) | Purpose::Compile => Vec::new(),
             Purpose::Item => self.item_completions(matches),
             Purpose::Callback { .. } => self.callback_completions(matches),
         }
@@ -314,15 +307,6 @@ impl Editor {
             self.minibuffer = None;
             let directory = self.project_directory();
             self.start_compile(command, directory);
-            return;
-        }
-        if purpose == Purpose::RHelp {
-            let input = self.minibuffer_input();
-            let default = self
-                .minibuffer
-                .take()
-                .and_then(|minibuffer| minibuffer.default);
-            self.r_help_on(&input, default);
             return;
         }
         if purpose.takes_text() {

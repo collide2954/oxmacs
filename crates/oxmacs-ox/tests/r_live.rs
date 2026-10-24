@@ -1,20 +1,42 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use oxmacs_core::external::r::{HELPER, PLOTS_VARIABLE, PROFILE_VARIABLE};
-use oxmacs_core::external::tools::{self, Probe};
+use oxmacs_core::editor::Editor;
+use oxmacs_ox::Ox;
+
+fn unquoted(shown: &str) -> String {
+    shown
+        .trim_matches('"')
+        .replace("\\\\", "\\")
+        .replace("\\\"", "\"")
+}
 
 fn session(input: &str) -> (String, tempfile::TempDir) {
-    let Probe::Found { path, .. } = tools::probe_r(None) else {
-        panic!("R is not installed");
+    let mut editor = Editor::new();
+    let mut ox = Ox::new();
+    ox.start(&mut editor, None);
+    let mut eval = |source: &str| {
+        ox.eval(
+            &mut editor,
+            &format!("(module (import (r session) (r helper))) {source}"),
+        )
+        .unwrap()
     };
+    let program = eval("(session/find-r)");
+    assert_ne!(program, "nil", "R is not installed");
+    let arguments: Vec<String> =
+        eval("(apply str (map (fn [argument] (str argument \"\\n\")) (session/arguments)))")
+            .trim_matches('"')
+            .split("\\n")
+            .filter(|argument| !argument.is_empty())
+            .map(str::to_owned)
+            .collect();
+    let helper = unquoted(&eval("(await (helper/write))"));
     let directory = tempfile::tempdir().unwrap();
-    let helper = directory.path().join("helper.R");
-    std::fs::write(&helper, HELPER).unwrap();
-    let mut child = Command::new(path)
-        .args(tools::r_arguments())
-        .env(PROFILE_VARIABLE, &helper)
-        .env(PLOTS_VARIABLE, directory.path().join("plots"))
+    let mut child = Command::new(unquoted(&program))
+        .args(arguments)
+        .env("R_PROFILE_USER", &helper)
+        .env("OXMACS_R_PLOTS", directory.path().join("plots"))
         .current_dir(directory.path())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -28,6 +50,7 @@ fn session(input: &str) -> (String, tempfile::TempDir) {
         .write_all(input.as_bytes())
         .unwrap();
     let output = child.wait_with_output().unwrap();
+    let _ = std::fs::remove_file(helper);
     (
         String::from_utf8_lossy(&output.stdout).replace('\r', ""),
         directory,

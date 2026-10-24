@@ -170,15 +170,6 @@ pub const SETTINGS: &[Setting] = &[
     optional(
         setting(
             R,
-            "r-program",
-            Kind::Text,
-            "R executable for the console; Rterm on Windows",
-        ),
-        "auto-detect",
-    ),
-    optional(
-        setting(
-            R,
             "air-program",
             Kind::Text,
             "air executable that formats R; M-x list-tools installs one",

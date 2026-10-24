@@ -15,7 +15,19 @@ pub const BUNDLED: &[Bundle] = &[
     REMOTE,
     MARKDOWN,
     MANUAL,
+    R,
 ];
+
+const R: Bundle = Bundle {
+    name: "r",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/r/plugin.ox")),
+        ("r.ox", include_str!("../plugins/r/r.ox")),
+        ("session.ox", include_str!("../plugins/r/session.ox")),
+        ("helper.ox", include_str!("../plugins/r/helper.ox")),
+        ("help.ox", include_str!("../plugins/r/help.ox")),
+    ],
+};
 
 const MANUAL: Bundle = Bundle {
     name: "manual",
@@ -466,6 +478,9 @@ mod markdown;
 
 #[cfg(test)]
 mod manual;
+
+#[cfg(test)]
+mod r;
 
 #[cfg(test)]
 mod dired {

@@ -341,6 +341,22 @@ mod tests {
         assert_eq!(editor.message(), Some("Buffer is read-only: *scratch*"));
     }
 
+    #[test]
+    fn buffers_can_keep_header_lines_above_their_text() {
+        let mut editor = Editor::new();
+        let id = editor.open_plugin_buffer("*table*", blank());
+        let style = LineStyle {
+            background: None,
+            spans: vec![(0..4, Highlight::Heading)],
+        };
+
+        editor.set_header_lines(id, vec![("name".to_owned(), style.clone())]);
+        assert_eq!(editor.pane().header_lines(), [("name".to_owned(), style)]);
+
+        editor.set_header_lines(id, Vec::new());
+        assert_eq!(editor.pane().header_lines(), []);
+    }
+
     fn shown_in(editor: &Editor) -> Vec<String> {
         editor
             .tiling()

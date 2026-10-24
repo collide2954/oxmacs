@@ -1,0 +1,171 @@
+(module
+  (import (ox file) (ox path) (ox process) (ox string) (ox crypto)
+          (r helper :as helper))
+  (export label sessions known? current-session running? link! linked own! owner
+          windows? arguments locate find-r launch ensure show-console evaluate request
+          r-string helper-of on-marker on-ready use-keys!))
+
+(def label "R")
+(def missing "R not found; install it from https://cran.r-project.org or set the r plugin's program")
+
+(defonce state (atom {links: {} helpers: {} widths: {} owners: {} launched: 0}))
+(defonce handlers (atom {}))
+(defonce ready-hooks (atom {}))
+(defonce keys (atom {}))
+
+(def (use-keys! bindings) (reset! keys bindings))
+
+(def (on-marker kind f) (swap! handlers assoc kind f))
+
+(def (on-ready key f) (swap! ready-hooks assoc key f))
+
+(def (sessions) (consoles label))
+
+(def (known? name) (some (fn [known] (= known name)) (sessions)))
+
+(def (own! buffer session) (swap! state assoc-in [:owners buffer] session))
+
+(def (owner buffer) (get-in @state [:owners buffer]))
+
+(def (linked script) (get-in @state [:links script]))
+
+(def (current-session)
+  (let [here (buffer-name)
+        own (if (known? here) here (or (owner here) (linked here)))]
+    (if (and own (known? own)) own (first (sessions)))))
+
+(def (running? session) (and session (console-running? session)))
+
+(def (link! console)
+  (when (= (buffer-language) "R")
+    (swap! state assoc-in [:links (buffer-name)] console)))
+
+(def (helper-of session) (get-in @state [:helpers session]))
+
+(def (windows?) (= (process/os) :windows))
+
+(def (arguments)
+  (if (windows?)
+    ["--ess" "--no-save" "--no-restore" "--quiet"]
+    ["--no-save" "--no-restore" "--quiet" "--interactive" "--no-readline"]))
+
+(def (first-existing paths)
+  (cond ((empty? paths) nil)
+        ((await (file/exists? (first paths))) (first paths))
+        (else (first-existing (rest paths)))))
+
+(def (binary home)
+  (let [bin (path/join home "bin")]
+    (first-existing (if (windows?)
+                      [(path/join bin "x64" "Rterm.exe") (path/join bin "Rterm.exe")]
+                      [(path/join bin "R")]))))
+
+(def (version install)
+  (map (fn [part] (or (string/to-number part) 0))
+       (string/split (string/replace (or (path/name install) "") "R-" "") ".")))
+
+(def (newest installs)
+  (let [found (keep (fn [install] (when-let [found (binary install)] [(version install) found])) installs)]
+    (when (not (empty? found))
+      (second (last (sort-by first found))))))
+
+(def (folders root)
+  (try (map (fn [entry] entry.path) (filter (fn [entry] entry.dir) (await (file/list root))))
+       (catch error e [])))
+
+(def (registry)
+  (if (windows?)
+    (keep (fn [key]
+            (try (let [found (await (process/run "reg" ["query" key "/v" "InstallPath"]))
+                       line (find (fn [line] (string/includes? line "REG_SZ")) (string/lines found.stdout))]
+                   (when line (string/trim (second (string/split line "REG_SZ" 2)))))
+                 (catch error e nil)))
+          ["HKLM\\SOFTWARE\\R-core\\R" "HKCU\\SOFTWARE\\R-core\\R"])
+    []))
+
+(def (installs)
+  (let [roots (concat (keep (fn [variable] (when-let [root (process/env variable)] (path/join root "R")))
+                            ["ProgramFiles" "ProgramW6432"])
+                      (if-let [local (process/env "LOCALAPPDATA")] [(path/join local "Programs" "R")] []))]
+    (concat (mapcat folders roots)
+            (registry)
+            (if (= (process/os) :macos) ["/Library/Frameworks/R.framework/Resources"] []))))
+
+(def (locate configured sources)
+  (cond (configured (if (await (file/exists? configured)) configured ((get sources :which) configured)))
+        (else (or ((get sources :which) (if (windows?) "Rterm" "R"))
+                  (when-let [home ((get sources :home))] (binary home))
+                  (newest ((get sources :installs)))))))
+
+(def (find-r)
+  (locate (plugin-setting 'r :program)
+          {which: process/which
+           home: (fn [] (process/env "R_HOME"))
+           installs: installs}))
+
+(def (session-name)
+  (let [folder (or (path/name (default-directory)) "R")
+        named (fn [number] (if (= number 1) "*R:{folder}*" "*R:{folder}:{number}*"))]
+    (named (find (fn [number] (not (buffer-exists? (named number))))
+                 (range 1 (+ 2 (count (buffer-list))))))))
+
+(def (heard session kind payload)
+  (when-let [handle (get @handlers kind)]
+    (handle session payload)))
+
+(def (request session call)
+  (and session (console-request session call)))
+
+(def (fit session)
+  (let [width (buffer-width session)]
+    (when (and width (>= width 10) (console-running? session) (not (helper-of session))
+               (not= width (get-in @state [:widths session])))
+      (when (request session "getOption(\"oxmacs\")$width({width}L)")
+        (swap! state assoc-in [:widths session] width)))))
+
+(def (idle session)
+  (when-let [file (helper-of session)]
+    (swap! state update :helpers dissoc session)
+    (try (await (file/remove file)) (catch error e nil)))
+  (map (fn [hook] (hook session)) (vals @ready-hooks))
+  (fit session))
+
+(def (launch existing)
+  (if-let [program (find-r)]
+    (let [profile (await (helper/write))
+          launched (get (swap! state update :launched inc) :launched)
+          plots (path/join (path/temp) "oxmacs" "plots-{(crypto/random 4)}-{launched}")
+          original (process/env "R_PROFILE_USER")
+          env (merge {R_PROFILE_USER: profile OXMACS_R_PLOTS: plots}
+                     (if original {OXMACS_R_PROFILE_USER: original} {}))
+          name (if (and existing (known? existing)) existing (session-name))]
+      (console-start name :program program :args (arguments) :env env :label label :keys @keys
+                     :on-output (fn [kind payload] (heard name kind payload))
+                     :on-idle (fn [] (idle name))
+                     :on-resize (fn [_] (fit name)))
+      (swap! state (fn [old] (-> old
+                                 (assoc-in [:helpers name] profile)
+                                 (update :widths dissoc name))))
+      name)
+    (do (message missing) nil)))
+
+(def (ensure)
+  (let [session (current-session)]
+    (if (running? session)
+      session
+      (when-let [started (launch session)]
+        (link! started)
+        started))))
+
+(def (show-console session select)
+  (display-buffer session :select select))
+
+(def (evaluate session code)
+  (console-send session code))
+
+(def escapes {"\"" "\\\"" "\\" "\\\\" "\n" "\\n" "\r" "\\r" "\t" "\\t"})
+
+(def (r-string text)
+  (str "\"" (apply str (map (fn [character] (or (get escapes (str character)) character))
+                            (string/chars text)))
+       "\""))

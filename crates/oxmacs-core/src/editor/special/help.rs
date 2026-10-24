@@ -19,32 +19,15 @@ pub(in crate::editor) struct Help {
     command: Option<CommandId>,
     width: usize,
     styles: Vec<LineStyle>,
-    r: bool,
     doc: bool,
 }
 
 impl Help {
-    pub(in crate::editor) fn r(styles: Vec<LineStyle>) -> Self {
-        Self {
-            styles,
-            r: true,
-            ..Self::default()
-        }
-    }
-
     fn doc() -> Self {
         Self {
             doc: true,
             ..Self::default()
         }
-    }
-
-    pub(in crate::editor) fn is_r(&self) -> bool {
-        self.r
-    }
-
-    pub(in crate::editor) fn set_styles(&mut self, styles: Vec<LineStyle>) {
-        self.styles = styles;
     }
 
     pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
@@ -125,7 +108,7 @@ impl Editor {
 
     fn help_index(&self) -> Option<usize> {
         self.buffers
-            .find_mode(|mode| matches!(mode, Mode::Help(help) if !help.r && !help.doc))
+            .find_mode(|mode| matches!(mode, Mode::Help(help) if !help.doc))
     }
 
     pub(in crate::editor) fn describe(&mut self, command: CommandId) {
@@ -288,7 +271,7 @@ mod tests {
             "{shown:?}"
         );
         assert!(
-            shown.contains(&"          SPC in *Help* and R tables".to_owned()),
+            shown.contains(&"          SPC in *Help*".to_owned()),
             "{shown:?}"
         );
 

@@ -1,10 +1,6 @@
-use std::fmt::Write;
+(module (import (ox file) (ox path) (ox crypto)) (export script write))
 
-pub const PROFILE_VARIABLE: &str = "R_PROFILE_USER";
-pub const ORIGINAL_PROFILE_VARIABLE: &str = "OXMACS_R_PROFILE_USER";
-pub const PLOTS_VARIABLE: &str = "OXMACS_R_PLOTS";
-
-pub const HELPER: &str = r#"local({
+(def script #r#"local({
   original <- Sys.getenv("OXMACS_R_PROFILE_USER")
   if (nzchar(original)) {
     Sys.setenv(R_PROFILE_USER = original)
@@ -296,64 +292,12 @@ local({
   )
 })
 options(prompt = "\001>\002\003", continue = "\001+\002\003")
-"#;
+"#)
 
-pub fn string(text: &str) -> String {
-    let mut literal = String::with_capacity(text.len() + 2);
-    literal.push('"');
-    for c in text.chars() {
-        match c {
-            '"' => literal.push_str("\\\""),
-            '\\' => literal.push_str("\\\\"),
-            '\n' => literal.push_str("\\n"),
-            '\r' => literal.push_str("\\r"),
-            '\t' => literal.push_str("\\t"),
-            c if c.is_control() => {
-                let _ = write!(literal, "\\u{{{:x}}}", u32::from(c));
-            }
-            c => literal.push(c),
-        }
-    }
-    literal.push('"');
-    literal
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn strings_are_quoted_for_r() {
-        assert_eq!(string("mean"), "\"mean\"");
-        assert_eq!(string("a\"b\\c"), "\"a\\\"b\\\\c\"");
-        assert_eq!(string("x\ny\u{1}"), "\"x\\ny\\u{1}\"");
-        assert_eq!(string("é"), "\"é\"");
-    }
-
-    #[test]
-    fn the_helper_answers_help_through_markers() {
-        assert!(HELPER.contains("oxmacs$help <- function(topic)"));
-        assert!(HELPER.contains("pager = function(files, header, title, delete.file)"));
-        assert!(HELPER.contains("help_type = \"text\""));
-    }
-
-    #[test]
-    fn the_helper_completes_through_markers() {
-        assert!(HELPER.contains("oxmacs$complete <- function(line, cursor)"));
-        assert!(HELPER.contains("marker(\"complete\""));
-    }
-
-    #[test]
-    fn the_helper_sets_the_width_of_output_and_help() {
-        assert!(HELPER.contains("options(width = width)"));
-        assert!(HELPER.contains("tools::Rd2txt_options(width = width)"));
-    }
-
-    #[test]
-    fn the_helper_sets_marked_prompts() {
-        assert!(
-            HELPER.contains(r#"options(prompt = "\001>\002\003", continue = "\001+\002\003")"#)
-        );
-        assert!(HELPER.contains(ORIGINAL_PROFILE_VARIABLE));
-    }
-}
+(def (write)
+  "Writes the helper R reads as its profile to a file of its own and returns a promise of its path."
+  (let [folder (path/join (path/temp) "oxmacs")
+        file (path/join folder "r-{(crypto/random 8)}.R")]
+    (spawn (await (file/make-dir folder))
+           (await (file/write file script))
+           file)))

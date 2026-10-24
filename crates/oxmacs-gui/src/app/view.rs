@@ -1,10 +1,7 @@
-use iced::widget::{
-    Column, Row, canvas, column, container, image, mouse_area, responsive, sensor, space, stack,
-    text,
-};
-use iced::{Border, Color, ContentFit, Element, Length};
+use iced::widget::{Column, Row, canvas, column, container, mouse_area, responsive, sensor, space};
+use iced::{Element, Length};
 use oxmacs_core::clock;
-use oxmacs_core::editor::{Axis, GalleryView, Pane, PlotView, Tiling, WindowId};
+use oxmacs_core::editor::{Axis, Pane, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
 use oxmacs_ox::takeover::{self, Takeover};
 use oxmacs_ox::views::ViewBuffer;
@@ -139,24 +136,6 @@ impl App {
             return space().into();
         };
         let active = pane.is_selected();
-        let plots = match (pane.plot_gallery(), pane.plot()) {
-            (Some(gallery), _) => Some(plot_gallery(window, &gallery, faces)),
-            (None, Some(plot)) => Some(self.plot(window, &plot, faces)),
-            (None, None) => None,
-        };
-        if let Some(body) = plots {
-            let look = Look {
-                faces,
-                active,
-                font: self.font,
-                size: self.text_size,
-            };
-            return column![
-                body,
-                mode_line::view(&pane.status(), &[], self.mode_line_style, look)
-            ]
-            .into();
-        }
         let body = self.body(pane, window, faces);
         let last = self.editor.tiling().windows().last() == Some(&window);
         let segments = if last {
@@ -217,73 +196,4 @@ impl App {
         .height(Length::Fill)
         .into()
     }
-
-    fn plot(&self, window: WindowId, plot: &PlotView, faces: Faces) -> Element<'_, Message> {
-        let picture = image(self.plot_image(&plot.path))
-            .content_fit(ContentFit::Contain)
-            .width(Length::Fill)
-            .height(Length::Fill);
-        let counter = container(
-            text(format!("{} / {}", plot.index, plot.count))
-                .font(self.font)
-                .size(self.text_size * COUNTER_SCALE)
-                .color(style::color(faces.shadow)),
-        )
-        .padding([4, 8])
-        .align_right(Length::Fill);
-        let sized = sensor(stack![picture, counter])
-            .on_show(move |size| Message::PlotSized(window, size))
-            .on_resize(move |size| Message::PlotSized(window, size));
-        mouse_area(sized)
-            .on_press(Message::FocusWindow(window))
-            .into()
-    }
 }
-
-fn plot_gallery<'a>(window: WindowId, gallery: &GalleryView, faces: Faces) -> Element<'a, Message> {
-    let columns = gallery.columns.max(1);
-    let accent = style::color(faces.cursor);
-    let rows = gallery
-        .paths
-        .chunks(columns)
-        .enumerate()
-        .map(|(row, paths)| {
-            let mut tiles: Vec<Element<'a, Message>> = paths
-                .iter()
-                .enumerate()
-                .map(|(column, path)| {
-                    let position = row * columns + column;
-                    let chosen = position == gallery.selected;
-                    let picture = image(image::Handle::from_path(path))
-                        .content_fit(ContentFit::Contain)
-                        .width(Length::Fill)
-                        .height(Length::Fill);
-                    let tile = container(picture)
-                        .padding(TILE_PADDING)
-                        .width(Length::Fill)
-                        .height(Length::Fill)
-                        .style(move |_| container::Style {
-                            border: Border {
-                                color: if chosen { accent } else { Color::TRANSPARENT },
-                                width: TILE_BORDER,
-                                radius: TILE_RADIUS.into(),
-                            },
-                            ..container::Style::default()
-                        });
-                    mouse_area(tile)
-                        .on_press(Message::PickPlot(window, position))
-                        .into()
-                })
-                .collect();
-            tiles.resize_with(columns, || space().width(Length::Fill).into());
-            Row::with_children(tiles).height(Length::Fill).into()
-        });
-    container(Column::with_children(rows))
-        .padding(TILE_PADDING)
-        .into()
-}
-
-const COUNTER_SCALE: f32 = 0.85;
-const TILE_PADDING: u16 = 4;
-const TILE_BORDER: f32 = 2.0;
-const TILE_RADIUS: f32 = 4.0;

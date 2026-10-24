@@ -14,6 +14,8 @@ struct Known {
     buffer: BufferId,
     output: Option<Hold>,
     idle: Option<Hold>,
+    resized: Option<Hold>,
+    width: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -114,6 +116,7 @@ struct Options {
     keys: Vec<(String, String)>,
     output: Option<Value>,
     idle: Option<Value>,
+    resized: Option<Value>,
 }
 
 fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
@@ -138,6 +141,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
             "keys" => found.keys = pairs(heap, *value, "keys")?,
             "on-output" => found.output = Some(*value),
             "on-idle" => found.idle = Some(*value),
+            "on-resize" => found.resized = Some(*value),
             _ => return Err(unknown(heap, pair[0])),
         }
     }
@@ -146,7 +150,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
-        "console-start takes :program, :args, :directory, :env, :label, :keys, :on-output and :on-idle, not {}",
+        "console-start takes :program, :args, :directory, :env, :label, :keys, :on-output, :on-idle and :on-resize, not {}",
         print::brief(heap, option)
     ))
 }
@@ -230,6 +234,7 @@ fn start(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Va
     let buffer = editor.start_console(spec, existing);
     let output = given.output.map(|function| heap.hold(function));
     let waiting = given.idle.map(|function| heap.hold(function));
+    let resized = given.resized.map(|function| heap.hold(function));
     if let Some(consoles) = consoles(editor) {
         if let Some(at) = consoles
             .known
@@ -239,11 +244,14 @@ fn start(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Va
             let old = consoles.known.remove(at);
             release(heap, old.output);
             release(heap, old.idle);
+            release(heap, old.resized);
         }
         consoles.known.push(Known {
             buffer,
             output,
             idle: waiting,
+            resized,
+            width: None,
         });
     }
     made(heap.string(&name))
@@ -356,6 +364,41 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
             log::report(editor, &error, None);
         }
     }
+    resized(isolate, editor);
+}
+
+fn resized(isolate: &mut Isolate, editor: &mut Editor) {
+    let buffers: Vec<BufferId> = editor
+        .plugin_state::<Consoles>()
+        .map(|consoles| consoles.known.iter().map(|known| known.buffer).collect())
+        .unwrap_or_default();
+    let mut calls = Vec::new();
+    for buffer in buffers {
+        let Some(width) = editor.buffer_width(buffer) else {
+            continue;
+        };
+        let Some(known) = editor.plugin_state_mut::<Consoles>().and_then(|consoles| {
+            consoles
+                .known
+                .iter_mut()
+                .find(|known| known.buffer == buffer)
+        }) else {
+            continue;
+        };
+        if known.width != Some(width) {
+            known.width = Some(width);
+            calls.extend(known.resized.map(|hold| (hold, width)));
+        }
+    }
+    for (hold, width) in calls {
+        let Some(handler) = isolate.held(hold) else {
+            continue;
+        };
+        let width = Value::Int(i64::try_from(width).unwrap_or(i64::MAX));
+        if let Err(error) = isolate.spawn(handler, &[width]) {
+            log::report(editor, &error, None);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -432,6 +475,26 @@ mod tests {
             .unwrap(),
             r#"[["*shell*"] true true false]"#
         );
+    }
+
+    #[test]
+    fn consoles_hear_when_their_window_changes_width() {
+        let (mut editor, mut ox, _) = started(SHELL);
+        ox.eval(
+            &mut editor,
+            r#"(def widths (atom [])) (console-start "*shell*" :program "shell" :args ["-i"] :env {TERM: "dumb"} :on-resize (fn [width] (swap! widths conj width)))"#,
+        )
+        .unwrap();
+        press(&mut editor, &mut ox, "C-x o");
+
+        editor.resize_pane(editor.selected_window(), 20, 41);
+        settle(&mut editor, &mut ox);
+        editor.resize_pane(editor.selected_window(), 30, 41);
+        settle(&mut editor, &mut ox);
+        editor.resize_pane(editor.selected_window(), 30, 51);
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(ox.eval(&mut editor, "@widths").unwrap(), "[40 50]");
     }
 
     #[test]

@@ -27,7 +27,6 @@ pub use console::{ConsoleHook, ConsoleSpec, MarkerHook};
 pub use editing::format::{FormatRequest, Formatter};
 pub use effect::{Effect, FetchId};
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
-pub use languages::r_plots::{GalleryView, PlotView};
 pub use languages::registry::{LineHighlighter, LineIndenter};
 pub use lsp::{SERVERS, ServerId, ServerSpec};
 pub use motion::mouse::{Cell, Clicks};
@@ -59,7 +58,6 @@ use buffers::{BufferList, Mode};
 use crate::command::{Command, CommandId, CommandSpec, Commands, DynamicSpec, Scope, ScopeId};
 use crate::config::{Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
-use crate::external::tools;
 use crate::input::bindings::Keymaps;
 use crate::input::{Key, KeyCode, KeyParseError, KeySequence, Keymap, Lookup, Modifiers};
 use crate::plugin::States;
@@ -118,8 +116,8 @@ pub struct Editor {
     keymaps: Keymaps,
     popup: Option<prompts::popup::Popup>,
     transients: prompts::transient::Transients,
-    r_sessions: languages::r_console::Sessions,
     xref: Vec<(crate::text::BufferId, usize)>,
+    headers: Vec<(crate::text::BufferId, Vec<(String, LineStyle)>)>,
     processes: special::processes::Processes,
     toolbox: special::toolbox::Toolbox,
     pending: Vec<Key>,
@@ -164,7 +162,6 @@ pub struct Editor {
     repeated: bool,
     working_directory: PathBuf,
     home: Option<PathBuf>,
-    find_r: fn(Option<&str>) -> Option<PathBuf>,
     formatters: Vec<(Language, Formatter)>,
     linters: Vec<(Language, Linter)>,
     error_patterns: Vec<ErrorPattern>,
@@ -210,8 +207,8 @@ impl Editor {
             keymaps: Keymaps::default(),
             popup: None,
             transients: prompts::transient::Transients::default(),
-            r_sessions: languages::r_console::Sessions::default(),
             xref: Vec::new(),
+            headers: Vec::new(),
             processes: special::processes::Processes::default(),
             toolbox: special::toolbox::Toolbox::default(),
             pending: Vec::new(),
@@ -257,7 +254,6 @@ impl Editor {
             repeated: false,
             working_directory: env::current_dir().unwrap_or_default(),
             home: dirs::home_dir(),
-            find_r: tools::find_r,
             formatters: vec![
                 (Language::RUST, editing::format::RUSTFMT),
                 (Language::R, editing::format::AIR_FORMAT),
@@ -501,10 +497,7 @@ impl Editor {
             Some(Mode::Diagnostics(_)) => Scope::Diagnostics,
             Some(Mode::Help(_)) => Scope::Help,
             Some(Mode::Locations(_)) => Scope::Locations,
-            Some(Mode::Plots(_)) => Scope::Plots,
             Some(Mode::Tools(_)) => Scope::Tools,
-            Some(Mode::Environment(_)) => Scope::Environment,
-            Some(Mode::Table(_)) => Scope::Table,
             Some(Mode::Console(_)) => Scope::Console,
             Some(Mode::Text(_) | Mode::Plugin(_)) | None => Scope::Global,
         }
@@ -527,8 +520,6 @@ impl Editor {
             Some(Mode::Help(help)) => help.line_style(line),
             Some(Mode::Locations(list)) => list.line_style(line),
             Some(Mode::Tools(list)) => list.line_style(line),
-            Some(Mode::Environment(view)) => view.line_style(line),
-            Some(Mode::Table(view)) => view.line_style(line),
             Some(Mode::Plugin(view)) => view.line_style(line),
             Some(Mode::Text(Some(syntax))) => LineStyle {
                 background: None,
@@ -543,9 +534,7 @@ impl Editor {
                     None => self.syntax_highlights_at(index, line),
                 },
             },
-            Some(Mode::Console(_) | Mode::Plots(_) | Mode::Text(None)) | None => {
-                LineStyle::default()
-            }
+            Some(Mode::Console(_) | Mode::Text(None)) | None => LineStyle::default(),
         }
     }
 

@@ -1,10 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use iced::font::Family;
 use iced::futures::channel::mpsc;
 use iced::theme::Mode;
 use iced::time::Instant;
-use iced::widget::image;
 use iced::{Task, clipboard, keyboard};
 use oxmacs_core::command::Command;
 use oxmacs_core::editor::{Effect, Job, Outcome, ServerId, WindowId};
@@ -18,7 +17,7 @@ use oxmacs_ox::takeover;
 use super::{App, Message, transition};
 use crate::keys::{self, Platform};
 use crate::widgets::buffer_view::ViewEvent;
-use crate::{animation, fetch, fonts, units};
+use crate::{animation, fetch, fonts};
 impl App {
     fn handle_view_event(&mut self, window: WindowId, event: ViewEvent) {
         let selected = window == self.editor.selected_window();
@@ -191,12 +190,6 @@ impl App {
                     self.last_input = self.now;
                 }
             }
-            Message::PlotLoaded(path, allocation) => self.plot_loaded(path, allocation),
-            Message::PickPlot(window, position) => {
-                self.focus(window);
-                self.editor.pick_plot_in(window, position);
-            }
-            Message::PlotSized(window, size) => self.plot_sized(window, size),
             Message::Job(job, process::Event::Line(line)) => self.editor.job_output(job, &line),
             Message::Job(job, process::Event::Output(text)) => {
                 self.editor.session_output(job, &text);
@@ -221,13 +214,12 @@ impl App {
         }
         self.ox.tick(&mut self.editor);
         self.settle();
-        let plots = self.load_plots();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {
             self.quit();
             return iced::exit();
         }
-        Task::batch([self.pending_effects(), plots])
+        self.pending_effects()
     }
 
     fn quit(&mut self) {
@@ -249,48 +241,6 @@ impl App {
     fn sample_processes(&mut self) {
         let samples = self.usage.sample(&self.editor.process_pids());
         self.editor.processes_tick(&samples);
-    }
-
-    fn plot_sized(&mut self, window: WindowId, size: iced::Size) {
-        let pixels = |extent: f32| u32::try_from(units::floor_to_usize(extent)).unwrap_or(u32::MAX);
-        self.editor
-            .plots_sized(window, pixels(size.width), pixels(size.height));
-    }
-
-    fn load_plots(&mut self) -> Task<Message> {
-        let fresh: Vec<PathBuf> = self
-            .editor
-            .tiling()
-            .windows()
-            .into_iter()
-            .filter_map(|window| self.editor.pane_of(window)?.plot())
-            .map(|plot| plot.path)
-            .filter(|path| {
-                !self.plot_loading.contains(path)
-                    && !self.plot_images.iter().any(|(known, _)| known == path)
-            })
-            .collect();
-        self.plot_loading.extend(fresh.iter().cloned());
-        Task::batch(fresh.into_iter().map(|path| {
-            image::allocate(image::Handle::from_path(&path))
-                .map(move |allocation| Message::PlotLoaded(path.clone(), allocation.ok()))
-        }))
-    }
-
-    fn plot_loaded(&mut self, path: PathBuf, allocation: Option<image::Allocation>) {
-        self.plot_loading.retain(|known| *known != path);
-        if let Some(allocation) = allocation {
-            self.plot_images.push((path, allocation));
-        }
-        let excess = self.plot_images.len().saturating_sub(KEPT_PLOTS);
-        self.plot_images.drain(..excess);
-    }
-
-    pub(super) fn plot_image(&self, path: &Path) -> image::Handle {
-        shown_plot(&self.plot_images, path).map_or_else(
-            || image::Handle::from_path(path),
-            |allocation| allocation.handle().clone(),
-        )
     }
 
     pub(super) fn pending_effects(&mut self) -> Task<Message> {
@@ -412,16 +362,6 @@ impl App {
 
 const HAS_PRIMARY_SELECTION: bool = cfg!(target_os = "linux");
 const EXIT: &str = r#"{"jsonrpc":"2.0","method":"exit"}"#;
-const KEPT_PLOTS: usize = 8;
-
-pub fn shown_plot<'a, T>(loaded: &'a [(PathBuf, T)], path: &Path) -> Option<&'a T> {
-    loaded
-        .iter()
-        .rev()
-        .find(|(known, _)| known == path)
-        .or_else(|| loaded.last())
-        .map(|(_, item)| item)
-}
 
 fn open_externally(path: &Path) -> Result<(), String> {
     open::that_detached(path).map_err(|error| format!("{}: {error}", path.display()))

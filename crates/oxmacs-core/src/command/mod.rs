@@ -279,11 +279,6 @@ pub enum Command {
     EnlargeWindowHorizontally,
     #[strum(message = "Make the window narrower")]
     ShrinkWindowHorizontally,
-    #[strum(
-        message = "Jump to the definition of the R name at point",
-        detailed_message = "Looks for an assignment to the name, first in open R buffers, then in the project's R files (the folder with .git, DESCRIPTION or an .Rproj file). Otherwise the running session supplies it: the file a function was sourced from, or its source in *R source: name*. M-, goes back."
-    )]
-    RFindDefinition,
     #[strum(message = "Go back to where the last jump started")]
     XrefGoBack,
     #[strum(message = "Run cargo check in *compilation*")]
@@ -296,40 +291,6 @@ pub enum Command {
     RustRun,
     #[strum(message = "Run cargo clippy in *compilation*")]
     RustRunClippy,
-    #[strum(message = "Insert the assignment arrow <-")]
-    RInsertAssignment,
-    #[strum(message = "Insert the native pipe |>")]
-    RInsertPipe,
-    #[strum(
-        message = "Start an R console beside the script",
-        detailed_message = "Starts R in a console named after its folder, such as *R:analysis*, using the r-program setting or the R found on your system. Type after the prompt and press RET to run it; M-p and M-n bring back earlier input."
-    )]
-    RunR,
-    #[strum(
-        message = "Start another R session beside the current one",
-        detailed_message = "Starts a new R session named after the folder it runs in, such as *R:analysis:2*, and shows it beside the current window. The R script you start it from sends its code there from then on; other scripts keep their own sessions."
-    )]
-    RNewSession,
-    #[strum(
-        message = "Send the statement or selection to R and step",
-        detailed_message = "Sends the selection, or else the whole statement around point even when it spans several lines, to the script's R session and moves to the next statement. R starts first when it isn't running, and the code shows in the console as R reads it."
-    )]
-    RSendStatement,
-    #[strum(
-        message = "Send the function or paragraph to R and step",
-        detailed_message = "Sends the selection, or else the function definition around point, or else the paragraph around point, to the script's R session and moves past it. R starts first when it isn't running."
-    )]
-    RSendFunction,
-    #[strum(
-        message = "Switch between the R script and its R session",
-        detailed_message = "From an R script, shows its R session beside it and moves there, starting R when it isn't running. From an R session, goes back to the script that last used it."
-    )]
-    RSwitchToConsole,
-    #[strum(
-        message = "Show R's help on a topic in *R help*",
-        detailed_message = "Asks for a topic, offering the symbol at point, and shows R's help for it in *R help* beside the current window. Typing ?topic in an R session shows it there too. R starts first when it isn't running."
-    )]
-    RHelp,
     #[strum(message = "Send the input after the prompt")]
     ComintSendInput,
     #[strum(message = "Bring back the previous input")]
@@ -443,17 +404,6 @@ pub enum Command {
     CompletionQuit,
 
     #[strum(
-        message = "List the objects in the R session",
-        detailed_message = "Opens the session's environment between its console and its plots: data, values and functions with their class, size and a short value. It refreshes after each command you run while it is shown; RET opens a data frame as a table and anything else with str()."
-    )]
-    REnvironment,
-    #[strum(message = "Open the object on this line")]
-    REnvironmentVisit,
-    #[strum(message = "Show the next columns of the table")]
-    RTableNextColumn,
-    #[strum(message = "Show the previous columns of the table")]
-    RTablePreviousColumn,
-    #[strum(
         message = "List each language and what works in it",
         detailed_message = "Opens *Languages*: every language this build knows, with its file extensions and which features work in it, from highlighting and indentation to formatting, linting, completion and a console. q closes it."
     )]
@@ -471,49 +421,11 @@ pub enum Command {
     ToolUpdate,
     #[strum(message = "Remove oxmacs's copy of the tool on this line")]
     ToolRemove,
-
-    #[strum(message = "Show the next R plot")]
-    RPlotNext,
-    #[strum(message = "Show the previous R plot")]
-    RPlotPrevious,
-    #[strum(
-        message = "Save the shown R plot to a file",
-        detailed_message = "Asks for a file name and saves the shown plot at the window's size: as PDF when the name ends in .pdf, as SVG for .svg, and as PNG otherwise."
-    )]
-    RPlotSave,
-    #[strum(message = "Delete the shown R plot from the history")]
-    RPlotDelete,
-    #[strum(
-        message = "Open a large copy of the shown R plot",
-        detailed_message = "Has R draw the shown plot at twice the window's size, at least 1200 pixels wide, and opens it in the system's image viewer."
-    )]
-    RPlotZoom,
-    #[strum(
-        message = "Show all R plots side by side, or the shown one again",
-        detailed_message = "Switches an R plots window between the shown plot and a gallery of every plot in the history. In the gallery the arrows, n and p move the selection, and RET or a click opens the selected plot."
-    )]
-    RPlotGallery,
-    #[strum(
-        message = "Keep the shown R plot in its own window",
-        detailed_message = "Pins the shown plot: its window, renamed after the plot, keeps showing it while new plots open in a fresh plots window beside it. A pinned plot still redraws at its window's size and can be saved with s or zoomed with z."
-    )]
-    RPlotPin,
-    #[strum(message = "Open the plot selected in the gallery")]
-    RPlotOpen,
-    #[strum(message = "Select the plot above in the gallery")]
-    RPlotAbove,
-    #[strum(message = "Select the plot below in the gallery")]
-    RPlotBelow,
     #[strum(
         message = "Complete the code before point",
-        detailed_message = "In R scripts and R sessions, asks the running R session how the code before point could go on: objects, functions, arguments, columns after $ and packages. Several answers appear in a popup at point; a single answer is inserted at once."
+        detailed_message = "Asks the buffer's language server how the code before point could go on. Several answers appear in a popup at point; a single answer is inserted at once."
     )]
     CompletionAtPoint,
-    #[strum(
-        message = "Indent the line, or complete once it is indented",
-        detailed_message = "Indents the line or selection like TAB elsewhere. When the line is already indented and point follows some code, completes the code before point instead."
-    )]
-    IndentOrComplete,
 }
 
 impl Command {
@@ -564,10 +476,7 @@ impl Command {
                 | Self::CommentLine
                 | Self::CommentDwim
                 | Self::FormatBuffer
-                | Self::RInsertAssignment
-                | Self::RInsertPipe
                 | Self::CompletionAccept
-                | Self::IndentOrComplete
                 | Self::DeleteChar
                 | Self::DeleteBackwardChar
                 | Self::DeleteLine
@@ -599,12 +508,6 @@ impl Command {
             | Self::RustTest
             | Self::RustRun
             | Self::RustRunClippy => Scope::Rust,
-            Self::RInsertAssignment
-            | Self::RFindDefinition
-            | Self::RInsertPipe
-            | Self::RSendStatement
-            | Self::RSendFunction
-            | Self::IndentOrComplete => Scope::R,
             Self::ComintSendInput | Self::ComintPreviousInput | Self::ComintNextInput => {
                 Scope::Console
             }
@@ -634,18 +537,6 @@ impl Command {
             Self::ToolDetails | Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => {
                 Scope::Tools
             }
-            Self::REnvironmentVisit => Scope::Environment,
-            Self::RTableNextColumn | Self::RTablePreviousColumn => Scope::Table,
-            Self::RPlotNext
-            | Self::RPlotPrevious
-            | Self::RPlotSave
-            | Self::RPlotDelete
-            | Self::RPlotZoom
-            | Self::RPlotGallery
-            | Self::RPlotPin
-            | Self::RPlotOpen
-            | Self::RPlotAbove
-            | Self::RPlotBelow => Scope::Plots,
             _ => Scope::Global,
         }
     }
@@ -665,10 +556,7 @@ pub enum Scope {
     Help,
     Locations,
     Popup,
-    Plots,
     Tools,
-    Environment,
-    Table,
 }
 
 impl Scope {
@@ -686,10 +574,7 @@ impl Scope {
             Self::Help => Some("*Help*"),
             Self::Locations => Some("*xref*"),
             Self::Popup => Some("the completion popup"),
-            Self::Plots => Some("R plot windows"),
             Self::Tools => Some("*Tools*"),
-            Self::Environment => Some("R environments"),
-            Self::Table => Some("R tables"),
         }
     }
 }

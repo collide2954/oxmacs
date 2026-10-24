@@ -2,6 +2,7 @@ use std::any::Any;
 use std::path::{Path, PathBuf};
 
 use crate::command::{Command, CommandId};
+use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::editor::{Axis, Editor, Effect};
@@ -76,6 +77,23 @@ impl Editor {
         if select && let Some(window) = self.window_showing(id) {
             self.select_window(window);
         }
+    }
+
+    pub fn set_header_lines(&mut self, id: BufferId, lines: Vec<(String, LineStyle)>) {
+        let alive: Vec<BufferId> = self.buffers.iter().map(Buffer::id).collect();
+        self.headers
+            .retain(|(known, _)| *known != id && alive.contains(known));
+        if !lines.is_empty() {
+            self.headers.push((id, lines));
+        }
+    }
+
+    pub(in crate::editor) fn header_lines_of(&self, id: BufferId) -> Vec<(String, LineStyle)> {
+        self.headers
+            .iter()
+            .find(|(known, _)| *known == id)
+            .map(|(_, lines)| lines.clone())
+            .unwrap_or_default()
     }
 
     pub fn insert_text(&mut self, text: &str) -> bool {
