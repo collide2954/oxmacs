@@ -94,6 +94,39 @@ fn projects_without_a_description_are_not_packages() {
 }
 
 #[test]
+fn renv_keeps_the_project_library_from_m_x() {
+    let (root, mut r, _) = in_package(false, "renv");
+    let at = quoted(&root);
+
+    for (command, call) in [
+        ("r-renv-status", "status"),
+        ("r-renv-snapshot", "snapshot"),
+        ("r-renv-restore", "restore"),
+        ("r-renv-init", "init"),
+    ] {
+        r.run(command);
+        assert_eq!(
+            r.sent(),
+            [format!("renv::{call}(project = {at})\n")],
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn renv_commands_say_when_renv_is_missing() {
+    let (_root, mut r, _) = in_package(false, "devtools");
+
+    r.run("r-renv-status");
+
+    assert_eq!(
+        r.editor.message(),
+        Some("This needs renv; install it in R with install.packages(\"renv\")")
+    );
+    assert_eq!(r.sent(), Vec::<String>::new());
+}
+
+#[test]
 fn test_results_are_listed_by_file_and_return_visits_a_failure() {
     let (root, mut r, job) = in_package(true, "devtools\ttestthat");
 

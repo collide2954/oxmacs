@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.14.0"
+  :version "0.15.0"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands {run-r: "Start an R console beside the script"
              r-new-session: "Start another R session beside the current one"
@@ -42,7 +42,11 @@
              r-debug-continue: "Continue running the code R is debugging"
              r-debug-stop: "Stop debugging and go back to R's prompt"
              r-debug-function: "Debug the function at point the next time it runs"
-             r-undebug-function: "Stop debugging the function at point"}
+             r-undebug-function: "Stop debugging the function at point"
+             r-renv-status: "Show how the project's library differs from renv.lock"
+             r-renv-snapshot: "Record the project's library in renv.lock"
+             r-renv-restore: "Install the packages renv.lock records into the project's library"
+             r-renv-init: "Give the project a library of its own with renv"}
   :modes [{name: "R Markdown" extensions: ["Rmd" "rmd" "qmd"]}]
   :mode-keys {"R" {"M--" r-insert-assignment
                    "C-S-m" r-insert-pipe
