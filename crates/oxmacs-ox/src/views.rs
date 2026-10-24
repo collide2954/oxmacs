@@ -412,14 +412,17 @@ fn keys(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, Error> {
         })
 }
 
-pub(crate) fn buffer_name(heap: &Heap, native: &str, value: Value) -> Result<String, Error> {
-    heap.text(value)
-        .map(str::to_owned)
-        .ok_or_else(|| wrong(heap, native, "a buffer name", value))
+pub(crate) fn buffer_name(
+    heap: &Heap,
+    editor: &Editor,
+    native: &str,
+    value: Value,
+) -> Result<String, Error> {
+    crate::handles::name(heap, editor, native, value)
 }
 
 fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
-    let name = buffer_name(heap, "open-view", arguments[0])?;
+    let name = buffer_name(heap, editor, "open-view", arguments[0])?;
     let (found, rest) = options(
         heap,
         "open-view",

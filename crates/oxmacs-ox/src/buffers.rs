@@ -318,7 +318,7 @@ fn fill_chat(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Opti
 }
 
 fn append(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
-    let name = crate::views::buffer_name(heap, "append-lines", arguments[0])?;
+    let name = crate::views::buffer_name(heap, editor, "append-lines", arguments[0])?;
     let id = plugin_buffer(editor, &name)
         .ok_or_else(|| Error::new(format!("There is no plugin buffer named {name}")))?;
     let rendered = render(heap, "append-lines", arguments[1])?;
@@ -408,7 +408,7 @@ fn input_point(_: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, 
 }
 
 fn set_input(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
-    let name = crate::views::buffer_name(heap, "set-input", arguments[0])?;
+    let name = crate::views::buffer_name(heap, editor, "set-input", arguments[0])?;
     let text = print::display(heap, arguments[1]);
     let point = match arguments.get(2..) {
         Some([Value::Keyword(option), value]) if option.name() == "point" => {
@@ -563,7 +563,7 @@ pub(crate) fn reveal(editor: &mut Editor, id: BufferId, beside: bool, select: bo
 }
 
 fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
-    let name = crate::views::buffer_name(heap, "open-buffer", arguments[0])?;
+    let name = crate::views::buffer_name(heap, editor, "open-buffer", arguments[0])?;
     let rendered = render(heap, "open-buffer", arguments[1])?;
     let mut given = options(heap, &arguments[2..])?;
     let id = plugin_buffer(editor, &name).unwrap_or_else(|| {
@@ -641,7 +641,7 @@ pub fn watch(isolate: &mut Isolate, editor: &mut Editor) {
     }
 }
 fn set_lines(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
-    let name = crate::views::buffer_name(heap, "set-lines", arguments[0])?;
+    let name = crate::views::buffer_name(heap, editor, "set-lines", arguments[0])?;
     let id = plugin_buffer(editor, &name)
         .ok_or_else(|| Error::new(format!("There is no plugin buffer named {name}")))?;
     let rendered = render(heap, "set-lines", arguments[1])?;
@@ -667,12 +667,8 @@ fn set_lines(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
     Ok(Value::Nil)
 }
 
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "natives return results even when they cannot fail"
-)]
-fn current_line(_: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Error> {
-    let buffer = editor.buffer();
+fn current_line(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Error> {
+    let buffer = crate::handles::current_buffer(heap, editor)?;
     let line = buffer.line_of(buffer.point());
     Ok(Value::Int(i64::try_from(line).unwrap_or(i64::MAX)))
 }
@@ -693,7 +689,7 @@ fn goto_line(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
         Some(column) => number(heap, *column)?,
         None => 0,
     };
-    let buffer = editor.buffer_mut();
+    let buffer = crate::handles::current_buffer_mut(heap, editor)?;
     let start = buffer.line_start(line);
     let end = buffer.line_end(line);
     buffer.set_point((start + column).min(end));
@@ -701,7 +697,7 @@ fn goto_line(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
 }
 
 fn region_lines(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Error> {
-    let buffer = editor.buffer();
+    let buffer = crate::handles::current_buffer(heap, editor)?;
     let Some(selection) = buffer.selection() else {
         return Ok(Value::Nil);
     };
@@ -723,15 +719,15 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>("input-text", 0, Some(1), input_text);
     isolate.define_host_native::<Editor>("input-point", 0, Some(0), input_point);
     isolate.define_host_native::<Editor>("set-input", 2, Some(4), set_input);
-    isolate.define_host_native::<Editor>("current-column", 0, Some(0), |_, editor, _| {
-        let buffer = editor.buffer();
+    isolate.define_host_native::<Editor>("current-column", 0, Some(0), |heap, editor, _| {
+        let buffer = crate::handles::current_buffer(heap, editor)?;
         let point = buffer.point();
         let column = point - buffer.line_start(buffer.line_of(point));
         Ok(Value::Int(i64::try_from(column).unwrap_or(i64::MAX)))
     });
     isolate.define_host_native::<Editor>("line-text", 1, Some(1), |heap, editor, arguments| {
         let line = number(heap, arguments[0])?;
-        let buffer = editor.buffer();
+        let buffer = crate::handles::current_buffer(heap, editor)?;
         if line >= buffer.len_lines() {
             return Ok(Value::Nil);
         }
@@ -744,14 +740,16 @@ pub fn install(isolate: &mut Isolate) {
         1,
         Some(1),
         |heap, editor, arguments| {
-            let name = print::display(heap, arguments[0]);
-            Ok(Value::Bool(editor.buffer_named(&name).is_some()))
+            Ok(Value::Bool(crate::handles::live(
+                heap,
+                editor,
+                arguments[0],
+            )))
         },
     );
     isolate.define_host_native::<Editor>("buffer-width", 1, Some(1), |heap, editor, arguments| {
-        let name = print::display(heap, arguments[0]);
-        Ok(editor
-            .buffer_named(&name)
+        let id = crate::handles::target(heap, editor, "buffer-width", arguments[0]).ok();
+        Ok(id
             .and_then(|id| editor.buffer_width(id))
             .map_or(Value::Nil, |width| {
                 Value::Int(i64::try_from(width).unwrap_or(i64::MAX))
@@ -759,15 +757,11 @@ pub fn install(isolate: &mut Isolate) {
     });
     isolate.define_host_native::<Editor>("region-lines", 0, Some(0), region_lines);
     isolate.define_host_native::<Editor>("buffer-shown?", 1, Some(1), |heap, editor, arguments| {
-        let name = print::display(heap, arguments[0]);
-        Ok(Value::Bool(
-            editor
-                .buffer_named(&name)
-                .is_some_and(|id| editor.buffer_shown(id)),
-        ))
+        let id = crate::handles::target(heap, editor, "buffer-shown?", arguments[0]).ok();
+        Ok(Value::Bool(id.is_some_and(|id| editor.buffer_shown(id))))
     });
-    isolate.define_host_native::<Editor>("deactivate-mark", 0, Some(0), |_, editor, _| {
-        editor.buffer_mut().deactivate_mark();
+    isolate.define_host_native::<Editor>("deactivate-mark", 0, Some(0), |heap, editor, _| {
+        crate::handles::current_buffer_mut(heap, editor)?.deactivate_mark();
         Ok(Value::Nil)
     });
     isolate.define_host_native::<Editor>(
@@ -775,16 +769,14 @@ pub fn install(isolate: &mut Isolate) {
         1,
         Some(1),
         |heap, editor, arguments| {
-            let name = print::display(heap, arguments[0]);
-            let id = editor
-                .buffer_named(&name)
-                .ok_or_else(|| Error::new(format!("There is no buffer named {name}")))?;
+            let id = crate::handles::target(heap, editor, "switch-to-buffer", arguments[0])?;
             editor.show_buffer(id);
             Ok(Value::Nil)
         },
     );
     isolate.define_host_native::<Editor>("buffer-text", 0, Some(0), |heap, editor, _| {
-        heap.string(&editor.buffer().contents())
+        let text = crate::handles::current_buffer(heap, editor)?.contents();
+        heap.string(&text)
             .map_err(|full| Error::new(full.to_string()))
     });
     isolate.define_host_native::<Editor>(
@@ -793,12 +785,15 @@ pub fn install(isolate: &mut Isolate) {
         Some(1),
         |heap, editor, arguments| {
             let text = print::display(heap, arguments[0]);
-            editor.buffer_mut().replace_text(&text);
+            crate::handles::current_buffer_mut(heap, editor)?.replace_text(&text);
             Ok(Value::Nil)
         },
     );
     isolate.define_host_native::<Editor>("buffer-name", 0, Some(0), |heap, editor, _| {
-        heap.string(editor.buffer().name())
+        let name = crate::handles::current_buffer(heap, editor)?
+            .name()
+            .to_owned();
+        heap.string(&name)
             .map_err(|full| Error::new(full.to_string()))
     });
 }

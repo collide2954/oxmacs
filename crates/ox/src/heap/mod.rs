@@ -14,6 +14,7 @@ use crate::portable::{Channel, Signal};
 use crate::read::Marks;
 use crate::span::Span;
 use crate::symbol::Sym;
+use crate::task::TaskId;
 use crate::value::foreign::{Foreign, Holder};
 use crate::value::map::{Map, Node};
 use crate::value::promise::Promise;
@@ -171,6 +172,7 @@ pub struct Heap {
     jobs: Vec<jobs::Job>,
     signal: Arc<Signal>,
     next_collection: usize,
+    running: Option<TaskId>,
 }
 
 fn reference(value: Value, kind: Kind) -> Option<u32> {
@@ -181,6 +183,14 @@ fn reference(value: Value, kind: Kind) -> Option<u32> {
 }
 
 impl Heap {
+    pub fn running_task(&self) -> Option<TaskId> {
+        self.running
+    }
+
+    pub(crate) fn set_running_task(&mut self, task: Option<TaskId>) {
+        self.running = task;
+    }
+
     pub fn hold(&mut self, value: Value) -> Hold {
         self.next_hold += 1;
         let hold = Hold(self.next_hold);

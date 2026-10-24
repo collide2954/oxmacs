@@ -2,6 +2,11 @@
   "Defines an M-x command called name, described by summary, that runs body."
   `(define-command '~name ~summary (fn [] ~@body)))
 
+(defmacro with-buffer [buffer & body]
+  "Runs body with buffer, a handle or a name, as the current buffer of this task, leaving the windows alone."
+  `(do (enter-buffer ~buffer)
+       (try (do ~@body) (finally (leave-buffer)))))
+
 (defmacro defmode [name title & options]
   "Defines a major mode; see define-mode for its options."
   `(define-mode '~name ~title ~@options))

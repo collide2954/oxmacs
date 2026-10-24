@@ -271,8 +271,7 @@ pub fn install(isolate: &mut Isolate) {
         shown(heap, Some(&directory))
     });
     isolate.define_host_native::<Editor>("close-buffer", 1, Some(1), |heap, editor, arguments| {
-        let name = print::display(heap, arguments[0]);
-        if let Some(id) = editor.buffer_named(&name) {
+        if let Ok(id) = crate::handles::target(heap, editor, "close-buffer", arguments[0]) {
             editor.close_buffer(id);
         }
         Ok(Value::Nil)

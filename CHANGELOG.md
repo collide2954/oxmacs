@@ -71,6 +71,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Plugins get buffer handles: `(current-buffer)` returns one that stays with its buffer when the name changes and says `That buffer was killed` once it is gone, `(with-buffer b ...)` works in another buffer without touching the windows, each task with its own current buffer, and natives that take a buffer name take a handle too.
 - Unsaved files get recovery copies in the oxmacs cache folder, never beside the files themselves, and opening a file whose copy is newer offers to recover it; saving, reverting or killing the buffer removes the copy. A crash writes a log there too.
 - `ui/image` shows an `ox/image` image in a plugin view, and `open-view` takes `:beside` and `:select` like `open-buffer`.
 - Plugins can list the processes oxmacs runs with `processes`, follow them with `on-processes-change`, end them with `stop-process` and `kill-process`, and sample their usage with `watch-process-usage`. `open-buffer`'s `:select true` moves to a buffer it opens beside.

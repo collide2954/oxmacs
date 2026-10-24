@@ -342,3 +342,27 @@ fn synchronous_work_stops_at_its_budget() {
     let sum = isolate.eval("(+ 1 2)").unwrap();
     assert_eq!(isolate.write(sum), "3");
 }
+
+#[test]
+fn natives_know_which_task_is_calling_them() {
+    let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut isolate = Isolate::new();
+    let record = std::rc::Rc::clone(&seen);
+    isolate.define_native("whose", 0, Some(0), move |heap, _| {
+        record.borrow_mut().push(heap.running_task());
+        Ok(Value::Nil)
+    });
+    let both = isolate.eval("(fn [] (whose) (sleep 1) (whose))").unwrap();
+
+    isolate.eval("(whose)").unwrap();
+    let first = isolate.spawn(both, &[]).unwrap();
+    let second = isolate.spawn(both, &[]).unwrap();
+    while isolate.pending() > 0 {
+        isolate.run(Duration::from_millis(5));
+    }
+
+    let mut seen = seen.borrow().clone();
+    assert_eq!(seen.remove(0), None);
+    seen.sort_by_key(|task| task.map(|task| task == second));
+    assert_eq!(seen, [Some(first), Some(first), Some(second), Some(second)]);
+}

@@ -147,7 +147,9 @@ impl Runtime {
             let turn = now + (deadline - now) / waiting;
             let first = task.resume.take();
             self.running = task.promise;
+            self.heap.set_running_task(Some(task.id));
             let outcome = self.drive(&mut task.fiber, Some(turn), first, host);
+            self.heap.set_running_task(None);
             self.running = None;
             match outcome {
                 Ok(Stop::Paused) => self.tasks.push_back(task),
