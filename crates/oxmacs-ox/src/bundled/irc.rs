@@ -542,6 +542,23 @@ fn whois_answers_show_in_the_buffer_that_asked() {
 }
 
 #[test]
+fn monitored_nicks_say_when_they_come_and_go() {
+    let fake = Fake::start();
+    let (_home, mut editor, mut ox) = started(&network(fake.port, r#"monitor: ["bo" "cy"]"#));
+    run(&mut editor, &mut ox, "irc");
+    fake.expect(&mut editor, &mut ox, "CAP LS 302");
+    fake.say(":srv 001 ana :Welcome");
+    fake.say(":srv 005 ana MONITOR=100 :are supported by this server");
+    fake.say(":srv 376 ana :End of /MOTD command.");
+    fake.expect(&mut editor, &mut ox, "MONITOR + bo,cy");
+
+    fake.say(":srv 730 ana :bo!b@host");
+    wait_for_text(&mut editor, &mut ox, "*irc Test*", "bo is online");
+    fake.say(":srv 731 ana :cy");
+    wait_for_text(&mut editor, &mut ox, "*irc Test*", "cy is offline");
+}
+
+#[test]
 fn joins_and_parts_of_quiet_people_stay_hidden_until_asked_for() {
     let (fake, _home, mut editor, mut ox) = joined();
     fake.say(":bo!b@host PRIVMSG #oxmacs :I talk");

@@ -523,7 +523,7 @@
            (cond (target (error! target (last params)))
              (about (error! (here-on name) (str (string/join " " (drop 1 (take (dec (count params)) params))) ": " (last params))))
              (else (error! (here-on name) (last params)))))
-      ((contains? (set ["002" "003" "004" "251" "252" "253" "254" "255" "265" "266" "375" "372" "376"]) line.command)
+      ((contains? (set ["002" "003" "004" "251" "252" "253" "254" "255" "265" "266" "375" "372"]) line.command)
        (info! (server-buffer name) (last line.params)))
       (else (info! (server-buffer name) text)))))
 
@@ -547,6 +547,23 @@
           (notify (str line.nick " on " name) (str "Invites you to " channel))))
       (when-let [buffer (buffer-of name channel)]
         (event! buffer line :info (str line.nick " invited " invited))))))
+
+(def (on-motd-end! name line)
+  (info! (server-buffer name) (last line.params))
+  (let [wanted (or (get-in (network name) [:config :monitor]) [])]
+    (when (and (not (empty? wanted)) (get-in (network name) [:isupport "MONITOR"]))
+      (send-command! name "MONITOR" ["+" (string/join "," wanted)]))))
+
+(def (on-monitor! name line online)
+  (each (fn [target]
+          (let [nick (first (string/split target "!" 2))
+                said (str nick (if online " is online" " is offline"))]
+            (info! (server-buffer name) said)
+            (when-let [buffer (buffer-of name nick)]
+              (info! buffer said))
+            (when (and online (plugin-setting 'irc :notify) (not (window-focused?)))
+              (notify name said))))
+        (remove string/blank? (string/split (or (last line.params) "") ","))))
 
 (def whois-replies (set ["301" "311" "312" "313" "317" "318" "319" "330" "338" "378" "379" "671" "276" "307" "320" "335"]))
 
@@ -657,6 +674,10 @@
       ((= command "332") (on-topic-reply! name line))
       ((= command "353") (on-names! name line))
       ((contains? whois-replies command) (on-whois! name line))
+      ((or (= command "376") (= command "422")) (on-motd-end! name line))
+      ((= command "730") (on-monitor! name line true))
+      ((= command "731") (on-monitor! name line false))
+      ((contains? (set ["732" "733"]) command) nil)
       ((= command "321") (change-network! name assoc :listing []))
       ((= command "322") (on-list-item! name line))
       ((= command "323") (on-list-end! name))

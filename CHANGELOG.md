@@ -68,6 +68,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- IRC networks take `:monitor`, a list of nicks to watch with IRCv3 `MONITOR`: the server buffer, and a private chat with them, say when they come online or go offline, with a desktop notification when they arrive while you are elsewhere.
 - IRC `/whois` answers show in the buffer you asked from as plain sentences, such as who someone is, their channels, account, server, idle time and away message, and `/whois` alone in a private chat asks about the other person. Away replies to your messages show in that chat.
 - An IRC channel list: `/list` or `M-x irc-list` shows a network's channels by size with their topics, `/` filters them by name or topic, `RET` joins the one on the line and `g` lists them again.
 - `TAB` in IRC completes slash commands at the start of the input and the channels you are in, as well as nicks.
