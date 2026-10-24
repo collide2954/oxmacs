@@ -260,7 +260,8 @@
 (defcommand irc-join "Join a channel on this network"
   (quietly (fn []
              (let [entry (here-or-complain)
-                   channel (string/trim (await (prompt "Join: " :initial "#")))]
+                   invited (get (client/network entry.network) :invited)
+                   channel (string/trim (await (prompt "Join: " :initial (or invited "#"))))]
                (client/join! entry.network channel)))))
 
 (defcommand irc-part "Leave this channel"

@@ -352,6 +352,54 @@ fn typing_sends_messages_commands_and_completes_nicks() {
 }
 
 #[test]
+fn errors_standard_replies_and_invites_show_where_you_are() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    run(&mut editor, &mut ox, "irc-switch");
+    type_in(&mut editor, &mut ox, "#oxmacs");
+    keys(&mut editor, &mut ox, "RET");
+
+    fake.say(":srv FAIL CHATHISTORY MESSAGE_ERROR LATEST :Messages could not be retrieved");
+    wait_for_text(
+        &mut editor,
+        &mut ox,
+        "#oxmacs",
+        "CHATHISTORY failed: Messages could not be retrieved",
+    );
+    fake.say(":srv WARN REHASH CERTS_EXPIRED :Certificate has expired");
+    wait_for_text(
+        &mut editor,
+        &mut ox,
+        "#oxmacs",
+        "REHASH: Certificate has expired",
+    );
+    fake.say(":srv 482 ana #oxmacs :You're not channel operator");
+    wait_for_text(
+        &mut editor,
+        &mut ox,
+        "#oxmacs",
+        "! You're not channel operator",
+    );
+    fake.say(":srv 433 ana bob :Nickname is already in use");
+    wait_for_text(
+        &mut editor,
+        &mut ox,
+        "#oxmacs",
+        "bob: Nickname is already in use",
+    );
+    fake.say(":bo!b@host INVITE cy #oxmacs");
+    wait_for_text(&mut editor, &mut ox, "#oxmacs", "bo invited cy");
+
+    fake.say(":bo!b@host INVITE ana #secret");
+    wait_for_text(&mut editor, &mut ox, "#oxmacs", "bo invites you to #secret");
+    run(&mut editor, &mut ox, "irc-join");
+    assert!(pump(&mut editor, &mut ox, |editor, _| editor
+        .minibuffer()
+        .is_some()));
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(&mut editor, &mut ox, "JOIN #secret");
+}
+
+#[test]
 fn joins_and_parts_of_quiet_people_stay_hidden_until_asked_for() {
     let (fake, _home, mut editor, mut ox) = joined();
     fake.say(":bo!b@host PRIVMSG #oxmacs :I talk");

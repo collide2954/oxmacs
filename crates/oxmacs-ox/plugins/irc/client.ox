@@ -169,6 +169,10 @@
       (when (and hidden chat (not message.self))
         (note-activity! buffer message.mention)))))
 
+(def (here-on name)
+  (let [entry (buffer-entry (buffer-name))]
+    (if (and entry (= entry.network name)) entry.buffer (server-buffer name))))
+
 (def (info! buffer text)
   (add! buffer {kind: :info time: (time/now) text: text}))
 
@@ -301,8 +305,9 @@
                                     {prefixes: (second (string/split prefix ")" 2))}
                                     {})))))
 
-(def (on-nick-taken! name _line)
-  (unless (get (network name) :registered)
+(def (on-nick-taken! name line)
+  (if (get (network name) :registered)
+    (on-numeric! name line)
     (let [nick (str (my-nick name) "_")]
       (change-network! name assoc :nick nick)
       (send-command! name "NICK" [nick]))))
@@ -508,12 +513,38 @@
 
 (def (on-numeric! name line)
   (let [code (string/to-number line.command)
-        text (string/join " " (drop 1 line.params))]
+        params line.params
+        about (when (> (count params) 2) (get params 1))
+        target (when about (buffer-of name about))
+        text (string/join " " (drop 1 params))]
     (cond ((and code (>= code 400) (< code 600))
-           (error! (server-buffer name) text))
+           (cond (target (error! target (last params)))
+             (about (error! (here-on name) (str (string/join " " (drop 1 (take (dec (count params)) params))) ": " (last params))))
+             (else (error! (here-on name) (last params)))))
       ((contains? (set ["002" "003" "004" "251" "252" "253" "254" "255" "265" "266" "375" "372" "376"]) line.command)
        (info! (server-buffer name) (last line.params)))
       (else (info! (server-buffer name) text)))))
+
+(def (on-standard! name line)
+  (let [kind line.command
+        about (first line.params)
+        text (or (last line.params) "")
+        said (cond ((or (nil? about) (= about "*")) text)
+               ((= kind "FAIL") (str about " failed: " text))
+               (else (str about ": " text)))]
+    (if (= kind "FAIL")
+      (error! (here-on name) said)
+      (info! (here-on name) said))))
+
+(def (on-invite! name line)
+  (let [[invited channel] line.params]
+    (if (protocol/same-nick? invited (my-nick name))
+      (do (change-network! name assoc :invited channel)
+        (info! (here-on name) (str line.nick " invites you to " channel "; C-c C-j joins"))
+        (when (and (plugin-setting 'irc :notify) (not (window-focused?)))
+          (notify (str line.nick " on " name) (str "Invites you to " channel))))
+      (when-let [buffer (buffer-of name channel)]
+        (event! buffer line :info (str line.nick " invited " invited))))))
 
 (def (dispatch! name line)
   (let [command line.command]
@@ -534,6 +565,8 @@
       ((= command "PRIVMSG") (on-message! name line :privmsg))
       ((= command "NOTICE") (on-message! name line :notice))
       ((= command "TAGMSG") (on-tagmsg! name line))
+      ((= command "INVITE") (on-invite! name line))
+      ((contains? (set ["FAIL" "WARN" "NOTE"]) command) (on-standard! name line))
       ((= command "TOPIC") (on-topic! name line))
       ((= command "332") (on-topic-reply! name line))
       ((= command "353") (on-names! name line))
