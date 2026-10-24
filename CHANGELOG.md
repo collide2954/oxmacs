@@ -10,6 +10,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Checking an Ox file never touches the outside world: file, process, network and HTTP calls, `print` and workers are refused while checking, and a module that needs them to load is skipped. Checks run beside the editor instead of holding it up, stop after 2 seconds with a warning where they stopped, and load imported files again when they change on disk.
 - Ox code that runs too long no longer freezes the editor: views, highlighters and take-over frames stop after 250 ms, and init files, plugin loads and the REPL after 10 seconds, with an error in the log.
 - Ox no longer brings the editor down: printing an atom or promise that holds itself shows `#<atom ...>`, deeply nested values print and travel through channels and workers without overflowing the stack (values nested more than 256 levels deep are refused with an error), error messages show at most 200 characters of a value, a native that panics raises an error instead, and images are limited to 32,768 pixels a side and 134 megapixels.
+- Reconnecting to an IRC network logs in with SASL again without stopping to ask for the vault password when the vault has locked meanwhile.
+- A private IRC chat follows the other person when they change nick, saying so, instead of a new chat opening for the new nick.
 - Saving through a symlink writes the file it points to and keeps the link; a file with hard links, one another program holds open, or one in a folder that can't take new files is written in place; and on Unix saving keeps the owner. A file opened again through a symlink or in other letter case reuses its buffer.
 - Answering a revert, reread, save-over or kill question acts on the buffer it asked about, even if another window was chosen meanwhile, instead of whichever buffer had moved into its place.
 - Ox reads files that start with a byte order mark, as Windows tools often save them, instead of failing on the first form.
@@ -44,6 +46,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `M-x irc-setup` saves the network in `custom.ox` with `M-x customize`'s writer instead of adding a `use-plugin` form to `init.ox` every time, so setting up a network again replaces it.
 - Closing the window asks about unsaved files, as `C-x C-c` does. `auto-save` now keeps recovery copies of every file instead of saving Rust files in place; the new `auto-save-visited` saves files in place when idle.
 - `await` gives back any value that isn't a promise, so code can await whatever a function returns.
 - `M-x list-processes` is a bundled Ox plugin. `s` and `S` sort, `/` filters, `TAB` shows a process's command, folder, status and environment, `k` asks it to end and kills it three seconds later if it hasn't, `K` kills it at once, and a sparkline shows its CPU over the last minute.
@@ -74,6 +77,13 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Plugins hear buffers: `on-buffer-open` for each file or other buffer people type in, `on-buffer-change` with the edits each command makes, `on-mode-enter` when a buffer enters a mode, and `on-before-save`, which saving waits for, so a handler can format a file before it is written; an error in one cancels the save.
 - Plugins edit buffers by character offset: `point`, `set-point`, `insert`, `delete`, `text-between`, `buffer-size` and `region`, `line-start`, `line-end` and `line-of` to work with lines, and markers that move with the text around them. Read-only buffers refuse edits.
 - Plugins get buffer handles: `(current-buffer)` returns one that stays with its buffer when the name changes and says `That buffer was killed` once it is gone, `(with-buffer b ...)` works in another buffer without touching the windows, each task with its own current buffer, and natives that take a buffer name take a handle too.
+- IRC follows the capabilities a server adds or drops while you are connected, with IRCv3 `CAP NEW` and `CAP DEL`, and asks for `cap-notify` and `userhost-in-names`.
+- IRC networks take `:monitor`, a list of nicks to watch with IRCv3 `MONITOR`: the server buffer, and a private chat with them, say when they come online or go offline, with a desktop notification when they arrive while you are elsewhere.
+- IRC `/whois` answers show in the buffer you asked from as plain sentences, such as who someone is, their channels, account, server, idle time and away message, and `/whois` alone in a private chat asks about the other person. Away replies to your messages show in that chat.
+- An IRC channel list: `/list` or `M-x irc-list` shows a network's channels by size with their topics, `/` filters them by name or topic, `RET` joins the one on the line and `g` lists them again.
+- `TAB` in IRC completes slash commands at the start of the input and the channels you are in, as well as nicks.
+- IRC reconnects after a lost connection with backoff, after 1, 2, 5, 15 and 30 seconds and then every minute, keeps trying while the server can't be reached, says so in every buffer of that network and rejoins the channels you were in. `/reconnect` connects again at once and `/quit` stops trying.
+- IRC shows server errors and IRCv3 `FAIL`, `WARN` and `NOTE` replies in the buffer you are in, or in the channel they are about, instead of only in the server buffer, says when a nick you asked for is taken, and tells you about invitations, with `C-c C-j` offering the channel you were invited to.
 - Unsaved files get recovery copies in the oxmacs cache folder, never beside the files themselves, and opening a file whose copy is newer offers to recover it; saving, reverting or killing the buffer removes the copy. A crash writes a log there too.
 - `ui/image` shows an `ox/image` image in a plugin view, and `open-view` takes `:beside` and `:select` like `open-buffer`.
 - Plugins can list the processes oxmacs runs with `processes`, follow them with `on-processes-change`, end them with `stop-process` and `kill-process`, and sample their usage with `watch-process-usage`. `open-buffer`'s `:select true` moves to a buffer it opens beside.

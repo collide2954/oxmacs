@@ -4,11 +4,15 @@
           (irc format :as format)
           (irc client :as client)
           (irc logs :as logs)
-          (vault store :as vault)))
+          (vault store :as vault)
+          (customize form :as form)
+          (customize written :as written)))
 
 (def nicks-buffer "*irc nicks*")
 (def search-buffer "*irc search*")
 (def reactions ["👍" "❤️" "😂" "🎉" "👀" "🙏" "✅"])
+(def slash-commands ["join" "part" "me" "msg" "query" "notice" "nick" "quit" "reconnect" "topic" "whois" "names"
+                     "list" "away" "back" "invite" "kick" "quote" "clear" "noise" "help"])
 
 (defonce completing (atom nil))
 (defonce found (atom []))
@@ -46,16 +50,24 @@
                  (switch-to-buffer (client/server-buffer first-one.name))
                  (connect-all!))))))
 
-(def (form-of config)
-  (str "{{name: " (pr-str config.name)
-       " host: " (pr-str config.host)
-       " port: " config.port
-       " tls: " config.tls
-       " nick: " (pr-str config.nick)
-       (if config.login (str " login: " (pr-str config.login)) "")
-       " channels: [" (string/join " " (map pr-str config.channels)) "]}"))
+(def (networks-entry? entry)
+  (and (= entry.plugin "irc") (= entry.key :networks)))
 
-(defcommand irc-setup "Add an IRC network to init.ox"
+(def (save-networks! all)
+  (configure-plugin 'irc {networks: all})
+  (let [file (path/join (oxmacs-home) "custom.ox")
+        found (form/entries (settings-schema) (settings) (saved-settings) (custom-settings) (plugin-settings))
+        unsaved (some (fn [entry] (and entry.changed (not (networks-entry? entry)))) found)
+        mine (find networks-entry? found)
+        overridden (not= mine.saved mine.custom)
+        entries (map (fn [entry] (assoc entry :changed (networks-entry? entry))) found)]
+    (await (file/make-dir (path/parent file)))
+    (await (file/write file (written/text entries)))
+    (unless (or unsaved overridden)
+      (reload-init))
+    overridden))
+
+(defcommand irc-setup "Add an IRC network to your settings"
   (quietly (fn []
              (let [name (string/trim (await (prompt "Network name: " :initial "Libera")))
                    host (string/trim (await (prompt "Server: " :initial "irc.libera.chat")))
@@ -72,17 +84,17 @@
                                (vault/add! {title: title username: account password: password url: (str "ircs://" host) totp: "" notes: ""}))
                              title))
                    channels (vec (string/words (await (prompt "Channels to join: " :initial "#oxmacs"))))
-                   config {name: name host: host port: port tls: tls nick: nick login: login channels: channels}
-                   others (vec (remove (fn [known] (= known.name name)) (networks)))
-                   all (conj others config)
-                   init (path/join (oxmacs-home) "init.ox")
-                   old (if (await (file/exists? init)) (await (file/read init)) "")
-                   form (str "(use-plugin irc :config {{networks: [" (string/join "\n                                     " (map form-of all)) "]})\n")]
+                   config (merge {name: name host: host port: port tls: tls nick: nick}
+                                 (if login {login: login} {})
+                                 {channels: channels})
+                   others (vec (remove (fn [known] (= known.name name)) (networks)))]
                (when (string/blank? nick)
                  (raise (error "A network needs a nick")))
-               (await (file/write init (str old (if (or (= old "") (string/ends-with? old "\n")) "" "\n") form)))
-               (configure-plugin 'irc {networks: all})
-               (message (str "Added " name " to init.ox"))
+               (when (nil? (oxmacs-home))
+                 (raise (error "There is no oxmacs home folder to save the network in")))
+               (message (if (save-networks! (conj others config))
+                          (str "Saved " name " in custom.ox, but init.ox sets the IRC networks too and wins; move them out of init.ox")
+                          (str "Saved " name " in custom.ox")))
                (when (await (yes-or-no (str "Connect to " name " now? ")))
                  (client/connect! config :show true))))))
 
@@ -120,8 +132,13 @@
       ((= command "notice") (client/send-command! name "NOTICE" [word more]))
       ((= command "nick") (client/send-command! name "NICK" [word]))
       ((= command "quit") (client/quit! name (when (not= rest "") rest)))
+      ((= command "reconnect") (client/reconnect! name))
+      ((= command "list") (client/list! name rest))
       ((= command "topic") (client/send-command! name "TOPIC" (if (= rest "") [here-target] [here-target rest])))
-      ((= command "whois") (client/send-command! name "WHOIS" [word]))
+      ((= command "whois") (let [nick (if (and (= word "") (= entry.kind :query)) entry.target word)]
+                             (if (= nick "")
+                               (message "Whom? /whois takes a nick")
+                               (client/whois! buffer nick))))
       ((= command "names") (client/info! buffer (str (count (client/channel-nicks name here-target)) " people: "
                                                      (string/join " " (sort (map (fn [person] (str person.prefix person.nick))
                                                                                  (client/channel-nicks name here-target)))))))
@@ -132,7 +149,7 @@
       ((or (= command "quote") (= command "raw")) (client/send! name rest))
       ((= command "clear") (client/clear-buffer! buffer))
       ((= command "noise") (run-command 'irc-toggle-noise))
-      ((= command "help") (client/info! buffer "/join /part /me /msg /query /notice /nick /quit /topic /whois /names /away /back /invite /kick /quote /clear /noise"))
+      ((= command "help") (client/info! buffer (string/join " " (map (fn [known] (str "/" known)) slash-commands))))
       (else (client/send! name (string/trim (str (string/upper command) " " rest)))))))
 
 (defcommand irc-return "Send the input, or open the link at point"
@@ -145,6 +162,8 @@
                  (let [entry (here-or-complain)
                        text (take-input)]
                    (cond ((string/blank? text) nil)
+                     ((contains? (set ["/quit" "/reconnect"]) (string/lower (first (string/words text))))
+                      (run-slash! buffer text))
                      ((not (client/connected? entry.network))
                       (message (str "Not connected to " entry.network "; M-x irc connects")))
                      ((and (string/starts-with? text "/") (not (string/starts-with? text "//")))
@@ -167,7 +186,18 @@
                                  (not (protocol/same-nick? nick (client/my-nick entry.network)))))
                  ordered))))
 
-(defcommand irc-complete "Complete the nick before point; again for the next one"
+(def (completions entry start prefix)
+  (cond ((and (= start 0) (string/starts-with? prefix "/"))
+         {found: (vec (filter (fn [command] (string/starts-with? command (string/lower prefix)))
+                              (map (fn [command] (str "/" command)) slash-commands)))
+          suffix: " " kind: "command"})
+    ((string/starts-with? prefix "#")
+     {found: (vec (filter (fn [channel] (string/starts-with? (protocol/casefold channel) (protocol/casefold prefix)))
+                          (client/joined-channels entry.network)))
+      suffix: " " kind: "channel"})
+    (else {found: (candidates entry prefix) suffix: (if (= start 0) ": " " ") kind: "nick"})))
+
+(defcommand irc-complete "Complete the nick, channel or command before point; again for the next one"
   (let [entry (here)
         text (input-text)
         at (input-point)]
@@ -176,16 +206,17 @@
             again (and last-one (= last-one.text text) (= last-one.at at) (= last-one.buffer (buffer-name)))
             start (if again last-one.start (word-start text at))
             prefix (if again last-one.prefix (string/slice text start at))
-            found (if again last-one.found (candidates entry prefix))
+            offered (if again last-one.offered (completions entry start prefix))
+            found offered.found
             index (if again (mod (inc last-one.index) (max 1 (count found))) 0)]
         (if (empty? found)
-          (message (str "No nick starts with " prefix))
-          (let [nick (nth found index)
-                suffix (if (= start 0) ": " " ")
-                fresh (str (string/slice text 0 start) nick suffix (string/slice text at))
-                point (+ start (count nick) (count suffix))]
+          (message (str "No " offered.kind " starts with " prefix))
+          (let [chosen (nth found index)
+                suffix offered.suffix
+                fresh (str (string/slice text 0 start) chosen suffix (string/slice text at))
+                point (+ start (count chosen) (count suffix))]
             (set-input (buffer-name) fresh :point point)
-            (reset! completing {buffer: (buffer-name) text: fresh at: point start: start prefix: prefix found: found index: index})))))))
+            (reset! completing {buffer: (buffer-name) text: fresh at: point start: start prefix: prefix offered: offered index: index})))))))
 
 (def (nick-lines entry)
   (let [people (client/channel-nicks entry.network entry.target)
@@ -250,7 +281,8 @@
 (defcommand irc-join "Join a channel on this network"
   (quietly (fn []
              (let [entry (here-or-complain)
-                   channel (string/trim (await (prompt "Join: " :initial "#")))]
+                   invited (get (client/network entry.network) :invited)
+                   channel (string/trim (await (prompt "Join: " :initial (or invited "#"))))]
                (client/join! entry.network channel)))))
 
 (defcommand irc-part "Leave this channel"
@@ -259,6 +291,28 @@
                (if (= entry.kind :channel)
                  (client/part! entry.network entry.target nil)
                  (message "This isn't a channel"))))))
+
+(def (listed-or-complain)
+  (or (client/listing (buffer-name)) (raise (error "This isn't a channel list"))))
+
+(defcommand irc-list "List the channels on this network, or again in a channel list"
+  (quietly (fn []
+             (let [listed (client/listing (buffer-name))]
+               (client/list! (if listed listed.network (get (here-or-complain) :network)) "")))))
+
+(defcommand irc-list-join "Join the channel on this line of the channel list"
+  (quietly (fn []
+             (let [listed (listed-or-complain)]
+               (if-let [channel (get listed.shown (- (current-line) 3))]
+                 (client/join! listed.network channel.name)
+                 (message "No channel on this line"))))))
+
+(defcommand irc-list-filter "Show only the channels whose name or topic has some text; empty shows them all"
+  (quietly (fn []
+             (let [buffer (buffer-name)
+                   listed (listed-or-complain)
+                   wanted (string/trim (await (prompt "Channels with: " :initial (or listed.filter ""))))]
+               (client/filter-list! buffer wanted)))))
 
 (defcommand irc-switch "Go to an IRC buffer"
   (quietly (fn []
