@@ -559,6 +559,27 @@ fn monitored_nicks_say_when_they_come_and_go() {
 }
 
 #[test]
+fn private_chats_follow_nick_changes() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    fake.say(":dee!d@host PRIVMSG ana :psst");
+    wait_for_text(&mut editor, &mut ox, "dee", "psst");
+
+    fake.say(":dee!d@host NICK dee2");
+    wait_for_text(&mut editor, &mut ox, "dee", "dee is now dee2");
+    fake.say(":dee2!d@host PRIVMSG ana :still me");
+    wait_for_text(&mut editor, &mut ox, "dee", "still me");
+    assert!(editor.buffer_named("dee2").is_none());
+
+    run(&mut editor, &mut ox, "irc-switch");
+    type_in(&mut editor, &mut ox, "dee");
+    keys(&mut editor, &mut ox, "RET");
+    assert!(editor.buffer().contents().ends_with("dee2> "));
+    type_in(&mut editor, &mut ox, "hi");
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(&mut editor, &mut ox, "PRIVMSG dee2 hi");
+}
+
+#[test]
 fn joins_and_parts_of_quiet_people_stay_hidden_until_asked_for() {
     let (fake, _home, mut editor, mut ox) = joined();
     fake.say(":bo!b@host PRIVMSG #oxmacs :I talk");

@@ -368,7 +368,13 @@
               (add-name! name channel fresh (or (get known :prefix) ""))
               (when-let [buffer (buffer-of name channel)]
                 (event! buffer line :nick (str old " is now " fresh)))))
-          (channels-with name old))))
+          (channels-with name old))
+    (when-let [buffer (buffer-of name old)]
+      (when (= (get (buffer-entry buffer) :kind) :query)
+        (swap! state assoc-in [:buffers buffer :target] fresh)
+        (open-buffer buffer [] :input (prompt-of (buffer-entry buffer)) :show false)
+        (render! buffer)
+        (event! buffer line :nick (str old " is now " fresh))))))
 
 (def (reply-ctcp! name nick [command argument])
   (cond ((= command "VERSION") (send-command! name "NOTICE" [nick "\u{1}VERSION oxmacs\u{1}"]))
