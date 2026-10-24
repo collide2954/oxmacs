@@ -3728,6 +3728,7 @@ version = "0.13.0"
 dependencies = [
  "dirs",
  "iced",
+ "iced_runtime",
  "iced_test",
  "jiff",
  "native-theme",

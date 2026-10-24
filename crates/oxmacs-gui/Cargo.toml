@@ -27,6 +27,7 @@ native-theme = { workspace = true, features = ["windows"] }
 native-theme = { workspace = true, features = ["macos"] }
 
 [dev-dependencies]
+iced_runtime.workspace = true
 iced_test.workspace = true
 serde_json.workspace = true
 skrifa.workspace = true

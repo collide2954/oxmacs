@@ -1,17 +1,67 @@
+use std::cell::{Cell, RefCell};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::task::{Context, Poll};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use iced::Size;
+use iced::futures::stream::BoxStream;
 use iced::keyboard::key::{Code, Named, Physical};
 use iced::keyboard::{self, Key, Location, Modifiers};
+use iced::{Size, Task};
+use iced_runtime::Action;
 use iced_test::Simulator;
 use oxmacs_gui::app::{App, Message};
 use oxmacs_gui::fonts;
 use oxmacs_ox::views::{Node, ViewBuffer};
+
+thread_local! {
+    static PUMPING: Cell<bool> = const { Cell::new(false) };
+    static STREAMS: RefCell<Vec<BoxStream<'static, Action<Message>>>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+fn track(task: Task<Message>) {
+    if PUMPING.get()
+        && let Some(stream) = iced_runtime::task::into_stream(task)
+    {
+        STREAMS.with_borrow_mut(|streams| streams.push(stream));
+    }
+}
+
+fn pump(app: &mut App) {
+    if !PUMPING.get() {
+        return;
+    }
+    let waker = iced::futures::task::noop_waker();
+    let mut context = Context::from_waker(&waker);
+    loop {
+        let mut arrived = Vec::new();
+        let mut kept = Vec::new();
+        for mut stream in STREAMS.take() {
+            loop {
+                match stream.as_mut().poll_next(&mut context) {
+                    Poll::Ready(Some(Action::Output(message))) => arrived.push(message),
+                    Poll::Ready(Some(_)) => {}
+                    Poll::Ready(None) => break,
+                    Poll::Pending => {
+                        kept.push(stream);
+                        break;
+                    }
+                }
+            }
+        }
+        STREAMS.with_borrow_mut(|streams| streams.extend(kept));
+        if arrived.is_empty() {
+            return;
+        }
+        for message in arrived {
+            track(app.update(message));
+        }
+    }
+}
 
 const SIZE: Size = Size::new(640.0, 640.0);
 
@@ -72,6 +122,8 @@ struct Film {
     frames: Vec<(String, f64)>,
     seed: u64,
     size: Size,
+    uploads: usize,
+    output: Option<(u32, u32)>,
 }
 
 impl Film {
@@ -83,6 +135,8 @@ impl Film {
             frames: Vec::new(),
             seed: 7,
             size: SIZE,
+            uploads: 0,
+            output: None,
         }
     }
 
@@ -90,13 +144,27 @@ impl Film {
         Self { size, ..self }
     }
 
+    fn warmed(self, uploads: usize) -> Self {
+        Self { uploads, ..self }
+    }
+
+    fn scaled_to(self, width: u32, height: u32) -> Self {
+        Self {
+            output: Some((width, height)),
+            ..self
+        }
+    }
+
     fn shot(&mut self, app: &mut App, seconds: f64) {
         let mut ui = Simulator::with_size(settings(), self.size, app.view());
+        for _ in 0..self.uploads {
+            let _ = ui.snapshot(&app.theme());
+        }
         let snapshot = ui.snapshot(&app.theme()).unwrap();
         let stem = format!("frame-{:05}", self.frames.len());
         snapshot.matches_image(self.folder.join(&stem)).unwrap();
         for message in ui.into_messages() {
-            let _ = app.update(message);
+            track(app.update(message));
         }
         self.frames.push((stem, seconds));
     }
@@ -190,6 +258,12 @@ impl Film {
         let _ = writeln!(list, "file '{closing}'");
         let listed = self.folder.join("frames.txt");
         fs::write(&listed, list).unwrap();
+        let filters = match self.output {
+            Some((width, height)) => {
+                format!("fps=30,scale={width}:{height}:flags=lanczos,format=yuv420p")
+            }
+            None => "fps=30,format=yuv420p".to_owned(),
+        };
         let status = Command::new("ffmpeg")
             .args([
                 "-y",
@@ -202,9 +276,9 @@ impl Film {
                 "-i",
             ])
             .arg(&listed)
+            .arg("-vf")
+            .arg(&filters)
             .args([
-                "-vf",
-                "fps=30,format=yuv420p",
                 "-c:v",
                 "libx264",
                 "-preset",
@@ -222,7 +296,7 @@ impl Film {
 }
 
 fn key(app: &mut App, key: Key, text: Option<&str>, modifiers: Modifiers) {
-    let _ = app.update(Message::Keyboard(keyboard::Event::KeyPressed {
+    track(app.update(Message::Keyboard(keyboard::Event::KeyPressed {
         key: key.clone(),
         modified_key: key,
         physical_key: Physical::Code(Code::KeyA),
@@ -230,7 +304,7 @@ fn key(app: &mut App, key: Key, text: Option<&str>, modifiers: Modifiers) {
         modifiers,
         text: text.map(Into::into),
         repeat: false,
-    }));
+    })));
 }
 
 fn keys(app: &mut App, chord: &str) {
@@ -277,13 +351,15 @@ fn type_char(app: &mut App, c: char) {
 
 fn settle(app: &mut App) {
     for _ in 0..3 {
-        let _ = app.update(Message::OxTick);
+        track(app.update(Message::OxTick));
+        pump(app);
     }
 }
 
 fn wait(app: &mut App, what: &str, done: impl Fn(&App) -> bool) {
     for _ in 0..3000 {
-        let _ = app.update(Message::OxTick);
+        track(app.update(Message::OxTick));
+        pump(app);
         if done(app) {
             return;
         }
@@ -805,7 +881,7 @@ fn show_matrix(film: &mut Film, app: &mut App) {
     film.type_slowly(app, "matrix");
     film.press(app, "RET");
     settle(app);
-    let start = iced::time::Instant::now();
+    let start = Instant::now();
     for frame in 0..150u32 {
         let _ = app.update(Message::Tick(
             start + Duration::from_millis(u64::from(frame) * 66),
@@ -814,4 +890,374 @@ fn show_matrix(film: &mut Film, app: &mut App) {
     }
     film.press(app, "q");
     film.hold(1.5);
+}
+
+const CARS: &str = "# Fuel economy in the 1974 Motor Trend road tests
+cars <- mtcars
+cars$cyl <- factor(cars$cyl)
+
+fit <- lm(mpg ~ wt, data = cars)
+summary(fit)
+
+plot(mpg ~ wt, data = cars, pch = 19, col = \"steelblue\")
+abline(fit, col = \"tomato\", lwd = 2)
+hist(cars$mpg, col = \"grey80\", main = \"Miles per gallon\")
+boxplot(mpg ~ cyl, data = cars, col = \"wheat\")
+";
+
+const DESCRIPTION: &str = "Package: tinystats
+Title: Small Summaries
+Version: 0.1.0
+Authors@R: person(\"Ada\", \"Lovelace\", email = \"ada@example.com\", role = c(\"aut\", \"cre\"))
+Description: A few small summary statistics.
+License: MIT
+Encoding: UTF-8
+Suggests: testthat (>= 3.0.0)
+Config/testthat/edition: 3
+";
+
+const STATS: &str = "#' Coefficient of variation
+cv <- function(x) sd(x) / mean(x)
+
+#' Range as a single number
+spread <- function(x) max(x) - min(x)
+";
+
+const TESTS: &str = "test_that(\"cv divides the deviation by the mean\", {
+  expect_equal(cv(c(2, 4, 6)), 0.5)
+})
+
+test_that(\"spread is max minus min\", {
+  expect_equal(spread(c(3, 9, 4)), 6)
+})
+
+test_that(\"spread ignores missing values\", {
+  expect_equal(spread(c(3, NA, 9)), 6)
+})
+";
+
+fn r_home() -> PathBuf {
+    let user = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap();
+    let home = user.join("oxmacs-r-demo");
+    if home.join(".oxmacs-demo").exists() {
+        fs::remove_dir_all(&home).unwrap();
+    }
+    assert!(
+        !home.exists(),
+        "{} exists and wasn't made by this demo",
+        home.display()
+    );
+    let package = home.join("tinystats");
+    fs::create_dir_all(home.join("analysis")).unwrap();
+    fs::create_dir_all(package.join("R")).unwrap();
+    fs::create_dir_all(package.join("tests").join("testthat")).unwrap();
+    fs::write(home.join(".oxmacs-demo"), "").unwrap();
+    fs::write(
+        home.join("init.ox"),
+        "(settings {theme: :adwaita-dark animations: false font-size: 12})\n(use-plugin r :config {language-server: false})\n",
+    )
+    .unwrap();
+    fs::write(home.join("analysis").join("cars.R"), CARS).unwrap();
+    fs::write(package.join("DESCRIPTION"), DESCRIPTION).unwrap();
+    fs::write(package.join("R").join("stats.R"), STATS).unwrap();
+    fs::write(
+        package.join("tests").join("testthat").join("test-stats.R"),
+        TESTS,
+    )
+    .unwrap();
+    home
+}
+
+fn text_of(app: &App, name: &str) -> String {
+    let editor = app.editor();
+    editor
+        .buffer_named(name)
+        .and_then(|id| editor.buffer_by_id(id))
+        .map(oxmacs_core::text::Buffer::contents)
+        .unwrap_or_default()
+}
+
+fn prompted(app: &App, console: &str) -> bool {
+    text_of(app, console).trim_end_matches(' ').ends_with('>')
+}
+
+fn until(app: &mut App, what: &str, done: impl Fn(&App) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        track(app.update(Message::OxTick));
+        pump(app);
+        if done(app) {
+            settle(app);
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for {what}: {:?} in {}",
+            app.editor().message(),
+            app.editor().buffer().name()
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn rest(app: &mut App, seconds: f64) {
+    thread::sleep(Duration::from_secs_f64(seconds));
+    track(app.update(Message::Idle));
+    settle(app);
+}
+
+fn select(film: &mut Film, app: &mut App, wanted: impl Fn(&str) -> bool) {
+    for _ in 0..8 {
+        if wanted(app.editor().buffer().name()) {
+            return;
+        }
+        film.press(app, "C-x o");
+    }
+    panic!("no window shows the buffer wanted");
+}
+
+fn command(film: &mut Film, app: &mut App, name: &str) {
+    film.press(app, "M-x");
+    film.type_slowly(app, name);
+    film.press(app, "RET");
+}
+
+fn step(film: &mut Film, app: &mut App, console: &str, hold: f64) {
+    film.press(app, "C-RET");
+    until(app, "R's prompt", |app| prompted(app, console));
+    film.shot(app, hold);
+}
+
+fn open_cars(film: &mut Film, app: &mut App) {
+    film.mark("open");
+    film.press(app, "C-x C-f");
+    film.type_slowly(app, "~/oxmacs-r-demo/analysis/cars.R");
+    film.press(app, "RET");
+    film.hold(1.2);
+    command(film, app, "r-layout");
+    until(app, "the R console", |app| prompted(app, "*R:analysis*"));
+    film.shot(app, 2.6);
+    film.press(app, "C-n");
+}
+
+fn images(node: &Node) -> usize {
+    match node {
+        Node::Image { .. } => 1,
+        Node::Column { children, .. } | Node::Row { children, .. } => {
+            children.iter().map(images).sum()
+        }
+        Node::Scrollable(child) => images(child),
+        _ => 0,
+    }
+}
+
+fn plot_images(app: &App) -> usize {
+    let editor = app.editor();
+    editor
+        .buffer_names()
+        .iter()
+        .filter(|name| name.contains("plots"))
+        .filter_map(|name| editor.buffer_named(name))
+        .filter_map(|id| editor.plugin_buffer::<ViewBuffer>(id))
+        .map(|(_, view)| images(&view.node))
+        .sum()
+}
+
+fn plotted(app: &App) -> bool {
+    plot_images(app) > 0
+}
+
+fn run_cars(film: &mut Film, app: &mut App) {
+    film.mark("run");
+    let console = "*R:analysis*";
+    step(film, app, console, 0.6);
+    step(film, app, console, 0.6);
+    step(film, app, console, 0.6);
+    step(film, app, console, 3.6);
+    film.mark("plots");
+    for hold in [2.2, 2.2, 2.2, 2.8] {
+        step(film, app, console, 0.2);
+        until(app, "the plot", plotted);
+        rest(app, 0.3);
+        film.shot(app, hold);
+    }
+}
+
+fn browse_plots(film: &mut Film, app: &mut App) {
+    film.mark("gallery");
+    select(film, app, |name| name.contains("plots"));
+    film.hold(0.6);
+    for key in ["p", "p", "p"] {
+        film.press(app, key);
+        rest(app, 0.4);
+        film.shot(app, 1.0);
+    }
+    film.press(app, "v");
+    until(app, "the gallery", |app| plot_images(app) >= 3);
+    rest(app, 0.3);
+    film.shot(app, 3.2);
+    film.press(app, "v");
+    rest(app, 0.5);
+    film.shot(app, 0.6);
+}
+
+fn to_column(app: &mut App, name: &str) {
+    let wanted = format!(" {name}");
+    let column = app
+        .editor()
+        .pane()
+        .header_lines()
+        .iter()
+        .find(|(text, _)| text.split_whitespace().next() == Some(name))
+        .and_then(|(text, _)| text.find(&wanted).map(|at| at + 1))
+        .expect("the column");
+    keys(app, "M-<");
+    for _ in 0..=column {
+        keys(app, "C-f");
+    }
+    settle(app);
+}
+
+fn explore_cars(film: &mut Film, app: &mut App) {
+    film.mark("data");
+    select(film, app, |name| name.contains("environment"));
+    film.hold(1.0);
+    film.press(app, "C-s");
+    film.type_slowly(app, "cars");
+    film.press(app, "RET");
+    film.press(app, "RET");
+    until(app, "the table of cars", |app| {
+        app.editor().buffer().name().contains("cars") && app.editor().buffer().len_lines() > 5
+    });
+    film.shot(app, 2.2);
+    to_column(app, "mpg");
+    film.shot(app, 0.6);
+    film.press(app, "s");
+    rest(app, 0.6);
+    film.shot(app, 1.4);
+    to_column(app, "mpg");
+    film.press(app, "s");
+    rest(app, 0.6);
+    film.shot(app, 2.0);
+    to_column(app, "mpg");
+    film.press(app, "i");
+    rest(app, 0.8);
+    film.shot(app, 2.2);
+    film.press(app, "/");
+    film.type_slowly(app, "cyl == 4");
+    film.press(app, "RET");
+    rest(app, 0.8);
+    film.shot(app, 2.4);
+}
+
+fn complete_and_ask(film: &mut Film, app: &mut App) {
+    film.mark("smarts");
+    select(film, app, |name| name == "cars.R");
+    film.press(app, "M->");
+    film.type_slowly(app, "med");
+    rest(app, 0.4);
+    until(app, "completions", |app| {
+        app.editor().pane().popup().is_some()
+    });
+    film.shot(app, 1.6);
+    film.press(app, "RET");
+    film.type_slowly(app, "(");
+    rest(app, 0.6);
+    until(app, "the arguments of median", |app| {
+        app.editor()
+            .message()
+            .is_some_and(|shown| shown.starts_with("median("))
+    });
+    film.shot(app, 1.8);
+    film.type_slowly(app, "cars$mpg)");
+    if app.editor().pane().popup().is_some() {
+        film.press(app, "C-g");
+    }
+    film.press(app, "C-RET");
+    until(app, "R's prompt", |app| prompted(app, "*R:analysis*"));
+    film.shot(app, 1.6);
+    film.mark("help");
+    film.press(app, "C-c C-v");
+    film.type_slowly(app, "median");
+    film.press(app, "RET");
+    until(app, "R's help", |app| {
+        app.editor().buffer().name() == "*R help*"
+    });
+    film.shot(app, 3.2);
+    film.press(app, "TAB");
+    film.hold(0.8);
+    film.press(app, "RET");
+    until(app, "the linked help", |app| {
+        !text_of(app, "*R help*").starts_with("median")
+    });
+    film.shot(app, 2.0);
+    film.press(app, "l");
+    rest(app, 0.4);
+    film.shot(app, 1.2);
+}
+
+fn test_package(film: &mut Film, app: &mut App) {
+    film.mark("package");
+    film.press(app, "C-x 1");
+    film.press(app, "C-x C-f");
+    film.type_slowly(app, "~/oxmacs-r-demo/tinystats/tests/testthat/test-stats.R");
+    film.press(app, "RET");
+    film.hold(1.0);
+    film.press(app, "C-x 3");
+    film.press(app, "C-x C-f");
+    film.type_slowly(app, "~/oxmacs-r-demo/tinystats/R/stats.R");
+    film.press(app, "RET");
+    film.hold(1.2);
+    command(film, app, "r-test");
+    until(app, "the test results", |app| {
+        app.editor().buffer().name() == "*R tests*" && text_of(app, "*R tests*").contains("missing")
+    });
+    film.shot(app, 4.0);
+    film.mark("fix");
+    select(film, app, |name| name == "stats.R");
+    for call in ["max(x", "min(x"] {
+        film.press(app, "M-< C-s");
+        film.type_slowly(app, call);
+        film.press(app, "RET");
+        film.type_slowly(app, ", na.rm = TRUE");
+    }
+    film.press(app, "C-x C-s");
+    film.hold(0.8);
+    command(film, app, "r-test");
+    until(app, "the tests passing", |app| {
+        !text_of(app, "*R tests*").contains('\u{2717}')
+            && text_of(app, "*R tests*").contains("missing")
+    });
+    film.shot(app, 4.0);
+}
+
+#[test]
+#[ignore = "renders a 16:9 video of the r plugin into $OXMACS_R_VIDEO"]
+fn r_video() {
+    let Ok(out) = std::env::var("OXMACS_R_VIDEO") else {
+        return;
+    };
+    let out = PathBuf::from(out);
+    let home = r_home();
+    PUMPING.set(true);
+    let mut film = Film::new(out.with_extension("frames"))
+        .sized(Size::new(1280.0, 720.0))
+        .warmed(5)
+        .scaled_to(1280, 720);
+    let (mut app, booted) = App::boot(&[], Some(&home));
+    track(booted);
+    track(app.update(Message::Focus(true)));
+    settle(&mut app);
+    film.shot(&mut app, 1.5);
+    open_cars(&mut film, &mut app);
+    run_cars(&mut film, &mut app);
+    browse_plots(&mut film, &mut app);
+    explore_cars(&mut film, &mut app);
+    complete_and_ask(&mut film, &mut app);
+    test_package(&mut film, &mut app);
+    film.hold(2.5);
+    film.finish(&out);
 }
