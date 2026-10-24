@@ -1,7 +1,9 @@
 (module
   (import (ox string)
           (r session :as session)
-          (r help :as help)))
+          (r help :as help)
+          (r plots :as plots)
+          (r data :as data)))
 
 (def help-buffer "*R help*")
 
@@ -10,7 +12,8 @@
    "M-p" 'comint-previous-input
    "M-n" 'comint-next-input
    "C-c C-z" 'r-switch-to-console
-   "C-c C-v" 'r-help})
+   "C-c C-v" 'r-help
+   "C-c C-e" 'r-environment})
 
 (def help-keys {"SPC" 'scroll-up-command "DEL" 'scroll-down-command "q" 'quit-window})
 
@@ -19,6 +22,13 @@
 
 (session/on-marker "message" (fn [_ payload] (message payload)))
 (session/on-marker "help" show-help)
+(session/on-marker "plot" plots/arrived)
+(session/on-marker "gallery" plots/thumbnails)
+(session/on-marker "zoom" plots/zoomed)
+(session/on-marker "environment" data/listed)
+(session/on-marker "table" data/tabled)
+(session/on-marker "object" data/described)
+(session/on-ready :environment data/environment-due)
 
 (def (insert-operator operator)
   (let [at (point)

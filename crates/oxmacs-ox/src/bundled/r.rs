@@ -7,13 +7,16 @@ use oxmacs_core::text::Buffer;
 use crate::Ox;
 use crate::testing::{home_with, press, settle};
 
+mod data;
 mod help;
 mod keys;
+mod plots;
 mod sessions;
 
 pub(super) const PROMPT: &str = "\u{1}>\u{2}\u{3}";
 pub(super) const CONTINUE: &str = "\u{1}+\u{2}\u{3}";
 pub(super) const CONSOLE: &str = "*R:analysis*";
+pub(super) const PLOTS: &str = "*R:analysis plots*";
 
 pub(super) struct R {
     pub home: tempfile::TempDir,
@@ -40,6 +43,14 @@ impl R {
             Ok(shown) => shown,
             Err(error) => format!("error: {}", error.message),
         }
+    }
+
+    pub fn logged(&self) -> String {
+        self.editor
+            .buffer_named(crate::log::LOG)
+            .and_then(|id| self.editor.buffer_by_id(id))
+            .map(Buffer::contents)
+            .unwrap_or_default()
     }
 
     pub fn program(&self) -> PathBuf {
