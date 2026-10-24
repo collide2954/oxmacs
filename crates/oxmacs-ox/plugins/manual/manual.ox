@@ -2,12 +2,13 @@
   (import (ox string)
           (markdown render :as md)
           (manual start) (manual language) (manual data) (manual flow)
-          (manual tasks) (manual editor) (manual plugins) (manual tools)
-          (manual tutorial)))
+          (manual modules) (manual tasks) (manual editor) (manual ui)
+          (manual plugins) (manual tools) (manual tutorial)))
 
 (def buffer "*Ox manual*")
 
-(def guide [start/page language/page data/page flow/page tasks/page editor/page plugins/page tools/page])
+(def guide
+  [start/page language/page data/page flow/page modules/page tasks/page editor/page ui/page plugins/page tools/page])
 
 (defonce state (atom {page: "top" shown: nil back: [] ahead: [] reference: nil}))
 

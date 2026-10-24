@@ -1,9 +1,11 @@
 use std::fs;
 
 use oxmacs_core::editor::Editor;
+use oxmacs_core::text::Buffer;
 use oxmacs_core::theme::Highlight;
 
 use crate::Ox;
+use crate::log::LOG;
 use crate::testing::{home_with, press, settle, typed};
 use crate::tools::REPL;
 
@@ -59,6 +61,14 @@ fn c_h_i_opens_the_contents_and_links_lead_through_the_guide() {
     assert_eq!(shown[0], "The Ox manual");
     assert_eq!(editor.line_style(0).spans, [(0..13, Highlight::Heading)]);
     assert!(shown.contains(&"  • The language".to_owned()), "{shown:#?}");
+    assert!(
+        shown.contains(&"  • Modules and libraries".to_owned()),
+        "{shown:#?}"
+    );
+    assert!(
+        shown.contains(&"  • Buffers and views".to_owned()),
+        "{shown:#?}"
+    );
     assert!(shown.contains(&"  • Editor API".to_owned()), "{shown:#?}");
     assert!(shown.contains(&"  • ox/string".to_owned()), "{shown:#?}");
 
@@ -169,13 +179,19 @@ const GUIDE: &[(&str, &str)] = &[
     ("language", include_str!("../../plugins/manual/language.ox")),
     ("data", include_str!("../../plugins/manual/data.ox")),
     ("flow", include_str!("../../plugins/manual/flow.ox")),
+    ("modules", include_str!("../../plugins/manual/modules.ox")),
     ("tasks", include_str!("../../plugins/manual/tasks.ox")),
     ("editor", include_str!("../../plugins/manual/editor.ox")),
+    ("ui", include_str!("../../plugins/manual/ui.ox")),
     ("plugins", include_str!("../../plugins/manual/plugins.ox")),
     ("tools", include_str!("../../plugins/manual/tools.ox")),
 ];
 
 fn examples(page: &str) -> Vec<String> {
+    blocks(page, &["", "ox"])
+}
+
+fn blocks(page: &str, wanted: &[&str]) -> Vec<String> {
     let mut found = Vec::new();
     let mut fenced = false;
     let mut current: Option<Vec<&str>> = None;
@@ -187,7 +203,7 @@ fn examples(page: &str) -> Vec<String> {
             }
             Some(fence) => {
                 fenced = true;
-                current = (fence.is_empty() || fence == "ox").then(Vec::new);
+                current = wanted.contains(&fence).then(Vec::new);
             }
             None => {
                 if let Some(lines) = &mut current {
@@ -197,6 +213,14 @@ fn examples(page: &str) -> Vec<String> {
         }
     }
     found
+}
+
+fn logged(editor: &Editor) -> String {
+    editor
+        .buffer_named(LOG)
+        .and_then(|id| editor.buffer_by_id(id))
+        .map(Buffer::contents)
+        .unwrap_or_default()
 }
 
 #[test]
@@ -211,10 +235,92 @@ fn every_example_in_the_guide_runs() {
                 failures.push(format!("{page}: {source}\n  {}", error.message));
             }
             settle(&mut editor, &mut ox);
+            let log = logged(&editor);
+            if !log.is_empty() {
+                failures.push(format!("{page}: {source}\n  logged {log}"));
+                break;
+            }
         }
     }
     assert!(count > 30, "only {count} examples");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+fn links(page: &str) -> Vec<String> {
+    page.split("](")
+        .skip(1)
+        .filter_map(|rest| rest.split_once(')'))
+        .map(|(target, _)| target.to_owned())
+        .collect()
+}
+
+#[test]
+fn every_link_in_the_guide_leads_to_a_page() {
+    let (_home, mut editor, mut ox) = opened();
+    let mut broken = Vec::new();
+    let mut count = 0;
+    for (page, text) in GUIDE {
+        for target in links(text) {
+            count += 1;
+            if target == "tutorial" {
+                continue;
+            }
+            let check = format!(
+                r#"(module (import (manual)))
+                   (let [spot (manual/spot-of "{target}")
+                         found (manual/page-of spot.id (manual/reference))]
+                     (and (some? found)
+                          (or (nil? spot.anchor) (some? (find (fn [entry] (= entry.name spot.anchor)) found.entries)))))"#
+            );
+            match ox.eval(&mut editor, &check) {
+                Ok(shown) if shown == "true" => {}
+                Ok(shown) => broken.push(format!("{page}: {target} ({shown})")),
+                Err(error) => broken.push(format!("{page}: {target} ({})", error.message)),
+            }
+        }
+    }
+    assert!(count > 10, "only {count} links");
+    assert!(broken.is_empty(), "{}", broken.join("\n"));
+}
+
+#[test]
+fn the_plugins_the_guide_builds_work() {
+    let page = GUIDE
+        .iter()
+        .find(|(id, _)| *id == "plugins")
+        .map(|(_, text)| *text)
+        .unwrap();
+    let [manifest, entry, init, library]: [String; 4] = blocks(page, &["text"]).try_into().unwrap();
+    let init = format!("{init}\n(use-plugin strings)");
+    let home = home_with(&[
+        ("plugins/hello/plugin.ox", manifest.as_str()),
+        ("plugins/hello/hello.ox", entry.as_str()),
+        ("plugins/strings/plugin.ox", library.as_str()),
+        ("plugins/strings/strings.ox", ""),
+        (
+            "plugins/strings/case.ox",
+            "(def (shout text) (str text \"!\"))",
+        ),
+        ("init.ox", init.as_str()),
+    ]);
+    let mut editor = Editor::new();
+    let mut ox = Ox::new();
+    ox.start(&mut editor, Some(home.path()));
+    settle(&mut editor, &mut ox);
+
+    press(&mut editor, &mut ox, "M-x");
+    typed(&mut editor, &mut ox, "hello");
+    press(&mut editor, &mut ox, "RET");
+    assert_eq!(editor.message(), Some("Hello, Ana!"));
+
+    let shouted = ox
+        .eval(
+            &mut editor,
+            "(module (import (strings case))) (case/shout \"hi\")",
+        )
+        .unwrap();
+    assert_eq!(shouted, "\"hi!\"");
+    assert_eq!(logged(&editor), "");
 }
 
 #[test]

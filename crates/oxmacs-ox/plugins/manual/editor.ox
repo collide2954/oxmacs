@@ -5,11 +5,11 @@
    title: "Extending oxmacs"
    text: #r#"# Extending oxmacs
 
-Everything below works in `init.ox`, in a plugin, or straight from the REPL. The [Editor API](ref:oxmacs) lists every function.
+Everything below works in `init.ox`, in a plugin, or straight from the REPL. The [Editor API](ref:oxmacs) lists every function, and [Buffers and views](ui) covers what a plugin can show.
 
 ## Commands and keys
 
-`defcommand` adds an `M-x` command. A command runs as a task, so it can wait for a prompt or a download without holding up typing.
+`defcommand` adds an `M-x` command. A command runs as a task, so it can wait for a prompt or a download without holding up typing. Defining a command again replaces it.
 
 ```
 (defcommand say-hello "Say hello in the echo area"
@@ -17,11 +17,11 @@ Everything below works in `init.ox`, in a plugin, or straight from the REPL. The
 (bind-key "C-c h" 'say-hello)
 ```
 
-`run-command` runs any command by name, as `M-x` does.
+`bind-key` binds keys everywhere; modes and plugin buffers have keys of their own. `run-command` runs any command by name, as `M-x` does. An error a command doesn't catch shows in the echo area as `Ox: …` and is kept in `*ox log*`.
 
 ## Asking
 
-`prompt` asks in the minibuffer and returns a promise of the answer. `:choices` offers completion, and `yes-or-no` asks a question.
+`prompt` asks in the minibuffer and returns a promise of the answer. `:choices` offers completion, `:initial` fills in text and `:secret true` hides what is typed. `yes-or-no` asks a question.
 
 ```
 (defcommand greet "Greet someone"
@@ -30,7 +30,7 @@ Everything below works in `init.ox`, in a plugin, or straight from the REPL. The
       (message "Hello, {name}"))))
 ```
 
-`prompt-path` asks for a file or a folder, with completion.
+`prompt-path` asks for a file or a folder, with completion. `C-g` cancels a prompt by failing its promise, which ends the command unless it catches the error.
 
 ## The current buffer
 
@@ -38,49 +38,18 @@ Everything below works in `init.ox`, in a plugin, or straight from the REPL. The
 [(buffer-name) (current-line) (current-column)]
 ```
 
-`buffer-text` and `set-buffer-text` read and replace the text, `goto-line` moves point, `open-file` visits a file and `switch-to-buffer` shows a buffer.
-
-## Buffers of your own
-
-`open-buffer` shows lines in a read-only buffer with its own keys. A line is text, or a vector of pieces where `[text face]` colors a piece with a theme face such as `:heading`, `:link`, `:comment`, `:keyword`, `:string`, `:success` or `:error`.
-
-```
-(defcommand fruit-next "Move to the next fruit"
-  (goto-line (+ (current-line) 1)))
-(open-buffer "*fruit*"
-             [[["Fruit" :heading]]
-              ["  apple   " ["ripe" :success]]
-              ["  quince  " ["hard" :warning]]]
-             :keys {"n" 'fruit-next "q" 'quit-window})
-```
-
-`set-lines` redraws it and keeps point where it was. `:on-move` and `:on-resize` call back when point moves to another line or the window changes width, and `:input` adds an input line, as in a chat.
-
-## Views
-
-`open-view` draws widgets instead of text, and draws again whenever the atoms it reads change.
-
-```
-(def clicks (atom 0))
-(open-view "*clicks*"
-           (fn []
-             (ui/column
-              (ui/text "Clicked {@clicks} times" :face :heading)
-              (ui/button "Click" :on-press (fn [] (swap! clicks inc))))))
-```
-
-`ui/canvas` draws rectangles, circles, lines and text, for charts and games.
+Lines and columns count from 0. `buffer-text` and `set-buffer-text` read and replace the text, `line-text` reads one line, `region-lines` gives the first and last lines of the selection, and `goto-line` moves point. `open-file` visits a file, `buffer-file` gives the file a buffer visits and `switch-to-buffer` shows a buffer.
 
 ## Reacting
 
-Hooks run a function when something happens. Registering the same key again replaces the earlier function.
+Hooks call a function, as a task, when something happens. Registering the same key again replaces the earlier function.
 
 ```text
 (on-saved :log-saves (fn [path] (message "Saved {path}")))
 (on-idle :rest 300 (fn [] (message "Time for a break")))
 ```
 
-`on-disk-change`, `on-settings-change` and `on-open-directory` work the same way. `every` repeats work on a timer.
+`on-disk-change` and `on-settings-change` take a key and a function the same way, and `on-processes-change` follows the processes oxmacs runs, which `processes` lists. `(on-open-directory f)` makes `f` the way directories open, with no key; a plugin that does this declares `:opens-directories true`, as dired does. `every` repeats work on a timer.
 
 ## The mode line and notifications
 
@@ -89,9 +58,15 @@ Hooks run a function when something happens. Registering the same key again repl
 (set-mode-line :status nil)
 ```
 
-`notify` shows a desktop notification, and `clipboard-set` copies text without touching the kill ring.
+`notify` shows a desktop notification, and `clipboard-set` copies text without touching the kill ring, for secrets.
 
-## Settings and modes
+## Settings
 
-`(settings {theme: :adwaita-dark})` changes editor settings, and `(settings)` reads them all. `defmode` adds a major mode for files by extension or name, with its own keys and highlighting.
+`(settings {theme: :adwaita-dark})` changes editor settings at once, `nil` putting one back to its default, and `(settings)` reads them all as a map. `settings-schema` describes each one, as `M-x customize` lists them.
+
+```
+(get (settings) :tab-width)
+```
+
+Settings made this way last until oxmacs quits; keep them in `init.ox`. Plugins declare settings of their own, read with `setting`; see [Writing a plugin](plugins).
 "#})

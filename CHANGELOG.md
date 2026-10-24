@@ -7,6 +7,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 ### Fixed
 
 - Deleting `tutorial.txt` starts the tutorial over at the top, as the tutorial says, instead of opening the fresh copy where you left the old one.
+- The Ox manual no longer shows numbers Ox can't read (`1_000_000`, `0xff`), a view example that fails without `(import (ox ui))`, `file/read` expanding `~`, `on-open-directory` taking a key, records as maps or `ox test` running a whole plugin folder. Its examples are now tested to log no errors, its links to lead to a page, and the plugin it builds to work.
 - Ox code that runs too long no longer freezes the editor: views, highlighters and take-over frames stop after 250 ms, and init files, plugin loads and the REPL after 10 seconds, with an error in the log.
 - Ox no longer brings the editor down: printing an atom or promise that holds itself shows `#<atom ...>`, deeply nested values print and travel through channels and workers without overflowing the stack (values nested more than 256 levels deep are refused with an error), error messages show at most 200 characters of a value, a native that panics raises an error instead, and images are limited to 32,768 pixels a side and 134 megapixels.
 - Saving through a symlink writes the file it points to and keeps the link; a file with hard links, one another program holds open, or one in a folder that can't take new files is written in place; and on Unix saving keeps the owner. A file opened again through a symlink or in other letter case reuses its buffer.
@@ -70,6 +71,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- The Ox manual has new pages on modules and libraries, with plugins as Ox's standard library, and on buffers, views, drawing, modes and menus, and covers more on every other page: raw strings, characters and block comments, parameters, records with defaults, patterns, error fields and `defrules`, time limits, processes, generators and channels, plugin manifests and library plugins, and `ox check` options, testing, profiling and benchmarks.
 - Unsaved files get recovery copies in the oxmacs cache folder, never beside the files themselves, and opening a file whose copy is newer offers to recover it; saving, reverting or killing the buffer removes the copy. A crash writes a log there too.
 - `ui/image` shows an `ox/image` image in a plugin view, and `open-view` takes `:beside` and `:select` like `open-buffer`.
 - Plugins can list the processes oxmacs runs with `processes`, follow them with `on-processes-change`, end them with `stop-process` and `kill-process`, and sample their usage with `watch-process-usage`. `open-buffer`'s `:select true` moves to a buffer it opens beside.
