@@ -4,7 +4,6 @@
           (r help :as help))
   (export line find-definition answered))
 
-(def markers [".git" "DESCRIPTION"])
 (def skipped #{"renv" "node_modules" "packrat"})
 (def most-files 2000)
 (def deepest 8)
@@ -37,18 +36,6 @@
 (def (listing folder)
   (try (sort-by (fn [entry] entry.path) (await (file/list folder)))
        (catch error e [])))
-
-(def (marked? folder at)
-  (cond ((>= at (count markers)) false)
-        ((await (file/exists? (path/join folder (nth markers at)))) true)
-        (else (marked? folder (+ at 1)))))
-
-(def (root-of folder)
-  (when folder
-    (if (or (marked? folder 0)
-            (some (fn [entry] (= (path/extension entry.name) "Rproj")) (listing folder)))
-      folder
-      (root-of (path/parent folder)))))
 
 (def (r-file? name)
   (or (contains? #{"R" "r"} (path/extension name)) (= name ".Rprofile")))
@@ -92,7 +79,7 @@
     true))
 
 (def (in-project name origin)
-  (when-let [root (root-of (default-directory))]
+  (when-let [root (session/project-here)]
     (when-let [[path at] (first-definition (walk (listing root) 0 0 []) name 0)]
       (visit path at origin))))
 

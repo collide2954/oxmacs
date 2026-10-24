@@ -1,7 +1,7 @@
 (module
   (import (ox file) (ox path) (ox process) (ox string) (ox crypto) (ox json)
           (r helper :as helper))
-  (export label sessions known? current-session running? link! linked own! owner
+  (export label sessions known? current-session running? link! linked own! owner project-of project-here
           windows? arguments locate find-r launch ensure show-console evaluate request
           r-string helper-of on-marker on-ready use-keys!))
 
@@ -29,10 +29,42 @@
 
 (def (linked script) (get-in @state [:links script]))
 
+(def project-markers ["DESCRIPTION" "renv.lock" ".git"])
+
+(defonce projects (atom {}))
+
+(def (marked? folder at)
+  (cond ((>= at (count project-markers)) false)
+        ((await (file/exists? (path/join folder (nth project-markers at)))) true)
+        (else (marked? folder (+ at 1)))))
+
+(def (r-project? folder)
+  (some (fn [entry] (= (path/extension entry.name) "Rproj"))
+        (try (await (file/list folder)) (catch error e []))))
+
+(def (project-of folder)
+  "The folder of the R project holding folder: the nearest with a DESCRIPTION, renv.lock, .git or .Rproj file below the home folder, or nil."
+  (when (and folder (not= folder (path/home)))
+    (if (or (marked? folder 0) (r-project? folder))
+      folder
+      (project-of (path/parent folder)))))
+
+(def (project-here)
+  (let [folder (default-directory)]
+    (if (contains? @projects folder)
+      (get @projects folder)
+      (let [found (project-of folder)]
+        (swap! projects assoc folder found)
+        found))))
+
 (def (current-session)
   (let [here (buffer-name)
         own (if (known? here) here (or (owner here) (linked here)))]
-    (if (and own (known? own)) own (first (sessions)))))
+    (if (and own (known? own))
+      own
+      (let [project (project-here)
+            mine (find (fn [console] (= (get-in @state [:roots console]) project)) (sessions))]
+        (or mine (when (not project) (first (sessions))))))))
 
 (def (running? session) (and session (console-running? session)))
 
@@ -103,8 +135,8 @@
            home: (fn [] (process/env "R_HOME"))
            installs: installs}))
 
-(def (session-name)
-  (let [folder (or (path/name (default-directory)) "R")
+(def (session-name directory)
+  (let [folder (or (path/name directory) "R")
         named (fn [number] (if (= number 1) "*R:{folder}*" "*R:{folder}:{number}*"))]
     (named (find (fn [number] (not (buffer-exists? (named number))))
                  (range 1 (+ 2 (count (buffer-list))))))))
@@ -163,13 +195,17 @@
           original (process/env "R_PROFILE_USER")
           env (merge {R_PROFILE_USER: profile OXMACS_R_PLOTS: plots}
                      (if original {OXMACS_R_PROFILE_USER: original} {}))
-          name (if (and existing (known? existing)) existing (session-name))]
-      (console-start name :program program :args (arguments) :env env :label label :keys @keys
+          restarted (and existing (known? existing))
+          root (if restarted (get-in @state [:roots existing]) (project-here))
+          directory (or root (default-directory))
+          name (if restarted existing (session-name directory))]
+      (console-start name :program program :args (arguments) :directory directory :env env :label label :keys @keys
                      :on-output (fn [kind payload] (heard name kind payload))
                      :on-idle (fn [] (idle name))
                      :on-resize (fn [_] (fit name)))
       (swap! state (fn [old] (-> old
                                  (assoc-in [:helpers name] profile)
+                                 (assoc-in [:roots name] root)
                                  (update :widths dissoc name))))
       (load-history name)
       name)

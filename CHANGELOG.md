@@ -72,6 +72,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Each R project gets a session of its own: scripts under a folder with a DESCRIPTION, renv.lock, .git or .Rproj file send their code to that project's session, which starts in the project's folder, so its `.Rprofile` and renv load.
 - `M-x r-layout` arranges the windows like RStudio: the script above its console on the left, the environment above the plots, or the help when there are no plots, on the right; `M-x r-layout-restore` puts back the windows as they were. Plugins read the windows as data with `window-layout` and lay them out with `arrange-windows`.
 - R consoles remember their input across sessions: what you type is kept in `r-history` in the oxmacs home folder, and `M-p` brings back the last thousand inputs in a new session. Plugins read and set a console's input history with `console-history` and `set-console-history`.
 - `C-c C-o` in R scripts and consoles shows the structure of the R object at point in the echo area.

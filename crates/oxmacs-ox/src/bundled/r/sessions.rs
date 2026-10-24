@@ -426,3 +426,34 @@ fn r_layout_puts_help_in_the_corner_when_there_are_no_plots() {
             .ends_with(r#"[0.6 "*R help*"]]]]"#)
     );
 }
+
+#[test]
+fn each_project_gets_a_session_of_its_own_started_in_its_folder() {
+    let root = tempfile::tempdir().unwrap();
+    for (project, marker) in [("alpha", "DESCRIPTION"), ("beta", "beta.Rproj")] {
+        let folder = root.path().join(project).join("R");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(root.path().join(project).join(marker), "").unwrap();
+        std::fs::write(folder.join("main.R"), "x <- 1\n").unwrap();
+    }
+    let mut r = started();
+    r.editor
+        .open_file(&root.path().join("alpha").join("R").join("main.R"));
+    r.press("C-RET");
+    let alpha = r.sessions().pop().unwrap();
+    assert_eq!(alpha.directory, root.path().join("alpha"));
+
+    r.editor
+        .open_file(&root.path().join("beta").join("R").join("main.R"));
+    r.press("C-RET");
+    let beta = r.sessions().pop().unwrap();
+    assert_eq!(beta.directory, root.path().join("beta"));
+    assert!(r.editor.buffer_names().contains(&"*R:alpha*"));
+    assert!(r.editor.buffer_names().contains(&"*R:beta*"));
+
+    let other = root.path().join("alpha").join("R").join("other.R");
+    std::fs::write(&other, "y <- 2\n").unwrap();
+    r.editor.open_file(&other);
+    r.press("C-RET");
+    assert_eq!(r.sends(), [(alpha.id, "y <- 2\n".to_owned())]);
+}
