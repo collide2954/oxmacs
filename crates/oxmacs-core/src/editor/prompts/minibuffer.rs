@@ -330,6 +330,7 @@ impl Editor {
             Choice::Command(command) => {
                 self.command_history.retain(|used| *used != command);
                 self.command_history.push(command);
+                self.note_extended_command(command);
                 self.execute(command);
             }
             Choice::Clip(index) => {
