@@ -79,6 +79,8 @@ pub enum Node {
         picture: Picture,
         width: Option<f32>,
         height: Option<f32>,
+        press: Option<Press>,
+        selected: bool,
     },
 }
 
@@ -101,6 +103,8 @@ struct Open {
     callbacks: Vec<Hold>,
     buffer: BufferId,
     scope: ScopeId,
+    resized: Option<Hold>,
+    size: Option<(u32, u32)>,
 }
 
 #[derive(Debug, Default)]
@@ -311,6 +315,40 @@ fn button(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     widget(heap, "button", Node::Button { label, press })
 }
 
+fn image(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let picture = ox::image::image_of(heap, arguments[0])
+        .ok_or_else(|| wrong(heap, "image", "an image", arguments[0]))?;
+    let (found, rest) = options(
+        heap,
+        "image",
+        &arguments[1..],
+        &["width", "height", "on-press", "selected"],
+    )?;
+    if let Some(extra) = rest.first() {
+        return Err(wrong(heap, "image", "options after the image", *extra));
+    }
+    let (mut width, mut height, mut press, mut selected) = (None, None, None, false);
+    for (option, value) in found {
+        match option {
+            "on-press" => press = Some(Press::Held(heap.hold(value))),
+            "selected" => selected = value.truthy(),
+            "width" => width = Some(size(heap, "image", value)?),
+            _ => height = Some(size(heap, "image", value)?),
+        }
+    }
+    widget(
+        heap,
+        "image",
+        Node::Image {
+            picture: Picture(picture),
+            width,
+            height,
+            press,
+            selected,
+        },
+    )
+}
+
 pub fn install(isolate: &mut Isolate) {
     isolate.define_native_in(UI, "column", 0, None, |heap, arguments| {
         stack(heap, "column", arguments, false)
@@ -361,32 +399,7 @@ pub fn install(isolate: &mut Isolate) {
             },
         )
     });
-    isolate.define_native_in(UI, "image", 1, Some(5), |heap, arguments| {
-        let picture = ox::image::image_of(heap, arguments[0])
-            .ok_or_else(|| wrong(heap, "image", "an image", arguments[0]))?;
-        let (found, rest) = options(heap, "image", &arguments[1..], &["width", "height"])?;
-        if let Some(extra) = rest.first() {
-            return Err(wrong(heap, "image", "options after the image", *extra));
-        }
-        let (mut width, mut height) = (None, None);
-        for (option, value) in found {
-            let shown = Some(size(heap, "image", value)?);
-            if option == "width" {
-                width = shown;
-            } else {
-                height = shown;
-            }
-        }
-        widget(
-            heap,
-            "image",
-            Node::Image {
-                picture: Picture(picture),
-                width,
-                height,
-            },
-        )
-    });
+    isolate.define_native_in(UI, "image", 1, Some(9), image);
     isolate.define_host_native::<Editor>("open-view", 2, None, open);
 }
 
@@ -424,7 +437,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         heap,
         "open-view",
         &arguments[2..],
-        &["keys", "beside", "select"],
+        &["keys", "beside", "select", "show", "on-resize"],
     )?;
     if let Some(extra) = rest.first() {
         return Err(wrong(
@@ -435,11 +448,13 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         ));
     }
     let mut bindings = Vec::new();
-    let (mut beside, mut select) = (false, false);
+    let (mut beside, mut select, mut show, mut resized) = (false, false, true, None);
     for (option, value) in found {
         match option {
             "beside" => beside = value.truthy(),
             "select" => select = value.truthy(),
+            "show" => show = value.truthy(),
+            "on-resize" => resized = Some(value),
             _ => bindings = keys(heap, value)?,
         }
     }
@@ -449,15 +464,21 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         .partition(|view| editor.buffer_by_id(view.buffer).is_some());
     for view in closed {
         heap.release(view.function);
-        for callback in view.callbacks {
+        for callback in view.callbacks.into_iter().chain(view.resized) {
             heap.release(callback);
         }
     }
     views.open = alive;
     let function = heap.hold(arguments[1]);
+    let resized = resized.map(|handler| heap.hold(handler));
     let index = if let Some(index) = views.open.iter().position(|view| view.name == name) {
         heap.release(views.open[index].function);
         views.open[index].function = function;
+        if let Some(resized) = resized
+            && let Some(old) = views.open[index].resized.replace(resized)
+        {
+            heap.release(old);
+        }
         index
     } else {
         let scope = editor.add_scope(Box::leak(name.clone().into_boxed_str()));
@@ -477,6 +498,8 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             callbacks: Vec::new(),
             buffer,
             scope,
+            resized,
+            size: None,
         });
         views.open.len() - 1
     };
@@ -491,8 +514,30 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             .bind(scope, &keys, id)
             .map_err(|error| Error::new(format!("{keys}: {error}")))?;
     }
-    crate::buffers::reveal(editor, buffer, beside, select);
+    if show {
+        crate::buffers::reveal(editor, buffer, beside, select);
+    }
     Ok(Value::Nil)
+}
+
+pub fn sized(isolate: &mut Isolate, editor: &mut Editor, buffer: BufferId, size: (u32, u32)) {
+    let Some(view) = editor
+        .plugin_state_mut::<Views>()
+        .and_then(|views| views.open.iter_mut().find(|view| view.buffer == buffer))
+    else {
+        return;
+    };
+    if view.size == Some(size) {
+        return;
+    }
+    view.size = Some(size);
+    let Some(handler) = view.resized.and_then(|hold| isolate.held(hold)) else {
+        return;
+    };
+    let arguments = [Value::Int(i64::from(size.0)), Value::Int(i64::from(size.1))];
+    if let Err(error) = isolate.spawn(handler, &arguments) {
+        log::report(editor, &error, None);
+    }
 }
 
 fn number(node: Node, callbacks: &mut Vec<Hold>) -> Node {
@@ -520,6 +565,22 @@ fn number(node: Node, callbacks: &mut Vec<Hold>) -> Node {
             Node::Button {
                 label,
                 press: Some(Press::Slot(callbacks.len() - 1)),
+            }
+        }
+        Node::Image {
+            picture,
+            width,
+            height,
+            press: Some(Press::Held(hold)),
+            selected,
+        } => {
+            callbacks.push(hold);
+            Node::Image {
+                picture,
+                width,
+                height,
+                press: Some(Press::Slot(callbacks.len() - 1)),
+                selected,
             }
         }
         other => other,
@@ -744,6 +805,7 @@ mod tests {
                     picture,
                     width,
                     height,
+                    ..
                 } => (
                     picture.0.pixels.width(),
                     picture.0.pixels.height(),
@@ -763,6 +825,8 @@ mod tests {
                 picture: picture.clone(),
                 width: None,
                 height: None,
+                press: None,
+                selected: false,
             }
         );
         assert!(
@@ -770,6 +834,55 @@ mod tests {
                 .unwrap_err()
                 .message
                 .contains("image expects an image, got 5")
+        );
+    }
+
+    #[test]
+    fn images_can_be_pressed_and_marked_selected() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        ox.eval(
+            &mut editor,
+            r#"(module (import (ox ui) (ox image))) (def pressed (atom 0)) (def dot (image/new 2 2)) (open-view "*thumbs*" (fn [] (ui/row (ui/image dot :selected true :on-press (fn [] (swap! pressed inc))) (ui/image dot))))"#,
+        )
+        .unwrap();
+        settle(&mut editor, &mut ox);
+
+        let Node::Row { children, .. } = shown(&editor, "*thumbs*") else {
+            panic!("not a row");
+        };
+        let marks: Vec<(Option<Press>, bool)> = children
+            .iter()
+            .map(|child| match child {
+                Node::Image {
+                    press, selected, ..
+                } => (press.clone(), *selected),
+                other => panic!("not an image: {other:?}"),
+            })
+            .collect();
+        assert_eq!(marks, [(Some(Press::Slot(0)), true), (None, false)]);
+        let id = editor.buffer_named("*thumbs*").unwrap();
+        ox.press(&mut editor, id, 0);
+        settle(&mut editor, &mut ox);
+        assert_eq!(ox.eval(&mut editor, "@pressed").unwrap(), "1");
+    }
+
+    #[test]
+    fn views_open_unseen_and_hear_their_size() {
+        let (mut editor, mut ox) = opened(
+            r#"(def sizes (atom [])) (open-view "*sized*" (fn [] (text "x")) :show false :on-resize (fn [width height] (swap! sizes conj [width height])))"#,
+        );
+        let id = editor.buffer_named("*sized*").unwrap();
+        assert!(!editor.buffer_shown(id));
+
+        for (width, height) in [(800, 600), (800, 600), (640, 600)] {
+            ox.view_sized(&mut editor, id, width, height);
+            settle(&mut editor, &mut ox);
+        }
+
+        assert_eq!(
+            ox.eval(&mut editor, "@sizes").unwrap(),
+            "[[800 600] [640 600]]"
         );
     }
 

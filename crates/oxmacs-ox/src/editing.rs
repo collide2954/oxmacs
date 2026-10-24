@@ -3,10 +3,12 @@ use std::ops::Range;
 use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
+use oxmacs_core::display::LineStyle;
 use oxmacs_core::editor::{Axis, Editor};
 use oxmacs_core::text::BufferId;
 
 use crate::log;
+use crate::views::face_named;
 
 fn made(made: Result<Value, ox::heap::HeapFull>) -> Result<Value, Error> {
     made.map_err(|full| Error::new(full.to_string()))
@@ -72,6 +74,57 @@ fn display(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<
         }
     }
     editor.display_buffer(id, near, select);
+    Ok(Value::Nil)
+}
+
+fn header_line(heap: &Heap, value: Value) -> Result<(String, LineStyle), Error> {
+    let wrong = || {
+        Error::new(format!(
+            "set-header expects lines of text and [text face] pieces, got {}",
+            print::brief(heap, value)
+        ))
+    };
+    let pieces = match heap.text(value) {
+        Some(_) => vec![value],
+        None => heap.elements(value).ok_or_else(wrong)?,
+    };
+    let mut text = String::new();
+    let mut style = LineStyle::default();
+    for piece in pieces {
+        let (shown, face) = match heap.text(piece) {
+            Some(shown) => (shown.to_owned(), None),
+            None => match heap.elements(piece).as_deref() {
+                Some([shown, Value::Keyword(face)]) => (
+                    print::display(heap, *shown),
+                    Some(face_named(face.name()).ok_or_else(wrong)?),
+                ),
+                _ => return Err(wrong()),
+            },
+        };
+        let start = text.chars().count();
+        text.push_str(&shown);
+        if let Some(face) = face {
+            style.spans.push((start..text.chars().count(), face));
+        }
+    }
+    Ok((text, style))
+}
+
+fn header(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let id = named(heap, editor, "set-header", arguments[0])?;
+    let lines = heap
+        .elements(arguments[1])
+        .filter(|_| heap.text(arguments[1]).is_none())
+        .ok_or_else(|| {
+            Error::new(format!(
+                "set-header expects a vector of lines, got {}",
+                print::brief(heap, arguments[1])
+            ))
+        })?
+        .into_iter()
+        .map(|line| header_line(heap, line))
+        .collect::<Result<Vec<_>, Error>>()?;
+    editor.set_header_lines(id, lines);
     Ok(Value::Nil)
 }
 
@@ -228,6 +281,7 @@ fn install_places(isolate: &mut Isolate) {
         },
     );
     isolate.define_host_native::<Editor>("display-buffer", 1, None, display);
+    isolate.define_host_native::<Editor>("set-header", 2, Some(2), header);
     isolate.define_host_native::<Editor>("complete-at", 2, Some(3), complete);
     isolate.define_host_native::<Editor>("completion-shown?", 0, Some(0), |_, editor, _| {
         Ok(Value::Bool(editor.pane().popup().is_some()))
@@ -378,6 +432,29 @@ mod tests {
         assert_eq!(editor.buffer().contents(), "print");
         eval(&mut editor, &mut ox, "(complete-at 0 [] true)");
         assert_eq!(editor.message(), Some("No completions"));
+    }
+
+    #[test]
+    fn buffers_keep_header_lines_above_their_text() {
+        let (mut editor, mut ox) = editing("rows", 0);
+        ox.eval(&mut editor, r#"(open-buffer "*table*" ["row"])"#)
+            .unwrap();
+
+        eval(
+            &mut editor,
+            &mut ox,
+            r#"(set-header "*table*" [[["name" :heading] " x"] "types"])"#,
+        );
+
+        let header = editor.pane().header_lines();
+        let texts: Vec<&str> = header.iter().map(|(text, _)| text.as_str()).collect();
+        assert_eq!(texts, ["name x", "types"]);
+        assert_eq!(
+            header[0].1.spans,
+            [(0..4, oxmacs_core::theme::Highlight::Heading)]
+        );
+        eval(&mut editor, &mut ox, r#"(set-header "*table*" [])"#);
+        assert_eq!(editor.pane().header_lines(), []);
     }
 
     #[test]

@@ -169,8 +169,11 @@ impl App {
             let drawn = ox_view::view(&shown.node, look, move |slot| {
                 Message::OxPress(buffer, slot)
             });
+            let sized = sensor(container(drawn).width(Length::Fill).height(Length::Fill))
+                .on_show(move |size| Message::ViewSized(buffer, size))
+                .on_resize(move |size| Message::ViewSized(buffer, size));
             return mouse_area(
-                container(drawn)
+                container(sized)
                     .padding([4, 8])
                     .width(Length::Fill)
                     .height(Length::Fill),

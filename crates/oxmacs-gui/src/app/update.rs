@@ -17,7 +17,7 @@ use oxmacs_ox::takeover;
 use super::{App, Message, transition};
 use crate::keys::{self, Platform};
 use crate::widgets::buffer_view::ViewEvent;
-use crate::{animation, fetch, fonts};
+use crate::{animation, fetch, fonts, units};
 impl App {
     fn handle_view_event(&mut self, window: WindowId, event: ViewEvent) {
         let selected = window == self.editor.selected_window();
@@ -207,6 +207,16 @@ impl App {
                 self.editor.server_event(id, event);
             }
             Message::OxPress(buffer, slot) => self.ox.press(&mut self.editor, buffer, slot),
+            Message::ViewSized(buffer, size) => {
+                let pixels =
+                    |extent: f32| u32::try_from(units::floor_to_usize(extent)).unwrap_or(u32::MAX);
+                self.ox.view_sized(
+                    &mut self.editor,
+                    buffer,
+                    pixels(size.width),
+                    pixels(size.height),
+                );
+            }
             Message::TakeoverSized(size) => self.takeover_size = Some(size),
             Message::Focus(focused) => self.focus_changed(focused),
             Message::Idle => self.idle(),

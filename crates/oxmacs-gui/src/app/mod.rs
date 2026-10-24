@@ -75,6 +75,7 @@ pub enum Message {
     ToolInstalled(Managed, Result<PathBuf, String>),
     OxTick,
     OxPress(BufferId, usize),
+    ViewSized(BufferId, iced::Size),
     TakeoverSized(iced::Size),
     EndTakeover,
     Focus(bool),

@@ -165,6 +165,10 @@ impl Ox {
         views::press(&mut self.isolate, editor, buffer, slot);
     }
 
+    pub fn view_sized(&mut self, editor: &mut Editor, buffer: BufferId, width: u32, height: u32) {
+        views::sized(&mut self.isolate, editor, buffer, (width, height));
+    }
+
     fn run_init(&mut self, editor: &mut Editor, home: Option<&Path>) -> bool {
         let Some(home) = home else {
             return false;

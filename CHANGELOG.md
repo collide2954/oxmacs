@@ -72,6 +72,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Plugin views hear their size in pixels through `open-view`'s `:on-resize` and can open unseen with `:show false`; `ui/image` takes `:on-press` and `:selected`. `set-header` keeps lines above a buffer's text while it scrolls, and `prompt-path`'s `:initial` starts with a file name, as when saving.
 - Plugins can run consoles with `console-start`, which hears the program's marked output and prompts, and talk to them with `console-send` and `console-request`. They can read and move point, insert text, read ranges and the region, find the statement or function around a place, list and read buffers, show a buffer below or beside another with `display-buffer`, offer completions with `complete-at`, remember where a jump started for `M-,`, follow typing with `on-typed`, and bind keys in the buffers of a mode with the manifest's `:mode-keys`.
 - `process/which` finds a program on `PATH`, `process/os` names the operating system and `path/temp` gives the folder for temporary files.
 - Unsaved files get recovery copies in the oxmacs cache folder, never beside the files themselves, and opening a file whose copy is newer offers to recover it; saving, reverting or killing the buffer removes the copy. A crash writes a log there too.
