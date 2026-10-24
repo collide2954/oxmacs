@@ -29,6 +29,10 @@ sudo dnf install oxmacs
 
 `oxmacs-nightly.repo` in the same folder has a build of every change on master.
 
+## Builds from CI
+
+Every CI run builds `oxmacs` and `ox` in release mode for Linux (x86_64), macOS (Apple silicon) and Windows (x86_64), plus the Fedora 44 and 45 RPMs, and keeps them as downloads on the run's page under Artifacts. The Linux and macOS downloads hold a `.tar.gz`, which keeps the files executable; macOS may ask you to allow an unsigned app the first time it opens. Version tags also attach all of them to the GitHub release.
+
 ## Extending oxmacs
 
 oxmacs is moving its features into Ox, an extension language of its own: a modern Scheme with a fast bytecode VM, built in [crates/ox](crates/ox) and documented in the Ox manual inside oxmacs, on `C-h i`. The `ox` command runs `.ox` files and opens a REPL, and `ox check`, `ox test`, `ox profile` and `ox perf` check, test, profile and benchmark Ox code:
@@ -90,7 +94,7 @@ oxmacs is configured in Ox, in `~/.oxmacs/init.ox` (`OXMACS_HOME` moves the fold
 
 ## Development
 
-Run `cargo fmt --all` and `cargo clippy --workspace --all-targets --all-features -- -D warnings` before committing. CI runs clippy, a build and the tests on Linux, macOS and Windows for pushes to master and pull requests. Changes are recorded in CHANGELOG.md.
+Run `cargo fmt --all` and the tests for what you change before committing. CI runs clippy and the tests on Linux, macOS and Windows for pushes to master, version tags and pull requests, then builds the executables and the Fedora packages; the dnf repository is updated only when every check passes. Changes are recorded in CHANGELOG.md.
 
 ## License
 

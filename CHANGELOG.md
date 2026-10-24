@@ -88,6 +88,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Every CI run keeps release builds of `oxmacs` and `ox` for Linux, macOS and Windows, and the Fedora 44 and 45 RPMs, as downloads on its page; version tags attach them all to the release. The Fedora packages are built by the main CI and published to the dnf repository only when every check passes.
 - Plugins can require other plugins and oxmacs itself in `plugin.ox`, as `:requires {markdown: "^0.2" ox: ">=0.14"}`. Required plugins start first, one that is off lends its modules without starting, and a plugin whose requirements are missing or the wrong version stays off and says why in `*ox log*`.
 - The README and the Ox manual list the bundled plugins, with their versions, whether they are on by default and what they do, and Ox's built-in modules; a test keeps both lists in step with the plugins and modules.
 - `M-;` in R Markdown comments with `#` inside R chunks and with `<!-- -->` in the prose around them, toggling a selection, starting a comment on a blank line, or adding one at the end of a line of code.
