@@ -54,6 +54,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- A plugin imports another plugin's modules only when its manifest requires that plugin; the error says what to add to `:requires`. The calendar, irc, manual and remote plugins declare the plugins they use.
 - In Ox buffers and the Ox REPL, the signature of the call at point shows once point has rested for 0.4 seconds, as R's does, rather than being worked out again on every key.
 - The calendar, git, IRC, Markdown, screensaver, vault and weather plugins are opt-in: each stays off until `(use-plugin name)` in `init.ox`. Their modules can still be imported, so the remote file browser keeps using the vault.
 - A plugin's `plugin.ox` must give `:version` as a semantic version such as `1.2.0` and may only use the keys plugins know; a misspelled key or a version like `1.0` keeps the plugin from loading and says why in `*ox log*`.

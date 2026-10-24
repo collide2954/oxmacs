@@ -43,7 +43,7 @@ Ox has three layers, and only the last is written in Ox:
 - The `ox/...` modules, such as `ox/string`, `ox/file` and `ox/http`, are Rust plugged straight into Ox through the bridge, and need only an import. The [Editor API](ref:oxmacs) is plugged in the same way.
 - Everything else is a plugin.
 
-So plugins do two jobs: they add features to the editor, and they are Ox's standard library, where shared Ox code lives. Some bundled plugins are on from the start; others, such as life, wait until `use-plugin` turns them on. Any plugin's modules can be imported by another plugin, so a plugin can be a library as well as a feature, or only a library. This manual renders its pages with the markdown plugin's renderer:
+So plugins do two jobs: they add features to the editor, and they are Ox's standard library, where shared Ox code lives. Some bundled plugins are on from the start; others, such as life, wait until `use-plugin` turns them on. Any plugin's modules can be imported by another plugin that requires it, so a plugin can be a library as well as a feature, or only a library. This manual renders its pages with the markdown plugin's renderer:
 
 ```
 (module (import (markdown render)))

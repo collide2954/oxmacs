@@ -87,6 +87,7 @@ pub struct Isolate {
     sources: HashMap<String, (String, String)>,
     files: HashMap<String, (PathBuf, Option<SystemTime>)>,
     broken: HashSet<String>,
+    packages: HashMap<String, Vec<String>>,
     doc_tables: Vec<&'static str>,
     docs: OnceCell<Docs>,
 }
@@ -119,6 +120,7 @@ impl Isolate {
             sources: HashMap::new(),
             files: HashMap::new(),
             broken: HashSet::new(),
+            packages: HashMap::new(),
             doc_tables: vec![LIBRARY_DOCS],
             docs: OnceCell::new(),
         };
@@ -205,6 +207,28 @@ impl Isolate {
     pub fn add_source(&mut self, module: &str, file: &str, text: &str) {
         self.sources
             .insert(module.to_owned(), (file.to_owned(), text.to_owned()));
+    }
+
+    pub fn limit_imports(&mut self, package: &str, requires: &[String]) {
+        self.packages.insert(package.to_owned(), requires.to_vec());
+    }
+
+    fn may_import(&self, importer: ModuleId, name: &str) -> Result<(), String> {
+        let Some(importer) = self.runtime.modules.get(importer).map(|found| &found.name) else {
+            return Ok(());
+        };
+        let package = |module: &str| module.split('/').next().unwrap_or(module).to_owned();
+        let (from, to) = (package(importer), package(name));
+        match self.packages.get(&from) {
+            Some(requires)
+                if from != to && self.packages.contains_key(&to) && !requires.contains(&to) =>
+            {
+                Err(format!(
+                    "{importer} imports {name} without requiring {to}; add {to} to {from}'s :requires"
+                ))
+            }
+            _ => Ok(()),
+        }
     }
 
     pub fn eval_module_with(
@@ -485,6 +509,8 @@ impl Isolate {
             }
         }
         let name = segments.join("/");
+        self.may_import(module, &name)
+            .map_err(|message| Error::at(spec.span, message))?;
         let loaded = self
             .runtime
             .module_ids

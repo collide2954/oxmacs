@@ -11,7 +11,7 @@ A plugin is a folder under `~/.oxmacs/plugins` with a manifest and Ox modules. I
 
 Ox has no standard library of its own. The built-in functions and the `ox/...` modules, such as `ox/string` and `ox/json`, are primitives: Rust code plugged straight into Ox through the bridge, as the editor API is. Everything else is a plugin.
 
-So plugins do two jobs. They extend the editor, and they are where shared Ox code lives. Some bundled plugins, such as dired and git, are on from the start; others, such as life, wait until `use-plugin` turns them on. A plugin can import another plugin's modules, as this manual does with `(import (markdown render))`, so a plugin you write can be a library as well as a feature. See [Modules and libraries](modules).
+So plugins do two jobs. They extend the editor, and they are where shared Ox code lives. Some bundled plugins, such as dired and git, are on from the start; others, such as life, wait until `use-plugin` turns them on. A plugin can import the modules of another plugin it requires, as this manual does with `(import (markdown render))`, so a plugin you write can be a library as well as a feature. See [Modules and libraries](modules).
 
 ## Make one in four steps
 
@@ -85,18 +85,18 @@ oxmacs ships these plugins. Those on by default load the first time you use them
 
 ```table
 Plugin       Version  Default  What it does
-calendar     0.2.0    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
+calendar     0.2.1    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
 customize    0.1.1    on       Change the editor's and plugins' settings in a form
 dired        0.2.2    on       List directories and manage their files
 git          0.3.0    opt-in   Git status and staging in the style of Magit
-irc          0.9.1    opt-in   An IRCv3 client in the style of ERC
+irc          0.9.2    opt-in   An IRCv3 client in the style of ERC
 life         0.2.0    opt-in   Conway's Game of Life on a canvas
 manual       0.5.3    on       The oxmacs tutorial and the Ox manual
 markdown     0.2.0    opt-in   Markdown rendered as styled text
 processes    0.1.1    on       List the processes oxmacs runs, with their usage
 profiler     0.1.1    on       Find where the Ox code in oxmacs spends its time
 r            0.18.1   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
-remote       0.1.0    on       Browse and edit files on other machines over ssh, sftp and ftp
+remote       0.1.1    on       Browse and edit files on other machines over ssh, sftp and ftp
 screensaver  0.2.0    opt-in   A starfield or matrix rain after a while without input
 vault        0.2.0    opt-in   An encrypted password vault with one-time codes and imports
 weather      0.3.0    opt-in   Forecasts from Open-Meteo

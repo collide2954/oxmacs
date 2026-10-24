@@ -607,6 +607,9 @@ pub fn discover(
             }),
         }
     }
+    for plugin in &known {
+        limit_imports(isolate, &plugin.manifest);
+    }
     for plugin in known.iter().filter(|plugin| plugin.active) {
         stubs(editor, plugin);
     }
@@ -1016,6 +1019,15 @@ fn unmet(plugins: &Plugins, manifest: &Manifest) -> Vec<String> {
         .collect()
 }
 
+fn limit_imports(isolate: &mut Isolate, manifest: &Manifest) {
+    let requires: Vec<String> = manifest
+        .requires
+        .iter()
+        .map(|(required, _)| required.clone())
+        .collect();
+    isolate.limit_imports(&manifest.name, &requires);
+}
+
 fn wake_required(isolate: &mut Isolate, editor: &mut Editor, name: &str) {
     let active = editor.plugin_state::<Plugins>().is_some_and(|plugins| {
         plugins
@@ -1141,6 +1153,7 @@ fn start_now(isolate: &mut Isolate, editor: &mut Editor, path: &Path) {
     else {
         return;
     };
+    limit_imports(isolate, &plugin.manifest);
     stubs(editor, &plugin);
     if wake(isolate, editor, &name) {
         views::redraw(editor);
@@ -1603,22 +1616,22 @@ mod tests {
         ],
     };
 
-    const USER_ENTRY: &str = "(module (import (base words)))\n(swap! words/order conj \"user\")\n(defcommand use-it \"Use it\" (message (str @words/order)))";
+    const USER_ENTRY: &str = "(module (import (base words)))\n(swap! words/order conj \"client\")\n(defcommand use-it \"Use it\" (message (str @words/order)))";
 
     macro_rules! needing {
         ($requires:literal) => {
             Bundle {
-                name: "user",
+                name: "client",
                 files: &[
                     (
                         "plugin.ox",
                         concat!(
-                            "(plugin user :version \"1.0.0\" :requires ",
+                            "(plugin client :version \"1.0.0\" :requires ",
                             $requires,
                             " :commands {use-it: \"Use it\"})"
                         ),
                     ),
-                    ("user.ox", USER_ENTRY),
+                    ("client.ox", USER_ENTRY),
                 ],
             }
         };
@@ -1633,7 +1646,7 @@ mod tests {
 
         run(&mut editor, &mut ox, "use-it");
 
-        assert_eq!(editor.message(), Some(r#"["base" "user"]"#));
+        assert_eq!(editor.message(), Some(r#"["base" "client"]"#));
         assert_eq!(logged(&editor), "");
     }
 
@@ -1644,7 +1657,7 @@ mod tests {
 
         run(&mut editor, &mut ox, "use-it");
 
-        assert_eq!(editor.message(), Some(r#"["user"]"#));
+        assert_eq!(editor.message(), Some(r#"["client"]"#));
         assert!(editor.command_named("base-hi").is_none());
         assert_eq!(logged(&editor), "");
     }
@@ -1655,18 +1668,49 @@ mod tests {
             ("plugins/base/plugin.ox", "(plugin base :version \"1.2.0\")"),
             ("plugins/base/words.ox", "(def order (atom []))"),
             (
-                "plugins/user/plugin.ox",
-                "(plugin user :version \"1.0.0\" :requires {base: \"^1\"} :commands {use-it: \"Use it\"})",
+                "plugins/client/plugin.ox",
+                "(plugin client :version \"1.0.0\" :requires {base: \"^1\"} :commands {use-it: \"Use it\"})",
             ),
-            ("plugins/user/user.ox", USER_ENTRY),
-            ("init.ox", "(use-plugin user)"),
+            ("plugins/client/client.ox", USER_ENTRY),
+            ("init.ox", "(use-plugin client)"),
         ]);
         let (mut editor, mut ox) = started(&[], home.path());
 
         run(&mut editor, &mut ox, "use-it");
 
-        assert_eq!(editor.message(), Some(r#"["user"]"#));
+        assert_eq!(editor.message(), Some(r#"["client"]"#));
         assert_eq!(logged(&editor), "");
+    }
+
+    #[test]
+    fn plugins_import_only_the_plugins_they_require() {
+        const UNDECLARED: Bundle = Bundle {
+            name: "client",
+            files: &[
+                (
+                    "plugin.ox",
+                    "(plugin client :version \"1.0.0\" :commands {use-it: \"Use it\"})",
+                ),
+                ("client.ox", USER_ENTRY),
+            ],
+        };
+        let home = home_with(&[]);
+        let (mut editor, mut ox) = started(&[BASE, UNDECLARED], home.path());
+
+        run(&mut editor, &mut ox, "use-it");
+
+        let shown = logged(&editor);
+        assert!(
+            shown.contains(
+                "client imports base/words without requiring base; add base to client's :requires"
+            ),
+            "{shown}"
+        );
+        assert_eq!(
+            ox.eval(&mut editor, "(module (import (base words))) @words/order")
+                .unwrap(),
+            "[]"
+        );
     }
 
     #[test]
@@ -1676,14 +1720,14 @@ mod tests {
         const FUTURE: Bundle = needing!("{ox: \">=99\"}");
         let this = env!("CARGO_PKG_VERSION");
         for (user, problem) in [
-            (NEWER, "user needs base ^2, but base is 1.2.0".to_owned()),
+            (NEWER, "client needs base ^2, but base is 1.2.0".to_owned()),
             (
                 MISSING,
-                "user needs elsewhere *, but elsewhere isn't installed".to_owned(),
+                "client needs elsewhere *, but elsewhere isn't installed".to_owned(),
             ),
             (
                 FUTURE,
-                format!("user needs oxmacs >=99, but this is oxmacs {this}"),
+                format!("client needs oxmacs >=99, but this is oxmacs {this}"),
             ),
         ] {
             let home = home_with(&[]);
@@ -1693,7 +1737,7 @@ mod tests {
             run(&mut editor, &mut ox, "use-it");
 
             assert!(logged(&editor).contains(&problem), "{}", logged(&editor));
-            assert_ne!(editor.message(), Some(r#"["base" "user"]"#));
+            assert_ne!(editor.message(), Some(r#"["base" "client"]"#));
         }
     }
 
@@ -1707,7 +1751,7 @@ mod tests {
         let shown = logged(&editor);
         assert!(
             shown.contains(
-                "user's :requires must map plugin names to version ranges such as \"^1.2\", got \"one\" for base"
+                "client's :requires must map plugin names to version ranges such as \"^1.2\", got \"one\" for base"
             ),
             "{shown}"
         );

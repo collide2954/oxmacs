@@ -114,6 +114,37 @@ fn macros_belong_to_their_module_and_use_its_names() {
 }
 
 #[test]
+fn packages_import_only_the_packages_they_require() {
+    let (_dir, mut isolate) = with_root(&[
+        ("text/words.ox", "(def hello \"hi\")"),
+        (
+            "notes/view.ox",
+            "(module (import (text words)))\n(def shown words/hello)",
+        ),
+        (
+            "notes/list.ox",
+            "(module (import (notes view)))\n(def shown view/shown)",
+        ),
+        (
+            "mail/view.ox",
+            "(module (import (text words)))\n(def shown words/hello)",
+        ),
+    ]);
+    isolate.limit_imports("text", &[]);
+    isolate.limit_imports("notes", &["text".to_owned()]);
+    isolate.limit_imports("mail", &[]);
+
+    assert_eq!(
+        evaluated(&mut isolate, "(module (import (notes list))) list/shown"),
+        "\"hi\""
+    );
+    assert_eq!(
+        evaluated(&mut isolate, "(module (import (mail view))) view/shown"),
+        "error: mail/view imports text/words without requiring text; add text to mail's :requires"
+    );
+}
+
+#[test]
 fn import_cycles_are_named() {
     let (_dir, mut isolate) = with_root(&[
         ("a.ox", "(module (import (b)))"),
