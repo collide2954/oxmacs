@@ -24,6 +24,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Removed
 
+- The design notes under `docs/`. The README and the Ox manual on `C-h i` document oxmacs and Ox.
 - `M-x oxmacs-doctor`. `M-x list-tools` and `M-x list-languages` cover what it checked.
 - The network connections core kept for the old IRC applet, unused since `ox/net` replaced them; oxmacs-core no longer depends on rustls and webpki-roots.
 - `config.toml`. oxmacs no longer reads it, and the toml and toml_edit crates are gone; settings move to `(settings {…})` in `~/.oxmacs/init.ox`. The old file is left where it was.
