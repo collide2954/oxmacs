@@ -11,6 +11,7 @@ use iced::keyboard::{self, Key, Location, Modifiers};
 use iced_test::Simulator;
 use oxmacs_gui::app::{App, Message};
 use oxmacs_gui::fonts;
+use oxmacs_ox::views::{Node, ViewBuffer};
 
 const SIZE: Size = Size::new(640.0, 640.0);
 
@@ -70,6 +71,7 @@ struct Film {
     folder: PathBuf,
     frames: Vec<(String, f64)>,
     seed: u64,
+    size: Size,
 }
 
 impl Film {
@@ -80,11 +82,16 @@ impl Film {
             folder,
             frames: Vec::new(),
             seed: 7,
+            size: SIZE,
         }
     }
 
+    fn sized(self, size: Size) -> Self {
+        Self { size, ..self }
+    }
+
     fn shot(&mut self, app: &mut App, seconds: f64) {
-        let mut ui = Simulator::with_size(settings(), SIZE, app.view());
+        let mut ui = Simulator::with_size(settings(), self.size, app.view());
         let snapshot = ui.snapshot(&app.theme()).unwrap();
         let stem = format!("frame-{:05}", self.frames.len());
         snapshot.matches_image(self.folder.join(&stem)).unwrap();
@@ -417,6 +424,142 @@ fn calendar(home: &Path) {
         )
         .unwrap();
     }
+}
+
+const STUDIO: &str = r##"(module
+  (import (ox image) (ox ui)))
+
+(def (look picture)
+  picture)
+
+(defonce shown (atom nil))
+(defonce reloads (atom 0))
+
+(def stars
+  (map (fn [i] [(mod (+ (* i 137) (* i i 11)) 480)
+                (+ 6 (mod (+ (* i 71) (* i i 7)) 120))
+                (+ 0.8 (* 0.3 (mod i 3)))])
+       (range 70)))
+
+(def (scene)
+  (image/edit (image/new 480 300 :color "#0b1633")
+    (fn [c]
+      (map (fn [i] (image/rect! c 0 (+ 60 (* i 15)) 480 300
+                                :fill "#24407a" :opacity 0.08))
+           (range 12))
+      (map (fn [[x y r]] (image/circle! c x y r :fill :white :opacity 0.8)) stars)
+      (image/circle! c 370 80 34 :fill "#ffd166")
+      (image/circle! c 384 72 30 :fill "#0b1633")
+      (image/polygon! c [[0 300] [0 196] [80 160] [180 212] [300 140]
+                         [400 198] [480 172] [480 300]] :fill "#2a9d8f")
+      (image/polygon! c [[0 300] [0 244] [130 206] [250 252] [370 218]
+                         [480 246] [480 300]] :fill "#264653")
+      (image/rect! c 196 228 22 30 :fill "#e9c46a")
+      (image/polygon! c [[190 230] [207 212] [224 230]] :fill "#e76f51"))))
+
+(def (render)
+  (ui/column :spacing 6
+    (ui/text (str "Studio   reload " @reloads) :face :heading)
+    (if-let [picture @shown]
+      (ui/image picture)
+      (ui/text "Rendering..." :face :comment))))
+
+(swap! reloads inc)
+(open-view "*Studio*" render :beside true)
+(spawn (reset! shown (await (look (scene)))))
+"##;
+
+const LOOKS: &[&str] = &[
+    "(-> picture (image/hue 150)))",
+    "(-> picture (image/sepia) (image/vignette 0.9)))",
+    "(-> picture (image/pixelate 8)))",
+    "(-> picture (image/blur 3) (image/paste! (image/edges picture) 0 0 :blend :screen)))",
+    "(-> picture (image/grayscale) (image/tint \"#ff8fab\")))",
+];
+
+fn studio_home() -> PathBuf {
+    let user = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap();
+    let home = user.join("oxmacs-studio");
+    if home.join(".oxmacs-demo").exists() {
+        fs::remove_dir_all(&home).unwrap();
+    }
+    assert!(
+        !home.exists(),
+        "{} exists and wasn't made by this demo",
+        home.display()
+    );
+    fs::create_dir_all(&home).unwrap();
+    fs::write(home.join(".oxmacs-demo"), "").unwrap();
+    fs::write(
+        home.join("init.ox"),
+        "(settings {theme: :adwaita-dark mode-line-style: :powerline animations: false font-size: 12})\n",
+    )
+    .unwrap();
+    fs::write(home.join("studio.ox"), STUDIO).unwrap();
+    home
+}
+
+fn picture_key(app: &App) -> Option<usize> {
+    fn found(node: &Node) -> Option<usize> {
+        match node {
+            Node::Column { children, .. } | Node::Row { children, .. } => {
+                children.iter().find_map(found)
+            }
+            Node::Scrollable(child) => found(child),
+            Node::Image { picture, .. } => Some(picture.key()),
+            _ => None,
+        }
+    }
+    let editor = app.editor();
+    let id = editor.buffer_named("*Studio*")?;
+    let (_, view) = editor.plugin_buffer::<ViewBuffer>(id)?;
+    found(&view.node)
+}
+
+fn reload(film: &mut Film, app: &mut App) {
+    let before = picture_key(app);
+    film.press(app, "C-c C-k");
+    wait(app, "the new picture", |app| {
+        picture_key(app).is_some_and(|key| Some(key) != before)
+    });
+    settle(app);
+    film.shot(app, 2.4);
+}
+
+#[test]
+#[ignore = "renders a square video of ox/image into $OXMACS_IMAGE_VIDEO"]
+fn image_video() {
+    let Ok(out) = std::env::var("OXMACS_IMAGE_VIDEO") else {
+        return;
+    };
+    let out = PathBuf::from(out);
+    let home = studio_home();
+    let mut film = Film::new(out.with_extension("frames")).sized(Size::new(720.0, 720.0));
+    let (mut app, _) = App::boot(&[], Some(&home));
+    settle(&mut app);
+    film.shot(&mut app, 1.5);
+    film.press(&mut app, "C-x C-f");
+    film.type_slowly(&mut app, "~/oxmacs-studio/studio.ox");
+    film.press(&mut app, "RET");
+    film.hold(0.8);
+    film.press(&mut app, "C-x 2");
+    film.mark("first");
+    reload(&mut film, &mut app);
+    for (number, look) in LOOKS.iter().enumerate() {
+        film.mark(&format!("look-{number}"));
+        film.press(&mut app, "M-< C-n C-n C-n C-n C-a C-k");
+        film.hold(0.3);
+        film.type_slowly(&mut app, &format!("  {look}"));
+        reload(&mut film, &mut app);
+    }
+    film.press(&mut app, "M-< C-n C-n C-n C-n C-a C-k");
+    film.type_slowly(&mut app, "  picture)");
+    reload(&mut film, &mut app);
+    film.hold(1.0);
+    film.finish(&out);
 }
 
 #[test]
