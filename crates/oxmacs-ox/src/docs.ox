@@ -17,6 +17,7 @@
 (on-before-save key f) "Calls f with each buffer about to be saved, and saves it once f returns; an error in f cancels the save with its message, and quitting waits for it. Registering key again replaces its handler."
 (on-settings-change key f) "Calls f after the editor's settings change, once however many changed together. Registering key again replaces its handler."
 (on-processes-change key f) "Calls f when a process oxmacs runs starts, ends or reports its usage. Registering key again replaces its handler."
+(on-key-command key f) "Calls f after each key sequence that runs a command, other than typing a character, with a map of :keys, the keys pressed as a vector such as [\"C-x\" \"C-s\"], and :command, the name of the command. A command run from M-x comes with the keys of M-x. Registering key again replaces its handler."
 (processes) "The processes oxmacs runs or ran lately, each a map of :id, :kind, :name, :program, :args, :directory, :env, :status (:starting, :running, :exited or :failed), :exit, :pid, :started and :ended in milliseconds since 1970, :buffer, and :cpu percentages and :memory bytes, the last sixty samples while usage is watched."
 (stop-process id) "Asks the process with id to end, and ends it three seconds later if it hasn't."
 (kill-process id) "Ends the process with id at once."

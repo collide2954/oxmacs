@@ -9,6 +9,7 @@ mod help;
 mod hooks;
 pub mod idle;
 mod keepass;
+mod keystrokes;
 mod layout;
 mod log;
 mod manual;
@@ -64,6 +65,7 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     handles::install(&mut isolate);
     editing::install(&mut isolate);
     hooks::install(&mut isolate);
+    keystrokes::install(&mut isolate);
     processes::install(&mut isolate);
     consoles::install(&mut isolate);
     layout::install(&mut isolate);
@@ -273,6 +275,7 @@ impl Ox {
         }
         plugins::wake_waiting(&mut self.isolate, editor);
         hooks::run(&mut self.isolate, editor);
+        keystrokes::run(&mut self.isolate, editor);
         consoles::run(&mut self.isolate, editor);
         buffers::watch(&mut self.isolate, editor);
         commands::run_waiting(&mut self.isolate, editor);

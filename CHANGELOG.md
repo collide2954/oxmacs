@@ -81,6 +81,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Plugins hear the keys that run commands: `on-key-command` gets the keys pressed and the command's name, leaving out typing, with a command run from `M-x` under the keys of `M-x`.
 - The README and the Ox manual list the bundled plugins, with their versions, whether they are on by default and what they do, and Ox's built-in modules; a test keeps both lists in step with the plugins and modules.
 - `M-;` in R Markdown comments with `#` inside R chunks and with `<!-- -->` in the prose around them, toggling a selection, starting a comment on a blank line, or adding one at the end of a line of code.
 - The r plugin's `completion-delay` and `signature-delay` settings set how long typing rests before R completion pops up on its own and before a call's arguments show, 0.25 and 0.4 seconds by default.

@@ -329,7 +329,7 @@ fn on_open_directory(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) 
     }
 }
 
-fn keyed(heap: &mut Heap, handlers: &mut Vec<(String, Hold)>, arguments: &[Value]) {
+pub(crate) fn keyed(heap: &mut Heap, handlers: &mut Vec<(String, Hold)>, arguments: &[Value]) {
     let key = print::display(heap, arguments[0]);
     let hold = heap.hold(arguments[1]);
     match handlers.iter_mut().find(|(known, _)| *known == key) {
