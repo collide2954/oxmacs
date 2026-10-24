@@ -6,7 +6,7 @@
           (vault store :as vault))
   (export state network buffer-entry server-buffer buffer-of ensure-buffer! render! connect! quit! send! send-command!
           say! say-lines! act! join! part! has-cap? my-nick channel-nicks info! error! note-seen! toggle-noise!
-          message-at reply-to react! clear-buffer! irc-buffers next-active connected? reconnect!))
+          message-at reply-to react! clear-buffer! irc-buffers next-active connected? reconnect! joined-channels))
 
 (def wanted-caps ["server-time" "message-tags" "echo-message" "batch" "draft/chathistory" "chathistory" "sasl"
                   "away-notify" "account-notify" "multi-prefix" "extended-join" "draft/multiline"
@@ -665,6 +665,7 @@
 (def backoff [1 2 5 15 30 60])
 
 (def (joined-channels name)
+  "The channels you are in on the network called name, sorted."
   (sort (map :name (vals (or (get (network name) :channels) {})))))
 
 (def (network-buffers name)

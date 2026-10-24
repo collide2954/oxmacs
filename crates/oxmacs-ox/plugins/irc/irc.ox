@@ -11,6 +11,8 @@
 (def nicks-buffer "*irc nicks*")
 (def search-buffer "*irc search*")
 (def reactions ["👍" "❤️" "😂" "🎉" "👀" "🙏" "✅"])
+(def slash-commands ["join" "part" "me" "msg" "query" "notice" "nick" "quit" "reconnect" "topic" "whois" "names"
+                     "away" "back" "invite" "kick" "quote" "clear" "noise" "help"])
 
 (defonce completing (atom nil))
 (defonce found (atom []))
@@ -143,7 +145,7 @@
       ((or (= command "quote") (= command "raw")) (client/send! name rest))
       ((= command "clear") (client/clear-buffer! buffer))
       ((= command "noise") (run-command 'irc-toggle-noise))
-      ((= command "help") (client/info! buffer "/join /part /me /msg /query /notice /nick /quit /reconnect /topic /whois /names /away /back /invite /kick /quote /clear /noise"))
+      ((= command "help") (client/info! buffer (string/join " " (map (fn [known] (str "/" known)) slash-commands))))
       (else (client/send! name (string/trim (str (string/upper command) " " rest)))))))
 
 (defcommand irc-return "Send the input, or open the link at point"
@@ -180,7 +182,18 @@
                                  (not (protocol/same-nick? nick (client/my-nick entry.network)))))
                  ordered))))
 
-(defcommand irc-complete "Complete the nick before point; again for the next one"
+(def (completions entry start prefix)
+  (cond ((and (= start 0) (string/starts-with? prefix "/"))
+         {found: (vec (filter (fn [command] (string/starts-with? command (string/lower prefix)))
+                              (map (fn [command] (str "/" command)) slash-commands)))
+          suffix: " " kind: "command"})
+    ((string/starts-with? prefix "#")
+     {found: (vec (filter (fn [channel] (string/starts-with? (protocol/casefold channel) (protocol/casefold prefix)))
+                          (client/joined-channels entry.network)))
+      suffix: " " kind: "channel"})
+    (else {found: (candidates entry prefix) suffix: (if (= start 0) ": " " ") kind: "nick"})))
+
+(defcommand irc-complete "Complete the nick, channel or command before point; again for the next one"
   (let [entry (here)
         text (input-text)
         at (input-point)]
@@ -189,16 +202,17 @@
             again (and last-one (= last-one.text text) (= last-one.at at) (= last-one.buffer (buffer-name)))
             start (if again last-one.start (word-start text at))
             prefix (if again last-one.prefix (string/slice text start at))
-            found (if again last-one.found (candidates entry prefix))
+            offered (if again last-one.offered (completions entry start prefix))
+            found offered.found
             index (if again (mod (inc last-one.index) (max 1 (count found))) 0)]
         (if (empty? found)
-          (message (str "No nick starts with " prefix))
-          (let [nick (nth found index)
-                suffix (if (= start 0) ": " " ")
-                fresh (str (string/slice text 0 start) nick suffix (string/slice text at))
-                point (+ start (count nick) (count suffix))]
+          (message (str "No " offered.kind " starts with " prefix))
+          (let [chosen (nth found index)
+                suffix offered.suffix
+                fresh (str (string/slice text 0 start) chosen suffix (string/slice text at))
+                point (+ start (count chosen) (count suffix))]
             (set-input (buffer-name) fresh :point point)
-            (reset! completing {buffer: (buffer-name) text: fresh at: point start: start prefix: prefix found: found index: index})))))))
+            (reset! completing {buffer: (buffer-name) text: fresh at: point start: start prefix: prefix offered: offered index: index})))))))
 
 (def (nick-lines entry)
   (let [people (client/channel-nicks entry.network entry.target)

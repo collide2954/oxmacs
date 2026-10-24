@@ -340,9 +340,19 @@ fn typing_sends_messages_commands_and_completes_nicks() {
     keys(&mut editor, &mut ox, "TAB");
     assert_eq!(eval(&mut editor, &mut ox, "(input-text)"), r#""cy: ""#);
     keys(&mut editor, &mut ox, "C-a C-k");
-    type_in(&mut editor, &mut ox, "/topic coffee");
+    type_in(&mut editor, &mut ox, "/to");
+    keys(&mut editor, &mut ox, "TAB");
+    assert_eq!(eval(&mut editor, &mut ox, "(input-text)"), r#""/topic ""#);
+    type_in(&mut editor, &mut ox, "coffee");
     keys(&mut editor, &mut ox, "RET");
     fake.expect(&mut editor, &mut ox, "TOPIC #oxmacs coffee");
+    type_in(&mut editor, &mut ox, "/part #o");
+    keys(&mut editor, &mut ox, "TAB");
+    assert_eq!(
+        eval(&mut editor, &mut ox, "(input-text)"),
+        r#""/part #oxmacs ""#
+    );
+    keys(&mut editor, &mut ox, "C-a C-k");
 
     run(&mut editor, &mut ox, "irc-nicks");
     let nicks = contents(&editor, "*irc nicks*");
