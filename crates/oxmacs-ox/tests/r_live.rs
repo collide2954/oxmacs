@@ -197,7 +197,7 @@ fn marked<'a>(output: &'a str, kind: &str) -> Vec<&'a str> {
 #[ignore = "runs the R installed on this machine"]
 fn the_environment_tables_and_objects_are_described() {
     let (output, _directory) = session(
-        "x <- 1:10\ns <- \"hello world\"\ncars <- mtcars\nadd <- function(a, b = 2) a + b\ngetOption(\"oxmacs\")$environment()\ngetOption(\"oxmacs\")$view(\"cars\", 2L)\ngetOption(\"oxmacs\")$view(\"x\", 2L)\ngetOption(\"oxmacs\")$inspect(\"add\")\nq()\n",
+        "x <- 1:10\ns <- \"hello world\"\ncars <- mtcars\nadd <- function(a, b = 2) a + b\ngetOption(\"oxmacs\")$environment()\ngetOption(\"oxmacs\")$view(\"cars\", 2L)\ngetOption(\"oxmacs\")$view(\"x\", 2L)\ngetOption(\"oxmacs\")$inspect(\"add\")\ngetOption(\"oxmacs\")$peek(\"cars\")\nq()\n",
     );
 
     let environment = marked(&output, "environment");
@@ -220,6 +220,10 @@ fn the_environment_tables_and_objects_are_described() {
     assert_eq!(table.len(), 5);
     assert_eq!(marked(&output, "message"), ["x is not a table"]);
     assert!(marked(&output, "object")[0].starts_with("add\nfunction (a, b = 2)"));
+    let peek: Vec<&str> = marked(&output, "peek")[0].lines().collect();
+    assert_eq!(peek[0], "cars");
+    assert!(peek[1].starts_with("'data.frame':"), "{peek:?}");
+    assert_eq!(peek.len(), 13, "{peek:?}");
 }
 
 #[test]

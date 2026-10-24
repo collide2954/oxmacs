@@ -72,6 +72,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `C-c C-o` in R scripts and consoles shows the structure of the R object at point in the echo area.
 - R tables sort by the column at point with `s` (up, down, then as they were), keep the rows where an R expression holds with `/`, page through a thousand rows at a time with `]` and `[`, and describe the column at point with `i`: its mean, spread and range, or its commonest values, and how many are missing.
 - R help links the names under See Also: `RET` follows one, `TAB` and `S-TAB` move between them, `l` and `r` go back and forward through the pages seen, `x` runs the example at point in the console and `e` runs them all.
 - Plugin views hear their size in pixels through `open-view`'s `:on-resize` and can open unseen with `:show false`; `ui/image` takes `:on-press` and `:selected`. `set-header` keeps lines above a buffer's text while it scrolls, and `prompt-path`'s `:initial` starts with a file name, as when saving.

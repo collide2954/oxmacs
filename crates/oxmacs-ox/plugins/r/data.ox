@@ -1,7 +1,8 @@
 (module
   (import (ox string)
-          (r session :as session))
-  (export listed tabled described described-column environment-due))
+          (r session :as session)
+          (r help :as help))
+  (export listed tabled described described-column peeked environment-due))
 
 (def help "RET opens   g refreshes   q quits")
 (def value-width 60)
@@ -307,3 +308,14 @@
     (if view.table
       (ask-table view.session view.object (current-view view))
       (ask-object view.session view.object false))))
+
+(defcommand r-peek "Show the structure of the R object at point in the echo area"
+  (let [running (session/current-session)
+        name (help/symbol-at-point)]
+    (cond ((not (session/running? running)) (message "Start R with C-c C-z to look at its objects"))
+          ((not name) (message "No R name at point"))
+          (else (session/request running "getOption(\"oxmacs\")$peek({(session/r-string name)})")))))
+
+(def (peeked _ payload)
+  (let [[name text] (string/split payload "\n" 2)]
+    (message "{name}  {(string/trim-start (or text ""))}")))

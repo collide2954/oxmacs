@@ -1,6 +1,6 @@
 (module
   (import (ox string) (ox regex))
-  (export page symbol-in topic-of link-at next-link example-at examples))
+  (export page symbol-in symbol-at-point topic-of link-at next-link example-at examples))
 
 (def backspace \u{8})
 
@@ -105,3 +105,6 @@
                          (regex/find-all #"[\p{L}\p{N}._]+" line))]
     (when (regex/matches? #"^[^0-9_]" found.text)
       found.text)))
+
+(def (symbol-at-point)
+  (symbol-in (or (line-text (current-line)) "") (current-column)))

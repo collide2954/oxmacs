@@ -285,3 +285,37 @@ fn i_describes_the_column_at_point() {
         Some("mpg <dbl>: mean 20.09, max 33.9, 0 missing")
     );
 }
+
+#[test]
+fn control_c_control_o_shows_the_object_at_point_in_the_echo_area() {
+    let mut r = script("x <- 1:10\nmean(x)\n", 15);
+    let job = r.running();
+
+    r.press("C-c C-o");
+    assert_eq!(r.sent(), ["getOption(\"oxmacs\")$peek(\"x\")\n"]);
+    r.output(
+        job,
+        &format!("\u{1}peek\u{2}x\n int [1:10] 1 2 3 4 5 6 7 8 9 10\u{3}{PROMPT}"),
+    );
+
+    assert_eq!(
+        r.editor.message(),
+        Some("x  int [1:10] 1 2 3 4 5 6 7 8 9 10")
+    );
+}
+
+#[test]
+fn objects_are_only_shown_from_a_running_session() {
+    let mut r = script("x <- 1:10\n", 0);
+
+    r.press("C-c C-o");
+    assert_eq!(
+        r.editor.message(),
+        Some("Start R with C-c C-z to look at its objects")
+    );
+    assert_eq!(r.started(), Vec::new());
+
+    r.running();
+    r.press("C-e C-c C-o");
+    assert_eq!(r.editor.message(), Some("No R name at point"));
+}

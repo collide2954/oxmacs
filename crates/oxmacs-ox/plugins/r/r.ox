@@ -15,6 +15,7 @@
    "C-c C-z" 'r-switch-to-console
    "C-c C-v" 'r-help
    "C-c C-e" 'r-environment
+   "C-c C-o" 'r-peek
    "M-." 'r-find-definition
    "TAB" 'r-complete
    "C-M-i" 'r-complete})
@@ -28,6 +29,7 @@
 (session/on-marker "table" data/tabled)
 (session/on-marker "object" data/described)
 (session/on-marker "stats" data/described-column)
+(session/on-marker "peek" data/peeked)
 (session/on-ready :environment data/environment-due)
 (session/on-marker "complete" complete/answered)
 (session/on-marker "signature" complete/signed)
@@ -78,9 +80,6 @@
             last-line ((fn down [line] (if (and (< (+ line 1) total) (not (blank? (+ line 1)))) (down (+ line 1)) line)) start)]
         [(nth starts first-line) (+ (nth starts last-line) (count (nth lines last-line)))]))))
 
-(def (symbol-at-point)
-  (help/symbol-in (or (line-text (current-line)) "") (current-column)))
-
 (defcommand run-r "Start an R console beside the script"
   (when-let [running (session/ensure)]
     (session/show-console running true)))
@@ -112,7 +111,7 @@
         (session/show-console running true)))))
 
 (defcommand r-help "Show R's help on a topic in *R help*"
-  (let [default (symbol-at-point)
+  (let [default (help/symbol-at-point)
         typed (string/trim (await (prompt (if default "R help on (default {default}): " "R help on: "))))
         topic (if (string/blank? typed) default typed)]
     (when topic

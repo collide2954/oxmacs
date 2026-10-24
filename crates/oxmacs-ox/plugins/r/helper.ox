@@ -287,6 +287,15 @@ local({
     marker("stats", paste(column, class(value)[1], paste0(flat(text), ", ", missing, " missing"), sep = "\t"))
     last()
   }
+  oxmacs$peek <- function(name) {
+    text <- tryCatch(
+      utils::capture.output(utils::str(eval(str2lang(name), globalenv()), max.level = 1, list.len = 10)),
+      error = function(e) conditionMessage(e)
+    )
+    if (length(text) > 12) text <- c(utils::head(text, 12), "...")
+    marker("peek", paste(c(name, text), collapse = "\n"))
+    last()
+  }
   oxmacs$inspect <- function(name) {
     text <- tryCatch(
       utils::capture.output(utils::str(get(name, envir = globalenv()))),
