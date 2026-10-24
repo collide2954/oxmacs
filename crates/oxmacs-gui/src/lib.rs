@@ -1,5 +1,6 @@
 pub mod animation;
 pub mod app;
+pub mod crash;
 mod fetch;
 pub mod fonts;
 pub mod keys;
@@ -19,6 +20,7 @@ use oxmacs_core::cli::Visit;
 use oxmacs_core::config::WindowMode;
 
 pub fn run(visits: Vec<Visit>) -> Result {
+    crash::install(crash::folder());
     let home = oxmacs_ox::home();
     let booted = App::boot(&visits, home.as_deref());
     let mode = booted.0.editor().config().window_mode;
@@ -49,6 +51,7 @@ fn window_settings(mode: WindowMode) -> window::Settings {
         size: Size::new(960.0, 720.0),
         maximized: mode == WindowMode::Maximized,
         fullscreen: mode == WindowMode::Fullscreen,
+        exit_on_close_request: false,
         platform_specific: platform(),
         ..window::Settings::default()
     }
@@ -77,6 +80,7 @@ mod tests {
     fn the_window_opens_in_the_configured_mode() {
         let windowed = window_settings(WindowMode::Windowed);
         assert!(!windowed.maximized && !windowed.fullscreen);
+        assert!(!windowed.exit_on_close_request);
         assert_eq!(windowed.size, Size::new(960.0, 720.0));
 
         assert!(window_settings(WindowMode::Maximized).maximized);

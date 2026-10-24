@@ -306,6 +306,14 @@ impl Editor {
     }
 
     pub(super) fn finish_kill(&mut self, index: usize) {
+        if let Some(path) = self
+            .buffers
+            .get(index)
+            .and_then(|buffer| buffer.file())
+            .map(|file| file.path.clone())
+        {
+            self.forget_recovery(&path);
+        }
         self.buffers.remove(index);
         self.rehome_windows();
         self.name_file_buffers();

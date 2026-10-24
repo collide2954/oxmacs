@@ -3726,6 +3726,7 @@ dependencies = [
 name = "oxmacs-gui"
 version = "0.13.0"
 dependencies = [
+ "dirs",
  "iced",
  "iced_test",
  "jiff",

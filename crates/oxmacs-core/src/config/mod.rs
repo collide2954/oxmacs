@@ -28,6 +28,7 @@ pub struct Config {
     pub clock_format: String,
     pub rust_lint: RustLint,
     pub auto_save: bool,
+    pub auto_save_visited: bool,
     pub line_numbers: LineNumbers,
     pub line_number_separator: bool,
     pub window_mode: WindowMode,
@@ -103,6 +104,7 @@ impl Default for Config {
             clock_format: "%H:%M".to_owned(),
             rust_lint: RustLint::default(),
             auto_save: true,
+            auto_save_visited: false,
             line_numbers: LineNumbers::default(),
             line_number_separator: false,
             window_mode: WindowMode::default(),
@@ -296,6 +298,7 @@ mod tests {
         assert!(!config.format_on_save);
         assert!(!config.line_number_separator);
         assert!(config.auto_save);
+        assert!(!config.auto_save_visited);
         assert!(config.splash);
         assert_eq!(config.air_program, None);
 
@@ -303,6 +306,7 @@ mod tests {
             "format-on-save": true,
             "line-number-separator": true,
             "auto-save": false,
+            "auto-save-visited": true,
             "splash": false,
             "animations": false,
             "air-program": "C:/tools/air.exe"
@@ -311,6 +315,7 @@ mod tests {
         assert!(config.format_on_save);
         assert!(config.line_number_separator);
         assert!(!config.auto_save);
+        assert!(config.auto_save_visited);
         assert!(!config.splash);
         assert!(!config.animations);
         assert_eq!(config.air_program.as_deref(), Some("C:/tools/air.exe"));

@@ -10,6 +10,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+dirs.workspace = true
 iced.workspace = true
 jiff.workspace = true
 oxmacs-core.workspace = true

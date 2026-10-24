@@ -164,9 +164,10 @@ impl Editor {
             return;
         };
         buffer.replace_text(&loaded.text);
-        buffer.set_file(FileInfo::new(path, loaded.format, loaded.disk));
+        buffer.set_file(FileInfo::new(path.clone(), loaded.format, loaded.disk));
         buffer.mark_saved();
         let message = format!("Reverted buffer {}", buffer.name());
+        self.forget_recovery(&path);
         self.show_message(message);
         if index == 0 {
             self.reveal_point();

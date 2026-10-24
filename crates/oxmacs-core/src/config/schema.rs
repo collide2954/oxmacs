@@ -156,10 +156,16 @@ pub const SETTINGS: &[Setting] = &[
         "Cargo command that lints Rust projects on save",
     ),
     setting(
-        RUST,
+        FILES,
         "auto-save",
         Kind::Toggle,
-        "Save modified Rust buffers when idle so they are linted",
+        "Keep recovery copies of unsaved files in the oxmacs cache, offered back after a crash",
+    ),
+    setting(
+        FILES,
+        "auto-save-visited",
+        Kind::Toggle,
+        "Save modified files in place when idle",
     ),
     optional(
         setting(

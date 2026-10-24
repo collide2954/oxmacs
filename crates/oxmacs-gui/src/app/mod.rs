@@ -85,6 +85,7 @@ pub enum Message {
     EndTakeover,
     Focus(bool),
     Idle,
+    CloseRequested,
 }
 
 impl Default for App {
@@ -127,6 +128,10 @@ impl App {
     pub fn boot(visits: &[Visit], home: Option<&Path>) -> (Self, Task<Message>) {
         let mut app = Self::default();
         app.editor.add_language_servers(SERVERS);
+        app.editor.set_recovery_folder(
+            home.and(dirs::cache_dir())
+                .map(|cache| cache.join("oxmacs").join("recovery")),
+        );
         let started = app.start_ox(home);
         let splash = app.editor.config().splash;
         app.start(visits, splash);
@@ -261,6 +266,7 @@ impl App {
         };
         Subscription::batch([
             keyboard::listen().map(Message::Keyboard),
+            window::close_requests().map(|_| Message::CloseRequested),
             system::theme_changes().map(Message::AppearanceChanged),
             watcher::changes(Watched {
                 files: self.editor.visited_files(),
@@ -771,20 +777,48 @@ mod tests {
     }
 
     #[test]
-    fn auto_save_messages_save_idle_rust_buffers() {
+    fn auto_save_messages_keep_recovery_copies_of_idle_buffers() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("Cargo.toml"), "[package]\n").unwrap();
-        let path = dir.path().join("main.rs");
-        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let path = dir.path().join("notes.txt");
+        std::fs::write(&path, "hello\n").unwrap();
         let mut app = App::default();
+        app.editor
+            .set_recovery_folder(Some(dir.path().join("recovery")));
         app.start(&[visit(&path)], false);
         press(&mut app, "x", Modifiers::empty());
         assert!(app.editor().wants_auto_save());
 
         let _ = app.update(Message::AutoSave);
 
-        assert!(!app.editor().buffer().is_modified());
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "xfn main() {}\n");
+        assert!(app.editor().buffer().is_modified());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello\n");
+        assert_eq!(
+            std::fs::read_dir(dir.path().join("recovery"))
+                .unwrap()
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn closing_the_window_asks_about_unsaved_files_first() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("notes.txt");
+        std::fs::write(&path, "hello\n").unwrap();
+        let mut app = App::default();
+        app.start(&[visit(&path)], false);
+        press(&mut app, "x", Modifiers::empty());
+
+        let _ = app.update(Message::CloseRequested);
+
+        assert!(!app.editor().should_quit());
+        assert!(
+            app.editor()
+                .question()
+                .is_some_and(|question| question.prompt().starts_with("Save file "))
+        );
+        press(&mut app, "n", Modifiers::empty());
+        assert!(app.editor().should_quit());
     }
 
     #[test]

@@ -271,13 +271,14 @@ impl Editor {
         match files::load(&path) {
             Ok(loaded) => {
                 let mut buffer = Buffer::with_text(path.display().to_string(), &loaded.text);
-                buffer.set_file(FileInfo::new(path, loaded.format, loaded.disk));
+                buffer.set_file(FileInfo::new(path.clone(), loaded.format, loaded.disk));
                 buffer.set_read_only(loaded.read_only);
                 self.add_buffer(buffer);
                 self.mark_buffer(0);
                 if loaded.disk.is_none() {
                     self.show_message("(New file)");
                 }
+                self.offer_recovery(&path);
                 true
             }
             Err(error) => {
@@ -355,6 +356,7 @@ impl Editor {
                     buffer.set_file(FileInfo::new(path.clone(), format, Some(disk)));
                     buffer.mark_saved();
                 }
+                self.forget_recovery(&path);
                 let shown = paths::abbreviate(&path, self.home.as_deref());
                 let warning = format_error
                     .map(|error| format!("; {error}"))

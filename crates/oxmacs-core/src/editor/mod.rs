@@ -82,6 +82,7 @@ struct Settings {
     line_numbers: LineNumbers,
     line_number_separator: bool,
     auto_save: bool,
+    auto_save_visited: bool,
     language_servers: bool,
     inlay_hints: bool,
 }
@@ -94,6 +95,7 @@ impl From<&Config> for Settings {
             line_numbers: config.line_numbers,
             line_number_separator: config.line_number_separator,
             auto_save: config.auto_save,
+            auto_save_visited: config.auto_save_visited,
             language_servers: config.language_servers,
             inlay_hints: config.inlay_hints,
         }
@@ -168,6 +170,8 @@ pub struct Editor {
     error_patterns: Vec<ErrorPattern>,
     tools_root: Option<PathBuf>,
     init_path: Option<PathBuf>,
+    recovery: Option<PathBuf>,
+    recovered: Vec<(crate::text::BufferId, u64)>,
     next_fetch: u64,
     fetches: effect::Fetches,
     job_handlers: job::JobHandlers,
@@ -262,6 +266,8 @@ impl Editor {
             error_patterns: build::errors::BUILT_IN.to_vec(),
             tools_root: dirs::data_dir().map(|data| data.join("oxmacs").join("tools")),
             init_path: None,
+            recovery: None,
+            recovered: Vec::new(),
             next_fetch: 0,
             fetches: effect::Fetches::default(),
             job_handlers: job::JobHandlers::default(),

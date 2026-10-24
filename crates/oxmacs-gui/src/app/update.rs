@@ -6,6 +6,7 @@ use iced::theme::Mode;
 use iced::time::Instant;
 use iced::widget::image;
 use iced::{Task, clipboard, keyboard};
+use oxmacs_core::command::Command;
 use oxmacs_core::editor::{Effect, Job, Outcome, ServerId, WindowId};
 use oxmacs_core::external::lsp;
 use oxmacs_core::external::notify;
@@ -216,6 +217,7 @@ impl App {
             Message::TakeoverSized(size) => self.takeover_size = Some(size),
             Message::Focus(focused) => self.focus_changed(focused),
             Message::Idle => self.idle(),
+            Message::CloseRequested => self.editor.execute(Command::SaveBuffersKillOxmacs),
         }
         self.ox.tick(&mut self.editor);
         self.settle();
