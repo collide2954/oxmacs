@@ -12,6 +12,7 @@ mod mode;
 mod modes;
 mod natives;
 mod plugins;
+mod processes;
 mod prompts;
 mod settings;
 pub mod shapes;
@@ -54,6 +55,7 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     views::install(&mut isolate);
     buffers::install(&mut isolate);
     hooks::install(&mut isolate);
+    processes::install(&mut isolate);
     transients::install(&mut isolate);
     modes::install(&mut isolate);
     takeover::install(&mut isolate);

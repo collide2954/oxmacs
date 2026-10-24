@@ -6,7 +6,6 @@ use iced::theme::Mode;
 use iced::time::Instant;
 use iced::widget::image;
 use iced::{Task, clipboard, keyboard};
-use jiff::Timestamp;
 use oxmacs_core::editor::{Effect, Job, Outcome, ServerId, WindowId};
 use oxmacs_core::external::lsp;
 use oxmacs_core::external::notify;
@@ -247,7 +246,7 @@ impl App {
 
     fn sample_processes(&mut self) {
         let samples = self.usage.sample(&self.editor.process_pids());
-        self.editor.processes_tick(Timestamp::now(), &samples);
+        self.editor.processes_tick(&samples);
     }
 
     fn plot_sized(&mut self, window: WindowId, size: iced::Size) {
@@ -317,6 +316,12 @@ impl App {
                     .is_some_and(|(_, handle)| handle.send(&text).is_ok());
                 if !sent {
                     self.editor.show_message("The process is not running");
+                }
+                Task::none()
+            }
+            Effect::Terminate(job) => {
+                if let Some((_, killer)) = self.jobs.iter().find(|(id, _)| *id == job) {
+                    killer.terminate();
                 }
                 Task::none()
             }

@@ -396,7 +396,6 @@ impl Editor {
         }
         self.render_help();
         self.fit_r_widths();
-        self.render_processes();
         self.render_tools();
         self.render_tables();
         self.render_environments();

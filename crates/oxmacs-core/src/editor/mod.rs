@@ -43,7 +43,7 @@ pub use prompts::transient::{
 pub use search::isearch::Search;
 pub use search::replace::Replace;
 pub use special::locations::Place;
-pub use special::processes::{ProcessKey, ProcessSpec};
+pub use special::processes::{ProcessInfo, ProcessStatus};
 pub use windows::numbers::Gutter;
 pub use windows::pane::{Pane, ScreenRow};
 pub use windows::status::{BufferState, Status};
@@ -496,7 +496,6 @@ impl Editor {
             Some(Mode::Help(_)) => Scope::Help,
             Some(Mode::Locations(_)) => Scope::Locations,
             Some(Mode::Plots(_)) => Scope::Plots,
-            Some(Mode::Processes(_)) => Scope::Processes,
             Some(Mode::Tools(_)) => Scope::Tools,
             Some(Mode::Environment(_)) => Scope::Environment,
             Some(Mode::Table(_)) => Scope::Table,
@@ -521,7 +520,6 @@ impl Editor {
             Some(Mode::Diagnostics(list)) => list.line_style(line),
             Some(Mode::Help(help)) => help.line_style(line),
             Some(Mode::Locations(list)) => list.line_style(line),
-            Some(Mode::Processes(list)) => list.line_style(line),
             Some(Mode::Tools(list)) => list.line_style(line),
             Some(Mode::Environment(view)) => view.line_style(line),
             Some(Mode::Table(view)) => view.line_style(line),

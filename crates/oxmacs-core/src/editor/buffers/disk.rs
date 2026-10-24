@@ -114,10 +114,6 @@ impl Editor {
             self.r_table_reload();
             return;
         }
-        if matches!(self.buffers.mode(0), Some(Mode::Processes(_))) {
-            self.render_processes();
-            return;
-        }
         if matches!(self.buffers.mode(0), Some(Mode::Tools(_))) {
             self.check_tool_releases();
             return;

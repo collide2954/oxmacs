@@ -441,11 +441,7 @@ pub enum Command {
     CompletionAccept,
     #[strum(message = "Close the completion popup")]
     CompletionQuit,
-    #[strum(
-        message = "List the processes oxmacs runs",
-        detailed_message = "Opens *Processes*: every R session, compile, lint and background process oxmacs started or controls, with its status, process id, running time, CPU and memory. It updates as things change; RET visits an entry's buffer and k stops it."
-    )]
-    ListProcesses,
+
     #[strum(
         message = "List the objects in the R session",
         detailed_message = "Opens the session's environment between its console and its plots: data, values and functions with their class, size and a short value. It refreshes after each command you run while it is shown; RET opens a data frame as a table and anything else with str()."
@@ -475,10 +471,7 @@ pub enum Command {
     ToolUpdate,
     #[strum(message = "Remove oxmacs's copy of the tool on this line")]
     ToolRemove,
-    #[strum(message = "Visit the buffer of the process on this line")]
-    ProcessVisit,
-    #[strum(message = "Stop the process on this line")]
-    ProcessStop,
+
     #[strum(message = "Show the next R plot")]
     RPlotNext,
     #[strum(message = "Show the previous R plot")]
@@ -637,7 +630,6 @@ impl Command {
             | Self::CompletionPrevious
             | Self::CompletionAccept
             | Self::CompletionQuit => Scope::Popup,
-            Self::ProcessVisit | Self::ProcessStop => Scope::Processes,
             Self::LocationVisit | Self::LocationNext | Self::LocationPrevious => Scope::Locations,
             Self::ToolDetails | Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => {
                 Scope::Tools
@@ -674,7 +666,6 @@ pub enum Scope {
     Locations,
     Popup,
     Plots,
-    Processes,
     Tools,
     Environment,
     Table,
@@ -696,7 +687,6 @@ impl Scope {
             Self::Locations => Some("*xref*"),
             Self::Popup => Some("the completion popup"),
             Self::Plots => Some("R plot windows"),
-            Self::Processes => Some("*Processes*"),
             Self::Tools => Some("*Tools*"),
             Self::Environment => Some("R environments"),
             Self::Table => Some("R tables"),

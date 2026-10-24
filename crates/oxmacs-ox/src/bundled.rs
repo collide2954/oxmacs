@@ -6,6 +6,7 @@ pub const BUNDLED: &[Bundle] = &[
     GIT,
     SCREENSAVER,
     PROFILER,
+    PROCESSES,
     CUSTOMIZE,
     VAULT,
     IRC,
@@ -132,6 +133,18 @@ const PROFILER: Bundle = Bundle {
             include_str!("../plugins/profiler/profiler.ox"),
         ),
         ("report.ox", include_str!("../plugins/profiler/report.ox")),
+    ],
+};
+
+const PROCESSES: Bundle = Bundle {
+    name: "processes",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/processes/plugin.ox")),
+        (
+            "processes.ox",
+            include_str!("../plugins/processes/processes.ox"),
+        ),
+        ("table.ox", include_str!("../plugins/processes/table.ox")),
     ],
 };
 
@@ -426,6 +439,9 @@ mod screensaver;
 
 #[cfg(test)]
 mod profiler;
+
+#[cfg(test)]
+mod processes;
 
 #[cfg(test)]
 mod customize;

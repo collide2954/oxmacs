@@ -482,6 +482,7 @@ struct Options {
     directory: Option<PathBuf>,
     watched: Option<PathBuf>,
     beside: bool,
+    select: bool,
     moved: Option<Value>,
     resized: Option<Value>,
     line: Option<usize>,
@@ -499,6 +500,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
                 "directory" => found.directory = Some(PathBuf::from(print::display(heap, *value))),
                 "watch" => found.watched = Some(PathBuf::from(print::display(heap, *value))),
                 "beside" => found.beside = value.truthy(),
+                "select" => found.select = value.truthy(),
                 "on-move" => found.moved = Some(*value),
                 "on-resize" => found.resized = Some(*value),
                 "line" => found.line = Some(number(heap, *value)?),
@@ -515,7 +517,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
-        "open-buffer takes :keys, :directory, :watch, :beside, :on-move, :on-resize, :line, :unsaved, :input and :show, not {}",
+        "open-buffer takes :keys, :directory, :watch, :beside, :select, :on-move, :on-resize, :line, :unsaved, :input and :show, not {}",
         print::write(heap, option)
     ))
 }
@@ -548,9 +550,11 @@ fn bind(editor: &mut Editor, id: BufferId, bindings: Vec<(String, String)>) -> R
     Ok(())
 }
 
-fn reveal(editor: &mut Editor, id: BufferId, beside: bool) {
+fn reveal(editor: &mut Editor, id: BufferId, beside: bool, select: bool) {
     if !beside {
         editor.show_buffer(id);
+    } else if select {
+        editor.show_buffer_beside(id);
     } else if !editor.buffer_shown(id) {
         let origin = editor.selected_window();
         editor.show_buffer_beside(id);
@@ -601,7 +605,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     }
     bind(editor, id, given.bindings)?;
     if !given.hidden {
-        reveal(editor, id, given.beside);
+        reveal(editor, id, given.beside, given.select);
     }
     Ok(Value::Nil)
 }
@@ -944,6 +948,25 @@ mod tests {
             "{:?}",
             editor.buffer_names()
         );
+    }
+
+    #[test]
+    fn buffers_opened_beside_can_take_the_focus() {
+        let (mut editor, mut ox) = opened(
+            r#"(open-buffer "*main*" ["a"]) (open-buffer "*side*" ["x"] :beside true :select true)"#,
+        );
+        assert_eq!(editor.buffer().name(), "*side*");
+        assert_eq!(editor.tiling().windows().len(), 2);
+
+        press(&mut editor, &mut ox, "C-x o");
+        ox.eval(
+            &mut editor,
+            r#"(open-buffer "*side*" ["y"] :beside true :select true)"#,
+        )
+        .unwrap();
+
+        assert_eq!(editor.buffer().name(), "*side*");
+        assert_eq!(editor.tiling().windows().len(), 2);
     }
 
     #[test]

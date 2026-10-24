@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use crate::editor::prompts::callbacks::Answer;
-use crate::editor::special::processes::Source;
 use crate::editor::{Editor, is_keyboard_quit};
 use crate::external::managed::Managed;
 use crate::files::{DiskState, paths};
@@ -30,7 +29,6 @@ enum Pending {
         disk: Option<DiskState>,
     },
     SaveOver,
-    StopProcess(Source),
     RemoveTool(Managed),
     Callback,
 }
@@ -181,11 +179,6 @@ impl Editor {
                     self.save_buffer_at(0);
                 }
             }
-            Pending::StopProcess(source) => {
-                if answer == 'y' {
-                    self.finish_stop(source);
-                }
-            }
             Pending::RemoveTool(tool) => {
                 if answer == 'y' {
                     self.finish_tool_removal(tool);
@@ -229,15 +222,6 @@ impl Editor {
             choices: YES_NO,
             typed: None,
             pending: Pending::Revert { index },
-        });
-    }
-
-    pub(in crate::editor) fn ask_to_stop(&mut self, name: &str, source: Source) {
-        self.question = Some(Question {
-            prompt: format!("Stop {name}? (y or n) "),
-            choices: YES_NO,
-            typed: None,
-            pending: Pending::StopProcess(source),
         });
     }
 

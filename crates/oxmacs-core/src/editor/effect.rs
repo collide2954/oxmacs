@@ -36,6 +36,7 @@ pub enum Effect {
     Reconfigure,
     Fetch(FetchId, String),
     InstallTool(Box<Install>),
+    Terminate(JobId),
     StartServer(ServerId, Launch),
     ToServer(ServerId, String),
     StopServer(ServerId),

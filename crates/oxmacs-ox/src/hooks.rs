@@ -14,6 +14,7 @@ enum Waiting {
     DiskChanged,
     Saved(PathBuf),
     Configured,
+    Processes,
 }
 
 #[derive(Debug, Default)]
@@ -23,6 +24,7 @@ pub struct Hooks {
     disk: Vec<(String, Hold)>,
     saved: Vec<(String, Hold)>,
     configured: Vec<(String, Hold)>,
+    processes: Vec<(String, Hold)>,
     waiting: Vec<Waiting>,
 }
 
@@ -76,11 +78,21 @@ pub fn settings_changed(editor: &mut Editor) {
     }
 }
 
+fn processes_changed(editor: &mut Editor) {
+    if let Some(hooks) = hooks(editor)
+        && !hooks.processes.is_empty()
+        && !hooks.waiting.contains(&Waiting::Processes)
+    {
+        hooks.waiting.push(Waiting::Processes);
+    }
+}
+
 pub fn watch(editor: &mut Editor) {
     hooks(editor);
     editor.on_disk_change(disk_changed);
     editor.on_saved(saved);
     editor.on_configured(settings_changed);
+    editor.on_processes_change(processes_changed);
 }
 
 pub fn open_directories(editor: &mut Editor, plugin: &str) {
@@ -116,6 +128,13 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
                 editor
                     .plugin_state::<Hooks>()
                     .map(|hooks| hooks.configured.iter().map(|(_, hold)| *hold).collect())
+                    .unwrap_or_default(),
+                Vec::new(),
+            ),
+            Waiting::Processes => (
+                editor
+                    .plugin_state::<Hooks>()
+                    .map(|hooks| hooks.processes.iter().map(|(_, hold)| *hold).collect())
                     .unwrap_or_default(),
                 Vec::new(),
             ),
@@ -214,6 +233,17 @@ pub fn install(isolate: &mut Isolate) {
         |heap, editor, arguments| {
             if let Some(hooks) = hooks(editor) {
                 keyed(heap, &mut hooks.configured, arguments);
+            }
+            Ok(Value::Nil)
+        },
+    );
+    isolate.define_host_native::<Editor>(
+        "on-processes-change",
+        2,
+        Some(2),
+        |heap, editor, arguments| {
+            if let Some(hooks) = hooks(editor) {
+                keyed(heap, &mut hooks.processes, arguments);
             }
             Ok(Value::Nil)
         },

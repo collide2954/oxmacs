@@ -16,7 +16,6 @@ use crate::editor::languages::r_table::TableView;
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::special::help::Help;
 use crate::editor::special::locations::Locations;
-use crate::editor::special::processes::ProcessList;
 use crate::editor::special::splash::Splash;
 use crate::editor::special::toolbox::ToolList;
 use crate::editor::{Choice, Completion, Editor};
@@ -37,7 +36,6 @@ pub(super) enum Mode {
     Help(Help),
     Locations(Locations),
     Plots(Plots),
-    Processes(ProcessList),
     Tools(ToolList),
     Environment(EnvironmentView),
     Table(TableView),

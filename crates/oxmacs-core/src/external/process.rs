@@ -11,6 +11,7 @@ use crate::external::tools;
 const POLL: Duration = Duration::from_millis(50);
 const LINGER: Duration = Duration::from_millis(250);
 const CHUNK: usize = 8192;
+const GRACE: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
@@ -37,6 +38,20 @@ impl Handle {
             .ok_or_else(|| io::Error::from(io::ErrorKind::BrokenPipe))?;
         stdin.write_all(text.as_bytes())?;
         stdin.flush()
+    }
+
+    pub fn terminate(&self) {
+        self.close_input();
+        let pid = self.pid();
+        let child = Arc::clone(&self.child);
+        thread::spawn(move || {
+            ask_to_end(pid);
+            thread::sleep(GRACE);
+            let mut child = lock(&child);
+            if matches!(child.try_wait(), Ok(None)) {
+                let _ = child.kill();
+            }
+        });
     }
 
     pub fn pid(&self) -> u32 {
@@ -93,6 +108,22 @@ fn command(job: &Job, output: PipeWriter, interactive: bool) -> io::Result<Comma
         .stderr(output);
     tools::hide_console(&mut command);
     Ok(command)
+}
+
+fn ask_to_end(pid: u32) {
+    let (program, args) = if cfg!(windows) {
+        ("taskkill", ["/PID".to_owned(), pid.to_string()])
+    } else {
+        ("kill", ["-TERM".to_owned(), pid.to_string()])
+    };
+    let mut command = Command::new(program);
+    command
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    tools::hide_console(&mut command);
+    let _ = command.status();
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {

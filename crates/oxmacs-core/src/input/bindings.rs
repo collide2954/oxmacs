@@ -259,15 +259,6 @@ const PLOTS: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
-const PROCESSES: &[(&str, Command)] = &[
-    ("RET", Command::ProcessVisit),
-    ("k", Command::ProcessStop),
-    ("n", Command::NextLine),
-    ("p", Command::PreviousLine),
-    ("g", Command::RevertBuffer),
-    ("q", Command::QuitWindow),
-];
-
 const TOOLS: &[(&str, Command)] = &[
     ("TAB", Command::ToolDetails),
     ("i", Command::ToolInstall),
@@ -360,7 +351,6 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::Locations => LOCATIONS,
         Scope::Popup => POPUP,
         Scope::Plots => PLOTS,
-        Scope::Processes => PROCESSES,
         Scope::Tools => TOOLS,
         Scope::Environment => ENVIRONMENT,
         Scope::Table => TABLE,
