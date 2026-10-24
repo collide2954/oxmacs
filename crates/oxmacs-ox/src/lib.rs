@@ -2,6 +2,7 @@ mod buffers;
 mod bundled;
 pub mod checker;
 mod commands;
+mod editing;
 mod handles;
 mod help;
 mod hooks;
@@ -58,6 +59,7 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     views::install(&mut isolate);
     buffers::install(&mut isolate);
     handles::install(&mut isolate);
+    editing::install(&mut isolate);
     hooks::install(&mut isolate);
     processes::install(&mut isolate);
     transients::install(&mut isolate);
