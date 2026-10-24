@@ -16,6 +16,7 @@ mod manual;
 mod mode;
 mod modes;
 mod natives;
+pub mod overlays;
 mod plugins;
 mod processes;
 mod prompts;
@@ -57,6 +58,7 @@ pub fn home() -> Option<PathBuf> {
 fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     let mut isolate = Isolate::new();
     natives::install(&mut isolate);
+    overlays::install(&mut isolate);
     settings::install(&mut isolate);
     commands::install(&mut isolate);
     plugins::install(&mut isolate);

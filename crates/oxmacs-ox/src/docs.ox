@@ -1,5 +1,6 @@
 (message text) "Shows text in the echo area."
 (set-mode-line key text) "Shows text in the mode line under key, replacing what key showed before; nil takes it away."
+(set-overlay key rows {place :bottom-right scale 1}) "Floats rows over the windows under key, replacing what key showed before; nil or [] takes them away. A row is text, a vector of pieces or a map of :pieces and an :opacity from 0 to 1, and a piece is text or [text face], with face a theme face such as :comment, or :keycap to draw the text as a key. :place is :bottom-right, above the echo area, or :bottom-center, and :scale sizes the text against the editor's."
 (clipboard-set text) "Puts text on the system clipboard without adding it to the kill ring, for secrets."
 (notify title body) "Shows a desktop notification with title and body."
 (window-focused?) "True while the oxmacs window has the keyboard focus."
