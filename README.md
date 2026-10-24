@@ -94,7 +94,7 @@ oxmacs is configured in Ox, in `~/.oxmacs/init.ox` (`OXMACS_HOME` moves the fold
 
 ## Development
 
-Run `cargo fmt --all` and the tests for what you change before committing. CI runs clippy and the tests on Linux, macOS and Windows for pushes to master, version tags and pull requests, then builds the executables and the Fedora packages; the dnf repository is updated only when every check passes. Changes are recorded in CHANGELOG.md.
+Run `cargo fmt --all` and the tests for what you change before committing. For pushes to master, version tags and pull requests, CI checks formatting and then runs clippy on Linux, macOS and Windows. Only when both pass does it run the tests and build the executables and the Fedora packages, and the dnf repository is updated only when every check passes. Changes are recorded in CHANGELOG.md.
 
 ## License
 

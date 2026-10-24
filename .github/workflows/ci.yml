@@ -34,9 +34,40 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all --check
 
+  clippy:
+    name: clippy (${{ matrix.name }})
+    needs: fmt
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+          - name: macOS
+            os: macos-latest
+          - name: Windows
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Ox format and check
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cargo run -q -p ox-cli --locked -- fmt --check crates/oxmacs-ox/plugins crates/oxmacs-ox/src crates/ox/src/library crates/ox-perf/benchmarks
+          cargo run -q -p ox-cli --locked -- check crates/oxmacs-ox/plugins
+
   check:
     name: ${{ matrix.name }}
-    needs: fmt
+    needs: clippy
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     strategy:
@@ -61,20 +92,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Test
         run: cargo test --workspace --all-features --locked
-      - name: Ox format and check
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          cargo run -q -p ox-cli --locked -- fmt --check crates/oxmacs-ox/plugins crates/oxmacs-ox/src crates/ox/src/library crates/ox-perf/benchmarks
-          cargo run -q -p ox-cli --locked -- check crates/oxmacs-ox/plugins
       - name: Build the executables
         id: build
         if: ${{ !cancelled() }}
@@ -106,7 +128,7 @@ jobs:
 
   fedora:
     name: Fedora ${{ matrix.fedora }}
-    needs: fmt
+    needs: clippy
     runs-on: ubuntu-latest
     container: registry.fedoraproject.org/fedora:${{ matrix.fedora }}
     timeout-minutes: 90
