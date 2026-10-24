@@ -1,5 +1,5 @@
 (plugin irc
-  :version "0.4.0"
+  :version "0.5.0"
   :summary "An IRCv3 client in the style of ERC"
   :commands {irc: "Connect to your IRC networks"
              irc-setup: "Add an IRC network to your settings"

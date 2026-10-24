@@ -6,7 +6,8 @@
           (vault store :as vault))
   (export state network buffer-entry server-buffer buffer-of ensure-buffer! render! connect! quit! send! send-command!
           say! say-lines! act! join! part! has-cap? my-nick channel-nicks info! error! note-seen! toggle-noise!
-          message-at reply-to react! clear-buffer! irc-buffers next-active connected? reconnect! joined-channels))
+          message-at reply-to react! clear-buffer! irc-buffers next-active connected? reconnect! joined-channels
+          list! listing filter-list!))
 
 (def wanted-caps ["server-time" "message-tags" "echo-message" "batch" "draft/chathistory" "chathistory" "sasl"
                   "away-notify" "account-notify" "multi-prefix" "extended-join" "draft/multiline"
@@ -547,6 +548,52 @@
       (when-let [buffer (buffer-of name channel)]
         (event! buffer line :info (str line.nick " invited " invited))))))
 
+(def list-keys {"RET" 'irc-list-join "/" 'irc-list-filter "g" 'irc-list "q" 'quit-window})
+
+(def (list-buffer name)
+  (str "*irc channels " name "*"))
+
+(def (listing buffer)
+  "The channel list shown in buffer, as a map of :network, :channels, :filter and the :shown channels, or nil."
+  (get-in @state [:lists buffer]))
+
+(def (draw-list! buffer {show false})
+  (let [listed (listing buffer)
+        wanted (string/lower (or listed.filter ""))
+        has (fn [text] (string/includes? (string/lower (protocol/plain-text (or text ""))) wanted))
+        chosen (vec (filter (fn [channel] (or (has channel.name) (has channel.topic))) listed.channels))
+        lines (format/channel-lines listed.network chosen (count listed.channels) listed.filter)]
+    (swap! state assoc-in [:lists buffer :shown] chosen)
+    (if (or show (not (buffer-exists? buffer)))
+      (open-buffer buffer lines :keys list-keys :line 3)
+      (set-lines buffer lines :line 3))))
+
+(def (filter-list! buffer wanted)
+  "Shows only the channels in the list in buffer whose name or topic has wanted in it."
+  (when (listing buffer)
+    (swap! state assoc-in [:lists buffer :filter] wanted)
+    (draw-list! buffer)))
+
+(def (list! name arguments)
+  "Asks the network called name for its channels, which then show in a list."
+  (change-network! name assoc :listing [])
+  (send! name (string/trim (str "LIST " (or arguments ""))))
+  (message (str "Asking " name " for its channels…")))
+
+(def (on-list-item! name line)
+  (let [[_ channel users topic] line.params]
+    (change-network! name update :listing
+                     (fn [found] (conj (or found []) {name: channel users: (or (string/to-number (or users "")) 0) topic: (or topic "")})))))
+
+(def (on-list-end! name)
+  (let [buffer (list-buffer name)
+        found (or (get (network name) :listing) [])]
+    (change-network! name dissoc :listing)
+    (swap! state assoc-in [:lists buffer]
+           {network: name filter: "" shown: []
+            channels: (vec (sort-by (fn [channel] [(- channel.users) (fold channel.name)]) found))})
+    (draw-list! buffer :show true)))
+
 (def (dispatch! name line)
   (let [command line.command]
     (cond ((= command "PING") (send-command! name "PONG" line.params))
@@ -571,6 +618,9 @@
       ((= command "TOPIC") (on-topic! name line))
       ((= command "332") (on-topic-reply! name line))
       ((= command "353") (on-names! name line))
+      ((= command "321") (change-network! name assoc :listing []))
+      ((= command "322") (on-list-item! name line))
+      ((= command "323") (on-list-end! name))
       ((contains? (set ["333" "366" "MARKREAD" "PONG"]) command) nil)
       ((= command "AWAY") (on-away! name line))
       ((= command "BATCH") (on-batch! name line))

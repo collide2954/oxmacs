@@ -454,6 +454,54 @@ fn lost_connections_come_back_and_rejoin_the_open_channels() {
 }
 
 #[test]
+fn the_channel_list_is_filtered_and_joined_from() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    type_in(&mut editor, &mut ox, "/list");
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(&mut editor, &mut ox, "LIST");
+    fake.say(":srv 321 ana Channel :Users  Name");
+    fake.say(":srv 322 ana #small 3 :a quiet place");
+    fake.say(":srv 322 ana #rust 120 :\u{2}Rust\u{2} talk");
+    fake.say(":srv 323 ana :End of /LIST");
+    wait_for_text(&mut editor, &mut ox, "*irc channels Test*", "#small");
+
+    assert_eq!(editor.buffer().name(), "*irc channels Test*");
+    let lines: Vec<String> = editor
+        .buffer()
+        .contents()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(lines[0], "Channels on Test  2 channels");
+    assert_eq!(lines[3], "#rust     120  Rust talk");
+    assert_eq!(lines[4], "#small      3  a quiet place");
+
+    keys(&mut editor, &mut ox, "/");
+    assert!(pump(&mut editor, &mut ox, |editor, _| editor
+        .minibuffer()
+        .is_some()));
+    type_in(&mut editor, &mut ox, "QUIET");
+    keys(&mut editor, &mut ox, "RET");
+    wait_for_text(
+        &mut editor,
+        &mut ox,
+        "*irc channels Test*",
+        "1 of 2 channels with \"QUIET\"",
+    );
+    let lines: Vec<String> = editor
+        .buffer()
+        .contents()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(lines.len(), 4);
+    assert!(lines[3].starts_with("#small "), "{lines:?}");
+
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(&mut editor, &mut ox, "JOIN #small");
+}
+
+#[test]
 fn joins_and_parts_of_quiet_people_stay_hidden_until_asked_for() {
     let (fake, _home, mut editor, mut ox) = joined();
     fake.say(":bo!b@host PRIVMSG #oxmacs :I talk");

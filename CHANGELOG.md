@@ -68,6 +68,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- An IRC channel list: `/list` or `M-x irc-list` shows a network's channels by size with their topics, `/` filters them by name or topic, `RET` joins the one on the line and `g` lists them again.
 - `TAB` in IRC completes slash commands at the start of the input and the channels you are in, as well as nicks.
 - IRC reconnects after a lost connection with backoff, after 1, 2, 5, 15 and 30 seconds and then every minute, keeps trying while the server can't be reached, says so in every buffer of that network and rejoins the channels you were in. `/reconnect` connects again at once and `/quit` stops trying.
 - IRC shows server errors and IRCv3 `FAIL`, `WARN` and `NOTE` replies in the buffer you are in, or in the channel they are about, instead of only in the server buffer, says when a nick you asked for is taken, and tells you about invitations, with `C-c C-j` offering the channel you were invited to.

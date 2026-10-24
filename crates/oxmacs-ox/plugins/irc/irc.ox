@@ -12,7 +12,7 @@
 (def search-buffer "*irc search*")
 (def reactions ["👍" "❤️" "😂" "🎉" "👀" "🙏" "✅"])
 (def slash-commands ["join" "part" "me" "msg" "query" "notice" "nick" "quit" "reconnect" "topic" "whois" "names"
-                     "away" "back" "invite" "kick" "quote" "clear" "noise" "help"])
+                     "list" "away" "back" "invite" "kick" "quote" "clear" "noise" "help"])
 
 (defonce completing (atom nil))
 (defonce found (atom []))
@@ -133,6 +133,7 @@
       ((= command "nick") (client/send-command! name "NICK" [word]))
       ((= command "quit") (client/quit! name (when (not= rest "") rest)))
       ((= command "reconnect") (client/reconnect! name))
+      ((= command "list") (client/list! name rest))
       ((= command "topic") (client/send-command! name "TOPIC" (if (= rest "") [here-target] [here-target rest])))
       ((= command "whois") (client/send-command! name "WHOIS" [word]))
       ((= command "names") (client/info! buffer (str (count (client/channel-nicks name here-target)) " people: "
@@ -287,6 +288,28 @@
                (if (= entry.kind :channel)
                  (client/part! entry.network entry.target nil)
                  (message "This isn't a channel"))))))
+
+(def (listed-or-complain)
+  (or (client/listing (buffer-name)) (raise (error "This isn't a channel list"))))
+
+(defcommand irc-list "List the channels on this network, or again in a channel list"
+  (quietly (fn []
+             (let [listed (client/listing (buffer-name))]
+               (client/list! (if listed listed.network (get (here-or-complain) :network)) "")))))
+
+(defcommand irc-list-join "Join the channel on this line of the channel list"
+  (quietly (fn []
+             (let [listed (listed-or-complain)]
+               (if-let [channel (get listed.shown (- (current-line) 3))]
+                 (client/join! listed.network channel.name)
+                 (message "No channel on this line"))))))
+
+(defcommand irc-list-filter "Show only the channels whose name or topic has some text; empty shows them all"
+  (quietly (fn []
+             (let [buffer (buffer-name)
+                   listed (listed-or-complain)
+                   wanted (string/trim (await (prompt "Channels with: " :initial (or listed.filter ""))))]
+               (client/filter-list! buffer wanted)))))
 
 (defcommand irc-switch "Go to an IRC buffer"
   (quietly (fn []
