@@ -62,7 +62,7 @@ fn return_opens_tables_as_tables_and_other_objects_with_str() {
     r.editor.take_effects();
 
     r.press("M-< C-n C-n C-n RET");
-    assert_eq!(r.sent(), ["getOption(\"oxmacs\")$view(\"cars\", 1000L)\n"]);
+    assert_eq!(r.sent(), [view_call("0L, \"\", FALSE, \"\"")]);
     r.press("C-n C-n C-n RET");
     assert_eq!(r.sent(), ["getOption(\"oxmacs\")$inspect(\"s\")\n"]);
     r.press("M-< RET");
@@ -123,7 +123,7 @@ fn tables_show_rows_under_a_header_of_names_and_types() {
     assert_eq!(r.editor.buffer().name(), "*R:analysis cars*");
     let header = header(&r);
     assert!(
-        header[0].starts_with("cars  32 × 11 (first 2)  columns 1–4"),
+        header[0].starts_with("cars  32 × 11 (rows 1–2)  columns 1–4"),
         "{header:?}"
     );
     assert_eq!(header[1], "              mpg    cyl   disp  name");
@@ -161,7 +161,7 @@ fn g_asks_r_for_the_table_again() {
 
     r.press("g");
 
-    assert_eq!(r.sent(), ["getOption(\"oxmacs\")$view(\"cars\", 1000L)\n"]);
+    assert_eq!(r.sent(), [view_call("0L, \"\", FALSE, \"\"")]);
 }
 
 #[test]
@@ -180,4 +180,108 @@ fn other_objects_show_their_structure() {
     r.editor.take_effects();
     r.press("g");
     assert_eq!(r.sent(), ["getOption(\"oxmacs\")$inspect(\"add\")\n"]);
+}
+
+const SORTED: &str = "cars\t32\t11\t0\t32\tmpg\tTRUE\t\n\tmpg\tcyl\tdisp\tname\n\tnumeric\tnumeric\tnumeric\tcharacter\nDatsun 710\t22.8\t4\t108\tsmall\nMazda RX4\t21\t6\t160\tfast";
+
+fn view_call(rest: &str) -> String {
+    format!("getOption(\"oxmacs\")$view(\"cars\", 1000L, {rest})\n")
+}
+
+#[test]
+fn s_sorts_by_the_column_at_point_up_then_down_then_not() {
+    let (mut r, job) = viewed(CARS);
+    r.editor.take_effects();
+    r.editor.go_to_line(1, 15);
+
+    r.press("s");
+    assert_eq!(r.sent(), [view_call("0L, \"mpg\", FALSE, \"\"")]);
+    r.output(job, &format!("\u{1}table\u{2}{SORTED}\u{3}{PROMPT}"));
+    assert!(
+        header(&r)[0].contains("sorted by mpg ↓"),
+        "{:?}",
+        header(&r)
+    );
+    assert_eq!(r.lines()[0], "Datsun 710   22.8      4    108  small");
+
+    r.editor.go_to_line(1, 15);
+    r.press("s");
+    assert_eq!(r.sent(), [view_call("0L, \"\", FALSE, \"\"")]);
+    r.editor.go_to_line(1, 23);
+    r.press("s");
+    assert_eq!(r.sent(), [view_call("0L, \"cyl\", FALSE, \"\"")]);
+    r.press("M-< C-a s");
+    assert_eq!(r.editor.message(), Some("No column here"));
+}
+
+#[test]
+fn slash_filters_the_rows_with_an_r_expression() {
+    let (mut r, job) = viewed(CARS);
+    r.editor.take_effects();
+
+    r.press("/");
+    assert_eq!(
+        r.editor.minibuffer().unwrap().prompt(),
+        "Keep the rows of cars where (R): "
+    );
+    r.typed("mpg > 20");
+    r.press("RET");
+    assert_eq!(r.sent(), [view_call("0L, \"\", FALSE, \"mpg > 20\"")]);
+
+    r.output(
+        job,
+        &format!(
+            "\u{1}table\u{2}{}\u{3}{PROMPT}",
+            CARS.replace("cars\t32\t11", "cars\t14\t11\t0\t32\t\tFALSE\tmpg > 20")
+        ),
+    );
+    assert!(
+        header(&r)[0].contains("14 of 32 rows where mpg > 20"),
+        "{:?}",
+        header(&r)
+    );
+}
+
+#[test]
+fn brackets_page_through_long_tables() {
+    let (mut r, job) = viewed(&CARS.replace("cars\t32\t11", "cars\t2500\t11\t0\t2500\t\tFALSE\t"));
+    r.editor.take_effects();
+    assert!(header(&r)[0].contains("rows 1–2)"), "{:?}", header(&r));
+
+    r.press("[");
+    assert_eq!(r.editor.message(), Some("This is the first page"));
+    r.press("]");
+    assert_eq!(r.sent(), [view_call("1000L, \"\", FALSE, \"\"")]);
+    r.output(
+        job,
+        &format!(
+            "\u{1}table\u{2}{}\u{3}{PROMPT}",
+            CARS.replace("cars\t32\t11", "cars\t2500\t11\t1000\t2500\t\tFALSE\t")
+        ),
+    );
+    assert!(header(&r)[0].contains("rows 1001–1002"), "{:?}", header(&r));
+    r.press("[");
+    assert_eq!(r.sent(), [view_call("0L, \"\", FALSE, \"\"")]);
+}
+
+#[test]
+fn i_describes_the_column_at_point() {
+    let (mut r, job) = viewed(CARS);
+    r.editor.take_effects();
+    r.editor.go_to_line(1, 15);
+
+    r.press("i");
+    assert_eq!(
+        r.sent(),
+        ["getOption(\"oxmacs\")$stats(\"cars\", \"mpg\")\n"]
+    );
+    r.output(
+        job,
+        &format!("\u{1}stats\u{2}mpg\tnumeric\tmean 20.09, max 33.9, 0 missing\u{3}{PROMPT}"),
+    );
+
+    assert_eq!(
+        r.editor.message(),
+        Some("mpg <dbl>: mean 20.09, max 33.9, 0 missing")
+    );
 }

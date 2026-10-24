@@ -229,23 +229,62 @@ local({
     marker("environment", paste(rows, collapse = "\n"))
     last()
   }
-  oxmacs$view <- function(name, rows) {
+  oxmacs$view <- function(name, rows, offset = 0L, sort = "", decreasing = FALSE, filter = "") {
     value <- tryCatch(get(name, envir = globalenv()), error = function(e) NULL)
     if (!is.data.frame(value) && !is.matrix(value)) {
       marker("message", paste(name, "is not a table"))
       return(last())
     }
     value <- as.data.frame(value)
-    shown <- utils::head(value, rows)
+    total <- nrow(value)
+    if (nzchar(filter)) {
+      kept <- tryCatch(eval(str2lang(filter), value, globalenv()), error = function(e) e)
+      if (inherits(kept, "error")) {
+        marker("message", paste0("Cannot keep the rows where ", filter, ": ", conditionMessage(kept)))
+        return(last())
+      }
+      if (!is.logical(kept)) {
+        marker("message", paste("Cannot keep the rows where", filter, "because it is not TRUE or FALSE"))
+        return(last())
+      }
+      value <- value[!is.na(kept) & kept, , drop = FALSE]
+    }
+    if (nzchar(sort) && sort %in% names(value)) {
+      value <- value[order(value[[sort]], decreasing = isTRUE(decreasing)), , drop = FALSE]
+    }
+    offset <- max(0L, min(as.integer(offset), nrow(value)))
+    shown <- value[seq_len(max(0L, min(rows, nrow(value) - offset))) + offset, , drop = FALSE]
     types <- vapply(value, function(column) class(column)[1], character(1))
     cells <- lapply(shown, function(column) flat(format(column, trim = TRUE)))
     lines <- c(
-      paste(name, nrow(value), ncol(value), sep = "\t"),
+      paste(name, nrow(value), ncol(value), offset, total, sort,
+        if (isTRUE(decreasing)) "TRUE" else "FALSE", flat(filter), sep = "\t"),
       paste(c("", names(value)), collapse = "\t"),
       paste(c("", types), collapse = "\t"),
-      do.call(paste, c(list(flat(rownames(shown))), cells, sep = "\t"))
+      if (nrow(shown) > 0) do.call(paste, c(list(flat(rownames(shown))), cells, sep = "\t"))
     )
     marker("table", paste(lines, collapse = "\n"))
+    last()
+  }
+  oxmacs$stats <- function(name, column) {
+    value <- tryCatch(as.data.frame(get(name, envir = globalenv()))[[column]], error = function(e) NULL)
+    if (is.null(value)) {
+      marker("message", paste("No column", column, "in", name))
+      return(last())
+    }
+    missing <- sum(is.na(value))
+    present <- value[!is.na(value)]
+    text <- if (is.numeric(present) && length(present) > 0) {
+      numbers <- signif(c(mean(present), stats::sd(present), min(present),
+        stats::median(present), max(present)), 4)
+      paste0("mean ", numbers[1], ", sd ", numbers[2], ", min ", numbers[3],
+        ", median ", numbers[4], ", max ", numbers[5])
+    } else {
+      counts <- sort(table(present), decreasing = TRUE)
+      paste0(length(counts), " distinct: ",
+        paste(utils::head(paste0(names(counts), " (", counts, ")"), 5), collapse = ", "))
+    }
+    marker("stats", paste(column, class(value)[1], paste0(flat(text), ", ", missing, " missing"), sep = "\t"))
     last()
   }
   oxmacs$inspect <- function(name) {

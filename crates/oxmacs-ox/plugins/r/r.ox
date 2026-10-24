@@ -27,6 +27,7 @@
 (session/on-marker "environment" data/listed)
 (session/on-marker "table" data/tabled)
 (session/on-marker "object" data/described)
+(session/on-marker "stats" data/described-column)
 (session/on-ready :environment data/environment-due)
 (session/on-marker "complete" complete/answered)
 (session/on-marker "signature" complete/signed)

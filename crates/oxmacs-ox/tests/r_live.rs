@@ -213,7 +213,7 @@ fn the_environment_tables_and_objects_are_described() {
         "{output:?}"
     );
     let table: Vec<&str> = marked(&output, "table")[0].lines().collect();
-    assert_eq!(table[0], "cars\t32\t11");
+    assert_eq!(table[0], "cars\t32\t11\t0\t32\t\tFALSE\t");
     assert!(table[1].starts_with("\tmpg\tcyl\tdisp"), "{table:?}");
     assert!(table[2].starts_with("\tnumeric\tnumeric"), "{table:?}");
     assert!(table[3].starts_with("Mazda RX4\t21\t6\t160"), "{table:?}");
@@ -307,5 +307,26 @@ fn completions_come_back_with_where_they_start() {
     assert!(
         output.contains("\u{1}complete\u{2}8\tstats\tstats4"),
         "{output:?}"
+    );
+}
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
+fn tables_sort_filter_page_and_describe_their_columns() {
+    let (output, _directory) = session(
+        "cars <- mtcars\ngetOption(\"oxmacs\")$view(\"cars\", 3L, 1L, \"mpg\", TRUE, \"cyl == 4\")\ngetOption(\"oxmacs\")$view(\"cars\", 3L, 0L, \"\", FALSE, \"nope +\")\ngetOption(\"oxmacs\")$stats(\"cars\", \"mpg\")\nq()\n",
+    );
+
+    let table: Vec<&str> = marked(&output, "table")[0].lines().collect();
+    assert_eq!(table[0], "cars\t11\t11\t1\t32\tmpg\tTRUE\tcyl == 4");
+    assert!(table[3].starts_with("Fiat 128\t32.4"), "{table:?}");
+    assert_eq!(table.len(), 6);
+    assert!(
+        marked(&output, "message")[0].starts_with("Cannot keep the rows where nope +"),
+        "{output:?}"
+    );
+    assert_eq!(
+        marked(&output, "stats"),
+        ["mpg\tnumeric\tmean 20.09, sd 6.027, min 10.4, median 19.2, max 33.9, 0 missing"]
     );
 }
