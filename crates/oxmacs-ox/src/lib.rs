@@ -120,6 +120,7 @@ impl Ox {
 
     pub fn start(&mut self, editor: &mut Editor, home: Option<&Path>) {
         self.home = home.map(Path::to_path_buf);
+        editor.let_host_play_macros();
         editor.set_init_path(home.map(|home| home.join("init.ox")));
         tools::install(editor);
         hooks::watch(editor);
@@ -218,6 +219,31 @@ impl Ox {
     pub fn tick(&mut self, editor: &mut Editor) -> Pace {
         let started = self.isolate.profiling().then(Instant::now);
         self.checker.collect(editor);
+        self.drain(editor);
+        while editor.macro_playing() {
+            editor.play_macro_key();
+            if self.drain(editor) {
+                editor.stop_macro();
+            }
+        }
+        buffers::watch(&mut self.isolate, editor);
+        let highlighting = self.isolate.profiling().then(Instant::now);
+        modes::highlight(&mut self.isolate, editor);
+        self.timed("highlight", highlighting);
+        let refreshing = self.isolate.profiling().then(Instant::now);
+        views::refresh(&mut self.isolate, editor);
+        self.timed("views", refreshing);
+        help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
+        help::eldoc(&self.isolate, editor, self.home.as_deref(), &mut self.help);
+        self.timed("tick", started);
+        if tools::requests_waiting(editor) {
+            return Pace::Running;
+        }
+        self.pace()
+    }
+
+    fn drain(&mut self, editor: &mut Editor) -> bool {
+        let mut failed = false;
         self.handle_requests(editor);
         for plugin in modes::wakes(editor) {
             plugins::request_wake(editor, &plugin);
@@ -236,8 +262,9 @@ impl Ox {
             let report = self
                 .isolate
                 .run_with(editor, deadline.saturating_duration_since(Instant::now()));
-            let failed = self.evaluated(editor, report.finished);
-            for error in report.unhandled.into_iter().chain(failed) {
+            let evaluated = self.evaluated(editor, report.finished);
+            for error in report.unhandled.into_iter().chain(evaluated) {
+                failed = true;
                 log::report(editor, &error, None);
             }
             self.advance(editor);
@@ -246,20 +273,7 @@ impl Ox {
                 break;
             }
         }
-        buffers::watch(&mut self.isolate, editor);
-        let highlighting = self.isolate.profiling().then(Instant::now);
-        modes::highlight(&mut self.isolate, editor);
-        self.timed("highlight", highlighting);
-        let refreshing = self.isolate.profiling().then(Instant::now);
-        views::refresh(&mut self.isolate, editor);
-        self.timed("views", refreshing);
-        help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
-        help::eldoc(&self.isolate, editor, self.home.as_deref(), &mut self.help);
-        self.timed("tick", started);
-        if tools::requests_waiting(editor) {
-            return Pace::Running;
-        }
-        self.pace()
+        failed
     }
 }
 

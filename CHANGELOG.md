@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Keyboard macros let Ox commands finish before the next key plays, so a macro that runs a plugin command sees the buffer as it would by hand, and an Ox error stops the macro like any other error.
 - Checking an Ox file never touches the outside world: file, process, network and HTTP calls, `print` and workers are refused while checking, and a module that needs them to load is skipped. Checks run beside the editor instead of holding it up, stop after 2 seconds with a warning where they stopped, and load imported files again when they change on disk.
 - Ox code that runs too long no longer freezes the editor: views, highlighters and take-over frames stop after 250 ms, and init files, plugin loads and the REPL after 10 seconds, with an error in the log.
 - Ox no longer brings the editor down: printing an atom or promise that holds itself shows `#<atom ...>`, deeply nested values print and travel through channels and workers without overflowing the stack (values nested more than 256 levels deep are refused with an error), error messages show at most 200 characters of a value, a native that panics raises an error instead, and images are limited to 32,768 pixels a side and 134 megapixels.

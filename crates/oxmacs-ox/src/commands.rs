@@ -114,3 +114,45 @@ pub fn run_waiting(isolate: &mut Isolate, editor: &mut Editor) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use oxmacs_core::editor::Editor;
+
+    use crate::Ox;
+    use crate::testing::{home_with, press};
+
+    fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
+        let home = home_with(&[("init.ox", init)]);
+        let mut editor = Editor::new();
+        let mut ox = Ox::with_bundled(&[]);
+        ox.start(&mut editor, Some(home.path()));
+        (home, editor, ox)
+    }
+
+    #[test]
+    fn keyboard_macros_let_ox_commands_finish_before_the_next_key() {
+        let (_home, mut editor, mut ox) = started(
+            r#"(def seen (atom [])) (defcommand note "Note the text" (swap! seen conj (buffer-text))) (bind-key "C-c m" 'note)"#,
+        );
+        press(&mut editor, &mut ox, "<f3> x C-c m y <f4>");
+
+        press(&mut editor, &mut ox, "<f4>");
+
+        assert_eq!(editor.buffer().contents(), "xyxy");
+        assert_eq!(ox.eval(&mut editor, "@seen").unwrap(), r#"["x" "xyx"]"#);
+    }
+
+    #[test]
+    fn an_ox_error_stops_the_keyboard_macro() {
+        let (_home, mut editor, mut ox) =
+            started(r#"(defcommand boom "Fail" (raise (error "no"))) (bind-key "C-c b" 'boom)"#);
+        press(&mut editor, &mut ox, "<f3> a C-c b c <f4>");
+        assert_eq!(editor.buffer().contents(), "ac");
+
+        press(&mut editor, &mut ox, "<f4>");
+
+        assert_eq!(editor.buffer().contents(), "aca");
+        assert_eq!(editor.message(), Some("Ox: no"));
+    }
+}

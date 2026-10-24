@@ -1,13 +1,36 @@
 use crate::editor::Editor;
 use crate::input::{Key, KeyCode};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Again {
+    No,
+    Quietly,
+    Announced,
+}
+
+#[derive(Debug)]
+struct Lines {
+    line: usize,
+    left: usize,
+    before: usize,
+}
+
+#[derive(Debug)]
+struct Playing {
+    keys: Vec<Key>,
+    next: usize,
+    lines: Option<Lines>,
+    again: Again,
+}
+
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Macros {
     recording: Option<Vec<Key>>,
     start: usize,
     last: Option<Vec<Key>>,
     counter: u64,
-    replaying: bool,
+    playing: Option<Playing>,
+    host: bool,
     again: bool,
     pub(in crate::editor) faulted: bool,
 }
@@ -18,7 +41,7 @@ impl Macros {
     }
 
     pub(in crate::editor) fn replaying(&self) -> bool {
-        self.replaying
+        self.playing.is_some()
     }
 }
 
@@ -27,16 +50,50 @@ fn again(key: Key) -> bool {
 }
 
 impl Editor {
+    pub fn let_host_play_macros(&mut self) {
+        self.macros.host = true;
+    }
+
+    pub fn macro_playing(&self) -> bool {
+        self.macros.replaying()
+    }
+
+    pub fn play_macro_key(&mut self) {
+        if self.macros.faulted {
+            self.finish_replay();
+            return;
+        }
+        let Some(playing) = &mut self.macros.playing else {
+            return;
+        };
+        let Some(key) = playing.keys.get(playing.next).copied() else {
+            self.next_macro_line();
+            return;
+        };
+        playing.next += 1;
+        self.handle_key(key);
+        if self.macros.faulted {
+            self.finish_replay();
+        }
+    }
+
+    pub fn stop_macro(&mut self) {
+        if self.macros.replaying() {
+            self.macros.faulted = true;
+            self.finish_replay();
+        }
+    }
+
     pub(in crate::editor) fn note_macro_key(&mut self, key: Key) -> bool {
-        if self.macros.again && !self.macros.replaying {
+        if self.macros.again && !self.macros.replaying() {
             self.macros.again = false;
             if self.pending.is_empty() && again(key) {
                 self.message = None;
-                self.macros.again = self.call_macro();
+                self.call_macro(Again::Quietly);
                 return true;
             }
         }
-        if !self.macros.replaying
+        if !self.macros.replaying()
             && let Some(recording) = &mut self.macros.recording
         {
             if self.pending.is_empty() {
@@ -52,7 +109,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn start_macro(&mut self) {
-        if self.macros.replaying {
+        if self.macros.replaying() {
             return;
         }
         if self.macros.recording.is_some() {
@@ -66,7 +123,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn end_macro(&mut self) {
-        if self.macros.replaying {
+        if self.macros.replaying() {
             return;
         }
         let Some(mut keys) = self.macros.recording.take() else {
@@ -79,7 +136,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn start_macro_or_count(&mut self) {
-        if self.macros.recording.is_none() && !self.macros.replaying {
+        if self.macros.recording.is_none() && !self.macros.replaying() {
             self.start_macro();
             return;
         }
@@ -95,7 +152,7 @@ impl Editor {
         if self.macros.recording.is_some() {
             self.end_macro();
         } else {
-            self.call_macro();
+            self.call_macro(Again::No);
         }
     }
 
@@ -103,40 +160,97 @@ impl Editor {
         if self.macros.recording.is_some() {
             self.end_macro();
         }
-        if self.call_macro() {
-            self.macros.again = true;
-            self.show_message("Type e to play the macro again");
-        }
+        self.call_macro(Again::Announced);
     }
 
-    fn call_macro(&mut self) -> bool {
-        if self.macros.replaying {
-            return false;
+    fn call_macro(&mut self, again: Again) {
+        if self.macros.replaying() {
+            return;
         }
         let Some(keys) = self.macros.last.clone() else {
             self.show_message("No keyboard macro defined");
-            return false;
+            return;
         };
-        self.replay(&keys)
+        self.begin_replay(keys, None, again);
     }
 
-    pub(in crate::editor) fn replay(&mut self, keys: &[Key]) -> bool {
-        self.current_mut().close_undo_step();
-        self.macros.replaying = true;
+    fn begin_replay(&mut self, keys: Vec<Key>, lines: Option<Lines>, again: Again) {
         self.macros.faulted = false;
-        for key in keys {
-            self.handle_key(*key);
-            if self.macros.faulted {
-                break;
+        self.macros.again = false;
+        self.macros.playing = Some(Playing {
+            keys,
+            next: 0,
+            lines,
+            again,
+        });
+        self.start_macro_line();
+        self.current_mut().close_undo_step();
+        if !self.macros.host {
+            while self.macros.replaying() {
+                self.play_macro_key();
             }
         }
+    }
+
+    fn start_macro_line(&mut self) {
+        let Some(line) = self
+            .macros
+            .playing
+            .as_ref()
+            .and_then(|playing| playing.lines.as_ref())
+            .map(|lines| lines.line)
+        else {
+            return;
+        };
+        let before = self.buffers.current().len_lines();
+        let start = self.buffers.current().line_start(line);
+        self.current_mut().set_point(start);
+        if let Some(lines) = self
+            .macros
+            .playing
+            .as_mut()
+            .and_then(|playing| playing.lines.as_mut())
+        {
+            lines.before = before;
+        }
+    }
+
+    fn next_macro_line(&mut self) {
+        let after = self.buffers.current().len_lines();
+        let more = match &mut self.macros.playing {
+            Some(Playing {
+                lines: Some(lines),
+                next,
+                ..
+            }) if lines.left > 1 => {
+                lines.left -= 1;
+                lines.line = (lines.line + 1 + after).saturating_sub(lines.before);
+                *next = 0;
+                true
+            }
+            _ => false,
+        };
+        if more {
+            self.current_mut().close_undo_step();
+            self.start_macro_line();
+        } else {
+            self.finish_replay();
+        }
+    }
+
+    fn finish_replay(&mut self) {
+        let Some(playing) = self.macros.playing.take() else {
+            return;
+        };
         let faulted = self.macros.faulted;
         if faulted && self.search.is_some() {
             self.exit_search();
         }
-        self.macros.replaying = false;
         self.current_mut().close_undo_step();
-        !faulted
+        self.macros.again = !faulted && playing.again != Again::No;
+        if self.macros.again && playing.again == Again::Announced {
+            self.show_message("Type e to play the macro again");
+        }
     }
 
     pub(in crate::editor) fn apply_macro_to_lines(&mut self) {
@@ -155,17 +269,12 @@ impl Editor {
             last -= 1;
         }
         self.current_mut().deactivate_mark();
-        let mut line = first;
-        for _ in first..=last {
-            let before = self.buffers.current().len_lines();
-            let start = self.buffers.current().line_start(line);
-            self.current_mut().set_point(start);
-            if !self.replay(&keys) {
-                break;
-            }
-            let after = self.buffers.current().len_lines();
-            line = (line + 1 + after).saturating_sub(before);
-        }
+        let lines = Lines {
+            line: first,
+            left: last - first + 1,
+            before: 0,
+        };
+        self.begin_replay(keys, Some(lines), Again::No);
     }
 }
 #[cfg(test)]
@@ -218,6 +327,28 @@ mod tests {
 
         assert_eq!(editor.buffer().contents(), "xyone\nxtwo\nthree\nfour\n");
         assert_eq!(editor.message(), Some("<f12> is undefined"));
+    }
+
+    #[test]
+    fn a_host_can_play_the_macro_one_key_at_a_time_and_stop_it() {
+        let mut editor = editor_with(LINES, 0);
+        editor.let_host_play_macros();
+        press(&mut editor, "<f3> C-a x C-n <f4>");
+
+        press(&mut editor, "<f4>");
+        assert!(editor.macro_playing());
+        assert_eq!(editor.buffer().contents(), "xone\ntwo\nthree\nfour\n");
+        editor.play_macro_key();
+        editor.play_macro_key();
+        assert_eq!(editor.buffer().contents(), "xone\nxtwo\nthree\nfour\n");
+        editor.stop_macro();
+        assert!(!editor.macro_playing());
+
+        press(&mut editor, "C-n C-a C-SPC C-n C-n C-x C-k r");
+        while editor.macro_playing() {
+            editor.play_macro_key();
+        }
+        assert_eq!(editor.buffer().contents(), "xone\nxtwo\nxthree\nxfour\n");
     }
 
     #[test]
