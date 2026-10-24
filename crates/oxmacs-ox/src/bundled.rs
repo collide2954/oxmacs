@@ -26,6 +26,7 @@ const R: Bundle = Bundle {
         ("session.ox", include_str!("../plugins/r/session.ox")),
         ("helper.ox", include_str!("../plugins/r/helper.ox")),
         ("help.ox", include_str!("../plugins/r/help.ox")),
+        ("pane.ox", include_str!("../plugins/r/pane.ox")),
         ("plots.ox", include_str!("../plugins/r/plots.ox")),
         ("data.ox", include_str!("../plugins/r/data.ox")),
         ("complete.ox", include_str!("../plugins/r/complete.ox")),

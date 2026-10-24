@@ -2,12 +2,11 @@
   (import (ox string)
           (r session :as session)
           (r help :as help)
+          (r pane :as pane)
           (r plots :as plots)
           (r data :as data)
           (r complete :as complete)
           (r definition :as definition)))
-
-(def help-buffer "*R help*")
 
 (def console-keys
   {"RET" 'comint-send-input
@@ -20,13 +19,8 @@
    "TAB" 'r-complete
    "C-M-i" 'r-complete})
 
-(def help-keys {"SPC" 'scroll-up-command "DEL" 'scroll-down-command "q" 'quit-window})
-
-(def (show-help _ text)
-  (open-buffer help-buffer (help/page text) :keys help-keys :beside true :select true :line 0))
-
 (session/on-marker "message" (fn [_ payload] (message payload)))
-(session/on-marker "help" show-help)
+(session/on-marker "help" pane/show-help)
 (session/on-marker "plot" plots/arrived)
 (session/on-marker "gallery" plots/thumbnails)
 (session/on-marker "zoom" plots/zoomed)
@@ -121,8 +115,7 @@
         typed (string/trim (await (prompt (if default "R help on (default {default}): " "R help on: "))))
         topic (if (string/blank? typed) default typed)]
     (when topic
-      (when-let [running (session/ensure)]
-        (session/request running "getOption(\"oxmacs\")$help({(session/r-string topic)})")))))
+      (pane/ask-help topic))))
 
 (defcommand r-complete "Complete the R code before point from the session"
   (complete/complete true))

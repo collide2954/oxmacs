@@ -72,6 +72,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- R help links the names under See Also: `RET` follows one, `TAB` and `S-TAB` move between them, `l` and `r` go back and forward through the pages seen, `x` runs the example at point in the console and `e` runs them all.
 - Plugin views hear their size in pixels through `open-view`'s `:on-resize` and can open unseen with `:show false`; `ui/image` takes `:on-press` and `:selected`. `set-header` keeps lines above a buffer's text while it scrolls, and `prompt-path`'s `:initial` starts with a file name, as when saving.
 - Plugins can run consoles with `console-start`, which hears the program's marked output and prompts, and talk to them with `console-send` and `console-request`. They can read and move point, insert text, read ranges and the region, find the statement or function around a place, list and read buffers, show a buffer below or beside another with `display-buffer`, offer completions with `complete-at`, remember where a jump started for `M-,`, tell whether the last key typed text with `just-typed?` or a prompt is open with `prompting?`, show text in a buffer of a mode with `show-text`, and bind keys in the buffers of a mode with the manifest's `:mode-keys`.
 - `process/which` finds a program on `PATH`, `process/os` names the operating system and `path/temp` gives the folder for temporary files.

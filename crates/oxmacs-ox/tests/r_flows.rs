@@ -161,6 +161,12 @@ fn a_script_runs_in_r_and_its_plots_help_and_objects_show() {
     live.until("the help", |editor| {
         contents(editor, "*R help*").contains("Median Value")
     });
+    live.press("TAB RET");
+    live.until("the linked help", |editor| {
+        contents(editor, "*R help*").contains("Sample Quantiles")
+    });
+    live.press("l");
+    assert!(contents(&live.editor, "*R help*").contains("Median Value"));
 
     let id = live.editor.buffer_named(&console).unwrap();
     live.editor.show_buffer(id);
