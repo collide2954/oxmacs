@@ -23,4 +23,4 @@
 (await (promise)) ;! Nothing can deliver this promise
 (try (await (promise)) (catch error e :stuck)) ;=> :stuck
 (let [p (promise)] (deliver p 1) (deliver p 2)) ;! This promise was already delivered
-(await 5) ;! await expects a promise, got 5
+(await 5) ;=> 5

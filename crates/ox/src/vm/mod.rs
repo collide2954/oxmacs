@@ -813,6 +813,9 @@ impl Runtime {
         Ok(match control {
             Control::Yield => Flow::Yield(argument, landing),
             Control::Next => Flow::Resume(argument, landing),
+            Control::Await if self.heap.promise_of(argument).is_none() => {
+                Flow::Land(landing, argument)
+            }
             Control::Await => Flow::Await(argument, landing),
             Control::Generator => Flow::Land(landing, self.make_generator(argument)?),
             Control::Spawn => Flow::Land(landing, self.spawn_promise(argument)?),

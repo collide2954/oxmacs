@@ -37,6 +37,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `await` gives back any value that isn't a promise, so code can await whatever a function returns.
 - `M-x list-processes` is a bundled Ox plugin. `s` and `S` sort, `/` filters, `TAB` shows a process's command, folder, status and environment, `k` asks it to end and kills it three seconds later if it hasn't, `K` kills it at once, and a sparkline shows its CPU over the last minute.
 - Settings are Ox: `(settings {theme: :adwaita-dark tab-width: 4})` in `~/.oxmacs/init.ox` sets them, and plugins take theirs from `use-plugin`'s `:config`. `custom.ox` and `init.ox` run before the window opens, so the theme, font and window mode apply from the first frame, and saving either runs both again from fresh settings. `M-x find-init-file` replaces `find-config-file`.
 - `M-x customize` is a bundled Ox plugin and lists plugin settings too. `C-x C-s` writes `~/.oxmacs/custom.ox`, which runs before `init.ox`, so `init.ox` wins; a setting `init.ox` overrides says so.

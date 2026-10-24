@@ -98,7 +98,7 @@
 (promise) "A promise that someone can deliver a value to, or fail, later. await waits for it."
 (deliver p value) "Fulfills the promise p with value, waking whatever awaits it."
 (fail p error) "Fails the promise p with error, which is raised in whatever awaits it."
-(await p) "Waits for the promise p and returns its value, or raises its error. Other tasks run meanwhile."
+(await p) "Waits for the promise p and returns its value, or raises its error; any other value comes back as it is. Other tasks run meanwhile."
 (promise? value) "True when value is a promise."
 (done? value) "True when a generator has finished, a promise has settled, or a channel is closed and empty."
 (generator f) "A generator that runs f, pausing at each yield; next resumes it. gen is the macro most code uses."
