@@ -187,6 +187,7 @@ mod tests {
     use oxmacs_core::external::diagnostics::Severity;
 
     use super::CHECK_PAUSE;
+    use crate::help::SIGNATURE_PAUSE;
     use crate::{Ox, Pace};
 
     const UNUSED: &str = "h is never used; call it _h if that's on purpose";
@@ -225,8 +226,11 @@ mod tests {
         );
         let since = Instant::now();
 
-        assert_eq!(ox.idle_wait(&editor, since), Some(CHECK_PAUSE));
+        assert_eq!(ox.idle_wait(&editor, since), Some(SIGNATURE_PAUSE));
         rest(&mut editor, &mut ox, since, 100);
+        assert_eq!(editor.pane().line_diagnostics(1), []);
+        rest(&mut editor, &mut ox, since, 400);
+        assert_eq!(ox.idle_wait(&editor, since), Some(CHECK_PAUSE));
         assert_eq!(editor.pane().line_diagnostics(1), []);
         rest(&mut editor, &mut ox, since, 600);
         settle(&mut editor, &mut ox);
@@ -243,6 +247,8 @@ mod tests {
         editor.buffer_mut().delete_range(26..30);
         editor.buffer_mut().insert_at(26, "area");
         let later = since + Duration::from_secs(1);
+        assert_eq!(ox.idle_wait(&editor, later), Some(SIGNATURE_PAUSE));
+        rest(&mut editor, &mut ox, later, 400);
         assert_eq!(ox.idle_wait(&editor, later), Some(CHECK_PAUSE));
         rest(&mut editor, &mut ox, later, 600);
         settle(&mut editor, &mut ox);
