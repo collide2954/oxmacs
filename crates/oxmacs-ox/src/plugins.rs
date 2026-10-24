@@ -320,6 +320,34 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
     Ok(manifest)
 }
 
+#[cfg(test)]
+pub(crate) struct Listed {
+    pub name: String,
+    pub version: Version,
+    pub opt_in: bool,
+    pub summary: String,
+}
+
+#[cfg(test)]
+pub(crate) fn catalog(isolate: &mut Isolate, bundles: &[Bundle]) -> Vec<Listed> {
+    let mut listed: Vec<Listed> = bundles
+        .iter()
+        .filter_map(|bundle| {
+            let (_, text) = bundle.files.iter().find(|(name, _)| *name == "plugin.ox")?;
+            let value = isolate.eval_named("plugin.ox", text).ok()?;
+            let manifest = manifest_of(isolate.heap_mut(), value).ok()?;
+            Some(Listed {
+                name: manifest.name,
+                version: manifest.version,
+                opt_in: manifest.opt_in,
+                summary: manifest.summary,
+            })
+        })
+        .collect();
+    listed.sort_by(|a, b| a.name.cmp(&b.name));
+    listed
+}
+
 fn read_manifest(
     isolate: &mut Isolate,
     editor: &mut Editor,

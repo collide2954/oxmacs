@@ -82,6 +82,11 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     isolate
 }
 
+pub const EDITOR_MODULES: &[(&str, &str)] = &[(
+    "ox/ui",
+    "Widgets for plugin views: text, rows, columns, buttons, images and canvases; in oxmacs only",
+)];
+
 pub fn checking_isolate() -> Isolate {
     editor_isolate(&prompts::Inbox::default())
 }

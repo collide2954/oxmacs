@@ -52,6 +52,28 @@ So plugins do two jobs: they add features to the editor, and they are Ox's stand
 
 The modules of bundled plugins can always be imported. A plugin in your own folder can be imported once it has started; [Writing a plugin](plugins) shows how to make one start with oxmacs.
 
+## Built-in modules
+
+Ox itself brings these modules, each a plug into the Rust bridge. Import them as in `(import (ox file))`; the prelude needs no import.
+
+```table
+Module      What it gives
+prelude     Numbers, collections, text, records, errors, pattern matching, tasks, channels and promises, there without an import
+ox/string   Text: searching, splitting, joining, trimming, padding and changing case
+ox/regex    Regular expressions: matching, finding, replacing and splitting
+ox/json     Reading and writing JSON
+ox/csv      Reading CSV into rows
+ox/time     Dates and times: the clock, parsing, formatting, time zones and durations
+ox/path     Taking paths apart and joining them, the home folder and ~ expansion
+ox/file     Reading, writing, listing, copying, renaming and removing files and folders
+ox/process  Running programs, talking to them while they run, and the environment
+ox/net      TCP connections, with or without TLS
+ox/http     HTTP requests and URL encoding
+ox/crypto   Hashes, encryption with a password, random numbers, base64 and one-time codes
+ox/image    Opening, editing, drawing on and saving images, with filters and color adjustments
+ox/ui       Widgets for plugin views: text, rows, columns, buttons, images and canvases; in oxmacs only
+```
+
 ## Workers
 
 A module is also how work moves to another thread. `worker` loads a module in a fresh isolate on a thread of its own, calls one of its functions and returns a promise of the result:

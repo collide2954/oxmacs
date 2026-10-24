@@ -911,6 +911,14 @@ impl Isolate {
         self.runtime.spawn(function, &[]).map(Some)
     }
 
+    pub fn module_names(&self) -> Vec<String> {
+        self.runtime
+            .modules
+            .iter()
+            .map(|module| module.name.clone())
+            .collect()
+    }
+
     pub fn module_count(&self) -> usize {
         self.runtime.modules.len()
     }

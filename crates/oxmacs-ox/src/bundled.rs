@@ -457,6 +457,9 @@ mod tests {
 }
 
 #[cfg(test)]
+mod catalog;
+
+#[cfg(test)]
 mod git;
 
 #[cfg(test)]

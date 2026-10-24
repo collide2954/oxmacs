@@ -79,6 +79,29 @@ Another plugin can import `(hello name)` once hello has started. A library with 
 
 `ox check ~/.oxmacs/plugins/hello` reports mistakes such as unknown names and wrong arities before you run anything; in a plugin folder it knows the editor API and the plugin's own modules. `ox test` runs the `test` blocks of modules that need neither the editor nor another module of the plugin; give it those files, as in `ox test ~/.oxmacs/plugins/hello/words.ox`. See [the ox command](tools).
 
+## The bundled plugins
+
+oxmacs ships these plugins. Those on by default load the first time you use them; opt-in ones wait for `(use-plugin name)` in `init.ox`.
+
+```table
+Plugin       Version  Default  What it does
+calendar     0.1.0    on       Calendars in .ics files, with CalDAV sync, reminders and invitations
+customize    0.1.1    on       Change the editor's and plugins' settings in a form
+dired        0.2.2    on       List directories and manage their files
+git          0.2.3    on       Git status and staging in the style of Magit
+irc          0.8.1    on       An IRCv3 client in the style of ERC
+life         0.2.0    opt-in   Conway's Game of Life on a canvas
+manual       0.5.0    on       The oxmacs tutorial and the Ox manual
+markdown     0.1.1    on       Markdown rendered as styled text
+processes    0.1.0    on       List the processes oxmacs runs, with their usage
+profiler     0.1.1    on       Find where the Ox code in oxmacs spends its time
+r            0.18.0   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
+remote       0.1.0    on       Browse and edit files on other machines over ssh, sftp and ftp
+screensaver  0.1.1    on       A starfield or matrix rain after a while without input
+vault        0.1.0    on       An encrypted password vault with one-time codes and imports
+weather      0.2.1    on       Forecasts from Open-Meteo
+```
+
 ## Learn from the bundled plugins
 
 dired, git, weather, irc, calendar, vault, remote, markdown and this manual are all plugins written this way. Their sources are in the oxmacs repository under `crates/oxmacs-ox/plugins`.

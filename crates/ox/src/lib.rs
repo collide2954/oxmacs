@@ -21,4 +21,4 @@ mod vm;
 
 pub use error::Error;
 pub use isolate::Isolate;
-pub use library::image;
+pub use library::{MODULES, image};
