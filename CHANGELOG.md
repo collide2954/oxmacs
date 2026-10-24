@@ -40,6 +40,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `M-x irc-setup` saves the network in `custom.ox` with `M-x customize`'s writer instead of adding a `use-plugin` form to `init.ox` every time, so setting up a network again replaces it.
 - Closing the window asks about unsaved files, as `C-x C-c` does. `auto-save` now keeps recovery copies of every file instead of saving Rust files in place; the new `auto-save-visited` saves files in place when idle.
 - `await` gives back any value that isn't a promise, so code can await whatever a function returns.
 - `M-x list-processes` is a bundled Ox plugin. `s` and `S` sort, `/` filters, `TAB` shows a process's command, folder, status and environment, `k` asks it to end and kills it three seconds later if it hasn't, `K` kills it at once, and a sparkline shows its CPU over the last minute.

@@ -500,10 +500,8 @@ fn messages_are_logged_by_day_and_found_again() {
 }
 
 #[test]
-fn setup_writes_the_network_to_init_ox() {
+fn setup_saves_the_network_in_custom_ox_once() {
     let (home, mut editor, mut ox) = started("");
-
-    run(&mut editor, &mut ox, "irc-setup");
     let answer = |editor: &mut Editor, ox: &mut Ox, text: &str| {
         assert!(pump(editor, ox, |editor, _| editor.minibuffer().is_some()));
         type_in(editor, ox, text);
@@ -513,21 +511,34 @@ fn setup_writes_the_network_to_init_ox() {
         assert!(pump(editor, ox, |editor, _| editor.question().is_some()));
         keys(editor, ox, key);
     };
-    answer(&mut editor, &mut ox, "");
-    answer(&mut editor, &mut ox, "");
-    answer(&mut editor, &mut ox, "");
-    decide(&mut editor, &mut ox, "y");
-    answer(&mut editor, &mut ox, "ana");
-    decide(&mut editor, &mut ox, "n");
-    answer(&mut editor, &mut ox, "");
-    decide(&mut editor, &mut ox, "n");
-    pump(&mut editor, &mut ox, |editor, _| {
-        editor.question().is_none()
-    });
-    let init = fs::read_to_string(home.path().join("init.ox")).unwrap();
+
+    for _ in 0..2 {
+        run(&mut editor, &mut ox, "irc-setup");
+        answer(&mut editor, &mut ox, "");
+        answer(&mut editor, &mut ox, "");
+        answer(&mut editor, &mut ox, "");
+        decide(&mut editor, &mut ox, "y");
+        answer(&mut editor, &mut ox, "ana");
+        decide(&mut editor, &mut ox, "n");
+        answer(&mut editor, &mut ox, "");
+        decide(&mut editor, &mut ox, "n");
+        pump(&mut editor, &mut ox, |editor, _| {
+            editor.question().is_none()
+        });
+    }
+
+    assert_eq!(fs::read_to_string(home.path().join("init.ox")).unwrap(), "");
     assert_eq!(
-        init,
-        "(use-plugin irc :config {networks: [{name: \"Libera\" host: \"irc.libera.chat\" port: 6697 tls: true nick: \"ana\" channels: [\"#oxmacs\"]}]})\n"
+        fs::read_to_string(home.path().join("custom.ox")).unwrap(),
+        ";; Written by M-x customize. Your own settings belong in init.ox,\n;; which runs after this file and wins.\n\n(configure-plugin 'irc {networks: [{name: \"Libera\" host: \"irc.libera.chat\" port: 6697 tls: true nick: \"ana\" channels: [\"#oxmacs\"]}]})\n"
+    );
+    assert_eq!(
+        eval(
+            &mut editor,
+            &mut ox,
+            "(count (plugin-setting 'irc :networks))"
+        ),
+        "1"
     );
     assert_eq!(
         eval(

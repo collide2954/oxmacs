@@ -1,8 +1,8 @@
 (plugin irc
-  :version "0.1.1"
+  :version "0.1.2"
   :summary "An IRCv3 client in the style of ERC"
   :commands {irc: "Connect to your IRC networks"
-             irc-setup: "Add an IRC network to init.ox"
+             irc-setup: "Add an IRC network to your settings"
              irc-next-active: "Go to the next IRC buffer with new messages"
              irc-search: "Search the IRC logs"}
   :keys {"C-c C-SPC" irc-next-active}
