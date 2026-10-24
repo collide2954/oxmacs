@@ -248,6 +248,7 @@ impl Ox {
 
     fn drain(&mut self, editor: &mut Editor) -> bool {
         let mut failed = false;
+        hooks::release_saves(&mut self.isolate, editor);
         self.handle_requests(editor);
         for plugin in modes::wakes(editor) {
             plugins::request_wake(editor, &plugin);

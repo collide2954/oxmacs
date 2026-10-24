@@ -18,6 +18,7 @@ mod search;
 mod special;
 #[cfg(test)]
 mod test_support;
+mod watching;
 mod windows;
 
 pub use crate::external::diagnostics::{Diagnostic, LintLine, Severity};
@@ -160,6 +161,11 @@ pub struct Editor {
     file_openers: Vec<FileOpener>,
     save_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
     saved_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
+    opened_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
+    tracking_edits: bool,
+    holding_saves: bool,
+    held_saves: Vec<(crate::text::BufferId, bool)>,
+    releasing: Option<crate::text::BufferId>,
     last_id: Option<CommandId>,
     repeated: bool,
     working_directory: PathBuf,
@@ -253,6 +259,11 @@ impl Editor {
             file_openers: Vec::new(),
             save_handlers: Vec::new(),
             saved_handlers: Vec::new(),
+            opened_handlers: Vec::new(),
+            tracking_edits: false,
+            holding_saves: false,
+            held_saves: Vec::new(),
+            releasing: None,
             last_id: None,
             repeated: false,
             working_directory: env::current_dir().unwrap_or_default(),
@@ -316,7 +327,7 @@ impl Editor {
     }
 
     pub fn should_quit(&self) -> bool {
-        self.quit_requested
+        self.quit_requested && self.held_saves.is_empty()
     }
 
     pub fn viewport(&self) -> &Viewport {

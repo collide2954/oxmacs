@@ -1,12 +1,13 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
 use oxmacs_core::editor::Editor;
-use oxmacs_core::text::BufferId;
+use oxmacs_core::text::{BufferId, Splice};
 
-use crate::{log, plugins};
+use crate::{PATIENT, handles, log, plugins};
 
 #[derive(Debug, PartialEq)]
 enum Waiting {
@@ -15,6 +16,9 @@ enum Waiting {
     Saved(PathBuf),
     Configured,
     Processes,
+    Opened(BufferId),
+    Changed(BufferId, Vec<Splice>),
+    Mode(BufferId, String),
 }
 
 #[derive(Debug, Default)]
@@ -25,6 +29,11 @@ pub struct Hooks {
     saved: Vec<(String, Hold)>,
     configured: Vec<(String, Hold)>,
     processes: Vec<(String, Hold)>,
+    opened: Vec<(String, Hold)>,
+    changed: Vec<(String, Hold)>,
+    modes: Vec<(String, Hold)>,
+    before_save: Vec<(String, Hold)>,
+    languages: HashMap<BufferId, String>,
     waiting: Vec<Waiting>,
 }
 
@@ -93,6 +102,114 @@ pub fn watch(editor: &mut Editor) {
     editor.on_saved(saved);
     editor.on_configured(settings_changed);
     editor.on_processes_change(processes_changed);
+    editor.on_buffer_opened(opened);
+}
+
+fn opened(editor: &mut Editor, id: BufferId) {
+    if let Some(hooks) = hooks(editor)
+        && !hooks.opened.is_empty()
+    {
+        hooks.waiting.push(Waiting::Opened(id));
+    }
+}
+
+fn languages(editor: &Editor) -> Vec<(BufferId, String)> {
+    editor
+        .buffer_ids()
+        .into_iter()
+        .filter_map(|id| {
+            editor
+                .buffer_language(id)
+                .map(|language| (id, language.name().to_owned()))
+        })
+        .collect()
+}
+
+fn notice(editor: &mut Editor) {
+    let Some(known) = editor.plugin_state::<Hooks>() else {
+        return;
+    };
+    let watching_modes = !known.modes.is_empty();
+    let edits = if known.changed.is_empty() {
+        Vec::new()
+    } else {
+        editor.take_edits()
+    };
+    let modes = if watching_modes {
+        languages(editor)
+    } else {
+        Vec::new()
+    };
+    let Some(hooks) = hooks(editor) else {
+        return;
+    };
+    for (id, splices) in edits {
+        hooks.waiting.push(Waiting::Changed(id, splices));
+    }
+    for (id, mode) in modes {
+        if hooks.languages.get(&id) != Some(&mode) {
+            hooks.languages.insert(id, mode.clone());
+            hooks.waiting.push(Waiting::Mode(id, mode));
+        }
+    }
+}
+
+fn edits(heap: &mut Heap, splices: &[Splice]) -> Result<Value, Error> {
+    let count = |number: usize| Value::Int(i64::try_from(number).unwrap_or(i64::MAX));
+    let mut items = Vec::with_capacity(splices.len());
+    for splice in splices {
+        items.push(heap.map_from(&[
+            Value::keyword("start"),
+            count(splice.start),
+            Value::keyword("removed"),
+            count(splice.removed),
+            Value::keyword("inserted"),
+            count(splice.inserted),
+        ])?);
+    }
+    heap.vector_from(&items)
+        .map_err(|full| Error::new(full.to_string()))
+}
+
+fn held(editor: &Editor, pick: fn(&Hooks) -> &Vec<(String, Hold)>) -> Vec<Hold> {
+    editor
+        .plugin_state::<Hooks>()
+        .map(|hooks| pick(hooks).iter().map(|(_, hold)| *hold).collect())
+        .unwrap_or_default()
+}
+
+pub fn release_saves(isolate: &mut Isolate, editor: &mut Editor) {
+    let saves = editor.held_saves();
+    if saves.is_empty() {
+        return;
+    }
+    let handlers = held(editor, |hooks| &hooks.before_save);
+    for id in saves {
+        let mut failed = None;
+        for hold in &handlers {
+            let Some(function) = isolate.held(*hold) else {
+                continue;
+            };
+            let Ok(buffer) = handles::handle(isolate.heap_mut(), editor, id) else {
+                break;
+            };
+            if let Err(error) = isolate.within(PATIENT, |isolate| {
+                isolate.call_with(editor, function, &[buffer])
+            }) {
+                failed = Some(error);
+                break;
+            }
+        }
+        match failed {
+            Some(error) => {
+                editor.drop_held_save(id);
+                log::report(editor, &error, None);
+            }
+            None => {
+                editor.finish_held_save(id);
+            }
+        }
+    }
 }
 
 pub fn open_directories(editor: &mut Editor, plugin: &str) {
@@ -103,6 +220,7 @@ pub fn open_directories(editor: &mut Editor, plugin: &str) {
 }
 
 pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
+    notice(editor);
     let waiting = hooks(editor)
         .map(|hooks| std::mem::take(&mut hooks.waiting))
         .unwrap_or_default();
@@ -149,6 +267,30 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
                         .unwrap_or_default(),
                     vec![path],
                 )
+            }
+            Waiting::Opened(id) => {
+                let Ok(buffer) = handles::handle(isolate.heap_mut(), editor, id) else {
+                    continue;
+                };
+                (held(editor, |hooks| &hooks.opened), vec![buffer])
+            }
+            Waiting::Changed(id, splices) => {
+                let Ok(buffer) = handles::handle(isolate.heap_mut(), editor, id) else {
+                    continue;
+                };
+                let Ok(changes) = edits(isolate.heap_mut(), &splices) else {
+                    continue;
+                };
+                (held(editor, |hooks| &hooks.changed), vec![buffer, changes])
+            }
+            Waiting::Mode(id, mode) => {
+                let Ok(buffer) = handles::handle(isolate.heap_mut(), editor, id) else {
+                    continue;
+                };
+                let Ok(mode) = isolate.heap_mut().string(&mode) else {
+                    continue;
+                };
+                (held(editor, |hooks| &hooks.modes), vec![buffer, mode])
             }
         };
         for hold in handlers {
@@ -197,6 +339,54 @@ fn keyed(heap: &mut Heap, handlers: &mut Vec<(String, Hold)>, arguments: &[Value
         }
         None => handlers.push((key, hold)),
     }
+}
+
+fn install_buffer_hooks(isolate: &mut Isolate) {
+    isolate.define_host_native::<Editor>(
+        "on-buffer-open",
+        2,
+        Some(2),
+        |heap, editor, arguments| {
+            if let Some(hooks) = hooks(editor) {
+                keyed(heap, &mut hooks.opened, arguments);
+            }
+            Ok(Value::Nil)
+        },
+    );
+    isolate.define_host_native::<Editor>(
+        "on-buffer-change",
+        2,
+        Some(2),
+        |heap, editor, arguments| {
+            editor.track_edits();
+            if let Some(hooks) = hooks(editor) {
+                keyed(heap, &mut hooks.changed, arguments);
+            }
+            Ok(Value::Nil)
+        },
+    );
+    isolate.define_host_native::<Editor>("on-mode-enter", 2, Some(2), |heap, editor, arguments| {
+        let known = languages(editor);
+        if let Some(hooks) = hooks(editor) {
+            if hooks.modes.is_empty() {
+                hooks.languages = known.into_iter().collect();
+            }
+            keyed(heap, &mut hooks.modes, arguments);
+        }
+        Ok(Value::Nil)
+    });
+    isolate.define_host_native::<Editor>(
+        "on-before-save",
+        2,
+        Some(2),
+        |heap, editor, arguments| {
+            editor.hold_saves();
+            if let Some(hooks) = hooks(editor) {
+                keyed(heap, &mut hooks.before_save, arguments);
+            }
+            Ok(Value::Nil)
+        },
+    );
 }
 
 pub fn install(isolate: &mut Isolate) {
@@ -248,6 +438,7 @@ pub fn install(isolate: &mut Isolate) {
             Ok(Value::Nil)
         },
     );
+    install_buffer_hooks(isolate);
     isolate.define_host_native::<Editor>("open-file", 1, Some(1), |heap, editor, arguments| {
         let path = path_of(heap, "open-file", arguments[0])?;
         Ok(Value::Bool(editor.open_file(&path)))
@@ -271,7 +462,7 @@ pub fn install(isolate: &mut Isolate) {
         shown(heap, Some(&directory))
     });
     isolate.define_host_native::<Editor>("close-buffer", 1, Some(1), |heap, editor, arguments| {
-        if let Ok(id) = crate::handles::target(heap, editor, "close-buffer", arguments[0]) {
+        if let Ok(id) = handles::target(heap, editor, "close-buffer", arguments[0]) {
             editor.close_buffer(id);
         }
         Ok(Value::Nil)
@@ -311,6 +502,73 @@ mod tests {
         let mut ox = Ox::with_bundled(&[LISTER]);
         ox.start(&mut editor, Some(home));
         (editor, ox)
+    }
+
+    fn with_init(init: &str) -> (tempfile::TempDir, Editor, Ox) {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(home.path().join("init.ox"), init).unwrap();
+        let (editor, ox) = started(home.path());
+        (home, editor, ox)
+    }
+
+    #[test]
+    fn buffer_hooks_hear_text_buffers_open_change_and_enter_modes() {
+        let (home, mut editor, mut ox) = with_init(
+            r"(def heard (atom []))
+(on-buffer-open :test (fn [b] (swap! heard conj [:open (with-buffer b (buffer-name))])))
+(on-mode-enter :test (fn [b mode] (swap! heard conj [:mode mode])))
+(on-buffer-change :test (fn [b edits] (let [e (first edits)] (swap! heard conj [:change (with-buffer b (buffer-name)) e.start e.removed e.inserted (count edits)]))))",
+        );
+        let path = home.path().join("notes.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+
+        editor.open_file(&path);
+        settle(&mut editor, &mut ox);
+        press(&mut editor, &mut ox, "x");
+        ox.eval(&mut editor, r#"(open-buffer "*list*" ["a"])"#)
+            .unwrap();
+        settle(&mut editor, &mut ox);
+
+        let mode = editor
+            .buffer_language(editor.buffer_named("notes.rs").unwrap())
+            .unwrap()
+            .name()
+            .to_owned();
+        assert_eq!(
+            ox.eval(&mut editor, "@heard").unwrap(),
+            format!(r#"[[:open "notes.rs"] [:mode "{mode}"] [:change "notes.rs" 0 0 1 1]]"#)
+        );
+    }
+
+    #[test]
+    fn saving_waits_for_before_save_handlers() {
+        let (home, mut editor, mut ox) = with_init(
+            r"(module (import (ox string)))
+(on-before-save :shout (fn [b] (with-buffer b (set-buffer-text (string/upper (buffer-text))))))",
+        );
+        let path = home.path().join("notes.txt");
+        std::fs::write(&path, "abc").unwrap();
+        editor.open_file(&path);
+
+        press(&mut editor, &mut ox, "x C-x C-s");
+
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "XABC");
+        assert!(!editor.buffer().is_modified());
+    }
+
+    #[test]
+    fn a_failing_before_save_handler_cancels_the_save() {
+        let (home, mut editor, mut ox) =
+            with_init(r#"(on-before-save :refuse (fn [b] (raise (error "not today"))))"#);
+        let path = home.path().join("notes.txt");
+        std::fs::write(&path, "abc").unwrap();
+        editor.open_file(&path);
+
+        press(&mut editor, &mut ox, "x C-x C-s");
+
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "abc");
+        assert_eq!(editor.message(), Some("Ox: not today"));
+        assert!(editor.buffer().is_modified());
     }
 
     #[test]

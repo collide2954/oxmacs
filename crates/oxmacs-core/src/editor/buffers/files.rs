@@ -327,6 +327,9 @@ impl Editor {
         let Some(id) = self.buffers.get(index).map(Buffer::id) else {
             return false;
         };
+        if self.held_save(id, format) {
+            return true;
+        }
         self.tell_save(id);
         let Some(index) = self.buffers.position(|buffer| buffer.id() == id) else {
             return false;

@@ -367,11 +367,19 @@ impl Editor {
         );
     }
 
-    pub(super) fn add_buffer_with(&mut self, buffer: Buffer, mode: Mode) {
+    pub(super) fn add_buffer_with(&mut self, mut buffer: Buffer, mode: Mode) {
+        let text = matches!(mode, Mode::Text(_));
+        if text && self.tracking_edits() {
+            buffer.track_splices();
+        }
+        let id = buffer.id();
         self.buffers.set_top(self.viewport.top());
         self.buffers.push_front_with(buffer, mode);
         self.name_file_buffers();
         self.after_buffer_switch();
+        if text {
+            self.tell_opened(id);
+        }
     }
 
     pub(super) fn after_buffer_switch(&mut self) {

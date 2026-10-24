@@ -46,6 +46,13 @@ pub struct Marker(usize);
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Splice {
+    pub start: usize,
+    pub removed: usize,
+    pub inserted: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct Buffer {
     id: BufferId,
@@ -53,6 +60,7 @@ pub struct Buffer {
     text: Rope,
     revision: u64,
     changes: Option<Vec<TextChange>>,
+    splices: Option<Vec<Splice>>,
     point: usize,
     mark: Option<usize>,
     mark_active: bool,
@@ -71,6 +79,7 @@ impl Buffer {
             text: Rope::new(),
             revision: 0,
             changes: None,
+            splices: None,
             point: 0,
             mark: None,
             mark_active: false,
@@ -157,6 +166,24 @@ impl Buffer {
     fn byte_position(&self, byte: usize) -> (usize, usize) {
         let row = self.text.byte_to_line(byte);
         (row, byte - self.text.line_to_byte(row))
+    }
+
+    pub fn track_splices(&mut self) {
+        self.splices.get_or_insert_with(Vec::new);
+    }
+
+    pub fn take_splices(&mut self) -> Vec<Splice> {
+        self.splices.as_mut().map(mem::take).unwrap_or_default()
+    }
+
+    fn splice_made(&mut self, start: usize, removed: usize, inserted: usize) {
+        if let Some(splices) = &mut self.splices {
+            splices.push(Splice {
+                start,
+                removed,
+                inserted,
+            });
+        }
     }
 
     fn record(&mut self, change: TextChange) {
@@ -404,6 +431,7 @@ impl Buffer {
         let start = self.byte_position(start_byte);
         self.text.insert(at, text);
         self.revision += 1;
+        self.splice_made(at, 0, inserted);
         let new_end_byte = start_byte + text.len();
         let new_end = self.byte_position(new_end_byte);
         self.record(TextChange {
@@ -431,6 +459,7 @@ impl Buffer {
         let old_end = self.byte_position(old_end_byte);
         self.text.remove(start..end);
         self.revision += 1;
+        self.splice_made(start, end - start, 0);
         self.record(TextChange {
             start_byte,
             old_end_byte,
@@ -475,8 +504,11 @@ impl Buffer {
     }
 
     pub fn set_text(&mut self, text: &str) {
+        let removed = self.len_chars();
         self.text = Rope::from_str(text);
         self.revision += 1;
+        let inserted = self.len_chars();
+        self.splice_made(0, removed, inserted);
         if let Some(changes) = &mut self.changes {
             changes.clear();
         }
