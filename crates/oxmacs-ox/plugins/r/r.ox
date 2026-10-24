@@ -6,7 +6,8 @@
           (r plots :as plots)
           (r data :as data)
           (r complete :as complete)
-          (r definition :as definition)))
+          (r definition :as definition)
+          (r layout)))
 
 (def console-keys
   {"RET" 'comint-send-input

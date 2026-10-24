@@ -38,6 +38,8 @@
 (buffer-language (name)) "The language of the buffer called name, or of the current buffer, such as \"R\", or nil for plain text."
 (buffer-list) "The names of every buffer."
 (buffer-contents name) "The whole text of the buffer called name, or nil when there is none."
+(window-layout) "The windows as data: a buffer name, or [:columns …] or [:rows …] of [weight part] pairs, left to right or top to bottom, as arrange-windows takes them."
+(arrange-windows layout {select nil}) "Lays the windows out as layout says: a buffer name, or [:columns …] or [:rows …] of parts, each a layout or a [weight layout] pair whose weights are fractions of the space; parts without one share what is left. :select names the buffer whose window to move to."
 (set-header name lines) "Keeps lines, each text or a vector of text and [text face] pieces, above the text of the buffer called name, where they stay while it scrolls; [] takes them away."
 (show-text name text {mode nil read-only false}) "Shows text in the current window in an ordinary buffer called name, made the first time, with point at its start, in the major :mode named, such as \"R\", and :read-only true keeping it from edits."
 (prompting?) "True while the minibuffer, a question, a search or a replace is open."

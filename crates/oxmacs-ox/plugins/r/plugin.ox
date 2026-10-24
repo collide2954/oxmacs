@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.7.0"
+  :version "0.8.0"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands {run-r: "Start an R console beside the script"
              r-new-session: "Start another R session beside the current one"
@@ -9,6 +9,8 @@
              r-help: "Show R's help on a topic in *R help*"
              r-environment: "List the objects in the R session"
              r-peek: "Show the structure of the R object at point in the echo area"
+             r-layout: "Arrange the windows like RStudio: script and console, environment and plots"
+             r-layout-restore: "Put the windows back as they were before r-layout"
              r-complete: "Complete the R code before point from the session"
              r-indent-or-complete: "Indent the line, or complete the R code once it is indented"
              r-find-definition: "Jump to the definition of the R name at point"

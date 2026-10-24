@@ -357,6 +357,39 @@ mod tests {
         assert_eq!(editor.pane().header_lines(), []);
     }
 
+    #[test]
+    fn windows_are_arranged_in_nested_splits_and_read_back() {
+        use crate::editor::{Arrangement, Axis};
+
+        let mut editor = Editor::new();
+        let a = editor.open_plugin_buffer("*a*", blank());
+        let b = editor.open_plugin_buffer("*b*", blank());
+        let c = editor.open_plugin_buffer("*c*", blank());
+        let layout = Arrangement::Split {
+            axis: Axis::Columns,
+            parts: vec![
+                (0.25, Arrangement::Buffer(a)),
+                (
+                    0.75,
+                    Arrangement::Split {
+                        axis: Axis::Rows,
+                        parts: vec![(0.5, Arrangement::Buffer(b)), (0.5, Arrangement::Buffer(c))],
+                    },
+                ),
+            ],
+        };
+
+        editor.arrange_windows(&layout, Some(c));
+
+        assert_eq!(shown_in(&editor), ["*a*", "*b*", "*c*"]);
+        assert_eq!(editor.buffer().name(), "*c*");
+        assert_eq!(editor.window_arrangement(), layout);
+
+        let scratch = editor.buffer_named("*scratch*").unwrap();
+        editor.arrange_windows(&Arrangement::Buffer(scratch), None);
+        assert_eq!(shown_in(&editor), ["*scratch*"]);
+    }
+
     fn shown_in(editor: &Editor) -> Vec<String> {
         editor
             .tiling()

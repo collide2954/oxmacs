@@ -387,3 +387,42 @@ fn input_history_carries_over_to_later_sessions() {
 
     assert_eq!(later.contents(), "> x <- 1");
 }
+
+#[test]
+fn r_layout_arranges_four_panes_and_r_layout_restore_brings_back_the_old_ones() {
+    let mut r = script("x <- 1\n", 0);
+    r.running();
+    let before = r.eval("(window-layout)");
+
+    r.run("r-layout");
+
+    assert_eq!(r.editor.buffer().name(), "t");
+    assert_eq!(
+        r.eval("(window-layout)"),
+        r#"[:columns [0.5 [:rows [0.6 "t"] [0.4 "*R:analysis*"]]] [0.5 [:rows [0.4 "*R:analysis environment*"] [0.6 "*R:analysis plots*"]]]]"#
+    );
+    assert_eq!(r.sent(), ["getOption(\"oxmacs\")$environment()\n"]);
+
+    r.run("r-layout-restore");
+    assert_eq!(r.eval("(window-layout)"), before);
+    r.run("r-layout-restore");
+    assert_eq!(r.editor.message(), Some("No layout to restore"));
+}
+
+#[test]
+fn r_layout_puts_help_in_the_corner_when_there_are_no_plots() {
+    let mut r = script("x <- 1\n", 0);
+    let job = r.running();
+    r.output(
+        job,
+        &format!("\u{1}help\u{2}mean   package:base\n\u{3}{PROMPT}"),
+    );
+    r.visit("t");
+
+    r.run("r-layout");
+
+    assert!(
+        r.eval("(window-layout)")
+            .ends_with(r#"[0.6 "*R help*"]]]]"#)
+    );
+}

@@ -43,6 +43,7 @@ pub use search::isearch::Search;
 pub use search::replace::Replace;
 pub use special::locations::Place;
 pub use special::processes::{ProcessInfo, ProcessStatus};
+pub use windows::Arrangement;
 pub use windows::numbers::Gutter;
 pub use windows::pane::{Pane, ScreenRow};
 pub use windows::status::{BufferState, Status};

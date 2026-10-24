@@ -2,7 +2,7 @@
   (import (ox string)
           (r session :as session)
           (r help :as help))
-  (export listed tabled described described-column peeked environment-due))
+  (export listed tabled described described-column peeked environment-due environment-buffer ask-environment))
 
 (def help "RET opens   g refreshes   q quits")
 (def value-width 60)
@@ -71,13 +71,17 @@
   {"RET" 'r-environment-visit "n" 'next-line "p" 'previous-line
    "g" 'r-environment-refresh "q" 'quit-window})
 
-(def (show-environment session)
+(def (environment-buffer session)
   (let [name (environment-name session)]
     (unless (buffer-exists? name)
       (swap! environments assoc name {session: session entries: [] rows: []})
       (open-buffer name [help] :keys environment-keys :show false
                    :on-resize (fn [width] (draw-environment name width)))
       (session/own! name session))
+    name))
+
+(def (show-environment session)
+  (let [name (environment-buffer session)]
     (unless (buffer-shown? name)
       (if (buffer-shown? session)
         (display-buffer name :below session)

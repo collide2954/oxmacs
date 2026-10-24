@@ -8,6 +8,7 @@ mod help;
 mod hooks;
 pub mod idle;
 mod keepass;
+mod layout;
 mod log;
 mod manual;
 mod mode;
@@ -62,6 +63,7 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     processes::install(&mut isolate);
     consoles::install(&mut isolate);
     editing::install(&mut isolate);
+    layout::install(&mut isolate);
     transients::install(&mut isolate);
     modes::install(&mut isolate);
     takeover::install(&mut isolate);

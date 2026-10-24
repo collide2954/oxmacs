@@ -1,7 +1,7 @@
 (module
   (import (ox string) (ox ui) (ox image)
           (r session :as session))
-  (export view gallery pick arrived thumbnails zoomed columns))
+  (export view gallery pick arrived thumbnails zoomed columns plots-buffer unpinned-of))
 
 (def size [672 480])
 (def zoom-width 1200)
@@ -108,11 +108,15 @@
   (session/own! name session)
   name)
 
-(def (place session)
+(def (plots-buffer session)
   (let [name (or (unpinned-of session) "{(stem session)} plots*")]
     (unless (get @views name)
       (swap! views assoc name {session: session pinned: false})
       (make name session))
+    name))
+
+(def (place session)
+  (let [name (plots-buffer session)]
     (unless (buffer-shown? name)
       (let [pinned (find (fn [other] (let [plots (get @views other)]
                                        (and (= plots.session session) plots.pinned (buffer-shown? other))))

@@ -72,6 +72,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `M-x r-layout` arranges the windows like RStudio: the script above its console on the left, the environment above the plots, or the help when there are no plots, on the right; `M-x r-layout-restore` puts back the windows as they were. Plugins read the windows as data with `window-layout` and lay them out with `arrange-windows`.
 - R consoles remember their input across sessions: what you type is kept in `r-history` in the oxmacs home folder, and `M-p` brings back the last thousand inputs in a new session. Plugins read and set a console's input history with `console-history` and `set-console-history`.
 - `C-c C-o` in R scripts and consoles shows the structure of the R object at point in the echo area.
 - R tables sort by the column at point with `s` (up, down, then as they were), keep the rows where an R expression holds with `/`, page through a thousand rows at a time with `]` and `[`, and describe the column at point with `i`: its mean, spread and range, or its commonest values, and how many are missing.
