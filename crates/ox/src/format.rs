@@ -279,6 +279,12 @@ fn pieces(chars: &[char], start: usize, end: usize, literals: &[Literal]) -> Vec
                 }
                 Some('\\') => {
                     at = (at + 2).min(end);
+                    if chars[at - 1] == 'u'
+                        && chars.get(at) == Some(&'{')
+                        && let Some(close) = chars[at..end].iter().position(|found| *found == '}')
+                    {
+                        at += close + 1;
+                    }
                     while at < end && !delimits(chars[at]) {
                         at += 1;
                     }

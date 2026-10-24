@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- `ox fmt` keeps a character written as `\u{8}` whole instead of refusing to format the file.
 - Sending R code several times while R is still starting goes to that one session in the order it was sent, instead of starting a session for each.
 - Keyboard macros let Ox commands finish before the next key plays, so a macro that runs a plugin command sees the buffer as it would by hand, and an Ox error stops the macro like any other error.
 - Checking an Ox file never touches the outside world: file, process, network and HTTP calls, `print` and workers are refused while checking, and a module that needs them to load is skipped. Checks run beside the editor instead of holding it up, stop after 2 seconds with a warning where they stopped, and load imported files again when they change on disk.

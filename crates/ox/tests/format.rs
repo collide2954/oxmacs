@@ -79,6 +79,13 @@ fn spacing_closers_and_blank_lines_are_tidied() {
 }
 
 #[test]
+fn unicode_characters_stay_whole() {
+    let source = "(def backspace \\u{8})\n(def snow [\\u{2603} \\a])\n";
+
+    assert_eq!(formatted(source), source);
+}
+
+#[test]
 fn strings_comments_and_characters_keep_their_text() {
     let source = "(def text \"a  ( b
    c\")
