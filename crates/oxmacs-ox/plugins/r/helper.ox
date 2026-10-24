@@ -417,6 +417,7 @@ local({
   options(
     oxmacs = oxmacs,
     help_type = "text",
+    viewer = function(url, height = NULL) marker("viewer", url),
     pager = function(files, header, title, delete.file) {
       text <- unlist(lapply(files, readLines, warn = FALSE))
       if (isTRUE(delete.file)) unlink(files)

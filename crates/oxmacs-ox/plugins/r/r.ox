@@ -10,7 +10,8 @@
           (r layout)
           (r package :as package)
           (r markdown :as markdown)
-          (r language :as language)))
+          (r language :as language)
+          (r jobs)))
 
 (def console-keys
   {"RET" 'comint-send-input
@@ -38,6 +39,7 @@
 (session/on-marker "tests" package/tested)
 (session/on-marker "installed" package/installed)
 (session/on-marker "rendered" markdown/rendered)
+(session/on-marker "viewer" (fn [_ url] (open-externally url) (message "Opened {url}")))
 (on-saved :r-markdown markdown/saved)
 (session/on-ready :environment data/environment-due)
 (session/on-marker "complete" complete/answered)

@@ -1,0 +1,155 @@
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+use oxmacs_core::editor::{Editor, Effect};
+
+use super::{PROMPT, R, ox_text, started, with_program};
+use crate::testing::settle;
+
+fn shell(script: &str) -> (&'static str, Vec<String>) {
+    if cfg!(windows) {
+        ("cmd", vec!["/C".to_owned(), script.to_owned()])
+    } else {
+        ("sh", vec!["-c".to_owned(), script.to_owned()])
+    }
+}
+
+fn contents(r: &R, name: &str) -> String {
+    r.editor
+        .buffer_named(name)
+        .and_then(|id| r.editor.buffer_by_id(id))
+        .map(oxmacs_core::text::Buffer::contents)
+        .unwrap_or_default()
+}
+
+fn until(r: &mut R, name: &str, wanted: &str) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !contents(r, name).contains(wanted) {
+        assert!(Instant::now() < deadline, "{}", contents(r, name));
+        settle(&mut r.editor, &mut r.ox);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn start(r: &mut R, name: &str, script: &str, options: &str) -> String {
+    let (program, args) = shell(script);
+    let args: Vec<String> = args.iter().map(|arg| ox_text(arg)).collect();
+    let folder = ox_text(&std::env::temp_dir().display().to_string());
+    r.eval(&format!(
+        "(module (import (r jobs :as jobs))) (jobs/start {} {program:?} [{}] {folder} {options})",
+        ox_text(name),
+        args.join(" ")
+    ))
+}
+
+#[test]
+fn jobs_show_their_output_and_how_they_finished() {
+    let mut r = started();
+
+    start(&mut r, "*R job: two*", "echo one&& echo two 1>&2", "");
+    until(&mut r, "*R job: two*", "Finished");
+
+    let shown = contents(&r, "*R job: two*");
+    let lines: Vec<&str> = shown.lines().map(str::trim_end).collect();
+    assert_eq!(lines[1], "k stops it   g runs it again   q quits");
+    assert!(lines.contains(&"one"), "{shown}");
+    assert!(lines.contains(&"two"), "{shown}");
+    assert_eq!(lines.last(), Some(&"Finished"));
+
+    start(&mut r, "*R job: fails*", "exit 3", "");
+    until(&mut r, "*R job: fails*", "Finished");
+    assert!(contents(&r, "*R job: fails*").ends_with("Finished with status 3"));
+}
+
+fn ticked(r: &mut R, keys: &str, done: impl Fn(&str) -> bool) {
+    crate::testing::keys(&mut r.editor, keys);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !done(&contents(r, "*R job: long*")) {
+        assert!(
+            Instant::now() < deadline,
+            "{}",
+            contents(r, "*R job: long*")
+        );
+        r.ox.tick(&mut r.editor);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn k_stops_a_job_and_g_runs_it_again() {
+    let mut r = started();
+    let (program, args) = if cfg!(windows) {
+        ("ping", r#"["-n" "30" "127.0.0.1"]"#)
+    } else {
+        ("sleep", r#"["30"]"#)
+    };
+    let folder = ox_text(&std::env::temp_dir().display().to_string());
+    r.eval(&format!(
+        "(module (import (r jobs :as jobs))) (jobs/start \"*R job: long*\" {program:?} {args} {folder})"
+    ));
+    let id = r.editor.buffer_named("*R job: long*").unwrap();
+    r.editor.show_buffer(id);
+
+    ticked(&mut r, "k", |text| text.ends_with("Stopped"));
+    ticked(&mut r, "g", |text| !text.contains("Stopped"));
+    ticked(&mut r, "k", |text| text.ends_with("Stopped"));
+    r.press("k");
+    assert_eq!(r.editor.message(), Some("This job is not running"));
+}
+
+#[test]
+fn shiny_apps_open_once_they_listen() {
+    let mut r = started();
+
+    r.eval(r#"(module (import (r jobs :as jobs))) (jobs/heard-app "Listening on http://127.0.0.1:4321")"#);
+
+    assert_eq!(
+        r.editor.take_effects(),
+        [Effect::OpenExternally(PathBuf::from(
+            "http://127.0.0.1:4321"
+        ))]
+    );
+}
+
+#[test]
+fn running_needs_rscript_beside_r_and_an_app_folder() {
+    let folder = tempfile::tempdir().unwrap();
+    let script = folder.path().join("job.R");
+    std::fs::write(&script, "print(1)\n").unwrap();
+    let mut r = with_program(None, Editor::new());
+    r.editor.open_file(&script);
+    settle(&mut r.editor, &mut r.ox);
+
+    r.run("r-run-job");
+    assert_eq!(
+        r.editor.message(),
+        Some(format!("Rscript was not found beside {}", r.program().display()).as_str())
+    );
+    r.run("r-run-app");
+    assert_eq!(
+        r.editor.message(),
+        Some("No Shiny app here: it needs app.R, or ui.R and server.R")
+    );
+}
+
+#[test]
+fn widgets_r_shows_open_in_the_system_viewer() {
+    let mut r = started();
+    r.run("run-r");
+    let job = r.started()[0];
+    r.output(job, PROMPT);
+    r.editor.take_effects();
+
+    r.output(
+        job,
+        &format!("\u{1}viewer\u{2}C:/tmp/widget/index.html\u{3}{PROMPT}"),
+    );
+
+    assert!(
+        r.editor
+            .take_effects()
+            .contains(&Effect::OpenExternally(PathBuf::from(
+                "C:/tmp/widget/index.html"
+            )))
+    );
+}

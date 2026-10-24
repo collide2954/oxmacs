@@ -10,6 +10,7 @@ use crate::testing::{home_with, press, settle};
 mod data;
 mod definitions;
 mod help;
+mod jobs;
 mod keys;
 mod language;
 mod markdown;

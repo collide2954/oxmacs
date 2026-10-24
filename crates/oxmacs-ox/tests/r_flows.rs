@@ -241,3 +241,26 @@ fn the_languageserver_finds_problems_in_r_scripts_without_a_session() {
     );
     assert!(live.jobs.is_empty());
 }
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
+fn scripts_run_as_background_jobs_apart_from_the_session() {
+    let mut live = Live::new();
+    let script = live.folder.path().join("job.R");
+    std::fs::write(&script, "cat('job says', 6 * 7, '\\n')\n").unwrap();
+    live.editor.open_file(&script);
+
+    live.press("M-x");
+    live.typed("r-run-job");
+    live.press("RET");
+    live.until("the job", |editor| {
+        contents(editor, "*R job: job.R*").ends_with("Finished")
+    });
+
+    assert!(
+        contents(&live.editor, "*R job: job.R*").contains("job says 42"),
+        "{}",
+        contents(&live.editor, "*R job: job.R*")
+    );
+    assert!(live.jobs.is_empty());
+}

@@ -336,6 +336,19 @@ fn tables_sort_filter_page_and_describe_their_columns() {
 }
 
 #[test]
+#[ignore = "runs the R installed on this machine"]
+fn widgets_go_to_the_viewer_marker() {
+    let (output, _directory) =
+        session("getOption(\"viewer\")(\"C:/tmp/widget/index.html\")\nq()\n");
+
+    assert_eq!(
+        marked(&output, "viewer"),
+        ["C:/tmp/widget/index.html"],
+        "{output:?}"
+    );
+}
+
+#[test]
 #[ignore = "runs the R and Quarto installed on this machine"]
 fn documents_render_beside_themselves_or_say_why_not() {
     let folder = tempfile::tempdir().unwrap();
