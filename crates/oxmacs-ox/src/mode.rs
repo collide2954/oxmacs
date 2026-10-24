@@ -387,10 +387,10 @@ fn highlight(editor: &Editor, id: BufferId, line: usize) -> Spans {
     let Some(buffer) = editor.buffer_by_id(id) else {
         return Vec::new();
     };
-    let state = match editor.plugin_state::<Lexed>() {
-        Some(lexed) => lexed.state(buffer, line),
-        None => Starts::new(buffer, line).state(buffer, line),
-    };
+    let state = editor.plugin_state::<Lexed>().map_or_else(
+        || Starts::new(buffer, line).state(buffer, line),
+        |lexed| lexed.state(buffer, line),
+    );
     highlight_with(&buffer.line_text(line), state).0
 }
 const LOOK_BACK: usize = 2000;
