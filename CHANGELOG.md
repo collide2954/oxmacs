@@ -82,6 +82,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 ### Added
 
 - Plugins hear the keys that run commands: `on-key-command` gets the keys pressed and the command's name, leaving out typing, with a command run from `M-x` under the keys of `M-x`.
+- The opt-in `keycast` plugin shows the keys you press and the commands they run, for demo videos: keycaps and the command name in a pill at the bottom right, larger at the bottom center, or in the mode line, with the last three stacked, older ones fainter, repeats counted as `×4`, and each gone after about two seconds. Typing never shows. Turn it on with `(use-plugin keycast)`.
 - Plugins float text over the windows with `set-overlay`: rows of text, theme faces and keycaps, each with its own opacity, at the bottom right or larger at the bottom center.
 - The README and the Ox manual list the bundled plugins, with their versions, whether they are on by default and what they do, and Ox's built-in modules; a test keeps both lists in step with the plugins and modules.
 - `M-;` in R Markdown comments with `#` inside R chunks and with `<!-- -->` in the prose around them, toggling a selection, starting a comment on a blank line, or adding one at the end of a line of code.

@@ -16,7 +16,17 @@ pub const BUNDLED: &[Bundle] = &[
     MARKDOWN,
     MANUAL,
     R,
+    KEYCAST,
 ];
+
+const KEYCAST: Bundle = Bundle {
+    name: "keycast",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/keycast/plugin.ox")),
+        ("keycast.ox", include_str!("../plugins/keycast/keycast.ox")),
+        ("stack.ox", include_str!("../plugins/keycast/stack.ox")),
+    ],
+};
 
 const R: Bundle = Bundle {
     name: "r",
@@ -498,6 +508,9 @@ mod manual;
 
 #[cfg(test)]
 mod r;
+
+#[cfg(test)]
+mod keycast;
 
 #[cfg(test)]
 mod dired {
