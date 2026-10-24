@@ -135,7 +135,10 @@
       ((= command "reconnect") (client/reconnect! name))
       ((= command "list") (client/list! name rest))
       ((= command "topic") (client/send-command! name "TOPIC" (if (= rest "") [here-target] [here-target rest])))
-      ((= command "whois") (client/send-command! name "WHOIS" [word]))
+      ((= command "whois") (let [nick (if (and (= word "") (= entry.kind :query)) entry.target word)]
+                             (if (= nick "")
+                               (message "Whom? /whois takes a nick")
+                               (client/whois! buffer nick))))
       ((= command "names") (client/info! buffer (str (count (client/channel-nicks name here-target)) " people: "
                                                      (string/join " " (sort (map (fn [person] (str person.prefix person.nick))
                                                                                  (client/channel-nicks name here-target)))))))

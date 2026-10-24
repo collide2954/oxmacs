@@ -502,6 +502,46 @@ fn the_channel_list_is_filtered_and_joined_from() {
 }
 
 #[test]
+fn whois_answers_show_in_the_buffer_that_asked() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    run(&mut editor, &mut ox, "irc-switch");
+    type_in(&mut editor, &mut ox, "#oxmacs");
+    keys(&mut editor, &mut ox, "RET");
+
+    type_in(&mut editor, &mut ox, "/whois bo");
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(&mut editor, &mut ox, "WHOIS bo");
+    fake.say(":srv 311 ana bo b host * :Bo Real");
+    fake.say(":srv 319 ana bo :@#oxmacs #rust");
+    fake.say(":srv 312 ana bo srv.example :Example server");
+    fake.say(":srv 330 ana bo bo-account :is logged in as");
+    fake.say(":srv 301 ana bo :gone fishing");
+    fake.say(":srv 317 ana bo 300 1792742400 :seconds idle, signon time");
+    fake.say(":srv 671 ana bo :is using a secure connection");
+    fake.say(":srv 318 ana bo :End of /WHOIS list.");
+    wait_for_text(
+        &mut editor,
+        &mut ox,
+        "#oxmacs",
+        "bo is using a secure connection",
+    );
+
+    let shown = contents(&editor, "#oxmacs");
+    for wanted in [
+        "bo is b@host (Bo Real)",
+        "bo is in @#oxmacs #rust",
+        "bo is on srv.example (Example server)",
+        "bo is logged in as bo-account",
+        "bo is away: gone fishing",
+        "bo has been idle 5 minutes, online since ",
+    ] {
+        assert!(shown.contains(wanted), "{wanted} missing from {shown}");
+    }
+    assert!(!shown.contains("End of /WHOIS"), "{shown}");
+    assert!(!contents(&editor, "*irc Test*").contains("Bo Real"));
+}
+
+#[test]
 fn joins_and_parts_of_quiet_people_stay_hidden_until_asked_for() {
     let (fake, _home, mut editor, mut ox) = joined();
     fake.say(":bo!b@host PRIVMSG #oxmacs :I talk");

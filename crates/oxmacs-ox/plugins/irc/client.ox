@@ -7,7 +7,7 @@
   (export state network buffer-entry server-buffer buffer-of ensure-buffer! render! connect! quit! send! send-command!
           say! say-lines! act! join! part! has-cap? my-nick channel-nicks info! error! note-seen! toggle-noise!
           message-at reply-to react! clear-buffer! irc-buffers next-active connected? reconnect! joined-channels
-          list! listing filter-list!))
+          list! listing filter-list! whois!))
 
 (def wanted-caps ["server-time" "message-tags" "echo-message" "batch" "draft/chathistory" "chathistory" "sasl"
                   "away-notify" "account-notify" "multi-prefix" "extended-join" "draft/multiline"
@@ -548,6 +548,44 @@
       (when-let [buffer (buffer-of name channel)]
         (event! buffer line :info (str line.nick " invited " invited))))))
 
+(def whois-replies (set ["301" "311" "312" "313" "317" "318" "319" "330" "338" "378" "379" "671" "276" "307" "320" "335"]))
+
+(def (whois! buffer nick)
+  "Asks who nick is, from buffer, where the answers then show."
+  (let [name (get (buffer-entry buffer) :network)]
+    (change-network! name assoc-in [:asking (fold nick)] buffer)
+    (send-command! name "WHOIS" [nick])))
+
+(def (span seconds)
+  (let [[size unit] (cond ((< seconds 60) [seconds "second"])
+                      ((< seconds 3600) [(// seconds 60) "minute"])
+                      ((< seconds 86400) [(// seconds 3600) "hour"])
+                      (else [(// seconds 86400) "day"]))]
+    (str size " " unit (if (= size 1) "" "s"))))
+
+(def (whois-text line)
+  (let [[_ nick a b c d] line.params
+        said (last line.params)]
+    (cond ((= line.command "311") (str nick " is " a "@" b " (" said ")"))
+      ((= line.command "319") (str nick " is in " said))
+      ((= line.command "312") (str nick " is on " a " (" said ")"))
+      ((= line.command "330") (str nick " is logged in as " a))
+      ((= line.command "301") (str nick " is away: " said))
+      ((= line.command "317")
+       (let [idle (or (string/to-number a) 0)
+             since (when (and c (string/to-number b)) (* 1000 (string/to-number b)))]
+         (str nick " has been idle " (span idle)
+              (if since (str ", online since " (time/format since "%-d %B %H:%M")) ""))))
+      (else (str nick " " said)))))
+
+(def (on-whois! name line)
+  (let [nick (get line.params 1)
+        asked (get-in (network name) [:asking (fold nick)])
+        buffer (or asked (when (= line.command "301") (or (buffer-of name nick) (here-on name))))]
+    (cond ((= line.command "318") (change-network! name update :asking (fn [asking] (dissoc (or asking {}) (fold nick)))))
+      (buffer (info! buffer (whois-text line)))
+      (else (on-numeric! name line)))))
+
 (def list-keys {"RET" 'irc-list-join "/" 'irc-list-filter "g" 'irc-list "q" 'quit-window})
 
 (def (list-buffer name)
@@ -618,6 +656,7 @@
       ((= command "TOPIC") (on-topic! name line))
       ((= command "332") (on-topic-reply! name line))
       ((= command "353") (on-names! name line))
+      ((contains? whois-replies command) (on-whois! name line))
       ((= command "321") (change-network! name assoc :listing []))
       ((= command "322") (on-list-item! name line))
       ((= command "323") (on-list-end! name))
