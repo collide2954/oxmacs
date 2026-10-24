@@ -4,6 +4,7 @@ mod console;
 mod dispatch;
 mod editing;
 mod effect;
+mod flash;
 mod job;
 mod languages;
 mod lsp;
@@ -185,6 +186,7 @@ pub struct Editor {
     last_compile: Option<String>,
     lints: build::lint::Lints,
     notes: Vec<notes::Note>,
+    flashes: Vec<flash::Flash>,
     errors_from: build::errors::ErrorSource,
     lsp: lsp::Clients,
     focused: bool,
@@ -285,6 +287,7 @@ impl Editor {
             last_compile: None,
             lints: build::lint::Lints::default(),
             notes: Vec::new(),
+            flashes: Vec::new(),
             errors_from: build::errors::ErrorSource::default(),
             lsp: lsp::Clients::default(),
             focused: true,

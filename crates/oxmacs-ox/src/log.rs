@@ -23,6 +23,11 @@ impl PluginBuffer for LogView {
 struct Log {
     text: String,
     scope: Option<ScopeId>,
+    reports: usize,
+}
+
+pub fn reports(editor: &Editor) -> usize {
+    editor.plugin_state::<Log>().map_or(0, |log| log.reports)
 }
 
 fn place(error: &Error, origin: Option<(&str, &str)>) -> String {
@@ -90,6 +95,9 @@ pub fn report(editor: &mut Editor, error: &Error, origin: Option<(&str, &str)>) 
         }
     }
     append(editor, &entry);
+    if let Some(log) = editor.plugin_state_mut::<Log>() {
+        log.reports += 1;
+    }
     editor.show_message(format!("Ox: {}", error.message));
 }
 

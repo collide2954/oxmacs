@@ -292,6 +292,11 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>("console-send", 2, Some(2), |heap, editor, arguments| {
         let id = console(heap, editor, "console-send", arguments[0])?;
         let code = print::display(heap, arguments[1]);
+        if let Ok(source) = crate::handles::current(heap, editor)
+            && source != id
+        {
+            crate::flashes::sent(editor, source, &code);
+        }
         editor.console_evaluate(id, &code);
         Ok(Value::Nil)
     });
@@ -657,6 +662,33 @@ mod tests {
         editor.session_output(job, &format!("{PROMPT}{PROMPT}"));
         let id = editor.buffer_named("*shell*").unwrap();
         assert_eq!(editor.buffer_by_id(id).unwrap().contents(), "$ ls\n$ pwd\n");
+    }
+
+    #[test]
+    fn code_sent_from_a_buffer_that_holds_it_is_reported_where_it_sits() {
+        let (mut editor, mut ox, job) = started(SHELL);
+        editor.session_output(job, PROMPT);
+        settle(&mut editor, &mut ox);
+        editor.buffer_mut().insert_at(0, "ls\npwd\nls\n");
+        editor.buffer_mut().set_point(3);
+        ox.eval(
+            &mut editor,
+            "(def ran (atom [])) (on-evaluate :test (fn [b start end failed] (swap! ran conj [(with-buffer b (buffer-name)) start end failed])))",
+        )
+        .unwrap();
+
+        ox.eval(
+            &mut editor,
+            r#"(console-send "*shell*" "ls\n") (console-send "*shell*" "echo") (with-buffer "*shell*" (console-send "*shell*" "pwd"))"#,
+        )
+        .unwrap();
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(
+            ox.eval(&mut editor, "@ran").unwrap(),
+            r#"[["*scratch*" 0 2 false]]"#
+        );
+        assert_eq!(sent(&mut editor), ["ls\n", "echo\n", "pwd\n"]);
     }
 
     #[test]

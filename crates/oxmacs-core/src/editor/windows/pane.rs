@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::ops::Range;
+use std::time::Instant;
 
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
 use crate::editor::buffers::Mode;
@@ -189,6 +190,14 @@ impl<'a> Pane<'a> {
             Some(Mode::Plugin(view)) => view.pills(line),
             _ => Vec::new(),
         }
+    }
+
+    pub fn line_flashes(&self, line: usize, now: Instant) -> Vec<(Range<usize>, Highlight, f32)> {
+        self.editor.flashes_on_line(self.index, line, now)
+    }
+
+    pub fn flashing(&self, now: Instant) -> bool {
+        self.editor.flashing_in(self.index, now)
     }
 
     pub fn line_marks(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {

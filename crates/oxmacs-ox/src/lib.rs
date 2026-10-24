@@ -4,6 +4,7 @@ pub mod checker;
 mod commands;
 mod consoles;
 mod editing;
+mod flashes;
 mod handles;
 mod help;
 mod hooks;
@@ -64,6 +65,7 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     handles::install(&mut isolate);
     editing::install(&mut isolate);
     hooks::install(&mut isolate);
+    flashes::install(&mut isolate);
     processes::install(&mut isolate);
     consoles::install(&mut isolate);
     layout::install(&mut isolate);
@@ -304,6 +306,7 @@ impl Ox {
                 break;
             }
         }
+        flashes::run(&mut self.isolate, editor);
         failed
     }
 }

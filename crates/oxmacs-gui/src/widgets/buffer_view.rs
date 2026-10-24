@@ -294,7 +294,7 @@ impl<'a, Message> BufferView<'a, Message> {
         let target = self.cursor_cell();
         let cursor = state.cursor.get_or_insert_with(|| Glide::new(target));
         cursor.retarget(target, now, self.motion.enabled && !scrolled && !pointed);
-        if cursor.is_animating(now) || scrolling {
+        if cursor.is_animating(now) || scrolling || self.pane.flashing(now) {
             shell.request_redraw();
             return;
         }
@@ -609,7 +609,11 @@ where
                         draw_pill(renderer, columns, *rectangle, cell.width, color);
                     }
                 }
-                for (columns, color) in selection.into_iter().chain(marks) {
+                let flashes = line.flashes.iter().map(|(columns, face, strength)| {
+                    let color = style::color(self.faces.highlight(*face)).scale_alpha(*strength);
+                    (*columns, color)
+                });
+                for (columns, color) in selection.into_iter().chain(marks).chain(flashes) {
                     if let Some(columns) =
                         display::row_highlight(columns, row.column, row.end_column)
                     {
@@ -683,6 +687,7 @@ struct DrawnLine<'a> {
     highlight: Option<(usize, Option<usize>)>,
     marks: Vec<((usize, Option<usize>), Highlight)>,
     pills: Vec<((usize, Option<usize>), Highlight)>,
+    flashes: Vec<((usize, Option<usize>), Highlight, f32)>,
     diagnostics: Vec<((usize, Option<usize>), Severity)>,
     note: Option<(String, Highlight)>,
 }
@@ -697,6 +702,7 @@ impl<'a, Message> BufferView<'a, Message> {
         let tab_width = self.pane.tab_width();
         let cell = state.metrics.cell;
         let shift = state.shift();
+        let now = state.frame.unwrap_or_else(Instant::now);
         let selection = buffer.selection();
         let mut lines: Vec<DrawnLine<'a>> = Vec::new();
         let mut rows = Vec::new();
@@ -727,6 +733,16 @@ impl<'a, Message> BufferView<'a, Message> {
                         Some((columns, pill))
                     })
                     .collect();
+                let flashes = self
+                    .pane
+                    .line_flashes(row.line, now)
+                    .into_iter()
+                    .filter_map(|(range, face, strength)| {
+                        let columns =
+                            display::highlight_columns(&text, 0..span.len(), &range, tab_width)?;
+                        Some((columns, face, strength))
+                    })
+                    .collect();
                 let diagnostics = self
                     .pane
                     .line_diagnostics(row.line)
@@ -746,6 +762,7 @@ impl<'a, Message> BufferView<'a, Message> {
                     }),
                     marks,
                     pills,
+                    flashes,
                     style: self.pane.line_style(row.line),
                     text,
                 });
@@ -1065,6 +1082,55 @@ mod tests {
         let rises: Vec<f32> = (0..8).map(wave_rise).collect();
 
         assert_eq!(rises, [0.0, 1.0, 2.0, 1.0, 0.0, 1.0, 2.0, 1.0]);
+    }
+
+    fn ignored(_: WindowId, _: ViewEvent) {}
+
+    #[test]
+    fn flashes_are_laid_out_in_display_columns_with_their_strength() {
+        let mut buffer = Buffer::with_text("t", "\tab\ncd\n");
+        buffer.set_point(0);
+        let mut editor = oxmacs_core::editor::Editor::with_buffer(buffer);
+        let now = Instant::now();
+        let id = editor.buffer().id();
+        editor.flash(
+            id,
+            1..5,
+            Highlight::Removed,
+            Duration::from_millis(500),
+            now,
+        );
+        let view = BufferView::new(
+            editor.pane(),
+            editor.selected_window(),
+            oxmacs_core::theme::ADWAITA,
+            Font::MONOSPACE,
+            16.0,
+            Motion {
+                enabled: true,
+                last_input: now,
+                blink_interval: Duration::ZERO,
+            },
+            ignored,
+        );
+        let state = State {
+            metrics: Metrics {
+                cell: CELL,
+                ..Metrics::default()
+            },
+            frame: Some(now),
+            ..State::default()
+        };
+
+        let (lines, _) = view.lay_out_rows(
+            &state,
+            Rectangle::new(Point::ORIGIN, Size::new(400.0, 200.0)),
+        );
+
+        assert_eq!(lines[0].flashes, [((8, Some(10)), Highlight::Removed, 1.0)]);
+        assert_eq!(lines[1].flashes, [((0, Some(1)), Highlight::Removed, 1.0)]);
+        assert!(view.pane.flashing(now));
+        assert!(!view.pane.flashing(now + Duration::from_millis(500)));
     }
 
     #[test]
