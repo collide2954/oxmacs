@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
@@ -32,12 +32,14 @@ impl Fake {
         let out = Arc::new(Mutex::new(None));
         let writer = Arc::clone(&out);
         thread::spawn(move || {
-            let (stream, _) = listener.accept().unwrap();
-            *writer.lock().unwrap() = Some(stream.try_clone().unwrap());
-            for line in BufReader::new(stream).lines() {
-                let Ok(line) = line else { break };
-                if sender.send(line).is_err() {
-                    break;
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { break };
+                *writer.lock().unwrap() = Some(stream.try_clone().unwrap());
+                for line in BufReader::new(stream).lines() {
+                    let Ok(line) = line else { break };
+                    if sender.send(line).is_err() {
+                        return;
+                    }
                 }
             }
         });
@@ -54,6 +56,12 @@ impl Fake {
         let stream = out.as_mut().expect("nobody connected yet");
         write!(stream, "{line}\r\n").unwrap();
         stream.flush().unwrap();
+    }
+
+    fn hang_up(&self) {
+        if let Some(stream) = self.out.lock().unwrap().take() {
+            stream.shutdown(Shutdown::Both).unwrap();
+        }
     }
 
     fn drain(&self) {
@@ -397,6 +405,42 @@ fn errors_standard_replies_and_invites_show_where_you_are() {
         .is_some()));
     keys(&mut editor, &mut ox, "RET");
     fake.expect(&mut editor, &mut ox, "JOIN #secret");
+}
+
+#[test]
+fn lost_connections_come_back_and_rejoin_the_open_channels() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    type_in(&mut editor, &mut ox, "/join #extra");
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(&mut editor, &mut ox, "JOIN #extra");
+    fake.say(":ana!a@host JOIN #extra");
+    wait_for_text(&mut editor, &mut ox, "#extra", "You joined #extra");
+
+    fake.hang_up();
+    wait_for_text(
+        &mut editor,
+        &mut ox,
+        "#oxmacs",
+        "Disconnected; trying again in 1 second",
+    );
+    fake.expect(&mut editor, &mut ox, "CAP LS 302");
+    fake.say(":srv 001 ana :Welcome back");
+    fake.expect(&mut editor, &mut ox, "JOIN #extra,#oxmacs");
+    fake.say(":ana!a@host JOIN #extra");
+    fake.say(":ana!a@host JOIN #oxmacs");
+    assert!(pump(&mut editor, &mut ox, |editor, _| contents(
+        editor, "#oxmacs"
+    )
+    .matches("You joined #oxmacs")
+    .count()
+        == 2));
+
+    type_in(&mut editor, &mut ox, "/reconnect");
+    keys(&mut editor, &mut ox, "RET");
+    fake.expect(&mut editor, &mut ox, "QUIT Reconnecting");
+    fake.expect(&mut editor, &mut ox, "CAP LS 302");
+    fake.say(":srv 001 ana :Welcome again");
+    fake.expect(&mut editor, &mut ox, "JOIN #extra,#oxmacs");
 }
 
 #[test]

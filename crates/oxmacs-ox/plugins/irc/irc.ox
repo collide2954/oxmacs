@@ -130,6 +130,7 @@
       ((= command "notice") (client/send-command! name "NOTICE" [word more]))
       ((= command "nick") (client/send-command! name "NICK" [word]))
       ((= command "quit") (client/quit! name (when (not= rest "") rest)))
+      ((= command "reconnect") (client/reconnect! name))
       ((= command "topic") (client/send-command! name "TOPIC" (if (= rest "") [here-target] [here-target rest])))
       ((= command "whois") (client/send-command! name "WHOIS" [word]))
       ((= command "names") (client/info! buffer (str (count (client/channel-nicks name here-target)) " people: "
@@ -142,7 +143,7 @@
       ((or (= command "quote") (= command "raw")) (client/send! name rest))
       ((= command "clear") (client/clear-buffer! buffer))
       ((= command "noise") (run-command 'irc-toggle-noise))
-      ((= command "help") (client/info! buffer "/join /part /me /msg /query /notice /nick /quit /topic /whois /names /away /back /invite /kick /quote /clear /noise"))
+      ((= command "help") (client/info! buffer "/join /part /me /msg /query /notice /nick /quit /reconnect /topic /whois /names /away /back /invite /kick /quote /clear /noise"))
       (else (client/send! name (string/trim (str (string/upper command) " " rest)))))))
 
 (defcommand irc-return "Send the input, or open the link at point"
@@ -155,6 +156,8 @@
                  (let [entry (here-or-complain)
                        text (take-input)]
                    (cond ((string/blank? text) nil)
+                     ((contains? (set ["/quit" "/reconnect"]) (string/lower (first (string/words text))))
+                      (run-slash! buffer text))
                      ((not (client/connected? entry.network))
                       (message (str "Not connected to " entry.network "; M-x irc connects")))
                      ((and (string/starts-with? text "/") (not (string/starts-with? text "//")))

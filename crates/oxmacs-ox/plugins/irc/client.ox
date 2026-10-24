@@ -6,7 +6,7 @@
           (vault store :as vault))
   (export state network buffer-entry server-buffer buffer-of ensure-buffer! render! connect! quit! send! send-command!
           say! say-lines! act! join! part! has-cap? my-nick channel-nicks info! error! note-seen! toggle-noise!
-          message-at reply-to react! clear-buffer! irc-buffers next-active connected?))
+          message-at reply-to react! clear-buffer! irc-buffers next-active connected? reconnect!))
 
 (def wanted-caps ["server-time" "message-tags" "echo-message" "batch" "draft/chathistory" "chathistory" "sasl"
                   "away-notify" "account-notify" "multi-prefix" "extended-join" "draft/multiline"
@@ -287,11 +287,12 @@
 
 (def (on-welcome! name line)
   (let [nick (first line.params)
-        config (get (network name) :config)]
-    (change-network! name merge {nick: nick registered: true attempts: 0})
+        config (get (network name) :config)
+        channels (or (get (network name) :rejoin) config.channels [])]
+    (change-network! name merge {nick: nick registered: true attempts: 0 rejoin: nil})
     (info! (server-buffer name) (or (last line.params) "Connected"))
-    (unless (empty? (or config.channels []))
-      (send-command! name "JOIN" [(string/join "," config.channels)]))))
+    (unless (empty? channels)
+      (send-command! name "JOIN" [(string/join "," channels)]))))
 
 (def (on-isupport! name line)
   (let [tokens (drop 1 (take (dec (count line.params)) line.params))
@@ -644,39 +645,68 @@
     (change-network! name (fn [old]
                             {config: config conn: nil nick: config.nick registered: false capped: false
                              caps: (set []) offered: (set []) isupport: {} batches: {} channels: {}
-                             sasl: sasl quitting: false attempts: (or (get old :attempts) 0)}))
+                             sasl: sasl quitting: false attempts: (or (get old :attempts) 0) rejoin: (get old :rejoin)}))
     (info! buffer (str "Connecting to " config.host " port " (or config.port 6697) "…"))
     (let [conn (try (await (net/connect config.host (or config.port 6697) :tls (not= config.tls false)))
                  (catch error e
                    (error! buffer (str "Couldn't connect: " e.message))
                    nil))]
-      (when conn
-        (change-network! name assoc :conn conn)
-        (send! name "CAP LS 302")
-        (send-command! name "NICK" [config.nick])
-        (send-command! name "USER" [(or config.user config.nick) "0" "*" (or config.realname config.nick)])
-        (spawn (read-loop! name conn))
-        (watch!))
+      (if conn
+        (do (change-network! name assoc :conn conn)
+          (send! name "CAP LS 302")
+          (send-command! name "NICK" [config.nick])
+          (send-command! name "USER" [(or config.user config.nick) "0" "*" (or config.realname config.nick)])
+          (spawn (read-loop! name conn))
+          (watch!))
+        (when (> (get (network name) :attempts) 0)
+          (spawn (retry! name))))
       conn)))
+
+(def backoff [1 2 5 15 30 60])
+
+(def (joined-channels name)
+  (sort (map :name (vals (or (get (network name) :channels) {})))))
+
+(def (network-buffers name)
+  (vec (keep (fn [[buffer entry]] (when (= entry.network name) buffer)) (entries (get @state :buffers)))))
+
+(def (retry! name)
+  (let [old (network name)
+        attempts (inc (or old.attempts 0))
+        wait (get backoff (min (dec attempts) (dec (count backoff))))
+        said (str "Disconnected; trying again in " wait (if (= wait 1) " second" " seconds"))]
+    (change-network! name assoc :attempts attempts)
+    (each (fn [buffer] (error! buffer said))
+          (if (= attempts 1) (network-buffers name) [(server-buffer name)]))
+    (sleep (time/seconds wait))
+    (unless (or (connected? name) (get (network name) :quitting))
+      (connect! old.config))))
 
 (def (closed! name conn)
   (when (= (get (network name) :conn) conn)
-    (let [old (network name)
-          attempts (inc (or old.attempts 0))
-          wait (min 60 (* 5 attempts))]
-      (change-network! name merge {conn: nil registered: false attempts: attempts})
+    (let [old (network name)]
+      (change-network! name merge {conn: nil registered: false rejoin: (unless old.quitting (joined-channels name))})
       (if old.quitting
         (info! (server-buffer name) "Disconnected")
-        (do (error! (server-buffer name) (str "The connection ended; trying again in " wait " seconds"))
-          (sleep (time/seconds wait))
-          (unless (or (connected? name) (get (network name) :quitting))
-            (connect! old.config)))))))
+        (retry! name)))))
 
 (def (quit! name reason)
   (change-network! name assoc :quitting true)
-  (send-command! name "QUIT" [(or reason "oxmacs")])
-  (when-let [conn (get (network name) :conn)]
-    (net/close conn)))
+  (if-let [conn (get (network name) :conn)]
+    (do (send-command! name "QUIT" [(or reason "oxmacs")])
+      (net/close conn))
+    (info! (server-buffer name) "Disconnected")))
+
+(def (reconnect! name)
+  "Drops the connection to the network called name, if there is one, and connects again at once, rejoining its channels."
+  (let [old (network name)
+        conn old.conn]
+    (change-network! name merge {conn: nil quitting: false attempts: 0
+                                 rejoin: (if conn (joined-channels name) old.rejoin)})
+    (when conn
+      (net/send conn (protocol/format-line "QUIT" ["Reconnecting"]))
+      (net/close conn))
+    (connect! old.config)))
 
 (def (join! name channel {show true})
   (when show
