@@ -2,13 +2,14 @@ use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::library::collections::{self, expected, is_list};
+use crate::library::ordering;
 use crate::native::{Control, Drains};
 use crate::value::Value;
 use crate::value::equal::equal;
 use crate::value::map::Map;
 use crate::vm::Runtime;
 use crate::vm::build::{full, make_vector};
-use crate::vm::routine::{Next, Routine, Started, finished, is_generator};
+use crate::vm::routine::{Forward, Next, Routine, Started, finished, is_generator};
 
 use super::{int, items, less, plus, smaller, stretch};
 
@@ -162,6 +163,258 @@ impl Routine for Pull {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Map,
+    MapCat,
+    Filter,
+    Remove,
+    Keep,
+    Some,
+    Every,
+    Find,
+    TakeWhile,
+    DropWhile,
+    GroupBy,
+    SortBy,
+}
+
+#[derive(Debug)]
+struct Each {
+    mode: Mode,
+    function: Value,
+    columns: Vec<Vec<Value>>,
+    length: usize,
+    at: usize,
+    out: Vec<Value>,
+    groups: Map,
+    arguments: Vec<Value>,
+}
+
+impl Each {
+    fn start(mode: Mode, runtime: &mut Runtime, arguments: &[Value]) -> Result<Started, Error> {
+        let columns = arguments[1..]
+            .iter()
+            .map(|coll| items(&mut runtime.heap, *coll))
+            .collect::<Result<Vec<_>, Error>>()?;
+        let length = columns.iter().map(Vec::len).min().unwrap_or(0);
+        Ok(Started::Running(Box::new(Self {
+            mode,
+            function: arguments[0],
+            columns,
+            length,
+            at: 0,
+            out: Vec::new(),
+            groups: Map::EMPTY,
+            arguments: Vec::new(),
+        })))
+    }
+
+    fn took(&mut self, heap: &mut Heap, value: Value) -> Result<Option<Value>, Error> {
+        let item = self.columns[0][self.at - 1];
+        match self.mode {
+            Mode::Map | Mode::MapCat | Mode::SortBy => self.out.push(value),
+            Mode::Filter if value.truthy() => self.out.push(item),
+            Mode::Remove if !value.truthy() => self.out.push(item),
+            Mode::Keep if value != Value::Nil => self.out.push(value),
+            Mode::Some if value.truthy() => return Ok(Some(value)),
+            Mode::Every if !value.truthy() => return Ok(Some(Value::Bool(false))),
+            Mode::Find if value.truthy() => return Ok(Some(item)),
+            Mode::TakeWhile if !value.truthy() => return make_vector(heap, &self.out).map(Some),
+            Mode::TakeWhile => self.out.push(item),
+            Mode::DropWhile if !value.truthy() => {
+                return make_vector(heap, &self.columns[0][self.at - 1..]).map(Some);
+            }
+            Mode::GroupBy => {
+                let group = match self.groups.get(heap, value) {
+                    Some(group) => group,
+                    None => make_vector(heap, &[])?,
+                };
+                let grown = collections::conj(heap, group, &[item])?;
+                self.groups = self.groups.assoc(heap, value, grown).map_err(full)?;
+            }
+            Mode::Filter
+            | Mode::Remove
+            | Mode::Keep
+            | Mode::Some
+            | Mode::Every
+            | Mode::Find
+            | Mode::DropWhile => {}
+        }
+        Ok(None)
+    }
+
+    fn finish(&self, heap: &mut Heap) -> Result<Value, Error> {
+        match self.mode {
+            Mode::Map | Mode::Filter | Mode::Remove | Mode::Keep | Mode::TakeWhile => {
+                make_vector(heap, &self.out)
+            }
+            Mode::MapCat => {
+                let mut items = Vec::new();
+                for part in &self.out {
+                    items.extend(collections::sequence(heap, "concat", *part)?);
+                }
+                make_vector(heap, &items)
+            }
+            Mode::Some | Mode::Find => Ok(Value::Nil),
+            Mode::Every => Ok(Value::Bool(true)),
+            Mode::DropWhile => make_vector(heap, &[]),
+            Mode::GroupBy => heap.map(self.groups).map_err(full),
+            Mode::SortBy => sorted(heap, &self.columns[0], &self.out),
+        }
+    }
+}
+
+impl Routine for Each {
+    fn resume(&mut self, runtime: &mut Runtime, value: Value) -> Result<Next<'_>, Error> {
+        if self.at > 0
+            && let Some(done) = self.took(&mut runtime.heap, value)?
+        {
+            return Ok(Next::Return(done));
+        }
+        if self.at >= self.length {
+            return self.finish(&mut runtime.heap).map(Next::Return);
+        }
+        let at = self.at;
+        self.at += 1;
+        self.arguments.clear();
+        self.arguments
+            .extend(self.columns.iter().map(|column| column[at]));
+        Ok(Next::Call(self.function, &self.arguments))
+    }
+
+    fn roots(&self, values: &mut Vec<Value>) {
+        values.push(self.function);
+        values.extend(self.columns.iter().flatten());
+        values.extend(&self.out);
+        values.extend(&self.arguments);
+        values.extend(self.groups.children());
+    }
+}
+
+fn sorted(heap: &mut Heap, items: &[Value], keys: &[Value]) -> Result<Value, Error> {
+    let pairs = keys
+        .iter()
+        .enumerate()
+        .map(|(at, key)| make_vector(heap, &[*key, int(at)]))
+        .collect::<Result<Vec<_>, Error>>()?;
+    let pairs = make_vector(heap, &pairs)?;
+    let order = ordering::sort(heap, &[pairs])?;
+    let mut out = Vec::with_capacity(items.len());
+    for pair in collections::sequence(heap, "sort", order)? {
+        let at = heap.vector_of(pair).and_then(|pair| pair.get(heap, 1));
+        if let Some(Value::Int(at)) = at
+            && let Some(item) = usize::try_from(at).ok().and_then(|at| items.get(at))
+        {
+            out.push(*item);
+        }
+    }
+    make_vector(heap, &out)
+}
+
+#[derive(Debug)]
+struct Reduce {
+    function: Value,
+    items: Vec<Value>,
+    at: usize,
+    pair: [Value; 2],
+}
+
+impl Routine for Reduce {
+    fn resume(&mut self, _: &mut Runtime, value: Value) -> Result<Next<'_>, Error> {
+        if self.at > 0 {
+            self.pair[0] = value;
+        }
+        let Some(item) = self.items.get(self.at) else {
+            return Ok(Next::Return(self.pair[0]));
+        };
+        self.pair[1] = *item;
+        self.at += 1;
+        Ok(Next::Call(self.function, &self.pair))
+    }
+
+    fn roots(&self, values: &mut Vec<Value>) {
+        values.push(self.function);
+        values.extend(&self.items);
+        values.extend(self.pair);
+    }
+}
+
+fn reduce(runtime: &mut Runtime, arguments: &[Value]) -> Result<Started, Error> {
+    let function = arguments[0];
+    let given = &arguments[1..];
+    let mut items = items(
+        &mut runtime.heap,
+        given.last().copied().unwrap_or(Value::Nil),
+    )?;
+    let start = if given.len() == 1 {
+        if items.is_empty() {
+            return Ok(Started::Running(Box::new(Forward::new(
+                function,
+                Vec::new(),
+            ))));
+        }
+        items.remove(0)
+    } else {
+        given.first().copied().unwrap_or(Value::Nil)
+    };
+    if items.is_empty() {
+        return Ok(Started::Done(start));
+    }
+    Ok(Started::Running(Box::new(Reduce {
+        function,
+        items,
+        at: 0,
+        pair: [start, Value::Nil],
+    })))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Pulling {
+    Next,
+    Kept,
+}
+
+#[derive(Debug)]
+struct TakeWhile {
+    generator: Value,
+    keep: Value,
+    out: Vec<Value>,
+    item: [Value; 1],
+    pulling: Option<Pulling>,
+}
+
+impl Routine for TakeWhile {
+    fn resume(&mut self, runtime: &mut Runtime, value: Value) -> Result<Next<'_>, Error> {
+        match self.pulling {
+            Some(Pulling::Next) => {
+                if finished(&runtime.heap, self.generator) {
+                    return make_vector(&mut runtime.heap, &self.out).map(Next::Return);
+                }
+                self.item = [value];
+                self.pulling = Some(Pulling::Kept);
+                return Ok(Next::Call(self.keep, &self.item));
+            }
+            Some(Pulling::Kept) => {
+                if !value.truthy() {
+                    return make_vector(&mut runtime.heap, &self.out).map(Next::Return);
+                }
+                self.out.push(self.item[0]);
+            }
+            None => {}
+        }
+        self.pulling = Some(Pulling::Next);
+        let next = runtime.control_value(Control::Next);
+        Ok(Next::Call(next, std::slice::from_ref(&self.generator)))
+    }
+
+    fn roots(&self, values: &mut Vec<Value>) {
+        values.extend([self.generator, self.keep]);
+        values.extend(&self.out);
+        values.extend(self.item);
+    }
+}
+
 pub(super) fn install(isolate: &mut Isolate) {
     isolate.define_draining("distinct", 1, Some(1), Drains::At(0), |heap, arguments| {
         distinct(heap, arguments[0])
@@ -218,4 +471,45 @@ pub(super) fn install(isolate: &mut Isolate) {
     isolate.define_native("repeat", 2, Some(2), |heap, arguments| {
         repeat(heap, arguments[0], arguments[1])
     });
+    install_callers(isolate);
+}
+
+fn install_callers(isolate: &mut Isolate) {
+    let each: [(&str, Mode, Option<usize>, Drains); 11] = [
+        ("map", Mode::Map, None, Drains::From(1)),
+        ("mapcat", Mode::MapCat, None, Drains::From(1)),
+        ("filter", Mode::Filter, Some(2), Drains::At(1)),
+        ("remove", Mode::Remove, Some(2), Drains::At(1)),
+        ("keep", Mode::Keep, Some(2), Drains::At(1)),
+        ("some", Mode::Some, Some(2), Drains::At(1)),
+        ("every?", Mode::Every, Some(2), Drains::At(1)),
+        ("find", Mode::Find, Some(2), Drains::At(1)),
+        ("drop-while", Mode::DropWhile, Some(2), Drains::At(1)),
+        ("group-by", Mode::GroupBy, Some(2), Drains::At(1)),
+        ("sort-by", Mode::SortBy, Some(2), Drains::At(1)),
+    ];
+    for (name, mode, most, drains) in each {
+        isolate.define_routine(name, 2, most, Some(drains), move |runtime, _, arguments| {
+            Each::start(mode, runtime, arguments)
+        });
+    }
+    isolate.define_routine("take-while", 2, Some(2), None, |runtime, _, arguments| {
+        if !is_generator(&runtime.heap, arguments[1]) {
+            return Each::start(Mode::TakeWhile, runtime, arguments);
+        }
+        Ok(Started::Running(Box::new(TakeWhile {
+            generator: arguments[1],
+            keep: arguments[0],
+            out: Vec::new(),
+            item: [Value::Nil],
+            pulling: None,
+        })))
+    });
+    isolate.define_routine(
+        "reduce",
+        1,
+        None,
+        Some(Drains::Last),
+        |runtime, _, arguments| reduce(runtime, arguments),
+    );
 }

@@ -102,6 +102,8 @@ fn error_types_and_made_functions_describe_their_parameters() {
     assert_eq!(always.kind, Kind::Function);
     assert_eq!(always.signature, "(always & _)");
     assert_eq!(always.doc, None);
+    isolate.eval("(def add (partial + 1))").unwrap();
+    assert_eq!(described(&mut isolate, "add").signature, "(add & more)");
 }
 
 #[test]
@@ -186,7 +188,8 @@ fn the_reference_lists_every_library_module_with_its_documented_names() {
     };
 
     assert_eq!(reference[0].module, "ox");
-    assert_eq!(entry("ox", "map").kind, Kind::Function);
+    assert_eq!(entry("ox", "map").kind, Kind::Native);
+    assert_eq!(entry("ox", "map").signature, "(map f coll & colls)");
     assert!(entry("ox", "map").doc.is_some());
     assert_eq!(entry("ox", "+").kind, Kind::Native);
     assert_eq!(entry("ox", "if").kind, Kind::Special);

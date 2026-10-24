@@ -47,6 +47,7 @@ pub struct Native {
 pub(crate) enum Drains {
     At(usize),
     From(usize),
+    Last,
 }
 
 impl Drains {
@@ -54,6 +55,7 @@ impl Drains {
         match self {
             Self::At(at) => at.min(count)..(at + 1).min(count),
             Self::From(at) => at.min(count)..count,
+            Self::Last => count.saturating_sub(1)..count,
         }
     }
 }

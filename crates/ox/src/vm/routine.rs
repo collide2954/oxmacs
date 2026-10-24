@@ -98,6 +98,38 @@ pub(crate) fn is_generator(heap: &Heap, value: Value) -> bool {
     heap.generator_of(value).is_some()
 }
 
+#[derive(Debug)]
+pub(crate) struct Forward {
+    function: Value,
+    arguments: Vec<Value>,
+    called: bool,
+}
+
+impl Forward {
+    pub(crate) fn new(function: Value, arguments: Vec<Value>) -> Self {
+        Self {
+            function,
+            arguments,
+            called: false,
+        }
+    }
+}
+
+impl Routine for Forward {
+    fn resume(&mut self, _: &mut Runtime, value: Value) -> Result<Next<'_>, Error> {
+        if self.called {
+            return Ok(Next::Return(value));
+        }
+        self.called = true;
+        Ok(Next::Call(self.function, &self.arguments))
+    }
+
+    fn roots(&self, values: &mut Vec<Value>) {
+        values.push(self.function);
+        values.extend(&self.arguments);
+    }
+}
+
 pub(crate) fn captured(heap: &Heap, callee: Value, at: usize) -> Value {
     heap.native_of(callee)
         .and_then(|native| native.captured.get(at).copied())

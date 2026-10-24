@@ -54,7 +54,7 @@ impl Runtime {
         Ok(self.start(Fiber::new(Machine::new(&Rc::new(code))), None))
     }
 
-    pub(super) fn spawn_promise(&mut self, function: Value) -> Result<Value, Error> {
+    pub(crate) fn spawn_promise(&mut self, function: Value) -> Result<Value, Error> {
         let fiber = Self::fiber_for(function)?;
         let promise = self
             .heap
@@ -64,7 +64,7 @@ impl Runtime {
         Ok(promise)
     }
 
-    pub(super) fn make_generator(&mut self, function: Value) -> Result<Value, Error> {
+    pub(crate) fn make_generator(&mut self, function: Value) -> Result<Value, Error> {
         let fiber = Self::fiber_for(function)?;
         self.heap
             .generator(Generator::Ready(Box::new(fiber.machine), Landing::Nowhere))

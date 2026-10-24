@@ -8,7 +8,7 @@ pub mod image;
 mod json;
 mod net;
 pub(crate) mod numbers;
-mod ordering;
+pub(crate) mod ordering;
 pub(crate) mod paths;
 mod patterns;
 mod prelude;

@@ -66,3 +66,54 @@
 [(explain '(= (+ 1 1) 3) [2 3]) (explain '(f "a" x) ["a" 1]) (explain '(f) [])] ;=> ["(= (+ 1 1) 3)\n  (+ 1 1) => 2" "(f \"a\" x)\n  x => 1" "(f)"]
 (explain 5 []) ;! rest expects a collection, got 5
 (explain '(f a) 5) ;! vec expects a collection, got 5
+
+;; functions that call the functions they are given
+[complement comp partial juxt memoize swap! update every iterate] ;=> [#<native complement> #<native comp> #<native partial> #<native juxt> #<native memoize> #<native swap!> #<native update> #<native every> #<native iterate>]
+[map filter remove reduce some every? keep sort-by mapcat take-while drop-while find group-by update-in merge-with] ;=> [#<native map> #<native filter> #<native remove> #<native reduce> #<native some> #<native every?> #<native keep> #<native sort-by> #<native mapcat> #<native take-while> #<native drop-while> #<native find> #<native group-by> #<native update-in> #<native merge-with>]
+[(complement even?) (comp inc) (partial +) (juxt inc) (memoize inc) ((comp) 5) (comp)] ;=> [#<fn> #<fn> #<fn> #<fn> #<fn> 5 #<native identity>]
+[((complement nil?) nil) ((comp str inc) 1) ((comp inc inc inc) 1) ((partial + 1 2) 3 4) ((juxt) 1) ((juxt first last) [1 2 3])] ;=> [false "2" 4 10 [] [1 3]]
+((complement 5) 1) ;! 5 is not a function
+((comp 5) 1) ;! 5 is not a function
+((partial 5) 1) ;! 5 is not a function
+(let [a (atom 1)] [(swap! a + 1 2) @a]) ;=> [4 4]
+(swap! (atom 1) 5) ;! 5 is not a function
+[(update {a: 1} :a inc) (update [1] 0 + 5) (update nil :a (fn [x] x))] ;=> [{a: 2} [6] {a: nil}]
+(update 5 :a inc) ;! inc expects numbers, got nil
+(update {} :a 5) ;! 5 is not a function
+[(map inc []) (map vector [1 2] [3] [4 5]) (map inc nil) (map identity "ab") (map identity {a: 1})] ;=> [[] [[1 3 4]] [] [\a \b] [[:a 1]]]
+(map inc 5) ;! vec expects a collection, got 5
+(map inc [1] 5) ;! vec expects a collection, got 5
+(map 5 [1]) ;! 5 is not a function
+(map (fn [] 1) [1]) ;! fn takes 0 arguments, got 1
+(map inc [:a]) ;! inc expects numbers, got :a
+[(filter :a [{a: 1} {b: 2}]) (remove :a [{a: 1} {b: 2}]) (keep :a [{a: 1} {b: 2} {a: false}])] ;=> [[{a: 1}] [{b: 2}] [1 false]]
+(filter even? 5) ;! vec expects a collection, got 5
+(remove 5 [1]) ;! 5 is not a function
+[(reduce + [1]) (reduce + 1 []) (reduce +) (reduce + 1 2 [3]) (reduce conj [] "ab")] ;=> [1 1 nil 4 [\a \b]]
+(reduce + 5) ;! vec expects a collection, got 5
+(reduce 5 [1 2]) ;! 5 is not a function
+(reduce + :x [1]) ;! + expects numbers, got :x
+[(some even? []) (some :a [{} {a: false} {a: 2}]) (every? even? []) (every? identity [1 nil]) (find nil? [1 nil 2]) (find even? [1])] ;=> [nil 2 true false nil nil]
+(every? 5 [1]) ;! 5 is not a function
+[(sort-by - [3 1 2]) (sort-by count ["ccc" "a" "bb" "d"]) (sort-by identity [])] ;=> [[3 2 1] ["a" "d" "bb" "ccc"] []]
+(sort-by identity [1 :a]) ;! sort can't compare [1 0] with [:a 1]
+(sort-by 5 [1]) ;! 5 is not a function
+[(mapcat (fn [x] [x x]) [1 2]) (mapcat list [1] [2]) (mapcat identity [])] ;=> [[1 1 2 2] [1 2] []]
+(mapcat identity [1]) ;! concat expects a collection, got 1
+[(take-while even? [2 4 5 6]) (take-while even? (gen (yield 2) (yield 3))) (drop-while even? [2 3 4]) (drop-while even? [2 4])] ;=> [[2 4] [2] [3 4] []]
+(take-while 5 (gen (yield 1))) ;! 5 is not a function
+(let [g (gen (yield 2) (yield 3) (yield 4))] [(take-while even? g) (next g)]) ;=> [[2] 4]
+[(group-by even? [1 2 3]) (group-by :k [{k: 1} {k: 2} {k: 1}]) (group-by identity [])] ;=> [{false [1 3] true [2]} {1 [{k: 1} {k: 1}] 2 [{k: 2}]} {}]
+[(update-in {a: {b: 1}} [:a :b] + 10) (update-in {} [:a] (fn [x] x)) (update-in nil [:a :b] (constantly 1))] ;=> [{a: {b: 11}} {a: nil} {a: {b: 1}}]
+(update-in {a: 1} (gen (yield :a)) inc) ;! first expects a collection, got #<generator>
+(update-in {a: 1} [:a] 5) ;! 5 is not a function
+[(merge-with + {a: 1} nil {a: 2 b: 3}) (merge-with +) (merge-with + nil) (merge-with + {} {a: 1})] ;=> [{a: 3 b: 3} nil nil {a: 1}]
+(merge-with + {a: 1} 5) ;! keys expects a map, got 5
+(merge-with 5 {a: 1} {a: 2}) ;! 5 is not a function
+(let [calls (atom 0) f (memoize (fn [& xs] (swap! calls inc) (count xs)))] [(f) (f) (f 1) (f 1) @calls]) ;=> [0 0 1 1 2]
+(take 3 (iterate (fn [x] (* x 2)) 1)) ;=> [1 2 4]
+(take 2 (iterate 5 1)) ;! 5 is not a function
+(let [n (atom 0)] (await (every 1 (fn [] (swap! n inc) (when (= @n 3) :stop)))) @n) ;=> 3
+(every :x inc) ;=> #<promise>
+[(map + [1 2] (gen (yield 10) (yield 20))) (reduce + (gen (yield 1) (yield 2))) (reduce + 0 (gen (yield 1) (yield 2)))] ;=> [[11 22] 3 3]
+[(some even? (gen (yield 1) (yield 2))) (sort-by - (gen (yield 1) (yield 2)))] ;=> [true [2 1]]
