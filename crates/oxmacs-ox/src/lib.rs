@@ -158,14 +158,22 @@ impl Ox {
     }
 
     pub fn idle(&mut self, editor: &mut Editor, since: Instant, now: Instant) {
+        let rested = now.saturating_duration_since(since);
         idle::run(&mut self.isolate, editor, since, now);
-        self.checker
-            .run(editor, now.saturating_duration_since(since));
+        if rested >= help::SIGNATURE_PAUSE {
+            help::echo_signature(&self.isolate, editor, self.home.as_deref(), &mut self.help);
+        }
+        self.checker.run(editor, rested);
     }
 
     pub fn idle_wait(&self, editor: &Editor, since: Instant) -> Option<Duration> {
         let check = self.checker.wait(editor);
-        idle::next(editor, since).into_iter().chain(check).min()
+        let signature = help::signature_wait(editor, &self.help);
+        idle::next(editor, since)
+            .into_iter()
+            .chain(check)
+            .chain(signature)
+            .min()
     }
 
     pub fn end_take_over(&mut self, editor: &mut Editor) {
@@ -253,7 +261,6 @@ impl Ox {
         views::refresh(&mut self.isolate, editor);
         self.timed("views", refreshing);
         help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
-        help::eldoc(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         self.timed("tick", started);
         if tools::requests_waiting(editor) {
             return Pace::Running;

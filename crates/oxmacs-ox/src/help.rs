@@ -1,5 +1,6 @@
 use std::fmt::Write as _;
 use std::path::Path;
+use std::time::Duration;
 
 use ox::Isolate;
 use ox::describe::{Description, Kind};
@@ -12,12 +13,16 @@ use oxmacs_core::text::BufferId;
 use crate::{mode, plugins, stacktrace, tools};
 
 pub const DOC: &str = "*ox doc*";
+pub(crate) const SIGNATURE_PAUSE: Duration = Duration::from_millis(400);
 const LOOK_BACK: usize = 400;
 const AUTO_PREFIX: usize = 3;
 
+type Spot = (BufferId, u64, usize);
+
 #[derive(Debug, Default)]
 pub(crate) struct Help {
-    seen: Option<((BufferId, u64, usize), Option<String>)>,
+    seen: Option<(Spot, Option<String>)>,
+    rested: Option<Spot>,
     shown: Option<String>,
     completed: Option<(BufferId, u64)>,
 }
@@ -75,11 +80,29 @@ fn summary(description: &Description) -> String {
     }
 }
 
-pub(crate) fn eldoc(isolate: &Isolate, editor: &mut Editor, home: Option<&Path>, help: &mut Help) {
+fn spot(editor: &Editor) -> Spot {
+    let buffer = editor.buffer();
+    (buffer.id(), buffer.revision(), buffer.point())
+}
+
+pub(crate) fn signature_wait(editor: &Editor, help: &Help) -> Option<Duration> {
+    (in_ox(editor) && help.rested != Some(spot(editor))).then_some(SIGNATURE_PAUSE)
+}
+
+pub(crate) fn echo_signature(
+    isolate: &Isolate,
+    editor: &mut Editor,
+    home: Option<&Path>,
+    help: &mut Help,
+) {
+    if !in_ox(editor) {
+        return;
+    }
+    let key = spot(editor);
+    help.rested = Some(key);
     if editor.minibuffer().is_some()
         || editor.question().is_some()
         || editor.pane().popup().is_some()
-        || !in_ox(editor)
     {
         return;
     }
@@ -89,8 +112,6 @@ pub(crate) fn eldoc(isolate: &Isolate, editor: &mut Editor, home: Option<&Path>,
     if !ours {
         return;
     }
-    let buffer = editor.buffer();
-    let key = (buffer.id(), buffer.revision(), buffer.point());
     let text = match &help.seen {
         Some((seen, text)) if *seen == key => text.clone(),
         _ => {
@@ -271,10 +292,11 @@ pub(crate) fn show_doc(isolate: &Isolate, editor: &mut Editor, home: Option<&Pat
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+    use std::time::Instant;
 
     use oxmacs_core::editor::Editor;
 
-    use super::DOC;
+    use super::{DOC, SIGNATURE_PAUSE};
     use crate::Ox;
     use crate::testing::{press, settle, typed};
 
@@ -300,6 +322,11 @@ mod tests {
         press(editor, ox, "C-b");
     }
 
+    fn rest(editor: &mut Editor, ox: &mut Ox) {
+        let since = Instant::now();
+        ox.idle(editor, since, since + SIGNATURE_PAUSE);
+    }
+
     #[test]
     fn the_signature_of_the_call_at_point_is_echoed_without_hiding_results() {
         let home = tempfile::tempdir().unwrap();
@@ -307,23 +334,46 @@ mod tests {
         let call = SOURCE.find("(area 2 3)").unwrap();
 
         go(&mut editor, &mut ox, call + 7);
+        rest(&mut editor, &mut ox);
         assert_eq!(editor.message(), Some("(area w h)  Width times height."));
         go(&mut editor, &mut ox, call + 10);
+        rest(&mut editor, &mut ox);
         assert_eq!(
             editor.message(),
             Some("(+ & numbers)  Adds the numbers; (+) is 0.")
         );
         press(&mut editor, &mut ox, "C-x C-e");
+        rest(&mut editor, &mut ox);
         assert_eq!(editor.message(), Some("=> 6"));
 
         let limit = SOURCE.find("(def limit").unwrap();
         go(&mut editor, &mut ox, limit + 6);
+        rest(&mut editor, &mut ox);
         assert_eq!(
             editor.message(),
             Some("(def name (doc) value)  Defines name in this module.")
         );
         go(&mut editor, &mut ox, SOURCE.len());
+        rest(&mut editor, &mut ox);
         assert_eq!(editor.message(), None);
+    }
+
+    #[test]
+    fn the_signature_waits_until_point_rests() {
+        let home = tempfile::tempdir().unwrap();
+        let (mut editor, mut ox) = visiting(home.path());
+        let call = SOURCE.find("(area 2 3)").unwrap();
+        let since = Instant::now();
+
+        go(&mut editor, &mut ox, call + 7);
+        assert_eq!(editor.message(), None);
+        assert_eq!(ox.idle_wait(&editor, since), Some(SIGNATURE_PAUSE));
+        ox.idle(&mut editor, since, since + SIGNATURE_PAUSE / 2);
+        assert_eq!(editor.message(), None);
+
+        ox.idle(&mut editor, since, since + SIGNATURE_PAUSE);
+        assert_eq!(editor.message(), Some("(area w h)  Width times height."));
+        assert_ne!(ox.idle_wait(&editor, since), Some(SIGNATURE_PAUSE));
     }
 
     #[test]
