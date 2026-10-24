@@ -11,6 +11,7 @@ mod data;
 mod definitions;
 mod help;
 mod keys;
+mod packages;
 mod plots;
 mod sessions;
 mod smarts;

@@ -334,3 +334,34 @@ fn tables_sort_filter_page_and_describe_their_columns() {
         ["mpg\tnumeric\tmean 20.09, sd 6.027, min 10.4, median 19.2, max 33.9, 0 missing"]
     );
 }
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
+fn packages_are_listed_and_their_help_and_tests_answer() {
+    let project = tempfile::tempdir().unwrap();
+    let path = project.path().display().to_string().replace('\\', "/");
+    let (output, _directory) = session(&format!(
+        "getOption(\"oxmacs\")$packages()\ngetOption(\"oxmacs\")$help_index(\"stats\")\ngetOption(\"oxmacs\")$test(\"{path}\")\nq()\n"
+    ));
+
+    assert_eq!(marked(&output, "packages").len(), 1, "{output:?}");
+    let installed = marked(&output, "installed");
+    assert!(
+        installed[0]
+            .lines()
+            .any(|line| line.starts_with("stats\t") && line.ends_with("\tTRUE")),
+        "{installed:?}"
+    );
+    assert!(
+        marked(&output, "help")[0].contains("package 'stats'")
+            || marked(&output, "help")[0].contains("package ‘stats’"),
+        "{output:?}"
+    );
+    assert!(
+        !marked(&output, "tests").is_empty()
+            || marked(&output, "message")
+                .iter()
+                .any(|message| message.contains("testthat") || message.contains("did not run")),
+        "{output:?}"
+    );
+}

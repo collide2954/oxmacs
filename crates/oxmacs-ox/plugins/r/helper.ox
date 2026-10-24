@@ -296,6 +296,59 @@ local({
     marker("peek", paste(c(name, text), collapse = "\n"))
     last()
   }
+  oxmacs$dev_packages <- function() {
+    wanted <- c("devtools", "pkgload", "roxygen2", "pkgbuild", "testthat", "rmarkdown",
+      "quarto", "shiny", "renv", "languageserver")
+    found <- wanted[vapply(wanted, function(name) nzchar(system.file(package = name)), logical(1))]
+    marker("packages", paste(found, collapse = "\t"))
+    invisible()
+  }
+  oxmacs$test <- function(path) {
+    if (!requireNamespace("testthat", quietly = TRUE)) {
+      marker("message", "Running tests needs testthat")
+      return(last())
+    }
+    results <- tryCatch(
+      testthat::test_local(path, reporter = "silent", stop_on_failure = FALSE),
+      error = function(e) e
+    )
+    if (inherits(results, "error")) {
+      marker("message", paste("The tests did not run:", conditionMessage(results)))
+      return(last())
+    }
+    rows <- vapply(results, function(test) {
+      kinds <- vapply(test$results, function(result) class(result)[1], character(1))
+      failed <- Filter(function(result) {
+        inherits(result, "expectation_failure") || inherits(result, "expectation_error")
+      }, test$results)
+      status <- if (length(failed) > 0) {
+        "failed"
+      } else if (any(kinds == "expectation_skip")) {
+        "skipped"
+      } else {
+        "passed"
+      }
+      first <- if (length(failed) > 0) failed[[1]] else NULL
+      line <- tryCatch(as.integer(first$srcref[1]), error = function(e) NA_integer_)
+      if (length(line) == 0) line <- NA_integer_
+      paste(test$file, flat(test$test), status, if (is.na(line)) "" else line,
+        if (is.null(first)) "" else flat(conditionMessage(first)), sep = "\t")
+    }, character(1))
+    marker("tests", paste(c(normalizePath(path), rows), collapse = "\n"))
+    last()
+  }
+  oxmacs$packages <- function() {
+    installed <- utils::installed.packages()[, c("Package", "Version"), drop = FALSE]
+    attached <- sub("^package:", "", grep("^package:", search(), value = TRUE))
+    rows <- unique(paste(installed[, "Package"], installed[, "Version"],
+      installed[, "Package"] %in% attached, sep = "\t"))
+    marker("installed", paste(sort(rows), collapse = "\n"))
+    last()
+  }
+  oxmacs$help_index <- function(name) {
+    print(utils::help(package = (name), help_type = "text"))
+    last()
+  }
   oxmacs$inspect <- function(name) {
     text <- tryCatch(
       utils::capture.output(utils::str(get(name, envir = globalenv()))),
@@ -328,6 +381,7 @@ local({
     marker("signature", paste(name, trimws(flat(text)), sep = "\t"))
     last()
   }
+  oxmacs$dev_packages()
   utils::rc.settings(ipck = TRUE)
   options(
     oxmacs = oxmacs,

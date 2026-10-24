@@ -7,7 +7,8 @@
           (r data :as data)
           (r complete :as complete)
           (r definition :as definition)
-          (r layout)))
+          (r layout)
+          (r package :as package)))
 
 (def console-keys
   {"RET" 'comint-send-input
@@ -31,6 +32,9 @@
 (session/on-marker "object" data/described)
 (session/on-marker "stats" data/described-column)
 (session/on-marker "peek" data/peeked)
+(session/on-marker "packages" package/available)
+(session/on-marker "tests" package/tested)
+(session/on-marker "installed" package/installed)
 (session/on-ready :environment data/environment-due)
 (session/on-marker "complete" complete/answered)
 (session/on-marker "signature" complete/signed)
