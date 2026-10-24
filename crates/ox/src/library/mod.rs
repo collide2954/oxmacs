@@ -29,12 +29,6 @@ use crate::value::Value;
 use crate::value::equal::{equal, hash, identical};
 use crate::value::print;
 
-pub(crate) const SOURCES: [(&str, &str, &str); 1] = [(
-    "ox/image",
-    "library/image/edit.ox",
-    include_str!("image/edit.ox"),
-)];
-
 pub const MODULES: &[(&str, &str)] = &[
     (
         "ox",

@@ -226,6 +226,7 @@
 (image/vignette image (strength) {radius 0.5 color :black}) "A promise of image fading to :color toward its corners, starting :radius of the way out from the center."
 (image/begin-edit image) "A canvas holding a private copy of image, for drawing in place until image/end-edit; image/edit does both around a function."
 (image/end-edit canvas) "The image drawn on canvas, ending its edit so it can't be drawn on again."
+(image/edit image change) "Calls change with a canvas holding a private copy of image, so the drawing functions ending in ! can change it in place, then returns the edited image."
 (image/set-pixel! target x y color) "Sets the pixel at x, y to color, in place on a canvas, or as a promise of a new image when target is an image."
 (image/rect! target x y w h {fill nil stroke nil width 1 opacity 1 blend :normal cap :butt join :miter dash nil radius 0}) "Draws a w by h rectangle from x, y, filled with :fill, black when neither :fill nor :stroke is given, outlined with :stroke :width wide, its corners rounded by :radius. Like every drawing function ending in !, it changes a canvas in place and returns it, or gives a promise of a new image when target is an image."
 (image/ellipse! target x y rx ry {fill nil stroke nil width 1 opacity 1 blend :normal cap :butt join :miter dash nil}) "Draws an ellipse centered on x, y with radii rx and ry, styled like image/rect!."

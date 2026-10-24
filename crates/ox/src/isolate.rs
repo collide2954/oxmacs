@@ -179,12 +179,6 @@ impl Isolate {
             }
             isolate.runtime.error_types.insert(kind, value);
         }
-        for (module, name, source) in library::SOURCES {
-            let place = isolate.runtime.module_named(module);
-            if let Err(error) = isolate.eval_in(place, name, source, &mut ()) {
-                panic!("The Ox library failed to load {name}: {error}");
-            }
-        }
         isolate
     }
 
@@ -648,13 +642,28 @@ impl Isolate {
         drains: Option<Drains>,
         start: impl Fn(&mut Runtime, Value, &[Value]) -> Result<Started, Error> + 'static,
     ) {
-        let shown = Sym::intern(name);
+        self.define_routine_in("ox", name, least, most, drains, start);
+    }
+
+    pub(crate) fn define_routine_in(
+        &mut self,
+        module: &str,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        drains: Option<Drains>,
+        start: impl Fn(&mut Runtime, Value, &[Value]) -> Result<Started, Error> + 'static,
+    ) {
+        let shown = shown_name(module, name);
         let native = Native {
-            resumable: Some(Rc::new(Resumable::new(shown, Box::new(start)))),
+            resumable: Some(Rc::new(Resumable::new(
+                Sym::intern(&shown),
+                Box::new(start),
+            ))),
             drains,
-            ..plain("ox", name, least, most, only_from_ox(name))
+            ..plain(module, name, least, most, only_from_ox(&shown))
         };
-        self.install("ox", name, native);
+        self.install(module, name, native);
     }
 
     pub fn define_native_awaiting(
