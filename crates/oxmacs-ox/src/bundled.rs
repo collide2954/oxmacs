@@ -16,7 +16,16 @@ pub const BUNDLED: &[Bundle] = &[
     MARKDOWN,
     MANUAL,
     R,
+    ZAP,
 ];
+
+const ZAP: Bundle = Bundle {
+    name: "zap",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/zap/plugin.ox")),
+        ("zap.ox", include_str!("../plugins/zap/zap.ox")),
+    ],
+};
 
 const R: Bundle = Bundle {
     name: "r",
@@ -498,6 +507,9 @@ mod manual;
 
 #[cfg(test)]
 mod r;
+
+#[cfg(test)]
+mod zap;
 
 #[cfg(test)]
 mod dired {

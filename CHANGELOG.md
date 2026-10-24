@@ -81,6 +81,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- The opt-in zap plugin flashes the code you run, character for character, fading out over half a second: Ox forms and files evaluated with `C-x C-e`, `C-M-x`, `C-c C-b` and `C-c C-k`, the Ox REPL's input, R statements, functions, regions and R Markdown chunks, and code any plugin sends to a console from the buffer that holds it. Ox code that fails flashes in the error color. Its `duration` setting sets how long a flash lasts.
+- Plugins light up text with `flash`, hear code run with `on-evaluate`, and report code they ran, or that failed, to zap with `zap`.
 - The README and the Ox manual list the bundled plugins, with their versions, whether they are on by default and what they do, and Ox's built-in modules; a test keeps both lists in step with the plugins and modules.
 - `M-;` in R Markdown comments with `#` inside R chunks and with `<!-- -->` in the prose around them, toggling a selection, starting a comment on a blank line, or adding one at the end of a line of code.
 - The r plugin's `completion-delay` and `signature-delay` settings set how long typing rests before R completion pops up on its own and before a call's arguments show, 0.25 and 0.4 seconds by default.
