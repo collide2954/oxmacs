@@ -43,7 +43,7 @@
 (set-input name text {point nil}) "Replaces the input line of the buffer called name with text, with point at its end or at :point."
 (current-column) "The column of point in the current buffer, counting from 0."
 (line-text line) "The text of line in the current buffer, counting from 0, or nil past its end."
-(open-view name render {keys nil}) "Shows a view in a buffer called name, built by calling render for ui/ widgets, and built again when it changes. :keys maps keys to commands."
+(open-view name render {keys nil beside false select false}) "Shows a view in a buffer called name, built by calling render for ui/ widgets, and built again when it changes. :keys maps keys to commands, and :beside shows it in another window, which :select true moves to."
 (transient title groups) "Opens a Magit-style menu titled title, of groups that are maps of :title, :switches as [key flag summary] and :actions as [key summary function]."
 (prompt question {initial "" choices nil secret false}) "Asks question in the minibuffer and returns a promise of the answer. :initial fills in text, :choices offers names to complete from, and :secret true hides what is typed."
 (prompt-path question {directories false}) "Asks for a path, with completion, and returns a promise of it; with :directories true it asks for a folder."

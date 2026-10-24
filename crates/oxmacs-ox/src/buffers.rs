@@ -550,7 +550,7 @@ fn bind(editor: &mut Editor, id: BufferId, bindings: Vec<(String, String)>) -> R
     Ok(())
 }
 
-fn reveal(editor: &mut Editor, id: BufferId, beside: bool, select: bool) {
+pub(crate) fn reveal(editor: &mut Editor, id: BufferId, beside: bool, select: bool) {
     if !beside {
         editor.show_buffer(id);
     } else if select {

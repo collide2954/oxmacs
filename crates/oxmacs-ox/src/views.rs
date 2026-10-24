@@ -420,7 +420,12 @@ pub(crate) fn buffer_name(heap: &Heap, native: &str, value: Value) -> Result<Str
 
 fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = buffer_name(heap, "open-view", arguments[0])?;
-    let (found, rest) = options(heap, "open-view", &arguments[2..], &["keys"])?;
+    let (found, rest) = options(
+        heap,
+        "open-view",
+        &arguments[2..],
+        &["keys", "beside", "select"],
+    )?;
     if let Some(extra) = rest.first() {
         return Err(wrong(
             heap,
@@ -430,8 +435,13 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         ));
     }
     let mut bindings = Vec::new();
-    for (_, value) in found {
-        bindings = keys(heap, value)?;
+    let (mut beside, mut select) = (false, false);
+    for (option, value) in found {
+        match option {
+            "beside" => beside = value.truthy(),
+            "select" => select = value.truthy(),
+            _ => bindings = keys(heap, value)?,
+        }
     }
     let mut views = editor.take_plugin_state::<Views>().unwrap_or_default();
     let (alive, closed): (Vec<Open>, Vec<Open>) = std::mem::take(&mut views.open)
@@ -481,7 +491,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             .bind(scope, &keys, id)
             .map_err(|error| Error::new(format!("{keys}: {error}")))?;
     }
-    editor.show_buffer(buffer);
+    crate::buffers::reveal(editor, buffer, beside, select);
     Ok(Value::Nil)
 }
 
@@ -677,6 +687,24 @@ mod tests {
                 ],
             }
         );
+    }
+
+    #[test]
+    fn views_can_open_beside_with_or_without_the_focus() {
+        let (mut editor, mut ox) =
+            opened(r#"(open-view "*side*" (fn [] (text "x")) :beside true)"#);
+        let side = editor.buffer_named("*side*").unwrap();
+        assert_eq!(editor.buffer().name(), "*scratch*");
+        assert!(editor.buffer_shown(side));
+
+        ox.eval(
+            &mut editor,
+            r#"(open-view "*side*" (fn [] (text "y")) :beside true :select true)"#,
+        )
+        .unwrap();
+
+        assert_eq!(editor.buffer().name(), "*side*");
+        assert_eq!(editor.tiling().windows().len(), 2);
     }
 
     #[test]
