@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Deleting `tutorial.txt` starts the tutorial over at the top, as the tutorial says, instead of opening the fresh copy where you left the old one.
 - Ox code that runs too long no longer freezes the editor: views, highlighters and take-over frames stop after 250 ms, and init files, plugin loads and the REPL after 10 seconds, with an error in the log.
 - Ox no longer brings the editor down: printing an atom or promise that holds itself shows `#<atom ...>`, deeply nested values print and travel through channels and workers without overflowing the stack (values nested more than 256 levels deep are refused with an error), error messages show at most 200 characters of a value, a native that panics raises an error instead, and images are limited to 32,768 pixels a side and 134 megapixels.
 - Saving through a symlink writes the file it points to and keeps the link; a file with hard links, one another program holds open, or one in a folder that can't take new files is written in place; and on Unix saving keeps the owner. A file opened again through a symlink or in other letter case reuses its buffer.

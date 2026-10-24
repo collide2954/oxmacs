@@ -237,3 +237,17 @@ fn c_h_t_opens_your_own_copy_of_the_tutorial_where_you_left_it() {
     press(&mut editor, &mut ox, "C-h t");
     assert_eq!(editor.buffer().line_of(editor.buffer().point()), 12);
 }
+
+#[test]
+fn deleting_your_copy_of_the_tutorial_starts_it_over() {
+    let (home, mut editor, mut ox) = started();
+    press(&mut editor, &mut ox, "C-h t");
+    press(&mut editor, &mut ox, "C-x k RET");
+    fs::write(home.path().join("tutorial.place"), "12").unwrap();
+    fs::remove_file(home.path().join("tutorial.txt")).unwrap();
+
+    press(&mut editor, &mut ox, "C-h t");
+
+    assert!(lines(&editor)[0].starts_with("The oxmacs tutorial"));
+    assert_eq!(editor.buffer().line_of(editor.buffer().point()), 0);
+}

@@ -135,12 +135,13 @@ You have finished the tutorial.
 
 (def (open)
   "Opens the reader's own copy of the tutorial where they left it, making it the first time."
-  (let [copy (path/join (folder) "tutorial.txt")]
-    (unless (await (file/exists? copy))
+  (let [copy (path/join (folder) "tutorial.txt")
+        fresh (not (await (file/exists? copy)))]
+    (when fresh
       (await (file/make-dir (folder)))
       (await (file/write copy text)))
     (open-file copy)
-    (goto-line (saved-line) 0)
+    (goto-line (if fresh 0 (saved-line)) 0)
     (on-idle :tutorial 2
              (fn []
                (when (reading?)
