@@ -580,6 +580,28 @@ fn private_chats_follow_nick_changes() {
 }
 
 #[test]
+fn capabilities_the_server_adds_or_drops_are_followed() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    let away_notify = r#"(module (import (irc client :as c))) (c/has-cap? "Test" "away-notify")"#;
+
+    fake.say(":srv CAP ana NEW :away-notify sasl unknown-cap");
+    fake.expect(&mut editor, &mut ox, "CAP REQ away-notify");
+    fake.say(":srv CAP ana ACK :away-notify");
+    assert!(pump(&mut editor, &mut ox, |editor, ox| eval(
+        editor,
+        ox,
+        away_notify
+    ) == "true"));
+
+    fake.say(":srv CAP ana DEL :away-notify");
+    assert!(pump(&mut editor, &mut ox, |editor, ox| eval(
+        editor,
+        ox,
+        away_notify
+    ) == "false"));
+}
+
+#[test]
 fn joins_and_parts_of_quiet_people_stay_hidden_until_asked_for() {
     let (fake, _home, mut editor, mut ox) = joined();
     fake.say(":bo!b@host PRIVMSG #oxmacs :I talk");

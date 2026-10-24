@@ -11,7 +11,7 @@
 
 (def wanted-caps ["server-time" "message-tags" "echo-message" "batch" "draft/chathistory" "chathistory" "sasl"
                   "away-notify" "account-notify" "multi-prefix" "extended-join" "draft/multiline"
-                  "draft/read-marker" "invite-notify" "chghost" "setname"])
+                  "draft/read-marker" "invite-notify" "chghost" "setname" "cap-notify" "userhost-in-names"])
 (def talk (set [:privmsg :action :notice]))
 (def noisy (set [:join :part :quit :nick]))
 (def max-messages 2000)
@@ -279,6 +279,17 @@
            (send-command! name "AUTHENTICATE" ["PLAIN"])
            (cap-end! name))))
       ((= sub "NAK") (cap-end! name))
+      ((= sub "NEW")
+       (let [offered (map (fn [cap] (first (string/split cap "=" 2))) (string/words (or (last rest) "")))
+             wanted (filter (fn [cap] (and (contains? (set offered) cap) (not= cap "sasl") (not (has-cap? name cap))))
+                            wanted-caps)]
+         (change-network! name update :offered into offered)
+         (unless (empty? wanted)
+           (send-command! name "CAP" ["REQ" (string/join " " wanted)]))))
+      ((= sub "DEL")
+       (let [gone (string/words (or (last rest) ""))]
+         (change-network! name update :caps (fn [caps] (apply disj caps gone)))
+         (change-network! name update :offered (fn [offered] (apply disj offered gone)))))
       (else nil))))
 
 (def (on-authenticate! name line)
