@@ -40,6 +40,20 @@ Everything below works in `init.ox`, in a plugin, or straight from the REPL. The
 
 Lines and columns count from 0. `buffer-text` and `set-buffer-text` read and replace the text, `line-text` reads one line, `region-lines` gives the first and last lines of the selection, and `goto-line` moves point. `open-file` visits a file, `buffer-file` gives the file a buffer visits and `switch-to-buffer` shows a buffer.
 
+## Editing buffers
+
+`(current-buffer)` gives a handle that stays with its buffer when the name changes. Every function that takes a buffer name takes a handle too, and using a handle to a buffer that has been killed says `That buffer was killed`. `with-buffer` makes another buffer current for its body, in this task only, without touching the windows.
+
+```
+(show-text "*notes*" "Notes\n")
+(with-buffer (current-buffer)
+  (set-point (buffer-size))
+  (insert "First line\n")
+  [(point) (line-of (point)) (text-between 0 5)])
+```
+
+Positions count characters from 0. `insert` adds text at point and moves point after it, `delete` removes the text between two positions and returns it, `region` gives the selection as `[start end]`, and `line-start`, `line-end` and `line-of` convert between lines and positions. Read-only buffers refuse edits with an error. A `marker` keeps a place that moves with the text around it; `marker-position` reads it and `move-marker` moves it.
+
 ## Reacting
 
 Hooks call a function, as a task, when something happens. Registering the same key again replaces the earlier function.
@@ -47,6 +61,15 @@ Hooks call a function, as a task, when something happens. Registering the same k
 ```text
 (on-saved :log-saves (fn [path] (message "Saved {path}")))
 (on-idle :rest 300 (fn [] (message "Time for a break")))
+```
+
+Four hooks follow the buffers people type in, leaving plugin buffers out. `on-buffer-open` hears each one open, `on-mode-enter` hears it enter a mode, and `on-buffer-change` gets the buffer and its edits after each command, each edit a map of `start`, `removed` and `inserted`. `on-before-save` runs before a file is written, and the save waits for it, so a handler can tidy the text first; an error in it cancels the save.
+
+```text
+(module (import (ox string)))
+(on-before-save :trim (fn [buffer]
+  (with-buffer buffer
+    (set-buffer-text (string/trim-end (buffer-text))))))
 ```
 
 `on-disk-change` and `on-settings-change` take a key and a function the same way, and `on-processes-change` follows the processes oxmacs runs, which `processes` lists. `(on-open-directory f)` makes `f` the way directories open, with no key; a plugin that does this declares `:opens-directories true`, as dired does. `every` repeats work on a timer.

@@ -78,6 +78,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- The Ox manual's Extending oxmacs page covers buffer handles, `with-buffer`, editing by position, markers and the buffer hooks.
 - Plugins hear buffers: `on-buffer-open` for each file or other buffer people type in, `on-buffer-change` with the edits each command makes, `on-mode-enter` when a buffer enters a mode, and `on-before-save`, which saving waits for, so a handler can format a file before it is written; an error in one cancels the save.
 - Plugins edit buffers by character offset: `point`, `set-point`, `insert`, `delete`, `text-between`, `buffer-size` and `region`, `line-start`, `line-end` and `line-of` to work with lines, and markers that move with the text around them. Read-only buffers refuse edits.
 - Plugins get buffer handles: `(current-buffer)` returns one that stays with its buffer when the name changes and says `That buffer was killed` once it is gone, `(with-buffer b ...)` works in another buffer without touching the windows, each task with its own current buffer, and natives that take a buffer name take a handle too.
