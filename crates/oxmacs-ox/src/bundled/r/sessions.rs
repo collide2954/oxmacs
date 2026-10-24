@@ -368,3 +368,22 @@ fn a_finished_session_starts_again_in_its_own_buffer() {
         1
     );
 }
+
+#[test]
+fn input_history_carries_over_to_later_sessions() {
+    let (mut r, job) = running_r();
+    r.output(job, PROMPT);
+    r.typed("x <- 1");
+    r.press("RET");
+    r.output(job, PROMPT);
+    let saved = std::fs::read_to_string(r.home.path().join("r-history")).unwrap();
+    assert_eq!(saved, "\"x <- 1\"\n");
+
+    let mut later = r.again();
+    later.run("run-r");
+    let job = later.started()[0];
+    later.output(job, PROMPT);
+    later.press("M-p");
+
+    assert_eq!(later.contents(), "> x <- 1");
+}

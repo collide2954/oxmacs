@@ -118,6 +118,18 @@ impl Editor {
         self.console_at(id).is_some_and(|console| console.waiting)
     }
 
+    pub fn console_history(&self, id: BufferId) -> Vec<String> {
+        self.console_at(id)
+            .map(|console| console.input.history().to_vec())
+            .unwrap_or_default()
+    }
+
+    pub fn set_console_history(&mut self, id: BufferId, history: Vec<String>) {
+        if let Some(console) = self.console_at_mut(id) {
+            console.input.set_history(history);
+        }
+    }
+
     fn console_of_job(&self, job: JobId) -> Option<BufferId> {
         (0..self.buffers.len()).find_map(|index| match self.buffers.mode(index) {
             Some(Mode::Console(console)) if console.job == Some(job) => {
@@ -527,6 +539,22 @@ mod tests {
 
         assert_eq!(sent(&mut editor), ["ls\n"]);
         assert_eq!(editor.message(), Some("C-c C-v is undefined"));
+    }
+
+    #[test]
+    fn history_can_be_read_and_given_back() {
+        let (mut editor, id, job) = started();
+        editor.session_output(job, PROMPT);
+        type_text(&mut editor, "ls");
+        press(&mut editor, "RET");
+        assert_eq!(editor.console_history(id), ["ls"]);
+
+        editor.set_console_history(id, vec!["pwd".to_owned(), "cd".to_owned()]);
+        editor.session_output(job, PROMPT);
+
+        press(&mut editor, "M-p");
+        assert!(contents(&editor, id).ends_with("$ cd"));
+        assert_eq!(editor.console_history(id), ["pwd", "cd"]);
     }
 
     #[test]

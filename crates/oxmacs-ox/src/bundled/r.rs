@@ -97,6 +97,16 @@ impl R {
             .collect()
     }
 
+    pub fn again(self) -> R {
+        let R { home, .. } = self;
+        let mut editor = Editor::new();
+        editor.set_working_directory(folder());
+        let mut ox = Ox::new();
+        ox.start(&mut editor, Some(home.path()));
+        settle(&mut editor, &mut ox);
+        R { home, editor, ox }
+    }
+
     pub fn running(&mut self) -> JobId {
         self.press("C-c C-z");
         let job = self.started()[0];

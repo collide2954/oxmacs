@@ -325,6 +325,41 @@ pub fn install(isolate: &mut Isolate) {
         }
         made(heap.vector_from(&values))
     });
+    isolate.define_host_native::<Editor>(
+        "console-history",
+        1,
+        Some(1),
+        |heap, editor, arguments| {
+            let id = console(heap, editor, "console-history", arguments[0])?;
+            let mut items = Vec::new();
+            for input in editor.console_history(id) {
+                items.push(made(heap.string(&input))?);
+            }
+            made(heap.vector_from(&items))
+        },
+    );
+    isolate.define_host_native::<Editor>(
+        "set-console-history",
+        2,
+        Some(2),
+        |heap, editor, arguments| {
+            let id = console(heap, editor, "set-console-history", arguments[0])?;
+            let items = heap
+                .elements(arguments[1])
+                .filter(|_| heap.text(arguments[1]).is_none())
+                .ok_or_else(|| {
+                    Error::new(format!(
+                        "set-console-history expects a vector of inputs, got {}",
+                        print::brief(heap, arguments[1])
+                    ))
+                })?
+                .into_iter()
+                .map(|item| print::display(heap, item))
+                .collect();
+            editor.set_console_history(id, items);
+            Ok(Value::Nil)
+        },
+    );
     isolate.define_host_native::<Editor>("console-input-start", 0, Some(0), |_, editor, _| {
         Ok(editor.console_input_start().map_or(Value::Nil, |start| {
             Value::Int(i64::try_from(start).unwrap_or(i64::MAX))
@@ -495,6 +530,32 @@ mod tests {
         settle(&mut editor, &mut ox);
 
         assert_eq!(ox.eval(&mut editor, "@widths").unwrap(), "[40 50]");
+    }
+
+    #[test]
+    fn plugins_read_and_give_back_console_history() {
+        let (mut editor, mut ox, job) = started(SHELL);
+        editor.session_output(job, PROMPT);
+        settle(&mut editor, &mut ox);
+        press(&mut editor, &mut ox, "C-x o");
+        typed(&mut editor, &mut ox, "ls");
+        press(&mut editor, &mut ox, "RET");
+
+        assert_eq!(
+            ox.eval(&mut editor, r#"(console-history "*shell*")"#)
+                .unwrap(),
+            r#"["ls"]"#
+        );
+        ox.eval(
+            &mut editor,
+            r#"(set-console-history "*shell*" ["old" "older"])"#,
+        )
+        .unwrap();
+        assert_eq!(
+            ox.eval(&mut editor, r#"(console-history "*shell*")"#)
+                .unwrap(),
+            r#"["old" "older"]"#
+        );
     }
 
     #[test]

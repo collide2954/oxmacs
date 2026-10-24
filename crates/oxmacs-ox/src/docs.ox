@@ -24,6 +24,8 @@
 (console-running? name) "True while the console called name has a running process."
 (console-waiting? name) "True when the console called name shows a prompt and waits for input."
 (consoles label) "The names of the consoles started with :label label."
+(console-history name) "The inputs typed in the console called name, oldest first, as M-p brings them back."
+(set-console-history name inputs) "Replaces the inputs M-p and M-n bring back in the console called name, oldest first."
 (console-input-start) "Where the input after the prompt starts in the current console, counting characters from 0, or nil outside a console."
 (point) "Where point is in the current buffer, counting characters from 0."
 (set-point position) "Moves point to position in the current buffer, counting characters from 0."

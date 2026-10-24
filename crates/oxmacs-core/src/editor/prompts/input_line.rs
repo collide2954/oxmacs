@@ -30,6 +30,15 @@ impl InputLine {
         Some(buffer.text_in(start..buffer.len_chars()))
     }
 
+    pub fn history(&self) -> &[String] {
+        &self.history
+    }
+
+    pub fn set_history(&mut self, history: Vec<String>) {
+        self.history = history;
+        self.recall = None;
+    }
+
     pub fn remember(&mut self, input: &str) {
         if !input.trim().is_empty() && self.history.last().map(String::as_str) != Some(input) {
             self.history.push(input.to_owned());

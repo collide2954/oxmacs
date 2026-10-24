@@ -1,5 +1,5 @@
 (module
-  (import (ox file) (ox path) (ox process) (ox string) (ox crypto)
+  (import (ox file) (ox path) (ox process) (ox string) (ox crypto) (ox json)
           (r helper :as helper))
   (export label sessions known? current-session running? link! linked own! owner
           windows? arguments locate find-r launch ensure show-console evaluate request
@@ -123,7 +123,32 @@
       (when (request session "getOption(\"oxmacs\")$width({width}L)")
         (swap! state assoc-in [:widths session] width)))))
 
+(def kept-history 1000)
+
+(def (history-file)
+  (when-let [home (oxmacs-home)] (path/join home "r-history")))
+
+(def (load-history session)
+  (when-let [file (history-file)]
+    (let [lines (try (string/lines (await (file/read file))) (catch error e []))
+          inputs (keep (fn [line] (try (json/read line) (catch error e nil))) lines)
+          kept (vec (drop (max 0 (- (count inputs) kept-history)) inputs))]
+      (set-console-history session kept)
+      (swap! state assoc-in [:saved session] (count kept))
+      (when (> (count inputs) (* 2 kept-history))
+        (await (file/write file (apply str (map (fn [input] (str (json/write input) "\n")) kept))))))))
+
+(def (save-history session)
+  (when-let [file (history-file)]
+    (let [inputs (console-history session)
+          saved (or (get-in @state [:saved session]) 0)
+          fresh (drop (min saved (count inputs)) inputs)]
+      (when (not (empty? fresh))
+        (swap! state assoc-in [:saved session] (count inputs))
+        (await (file/append file (apply str (map (fn [input] (str (json/write input) "\n")) fresh))))))))
+
 (def (idle session)
+  (save-history session)
   (when-let [file (helper-of session)]
     (swap! state update :helpers dissoc session)
     (try (await (file/remove file)) (catch error e nil)))
@@ -146,6 +171,7 @@
       (swap! state (fn [old] (-> old
                                  (assoc-in [:helpers name] profile)
                                  (update :widths dissoc name))))
+      (load-history name)
       name)
     (do (message missing) nil)))
 
