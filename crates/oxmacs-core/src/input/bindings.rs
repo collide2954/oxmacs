@@ -173,30 +173,12 @@ const RUST: &[(&str, Command)] = &[
     ("C-c !", Command::ListDiagnostics),
 ];
 
-const R: &[(&str, Command)] = &[
-    ("M--", Command::RInsertAssignment),
-    ("C-S-m", Command::RInsertPipe),
-    ("C-RET", Command::RSendStatement),
-    ("C-c C-c", Command::RSendFunction),
-    ("C-c C-z", Command::RSwitchToConsole),
-    ("C-c C-v", Command::RHelp),
-    ("C-c C-e", Command::REnvironment),
-    ("C-c C-f", Command::FormatBuffer),
-    ("M-.", Command::RFindDefinition),
-    ("TAB", Command::IndentOrComplete),
-    ("C-M-i", Command::CompletionAtPoint),
-];
+const R: &[(&str, Command)] = &[("C-c C-f", Command::FormatBuffer)];
 
 const CONSOLE: &[(&str, Command)] = &[
     ("RET", Command::ComintSendInput),
     ("M-p", Command::ComintPreviousInput),
     ("M-n", Command::ComintNextInput),
-    ("C-c C-z", Command::RSwitchToConsole),
-    ("C-c C-v", Command::RHelp),
-    ("C-c C-e", Command::REnvironment),
-    ("M-.", Command::RFindDefinition),
-    ("TAB", Command::CompletionAtPoint),
-    ("C-M-i", Command::CompletionAtPoint),
 ];
 
 const COMPILATION: &[(&str, Command)] = &[
@@ -243,22 +225,6 @@ const POPUP: &[(&str, Command)] = &[
     ("ESC", Command::CompletionQuit),
 ];
 
-const PLOTS: &[(&str, Command)] = &[
-    ("n", Command::RPlotNext),
-    ("<right>", Command::RPlotNext),
-    ("p", Command::RPlotPrevious),
-    ("<left>", Command::RPlotPrevious),
-    ("s", Command::RPlotSave),
-    ("d", Command::RPlotDelete),
-    ("z", Command::RPlotZoom),
-    ("v", Command::RPlotGallery),
-    ("k", Command::RPlotPin),
-    ("RET", Command::RPlotOpen),
-    ("<up>", Command::RPlotAbove),
-    ("<down>", Command::RPlotBelow),
-    ("q", Command::QuitWindow),
-];
-
 const TOOLS: &[(&str, Command)] = &[
     ("TAB", Command::ToolDetails),
     ("i", Command::ToolInstall),
@@ -266,27 +232,6 @@ const TOOLS: &[(&str, Command)] = &[
     ("d", Command::ToolRemove),
     ("n", Command::NextLine),
     ("p", Command::PreviousLine),
-    ("g", Command::RevertBuffer),
-    ("q", Command::QuitWindow),
-];
-
-const ENVIRONMENT: &[(&str, Command)] = &[
-    ("RET", Command::REnvironmentVisit),
-    ("n", Command::NextLine),
-    ("p", Command::PreviousLine),
-    ("g", Command::RevertBuffer),
-    ("q", Command::QuitWindow),
-];
-
-const TABLE: &[(&str, Command)] = &[
-    ("<right>", Command::RTableNextColumn),
-    ("f", Command::RTableNextColumn),
-    ("<left>", Command::RTablePreviousColumn),
-    ("b", Command::RTablePreviousColumn),
-    ("n", Command::NextLine),
-    ("p", Command::PreviousLine),
-    ("SPC", Command::ScrollUpCommand),
-    ("DEL", Command::ScrollDownCommand),
     ("g", Command::RevertBuffer),
     ("q", Command::QuitWindow),
 ];
@@ -350,10 +295,7 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::Help => HELP,
         Scope::Locations => LOCATIONS,
         Scope::Popup => POPUP,
-        Scope::Plots => PLOTS,
         Scope::Tools => TOOLS,
-        Scope::Environment => ENVIRONMENT,
-        Scope::Table => TABLE,
     }
 }
 

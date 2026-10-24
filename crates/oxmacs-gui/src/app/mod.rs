@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use iced::animation::Easing;
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
-use iced::widget;
 use iced::{Animation, Event, Font, Subscription, Task, Theme, event, keyboard, system, window};
 use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::cli::Visit;
@@ -40,8 +39,6 @@ pub struct App {
     reveal: Animation<bool>,
     clock: Option<String>,
     mode_line_style: ModeLineStyle,
-    plot_images: Vec<(PathBuf, widget::image::Allocation)>,
-    plot_loading: Vec<PathBuf>,
     usage: Usage,
     jobs: Vec<(JobId, Handle)>,
     servers: Vec<(ServerId, lsp::Server)>,
@@ -73,14 +70,12 @@ pub enum Message {
     Reparse,
     ProcessTick,
     FocusWindow(WindowId),
-    PlotSized(WindowId, iced::Size),
-    PickPlot(WindowId, usize),
-    PlotLoaded(PathBuf, Option<widget::image::Allocation>),
     Fetched(FetchId, Result<String, String>),
     Server(ServerId, lsp::Event),
     ToolInstalled(Managed, Result<PathBuf, String>),
     OxTick,
     OxPress(BufferId, usize),
+    ViewSized(BufferId, iced::Size),
     TakeoverSized(iced::Size),
     EndTakeover,
     Focus(bool),
@@ -112,8 +107,6 @@ impl App {
             reveal: transition(false, animation::REVEAL),
             clock: None,
             mode_line_style: config.mode_line_style,
-            plot_images: Vec::new(),
-            plot_loading: Vec::new(),
             usage: Usage::new(),
             jobs: Vec::new(),
             servers: Vec::new(),
@@ -367,27 +360,6 @@ mod tests {
             text: Some(c.into()),
             repeat: false,
         }));
-    }
-
-    #[test]
-    fn a_plot_still_loading_leaves_the_previous_one_shown() {
-        let loaded = [
-            (PathBuf::from("plot-1.png"), "one"),
-            (PathBuf::from("plot-2.png"), "two"),
-        ];
-
-        assert_eq!(
-            update::shown_plot(&loaded, Path::new("plot-1.png")),
-            Some(&"one")
-        );
-        assert_eq!(
-            update::shown_plot(&loaded, Path::new("plot-3.png")),
-            Some(&"two")
-        );
-        assert_eq!(
-            update::shown_plot::<&str>(&[], Path::new("plot-1.png")),
-            None
-        );
     }
 
     #[test]

@@ -13,6 +13,24 @@ impl Editor {
         self.buffers.sync_syntax(0);
     }
 
+    pub fn statement_at(&mut self, point: usize) -> Option<Range<usize>> {
+        self.sync_syntax();
+        let buffer = self.buffers.current();
+        self.buffers.syntax(0)?.statement_at(buffer, point)
+    }
+
+    pub fn statement_after(&mut self, position: usize) -> Option<usize> {
+        self.sync_syntax();
+        let buffer = self.buffers.current();
+        self.buffers.syntax(0)?.statement_after(buffer, position)
+    }
+
+    pub fn defun_around(&mut self, point: usize) -> Option<Range<usize>> {
+        self.sync_syntax();
+        let buffer = self.buffers.current();
+        self.buffers.syntax(0)?.defun_around(buffer, point)
+    }
+
     pub fn wants_reparse(&self) -> bool {
         self.buffers.syntax_stale(0)
             || self
@@ -150,6 +168,23 @@ mod tests {
             editor.line_style(0).spans,
             [(0..2, Highlight::Keyword), (3..7, Highlight::Function)]
         );
+    }
+
+    #[test]
+    fn statements_and_definitions_are_found_by_offset() {
+        let mut editor = crate::editor::test_support::editor_with(
+            "x <- 1\n\ny <- df |>\n  head()\nf <- function() {\n  1\n}\n",
+            0,
+        );
+        editor.set_major_mode(Some(Language::R));
+
+        assert_eq!(editor.statement_at(2), Some(0..6));
+        assert_eq!(editor.statement_after(6), Some(8));
+        assert_eq!(editor.statement_at(8), Some(8..27));
+        assert_eq!(editor.defun_around(40), Some(28..51));
+        assert_eq!(editor.defun_around(2), None);
+        editor.set_major_mode(None);
+        assert_eq!(editor.statement_at(2), None);
     }
 
     #[test]

@@ -132,8 +132,17 @@ pub fn install(isolate: &mut Isolate, inbox: &Inbox) {
         let directories = arguments[1..]
             .chunks(2)
             .any(|pair| matches!(pair, [Value::Keyword(option), value] if option.name() == "directories" && value.truthy()));
+        let initial = arguments[1..]
+            .chunks(2)
+            .find_map(|pair| match pair {
+                [Value::Keyword(option), value] if option.name() == "initial" => {
+                    Some(print::display(heap, *value))
+                }
+                _ => None,
+            })
+            .unwrap_or_default();
         let (promise, reply) = reply(heap, &locating)?;
-        editor.prompt_path(&question, directories, move |_, path| {
+        editor.prompt_path_with(&question, directories, &initial, move |_, path| {
             reply.send(Answer::Text(path.display().to_string()));
         });
         Ok(promise)
@@ -303,6 +312,27 @@ mod tests {
         press(&mut editor, &mut ox, "i n n e r RET RET");
 
         let expected = format!("at {}", folder.path().join("inner").display());
+        assert_eq!(editor.message(), Some(expected.as_str()));
+    }
+
+    #[test]
+    fn paths_can_start_with_a_name_to_save_as() {
+        let folder = tempfile::tempdir().unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&folder.path().join("scratch.txt"));
+        let mut ox = Ox::new();
+
+        run(
+            &mut editor,
+            &mut ox,
+            r#"(defcommand save-as "Save as" (message (str "to " (await (prompt-path "Save as: " :initial "plot-1.png")))))"#,
+            "save-as",
+        );
+        let input = editor.minibuffer().unwrap().input().contents();
+        assert!(input.ends_with("plot-1.png"), "{input}");
+        press(&mut editor, &mut ox, "RET");
+
+        let expected = format!("to {}", folder.path().join("plot-1.png").display());
         assert_eq!(editor.message(), Some(expected.as_str()));
     }
 

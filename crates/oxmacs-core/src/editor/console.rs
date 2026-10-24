@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
 
+use regex::Regex;
+
 use crate::command::ScopeId;
 use crate::editor::buffers::Mode;
 use crate::editor::prompts::input_line::InputLine;
@@ -20,6 +22,8 @@ pub struct ConsoleSpec {
     pub on_marker: MarkerHook,
     pub on_idle: ConsoleHook,
     pub scope: Option<ScopeId>,
+    pub prompts: Vec<Regex>,
+    pub watches: Vec<(String, Regex)>,
 }
 
 #[derive(Debug)]
@@ -29,6 +33,7 @@ pub(in crate::editor) struct Console {
     stream: Stream,
     expected: VecDeque<Option<String>>,
     pub(in crate::editor) waiting: bool,
+    prompt: String,
     pub(in crate::editor) label: &'static str,
     on_marker: MarkerHook,
     on_idle: ConsoleHook,
@@ -56,15 +61,17 @@ impl Editor {
             ..spec.job
         };
         let job = self.start_job(job, Self::console_event);
+        let stream = Stream::with_patterns(spec.prompts, spec.watches);
         match buffer {
             Some(mut buffer) => {
                 let input = InputLine::new(&mut buffer);
                 let console = Console {
                     job: Some(job),
                     input,
-                    stream: Stream::default(),
+                    stream,
                     expected: VecDeque::new(),
                     waiting: false,
+                    prompt: String::new(),
                     label: spec.label,
                     on_marker: spec.on_marker,
                     on_idle: spec.on_idle,
@@ -75,7 +82,7 @@ impl Editor {
             None => {
                 if let Some(console) = self.console_at_mut(id) {
                     console.job = Some(job);
-                    console.stream = Stream::default();
+                    console.stream = stream;
                     console.expected.clear();
                     console.waiting = false;
                 }
@@ -116,6 +123,24 @@ impl Editor {
 
     pub fn console_waiting(&self, id: BufferId) -> bool {
         self.console_at(id).is_some_and(|console| console.waiting)
+    }
+
+    pub fn console_prompt(&self, id: BufferId) -> Option<String> {
+        self.console_at(id)
+            .filter(|console| console.waiting)
+            .map(|console| console.prompt.clone())
+    }
+
+    pub fn console_history(&self, id: BufferId) -> Vec<String> {
+        self.console_at(id)
+            .map(|console| console.input.history().to_vec())
+            .unwrap_or_default()
+    }
+
+    pub fn set_console_history(&mut self, id: BufferId, history: Vec<String>) {
+        if let Some(console) = self.console_at_mut(id) {
+            console.input.set_history(history);
+        }
     }
 
     fn console_of_job(&self, job: JobId) -> Option<BufferId> {
@@ -160,6 +185,7 @@ impl Editor {
                         Some(Some(line)) => self.console_insert(id, &format!("{shown}{line}\n")),
                         None => {
                             console.waiting = true;
+                            console.stream.prompt().clone_into(&mut console.prompt);
                             idle = true;
                             self.console_insert(id, &shown);
                         }
@@ -255,7 +281,7 @@ impl Editor {
         true
     }
 
-    pub(in crate::editor) fn console_input_start(&self) -> Option<usize> {
+    pub fn console_input_start(&self) -> Option<usize> {
         let Some(Mode::Console(console)) = self.buffers.mode(0) else {
             return None;
         };
@@ -369,6 +395,8 @@ mod tests {
             on_marker: heard,
             on_idle: idle,
             scope: None,
+            prompts: Vec::new(),
+            watches: Vec::new(),
         }
     }
 
@@ -527,6 +555,49 @@ mod tests {
 
         assert_eq!(sent(&mut editor), ["ls\n"]);
         assert_eq!(editor.message(), Some("C-c C-v is undefined"));
+    }
+
+    #[test]
+    fn history_can_be_read_and_given_back() {
+        let (mut editor, id, job) = started();
+        editor.session_output(job, PROMPT);
+        type_text(&mut editor, "ls");
+        press(&mut editor, "RET");
+        assert_eq!(editor.console_history(id), ["ls"]);
+
+        editor.set_console_history(id, vec!["pwd".to_owned(), "cd".to_owned()]);
+        editor.session_output(job, PROMPT);
+
+        press(&mut editor, "M-p");
+        assert!(contents(&editor, id).ends_with("$ cd"));
+        assert_eq!(editor.console_history(id), ["pwd", "cd"]);
+    }
+
+    #[test]
+    fn prompts_and_lines_of_their_own_patterns_are_recognized() {
+        let (mut editor, id, job) = start(
+            Editor::new(),
+            ConsoleSpec {
+                prompts: vec![Regex::new(r"^Browse\[\d+\]> $").unwrap()],
+                watches: vec![("debug".to_owned(), Regex::new(r"^debug at ").unwrap())],
+                ..spec()
+            },
+        );
+        editor.session_output(job, PROMPT);
+        editor.console_evaluate(id, "f()");
+
+        editor.session_output(job, "debug at a.R#2: x\nBrowse[1]> ");
+
+        assert!(editor.console_waiting(id));
+        assert_eq!(editor.console_prompt(id).as_deref(), Some("Browse[1]> "));
+        assert_eq!(
+            contents(&editor, id),
+            "$ f()\ndebug at a.R#2: x\nBrowse[1]> "
+        );
+        assert_eq!(
+            heard_so_far(&editor),
+            ["idle", "*Shell* debug debug at a.R#2: x", "idle"]
+        );
     }
 
     #[test]

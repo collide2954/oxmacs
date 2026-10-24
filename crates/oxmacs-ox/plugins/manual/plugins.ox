@@ -51,6 +51,8 @@ Saving a loaded plugin's file evaluates it again in place, so a change takes eff
 - `:entry` names the entry file, the plugin's name with `.ox` unless given.
 - `:commands` maps each command to its summary. They exist from startup and load the plugin when first run.
 - `:keys` binds global keys, such as `{"C-c h" hello}`; your `init.ox` can rebind them.
+- `:mode-keys` binds keys in the buffers of a mode, such as `{"R" {"C-c h" hello}}`, and the first press loads the plugin.
+- `:wakes-for` names modes, such as `["R"]`, whose buffers load the plugin as soon as one is open.
 - `:settings` declares settings with a `:type` (`:string`, `:int`, `:number`, `:bool`, `:list` or a vector of keywords to choose from), a `:default` and a `:doc`. `M-x customize` shows them, `use-plugin :config` sets them and `(setting :name)` reads them in the entry file.
 - `:start-screen` adds commands to the start screen, as `{hello: "Say hello"}`.
 - `:modes` declares file modes that wake the plugin, as `[{name: "Notes" extensions: ["note"] comment: "#"}]`; the entry then defines them with `defmode`.

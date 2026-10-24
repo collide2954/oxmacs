@@ -1,10 +1,6 @@
-use std::fmt::Write;
+(module (import (ox file) (ox path) (ox crypto)) (export script write))
 
-pub const PROFILE_VARIABLE: &str = "R_PROFILE_USER";
-pub const ORIGINAL_PROFILE_VARIABLE: &str = "OXMACS_R_PROFILE_USER";
-pub const PLOTS_VARIABLE: &str = "OXMACS_R_PLOTS";
-
-pub const HELPER: &str = r#"local({
+(def script #r#"local({
   original <- Sys.getenv("OXMACS_R_PROFILE_USER")
   if (nzchar(original)) {
     Sys.setenv(R_PROFILE_USER = original)
@@ -233,23 +229,155 @@ local({
     marker("environment", paste(rows, collapse = "\n"))
     last()
   }
-  oxmacs$view <- function(name, rows) {
+  oxmacs$view <- function(name, rows, offset = 0L, sort = "", decreasing = FALSE, filter = "") {
     value <- tryCatch(get(name, envir = globalenv()), error = function(e) NULL)
     if (!is.data.frame(value) && !is.matrix(value)) {
       marker("message", paste(name, "is not a table"))
       return(last())
     }
     value <- as.data.frame(value)
-    shown <- utils::head(value, rows)
+    total <- nrow(value)
+    if (nzchar(filter)) {
+      kept <- tryCatch(eval(str2lang(filter), value, globalenv()), error = function(e) e)
+      if (inherits(kept, "error")) {
+        marker("message", paste0("Cannot keep the rows where ", filter, ": ", conditionMessage(kept)))
+        return(last())
+      }
+      if (!is.logical(kept)) {
+        marker("message", paste("Cannot keep the rows where", filter, "because it is not TRUE or FALSE"))
+        return(last())
+      }
+      value <- value[!is.na(kept) & kept, , drop = FALSE]
+    }
+    if (nzchar(sort) && sort %in% names(value)) {
+      value <- value[order(value[[sort]], decreasing = isTRUE(decreasing)), , drop = FALSE]
+    }
+    offset <- max(0L, min(as.integer(offset), nrow(value)))
+    shown <- value[seq_len(max(0L, min(rows, nrow(value) - offset))) + offset, , drop = FALSE]
     types <- vapply(value, function(column) class(column)[1], character(1))
     cells <- lapply(shown, function(column) flat(format(column, trim = TRUE)))
     lines <- c(
-      paste(name, nrow(value), ncol(value), sep = "\t"),
+      paste(name, nrow(value), ncol(value), offset, total, sort,
+        if (isTRUE(decreasing)) "TRUE" else "FALSE", flat(filter), sep = "\t"),
       paste(c("", names(value)), collapse = "\t"),
       paste(c("", types), collapse = "\t"),
-      do.call(paste, c(list(flat(rownames(shown))), cells, sep = "\t"))
+      if (nrow(shown) > 0) do.call(paste, c(list(flat(rownames(shown))), cells, sep = "\t"))
     )
     marker("table", paste(lines, collapse = "\n"))
+    last()
+  }
+  oxmacs$stats <- function(name, column) {
+    value <- tryCatch(as.data.frame(get(name, envir = globalenv()))[[column]], error = function(e) NULL)
+    if (is.null(value)) {
+      marker("message", paste("No column", column, "in", name))
+      return(last())
+    }
+    missing <- sum(is.na(value))
+    present <- value[!is.na(value)]
+    text <- if (is.numeric(present) && length(present) > 0) {
+      numbers <- signif(c(mean(present), stats::sd(present), min(present),
+        stats::median(present), max(present)), 4)
+      paste0("mean ", numbers[1], ", sd ", numbers[2], ", min ", numbers[3],
+        ", median ", numbers[4], ", max ", numbers[5])
+    } else {
+      counts <- sort(table(present), decreasing = TRUE)
+      paste0(length(counts), " distinct: ",
+        paste(utils::head(paste0(names(counts), " (", counts, ")"), 5), collapse = ", "))
+    }
+    marker("stats", paste(column, class(value)[1], paste0(flat(text), ", ", missing, " missing"), sep = "\t"))
+    last()
+  }
+  oxmacs$peek <- function(name) {
+    text <- tryCatch(
+      utils::capture.output(utils::str(eval(str2lang(name), globalenv()), max.level = 1, list.len = 10)),
+      error = function(e) conditionMessage(e)
+    )
+    if (length(text) > 12) text <- c(utils::head(text, 12), "...")
+    marker("peek", paste(c(name, text), collapse = "\n"))
+    last()
+  }
+  oxmacs$dev_packages <- function() {
+    wanted <- c("devtools", "pkgload", "roxygen2", "pkgbuild", "testthat", "rmarkdown",
+      "quarto", "shiny", "renv", "languageserver")
+    found <- wanted[vapply(wanted, function(name) nzchar(system.file(package = name)), logical(1))]
+    marker("packages", paste(found, collapse = "\t"))
+    invisible()
+  }
+  oxmacs$test <- function(path) {
+    if (!requireNamespace("testthat", quietly = TRUE)) {
+      marker("message", "Running tests needs testthat")
+      return(last())
+    }
+    results <- tryCatch(
+      testthat::test_local(path, reporter = "silent", stop_on_failure = FALSE),
+      error = function(e) e
+    )
+    if (inherits(results, "error")) {
+      marker("message", paste("The tests did not run:", conditionMessage(results)))
+      return(last())
+    }
+    rows <- vapply(results, function(test) {
+      kinds <- vapply(test$results, function(result) class(result)[1], character(1))
+      failed <- Filter(function(result) {
+        inherits(result, "expectation_failure") || inherits(result, "expectation_error")
+      }, test$results)
+      status <- if (length(failed) > 0) {
+        "failed"
+      } else if (any(kinds == "expectation_skip")) {
+        "skipped"
+      } else {
+        "passed"
+      }
+      first <- if (length(failed) > 0) failed[[1]] else NULL
+      line <- tryCatch(as.integer(first$srcref[1]), error = function(e) NA_integer_)
+      if (length(line) == 0) line <- NA_integer_
+      paste(test$file, flat(test$test), status, if (is.na(line)) "" else line,
+        if (is.null(first)) "" else flat(conditionMessage(first)), sep = "\t")
+    }, character(1))
+    marker("tests", paste(c(normalizePath(path), rows), collapse = "\n"))
+    last()
+  }
+  oxmacs$packages <- function() {
+    installed <- utils::installed.packages()[, c("Package", "Version"), drop = FALSE]
+    attached <- sub("^package:", "", grep("^package:", search(), value = TRUE))
+    rows <- unique(paste(installed[, "Package"], installed[, "Version"],
+      installed[, "Package"] %in% attached, sep = "\t"))
+    marker("installed", paste(sort(rows), collapse = "\n"))
+    last()
+  }
+  oxmacs$render <- function(path) {
+    started <- Sys.time() - 1
+    quarto <- Sys.which("quarto")
+    knits <- requireNamespace("rmarkdown", quietly = TRUE) &&
+      (rmarkdown::pandoc_available() || !nzchar(quarto))
+    by_quarto <- grepl("[.]qmd$", path, ignore.case = TRUE) || !knits
+    out <- tryCatch({
+      if (!by_quarto) {
+        rmarkdown::render(path, envir = new.env(parent = globalenv()))
+      } else if (nzchar(quarto)) {
+        status <- system2(quarto, c("render", shQuote(path)))
+        if (!identical(as.integer(status), 0L)) stop("quarto render stopped with status ", status)
+        stem <- paste0(tools::file_path_sans_ext(basename(path)), ".")
+        made <- list.files(dirname(path), full.names = TRUE)
+        made <- made[startsWith(basename(made), stem) &
+          tolower(tools::file_ext(made)) %in% c("html", "pdf", "docx", "pptx", "odt", "epub") &
+          file.mtime(made) >= started]
+        if (length(made) == 0) stop("quarto made nothing beside the document")
+        made[which.max(file.mtime(made))]
+      } else {
+        stop("rendering needs the rmarkdown package or Quarto")
+      }
+    }, error = function(e) e)
+    if (inherits(out, "error")) {
+      marker("message", paste("Rendering failed:", conditionMessage(out)))
+      marker("rendered", paste0(path, "\t"))
+    } else {
+      marker("rendered", paste(path, normalizePath(out, winslash = "/"), sep = "\t"))
+    }
+    invisible()
+  }
+  oxmacs$help_index <- function(name) {
+    print(utils::help(package = (name), help_type = "text"))
     last()
   }
   oxmacs$inspect <- function(name) {
@@ -284,10 +412,12 @@ local({
     marker("signature", paste(name, trimws(flat(text)), sep = "\t"))
     last()
   }
+  oxmacs$dev_packages()
   utils::rc.settings(ipck = TRUE)
   options(
     oxmacs = oxmacs,
     help_type = "text",
+    viewer = function(url, height = NULL) marker("viewer", url),
     pager = function(files, header, title, delete.file) {
       text <- unlist(lapply(files, readLines, warn = FALSE))
       if (isTRUE(delete.file)) unlink(files)
@@ -296,64 +426,12 @@ local({
   )
 })
 options(prompt = "\001>\002\003", continue = "\001+\002\003")
-"#;
+"#)
 
-pub fn string(text: &str) -> String {
-    let mut literal = String::with_capacity(text.len() + 2);
-    literal.push('"');
-    for c in text.chars() {
-        match c {
-            '"' => literal.push_str("\\\""),
-            '\\' => literal.push_str("\\\\"),
-            '\n' => literal.push_str("\\n"),
-            '\r' => literal.push_str("\\r"),
-            '\t' => literal.push_str("\\t"),
-            c if c.is_control() => {
-                let _ = write!(literal, "\\u{{{:x}}}", u32::from(c));
-            }
-            c => literal.push(c),
-        }
-    }
-    literal.push('"');
-    literal
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn strings_are_quoted_for_r() {
-        assert_eq!(string("mean"), "\"mean\"");
-        assert_eq!(string("a\"b\\c"), "\"a\\\"b\\\\c\"");
-        assert_eq!(string("x\ny\u{1}"), "\"x\\ny\\u{1}\"");
-        assert_eq!(string("é"), "\"é\"");
-    }
-
-    #[test]
-    fn the_helper_answers_help_through_markers() {
-        assert!(HELPER.contains("oxmacs$help <- function(topic)"));
-        assert!(HELPER.contains("pager = function(files, header, title, delete.file)"));
-        assert!(HELPER.contains("help_type = \"text\""));
-    }
-
-    #[test]
-    fn the_helper_completes_through_markers() {
-        assert!(HELPER.contains("oxmacs$complete <- function(line, cursor)"));
-        assert!(HELPER.contains("marker(\"complete\""));
-    }
-
-    #[test]
-    fn the_helper_sets_the_width_of_output_and_help() {
-        assert!(HELPER.contains("options(width = width)"));
-        assert!(HELPER.contains("tools::Rd2txt_options(width = width)"));
-    }
-
-    #[test]
-    fn the_helper_sets_marked_prompts() {
-        assert!(
-            HELPER.contains(r#"options(prompt = "\001>\002\003", continue = "\001+\002\003")"#)
-        );
-        assert!(HELPER.contains(ORIGINAL_PROFILE_VARIABLE));
-    }
-}
+(def (write)
+  "Writes the helper R reads as its profile to a file of its own and returns a promise of its path."
+  (let [folder (path/join (path/temp) "oxmacs")
+        file (path/join folder "r-{(crypto/random 8)}.R")]
+    (spawn (await (file/make-dir folder))
+           (await (file/write file script))
+           file)))

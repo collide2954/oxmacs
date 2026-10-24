@@ -12,10 +12,9 @@ use crate::text::{Buffer, BufferId};
 
 const BUDGET: Duration = Duration::from_millis(50);
 const TRIES: usize = 3;
-const STARTS: [(Scope, Option<Language>, &str); 3] = [
+const STARTS: [(Scope, Option<Language>, &str); 2] = [
     (Scope::Global, None, ""),
     (Scope::Rust, Some(Language::RUST), "fn main() {}\n"),
-    (Scope::R, Some(Language::R), "x <- 1\nplot(x)\n"),
 ];
 
 fn start(folder: &Path, language: Option<Language>, text: &str) -> Editor {
@@ -83,6 +82,6 @@ fn every_buffer_opens_quickly() {
         }
     }
 
-    assert!(opened.len() >= 15, "{opened:?}");
+    assert!(opened.len() >= 14, "{opened:?}");
     assert!(slow.is_empty(), "slower than {BUDGET:?}: {slow:#?}");
 }

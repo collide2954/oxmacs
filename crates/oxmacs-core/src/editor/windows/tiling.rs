@@ -176,6 +176,26 @@ impl Tiling {
         true
     }
 
+    pub(in crate::editor) fn set_weights(&mut self, windows: &[WindowId], weights: &[f32]) -> bool {
+        let Self::Split { parts, .. } = self else {
+            return false;
+        };
+        let leaves = parts.len() == windows.len()
+            && parts
+                .iter()
+                .zip(windows)
+                .all(|((_, part), window)| *part == Self::Window(*window));
+        if leaves {
+            for ((weight, _), given) in parts.iter_mut().zip(weights) {
+                *weight = *given;
+            }
+            return true;
+        }
+        parts
+            .iter_mut()
+            .any(|(_, part)| part.set_weights(windows, weights))
+    }
+
     pub fn boundary(&self, path: &[usize], index: usize) -> Option<f32> {
         let Self::Split { parts, .. } = self else {
             return None;

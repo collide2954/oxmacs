@@ -36,8 +36,6 @@ pub struct Config {
     pub language_servers: bool,
     pub inlay_hints: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub r_program: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub air_program: Option<String>,
 }
 
@@ -111,7 +109,6 @@ impl Default for Config {
             mode_line_style: ModeLineStyle::default(),
             language_servers: true,
             inlay_hints: true,
-            r_program: None,
             air_program: None,
         }
     }
@@ -326,7 +323,6 @@ mod tests {
         let full = Config {
             theme: Some("adwaita".to_owned()),
             font_family: Some("Iosevka".to_owned()),
-            r_program: Some("R".to_owned()),
             air_program: Some("air".to_owned()),
             ..Config::default()
         };

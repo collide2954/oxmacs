@@ -85,7 +85,7 @@ impl Editor {
         let input = self.minibuffer_input();
         let (directory, name) = paths::split(&input);
         let path = if name.is_empty() {
-            if matches!(purpose, Purpose::WriteFile | Purpose::SavePlot) {
+            if matches!(purpose, Purpose::WriteFile) {
                 if let Some(minibuffer) = &mut self.minibuffer {
                     minibuffer.note = Some("[Directory]".to_owned());
                 }
@@ -108,7 +108,6 @@ impl Editor {
             .and_then(|minibuffer| minibuffer.callback);
         match purpose {
             Purpose::WriteFile => self.write_file_to(path),
-            Purpose::SavePlot => self.save_plot_to(&path),
             Purpose::CallbackPath { .. } => {
                 if let Some(callback) = callback {
                     let path = self.absolute(&path);

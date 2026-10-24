@@ -1,5 +1,5 @@
 (plugin manual
-  :version "0.2.0"
+  :version "0.3.0"
   :summary "The oxmacs tutorial and the Ox manual"
   :commands {ox-manual: "Read the Ox manual"
              ox-manual-lookup: "Look up an Ox name in the manual"

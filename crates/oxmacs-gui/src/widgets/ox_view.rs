@@ -1,12 +1,17 @@
 use std::cell::RefCell;
 
-use iced::widget::{Column, Row, button, canvas, image, scrollable, space, text};
-use iced::{ContentFit, Element, Font, Length};
+use iced::widget::{
+    Column, Row, button, canvas, container, image, mouse_area, scrollable, space, text,
+};
+use iced::{Border, Color, ContentFit, Element, Font, Length};
 use oxmacs_core::theme::Theme as Faces;
 use oxmacs_ox::views::{Node, Picture, Press};
 
 use crate::style;
 use crate::widgets::drawing::Drawing;
+
+const FRAME: f32 = 2.0;
+const FRAME_RADIUS: f32 = 4.0;
 
 thread_local! {
     static PICTURES: RefCell<Vec<(Picture, image::Handle)>> = const { RefCell::new(Vec::new()) };
@@ -92,11 +97,33 @@ pub fn view<'a, Message: Clone + 'a>(
             picture,
             width,
             height,
-        } => image(handle(picture))
-            .content_fit(ContentFit::Contain)
-            .width(width.map_or(Length::Shrink, Length::Fixed))
-            .height(height.map_or(Length::Shrink, Length::Fixed))
-            .into(),
+            press: slot,
+            selected,
+        } => {
+            let shown = image(handle(picture))
+                .content_fit(ContentFit::Contain)
+                .width(width.map_or(Length::Shrink, Length::Fixed))
+                .height(height.map_or(Length::Shrink, Length::Fixed));
+            let accent = style::color(look.faces.cursor);
+            let framed = container(shown)
+                .padding(FRAME)
+                .style(move |_| container::Style {
+                    border: Border {
+                        color: if *selected {
+                            accent
+                        } else {
+                            Color::TRANSPARENT
+                        },
+                        width: FRAME,
+                        radius: FRAME_RADIUS.into(),
+                    },
+                    ..container::Style::default()
+                });
+            match slot {
+                Some(Press::Slot(slot)) => mouse_area(framed).on_press(press(*slot)).into(),
+                _ => framed.into(),
+            }
+        }
         Node::Scrollable(child) => scrollable(view(child, look, press))
             .height(Length::Fill)
             .into(),

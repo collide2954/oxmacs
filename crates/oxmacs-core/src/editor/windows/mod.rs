@@ -44,6 +44,15 @@ fn unsigned_as_f32(value: usize) -> f32 {
     value as f32
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Arrangement {
+    Buffer(BufferId),
+    Split {
+        axis: Axis,
+        parts: Vec<(f32, Arrangement)>,
+    },
+}
+
 #[derive(Debug, Clone, Copy)]
 struct Parked {
     buffer: BufferId,
@@ -384,6 +393,62 @@ impl Editor {
         }
     }
 
+    pub fn window_arrangement(&self) -> Arrangement {
+        self.arrangement_of(&self.windows.tiling)
+    }
+
+    fn arrangement_of(&self, tiling: &Tiling) -> Arrangement {
+        match tiling {
+            Tiling::Window(window) => Arrangement::Buffer(
+                self.pane_of(*window)
+                    .map_or_else(|| self.buffers.current().id(), |pane| pane.buffer().id()),
+            ),
+            Tiling::Split { axis, parts } => Arrangement::Split {
+                axis: *axis,
+                parts: parts
+                    .iter()
+                    .map(|(weight, part)| (*weight, self.arrangement_of(part)))
+                    .collect(),
+            },
+        }
+    }
+
+    pub fn arrange_windows(&mut self, arrangement: &Arrangement, select: Option<BufferId>) {
+        self.delete_other_windows();
+        let first = self.windows.selected;
+        self.build_arrangement(first, arrangement);
+        let target = select
+            .and_then(|id| self.window_showing(id))
+            .or_else(|| self.windows.tiling.windows().first().copied())
+            .unwrap_or(first);
+        self.select_window(target);
+    }
+
+    fn build_arrangement(&mut self, window: WindowId, arrangement: &Arrangement) {
+        self.select_window(window);
+        match arrangement {
+            Arrangement::Buffer(id) => self.show_buffer(*id),
+            Arrangement::Split { axis, parts } => {
+                let mut windows = vec![window];
+                for _ in 1..parts.len() {
+                    if let Some(last) = windows.last() {
+                        self.select_window(*last);
+                    }
+                    let before = self.windows.next;
+                    self.split_window(*axis);
+                    if self.windows.next != before {
+                        windows.push(WindowId(before));
+                    }
+                }
+                let weights: Vec<f32> = parts.iter().map(|(weight, _)| *weight).collect();
+                self.windows.tiling.set_weights(&windows, &weights);
+                for (window, (_, part)) in windows.into_iter().zip(parts) {
+                    self.build_arrangement(window, part);
+                }
+            }
+        }
+    }
+
     pub fn drag_divider(&mut self, path: &[usize], index: usize, fraction: f32) {
         self.windows.tiling.set_divider(path, index, fraction);
     }
@@ -395,10 +460,7 @@ impl Editor {
             self.resize_parked(window, rows, columns);
         }
         self.render_help();
-        self.fit_r_widths();
         self.render_tools();
-        self.render_tables();
-        self.render_environments();
         self.tell_display();
     }
 

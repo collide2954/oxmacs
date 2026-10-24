@@ -327,6 +327,118 @@ mod tests {
         );
     }
 
+    #[test]
+    fn plugins_insert_text_unless_the_buffer_is_read_only() {
+        let mut editor = Editor::new();
+
+        assert!(editor.insert_text("ab"));
+        assert_eq!(editor.buffer().contents(), "ab");
+        assert_eq!(editor.buffer().point(), 2);
+        type_keys(&mut editor, "C-x C-q");
+
+        assert!(!editor.insert_text("c"));
+        assert_eq!(editor.buffer().contents(), "ab");
+        assert_eq!(editor.message(), Some("Buffer is read-only: *scratch*"));
+    }
+
+    #[test]
+    fn buffers_can_keep_header_lines_above_their_text() {
+        let mut editor = Editor::new();
+        let id = editor.open_plugin_buffer("*table*", blank());
+        let style = LineStyle {
+            background: None,
+            spans: vec![(0..4, Highlight::Heading)],
+        };
+
+        editor.set_header_lines(id, vec![("name".to_owned(), style.clone())]);
+        assert_eq!(editor.pane().header_lines(), [("name".to_owned(), style)]);
+
+        editor.set_header_lines(id, Vec::new());
+        assert_eq!(editor.pane().header_lines(), []);
+    }
+
+    #[test]
+    fn windows_are_arranged_in_nested_splits_and_read_back() {
+        use crate::editor::{Arrangement, Axis};
+
+        let mut editor = Editor::new();
+        let a = editor.open_plugin_buffer("*a*", blank());
+        let b = editor.open_plugin_buffer("*b*", blank());
+        let c = editor.open_plugin_buffer("*c*", blank());
+        let layout = Arrangement::Split {
+            axis: Axis::Columns,
+            parts: vec![
+                (0.25, Arrangement::Buffer(a)),
+                (
+                    0.75,
+                    Arrangement::Split {
+                        axis: Axis::Rows,
+                        parts: vec![(0.5, Arrangement::Buffer(b)), (0.5, Arrangement::Buffer(c))],
+                    },
+                ),
+            ],
+        };
+
+        editor.arrange_windows(&layout, Some(c));
+
+        assert_eq!(shown_in(&editor), ["*a*", "*b*", "*c*"]);
+        assert_eq!(editor.buffer().name(), "*c*");
+        assert_eq!(editor.window_arrangement(), layout);
+
+        let scratch = editor.buffer_named("*scratch*").unwrap();
+        editor.arrange_windows(&Arrangement::Buffer(scratch), None);
+        assert_eq!(shown_in(&editor), ["*scratch*"]);
+    }
+
+    fn shown_in(editor: &Editor) -> Vec<String> {
+        editor
+            .tiling()
+            .windows()
+            .into_iter()
+            .filter_map(|window| editor.pane_of(window))
+            .map(|pane| pane.buffer().name().to_owned())
+            .collect()
+    }
+
+    fn blank() -> Greeter {
+        Greeter {
+            scope: Scope::Global.into(),
+            count: 0,
+            styles: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn buffers_are_displayed_beside_or_under_another_one() {
+        use crate::editor::Axis;
+
+        let mut editor = Editor::new();
+        let console = editor.open_plugin_buffer("*console*", blank());
+        editor.show_buffer(editor.buffer_named("*scratch*").unwrap());
+        editor.display_buffer(console, None, false);
+        assert_eq!(shown_in(&editor), ["*scratch*", "*console*"]);
+        assert_eq!(editor.buffer().name(), "*scratch*");
+
+        let plots = editor.open_plugin_buffer("*plots*", blank());
+        editor.show_buffer(editor.buffer_named("*scratch*").unwrap());
+        editor.display_buffer(plots, Some((console, Axis::Rows)), false);
+        assert_eq!(shown_in(&editor), ["*scratch*", "*console*", "*plots*"]);
+        let crate::editor::Tiling::Split { parts, .. } = editor.tiling() else {
+            panic!("not split");
+        };
+        assert!(matches!(
+            &parts[1].1,
+            crate::editor::Tiling::Split {
+                axis: Axis::Rows,
+                ..
+            }
+        ));
+
+        editor.display_buffer(plots, None, true);
+        assert_eq!(editor.buffer().name(), "*plots*");
+        assert_eq!(editor.tiling().windows().len(), 3);
+    }
+
     static PALETTE: [Theme; 2] = [
         Theme {
             name: "palette-light",

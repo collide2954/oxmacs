@@ -1,20 +1,42 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use oxmacs_core::external::r::{HELPER, PLOTS_VARIABLE, PROFILE_VARIABLE};
-use oxmacs_core::external::tools::{self, Probe};
+use oxmacs_core::editor::Editor;
+use oxmacs_ox::Ox;
+
+fn unquoted(shown: &str) -> String {
+    shown
+        .trim_matches('"')
+        .replace("\\\\", "\\")
+        .replace("\\\"", "\"")
+}
 
 fn session(input: &str) -> (String, tempfile::TempDir) {
-    let Probe::Found { path, .. } = tools::probe_r(None) else {
-        panic!("R is not installed");
+    let mut editor = Editor::new();
+    let mut ox = Ox::new();
+    ox.start(&mut editor, None);
+    let mut eval = |source: &str| {
+        ox.eval(
+            &mut editor,
+            &format!("(module (import (r session) (r helper))) {source}"),
+        )
+        .unwrap()
     };
+    let program = eval("(session/find-r)");
+    assert_ne!(program, "nil", "R is not installed");
+    let arguments: Vec<String> =
+        eval("(apply str (map (fn [argument] (str argument \"\\n\")) (session/arguments)))")
+            .trim_matches('"')
+            .split("\\n")
+            .filter(|argument| !argument.is_empty())
+            .map(str::to_owned)
+            .collect();
+    let helper = unquoted(&eval("(await (helper/write))"));
     let directory = tempfile::tempdir().unwrap();
-    let helper = directory.path().join("helper.R");
-    std::fs::write(&helper, HELPER).unwrap();
-    let mut child = Command::new(path)
-        .args(tools::r_arguments())
-        .env(PROFILE_VARIABLE, &helper)
-        .env(PLOTS_VARIABLE, directory.path().join("plots"))
+    let mut child = Command::new(unquoted(&program))
+        .args(arguments)
+        .env("R_PROFILE_USER", &helper)
+        .env("OXMACS_R_PLOTS", directory.path().join("plots"))
         .current_dir(directory.path())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -28,6 +50,7 @@ fn session(input: &str) -> (String, tempfile::TempDir) {
         .write_all(input.as_bytes())
         .unwrap();
     let output = child.wait_with_output().unwrap();
+    let _ = std::fs::remove_file(helper);
     (
         String::from_utf8_lossy(&output.stdout).replace('\r', ""),
         directory,
@@ -174,7 +197,7 @@ fn marked<'a>(output: &'a str, kind: &str) -> Vec<&'a str> {
 #[ignore = "runs the R installed on this machine"]
 fn the_environment_tables_and_objects_are_described() {
     let (output, _directory) = session(
-        "x <- 1:10\ns <- \"hello world\"\ncars <- mtcars\nadd <- function(a, b = 2) a + b\ngetOption(\"oxmacs\")$environment()\ngetOption(\"oxmacs\")$view(\"cars\", 2L)\ngetOption(\"oxmacs\")$view(\"x\", 2L)\ngetOption(\"oxmacs\")$inspect(\"add\")\nq()\n",
+        "x <- 1:10\ns <- \"hello world\"\ncars <- mtcars\nadd <- function(a, b = 2) a + b\ngetOption(\"oxmacs\")$environment()\ngetOption(\"oxmacs\")$view(\"cars\", 2L)\ngetOption(\"oxmacs\")$view(\"x\", 2L)\ngetOption(\"oxmacs\")$inspect(\"add\")\ngetOption(\"oxmacs\")$peek(\"cars\")\nq()\n",
     );
 
     let environment = marked(&output, "environment");
@@ -190,13 +213,17 @@ fn the_environment_tables_and_objects_are_described() {
         "{output:?}"
     );
     let table: Vec<&str> = marked(&output, "table")[0].lines().collect();
-    assert_eq!(table[0], "cars\t32\t11");
+    assert_eq!(table[0], "cars\t32\t11\t0\t32\t\tFALSE\t");
     assert!(table[1].starts_with("\tmpg\tcyl\tdisp"), "{table:?}");
     assert!(table[2].starts_with("\tnumeric\tnumeric"), "{table:?}");
     assert!(table[3].starts_with("Mazda RX4\t21\t6\t160"), "{table:?}");
     assert_eq!(table.len(), 5);
     assert_eq!(marked(&output, "message"), ["x is not a table"]);
     assert!(marked(&output, "object")[0].starts_with("add\nfunction (a, b = 2)"));
+    let peek: Vec<&str> = marked(&output, "peek")[0].lines().collect();
+    assert_eq!(peek[0], "cars");
+    assert!(peek[1].starts_with("'data.frame':"), "{peek:?}");
+    assert_eq!(peek.len(), 13, "{peek:?}");
 }
 
 #[test]
@@ -283,6 +310,98 @@ fn completions_come_back_with_where_they_start() {
     );
     assert!(
         output.contains("\u{1}complete\u{2}8\tstats\tstats4"),
+        "{output:?}"
+    );
+}
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
+fn tables_sort_filter_page_and_describe_their_columns() {
+    let (output, _directory) = session(
+        "cars <- mtcars\ngetOption(\"oxmacs\")$view(\"cars\", 3L, 1L, \"mpg\", TRUE, \"cyl == 4\")\ngetOption(\"oxmacs\")$view(\"cars\", 3L, 0L, \"\", FALSE, \"nope +\")\ngetOption(\"oxmacs\")$stats(\"cars\", \"mpg\")\nq()\n",
+    );
+
+    let table: Vec<&str> = marked(&output, "table")[0].lines().collect();
+    assert_eq!(table[0], "cars\t11\t11\t1\t32\tmpg\tTRUE\tcyl == 4");
+    assert!(table[3].starts_with("Fiat 128\t32.4"), "{table:?}");
+    assert_eq!(table.len(), 6);
+    assert!(
+        marked(&output, "message")[0].starts_with("Cannot keep the rows where nope +"),
+        "{output:?}"
+    );
+    assert_eq!(
+        marked(&output, "stats"),
+        ["mpg\tnumeric\tmean 20.09, sd 6.027, min 10.4, median 19.2, max 33.9, 0 missing"]
+    );
+}
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
+fn widgets_go_to_the_viewer_marker() {
+    let (output, _directory) =
+        session("getOption(\"viewer\")(\"C:/tmp/widget/index.html\")\nq()\n");
+
+    assert_eq!(
+        marked(&output, "viewer"),
+        ["C:/tmp/widget/index.html"],
+        "{output:?}"
+    );
+}
+
+#[test]
+#[ignore = "runs the R and Quarto installed on this machine"]
+fn documents_render_beside_themselves_or_say_why_not() {
+    let folder = tempfile::tempdir().unwrap();
+    let document = folder.path().join("notes.qmd");
+    std::fs::write(
+        &document,
+        "---\ntitle: Notes\n---\n\n# Hello\n\nPlain text.\n",
+    )
+    .unwrap();
+    let path = document.display().to_string().replace('\\', "/");
+    let (output, _directory) = session(&format!(
+        "getOption(\"oxmacs\")$render(\"{path}\")\ngetOption(\"oxmacs\")$render(\"{path}x.qmd\")\nq()\n"
+    ));
+
+    let rendered = marked(&output, "rendered");
+    let (source, made) = rendered[0].split_once('\t').unwrap();
+    assert_eq!(source, path);
+    assert!(made.ends_with("/notes.html"), "{output:?}");
+    assert!(std::fs::metadata(made).unwrap().len() > 1000);
+    assert_eq!(rendered[1], format!("{path}x.qmd\t"));
+    assert!(
+        marked(&output, "message")[0].starts_with("Rendering failed:"),
+        "{output:?}"
+    );
+}
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
+fn packages_are_listed_and_their_help_and_tests_answer() {
+    let project = tempfile::tempdir().unwrap();
+    let path = project.path().display().to_string().replace('\\', "/");
+    let (output, _directory) = session(&format!(
+        "getOption(\"oxmacs\")$packages()\ngetOption(\"oxmacs\")$help_index(\"stats\")\ngetOption(\"oxmacs\")$test(\"{path}\")\nq()\n"
+    ));
+
+    assert_eq!(marked(&output, "packages").len(), 1, "{output:?}");
+    let installed = marked(&output, "installed");
+    assert!(
+        installed[0]
+            .lines()
+            .any(|line| line.starts_with("stats\t") && line.ends_with("\tTRUE")),
+        "{installed:?}"
+    );
+    assert!(
+        marked(&output, "help")[0].contains("package 'stats'")
+            || marked(&output, "help")[0].contains("package ‘stats’"),
+        "{output:?}"
+    );
+    assert!(
+        !marked(&output, "tests").is_empty()
+            || marked(&output, "message")
+                .iter()
+                .any(|message| message.contains("testthat") || message.contains("did not run")),
         "{output:?}"
     );
 }

@@ -2,9 +2,10 @@ use std::any::Any;
 use std::path::{Path, PathBuf};
 
 use crate::command::{Command, CommandId};
+use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
-use crate::editor::{Editor, Effect};
+use crate::editor::{Axis, Editor, Effect};
 use crate::input::{KeySequence, Lookup};
 use crate::plugin::PluginBuffer;
 use crate::text::{Buffer, BufferId};
@@ -62,6 +63,71 @@ impl Editor {
 
     pub fn show_buffer_beside(&mut self, id: BufferId) {
         self.show_beside(move |editor| editor.buffers.position(|buffer| buffer.id() == id));
+    }
+
+    pub fn display_buffer(&mut self, id: BufferId, near: Option<(BufferId, Axis)>, select: bool) {
+        if self.window_showing(id).is_none() {
+            let place = move |editor: &mut Self| editor.show_buffer(id);
+            let beside = near.and_then(|(other, axis)| Some((self.window_showing(other)?, axis)));
+            match beside {
+                Some((window, axis)) => self.split_off(window, axis, place),
+                None => self.beside(place),
+            }
+        }
+        if select && let Some(window) = self.window_showing(id) {
+            self.select_window(window);
+        }
+    }
+
+    pub fn set_header_lines(&mut self, id: BufferId, lines: Vec<(String, LineStyle)>) {
+        let alive: Vec<BufferId> = self.buffers.iter().map(Buffer::id).collect();
+        self.headers
+            .retain(|(known, _)| *known != id && alive.contains(known));
+        if !lines.is_empty() {
+            self.headers.push((id, lines));
+        }
+    }
+
+    pub(in crate::editor) fn header_lines_of(&self, id: BufferId) -> Vec<(String, LineStyle)> {
+        self.headers
+            .iter()
+            .find(|(known, _)| *known == id)
+            .map(|(_, lines)| lines.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn show_text(
+        &mut self,
+        name: &str,
+        text: &str,
+        language: Option<crate::syntax::Language>,
+        read_only: bool,
+    ) -> Result<BufferId, String> {
+        match self.buffers.position(|buffer| buffer.name() == name) {
+            Some(index) if self.buffers.get(index).and_then(Buffer::file).is_some() => {
+                return Err(format!("{name} visits a file"));
+            }
+            Some(index) => self.select_buffer(index),
+            None => self.add_buffer_with(Buffer::with_text(name, ""), Mode::Text(None)),
+        }
+        if language.is_some() {
+            self.set_major_mode(language);
+        }
+        let buffer = self.buffers.current_mut();
+        buffer.set_read_only(false);
+        buffer.set_text(text);
+        buffer.mark_saved();
+        buffer.set_read_only(read_only);
+        buffer.set_point(0);
+        Ok(buffer.id())
+    }
+
+    pub fn insert_text(&mut self, text: &str) -> bool {
+        if self.refuse_read_only() {
+            return false;
+        }
+        self.buffers.current_mut().insert(text);
+        true
     }
 
     pub fn on_command(&mut self, handler: fn(&mut Editor)) {

@@ -2,12 +2,14 @@ mod buffers;
 mod bundled;
 pub mod checker;
 mod commands;
+mod consoles;
 mod editing;
 mod handles;
 mod help;
 mod hooks;
 pub mod idle;
 mod keepass;
+mod layout;
 mod log;
 mod manual;
 mod mode;
@@ -16,6 +18,7 @@ mod natives;
 mod plugins;
 mod processes;
 mod prompts;
+mod servers;
 mod settings;
 pub mod shapes;
 mod stacktrace;
@@ -62,6 +65,9 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     editing::install(&mut isolate);
     hooks::install(&mut isolate);
     processes::install(&mut isolate);
+    consoles::install(&mut isolate);
+    layout::install(&mut isolate);
+    servers::install(&mut isolate);
     transients::install(&mut isolate);
     modes::install(&mut isolate);
     takeover::install(&mut isolate);
@@ -165,6 +171,10 @@ impl Ox {
         views::press(&mut self.isolate, editor, buffer, slot);
     }
 
+    pub fn view_sized(&mut self, editor: &mut Editor, buffer: BufferId, width: u32, height: u32) {
+        views::sized(&mut self.isolate, editor, buffer, (width, height));
+    }
+
     fn run_init(&mut self, editor: &mut Editor, home: Option<&Path>) -> bool {
         let Some(home) = home else {
             return false;
@@ -250,11 +260,15 @@ impl Ox {
         let mut failed = false;
         hooks::release_saves(&mut self.isolate, editor);
         self.handle_requests(editor);
-        for plugin in modes::wakes(editor) {
+        for plugin in modes::wakes(editor)
+            .into_iter()
+            .chain(plugins::woken_by_modes(editor))
+        {
             plugins::request_wake(editor, &plugin);
         }
         plugins::wake_waiting(&mut self.isolate, editor);
         hooks::run(&mut self.isolate, editor);
+        consoles::run(&mut self.isolate, editor);
         buffers::watch(&mut self.isolate, editor);
         commands::run_waiting(&mut self.isolate, editor);
         transients::run_waiting(&mut self.isolate, editor);

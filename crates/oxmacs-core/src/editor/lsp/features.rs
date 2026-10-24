@@ -155,7 +155,7 @@ impl Editor {
             .map_or(Encoding::Utf16, |client| client.encoding)
     }
 
-    pub(in crate::editor) fn lsp_serves_here(&self) -> bool {
+    pub fn lsp_serves_here(&self) -> bool {
         let buffer = self.buffers.current().id();
         self.lsp
             .running
@@ -227,6 +227,41 @@ impl Editor {
         let buffer = self.buffers.current();
         self.lsp_serves_here()
             && self.lsp.signature != Some((buffer.id(), buffer.revision(), buffer.point()))
+    }
+
+    pub(in crate::editor) fn completion_at_point(&mut self) {
+        self.lsp_complete(true);
+    }
+
+    fn in_comment(&self) -> bool {
+        let buffer = self.buffers.current();
+        let point = buffer.point();
+        let line = buffer.line_of(point);
+        self.buffers
+            .syntax(0)
+            .and_then(|syntax| syntax.comment_start(buffer, line))
+            .is_some_and(|column| buffer.line_start(line) + column < point)
+    }
+
+    pub fn wants_auto_complete(&self) -> bool {
+        self.lsp_wants_auto_complete() && !self.in_comment()
+    }
+
+    pub fn auto_complete(&mut self) {
+        if self.wants_auto_complete() {
+            self.lsp_auto_complete();
+        }
+    }
+
+    pub fn wants_signature(&self) -> bool {
+        let quiet = self.minibuffer.is_none() && self.popup.is_none() && self.question.is_none();
+        quiet && self.lsp_wants_signature()
+    }
+
+    pub fn show_signature(&mut self) {
+        if self.wants_signature() {
+            self.lsp_signature();
+        }
     }
 
     fn lsp_hints(&mut self) {

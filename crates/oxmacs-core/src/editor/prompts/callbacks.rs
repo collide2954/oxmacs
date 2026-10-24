@@ -201,6 +201,21 @@ impl Editor {
         }
     }
 
+    pub fn prompt_path_with(
+        &mut self,
+        prompt: &str,
+        directories: bool,
+        name: &str,
+        done: impl FnOnce(&mut Editor, PathBuf) + Send + 'static,
+    ) {
+        self.prompt_path(prompt, directories, done);
+        if self.minibuffer.is_some() && !name.is_empty() {
+            let start = self.minibuffer_input();
+            self.set_minibuffer_input(&format!("{start}{name}"));
+            self.refresh_minibuffer();
+        }
+    }
+
     pub fn prompt_styled(
         &mut self,
         prompt: &str,

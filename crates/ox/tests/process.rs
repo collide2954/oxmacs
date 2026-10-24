@@ -116,6 +116,20 @@ fn started_processes_can_be_killed() {
 }
 
 #[test]
+fn programs_are_found_on_the_path_and_the_system_is_named() {
+    let mut isolate = Isolate::new();
+
+    let reply = evaluated(
+        &mut isolate,
+        "(module (import (ox process) (ox path) (ox string))) [(string/starts-with? (path/name (process/which \"cargo\")) \"cargo\") (process/which \"oxmacs-no-such-program\") (keyword? (process/os))]",
+    );
+
+    assert_eq!(reply, "[true nil true]");
+    let os = evaluated(&mut isolate, "(module (import (ox process))) (process/os)");
+    assert_eq!(os, format!(":{}", std::env::consts::OS));
+}
+
+#[test]
 fn programs_that_cannot_start_raise() {
     let mut isolate = Isolate::new();
 

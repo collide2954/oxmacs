@@ -201,6 +201,10 @@ impl Language {
         self.0.extensions
     }
 
+    pub fn aliases(self) -> &'static [&'static str] {
+        self.0.aliases
+    }
+
     pub fn line_comment(self) -> Option<&'static str> {
         self.0.line_comment
     }
