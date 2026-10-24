@@ -144,6 +144,7 @@ fn connect(host: String, port: u16, tls: bool) -> Result<Portable, Failure> {
         .name(format!("ox net {host}"))
         .spawn(move || {
             pump(stream, &commands, &fed);
+            drop(commands);
             fed.close();
         });
     if let Err(error) = started {

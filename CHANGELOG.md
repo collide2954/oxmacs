@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- `net/send` on a connection the server has closed returns false on every system once its lines have ended, instead of sometimes queueing the line on Windows.
 - `ox fmt` keeps a character written as `\u{8}` whole instead of refusing to format the file.
 - Sending R code several times while R is still starting goes to that one session in the order it was sent, instead of starting a session for each.
 - Keyboard macros let Ox commands finish before the next key plays, so a macro that runs a plugin command sees the buffer as it would by hand, and an Ox error stops the macro like any other error.
