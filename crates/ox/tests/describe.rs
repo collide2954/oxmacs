@@ -107,6 +107,22 @@ fn error_types_and_made_functions_describe_their_parameters() {
 }
 
 #[test]
+fn the_core_macros_are_built_in_and_described_from_the_library_docs() {
+    let mut isolate = shapes();
+
+    let when = described(&mut isolate, "when");
+    assert_eq!(when.kind, Kind::Macro);
+    assert_eq!(when.signature, "(when test & body)");
+    assert_eq!(
+        when.doc.as_deref(),
+        Some("Evaluates body when test is truthy; otherwise nil.")
+    );
+    assert_eq!(when.place, None);
+    let if_let = described(&mut isolate, "if-let");
+    assert_eq!(if_let.signature, "(if-let binding then & otherwise)");
+}
+
+#[test]
 fn redefining_a_name_moves_its_place() {
     let mut isolate = shapes();
 

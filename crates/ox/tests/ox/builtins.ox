@@ -117,3 +117,26 @@
 (every :x inc) ;=> #<promise>
 [(map + [1 2] (gen (yield 10) (yield 20))) (reduce + (gen (yield 1) (yield 2))) (reduce + 0 (gen (yield 1) (yield 2)))] ;=> [[11 22] 3 3]
 [(some even? (gen (yield 1) (yield 2))) (sort-by - (gen (yield 1) (yield 2)))] ;=> [true [2 1]]
+
+;; the core macros expand the same way
+(-> 1 nil) ;! nil is not a function
+(->> 1 [2] (vector 3)) ;! [2] is not a function
+[(-> {a: 1} :a) (->> [1 2] (map inc)) (let [x 5] (-> x (- 1) (* 2)))] ;=> [1 [2 3] 8]
+[(some-> 1) (some-> nil inc) (some-> {a: {b: nil}} :a :b inc) (as-> 1 x) (as-> 1 x [x x])] ;=> [1 nil nil 1 [1 1]]
+[(cond [else 1 2]) (cond (true 3)) (cond [nil 1] [false 2])] ;=> [2 3 nil]
+(cond 5) ;! first expects a collection, got 5
+[(if-let [x 1] x) (if-let [x nil] x) (when-let [x false] 1)] ;=> [1 nil nil]
+(if-let 5 1) ;! second expects a collection, got 5
+(if-let [x nil] x 1 2) ;! if takes a test, a then form and an optional else form
+(when) ;! when takes at least 1 argument, got 0
+(defrule (x)) ;! defrule takes 2 arguments, got 1
+[(atomically 1 2) (await (spawn 3)) (vec (gen))] ;=> [2 3 []]
+(maybe (raise 5)) ;! Raised 5
+(let [and 1] (and true and)) ;! 1 is not a function
+[(expect (= 1 1)) (expect (when true 1)) (expect 1)] ;=> [true true true]
+[(try (expect (when false 1)) (catch expectation-failed e e.message)) (try (expect nil) (catch expectation-failed e e.message))] ;=> ["(when false 1)" "nil"]
+[(try (expect (> 1 2 3)) (catch expectation-failed e e.message)) (try (expect ((fn [x] x) false)) (catch expectation-failed e e.message))] ;=> ["(> 1 2 3)" "((fn [x] x) false)"]
+(do (test "x" 1) (test "y" (expect false)) [(map :name @registered-tests) (try ((:run (last @registered-tests))) (catch expectation-failed e e.message))]) ;=> [["x" "y"] "false"]
+(defrule (my-unless test body) (if test nil body)) [(my-unless false 1) (my-unless true 1)] ;=> [1 nil]
+(defrules swap-pair [] [(swap-pair a b) [b a]]) (swap-pair 1 2) ;=> [2 1]
+(defmacro quoted [form] (list 'quote form)) (quoted (-> a b (c d))) ;=> (-> a b (c d))

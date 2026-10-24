@@ -31,7 +31,6 @@ use crate::vm::build::full;
 use crate::vm::modules::{Import, Module, ModuleId, PRELUDE, USER};
 use crate::vm::routine::{Resumable, Started};
 
-const PRELUDE_SOURCE: &str = include_str!("library/prelude/core.ox");
 const LIBRARY_DOCS: &str = include_str!("library/docs.ox");
 
 fn modified(path: &Path) -> Option<SystemTime> {
@@ -152,9 +151,6 @@ impl Isolate {
         library::install(&mut isolate);
         let apply = isolate.runtime.lookup(PRELUDE, Sym::intern("apply"));
         isolate.runtime.apply = apply.unwrap_or(Value::Nil);
-        if let Err(error) = isolate.eval_in(PRELUDE, "prelude/core.ox", PRELUDE_SOURCE, &mut ()) {
-            panic!("The Ox prelude failed to load: {error}");
-        }
         for prim in Prim::ALL {
             let found = isolate
                 .runtime
@@ -625,6 +621,23 @@ impl Isolate {
             ..plain("ox", name, least, most, function)
         };
         self.install("ox", name, native);
+    }
+
+    pub(crate) fn define_expander(
+        &mut self,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        expand: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
+    ) {
+        let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| expand(heap, arguments));
+        if let Ok(value) = self
+            .runtime
+            .heap
+            .native(plain("ox", name, least, most, function))
+        {
+            self.runtime.define_macro(PRELUDE, Sym::intern(name), value);
+        }
     }
 
     pub(crate) fn define_routine(

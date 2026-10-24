@@ -25,7 +25,9 @@ pub(crate) fn find_definition(isolate: &Isolate, editor: &mut Editor, home: Opti
     };
     let Some(place) = description.place else {
         editor.show_message(match description.kind {
-            Kind::Native => format!("{name} is built into Ox; C-c C-d shows its docs"),
+            Kind::Native | Kind::Macro => {
+                format!("{name} is built into Ox; C-c C-d shows its docs")
+            }
             Kind::Special => format!("{name} is a special form; C-c C-d shows its docs"),
             _ => format!("Ox doesn't know where {name} was defined"),
         });
@@ -245,13 +247,11 @@ mod tests {
 
         go(&mut editor, &mut ox, SHAPES.find("when").unwrap());
         press(&mut editor, &mut ox, "M-.");
-        assert_eq!(editor.buffer().name(), "prelude/core.ox");
-        assert!(editor.buffer().is_read_only());
-        let buffer = editor.buffer();
-        let line = buffer.line_text(buffer.line_of(buffer.point()));
-        assert!(line.starts_with("(defmacro when "), "{line}");
-        press(&mut editor, &mut ox, "M-,");
         assert_eq!(editor.buffer().name(), "shapes.ox");
+        assert_eq!(
+            editor.message(),
+            Some("when is built into Ox; C-c C-d shows its docs")
+        );
 
         go(&mut editor, &mut ox, SHAPES.find("inc").unwrap());
         press(&mut editor, &mut ox, "M-.");

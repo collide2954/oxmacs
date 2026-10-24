@@ -1,5 +1,6 @@
 mod errors;
 mod functions;
+mod macros;
 mod maps;
 mod profiling;
 mod sequences;
@@ -79,4 +80,5 @@ pub(crate) fn install(isolate: &mut Isolate) {
     maps::install(isolate);
     testing::install(isolate);
     profiling::install(isolate);
+    macros::install(isolate);
 }
