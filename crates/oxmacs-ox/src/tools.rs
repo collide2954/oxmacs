@@ -12,7 +12,7 @@ use ox::{Error, read};
 use oxmacs_core::command::{Command, CommandId, DynamicSpec, Scope, ScopeId};
 use oxmacs_core::editor::{Editor, InputLine};
 use oxmacs_core::plugin::PluginBuffer;
-use oxmacs_core::text::BufferId;
+use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
 use crate::{Ox, flashes, help, log, mode, plugins, stacktrace, xref};
@@ -703,9 +703,7 @@ impl Ox {
         let before = log::reports(editor);
         self.reload(editor, path);
         let failed = log::reports(editor) > before;
-        let end = editor
-            .buffer_by_id(id)
-            .map_or(0, |buffer| buffer.len_chars());
+        let end = editor.buffer_by_id(id).map_or(0, Buffer::len_chars);
         flashes::evaluated(editor, id, 0..end, failed);
     }
 

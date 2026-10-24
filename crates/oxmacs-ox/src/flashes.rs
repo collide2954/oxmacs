@@ -5,7 +5,7 @@ use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
 use oxmacs_core::editor::Editor;
-use oxmacs_core::text::BufferId;
+use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
 use crate::views::face_named;
@@ -147,9 +147,7 @@ fn zap(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Valu
             }
         }
     }
-    let last = editor
-        .buffer_by_id(buffer)
-        .map_or(0, oxmacs_core::text::Buffer::len_chars);
+    let last = editor.buffer_by_id(buffer).map_or(0, Buffer::len_chars);
     evaluated(
         editor,
         buffer,
