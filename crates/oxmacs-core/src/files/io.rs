@@ -84,20 +84,100 @@ pub fn load(path: &Path) -> Result<Loaded, FileError> {
     })
 }
 
-pub fn save(path: &Path, text: &str, format: Format) -> Result<DiskState, FileError> {
-    let directory = path
+pub fn same_file(first: &Path, second: &Path) -> bool {
+    match (fs::canonicalize(first), fs::canonicalize(second)) {
+        (Ok(first), Ok(second)) => first == second,
+        _ => first == second,
+    }
+}
+
+fn resolved(path: &Path) -> PathBuf {
+    let mut current = path.to_path_buf();
+    for _ in 0..40 {
+        let linked =
+            fs::symlink_metadata(&current).is_ok_and(|metadata| metadata.file_type().is_symlink());
+        let Some(target) = linked.then(|| fs::read_link(&current).ok()).flatten() else {
+            break;
+        };
+        current = match current.parent() {
+            Some(parent) if target.is_relative() => parent.join(target),
+            _ => target,
+        };
+    }
+    current
+}
+
+#[cfg(unix)]
+fn shared(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    metadata.nlink() > 1
+}
+
+#[cfg(not(unix))]
+fn shared(_: &fs::Metadata) -> bool {
+    false
+}
+
+#[cfg(unix)]
+fn keep_owner(path: &Path, metadata: &fs::Metadata) {
+    use std::os::unix::fs::MetadataExt;
+    let _ = std::os::unix::fs::chown(path, Some(metadata.uid()), Some(metadata.gid()));
+}
+
+#[cfg(not(unix))]
+fn keep_owner(_: &Path, _: &fs::Metadata) {}
+
+enum Replaced {
+    Done,
+    InPlace,
+}
+
+fn replace(target: &Path, bytes: &[u8], existing: Option<&fs::Metadata>) -> io::Result<Replaced> {
+    let directory = target
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let mut temp = NamedTempFile::new_in(directory).map_err(FileError::io(path))?;
-    temp.write_all(&encode(text, format))
-        .and_then(|()| temp.as_file().sync_all())
-        .map_err(FileError::io(path))?;
-    if let Ok(metadata) = fs::metadata(path) {
-        fs::set_permissions(temp.path(), metadata.permissions()).map_err(FileError::io(path))?;
+    let mut temp = match NamedTempFile::new_in(directory) {
+        Ok(temp) => temp,
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied && existing.is_some() => {
+            return Ok(Replaced::InPlace);
+        }
+        Err(error) => return Err(error),
+    };
+    temp.write_all(bytes)?;
+    temp.as_file().sync_all()?;
+    if let Some(metadata) = existing {
+        fs::set_permissions(temp.path(), metadata.permissions())?;
+        keep_owner(temp.path(), metadata);
     }
-    temp.persist(path)
-        .map_err(|error| FileError::io(path)(error.error))?;
+    match temp.persist(target) {
+        Ok(_) => Ok(Replaced::Done),
+        Err(_) if existing.is_some() => Ok(Replaced::InPlace),
+        Err(error) => Err(error.error),
+    }
+}
+
+fn write_in_place(target: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(target)?;
+    file.write_all(bytes)?;
+    file.sync_all()
+}
+
+pub fn save(path: &Path, text: &str, format: Format) -> Result<DiskState, FileError> {
+    let target = resolved(path);
+    let bytes = encode(text, format);
+    let existing = fs::metadata(&target).ok();
+    let replaced = if existing.as_ref().is_some_and(shared) {
+        Replaced::InPlace
+    } else {
+        replace(&target, &bytes, existing.as_ref()).map_err(FileError::io(path))?
+    };
+    if matches!(replaced, Replaced::InPlace) {
+        write_in_place(&target, &bytes).map_err(FileError::io(path))?;
+    }
     DiskState::of(path)
         .map_err(FileError::io(path))?
         .ok_or_else(|| FileError::io(path)(io::ErrorKind::NotFound.into()))
@@ -192,6 +272,102 @@ mod tests {
         let path = dir.path().join("missing").join("a.txt");
 
         assert!(save(&path, "hi", Format::default()).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn saving_through_a_symlink_writes_its_target_and_keeps_the_link() {
+        let dir = temp();
+        let target = dir.path().join("target.txt");
+        let link = dir.path().join("link.txt");
+        fs::write(&target, "old").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        save(&link, "new", Format::default()).unwrap();
+
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn saving_keeps_hard_links_together() {
+        let dir = temp();
+        let path = dir.path().join("a.txt");
+        let twin = dir.path().join("b.txt");
+        fs::write(&path, "old").unwrap();
+        fs::hard_link(&path, &twin).unwrap();
+
+        save(&path, "new", Format::default()).unwrap();
+
+        assert_eq!(fs::read_to_string(&twin).unwrap(), "new");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn saving_in_a_folder_that_cannot_take_new_files_writes_in_place() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = temp();
+        let folder = dir.path().join("locked");
+        fs::create_dir(&folder).unwrap();
+        let path = folder.join("a.txt");
+        fs::write(&path, "old").unwrap();
+        fs::set_permissions(&folder, fs::Permissions::from_mode(0o555)).unwrap();
+        let unlocked = fs::write(folder.join("probe"), "").is_ok();
+
+        let saved = save(&path, "new", Format::default());
+
+        fs::set_permissions(&folder, fs::Permissions::from_mode(0o755)).unwrap();
+        if unlocked {
+            return;
+        }
+        saved.unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn saving_a_file_another_program_holds_open_writes_in_place() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let dir = temp();
+        let path = dir.path().join("held.txt");
+        fs::write(&path, "old").unwrap();
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1 | 2)
+            .open(&path)
+            .unwrap();
+
+        save(&path, "new", Format::default()).unwrap();
+
+        drop(held);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new");
+    }
+
+    #[test]
+    fn the_same_file_is_recognized_through_other_spellings() {
+        let dir = temp();
+        let path = dir.path().join("a.txt");
+        fs::write(&path, "").unwrap();
+        let other = dir.path().join("b.txt");
+        fs::write(&other, "").unwrap();
+
+        assert!(same_file(&path, &dir.path().join(".").join("a.txt")));
+        assert!(!same_file(&path, &other));
+        assert!(same_file(
+            &dir.path().join("new.txt"),
+            &dir.path().join("new.txt")
+        ));
+        if cfg!(windows) {
+            assert!(same_file(&path, &dir.path().join("A.TXT")));
+        }
     }
 
     #[cfg(unix)]

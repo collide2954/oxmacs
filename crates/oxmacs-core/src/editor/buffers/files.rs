@@ -261,10 +261,11 @@ impl Editor {
         if let Some(open) = self.file_opener(&path) {
             return open(self, &path);
         }
-        if let Some(index) = self
-            .buffers
-            .position(|buffer| buffer.file().is_some_and(|file| file.path == path))
-        {
+        if let Some(index) = self.buffers.position(|buffer| {
+            buffer
+                .file()
+                .is_some_and(|file| files::same_file(&file.path, &path))
+        }) {
             self.select_buffer(index);
             return true;
         }
@@ -439,6 +440,26 @@ mod tests {
         assert!(read_only);
         editor.open_file(&dir.path().join("b.txt"));
         assert!(!editor.buffer().is_read_only());
+    }
+
+    #[test]
+    fn the_same_file_by_another_spelling_reuses_its_buffer() {
+        let (dir, mut editor) = workspace();
+        editor.open_file(&dir.path().join("a.txt"));
+        let count = editor.buffer_names().len();
+
+        let other = if cfg!(windows) {
+            dir.path().join("A.TXT")
+        } else {
+            let link = dir.path().join("link.txt");
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(dir.path().join("a.txt"), &link).unwrap();
+            link
+        };
+        editor.open_file(&other);
+
+        assert_eq!(editor.buffer_names().len(), count);
+        assert_eq!(editor.buffer().contents(), "hello");
     }
 
     #[test]
