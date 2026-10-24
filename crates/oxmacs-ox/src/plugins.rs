@@ -8,7 +8,7 @@ use ox::value::{Value, print};
 use ox::{Error, Isolate};
 use oxmacs_core::command::{DynamicSpec, Scope};
 use oxmacs_core::editor::Editor;
-use semver::Version;
+use semver::{Version, VersionReq};
 
 use crate::{commands, hooks, log, modes, views};
 
@@ -58,6 +58,7 @@ struct Manifest {
     opt_in: bool,
     modes: Vec<modes::Declared>,
     wakes_for: Vec<String>,
+    requires: Vec<(String, VersionReq)>,
 }
 
 #[derive(Debug, Clone)]
@@ -233,6 +234,25 @@ fn version_of(heap: &Heap, name: &str, value: Value) -> Result<Version, String> 
         })
 }
 
+fn requires_of(heap: &Heap, name: &str, value: Value) -> Result<Vec<(String, VersionReq)>, String> {
+    let wrong = |shown: String| {
+        format!(
+            "{name}'s :requires must map plugin names to version ranges such as \"^1.2\", got {shown}"
+        )
+    };
+    heap.entries(value)
+        .ok_or_else(|| wrong(print::brief(heap, value)))?
+        .into_iter()
+        .map(|(key, range)| {
+            let plugin = keyword(key).ok_or_else(|| wrong(print::brief(heap, key)))?;
+            heap.text(range)
+                .and_then(|text| VersionReq::parse(text).ok())
+                .map(|range| (plugin.to_owned(), range))
+                .ok_or_else(|| wrong(format!("{} for {plugin}", print::brief(heap, range))))
+        })
+        .collect()
+}
+
 fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
     let items = heap
         .elements(value)
@@ -256,6 +276,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
         opt_in: false,
         modes: Vec::new(),
         wakes_for: Vec::new(),
+        requires: Vec::new(),
     };
     for pair in options.chunks(2) {
         let [key, value] = pair else {
@@ -296,6 +317,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
             Some("opens-directories") => manifest.opens_directories = value.truthy(),
             Some("opt-in") => manifest.opt_in = value.truthy(),
             Some("modes") => manifest.modes = modes::declared(heap, *value)?,
+            Some("requires") => manifest.requires = requires_of(heap, &manifest.name, *value)?,
             Some("wakes-for") => {
                 manifest.wakes_for = heap
                     .elements(*value)
@@ -542,6 +564,9 @@ pub fn discover(
             });
         }
     }
+    if let Some(home) = home {
+        isolate.add_root(home.join("plugins"));
+    }
     let mut folders: Vec<PathBuf> = home
         .map(|home| home.join("plugins"))
         .and_then(|plugins| fs::read_dir(plugins).ok())
@@ -561,18 +586,19 @@ pub fn discover(
         else {
             continue;
         };
-        let origin = Origin::Folder(folder);
         match known
             .iter_mut()
             .find(|plugin| plugin.manifest.name == manifest.name)
         {
             Some(bundled) => {
+                let files = folder_files(&folder);
+                add_sources(isolate, &manifest.name, &manifest.entry, &files);
                 bundled.manifest = manifest;
-                bundled.origin = origin;
+                bundled.origin = Origin::Folder(folder);
             }
             None => known.push(Plugin {
                 manifest,
-                origin,
+                origin: Origin::Folder(folder),
                 active: false,
                 loaded: false,
                 config: Vec::new(),
@@ -961,6 +987,47 @@ pub fn wake_waiting(isolate: &mut Isolate, editor: &mut Editor) {
     }
 }
 
+fn unmet(plugins: &Plugins, manifest: &Manifest) -> Vec<String> {
+    let needs = &manifest.name;
+    manifest
+        .requires
+        .iter()
+        .filter_map(|(required, range)| {
+            if required == "ox" {
+                let this = Version::parse(env!("CARGO_PKG_VERSION")).ok()?;
+                return (!range.matches(&this))
+                    .then(|| format!("{needs} needs oxmacs {range}, but this is oxmacs {this}"));
+            }
+            let found = plugins
+                .known
+                .iter()
+                .find(|plugin| plugin.manifest.name == *required);
+            match found {
+                None => Some(format!(
+                    "{needs} needs {required} {range}, but {required} isn't installed"
+                )),
+                Some(found) if !range.matches(&found.manifest.version) => Some(format!(
+                    "{needs} needs {required} {range}, but {required} is {}",
+                    found.manifest.version
+                )),
+                Some(_) => None,
+            }
+        })
+        .collect()
+}
+
+fn wake_required(isolate: &mut Isolate, editor: &mut Editor, name: &str) {
+    let active = editor.plugin_state::<Plugins>().is_some_and(|plugins| {
+        plugins
+            .known
+            .iter()
+            .any(|plugin| plugin.manifest.name == name && plugin.active)
+    });
+    if active {
+        let _ = wake(isolate, editor, name);
+    }
+}
+
 fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) -> bool {
     let Some(plugins) = editor.plugin_state_mut::<Plugins>() else {
         return false;
@@ -974,6 +1041,16 @@ fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) -> bool {
     };
     plugin.loaded = true;
     let plugin = plugin.clone();
+    let problems = unmet(plugins, &plugin.manifest);
+    if !problems.is_empty() {
+        for problem in problems {
+            log::report(editor, &Error::new(problem), None);
+        }
+        return false;
+    }
+    for (required, _) in &plugin.manifest.requires {
+        wake_required(isolate, editor, required);
+    }
     let files = match &plugin.origin {
         Origin::Bundled(files) => bundled_files(name, files),
         Origin::Folder(folder) => folder_files(folder),
@@ -1490,6 +1567,148 @@ mod tests {
         );
         assert!(
             shown.contains("typo's plugin.ox has no key :descripton"),
+            "{shown}"
+        );
+    }
+
+    const BASE_FILES: &[(&str, &str)] = &[
+        (
+            "base.ox",
+            "(module (import (base words)))\n(swap! words/order conj \"base\")\n(defcommand base-hi \"Hi\" (message \"hi\"))",
+        ),
+        ("words.ox", "(def order (atom []))"),
+    ];
+
+    const BASE: Bundle = Bundle {
+        name: "base",
+        files: &[
+            (
+                "plugin.ox",
+                "(plugin base :version \"1.2.0\" :commands {base-hi: \"Hi\"})",
+            ),
+            BASE_FILES[0],
+            BASE_FILES[1],
+        ],
+    };
+
+    const OPT_IN_BASE: Bundle = Bundle {
+        name: "base",
+        files: &[
+            (
+                "plugin.ox",
+                "(plugin base :version \"1.2.0\" :opt-in true :commands {base-hi: \"Hi\"})",
+            ),
+            BASE_FILES[0],
+            BASE_FILES[1],
+        ],
+    };
+
+    const USER_ENTRY: &str = "(module (import (base words)))\n(swap! words/order conj \"user\")\n(defcommand use-it \"Use it\" (message (str @words/order)))";
+
+    macro_rules! needing {
+        ($requires:literal) => {
+            Bundle {
+                name: "user",
+                files: &[
+                    (
+                        "plugin.ox",
+                        concat!(
+                            "(plugin user :version \"1.0.0\" :requires ",
+                            $requires,
+                            " :commands {use-it: \"Use it\"})"
+                        ),
+                    ),
+                    ("user.ox", USER_ENTRY),
+                ],
+            }
+        };
+    }
+
+    const USER: Bundle = needing!("{base: \"^1.1\" ox: \">=0.1\"}");
+
+    #[test]
+    fn plugins_wake_what_they_require_first() {
+        let home = home_with(&[]);
+        let (mut editor, mut ox) = started(&[BASE, USER], home.path());
+
+        run(&mut editor, &mut ox, "use-it");
+
+        assert_eq!(editor.message(), Some(r#"["base" "user"]"#));
+        assert_eq!(logged(&editor), "");
+    }
+
+    #[test]
+    fn a_required_opt_in_plugin_lends_its_modules_but_stays_off() {
+        let home = home_with(&[]);
+        let (mut editor, mut ox) = started(&[OPT_IN_BASE, USER], home.path());
+
+        run(&mut editor, &mut ox, "use-it");
+
+        assert_eq!(editor.message(), Some(r#"["user"]"#));
+        assert!(editor.command_named("base-hi").is_none());
+        assert_eq!(logged(&editor), "");
+    }
+
+    #[test]
+    fn libraries_in_your_folder_can_be_imported_before_they_start() {
+        let home = home_with(&[
+            ("plugins/base/plugin.ox", "(plugin base :version \"1.2.0\")"),
+            ("plugins/base/words.ox", "(def order (atom []))"),
+            (
+                "plugins/user/plugin.ox",
+                "(plugin user :version \"1.0.0\" :requires {base: \"^1\"} :commands {use-it: \"Use it\"})",
+            ),
+            ("plugins/user/user.ox", USER_ENTRY),
+            ("init.ox", "(use-plugin user)"),
+        ]);
+        let (mut editor, mut ox) = started(&[], home.path());
+
+        run(&mut editor, &mut ox, "use-it");
+
+        assert_eq!(editor.message(), Some(r#"["user"]"#));
+        assert_eq!(logged(&editor), "");
+    }
+
+    #[test]
+    fn plugins_whose_requirements_are_not_met_stay_asleep() {
+        const NEWER: Bundle = needing!("{base: \"^2\"}");
+        const MISSING: Bundle = needing!("{elsewhere: \"*\"}");
+        const FUTURE: Bundle = needing!("{ox: \">=99\"}");
+        let this = env!("CARGO_PKG_VERSION");
+        for (user, problem) in [
+            (NEWER, "user needs base ^2, but base is 1.2.0".to_owned()),
+            (
+                MISSING,
+                "user needs elsewhere *, but elsewhere isn't installed".to_owned(),
+            ),
+            (
+                FUTURE,
+                format!("user needs oxmacs >=99, but this is oxmacs {this}"),
+            ),
+        ] {
+            let home = home_with(&[]);
+            let bundles: &'static [Bundle] = Box::leak(Box::new([BASE, user]));
+            let (mut editor, mut ox) = started(bundles, home.path());
+
+            run(&mut editor, &mut ox, "use-it");
+
+            assert!(logged(&editor).contains(&problem), "{}", logged(&editor));
+            assert_ne!(editor.message(), Some(r#"["base" "user"]"#));
+        }
+    }
+
+    #[test]
+    fn requirements_must_be_version_ranges() {
+        const WRONG: Bundle = needing!("{base: \"one\"}");
+        let home = home_with(&[]);
+        let (editor, _) = started(&[BASE, WRONG], home.path());
+
+        assert!(editor.command_named("use-it").is_none());
+        let shown = logged(&editor);
+        assert!(
+            shown.contains(
+                "user's :requires must map plugin names to version ranges such as \"^1.2\", got \"one\" for base"
+            ),
             "{shown}"
         );
     }

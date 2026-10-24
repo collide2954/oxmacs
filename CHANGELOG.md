@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- The modules of plugins in your own folder can be imported before those plugins start, so a plugin there can be a library that is never turned on.
 - Holding a key to move through an Ox file no longer lags: highlighting remembers where each line's form left off instead of lexing from the start of the form for every line it draws.
 - `ox check` skips modules that call editor-only functions when they load, instead of reporting each call as an error, and the bundled plugins pass `ox fmt --check` and `ox check` again.
 - `net/send` on a connection the server has closed returns false on every system once its lines have ended, instead of sometimes queueing the line on Windows.
@@ -86,6 +87,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Plugins can require other plugins and oxmacs itself in `plugin.ox`, as `:requires {markdown: "^0.2" ox: ">=0.14"}`. Required plugins start first, one that is off lends its modules without starting, and a plugin whose requirements are missing or the wrong version stays off and says why in `*ox log*`.
 - The README and the Ox manual list the bundled plugins, with their versions, whether they are on by default and what they do, and Ox's built-in modules; a test keeps both lists in step with the plugins and modules.
 - `M-;` in R Markdown comments with `#` inside R chunks and with `<!-- -->` in the prose around them, toggling a selection, starting a comment on a blank line, or adding one at the end of a line of code.
 - The r plugin's `completion-delay` and `signature-delay` settings set how long typing rests before R completion pops up on its own and before a call's arguments show, 0.25 and 0.4 seconds by default.

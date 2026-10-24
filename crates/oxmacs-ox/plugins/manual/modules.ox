@@ -50,7 +50,7 @@ So plugins do two jobs: they add features to the editor, and they are Ox's stand
 (get (render/render "# Notes\n\n- one\n- two" 40) :lines)
 ```
 
-The modules of bundled plugins can always be imported. A plugin in your own folder can be imported once it has started; [Writing a plugin](plugins) shows how to make one start with oxmacs.
+A plugin that imports another plugin's modules names that plugin in the `:requires` of its manifest, which makes them importable even when that plugin is off; see [Writing a plugin](plugins).
 
 ## Built-in modules
 

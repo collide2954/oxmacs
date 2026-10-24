@@ -47,7 +47,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `git` | 0.3.0 | opt-in | Git status and staging in the style of Magit |
 | `irc` | 0.9.1 | opt-in | An IRCv3 client in the style of ERC |
 | `life` | 0.2.0 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.2 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.3 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.0 | opt-in | Markdown rendered as styled text |
 | `processes` | 0.1.1 | on | List the processes oxmacs runs, with their usage |
 | `profiler` | 0.1.1 | on | Find where the Ox code in oxmacs spends its time |
