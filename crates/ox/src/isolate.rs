@@ -63,6 +63,7 @@ fn plain(
         outside: false,
         resumable: None,
         drains: None,
+        captured: Box::new([]),
     }
 }
 
@@ -249,6 +250,10 @@ impl Isolate {
 
     pub fn heap_mut(&mut self) -> &mut Heap {
         &mut self.runtime.heap
+    }
+
+    pub(crate) fn runtime_mut(&mut self) -> &mut Runtime {
+        &mut self.runtime
     }
 
     pub fn add_root(&mut self, root: impl Into<PathBuf>) {
@@ -1092,16 +1097,21 @@ impl Isolate {
         let parameters_of = |value: Value| {
             heap.closure_of(value)
                 .and_then(|closure| closure.code.parameters.clone())
+                .or_else(|| heap.native_of(value)?.parameters().cloned())
         };
         let mut doc = self.runtime.doc(owner, short).map(str::to_owned);
-        let (kind, parameters) = if let Some(native) = heap.native_of(value) {
+        let built_in = heap
+            .native_of(value)
+            .filter(|native| native.parameters().is_none());
+        let (kind, parameters) = if let Some(native) = built_in {
             let entry = self.docs().entries.get(native.name.name());
             doc = entry.map(|entry| entry.doc.clone());
             let parameters = entry.map_or_else(
                 || describe::fallback(native.least, native.most),
                 |entry| entry.parameters.clone(),
             );
-            (Kind::Native, Some(parameters))
+            let kind = if macros { Kind::Macro } else { Kind::Native };
+            (kind, Some(parameters))
         } else if let Some(record) = heap.record_type_of(value) {
             let parameters = parameters_of(record.constructor).map(|shown| shown.to_string());
             (Kind::Record, parameters)
@@ -1219,38 +1229,48 @@ impl Isolate {
 
     pub fn undocumented(&self) -> Vec<String> {
         let docs = self.docs();
+        let heap = &self.runtime.heap;
         let mut problems = docs.broken.clone();
         let mut natives = HashSet::new();
+        let mut check = |native: &Native, problems: &mut Vec<String>| {
+            let shown = native.name.name();
+            natives.insert(shown);
+            match docs.entries.get(shown) {
+                None => problems.push(format!("{shown} has no doc entry")),
+                Some(entry) if !entry.fits(native.least, native.most) => {
+                    problems.push(format!(
+                        "{shown} takes {} arguments but its doc entry shows {}",
+                        describe::fallback(native.least, native.most),
+                        describe::fallback(entry.least, entry.most)
+                    ));
+                }
+                Some(_) => {}
+            }
+        };
+        let built_in = |value: Value| {
+            heap.native_of(value)
+                .filter(|native| native.parameters().is_none())
+        };
         for module in &self.runtime.modules {
             let library = module.name == "ox" || module.name.starts_with("ox/");
             for (name, value) in &module.globals {
                 if name.name().starts_with('#') {
                     continue;
                 }
-                if let Some(native) = self.runtime.heap.native_of(*value) {
-                    let shown = native.name.name();
-                    natives.insert(shown);
-                    match docs.entries.get(shown) {
-                        None => problems.push(format!("{shown} has no doc entry")),
-                        Some(entry) if !entry.fits(native.least, native.most) => {
-                            problems.push(format!(
-                                "{shown} takes {} arguments but its doc entry shows {}",
-                                describe::fallback(native.least, native.most),
-                                describe::fallback(entry.least, entry.most)
-                            ));
-                        }
-                        Some(_) => {}
-                    }
+                if let Some(native) = built_in(*value) {
+                    check(native, &mut problems);
                 } else if library
-                    && self.runtime.heap.closure_of(*value).is_some()
+                    && (heap.closure_of(*value).is_some() || heap.native_of(*value).is_some())
                     && !module.docs.contains_key(name)
                 {
                     problems.push(format!("{} has no docstring", name.name()));
                 }
             }
             if library {
-                for name in module.macros.keys() {
-                    if !module.docs.contains_key(name) {
+                for (name, value) in &module.macros {
+                    if let Some(native) = built_in(*value) {
+                        check(native, &mut problems);
+                    } else if !module.docs.contains_key(name) {
                         problems.push(format!("the macro {} has no docstring", name.name()));
                     }
                 }

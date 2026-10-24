@@ -15,7 +15,7 @@ fn int(number: usize) -> Value {
     Value::Int(i64::try_from(number).unwrap_or(i64::MAX))
 }
 
-fn expected(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
+pub(crate) fn expected(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects {what}, got {}",
         print::brief(heap, value)
@@ -38,7 +38,7 @@ pub(crate) fn index(heap: &Heap, name: &str, value: Value) -> Result<i64, Error>
     }
 }
 
-fn is_list(heap: &Heap, value: Value) -> bool {
+pub(crate) fn is_list(heap: &Heap, value: Value) -> bool {
     value == Value::Nil || heap.pair_of(value).is_some()
 }
 
@@ -55,7 +55,7 @@ fn vector_of(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
     store(heap, vector)
 }
 
-fn map_or_nil(heap: &Heap, name: &str, collection: Value) -> Result<Map, Error> {
+pub(crate) fn map_or_nil(heap: &Heap, name: &str, collection: Value) -> Result<Map, Error> {
     if collection == Value::Nil {
         return Ok(Map::EMPTY);
     }
@@ -135,7 +135,7 @@ fn disj(heap: &mut Heap, collection: Value, items: &[Value]) -> Result<Value, Er
     store_set(heap, set)
 }
 
-fn contains(heap: &Heap, collection: Value, key: Value) -> Result<Value, Error> {
+pub(crate) fn contains(heap: &Heap, collection: Value, key: Value) -> Result<Value, Error> {
     if collection == Value::Nil {
         return Ok(Value::Bool(false));
     }
@@ -215,7 +215,7 @@ fn conj_entries(heap: &mut Heap, map: Map, items: &[Value]) -> Result<Value, Err
     store_map(heap, map)
 }
 
-fn count(heap: &Heap, value: Value) -> Result<Value, Error> {
+pub(crate) fn count(heap: &Heap, value: Value) -> Result<Value, Error> {
     if let Some(length) = heap.length(value) {
         return Ok(int(length));
     }
@@ -298,7 +298,7 @@ pub(crate) fn vec(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
     vector_of(heap, &items)
 }
 
-fn conj(heap: &mut Heap, collection: Value, items: &[Value]) -> Result<Value, Error> {
+pub(crate) fn conj(heap: &mut Heap, collection: Value, items: &[Value]) -> Result<Value, Error> {
     if let Some(vector) = heap.vector_of(collection) {
         let grown = items
             .iter()
@@ -322,7 +322,7 @@ fn conj(heap: &mut Heap, collection: Value, items: &[Value]) -> Result<Value, Er
     Err(expected(heap, "conj", "a collection", collection))
 }
 
-fn assoc(heap: &mut Heap, collection: Value, pairs: &[Value]) -> Result<Value, Error> {
+pub(crate) fn assoc(heap: &mut Heap, collection: Value, pairs: &[Value]) -> Result<Value, Error> {
     if pairs.len() % 2 == 1 {
         return Err(Error::new("assoc takes a collection and key value pairs"));
     }
@@ -391,7 +391,7 @@ fn peek(heap: &Heap, collection: Value) -> Result<Value, Error> {
     Err(expected(heap, "peek", "a vector or list", collection))
 }
 
-fn first(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
+pub(crate) fn first(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
     if let Some(pair) = heap.pair_of(collection) {
         return Ok(pair.head);
     }
@@ -402,7 +402,7 @@ fn first(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
     Ok(items.first().copied().unwrap_or(Value::Nil))
 }
 
-fn rest(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
+pub(crate) fn rest(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
     if is_list(heap, collection) {
         return Ok(heap
             .pair_of(collection)
@@ -412,7 +412,7 @@ fn rest(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
     vector_of(heap, items.get(1..).unwrap_or_default())
 }
 
-fn range(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+pub(crate) fn range(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let mut numbers = Vec::with_capacity(arguments.len());
     for value in arguments {
         let Value::Int(number) = value else {

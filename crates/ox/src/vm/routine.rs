@@ -4,11 +4,11 @@ use std::rc::Rc;
 use crate::bytecode::{Code, Op};
 use crate::error::Error;
 use crate::heap::Heap;
-use crate::native::Control;
+use crate::native::{Control, Native, NativeFn};
 use crate::symbol::Sym;
 use crate::value::Value;
 use crate::vm::Runtime;
-use crate::vm::build::{make_vector, raised};
+use crate::vm::build::{full, make_vector, raised};
 use crate::vm::machine::Generator;
 
 pub(crate) const RAISED: u32 = 3;
@@ -41,6 +41,8 @@ pub(crate) type Start = dyn Fn(&mut Runtime, Value, &[Value]) -> Result<Started,
 pub(crate) struct Resumable {
     pub(crate) start: Box<Start>,
     pub(crate) code: Rc<Code>,
+    pub(crate) parameters: Option<Rc<str>>,
+    stub: Rc<NativeFn>,
 }
 
 impl fmt::Debug for Resumable {
@@ -54,6 +56,7 @@ impl fmt::Debug for Resumable {
 
 impl Resumable {
     pub(crate) fn new(name: Sym, start: Box<Start>) -> Self {
+        let message = format!("{} can only be called from Ox", name.name());
         Self {
             start,
             code: Rc::new(Code {
@@ -62,6 +65,18 @@ impl Resumable {
                 ops: vec![Op::Resume, Op::Invoke, Op::Jump { to: 0 }, Op::Raised],
                 ..Code::default()
             }),
+            parameters: None,
+            stub: Rc::new(move |_, _, _| Err(Error::new(message.clone()))),
+        }
+    }
+
+    pub(crate) fn closure(
+        parameters: &str,
+        start: impl Fn(&mut Runtime, Value, &[Value]) -> Result<Started, Error> + 'static,
+    ) -> Self {
+        Self {
+            parameters: Some(parameters.into()),
+            ..Self::new(Sym::intern("fn"), Box::new(start))
         }
     }
 
@@ -81,6 +96,46 @@ impl Resumable {
 
 pub(crate) fn is_generator(heap: &Heap, value: Value) -> bool {
     heap.generator_of(value).is_some()
+}
+
+pub(crate) fn captured(heap: &Heap, callee: Value, at: usize) -> Value {
+    heap.native_of(callee)
+        .and_then(|native| native.captured.get(at).copied())
+        .unwrap_or(Value::Nil)
+}
+
+impl Runtime {
+    pub(crate) fn make_closure(
+        &mut self,
+        kind: &Rc<Resumable>,
+        name: Sym,
+        least: usize,
+        most: Option<usize>,
+        captured: &[Value],
+    ) -> Result<Value, Error> {
+        self.heap
+            .native(Native {
+                name,
+                least,
+                most,
+                function: Rc::clone(&kind.stub),
+                control: None,
+                awaits: false,
+                outside: false,
+                resumable: Some(Rc::clone(kind)),
+                drains: None,
+                captured: captured.into(),
+            })
+            .map_err(full)
+    }
+
+    pub(crate) fn native_closure(
+        &mut self,
+        kind: &Rc<Resumable>,
+        captured: &[Value],
+    ) -> Result<Value, Error> {
+        self.make_closure(kind, Sym::intern("fn"), 0, None, captured)
+    }
 }
 
 pub(crate) fn finished(heap: &Heap, generator: Value) -> bool {

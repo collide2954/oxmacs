@@ -1,29 +1,3 @@
-(deferror error [])
-(deferror type-error [])
-(deferror arity-error [])
-(deferror name-error [])
-(deferror range-error [])
-(deferror zero-division-error [])
-(deferror no-match-error [])
-(deferror expectation-failed [])
-(def (identity x) "Returns x." x)
-
-(def (constantly x)
-  "A function that ignores its arguments and always returns x."
-  (fn [& _] x))
-
-(def (not x)
-  "True when x is false or nil."
-  (if x false true))
-
-(def (nil? x)
-  "True when x is nil."
-  (identical? x nil))
-
-(def (some? x)
-  "True when x is anything but nil."
-  (not (nil? x)))
-
 (def (complement f)
   "A function that returns the opposite truth of f: ((complement even?) 3) is true."
   (fn [& args] (not (apply f args))))
@@ -121,19 +95,6 @@
            (step (+ i 1) (if (nil? value) out (cons value out))))
          (reverse out)))
      0 nil)))
-
-(def (distinct coll)
-  "The items of coll without repeats, in their first order."
-  (let [items (vec coll)
-        n (count items)]
-    ((fn step [i seen out]
-       (if (< i n)
-         (let [item (nth items i)]
-           (if (contains? seen item)
-             (step (+ i 1) seen out)
-             (step (+ i 1) (conj seen item) (cons item out))))
-         (reverse out)))
-     0 (set []) nil)))
 
 (def (sort-by key coll)
   "The items of coll sorted by (key item), keeping the order of ties."
@@ -241,12 +202,6 @@
   "Calls f every ms milliseconds in a task of its own, until f returns :stop."
   (spawn ((fn tick [] (sleep ms) (unless (= (f) :stop) (tick))))))
 
-(def (drop n coll)
-  "The items of coll after the first n, as a vector."
-  (let [items (vec coll)
-        total (count items)]
-    ((fn step [i out] (if (< i total) (step (+ i 1) (cons (nth items i) out)) (reverse out))) (min n total) nil)))
-
 (def (take-while keep? coll)
   "The items of a collection or generator up to the first for which keep? is falsy."
   (if (generator? coll)
@@ -271,36 +226,10 @@
   "A generator of x, (f x), (f (f x)) and so on, without end: (take 3 (iterate inc 0)) is [0 1 2]."
   (gen ((fn step [value] (yield value) (step (f value))) x)))
 
-(def (chunk n coll)
-  "The items of coll in vectors of n, the last one perhaps shorter: (chunk 2 [1 2 3]) is [[1 2] [3]]."
-  (let [items (vec coll)
-        total (count items)]
-    ((fn step [i out]
-       (if (< i total)
-         (step (+ i n) (conj out (take n (drop i items))))
-         out))
-     0 [])))
-
-(def (partition n coll)
-  "The items of coll in vectors of exactly n, leaving out any short last group."
-  (filter (fn [group] (= (count group) n)) (chunk n coll)))
-
-(def (flatten coll)
-  "The items of nested vectors and lists, in one flat vector."
-  (reduce (fn [out item]
-            (if (or (vector? item) (list? item))
-              (into out (flatten item))
-              (conj out item)))
-          [] (vec coll)))
-
 (def (find pred coll)
   "The first item of coll for which pred is truthy, or nil."
   (when-let [found (some (fn [item] (when (pred item) [item])) coll)]
     (first found)))
-
-(def (frequencies coll)
-  "A map from each distinct item of coll to how many times it appears."
-  (reduce (fn [counts item] (assoc counts item (+ 1 (get counts item 0)))) {} coll))
 
 (def (group-by key coll)
   "A map from each (key item) to a vector of the items that gave it."
@@ -309,42 +238,9 @@
               (assoc groups k (conj (get groups k []) item))))
           {} coll))
 
-(def (zip & colls)
-  "Vectors of the items of the collections side by side: (zip [1 2] [:a :b]) is [[1 :a] [2 :b]]."
-  (apply map vector colls))
-
-(def (interleave & colls)
-  "One item from each collection in turn: (interleave [1 2] [:a :b]) is [1 :a 2 :b]."
-  (mapcat identity (apply zip colls)))
-
-(def (repeat n x)
-  "A vector of x, n times."
-  (map (fn [_] x) (range n)))
-
-(def (get-in m path & default)
-  "The value found by following the keys of path into nested maps and vectors, or default, or nil."
-  (let [found (reduce (fn [value key] (if (nil? value) nil (get value key))) m path)]
-    (if (and (nil? found) (not (empty? default))) (first default) found)))
-
-(def (assoc-in m path value)
-  "A copy of nested maps m with value set at the keys of path, making maps on the way as needed."
-  (let [key (first path)
-        more (rest path)]
-    (if (empty? more)
-      (assoc m key value)
-      (assoc m key (assoc-in (get m key {}) more value)))))
-
 (def (update-in m path f & args)
   "A copy of nested maps m with the value at path changed to (f value args...)."
   (assoc-in m path (apply f (get-in m path) args)))
-
-(def (merge & maps)
-  "One map with the entries of all the maps, later ones winning."
-  (reduce (fn [out m]
-            (if (nil? m)
-              out
-              (reduce (fn [out key] (assoc out key (get m key))) (or out {}) (keys m))))
-          nil maps))
 
 (def (merge-with f & maps)
   "Merges the maps like merge, combining the values of a key found in more than one with f."
@@ -355,10 +251,6 @@
                         (assoc out key (if (contains? out key) (f (get out key) (get m key)) (get m key))))
                       (or out {}) (keys m))))
           nil maps))
-
-(def (select-keys m wanted)
-  "A map of just the entries of m whose keys are in wanted."
-  (reduce (fn [out key] (if (contains? m key) (assoc out key (get m key)) out)) {} wanted))
 
 (def (juxt & fs)
   "A function that calls each of fs with its arguments and returns their results in a vector: ((juxt first last) [1 2 3]) is [1 3]."
@@ -391,27 +283,10 @@
     `(let [~name ~value]
        (as-> ~(first forms) ~name ~@(rest forms)))))
 
-(def registered-tests (atom []))
-
 (defmacro test [title & body]
   "Registers a test called title that ox test runs; it passes unless body raises, and expect raises on a false check."
   `(do (swap! registered-tests conj {name: ~title run: (fn [] ~@body)})
      nil))
-
-(def (shown-plainly? form)
-  "True when form reads the same as its value, so expect doesn't repeat it."
-  (or (number? form) (string? form) (keyword? form) (nil? form) (bool? form) (char? form)))
-
-(def (explain form values)
-  "The text expect shows when form failed: the form, then what each argument evaluated to."
-  (apply str (pr-str form)
-         (map (fn [pair]
-                (if (shown-plainly? (nth pair 0))
-                  ""
-                  "\n  {(pr-str (nth pair 0))} => {(pr-str (nth pair 1))}"))
-              (zip (rest form) values))))
-
-(def plain-heads #{"and" "or" "not" "if" "when" "unless" "cond" "let" "do" "match" "try"})
 
 (defmacro expect [form]
   "Checks that form is truthy, raising expectation-failed with what each argument was when it isn't: (expect (= (area 2 3) 6))."
@@ -424,7 +299,3 @@
          true
          (raise (expectation-failed (explain '~form values)))))
     `(if ~form true (raise (expectation-failed (pr-str '~form))))))
-
-(def (profile-report found)
-  "Prints the :report of a profile."
-  (print (get found :report)))

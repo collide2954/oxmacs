@@ -196,7 +196,11 @@ impl<'a> Printer<'a> {
                 Promise::Failed(_) => self.out.push_str("#<promise failed>"),
             }
         } else if let Some(native) = heap.native_of(value) {
-            let _ = write!(self.out, "#<native {}>", native.name.name());
+            if native.parameters().is_some() {
+                self.out.push_str("#<fn>");
+            } else {
+                let _ = write!(self.out, "#<native {}>", native.name.name());
+            }
         } else if let Some(closure) = heap.closure_of(value) {
             match closure.code.name {
                 Some(name) => {

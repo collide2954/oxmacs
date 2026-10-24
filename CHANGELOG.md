@@ -49,7 +49,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
-- `vec`, `take` and `profile` are built into Ox in Rust instead of written in Ox. Rust functions can now call Ox functions and wait for them, so a function passed to one can still `await`, `sleep` and `yield`.
+- More of Ox's core library is built into Ox in Rust instead of written in Ox: the error types, `vec`, `take`, `drop`, `chunk`, `partition`, `flatten`, `distinct`, `frequencies`, `zip`, `interleave`, `repeat`, `get-in`, `assoc-in`, `merge`, `select-keys`, `identity`, `constantly`, `not`, `nil?`, `some?` and `profile`, with the same names, docs and results. Rust functions can now call Ox functions and wait for them, so a function passed to one can still `await`, `sleep` and `yield`. `chunk` and `partition` with a size of 0 raise an error instead of running forever.
 - A plugin's `plugin.ox` must give `:version` as a semantic version such as `1.2.0` and may only use the keys plugins know; a misspelled key or a version like `1.0` keeps the plugin from loading and says why in `*ox log*`.
 - The r plugin renders R Markdown and Quarto documents in an R process of its own, as a background job showing its output beside, so the console stays free while it works.
 - `M-x irc-setup` saves the network in `custom.ox` with `M-x customize`'s writer instead of adding a `use-plugin` form to `init.ox` every time, so setting up a network again replaces it.

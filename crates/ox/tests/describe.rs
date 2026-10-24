@@ -88,6 +88,23 @@ fn natives_and_special_forms_are_described_from_the_library_docs() {
 }
 
 #[test]
+fn error_types_and_made_functions_describe_their_parameters() {
+    let mut isolate = shapes();
+    isolate.eval("(def always (constantly 1))").unwrap();
+
+    let error = described(&mut isolate, "type-error");
+    assert_eq!(error.kind, Kind::Record);
+    assert_eq!(
+        error.signature,
+        "(type-error (message \"type-error\") (traceback nil))"
+    );
+    let always = described(&mut isolate, "always");
+    assert_eq!(always.kind, Kind::Function);
+    assert_eq!(always.signature, "(always & _)");
+    assert_eq!(always.doc, None);
+}
+
+#[test]
 fn redefining_a_name_moves_its_place() {
     let mut isolate = shapes();
 

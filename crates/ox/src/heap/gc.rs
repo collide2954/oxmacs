@@ -126,9 +126,6 @@ impl Heap {
             Kind::BigInt => {
                 self.bigints.mark(index);
             }
-            Kind::Native => {
-                self.natives.mark(index);
-            }
             Kind::Identifier => {
                 self.identifiers.mark(index);
             }
@@ -211,7 +208,7 @@ impl Heap {
                     gray.extend(record.fields.iter().copied());
                 }
             }
-            Kind::Generator | Kind::Promise | Kind::Channel | Kind::Foreign => {
+            Kind::Native | Kind::Generator | Kind::Promise | Kind::Channel | Kind::Foreign => {
                 self.trace_task(reference.kind, index, gray, codes);
             }
         }
@@ -225,6 +222,13 @@ impl Heap {
         codes: &mut Vec<Rc<Code>>,
     ) {
         match kind {
+            Kind::Native => {
+                if self.natives.mark(index)
+                    && let Some(native) = self.natives.get(index)
+                {
+                    gray.extend(native.captured.iter().copied());
+                }
+            }
             Kind::Generator => {
                 if self.generators.mark(index)
                     && let Some(Generator::Ready(machine, _)) = self.generators.get(index)

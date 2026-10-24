@@ -40,17 +40,20 @@ pub struct Native {
     pub outside: bool,
     pub(crate) resumable: Option<Rc<Resumable>>,
     pub(crate) drains: Option<Drains>,
+    pub(crate) captured: Box<[Value]>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Drains {
     At(usize),
+    From(usize),
 }
 
 impl Drains {
     pub(crate) fn range(self, count: usize) -> Range<usize> {
         match self {
             Self::At(at) => at.min(count)..(at + 1).min(count),
+            Self::From(at) => at.min(count)..count,
         }
     }
 }
@@ -73,6 +76,10 @@ pub fn arguments(count: usize) -> String {
 }
 
 impl Native {
+    pub(crate) fn parameters(&self) -> Option<&Rc<str>> {
+        self.resumable.as_ref()?.parameters.as_ref()
+    }
+
     pub fn check(&self, count: usize) -> Result<(), Error> {
         let fits = count >= self.least && self.most.is_none_or(|most| count <= most);
         if fits {

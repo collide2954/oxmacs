@@ -79,9 +79,10 @@ pub const MODULES: &[(&str, &str)] = &[
 ];
 const OUTSIDE_MODULES: [&str; 4] = ["ox/file", "ox/http", "ox/net", "ox/process"];
 
-const OUTSIDE_NATIVES: [&str; 6] = [
+const OUTSIDE_NATIVES: [&str; 7] = [
     "print",
     "println",
+    "profile-report",
     "worker",
     "image/open",
     "image/probe",
@@ -92,7 +93,7 @@ pub(crate) fn reaches_outside(module: &str, shown: &str) -> bool {
     OUTSIDE_MODULES.contains(&module) || OUTSIDE_NATIVES.contains(&shown)
 }
 
-fn output(heap: &Heap, arguments: &[Value], newline: bool) -> Result<Value, Error> {
+pub(crate) fn output(heap: &Heap, arguments: &[Value], newline: bool) -> Result<Value, Error> {
     let mut text = arguments
         .iter()
         .map(|value| print::display(heap, *value))
@@ -119,7 +120,7 @@ fn join(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         .map_err(|full| Error::new(full.to_string()))
 }
 
-fn not_an_atom(heap: &Heap, name: &str, value: Value) -> Error {
+pub(crate) fn not_an_atom(heap: &Heap, name: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects an atom, got {}",
         print::brief(heap, value)

@@ -1,5 +1,9 @@
+mod errors;
+mod functions;
+mod maps;
 mod profiling;
 mod sequences;
+mod testing;
 
 use std::cmp::Ordering;
 
@@ -66,9 +70,13 @@ fn stretch(
 }
 
 pub(crate) fn install(isolate: &mut Isolate) {
+    errors::install(isolate);
+    functions::install(isolate);
     isolate.define_draining("vec", 1, Some(1), Drains::At(0), |heap, arguments| {
         collections::vec(heap, arguments[0])
     });
     sequences::install(isolate);
+    maps::install(isolate);
+    testing::install(isolate);
     profiling::install(isolate);
 }
