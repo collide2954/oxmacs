@@ -15,7 +15,7 @@ use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Highlight;
 
-use crate::{Ox, help, log, mode, plugins, stacktrace, xref};
+use crate::{Ox, flashes, help, log, mode, plugins, stacktrace, xref};
 
 pub const REPL: &str = "*ox repl*";
 const PROMPT: &str = "ox> ";
@@ -59,6 +59,7 @@ struct Form {
     module: String,
     text: Rc<str>,
     span: Range<usize>,
+    start: usize,
     end: usize,
     finish: Finish,
 }
@@ -71,6 +72,7 @@ impl Form {
             revision: buffer.revision(),
             name: source_name(editor),
             module: "user".to_owned(),
+            start: buffer.byte_to_char(span.start),
             end: buffer.byte_to_char(span.end),
             text: Rc::clone(text),
             span,
@@ -85,6 +87,15 @@ impl Form {
             .collect();
         format!("{padding}{}", &self.text[self.span.clone()])
     }
+
+    fn ran(&self, editor: &mut Editor, failed: bool) {
+        if editor
+            .buffer_by_id(self.buffer)
+            .is_some_and(|buffer| buffer.revision() == self.revision)
+        {
+            flashes::evaluated(editor, self.buffer, self.start..self.end, failed);
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -92,6 +103,7 @@ pub(crate) struct Evaluation {
     waiting: VecDeque<Form>,
     running: Option<(TaskId, Form)>,
     interrupted: bool,
+    loading: Option<(BufferId, PathBuf)>,
 }
 
 fn prefixed(text: &str, at: usize) -> usize {
@@ -497,7 +509,16 @@ impl Ox {
                 Request::Send => self.send(editor),
                 Request::Recall(older) => recall(editor, older),
                 Request::Saved(path) => {
-                    self.reload(editor, &path);
+                    match self
+                        .evaluation
+                        .loading
+                        .take_if(|(_, loading)| *loading == path)
+                    {
+                        Some((id, _)) => self.reload_whole(editor, id, &path),
+                        None => {
+                            self.reload(editor, &path);
+                        }
+                    }
                 }
                 Request::ReloadInit => {
                     let home = self.home.clone();
@@ -565,6 +586,7 @@ impl Ox {
     }
 
     fn succeeded(&mut self, editor: &mut Editor, form: &Form, value: Value) {
+        form.ran(editor, false);
         let shown = || format!("=> {}", self.isolate.write(value));
         match &form.finish {
             Finish::Quietly => {}
@@ -579,6 +601,7 @@ impl Ox {
     }
 
     fn failed(&mut self, editor: &mut Editor, form: &Form, error: &Error) {
+        form.ran(editor, true);
         self.evaluation.waiting.clear();
         note(
             editor,
@@ -667,11 +690,23 @@ impl Ox {
 
     fn eval_buffer(&mut self, editor: &mut Editor) {
         if let Some(path) = editor.buffer().file().map(|file| file.path.clone())
-            && self.reload(editor, &path)
+            && self.reloads(&path)
         {
+            let id = editor.buffer().id();
+            self.reload_whole(editor, id, &path);
             return;
         }
         self.evaluate_all(editor, Finish::Echo);
+    }
+
+    fn reload_whole(&mut self, editor: &mut Editor, id: BufferId, path: &Path) {
+        let before = log::reports(editor);
+        self.reload(editor, path);
+        let failed = log::reports(editor) > before;
+        let end = editor
+            .buffer_by_id(id)
+            .map_or(0, |buffer| buffer.len_chars());
+        flashes::evaluated(editor, id, 0..end, failed);
     }
 
     fn load_file(&mut self, editor: &mut Editor) {
@@ -684,8 +719,10 @@ impl Ox {
         };
         let saved = modified && editor.save_buffer(id);
         if self.reloads(&path) {
-            if !saved {
-                self.reload(editor, &path);
+            if saved {
+                self.evaluation.loading = Some((id, path));
+            } else {
+                self.reload_whole(editor, id, &path);
             }
             return;
         }
@@ -726,20 +763,26 @@ impl Ox {
             return;
         }
         view.input.remember(&input);
+        let start = view.input.start(buffer).unwrap_or_default();
+        let lead = input.chars().take_while(|c| c.is_whitespace()).count();
+        let typed = start + lead..start + input.trim_end().chars().count();
         let shown = (!input.trim().is_empty()).then(|| {
             match self
                 .isolate
                 .within(crate::PATIENT, |isolate| isolate.eval_with(editor, &input))
             {
-                Ok(value) => self.isolate.write(value),
-                Err(error) => format!("error: {}", error.message),
+                Ok(value) => (self.isolate.write(value), false),
+                Err(error) => (format!("error: {}", error.message), true),
             }
         });
+        if let Some((_, failed)) = shown {
+            flashes::evaluated(editor, id, typed, failed);
+        }
         let Some((buffer, view)) = editor.plugin_buffer_mut::<ReplView>(id) else {
             return;
         };
         let mut text = String::from("\n");
-        if let Some(shown) = shown {
+        if let Some((shown, _)) = shown {
             text.push_str(&shown);
             text.push('\n');
         }
@@ -1061,6 +1104,89 @@ mod tests {
         assert!(editor.buffer().contents().ends_with("ox> (+ 1\n2)"));
         press(&mut editor, &mut ox, "M-p");
         assert!(editor.buffer().contents().ends_with("ox> (/ 1 0)"));
+    }
+
+    const HEARD: &str = "(def heard (atom []))\n(on-evaluate :test (fn [b start end failed] (swap! heard conj [(with-buffer b (buffer-name)) start end failed])))\n";
+
+    fn heard(editor: &mut Editor, ox: &mut Ox) -> String {
+        ox.eval(editor, "@heard").unwrap()
+    }
+
+    #[test]
+    fn evaluated_forms_reach_on_evaluate_with_where_they_are_and_whether_they_failed() {
+        let home = home_with(&[("init.ox", HEARD), ("scratch.ox", "(def x 5)\n(* y 2)")]);
+        let (mut editor, mut ox) = visiting(home.path(), "scratch.ox");
+
+        press(&mut editor, &mut ox, "C-x C-e");
+        editor.buffer_mut().set_point(4);
+        press(&mut editor, &mut ox, "C-M-x");
+
+        assert_eq!(
+            heard(&mut editor, &mut ox),
+            r#"[["scratch.ox" 10 17 true] ["scratch.ox" 0 9 false]]"#
+        );
+    }
+
+    #[test]
+    fn loading_a_file_reports_each_form_until_one_fails() {
+        let home = home_with(&[
+            ("init.ox", HEARD),
+            ("scratch.ox", "(def a 1)\n(/ a 0)\n(def b 2)"),
+        ]);
+        let (mut editor, mut ox) = visiting(home.path(), "scratch.ox");
+
+        press(&mut editor, &mut ox, "C-c C-k");
+
+        assert_eq!(
+            heard(&mut editor, &mut ox),
+            r#"[["scratch.ox" 0 9 false] ["scratch.ox" 10 17 true]]"#
+        );
+    }
+
+    #[test]
+    fn loading_init_ox_reports_the_whole_file() {
+        let failing = format!("{HEARD}(/ 1 0)\n");
+        let home = home_with(&[("init.ox", HEARD)]);
+        let (mut editor, mut ox) = visiting(home.path(), "init.ox");
+
+        press(&mut editor, &mut ox, "C-c C-k");
+        let whole = HEARD.chars().count();
+        assert_eq!(
+            heard(&mut editor, &mut ox),
+            format!(r#"[["init.ox" 0 {whole} false]]"#)
+        );
+
+        editor.buffer_mut().insert_at(whole, "(/ 1 0)\n");
+        press(&mut editor, &mut ox, "C-c C-k");
+        assert_eq!(
+            heard(&mut editor, &mut ox),
+            format!(r#"[["init.ox" 0 {} true]]"#, failing.chars().count())
+        );
+    }
+
+    #[test]
+    fn the_repl_reports_its_input() {
+        let home = home_with(&[("init.ox", HEARD)]);
+        let (mut editor, mut ox) = started(home.path());
+        press(&mut editor, &mut ox, "M-x");
+        typed(&mut editor, &mut ox, "ox-repl");
+        press(&mut editor, &mut ox, "RET");
+
+        typed(&mut editor, &mut ox, "(+ 1 2)");
+        press(&mut editor, &mut ox, "RET");
+        typed(&mut editor, &mut ox, "(/ 1 0)");
+        press(&mut editor, &mut ox, "RET");
+
+        let first = super::GREETING.chars().count() + super::PROMPT.len();
+        let second = first + "(+ 1 2)\n3\n".len() + super::PROMPT.len();
+        assert_eq!(
+            heard(&mut editor, &mut ox),
+            format!(
+                r#"[["*ox repl*" {first} {} false] ["*ox repl*" {second} {} true]]"#,
+                first + 7,
+                second + 7
+            )
+        );
     }
 
     #[test]
