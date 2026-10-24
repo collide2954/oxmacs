@@ -34,6 +34,21 @@ pub(crate) const SOURCES: [(&str, &str, &str); 1] = [(
     include_str!("image/edit.ox"),
 )];
 
+const OUTSIDE_MODULES: [&str; 4] = ["ox/file", "ox/http", "ox/net", "ox/process"];
+
+const OUTSIDE_NATIVES: [&str; 6] = [
+    "print",
+    "println",
+    "worker",
+    "image/open",
+    "image/probe",
+    "image/save",
+];
+
+pub(crate) fn reaches_outside(module: &str, shown: &str) -> bool {
+    OUTSIDE_MODULES.contains(&module) || OUTSIDE_NATIVES.contains(&shown)
+}
+
 fn output(heap: &Heap, arguments: &[Value], newline: bool) -> Result<Value, Error> {
     let mut text = arguments
         .iter()

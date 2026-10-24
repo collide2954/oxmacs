@@ -1,6 +1,7 @@
 pub mod report;
 
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 
 use crate::compile::parameters::parse_parameters;
 use crate::expand::patterns;
@@ -11,6 +12,8 @@ use crate::symbol::Sym;
 use crate::value::Value;
 use crate::vm::Runtime;
 use crate::vm::modules::{self, ModuleId, PRELUDE};
+
+pub const BUDGET: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Severity {

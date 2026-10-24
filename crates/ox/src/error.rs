@@ -16,6 +16,7 @@ pub enum ErrorKind {
     ZeroDivision,
     NoMatch,
     Interrupt,
+    Refused,
 }
 
 impl ErrorKind {

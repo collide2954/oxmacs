@@ -1,4 +1,6 @@
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::thread;
 use std::time::Duration;
 
 use ox::Isolate;
@@ -10,11 +12,65 @@ use oxmacs_core::text::BufferId;
 
 pub const CHECK_PAUSE: Duration = Duration::from_millis(500);
 
+struct Job {
+    path: PathBuf,
+    source: String,
+    editor: bool,
+}
+
+struct Done {
+    path: PathBuf,
+    source: String,
+    found: Vec<Diagnostic>,
+}
+
+#[derive(Debug)]
+struct Worker {
+    jobs: Sender<Job>,
+    done: Receiver<Done>,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Checker {
-    editor: Option<Isolate>,
-    plain: Option<Isolate>,
+    worker: Option<Worker>,
+    busy: bool,
     checked: Vec<(BufferId, u64)>,
+}
+
+fn serve(jobs: &Receiver<Job>, done: &Sender<Done>) {
+    let mut editor = None;
+    let mut plain = None;
+    for job in jobs {
+        let isolate = if job.editor {
+            editor.get_or_insert_with(crate::checking_isolate)
+        } else {
+            plain.get_or_insert_with(Isolate::new)
+        };
+        for root in check_roots(&job.path) {
+            isolate.add_root(root);
+        }
+        let found = isolate.check(&job.path.display().to_string(), &job.source);
+        let finished = Done {
+            path: job.path,
+            source: job.source,
+            found,
+        };
+        if done.send(finished).is_err() {
+            return;
+        }
+    }
+}
+
+impl Worker {
+    fn start() -> Option<Self> {
+        let (jobs, waiting) = mpsc::channel();
+        let (finished, done) = mpsc::channel();
+        thread::Builder::new()
+            .name("oxmacs ox checker".to_owned())
+            .spawn(move || serve(&waiting, &finished))
+            .ok()?;
+        Some(Self { jobs, done })
+    }
 }
 
 pub fn editor_code(path: &Path) -> bool {
@@ -60,12 +116,19 @@ fn found(path: &Path, source: &str, diagnostic: Diagnostic) -> Found {
 
 impl Checker {
     pub(crate) fn wait(&self, editor: &Editor) -> Option<Duration> {
+        if self.busy {
+            return None;
+        }
         let (id, revision, _) = due(editor)?;
         (!self.checked.contains(&(id, revision))).then_some(CHECK_PAUSE)
     }
 
-    pub(crate) fn run(&mut self, editor: &mut Editor, rested: Duration) {
-        if rested < CHECK_PAUSE {
+    pub(crate) fn busy(&self) -> bool {
+        self.busy
+    }
+
+    pub(crate) fn run(&mut self, editor: &Editor, rested: Duration) {
+        if rested < CHECK_PAUSE || self.busy {
             return;
         }
         let Some((id, revision, path)) = due(editor) else {
@@ -76,21 +139,43 @@ impl Checker {
         }
         self.checked.retain(|(checked, _)| *checked != id);
         self.checked.push((id, revision));
-        let isolate = if editor_code(&path) {
-            self.editor.get_or_insert_with(crate::checking_isolate)
-        } else {
-            self.plain.get_or_insert_with(Isolate::new)
+        let job = Job {
+            editor: editor_code(&path),
+            path,
+            source: editor.buffer().contents(),
         };
-        for root in check_roots(&path) {
-            isolate.add_root(root);
+        if self.worker.is_none() {
+            self.worker = Worker::start();
         }
-        let source = editor.buffer().contents();
-        let findings = isolate
-            .check(&path.display().to_string(), &source)
-            .into_iter()
-            .map(|diagnostic| found(&path, &source, diagnostic))
-            .collect();
-        editor.replace_diagnostics(&path, findings);
+        self.busy = self
+            .worker
+            .as_ref()
+            .is_some_and(|worker| worker.jobs.send(job).is_ok());
+        if !self.busy {
+            self.worker = None;
+        }
+    }
+
+    pub(crate) fn collect(&mut self, editor: &mut Editor) {
+        let Some(worker) = &self.worker else {
+            return;
+        };
+        match worker.done.try_recv() {
+            Ok(done) => {
+                self.busy = false;
+                let findings = done
+                    .found
+                    .into_iter()
+                    .map(|diagnostic| found(&done.path, &done.source, diagnostic))
+                    .collect();
+                editor.replace_diagnostics(&done.path, findings);
+            }
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => {
+                self.busy = false;
+                self.worker = None;
+            }
+        }
     }
 }
 
@@ -102,9 +187,17 @@ mod tests {
     use oxmacs_core::external::diagnostics::Severity;
 
     use super::CHECK_PAUSE;
-    use crate::Ox;
+    use crate::{Ox, Pace};
 
     const UNUSED: &str = "h is never used; call it _h if that's on purpose";
+
+    fn settle(editor: &mut Editor, ox: &mut Ox) {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while ox.pace() != Pace::Idle && Instant::now() < deadline {
+            ox.tick(editor);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
 
     fn visiting(files: &[(&str, &str)], name: &str) -> (tempfile::TempDir, Editor, Ox) {
         let home = tempfile::tempdir().unwrap();
@@ -136,6 +229,7 @@ mod tests {
         rest(&mut editor, &mut ox, since, 100);
         assert_eq!(editor.pane().line_diagnostics(1), []);
         rest(&mut editor, &mut ox, since, 600);
+        settle(&mut editor, &mut ox);
         assert_eq!(
             editor.pane().line_diagnostics(0),
             [(13..14, Severity::Warning)]
@@ -151,6 +245,7 @@ mod tests {
         let later = since + Duration::from_secs(1);
         assert_eq!(ox.idle_wait(&editor, later), Some(CHECK_PAUSE));
         rest(&mut editor, &mut ox, later, 600);
+        settle(&mut editor, &mut ox);
         assert_eq!(editor.pane().line_diagnostics(1), []);
         assert_eq!(editor.pane().status().lint.as_deref(), Some("W1"));
     }
@@ -173,8 +268,32 @@ mod tests {
         );
 
         rest(&mut editor, &mut ox, Instant::now(), 600);
+        settle(&mut editor, &mut ox);
 
         assert_eq!(editor.pane().line_diagnostics(1), []);
         assert_eq!(editor.pane().line_diagnostics(2), [(1..7, Severity::Error)]);
+    }
+
+    #[test]
+    fn checking_runs_beside_the_editor_and_reports_when_it_is_done() {
+        let (_home, mut editor, mut ox) = visiting(
+            &[(
+                "scratch.ox",
+                "(defmacro hang [] ((fn again [] (again))))\n(hang)\n",
+            )],
+            "scratch.ox",
+        );
+        let started = Instant::now();
+
+        rest(&mut editor, &mut ox, started, 600);
+
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert_eq!(ox.pace(), Pace::Waiting);
+        assert_eq!(editor.pane().line_diagnostics(1), []);
+        settle(&mut editor, &mut ox);
+        assert_eq!(
+            editor.pane().line_diagnostics(1),
+            [(0..6, Severity::Warning)]
+        );
     }
 }

@@ -68,6 +68,7 @@ pub struct Runtime {
     next_task: u64,
     running: Option<Value>,
     pub(crate) budget: Option<(Instant, Duration)>,
+    pub(crate) sandboxed: bool,
     pub(crate) roots: Vec<PathBuf>,
     pub(crate) worker_setup: Option<fn(&mut Isolate)>,
     stand_ins: HashMap<(Sym, Sym), Value>,
@@ -149,6 +150,7 @@ impl Default for Runtime {
             next_task: 0,
             running: None,
             budget: None,
+            sandboxed: false,
             roots: Vec::new(),
             worker_setup: None,
             stand_ins: HashMap::new(),
@@ -696,6 +698,12 @@ impl Runtime {
         let Some(native) = self.heap.native_of(callee) else {
             return Ok(Target::Data);
         };
+        if native.outside && self.sandboxed {
+            return Err(
+                Error::new(format!("{} doesn't run while checking", native.name.name()))
+                    .of(ErrorKind::Refused),
+            );
+        }
         native.check(count)?;
         Ok(match native.control {
             Some(control) => Target::Control(control),

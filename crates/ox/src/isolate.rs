@@ -2,10 +2,10 @@ use std::any::Any;
 use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::bytecode::Prim;
 use crate::check::{self, Diagnostic};
@@ -32,6 +32,10 @@ use crate::vm::modules::{Import, Module, ModuleId, PRELUDE, USER};
 
 const PRELUDE_SOURCE: &str = include_str!("library/prelude/core.ox");
 const LIBRARY_DOCS: &str = include_str!("library/docs.ox");
+
+fn modified(path: &Path) -> Option<SystemTime> {
+    fs::metadata(path).and_then(|found| found.modified()).ok()
+}
 
 fn shown_name(module: &str, name: &str) -> String {
     match module.rsplit_once('/') {
@@ -81,6 +85,8 @@ pub struct Isolate {
     runtime: Runtime,
     loading: Vec<String>,
     sources: HashMap<String, (String, String)>,
+    files: HashMap<String, (PathBuf, Option<SystemTime>)>,
+    broken: HashSet<String>,
     doc_tables: Vec<&'static str>,
     docs: OnceCell<Docs>,
 }
@@ -111,6 +117,8 @@ impl Isolate {
             runtime: Runtime::default(),
             loading: Vec::new(),
             sources: HashMap::new(),
+            files: HashMap::new(),
+            broken: HashSet::new(),
             doc_tables: vec![LIBRARY_DOCS],
             docs: OnceCell::new(),
         };
@@ -355,9 +363,45 @@ impl Isolate {
             .map(|root| root.join(format!("{name}.ox")))
             .find(|path| path.is_file())
             .ok_or_else(|| Error::new(format!("No module named {name}")))?;
+        let changed = modified(&path);
         let source = fs::read_to_string(&path)
             .map_err(|error| Error::new(format!("{}: {error}", path.display())))?;
-        self.evaluate_module(name, &path.display().to_string(), &source, host)
+        let result = self.evaluate_module(name, &path.display().to_string(), &source, host);
+        if result.is_ok() {
+            self.broken.remove(name);
+            self.files.insert(name.to_owned(), (path, changed));
+        } else {
+            self.broken.insert(name.to_owned());
+        }
+        result
+    }
+
+    fn stale(&self, name: &str, seen: &mut HashSet<String>) -> bool {
+        if !seen.insert(name.to_owned()) {
+            return false;
+        }
+        if self.broken.contains(name)
+            || self
+                .files
+                .get(name)
+                .is_some_and(|(path, changed)| modified(path) != *changed)
+        {
+            return true;
+        }
+        let Some(module) = self
+            .runtime
+            .module_ids
+            .get(name)
+            .and_then(|id| self.runtime.modules.get(*id))
+        else {
+            return false;
+        };
+        module.imports.iter().any(|import| {
+            self.runtime
+                .modules
+                .get(import.module)
+                .is_some_and(|found| self.stale(&found.name, seen))
+        })
     }
 
     fn evaluate_module(
@@ -441,12 +485,23 @@ impl Isolate {
             }
         }
         let name = segments.join("/");
-        let loaded = self.runtime.module_ids.get(&name).copied();
+        let loaded = self
+            .runtime
+            .module_ids
+            .get(&name)
+            .copied()
+            .filter(|_| !self.loading.contains(&name));
+        let reload =
+            loaded.filter(|_| self.runtime.sandboxed && self.stale(&name, &mut HashSet::new()));
         let id = match loaded {
-            Some(id) if !self.loading.contains(&name) => id,
-            _ => self
-                .load_module(&name, host)
-                .map_err(|error| error.or_at(spec.span))?,
+            Some(id) if reload.is_none() => id,
+            _ => {
+                if let Some(id) = reload {
+                    self.runtime.reset_module(id);
+                }
+                self.load_module(&name, host)
+                    .map_err(|error| error.or_at(spec.span))?
+            }
         };
         if let Some(found) = self.runtime.module_mut(module) {
             found.imports.retain(|import| import.module != id);
@@ -550,6 +605,7 @@ impl Isolate {
                 function,
                 control: None,
                 awaits: true,
+                outside: false,
             },
         );
     }
@@ -573,11 +629,16 @@ impl Isolate {
                 function,
                 control,
                 awaits: false,
+                outside: false,
             },
         );
     }
 
     fn install(&mut self, module: &str, name: &str, native: Native) {
+        let native = Native {
+            outside: library::reaches_outside(module, native.name.name()),
+            ..native
+        };
         let place = self.runtime.module_named(module);
         if let Ok(value) = self.runtime.heap.native(native) {
             self.runtime.define(place, Sym::intern(name), value);
@@ -638,7 +699,7 @@ impl Isolate {
         found: &mut Vec<Diagnostic>,
         unknown: &mut check::Unknown,
         imports: &mut Vec<check::Import>,
-    ) {
+    ) -> Result<(), Span> {
         for clause in clauses {
             let specs = match &clause.datum {
                 Datum::List(items) if items.first().and_then(symbol) == Some("import") => {
@@ -656,21 +717,51 @@ impl Isolate {
                 }
             };
             for spec in specs {
-                if let Err(error) = self.import(module, spec, &mut ()) {
-                    found.push(Diagnostic::error(
-                        "import",
-                        error.message,
-                        error.span.unwrap_or(spec.span),
-                    ));
-                    unknown.add(spec);
-                } else {
-                    imports.extend(check::Import::of(spec));
+                match self.import(module, spec, &mut ()) {
+                    Ok(()) => imports.extend(check::Import::of(spec)),
+                    Err(error) if error.kind == ErrorKind::Interrupt => return Err(spec.span),
+                    Err(error) => {
+                        if error.kind != ErrorKind::Refused {
+                            found.push(Diagnostic::error(
+                                "import",
+                                error.message,
+                                error.span.unwrap_or(spec.span),
+                            ));
+                        }
+                        unknown.add(spec);
+                    }
                 }
             }
         }
+        Ok(())
     }
 
     pub fn check(&mut self, name: &str, source: &str) -> Vec<Diagnostic> {
+        self.check_within(check::BUDGET, name, source)
+    }
+
+    pub fn check_within(&mut self, budget: Duration, name: &str, source: &str) -> Vec<Diagnostic> {
+        let sandboxed = std::mem::replace(&mut self.runtime.sandboxed, true);
+        let found = self.within(budget, |isolate| Ok(isolate.check_source(name, source)));
+        self.runtime.sandboxed = sandboxed;
+        found.unwrap_or_default()
+    }
+
+    fn stopped(&self, mut found: Vec<Diagnostic>, span: Span) -> Vec<Diagnostic> {
+        let budget = self
+            .runtime
+            .budget
+            .map_or(0, |(_, budget)| budget.as_millis());
+        found.push(Diagnostic::warning(
+            "budget",
+            format!("Checking stopped here after {budget} ms"),
+            span,
+        ));
+        found.sort_by_key(|diagnostic| (diagnostic.span.start, diagnostic.span.end));
+        found
+    }
+
+    fn check_source(&mut self, name: &str, source: &str) -> Vec<Diagnostic> {
         let module_name = format!("#check:{name}");
         let module = self.runtime.module_named(&module_name);
         self.runtime.reset_module(module);
@@ -695,17 +786,26 @@ impl Isolate {
                 continue;
             }
             if let Some(clauses) = header(form) {
-                self.check_header(module, clauses, &mut found, &mut unknown, &mut imports);
+                if let Err(span) =
+                    self.check_header(module, clauses, &mut found, &mut unknown, &mut imports)
+                {
+                    return self.stopped(found, span);
+                }
                 continue;
             }
             let syntax = match expand(&mut self.runtime, form, module) {
                 Ok(syntax) => syntax,
+                Err(error) if error.kind == ErrorKind::Interrupt => {
+                    return self.stopped(found, form.span);
+                }
                 Err(error) => {
-                    found.push(Diagnostic::error(
-                        "macro",
-                        error.message,
-                        error.span.unwrap_or(form.span),
-                    ));
+                    if error.kind != ErrorKind::Refused {
+                        found.push(Diagnostic::error(
+                            "macro",
+                            error.message,
+                            error.span.unwrap_or(form.span),
+                        ));
+                    }
                     continue;
                 }
             };
@@ -729,6 +829,9 @@ impl Isolate {
             if check::defines_macro(&syntax)
                 && let Err(error) = self.runtime.run(&Rc::new(code), &mut ())
             {
+                if error.kind == ErrorKind::Interrupt {
+                    return self.stopped(found, form.span);
+                }
                 found.push(Diagnostic::error(
                     "macro",
                     error.message,

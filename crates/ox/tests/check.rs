@@ -1,5 +1,113 @@
+use std::fs;
+use std::path::Path;
+use std::time::{Duration, UNIX_EPOCH};
+
 use ox::Isolate;
 use ox::check::{Diagnostic, Severity};
+
+fn messages(found: &[Diagnostic]) -> Vec<&str> {
+    found.iter().map(|found| found.message.as_str()).collect()
+}
+
+fn rewrite(path: &Path, text: &str, step: u64) {
+    fs::write(path, text).unwrap();
+    fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(UNIX_EPOCH + Duration::from_secs(1_000_000 + step))
+        .unwrap();
+}
+
+#[test]
+fn checking_never_writes_files_or_runs_programs() {
+    let dir = tempfile::tempdir().unwrap();
+    let made = dir.path().join("made.txt");
+    let shown = made.display().to_string().replace('\\', "/");
+    fs::write(
+        dir.path().join("writer.ox"),
+        format!(
+            "(module (import (ox file)))\n(file/write \"{shown}\" \"x\")\n(def (hello) \"hi\")\n"
+        ),
+    )
+    .unwrap();
+    let mut isolate = Isolate::new();
+    isolate.add_root(dir.path());
+    let source = format!(
+        "(module (import (writer) (ox file) (ox process)))
+(defmacro sneaky [] (file/write \"{shown}\" \"y\") 1)
+(defmacro runs [] (process/run \"nothing-here\" []) 1)
+(sneaky)
+(runs)
+(writer/hello)
+"
+    );
+
+    assert_eq!(isolate.check("sample.ox", &source), []);
+    assert!(!made.exists());
+
+    isolate
+        .eval(&format!(
+            "(module (import (ox file)))\n(await (file/write \"{shown}\" \"z\"))"
+        ))
+        .unwrap();
+    assert!(made.exists());
+}
+
+#[test]
+fn checking_that_takes_too_long_stops_with_one_warning() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("slow.ox"),
+        "(def (forever) (forever))\n(forever)\n",
+    )
+    .unwrap();
+    let mut isolate = Isolate::new();
+    isolate.add_root(dir.path());
+    let budget = Duration::from_millis(100);
+    let hang = "(defmacro hang [] ((fn again [] (again))))\n(hang)\n(missing)\n";
+    let slow = "(module (import (slow)))\n(missing)\n";
+
+    for (source, at) in [(hang, "(hang)"), (slow, "(slow)")] {
+        let found = isolate.check_within(budget, "sample.ox", source);
+        assert_eq!(messages(&found), ["Checking stopped here after 100 ms"]);
+        assert_eq!(found[0].severity, Severity::Warning);
+        let span = found[0].span;
+        assert_eq!(&source[span.start as usize..span.end as usize], at);
+    }
+}
+
+#[test]
+fn checking_again_loads_imports_that_changed_on_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    let words = dir.path().join("words.ox");
+    let letters = dir.path().join("letters.ox");
+    fs::write(&letters, "(def (greet) \"hi\")\n").unwrap();
+    fs::write(
+        &words,
+        "(module (import (letters)))\n(def hello letters/greet)\n",
+    )
+    .unwrap();
+    let mut isolate = Isolate::new();
+    isolate.add_root(dir.path());
+    let source = "(module (import (words)))\n(words/hello)\n";
+    assert_eq!(
+        messages(&isolate.check("sample.ox", source)),
+        Vec::<&str>::new()
+    );
+
+    rewrite(&letters, "(def (greet name) name)\n", 1);
+    assert_eq!(
+        messages(&isolate.check("sample.ox", source)),
+        ["words/hello takes 1 argument, got 0"]
+    );
+
+    rewrite(&words, "(def (bye) 1)\n", 2);
+    assert_eq!(
+        messages(&isolate.check("sample.ox", source)),
+        ["words/hello is not defined"]
+    );
+}
 
 fn found(source: &str) -> Vec<(Severity, String, String)> {
     let mut isolate = Isolate::new();

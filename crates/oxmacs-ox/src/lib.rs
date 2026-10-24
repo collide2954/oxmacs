@@ -201,7 +201,7 @@ impl Ox {
     pub fn pace(&self) -> Pace {
         if self.isolate.runnable() > 0 {
             Pace::Running
-        } else if self.isolate.pending() > 0 {
+        } else if self.isolate.pending() > 0 || self.checker.busy() {
             Pace::Waiting
         } else {
             Pace::Idle
@@ -209,11 +209,15 @@ impl Ox {
     }
 
     pub fn next_wake(&self) -> Wake {
+        if self.checker.busy() {
+            return Wake::Soon;
+        }
         self.isolate.next_wake()
     }
 
     pub fn tick(&mut self, editor: &mut Editor) -> Pace {
         let started = self.isolate.profiling().then(Instant::now);
+        self.checker.collect(editor);
         self.handle_requests(editor);
         for plugin in modes::wakes(editor) {
             plugins::request_wake(editor, &plugin);

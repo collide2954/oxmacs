@@ -35,6 +35,7 @@ pub struct Native {
     pub function: Rc<NativeFn>,
     pub control: Option<Control>,
     pub awaits: bool,
+    pub outside: bool,
 }
 
 impl fmt::Debug for Native {
