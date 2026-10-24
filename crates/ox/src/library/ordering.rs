@@ -56,7 +56,7 @@ fn incomparable(heap: &Heap, name: &str, a: Value, b: Value) -> Error {
     .of(ErrorKind::Type)
 }
 
-fn sort(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+pub(crate) fn sort(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let original = collections::sequence(heap, "sort", arguments[0])?;
     let mut items = original.clone();
     let mut failure = None;

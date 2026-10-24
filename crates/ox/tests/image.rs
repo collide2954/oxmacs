@@ -749,6 +749,40 @@ fn edits_draw_shapes_on_a_private_copy() {
 }
 
 #[test]
+fn edit_is_built_in_and_waits_for_what_it_is_given() {
+    let isolate = &mut Isolate::new();
+    shown(isolate, BLANK);
+
+    assert_eq!(shown(isolate, "image/edit"), "#<native image/edit>");
+    assert_eq!(
+        shown(
+            isolate,
+            "(image/pixel (image/edit (image/resize blank 4) (fn [c] (sleep 1) (image/set-pixel! c 1 1 :red))) 1 1)"
+        ),
+        "[255 0 0 255]"
+    );
+    assert_eq!(
+        shown(isolate, "(image/width (image/edit blank (fn [c] 5)))"),
+        "10"
+    );
+    assert_eq!(
+        failure(isolate, "(image/edit 5 identity)"),
+        "image/begin-edit expects an image, got 5"
+    );
+    assert_eq!(
+        failure(
+            isolate,
+            "(image/edit blank (fn [c] (raise (error \"inside\"))))"
+        ),
+        "inside"
+    );
+    assert_eq!(
+        failure(isolate, "(image/edit blank 5)"),
+        "5 is not a function"
+    );
+}
+
+#[test]
 fn layers_blend_mask_and_tile() {
     let isolate = &mut Isolate::new();
     shown(isolate, BLANK);

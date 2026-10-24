@@ -1,16 +1,17 @@
 pub(crate) mod collections;
 pub(crate) mod crypto;
 mod csv;
-mod errors;
+pub(crate) mod errors;
 mod files;
 mod http;
 pub mod image;
 mod json;
 mod net;
 pub(crate) mod numbers;
-mod ordering;
+pub(crate) mod ordering;
 pub(crate) mod paths;
 mod patterns;
+mod prelude;
 mod process;
 mod regex;
 mod rules;
@@ -27,12 +28,6 @@ use crate::isolate::Isolate;
 use crate::value::Value;
 use crate::value::equal::{equal, hash, identical};
 use crate::value::print;
-
-pub(crate) const SOURCES: [(&str, &str, &str); 1] = [(
-    "ox/image",
-    "library/image/edit.ox",
-    include_str!("image/edit.ox"),
-)];
 
 pub const MODULES: &[(&str, &str)] = &[
     (
@@ -78,9 +73,10 @@ pub const MODULES: &[(&str, &str)] = &[
 ];
 const OUTSIDE_MODULES: [&str; 4] = ["ox/file", "ox/http", "ox/net", "ox/process"];
 
-const OUTSIDE_NATIVES: [&str; 6] = [
+const OUTSIDE_NATIVES: [&str; 7] = [
     "print",
     "println",
+    "profile-report",
     "worker",
     "image/open",
     "image/probe",
@@ -91,7 +87,7 @@ pub(crate) fn reaches_outside(module: &str, shown: &str) -> bool {
     OUTSIDE_MODULES.contains(&module) || OUTSIDE_NATIVES.contains(&shown)
 }
 
-fn output(heap: &Heap, arguments: &[Value], newline: bool) -> Result<Value, Error> {
+pub(crate) fn output(heap: &Heap, arguments: &[Value], newline: bool) -> Result<Value, Error> {
     let mut text = arguments
         .iter()
         .map(|value| print::display(heap, *value))
@@ -118,7 +114,7 @@ fn join(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         .map_err(|full| Error::new(full.to_string()))
 }
 
-fn not_an_atom(heap: &Heap, name: &str, value: Value) -> Error {
+pub(crate) fn not_an_atom(heap: &Heap, name: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects an atom, got {}",
         print::brief(heap, value)
@@ -200,6 +196,7 @@ pub fn install(isolate: &mut Isolate) {
             .map_err(|full| Error::new(full.to_string()))
     });
     collections::install(isolate);
+    prelude::install(isolate);
 
     isolate.define_native("print", 0, None, |heap, arguments| {
         output(heap, arguments, false)

@@ -15,7 +15,7 @@ use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
 use crate::heap::{Closure, Heap, Hold, Rooted};
 use crate::library;
-use crate::native::{Control, Native, NativeFn};
+use crate::native::{Control, Drains, Native, NativeFn};
 use crate::portable::{Failure, Portable};
 use crate::profile::Profile;
 use crate::read::{self, Datum, Syntax};
@@ -29,8 +29,8 @@ use crate::value::record::Family;
 use crate::vm::Runtime;
 use crate::vm::build::full;
 use crate::vm::modules::{Import, Module, ModuleId, PRELUDE, USER};
+use crate::vm::routine::{Resumable, Started};
 
-const PRELUDE_SOURCE: &str = include_str!("library/prelude/core.ox");
 const LIBRARY_DOCS: &str = include_str!("library/docs.ox");
 
 fn modified(path: &Path) -> Option<SystemTime> {
@@ -43,6 +43,32 @@ fn shown_name(module: &str, name: &str) -> String {
         Some((_, last)) => format!("{last}/{name}"),
         None => format!("{module}/{name}"),
     }
+}
+
+fn plain(
+    module: &str,
+    name: &str,
+    least: usize,
+    most: Option<usize>,
+    function: Rc<NativeFn>,
+) -> Native {
+    Native {
+        name: Sym::intern(&shown_name(module, name)),
+        least,
+        most,
+        function,
+        control: None,
+        awaits: false,
+        outside: false,
+        resumable: None,
+        drains: None,
+        captured: Box::new([]),
+    }
+}
+
+fn only_from_ox(name: &str) -> Rc<NativeFn> {
+    let message = format!("{name} can only be called from Ox");
+    Rc::new(move |_, _, _| Err(Error::new(message.clone())))
 }
 
 pub(crate) fn work(
@@ -127,9 +153,6 @@ impl Isolate {
         library::install(&mut isolate);
         let apply = isolate.runtime.lookup(PRELUDE, Sym::intern("apply"));
         isolate.runtime.apply = apply.unwrap_or(Value::Nil);
-        if let Err(error) = isolate.eval_in(PRELUDE, "prelude/core.ox", PRELUDE_SOURCE, &mut ()) {
-            panic!("The Ox prelude failed to load: {error}");
-        }
         for prim in Prim::ALL {
             let found = isolate
                 .runtime
@@ -157,12 +180,6 @@ impl Isolate {
                 isolate.runtime.heap.set_family(value, Family::AnyError);
             }
             isolate.runtime.error_types.insert(kind, value);
-        }
-        for (module, name, source) in library::SOURCES {
-            let place = isolate.runtime.module_named(module);
-            if let Err(error) = isolate.eval_in(place, name, source, &mut ()) {
-                panic!("The Ox library failed to load {name}: {error}");
-            }
         }
         isolate
     }
@@ -247,6 +264,10 @@ impl Isolate {
 
     pub fn heap_mut(&mut self) -> &mut Heap {
         &mut self.runtime.heap
+    }
+
+    pub(crate) fn runtime_mut(&mut self) -> &mut Runtime {
+        &mut self.runtime
     }
 
     pub fn add_root(&mut self, root: impl Into<PathBuf>) {
@@ -559,7 +580,7 @@ impl Isolate {
         function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
     ) {
         let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
-        self.install_native(module, name, least, most, function, None);
+        self.install_native(module, name, least, most, function);
     }
 
     pub fn define_host_native<T: Any>(
@@ -587,7 +608,7 @@ impl Isolate {
             };
             function(heap, host, arguments)
         });
-        self.install_native(module, name, least, most, function, None);
+        self.install_native(module, name, least, most, function);
     }
 
     pub(crate) fn define_control(
@@ -597,9 +618,78 @@ impl Isolate {
         most: Option<usize>,
         control: Control,
     ) {
-        let message = format!("{name} can only be called from Ox");
-        let function: Rc<NativeFn> = Rc::new(move |_, _, _| Err(Error::new(message.clone())));
-        self.install_native("ox", name, least, most, function, Some(control));
+        let native = Native {
+            control: Some(control),
+            ..plain("ox", name, least, most, only_from_ox(name))
+        };
+        if let Some(value) = self.install("ox", name, native) {
+            self.runtime.controls.insert(control, value);
+        }
+    }
+
+    pub(crate) fn define_draining(
+        &mut self,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        drains: Drains,
+        function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
+    ) {
+        let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
+        let native = Native {
+            drains: Some(drains),
+            ..plain("ox", name, least, most, function)
+        };
+        self.install("ox", name, native);
+    }
+
+    pub(crate) fn define_expander(
+        &mut self,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        expand: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
+    ) {
+        let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| expand(heap, arguments));
+        if let Ok(value) = self
+            .runtime
+            .heap
+            .native(plain("ox", name, least, most, function))
+        {
+            self.runtime.define_macro(PRELUDE, Sym::intern(name), value);
+        }
+    }
+
+    pub(crate) fn define_routine(
+        &mut self,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        drains: Option<Drains>,
+        start: impl Fn(&mut Runtime, Value, &[Value]) -> Result<Started, Error> + 'static,
+    ) {
+        self.define_routine_in("ox", name, least, most, drains, start);
+    }
+
+    pub(crate) fn define_routine_in(
+        &mut self,
+        module: &str,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        drains: Option<Drains>,
+        start: impl Fn(&mut Runtime, Value, &[Value]) -> Result<Started, Error> + 'static,
+    ) {
+        let shown = shown_name(module, name);
+        let native = Native {
+            resumable: Some(Rc::new(Resumable::new(
+                Sym::intern(&shown),
+                Box::new(start),
+            ))),
+            drains,
+            ..plain(module, name, least, most, only_from_ox(&shown))
+        };
+        self.install(module, name, native);
     }
 
     pub fn define_native_awaiting(
@@ -621,19 +711,11 @@ impl Isolate {
         function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
     ) {
         let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
-        self.install(
-            module,
-            name,
-            Native {
-                name: Sym::intern(&shown_name(module, name)),
-                least,
-                most,
-                function,
-                control: None,
-                awaits: true,
-                outside: false,
-            },
-        );
+        let native = Native {
+            awaits: true,
+            ..plain(module, name, least, most, function)
+        };
+        self.install(module, name, native);
     }
 
     fn install_native(
@@ -643,32 +725,19 @@ impl Isolate {
         least: usize,
         most: Option<usize>,
         function: Rc<NativeFn>,
-        control: Option<Control>,
     ) {
-        self.install(
-            module,
-            name,
-            Native {
-                name: Sym::intern(&shown_name(module, name)),
-                least,
-                most,
-                function,
-                control,
-                awaits: false,
-                outside: false,
-            },
-        );
+        self.install(module, name, plain(module, name, least, most, function));
     }
 
-    fn install(&mut self, module: &str, name: &str, native: Native) {
+    fn install(&mut self, module: &str, name: &str, native: Native) -> Option<Value> {
         let native = Native {
             outside: library::reaches_outside(module, native.name.name()),
             ..native
         };
         let place = self.runtime.module_named(module);
-        if let Ok(value) = self.runtime.heap.native(native) {
-            self.runtime.define(place, Sym::intern(name), value);
-        }
+        let value = self.runtime.heap.native(native).ok()?;
+        self.runtime.define(place, Sym::intern(name), value);
+        Some(value)
     }
 
     pub fn promise(&mut self) -> Result<Value, Error> {
@@ -1076,16 +1145,21 @@ impl Isolate {
         let parameters_of = |value: Value| {
             heap.closure_of(value)
                 .and_then(|closure| closure.code.parameters.clone())
+                .or_else(|| heap.native_of(value)?.parameters().cloned())
         };
         let mut doc = self.runtime.doc(owner, short).map(str::to_owned);
-        let (kind, parameters) = if let Some(native) = heap.native_of(value) {
+        let built_in = heap
+            .native_of(value)
+            .filter(|native| native.parameters().is_none());
+        let (kind, parameters) = if let Some(native) = built_in {
             let entry = self.docs().entries.get(native.name.name());
             doc = entry.map(|entry| entry.doc.clone());
             let parameters = entry.map_or_else(
                 || describe::fallback(native.least, native.most),
                 |entry| entry.parameters.clone(),
             );
-            (Kind::Native, Some(parameters))
+            let kind = if macros { Kind::Macro } else { Kind::Native };
+            (kind, Some(parameters))
         } else if let Some(record) = heap.record_type_of(value) {
             let parameters = parameters_of(record.constructor).map(|shown| shown.to_string());
             (Kind::Record, parameters)
@@ -1203,38 +1277,48 @@ impl Isolate {
 
     pub fn undocumented(&self) -> Vec<String> {
         let docs = self.docs();
+        let heap = &self.runtime.heap;
         let mut problems = docs.broken.clone();
         let mut natives = HashSet::new();
+        let mut check = |native: &Native, problems: &mut Vec<String>| {
+            let shown = native.name.name();
+            natives.insert(shown);
+            match docs.entries.get(shown) {
+                None => problems.push(format!("{shown} has no doc entry")),
+                Some(entry) if !entry.fits(native.least, native.most) => {
+                    problems.push(format!(
+                        "{shown} takes {} arguments but its doc entry shows {}",
+                        describe::fallback(native.least, native.most),
+                        describe::fallback(entry.least, entry.most)
+                    ));
+                }
+                Some(_) => {}
+            }
+        };
+        let built_in = |value: Value| {
+            heap.native_of(value)
+                .filter(|native| native.parameters().is_none())
+        };
         for module in &self.runtime.modules {
             let library = module.name == "ox" || module.name.starts_with("ox/");
             for (name, value) in &module.globals {
                 if name.name().starts_with('#') {
                     continue;
                 }
-                if let Some(native) = self.runtime.heap.native_of(*value) {
-                    let shown = native.name.name();
-                    natives.insert(shown);
-                    match docs.entries.get(shown) {
-                        None => problems.push(format!("{shown} has no doc entry")),
-                        Some(entry) if !entry.fits(native.least, native.most) => {
-                            problems.push(format!(
-                                "{shown} takes {} arguments but its doc entry shows {}",
-                                describe::fallback(native.least, native.most),
-                                describe::fallback(entry.least, entry.most)
-                            ));
-                        }
-                        Some(_) => {}
-                    }
+                if let Some(native) = built_in(*value) {
+                    check(native, &mut problems);
                 } else if library
-                    && self.runtime.heap.closure_of(*value).is_some()
+                    && (heap.closure_of(*value).is_some() || heap.native_of(*value).is_some())
                     && !module.docs.contains_key(name)
                 {
                     problems.push(format!("{} has no docstring", name.name()));
                 }
             }
             if library {
-                for name in module.macros.keys() {
-                    if !module.docs.contains_key(name) {
+                for (name, value) in &module.macros {
+                    if let Some(native) = built_in(*value) {
+                        check(native, &mut problems);
+                    } else if !module.docs.contains_key(name) {
                         problems.push(format!("the macro {} has no docstring", name.name()));
                     }
                 }

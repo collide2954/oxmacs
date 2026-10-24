@@ -4,6 +4,7 @@ pub(crate) mod convert;
 pub(crate) mod machine;
 pub(crate) mod modules;
 mod prims;
+pub(crate) mod routine;
 mod tasks;
 mod workers;
 
@@ -39,9 +40,10 @@ use crate::value::number::to_float;
 use crate::value::print;
 use crate::value::promise::Promise;
 use crate::value::record::Record;
-use crate::vm::bind::bind;
-use machine::{Caller, Fiber, Generator, Landing, Machine};
+use crate::vm::bind::{Binding, bind};
+use machine::{Caller, Fiber, Generator, Handler, Landing, Machine};
 use modules::{Module, ModuleId};
+use routine::{Next, RAISED, Resumable, Started};
 use tasks::Task;
 
 #[derive(Debug)]
@@ -73,6 +75,8 @@ pub struct Runtime {
     pub(crate) worker_setup: Option<fn(&mut Isolate)>,
     stand_ins: HashMap<(Sym, Sym), Value>,
     channels: HashMap<usize, Value>,
+    pub(crate) controls: HashMap<Control, Value>,
+    drainer: Rc<Resumable>,
 }
 
 const CHECK_EVERY: u32 = 1024;
@@ -121,6 +125,7 @@ type Step = Result<Flow, Error>;
 enum Target {
     Code(Rc<Code>),
     Native(Rc<NativeFn>, Sym, bool),
+    Routine(Rc<Resumable>),
     Control(Control),
     Data,
 }
@@ -155,6 +160,8 @@ impl Default for Runtime {
             worker_setup: None,
             stand_ins: HashMap::new(),
             channels: HashMap::new(),
+            controls: HashMap::new(),
+            drainer: Rc::new(Resumable::drainer()),
         };
         runtime.module_named("ox");
         runtime.module_named("user");
@@ -535,6 +542,9 @@ impl Runtime {
                     .leave(machine.get(from))
                     .map_or(Flow::Next, Flow::Return));
             }
+            Op::Resume => return self.resume_routine(machine, false),
+            Op::Raised => return self.resume_routine(machine, true),
+            Op::Invoke => return self.routine_call(machine, host),
             _ => self.rare(machine, op)?,
         }
         Ok(Flow::Next)
@@ -620,9 +630,77 @@ impl Runtime {
             | Op::Prim { .. }
             | Op::Jump { .. }
             | Op::JumpUnless { .. }
-            | Op::Return { .. } => {}
+            | Op::Return { .. }
+            | Op::Resume
+            | Op::Invoke
+            | Op::Raised => {}
         }
         Ok(())
+    }
+
+    #[inline(never)]
+    fn resume_routine(&mut self, machine: &mut Machine, raised: bool) -> Step {
+        let frames = machine.frames.len();
+        while machine
+            .handlers
+            .last()
+            .is_some_and(|handler| handler.frames == frames)
+        {
+            machine.handlers.pop();
+        }
+        let base = machine.base;
+        let value = machine.stack[base];
+        let Some(routine) = machine
+            .frames
+            .last_mut()
+            .and_then(|frame| frame.routine.as_mut())
+        else {
+            return Err(Error::new("A native lost its state"));
+        };
+        let next = if raised {
+            routine.raised(self, value)?
+        } else {
+            routine.resume(self, value)?
+        };
+        let (callee, arguments, catching) = match next {
+            Next::Return(value) => {
+                return Ok(machine.leave(value).map_or(Flow::Next, Flow::Return));
+            }
+            Next::Call(callee, arguments) => (callee, arguments, false),
+            Next::Catch(callee, arguments) => (callee, arguments, true),
+        };
+        let count = i64::try_from(arguments.len())
+            .ok()
+            .filter(|count| u16::try_from(*count).is_ok())
+            .ok_or_else(|| Error::new("This call has too many arguments"))?;
+        let start = base + 3;
+        let needed = start + arguments.len();
+        if machine.stack.len() < needed {
+            machine.stack.resize(needed, Value::Nil);
+        }
+        machine.stack[base + 1] = Value::Int(count);
+        machine.stack[base + 2] = callee;
+        machine.stack[start..needed].copy_from_slice(arguments);
+        if catching {
+            machine.handlers.push(Handler {
+                frames,
+                to: RAISED as usize,
+                register: 0,
+            });
+        }
+        machine.pc = 1;
+        Ok(Flow::Next)
+    }
+
+    #[inline(never)]
+    fn routine_call(&mut self, machine: &mut Machine, host: &mut dyn Any) -> Step {
+        let base = machine.base;
+        let Value::Int(count) = machine.stack[base + 1] else {
+            return Err(Error::new("A native lost its call"));
+        };
+        let count =
+            u16::try_from(count).map_err(|_| Error::new("This call has too many arguments"))?;
+        self.call_into(machine, base + 2, count, base, host)
     }
 
     fn build(&mut self, machine: &mut Machine, op: Op) -> Result<(), Error> {
@@ -660,7 +738,7 @@ impl Runtime {
                 return Ok(());
             }
             Op::PushHandler { register, to } => {
-                machine.handlers.push(machine::Handler {
+                machine.handlers.push(Handler {
                     frames: machine.frames.len(),
                     to: to as usize,
                     register,
@@ -691,7 +769,11 @@ impl Runtime {
         Ok(count)
     }
 
-    fn target(&self, callee: Value, count: usize) -> Result<Target, Error> {
+    pub(crate) fn control_value(&self, control: Control) -> Value {
+        self.controls.get(&control).copied().unwrap_or(Value::Nil)
+    }
+
+    fn target(&self, callee: Value, arguments: &[Value]) -> Result<Target, Error> {
         if let Some(closure) = self.heap.closure_of(callee) {
             return Ok(Target::Code(Rc::clone(&closure.code)));
         }
@@ -704,11 +786,31 @@ impl Runtime {
                     .of(ErrorKind::Refused),
             );
         }
-        native.check(count)?;
+        native.check(arguments.len())?;
+        if let Some(drains) = native.drains
+            && arguments[drains.range(arguments.len())]
+                .iter()
+                .any(|argument| routine::is_generator(&self.heap, *argument))
+        {
+            return Ok(Target::Routine(Rc::clone(&self.drainer)));
+        }
+        if let Some(resumable) = &native.resumable {
+            return Ok(Target::Routine(Rc::clone(resumable)));
+        }
         Ok(match native.control {
             Some(control) => Target::Control(control),
             None => Target::Native(Rc::clone(&native.function), native.name, native.awaits),
         })
+    }
+
+    fn start_routine(
+        &mut self,
+        machine: &Machine,
+        resumable: &Resumable,
+        callee: Value,
+        arguments: std::ops::RangeInclusive<usize>,
+    ) -> Result<Started, Error> {
+        (resumable.start)(self, callee, &machine.stack[arguments])
     }
 
     fn promised(&self, arguments: &[Value]) -> Option<(usize, Value)> {
@@ -748,7 +850,7 @@ impl Runtime {
         let count = self.arguments(machine, slot, count)?;
         let callee = self.constructor_of(machine.stack[slot]);
         let arguments = slot + 1..=slot + count;
-        match self.target(callee, count)? {
+        match self.target(callee, &machine.stack[arguments.clone()])? {
             Target::Code(function) => {
                 if let Some(profiler) = &mut self.profiler {
                     profiler.called(&function, &self.modules);
@@ -771,6 +873,17 @@ impl Runtime {
                     &machine.stack[arguments],
                 )?;
                 self.timed(name, started, machine);
+            }
+            Target::Routine(resumable) => {
+                match self.start_routine(machine, &resumable, callee, arguments)? {
+                    Started::Done(value) => machine.stack[result] = value,
+                    Started::Running(routine) => {
+                        let call = machine.span(machine.pc.saturating_sub(1));
+                        let code = Rc::clone(&resumable.code);
+                        machine.enter(code, callee, slot, result, Binding::Direct)?;
+                        machine.run_routine(routine, call)?;
+                    }
+                }
             }
             Target::Control(control) => {
                 return self.control(machine, control, slot, count, Landing::Register(result));
@@ -826,7 +939,7 @@ impl Runtime {
         let count = self.arguments(machine, slot, count)?;
         let callee = self.constructor_of(machine.stack[slot]);
         let arguments = slot + 1..=slot + count;
-        let result = match self.target(callee, count)? {
+        let result = match self.target(callee, &machine.stack[arguments.clone()])? {
             Target::Code(function) => {
                 if let Some(profiler) = &mut self.profiler {
                     profiler.called(&function, &self.modules);
@@ -851,6 +964,18 @@ impl Runtime {
                 )?;
                 self.timed(name, started, machine);
                 result
+            }
+            Target::Routine(resumable) => {
+                match self.start_routine(machine, &resumable, callee, arguments)? {
+                    Started::Done(value) => value,
+                    Started::Running(routine) => {
+                        let call = machine.span(machine.pc.saturating_sub(1));
+                        let code = Rc::clone(&resumable.code);
+                        machine.replace(code, callee, slot, count, Binding::Direct);
+                        machine.run_routine(routine, call)?;
+                        return Ok(Flow::Next);
+                    }
+                }
             }
             Target::Control(control) => {
                 return self.control(machine, control, slot, count, Landing::Leave);
@@ -1026,6 +1151,7 @@ impl Runtime {
         roots.extend(self.last_raised.as_ref().map(|(value, _)| *value));
         roots.push(self.apply);
         roots.extend(self.prims);
+        roots.extend(self.controls.values().copied());
         roots.extend(self.running);
         self.task_roots(roots, codes);
     }

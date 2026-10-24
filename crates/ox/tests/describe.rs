@@ -88,6 +88,41 @@ fn natives_and_special_forms_are_described_from_the_library_docs() {
 }
 
 #[test]
+fn error_types_and_made_functions_describe_their_parameters() {
+    let mut isolate = shapes();
+    isolate.eval("(def always (constantly 1))").unwrap();
+
+    let error = described(&mut isolate, "type-error");
+    assert_eq!(error.kind, Kind::Record);
+    assert_eq!(
+        error.signature,
+        "(type-error (message \"type-error\") (traceback nil))"
+    );
+    let always = described(&mut isolate, "always");
+    assert_eq!(always.kind, Kind::Function);
+    assert_eq!(always.signature, "(always & _)");
+    assert_eq!(always.doc, None);
+    isolate.eval("(def add (partial + 1))").unwrap();
+    assert_eq!(described(&mut isolate, "add").signature, "(add & more)");
+}
+
+#[test]
+fn the_core_macros_are_built_in_and_described_from_the_library_docs() {
+    let mut isolate = shapes();
+
+    let when = described(&mut isolate, "when");
+    assert_eq!(when.kind, Kind::Macro);
+    assert_eq!(when.signature, "(when test & body)");
+    assert_eq!(
+        when.doc.as_deref(),
+        Some("Evaluates body when test is truthy; otherwise nil.")
+    );
+    assert_eq!(when.place, None);
+    let if_let = described(&mut isolate, "if-let");
+    assert_eq!(if_let.signature, "(if-let binding then & otherwise)");
+}
+
+#[test]
 fn redefining_a_name_moves_its_place() {
     let mut isolate = shapes();
 
@@ -169,7 +204,8 @@ fn the_reference_lists_every_library_module_with_its_documented_names() {
     };
 
     assert_eq!(reference[0].module, "ox");
-    assert_eq!(entry("ox", "map").kind, Kind::Function);
+    assert_eq!(entry("ox", "map").kind, Kind::Native);
+    assert_eq!(entry("ox", "map").signature, "(map f coll & colls)");
     assert!(entry("ox", "map").doc.is_some());
     assert_eq!(entry("ox", "+").kind, Kind::Native);
     assert_eq!(entry("ox", "if").kind, Kind::Special);

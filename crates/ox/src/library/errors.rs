@@ -4,7 +4,7 @@ use crate::value::Value;
 use crate::value::record::Family;
 use crate::vm::build::{interrupt_marker, raised};
 
-fn catches(heap: &Heap, value: Value, kind: Value) -> bool {
+pub(crate) fn catches(heap: &Heap, value: Value, kind: Value) -> bool {
     let (Some(wanted), Some(record)) = (heap.record_type_of(kind), heap.record_of(value)) else {
         return false;
     };

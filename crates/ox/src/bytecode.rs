@@ -183,6 +183,9 @@ pub enum Op {
     Return {
         from: Register,
     },
+    Resume,
+    Invoke,
+    Raised,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,15 +1,17 @@
 use std::any::Any;
 use std::fmt;
+use std::ops::Range;
 use std::rc::Rc;
 
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::symbol::Sym;
 use crate::value::Value;
+use crate::vm::routine::Resumable;
 
 pub type NativeFn = dyn Fn(&mut Heap, &mut dyn Any, &[Value]) -> Result<Value, Error>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Control {
     Yield,
     Next,
@@ -36,6 +38,26 @@ pub struct Native {
     pub control: Option<Control>,
     pub awaits: bool,
     pub outside: bool,
+    pub(crate) resumable: Option<Rc<Resumable>>,
+    pub(crate) drains: Option<Drains>,
+    pub(crate) captured: Box<[Value]>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Drains {
+    At(usize),
+    From(usize),
+    Last,
+}
+
+impl Drains {
+    pub(crate) fn range(self, count: usize) -> Range<usize> {
+        match self {
+            Self::At(at) => at.min(count)..(at + 1).min(count),
+            Self::From(at) => at.min(count)..count,
+            Self::Last => count.saturating_sub(1)..count,
+        }
+    }
 }
 
 impl fmt::Debug for Native {
@@ -56,6 +78,10 @@ pub fn arguments(count: usize) -> String {
 }
 
 impl Native {
+    pub(crate) fn parameters(&self) -> Option<&Rc<str>> {
+        self.resumable.as_ref()?.parameters.as_ref()
+    }
+
     pub fn check(&self, count: usize) -> Result<(), Error> {
         let fits = count >= self.least && self.most.is_none_or(|most| count <= most);
         if fits {
