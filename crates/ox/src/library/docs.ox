@@ -224,6 +224,7 @@
 (path/abbreviate path) "path with the home folder shown as ~."
 (path/absolute? path) "True when path doesn't depend on the current folder."
 (path/separator) "The system's path separator, / or \\."
+(path/temp) "The system's folder for temporary files."
 
 (file/read path) "A promise of the contents of the file at path, as a string. Use await to get it."
 (file/write path text) "Writes text to the file at path, replacing what was there, and returns a promise that settles when it is done."
@@ -241,6 +242,8 @@
 
 (process/run program arguments {cwd nil env nil input nil}) "Runs program with a vector of arguments and returns a promise of a map of :status, :stdout and :stderr. :cwd sets its folder, :env a map of variables to set or, with nil, remove, and :input text for its standard input."
 (process/env name) "The value of the environment variable name, or nil."
+(process/which program) "The path of program in the folders of PATH, trying program.exe first on Windows, or nil when it isn't there."
+(process/os) "The operating system as a keyword: :windows, :macos, :linux or another name Rust gives it."
 (process/start program arguments {cwd nil env nil input nil}) "Starts program and returns at once a map of :lines and :errors, channels of its output and error lines that close when it ends, and :exit, a promise of its exit status. It raises when the program can't start."
 (process/write process text) "Writes text to the standard input of a started process; false once its input is closed."
 (process/close-input process) "Closes the standard input of a started process, which many programs take as the end of their work."

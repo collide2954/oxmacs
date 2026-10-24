@@ -79,6 +79,9 @@ pub fn install(isolate: &mut Isolate) {
         };
         shown(heap, Some(&expanded))
     });
+    isolate.define_native_in(MODULE, "temp", 0, Some(0), |heap, _| {
+        shown(heap, Some(&std::env::temp_dir()))
+    });
     isolate.define_native_in(MODULE, "separator", 0, Some(0), |heap, _| {
         heap.string(std::path::MAIN_SEPARATOR_STR).map_err(full)
     });

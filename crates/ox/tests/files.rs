@@ -191,4 +191,8 @@ fn paths_are_joined_and_taken_apart() {
         ),
         "[nil nil true false]"
     );
+    assert_eq!(
+        evaluated(&mut isolate, "(path/temp)"),
+        format!("{:?}", std::env::temp_dir().display().to_string())
+    );
 }

@@ -295,4 +295,27 @@ pub fn install(isolate: &mut Isolate) {
             Err(_) => Ok(Value::Nil),
         }
     });
+    isolate.define_native_in(MODULE, "which", 1, Some(1), |heap, arguments| {
+        let program = text(heap, "process/which", arguments[0])?.to_owned();
+        match which(&program) {
+            Some(path) => heap.string(&path.display().to_string()).map_err(full),
+            None => Ok(Value::Nil),
+        }
+    });
+    isolate.define_native_in(MODULE, "os", 0, Some(0), |_, _| {
+        Ok(Value::keyword(std::env::consts::OS))
+    });
+}
+
+fn which(program: &str) -> Option<PathBuf> {
+    let names = |directory: &std::path::Path| {
+        let mut names = vec![directory.join(program)];
+        if cfg!(windows) {
+            names.insert(0, directory.join(format!("{program}.exe")));
+        }
+        names
+    };
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .flat_map(|directory| names(&directory))
+        .find(|candidate| candidate.is_file())
 }

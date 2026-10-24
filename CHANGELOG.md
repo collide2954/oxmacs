@@ -71,6 +71,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `process/which` finds a program on `PATH`, `process/os` names the operating system and `path/temp` gives the folder for temporary files.
 - Unsaved files get recovery copies in the oxmacs cache folder, never beside the files themselves, and opening a file whose copy is newer offers to recover it; saving, reverting or killing the buffer removes the copy. A crash writes a log there too.
 - `ui/image` shows an `ox/image` image in a plugin view, and `open-view` takes `:beside` and `:select` like `open-buffer`.
 - Plugins can list the processes oxmacs runs with `processes`, follow them with `on-processes-change`, end them with `stop-process` and `kill-process`, and sample their usage with `watch-process-usage`. `open-buffer`'s `:select true` moves to a buffer it opens beside.
