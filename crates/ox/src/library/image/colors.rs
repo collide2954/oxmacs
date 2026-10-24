@@ -257,7 +257,7 @@ pub(crate) fn color(heap: &Heap, name: &str, value: Value) -> Result<Rgba<u8>, E
     found.map(Rgba).ok_or_else(|| {
         Error::new(format!(
             "image/{name} expects a color such as \"#ff8800\", [255 136 0], :orange or a theme face, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })

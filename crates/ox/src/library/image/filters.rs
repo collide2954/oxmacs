@@ -609,7 +609,7 @@ fn install_sharpening(isolate: &mut Isolate) {
             Some(other) => {
                 return Err(Error::new(format!(
                     "image/edges takes :method :sobel or :canny, not {}",
-                    print::write(heap, other)
+                    print::brief(heap, other)
                 ))
                 .of(ErrorKind::Type));
             }
@@ -666,7 +666,7 @@ fn install_effects(isolate: &mut Isolate) {
             Some(other) => {
                 return Err(Error::new(format!(
                     "image/noise expects a whole number :seed, got {}",
-                    print::write(heap, other)
+                    print::brief(heap, other)
                 ))
                 .of(ErrorKind::Type));
             }

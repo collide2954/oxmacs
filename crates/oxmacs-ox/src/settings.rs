@@ -55,7 +55,7 @@ fn to_json(heap: &Heap, setting: &Setting, value: Value) -> Result<Option<Json>,
             "{} must be {}, got {}",
             setting.key,
             wanted(setting.kind),
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
     })
 }
@@ -128,7 +128,7 @@ fn change(heap: &Heap, editor: &mut Editor, changes: Value) -> Result<Value, Err
         .ok_or_else(|| Error::new("settings takes a map, such as {tab-width: 4}"))?;
     let mut config = editor.config().clone();
     for (key, value) in entries {
-        let key = name_of(heap, key).unwrap_or_else(|| print::write(heap, key));
+        let key = name_of(heap, key).unwrap_or_else(|| print::brief(heap, key));
         let setting = schema::find(&key)
             .ok_or_else(|| Error::new(format!("There is no setting named {key}")))?;
         config = config

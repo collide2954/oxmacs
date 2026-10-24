@@ -127,7 +127,7 @@ pub(super) fn changed(
 pub(super) fn outside(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
     Error::new(format!(
         "image/{name} expects {what}, got {}",
-        print::write(heap, value)
+        print::brief(heap, value)
     ))
     .of(ErrorKind::Range)
 }
@@ -595,7 +595,7 @@ fn install_levels(isolate: &mut Isolate) {
         let Some(chosen) = chosen else {
             return Err(Error::new(format!(
                 "image/curves takes :channel :all, :red, :green, :blue or :alpha, not {}",
-                print::write(heap, options.get("channel").unwrap_or(Value::Nil))
+                print::brief(heap, options.get("channel").unwrap_or(Value::Nil))
             ))
             .of(ErrorKind::Type));
         };

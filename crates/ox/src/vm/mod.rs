@@ -1,6 +1,6 @@
 pub(crate) mod bind;
 pub(crate) mod build;
-mod convert;
+pub(crate) mod convert;
 pub(crate) mod machine;
 pub(crate) mod modules;
 mod prims;
@@ -15,6 +15,7 @@ use build::{
 use std::any::Any;
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
+use std::panic::{self, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -159,6 +160,25 @@ impl Default for Runtime {
 
 fn not_defined(name: Sym) -> Error {
     Error::new(format!("{} is not defined", modules::display(name))).of(ErrorKind::Name)
+}
+
+fn guarded(
+    function: &NativeFn,
+    name: Sym,
+    heap: &mut Heap,
+    host: &mut dyn Any,
+    arguments: &[Value],
+) -> Result<Value, Error> {
+    panic::catch_unwind(AssertUnwindSafe(|| function(heap, host, arguments))).unwrap_or_else(
+        |payload| {
+            let reason = payload
+                .downcast_ref::<&str>()
+                .map(|text| (*text).to_owned())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "a panic".to_owned());
+            Err(Error::new(format!("{} crashed: {reason}", name.name())))
+        },
+    )
 }
 
 fn interrupted() -> Error {
@@ -338,7 +358,7 @@ impl Runtime {
     fn expected(&self, name: &str, wanted: &str, value: Value) -> Error {
         Error::new(format!(
             "{name} expects {wanted}, got {}",
-            print::write(&self.heap, value)
+            print::brief(&self.heap, value)
         ))
         .of(ErrorKind::Type)
     }
@@ -715,7 +735,13 @@ impl Runtime {
             }
             Target::Native(function, name, _) => {
                 let started = self.profiler.is_some().then(Instant::now);
-                machine.stack[result] = function(&mut self.heap, host, &machine.stack[arguments])?;
+                machine.stack[result] = guarded(
+                    &*function,
+                    name,
+                    &mut self.heap,
+                    host,
+                    &machine.stack[arguments],
+                )?;
                 self.timed(name, started, machine);
             }
             Target::Control(control) => {
@@ -788,7 +814,13 @@ impl Runtime {
             }
             Target::Native(function, name, _) => {
                 let started = self.profiler.is_some().then(Instant::now);
-                let result = function(&mut self.heap, host, &machine.stack[arguments])?;
+                let result = guarded(
+                    &*function,
+                    name,
+                    &mut self.heap,
+                    host,
+                    &machine.stack[arguments],
+                )?;
                 self.timed(name, started, machine);
                 result
             }

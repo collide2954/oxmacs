@@ -14,7 +14,7 @@ use crate::vm::machine::Generator;
 fn expected(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects {wanted}, got {}",
-        print::write(heap, value)
+        print::brief(heap, value)
     ))
     .of(ErrorKind::Type)
 }

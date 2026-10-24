@@ -8,7 +8,7 @@ use tiny_skia::{
 };
 
 use super::adjust::{byte, factor, luma, narrow, outside, strength, unit};
-use super::{Image, MODULE, Options, colors, image_of, later, number, size, stored, wanted};
+use super::{Image, MODULE, Options, colors, image_of, later, number, roomy, size, stored, wanted};
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
@@ -104,7 +104,7 @@ fn drawn(
     let Some(image) = image_of(heap, target) else {
         return Err(Error::new(format!(
             "image/{name} expects an image or a canvas, got {}",
-            print::write(heap, target)
+            print::brief(heap, target)
         ))
         .of(ErrorKind::Type));
     };
@@ -129,7 +129,7 @@ fn blend(heap: &Heap, name: &str, options: &Options<'_>) -> Result<BlendMode, Er
     found.ok_or_else(|| {
         Error::new(format!(
             "image/{name} takes a :blend mode such as :multiply, :screen or :overlay, not {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })
@@ -164,7 +164,7 @@ fn keyword_choice<T: Copy>(
         Error::new(format!(
             "image/{name} takes :{key} {}, not {}",
             listed.join(", "),
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })
@@ -489,7 +489,7 @@ fn canvas_of(heap: &Heap, name: &str, value: Value) -> Result<Arc<Canvas>, Error
     heap.shared_of::<Canvas>(value).ok_or_else(|| {
         Error::new(format!(
             "image/{name} expects a canvas, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })
@@ -666,6 +666,7 @@ fn install_layers(isolate: &mut Isolate) {
         let image = wanted(heap, "tile", arguments[0])?;
         let width = size(heap, "tile", "a width", arguments[1])?;
         let height = size(heap, "tile", "a height", arguments[2])?;
+        roomy("tile", width, height)?;
         later(heap, "tile", move || {
             Ok(image.with(tiled(&image.pixels, width, height)))
         })

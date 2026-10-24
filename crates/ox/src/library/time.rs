@@ -32,7 +32,7 @@ fn parse(heap: &mut Heap, value: Value) -> Result<Value, Error> {
         .map_err(|_| {
             Error::new(format!(
                 "time/parse can't read {} as a date or a time",
-                print::write(heap, value)
+                print::brief(heap, value)
             ))
         })?;
     fields(heap, time)
@@ -59,7 +59,7 @@ fn moment(heap: &Heap, name: &str, value: Value) -> Result<Timestamp, Error> {
     let Value::Int(millis) = value else {
         return Err(Error::new(format!(
             "{name} expects milliseconds, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type));
     };
@@ -86,7 +86,7 @@ fn field(heap: &Heap, fields: &[(Value, Value)], name: &str, default: i64) -> Re
         Some((_, Value::Int(number))) => Ok(*number),
         Some((_, value)) => Err(Error::new(format!(
             "time/instant expects a whole number for :{name}, got {}",
-            print::write(heap, *value)
+            print::brief(heap, *value)
         ))
         .of(ErrorKind::Type)),
     }
@@ -120,7 +120,7 @@ fn instant(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let unreadable = || {
         Error::new(format!(
             "time/instant can't read {} as a moment",
-            print::write(heap, given)
+            print::brief(heap, given)
         ))
     };
     let civil = if let Some(fields) = heap.entries(given) {
@@ -146,7 +146,7 @@ fn add(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let fields = heap.entries(arguments[1]).ok_or_else(|| {
         Error::new(format!(
             "time/add expects a map of amounts, got {}",
-            print::write(heap, arguments[1])
+            print::brief(heap, arguments[1])
         ))
         .of(ErrorKind::Type)
     })?;
@@ -159,7 +159,7 @@ fn add(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         let Value::Int(amount) = value else {
             return Err(Error::new(format!(
                 "time/add expects whole numbers, got {}",
-                print::write(heap, value)
+                print::brief(heap, value)
             ))
             .of(ErrorKind::Type));
         };
@@ -199,8 +199,8 @@ fn days_in_month(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let (Value::Int(year), Value::Int(month)) = (arguments[0], arguments[1]) else {
         return Err(Error::new(format!(
             "time/days-in-month expects a year and a month, got {} and {}",
-            print::write(heap, arguments[0]),
-            print::write(heap, arguments[1])
+            print::brief(heap, arguments[0]),
+            print::brief(heap, arguments[1])
         ))
         .of(ErrorKind::Type));
     };
@@ -240,7 +240,7 @@ fn scale(heap: &Heap, name: &str, value: Value, factor: i64) -> Result<Value, Er
         Value::Float(count) => Ok(Value::Float(count * to_float(factor))),
         _ => Err(Error::new(format!(
             "{name} expects a number, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)),
     }

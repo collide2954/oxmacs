@@ -42,7 +42,7 @@ fn seconds(heap: &Heap, value: Value) -> Result<Duration, Error> {
     after.filter(|after| !after.is_zero()).ok_or_else(|| {
         Error::new(format!(
             "on-idle expects a positive number of seconds, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
     })
 }

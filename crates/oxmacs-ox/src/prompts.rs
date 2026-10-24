@@ -77,7 +77,7 @@ fn offers(heap: &Heap, value: Value) -> Result<Vec<Offer>, Error> {
     found.ok_or_else(|| {
         Error::new(format!(
             ":choices must be a vector of names or a map of names to notes, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
     })
 }
@@ -106,7 +106,7 @@ fn prompt(
             _ => {
                 return Err(Error::new(format!(
                     "prompt takes :initial, :choices and :secret, not {}",
-                    print::write(heap, pair[0])
+                    print::brief(heap, pair[0])
                 )));
             }
         }

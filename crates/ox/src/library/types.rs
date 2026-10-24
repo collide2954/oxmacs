@@ -18,7 +18,7 @@ fn named(heap: &Heap, function: &str, value: Value) -> Result<String, Error> {
             .ok_or_else(|| {
                 Error::new(format!(
                     "{function} expects a string, symbol or keyword, got {}",
-                    print::write(heap, value)
+                    print::brief(heap, value)
                 ))
                 .of(ErrorKind::Type)
             }),

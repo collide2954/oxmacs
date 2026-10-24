@@ -89,7 +89,7 @@ pub fn install(isolate: &mut Isolate) {
     });
     isolate.define_native("#no-match", 1, Some(1), |heap, arguments| {
         Err(
-            Error::new(format!("No match for {}", print::write(heap, arguments[0])))
+            Error::new(format!("No match for {}", print::brief(heap, arguments[0])))
                 .of(ErrorKind::NoMatch),
         )
     });

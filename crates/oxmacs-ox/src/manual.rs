@@ -49,7 +49,7 @@ fn highlight(heap: &mut Heap, lines: Value) -> Result<Value, Error> {
         .ok_or_else(|| {
             Error::new(format!(
                 "ox-highlight expects a vector of lines, got {}",
-                print::write(heap, lines)
+                print::brief(heap, lines)
             ))
         })?
         .into_iter()

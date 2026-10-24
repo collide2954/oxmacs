@@ -11,7 +11,7 @@ fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> 
     heap.text(value).ok_or_else(|| {
         Error::new(format!(
             "string/{name} expects a string, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })
@@ -27,7 +27,7 @@ fn count(heap: &Heap, name: &str, value: Value) -> Result<usize, Error> {
         }),
         _ => Err(Error::new(format!(
             "string/{name} expects a whole number, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)),
     }
@@ -191,7 +191,7 @@ pub fn install(isolate: &mut Isolate) {
             .ok_or_else(|| {
                 Error::new(format!(
                     "string/join expects a sequence, got {}",
-                    print::write(heap, items)
+                    print::brief(heap, items)
                 ))
                 .of(ErrorKind::Type)
             })?

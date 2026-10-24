@@ -21,6 +21,25 @@ use crate::vm::build::{full, make_map, make_vector};
 
 const MODULE: &str = "ox/image";
 const KIND: &str = "image";
+const MOST_SIDE: u32 = 32_768;
+const MOST_PIXELS: u64 = 134_217_728;
+
+fn room(name: &str, width: u32, height: u32) -> Result<(), String> {
+    if width <= MOST_SIDE
+        && height <= MOST_SIDE
+        && u64::from(width) * u64::from(height) <= MOST_PIXELS
+    {
+        return Ok(());
+    }
+    Err(format!(
+        "image/{name} would make a {width}×{height} image; images can be at most {MOST_SIDE} pixels a side and {} megapixels",
+        MOST_PIXELS / 1_000_000
+    ))
+}
+
+fn roomy(name: &str, width: u32, height: u32) -> Result<(), Error> {
+    room(name, width, height).map_err(|message| Error::new(message).of(ErrorKind::Range))
+}
 
 #[derive(Debug, Clone)]
 pub struct Image {
@@ -64,7 +83,7 @@ fn wanted(heap: &Heap, name: &str, value: Value) -> Result<Arc<Image>, Error> {
     image_of(heap, value).ok_or_else(|| {
         Error::new(format!(
             "image/{name} expects an image, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })
@@ -99,7 +118,7 @@ fn text<'a>(heap: &'a Heap, name: &str, what: &str, value: Value) -> Result<&'a 
     heap.text(value).ok_or_else(|| {
         Error::new(format!(
             "image/{name} expects {what}, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })
@@ -111,7 +130,7 @@ fn number(heap: &Heap, name: &str, what: &str, value: Value) -> Result<f64, Erro
         Value::Float(number) => Ok(number),
         _ => Err(Error::new(format!(
             "image/{name} expects {what} as a number, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)),
     }
@@ -125,7 +144,7 @@ fn size(heap: &Heap, name: &str, what: &str, value: Value) -> Result<u32, Error>
     .ok_or_else(|| {
         Error::new(format!(
             "image/{name} expects {what} as a whole number above 0, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })
@@ -154,7 +173,7 @@ impl<'a> Options<'a> {
                     return Err(Error::new(format!(
                         "image/{name} takes {}, not {}",
                         listed.join(", "),
-                        print::write(heap, *other)
+                        print::brief(heap, *other)
                     ))
                     .of(ErrorKind::Arity));
                 }
@@ -227,6 +246,7 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_native_in(MODULE, "new", 2, Some(4), |heap, arguments| {
         let width = size(heap, "new", "a width", arguments[0])?;
         let height = size(heap, "new", "a height", arguments[1])?;
+        roomy("new", width, height)?;
         let options = Options::read(heap, "new", &arguments[2..], &["color"])?;
         let color = match options.get("color") {
             Some(value) => colors::color(heap, "new", value)?,
@@ -262,8 +282,8 @@ pub fn install(isolate: &mut Isolate) {
                     "image/pixel expects a point inside the {}×{} image, got {} {}",
                     image.pixels.width(),
                     image.pixels.height(),
-                    print::write(heap, arguments[1]),
-                    print::write(heap, arguments[2])
+                    print::brief(heap, arguments[1]),
+                    print::brief(heap, arguments[2])
                 ))
                 .of(ErrorKind::Range)
             })?;

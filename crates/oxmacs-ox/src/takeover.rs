@@ -59,7 +59,7 @@ fn take_over(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
                 let Value::Int(fps @ 1..=FASTEST) = *value else {
                     return Err(Error::new(format!(
                         "take-over :fps must be a whole number from 1 to {FASTEST}, got {}",
-                        print::write(heap, *value)
+                        print::brief(heap, *value)
                     )));
                 };
                 every = Duration::from_millis(1000 / fps.unsigned_abs());

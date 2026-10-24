@@ -186,7 +186,7 @@ fn settings_of(heap: &mut Heap, value: Value) -> Result<Vec<Setting>, String> {
             return Err(format!(
                 "The default for {key} must be {}, got {}",
                 describe(&kind),
-                print::write(heap, default)
+                print::brief(heap, default)
             ));
         }
         let default = default.map(|default| heap.hold(default));
@@ -222,7 +222,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
     };
     for pair in options.chunks(2) {
         let [key, value] = pair else {
-            return Err(format!("{} has no value", print::write(heap, pair[0])));
+            return Err(format!("{} has no value", print::brief(heap, pair[0])));
         };
         match keyword(*key) {
             Some("commands") => manifest.commands = commands_of(heap, *value)?,
@@ -476,7 +476,7 @@ fn merge(heap: &mut Heap, plugin: &mut Plugin, config: Value) -> Vec<String> {
             problems.push(format!(
                 "{name}'s {key} must be {}, got {}",
                 describe(&setting.kind),
-                print::write(heap, given)
+                print::brief(heap, given)
             ));
             continue;
         }
@@ -634,7 +634,7 @@ fn configure(
     let mut disabled = false;
     for pair in options.chunks(2) {
         let [option, value] = pair else {
-            problems.push(format!("{} has no value", print::write(heap, pair[0])));
+            problems.push(format!("{} has no value", print::brief(heap, pair[0])));
             continue;
         };
         match keyword(*option) {
@@ -642,7 +642,7 @@ fn configure(
             Some("config") => problems.extend(merge(heap, plugin, *value)),
             _ => problems.push(format!(
                 "use-plugin takes :config and :disabled, not {}",
-                print::write(heap, *option)
+                print::brief(heap, *option)
             )),
         }
     }

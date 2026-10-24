@@ -69,7 +69,7 @@ fn read(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
             _ => {
                 return Err(Error::new(format!(
                     "csv/read takes :header, not {}",
-                    print::write(heap, pair[0])
+                    print::brief(heap, pair[0])
                 )));
             }
         }

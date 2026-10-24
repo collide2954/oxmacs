@@ -24,7 +24,7 @@ pub fn field(heap: &Heap, value: Value, name: Sym) -> Result<Value, Error> {
     if let Some(map) = heap.map_of(value) {
         return Ok(map.get(heap, Value::Keyword(name)).unwrap_or(Value::Nil));
     }
-    Err(no_field(&print::write(heap, value), name))
+    Err(no_field(&print::brief(heap, value), name))
 }
 
 pub fn call_data(heap: &Heap, callee: Value, given: &[Value]) -> Result<Value, Error> {
@@ -34,7 +34,7 @@ pub fn call_data(heap: &Heap, callee: Value, given: &[Value]) -> Result<Value, E
         1
     } else {
         return Err(
-            Error::new(format!("{} is not a function", print::write(heap, callee)))
+            Error::new(format!("{} is not a function", print::brief(heap, callee)))
                 .of(ErrorKind::Type),
         );
     };
@@ -46,7 +46,7 @@ pub fn call_data(heap: &Heap, callee: Value, given: &[Value]) -> Result<Value, E
         };
         return Err(Error::new(format!(
             "{} takes {wanted}, got {}",
-            print::write(heap, callee),
+            print::brief(heap, callee),
             given.len()
         ))
         .of(ErrorKind::Arity));
@@ -67,7 +67,7 @@ pub fn record_literal(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> 
     let Some(record_type) = heap.record_type_of(*kind) else {
         return Err(Error::new(format!(
             "{} is not a record type",
-            print::write(heap, *kind)
+            print::brief(heap, *kind)
         )));
     };
     let name = record_type.name.name();
@@ -80,7 +80,7 @@ pub fn record_literal(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> 
         let Value::Keyword(field) = key else {
             return Err(Error::new(format!(
                 "{name} has no field {}",
-                print::write(heap, *key)
+                print::brief(heap, *key)
             )));
         };
         let Some(place) = names
@@ -128,7 +128,7 @@ pub fn raised(heap: &Heap, value: Value) -> Error {
         .record_of(value)
         .and_then(|record| record.get(heap, Sym::intern("message")))
         .and_then(|message| heap.text(message).map(str::to_owned))
-        .unwrap_or_else(|| format!("Raised {}", print::write(heap, value)));
+        .unwrap_or_else(|| format!("Raised {}", print::brief(heap, value)));
     Error::raised(message, value)
 }
 
@@ -150,7 +150,7 @@ pub fn make_map(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
         if grown.count == map.count {
             return Err(Error::new(format!(
                 "Duplicate key {} in a map literal",
-                print::write(heap, *key)
+                print::brief(heap, *key)
             )));
         }
         map = grown;
@@ -165,7 +165,7 @@ pub fn make_set(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
         if grown.count == set.count {
             return Err(Error::new(format!(
                 "Duplicate item {} in a set literal",
-                print::write(heap, *item)
+                print::brief(heap, *item)
             )));
         }
         set = grown;

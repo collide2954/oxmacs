@@ -302,3 +302,20 @@ fn errors_in_tasks_are_reported() {
         Err("Division by zero".to_owned())
     );
 }
+
+#[test]
+fn values_nested_too_deeply_to_send_are_refused_instead_of_crashing() {
+    let mut isolate = Isolate::new();
+
+    let error = isolate
+        .eval("(let [deep (reduce (fn [acc _] [acc]) nil (range 5000)) c (chan 1)] (send c deep))")
+        .unwrap_err();
+
+    assert!(
+        error
+            .message
+            .ends_with("is nested more than 256 levels deep to be sent through a channel"),
+        "{}",
+        error.message
+    );
+}

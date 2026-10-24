@@ -169,7 +169,7 @@ fn connect(host: String, port: u16, tls: bool) -> Result<Portable, Failure> {
 fn wrong(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects {wanted}, got {}",
-        print::write(heap, value)
+        print::brief(heap, value)
     ))
     .of(ErrorKind::Type)
 }
@@ -205,7 +205,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<bool, Error> {
             _ => {
                 return Err(Error::new(format!(
                     "net/connect takes :tls, not {}",
-                    print::write(heap, pair[0])
+                    print::brief(heap, pair[0])
                 )));
             }
         }

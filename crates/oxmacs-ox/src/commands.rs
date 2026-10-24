@@ -21,7 +21,7 @@ fn name_of(heap: &Heap, value: Value) -> Result<String, Error> {
         _ => heap.text(value).map(str::to_owned).ok_or_else(|| {
             Error::new(format!(
                 "A command name must be a symbol, got {}",
-                print::write(heap, value)
+                print::brief(heap, value)
             ))
         }),
     }

@@ -2,7 +2,7 @@ use image::imageops::{self, FilterType};
 use image::{Rgba, RgbaImage};
 use imageproc::geometric_transformations::{Border, Interpolation, Projection, warp_into};
 
-use super::{MODULE, Options, colors, later, number, size, wanted};
+use super::{MODULE, Options, colors, later, number, room, roomy, size, wanted};
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
@@ -28,7 +28,7 @@ fn filter(heap: &Heap, name: &str, options: &Options<'_>) -> Result<FilterType, 
     .ok_or_else(|| {
         Error::new(format!(
             "image/{name} takes :filter :nearest, :linear, :cubic, :gaussian or :lanczos, not {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })
@@ -60,7 +60,7 @@ fn whole(heap: &Heap, name: &str, what: &str, value: Value) -> Result<i64, Error
         Value::Int(number) => Ok(number),
         _ => Err(Error::new(format!(
             "image/{name} expects {what} as a whole number, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)),
     }
@@ -106,7 +106,7 @@ fn anchor(heap: &Heap, options: &Options<'_>) -> Result<(f64, f64), Error> {
     found.ok_or_else(|| {
         Error::new(format!(
             "image/canvas takes an :anchor such as :center, :top-left or :bottom, not {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })
@@ -131,10 +131,15 @@ fn offset(room: u32, used: u32, fraction: f64) -> i64 {
     moved
 }
 
-fn rotate(pixels: &RgbaImage, degrees: f64, color: Rgba<u8>, expand: bool) -> RgbaImage {
+fn rotate(
+    pixels: &RgbaImage,
+    degrees: f64,
+    color: Rgba<u8>,
+    expand: bool,
+) -> Result<RgbaImage, String> {
     let turns = degrees.rem_euclid(360.0);
     if turns.abs() < f64::EPSILON {
-        return pixels.clone();
+        return Ok(pixels.clone());
     }
     for (exact, turned) in [
         (90.0, imageops::rotate90 as fn(&RgbaImage) -> RgbaImage),
@@ -142,7 +147,7 @@ fn rotate(pixels: &RgbaImage, degrees: f64, color: Rgba<u8>, expand: bool) -> Rg
         (270.0, imageops::rotate270),
     ] {
         if (turns - exact).abs() < 1e-9 {
-            return turned(pixels);
+            return Ok(turned(pixels));
         }
     }
     let radians = turns.to_radians();
@@ -156,6 +161,7 @@ fn rotate(pixels: &RgbaImage, degrees: f64, color: Rgba<u8>, expand: bool) -> Rg
     } else {
         (pixels.width(), pixels.height())
     };
+    room("rotate", out_width, out_height)?;
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_precision_loss,
@@ -172,7 +178,7 @@ fn rotate(pixels: &RgbaImage, degrees: f64, color: Rgba<u8>, expand: bool) -> Rg
         Border::Constant(color),
         &mut out,
     );
-    out
+    Ok(out)
 }
 
 fn trim(pixels: &RgbaImage, tolerance: f64) -> RgbaImage {
@@ -210,7 +216,7 @@ fn points(heap: &Heap, name: &str, value: Value) -> Result<[(f32, f32); 4], Erro
     let wrong = || {
         Error::new(format!(
             "image/{name} expects four [x y] points, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     };
@@ -264,6 +270,7 @@ fn install_scaling(isolate: &mut Isolate) {
                 f64::from(width) / f64::from(image.pixels.width()),
             ),
         };
+        roomy("resize", width, height)?;
         later(heap, "resize", move || {
             Ok(image.with(imageops::resize(&image.pixels, width, height, filter)))
         })
@@ -289,12 +296,9 @@ fn install_scaling(isolate: &mut Isolate) {
                 } else {
                     across.min(down)
                 };
-                let resized = imageops::resize(
-                    &image.pixels,
-                    scaled(from_width, by),
-                    scaled(from_height, by),
-                    filter,
-                );
+                let (to_width, to_height) = (scaled(from_width, by), scaled(from_height, by));
+                room(name, to_width, to_height)?;
+                let resized = imageops::resize(&image.pixels, to_width, to_height, filter);
                 if !cover {
                     return Ok(image.with(resized));
                 }
@@ -353,6 +357,7 @@ fn install_layout(isolate: &mut Isolate) {
             if width < 1 || height < 1 {
                 return Err("image/pad would leave no pixels".to_owned());
             }
+            room("pad", to_u32(width), to_u32(height))?;
             Ok(image.with(placed(
                 &image.pixels,
                 to_u32(width),
@@ -369,6 +374,7 @@ fn install_layout(isolate: &mut Isolate) {
         let options = Options::read(heap, "canvas", &arguments[3..], &["anchor", "color"])?;
         let (across, down) = anchor(heap, &options)?;
         let color = fill_color(heap, "canvas", &options)?;
+        roomy("canvas", width, height)?;
         later(heap, "canvas", move || {
             let at = (
                 offset(width, image.pixels.width(), across),
@@ -384,7 +390,7 @@ fn install_layout(isolate: &mut Isolate) {
         let color = fill_color(heap, "rotate", &options)?;
         let expand = options.get("expand").is_none_or(Value::truthy);
         later(heap, "rotate", move || {
-            Ok(image.with(rotate(&image.pixels, degrees, color, expand)))
+            Ok(image.with(rotate(&image.pixels, degrees, color, expand)?))
         })
     });
     isolate.define_native_awaiting_in(MODULE, "flip", 2, Some(2), |heap, arguments| {
@@ -395,7 +401,7 @@ fn install_layout(isolate: &mut Isolate) {
             other => {
                 return Err(Error::new(format!(
                     "image/flip takes :horizontal or :vertical, not {}",
-                    print::write(heap, other)
+                    print::brief(heap, other)
                 ))
                 .of(ErrorKind::Type));
             }
@@ -424,7 +430,7 @@ fn install_warps(isolate: &mut Isolate) {
         let wrong = || {
             Error::new(format!(
                 "image/affine expects a matrix [a b c d e f], got {}",
-                print::write(heap, arguments[1])
+                print::brief(heap, arguments[1])
             ))
             .of(ErrorKind::Type)
         };

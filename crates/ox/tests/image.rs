@@ -170,6 +170,24 @@ fn mistakes_are_reported() {
         "image/new expects a width as a whole number above 0, got 0"
     );
     assert_eq!(
+        failure(&mut isolate, "(image/new 40000 40000)"),
+        "image/new would make a 40000×40000 image; images can be at most 32768 pixels a side and 134 megapixels"
+    );
+    assert_eq!(
+        failure(
+            &mut isolate,
+            "(await (image/resize (image/new 10 10) 30000))"
+        ),
+        "image/resize would make a 30000×30000 image; images can be at most 32768 pixels a side and 134 megapixels"
+    );
+    assert_eq!(
+        failure(
+            &mut isolate,
+            "(await (image/tile (image/new 1 1) 20000 20000))"
+        ),
+        "image/tile would make a 20000×20000 image; images can be at most 32768 pixels a side and 134 megapixels"
+    );
+    assert_eq!(
         failure(
             &mut isolate,
             &format!(

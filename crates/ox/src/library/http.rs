@@ -19,7 +19,7 @@ fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> 
     heap.text(value).ok_or_else(|| {
         Error::new(format!(
             "{name} expects a string, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })
@@ -138,7 +138,7 @@ fn asked(heap: &Heap, arguments: &[Value]) -> Result<Asked, Error> {
                 let entries = heap.entries(*value).ok_or_else(|| {
                     Error::new(format!(
                         "http/request expects a map for :headers, got {}",
-                        print::write(heap, *value)
+                        print::brief(heap, *value)
                     ))
                 })?;
                 asked.headers = entries
@@ -158,7 +158,7 @@ fn asked(heap: &Heap, arguments: &[Value]) -> Result<Asked, Error> {
             _ => {
                 return Err(Error::new(format!(
                     "http/request takes :headers, :body, :user and :password, not {}",
-                    print::write(heap, pair[0])
+                    print::brief(heap, pair[0])
                 )));
             }
         }

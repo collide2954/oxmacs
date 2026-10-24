@@ -167,7 +167,7 @@ fn texts(heap: &Heap, value: Value) -> Result<Vec<String>, Error> {
         .ok_or_else(|| {
             Error::new(format!(
                 "define-mode expects a vector of names, got {}",
-                print::write(heap, value)
+                print::brief(heap, value)
             ))
         })
 }
@@ -216,7 +216,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
         "define-mode takes :extensions, :file-names, :comment, :keys and :highlight, not {}",
-        print::write(heap, option)
+        print::brief(heap, option)
     ))
 }
 
@@ -297,7 +297,7 @@ fn spans(heap: &Heap, title: &str, value: Value) -> Result<Spans, Error> {
     let wrong = |value: Value| {
         Error::new(format!(
             "{title} highlighting expects [start end face] spans, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
     };
     let number = |value: Value| match value {
@@ -323,7 +323,7 @@ fn spans(heap: &Heap, title: &str, value: Value) -> Result<Spans, Error> {
             .ok_or_else(|| {
                 Error::new(format!(
                     "{title} highlighting doesn't know the face {}",
-                    print::write(heap, *face)
+                    print::brief(heap, *face)
                 ))
             })?;
             Ok((range, highlight))

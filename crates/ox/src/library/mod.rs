@@ -64,7 +64,7 @@ fn join(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 fn not_an_atom(heap: &Heap, name: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects an atom, got {}",
-        print::write(heap, value)
+        print::brief(heap, value)
     ))
     .of(ErrorKind::Type)
 }

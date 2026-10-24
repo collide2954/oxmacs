@@ -102,7 +102,7 @@ fn segment(
         Some(_) => {
             return Err(Error::new(format!(
                 "{name} expects text, [text face] or [text face :pill] in a line, got {}",
-                print::write(heap, value)
+                print::brief(heap, value)
             )));
         }
         None => (value, None, false),
@@ -129,7 +129,7 @@ fn face(heap: &Heap, name: &str, value: Value) -> Result<Highlight, Error> {
     .ok_or_else(|| {
         Error::new(format!(
             "{name} doesn't know the face {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
     })
 }
@@ -138,7 +138,7 @@ fn render(heap: &Heap, name: &str, lines: Value) -> Result<Rendered, Error> {
     let lines = heap.elements(lines).ok_or_else(|| {
         Error::new(format!(
             "{name} expects a vector of lines, got {}",
-            print::write(heap, lines)
+            print::brief(heap, lines)
         ))
     })?;
     let mut text = String::new();
@@ -471,7 +471,7 @@ fn keys(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, Error> {
         .ok_or_else(|| {
             Error::new(format!(
                 "open-buffer expects a map of keys to commands for :keys, got {}",
-                print::write(heap, value)
+                print::brief(heap, value)
             ))
         })
 }
@@ -518,7 +518,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
         "open-buffer takes :keys, :directory, :watch, :beside, :select, :on-move, :on-resize, :line, :unsaved, :input and :show, not {}",
-        print::write(heap, option)
+        print::brief(heap, option)
     ))
 }
 
@@ -682,7 +682,7 @@ fn number(heap: &Heap, value: Value) -> Result<usize, Error> {
         Value::Int(number) => Ok(usize::try_from(number).unwrap_or(0)),
         _ => Err(Error::new(format!(
             "goto-line expects whole numbers, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))),
     }
 }

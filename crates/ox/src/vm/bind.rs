@@ -35,7 +35,7 @@ fn unknown_keyword(heap: &Heap, code: &Code, value: Value) -> Error {
     Error::new(format!(
         "{} has no keyword parameter {}",
         name(code),
-        print::write(heap, value)
+        print::brief(heap, value)
     ))
     .of(ErrorKind::Arity)
 }

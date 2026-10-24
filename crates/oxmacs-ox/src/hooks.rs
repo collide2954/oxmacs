@@ -166,7 +166,7 @@ fn path_of(heap: &Heap, name: &str, value: Value) -> Result<PathBuf, Error> {
     heap.text(value).map(PathBuf::from).ok_or_else(|| {
         Error::new(format!(
             "{name} expects a path, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
     })
 }

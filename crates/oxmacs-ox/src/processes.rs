@@ -101,7 +101,7 @@ fn id_of(heap: &Heap, name: &str, value: Value) -> Result<u64, Error> {
     .ok_or_else(|| {
         Error::new(format!(
             "{name} expects a process id, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
     })
 }

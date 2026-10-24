@@ -115,7 +115,7 @@ fn read(heap: &mut Heap, value: Value) -> Result<Value, Error> {
     let Some(text) = heap.text(value) else {
         return Err(Error::new(format!(
             "json/read expects a string, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type));
     };
@@ -134,7 +134,7 @@ fn key(heap: &Heap, key: Value) -> Result<String, Error> {
         _ => heap.text(key).map(str::to_owned).ok_or_else(|| {
             Error::new(format!(
                 "json/write needs keyword or string keys, got {}",
-                print::write(heap, key)
+                print::brief(heap, key)
             ))
         }),
     }
@@ -162,7 +162,7 @@ fn write(heap: &Heap, value: Value, out: &mut String) -> Result<(), Error> {
     let refused = || {
         Error::new(format!(
             "json/write can't write {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
     };
     match value {

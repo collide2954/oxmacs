@@ -110,7 +110,7 @@ fn random(count: usize) -> Result<Vec<u8>, Error> {
 fn wrong(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects {wanted}, got {}",
-        print::write(heap, value)
+        print::brief(heap, value)
     ))
     .of(ErrorKind::Type)
 }
@@ -150,7 +150,7 @@ fn options<'a>(
                     .map(|known| format!(":{known}"))
                     .collect::<Vec<_>>()
                     .join(", "),
-                print::write(heap, pair[0])
+                print::brief(heap, pair[0])
             ))
         })?;
         found.push((*option, counted(heap, name, pair[1])?));

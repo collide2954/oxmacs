@@ -2,15 +2,32 @@ use std::fmt::Write as _;
 
 use crate::heap::Heap;
 use crate::value::Value;
-use crate::value::map::Map;
+use crate::value::equal::identical;
 use crate::value::promise::Promise;
-use crate::value::record::Record;
-use crate::value::vector::Vector;
+
+const BRIEF: usize = 200;
+
+enum Step {
+    Value(Value),
+    Text(&'static str),
+    Owned(String),
+    Leave,
+}
+
+struct Printer<'a> {
+    heap: &'a Heap,
+    out: String,
+    stack: Vec<Step>,
+    path: Vec<Value>,
+    limit: Option<usize>,
+}
 
 pub fn write(heap: &Heap, value: Value) -> String {
-    let mut out = String::new();
-    write_into(heap, value, &mut out);
-    out
+    Printer::new(heap, None).run(value)
+}
+
+pub fn brief(heap: &Heap, value: Value) -> String {
+    Printer::new(heap, Some(BRIEF)).run(value)
 }
 
 pub fn display(heap: &Heap, value: Value) -> String {
@@ -21,70 +38,186 @@ pub fn display(heap: &Heap, value: Value) -> String {
     }
 }
 
-fn write_into(heap: &Heap, value: Value, out: &mut String) {
-    match value {
-        Value::Nil => out.push_str("nil"),
-        Value::Bool(flag) => out.push_str(if flag { "true" } else { "false" }),
-        Value::Int(number) => {
-            let _ = write!(out, "{number}");
+impl<'a> Printer<'a> {
+    fn new(heap: &'a Heap, limit: Option<usize>) -> Self {
+        Self {
+            heap,
+            out: String::new(),
+            stack: Vec::new(),
+            path: Vec::new(),
+            limit,
         }
-        Value::Float(number) => float(number, out),
-        Value::Char(character) => self::character(character, out),
-        Value::Symbol(name) => out.push_str(name.name()),
-        Value::Keyword(name) => {
-            out.push(':');
-            out.push_str(name.name());
-        }
-        Value::Ref(_) => {
-            if let Some(text) = heap.text(value) {
-                string(text, out);
-            } else if let Some(number) = heap.bigint_of(value) {
-                let _ = write!(out, "{number}");
-            } else if heap.pair_of(value).is_some() {
-                list(heap, value, out);
-            } else if let Some(items) = heap.vector_of(value) {
-                vector(heap, items, out);
-            } else if let Some(entries) = heap.map_of(value) {
-                map(heap, entries, out);
-            } else if let Some(items) = heap.set_of(value) {
-                set(heap, items, out);
-            } else if let Some(fields) = heap.record_of(value) {
-                record(heap, fields, out);
-            } else if let Some(kind) = heap.record_type_of(value) {
-                let _ = write!(out, "#<record {}>", kind.name.name());
-            } else if let Some(identifier) = heap.identifier_of(value) {
-                out.push_str(identifier.name.name());
-            } else if let Some(held) = heap.atom_get(value) {
-                out.push_str("#<atom ");
-                write_into(heap, held, out);
-                out.push('>');
-            } else if heap.channel_of(value).is_some() {
-                out.push_str("#<chan>");
-            } else if let Some(foreign) = heap.foreign_entry(value) {
-                let _ = write!(out, "#<{}>", foreign.name.name());
-            } else if heap.generator_of(value).is_some() {
-                out.push_str("#<generator>");
-            } else if let Some(promise) = heap.promise_of(value) {
-                match promise {
-                    Promise::Pending { .. } => out.push_str("#<promise>"),
-                    Promise::Delivered(held) => {
-                        out.push_str("#<promise ");
-                        write_into(heap, held, out);
-                        out.push('>');
-                    }
-                    Promise::Failed(_) => out.push_str("#<promise failed>"),
+    }
+
+    fn run(mut self, value: Value) -> String {
+        self.stack.push(Step::Value(value));
+        while let Some(step) = self.stack.pop() {
+            if let Some(limit) = self.limit
+                && self.out.len() > limit
+            {
+                let mut end = limit;
+                while !self.out.is_char_boundary(end) {
+                    end -= 1;
                 }
-            } else if let Some(native) = heap.native_of(value) {
-                let _ = write!(out, "#<native {}>", native.name.name());
-            } else if let Some(closure) = heap.closure_of(value) {
-                match closure.code.name {
-                    Some(name) => {
-                        let _ = write!(out, "#<fn {}>", name.name());
-                    }
-                    None => out.push_str("#<fn>"),
+                self.out.truncate(end);
+                self.out.push('…');
+                return self.out;
+            }
+            match step {
+                Step::Value(value) => self.value(value),
+                Step::Text(text) => self.out.push_str(text),
+                Step::Owned(text) => self.out.push_str(&text),
+                Step::Leave => {
+                    self.path.pop();
                 }
             }
         }
+        if let Some(limit) = self.limit
+            && self.out.len() > limit
+        {
+            let mut end = limit;
+            while !self.out.is_char_boundary(end) {
+                end -= 1;
+            }
+            self.out.truncate(end);
+            self.out.push('…');
+        }
+        self.out
+    }
+
+    fn sequence(&mut self, open: &str, close: &'static str, parts: Vec<Vec<Step>>) {
+        self.out.push_str(open);
+        self.stack.push(Step::Text(close));
+        for (index, part) in parts.into_iter().enumerate().rev() {
+            self.stack.extend(part.into_iter().rev());
+            if index > 0 {
+                self.stack.push(Step::Text(" "));
+            }
+        }
+    }
+
+    fn holder(&mut self, value: Value, label: &str, held: Value) {
+        if self.path.iter().any(|seen| identical(*seen, value)) {
+            let _ = write!(self.out, "#<{label} ...>");
+            return;
+        }
+        let _ = write!(self.out, "#<{label} ");
+        self.path.push(value);
+        self.stack.push(Step::Text(">"));
+        self.stack.push(Step::Leave);
+        self.stack.push(Step::Value(held));
+    }
+
+    fn value(&mut self, value: Value) {
+        let heap = self.heap;
+        match value {
+            Value::Nil => self.out.push_str("nil"),
+            Value::Bool(flag) => self.out.push_str(if flag { "true" } else { "false" }),
+            Value::Int(number) => {
+                let _ = write!(self.out, "{number}");
+            }
+            Value::Float(number) => float(number, &mut self.out),
+            Value::Char(character) => self::character(character, &mut self.out),
+            Value::Symbol(name) => self.out.push_str(name.name()),
+            Value::Keyword(name) => {
+                self.out.push(':');
+                self.out.push_str(name.name());
+            }
+            Value::Ref(_) => self.reference(heap, value),
+        }
+    }
+
+    fn reference(&mut self, heap: &Heap, value: Value) {
+        if let Some(text) = heap.text(value) {
+            string(text, &mut self.out);
+        } else if let Some(number) = heap.bigint_of(value) {
+            let _ = write!(self.out, "{number}");
+        } else if heap.pair_of(value).is_some() {
+            self.list(value);
+        } else if let Some(items) = heap.vector_of(value) {
+            let parts = items
+                .items(heap)
+                .into_iter()
+                .map(|item| vec![Step::Value(item)])
+                .collect();
+            self.sequence("[", "]", parts);
+        } else if let Some(entries) = heap.map_of(value) {
+            let parts = entries
+                .entries(heap)
+                .into_iter()
+                .map(|(key, item)| {
+                    let key = match key {
+                        Value::Keyword(name) => Step::Owned(format!("{}:", name.name())),
+                        other => Step::Value(other),
+                    };
+                    vec![key, Step::Text(" "), Step::Value(item)]
+                })
+                .collect();
+            self.sequence("{", "}", parts);
+        } else if let Some(items) = heap.set_of(value) {
+            let parts = items
+                .entries(heap)
+                .into_iter()
+                .map(|(item, _)| vec![Step::Value(item)])
+                .collect();
+            self.sequence("#{", "}", parts);
+        } else if let Some(record) = heap.record_of(value) {
+            let names: &[_] = heap
+                .record_type_of(record.kind)
+                .map_or(&[], |kind| &kind.fields);
+            let parts = names
+                .iter()
+                .zip(&record.fields)
+                .map(|(name, field)| {
+                    vec![
+                        Step::Owned(format!("{}: ", name.name())),
+                        Step::Value(*field),
+                    ]
+                })
+                .collect();
+            let open = format!("#{}{{", record.type_name(heap));
+            self.sequence(&open, "}", parts);
+        } else if let Some(kind) = heap.record_type_of(value) {
+            let _ = write!(self.out, "#<record {}>", kind.name.name());
+        } else if let Some(identifier) = heap.identifier_of(value) {
+            self.out.push_str(identifier.name.name());
+        } else if let Some(held) = heap.atom_get(value) {
+            self.holder(value, "atom", held);
+        } else if heap.channel_of(value).is_some() {
+            self.out.push_str("#<chan>");
+        } else if let Some(foreign) = heap.foreign_entry(value) {
+            let _ = write!(self.out, "#<{}>", foreign.name.name());
+        } else if heap.generator_of(value).is_some() {
+            self.out.push_str("#<generator>");
+        } else if let Some(promise) = heap.promise_of(value) {
+            match promise {
+                Promise::Pending { .. } => self.out.push_str("#<promise>"),
+                Promise::Delivered(held) => self.holder(value, "promise", held),
+                Promise::Failed(_) => self.out.push_str("#<promise failed>"),
+            }
+        } else if let Some(native) = heap.native_of(value) {
+            let _ = write!(self.out, "#<native {}>", native.name.name());
+        } else if let Some(closure) = heap.closure_of(value) {
+            match closure.code.name {
+                Some(name) => {
+                    let _ = write!(self.out, "#<fn {}>", name.name());
+                }
+                None => self.out.push_str("#<fn>"),
+            }
+        }
+    }
+
+    fn list(&mut self, value: Value) {
+        let mut parts = Vec::new();
+        let mut rest = value;
+        while let Some(pair) = self.heap.pair_of(rest) {
+            parts.push(vec![Step::Value(pair.head)]);
+            rest = pair.tail;
+        }
+        if rest != Value::Nil {
+            parts.push(vec![Step::Text("."), Step::Text(" "), Step::Value(rest)]);
+        }
+        self.sequence("(", ")", parts);
     }
 }
 
@@ -139,87 +272,9 @@ fn string(text: &str, out: &mut String) {
     }
     out.push('"');
 }
-
-fn list(heap: &Heap, value: Value, out: &mut String) {
-    out.push('(');
-    let mut rest = value;
-    let mut first = true;
-    while let Some(pair) = heap.pair_of(rest) {
-        if !first {
-            out.push(' ');
-        }
-        first = false;
-        write_into(heap, pair.head, out);
-        rest = pair.tail;
-    }
-    if rest != Value::Nil {
-        out.push_str(" . ");
-        write_into(heap, rest, out);
-    }
-    out.push(')');
-}
-
-fn vector(heap: &Heap, vector: Vector, out: &mut String) {
-    out.push('[');
-    for (index, item) in vector.items(heap).into_iter().enumerate() {
-        if index > 0 {
-            out.push(' ');
-        }
-        write_into(heap, item, out);
-    }
-    out.push(']');
-}
-
-fn map(heap: &Heap, map: Map, out: &mut String) {
-    out.push('{');
-    for (index, (key, value)) in map.entries(heap).into_iter().enumerate() {
-        if index > 0 {
-            out.push(' ');
-        }
-        if let Value::Keyword(name) = key {
-            out.push_str(name.name());
-            out.push(':');
-        } else {
-            write_into(heap, key, out);
-        }
-        out.push(' ');
-        write_into(heap, value, out);
-    }
-    out.push('}');
-}
-
-fn set(heap: &Heap, set: Map, out: &mut String) {
-    out.push_str("#{");
-    for (index, (item, _)) in set.entries(heap).into_iter().enumerate() {
-        if index > 0 {
-            out.push(' ');
-        }
-        write_into(heap, item, out);
-    }
-    out.push('}');
-}
-
-fn record(heap: &Heap, record: &Record, out: &mut String) {
-    out.push('#');
-    out.push_str(record.type_name(heap));
-    out.push('{');
-    let names: &[_] = heap
-        .record_type_of(record.kind)
-        .map_or(&[], |kind| &kind.fields);
-    for (index, (name, value)) in names.iter().zip(&record.fields).enumerate() {
-        if index > 0 {
-            out.push(' ');
-        }
-        out.push_str(name.name());
-        out.push_str(": ");
-        write_into(heap, *value, out);
-    }
-    out.push('}');
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{display, write};
+    use super::{brief, display, write};
     use crate::heap::Heap;
     use crate::value::Value;
 
@@ -285,6 +340,44 @@ mod tests {
 
         assert_eq!(write(&heap, list), r#"(1 "two" (3))"#);
         assert_eq!(write(&heap, dotted), "(1 . 2)");
+    }
+
+    #[test]
+    fn atoms_and_promises_that_hold_themselves_print_without_looping() {
+        let mut heap = Heap::default();
+        let atom = heap.atom(Value::Nil).unwrap();
+        let inside = heap.vector_from(&[atom, Value::Int(1)]).unwrap();
+        heap.atom_set(atom, inside);
+
+        assert_eq!(write(&heap, atom), "#<atom [#<atom ...> 1]>");
+    }
+
+    #[test]
+    fn deeply_nested_values_print_without_running_out_of_stack() {
+        let mut heap = Heap::default();
+        let mut nested = Value::Nil;
+        for _ in 0..200_000 {
+            nested = heap.vector_from(&[nested]).unwrap();
+        }
+
+        let shown = write(&heap, nested);
+
+        assert_eq!(shown.len(), 200_000 * 2 + 3);
+        assert!(shown.starts_with("[[[") && shown.ends_with("]]]"));
+        assert_eq!(shown.find("nil"), Some(200_000));
+    }
+
+    #[test]
+    fn brief_stops_after_a_few_hundred_characters() {
+        let mut heap = Heap::default();
+        let items: Vec<Value> = (0..100_000).map(Value::Int).collect();
+        let big = heap.vector_from(&items).unwrap();
+
+        let shown = brief(&heap, big);
+
+        assert!(shown.chars().count() <= 201, "{}", shown.len());
+        assert!(shown.starts_with("[0 1 2 ") && shown.ends_with('…'));
+        assert_eq!(brief(&heap, Value::Int(5)), "5");
     }
 
     #[test]

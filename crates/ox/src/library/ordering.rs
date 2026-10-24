@@ -50,8 +50,8 @@ pub(crate) fn order(heap: &Heap, a: Value, b: Value) -> Option<Ordering> {
 fn incomparable(heap: &Heap, name: &str, a: Value, b: Value) -> Error {
     Error::new(format!(
         "{name} can't compare {} with {}",
-        print::write(heap, a),
-        print::write(heap, b)
+        print::brief(heap, a),
+        print::brief(heap, b)
     ))
     .of(ErrorKind::Type)
 }

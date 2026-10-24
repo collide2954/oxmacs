@@ -143,6 +143,20 @@ fn syntax_of(
     span: Span,
     spans: &Spans,
 ) -> Result<Syntax, Value> {
+    syntax_at(heap, value, mark, span, spans, 0)
+}
+
+fn syntax_at(
+    heap: &Heap,
+    value: Value,
+    mark: u32,
+    span: Span,
+    spans: &Spans,
+    depth: usize,
+) -> Result<Syntax, Value> {
+    if depth > crate::vm::convert::DEEPEST {
+        return Err(value);
+    }
     let own = match value {
         Value::Ref(reference) => spans.get(&reference).copied().unwrap_or(span),
         _ => span,
@@ -158,7 +172,7 @@ fn syntax_of(
     let all = |items: Vec<Value>| {
         items
             .into_iter()
-            .map(|item| syntax_of(heap, item, mark, span, spans))
+            .map(|item| syntax_at(heap, item, mark, span, spans, depth + 1))
             .collect::<Result<Vec<_>, _>>()
     };
     let datum = match value {
@@ -547,7 +561,7 @@ impl Expander<'_> {
                     form.span,
                     format!(
                         "{name} produced {}, which is not code",
-                        print::write(&self.runtime.heap, bad)
+                        print::brief(&self.runtime.heap, bad)
                     ),
                 )
             })?;

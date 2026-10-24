@@ -44,7 +44,7 @@ fn regex_of(heap: &Heap, name: &str, value: Value) -> Result<Arc<Regex>, Error> 
     let pattern = heap.text(value).ok_or_else(|| {
         Error::new(format!(
             "regex/{name} expects a regex or a pattern string, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })?;
@@ -55,7 +55,7 @@ fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> 
     heap.text(value).ok_or_else(|| {
         Error::new(format!(
             "regex/{name} expects text to search, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })

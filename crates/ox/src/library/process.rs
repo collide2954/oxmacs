@@ -34,7 +34,7 @@ fn keyword(name: &str) -> Portable {
 fn wrong(heap: &Heap, expected: &str, value: Value) -> Error {
     Error::new(format!(
         "process/run expects {expected}, got {}",
-        print::write(heap, value)
+        print::brief(heap, value)
     ))
     .of(ErrorKind::Type)
 }
@@ -89,7 +89,7 @@ fn parse(heap: &Heap, name: &str, arguments: &[Value]) -> Result<Run, Error> {
             _ => {
                 return Err(Error::new(format!(
                     "process/run takes :cwd, :env and :input, not {}",
-                    print::write(heap, pair[0])
+                    print::brief(heap, pair[0])
                 )));
             }
         }
@@ -254,7 +254,7 @@ fn started<'a>(heap: &'a Heap, name: &str, process: Value) -> Result<&'a Started
 fn wrong_for(heap: &Heap, name: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects a process from process/start, got {}",
-        print::write(heap, value)
+        print::brief(heap, value)
     ))
     .of(ErrorKind::Type)
 }

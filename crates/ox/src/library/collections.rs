@@ -18,7 +18,7 @@ fn int(number: usize) -> Value {
 fn expected(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects {what}, got {}",
-        print::write(heap, value)
+        print::brief(heap, value)
     ))
     .of(ErrorKind::Type)
 }
@@ -164,7 +164,7 @@ fn with(heap: &mut Heap, value: Value, pairs: &[Value]) -> Result<Value, Error> 
         let Some(place) = slot.and_then(|slot| fields.get_mut(slot)) else {
             let name = match key {
                 Value::Keyword(name) => name.name().to_owned(),
-                other => print::write(heap, *other),
+                other => print::brief(heap, *other),
             };
             return Err(Error::new(format!(
                 "{} has no field {name}",

@@ -153,7 +153,7 @@ fn parity(heap: &Heap, name: &str, value: Value, even: bool) -> Result<Value, Er
         .ok_or_else(|| {
             Error::new(format!(
                 "{name} expects a whole number, got {}",
-                crate::value::print::write(heap, value)
+                crate::value::print::brief(heap, value)
             ))
             .of(ErrorKind::Type)
         })

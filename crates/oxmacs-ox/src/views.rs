@@ -157,7 +157,7 @@ pub(crate) fn face_named(name: &str) -> Option<Highlight> {
 fn wrong(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects {wanted}, got {}",
-        print::write(heap, value)
+        print::brief(heap, value)
     ))
 }
 
@@ -199,7 +199,7 @@ fn options<'a>(
     if let Some(stray) = rest.iter().find(|value| matches!(value, Value::Keyword(_))) {
         return Err(Error::new(format!(
             "{name} doesn't take {}",
-            print::write(heap, *stray)
+            print::brief(heap, *stray)
         )));
     }
     Ok((found, rest))
@@ -223,7 +223,7 @@ fn children(heap: &Heap, name: &str, values: &[Value], out: &mut Vec<Node>) -> R
         } else {
             return Err(Error::new(format!(
                 "{name} can't show {}",
-                print::write(heap, *value)
+                print::brief(heap, *value)
             )));
         }
     }
@@ -284,7 +284,7 @@ fn text(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         face = Some(known.ok_or_else(|| {
             Error::new(format!(
                 "text doesn't know the face {}",
-                print::write(heap, value)
+                print::brief(heap, value)
             ))
         })?);
     }

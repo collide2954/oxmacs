@@ -54,7 +54,7 @@ const SHAPES: &str = "[:rect x y width height color], [:circle x y radius color]
 fn wrong(heap: &Heap, wanted: &str, value: Value) -> Error {
     Error::new(format!(
         "Drawings take {wanted}, got {}",
-        print::write(heap, value)
+        print::brief(heap, value)
     ))
 }
 

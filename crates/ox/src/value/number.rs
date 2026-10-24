@@ -38,7 +38,7 @@ impl Number {
                 .ok_or_else(|| {
                     Error::new(format!(
                         "{name} expects numbers, got {}",
-                        print::write(heap, other)
+                        print::brief(heap, other)
                     ))
                     .of(ErrorKind::Type)
                 }),

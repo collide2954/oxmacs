@@ -27,6 +27,7 @@ fn svg(path: &Path) -> Result<Image, String> {
     let tree = resvg::usvg::Tree::from_data(&data, &options)
         .map_err(|error| format!("Couldn't read {} as SVG: {error}", path.display()))?;
     let size = tree.size().to_int_size();
+    super::room("open", size.width(), size.height())?;
     let mut pixmap = resvg::tiny_skia::Pixmap::new(size.width(), size.height())
         .ok_or_else(|| format!("{} has no size to draw", path.display()))?;
     resvg::render(

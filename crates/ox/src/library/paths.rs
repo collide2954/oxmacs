@@ -13,7 +13,7 @@ pub(crate) fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a s
     heap.text(value).ok_or_else(|| {
         Error::new(format!(
             "{name} expects a string, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
     })

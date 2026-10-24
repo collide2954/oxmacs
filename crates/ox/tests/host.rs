@@ -92,3 +92,19 @@ fn natives_can_hand_slow_work_to_a_thread_that_answers_with_json() {
         r#"["mail" ["a" "b"] 2 0.5 nil "No missing here"]"#
     );
 }
+
+#[test]
+fn natives_that_panic_raise_an_error_and_leave_the_isolate_working() {
+    let mut isolate = Isolate::new();
+    isolate.define_native("boom", 0, Some(0), |_, _| panic!("oh no"));
+
+    let error = isolate.eval("(boom)").unwrap_err();
+
+    assert_eq!(error.message, "boom crashed: oh no");
+    let caught = isolate
+        .eval("(try (boom) (catch error e e.message))")
+        .unwrap();
+    assert_eq!(isolate.write(caught), r#""boom crashed: oh no""#);
+    let sum = isolate.eval("(+ 1 2)").unwrap();
+    assert_eq!(isolate.write(sum), "3");
+}

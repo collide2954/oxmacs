@@ -14,7 +14,7 @@ impl Runtime {
             _ => self.heap.text(value).map(str::to_owned).ok_or_else(|| {
                 Error::new(format!(
                     "worker expects {what}, got {}",
-                    print::write(&self.heap, value)
+                    print::brief(&self.heap, value)
                 ))
                 .of(ErrorKind::Type)
             }),

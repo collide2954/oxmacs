@@ -33,7 +33,7 @@ fn key(heap: &Heap, value: Value) -> Result<char, Error> {
         (Some(character), None) => Ok(character),
         _ => Err(Error::new(format!(
             "transient keys are single characters, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))),
     }
 }
@@ -42,7 +42,7 @@ fn parts(heap: &Heap, value: Value, kind: &str, shape: &str) -> Result<Vec<Vec<V
     let wrong = |value: Value| {
         Error::new(format!(
             "transient {kind} are {shape}, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
     };
     heap.elements(value)
@@ -60,7 +60,7 @@ fn group(heap: &mut Heap, value: Value, holds: &mut Vec<Hold>) -> Result<Group, 
     let entries = heap.entries(value).ok_or_else(|| {
         Error::new(format!(
             "transient groups are maps with :title, :switches and :actions, got {}",
-            print::write(heap, value)
+            print::brief(heap, value)
         ))
     })?;
     let field = |name: &str| {
@@ -99,7 +99,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     let given = heap.elements(arguments[1]).ok_or_else(|| {
         Error::new(format!(
             "transient expects a vector of groups, got {}",
-            print::write(heap, arguments[1])
+            print::brief(heap, arguments[1])
         ))
     })?;
     let mut holds = Vec::new();

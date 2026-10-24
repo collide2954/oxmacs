@@ -285,11 +285,11 @@ fn expand_rules(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
             return matcher.substitute(heap, *template, &bindings);
         }
     }
-    let mut call = vec![print::write(heap, *name)];
-    call.extend(inputs.iter().map(|input| print::write(heap, *input)));
+    let mut call = vec![print::brief(heap, *name)];
+    call.extend(inputs.iter().map(|input| print::brief(heap, *input)));
     Err(Error::new(format!(
         "No rule of {} matches ({})",
-        print::write(heap, *name),
+        print::brief(heap, *name),
         call.join(" ")
     )))
 }
