@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Answering a revert, reread, save-over or kill question acts on the buffer it asked about, even if another window was chosen meanwhile, instead of whichever buffer had moved into its place.
 - Ox reads files that start with a byte order mark, as Windows tools often save them, instead of failing on the first form.
 - `ox --help` lists the subcommands and `ox --version` prints the version, instead of looking for a file called `--help`.
 - `ui/column` and `ui/row` take `:spacing` after their children as well as before, so the calendar's week view draws again.

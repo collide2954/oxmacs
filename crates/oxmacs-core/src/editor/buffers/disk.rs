@@ -231,6 +231,54 @@ mod tests {
         assert!(!editor.buffer().is_modified());
     }
 
+    fn two_windows(text: &str) -> (tempfile::TempDir, PathBuf, Editor) {
+        let (dir, path, mut editor) = opened(text);
+        let other = dir.path().join("b.txt");
+        fs::write(&other, "b").unwrap();
+        type_text(&mut editor, "x");
+        press(&mut editor, "C-x 3 C-x o");
+        editor.open_file(&other);
+        type_text(&mut editor, "y");
+        press(&mut editor, "C-x o");
+        (dir, path, editor)
+    }
+
+    fn elsewhere(editor: &mut Editor) {
+        let other = editor
+            .tiling()
+            .windows()
+            .into_iter()
+            .find(|window| *window != editor.selected_window())
+            .unwrap();
+        editor.select_window(other);
+    }
+
+    #[test]
+    fn answers_go_to_the_buffer_asked_about_after_switching_windows() {
+        let (_dir, path, mut editor) = two_windows("old");
+        editor.execute(Command::RevertBuffer);
+        elsewhere(&mut editor);
+        press(&mut editor, "y");
+        assert_eq!(editor.buffer().contents(), "yb");
+        elsewhere(&mut editor);
+        assert_eq!(editor.buffer().contents(), "old");
+
+        type_text(&mut editor, "z");
+        fs::write(&path, "changed").unwrap();
+        press(&mut editor, "C-x C-s");
+        elsewhere(&mut editor);
+        press(&mut editor, "y");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "zold");
+        assert!(editor.buffer().is_modified());
+
+        elsewhere(&mut editor);
+        type_text(&mut editor, "w");
+        press(&mut editor, "C-x k RET");
+        elsewhere(&mut editor);
+        press(&mut editor, "y");
+        assert_eq!(editor.buffer_names(), ["b.txt", "*scratch*"]);
+    }
+
     #[test]
     fn reverting_can_be_undone() {
         let (_dir, _path, mut editor) = opened("old");

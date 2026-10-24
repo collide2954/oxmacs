@@ -5,6 +5,7 @@ use crate::editor::{Editor, is_keyboard_quit};
 use crate::external::managed::Managed;
 use crate::files::{DiskState, paths};
 use crate::input::{Key, KeyCode};
+use crate::text::{Buffer, BufferId};
 
 const SAVE_CHOICES: &[char] = &['y', 'n', '!', 'q'];
 const YES_NO: &[char] = &['y', 'n'];
@@ -19,16 +20,18 @@ enum Pending {
         path: PathBuf,
     },
     Kill {
-        index: usize,
+        buffer: BufferId,
     },
     Revert {
-        index: usize,
+        buffer: BufferId,
     },
     Reread {
-        index: usize,
+        buffer: BufferId,
         disk: Option<DiskState>,
     },
-    SaveOver,
+    SaveOver {
+        buffer: BufferId,
+    },
     RemoveTool(Managed),
     Callback,
 }
@@ -156,27 +159,29 @@ impl Editor {
                     self.finish_write(path);
                 }
             }
-            Pending::Kill { index } => {
-                if answer == 'y' {
+            Pending::Kill { buffer } => {
+                if let (true, Some(index)) = (answer == 'y', self.index_of(buffer)) {
                     self.finish_kill(index);
                 }
             }
-            Pending::Revert { index } => {
-                if answer == 'y' {
+            Pending::Revert { buffer } => {
+                if let (true, Some(index)) = (answer == 'y', self.index_of(buffer)) {
                     self.revert_at(index);
                 }
             }
-            Pending::Reread { index, disk } => {
-                if answer == 'y' {
-                    self.revert_at(index);
-                } else {
-                    self.note_disk_state(index, disk, true);
+            Pending::Reread { buffer, disk } => {
+                if let Some(index) = self.index_of(buffer) {
+                    if answer == 'y' {
+                        self.revert_at(index);
+                    } else {
+                        self.note_disk_state(index, disk, true);
+                    }
                 }
                 self.check_disk_changes();
             }
-            Pending::SaveOver => {
-                if answer == 'y' {
-                    self.save_buffer_at(0);
+            Pending::SaveOver { buffer } => {
+                if let (true, Some(index)) = (answer == 'y', self.index_of(buffer)) {
+                    self.save_buffer_at(index);
                 }
             }
             Pending::RemoveTool(tool) => {
@@ -192,12 +197,23 @@ impl Editor {
         }
     }
 
+    fn id_at(&self, index: usize) -> Option<BufferId> {
+        self.buffers.get(index).map(Buffer::id)
+    }
+
+    fn index_of(&self, buffer: BufferId) -> Option<usize> {
+        self.buffers.position(|known| known.id() == buffer)
+    }
+
     pub(in crate::editor) fn ask_to_save_over(&mut self, name: &str) {
+        let Some(buffer) = self.id_at(0) else {
+            return;
+        };
         self.question = Some(Question {
             prompt: format!("{name} changed on disk; save anyway? (y or n) "),
             choices: YES_NO,
             typed: None,
-            pending: Pending::SaveOver,
+            pending: Pending::SaveOver { buffer },
         });
     }
 
@@ -207,21 +223,27 @@ impl Editor {
         name: &str,
         disk: Option<DiskState>,
     ) {
+        let Some(buffer) = self.id_at(index) else {
+            return;
+        };
         self.question = Some(Question {
             prompt: format!("{name} changed on disk; reread it? (y or n) "),
             choices: YES_NO,
             typed: None,
-            pending: Pending::Reread { index, disk },
+            pending: Pending::Reread { buffer, disk },
         });
     }
 
     pub(in crate::editor) fn ask_to_revert(&mut self, index: usize, path: &Path) {
+        let Some(buffer) = self.id_at(index) else {
+            return;
+        };
         let shown = paths::abbreviate(path, self.home.as_deref());
         self.question = Some(Question {
             prompt: format!("Revert buffer from file {shown}? (y or n) "),
             choices: YES_NO,
             typed: None,
-            pending: Pending::Revert { index },
+            pending: Pending::Revert { buffer },
         });
     }
 
@@ -252,11 +274,14 @@ impl Editor {
     }
 
     pub(in crate::editor) fn ask_to_kill(&mut self, index: usize, name: &str) {
+        let Some(buffer) = self.id_at(index) else {
+            return;
+        };
         self.question = Some(Question {
             prompt: format!("Buffer {name} modified; kill anyway? (y or n) "),
             choices: YES_NO,
             typed: None,
-            pending: Pending::Kill { index },
+            pending: Pending::Kill { buffer },
         });
     }
 
