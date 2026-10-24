@@ -8,6 +8,7 @@ use crate::Ox;
 use crate::testing::{home_with, press, settle};
 
 mod data;
+mod debug;
 mod definitions;
 mod help;
 mod jobs;

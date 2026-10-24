@@ -11,7 +11,8 @@
           (r package :as package)
           (r markdown :as markdown)
           (r language :as language)
-          (r jobs)))
+          (r jobs)
+          (r debug :as debug)))
 
 (def console-keys
   {"RET" 'comint-send-input
@@ -23,7 +24,12 @@
    "C-c C-o" 'r-peek
    "M-." 'r-find-definition
    "TAB" 'r-complete
-   "C-M-i" 'r-complete})
+   "C-M-i" 'r-complete
+   "<f10>" 'r-debug-next
+   "S-<f4>" 'r-debug-step
+   "S-<f6>" 'r-debug-finish
+   "S-<f5>" 'r-debug-continue
+   "S-<f8>" 'r-debug-stop})
 
 (session/on-marker "message" (fn [_ payload] (message payload)))
 (session/on-marker "help" pane/show-help)
@@ -138,5 +144,7 @@
   (insert-operator "|>"))
 
 (session/use-keys! console-keys)
+(session/use-patterns! debug/prompts debug/watches)
+(session/on-marker "debug" debug/heard)
 
 (spawn (language/check))

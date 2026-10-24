@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Sending R code several times while R is still starting goes to that one session in the order it was sent, instead of starting a session for each.
 - Keyboard macros let Ox commands finish before the next key plays, so a macro that runs a plugin command sees the buffer as it would by hand, and an Ox error stops the macro like any other error.
 - Checking an Ox file never touches the outside world: file, process, network and HTTP calls, `print` and workers are refused while checking, and a module that needs them to load is skipped. Checks run beside the editor instead of holding it up, stop after 2 seconds with a warning where they stopped, and load imported files again when they change on disk.
 - Ox code that runs too long no longer freezes the editor: views, highlighters and take-over frames stop after 250 ms, and init files, plugin loads and the REPL after 10 seconds, with an error in the log.
@@ -72,6 +73,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Debugging R: when R stops in `browser()` or a function flagged with `C-c C-t d` (`C-c C-t u` clears it), its `Browse[1]>` prompt takes input like any other, the script opens at the line R is on, and RStudio's `<f10>`, `S-<f4>`, `S-<f6>`, `S-<f5>` and `S-<f8>` step, step in, finish, continue and stop, from the script or the console. Plugin consoles know prompts without markers from `:prompts` patterns, report lines matching `:watch` patterns, and tell the prompt they wait at with `console-prompt`.
 - R jobs and apps: `M-x r-run-job` runs the saved script with Rscript in the background, apart from the session, with its output in `*R job: name*`, where `k` stops it and `g` runs it again. `M-x r-run-app` runs the Shiny app of the folder or project the same way, reloading as its files change, and opens it once it listens. htmlwidgets and other pages R sends to its viewer open in the system's browser.
 - R scripts get R's languageserver package when it is installed: diagnostics from lintr, hover, references and the rest of the language server features, even before a session starts. Without a session, `C-M-i` and `TAB` complete and `M-.` finds definitions through it; with one, the session answers as before. The r plugin's `language-server` setting turns it off. Plugins start language servers of their own with `define-language-server`, ask `language-server-ready?`, and load as soon as a buffer of a mode opens with the manifest's `:wakes-for`.
 - R Markdown and Quarto: `.Rmd` and `.qmd` files open in R Markdown mode, with headings, chunk fences, chunk options and front matter set apart. `C-c C-c` or `C-S-RET` runs the R chunk at point, `C-RET` sends the statement in it and steps, `C-c C-a` runs every chunk and `C-c C-r` those above point; `M-n` and `M-p` move between chunks, `C-c C-i` inserts one and `M-g i` jumps to a heading or chunk. `C-c C-k` or `C-S-k` saves and renders the document with rmarkdown, or Quarto when rmarkdown or pandoc is missing, and opens the result; the r plugin's `render-on-save` renders on every save.

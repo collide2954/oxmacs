@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.13.0"
+  :version "0.14.0"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands {run-r: "Start an R console beside the script"
              r-new-session: "Start another R session beside the current one"
@@ -35,7 +35,14 @@
              r-run-job: "Run the R script in a background job, apart from the session"
              r-run-app: "Run the Shiny app of this folder in a background job and open it"
              r-job-stop: "Stop the job of this buffer"
-             r-job-again: "Run the job of this buffer again"}
+             r-job-again: "Run the job of this buffer again"
+             r-debug-next: "Run the next line of the code R is debugging"
+             r-debug-step: "Step into the function called on the line R is debugging"
+             r-debug-finish: "Finish the function or loop R is debugging"
+             r-debug-continue: "Continue running the code R is debugging"
+             r-debug-stop: "Stop debugging and go back to R's prompt"
+             r-debug-function: "Debug the function at point the next time it runs"
+             r-undebug-function: "Stop debugging the function at point"}
   :modes [{name: "R Markdown" extensions: ["Rmd" "rmd" "qmd"]}]
   :mode-keys {"R" {"M--" r-insert-assignment
                    "C-S-m" r-insert-pipe
@@ -53,7 +60,10 @@
                    "C-c C-w c" r-check "C-S-e" r-check
                    "C-c C-w i" r-install "C-S-b" r-install
                    "C-c C-w b" r-build
-                   "C-c C-w t" r-test "C-S-t" r-test}
+                   "C-c C-w t" r-test "C-S-t" r-test
+                   "C-c C-t d" r-debug-function "C-c C-t u" r-undebug-function
+                   "<f10>" r-debug-next "S-<f4>" r-debug-step "S-<f6>" r-debug-finish
+                   "S-<f5>" r-debug-continue "S-<f8>" r-debug-stop}
               "R Markdown" {"C-c C-c" r-markdown-run-chunk "C-S-RET" r-markdown-run-chunk
                             "C-RET" r-markdown-send-statement
                             "C-c C-a" r-markdown-run-all

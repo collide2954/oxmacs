@@ -3,7 +3,7 @@
           (r helper :as helper))
   (export label sessions known? current-session running? link! linked own! owner project-of project-here
           windows? arguments locate find-r launch ensure show-console evaluate request send script?
-          r-string helper-of on-marker on-ready use-keys!))
+          r-string helper-of on-marker on-ready use-keys! use-patterns! directory-of))
 
 (def label "R")
 (def missing "R not found; install it from https://cran.r-project.org or set the r plugin's program")
@@ -12,8 +12,13 @@
 (defonce handlers (atom {}))
 (defonce ready-hooks (atom {}))
 (defonce keys (atom {}))
+(defonce patterns (atom {prompts: [] watch: {}}))
 
 (def (use-keys! bindings) (reset! keys bindings))
+
+(def (use-patterns! prompts watch) (reset! patterns {prompts: prompts watch: watch}))
+
+(def (directory-of session) (get-in @state [:directories session]))
 
 (def (on-marker kind f) (swap! handlers assoc kind f))
 
@@ -204,22 +209,37 @@
           directory (or root (default-directory))
           name (if restarted existing (session-name directory))]
       (console-start name :program program :args (arguments) :directory directory :env env :label label :keys @keys
+                     :prompts (get @patterns :prompts) :watch (get @patterns :watch)
                      :on-output (fn [kind payload] (heard name kind payload))
                      :on-idle (fn [] (idle name))
                      :on-resize (fn [_] (fit name)))
       (swap! state (fn [old] (-> old
                                  (assoc-in [:helpers name] profile)
                                  (assoc-in [:roots name] root)
+                                 (assoc-in [:directories name] directory)
                                  (update :widths dissoc name))))
       (load-history name)
       name)
     (do (message missing) nil)))
 
+(defonce launching (atom {}))
+
+(def (launch-once session)
+  (let [key (or (project-here) (default-directory))]
+    (if-let [pending (get @launching key)]
+      (await pending)
+      (let [waiting (promise)
+            _ (swap! launching assoc key waiting)
+            started (try (launch session) (catch error e (message e.message) nil))]
+        (swap! launching dissoc key)
+        (deliver waiting started)
+        started))))
+
 (def (ensure)
   (let [session (current-session)]
     (if (running? session)
       session
-      (when-let [started (launch session)]
+      (when-let [started (launch-once session)]
         (link! started)
         started))))
 
@@ -229,12 +249,21 @@
 (def (evaluate session code)
   (console-send session code))
 
+(defonce sending (atom nil))
+
 (def (send code)
-  (when-let [running (ensure)]
-    (link! running)
-    (show-console running false)
-    (evaluate running code)
-    running))
+  (let [mine (promise)
+        before @sending]
+    (reset! sending mine)
+    (when before
+      (try (await before) (catch error e nil)))
+    (try
+      (when-let [running (ensure)]
+        (link! running)
+        (show-console running false)
+        (evaluate running code)
+        running)
+      (finally (deliver mine true)))))
 
 (def escapes {"\"" "\\\"" "\\" "\\\\" "\n" "\\n" "\r" "\\r" "\t" "\\t"})
 

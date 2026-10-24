@@ -48,6 +48,29 @@ fn run_r_starts_r_with_the_helper_as_its_profile() {
 }
 
 #[test]
+fn code_sent_while_r_is_starting_goes_to_that_session() {
+    let mut r = script("x <- 1\ny <- 2\nz <- 3\n", 0);
+
+    crate::testing::keys(&mut r.editor, "C-RET C-RET C-RET");
+    crate::testing::settle(&mut r.editor, &mut r.ox);
+
+    let effects = r.editor.take_effects();
+    let started = effects
+        .iter()
+        .filter(|effect| matches!(effect, oxmacs_core::editor::Effect::StartSession(_)))
+        .count();
+    let sent: Vec<&str> = effects
+        .iter()
+        .filter_map(|effect| match effect {
+            oxmacs_core::editor::Effect::Send(_, code) => Some(code.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(started, 1);
+    assert_eq!(sent, ["x <- 1\n", "y <- 2\n", "z <- 3\n"]);
+}
+
+#[test]
 fn each_session_gets_its_own_helper() {
     let mut r = started();
 

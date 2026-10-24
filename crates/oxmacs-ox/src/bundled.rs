@@ -36,6 +36,7 @@ const R: Bundle = Bundle {
         ("markdown.ox", include_str!("../plugins/r/markdown.ox")),
         ("language.ox", include_str!("../plugins/r/language.ox")),
         ("jobs.ox", include_str!("../plugins/r/jobs.ox")),
+        ("debug.ox", include_str!("../plugins/r/debug.ox")),
     ],
 };
 

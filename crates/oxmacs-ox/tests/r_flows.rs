@@ -108,7 +108,18 @@ impl Live {
     fn until(&mut self, what: &str, done: impl Fn(&Editor) -> bool) {
         let deadline = Instant::now() + Duration::from_secs(60);
         while !done(&self.editor) {
-            assert!(Instant::now() < deadline, "gave up waiting for {what}");
+            assert!(
+                Instant::now() < deadline,
+                "gave up waiting for {what} in {}: {:?}",
+                self.editor.buffer().name(),
+                self.editor
+                    .buffer_ids()
+                    .into_iter()
+                    .filter_map(|id| self.editor.buffer_by_id(id))
+                    .filter(|buffer| buffer.name().starts_with("*R"))
+                    .map(oxmacs_core::text::Buffer::contents)
+                    .collect::<Vec<_>>()
+            );
             self.step();
             thread::sleep(Duration::from_millis(20));
         }
@@ -263,4 +274,43 @@ fn scripts_run_as_background_jobs_apart_from_the_session() {
         contents(&live.editor, "*R job: job.R*")
     );
     assert!(live.jobs.is_empty());
+}
+
+#[test]
+#[ignore = "runs the R installed on this machine"]
+fn the_debugger_follows_r_through_the_source() {
+    let mut live = Live::new();
+    std::fs::write(
+        live.folder.path().join("double.R"),
+        "double <- function(x) {\n  y <- x * 2\n  y\n}\n",
+    )
+    .unwrap();
+    let run = live.folder.path().join("run.R");
+    std::fs::write(&run, "source(\"double.R\")\ndebugonce(double)\ndouble(2)\n").unwrap();
+    live.editor.open_file(&run);
+    let at = |editor: &Editor| {
+        let buffer = editor.buffer();
+        (buffer.name().to_owned(), buffer.line_of(buffer.point()))
+    };
+
+    live.press("C-RET C-RET C-RET");
+    live.until("the first debug line", |editor| {
+        at(editor) == ("double.R".to_owned(), 0)
+    });
+    live.press("<f10>");
+    live.until("the next line", |editor| {
+        at(editor) == ("double.R".to_owned(), 1)
+    });
+    live.press("S-<f8>");
+    let folder = live
+        .folder
+        .path()
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let console = format!("*R:{folder}*");
+    live.until("the prompt", |editor| {
+        contents(editor, &console).ends_with("Q\n> ")
+    });
 }

@@ -3750,6 +3750,7 @@ dependencies = [
  "keepass",
  "ox",
  "oxmacs-core",
+ "regex",
  "serde_json",
  "tempfile",
 ]

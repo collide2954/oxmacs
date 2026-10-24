@@ -6,6 +6,7 @@ use ox::{Error, Isolate};
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::{ConsoleSpec, Editor, JobSpec};
 use oxmacs_core::text::BufferId;
+use regex::Regex;
 
 use crate::log;
 
@@ -117,6 +118,8 @@ struct Options {
     output: Option<Value>,
     idle: Option<Value>,
     resized: Option<Value>,
+    prompts: Vec<String>,
+    watches: Vec<(String, String)>,
 }
 
 fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
@@ -142,6 +145,8 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
             "on-output" => found.output = Some(*value),
             "on-idle" => found.idle = Some(*value),
             "on-resize" => found.resized = Some(*value),
+            "prompts" => found.prompts = texts(heap, *value)?,
+            "watch" => found.watches = pairs(heap, *value, "watch")?,
             _ => return Err(unknown(heap, pair[0])),
         }
     }
@@ -150,7 +155,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
-        "console-start takes :program, :args, :directory, :env, :label, :keys, :on-output, :on-idle and :on-resize, not {}",
+        "console-start takes :program, :args, :directory, :env, :label, :keys, :on-output, :on-idle, :on-resize, :prompts and :watch, not {}",
         print::brief(heap, option)
     ))
 }
@@ -180,6 +185,18 @@ fn scope(editor: &mut Editor, label: &'static str) -> ScopeId {
         consoles.scopes.push((label, scope));
     }
     scope
+}
+
+fn pattern_of(pattern: &str) -> Result<Regex, Error> {
+    Regex::new(pattern).map_err(|error| {
+        Error::new(format!(
+            "console-start can't read the pattern {pattern}: {error}"
+        ))
+    })
+}
+
+fn patterns(given: &[String]) -> Result<Vec<Regex>, Error> {
+    given.iter().map(|pattern| pattern_of(pattern)).collect()
 }
 
 fn release(heap: &mut Heap, hold: Option<Hold>) {
@@ -213,6 +230,12 @@ fn start(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Va
         .buffer_named(&name)
         .filter(|id| editor.consoles(label).contains(id));
     let spec = ConsoleSpec {
+        prompts: patterns(&given.prompts)?,
+        watches: given
+            .watches
+            .into_iter()
+            .map(|(kind, pattern)| Ok((kind, pattern_of(&pattern)?)))
+            .collect::<Result<_, Error>>()?,
         name: name.clone(),
         label,
         job: JobSpec {
@@ -282,6 +305,11 @@ pub fn install(isolate: &mut Isolate) {
             Ok(Value::Bool(editor.console_request(id, &call)))
         },
     );
+    install_states(isolate);
+    install_history(isolate);
+}
+
+fn install_states(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>(
         "console-running?",
         1,
@@ -308,6 +336,21 @@ pub fn install(isolate: &mut Isolate) {
             ))
         },
     );
+    isolate.define_host_native::<Editor>(
+        "console-prompt",
+        1,
+        Some(1),
+        |heap, editor, arguments| {
+            let name = print::display(heap, arguments[0]);
+            match editor
+                .buffer_named(&name)
+                .and_then(|id| editor.console_prompt(id))
+            {
+                Some(prompt) => made(heap.string(&prompt)),
+                None => Ok(Value::Nil),
+            }
+        },
+    );
     isolate.define_host_native::<Editor>("consoles", 1, Some(1), |heap, editor, arguments| {
         let label = print::display(heap, arguments[0]);
         let names = editor
@@ -325,6 +368,9 @@ pub fn install(isolate: &mut Isolate) {
         }
         made(heap.vector_from(&values))
     });
+}
+
+fn install_history(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>(
         "console-history",
         1,
@@ -509,6 +555,41 @@ mod tests {
             )
             .unwrap(),
             r#"[["*shell*"] true true false]"#
+        );
+    }
+
+    #[test]
+    fn consoles_know_prompts_and_watched_lines_by_their_patterns() {
+        let (mut editor, mut ox, job) = started(
+            r##"(def heard (atom []))
+(console-start "*shell*" :program "shell" :args ["-i"] :env {TERM: "dumb"}
+               :prompts [#r#"^Browse\[\d+\]> $"#] :watch {debug: "^debug at "}
+               :on-output (fn [kind payload] (swap! heard conj [kind payload]))
+               :on-idle (fn [] (swap! heard conj :idle)))"##,
+        );
+
+        editor.session_output(job, "debug at a.R#2: x\nBrowse[1]> ");
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(
+            ox.eval(&mut editor, "@heard").unwrap(),
+            r#"[["debug" "debug at a.R#2: x"] :idle]"#
+        );
+        assert_eq!(
+            ox.eval(
+                &mut editor,
+                r#"[(console-prompt "*shell*") (console-prompt "*scratch*")]"#
+            )
+            .unwrap(),
+            r#"["Browse[1]> " nil]"#
+        );
+        assert!(
+            ox.eval(
+                &mut editor,
+                r#"(try (console-start "*bad*" :program "x" :prompts ["("]) (catch error e e.message))"#
+            )
+            .unwrap()
+            .contains("console-start can't read the pattern (")
         );
     }
 
