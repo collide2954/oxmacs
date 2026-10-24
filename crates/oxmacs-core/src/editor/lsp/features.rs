@@ -155,7 +155,7 @@ impl Editor {
             .map_or(Encoding::Utf16, |client| client.encoding)
     }
 
-    pub(in crate::editor) fn lsp_serves_here(&self) -> bool {
+    pub fn lsp_serves_here(&self) -> bool {
         let buffer = self.buffers.current().id();
         self.lsp
             .running

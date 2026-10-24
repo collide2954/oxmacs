@@ -17,6 +17,7 @@ mod natives;
 mod plugins;
 mod processes;
 mod prompts;
+mod servers;
 mod settings;
 pub mod shapes;
 mod stacktrace;
@@ -64,6 +65,7 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     consoles::install(&mut isolate);
     editing::install(&mut isolate);
     layout::install(&mut isolate);
+    servers::install(&mut isolate);
     transients::install(&mut isolate);
     modes::install(&mut isolate);
     takeover::install(&mut isolate);
@@ -255,7 +257,10 @@ impl Ox {
     fn drain(&mut self, editor: &mut Editor) -> bool {
         let mut failed = false;
         self.handle_requests(editor);
-        for plugin in modes::wakes(editor) {
+        for plugin in modes::wakes(editor)
+            .into_iter()
+            .chain(plugins::woken_by_modes(editor))
+        {
             plugins::request_wake(editor, &plugin);
         }
         plugins::wake_waiting(&mut self.isolate, editor);

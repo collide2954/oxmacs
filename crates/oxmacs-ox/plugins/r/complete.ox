@@ -1,6 +1,7 @@
 (module
   (import (ox string) (ox regex)
-          (r session :as session))
+          (r session :as session)
+          (r language :as language))
   (export in-r? complete answered indent-or-complete typed call-name signature-due
           signed forget-signatures settled))
 
@@ -22,12 +23,14 @@
           refusal (cond ((not (session/running? running)) "Start R with C-c C-z to complete from its session")
                         ((not (console-waiting? running)) "R is busy")
                         (else nil))]
-      (if refusal
-        (when explicit (message refusal))
+      (cond
+        ((and refusal explicit (language/ready?)) (run-command 'completion-at-point))
+        (refusal (when explicit (message refusal)))
+        (else
         (let [start (max (line-start) (or (console-input-start) 0))
               line (text-range start (point))]
           (when (session/request running "getOption(\"oxmacs\")$complete({(session/r-string line)}, {(count line)}L)")
-            (reset! asked {buffer: (buffer-name) start: start explicit: explicit})))))))
+            (reset! asked {buffer: (buffer-name) start: start explicit: explicit}))))))))
 
 (def (answered _ payload)
   (when-let [question @asked]
@@ -67,7 +70,7 @@
    (string/chars line) nil))
 
 (def (typed)
-  (when (and (in-r?) (not @asked) (not (completion-shown?)))
+  (when (and (in-r?) (not @asked) (not (completion-shown?)) (not (language/ready?)))
     (let [running (session/current-session)]
       (when (and (session/running? running)
                  (console-waiting? running)
@@ -118,7 +121,7 @@
 
 (def (signature-due)
   (let [running (session/current-session)]
-    (when (and (session/running? running) (not (prompting?)) (not (completion-shown?)))
+    (when (and (session/running? running) (not (prompting?)) (not (completion-shown?)) (not (language/ready?)))
       (let [spot (call-at-point)
             name (when spot (nth spot 2))]
         (cond ((not spot) (swap! signatures assoc :shown nil))

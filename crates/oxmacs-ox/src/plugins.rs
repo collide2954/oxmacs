@@ -54,6 +54,7 @@ struct Manifest {
     opens_directories: bool,
     opt_in: bool,
     modes: Vec<modes::Declared>,
+    wakes_for: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -238,6 +239,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
         opens_directories: false,
         opt_in: false,
         modes: Vec::new(),
+        wakes_for: Vec::new(),
     };
     for pair in options.chunks(2) {
         let [key, value] = pair else {
@@ -272,6 +274,18 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
             Some("opens-directories") => manifest.opens_directories = value.truthy(),
             Some("opt-in") => manifest.opt_in = value.truthy(),
             Some("modes") => manifest.modes = modes::declared(heap, *value)?,
+            Some("wakes-for") => {
+                manifest.wakes_for = heap
+                    .elements(*value)
+                    .filter(|_| heap.text(*value).is_none())
+                    .and_then(|items| {
+                        items
+                            .into_iter()
+                            .map(|item| heap.text(item).map(str::to_owned))
+                            .collect()
+                    })
+                    .ok_or_else(|| ":wakes-for must be a vector of mode names".to_owned())?;
+            }
             _ => {}
         }
     }
@@ -413,6 +427,37 @@ pub fn request_wake(editor: &mut Editor, name: &str) {
     if let Some(plugins) = editor.plugin_state_mut::<Plugins>() {
         plugins.waking.push(name.to_owned());
     }
+}
+
+pub fn woken_by_modes(editor: &Editor) -> Vec<String> {
+    let Some(plugins) = editor.plugin_state::<Plugins>() else {
+        return Vec::new();
+    };
+    let waiting: Vec<&Plugin> = plugins
+        .known
+        .iter()
+        .filter(|plugin| plugin.active && !plugin.loaded && !plugin.manifest.wakes_for.is_empty())
+        .collect();
+    if waiting.is_empty() {
+        return Vec::new();
+    }
+    let open: Vec<&str> = editor
+        .buffer_ids()
+        .into_iter()
+        .filter_map(|id| editor.buffer_language(id))
+        .map(oxmacs_core::syntax::Language::name)
+        .collect();
+    waiting
+        .into_iter()
+        .filter(|plugin| {
+            plugin
+                .manifest
+                .wakes_for
+                .iter()
+                .any(|mode| open.contains(&mode.as_str()))
+        })
+        .map(|plugin| plugin.manifest.name.clone())
+        .collect()
 }
 
 pub fn discover(
@@ -1309,6 +1354,34 @@ mod tests {
             "{}",
             logged(&editor)
         );
+    }
+
+    const WAKES_FOR: Bundle = Bundle {
+        name: "watcher",
+        files: &[
+            (
+                "plugin.ox",
+                r#"(plugin watcher :commands {watch: "Watch"} :wakes-for ["R"])"#,
+            ),
+            (
+                "watcher.ox",
+                "(defcommand watch \"Watch\" nil) (message \"Watching R\")",
+            ),
+        ],
+    };
+
+    #[test]
+    fn plugins_wake_once_a_buffer_of_a_mode_they_wake_for_is_open() {
+        let home = home_with(&[]);
+        let (mut editor, mut ox) = started(&[WAKES_FOR], home.path());
+        settle(&mut editor, &mut ox);
+        assert_ne!(editor.message(), Some("Watching R"));
+
+        editor.set_major_mode(Some(oxmacs_core::syntax::Language::R));
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(editor.message(), Some("Watching R"));
+        assert_eq!(logged(&editor), "");
     }
 
     #[test]

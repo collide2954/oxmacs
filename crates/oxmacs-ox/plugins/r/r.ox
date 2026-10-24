@@ -9,7 +9,8 @@
           (r definition :as definition)
           (r layout)
           (r package :as package)
-          (r markdown :as markdown)))
+          (r markdown :as markdown)
+          (r language :as language)))
 
 (def console-keys
   {"RET" 'comint-send-input
@@ -135,3 +136,5 @@
   (insert-operator "|>"))
 
 (session/use-keys! console-keys)
+
+(spawn (language/check))

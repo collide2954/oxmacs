@@ -1,7 +1,8 @@
 (module
   (import (ox string) (ox path) (ox file) (ox regex)
           (r session :as session)
-          (r help :as help))
+          (r help :as help)
+          (r language :as language))
   (export line find-definition answered))
 
 (def skipped #{"renv" "node_modules" "packrat"})
@@ -92,6 +93,7 @@
             ((and (session/running? running) (console-waiting? running))
              (reset! asked {name: name origin: origin})
              (session/request running "getOption(\"oxmacs\")$definition({(session/r-string name)})"))
+            ((language/ready?) (run-command 'lsp-find-definition))
             (else (message "No definition of {name} in open R buffers or the project"))))
     (message "No symbol at point")))
 

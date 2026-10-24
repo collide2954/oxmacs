@@ -2,7 +2,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use oxmacs_core::editor::{Editor, Effect, JobId};
+use oxmacs_core::editor::{Editor, Effect, JobId, ServerId};
+use oxmacs_core::external::lsp::{self, Server};
 use oxmacs_core::external::process::{self, Event, Handle};
 use oxmacs_core::input::KeySequence;
 use oxmacs_ox::views::{Node, ViewBuffer};
@@ -16,6 +17,9 @@ struct Live {
     jobs: Vec<(JobId, Handle)>,
     sender: Sender<(JobId, Event)>,
     events: Receiver<(JobId, Event)>,
+    servers: Vec<(ServerId, Server)>,
+    server_sender: Sender<(ServerId, lsp::Event)>,
+    server_events: Receiver<(ServerId, lsp::Event)>,
 }
 
 impl Live {
@@ -28,6 +32,7 @@ impl Live {
         let mut ox = Ox::new();
         ox.start(&mut editor, Some(home.path()));
         let (sender, events) = mpsc::channel();
+        let (server_sender, server_events) = mpsc::channel();
         Self {
             _home: home,
             folder,
@@ -36,7 +41,17 @@ impl Live {
             jobs: Vec::new(),
             sender,
             events,
+            servers: Vec::new(),
+            server_sender,
+            server_events,
         }
+    }
+
+    fn server(&self, id: ServerId) -> Option<&Server> {
+        self.servers
+            .iter()
+            .find(|(known, _)| *known == id)
+            .map(|(_, server)| server)
     }
 
     fn step(&mut self) {
@@ -56,8 +71,29 @@ impl Live {
                         handle.send(&text).unwrap();
                     }
                 }
+                Effect::StartServer(id, launch) => {
+                    let sender = self.server_sender.clone();
+                    let server = lsp::start(&launch, move |event| {
+                        let _ = sender.send((id, event));
+                    })
+                    .unwrap();
+                    self.servers.push((id, server));
+                }
+                Effect::ToServer(id, body) => {
+                    if let Some(server) = self.server(id) {
+                        server.send(&body).unwrap();
+                    }
+                }
+                Effect::StopServer(id) => {
+                    if let Some(server) = self.server(id) {
+                        server.kill();
+                    }
+                }
                 _ => {}
             }
+        }
+        while let Ok((id, event)) = self.server_events.try_recv() {
+            self.editor.server_event(id, event);
         }
         while let Ok((job, event)) = self.events.try_recv() {
             match event {
@@ -101,6 +137,9 @@ impl Drop for Live {
     fn drop(&mut self) {
         for (_, handle) in &self.jobs {
             handle.kill();
+        }
+        for (_, server) in &self.servers {
+            server.kill();
         }
     }
 }
@@ -181,4 +220,24 @@ fn a_script_runs_in_r_and_its_plots_help_and_objects_show() {
         "{}",
         contents(&live.editor, &console)
     );
+}
+
+#[test]
+#[ignore = "runs the R and the languageserver package installed on this machine"]
+fn the_languageserver_finds_problems_in_r_scripts_without_a_session() {
+    let mut live = Live::new();
+    let script = live.folder.path().join("lint.R");
+    std::fs::write(&script, "x = 1\n").unwrap();
+    live.editor.open_file(&script);
+
+    live.until("the languageserver's findings", |editor| {
+        !editor.pane().line_diagnostics(0).is_empty()
+    });
+
+    assert!(
+        live.editor.mode_line().contains("languageserver"),
+        "{}",
+        live.editor.mode_line()
+    );
+    assert!(live.jobs.is_empty());
 }

@@ -1,6 +1,7 @@
 (module
   (import (ox string) (ox path) (ox file)
-          (r session :as session))
+          (r session :as session)
+          (r language :as language))
   (export available tested installed))
 
 (def tests-buffer "*R tests*")
@@ -12,7 +13,11 @@
 (defonce listing (atom {session: nil rows: []}))
 
 (def (available session payload)
-  (swap! known assoc session (set (filter (fn [name] (not (string/blank? name))) (string/split payload "\t")))))
+  (let [found (set (filter (fn [name] (not (string/blank? name))) (string/split payload "\t")))]
+    (swap! known assoc session found)
+    (when (and (contains? found "languageserver") (language/wanted?))
+      (when-let [program (session/find-r)]
+        (language/define! program)))))
 
 (def (has? session package)
   (let [found (get @known session)]
