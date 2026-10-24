@@ -99,7 +99,7 @@
 (def (step delta)
   (when-let [listing (current)]
     (let [line (+ (current-line) delta)
-          line (max (l/first-entry-line listing) (min line (l/last-entry-line listing)))]
+          line (max 1 (min line (l/last-entry-line listing)))]
       (goto-line line (l/name-column listing)))))
 
 (defcommand dired-next-line "Move to the next file" (step 1))

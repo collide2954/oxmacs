@@ -606,6 +606,23 @@ mod dired {
     }
 
     #[test]
+    fn moving_up_from_the_first_file_reaches_the_parent_line() {
+        let dir = workspace();
+        let (_home, mut editor, mut ox) = listed(dir.path());
+
+        press(&mut editor, &mut ox, "p");
+        assert_eq!(at_point(&editor), "..");
+        press(&mut editor, &mut ox, "p <up> C-p");
+        assert_eq!(at_point(&editor), "..");
+        press(&mut editor, &mut ox, "<down>");
+        assert_eq!(at_point(&editor), format!("sub{MAIN_SEPARATOR}"));
+
+        press(&mut editor, &mut ox, "<up> RET");
+        let parent = dir.path().parent().unwrap().display().to_string();
+        assert_eq!(editor.buffer().name(), parent);
+    }
+
+    #[test]
     fn return_enters_directories_and_caret_comes_back() {
         let dir = workspace();
         let (_home, mut editor, mut ox) = listed(dir.path());
