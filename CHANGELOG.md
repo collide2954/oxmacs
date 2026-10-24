@@ -49,6 +49,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- The r plugin renders R Markdown and Quarto documents in an R process of its own, as a background job showing its output beside, so the console stays free while it works.
 - `M-x irc-setup` saves the network in `custom.ox` with `M-x customize`'s writer instead of adding a `use-plugin` form to `init.ox` every time, so setting up a network again replaces it.
 - R support is the bundled `r` plugin, off until `(use-plugin r)` turns it on. Its consoles, sessions, sending keys, help, R keys, plots window with its gallery and pins, environment listing, table views, completion, signatures and definitions work as before, plots now drawn in a plugin view, `M-x run-r` finds R the same way, and the `r-program` setting is now the plugin's `program`: `(use-plugin r :config {program: "Rterm"})`. Syntax, indentation and air formatting stay built in.
 - Closing the window asks about unsaved files, as `C-x C-c` does. `auto-save` now keeps recovery copies of every file instead of saving Rust files in place; the new `auto-save-visited` saves files in place when idle.

@@ -4,7 +4,7 @@ use oxmacs_core::editor::{Editor, Effect};
 use oxmacs_core::syntax::Language;
 use oxmacs_core::theme::Highlight;
 
-use super::{PROMPT, R, with_program};
+use super::{R, with_program};
 
 const REPORT: &str = "# Report\n\nSome text.\n\n```{r setup}\nlibrary(stats)\nx <- 1:10\n```\n\n## Plots\n\n```{r}\nplot(x)\n```\n\nThe end.\n";
 
@@ -24,13 +24,6 @@ fn report() -> (tempfile::TempDir, R) {
 
 fn line(r: &R) -> usize {
     r.editor.buffer().line_of(r.editor.buffer().point())
-}
-
-fn render_call(file: &std::path::Path) -> String {
-    format!(
-        "getOption(\"oxmacs\")$render({:?})\n",
-        file.display().to_string()
-    )
 }
 
 #[test]
@@ -157,42 +150,73 @@ fn control_c_control_i_inserts_a_chunk() {
     assert_eq!(line(&r), 4);
 }
 
-#[test]
-fn control_c_control_k_renders_and_opens_the_result() {
-    let (folder, mut r) = report();
-    let job = r.running();
-    let file = folder.path().join("report.Rmd");
+fn echoing(line: &str) -> String {
+    let (program, args) = if cfg!(windows) {
+        ("cmd", vec!["/C".to_owned(), format!("echo {line}")])
+    } else {
+        ("sh", vec!["-c".to_owned(), format!("printf '{line}\\n'")])
+    };
+    let args: Vec<String> = args.iter().map(|arg| super::ox_text(arg)).collect();
+    format!("{program:?} [{}]", args.join(" "))
+}
 
-    r.press("C-c C-k");
-    assert_eq!(r.sent(), [render_call(&file)]);
-    r.output(
-        job,
-        &format!(
-            "\u{1}rendered\u{2}{}\tC:/out/report.html\u{3}{PROMPT}",
-            file.display()
-        ),
-    );
+fn waited(r: &mut R, wanted: &str) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while r.editor.message() != Some(wanted) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?} {}",
+            r.editor.message(),
+            r.logged()
+        );
+        crate::testing::settle(&mut r.editor, &mut r.ox);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn rendering_runs_apart_from_the_session_and_opens_the_result() {
+    let (folder, mut r) = report();
+    let file = super::ox_text(&folder.path().join("report.Rmd").display().to_string());
+
+    r.eval(&format!(
+        "(module (import (r markdown :as markdown))) (markdown/render-with {file} {})",
+        echoing("oxmacs-rendered\tC:/out/report.html")
+    ));
+    waited(&mut r, "Rendered report.html");
 
     assert!(
         r.editor
             .take_effects()
             .contains(&Effect::OpenExternally(PathBuf::from("C:/out/report.html")))
     );
-    assert_eq!(r.editor.message(), Some("Rendered report.html"));
+    assert_eq!(r.started(), Vec::new());
+    r.eval(&format!(
+        "(markdown/render-with {file} {})",
+        echoing("oxmacs-render-failed\tpandoc is missing")
+    ));
+    waited(&mut r, "Rendering failed: pandoc is missing");
 }
 
 #[test]
-fn saving_renders_when_the_setting_asks_for_it() {
-    let (folder, mut r) = report();
-    r.running();
-    let file = folder.path().join("report.Rmd");
+fn control_c_control_k_and_saving_render_without_the_session() {
+    let (_folder, mut r) = report();
+    let missing = format!("Rscript was not found beside {}", r.program().display());
 
+    r.press("C-c C-k");
+    assert_eq!(r.editor.message(), Some(missing.as_str()));
+    assert_eq!(r.started(), Vec::new());
+    r.editor.show_message("elsewhere");
     r.press("x C-x C-s");
-    assert_eq!(r.sent(), Vec::<String>::new());
+    assert_eq!(
+        r.editor.message().map(|shown| shown.starts_with("Wrote")),
+        Some(true)
+    );
 
     r.eval("(configure-plugin 'r {render-on-save: true})");
     r.press("x C-x C-s");
-    assert_eq!(r.sent(), [render_call(&file)]);
+    assert_eq!(r.editor.message(), Some(missing.as_str()));
+    assert_eq!(r.sent(), Vec::<String>::new());
 }
 
 #[test]

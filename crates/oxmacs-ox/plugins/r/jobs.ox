@@ -2,7 +2,7 @@
   (import (ox string) (ox path) (ox file) (ox process) (ox regex)
           (r session :as session)
           (r language :as language))
-  (export start heard-app))
+  (export start rscript heard-app))
 
 (def help-line "k stops it   g runs it again   q quits")
 (def job-keys {"k" 'r-job-stop "g" 'r-job-again "q" 'quit-window "n" 'next-line "p" 'previous-line})
@@ -21,13 +21,15 @@
 
 (def (finished buffer run status)
   (when (current? buffer run)
+    (when-let [on-exit (get-in @jobs [buffer :on-exit])]
+      (on-exit status))
     (swap! jobs update buffer assoc :process nil)
     (append-lines buffer [[] (if (= status 0)
                                [["Finished" :success]]
                                [["Finished with status {status}" :error]])])))
 
-(def (start buffer program args directory {on-line nil title nil})
-  "Runs program with args in directory as a background job whose output shows in buffer, calling on-line with each line."
+(def (start buffer program args directory {on-line nil on-exit nil title nil})
+  "Runs program with args in directory as a background job whose output shows in buffer, calling on-line with each line and on-exit with its status."
   (when-let [old (get-in @jobs [buffer :process])]
     (process/kill old))
   (let [process (try (process/start program args :cwd directory)
@@ -35,7 +37,7 @@
     (when process
       (let [run (swap! runs inc)]
         (swap! jobs assoc buffer {process: process run: run program: program args: args
-                                  directory: directory on-line: on-line title: title})
+                                  directory: directory on-line: on-line on-exit: on-exit title: title})
         (open-buffer buffer [[[(or title (string/join " " (concat [(path/name program)] args))) :heading]]
                              [[help-line :comment]]
                              []]
@@ -55,7 +57,8 @@
 
 (defcommand r-job-again "Run the job of this buffer again"
   (if-let [job (get @jobs (buffer-name))]
-    (start (buffer-name) job.program job.args job.directory :on-line job.on-line :title job.title)
+    (start (buffer-name) job.program job.args job.directory
+           :on-line job.on-line :on-exit job.on-exit :title job.title)
     (message "No job to run again")))
 
 (def (rscript)

@@ -350,7 +350,22 @@ fn widgets_go_to_the_viewer_marker() {
 
 #[test]
 #[ignore = "runs the R and Quarto installed on this machine"]
-fn documents_render_beside_themselves_or_say_why_not() {
+fn documents_render_in_a_process_of_their_own_or_say_why_not() {
+    let mut editor = Editor::new();
+    let mut ox = Ox::new();
+    ox.start(&mut editor, None);
+    let mut eval = |source: &str| {
+        unquoted(
+            &ox.eval(
+                &mut editor,
+                &format!("(module (import (r jobs :as jobs) (r markdown :as markdown))) {source}"),
+            )
+            .unwrap(),
+        )
+    };
+    let rscript = eval("(jobs/rscript)");
+    assert_ne!(rscript, "nil", "Rscript is not installed");
+    let script = eval("(await (markdown/script-file))");
     let folder = tempfile::tempdir().unwrap();
     let document = folder.path().join("notes.qmd");
     std::fs::write(
@@ -358,23 +373,32 @@ fn documents_render_beside_themselves_or_say_why_not() {
         "---\ntitle: Notes\n---\n\n# Hello\n\nPlain text.\n",
     )
     .unwrap();
-    let path = document.display().to_string().replace('\\', "/");
-    let (output, _directory) = session(&format!(
-        "getOption(\"oxmacs\")$render(\"{path}\")\ngetOption(\"oxmacs\")$render(\"{path}x.qmd\")\nq()\n"
-    ));
+    let render = |path: &std::path::Path| {
+        let output = Command::new(&rscript)
+            .arg(&script)
+            .arg(path)
+            .current_dir(folder.path())
+            .output()
+            .unwrap();
+        (
+            output.status.success(),
+            String::from_utf8_lossy(&output.stdout).replace('\r', ""),
+        )
+    };
 
-    let rendered = marked(&output, "rendered");
-    let (source, made) = rendered[0].split_once('\t').unwrap();
-    assert_eq!(source, path);
-    assert!(made.ends_with("/notes.html"), "{output:?}");
+    let (worked, output) = render(&document);
+    assert!(worked, "{output}");
+    let made = output
+        .lines()
+        .find_map(|line| line.strip_prefix("oxmacs-rendered\t"))
+        .unwrap_or_else(|| panic!("{output}"));
+    assert!(made.ends_with("/notes.html"), "{output}");
     assert!(std::fs::metadata(made).unwrap().len() > 1000);
-    assert_eq!(rendered[1], format!("{path}x.qmd\t"));
-    assert!(
-        marked(&output, "message")[0].starts_with("Rendering failed:"),
-        "{output:?}"
-    );
-}
 
+    let (worked, output) = render(&folder.path().join("missing.qmd"));
+    assert!(!worked, "{output}");
+    assert!(output.contains("oxmacs-render-failed\t"), "{output}");
+}
 #[test]
 #[ignore = "runs the R installed on this machine"]
 fn packages_are_listed_and_their_help_and_tests_answer() {

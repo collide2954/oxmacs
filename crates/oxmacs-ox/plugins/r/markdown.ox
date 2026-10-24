@@ -1,7 +1,8 @@
 (module
-  (import (ox string) (ox regex) (ox path)
-          (r session :as session))
-  (export parse highlight rendered saved))
+  (import (ox string) (ox regex) (ox path) (ox file)
+          (r session :as session)
+          (r jobs :as jobs))
+  (export parse highlight render-with script-file saved))
 
 (def opening #"^\s*```+\s*\{\s*([A-Za-z][\w.-]*)(?:[\s,]+([^\s,}=]+)(?:[\s,}]|$))?")
 (def fence #"^\s*```")
@@ -225,13 +226,64 @@
 (def (renderable? file)
   (and file (contains? #{"rmd" "qmd"} (string/lower (or (path/extension file) "")))))
 
-(def (render file)
-  (when-let [running (session/ensure)]
-    (swap! rendering conj file)
-    (session/show-console running false)
-    (session/evaluate running "getOption(\"oxmacs\")$render({(session/r-string file)})")
-    (message "Rendering {(path/name file)}")))
+(def render-script #r#"path <- commandArgs(trailingOnly = TRUE)[1]
+started <- Sys.time() - 1
+quarto <- Sys.which("quarto")
+knits <- requireNamespace("rmarkdown", quietly = TRUE) &&
+  (rmarkdown::pandoc_available() || !nzchar(quarto))
+by_quarto <- grepl("[.]qmd$", path, ignore.case = TRUE) || !knits
+out <- tryCatch({
+  if (!by_quarto) {
+    rmarkdown::render(path, envir = new.env(parent = globalenv()))
+  } else if (nzchar(quarto)) {
+    status <- system2(quarto, c("render", shQuote(path)))
+    if (!identical(as.integer(status), 0L)) stop("quarto render stopped with status ", status)
+    stem <- paste0(tools::file_path_sans_ext(basename(path)), ".")
+    made <- list.files(dirname(path), full.names = TRUE)
+    made <- made[startsWith(basename(made), stem) &
+      tolower(tools::file_ext(made)) %in% c("html", "pdf", "docx", "pptx", "odt", "epub") &
+      file.mtime(made) >= started]
+    if (length(made) == 0) stop("quarto made nothing beside the document")
+    made[which.max(file.mtime(made))]
+  } else {
+    stop("rendering needs the rmarkdown package or Quarto")
+  }
+}, error = function(e) e)
+if (inherits(out, "error")) {
+  cat("oxmacs-render-failed\t", conditionMessage(out), "\n", sep = "")
+  quit(save = "no", status = 1)
+}
+cat("oxmacs-rendered\t", normalizePath(out, winslash = "/"), "\n", sep = "")
+"#)
 
+(def (script-file)
+  (let [file (path/join (path/temp) "oxmacs-render.R")]
+    (await (file/write file render-script))
+    file))
+
+(def (heard file line)
+  (let [[tag value] (string/split (string/trim-end line) "\t" 2)]
+    (cond ((= tag "oxmacs-rendered")
+           (do (swap! rendering disj file)
+             (open-externally value)
+             (message "Rendered {(path/name value)}")))
+          ((= tag "oxmacs-render-failed")
+           (do (swap! rendering disj file)
+             (message "Rendering failed: {value}")))
+          (else nil))))
+
+(def (render-with file program args)
+  "Renders file by running program with args as a background job, opening the file it reports it made."
+  (swap! rendering conj file)
+  (jobs/start "*R render: {(path/name file)}*" program args (path/parent file)
+              :title "Rendering {(path/name file)}"
+              :on-line (fn [line] (heard file line))
+              :on-exit (fn [_] (swap! rendering disj file))))
+
+(def (render file)
+  (when-let [script (jobs/rscript)]
+    (render-with file script [(script-file) file])
+    (message "Rendering {(path/name file)}")))
 (defcommand r-markdown-render "Save the document, render it with R Markdown or Quarto and open the result"
   (let [file (buffer-file)]
     (if (renderable? file)
@@ -242,13 +294,6 @@
 (def (saved file)
   (when (and (plugin-setting 'r :render-on-save) (renderable? file) (not (contains? @rendering file)))
     (render file)))
-
-(def (rendered _ payload)
-  (let [[source output] (string/split payload "\t" 2)]
-    (swap! rendering disj source)
-    (when (and output (not (string/blank? output)))
-      (open-externally output)
-      (message "Rendered {(path/name output)}"))))
 
 (defmode r-markdown "R Markdown"
   :extensions ["Rmd" "rmd" "qmd"]
