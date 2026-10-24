@@ -28,6 +28,8 @@ const R: Bundle = Bundle {
         ("help.ox", include_str!("../plugins/r/help.ox")),
         ("plots.ox", include_str!("../plugins/r/plots.ox")),
         ("data.ox", include_str!("../plugins/r/data.ox")),
+        ("complete.ox", include_str!("../plugins/r/complete.ox")),
+        ("definition.ox", include_str!("../plugins/r/definition.ox")),
     ],
 };
 

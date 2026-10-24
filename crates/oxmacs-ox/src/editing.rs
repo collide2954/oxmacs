@@ -1,13 +1,12 @@
 use std::ops::Range;
 
-use ox::heap::{Heap, Hold};
+use ox::heap::Heap;
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
 use oxmacs_core::display::LineStyle;
 use oxmacs_core::editor::{Axis, Editor};
 use oxmacs_core::text::BufferId;
 
-use crate::log;
 use crate::views::face_named;
 
 fn made(made: Result<Value, ox::heap::HeapFull>) -> Result<Value, Error> {
@@ -128,6 +127,38 @@ fn header(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     Ok(Value::Nil)
 }
 
+fn show_text(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let name = print::display(heap, arguments[0]);
+    let text = print::display(heap, arguments[1]);
+    let mut language = None;
+    let mut read_only = false;
+    for pair in arguments[2..].chunks(2) {
+        match pair {
+            [Value::Keyword(option), value] if option.name() == "mode" => {
+                let mode = print::display(heap, *value);
+                language = Some(
+                    editor
+                        .language_named(&mode)
+                        .ok_or_else(|| Error::new(format!("There is no mode called {mode}")))?,
+                );
+            }
+            [Value::Keyword(option), value] if option.name() == "read-only" => {
+                read_only = value.truthy();
+            }
+            _ => {
+                return Err(Error::new(format!(
+                    "show-text takes :mode and :read-only, not {}",
+                    print::brief(heap, pair[0])
+                )));
+            }
+        }
+    }
+    editor
+        .show_text(&name, &text, language, read_only)
+        .map_err(Error::new)?;
+    Ok(Value::Nil)
+}
+
 fn complete(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let start = offset(heap, "complete-at", arguments[0])?;
     let candidates = heap
@@ -145,48 +176,6 @@ fn complete(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result
     let explicit = arguments.get(2).is_some_and(|value| value.truthy());
     editor.complete_at(start, candidates, explicit);
     Ok(Value::Nil)
-}
-
-#[derive(Debug, Default)]
-struct Typing {
-    handlers: Vec<(String, Hold)>,
-    seen: Option<(BufferId, u64)>,
-}
-
-fn on_typed(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
-    let key = print::display(heap, arguments[0]);
-    let hold = heap.hold(arguments[1]);
-    let mut typing = editor.take_plugin_state::<Typing>().unwrap_or_default();
-    match typing.handlers.iter_mut().find(|(known, _)| *known == key) {
-        Some((_, existing)) => {
-            heap.release(std::mem::replace(existing, hold));
-        }
-        None => typing.handlers.push((key, hold)),
-    }
-    editor.set_plugin_state(typing);
-}
-
-pub fn typed(isolate: &mut Isolate, editor: &mut Editor) {
-    if !editor.just_typed() || editor.minibuffer().is_some() {
-        return;
-    }
-    let buffer = editor.buffer();
-    let key = (buffer.id(), buffer.revision());
-    let Some(typing) = editor.plugin_state_mut::<Typing>() else {
-        return;
-    };
-    if typing.seen == Some(key) {
-        return;
-    }
-    typing.seen = Some(key);
-    let handlers: Vec<Hold> = typing.handlers.iter().map(|(_, hold)| *hold).collect();
-    for hold in handlers {
-        if let Some(handler) = isolate.held(hold)
-            && let Err(error) = isolate.spawn(handler, &[])
-        {
-            log::report(editor, &error, None);
-        }
-    }
 }
 
 pub fn install(isolate: &mut Isolate) {
@@ -282,6 +271,10 @@ fn install_places(isolate: &mut Isolate) {
     );
     isolate.define_host_native::<Editor>("display-buffer", 1, None, display);
     isolate.define_host_native::<Editor>("set-header", 2, Some(2), header);
+    isolate.define_host_native::<Editor>("show-text", 2, Some(6), show_text);
+    isolate.define_host_native::<Editor>("prompting?", 0, Some(0), |_, editor, _| {
+        Ok(Value::Bool(editor.prompting()))
+    });
     isolate.define_host_native::<Editor>("complete-at", 2, Some(3), complete);
     isolate.define_host_native::<Editor>("completion-shown?", 0, Some(0), |_, editor, _| {
         Ok(Value::Bool(editor.pane().popup().is_some()))
@@ -302,9 +295,8 @@ fn install_places(isolate: &mut Isolate) {
             Ok(Value::Nil)
         },
     );
-    isolate.define_host_native::<Editor>("on-typed", 2, Some(2), |heap, editor, arguments| {
-        on_typed(heap, editor, arguments);
-        Ok(Value::Nil)
+    isolate.define_host_native::<Editor>("just-typed?", 0, Some(0), |_, editor, _| {
+        Ok(Value::Bool(editor.just_typed()))
     });
 }
 
@@ -458,6 +450,44 @@ mod tests {
     }
 
     #[test]
+    fn text_is_shown_in_a_buffer_of_its_own_mode() {
+        let (mut editor, mut ox) = editing("x", 0);
+
+        eval(
+            &mut editor,
+            &mut ox,
+            r#"(show-text "*source*" "f <- function() 1" :mode "R" :read-only true)"#,
+        );
+        assert_eq!(editor.buffer().name(), "*source*");
+        assert_eq!(editor.buffer().contents(), "f <- function() 1");
+        assert!(editor.buffer().is_read_only());
+        assert!(!editor.buffer().is_modified());
+        assert_eq!(eval(&mut editor, &mut ox, "(buffer-language)"), "\"R\"");
+
+        eval(&mut editor, &mut ox, r#"(show-text "*source*" "again")"#);
+        assert_eq!(editor.buffer().contents(), "again");
+        assert_eq!(editor.buffer().point(), 0);
+        assert!(
+            eval(
+                &mut editor,
+                &mut ox,
+                r#"(show-text "*x*" "" :mode "Cobol")"#
+            )
+            .contains("There is no mode called Cobol")
+        );
+    }
+
+    #[test]
+    fn plugins_know_when_a_prompt_is_open() {
+        let (mut editor, mut ox) = editing("x", 0);
+        assert_eq!(eval(&mut editor, &mut ox, "(prompting?)"), "false");
+
+        press(&mut editor, &mut ox, "M-x");
+
+        assert_eq!(eval(&mut editor, &mut ox, "(prompting?)"), "true");
+    }
+
+    #[test]
     fn locations_are_remembered_for_m_comma() {
         let (mut editor, mut ox) = editing("abc def", 2);
 
@@ -471,18 +501,14 @@ mod tests {
     }
 
     #[test]
-    fn typing_calls_its_handlers_once_per_change() {
+    fn plugins_know_when_a_character_was_just_typed() {
         let (mut editor, mut ox) = editing("", 0);
-        ox.eval(
-            &mut editor,
-            r"(def seen (atom [])) (on-typed :watch (fn [] (swap! seen conj (point))))",
-        )
-        .unwrap();
 
         typed(&mut editor, &mut ox, "ab");
+        assert_eq!(eval(&mut editor, &mut ox, "(just-typed?)"), "true");
         press(&mut editor, &mut ox, "C-b");
         settle(&mut editor, &mut ox);
 
-        assert_eq!(eval(&mut editor, &mut ox, "@seen"), "[1 2]");
+        assert_eq!(eval(&mut editor, &mut ox, "(just-typed?)"), "false");
     }
 }

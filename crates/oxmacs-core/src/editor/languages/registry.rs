@@ -81,10 +81,16 @@ impl Editor {
     }
 
     pub fn language_scope(&self, name: &str) -> Option<ScopeId> {
+        self.language_named(name)
+            .and_then(|language| self.registered(language))
+            .and_then(|known| known.scope)
+    }
+
+    pub fn language_named(&self, name: &str) -> Option<Language> {
         self.languages
             .iter()
-            .find(|known| known.language.name() == name || known.language.aliases().contains(&name))
-            .and_then(|known| known.scope)
+            .map(|known| known.language)
+            .find(|language| language.name() == name || language.aliases().contains(&name))
     }
 
     pub fn language_for(&self, path: &Path) -> Option<Language> {

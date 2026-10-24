@@ -96,6 +96,32 @@ impl Editor {
             .unwrap_or_default()
     }
 
+    pub fn show_text(
+        &mut self,
+        name: &str,
+        text: &str,
+        language: Option<crate::syntax::Language>,
+        read_only: bool,
+    ) -> Result<BufferId, String> {
+        match self.buffers.position(|buffer| buffer.name() == name) {
+            Some(index) if self.buffers.get(index).and_then(Buffer::file).is_some() => {
+                return Err(format!("{name} visits a file"));
+            }
+            Some(index) => self.select_buffer(index),
+            None => self.add_buffer_with(Buffer::with_text(name, ""), Mode::Text(None)),
+        }
+        if language.is_some() {
+            self.set_major_mode(language);
+        }
+        let buffer = self.buffers.current_mut();
+        buffer.set_read_only(false);
+        buffer.set_text(text);
+        buffer.mark_saved();
+        buffer.set_read_only(read_only);
+        buffer.set_point(0);
+        Ok(buffer.id())
+    }
+
     pub fn insert_text(&mut self, text: &str) -> bool {
         if self.refuse_read_only() {
             return false;

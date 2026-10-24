@@ -3,7 +3,9 @@
           (r session :as session)
           (r help :as help)
           (r plots :as plots)
-          (r data :as data)))
+          (r data :as data)
+          (r complete :as complete)
+          (r definition :as definition)))
 
 (def help-buffer "*R help*")
 
@@ -13,7 +15,10 @@
    "M-n" 'comint-next-input
    "C-c C-z" 'r-switch-to-console
    "C-c C-v" 'r-help
-   "C-c C-e" 'r-environment})
+   "C-c C-e" 'r-environment
+   "M-." 'r-find-definition
+   "TAB" 'r-complete
+   "C-M-i" 'r-complete})
 
 (def help-keys {"SPC" 'scroll-up-command "DEL" 'scroll-down-command "q" 'quit-window})
 
@@ -29,6 +34,13 @@
 (session/on-marker "table" data/tabled)
 (session/on-marker "object" data/described)
 (session/on-ready :environment data/environment-due)
+(session/on-marker "complete" complete/answered)
+(session/on-marker "signature" complete/signed)
+(session/on-marker "definition" definition/answered)
+(session/on-ready :signatures complete/forget-signatures)
+(session/on-ready :asked complete/settled)
+(on-idle :r-complete 0.25 (fn [] (when (just-typed?) (complete/typed))))
+(on-idle :r-signature 0.4 complete/signature-due)
 
 (def (insert-operator operator)
   (let [at (point)
@@ -111,6 +123,15 @@
     (when topic
       (when-let [running (session/ensure)]
         (session/request running "getOption(\"oxmacs\")$help({(session/r-string topic)})")))))
+
+(defcommand r-complete "Complete the R code before point from the session"
+  (complete/complete true))
+
+(defcommand r-indent-or-complete "Indent the line, or complete the R code once it is indented"
+  (complete/indent-or-complete))
+
+(defcommand r-find-definition "Jump to the definition of the R name at point"
+  (definition/find-definition))
 
 (defcommand r-insert-assignment "Insert the assignment arrow <-"
   (insert-operator "<-"))

@@ -243,7 +243,6 @@ impl Ox {
         self.timed("views", refreshing);
         help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         help::eldoc(&self.isolate, editor, self.home.as_deref(), &mut self.help);
-        editing::typed(&mut self.isolate, editor);
         self.timed("tick", started);
         if tools::requests_waiting(editor) {
             return Pace::Running;

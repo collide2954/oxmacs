@@ -8,10 +8,12 @@ use crate::Ox;
 use crate::testing::{home_with, press, settle};
 
 mod data;
+mod definitions;
 mod help;
 mod keys;
 mod plots;
 mod sessions;
+mod smarts;
 
 pub(super) const PROMPT: &str = "\u{1}>\u{2}\u{3}";
 pub(super) const CONTINUE: &str = "\u{1}+\u{2}\u{3}";
@@ -115,6 +117,10 @@ impl R {
         self.typed(command);
         self.press("RET");
     }
+}
+
+pub(super) fn ox_text(text: &str) -> String {
+    format!("{text:?}").replace('{', "{{").replace('}', "}}")
 }
 
 pub(super) fn folder() -> PathBuf {
