@@ -15,10 +15,10 @@
   (let [trimmed (string/trim-start text)
         after (cond ((string/starts-with? trimmed "`{name}`")
                      (string/slice trimmed (+ (string/length name) 2)))
-                    ((and (string/starts-with? trimmed name)
-                          (not (regex/matches? #"^[\p{L}\p{N}._]" (string/slice trimmed (string/length name)))))
-                     (string/slice trimmed (string/length name)))
-                    (else nil))]
+                ((and (string/starts-with? trimmed name)
+                      (not (regex/matches? #"^[\p{L}\p{N}._]" (string/slice trimmed (string/length name)))))
+                 (string/slice trimmed (string/length name)))
+                (else nil))]
     (when after
       (let [after (string/trim-start after)]
         (or (string/starts-with? after "<-")
@@ -36,7 +36,7 @@
 
 (def (listing folder)
   (try (sort-by (fn [entry] entry.path) (await (file/list folder)))
-       (catch error e [])))
+    (catch error _e [])))
 
 (def (r-file? name)
   (or (contains? #{"R" "r"} (path/extension name)) (= name ".Rprofile")))
@@ -51,14 +51,14 @@
                                 (not (contains? skipped entry.name)))
                          (walk (listing entry.path) 0 (+ depth 1) found)
                          found))
-                      ((r-file? entry.name) (conj found entry.path))
-                      (else found))]
+                  ((r-file? entry.name) (conj found entry.path))
+                  (else found))]
       (walk entries (+ at 1) depth found))))
 
 (def (first-definition files name at)
   (when (< at (count files))
     (let [path (nth files at)
-          text (try (await (file/read path)) (catch error e nil))
+          text (try (await (file/read path)) (catch error _e nil))
           found (when text (line text name))]
       (if found [path found] (first-definition files name (+ at 1))))))
 
@@ -89,12 +89,12 @@
     (let [origin [(buffer-name) (point)]
           running (session/current-session)]
       (cond ((in-buffers name origin) nil)
-            ((in-project name origin) nil)
-            ((and (session/running? running) (console-waiting? running))
-             (reset! asked {name: name origin: origin})
-             (session/request running "getOption(\"oxmacs\")$definition({(session/r-string name)})"))
-            ((language/ready?) (run-command 'lsp-find-definition))
-            (else (message "No definition of {name} in open R buffers or the project"))))
+        ((in-project name origin) nil)
+        ((and (session/running? running) (console-waiting? running))
+         (reset! asked {name: name origin: origin})
+         (session/request running "getOption(\"oxmacs\")$definition({(session/r-string name)})"))
+        ((language/ready?) (run-command 'lsp-find-definition))
+        (else (message "No definition of {name} in open R buffers or the project"))))
     (message "No symbol at point")))
 
 (def (answered _ payload)
@@ -111,7 +111,7 @@
                      at (if (> (count pieces) 1) (or (string/to-number (last pieces)) 1) 1)]
                  (unless (visit path (- at 1) question.origin)
                    (message "Cannot open {path}"))))
-              ((= kind "source")
-               (apply remember-location question.origin)
-               (show-text "*R source: {name}*" place :mode "R" :read-only true))
-              (else (message "No definition of {name} found")))))))
+          ((= kind "source")
+           (apply remember-location question.origin)
+           (show-text "*R source: {name}*" place :mode "R" :read-only true))
+          (else (message "No definition of {name} found")))))))

@@ -598,7 +598,7 @@
     (str size " " unit (if (= size 1) "" "s"))))
 
 (def (whois-text line)
-  (let [[_ nick a b c d] line.params
+  (let [[_ nick a b c _d] line.params
         said (last line.params)]
     (cond ((= line.command "311") (str nick " is " a "@" b " (" said ")"))
       ((= line.command "319") (str nick " is in " said))

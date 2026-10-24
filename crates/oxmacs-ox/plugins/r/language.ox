@@ -25,7 +25,7 @@
   (try (string/includes? (get (await (process/run script ["-e" "cat(nzchar(system.file(package = 'languageserver')))"]))
                               :stdout)
                          "TRUE")
-       (catch error e false)))
+    (catch error _e false)))
 
 (def (check)
   (when (and (wanted?) (not (get @state :checked)))

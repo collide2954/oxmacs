@@ -402,5 +402,5 @@ options(prompt = "\001>\002\003", continue = "\001+\002\003")
   (let [folder (path/join (path/temp) "oxmacs")
         file (path/join folder "r-{(crypto/random 8)}.R")]
     (spawn (await (file/make-dir folder))
-           (await (file/write file script))
-           file)))
+      (await (file/write file script))
+      file)))

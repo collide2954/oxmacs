@@ -557,7 +557,7 @@ impl Isolate {
         let missing = format!("{} isn't available here", shown_name(module, name));
         let function: Rc<NativeFn> = Rc::new(move |heap, host, arguments| {
             let Some(host) = host.downcast_mut::<T>() else {
-                return Err(Error::new(missing.clone()));
+                return Err(Error::new(missing.clone()).of(ErrorKind::Refused));
             };
             function(heap, host, arguments)
         });

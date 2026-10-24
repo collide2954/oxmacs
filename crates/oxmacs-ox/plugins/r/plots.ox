@@ -58,7 +58,7 @@
                   (fn [plots]
                     (when plots
                       (assoc plots key (if (= key :thumbs) (assoc (or plots.thumbs {}) path picture) {path picture}))))))
-         (catch error e nil))))
+      (catch error _e nil))))
 
 (def (shown-image plots)
   (let [pictures (or plots.pictures {})]
@@ -84,14 +84,14 @@
 (def (render name)
   (let [plots (get @views name)]
     (cond ((not plots) (ui/text ""))
-          (plots.gallery (grid name plots))
-          (plots.shown
-           (let [picture (shown-image plots)
-                 counter (ui/row (ui/space) (ui/text "{plots.shown.index} / {plots.shown.count}" :face :comment))]
-             (if picture
-               (ui/column counter (ui/image picture :width plots.shown.width :height plots.shown.height))
-               counter)))
-          (else (ui/text (if plots.gone "This plot is no longer in R's history" "No plots") :face :comment)))))
+      (plots.gallery (grid name plots))
+      (plots.shown
+       (let [picture (shown-image plots)
+             counter (ui/row (ui/space) (ui/text "{plots.shown.index} / {plots.shown.count}" :face :comment))]
+         (if picture
+           (ui/column counter (ui/image picture :width plots.shown.width :height plots.shown.height))
+           counter)))
+      (else (ui/text (if plots.gone "This plot is no longer in R's history" "No plots") :face :comment)))))
 
 (def plot-keys
   {"n" 'r-plot-next "<right>" 'r-plot-next "p" 'r-plot-previous "<left>" 'r-plot-previous
@@ -122,8 +122,8 @@
                                        (and (= plots.session session) plots.pinned (buffer-shown? other))))
                          (alive))]
         (cond (pinned (display-buffer name :right-of pinned))
-              ((buffer-shown? session) (display-buffer name :below session))
-              (else (display-buffer name)))))
+          ((buffer-shown? session) (display-buffer name :below session))
+          (else (display-buffer name)))))
     name))
 
 (def (parse payload)
@@ -157,13 +157,13 @@
 
 (def (arrived session payload)
   (cond ((= payload "none") (emptied session))
-        ((string/starts-with? payload "gone\t")
-         (gone session (string/to-number (string/slice payload 5))))
-        (else
-         (when-let [arrival (parse payload)]
-           (if (= arrival.why "pinned")
-             (when-let [name (pinned-of session arrival.id)] (settle name arrival))
-             (settle (place session) arrival))))))
+    ((string/starts-with? payload "gone\t")
+     (gone session (string/to-number (string/slice payload 5))))
+    (else
+     (when-let [arrival (parse payload)]
+       (if (= arrival.why "pinned")
+         (when-let [name (pinned-of session arrival.id)] (settle name arrival))
+         (settle (place session) arrival))))))
 
 (def (thumbnails session payload)
   (when-let [name (unpinned-of session)]
@@ -267,16 +267,16 @@
     (unless (refused name)
       (let [plots (get @views name)]
         (cond (plots.gallery (swap! views update name dissoc :gallery))
-              ((not plots.shown) (message "No plots"))
-              (else
-               (let [total plots.shown.count
-                     across (columns total)
-                     down (// (+ total across -1) across)
-                     [width height] (or plots.size size)
-                     tile [(// width (max across 1)) (// height (max down 1))]]
-                 (swap! views assoc-in [name :tile] tile)
-                 (session/request plots.session
-                                  "getOption(\"oxmacs\")$plot_gallery({(first tile)}L, {(second tile)}L)"))))))))
+          ((not plots.shown) (message "No plots"))
+          (else
+           (let [total plots.shown.count
+                 across (columns total)
+                 down (// (+ total across -1) across)
+                 [width height] (or plots.size size)
+                 tile [(// width (max across 1)) (// height (max down 1))]]
+             (swap! views assoc-in [name :tile] tile)
+             (session/request plots.session
+                              "getOption(\"oxmacs\")$plot_gallery({(first tile)}L, {(second tile)}L)"))))))))
 
 (defcommand r-plot-pin "Keep the shown R plot in its own window"
   (when-let [name (here)]

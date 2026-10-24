@@ -26,8 +26,8 @@
         minutes (mod (// seconds 60) 60)
         left (mod seconds 60)]
     (cond ((> hours 0) (str hours "h " (two minutes) "m"))
-          ((> minutes 0) (str minutes "m " (two left) "s"))
-          (else (str left "s")))))
+      ((> minutes 0) (str minutes "m " (two left) "s"))
+      (else (str left "s")))))
 
 (def (megabytes bytes) (str (// (+ bytes 1048575) 1048576) " MB"))
 
@@ -44,13 +44,13 @@
 
 (def (status-text p)
   (cond ((= p.status :exited) (if (and p.exit (not= p.exit 0)) (str "exit " p.exit) "exited"))
-        (else (name p.status))))
+    (else (name p.status))))
 
 (def (status-face p)
   (cond ((= p.status :running) :success)
-        ((= p.status :starting) :warning)
-        ((= (status-text p) "exited") :comment)
-        (else :error)))
+    ((= p.status :starting) :warning)
+    ((= (status-text p) "exited") :comment)
+    (else :error)))
 
 (def (command-line p) (string/join " " (concat [p.program] p.args)))
 
@@ -86,11 +86,11 @@
 
 (def (sort-key p now sorting)
   (cond ((= sorting :time) (- (or p.ended now) p.started))
-        ((= sorting :cpu) (or (last p.cpu) 0))
-        ((= sorting :memory) (or (last p.memory) 0))
-        ((= sorting :pid) (or p.pid 0))
-        ((= sorting :status) (status-text p))
-        (else (get p sorting))))
+    ((= sorting :cpu) (or (last p.cpu) 0))
+    ((= sorting :memory) (or (last p.memory) 0))
+    ((= sorting :pid) (or p.pid 0))
+    ((= sorting :status) (status-text p))
+    (else (get p sorting))))
 
 (def (matching processes query)
   (if (string/blank? query)
@@ -107,16 +107,16 @@
 
 (def (aligned column text width)
   (cond ((= column :details) (string/truncate text width))
-        ((contains? right column) (string/pad-start text width))
-        (else (string/pad-end text width))))
+    ((contains? right column) (string/pad-start text width))
+    (else (string/pad-end text width))))
 
 (def (face-of column p)
   (cond ((not (live? p)) (if (= column :status) (status-face p) :comment))
-        ((= column :name) :link)
-        ((= column :status) (status-face p))
-        ((= column :history) :constant)
-        ((= column :details) :comment)
-        (else nil)))
+    ((= column :name) :link)
+    ((= column :status) (status-face p))
+    ((= column :history) :constant)
+    ((= column :details) :comment)
+    (else nil)))
 
 (def (laid-out shown widths details texts faces)
   (vec (map (fn [i]
@@ -156,7 +156,7 @@
                                  columns))
             [shown details] (fit widths width)
             title {line: [[(string/trim-end (apply str (map (fn [part] (if (vector? part) (first part) part))
-                                                          (laid-out shown widths details heading {}))))
+                                                            (laid-out shown widths details heading {}))))
                            :comment]]}]
         (vec (concat header [title]
                      (mapcat (fn [pair]

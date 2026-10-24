@@ -21,16 +21,16 @@
   (when (in-r?)
     (let [running (session/current-session)
           refusal (cond ((not (session/running? running)) "Start R with C-c C-z to complete from its session")
-                        ((not (console-waiting? running)) "R is busy")
-                        (else nil))]
+                    ((not (console-waiting? running)) "R is busy")
+                    (else nil))]
       (cond
         ((and refusal explicit (language/ready?)) (run-command 'completion-at-point))
         (refusal (when explicit (message refusal)))
         (else
-        (let [start (max (line-start) (or (console-input-start) 0))
-              line (text-between start (point))]
-          (when (session/request running "getOption(\"oxmacs\")$complete({(session/r-string line)}, {(count line)}L)")
-            (reset! asked {buffer: (buffer-name) start: start explicit: explicit}))))))))
+         (let [start (max (line-start) (or (console-input-start) 0))
+               line (text-between start (point))]
+           (when (session/request running "getOption(\"oxmacs\")$complete({(session/r-string line)}, {(count line)}L)")
+             (reset! asked {buffer: (buffer-name) start: start explicit: explicit}))))))))
 
 (def (answered _ payload)
   (when-let [question @asked]
@@ -63,10 +63,10 @@
 (def (in-comment? line)
   ((fn scan [characters quote]
      (cond ((empty? characters) false)
-           (quote (scan (rest characters) (if (= (first characters) quote) nil quote)))
-           ((contains? #{\" \' \`} (first characters)) (scan (rest characters) (first characters)))
-           ((= (first characters) \#) true)
-           (else (scan (rest characters) nil))))
+       (quote (scan (rest characters) (if (= (first characters) quote) nil quote)))
+       ((contains? #{\" \' \`} (first characters)) (scan (rest characters) (first characters)))
+       ((= (first characters) \#) true)
+       (else (scan (rest characters) nil))))
    (string/chars line) nil))
 
 (def (typed)
@@ -86,15 +86,15 @@
                     (when (and (not quote) (not comment)) open)
                     (let [character (nth characters at)]
                       (cond (comment (scan (+ at 1) open quote false (not= character \newline)))
-                            (quote (cond (escaped (scan (+ at 1) open quote false false))
-                                         ((= character \\) (scan (+ at 1) open quote true false))
-                                         ((= character quote) (scan (+ at 1) open nil false false))
-                                         (else (scan (+ at 1) open quote false false))))
-                            ((contains? #{\" \' \`} character) (scan (+ at 1) open character false false))
-                            ((= character \#) (scan (+ at 1) open nil false true))
-                            ((contains? #{\( \[ \{} character) (scan (+ at 1) (conj open [character at]) nil false false))
-                            ((contains? #{\) \] \}} character) (scan (+ at 1) (if (empty? open) open (pop open)) nil false false))
-                            (else (scan (+ at 1) open nil false false))))))
+                        (quote (cond (escaped (scan (+ at 1) open quote false false))
+                                 ((= character \\) (scan (+ at 1) open quote true false))
+                                 ((= character quote) (scan (+ at 1) open nil false false))
+                                 (else (scan (+ at 1) open quote false false))))
+                        ((contains? #{\" \' \`} character) (scan (+ at 1) open character false false))
+                        ((= character \#) (scan (+ at 1) open nil false true))
+                        ((contains? #{\( \[ \{} character) (scan (+ at 1) (conj open [character at]) nil false false))
+                        ((contains? #{\) \] \}} character) (scan (+ at 1) (if (empty? open) open (pop open)) nil false false))
+                        (else (scan (+ at 1) open nil false false))))))
                 0 [] nil false false)]
     (when-let [[bracket at] (when (not (empty? opened)) (last opened))]
       (when (= bracket \()
@@ -125,15 +125,15 @@
       (let [spot (call-at-point)
             name (when spot (nth spot 2))]
         (cond ((not spot) (swap! signatures assoc :shown nil))
-              ((= spot (get @signatures :shown)) nil)
-              ((contains? (get @signatures :known) name)
-               (let [known (get-in @signatures [:known name])]
-                 (swap! signatures assoc :shown spot)
-                 (unless (string/blank? known) (message known))))
-              ((and (console-waiting? running) (not @asked))
-               (swap! signatures assoc :shown spot)
-               (session/request running "getOption(\"oxmacs\")$signature({(session/r-string name)})"))
-              (else nil))))))
+          ((= spot (get @signatures :shown)) nil)
+          ((contains? (get @signatures :known) name)
+           (let [known (get-in @signatures [:known name])]
+             (swap! signatures assoc :shown spot)
+             (unless (string/blank? known) (message known))))
+          ((and (console-waiting? running) (not @asked))
+           (swap! signatures assoc :shown spot)
+           (session/request running "getOption(\"oxmacs\")$signature({(session/r-string name)})"))
+          (else nil))))))
 
 (def (signed _ payload)
   (let [[name text] (string/split payload "\t" 2)

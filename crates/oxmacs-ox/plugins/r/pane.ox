@@ -1,6 +1,5 @@
 (module
-  (import (ox string)
-          (r session :as session)
+  (import (r session :as session)
           (r help :as help))
   (export show-help ask-help))
 

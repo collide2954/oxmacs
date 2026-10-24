@@ -5,7 +5,7 @@
 (defmacro with-buffer [buffer & body]
   "Runs body with buffer, a handle or a name, as the current buffer of this task, leaving the windows alone."
   `(do (enter-buffer ~buffer)
-       (try (do ~@body) (finally (leave-buffer)))))
+     (try (do ~@body) (finally (leave-buffer)))))
 
 (defmacro defmode [name title & options]
   "Defines a major mode; see define-mode for its options."

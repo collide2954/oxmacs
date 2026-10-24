@@ -40,12 +40,12 @@
 
 (def (marked? folder at)
   (cond ((>= at (count project-markers)) false)
-        ((await (file/exists? (path/join folder (nth project-markers at)))) true)
-        (else (marked? folder (+ at 1)))))
+    ((await (file/exists? (path/join folder (nth project-markers at)))) true)
+    (else (marked? folder (+ at 1)))))
 
 (def (r-project? folder)
   (some (fn [entry] (= (path/extension entry.name) "Rproj"))
-        (try (await (file/list folder)) (catch error e []))))
+        (try (await (file/list folder)) (catch error _e []))))
 
 (def (project-of folder)
   "The folder of the R project holding folder: the nearest with a DESCRIPTION, renv.lock, .git or .Rproj file below the home folder, or nil."
@@ -92,8 +92,8 @@
 
 (def (first-existing paths)
   (cond ((empty? paths) nil)
-        ((await (file/exists? (first paths))) (first paths))
-        (else (first-existing (rest paths)))))
+    ((await (file/exists? (first paths))) (first paths))
+    (else (first-existing (rest paths)))))
 
 (def (binary home)
   (let [bin (path/join home "bin")]
@@ -112,7 +112,7 @@
 
 (def (folders root)
   (try (map (fn [entry] entry.path) (filter (fn [entry] entry.dir) (await (file/list root))))
-       (catch error e [])))
+    (catch error _e [])))
 
 (def (registry)
   (if (windows?)
@@ -120,7 +120,7 @@
             (try (let [found (await (process/run "reg" ["query" key "/v" "InstallPath"]))
                        line (find (fn [line] (string/includes? line "REG_SZ")) (string/lines found.stdout))]
                    (when line (string/trim (second (string/split line "REG_SZ" 2)))))
-                 (catch error e nil)))
+              (catch error _e nil)))
           ["HKLM\\SOFTWARE\\R-core\\R" "HKCU\\SOFTWARE\\R-core\\R"])
     []))
 
@@ -134,9 +134,9 @@
 
 (def (locate configured sources)
   (cond (configured (if (await (file/exists? configured)) configured ((get sources :which) configured)))
-        (else (or ((get sources :which) (if (windows?) "Rterm" "R"))
-                  (when-let [home ((get sources :home))] (binary home))
-                  (newest ((get sources :installs)))))))
+    (else (or ((get sources :which) (if (windows?) "Rterm" "R"))
+              (when-let [home ((get sources :home))] (binary home))
+              (newest ((get sources :installs)))))))
 
 (def (find-r)
   (locate (plugin-setting 'r :program)
@@ -171,8 +171,8 @@
 
 (def (load-history session)
   (when-let [file (history-file)]
-    (let [lines (try (string/lines (await (file/read file))) (catch error e []))
-          inputs (keep (fn [line] (try (json/read line) (catch error e nil))) lines)
+    (let [lines (try (string/lines (await (file/read file))) (catch error _e []))
+          inputs (keep (fn [line] (try (json/read line) (catch error _e nil))) lines)
           kept (vec (drop (max 0 (- (count inputs) kept-history)) inputs))]
       (set-console-history session kept)
       (swap! state assoc-in [:saved session] (count kept))
@@ -192,7 +192,7 @@
   (save-history session)
   (when-let [file (helper-of session)]
     (swap! state update :helpers dissoc session)
-    (try (await (file/remove file)) (catch error e nil)))
+    (try (await (file/remove file)) (catch error _e nil)))
   (map (fn [hook] (hook session)) (vals @ready-hooks))
   (fit session))
 
@@ -256,7 +256,7 @@
         before @sending]
     (reset! sending mine)
     (when before
-      (try (await before) (catch error e nil)))
+      (try (await before) (catch error _e nil)))
     (try
       (when-let [running (ensure)]
         (link! running)

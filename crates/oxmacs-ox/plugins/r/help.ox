@@ -15,9 +15,9 @@
                shown (if struck (nth chars (+ at 2)) (nth chars at))
                next (if struck (+ at 3) (+ at 1))]
            (cond ((= shown backspace) (step next found))
-                 ((and (not (empty? found)) (= (second (last found)) struck))
-                  (step next (conj (pop found) [(str (first (last found)) shown) struck])))
-                 (else (step next (conj found [(str shown) struck])))))))
+             ((and (not (empty? found)) (= (second (last found)) struck))
+              (step next (conj (pop found) [(str (first (last found)) shown) struck])))
+             (else (step next (conj found [(str shown) struck])))))))
      0 [])))
 
 (def (plain parts) (apply str (map first parts)))

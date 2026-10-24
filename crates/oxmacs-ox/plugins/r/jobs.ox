@@ -33,7 +33,7 @@
   (when-let [old (get-in @jobs [buffer :process])]
     (process/kill old))
   (let [process (try (process/start program args :cwd directory)
-                     (catch error e (message e.message) nil))]
+                  (catch error e (message e.message) nil))]
     (when process
       (let [run (swap! runs inc)]
         (swap! jobs assoc buffer {process: process run: run program: program args: args
@@ -86,8 +86,8 @@
   (let [here (when-let [file (buffer-file)] (path/parent file))
         project (session/project-here)]
     (cond ((and here (app? here)) here)
-          ((and project (app? project)) project)
-          (else nil))))
+      ((and project (app? project)) project)
+      (else nil))))
 
 (def (heard-app line)
   (when-let [hit (regex/find #"Listening on (https?://\S+)" line)]

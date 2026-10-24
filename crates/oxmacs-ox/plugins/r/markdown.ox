@@ -36,23 +36,23 @@
         step (fn [state at]
                (let [line (nth lines at)]
                  (cond ((and front (<= at front)) state)
-                       (state.open
-                        (if (regex/matches? closing line)
-                          (-> state
-                              (update :blocks conj (assoc state.open :end at))
-                              (assoc :open nil))
-                          state))
-                       ((regex/matches? fence line)
-                        (let [hit (regex/find opening line)]
-                          (assoc state :open {start: at
-                                              language: (when hit (first hit.groups))
-                                              name: (when hit (second hit.groups))})))
-                       (else
-                        (if-let [hit (regex/find heading line)]
-                          (update state :headings conj {line: at
-                                                        level: (string/length (first hit.groups))
-                                                        title: (second hit.groups)})
-                          state)))))
+                   (state.open
+                    (if (regex/matches? closing line)
+                      (-> state
+                          (update :blocks conj (assoc state.open :end at))
+                          (assoc :open nil))
+                      state))
+                   ((regex/matches? fence line)
+                    (let [hit (regex/find opening line)]
+                      (assoc state :open {start: at
+                                          language: (when hit (first hit.groups))
+                                          name: (when hit (second hit.groups))})))
+                   (else
+                    (if-let [hit (regex/find heading line)]
+                      (update state :headings conj {line: at
+                                                    level: (string/length (first hit.groups))
+                                                    title: (second hit.groups)})
+                      state)))))
         done (reduce step {open: nil blocks: [] headings: []} (range total))
         blocks (if done.open (conj done.blocks (assoc done.open :end total)) done.blocks)]
     {lines: lines
@@ -68,23 +68,23 @@
     (cond ((and (= line 0) (= trimmed "---"))
            (reset! shading {front: true fenced: false})
            [[0 width :string]])
-          (state.front
-           (reset! shading {front: (not (contains? #{"---" "..."} trimmed)) fenced: false})
-           [[0 width :string]])
-          (state.fenced
-           (cond ((regex/matches? closing text)
-                  (reset! shading {front: false fenced: false})
-                  [[0 width :keyword]])
-                 ((= width 0) [])
-                 ((regex/matches? option-line text) [[0 width :attribute]])
-                 ((regex/matches? comment-line text) [[0 width :comment]])
-                 (else [])))
-          ((regex/matches? fence text)
-           (reset! shading {front: false fenced: true})
-           [[0 width :keyword]])
-          (else
-           (reset! shading {front: false fenced: false})
-           (if (regex/matches? heading text) [[0 width :heading]] [])))))
+      (state.front
+       (reset! shading {front: (not (contains? #{"---" "..."} trimmed)) fenced: false})
+       [[0 width :string]])
+      (state.fenced
+       (cond ((regex/matches? closing text)
+              (reset! shading {front: false fenced: false})
+              [[0 width :keyword]])
+         ((= width 0) [])
+         ((regex/matches? option-line text) [[0 width :attribute]])
+         ((regex/matches? comment-line text) [[0 width :comment]])
+         (else [])))
+      ((regex/matches? fence text)
+       (reset! shading {front: false fenced: true})
+       [[0 width :keyword]])
+      (else
+       (reset! shading {front: false fenced: false})
+       (if (regex/matches? heading text) [[0 width :heading]] [])))))
 
 (def (here) (parse (buffer-text)))
 
@@ -112,8 +112,8 @@
 (def (runnable found line)
   (let [chunk (chunk-at found line)]
     (cond ((not chunk) (message "Not in an R chunk") nil)
-          ((not (r-chunk? chunk)) (message "This is a {chunk.language} chunk, so R does not run it") nil)
-          (else chunk))))
+      ((not (r-chunk? chunk)) (message "This is a {chunk.language} chunk, so R does not run it") nil)
+      (else chunk))))
 
 (def (each f items)
   (reduce (fn [_ item] (f item) nil) nil items))
@@ -173,17 +173,17 @@
              (if code
                (insert "# ")
                (do (insert "<!--  -->") (set-point (- (point) 4))))))
-          ((and code (not (region)))
-           (let [text (line-text top)]
-             (if (string/starts-with? (string/trim-start text) "#")
-               (set-point (+ (line-start top) (leading text) (if (string/starts-with? (string/trim-start text) "# ") 2 1)))
-               (do (set-point (+ (line-start top) (string/length (string/trim-end text))))
-                 (delete (point) (line-end top))
-                 (insert " # ")))))
-          (code
-           (do (toggle-hashes top bottom) (set-point (marker-position kept))))
-          (else
-           (do (toggle-html top bottom) (set-point (marker-position kept)))))))
+      ((and code (not (region)))
+       (let [text (line-text top)]
+         (if (string/starts-with? (string/trim-start text) "#")
+           (set-point (+ (line-start top) (leading text) (if (string/starts-with? (string/trim-start text) "# ") 2 1)))
+           (do (set-point (+ (line-start top) (string/length (string/trim-end text))))
+             (delete (point) (line-end top))
+             (insert " # ")))))
+      (code
+       (do (toggle-hashes top bottom) (set-point (marker-position kept))))
+      (else
+       (do (toggle-html top bottom) (set-point (marker-position kept)))))))
 (defcommand r-markdown-run-chunk "Run the R chunk at point"
   (let [found (here)]
     (when-let [chunk (runnable found (current-line))]
@@ -214,15 +214,15 @@
 (def (depth text)
   (get (reduce (fn [state character]
                  (cond (state.comment (if (= character "\n") (assoc state :comment false) state))
-                       (state.escaped (assoc state :escaped false))
-                       (state.quote (cond ((= character "\\") (assoc state :escaped true))
-                                          ((= character state.quote) (assoc state :quote nil))
-                                          (else state)))
-                       ((contains? #{"\"" "'" "`"} character) (assoc state :quote character))
-                       ((= character "#") (assoc state :comment true))
-                       ((contains? #{"(" "[" "{{"} character) (update state :depth inc))
-                       ((contains? #{")" "]" "}}"} character) (update state :depth dec))
-                       (else state)))
+                   (state.escaped (assoc state :escaped false))
+                   (state.quote (cond ((= character "\\") (assoc state :escaped true))
+                                  ((= character state.quote) (assoc state :quote nil))
+                                  (else state)))
+                   ((contains? #{"\"" "'" "`"} character) (assoc state :quote character))
+                   ((= character "#") (assoc state :comment true))
+                   ((contains? #{"(" "[" "{{"} character) (update state :depth inc))
+                   ((contains? #{")" "]" "}}"} character) (update state :depth dec))
+                   (else state)))
                {depth: 0 quote: nil escaped: false comment: false}
                (map str (string/chars text)))
        :depth))
@@ -336,10 +336,10 @@ cat("oxmacs-rendered\t", normalizePath(out, winslash = "/"), "\n", sep = "")
            (do (swap! rendering disj file)
              (open-externally value)
              (message "Rendered {(path/name value)}")))
-          ((= tag "oxmacs-render-failed")
-           (do (swap! rendering disj file)
-             (message "Rendering failed: {value}")))
-          (else nil))))
+      ((= tag "oxmacs-render-failed")
+       (do (swap! rendering disj file)
+         (message "Rendering failed: {value}")))
+      (else nil))))
 
 (def (render-with file program args)
   "Renders file by running program with args as a background job, opening the file it reports it made."

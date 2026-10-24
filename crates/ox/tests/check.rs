@@ -55,6 +55,26 @@ fn checking_never_writes_files_or_runs_programs() {
 }
 
 #[test]
+fn modules_that_need_the_host_to_load_are_skipped_quietly() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("hosted.ox"),
+        "(register-it \"x\")\n(def (hello) \"hi\")\n",
+    )
+    .unwrap();
+    let mut isolate = Isolate::new();
+    isolate.define_host_native::<String>("register-it", 1, Some(1), |_, _, _| {
+        Ok(ox::value::Value::Nil)
+    });
+    isolate.add_root(dir.path());
+
+    assert_eq!(
+        isolate.check("sample.ox", "(module (import (hosted)))\n(hosted/hello)\n"),
+        []
+    );
+}
+
+#[test]
 fn checking_that_takes_too_long_stops_with_one_warning() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(
