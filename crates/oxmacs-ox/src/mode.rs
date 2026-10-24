@@ -369,17 +369,16 @@ impl Lexed {
     fn state(&self, buffer: &Buffer, line: usize) -> State {
         let mut known = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         known.retain(|starts| starts.buffer != buffer.id() || starts.revision == buffer.revision());
-        let at = match known.iter().position(|starts| starts.buffer == buffer.id()) {
-            Some(at) => at,
-            None => {
-                if known.len() == LEXED_BUFFERS {
-                    known.remove(0);
-                }
-                known.push(Starts::new(buffer, line));
-                known.len() - 1
-            }
-        };
-        known[at].state(buffer, line)
+        if let Some(at) = known.iter().position(|starts| starts.buffer == buffer.id()) {
+            return known[at].state(buffer, line);
+        }
+        if known.len() == LEXED_BUFFERS {
+            known.remove(0);
+        }
+        let mut starts = Starts::new(buffer, line);
+        let state = starts.state(buffer, line);
+        known.push(starts);
+        state
     }
 }
 
