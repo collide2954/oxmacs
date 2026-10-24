@@ -165,6 +165,10 @@ pub(super) fn arguments() -> Vec<String> {
 }
 
 pub(super) fn with_program(program: Option<&str>, editor: Editor) -> R {
+    launch(program, "", editor)
+}
+
+fn launch(program: Option<&str>, extra: &str, editor: Editor) -> R {
     let home = home_with(&[]);
     let configured = program.map_or_else(
         || {
@@ -176,7 +180,7 @@ pub(super) fn with_program(program: Option<&str>, editor: Editor) -> R {
     );
     std::fs::write(
         home.path().join("init.ox"),
-        format!("(use-plugin r :config {{program: {configured:?}}})"),
+        format!("(use-plugin r :config {{program: {configured:?} {extra}}})"),
     )
     .unwrap();
     let mut editor = editor;
@@ -197,4 +201,12 @@ pub(super) fn script(text: &str, point: usize) -> R {
     let mut editor = Editor::with_buffer(buffer);
     editor.set_major_mode(Some(Language::R));
     with_program(None, editor)
+}
+
+pub(super) fn configured_script(extra: &str, text: &str, point: usize) -> R {
+    let mut buffer = Buffer::with_text("t", text);
+    buffer.set_point(point);
+    let mut editor = Editor::with_buffer(buffer);
+    editor.set_major_mode(Some(Language::R));
+    launch(None, extra, editor)
 }

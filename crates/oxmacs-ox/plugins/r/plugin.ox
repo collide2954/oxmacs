@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.15.1"
+  :version "0.16.0"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands {run-r: "Start an R console beside the script"
              r-new-session: "Start another R session beside the current one"
@@ -84,7 +84,9 @@
                             "C-S-m" r-insert-pipe}}
   :settings {program: {type: :string doc: "The R to run, such as Rterm or a full path; unset finds R on PATH, in R_HOME or where R installs itself"}
              render-on-save: {type: :bool default: false doc: "Render R Markdown and Quarto documents each time they are saved"}
-             language-server: {type: :bool default: true doc: "Run R's languageserver package for diagnostics, completion and definitions when it is installed"}}
+             language-server: {type: :bool default: true doc: "Run R's languageserver package for diagnostics, completion and definitions when it is installed"}
+             completion-delay: {type: :number default: 0.25 doc: "Seconds of rest after typing before R completion pops up on its own"}
+             signature-delay: {type: :number default: 0.4 doc: "Seconds of rest before the arguments of the call at point show in the echo area"}}
   :wakes-for ["R"]
   :opt-in true
   :entry "r.ox")

@@ -53,8 +53,13 @@
 (session/on-marker "definition" definition/answered)
 (session/on-ready :signatures complete/forget-signatures)
 (session/on-ready :asked complete/settled)
-(on-idle :r-complete 0.25 (fn [] (when (just-typed?) (complete/typed))))
-(on-idle :r-signature 0.4 complete/signature-due)
+(def (pauses)
+  (on-idle :r-complete (plugin-setting 'r :completion-delay)
+           (fn [] (when (just-typed?) (complete/typed))))
+  (on-idle :r-signature (plugin-setting 'r :signature-delay) complete/signature-due))
+
+(pauses)
+(on-settings-change :r-pauses pauses)
 
 (def (insert-operator operator)
   (let [at (point)

@@ -220,6 +220,38 @@ fn rested(r: &mut R) {
     crate::testing::settle(&mut r.editor, &mut r.ox);
 }
 
+fn rested_for(r: &mut R, millis: u64) {
+    let since = Instant::now();
+    r.ox.idle(&mut r.editor, since, since + Duration::from_millis(millis));
+    crate::testing::settle(&mut r.editor, &mut r.ox);
+}
+
+#[test]
+fn the_pauses_before_completion_and_signatures_are_settings() {
+    let mut r = super::configured_script(
+        "completion-delay: 1.0 signature-delay: 1.5",
+        "x <- 1:10\nplot(x, \n",
+        18,
+    );
+    let job = r.running();
+    r.typed("mea");
+    r.sent();
+
+    rested_for(&mut r, 600);
+    assert_eq!(r.sent(), Vec::<String>::new());
+    rested_for(&mut r, 1200);
+    let asked = r.sent();
+    assert_eq!(asked.len(), 1, "{asked:?}");
+    assert!(asked[0].contains("$complete("), "{asked:?}");
+    answer(&mut r, job, "0");
+    r.press("C-b");
+    r.sent();
+    rested_for(&mut r, 1200);
+    assert_eq!(r.sent(), Vec::<String>::new());
+    rested_for(&mut r, 1600);
+    assert_eq!(r.sent(), ["getOption(\"oxmacs\")$signature(\"plot\")\n"]);
+}
+
 fn inside_plot() -> (R, JobId) {
     let mut r = script("x <- 1:10\nplot(x, \n", 18);
     let job = r.running();
