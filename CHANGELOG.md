@@ -79,6 +79,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `M-;` in R Markdown comments with `#` inside R chunks and with `<!-- -->` in the prose around them, toggling a selection, starting a comment on a blank line, or adding one at the end of a line of code.
 - The r plugin's `completion-delay` and `signature-delay` settings set how long typing rests before R completion pops up on its own and before a call's arguments show, 0.25 and 0.4 seconds by default.
 - The Ox manual's Extending oxmacs page covers buffer handles, `with-buffer`, editing by position, markers and the buffer hooks.
 - Plugins hear buffers: `on-buffer-open` for each file or other buffer people type in, `on-buffer-change` with the edits each command makes, `on-mode-enter` when a buffer enters a mode, and `on-before-save`, which saving waits for, so a handler can format a file before it is written; an error in one cancels the save.

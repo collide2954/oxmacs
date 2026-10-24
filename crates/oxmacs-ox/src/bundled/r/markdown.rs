@@ -256,3 +256,30 @@ fn the_console_key_goes_between_the_document_and_its_session() {
     r.press("C-c C-z");
     assert_eq!(r.editor.buffer().name(), "report.Rmd");
 }
+
+#[test]
+fn meta_semicolon_comments_chunks_with_hashes_and_prose_with_html() {
+    let (_folder, mut r) = report();
+
+    r.eval("(goto-line 5)");
+    r.press("C-SPC C-n C-n M-;");
+    assert_eq!(r.lines()[5..7], ["# library(stats)", "# x <- 1:10"]);
+    r.eval("(goto-line 5)");
+    r.press("C-SPC C-n C-n M-;");
+    assert_eq!(r.lines()[5..7], ["library(stats)", "x <- 1:10"]);
+
+    r.press("C-g");
+    r.eval("(goto-line 2)");
+    r.press("M-;");
+    assert_eq!(r.lines()[2], "<!-- Some text. -->");
+    r.eval("(goto-line 2)");
+    r.press("M-;");
+    assert_eq!(r.lines()[2], "Some text.");
+
+    r.eval("(goto-line 3)");
+    r.press("M-; x");
+    assert_eq!(r.lines()[3], "<!-- x -->");
+    r.eval("(goto-line 12)");
+    r.press("M-;");
+    assert_eq!(r.lines()[12], "plot(x) # ");
+}

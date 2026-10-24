@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.17.0"
+  :version "0.18.0"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands {run-r: "Start an R console beside the script"
              r-new-session: "Start another R session beside the current one"
@@ -31,6 +31,7 @@
              r-markdown-send-statement: "Send the R statement or selection to R and step"
              r-markdown-insert-chunk: "Insert an R chunk and put point in it"
              r-markdown-outline: "Jump to a heading or chunk of the document"
+             r-markdown-comment: "Comment or uncomment with # in R chunks and <!-- --> in the prose"
              r-markdown-render: "Save the document, render it with R Markdown or Quarto and open the result"
              r-run-job: "Run the R script in a background job, apart from the session"
              r-run-app: "Run the Shiny app of this folder in a background job and open it"
@@ -75,6 +76,7 @@
                             "M-n" r-markdown-next-chunk "M-p" r-markdown-previous-chunk
                             "C-c C-i" r-markdown-insert-chunk
                             "M-g i" r-markdown-outline
+                            "M-;" r-markdown-comment
                             "C-c C-k" r-markdown-render "C-S-k" r-markdown-render
                             "C-c C-z" r-switch-to-console
                             "C-c C-v" r-help

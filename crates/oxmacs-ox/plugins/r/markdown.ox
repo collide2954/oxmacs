@@ -115,6 +115,75 @@
           ((not (r-chunk? chunk)) (message "This is a {chunk.language} chunk, so R does not run it") nil)
           (else chunk))))
 
+(def (each f items)
+  (reduce (fn [_ item] (f item) nil) nil items))
+
+(def (leading text)
+  (- (string/length text) (string/length (string/trim-start text))))
+
+(def (in-code? found line)
+  (when-let [chunk (chunk-at found line)]
+    (and (< chunk.start line) (< line chunk.end))))
+
+(def (chosen-lines)
+  (if-let [[start end] (region)]
+    (let [top (line-of start)
+          bottom (line-of end)]
+      [top (if (and (> bottom top) (= end (line-start bottom))) (- bottom 1) bottom)])
+    [(current-line) (current-line)]))
+
+(def (toggle-hashes top bottom)
+  (let [filled (filter (fn [at] (not (string/blank? (line-text at)))) (range top (+ bottom 1)))
+        commented (every? (fn [at] (string/starts-with? (string/trim-start (line-text at)) "#")) filled)]
+    (if commented
+      (each (fn [at]
+              (let [text (line-text at)
+                    start (+ (line-start at) (leading text))
+                    rest (string/trim-start text)
+                    width (if (string/starts-with? rest "# ") 2 1)]
+                (delete start (+ start width))))
+            filled)
+      (let [column (apply min (map (fn [at] (leading (line-text at))) filled))]
+        (each (fn [at] (set-point (+ (line-start at) column)) (insert "# ")) filled)))))
+
+(def (toggle-html top bottom)
+  (let [head (string/trim-start (line-text top))
+        tail (string/trim-end (line-text bottom))]
+    (if (and (string/starts-with? head "<!--") (string/ends-with? tail "-->"))
+      (let [end (+ (line-start bottom) (string/length tail))
+            closing (if (string/ends-with? tail " -->") 4 3)
+            start (+ (line-start top) (leading (line-text top)))
+            opening (if (string/starts-with? head "<!-- ") 5 4)]
+        (delete (- end closing) end)
+        (delete start (+ start opening)))
+      (let [end (+ (line-start bottom) (string/length tail))
+            start (+ (line-start top) (leading (line-text top)))]
+        (set-point end)
+        (insert " -->")
+        (set-point start)
+        (insert "<!-- ")))))
+
+(defcommand r-markdown-comment "Comment or uncomment with # in R chunks and <!-- --> in the prose"
+  (let [found (here)
+        [top bottom] (chosen-lines)
+        code (in-code? found top)
+        kept (marker (point))]
+    (cond ((and (= top bottom) (not (region)) (string/blank? (line-text top)))
+           (do (set-point (line-end top))
+             (if code
+               (insert "# ")
+               (do (insert "<!--  -->") (set-point (- (point) 4))))))
+          ((and code (not (region)))
+           (let [text (line-text top)]
+             (if (string/starts-with? (string/trim-start text) "#")
+               (set-point (+ (line-start top) (leading text) (if (string/starts-with? (string/trim-start text) "# ") 2 1)))
+               (do (set-point (+ (line-start top) (string/length (string/trim-end text))))
+                 (delete (point) (line-end top))
+                 (insert " # ")))))
+          (code
+           (do (toggle-hashes top bottom) (set-point (marker-position kept))))
+          (else
+           (do (toggle-html top bottom) (set-point (marker-position kept)))))))
 (defcommand r-markdown-run-chunk "Run the R chunk at point"
   (let [found (here)]
     (when-let [chunk (runnable found (current-line))]
