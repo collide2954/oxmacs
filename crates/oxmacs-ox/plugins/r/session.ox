@@ -2,7 +2,7 @@
   (import (ox file) (ox path) (ox process) (ox string) (ox crypto) (ox json)
           (r helper :as helper))
   (export label sessions known? current-session running? link! linked own! owner project-of project-here
-          windows? arguments locate find-r launch ensure show-console evaluate request
+          windows? arguments locate find-r launch ensure show-console evaluate request send script?
           r-string helper-of on-marker on-ready use-keys!))
 
 (def label "R")
@@ -68,8 +68,12 @@
 
 (def (running? session) (and session (console-running? session)))
 
+(def script-languages #{"R" "R Markdown"})
+
+(def (script? name) (contains? script-languages (buffer-language name)))
+
 (def (link! console)
-  (when (= (buffer-language) "R")
+  (when (script? (buffer-name))
     (swap! state assoc-in [:links (buffer-name)] console)))
 
 (def (helper-of session) (get-in @state [:helpers session]))
@@ -224,6 +228,13 @@
 
 (def (evaluate session code)
   (console-send session code))
+
+(def (send code)
+  (when-let [running (ensure)]
+    (link! running)
+    (show-console running false)
+    (evaluate running code)
+    running))
 
 (def escapes {"\"" "\\\"" "\\" "\\\\" "\n" "\\n" "\r" "\\r" "\t" "\\t"})
 

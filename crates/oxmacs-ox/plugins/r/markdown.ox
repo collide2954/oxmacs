@@ -1,0 +1,253 @@
+(module
+  (import (ox string) (ox regex) (ox path)
+          (r session :as session))
+  (export parse highlight rendered saved))
+
+(def opening #"^\s*```+\s*\{\s*([A-Za-z][\w.-]*)(?:[\s,]+([^\s,}=]+)(?:[\s,}]|$))?")
+(def fence #"^\s*```")
+(def closing #"^\s*```+\s*$")
+(def heading #"^(#{1,6})\s+(\S.*?)[\s#]*$")
+(def label-option #"^\s*#\|\s*label:\s*(\S+)")
+(def option-line #"^\s*#\|")
+(def comment-line #"^\s*#")
+(def continued #"(\|>|%|[-+*/^,=&|~]|<-)\s*$")
+
+(def (front-matter-end lines)
+  (when (and (> (count lines) 0) (= (string/trim-end (first lines)) "---"))
+    (find (fn [at] (contains? #{"---" "..."} (string/trim-end (nth lines at))))
+          (range 1 (count lines)))))
+
+(def (unquoted text)
+  (string/replace (string/replace text "\"" "") "'" ""))
+
+(def (labelled chunk lines)
+  (if chunk.name
+    chunk
+    (assoc chunk :name (some (fn [at] (when-let [hit (regex/find label-option (nth lines at))]
+                                        (unquoted (first hit.groups))))
+                             (range (+ chunk.start 1) chunk.end)))))
+
+(def (parse text)
+  "The chunks and headings of R Markdown text, as a map of :lines, :chunks with their :start and :end lines, :language and :name, and :headings with their :line, :level and :title."
+  (let [lines (string/lines text)
+        total (count lines)
+        front (front-matter-end lines)
+        step (fn [state at]
+               (let [line (nth lines at)]
+                 (cond ((and front (<= at front)) state)
+                       (state.open
+                        (if (regex/matches? closing line)
+                          (-> state
+                              (update :blocks conj (assoc state.open :end at))
+                              (assoc :open nil))
+                          state))
+                       ((regex/matches? fence line)
+                        (let [hit (regex/find opening line)]
+                          (assoc state :open {start: at
+                                              language: (when hit (first hit.groups))
+                                              name: (when hit (second hit.groups))})))
+                       (else
+                        (if-let [hit (regex/find heading line)]
+                          (update state :headings conj {line: at
+                                                        level: (string/length (first hit.groups))
+                                                        title: (second hit.groups)})
+                          state)))))
+        done (reduce step {open: nil blocks: [] headings: []} (range total))
+        blocks (if done.open (conj done.blocks (assoc done.open :end total)) done.blocks)]
+    {lines: lines
+     chunks: (map (fn [chunk] (labelled chunk lines)) (filter (fn [block] block.language) blocks))
+     headings: done.headings}))
+
+(defonce shading (atom {front: false fenced: false}))
+
+(def (highlight line text)
+  (let [width (string/length text)
+        trimmed (string/trim-end text)
+        state (if (= line 0) {front: false fenced: false} @shading)]
+    (cond ((and (= line 0) (= trimmed "---"))
+           (reset! shading {front: true fenced: false})
+           [[0 width :string]])
+          (state.front
+           (reset! shading {front: (not (contains? #{"---" "..."} trimmed)) fenced: false})
+           [[0 width :string]])
+          (state.fenced
+           (cond ((regex/matches? closing text)
+                  (reset! shading {front: false fenced: false})
+                  [[0 width :keyword]])
+                 ((= width 0) [])
+                 ((regex/matches? option-line text) [[0 width :attribute]])
+                 ((regex/matches? comment-line text) [[0 width :comment]])
+                 (else [])))
+          ((regex/matches? fence text)
+           (reset! shading {front: false fenced: true})
+           [[0 width :keyword]])
+          (else
+           (reset! shading {front: false fenced: false})
+           (if (regex/matches? heading text) [[0 width :heading]] [])))))
+
+(def (here) (parse (buffer-text)))
+
+(def (r-chunk? chunk) (contains? #{"r" "R"} chunk.language))
+
+(def (chunk-at found line)
+  (find (fn [chunk] (and (<= chunk.start line) (<= line chunk.end))) found.chunks))
+
+(def (code-line? text)
+  (and (not (string/blank? text)) (not (regex/matches? comment-line text))))
+
+(def (body found chunk)
+  (let [code (filter (fn [text] (not (regex/matches? option-line text)))
+                     (map (fn [at] (nth found.lines at))
+                          (range (+ chunk.start 1) (min chunk.end (count found.lines)))))]
+    (if (some (fn [text] (not (string/blank? text))) code)
+      (str (string/join "\n" code) "\n")
+      "")))
+
+(def (run code)
+  (if (string/blank? code)
+    (message "No R code to run")
+    (session/send code)))
+
+(def (runnable found line)
+  (let [chunk (chunk-at found line)]
+    (cond ((not chunk) (message "Not in an R chunk") nil)
+          ((not (r-chunk? chunk)) (message "This is a {chunk.language} chunk, so R does not run it") nil)
+          (else chunk))))
+
+(defcommand r-markdown-run-chunk "Run the R chunk at point"
+  (let [found (here)]
+    (when-let [chunk (runnable found (current-line))]
+      (run (body found chunk)))))
+
+(defcommand r-markdown-run-all "Run every R chunk of the document"
+  (let [found (here)]
+    (run (apply str (map (fn [chunk] (body found chunk)) (filter r-chunk? found.chunks))))))
+
+(defcommand r-markdown-run-above "Run the R chunks above point"
+  (let [found (here)
+        line (current-line)]
+    (run (apply str (map (fn [chunk] (body found chunk))
+                         (filter (fn [chunk] (and (r-chunk? chunk) (< chunk.end line))) found.chunks))))))
+
+(defcommand r-markdown-next-chunk "Move to the code of the next chunk"
+  (let [line (current-line)]
+    (if-let [chunk (find (fn [chunk] (> chunk.start line)) (get (here) :chunks))]
+      (goto-line (+ chunk.start 1))
+      (message "No more chunks"))))
+
+(defcommand r-markdown-previous-chunk "Move to the code of the previous chunk"
+  (let [line (current-line)]
+    (if-let [chunk (last (filter (fn [chunk] (< chunk.end line)) (get (here) :chunks)))]
+      (goto-line (+ chunk.start 1))
+      (message "No chunk before this one"))))
+
+(def (depth text)
+  (get (reduce (fn [state character]
+                 (cond (state.comment (if (= character "\n") (assoc state :comment false) state))
+                       (state.escaped (assoc state :escaped false))
+                       (state.quote (cond ((= character "\\") (assoc state :escaped true))
+                                          ((= character state.quote) (assoc state :quote nil))
+                                          (else state)))
+                       ((contains? #{"\"" "'" "`"} character) (assoc state :quote character))
+                       ((= character "#") (assoc state :comment true))
+                       ((contains? #{"(" "[" "{{"} character) (update state :depth inc))
+                       ((contains? #{")" "]" "}}"} character) (update state :depth dec))
+                       (else state)))
+               {depth: 0 quote: nil escaped: false comment: false}
+               (map str (string/chars text)))
+       :depth))
+
+(def (uncommented text)
+  (string/trim-end (first (string/split text "#" 2))))
+
+(def (statement-end lines from end)
+  ((fn grow [to]
+     (let [text (string/join "\n" (map (fn [at] (nth lines at)) (range from (+ to 1))))]
+       (if (and (< (+ to 1) end)
+                (or (> (depth text) 0) (regex/matches? continued (uncommented (nth lines to)))))
+         (grow (+ to 1))
+         to)))
+   from))
+
+(defcommand r-markdown-send-statement "Send the R statement or selection to R and step"
+  (if-let [[start end] (region)]
+    (do (deactivate-mark)
+      (run (text-range start end)))
+    (let [found (here)
+          line (current-line)
+          lines found.lines]
+      (when-let [chunk (runnable found line)]
+        (if (= line chunk.start)
+          (message "Not in an R chunk")
+          (if-let [first-line (find (fn [at] (code-line? (nth lines at))) (range line chunk.end))]
+            (let [last-line (statement-end lines first-line chunk.end)
+                  code (str (string/join "\n" (map (fn [at] (nth lines at)) (range first-line (+ last-line 1)))) "\n")]
+              (goto-line (or (find (fn [at] (code-line? (nth lines at))) (range (+ last-line 1) chunk.end))
+                             chunk.end))
+              (run code))
+            (message "No R code here")))))))
+
+(defcommand r-markdown-insert-chunk "Insert an R chunk and put point in it"
+  (let [before (if (> (current-column) 0) "\n" "")
+        at (point)]
+    (when (insert (str before "```{{r}}\n\n```\n"))
+      (set-point (+ at (string/length before) 7)))))
+
+(def (outline found)
+  (let [chunks found.chunks
+        headings (map (fn [heading] {line: heading.line label: heading.title note: "L{(+ heading.line 1)}"})
+                      found.headings)
+        blocks (map (fn [at] (let [chunk (nth chunks at)]
+                               {line: chunk.start
+                                label: "chunk {(or chunk.name (+ at 1))}"
+                                note: "{chunk.language}  L{(+ chunk.start 1)}"}))
+                    (range (count chunks)))]
+    (reduce (fn [built item]
+              (let [label (if (contains? built.places item.label) "{item.label} L{(+ item.line 1)}" item.label)]
+                (-> built
+                    (assoc-in [:notes label] item.note)
+                    (assoc-in [:places label] item.line))))
+            {notes: {} places: {}}
+            (sort-by (fn [item] item.line) (concat headings blocks)))))
+
+(defcommand r-markdown-outline "Jump to a heading or chunk of the document"
+  (let [built (outline (here))]
+    (if (empty? built.places)
+      (message "No headings or chunks in this document")
+      (let [answer (await (prompt "Index item: " :choices built.notes))]
+        (when-let [line (get built.places answer)]
+          (goto-line line))))))
+
+(defonce rendering (atom #{}))
+
+(def (renderable? file)
+  (and file (contains? #{"rmd" "qmd"} (string/lower (or (path/extension file) "")))))
+
+(def (render file)
+  (when-let [running (session/ensure)]
+    (swap! rendering conj file)
+    (session/show-console running false)
+    (session/evaluate running "getOption(\"oxmacs\")$render({(session/r-string file)})")
+    (message "Rendering {(path/name file)}")))
+
+(defcommand r-markdown-render "Save the document, render it with R Markdown or Quarto and open the result"
+  (let [file (buffer-file)]
+    (if (renderable? file)
+      (do (run-command 'save-buffer)
+        (render file))
+      (message "Only .Rmd and .qmd files render"))))
+
+(def (saved file)
+  (when (and (plugin-setting 'r :render-on-save) (renderable? file) (not (contains? @rendering file)))
+    (render file)))
+
+(def (rendered _ payload)
+  (let [[source output] (string/split payload "\t" 2)]
+    (swap! rendering disj source)
+    (when (and output (not (string/blank? output)))
+      (open-externally output)
+      (message "Rendered {(path/name output)}"))))
+
+(defmode r-markdown "R Markdown"
+  :extensions ["Rmd" "rmd" "qmd"]
+  :highlight highlight)

@@ -336,6 +336,33 @@ fn tables_sort_filter_page_and_describe_their_columns() {
 }
 
 #[test]
+#[ignore = "runs the R and Quarto installed on this machine"]
+fn documents_render_beside_themselves_or_say_why_not() {
+    let folder = tempfile::tempdir().unwrap();
+    let document = folder.path().join("notes.qmd");
+    std::fs::write(
+        &document,
+        "---\ntitle: Notes\n---\n\n# Hello\n\nPlain text.\n",
+    )
+    .unwrap();
+    let path = document.display().to_string().replace('\\', "/");
+    let (output, _directory) = session(&format!(
+        "getOption(\"oxmacs\")$render(\"{path}\")\ngetOption(\"oxmacs\")$render(\"{path}x.qmd\")\nq()\n"
+    ));
+
+    let rendered = marked(&output, "rendered");
+    let (source, made) = rendered[0].split_once('\t').unwrap();
+    assert_eq!(source, path);
+    assert!(made.ends_with("/notes.html"), "{output:?}");
+    assert!(std::fs::metadata(made).unwrap().len() > 1000);
+    assert_eq!(rendered[1], format!("{path}x.qmd\t"));
+    assert!(
+        marked(&output, "message")[0].starts_with("Rendering failed:"),
+        "{output:?}"
+    );
+}
+
+#[test]
 #[ignore = "runs the R installed on this machine"]
 fn packages_are_listed_and_their_help_and_tests_answer() {
     let project = tempfile::tempdir().unwrap();

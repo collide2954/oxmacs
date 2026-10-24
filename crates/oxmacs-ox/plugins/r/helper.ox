@@ -345,6 +345,37 @@ local({
     marker("installed", paste(sort(rows), collapse = "\n"))
     last()
   }
+  oxmacs$render <- function(path) {
+    started <- Sys.time() - 1
+    quarto <- Sys.which("quarto")
+    knits <- requireNamespace("rmarkdown", quietly = TRUE) &&
+      (rmarkdown::pandoc_available() || !nzchar(quarto))
+    by_quarto <- grepl("[.]qmd$", path, ignore.case = TRUE) || !knits
+    out <- tryCatch({
+      if (!by_quarto) {
+        rmarkdown::render(path, envir = new.env(parent = globalenv()))
+      } else if (nzchar(quarto)) {
+        status <- system2(quarto, c("render", shQuote(path)))
+        if (!identical(as.integer(status), 0L)) stop("quarto render stopped with status ", status)
+        stem <- paste0(tools::file_path_sans_ext(basename(path)), ".")
+        made <- list.files(dirname(path), full.names = TRUE)
+        made <- made[startsWith(basename(made), stem) &
+          tolower(tools::file_ext(made)) %in% c("html", "pdf", "docx", "pptx", "odt", "epub") &
+          file.mtime(made) >= started]
+        if (length(made) == 0) stop("quarto made nothing beside the document")
+        made[which.max(file.mtime(made))]
+      } else {
+        stop("rendering needs the rmarkdown package or Quarto")
+      }
+    }, error = function(e) e)
+    if (inherits(out, "error")) {
+      marker("message", paste("Rendering failed:", conditionMessage(out)))
+      marker("rendered", paste0(path, "\t"))
+    } else {
+      marker("rendered", paste(path, normalizePath(out, winslash = "/"), sep = "\t"))
+    }
+    invisible()
+  }
   oxmacs$help_index <- function(name) {
     print(utils::help(package = (name), help_type = "text"))
     last()

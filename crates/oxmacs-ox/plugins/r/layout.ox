@@ -6,13 +6,13 @@
 (defonce saved (atom nil))
 
 (def (script-for running)
-  (let [scripts (filter (fn [name] (= (buffer-language name) "R")) (buffer-list))]
-    (if (= (buffer-language) "R")
+  (let [scripts (filter session/script? (buffer-list))]
+    (if (session/script? (buffer-name))
       (buffer-name)
       (or (find (fn [name] (= (session/linked name) running)) scripts) (first scripts)))))
 
 (defcommand r-layout "Arrange the windows like RStudio: script and console, environment and plots"
-  (let [here-is-r (= (buffer-language) "R")]
+  (let [here-is-r (session/script? (buffer-name))]
     (when-let [running (session/ensure)]
       (when here-is-r (session/link! running))
       (let [script (script-for running)

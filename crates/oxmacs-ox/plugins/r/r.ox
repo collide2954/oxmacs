@@ -8,7 +8,8 @@
           (r complete :as complete)
           (r definition :as definition)
           (r layout)
-          (r package :as package)))
+          (r package :as package)
+          (r markdown :as markdown)))
 
 (def console-keys
   {"RET" 'comint-send-input
@@ -35,6 +36,8 @@
 (session/on-marker "packages" package/available)
 (session/on-marker "tests" package/tested)
 (session/on-marker "installed" package/installed)
+(session/on-marker "rendered" markdown/rendered)
+(on-saved :r-markdown markdown/saved)
 (session/on-ready :environment data/environment-due)
 (session/on-marker "complete" complete/answered)
 (session/on-marker "signature" complete/signed)
@@ -52,17 +55,11 @@
       (when spaced-after
         (set-point (+ (point) 1))))))
 
-(def (send code)
-  (when-let [running (session/ensure)]
-    (session/link! running)
-    (session/show-console running false)
-    (session/evaluate running code)))
-
 (def (send-region)
   (when-let [[start end] (region)]
     (let [code (text-range start end)]
       (deactivate-mark)
-      (send code)
+      (session/send code)
       true)))
 
 (def (send-and-step found)
@@ -70,7 +67,7 @@
     (let [[start end] found
           code (text-range start end)]
       (set-point (or (statement-after end) (count (buffer-text))))
-      (send code))
+      (session/send code))
     (message "No R code here")))
 
 (def (paragraph text at)
@@ -106,7 +103,7 @@
 (defcommand r-switch-to-console "Switch between the R script and its R session"
   (let [here (buffer-name)]
     (if (session/known? here)
-      (let [scripts (filter (fn [name] (= (buffer-language name) "R")) (buffer-list))
+      (let [scripts (filter session/script? (buffer-list))
             script (or (find (fn [name] (= (session/linked name) here)) scripts) (first scripts))]
         (if script
           (display-buffer script :select true)
