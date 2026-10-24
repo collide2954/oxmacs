@@ -1,9 +1,10 @@
 use std::ops::Range;
+use std::sync::{Mutex, PoisonError};
 
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::{Editor, Formatter};
 use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
-use oxmacs_core::text::BufferId;
+use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
 static OX: LanguageSpec = LanguageSpec {
@@ -298,6 +299,7 @@ pub(crate) fn highlight_lines(lines: &[&str]) -> Vec<Spans> {
 }
 
 const HIGHLIGHT_LOOK_BACK: usize = 300;
+const LEXED_BUFFERS: usize = 8;
 
 fn top_level(line: &str) -> bool {
     ["(def", "(module", "(plugin", "(use-plugin"]
@@ -305,19 +307,90 @@ fn top_level(line: &str) -> bool {
         .any(|head| line.starts_with(head))
 }
 
-fn highlight(editor: &Editor, id: BufferId, line: usize) -> Spans {
-    let Some(buffer) = editor.buffer_by_id(id) else {
-        return Vec::new();
+fn after(text: &str, state: State) -> State {
+    let state = if top_level(text) {
+        State::default()
+    } else {
+        state
     };
+    highlight_with(text, state).1
+}
+
+fn starting(buffer: &Buffer, line: usize) -> (usize, State) {
     let floor = line.saturating_sub(HIGHLIGHT_LOOK_BACK);
     let first = (floor..line)
         .rev()
         .find(|candidate| top_level(&buffer.line_text(*candidate)))
         .unwrap_or(floor);
-    let mut state = State::default();
-    for earlier in first..line {
-        state = highlight_with(&buffer.line_text(earlier), state).1;
+    if first == line {
+        return (line, State::default());
     }
+    let state = highlight_with(&buffer.line_text(first), State::default()).1;
+    (first + 1, state)
+}
+
+#[derive(Debug)]
+struct Starts {
+    buffer: BufferId,
+    revision: u64,
+    first: usize,
+    states: Vec<State>,
+}
+
+impl Starts {
+    fn new(buffer: &Buffer, line: usize) -> Self {
+        let (first, state) = starting(buffer, line);
+        Self {
+            buffer: buffer.id(),
+            revision: buffer.revision(),
+            first,
+            states: vec![state],
+        }
+    }
+
+    fn state(&mut self, buffer: &Buffer, line: usize) -> State {
+        let end = self.first + self.states.len();
+        if line < self.first || line > end + HIGHLIGHT_LOOK_BACK {
+            *self = Self::new(buffer, line);
+        }
+        while self.first + self.states.len() <= line {
+            let last = self.first + self.states.len() - 1;
+            let state = self.states[self.states.len() - 1];
+            self.states.push(after(&buffer.line_text(last), state));
+        }
+        self.states[line - self.first]
+    }
+}
+
+#[derive(Debug, Default)]
+struct Lexed(Mutex<Vec<Starts>>);
+
+impl Lexed {
+    fn state(&self, buffer: &Buffer, line: usize) -> State {
+        let mut known = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        known.retain(|starts| starts.buffer != buffer.id() || starts.revision == buffer.revision());
+        let at = match known.iter().position(|starts| starts.buffer == buffer.id()) {
+            Some(at) => at,
+            None => {
+                if known.len() == LEXED_BUFFERS {
+                    known.remove(0);
+                }
+                known.push(Starts::new(buffer, line));
+                known.len() - 1
+            }
+        };
+        known[at].state(buffer, line)
+    }
+}
+
+fn highlight(editor: &Editor, id: BufferId, line: usize) -> Spans {
+    let Some(buffer) = editor.buffer_by_id(id) else {
+        return Vec::new();
+    };
+    let state = match editor.plugin_state::<Lexed>() {
+        Some(lexed) => lexed.state(buffer, line),
+        None => Starts::new(buffer, line).state(buffer, line),
+    };
     highlight_with(&buffer.line_text(line), state).0
 }
 const LOOK_BACK: usize = 2000;
@@ -344,6 +417,7 @@ fn indent(editor: &Editor, id: BufferId, line: usize) -> Option<usize> {
 
 pub fn install(editor: &mut Editor, scope: ScopeId) {
     editor.add_language(language(), Some(scope));
+    editor.set_plugin_state(Lexed::default());
     editor.set_highlighter(language(), highlight);
     editor.set_indenter(language(), indent);
     editor.add_formatter(language(), OX_FMT);
@@ -351,6 +425,8 @@ pub fn install(editor: &mut Editor, scope: ScopeId) {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Range;
+
     use oxmacs_core::editor::Editor;
     use oxmacs_core::syntax::Language;
     use oxmacs_core::theme::Highlight;
@@ -485,6 +561,49 @@ mod tests {
                 (29..31, Highlight::Function),
             ]
         );
+    }
+
+    fn lexed_from_the_form_start(editor: &Editor, line: usize) -> Vec<(Range<usize>, Highlight)> {
+        let buffer = editor.buffer();
+        let floor = line.saturating_sub(super::HIGHLIGHT_LOOK_BACK);
+        let first = (floor..line)
+            .rev()
+            .find(|candidate| super::top_level(&buffer.line_text(*candidate)))
+            .unwrap_or(floor);
+        let state = (first..line).fold(super::State::default(), |state, earlier| {
+            super::highlight_with(&buffer.line_text(earlier), state).1
+        });
+        super::highlight_with(&buffer.line_text(line), state).0
+    }
+
+    fn all_lines_match(editor: &Editor, order: &[usize]) {
+        for line in order {
+            assert_eq!(
+                editor.line_style(*line).spans,
+                lexed_from_the_form_start(editor, *line),
+                "line {line}"
+            );
+        }
+    }
+
+    #[test]
+    fn lines_highlight_the_same_in_any_order_and_after_edits() {
+        let form = "(def query \"<a>\n(not code)\n</a>\")\n(def (step cells)\n  \"The next generation.\"\n  cells)\n(defcommand life \"Watch it\" (go))\n";
+        let (_home, mut editor) = opened(&form.repeat(6));
+        let lines = editor.buffer().len_lines();
+        let forward: Vec<usize> = (0..lines).collect();
+        let backward: Vec<usize> = (0..lines).rev().collect();
+        let scattered: Vec<usize> = (0..lines).map(|at| at * 17 % lines).collect();
+
+        for order in [&forward, &backward, &scattered] {
+            all_lines_match(&editor, order);
+        }
+        let start = editor.buffer().line_start(8);
+        editor.buffer_mut().insert_at(start, "\"");
+        all_lines_match(&editor, &scattered);
+        all_lines_match(&editor, &forward);
+        editor.buffer_mut().delete_range(start..start + 1);
+        all_lines_match(&editor, &backward);
     }
 
     #[test]

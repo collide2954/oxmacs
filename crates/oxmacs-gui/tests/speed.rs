@@ -45,6 +45,34 @@ fn big_rust(lines: usize) -> String {
 
 #[test]
 #[ignore = "prints timings; run with --release --ignored --nocapture"]
+fn how_fast_ox_files_scroll() {
+    let home = tempfile::tempdir().unwrap();
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    for name in [
+        "oxmacs-ox/plugins/r/plugin.ox",
+        "oxmacs-ox/plugins/r/session.ox",
+        "oxmacs-ox/src/help.rs",
+    ] {
+        let (mut app, _) = App::boot(&[], Some(home.path()));
+        app.start(
+            &[Visit {
+                path: crates.join(name),
+                line: None,
+                column: None,
+            }],
+            false,
+        );
+        timed(&format!("move down a line in {name}"), 120, || {
+            key(&mut app, Key::Named(Named::ArrowDown), None);
+        });
+        timed(&format!("build the view of {name}"), 50, || {
+            drop(app.view());
+        });
+    }
+}
+
+#[test]
+#[ignore = "prints timings; run with --release --ignored --nocapture"]
 fn how_fast_the_editor_is() {
     let home = tempfile::tempdir().unwrap();
     let files = tempfile::tempdir().unwrap();

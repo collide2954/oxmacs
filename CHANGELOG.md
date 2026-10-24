@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Holding a key to move through an Ox file no longer lags: highlighting remembers where each line's form left off instead of lexing from the start of the form for every line it draws.
 - `ox check` skips modules that call editor-only functions when they load, instead of reporting each call as an error, and the bundled plugins pass `ox fmt --check` and `ox check` again.
 - `net/send` on a connection the server has closed returns false on every system once its lines have ended, instead of sometimes queueing the line on Windows.
 - `ox fmt` keeps a character written as `\u{8}` whole instead of refusing to format the file.

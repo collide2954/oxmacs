@@ -41,6 +41,24 @@ fn press(editor: &mut Editor, notation: &str) {
 
 #[test]
 #[ignore = "prints timings; run with --release --ignored --nocapture"]
+fn how_long_highlighting_a_window_of_ox_takes() {
+    let home = tempfile::tempdir().unwrap();
+    let plugins = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("plugins/r");
+    for name in ["plugin.ox", "session.ox"] {
+        let mut editor = Editor::new();
+        Ox::new().start(&mut editor, Some(home.path()));
+        editor.open_file(&plugins.join(name));
+        let lines = editor.buffer().len_lines();
+        timed(&format!("{name}: highlight the last 45 lines"), 50, || {
+            for line in lines.saturating_sub(45)..lines {
+                drop(editor.line_style(line));
+            }
+        });
+    }
+}
+
+#[test]
+#[ignore = "prints timings; run with --release --ignored --nocapture"]
 fn where_a_keystroke_spends_its_time() {
     let home = tempfile::tempdir().unwrap();
     let files = tempfile::tempdir().unwrap();
