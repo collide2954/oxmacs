@@ -15,7 +15,7 @@ use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
 use crate::heap::{Closure, Heap, Hold, Rooted};
 use crate::library;
-use crate::native::{Control, Native, NativeFn};
+use crate::native::{Control, Drains, Native, NativeFn};
 use crate::portable::{Failure, Portable};
 use crate::profile::Profile;
 use crate::read::{self, Datum, Syntax};
@@ -29,6 +29,7 @@ use crate::value::record::Family;
 use crate::vm::Runtime;
 use crate::vm::build::full;
 use crate::vm::modules::{Import, Module, ModuleId, PRELUDE, USER};
+use crate::vm::routine::{Resumable, Started};
 
 const PRELUDE_SOURCE: &str = include_str!("library/prelude/core.ox");
 const LIBRARY_DOCS: &str = include_str!("library/docs.ox");
@@ -43,6 +44,31 @@ fn shown_name(module: &str, name: &str) -> String {
         Some((_, last)) => format!("{last}/{name}"),
         None => format!("{module}/{name}"),
     }
+}
+
+fn plain(
+    module: &str,
+    name: &str,
+    least: usize,
+    most: Option<usize>,
+    function: Rc<NativeFn>,
+) -> Native {
+    Native {
+        name: Sym::intern(&shown_name(module, name)),
+        least,
+        most,
+        function,
+        control: None,
+        awaits: false,
+        outside: false,
+        resumable: None,
+        drains: None,
+    }
+}
+
+fn only_from_ox(name: &str) -> Rc<NativeFn> {
+    let message = format!("{name} can only be called from Ox");
+    Rc::new(move |_, _, _| Err(Error::new(message.clone())))
 }
 
 pub(crate) fn work(
@@ -533,7 +559,7 @@ impl Isolate {
         function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
     ) {
         let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
-        self.install_native(module, name, least, most, function, None);
+        self.install_native(module, name, least, most, function);
     }
 
     pub fn define_host_native<T: Any>(
@@ -561,7 +587,7 @@ impl Isolate {
             };
             function(heap, host, arguments)
         });
-        self.install_native(module, name, least, most, function, None);
+        self.install_native(module, name, least, most, function);
     }
 
     pub(crate) fn define_control(
@@ -571,9 +597,46 @@ impl Isolate {
         most: Option<usize>,
         control: Control,
     ) {
-        let message = format!("{name} can only be called from Ox");
-        let function: Rc<NativeFn> = Rc::new(move |_, _, _| Err(Error::new(message.clone())));
-        self.install_native("ox", name, least, most, function, Some(control));
+        let native = Native {
+            control: Some(control),
+            ..plain("ox", name, least, most, only_from_ox(name))
+        };
+        if let Some(value) = self.install("ox", name, native) {
+            self.runtime.controls.insert(control, value);
+        }
+    }
+
+    pub(crate) fn define_draining(
+        &mut self,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        drains: Drains,
+        function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
+    ) {
+        let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
+        let native = Native {
+            drains: Some(drains),
+            ..plain("ox", name, least, most, function)
+        };
+        self.install("ox", name, native);
+    }
+
+    pub(crate) fn define_routine(
+        &mut self,
+        name: &str,
+        least: usize,
+        most: Option<usize>,
+        drains: Option<Drains>,
+        start: impl Fn(&mut Runtime, Value, &[Value]) -> Result<Started, Error> + 'static,
+    ) {
+        let shown = Sym::intern(name);
+        let native = Native {
+            resumable: Some(Rc::new(Resumable::new(shown, Box::new(start)))),
+            drains,
+            ..plain("ox", name, least, most, only_from_ox(name))
+        };
+        self.install("ox", name, native);
     }
 
     pub fn define_native_awaiting(
@@ -595,19 +658,11 @@ impl Isolate {
         function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
     ) {
         let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
-        self.install(
-            module,
-            name,
-            Native {
-                name: Sym::intern(&shown_name(module, name)),
-                least,
-                most,
-                function,
-                control: None,
-                awaits: true,
-                outside: false,
-            },
-        );
+        let native = Native {
+            awaits: true,
+            ..plain(module, name, least, most, function)
+        };
+        self.install(module, name, native);
     }
 
     fn install_native(
@@ -617,32 +672,19 @@ impl Isolate {
         least: usize,
         most: Option<usize>,
         function: Rc<NativeFn>,
-        control: Option<Control>,
     ) {
-        self.install(
-            module,
-            name,
-            Native {
-                name: Sym::intern(&shown_name(module, name)),
-                least,
-                most,
-                function,
-                control,
-                awaits: false,
-                outside: false,
-            },
-        );
+        self.install(module, name, plain(module, name, least, most, function));
     }
 
-    fn install(&mut self, module: &str, name: &str, native: Native) {
+    fn install(&mut self, module: &str, name: &str, native: Native) -> Option<Value> {
         let native = Native {
             outside: library::reaches_outside(module, native.name.name()),
             ..native
         };
         let place = self.runtime.module_named(module);
-        if let Ok(value) = self.runtime.heap.native(native) {
-            self.runtime.define(place, Sym::intern(name), value);
-        }
+        let value = self.runtime.heap.native(native).ok()?;
+        self.runtime.define(place, Sym::intern(name), value);
+        Some(value)
     }
 
     pub fn promise(&mut self) -> Result<Value, Error> {

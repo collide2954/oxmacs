@@ -145,17 +145,6 @@
   "Maps f over the collections like map and concatenates the results."
   (apply concat (apply map f coll colls)))
 
-(def vec
-  "The items of a collection, or everything a generator yields, as a vector."
-  (let [items vec]
-    (fn vec [coll]
-      (if (generator? coll)
-        ((fn drain [out]
-           (let [item (next coll)]
-             (if (done? coll) (reverse out) (drain (cons item out)))))
-         nil)
-        (items coll)))))
-
 (defmacro when [test & body]
   "Evaluates body when test is truthy; otherwise nil."
   `(if ~test (do ~@body) nil))
@@ -251,19 +240,6 @@
 (def (every ms f)
   "Calls f every ms milliseconds in a task of its own, until f returns :stop."
   (spawn ((fn tick [] (sleep ms) (unless (= (f) :stop) (tick))))))
-
-(def (take n coll)
-  "The first n items of a collection or generator, as a vector."
-  (if (generator? coll)
-    ((fn pull [i out]
-       (if (< i n)
-         (let [item (next coll)]
-           (if (done? coll) (reverse out) (pull (+ i 1) (cons item out))))
-         (reverse out)))
-     0 nil)
-    (let [items (vec coll)
-          end (min n (count items))]
-      ((fn step [i out] (if (< i end) (step (+ i 1) (cons (nth items i) out)) (reverse out))) 0 nil))))
 
 (def (drop n coll)
   "The items of coll after the first n, as a vector."
@@ -448,12 +424,6 @@
          true
          (raise (expectation-failed (explain '~form values)))))
     `(if ~form true (raise (expectation-failed (pr-str '~form))))))
-
-(def (profile work)
-  "Calls work while profiling and returns the report as a map; its :report is the printed table."
-  (let [mine (profiler-start)]
-    (try (work) (catch error e (when mine (profiler-stop)) (raise e)))
-    (if mine (profiler-stop) (profiler-snapshot))))
 
 (def (profile-report found)
   "Prints the :report of a profile."

@@ -76,7 +76,7 @@ pub(crate) fn quick_holds(a: Value, b: Value, holds: fn(Ordering) -> bool) -> Op
     };
     Some(order.is_some_and(holds))
 }
-fn chain(
+pub(crate) fn chain(
     heap: &Heap,
     name: &str,
     arguments: &[Value],
@@ -106,7 +106,7 @@ fn step(heap: &mut Heap, name: &str, value: Value, by: i64) -> Result<Value, Err
     one(heap, name, value, |number| Ok(number.add(&Number::Int(by))))
 }
 
-fn extreme(
+pub(crate) fn extreme(
     heap: &Heap,
     name: &str,
     arguments: &[Value],
@@ -125,6 +125,13 @@ fn extreme(
         }
     }
     Ok(best)
+}
+
+pub(crate) fn sum(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    if let Some(sum) = quick(arguments, i64::checked_add, |a, b| a + b) {
+        return Ok(sum);
+    }
+    fold(heap, "+", Number::Int(0), arguments, |a, b| Ok(a.add(&b)))
 }
 
 fn one(
@@ -212,12 +219,7 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_native("==", 1, None, |heap, arguments| {
         chain(heap, "==", arguments, Ordering::is_eq)
     });
-    isolate.define_native("+", 0, None, |heap, arguments| {
-        if let Some(sum) = quick(arguments, i64::checked_add, |a, b| a + b) {
-            return Ok(sum);
-        }
-        fold(heap, "+", Number::Int(0), arguments, |a, b| Ok(a.add(&b)))
-    });
+    isolate.define_native("+", 0, None, sum);
     isolate.define_native("*", 0, None, |heap, arguments| {
         if let Some(product) = quick(arguments, i64::checked_mul, |a, b| a * b) {
             return Ok(product);

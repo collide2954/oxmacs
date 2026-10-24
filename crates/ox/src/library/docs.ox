@@ -89,6 +89,8 @@
 (vector? value) "True when value is a vector."
 (set? value) "True when value is a set."
 (record? value) "True when value is a record."
+(vec coll) "The items of a collection, or everything a generator yields, as a vector."
+(take n coll) "The first n items of a collection or generator, as a vector."
 (sort coll) "The items of a collection in ascending order, as a vector. Raises a type-error for items that can't be compared."
 (apply f first & more) "Calls f with the arguments, the last of which is a collection whose items are passed one by one: (apply + 1 [2 3]) is 6."
 (expand-rules name literals rules form) "Expands form with the first rule whose pattern matches it; defrule and defrules build macros with it."
@@ -117,6 +119,7 @@
 (profiler-start) "Starts sampling where Ox spends its time, returning true when this call started it. profile is the easy way in."
 (profiler-stop) "Stops the profiler and returns its report as a map, or nil when it wasn't running."
 (profiler-snapshot) "The profiler's report so far, as a map, while it keeps running; nil when it isn't."
+(profile work) "Calls work while profiling and returns the report as a map; its :report is the printed table."
 
 (regex pattern) "Compiles pattern into a regex once, for reuse. The regex/ functions also take pattern strings."
 (regex/matches? pattern text) "True when the regex pattern matches anywhere in text."

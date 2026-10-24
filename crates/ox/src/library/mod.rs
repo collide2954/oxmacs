@@ -1,7 +1,7 @@
 pub(crate) mod collections;
 pub(crate) mod crypto;
 mod csv;
-mod errors;
+pub(crate) mod errors;
 mod files;
 mod http;
 pub mod image;
@@ -11,6 +11,7 @@ pub(crate) mod numbers;
 mod ordering;
 pub(crate) mod paths;
 mod patterns;
+mod prelude;
 mod process;
 mod regex;
 mod rules;
@@ -200,6 +201,7 @@ pub fn install(isolate: &mut Isolate) {
             .map_err(|full| Error::new(full.to_string()))
     });
     collections::install(isolate);
+    prelude::install(isolate);
 
     isolate.define_native("print", 0, None, |heap, arguments| {
         output(heap, arguments, false)

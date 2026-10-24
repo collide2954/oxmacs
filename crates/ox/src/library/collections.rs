@@ -23,7 +23,7 @@ fn expected(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
     .of(ErrorKind::Type)
 }
 
-fn out_of_range(index: i64, kind: &str, count: usize, unit: &str) -> Error {
+pub(crate) fn out_of_range(index: i64, kind: &str, count: usize, unit: &str) -> Error {
     let plural = if count == 1 { "" } else { "s" };
     Error::new(format!(
         "Index {index} is out of range for a {kind} of {count} {unit}{plural}"
@@ -31,7 +31,7 @@ fn out_of_range(index: i64, kind: &str, count: usize, unit: &str) -> Error {
     .of(ErrorKind::Range)
 }
 
-fn index(heap: &Heap, name: &str, value: Value) -> Result<i64, Error> {
+pub(crate) fn index(heap: &Heap, name: &str, value: Value) -> Result<i64, Error> {
     match value {
         Value::Int(number) => Ok(number),
         _ => Err(expected(heap, name, "an integer index", value)),
@@ -290,7 +290,7 @@ pub fn get(heap: &Heap, arguments: &[Value]) -> Value {
     found.unwrap_or(fallback)
 }
 
-fn vec(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
+pub(crate) fn vec(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
     if heap.vector_of(collection).is_some() {
         return Ok(collection);
     }
@@ -561,7 +561,6 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_native("vector?", 1, Some(1), |heap, arguments| {
         Ok(Value::Bool(heap.vector_of(arguments[0]).is_some()))
     });
-    isolate.define_native("vec", 1, Some(1), |heap, arguments| vec(heap, arguments[0]));
     isolate.define_native("list", 0, None, |heap, arguments| {
         heap.list(arguments.iter().copied()).map_err(full)
     });

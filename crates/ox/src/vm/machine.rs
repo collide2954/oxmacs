@@ -5,6 +5,7 @@ use crate::error::{Error, Frame as Trace};
 use crate::span::Span;
 use crate::value::Value;
 use crate::vm::bind::Binding;
+use crate::vm::routine::Routine;
 
 const MAX_FRAMES: usize = 400_000;
 
@@ -16,6 +17,8 @@ pub(crate) struct Frame {
     pub(crate) pc: usize,
     pub(crate) base: usize,
     pub(crate) result: usize,
+    pub(crate) routine: Option<Box<dyn Routine>>,
+    pub(crate) call: Option<Span>,
 }
 
 #[derive(Debug)]
@@ -94,6 +97,8 @@ impl Machine {
                 pc: 0,
                 base: 0,
                 result: 0,
+                routine: None,
+                call: None,
             }],
             handlers: Vec::new(),
             code: Rc::clone(entry),
@@ -107,7 +112,12 @@ impl Machine {
     pub(crate) fn roots(&self, values: &mut Vec<Value>, codes: &mut Vec<Rc<Code>>) {
         values.extend(self.stack.iter().copied());
         values.push(self.closure);
-        values.extend(self.frames.iter().map(|frame| frame.closure));
+        for frame in &self.frames {
+            values.push(frame.closure);
+            if let Some(routine) = &frame.routine {
+                routine.roots(values);
+            }
+        }
         codes.push(Rc::clone(&self.code));
         codes.extend(self.frames.iter().map(|frame| Rc::clone(&frame.code)));
     }
@@ -162,6 +172,8 @@ impl Machine {
             pc: 0,
             base: start,
             result,
+            routine: None,
+            call: None,
         });
         self.code = function;
         self.closure = closure;
@@ -200,6 +212,21 @@ impl Machine {
             .get(at)
             .or_else(|| self.code.spans.last())
             .copied()
+            .or_else(|| self.frames.last().and_then(|frame| frame.call))
+    }
+
+    pub(crate) fn run_routine(
+        &mut self,
+        routine: Box<dyn Routine>,
+        call: Option<Span>,
+    ) -> Result<(), Error> {
+        self.stack[self.base] = Value::Nil;
+        let Some(frame) = self.frames.last_mut() else {
+            return Err(Error::new("A native lost its frame"));
+        };
+        frame.routine = Some(routine);
+        frame.call = call;
+        Ok(())
     }
 
     pub(crate) fn traceback(&self, at: usize) -> Vec<Trace> {

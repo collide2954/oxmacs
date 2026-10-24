@@ -1,15 +1,17 @@
 use std::any::Any;
 use std::fmt;
+use std::ops::Range;
 use std::rc::Rc;
 
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::symbol::Sym;
 use crate::value::Value;
+use crate::vm::routine::Resumable;
 
 pub type NativeFn = dyn Fn(&mut Heap, &mut dyn Any, &[Value]) -> Result<Value, Error>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Control {
     Yield,
     Next,
@@ -36,6 +38,21 @@ pub struct Native {
     pub control: Option<Control>,
     pub awaits: bool,
     pub outside: bool,
+    pub(crate) resumable: Option<Rc<Resumable>>,
+    pub(crate) drains: Option<Drains>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Drains {
+    At(usize),
+}
+
+impl Drains {
+    pub(crate) fn range(self, count: usize) -> Range<usize> {
+        match self {
+            Self::At(at) => at.min(count)..(at + 1).min(count),
+        }
+    }
 }
 
 impl fmt::Debug for Native {
