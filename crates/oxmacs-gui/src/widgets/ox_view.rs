@@ -1,10 +1,29 @@
-use iced::widget::{Column, Row, button, canvas, scrollable, space, text};
-use iced::{Element, Font, Length};
+use std::cell::RefCell;
+
+use iced::widget::{Column, Row, button, canvas, image, scrollable, space, text};
+use iced::{ContentFit, Element, Font, Length};
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_ox::views::{Node, Press};
+use oxmacs_ox::views::{Node, Picture, Press};
 
 use crate::style;
 use crate::widgets::drawing::Drawing;
+
+thread_local! {
+    static PICTURES: RefCell<Vec<(Picture, image::Handle)>> = const { RefCell::new(Vec::new()) };
+}
+
+fn handle(picture: &Picture) -> image::Handle {
+    PICTURES.with_borrow_mut(|known| {
+        known.retain(|(kept, _)| !kept.unused());
+        if let Some((_, handle)) = known.iter().find(|(kept, _)| kept.key() == picture.key()) {
+            return handle.clone();
+        }
+        let (width, height) = picture.size();
+        let handle = image::Handle::from_rgba(width, height, picture.rgba());
+        known.push((picture.clone(), handle.clone()));
+        handle
+    })
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Look {
@@ -69,6 +88,15 @@ pub fn view<'a, Message: Clone + 'a>(
         .width(Length::Fill)
         .height(height.map_or(Length::Fill, Length::Fixed))
         .into(),
+        Node::Image {
+            picture,
+            width,
+            height,
+        } => image(handle(picture))
+            .content_fit(ContentFit::Contain)
+            .width(width.map_or(Length::Shrink, Length::Fixed))
+            .height(height.map_or(Length::Shrink, Length::Fixed))
+            .into(),
         Node::Scrollable(child) => scrollable(view(child, look, press))
             .height(Length::Fill)
             .into(),

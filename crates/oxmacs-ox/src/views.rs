@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
@@ -16,6 +18,33 @@ const UI: &str = "ox/ui";
 pub enum Press {
     Held(Hold),
     Slot(usize),
+}
+
+#[derive(Debug, Clone)]
+pub struct Picture(pub Arc<ox::image::Image>);
+
+impl Picture {
+    pub fn key(&self) -> usize {
+        Arc::as_ptr(&self.0) as usize
+    }
+
+    pub fn unused(&self) -> bool {
+        Arc::strong_count(&self.0) == 1
+    }
+
+    pub fn size(&self) -> (u32, u32) {
+        self.0.pixels.dimensions()
+    }
+
+    pub fn rgba(&self) -> Vec<u8> {
+        self.0.pixels.as_raw().clone()
+    }
+}
+
+impl PartialEq for Picture {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,6 +74,11 @@ pub enum Node {
         shapes: Vec<Shape>,
         height: Option<f32>,
         relative: bool,
+    },
+    Image {
+        picture: Picture,
+        width: Option<f32>,
+        height: Option<f32>,
     },
 }
 
@@ -324,6 +358,32 @@ pub fn install(isolate: &mut Isolate) {
                 shapes: drawn,
                 height,
                 relative,
+            },
+        )
+    });
+    isolate.define_native_in(UI, "image", 1, Some(5), |heap, arguments| {
+        let picture = ox::image::image_of(heap, arguments[0])
+            .ok_or_else(|| wrong(heap, "image", "an image", arguments[0]))?;
+        let (found, rest) = options(heap, "image", &arguments[1..], &["width", "height"])?;
+        if let Some(extra) = rest.first() {
+            return Err(wrong(heap, "image", "options after the image", *extra));
+        }
+        let (mut width, mut height) = (None, None);
+        for (option, value) in found {
+            let shown = Some(size(heap, "image", value)?);
+            if option == "width" {
+                width = shown;
+            } else {
+                height = shown;
+            }
+        }
+        widget(
+            heap,
+            "image",
+            Node::Image {
+                picture: Picture(picture),
+                width,
+                height,
             },
         )
     });
@@ -630,6 +690,56 @@ mod tests {
                 spacing: 3.0,
                 children: vec![text("a"), text("b")],
             }
+        );
+    }
+
+    #[test]
+    fn images_show_at_their_size_or_the_size_given() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        ox.eval(
+            &mut editor,
+            r#"(module (import (ox ui) (ox image))) (def dot (image/new 4 2 :color :red)) (open-view "*picture*" (fn [] (ui/column (ui/image dot) (ui/image dot :width 40 :height 20))))"#,
+        )
+        .unwrap();
+        settle(&mut editor, &mut ox);
+
+        let Node::Column { children, .. } = shown(&editor, "*picture*") else {
+            panic!("not a column");
+        };
+        let sizes: Vec<(u32, u32, Option<f32>, Option<f32>)> = children
+            .iter()
+            .map(|child| match child {
+                Node::Image {
+                    picture,
+                    width,
+                    height,
+                } => (
+                    picture.0.pixels.width(),
+                    picture.0.pixels.height(),
+                    *width,
+                    *height,
+                ),
+                other => panic!("not an image: {other:?}"),
+            })
+            .collect();
+        assert_eq!(sizes, [(4, 2, None, None), (4, 2, Some(40.0), Some(20.0))]);
+        let Node::Image { picture, .. } = &children[0] else {
+            panic!("not an image");
+        };
+        assert_eq!(
+            children[0],
+            Node::Image {
+                picture: picture.clone(),
+                width: None,
+                height: None,
+            }
+        );
+        assert!(
+            ox.eval(&mut editor, "(module (import (ox ui))) (ui/image 5)")
+                .unwrap_err()
+                .message
+                .contains("image expects an image, got 5")
         );
     }
 

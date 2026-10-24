@@ -288,7 +288,7 @@ mod tests {
             }
             Node::Text { text, .. } => out.push(text.clone()),
             Node::Button { label, .. } => out.push(label.clone()),
-            Node::Space { .. } | Node::Canvas { .. } => {}
+            Node::Space { .. } | Node::Canvas { .. } | Node::Image { .. } => {}
             Node::Scrollable(child) => lines(child, out),
         }
     }

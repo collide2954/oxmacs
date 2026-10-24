@@ -43,7 +43,7 @@ fn walk(node: &Node, texts: &mut Vec<String>, cells: &mut usize) {
                 .filter(|shape| matches!(shape, Shape::Rect { .. }))
                 .count();
         }
-        Node::Button { .. } | Node::Space { .. } => {}
+        Node::Button { .. } | Node::Space { .. } | Node::Image { .. } => {}
     }
 }
 
