@@ -71,7 +71,7 @@ The shapes are `[:rect x y width height color]`, `[:circle x y radius color]`, `
 
 ## Modes
 
-`defmode` adds a major mode for files by extension or name, with a comment marker, keys of its own and highlighting. `:highlight` is called for each line with its number and text, and returns `[start end face]` spans, counting characters. A highlighter that takes a third argument also gets what it returned as `:state` for the line before, starting from `nil`, when it returns `{spans: [...] state: x}`, so strings and comments can run across lines; after an edit, only the lines from the first changed one are highlighted again. `:indent {width: 4 after: #"[:{]\s*$" dedent: #"^\s*}"}` indents `RET` and `TAB` one width past an opening line and back on a closing one; without it they keep the indentation of the line above.
+`defmode` adds a major mode for files by extension or name, with a comment marker, keys of its own and highlighting. `:highlight` is called for each line with its number and text, and returns `[start end face]` spans, counting characters. A highlighter that takes a third argument also gets what it returned as `:state` for the line before, starting from `nil`, when it returns `{spans: [...] state: x}`, so strings and comments can run across lines; after an edit, only the lines from the first changed one are highlighted again. `:indent {width: 4 after: #"[:{]\s*$" dedent: #"^\s*}"}` indents `RET` and `TAB` one width past an opening line and back on a closing one, with tabs when it adds `tabs: true`; without it they keep the indentation of the line above. A file's `.editorconfig` has the last word on tabs, indent size and tab width.
 
 ```
 (module (import (ox string)))

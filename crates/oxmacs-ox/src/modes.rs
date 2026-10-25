@@ -24,6 +24,7 @@ struct Rules {
     width: usize,
     after: Option<Regex>,
     dedent: Option<Regex>,
+    tabs: Option<bool>,
 }
 
 #[derive(Debug)]
@@ -45,7 +46,14 @@ fn indent_by_rules(editor: &Editor, id: BufferId, line: usize) -> Option<usize> 
         .indent
         .clone();
     let buffer = editor.buffer_by_id(id)?;
-    let tab = editor.config().tab_width.max(1);
+    let tab = editor.tab_width_of(id).max(1);
+    let width = editor
+        .indent_size_of(id)
+        .unwrap_or(if editor.indent_tabs_of(id) {
+            tab
+        } else {
+            rules.width
+        });
     let Some(above) = (0..line)
         .rev()
         .map(|number| buffer.line_text(number))
@@ -68,14 +76,14 @@ fn indent_by_rules(editor: &Editor, id: BufferId, line: usize) -> Option<usize> 
         .as_ref()
         .is_some_and(|after| after.is_match(&above))
     {
-        column += rules.width;
+        column += width;
     }
     if rules
         .dedent
         .as_ref()
         .is_some_and(|dedent| dedent.is_match(&buffer.line_text(line)))
     {
-        column = column.saturating_sub(rules.width);
+        column = column.saturating_sub(width);
     }
     Some(column)
 }
@@ -268,7 +276,7 @@ struct Options {
 fn rules(heap: &Heap, value: Value) -> Result<Rules, Error> {
     let entries = heap.entries(value).ok_or_else(|| {
         Error::new(format!(
-            "define-mode's :indent is a map of :width, :after and :dedent, not {}",
+            "define-mode's :indent is a map of :width, :after, :dedent and :tabs, not {}",
             print::brief(heap, value)
         ))
     })?;
@@ -292,9 +300,12 @@ fn rules(heap: &Heap, value: Value) -> Result<Rules, Error> {
             (Value::Keyword(key), value) if key.name() == "dedent" => {
                 found.dedent = Some(pattern(value)?)
             }
+            (Value::Keyword(key), Value::Bool(tabs)) if key.name() == "tabs" => {
+                found.tabs = Some(tabs);
+            }
             (key, _) => {
                 return Err(Error::new(format!(
-                    "define-mode's :indent takes :width, :after and :dedent, not {}",
+                    "define-mode's :indent takes :width, :after, :dedent and :tabs, not {}",
                     print::brief(heap, key)
                 )));
             }
@@ -370,6 +381,9 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     });
     editor.add_language(language, Some(scope));
     editor.set_indenter(language, indent_by_rules);
+    if let Some(tabs) = given.indent.tabs {
+        editor.set_indent_tabs(language, tabs);
+    }
     for (keys, command) in given.keys {
         let id = editor
             .command_named(&command)
@@ -738,6 +752,26 @@ mod tests {
         assert_eq!(editor.buffer().contents(), "if x {\n    y\n}");
         press(&mut editor, &mut ox, "C-p C-a C-d TAB");
         assert_eq!(editor.buffer().contents(), "if x {\n    y\n}");
+    }
+
+    #[test]
+    fn modes_can_indent_with_tabs_unless_editorconfig_says_otherwise() {
+        let mut ox = Ox::new();
+        let source = r##"(defmode tabbed "Tabbed" :extensions ["tbd"] :indent {width: 4 after: #"\{\s*$" tabs: true})"##;
+        let (dir, mut editor) = opened(&mut ox, source, "a.tbd", "if x {");
+
+        press(&mut editor, &mut ox, "C-e RET y");
+        assert_eq!(editor.buffer().contents(), "if x {\n\ty");
+
+        std::fs::write(
+            dir.path().join(".editorconfig"),
+            "[*.tbd]\nindent_style = space\nindent_size = 2\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("b.tbd"), "if x {").unwrap();
+        editor.open_file(&dir.path().join("b.tbd"));
+        press(&mut editor, &mut ox, "C-e RET y");
+        assert_eq!(editor.buffer().contents(), "if x {\n  y");
     }
 
     #[test]
