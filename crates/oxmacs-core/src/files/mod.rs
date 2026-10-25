@@ -1,3 +1,4 @@
+pub mod editorconfig;
 mod entry;
 mod format;
 mod io;
