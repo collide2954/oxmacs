@@ -12,11 +12,13 @@ use oxmacs_core::external::notify;
 use oxmacs_core::external::process;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
+use oxmacs_ox::tabbar::TabEvent;
 use oxmacs_ox::takeover;
 
 use super::{App, Message, transition};
 use crate::keys::{self, Platform};
 use crate::widgets::buffer_view::ViewEvent;
+use crate::widgets::tab_bar::TabMessage;
 use crate::{animation, fetch, fonts, units};
 impl App {
     fn handle_view_event(&mut self, window: WindowId, event: ViewEvent) {
@@ -121,6 +123,40 @@ impl App {
         self.ox.end_take_over(&mut self.editor);
     }
 
+    fn tab_message(&mut self, event: TabMessage) {
+        let happened = match event {
+            TabMessage::Pressed(at) => {
+                self.tab_drag = Some(at);
+                Some(TabEvent::Select(at))
+            }
+            TabMessage::Released(to) => self
+                .tab_drag
+                .take()
+                .filter(|from| *from != to)
+                .map(|from| TabEvent::Move { from, to }),
+            TabMessage::BarReleased => {
+                self.tab_drag = None;
+                None
+            }
+            TabMessage::Entered(at) => {
+                self.tab_hover = Some(at);
+                None
+            }
+            TabMessage::Left(at) => {
+                if self.tab_hover == Some(at) {
+                    self.tab_hover = None;
+                }
+                None
+            }
+            TabMessage::Close(at) => Some(TabEvent::Close(at)),
+            TabMessage::New => Some(TabEvent::New),
+        };
+        if let Some(happened) = happened {
+            self.last_input = self.now;
+            self.ox.tab_event(&mut self.editor, happened);
+        }
+    }
+
     fn reject_font(&mut self) {
         if self.font == fonts::EDITOR {
             return;
@@ -218,6 +254,7 @@ impl App {
                 );
             }
             Message::TakeoverSized(size) => self.takeover_size = Some(size),
+            Message::Tab(event) => self.tab_message(event),
             Message::Focus(focused) => self.focus_changed(focused),
             Message::Idle => self.idle(),
             Message::CloseRequested => self.editor.execute(Command::SaveBuffersKillOxmacs),

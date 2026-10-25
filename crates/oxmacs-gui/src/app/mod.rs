@@ -22,6 +22,7 @@ use oxmacs_ox::{Ox, Pace, Wake, takeover};
 
 use crate::watcher::Watched;
 use crate::widgets::buffer_view::ViewEvent;
+use crate::widgets::tab_bar::TabMessage;
 use crate::{animation, fonts, style, ticker, watcher};
 
 #[derive(Debug)]
@@ -45,6 +46,8 @@ pub struct App {
     ox: Ox,
     takeover_size: Option<iced::Size>,
     focused_since: Option<Instant>,
+    tab_hover: Option<usize>,
+    tab_drag: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -78,6 +81,7 @@ pub enum Message {
     ViewSized(BufferId, iced::Size),
     TakeoverSized(iced::Size),
     EndTakeover,
+    Tab(TabMessage),
     Focus(bool),
     Idle,
     CloseRequested,
@@ -113,6 +117,8 @@ impl App {
             ox: Ox::new(),
             takeover_size: None,
             focused_since: Some(Instant::now()),
+            tab_hover: None,
+            tab_drag: None,
         };
         app.configure(config);
         app
@@ -478,6 +484,70 @@ mod tests {
         assert!(ui.find("save-buffer").is_ok());
         assert!(ui.find("C-s").is_ok());
         assert!(ui.find("-- *scratch*   L1 C0   (Ox)").is_ok());
+    }
+
+    fn with_tab_bar() -> App {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("init.ox"),
+            r#"(set-tab-bar ["main" "notes"] :selected 0
+  :on-select (fn [i] (message "picked {i}"))
+  :on-close (fn [i] (message "closed {i}"))
+  :on-new (fn [] (message "new tab"))
+  :on-move (fn [from to] (message "moved {from} to {to}")))"#,
+        )
+        .unwrap();
+        let mut app = App::default();
+        let _ = app.start_ox(Some(home.path()));
+        app
+    }
+
+    fn click(app: &mut App, label: &str) {
+        let mut ui = iced_test::simulator(app.view());
+        ui.click(label).unwrap();
+        let messages: Vec<Message> = ui.into_messages().collect();
+        for message in messages {
+            let _ = app.update(message);
+        }
+    }
+
+    #[test]
+    fn plugin_tab_bars_show_above_the_windows_and_answer_clicks() {
+        let mut app = with_tab_bar();
+        {
+            let mut ui = iced_test::simulator(app.view());
+            assert!(ui.find("main").is_ok());
+            assert!(ui.find("-- *scratch*   L1 C0   (Ox)").is_ok());
+        }
+
+        click(&mut app, "notes");
+        assert_eq!(app.editor().message(), Some("picked 1"));
+        click(&mut app, "+");
+        assert_eq!(app.editor().message(), Some("new tab"));
+        click(&mut app, "×");
+        assert_eq!(app.editor().message(), Some("closed 0"));
+    }
+
+    #[test]
+    fn dragging_a_tab_onto_another_moves_it() {
+        use crate::widgets::tab_bar::TabMessage;
+
+        let mut app = with_tab_bar();
+
+        for message in [
+            TabMessage::Pressed(0),
+            TabMessage::Entered(1),
+            TabMessage::Released(1),
+            TabMessage::BarReleased,
+        ] {
+            let _ = app.update(Message::Tab(message));
+        }
+        assert_eq!(app.editor().message(), Some("moved 0 to 1"));
+
+        for message in [TabMessage::Released(0), TabMessage::BarReleased] {
+            let _ = app.update(Message::Tab(message));
+        }
+        assert_eq!(app.editor().message(), Some("moved 0 to 1"));
     }
 
     fn taken_over() -> App {

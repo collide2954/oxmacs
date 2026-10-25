@@ -5,16 +5,16 @@ use iced::{Element, Length};
 use oxmacs_core::clock;
 use oxmacs_core::editor::{Axis, Pane, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_ox::overlays;
 use oxmacs_ox::takeover::{self, Takeover};
 use oxmacs_ox::views::ViewBuffer;
+use oxmacs_ox::{overlays, tabbar};
 
 use super::{App, Message};
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
 use crate::widgets::drawing::Drawing;
 use crate::widgets::mode_line::{self, Look};
-use crate::widgets::{completions, echo_area, overlay, ox_view, transient};
+use crate::widgets::{completions, echo_area, overlay, ox_view, tab_bar, transient};
 use crate::{style, units};
 impl App {
     pub fn view(&self) -> Element<'_, Message> {
@@ -31,7 +31,21 @@ impl App {
             self.text_size,
             mode_line::height(self.text_size),
         );
+        let tabs: Element<'_, Message> = match tabbar::shown(&self.editor) {
+            Some(bar) if takeover::current(&self.editor).is_none() => tab_bar::view(
+                bar,
+                tab_bar::Look {
+                    faces,
+                    font: self.font,
+                    size: self.text_size,
+                    hovered: self.tab_hover,
+                },
+                Message::Tab,
+            ),
+            _ => column![].into(),
+        };
         column![
+            tabs,
             stack![windows, floating]
                 .width(Length::Fill)
                 .height(Length::Fill),

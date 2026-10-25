@@ -8,4 +8,5 @@ pub mod overlay;
 pub mod ox_view;
 pub mod popup;
 pub mod powerline;
+pub mod tab_bar;
 pub mod transient;
