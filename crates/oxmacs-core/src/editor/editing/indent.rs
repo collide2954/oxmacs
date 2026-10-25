@@ -10,8 +10,8 @@ impl Editor {
 
     fn indentation_rules(&self) -> Option<Indentation> {
         self.buffers
-            .syntax(0)
-            .map(|syntax| syntax.language().indentation())
+            .language(0)
+            .map(|language| language.indentation())
     }
 
     pub(in crate::editor) fn indent_for_tab(&mut self) {
@@ -50,10 +50,9 @@ impl Editor {
         }
         self.delete_selection();
         let line = self.point_line();
-        if self.indenter().is_some()
-            || self
-                .indentation_rules()
-                .is_some_and(|rules| rules.continues)
+        if self
+            .indentation_rules()
+            .is_some_and(|rules| rules.continues)
         {
             self.indent_line(line);
         }

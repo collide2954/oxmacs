@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `defmode` takes `:indent {width: 4 after: #"[:{]\s*$" dedent: #"^\s*}"}`: `RET` and `TAB` indent one width past a line that opens a block and back on one that closes it. In modes without it, `RET` and `TAB` keep the indentation of the line above instead of starting at the margin and inserting a tab.
 - A `defmode` highlighter that takes a third argument gets the state it returned for the line before, by returning `{spans: [...] state: x}`, so highlighting can carry strings, comments and blocks across lines; after an edit, only the lines from the first changed one are highlighted again.
 - `C-c C-t` (`M-x ox-test`) in Ox buffers runs the buffer's tests, unsaved edits included, as `ox test` would, and lists how each went in `*ox tests*` beside it.
 - `oxmacs --help` and `oxmacs --version` print to the terminal they ran from, Windows included, and `oxmacs -q` or `--no-init` starts without running `custom.ox` and `init.ox`. Other options are refused instead of opening a buffer named after them, and `--` still makes what follows file names.

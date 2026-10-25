@@ -18,7 +18,10 @@ static OX: LanguageSpec = LanguageSpec {
     aliases: &["ox"],
     line_comment: Some(";"),
     pairs: &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"')],
-    indentation: Indentation::KEEP,
+    indentation: Indentation {
+        continues: true,
+        ..Indentation::KEEP
+    },
     grammar: None,
     grammars: &[],
     outline: Outline::NONE,

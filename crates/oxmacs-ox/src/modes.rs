@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
+use regex::Regex;
+
 use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
@@ -17,12 +19,65 @@ type Spans = Vec<(Range<usize>, Highlight)>;
 
 const FEATURES: &[Feature] = &[Feature::Highlighting, Feature::Comments];
 
+#[derive(Debug, Clone, Default)]
+struct Rules {
+    width: usize,
+    after: Option<Regex>,
+    dedent: Option<Regex>,
+}
+
 #[derive(Debug)]
 struct Mode {
     language: Language,
     scope: ScopeId,
     highlight: Option<Hold>,
     plugin: Option<String>,
+    indent: Rules,
+}
+
+fn indent_by_rules(editor: &Editor, id: BufferId, line: usize) -> Option<usize> {
+    let language = editor.buffer_language(id)?;
+    let rules = editor
+        .plugin_state::<Modes>()?
+        .defined
+        .iter()
+        .find(|mode| mode.language == language)?
+        .indent
+        .clone();
+    let buffer = editor.buffer_by_id(id)?;
+    let tab = editor.config().tab_width.max(1);
+    let Some(above) = (0..line)
+        .rev()
+        .map(|number| buffer.line_text(number))
+        .find(|text| !text.trim().is_empty())
+    else {
+        return Some(0);
+    };
+    let mut column = above
+        .chars()
+        .take_while(|c| matches!(c, ' ' | '\t'))
+        .fold(0, |column, c| {
+            if c == '\t' {
+                column + tab - column % tab
+            } else {
+                column + 1
+            }
+        });
+    if rules
+        .after
+        .as_ref()
+        .is_some_and(|after| after.is_match(&above))
+    {
+        column += rules.width;
+    }
+    if rules
+        .dedent
+        .as_ref()
+        .is_some_and(|dedent| dedent.is_match(&buffer.line_text(line)))
+    {
+        column = column.saturating_sub(rules.width);
+    }
+    Some(column)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -98,12 +153,14 @@ pub fn declare(editor: &mut Editor, plugin: &str, declared: &Declared) {
     let language = spec(&declared.title, alias, declared.clone());
     let scope = editor.add_scope(leak(declared.title.clone()));
     editor.add_language(language, Some(scope));
+    editor.set_indenter(language, indent_by_rules);
     if let Some(modes) = modes(editor) {
         modes.defined.push(Mode {
             language,
             scope,
             highlight: None,
             plugin: Some(plugin.to_owned()),
+            indent: Rules::default(),
         });
     }
 }
@@ -205,6 +262,45 @@ struct Options {
     comment: Option<String>,
     keys: Vec<(String, String)>,
     highlight: Option<Value>,
+    indent: Rules,
+}
+
+fn rules(heap: &Heap, value: Value) -> Result<Rules, Error> {
+    let entries = heap.entries(value).ok_or_else(|| {
+        Error::new(format!(
+            "define-mode's :indent is a map of :width, :after and :dedent, not {}",
+            print::brief(heap, value)
+        ))
+    })?;
+    let pattern = |value: Value| {
+        if let Some(found) = heap.foreign_of::<Regex>(value) {
+            return Ok(found.clone());
+        }
+        let text = print::display(heap, value);
+        Regex::new(&text)
+            .map_err(|error| Error::new(format!("define-mode's :indent pattern {text:?}: {error}")))
+    };
+    let mut found = Rules::default();
+    for (key, value) in entries {
+        match (key, value) {
+            (Value::Keyword(key), Value::Int(width)) if key.name() == "width" => {
+                found.width = usize::try_from(width).unwrap_or(0);
+            }
+            (Value::Keyword(key), value) if key.name() == "after" => {
+                found.after = Some(pattern(value)?)
+            }
+            (Value::Keyword(key), value) if key.name() == "dedent" => {
+                found.dedent = Some(pattern(value)?)
+            }
+            (key, _) => {
+                return Err(Error::new(format!(
+                    "define-mode's :indent takes :width, :after and :dedent, not {}",
+                    print::brief(heap, key)
+                )));
+            }
+        }
+    }
+    Ok(found)
 }
 
 fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
@@ -224,6 +320,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
                         .collect();
                 }
                 "highlight" => found.highlight = Some(*value),
+                "indent" => found.indent = rules(heap, *value)?,
                 _ => return Err(unknown(heap, pair[0])),
             },
             _ => return Err(unknown(heap, pair[0])),
@@ -234,7 +331,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
-        "define-mode takes :extensions, :file-names, :comment, :keys and :highlight, not {}",
+        "define-mode takes :extensions, :file-names, :comment, :keys, :highlight and :indent, not {}",
         print::brief(heap, option)
     ))
 }
@@ -272,6 +369,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
         )
     });
     editor.add_language(language, Some(scope));
+    editor.set_indenter(language, indent_by_rules);
     for (keys, command) in given.keys {
         let id = editor
             .command_named(&command)
@@ -294,6 +392,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
         .find(|mode| mode.language == language)
     {
         Some(mode) => {
+            mode.indent = given.indent;
             if let Some(old) = std::mem::replace(&mut mode.highlight, highlight) {
                 heap.release(old);
             }
@@ -303,6 +402,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
             scope,
             highlight,
             plugin: None,
+            indent: given.indent,
         }),
     }
     Ok(Value::Nil)
@@ -610,6 +710,49 @@ mod tests {
 
         press(&mut editor, &mut ox, "C-n < <");
         assert_eq!(styled(&editor), [false, false, true, true, false]);
+    }
+
+    fn opened(ox: &mut Ox, source: &str, name: &str, text: &str) -> (tempfile::TempDir, Editor) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(name);
+        std::fs::write(&path, text).unwrap();
+        let mut editor = Editor::new();
+        ox.eval(&mut editor, source).unwrap();
+        editor.open_file(&path);
+        settle(&mut editor, ox);
+        (dir, editor)
+    }
+
+    #[test]
+    fn modes_indent_after_opening_lines_and_dedent_closing_ones() {
+        let mut ox = Ox::new();
+        let (_dir, mut editor) = opened(
+            &mut ox,
+            r##"(defmode braces "Braces" :extensions ["brc"] :indent {width: 4 after: #"[{:]\s*$" dedent: #"^\s*}"})"##,
+            "a.brc",
+            "if x {",
+        );
+
+        press(&mut editor, &mut ox, "C-e RET y RET }");
+
+        assert_eq!(editor.buffer().contents(), "if x {\n    y\n}");
+        press(&mut editor, &mut ox, "C-p C-a C-d TAB");
+        assert_eq!(editor.buffer().contents(), "if x {\n    y\n}");
+    }
+
+    #[test]
+    fn return_keeps_the_line_above_in_modes_without_rules() {
+        let mut ox = Ox::new();
+        let (_dir, mut editor) = opened(
+            &mut ox,
+            r#"(defmode plain "Plain" :extensions ["pln"])"#,
+            "a.pln",
+            "  a",
+        );
+
+        press(&mut editor, &mut ox, "C-e RET b");
+
+        assert_eq!(editor.buffer().contents(), "  a\n  b");
     }
 
     const NOTES_PLUGIN: crate::Bundle = crate::Bundle {
