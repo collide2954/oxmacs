@@ -409,7 +409,9 @@ mod tests {
         let (last, rest) = names.split_last().unwrap();
         let mut editor = Editor::with_buffer(Buffer::new(*last));
         for name in rest.iter().rev() {
-            editor.buffers.push_front(Buffer::new(*name));
+            editor
+                .buffers
+                .push_front_with(Buffer::new(*name), super::Mode::Text(None));
         }
         editor
     }

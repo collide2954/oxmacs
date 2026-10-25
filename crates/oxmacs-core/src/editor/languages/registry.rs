@@ -37,22 +37,21 @@ pub(in crate::editor) fn built_in() -> Vec<Registered> {
 
 impl Editor {
     pub fn add_language(&mut self, language: Language, scope: Option<ScopeId>) {
-        match self
+        if let Some(known) = self
             .languages
             .iter_mut()
             .find(|known| known.language == language)
         {
-            Some(known) => known.scope = scope,
-            None => {
-                self.languages.push(Registered {
-                    language,
-                    scope,
-                    highlight: None,
-                    indent: None,
-                });
-                self.add_mode_command(language);
-            }
+            known.scope = scope;
+            return;
         }
+        self.languages.push(Registered {
+            language,
+            scope,
+            highlight: None,
+            indent: None,
+        });
+        self.add_mode_command(language);
     }
 
     pub(in crate::editor) fn add_mode_command(&mut self, language: Language) {
