@@ -1,5 +1,5 @@
 use crate::editor::Editor;
-use crate::syntax::Indentation;
+use crate::syntax::{Indentation, Language};
 
 const ELECTRIC: &[char] = &['}', ')', ']'];
 
@@ -9,9 +9,7 @@ impl Editor {
     }
 
     fn indentation_rules(&self) -> Option<Indentation> {
-        self.buffers
-            .language(0)
-            .map(|language| language.indentation())
+        self.buffers.language(0).map(Language::indentation)
     }
 
     pub(in crate::editor) fn indent_for_tab(&mut self) {

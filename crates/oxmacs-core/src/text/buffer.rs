@@ -30,6 +30,7 @@ impl FileInfo {
         }
     }
 
+    #[must_use]
     pub fn styled(mut self) -> Self {
         self.style = editorconfig::style_for(&self.path);
         self
