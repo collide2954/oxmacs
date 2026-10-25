@@ -119,15 +119,20 @@ impl App {
         let Some(pane) = self.editor.pane_of(side.window) else {
             return main;
         };
-        let mut tinted = faces;
-        tinted.default.background = faces
-            .default
-            .background
-            .mix(faces.default.foreground, SIDE_TINT);
+        let tint = style::color(
+            faces
+                .default
+                .background
+                .mix(faces.default.foreground, SIDE_TINT),
+        );
         let width = units::to_f32(side.columns) * units::cell_width(self.text_size) + SIDE_PADDING;
-        let panel = container(self.body(pane, side.window, tinted))
+        let panel = container(self.body(pane, side.window, faces))
             .width(Length::Fixed(width))
-            .height(Length::Fill);
+            .height(Length::Fill)
+            .style(move |_| container::Style {
+                background: Some(tint.into()),
+                ..container::Style::default()
+            });
         let divider = Divider::new(
             Axis::Columns,
             1.0,
