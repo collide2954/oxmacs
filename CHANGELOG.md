@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- `ox test` works on a plugin folder: it skips the manifest, finds the plugin's modules, runs only the tests each file defines, and lists a file that needs the editor to load as skipped instead of failing it. `ox FILE` and `ox profile` find a plugin's modules too.
 - A `deferror` message sees the defaults of keyword fields: with `(deferror parse-error [line {column 0}] "At {line}:{column}")`, `(parse-error 3)` says `At 3:0` instead of `At 3:`.
 - A module imported twice with different options, as `(ox string :as s)` and `(ox string :only [upper])`, keeps both instead of only the last.
 - `(empty? generator)` says `empty?` expects a collection instead of blaming `count`.

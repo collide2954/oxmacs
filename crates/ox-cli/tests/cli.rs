@@ -186,6 +186,72 @@ fn running_a_file_skips_its_tests() {
 }
 
 #[test]
+fn ox_test_runs_a_plugin_folders_tests_and_skips_what_needs_the_editor() {
+    let dir = tempfile::tempdir().unwrap();
+    let plugin = dir.path().join("plugins").join("hello");
+    fs::create_dir_all(&plugin).unwrap();
+    fs::write(
+        plugin.join("plugin.ox"),
+        "(plugin hello :version \"0.1.0\" :commands {hello: \"Say hello\"})",
+    )
+    .unwrap();
+    fs::write(
+        plugin.join("hello.ox"),
+        "(module (import (hello words)))\n(defcommand hello \"Say hello\" (message words/greeting))\n(test \"never runs\" (expect false))",
+    )
+    .unwrap();
+    fs::write(
+        plugin.join("words.ox"),
+        "(def greeting \"Hello\")\n(test \"greets\" (expect (= greeting \"Hello\")))",
+    )
+    .unwrap();
+    fs::write(
+        plugin.join("shout.ox"),
+        "(module (import (hello words)))\n(def (shout) (str words/greeting \"!\"))\n(test \"shouts\" (expect (= (shout) \"Hello!\")))",
+    )
+    .unwrap();
+
+    let output = ox().arg("test").arg(&plugin).output().unwrap();
+
+    let shown = text(&output.stdout);
+    assert!(output.status.success(), "{shown}");
+    assert!(shown.contains("ok    greets\n"), "{shown}");
+    assert!(shown.contains("ok    shouts\n"), "{shown}");
+    assert!(
+        shown.contains(&format!(
+            "skip  {}: it needs the editor\n",
+            plugin.join("hello.ox").display()
+        )),
+        "{shown}"
+    );
+    assert!(shown.ends_with("2 tests passed\n"), "{shown}");
+}
+
+#[test]
+fn files_in_a_plugin_folder_import_its_modules() {
+    let dir = tempfile::tempdir().unwrap();
+    let plugin = dir.path().join("plugins").join("hello");
+    fs::create_dir_all(&plugin).unwrap();
+    fs::write(
+        plugin.join("plugin.ox"),
+        "(plugin hello :version \"0.1.0\")",
+    )
+    .unwrap();
+    fs::write(plugin.join("words.ox"), "(def greeting \"Hello\")").unwrap();
+    let say = plugin.join("say.ox");
+    fs::write(
+        &say,
+        "(module (import (hello words)))\n(println words/greeting)",
+    )
+    .unwrap();
+
+    let output = ox().arg(&say).output().unwrap();
+
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "Hello\n");
+}
+
+#[test]
 fn ox_test_runs_each_test_and_explains_failures() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("math.ox");

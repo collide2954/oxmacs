@@ -77,7 +77,7 @@ Another plugin imports `(hello name)` by requiring hello in its manifest, as `:r
 
 ## Test it
 
-`ox check ~/.oxmacs/plugins/hello` reports mistakes such as unknown names and wrong arities before you run anything; in a plugin folder it knows the editor API and the plugin's own modules. `ox test` runs the `test` blocks of modules that need neither the editor nor another module of the plugin; give it those files, as in `ox test ~/.oxmacs/plugins/hello/words.ox`. See [the ox command](tools).
+`ox check ~/.oxmacs/plugins/hello` reports mistakes such as unknown names and wrong arities before you run anything; in a plugin folder it knows the editor API and the plugin's own modules. `ox test ~/.oxmacs/plugins/hello` runs the `test` blocks of the plugin's modules, which can import each other; a file that needs the editor to load, such as the entry with its `defcommand`s, is skipped, so keep what you test in the other modules. See [the ox command](tools).
 
 ## The bundled plugins
 
@@ -92,7 +92,7 @@ git          0.3.0    opt-in   Git status and staging in the style of Magit
 irc          0.9.2    opt-in   An IRCv3 client in the style of ERC
 keycast      0.2.1    opt-in   Shows the keys you press and the commands they run, for demos
 life         0.2.0    opt-in   Conway's Game of Life on a canvas
-manual       0.5.9    on       The oxmacs tutorial and the Ox manual
+manual       0.5.10   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.0    opt-in   Markdown rendered as styled text
 processes    0.1.1    on       List the processes oxmacs runs, with their usage
 profiler     0.1.1    on       Find where the Ox code in oxmacs spends its time

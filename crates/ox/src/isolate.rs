@@ -1037,6 +1037,15 @@ impl Isolate {
         self.runtime.module_ids.get(name).copied().unwrap_or(USER)
     }
 
+    pub fn file_of(&self, function: Value) -> Option<&str> {
+        let closure = self.runtime.heap.closure_of(function)?;
+        closure
+            .code
+            .source
+            .as_deref()
+            .map(|source| source.name.as_str())
+    }
+
     pub fn describe(&self, module: &str, name: &str) -> Option<Description> {
         let module = self.module_id(module);
         let symbol = Sym::intern(name);

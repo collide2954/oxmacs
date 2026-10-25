@@ -6,6 +6,7 @@ use std::{env, fs};
 
 use ox::check::report::{self, Format};
 use ox::check::{Diagnostic, Severity};
+use ox::error::ErrorKind;
 use ox::span::line_column;
 use ox::value::Value;
 use ox::{Error, Isolate, read};
@@ -60,7 +61,7 @@ fn main() -> ExitCode {
         Some(path) => {
             let path = PathBuf::from(path);
             let mut isolate = Isolate::new();
-            isolate.add_root(path.parent().unwrap_or(Path::new(".")));
+            add_roots(&mut isolate, &path);
             run_file(&mut isolate, &path)
         }
         None => {
@@ -279,13 +280,19 @@ fn fmt_command(arguments: Vec<OsString>) -> ExitCode {
 
 fn profile_file(path: &Path) -> ExitCode {
     let mut isolate = Isolate::new();
-    isolate.add_root(path.parent().unwrap_or(Path::new(".")));
+    add_roots(&mut isolate, path);
     isolate.start_profiling();
     let code = run_file(&mut isolate, path);
     if let Some(profile) = isolate.stop_profiling() {
         print!("{}", profile.report());
     }
     code
+}
+
+fn add_roots(isolate: &mut Isolate, path: &Path) {
+    for root in checker::check_roots(path) {
+        isolate.add_root(root);
+    }
 }
 
 fn run_file(isolate: &mut Isolate, path: &Path) -> ExitCode {
@@ -306,21 +313,6 @@ fn run_file(isolate: &mut Isolate, path: &Path) -> ExitCode {
         }
     }
     ExitCode::FAILURE
-}
-
-fn collect(path: &Path, found: &mut Vec<PathBuf>) {
-    if !path.is_dir() {
-        found.push(path.to_owned());
-        return;
-    }
-    for entry in fs::read_dir(path).into_iter().flatten().flatten() {
-        let inner = entry.path();
-        if inner.is_dir() {
-            collect(&inner, found);
-        } else if inner.extension().is_some_and(|extension| extension == "ox") {
-            found.push(inner);
-        }
-    }
 }
 
 fn report(name: &str, error: &Error, path: &Path, source: &str) {
@@ -349,15 +341,25 @@ fn run_tests(paths: &[PathBuf]) -> ExitCode {
         paths.to_vec()
     };
     for path in &wanted {
-        collect(path, &mut files);
+        ox_files(path, &mut files);
     }
+    files.retain(|file| file.file_name().is_none_or(|name| name != "plugin.ox"));
     files.sort();
     let (mut total, mut failed) = (0_usize, 0_usize);
     for path in files {
         let source = fs::read_to_string(&path).unwrap_or_default();
-        let mut isolate = Isolate::new();
-        isolate.add_root(path.parent().unwrap_or(Path::new(".")));
-        if let Err(error) = isolate.eval_named(&path.display().to_string(), &source) {
+        let mut isolate = if checker::editor_code(&path) {
+            oxmacs_ox::checking_isolate()
+        } else {
+            Isolate::new()
+        };
+        add_roots(&mut isolate, &path);
+        let file = path.display().to_string();
+        if let Err(error) = isolate.eval_named(&file, &source) {
+            if error.kind == ErrorKind::Refused {
+                println!("skip  {}: it needs the editor", path.display());
+                continue;
+            }
             total += 1;
             failed += 1;
             report(&path.display().to_string(), &error, &path, &source);
@@ -370,6 +372,9 @@ fn run_tests(paths: &[PathBuf]) -> ExitCode {
             let name = isolate.write(field(&isolate, test, "name"));
             let name = name.trim_matches('"').to_owned();
             let run = field(&isolate, test, "run");
+            if isolate.file_of(run).is_some_and(|defined| defined != file) {
+                continue;
+            }
             total += 1;
             match isolate.call(run, &[]) {
                 Ok(_) => println!("ok    {name}"),
