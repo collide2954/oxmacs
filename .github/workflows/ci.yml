@@ -161,7 +161,8 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
-            echo "version=${base}^$(date -u +%Y%m%d%H%M)git${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            stamp=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d%H%M)
+            echo "version=${base}^${stamp}git${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
       - name: Package
         run: |
