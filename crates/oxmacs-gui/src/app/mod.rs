@@ -468,7 +468,7 @@ mod tests {
 
         assert!(ui.find("save-buffer").is_ok());
         assert!(ui.find("C-s").is_ok());
-        assert!(ui.find("-- *scratch*   L1 C0").is_ok());
+        assert!(ui.find("-- *scratch*   L1 C0   (Ox)").is_ok());
     }
 
     fn taken_over() -> App {
@@ -996,6 +996,7 @@ mod tests {
         .unwrap();
         let mut app = App::default();
         let _ = app.start_ox(Some(home.path()));
+        app.editor.set_major_mode(None);
         let long_ago = Instant::now().checked_sub(Duration::from_secs(61)).unwrap();
 
         let _ = app.update(Message::Focus(true));
