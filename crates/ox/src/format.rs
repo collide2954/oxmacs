@@ -167,6 +167,27 @@ fn raw_end(chars: &[char], at: usize, hashes: usize) -> (usize, bool) {
     (chars.len(), false)
 }
 
+fn block_end(chars: &[char], mut at: usize) -> (usize, bool) {
+    let mut depth = 1_usize;
+    while at < chars.len() {
+        match (chars[at], chars.get(at + 1)) {
+            ('|', Some('#')) => {
+                at += 2;
+                depth -= 1;
+                if depth == 0 {
+                    return (at, true);
+                }
+            }
+            ('#', Some('|')) => {
+                at += 2;
+                depth += 1;
+            }
+            _ => at += 1,
+        }
+    }
+    (chars.len(), false)
+}
+
 fn literals(chars: &[char]) -> Vec<Literal> {
     let mut found = Vec::new();
     let mut at = 0;
@@ -184,6 +205,7 @@ fn literals(chars: &[char]) -> Vec<Literal> {
                 continue;
             }
             '"' => Some(string_end(chars, at + 1)),
+            '#' if chars.get(at + 1) == Some(&'|') => Some(block_end(chars, at + 2)),
             '#' if chars.get(at + 1) == Some(&'"') => Some(regex_end(chars, at + 2)),
             '#' if chars.get(at + 1) == Some(&'r') => {
                 let hashes = chars[at + 2..]

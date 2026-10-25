@@ -86,6 +86,16 @@ fn unicode_characters_stay_whole() {
 }
 
 #[test]
+fn block_comments_keep_their_text_and_what_follows_is_formatted() {
+    let source = "(def x 1)\n#| outer (unbalanced\n   #| inner |# still \"quote\n|#\n(def   y\n2)\n";
+
+    assert_eq!(
+        formatted(source),
+        "(def x 1)\n#| outer (unbalanced\n   #| inner |# still \"quote\n|#\n(def   y\n  2)\n"
+    );
+}
+
+#[test]
 fn strings_comments_and_characters_keep_their_text() {
     let source = "(def text \"a  ( b
    c\")
