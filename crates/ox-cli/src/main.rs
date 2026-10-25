@@ -305,19 +305,16 @@ fn run_file(isolate: &mut Isolate, path: &Path) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let error = match isolate.eval_named(&path.display().to_string(), &source) {
-        Ok(_) => {
-            let unhandled = isolate.finish_tasks(None);
-            for error in &unhandled {
-                eprintln!("{}: {}", place(error, path, &source), error.message);
-            }
-            return if unhandled.is_empty() {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
-            };
+    let Err(error) = isolate.eval_named(&path.display().to_string(), &source) else {
+        let unhandled = isolate.finish_tasks(None);
+        for error in &unhandled {
+            eprintln!("{}: {}", place(error, path, &source), error.message);
         }
-        Err(error) => error,
+        return if unhandled.is_empty() {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        };
     };
     eprintln!("{}: {}", place(&error, path, &source), error.message);
     if error.traceback.len() > 1 {
