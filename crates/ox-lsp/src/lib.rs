@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use lsp_server::{Connection, ErrorCode, Message, Notification, Request, Response};
@@ -60,9 +61,10 @@ fn decode(text: &str) -> String {
     let mut out = Vec::with_capacity(bytes.len());
     let mut at = 0;
     while at < bytes.len() {
-        let escaped = (bytes[at] == b'%' && at + 2 < bytes.len())
-            .then(|| u8::from_str_radix(&text[at + 1..at + 3], 16).ok())
-            .flatten();
+        let escaped = (bytes[at] == b'%')
+            .then(|| text.get(at + 1..at + 3))
+            .flatten()
+            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
         if let Some(byte) = escaped {
             out.push(byte);
             at += 3;
@@ -76,26 +78,37 @@ fn decode(text: &str) -> String {
 
 fn path_of(uri: &str) -> Option<PathBuf> {
     let rest = decode(uri.strip_prefix("file://")?);
-    let drive = rest.len() > 2 && rest.as_bytes()[2] == b':' && rest.starts_with('/');
-    Some(PathBuf::from(if drive { &rest[1..] } else { &rest[..] }))
+    let drive = rest.as_bytes().get(2) == Some(&b':')
+        && rest.starts_with('/')
+        && rest.as_bytes()[1].is_ascii_alphabetic();
+    if drive {
+        let mut local = rest[1..].to_owned();
+        local[..1].make_ascii_uppercase();
+        return Some(PathBuf::from(local.replace('/', "\\")));
+    }
+    Some(PathBuf::from(rest))
+}
+
+fn keeps(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || b"-._~/:".contains(&byte)
 }
 
 fn uri_of(path: &Path) -> String {
-    let text = path.display().to_string().replace('\\', "/");
-    let encoded: String = text
-        .chars()
-        .map(|character| match character {
-            ' ' => "%20".to_owned(),
-            '#' => "%23".to_owned(),
-            '%' => "%25".to_owned(),
-            other => other.to_string(),
-        })
-        .collect();
-    if encoded.starts_with('/') {
-        format!("file://{encoded}")
+    let text = path.to_string_lossy().replace('\\', "/");
+    let rooted = if text.starts_with('/') {
+        text
     } else {
-        format!("file:///{encoded}")
+        format!("/{text}")
+    };
+    let mut encoded = String::from("file://");
+    for byte in rooted.bytes() {
+        if keeps(byte) {
+            encoded.push(char::from(byte));
+        } else {
+            let _ = write!(encoded, "%{byte:02X}");
+        }
     }
+    encoded
 }
 
 fn line_starts(text: &str) -> Vec<usize> {
@@ -522,4 +535,35 @@ pub fn serve(options: &Options) -> Result<(), Failure> {
     drop(connection);
     threads.join()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uris_and_paths_match_the_editor_s_vectors() {
+        for (path, uri) in [
+            (
+                r"C:\Users\ana\my code\a#b%c.ox",
+                "file:///C:/Users/ana/my%20code/a%23b%25c.ox",
+            ),
+            (
+                "/home/ana/naïve €.ox",
+                "file:///home/ana/na%C3%AFve%20%E2%82%AC.ox",
+            ),
+        ] {
+            assert_eq!(uri_of(Path::new(path)), uri);
+            assert_eq!(path_of(uri), Some(PathBuf::from(path)));
+        }
+        for (uri, path) in [
+            ("file:///c%3A/x/y.ox", r"C:\x\y.ox"),
+            ("file:///tmp/100%", "/tmp/100%"),
+            ("file:///tmp/%zz%4", "/tmp/%zz%4"),
+            ("file:///tmp/%aé%é%41", "/tmp/%aé%éA"),
+        ] {
+            assert_eq!(path_of(uri), Some(PathBuf::from(path)), "{uri}");
+        }
+        assert_eq!(path_of("https://example.com"), None);
+    }
 }

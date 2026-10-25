@@ -120,19 +120,27 @@ mod tests {
     }
 
     #[test]
-    fn paths_become_file_uris_and_back() {
-        if cfg!(windows) {
-            let path = PathBuf::from(r"C:\Users\ana\my code\main.rs");
-            assert_eq!(uri(&path), "file:///C:/Users/ana/my%20code/main.rs");
-            assert_eq!(super::path(&uri(&path)), Some(path.clone()));
-            assert_eq!(
-                super::path("file:///c%3A/Users/ana/my%20code/main.rs"),
-                Some(path)
-            );
-        } else {
-            let path = PathBuf::from("/home/ana/my code/naïve.rs");
-            assert_eq!(uri(&path), "file:///home/ana/my%20code/na%C3%AFve.rs");
-            assert_eq!(super::path(&uri(&path)), Some(path));
+    fn uris_and_paths_match_ox_lsp_s_vectors() {
+        for (local, encoded) in [
+            (
+                r"C:\Users\ana\my code\a#b%c.ox",
+                "file:///C:/Users/ana/my%20code/a%23b%25c.ox",
+            ),
+            (
+                "/home/ana/naïve €.ox",
+                "file:///home/ana/na%C3%AFve%20%E2%82%AC.ox",
+            ),
+        ] {
+            assert_eq!(uri(Path::new(local)), encoded);
+            assert_eq!(path(encoded), Some(PathBuf::from(local)));
+        }
+        for (encoded, local) in [
+            ("file:///c%3A/x/y.ox", r"C:\x\y.ox"),
+            ("file:///tmp/100%", "/tmp/100%"),
+            ("file:///tmp/%zz%4", "/tmp/%zz%4"),
+            ("file:///tmp/%aé%é%41", "/tmp/%aé%éA"),
+        ] {
+            assert_eq!(path(encoded), Some(PathBuf::from(local)), "{encoded}");
         }
         assert_eq!(path("https://example.com"), None);
     }

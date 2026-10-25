@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- `ox lsp` no longer crashes on a file URI with a `%` before a non-ASCII character, and it writes and reads file URIs the way the editor's LSP client does: every character outside the unreserved set is escaped, and Windows drive paths come back with backslashes and an upper-case drive letter.
 - Ox buffers show `#| … |#` block comments, nested ones and ones spanning lines included, and the form after `#;` as comments, and code after `#;` on the same line is no longer greyed out as if `;` started a line comment.
 - `ox fmt` keeps `#| … |#` block comments, nested ones included, exactly as written and goes on formatting the code after them, instead of indenting their text as code.
 - `ox FILE` waits for the tasks a file spawns and fails when one raises an error nothing catches, and `ox test` fails a test whose tasks raise, instead of both dropping unfinished tasks and their errors.
