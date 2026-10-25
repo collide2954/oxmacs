@@ -99,6 +99,44 @@ fn text_modules() -> String {
     table
 }
 
+fn sorted(mut names: Vec<String>) -> Vec<String> {
+    names.sort();
+    names
+}
+
+#[test]
+fn every_plugin_folder_and_file_is_bundled() {
+    let folder = workspace().join("crates/oxmacs-ox/plugins");
+    let mut on_disk: Vec<(String, Vec<String>)> = fs::read_dir(&folder)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.is_dir())
+        .map(|path| {
+            let files = fs::read_dir(&path)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+                .collect();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            (name, sorted(files))
+        })
+        .collect();
+    on_disk.sort();
+    let mut bundled: Vec<(String, Vec<String>)> = BUNDLED
+        .iter()
+        .map(|bundle| {
+            let files = bundle
+                .files
+                .iter()
+                .map(|(name, _)| (*name).to_owned())
+                .collect();
+            (bundle.name.to_owned(), sorted(files))
+        })
+        .collect();
+    bundled.sort();
+
+    assert_eq!(bundled, on_disk);
+}
+
 #[test]
 fn every_built_in_module_is_described() {
     let isolate = checking_isolate();
