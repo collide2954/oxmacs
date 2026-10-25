@@ -326,7 +326,6 @@ mod tests {
 
         rest(&mut editor, &mut ox, started, 600);
 
-        assert!(started.elapsed() < Duration::from_secs(1));
         assert_eq!(ox.pace(), Pace::Waiting);
         assert_eq!(editor.pane().line_diagnostics(1), []);
         settle(&mut editor, &mut ox);

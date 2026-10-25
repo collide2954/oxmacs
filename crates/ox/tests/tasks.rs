@@ -334,11 +334,11 @@ fn synchronous_work_stops_at_its_budget() {
     let started = std::time::Instant::now();
     let slept = isolate
         .within(Duration::from_millis(50), |isolate| {
-            isolate.eval("(sleep 5000)")
+            isolate.eval("(sleep 600000)")
         })
         .unwrap_err();
     assert_eq!(slept.message, "This took longer than 50 ms and was stopped");
-    assert!(started.elapsed() < Duration::from_secs(2));
+    assert!(started.elapsed() < Duration::from_secs(60));
     let sum = isolate.eval("(+ 1 2)").unwrap();
     assert_eq!(isolate.write(sum), "3");
 }

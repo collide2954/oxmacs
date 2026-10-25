@@ -60,28 +60,39 @@ fn opening(
     fastest
 }
 
-#[test]
-fn every_buffer_opens_quickly() {
+fn every_opening() -> Vec<(String, String, Duration)> {
     let folder = tempfile::tempdir().unwrap();
     fs::write(folder.path().join("notes.md"), "# Notes\n").unwrap();
     let mut opened = Vec::new();
-    let mut slow = Vec::new();
     for (scope, language, text) in STARTS {
         for command in Command::VARIANTS
             .iter()
             .copied()
             .filter(|command| command.scope() == scope)
         {
-            let Some((buffer, took)) = opening(folder.path(), language, text, command) else {
-                continue;
-            };
-            if took > BUDGET {
-                slow.push(format!("{} opened {buffer} in {took:?}", command.name()));
+            if let Some((buffer, took)) = opening(folder.path(), language, text, command) {
+                opened.push((command.name().to_owned(), buffer, took));
             }
-            opened.push(buffer);
         }
     }
+    opened
+}
+
+#[test]
+fn every_buffer_command_opens_its_buffer() {
+    let opened = every_opening();
 
     assert!(opened.len() >= 14, "{opened:?}");
+}
+
+#[test]
+#[ignore = "a timing budget; run with --ignored on a quiet machine"]
+fn every_buffer_opens_quickly() {
+    let slow: Vec<_> = every_opening()
+        .into_iter()
+        .filter(|(_, _, took)| *took > BUDGET)
+        .map(|(command, buffer, took)| format!("{command} opened {buffer} in {took:?}"))
+        .collect();
+
     assert!(slow.is_empty(), "slower than {BUDGET:?}: {slow:#?}");
 }
