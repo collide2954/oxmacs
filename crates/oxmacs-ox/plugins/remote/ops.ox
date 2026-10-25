@@ -175,7 +175,7 @@
   "Runs command in dir on host, returning its :status and :lines."
   (unless (can-run? host)
     (raise (error (str host.name " has no shell to run commands in"))))
-  (shell/run! host (str "cd -- " (shell/quote dir) " && " command)))
+  (shell/run! host (str "cd -- " (shell/quote dir) " && {{ " command "\n} </dev/null")))
 
 (def (search host dir pattern)
   "The lines below dir on host that hold pattern, each a map of :path, :line and :text."

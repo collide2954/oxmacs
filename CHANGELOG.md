@@ -4,6 +4,10 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- A command run with `!` in the remote file browser that reads its input, such as `cat`, gets none and finishes, instead of hanging the host's connection and swallowing the commands after it.
+
 ### Security
 
 - `net/send` refuses a line holding a carriage return or line feed instead of sending it to the server as two lines, and IRC sends text with a lone carriage return as separate lines after asking, so pasted text can't slip a second command to the server.

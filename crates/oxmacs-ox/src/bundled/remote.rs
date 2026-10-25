@@ -232,6 +232,23 @@ fn commands_run_and_searches_find_lines_on_the_host() {
 }
 
 #[test]
+fn a_command_that_reads_input_gets_none_instead_of_the_shells_next_commands() {
+    let (_far, _home, mut editor, mut ox) = browsing();
+
+    press(&mut editor, &mut ox, "!");
+    answer(&mut editor, &mut ox, "cat; echo after cat");
+    let output = editor.buffer().contents();
+    assert!(output.contains("after cat"), "{output}");
+    assert!(output.contains("Finished"), "{output}");
+
+    press(&mut editor, &mut ox, "q");
+    press(&mut editor, &mut ox, "!");
+    answer(&mut editor, &mut ox, "echo still here");
+    let output = editor.buffer().contents();
+    assert!(output.contains("still here"), "{output}");
+}
+
+#[test]
 fn a_remote_shell_runs_what_is_typed() {
     let (_far, _home, mut editor, mut ox) = browsing();
     let keys = |editor: &mut Editor, ox: &mut Ox, notation: &str| {
