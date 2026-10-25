@@ -57,7 +57,7 @@ fn evaluated(editor: &mut Editor, ox: &mut Ox, source: &str) -> String {
 fn keys_show_only_once_keycast_is_used() {
     let (_home, mut editor, mut ox) = started("");
     press(&mut editor, &mut ox, "C-x h");
-    assert!(rows(&editor).is_empty());
+    assert_eq!(rows(&editor), Vec::<String>::new());
 
     let (_home, mut editor, mut ox) = casting("");
     press(&mut editor, &mut ox, "C-x h");
@@ -75,7 +75,7 @@ fn typing_and_editing_keys_never_show() {
     typed(&mut editor, &mut ox, "hello there");
     press(&mut editor, &mut ox, "DEL <home> <delete> <end>");
 
-    assert!(rows(&editor).is_empty());
+    assert_eq!(rows(&editor), Vec::<String>::new());
     assert_eq!(editor.buffer().contents(), "ello ther");
 }
 
@@ -130,7 +130,7 @@ fn m_x_shows_the_command_it_ran() {
     let (_home, mut editor, mut ox) = casting("");
 
     press(&mut editor, &mut ox, "M-x");
-    assert!(rows(&editor).is_empty());
+    assert_eq!(rows(&editor), Vec::<String>::new());
     typed(&mut editor, &mut ox, "end-of-buffer");
     press(&mut editor, &mut ox, "RET");
 
@@ -167,6 +167,6 @@ fn keys_can_show_large_at_the_bottom_center_or_in_the_mode_line() {
     let (_home, mut editor, mut ox) = casting(" :config {placement: :mode-line}");
     press(&mut editor, &mut ox, "C-x h C-n C-n");
 
-    assert!(rows(&editor).is_empty());
+    assert_eq!(rows(&editor), Vec::<String>::new());
     assert_eq!(editor.mode_line_segments(), ["[C-n] ×2 next-line"]);
 }

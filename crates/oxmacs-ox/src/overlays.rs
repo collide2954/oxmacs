@@ -279,7 +279,7 @@ mod tests {
             "(set-overlay :keys nil) (set-overlay :other [])",
         )
         .unwrap();
-        assert!(shown(&editor).is_empty());
+        assert_eq!(shown(&editor), Vec::<&super::Overlay>::new());
     }
 
     #[test]
@@ -318,6 +318,6 @@ mod tests {
             error(&mut ox, &mut editor, r#"(set-overlay :x ["a"] :size 2)"#),
             "set-overlay takes :place and :scale"
         );
-        assert!(shown(&editor).is_empty());
+        assert_eq!(shown(&editor), Vec::<&super::Overlay>::new());
     }
 }
