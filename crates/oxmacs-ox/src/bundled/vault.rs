@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::Path;
 
-use ox::Isolate;
 use ox::value::print;
 use oxmacs_core::editor::{Editor, Effect};
 

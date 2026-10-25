@@ -8,7 +8,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use ox::Isolate;
 use ox::value::print;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::input::KeySequence;
