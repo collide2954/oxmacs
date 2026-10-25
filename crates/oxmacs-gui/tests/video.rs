@@ -1495,7 +1495,17 @@ fn fix_the_typo(film: &mut Film, app: &mut App) {
     film.press(app, "C-x C-e");
     until(app, "the fetch", flashing);
     fading(film, app);
-    film.shot(app, 2.0);
+    film.shot(app, 1.5);
+    rest(app, 0.7);
+    until(app, "the checker to clear the error", |app| {
+        app.editor()
+            .pane()
+            .status()
+            .lint
+            .is_none_or(|lint| !lint.contains('E'))
+    });
+    film.shot(app, 1.0);
+    film.press(app, "C-x 1");
 }
 
 fn build_the_view(film: &mut Film, app: &mut App) {
@@ -1507,6 +1517,15 @@ fn build_the_view(film: &mut Film, app: &mut App) {
     film.press(app, "C-c C-b");
     until(app, "the buffer's flashes", flashing);
     fading(film, app);
+    rest(app, 0.7);
+    until(app, "the checker to find nothing", |app| {
+        app.editor()
+            .pane()
+            .status()
+            .lint
+            .is_none_or(|lint| lint.is_empty())
+    });
+    film.shot(app, 1.0);
 }
 
 fn read_the_news(film: &mut Film, app: &mut App) {
