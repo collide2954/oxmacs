@@ -604,10 +604,7 @@ mod tests {
 
         let (app, _) = App::boot_with(&[], Some(home.path()), false);
 
-        assert_eq!(
-            app.editor().config(),
-            &oxmacs_core::config::Config::default()
-        );
+        assert_eq!(app.editor().config(), &Config::default());
         assert_eq!(app.editor().buffer().name(), "*oxmacs*");
     }
 
