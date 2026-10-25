@@ -61,7 +61,7 @@
 [(constantly 1) ((constantly 1) 2 3) (identity 4) (not false) (nil? false) (some? nil)] ;=> [#<fn> 1 4 true false false]
 [(error) (error "m") (type-error "t" 5) (expectation-failed)] ;=> [#error{message: "error" traceback: nil} #error{message: "m" traceback: nil} #type-error{message: "t" traceback: 5} #expectation-failed{message: "expectation-failed" traceback: nil}]
 (error 1 2 3) ;! error takes 0 to 2 arguments, got 3
-[@registered-tests (contains? plain-heads "and") (count plain-heads)] ;=> [[] true 11]
+[@registered-tests (contains? plain-heads "and") (count plain-heads)] ;=> [[] true 12]
 [(shown-plainly? 1) (shown-plainly? 'a) (shown-plainly? "s") (shown-plainly? 99999999999999999999) (shown-plainly? [1])] ;=> [true false true true false]
 [(explain '(= (+ 1 1) 3) [2 3]) (explain '(f "a" x) ["a" 1]) (explain '(f) [])] ;=> ["(= (+ 1 1) 3)\n  (+ 1 1) => 2" "(f \"a\" x)\n  x => 1" "(f)"]
 (explain 5 []) ;! rest expects a collection, got 5
@@ -136,6 +136,7 @@
 [(expect (= 1 1)) (expect (when true 1)) (expect 1)] ;=> [true true true]
 [(try (expect (when false 1)) (catch expectation-failed e e.message)) (try (expect nil) (catch expectation-failed e e.message))] ;=> ["(when false 1)" "nil"]
 [(try (expect (> 1 2 3)) (catch expectation-failed e e.message)) (try (expect ((fn [x] x) false)) (catch expectation-failed e e.message))] ;=> ["(> 1 2 3)" "((fn [x] x) false)"]
+(let [m {on: true off: false}] [(expect m.on) (try (expect m.off) (catch expectation-failed _ :failed))]) ;=> [true :failed]
 (do (test "x" 1) (test "y" (expect false)) [(map :name @registered-tests) (try ((:run (last @registered-tests))) (catch expectation-failed e e.message))]) ;=> [["x" "y"] "false"]
 (defrule (my-unless test body) (if test nil body)) [(my-unless false 1) (my-unless true 1)] ;=> [1 nil]
 (defrules swap-pair [] [(swap-pair a b) [b a]]) (swap-pair 1 2) ;=> [2 1]

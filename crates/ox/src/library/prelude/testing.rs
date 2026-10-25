@@ -9,8 +9,8 @@ use crate::vm::build::{full, make_set, make_vector};
 
 use super::sequences::zipped;
 
-pub(super) const PLAIN_HEADS: [&str; 11] = [
-    "and", "or", "not", "if", "when", "unless", "cond", "let", "do", "match", "try",
+pub(super) const PLAIN_HEADS: [&str; 12] = [
+    "and", "or", "not", "if", "when", "unless", "cond", "let", "do", "match", "try", ".",
 ];
 
 pub(super) fn shown_plainly(heap: &Heap, form: Value) -> bool {
