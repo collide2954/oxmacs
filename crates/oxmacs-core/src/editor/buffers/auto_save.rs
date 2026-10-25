@@ -217,6 +217,13 @@ mod tests {
     #[test]
     fn a_newer_copy_is_offered_when_the_file_is_visited_again() {
         let (dir, cache, mut editor) = recovering();
+        let earlier = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
+        fs::File::options()
+            .write(true)
+            .open(dir.path().join("src").join("main.rs"))
+            .unwrap()
+            .set_modified(earlier)
+            .unwrap();
         edited(&mut editor);
         editor.auto_save();
         let mut later = Editor::new();
