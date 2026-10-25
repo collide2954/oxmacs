@@ -89,7 +89,7 @@ calendar     0.2.3    opt-in   Calendars in .ics files, with CalDAV sync, remind
 customize    0.1.3    on       Change the editor's and plugins' settings in a form
 dired        0.2.5    on       List directories and manage their files
 git          0.3.1    opt-in   Git status and staging in the style of Magit
-irc          0.9.6    opt-in   An IRCv3 client in the style of ERC
+irc          0.9.7    opt-in   An IRCv3 client in the style of ERC
 keycast      0.2.1    opt-in   Shows the keys you press and the commands they run, for demos
 life         0.2.2    opt-in   Conway's Game of Life on a canvas
 manual       0.5.19   on       The oxmacs tutorial and the Ox manual

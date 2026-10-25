@@ -194,54 +194,6 @@ fn eval(editor: &mut Editor, ox: &mut Ox, source: &str) -> String {
 }
 
 #[test]
-fn lines_are_parsed_with_their_tags_source_and_params() {
-    let (_home, mut editor, mut ox) = started("");
-
-    assert_eq!(
-        eval(
-            &mut editor,
-            &mut ox,
-            r#"(module (import (irc protocol :as p)))
-               (let [l (p/parse-line "@time=2026-10-23T05:43:15.656Z;msgid=a\\sb\\:c :bo!b@host PRIVMSG #oxmacs :hi there")]
-                 [l.nick l.user l.host l.command l.params (get l.tags "msgid") (get l.tags "time")])"#
-        ),
-        r##"["bo" "b" "host" "PRIVMSG" ["#oxmacs" "hi there"] "a b;c" "2026-10-23T05:43:15.656Z"]"##
-    );
-    assert_eq!(
-        eval(
-            &mut editor,
-            &mut ox,
-            r##"(module (import (irc protocol :as p)))
-               [(p/format-line "PRIVMSG" ["#oxmacs" "hi there"] :tags {"+draft/reply" "x;y z"})
-                (p/format-line "NICK" ["ana"])
-                (p/format-line "PRIVMSG" ["#c" ":)"])
-                (get (p/parse-line "PING :tok") :params)
-                (get (p/parse-line ":srv 001 ana :Welcome") :command)]"##
-        ),
-        r#"["@+draft/reply=x\\:y\\sz PRIVMSG #oxmacs :hi there" "NICK ana" "PRIVMSG #c ::)" ["tok"] "001"]"#
-    );
-}
-
-#[test]
-fn ctcp_formatting_and_nicks_are_understood() {
-    let (_home, mut editor, mut ox) = started("");
-
-    assert_eq!(
-        eval(
-            &mut editor,
-            &mut ox,
-            r##"(module (import (irc protocol :as p)))
-               [(p/action "\u{1}ACTION waves\u{1}") (p/ctcp "\u{1}VERSION\u{1}") (p/action "hi")
-                (p/styled "\u{2}bold\u{2} \u{3}4,1red\u{f} plain") (p/plain-text "\u{3}12blue\u{3} done")
-                (p/same-nick? "Ana[m]" "ana{{m}") (p/channel? "#x") (p/channel? "bo")
-                (p/sasl-plain "ana" "pw") (p/split-message "aaa bbb ccc" 7)
-                (= (p/nick-face "Bo") (p/nick-face "bo"))]"##
-        ),
-        r#"["waves" ["VERSION" ""] nil [["bold" :heading] " " ["red" :error] " plain"] "blue done" true true false "YW5hAGFuYQBwdw==" ["aaa bbb" "ccc"] true]"#
-    );
-}
-
-#[test]
 fn messages_fill_the_width_beside_an_aligned_nick_column() {
     let (_home, mut editor, mut ox) = started("");
 

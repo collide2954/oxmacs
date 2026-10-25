@@ -187,3 +187,31 @@
           at (if (and space (> space (// width 2))) space width)]
       (vec (cons (string/slice text 0 at)
                  (split-message (string/trim-start (string/slice text at)) width))))))
+
+(test "lines are parsed with their tags, source and params"
+  (let [l (parse-line "@time=2026-10-23T05:43:15.656Z;msgid=a\\sb\\:c :bo!b@host PRIVMSG #oxmacs :hi there")]
+    (expect (= [l.nick l.user l.host l.command l.params]
+               ["bo" "b" "host" "PRIVMSG" ["#oxmacs" "hi there"]]))
+    (expect (= (get l.tags "msgid") "a b;c"))
+    (expect (= (get l.tags "time") "2026-10-23T05:43:15.656Z")))
+  (expect (= (get (parse-line "PING :tok") :params) ["tok"]))
+  (expect (= (get (parse-line ":srv 001 ana :Welcome") :command) "001")))
+
+(test "lines are written with escaped tags and a colon where needed"
+  (expect (= (format-line "PRIVMSG" ["#oxmacs" "hi there"] :tags {"+draft/reply" "x;y z"})
+             "@+draft/reply=x\\:y\\sz PRIVMSG #oxmacs :hi there"))
+  (expect (= (format-line "NICK" ["ana"]) "NICK ana"))
+  (expect (= (format-line "PRIVMSG" ["#c" ":)"]) "PRIVMSG #c ::)")))
+
+(test "ctcp, formatting and nicks are understood"
+  (expect (= (action "\u{1}ACTION waves\u{1}") "waves"))
+  (expect (= (ctcp "\u{1}VERSION\u{1}") ["VERSION" ""]))
+  (expect (nil? (action "hi")))
+  (expect (= (styled "\u{2}bold\u{2} \u{3}4,1red\u{f} plain") [["bold" :heading] " " ["red" :error] " plain"]))
+  (expect (= (plain-text "\u{3}12blue\u{3} done") "blue done"))
+  (expect (same-nick? "Ana[m]" "ana{{m}"))
+  (expect (channel? "#x"))
+  (expect (not (channel? "bo")))
+  (expect (= (sasl-plain "ana" "pw") "YW5hAGFuYQBwdw=="))
+  (expect (= (split-message "aaa bbb ccc" 7) ["aaa bbb" "ccc"]))
+  (expect (= (nick-face "Bo") (nick-face "bo"))))
