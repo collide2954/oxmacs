@@ -710,6 +710,24 @@ fn pasted_lines_are_sent_one_by_one_after_asking() {
 }
 
 #[test]
+fn a_carriage_return_alone_splits_lines_too_instead_of_reaching_the_server() {
+    let (fake, _home, mut editor, mut ox) = joined();
+    run(&mut editor, &mut ox, "irc-switch");
+    type_in(&mut editor, &mut ox, "#oxmacs");
+    keys(&mut editor, &mut ox, "RET");
+    eval(&mut editor, &mut ox, "(set-input \"#oxmacs\" \"hi\rQUIT\")");
+
+    keys(&mut editor, &mut ox, "RET");
+    assert!(pump(&mut editor, &mut ox, |editor, _| editor
+        .question()
+        .is_some()));
+    keys(&mut editor, &mut ox, "y");
+
+    fake.expect(&mut editor, &mut ox, "PRIVMSG #oxmacs hi");
+    fake.expect(&mut editor, &mut ox, "PRIVMSG #oxmacs QUIT");
+}
+
+#[test]
 fn messages_are_logged_by_day_and_found_again() {
     let fake = Fake::start();
     let (home, mut editor, mut ox) =

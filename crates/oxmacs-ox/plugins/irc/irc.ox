@@ -98,13 +98,14 @@
                (when (await (yes-or-no (str "Connect to " name " now? ")))
                  (client/connect! config :show true))))))
 
-(def (send-text! buffer text)
-  (if (string/includes? text "\n")
-    (let [lines (vec (remove string/blank? (string/lines text)))
-          entry (client/buffer-entry buffer)]
-      (when (await (yes-or-no (str "Send " (count lines) " lines to " entry.target "? ")))
-        (client/say-lines! buffer lines)))
-    (client/say! buffer text)))
+(def (send-text! buffer typed)
+  (let [text (string/replace (string/replace typed "\r\n" "\n") "\r" "\n")]
+    (if (string/includes? text "\n")
+      (let [lines (vec (remove string/blank? (string/lines text)))
+            entry (client/buffer-entry buffer)]
+        (when (await (yes-or-no (str "Send " (count lines) " lines to " entry.target "? ")))
+          (client/say-lines! buffer lines)))
+      (client/say! buffer text))))
 
 (def (words-after text)
   (let [[command rest] (let [at (string/index-of text " ")]

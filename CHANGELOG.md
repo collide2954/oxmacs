@@ -6,7 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Security
 
-- `net/send` refuses a line holding a carriage return or line feed instead of sending it to the server as two lines.
+- `net/send` refuses a line holding a carriage return or line feed instead of sending it to the server as two lines, and IRC sends text with a lone carriage return as separate lines after asking, so pasted text can't slip a second command to the server.
 
 ## [0.14.0] - 2026-10-25
 
