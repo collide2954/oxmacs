@@ -6,7 +6,7 @@ oxmacs feels like Emacs to use: the same keys, a minibuffer, `M-x`, buffers, win
 
 ## Building
 
-You need a stable Rust toolchain; `rust-toolchain.toml` picks it for you.
+You need Rust 1.99.1; `rust-toolchain.toml` picks it for you.
 
 ```sh
 cargo run -p oxmacs --release
