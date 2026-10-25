@@ -88,6 +88,22 @@ fn natives_and_special_forms_are_described_from_the_library_docs() {
 }
 
 #[test]
+fn library_constants_are_described_with_their_docs() {
+    let mut isolate = Isolate::new();
+    isolate.eval("(module (import (ox math)))").unwrap();
+
+    let pi = described(&mut isolate, "math/pi");
+
+    assert_eq!(pi.kind, Kind::Value);
+    assert_eq!(pi.signature, "math/pi");
+    assert!(
+        pi.doc.as_deref().is_some_and(|doc| doc.contains("circle")),
+        "{:?}",
+        pi.doc
+    );
+}
+
+#[test]
 fn error_types_and_made_functions_describe_their_parameters() {
     let mut isolate = shapes();
     isolate.eval("(def always (constantly 1))").unwrap();

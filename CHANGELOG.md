@@ -108,6 +108,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 ### Added
 
 - Ox has loops: `(loop [i 0] … (again (inc i)))` goes round in constant space, `for` builds a vector and `each` runs code for every item, both with nested bindings, `:when` and `:let`, and `while` and `until` repeat on changing state. `case` picks a clause by constant: `(case key [:up 1] [(:left :right) 2] [else 3])`.
+- `(ox math)` has `sqrt`, `pow`, `exp`, `log`, `log10`, `sin`, `cos`, `tan`, `atan2`, `pi`, `e`, `clamp`, `lerp`, and random numbers with `random`, `random-int` and `random-pick`. `pow` stays exact for whole numbers, so `(math/pow 2 100)` is the whole number, and a square root or logarithm out of range raises an error instead of giving NaN.
 - A module's own definitions, and names it imports with `:only`, take the place of built-in macros of the same name, so a module that defines its own `each` or `case` keeps calling it.
 - `console-start` takes `:errors`, patterns of lines that mean the code just sent failed: such a line reports that code to `on-evaluate` again as failed, so zap flashes R code that raised an error in the error color.
 - `(ox xml)` reads XML into maps of `:tag`, `:attrs` and `:children` with `xml/parse`, finds elements along paths such as `"channel/item"` with `xml/find` and `xml/find-all`, reads `xml/text` and `xml/attr`, and writes the same maps back as XML with `xml/write`.

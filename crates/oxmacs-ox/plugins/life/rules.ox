@@ -1,5 +1,5 @@
 (module
-  (import (ox crypto))
+  (import (ox math))
   (export width height step seeded cells points))
 
 (def width 80)
@@ -47,7 +47,7 @@
 
 (def (random-cells)
   (cells (keep (fn [index]
-                 (when (= 0 (crypto/random-below 5))
+                 (when (= 0 (math/random-int 5))
                    [(mod index width) (// index width)]))
                (range (* width height)))))
 

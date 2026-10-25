@@ -107,6 +107,21 @@ fn random(count: usize) -> Result<Vec<u8>, Error> {
     Ok(bytes)
 }
 
+pub(crate) fn random_bits() -> Result<u64, Error> {
+    let bytes = random(8)?;
+    Ok(u64::from_le_bytes(bytes.try_into().unwrap_or([0; 8])))
+}
+
+pub(crate) fn below(bound: u64) -> Result<u64, Error> {
+    let limit = u64::MAX - u64::MAX % bound;
+    loop {
+        let drawn = random_bits()?;
+        if drawn < limit {
+            return Ok(drawn % bound);
+        }
+    }
+}
+
 fn wrong(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
     Error::new(format!(
         "{name} expects {wanted}, got {}",
@@ -305,14 +320,7 @@ pub fn install(isolate: &mut Isolate) {
         if bound == 0 {
             return Err(Error::new("crypto/random-below needs a bound above 0"));
         }
-        let limit = u64::MAX - u64::MAX % bound;
-        loop {
-            let bytes = random(8)?;
-            let drawn = u64::from_le_bytes(bytes.try_into().unwrap_or([0; 8]));
-            if drawn < limit {
-                return Ok(Value::Int(i64::try_from(drawn % bound).unwrap_or(0)));
-            }
-        }
+        Ok(Value::Int(i64::try_from(below(bound)?).unwrap_or(0)))
     });
     isolate.define_native_in(MODULE, "derive-key", 2, None, derive_key);
     isolate.define_native_in(MODULE, "seal", 2, Some(2), seal);

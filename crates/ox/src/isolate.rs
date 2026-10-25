@@ -642,6 +642,14 @@ impl Isolate {
         self.install_native(module, name, least, most, function);
     }
 
+    pub(crate) fn define_value_in(&mut self, module: &str, name: &str, value: Value, doc: &str) {
+        let place = self.runtime.module_named(module);
+        let name = Sym::intern(name);
+        self.runtime.define(place, name, value);
+        self.runtime
+            .document(place, name, Some(doc.to_owned()), None);
+    }
+
     pub(crate) fn define_control(
         &mut self,
         name: &str,

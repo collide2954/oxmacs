@@ -6,6 +6,7 @@ mod files;
 mod http;
 pub mod image;
 mod json;
+mod math;
 mod net;
 pub(crate) mod numbers;
 pub(crate) mod ordering;
@@ -48,6 +49,10 @@ pub const MODULES: &[(&str, &str)] = &[
     (
         "ox/xml",
         "Reading XML into maps, finding elements along paths, and writing XML",
+    ),
+    (
+        "ox/math",
+        "Roots, powers, logarithms, angles, clamping and random numbers",
     ),
     (
         "ox/time",
@@ -135,6 +140,7 @@ fn all_equal(heap: &Heap, arguments: &[Value]) -> bool {
 
 pub fn install(isolate: &mut Isolate) {
     numbers::install(isolate);
+    math::install(isolate);
     errors::install(isolate);
     patterns::install(isolate);
     rules::install(isolate);

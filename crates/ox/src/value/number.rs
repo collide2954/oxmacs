@@ -23,7 +23,7 @@ pub fn to_float(number: i64) -> f64 {
     number as f64
 }
 
-fn shrink(number: BigInt) -> Number {
+pub(crate) fn shrink(number: BigInt) -> Number {
     i64::try_from(&number).map_or(Number::Big(number), Number::Int)
 }
 
