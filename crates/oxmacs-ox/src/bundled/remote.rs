@@ -134,6 +134,21 @@ fn listings_paths_and_quotes_are_understood() {
 }
 
 #[test]
+fn every_sftp_transfer_gets_a_file_of_its_own() {
+    let (home, mut editor, mut ox) = started("");
+
+    let found = eval(
+        &mut editor,
+        &mut ox,
+        r#"(module (import (remote ops :as ops) (ox path)))
+           (let [first (ops/transfer-file) second (ops/transfer-file)]
+             [(= first second) (= (path/parent first) (path/join (oxmacs-home) "remote"))])"#,
+    );
+
+    assert_eq!(found, "[false true]", "{}", home.path().display());
+}
+
+#[test]
 fn remote_files_open_locally_and_go_back_when_saved() {
     let (far, _home, mut editor, mut ox) = browsing();
     let listing = editor.buffer().contents();

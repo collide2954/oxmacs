@@ -4,7 +4,7 @@
           (remote hosts :as hosts)
           (vault store :as vault))
   (export home list-dir parse-listing read-text download! upload! remove! rename! make-dir! run search join-path
-          parent-of ftp-url can-run?))
+          parent-of ftp-url can-run? transfer-file))
 
 (def listing-pattern
   "^([-dlbcpsD])([-rwxsStT]{{9})\\S*\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\d{{4}-\\d{{2}-\\d{{2} \\d{{2}:\\d{{2}|[A-Z][a-z]{{2}\\s+\\d{{1,2}\\s+(?:\\d{{4}|\\d{{1,2}:\\d{{2}))\\s(.*)$")
@@ -76,6 +76,10 @@
       (raise (error (string/trim (str "sftp: " found.stderr)))))
     found))
 
+(def (transfer-file)
+  "A file of its own in the oxmacs home for one sftp transfer to pass through."
+  (path/join (oxmacs-home) "remote" (str ".transfer-" (crypto/random 8))))
+
 (def (sftp-word text)
   (str "\"" (string/replace (string/replace text "\\" "\\\\") "\"" "\\\"") "\""))
 
@@ -110,9 +114,12 @@
   (let [protocol (hosts/protocol-of host)]
     (cond ((= protocol :ftp) (get (curl host remote []) :stdout))
       ((= protocol :sftp)
-       (let [local (path/join (oxmacs-home) "remote" ".transfer")]
-         (sftp host [(str "get " (sftp-word remote) " " (sftp-word local))])
-         (await (file/read local))))
+       (let [local (transfer-file)]
+         (await (file/make-dir (path/parent local)))
+         (try (sftp host [(str "get " (sftp-word remote) " " (sftp-word local))])
+           (await (file/read local))
+           (finally (when (await (file/exists? local))
+                      (await (file/remove local)))))))
       (else (crypto/from-base64 (string/join "" (base64-of host remote nil)))))))
 
 (def (download! host remote local {size nil on-progress nil})
