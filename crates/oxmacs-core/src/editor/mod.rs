@@ -4,6 +4,7 @@ mod console;
 mod dispatch;
 mod editing;
 mod effect;
+mod file_types;
 mod flash;
 mod heard;
 mod job;
@@ -171,6 +172,7 @@ pub struct Editor {
     configured_handlers: Vec<fn(&mut Editor)>,
     disk_handlers: Vec<fn(&mut Editor)>,
     directory_handler: Option<fn(&mut Editor, &Path) -> bool>,
+    file_openers: Vec<(String, file_types::FileOpener)>,
     save_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
     saved_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
     opened_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
@@ -269,6 +271,7 @@ impl Editor {
             configured_handlers: Vec::new(),
             disk_handlers: Vec::new(),
             directory_handler: None,
+            file_openers: Vec::new(),
             save_handlers: Vec::new(),
             saved_handlers: Vec::new(),
             opened_handlers: Vec::new(),

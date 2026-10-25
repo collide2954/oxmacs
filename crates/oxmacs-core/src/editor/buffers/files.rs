@@ -257,6 +257,9 @@ impl Editor {
                 None => self.open_path_prompt("Find file: ", Purpose::FindFile, &path),
             };
         }
+        if let Some(open) = self.file_opener(&path) {
+            return open(self, &path);
+        }
         if let Some(index) = self.buffers.position(|buffer| {
             buffer
                 .file()
