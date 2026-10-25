@@ -301,6 +301,12 @@
 
 (json/read text) "The value that JSON text describes: objects become maps with keyword keys, and arrays vectors."
 (json/write value) "value as JSON text. Map keys must be keywords or strings."
+(xml/parse text) "The root element of XML text, as a map of :tag, its name; :attrs, a map of its attributes; and :children, a vector of its child elements and text. Names lose their namespace prefixes, text that is only whitespace is left out, and so are comments."
+(xml/find element path) "The first element along path below element, child tag names joined by /, such as \"channel/item\"; nil when there is none or element is nil."
+(xml/find-all element path) "Every element along path below element, such as \"channel/item\", in document order."
+(xml/text element) "All the text inside element and its descendants, joined; a string is its own text, and nil gives nil."
+(xml/attr element name) "The value of element's attribute name, given as a string or keyword; nil when it has none."
+(xml/write element) "element, a map like those xml/parse makes, as XML text, with its text and attribute values escaped."
 
 (http/get url) "A promise of the response to a GET of url, as a map of :status, :headers and :body."
 (http/encode text) "text made safe for a URL, with other characters written as %XX."

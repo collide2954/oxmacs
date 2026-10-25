@@ -19,6 +19,7 @@ mod strings;
 mod tasks;
 mod time;
 mod types;
+mod xml;
 
 use std::io::{self, Write};
 
@@ -44,6 +45,10 @@ pub const MODULES: &[(&str, &str)] = &[
     ),
     ("ox/json", "Reading and writing JSON"),
     ("ox/csv", "Reading CSV into rows"),
+    (
+        "ox/xml",
+        "Reading XML into maps, finding elements along paths, and writing XML",
+    ),
     (
         "ox/time",
         "Dates and times: the clock, parsing, formatting, time zones and durations",
@@ -137,6 +142,7 @@ pub fn install(isolate: &mut Isolate) {
     tasks::install(isolate);
     time::install(isolate);
     json::install(isolate);
+    xml::install(isolate);
     http::install(isolate);
     net::install(isolate);
     crypto::install(isolate);

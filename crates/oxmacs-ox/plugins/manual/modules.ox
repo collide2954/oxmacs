@@ -63,6 +63,7 @@ ox/string   Text: searching, splitting, joining, trimming, padding and changing 
 ox/regex    Regular expressions: matching, finding, replacing and splitting
 ox/json     Reading and writing JSON
 ox/csv      Reading CSV into rows
+ox/xml      Reading XML into maps, finding elements along paths, and writing XML
 ox/time     Dates and times: the clock, parsing, formatting, time zones and durations
 ox/path     Taking paths apart and joining them, the home folder and ~ expansion
 ox/file     Reading, writing, listing, copying, renaming and removing files and folders

@@ -52,6 +52,7 @@ regex = "1.13.1"
 resvg = { version = "0.48.1", default-features = false, features = ["text", "system-fonts"] }
 ring = "0.17.14"
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
+roxmltree = "0.21.1"
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0.229", features = ["derive"] }
 semver = "1.0.28"

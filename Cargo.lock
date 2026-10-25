@@ -3647,6 +3647,7 @@ dependencies = [
  "regex",
  "resvg",
  "ring",
+ "roxmltree 0.21.1",
  "rustls",
  "serde",
  "serde_json",
