@@ -21,7 +21,17 @@ pub const BUNDLED: &[Bundle] = &[
     LANGUAGES,
     TABS,
     EXPLORER,
+    ZEN,
 ];
+
+const ZEN: Bundle = Bundle {
+    name: "zen",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/zen/plugin.ox")),
+        ("zen.ox", include_str!("../plugins/zen/zen.ox")),
+        ("look.ox", include_str!("../plugins/zen/look.ox")),
+    ],
+};
 
 const EXPLORER: Bundle = Bundle {
     name: "explorer",
@@ -352,3 +362,6 @@ mod tabs;
 
 #[cfg(test)]
 mod explorer;
+
+#[cfg(test)]
+mod zen;
