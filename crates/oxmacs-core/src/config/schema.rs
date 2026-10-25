@@ -127,6 +127,12 @@ pub const SETTINGS: &[Setting] = &[
     ),
     setting(
         EDITING,
+        "indent-tabs",
+        Kind::Toggle,
+        "Indent with tabs instead of spaces, unless a mode or .editorconfig chooses",
+    ),
+    setting(
+        EDITING,
         "language-servers",
         Kind::Toggle,
         "Start a language server for files that have one installed",

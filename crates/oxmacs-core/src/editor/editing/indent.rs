@@ -116,7 +116,13 @@ impl Editor {
         let start = buffer.line_start(line);
         let text = buffer.line_text(line);
         let leading = text.chars().take_while(|c| matches!(c, ' ' | '\t')).count();
-        let wanted = " ".repeat(target);
+        let wanted = if self.config.indent_tabs {
+            let tab = self.tab_width.max(1);
+            format!("{}{}", "\t".repeat(target / tab), " ".repeat(target % tab))
+        } else {
+            " ".repeat(target)
+        };
+        let width = wanted.chars().count();
         if text.chars().take(leading).eq(wanted.chars()) {
             if buffer.point() >= start && buffer.point() < start + leading {
                 buffer.set_point(start + leading);
@@ -127,9 +133,9 @@ impl Editor {
         let moved = if point < start {
             point
         } else if point <= start + leading {
-            start + target
+            start + width
         } else {
-            point - leading + target
+            point - leading + width
         };
         buffer.delete_range(start..start + leading);
         buffer.set_point(start);
@@ -198,6 +204,33 @@ mod tests {
 
         assert_eq!(lines(&editor)[1], "    let x = 1;");
         assert_eq!(editor.buffer().point(), 17);
+    }
+
+    #[test]
+    fn indentation_is_made_of_tabs_when_indent_tabs_is_on() {
+        let mut editor = rust("fn a() {\nlet x = 1;\nif b {\nc();\n}\n}", 13);
+        editor.reconfigure(&crate::config::Config {
+            indent_tabs: true,
+            tab_width: 4,
+            ..crate::config::Config::default()
+        });
+
+        press(&mut editor, "TAB");
+        assert_eq!(lines(&editor)[1], "\tlet x = 1;");
+        assert_eq!(editor.buffer().point(), 14);
+
+        press(&mut editor, "C-x h C-M-\\");
+        assert_eq!(
+            lines(&editor),
+            [
+                "fn a() {",
+                "\tlet x = 1;",
+                "\tif b {",
+                "\t\tc();",
+                "\t}",
+                "}"
+            ]
+        );
     }
 
     #[test]
