@@ -3631,7 +3631,7 @@ dependencies = [
 
 [[package]]
 name = "ox"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "getrandom 0.4.3",
  "jiff",
@@ -3646,7 +3646,7 @@ dependencies = [
 
 [[package]]
 name = "ox-cli"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "ox",
  "ox-library",
@@ -3661,7 +3661,7 @@ dependencies = [
 
 [[package]]
 name = "ox-library"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "argon2",
  "chacha20poly1305",
@@ -3683,7 +3683,7 @@ dependencies = [
 
 [[package]]
 name = "ox-lsp"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "lsp-server",
  "ox",
@@ -3693,7 +3693,7 @@ dependencies = [
 
 [[package]]
 name = "ox-perf"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "ox",
  "ox-library",
@@ -3703,7 +3703,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "oxmacs-core",
  "oxmacs-gui",
@@ -3711,7 +3711,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-api"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "ox",
  "ox-library",
@@ -3720,7 +3720,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-core"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags 2.13.2",
  "dirs",
@@ -3745,7 +3745,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-gui"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "dirs",
  "iced",
@@ -3765,7 +3765,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-ox"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "dirs",
  "jiff",
