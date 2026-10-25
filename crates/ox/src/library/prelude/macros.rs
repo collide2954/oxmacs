@@ -16,9 +16,9 @@ fn list(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
     heap.list(items.iter().copied()).map_err(full)
 }
 
-fn call(heap: &mut Heap, head: &str, items: &[Value]) -> Result<Value, Error> {
+fn call(heap: &mut Heap, operator: &str, items: &[Value]) -> Result<Value, Error> {
     let mut all = Vec::with_capacity(items.len() + 1);
-    all.push(word(head));
+    all.push(word(operator));
     all.extend_from_slice(items);
     list(heap, &all)
 }
@@ -93,9 +93,9 @@ fn thread(heap: &mut Heap, arguments: &[Value], last: bool) -> Result<Value, Err
             items.push(threaded);
             list(heap, &items)?
         } else {
-            let head = collections::first(heap, *form)?;
+            let operator = collections::first(heap, *form)?;
             let rest = collections::rest(heap, *form)?;
-            let mut items = vec![head, threaded];
+            let mut items = vec![operator, threaded];
             items.extend(spliced(heap, rest)?);
             list(heap, &items)?
         };
@@ -173,11 +173,11 @@ fn atomically(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     call(heap, "do", &[enter, guarded])
 }
 
-fn wrapped(heap: &mut Heap, head: &str, body: &[Value]) -> Result<Value, Error> {
+fn wrapped(heap: &mut Heap, operator: &str, body: &[Value]) -> Result<Value, Error> {
     let mut function = vec![word("fn"), make_vector(heap, &[])?];
     function.extend_from_slice(body);
     let function = list(heap, &function)?;
-    call(heap, head, &[function])
+    call(heap, operator, &[function])
 }
 
 fn some_thread(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
@@ -185,9 +185,9 @@ fn some_thread(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         return Ok(arguments[0]);
     };
     let step = if is_list(heap, *form) {
-        let head = collections::first(heap, *form)?;
+        let operator = collections::first(heap, *form)?;
         let rest = collections::rest(heap, *form)?;
-        let mut items = vec![head, word("it")];
+        let mut items = vec![operator, word("it")];
         items.extend(spliced(heap, rest)?);
         list(heap, &items)?
     } else {
@@ -242,11 +242,11 @@ fn checked(heap: &Heap, form: Value) -> bool {
     let Some(pair) = heap.pair_of(form) else {
         return false;
     };
-    let head = match pair.head {
+    let operator = match pair.head {
         Value::Symbol(name) => Some(name),
         other => heap.identifier_of(other).map(|identifier| identifier.name),
     };
-    head.is_some_and(|name| !PLAIN_HEADS.contains(&name.name()))
+    operator.is_some_and(|name| !PLAIN_HEADS.contains(&name.name()))
 }
 
 fn expect(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
@@ -261,13 +261,13 @@ fn expect(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         let failure = failed(heap, shown)?;
         return call(heap, "if", &[form, Value::Bool(true), failure]);
     }
-    let head = collections::first(heap, form)?;
+    let operator = collections::first(heap, form)?;
     let operands = collections::rest(heap, form)?;
     let mut values = vec![word("vector")];
     values.extend(spliced(heap, operands)?);
     let values = list(heap, &values)?;
     let bound = binding(heap, word("values"), values)?;
-    let applied = call(heap, "apply", &[head, word("values")])?;
+    let applied = call(heap, "apply", &[operator, word("values")])?;
     let shown = call(heap, "explain", &[quoted_form, word("values")])?;
     let failure = failed(heap, shown)?;
     let test = call(heap, "if", &[applied, Value::Bool(true), failure])?;
