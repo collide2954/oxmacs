@@ -458,12 +458,18 @@ fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<us
     if buffer.contents() != rendered.text {
         editor.fill_buffer(id, &rendered.text);
     }
+    let mut moved = None;
     if let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) {
         view.styles = rendered.styles;
         view.pills = rendered.pills;
         let line = line.min(buffer.len_lines().saturating_sub(1));
         let start = buffer.line_start(line);
-        buffer.set_point((start + column).min(buffer.line_end(line)));
+        let position = (start + column).min(buffer.line_end(line));
+        buffer.set_point(position);
+        moved = placed.map(|_| position);
+    }
+    if let Some(position) = moved {
+        editor.move_points(id, move |_, _| Some(position));
     }
 }
 
@@ -1007,6 +1013,24 @@ mod tests {
             "{:?}",
             editor.buffer_names()
         );
+    }
+
+    #[test]
+    fn moving_to_a_line_moves_windows_that_show_the_buffer_elsewhere() {
+        let (mut editor, mut ox) = opened(r#"(open-buffer "*side*" ["a" "b" "c"] :beside true)"#);
+        let side = editor.buffer_named("*side*").unwrap();
+        let window = editor
+            .tiling()
+            .windows()
+            .into_iter()
+            .find(|window| editor.pane_of(*window).unwrap().buffer().id() == side)
+            .unwrap();
+        assert_ne!(editor.selected_window(), window);
+
+        ox.eval(&mut editor, r#"(set-lines "*side*" ["a" "b" "c"] :line 2)"#)
+            .unwrap();
+
+        assert_eq!(editor.pane_of(window).unwrap().point(), 4);
     }
 
     #[test]
