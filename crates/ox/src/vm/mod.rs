@@ -19,6 +19,7 @@ use std::collections::{HashMap, VecDeque};
 use std::panic::{self, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::bytecode::{Capture, Code, Op, Prim, Register};
@@ -46,6 +47,8 @@ use modules::{Module, ModuleId};
 use routine::{Next, RAISED, Resumable, Started};
 use tasks::Task;
 
+pub(crate) type Sources = Arc<HashMap<String, (String, String)>>;
+
 #[derive(Debug)]
 pub struct Runtime {
     pub heap: Heap,
@@ -72,6 +75,7 @@ pub struct Runtime {
     pub(crate) budget: Option<(Instant, Duration)>,
     pub(crate) sandboxed: bool,
     pub(crate) roots: Vec<PathBuf>,
+    pub(crate) sources: Sources,
     pub(crate) worker_setup: Option<fn(&mut Isolate)>,
     stand_ins: HashMap<(Sym, Sym), Value>,
     channels: HashMap<usize, Value>,
@@ -157,6 +161,7 @@ impl Default for Runtime {
             budget: None,
             sandboxed: false,
             roots: Vec::new(),
+            sources: Sources::default(),
             worker_setup: None,
             stand_ins: HashMap::new(),
             channels: HashMap::new(),

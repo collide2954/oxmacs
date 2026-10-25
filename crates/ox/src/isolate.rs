@@ -26,10 +26,10 @@ use crate::value::Value;
 use crate::value::print;
 use crate::value::promise::Promise;
 use crate::value::record::Family;
-use crate::vm::Runtime;
 use crate::vm::build::full;
 use crate::vm::modules::{Import, Module, ModuleId, PRELUDE, USER};
 use crate::vm::routine::{Resumable, Started};
+use crate::vm::{Runtime, Sources};
 
 const LIBRARY_DOCS: &str = include_str!("library/docs.ox");
 
@@ -73,6 +73,7 @@ fn only_from_ox(name: &str) -> Rc<NativeFn> {
 
 pub(crate) fn work(
     roots: &[PathBuf],
+    sources: Sources,
     setup: Option<fn(&mut Isolate)>,
     module: &str,
     function: Sym,
@@ -86,6 +87,7 @@ pub(crate) fn work(
     for root in roots {
         isolate.add_root(root.clone());
     }
+    isolate.runtime.sources = sources;
     let failed = |isolate: &mut Isolate, error: Error| {
         let value = isolate
             .runtime
@@ -110,7 +112,6 @@ pub(crate) fn work(
 pub struct Isolate {
     runtime: Runtime,
     loading: Vec<String>,
-    sources: HashMap<String, (String, String)>,
     files: HashMap<String, (PathBuf, Option<SystemTime>)>,
     broken: HashSet<String>,
     packages: HashMap<String, Vec<String>>,
@@ -143,7 +144,6 @@ impl Isolate {
         let mut isolate = Self {
             runtime: Runtime::default(),
             loading: Vec::new(),
-            sources: HashMap::new(),
             files: HashMap::new(),
             broken: HashSet::new(),
             packages: HashMap::new(),
@@ -222,7 +222,7 @@ impl Isolate {
     }
 
     pub fn add_source(&mut self, module: &str, file: &str, text: &str) {
-        self.sources
+        Arc::make_mut(&mut self.runtime.sources)
             .insert(module.to_owned(), (file.to_owned(), text.to_owned()));
     }
 
@@ -398,7 +398,7 @@ impl Isolate {
             chain.push(name.to_owned());
             return Err(Error::new(format!("Import cycle: {}", chain.join(" → "))));
         }
-        if let Some((file, source)) = self.sources.get(name).cloned() {
+        if let Some((file, source)) = self.runtime.sources.get(name).cloned() {
             return self.evaluate_module(name, &file, &source, host);
         }
         let path = self

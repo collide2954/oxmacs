@@ -41,6 +41,22 @@ fn evaluated(isolate: &mut Isolate, source: &str) -> String {
 }
 
 #[test]
+fn workers_load_modules_the_isolate_was_given_as_sources() {
+    let mut isolate = Isolate::new();
+    isolate.add_source(
+        "kit/words",
+        "kit/words.ox",
+        "(module (import (kit marks)))\n(def (shout x) (str x marks/bang))",
+    );
+    isolate.add_source("kit/marks", "kit/marks.ox", "(def bang \"!\")");
+
+    assert_eq!(
+        evaluated(&mut isolate, "(await (worker 'kit/words 'shout \"hi\"))"),
+        "\"hi!\""
+    );
+}
+
+#[test]
 fn a_worker_runs_a_module_function_and_its_promise_gets_the_result() {
     let (_dir, mut isolate) = with_jobs();
 

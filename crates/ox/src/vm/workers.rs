@@ -34,10 +34,11 @@ impl Runtime {
             .map(|argument| self.portable(*argument, "to a worker"))
             .collect::<Result<Vec<_>, Error>>()?;
         let roots = self.roots.clone();
+        let sources = std::sync::Arc::clone(&self.sources);
         let setup = self.worker_setup;
         let name = format!("ox worker {module}");
         self.heap.background(&name, move || {
-            work(&roots, setup, &module, function, &arguments)
+            work(&roots, sources, setup, &module, function, &arguments)
         })
     }
 
