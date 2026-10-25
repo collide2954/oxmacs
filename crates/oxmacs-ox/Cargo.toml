@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
+autotests = false
 
 [lints]
 workspace = true
@@ -24,3 +25,7 @@ serde_json.workspace = true
 [dev-dependencies]
 keepass = { workspace = true, features = ["save_kdbx4"] }
 tempfile.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/main.rs"
