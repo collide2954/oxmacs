@@ -35,6 +35,20 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all --check
 
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - run: cargo deny check
+
   clippy:
     name: clippy (${{ matrix.name }})
     needs: fmt
