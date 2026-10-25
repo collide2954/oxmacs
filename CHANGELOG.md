@@ -12,6 +12,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- `file/write` and `file/write-base64` write a new file that then takes the old one's place, so a crash or full disk no longer leaves `custom.ox`, calendar events or other files a plugin writes half written. Files with other hard links are still written in place, and symlinks keep pointing at their targets.
 - Saving a file with hard links on Windows writes it in place, as on Linux and macOS, so its other names keep showing the same text.
 - `M-x list-tools` lists only the language servers of languages oxmacs knows, instead of offering to install pyright, marksman, clangd, gopls and typescript-language-server, which could never start.
 - Renaming or moving a file or folder with `R` in dired moves the buffers visiting it along, as dired did before it became a plugin, instead of leaving them on the old path, where saving brought the old file back.

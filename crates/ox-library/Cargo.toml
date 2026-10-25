@@ -19,14 +19,17 @@ resvg.workspace = true
 ring.workspace = true
 rustls.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 tiny-skia.workspace = true
 trash.workspace = true
 ureq.workspace = true
 webpki-roots.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+winapi-util.workspace = true
+
 [dev-dependencies]
 image.workspace = true
-tempfile.workspace = true
 
 [lints]
 workspace = true

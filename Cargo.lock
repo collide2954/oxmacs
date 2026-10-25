@@ -3681,6 +3681,7 @@ dependencies = [
  "trash",
  "ureq",
  "webpki-roots",
+ "winapi-util",
 ]
 
 [[package]]

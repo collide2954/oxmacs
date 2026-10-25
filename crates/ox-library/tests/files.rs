@@ -57,6 +57,73 @@ fn appending_adds_to_the_end_and_makes_missing_files() {
 }
 
 #[test]
+fn writing_replaces_a_file_whole_so_a_reader_keeps_the_old_text() {
+    use std::io::Read;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("note.txt");
+    fs::write(&path, "old text").unwrap();
+    let mut reader = fs::File::open(&path).unwrap();
+    let mut isolate = ox_library::isolate();
+
+    let done = evaluated(
+        &mut isolate,
+        &format!(
+            "(await (file/write {path} \"new\")) (await (file/write-base64 {path} \"bmV3ZXI=\"))",
+            path = literal(&path)
+        ),
+    );
+
+    assert_eq!(done, "nil");
+    let mut seen = String::new();
+    reader.read_to_string(&mut seen).unwrap();
+    assert_eq!(seen, "old text");
+    assert_eq!(fs::read_to_string(&path).unwrap(), "newer");
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn writing_keeps_hard_links_together() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("a.txt");
+    let twin = dir.path().join("b.txt");
+    fs::write(&path, "old").unwrap();
+    fs::hard_link(&path, &twin).unwrap();
+    let mut isolate = ox_library::isolate();
+
+    evaluated(
+        &mut isolate,
+        &format!("(await (file/write {} \"new\"))", literal(&path)),
+    );
+
+    assert_eq!(fs::read_to_string(&twin).unwrap(), "new");
+}
+
+#[cfg(unix)]
+#[test]
+fn writing_through_a_symlink_writes_its_target_and_keeps_the_link() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("target.txt");
+    let link = dir.path().join("link.txt");
+    fs::write(&target, "old").unwrap();
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    let mut isolate = ox_library::isolate();
+
+    evaluated(
+        &mut isolate,
+        &format!("(await (file/write {} \"new\"))", literal(&link)),
+    );
+
+    assert!(
+        fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+}
+
+#[test]
 fn files_travel_as_base64_whatever_their_bytes() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("bytes.bin");

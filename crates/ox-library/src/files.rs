@@ -108,6 +108,51 @@ fn remove(path: &Path) -> io::Result<()> {
     }
 }
 
+#[cfg(unix)]
+fn linked(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    fs::metadata(path).is_ok_and(|metadata| metadata.nlink() > 1)
+}
+
+#[cfg(windows)]
+fn linked(path: &Path) -> bool {
+    fs::File::open(path)
+        .and_then(|file| winapi_util::file::information(&file))
+        .is_ok_and(|information| information.number_of_links() > 1)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn linked(_: &Path) -> bool {
+    false
+}
+
+fn replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let existing = fs::metadata(&target).ok();
+    if existing.is_some() && linked(&target) {
+        return fs::write(&target, bytes);
+    }
+    let directory = target
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let Ok(mut temp) = tempfile::NamedTempFile::new_in(directory) else {
+        return fs::write(&target, bytes);
+    };
+    temp.write_all(bytes)?;
+    temp.as_file().sync_all()?;
+    if let Some(metadata) = &existing {
+        fs::set_permissions(temp.path(), metadata.permissions())?;
+    }
+    let (file, temp) = temp.into_parts();
+    drop(file);
+    let temp = temp.keep()?;
+    fs::rename(&temp, &target).or_else(|_| {
+        let _ = fs::remove_file(&temp);
+        fs::write(&target, bytes)
+    })
+}
+
 fn done(result: io::Result<()>, verb: &str, path: &Path) -> Result<Portable, Failure> {
     result
         .map(|()| Portable::Nil)
@@ -142,7 +187,7 @@ fn write(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let path = PathBuf::from(text(heap, "file/write", arguments[0])?);
     let contents = text(heap, "file/write", arguments[1])?.to_owned();
     heap.background("ox file/write", move || {
-        done(fs::write(&path, contents), "write", &path)
+        done(replace(&path, contents.as_bytes()), "write", &path)
     })
 }
 
@@ -164,7 +209,7 @@ fn write_base64(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let bytes = from_base64(text(heap, "file/write-base64", arguments[1])?)
         .ok_or_else(|| Error::new("file/write-base64 got text that isn't base64"))?;
     heap.background("ox file/write-base64", move || {
-        done(fs::write(&path, bytes), "write", &path)
+        done(replace(&path, &bytes), "write", &path)
     })
 }
 
