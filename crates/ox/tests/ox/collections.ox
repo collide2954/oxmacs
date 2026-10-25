@@ -175,3 +175,4 @@
 ;; map and record literals need a value for every key
 {a: 1 b:} ;! This map has a key without a value
 (defrecord P [x y]) #P{x: 1 y:} ;! This record literal has a field without a value
+(def (nums) (gen (yield 1))) (empty? (nums)) ;! empty? expects a collection, got #<generator>

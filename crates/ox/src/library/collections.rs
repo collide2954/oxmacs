@@ -216,6 +216,10 @@ fn conj_entries(heap: &mut Heap, map: Map, items: &[Value]) -> Result<Value, Err
 }
 
 pub(crate) fn count(heap: &Heap, value: Value) -> Result<Value, Error> {
+    counted(heap, "count", value)
+}
+
+fn counted(heap: &Heap, native: &str, value: Value) -> Result<Value, Error> {
     if let Some(length) = heap.length(value) {
         return Ok(int(length));
     }
@@ -228,7 +232,7 @@ pub(crate) fn count(heap: &Heap, value: Value) -> Result<Value, Error> {
     if is_list(heap, value) {
         return Ok(int(heap.items(value).len()));
     }
-    Err(expected(heap, "count", "a collection", value))
+    Err(expected(heap, native, "a collection", value))
 }
 
 fn nth(heap: &Heap, collection: Value, wanted: Value) -> Result<Value, Error> {
@@ -466,7 +470,9 @@ fn install_sequences(isolate: &mut Isolate) {
         rest(heap, arguments[0])
     });
     isolate.define_native("empty?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(count(heap, arguments[0])? == Value::Int(0)))
+        Ok(Value::Bool(
+            counted(heap, "empty?", arguments[0])? == Value::Int(0),
+        ))
     });
     isolate.define_native("range", 1, Some(3), range);
     isolate.define_native("concat", 0, None, |heap, arguments| {
