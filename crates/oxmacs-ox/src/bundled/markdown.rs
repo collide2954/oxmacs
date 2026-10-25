@@ -46,7 +46,11 @@ fn pages_wrap_to_their_width_and_keep_their_links_and_code() {
 fn a_markdown_buffer_previews_beside_and_follows_its_links() {
     let (home, mut editor, mut ox) = started();
     let readme = home.path().join("README.md");
-    fs::write(&readme, "# Notes\n\nSee [the plan](plan.md).\n").unwrap();
+    fs::write(
+        &readme,
+        "---\nlayout: page\n---\n# Notes\n\nSee [the plan](plan.md).\n",
+    )
+    .unwrap();
     fs::write(home.path().join("plan.md"), "the plan\n").unwrap();
     editor.open_file(&readme);
 

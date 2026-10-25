@@ -1,5 +1,5 @@
 (plugin markdown
-  :version "0.2.2"
+  :version "0.2.3"
   :opt-in true
   :summary "Markdown rendered as styled text"
   :commands {markdown-preview: "Show this Markdown buffer rendered beside it"}

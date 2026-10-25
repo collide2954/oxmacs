@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.18.4"
+  :version "0.18.5"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands {run-r: "Start an R console beside the script"
              r-new-session: "Start another R session beside the current one"
@@ -33,6 +33,7 @@
              r-markdown-outline: "Jump to a heading or chunk of the document"
              r-markdown-comment: "Comment or uncomment with # in R chunks and <!-- --> in the prose"
              r-markdown-render: "Save the document, render it with R Markdown or Quarto and open the result"
+             r-markdown-preview: "Show the R Markdown document rendered beside it, as Markdown previews are"
              r-run-job: "Run the R script in a background job, apart from the session"
              r-run-app: "Run the Shiny app of this folder in a background job and open it"
              r-job-stop: "Stop the job of this buffer"
@@ -89,6 +90,7 @@
              language-server: {type: :bool default: true doc: "Run R's languageserver package for diagnostics, completion and definitions when it is installed"}
              completion-delay: {type: :number default: 0.25 doc: "Seconds of rest after typing before R completion pops up on its own"}
              signature-delay: {type: :number default: 0.4 doc: "Seconds of rest before the arguments of the call at point show in the echo area"}}
+  :requires {markdown: "^0.2"}
   :wakes-for ["R"]
   :opt-in true
   :entry "r.ox")

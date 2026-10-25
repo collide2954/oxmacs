@@ -1,6 +1,14 @@
 (module
   (import (ox string) (ox regex))
-  (export inline wrap render))
+  (export inline wrap render body))
+
+(def (body text)
+  "text without the YAML front matter between --- lines that opens many Markdown and R Markdown documents."
+  (let [lines (string/lines text)
+        end (when (and (> (count lines) 1) (= (string/trim-end (first lines)) "---"))
+              (find (fn [at] (contains? #{"---" "..."} (string/trim-end (nth lines at))))
+                    (range 1 (count lines))))]
+    (if end (string/join "\n" (drop (+ end 1) lines)) text)))
 
 (def token #"`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)\s]+)\)")
 
@@ -153,3 +161,8 @@
 (test "a link of several words is one link"
   (expect (= (get (render "See [the start page](start), then [more](next)." 80) :links)
              [{start: 4 end: 18 target: "start" line: 0} {start: 25 end: 29 target: "next" line: 0}])))
+
+(test "front matter is left out of the page"
+  (expect (= (body "---\ntitle: x\n...\n# A\n") "# A"))
+  (expect (= (body "# A\n---\nb") "# A\n---\nb"))
+  (expect (= (body "---\nnever closed") "---\nnever closed")))

@@ -30,7 +30,7 @@ fn line(r: &R) -> usize {
 fn r_markdown_files_open_in_their_mode_with_headings_and_chunks_marked() {
     let (_folder, r) = opened(
         "report.Rmd",
-        "---\ntitle: \"# Not a heading\"\n---\n# Report\n```{r}\n# a comment\n#| echo: false\nx\n```\n",
+        "---\ntitle: \"# Not a heading\"\n---\n# Report\n```{r}\n# a comment\n#| echo: false\nx\n```\nSee `x` and [docs](d.md).\n",
     );
 
     assert_eq!(r.editor.language().map(Language::name), Some("R Markdown"));
@@ -44,6 +44,31 @@ fn r_markdown_files_open_in_their_mode_with_headings_and_chunks_marked() {
     );
     assert_eq!(r.editor.line_style(7).spans, []);
     assert_eq!(r.editor.line_style(8).spans, [(0..3, Highlight::Keyword)]);
+    assert_eq!(
+        r.editor.line_style(9).spans,
+        [(4..7, Highlight::Constant), (12..24, Highlight::Link)]
+    );
+}
+
+#[test]
+fn r_markdown_documents_preview_beside_as_markdown_does() {
+    let (_folder, mut r) = opened(
+        "report.Rmd",
+        "---\ntitle: Report\n---\n# Report\n\nSome text.\n",
+    );
+
+    let id = r.editor.command_named("r-markdown-preview").unwrap();
+    r.editor.execute(id);
+    crate::testing::settle(&mut r.editor, &mut r.ox);
+
+    let preview = r
+        .editor
+        .buffer_named("*Markdown: report.Rmd*")
+        .expect("a preview");
+    assert!(r.editor.buffer_shown(preview));
+    r.editor.show_buffer(preview);
+    assert_eq!(r.editor.buffer().contents(), "Report\n\nSome text.");
+    assert_eq!(r.editor.line_style(0).spans, [(0..6, Highlight::Heading)]);
 }
 
 #[test]

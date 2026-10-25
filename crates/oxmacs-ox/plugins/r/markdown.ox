@@ -1,7 +1,9 @@
 (module
   (import (ox string) (ox regex) (ox path) (ox file)
           (r session :as session)
-          (r jobs :as jobs))
+          (r jobs :as jobs)
+          (markdown style :as style)
+          (markdown preview :as preview))
   (export parse highlight render-with script-file saved))
 
 (def opening #"^\s*```+\s*\{\s*([A-Za-z][\w.-]*)(?:[\s,]+([^\s,}=]+)(?:[\s,}]|$))?")
@@ -59,32 +61,20 @@
      chunks: (map (fn [chunk] (labelled chunk lines)) (filter (fn [block] block.language) blocks))
      headings: done.headings}))
 
-(defonce shading (atom {front: false fenced: false}))
-
-(def (highlight line text)
+(def (highlight line text state)
   (let [width (string/length text)
         trimmed (string/trim-end text)
-        state (if (= line 0) {front: false fenced: false} @shading)]
-    (cond ((and (= line 0) (= trimmed "---"))
-           (reset! shading {front: true fenced: false})
-           [[0 width :string]])
-      (state.front
-       (reset! shading {front: (not (contains? #{"---" "..."} trimmed)) fenced: false})
-       [[0 width :string]])
-      (state.fenced
-       (cond ((regex/matches? closing text)
-              (reset! shading {front: false fenced: false})
-              [[0 width :keyword]])
-         ((= width 0) [])
-         ((regex/matches? option-line text) [[0 width :attribute]])
-         ((regex/matches? comment-line text) [[0 width :comment]])
-         (else [])))
-      ((regex/matches? fence text)
-       (reset! shading {front: false fenced: true})
-       [[0 width :keyword]])
-      (else
-       (reset! shading {front: false fenced: false})
-       (if (regex/matches? heading text) [[0 width :heading]] [])))))
+        whole (fn [face] (if (= width 0) [] [[0 width face]]))]
+    (cond ((and (= line 0) (= trimmed "---")) {spans: (whole :string) state: :front})
+      ((= state :front)
+       {spans: (whole :string) state: (if (contains? #{"---" "..."} trimmed) nil :front)})
+      ((= state :fenced)
+       (cond ((regex/matches? closing text) {spans: (whole :keyword) state: nil})
+         ((regex/matches? option-line text) {spans: (whole :attribute) state: :fenced})
+         ((regex/matches? comment-line text) {spans: (whole :comment) state: :fenced})
+         (else {spans: [] state: :fenced})))
+      ((regex/matches? fence text) {spans: (whole :keyword) state: :fenced})
+      (else {spans: (style/prose text) state: nil}))))
 
 (def (here) (parse (buffer-text)))
 
@@ -356,6 +346,9 @@ cat("oxmacs-rendered\t", normalizePath(out, winslash = "/"), "\n", sep = "")
       (do (run-command 'save-buffer)
         (render file))
       (message "Only .Rmd and .qmd files render"))))
+
+(defcommand r-markdown-preview "Show the R Markdown document rendered beside it, as Markdown previews are"
+  (preview/show))
 
 (def (saved file)
   (when (and (plugin-setting 'r :render-on-save) (renderable? file) (not (contains? @rendering file)))

@@ -112,6 +112,7 @@ const MARKDOWN: Bundle = Bundle {
         ),
         ("render.ox", include_str!("../plugins/markdown/render.ox")),
         ("style.ox", include_str!("../plugins/markdown/style.ox")),
+        ("preview.ox", include_str!("../plugins/markdown/preview.ox")),
     ],
 };
 
