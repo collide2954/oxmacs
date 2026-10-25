@@ -548,6 +548,7 @@ fn indent(editor: &Editor, id: BufferId, line: usize) -> Option<usize> {
 
 pub fn install(editor: &mut Editor, scope: ScopeId) {
     editor.add_language(language(), Some(scope));
+    editor.set_scratch_language(Some(language()));
     editor.set_plugin_state(Lexed::default());
     editor.set_highlighter(language(), highlight);
     editor.set_indenter(language(), indent);
@@ -595,6 +596,27 @@ mod tests {
         Ox::new().start(&mut editor, Some(home.path()));
         editor.open_file(&path);
         (home, editor)
+    }
+
+    #[test]
+    fn scratch_starts_in_ox_mode_and_ox_mode_is_a_command() {
+        let home = tempfile::tempdir().unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        ox.start(&mut editor, Some(home.path()));
+        let scratch = editor.buffer_named("*scratch*").unwrap();
+        editor.show_buffer(scratch);
+
+        assert_eq!(editor.language(), Some(super::language()));
+        editor.buffer_mut().insert_at(0, "(+ 1 2)");
+        editor.buffer_mut().set_point(7);
+        crate::testing::press(&mut editor, &mut ox, "C-x C-e");
+        assert_eq!(editor.message(), Some("=> 3"));
+
+        crate::testing::press(&mut editor, &mut ox, "M-x t e x t - m o d e RET");
+        assert_eq!(editor.language(), None);
+        crate::testing::press(&mut editor, &mut ox, "M-x o x - m o d e RET");
+        assert_eq!(editor.language(), Some(super::language()));
     }
 
     #[test]

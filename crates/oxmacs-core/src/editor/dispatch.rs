@@ -2,7 +2,6 @@ use crate::command::Command;
 use crate::editor::search::isearch::Direction as SearchDirection;
 use crate::editor::windows::Direction;
 use crate::editor::{Axis, Editor};
-use crate::syntax::Language;
 use crate::text;
 
 impl Editor {
@@ -100,9 +99,6 @@ impl Editor {
             Command::ApplyMacroToRegionLines => self.apply_macro_to_lines(),
             Command::LoadTheme => self.load_theme(),
             Command::ToggleTheme => self.toggle_theme(),
-            Command::RustMode => self.set_major_mode(Some(Language::RUST)),
-            Command::TomlMode => self.set_major_mode(Some(Language::TOML)),
-            Command::RMode => self.set_major_mode(Some(Language::R)),
             Command::ListLanguages => self.list_languages(),
             Command::ListTools => self.list_tools(),
             Command::ToolDetails => self.tool_details(),

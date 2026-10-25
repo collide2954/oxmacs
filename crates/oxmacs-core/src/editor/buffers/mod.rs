@@ -47,6 +47,7 @@ struct Entry {
 #[derive(Debug)]
 pub(super) struct BufferList {
     entries: Vec<Entry>,
+    scratch: Option<(Language, Vec<Language>)>,
 }
 
 impl BufferList {
@@ -58,7 +59,16 @@ impl BufferList {
                 mode: Mode::Text(None),
                 numbers: None,
             }],
+            scratch: None,
         }
+    }
+
+    pub(super) fn set_scratch_language(
+        &mut self,
+        language: Option<Language>,
+        known: Vec<Language>,
+    ) {
+        self.scratch = language.map(|language| (language, known));
     }
 
     pub(super) fn mode(&self, index: usize) -> Option<&Mode> {
@@ -205,10 +215,6 @@ impl BufferList {
         self.iter().position(predicate)
     }
 
-    pub(super) fn push_front(&mut self, buffer: Buffer) {
-        self.push_front_with(buffer, Mode::Text(None));
-    }
-
     pub(super) fn push_front_with(&mut self, buffer: Buffer, mode: Mode) {
         self.entries.insert(
             0,
@@ -253,7 +259,11 @@ impl BufferList {
             self.entries.remove(index);
         }
         if self.entries.is_empty() {
-            self.push_front(Buffer::new(SCRATCH));
+            let syntax = self
+                .scratch
+                .as_ref()
+                .map(|(language, known)| Syntax::knowing(*language, known));
+            self.push_front_with(Buffer::new(SCRATCH), Mode::Text(syntax));
         }
     }
 }

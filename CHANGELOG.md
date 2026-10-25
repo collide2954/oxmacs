@@ -72,6 +72,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- Every language has a mode command named after it, `ox-mode` and the modes plugins define, such as `markdown-mode` and `git-commit-mode`, as well as `rust-mode`, `toml-mode` and `r-mode`.
+- `*scratch*` starts in Ox mode, so `C-x C-e` evaluates code there right away; `text-mode` turns it back into plain text.
 - The Ox language crate keeps only the reader, compiler, VM, checker, formatter and core modules; files, processes, the network, HTTP, cryptography, CSV and images moved to an `ox-library` crate that oxmacs and the `ox` command install, so a change to the VM no longer rebuilds the image, TLS and crypto stacks. Workers get the same modules.
 - The `ox` binary no longer links the editor: it checks, tests and formats editor code against the editor API's signatures and macros from a small `oxmacs-api` crate, so it builds without the editor's grammars and stays the same when the editor changes. Calls that need the editor still say "… isn't available here".
 - keycast shows `<home>`, `<end>`, the page keys and `DEL` as it does the arrows, hides `RET` and `TAB` when they only start a new line or indent, and counts a key as repeated only when its command ran just before, so typing between two presses shows them apart. `on-key-command` events carry `:repeat`.

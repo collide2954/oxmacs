@@ -208,7 +208,7 @@ impl Editor {
     }
 
     pub fn with_buffer(buffer: Buffer) -> Self {
-        Self {
+        let mut editor = Self {
             buffers: BufferList::new(buffer),
             windows: windows::Windows::new(),
             minibuffer: None,
@@ -296,7 +296,11 @@ impl Editor {
             lsp: lsp::Clients::default(),
             focused: true,
             config: Config::default(),
+        };
+        for language in editor.languages() {
+            editor.add_mode_command(language);
         }
+        editor
     }
 
     pub fn apply_config(&mut self, config: &Config) {

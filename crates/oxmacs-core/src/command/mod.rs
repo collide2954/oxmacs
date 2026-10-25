@@ -245,12 +245,6 @@ pub enum Command {
         detailed_message = "The new theme shows as an unsaved change in *Settings*; save it there with C-x C-s to keep it."
     )]
     ToggleTheme,
-    #[strum(message = "Edit the buffer as Rust")]
-    RustMode,
-    #[strum(message = "Edit the buffer as TOML")]
-    TomlMode,
-    #[strum(message = "Edit the buffer as R")]
-    RMode,
     #[strum(message = "Edit the buffer as plain text")]
     TextMode,
     #[strum(message = "Split the window into top and bottom")]

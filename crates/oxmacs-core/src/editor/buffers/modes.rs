@@ -57,6 +57,17 @@ impl Editor {
         }
     }
 
+    pub fn set_scratch_language(&mut self, language: Option<Language>) {
+        let known = self.languages();
+        self.buffers.set_scratch_language(language, known.clone());
+        if let Some(index) = self
+            .buffers
+            .position(|buffer| buffer.name() == super::SCRATCH && buffer.file().is_none())
+        {
+            self.buffers.set_language(index, language, &known);
+        }
+    }
+
     pub fn set_major_mode(&mut self, language: Option<Language>) {
         if self.buffers.is_special(0) {
             self.show_message("This buffer keeps its own mode");
@@ -73,7 +84,7 @@ mod tests {
 
     use crate::editor::Editor;
     use crate::editor::test_support::{press, type_text};
-    use crate::syntax::Language;
+    use crate::syntax::{Indentation, Language, LanguageSpec, Outline};
     use crate::theme::Highlight;
 
     fn run(editor: &mut Editor, command: &str) {
@@ -144,6 +155,59 @@ mod tests {
 
         run(&mut editor, "text-mode");
         assert_eq!(editor.language(), None);
+    }
+
+    static FIELD_NOTES: LanguageSpec = LanguageSpec {
+        name: "Field notes",
+        extensions: &["field"],
+        file_names: &[],
+        aliases: &[],
+        line_comment: None,
+        pairs: &[],
+        indentation: Indentation::KEEP,
+        grammar: None,
+        grammars: &[],
+        outline: Outline::NONE,
+        features: &[],
+    };
+
+    #[test]
+    fn every_language_added_gets_a_mode_command() {
+        let mut editor = Editor::new();
+        let field_notes = Language::new(&FIELD_NOTES);
+        editor.add_language(field_notes, None);
+        editor.add_language(field_notes, None);
+
+        let id = editor.command_named("field-notes-mode").unwrap();
+        assert_eq!(
+            editor.commands.summary(id),
+            "Edit the buffer as Field notes"
+        );
+        assert_eq!(
+            editor
+                .commands
+                .all()
+                .filter(|id| editor.commands.name(*id) == "field-notes-mode")
+                .count(),
+            1
+        );
+        run(&mut editor, "field-notes-mode");
+        assert_eq!(editor.language(), Some(field_notes));
+    }
+
+    #[test]
+    fn scratch_can_start_in_a_language_and_comes_back_in_it() {
+        let mut editor = Editor::new();
+        let field_notes = Language::new(&FIELD_NOTES);
+        editor.add_language(field_notes, None);
+
+        editor.set_scratch_language(Some(field_notes));
+        assert_eq!(editor.buffer().name(), "*scratch*");
+        assert_eq!(editor.language(), Some(field_notes));
+
+        press(&mut editor, "C-x k RET");
+        assert_eq!(editor.buffer_names(), ["*scratch*"]);
+        assert_eq!(editor.language(), Some(field_notes));
     }
 
     #[test]

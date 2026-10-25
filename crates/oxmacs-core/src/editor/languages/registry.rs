@@ -1,7 +1,8 @@
 use std::ops::Range;
 use std::path::Path;
+use std::sync::Arc;
 
-use crate::command::{Scope, ScopeId};
+use crate::command::{DynamicSpec, Scope, ScopeId};
 use crate::editor::Editor;
 use crate::syntax::{Language, language_for};
 use crate::text::BufferId;
@@ -42,13 +43,33 @@ impl Editor {
             .find(|known| known.language == language)
         {
             Some(known) => known.scope = scope,
-            None => self.languages.push(Registered {
-                language,
-                scope,
-                highlight: None,
-                indent: None,
-            }),
+            None => {
+                self.languages.push(Registered {
+                    language,
+                    scope,
+                    highlight: None,
+                    indent: None,
+                });
+                self.add_mode_command(language);
+            }
         }
+    }
+
+    pub(in crate::editor) fn add_mode_command(&mut self, language: Language) {
+        let short = language.aliases().first().map_or_else(
+            || language.name().to_lowercase().replace(' ', "-"),
+            |alias| (*alias).to_owned(),
+        );
+        let name = format!("{short}-mode");
+        if self.commands.find(&name).is_some() {
+            return;
+        }
+        self.add_dynamic_command(DynamicSpec {
+            name,
+            summary: format!("Edit the buffer as {}", language.name()),
+            scope: Scope::Global.into(),
+            run: Arc::new(move |editor: &mut Editor| editor.set_major_mode(Some(language))),
+        });
     }
 
     pub fn set_highlighter(&mut self, language: Language, highlight: LineHighlighter) {
