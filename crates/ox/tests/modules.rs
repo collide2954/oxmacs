@@ -114,6 +114,28 @@ fn macros_belong_to_their_module_and_use_its_names() {
 }
 
 #[test]
+fn a_module_s_own_definitions_shadow_built_in_macros() {
+    let (_dir, mut isolate) = with_root(&[
+        (
+            "lists.ox",
+            "(def (run) (each inc [1 2]))\n(def (each f items) (map f items))\n(def (case x) [:mine x])",
+        ),
+        (
+            "picked.ox",
+            "(module (import (lists :only [case])))\n(def answer (case 1))",
+        ),
+    ]);
+
+    assert_eq!(
+        evaluated(
+            &mut isolate,
+            "(module (import (lists) (picked))) [(lists/run) picked/answer (each [x [1]] x)]"
+        ),
+        "[[2 3] [:mine 1] nil]"
+    );
+}
+
+#[test]
 fn packages_import_only_the_packages_they_require() {
     let (_dir, mut isolate) = with_root(&[
         ("text/words.ox", "(def hello \"hi\")"),

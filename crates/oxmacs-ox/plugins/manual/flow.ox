@@ -18,6 +18,17 @@
 [(size 5) (size 50) (size 500)]
 ```
 
+`case` picks a clause by a constant, written as is, or a list of constants. No match gives `nil` unless an `else` clause catches the rest.
+
+```
+(def (arrow key)
+  (case key
+    [:up "↑"]
+    [(:left :right) "↔"]
+    [else "?"]))
+[(arrow :up) (arrow :right) (arrow :enter)]
+```
+
 `and` and `or` stop at the first answer and return it. `if-let` and `when-let` bind a value and go on only when it is true, that is, neither `false` nor `nil`:
 
 ```
@@ -59,12 +70,34 @@ A value no clause matches raises a `no-match-error`, so end with `[_ …]` when 
 
 ## Loops
 
-Ox has no loop statement. A function that calls itself last runs in constant space, so recursion is the loop; most of the time `map`, `filter` and `reduce` say it more directly. Calls that aren't last can nest 400,000 deep before Ox raises a "Stack overflow" error.
+`for` builds a vector from collections, `each` does something for every item and returns `nil`. Both take several name and collection pairs, which nest, `:when` to skip items and `:let` to name more values.
 
 ```
-(def (count-down n)
-  (if (= n 0) :done (count-down (- n 1))))
-(count-down 100000)
+(for [x (range 5) :when (odd? x) :let [square (* x x)]]
+  square)
+```
+
+```
+(each [name ["Ada" "Grace"]]
+  (println "Hello, {name}"))
+```
+
+`loop` binds names like `let`, and `again`, as the last thing its body does, goes round once more with new values. It runs in constant space.
+
+```
+(loop [i 0 total 0]
+  (if (< i 10)
+    (again (+ i 1) (+ total i))
+    total))
+```
+
+`while` and `until` repeat while state changes, as an atom does. `map`, `filter` and `reduce` often say a loop more directly, and a function that calls itself last runs in constant space too. Calls that aren't last can nest 400,000 deep before Ox raises a "Stack overflow" error.
+
+```
+(def tries (atom 0))
+(while (< @tries 3)
+  (swap! tries inc))
+@tries
 ```
 
 ## Errors

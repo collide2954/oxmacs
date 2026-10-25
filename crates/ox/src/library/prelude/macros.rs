@@ -83,6 +83,118 @@ fn cond(heap: &mut Heap, clauses: &[Value]) -> Result<Value, Error> {
     call(heap, "if", &[test, body, otherwise])
 }
 
+fn case(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let mut branches = vec![word("cond")];
+    for clause in &arguments[1..] {
+        let parts = if heap.vector_of(*clause).is_some() || heap.pair_of(*clause).is_some() {
+            spliced(heap, *clause)?
+        } else {
+            Vec::new()
+        };
+        let Some((constants, body)) = parts.split_first() else {
+            return Err(Error::new("case clauses are [value body...] vectors"));
+        };
+        let test = if equal(heap, *constants, word("else")) {
+            word("else")
+        } else {
+            let options = if heap.pair_of(*constants).is_some() {
+                spliced(heap, *constants)?
+            } else {
+                vec![*constants]
+            };
+            let mut checks = vec![word("or")];
+            for option in options {
+                let constant = quoted(heap, option)?;
+                checks.push(call(heap, "=", &[word("value"), constant])?);
+            }
+            list(heap, &checks)?
+        };
+        let mut branch = vec![test];
+        branch.extend_from_slice(body);
+        branches.push(make_vector(heap, &branch)?);
+    }
+    let bound = binding(heap, word("value"), arguments[0])?;
+    let chosen = list(heap, &branches)?;
+    call(heap, "let", &[bound, chosen])
+}
+
+enum Step {
+    Over(Value, Value),
+    When(Value),
+    Let(Value),
+}
+
+fn steps(heap: &mut Heap, name: &str, bindings: Value) -> Result<Vec<Step>, Error> {
+    let Some(vector) = heap.vector_of(bindings) else {
+        return Err(Error::new(format!(
+            "{name} takes a binding vector and a body"
+        )));
+    };
+    let items = vector.items(heap);
+    if items.len() % 2 == 1 {
+        return Err(Error::new(format!(
+            "{name} bindings come in name and collection pairs"
+        )));
+    }
+    items
+        .chunks(2)
+        .map(|pair| match pair[0] {
+            Value::Keyword(option) if option.name() == "when" => Ok(Step::When(pair[1])),
+            Value::Keyword(option) if option.name() == "let" => Ok(Step::Let(pair[1])),
+            Value::Keyword(option) => Err(Error::new(format!(
+                "{name} takes :when and :let, not :{}",
+                option.name()
+            ))),
+            name => Ok(Step::Over(name, pair[1])),
+        })
+        .collect()
+}
+
+fn each(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let mut inner = call(heap, "do", &arguments[1..])?;
+    for step in steps(heap, "each", arguments[0])?.into_iter().rev() {
+        inner = match step {
+            Step::Over(name, items) => {
+                let parameters = make_vector(heap, &[word("_"), name])?;
+                let function = call(heap, "fn", &[parameters, inner])?;
+                call(heap, "reduce", &[function, Value::Nil, items])?
+            }
+            Step::When(test) => call(heap, "when", &[test, inner])?,
+            Step::Let(bindings) => call(heap, "let", &[bindings, inner])?,
+        };
+    }
+    call(heap, "do", &[inner, Value::Nil])
+}
+
+fn comprehension(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let body = call(heap, "do", &arguments[1..])?;
+    let mut inner = make_vector(heap, &[body])?;
+    for step in steps(heap, "for", arguments[0])?.into_iter().rev() {
+        inner = match step {
+            Step::Over(name, items) => {
+                let parameters = make_vector(heap, &[name])?;
+                let function = call(heap, "fn", &[parameters, inner])?;
+                call(heap, "mapcat", &[function, items])?
+            }
+            Step::When(test) => {
+                let none = make_vector(heap, &[])?;
+                call(heap, "if", &[test, inner, none])?
+            }
+            Step::Let(bindings) => call(heap, "let", &[bindings, inner])?,
+        };
+    }
+    call(heap, "vec", &[inner])
+}
+
+fn repeated(heap: &mut Heap, arguments: &[Value], guard: &str) -> Result<Value, Error> {
+    let mut body = vec![word(guard)];
+    body.extend_from_slice(arguments);
+    body.push(call(heap, "again", &[])?);
+    let body = list(heap, &body)?;
+    let bindings = make_vector(heap, &[])?;
+    call(heap, "loop", &[bindings, body])
+}
+
 fn thread(heap: &mut Heap, arguments: &[Value], last: bool) -> Result<Value, Error> {
     let mut threaded = arguments[0];
     for form in &arguments[1..] {
@@ -284,6 +396,15 @@ pub(super) fn install(isolate: &mut Isolate) {
         chained(heap, arguments, Value::Nil, "or", true)
     });
     isolate.define_expander("cond", 0, None, cond);
+    isolate.define_expander("case", 1, None, case);
+    isolate.define_expander("each", 1, None, each);
+    isolate.define_expander("for", 1, None, comprehension);
+    isolate.define_expander("while", 1, None, |heap, arguments| {
+        repeated(heap, arguments, "when")
+    });
+    isolate.define_expander("until", 1, None, |heap, arguments| {
+        repeated(heap, arguments, "unless")
+    });
     isolate.define_expander("->", 1, None, |heap, arguments| {
         thread(heap, arguments, false)
     });

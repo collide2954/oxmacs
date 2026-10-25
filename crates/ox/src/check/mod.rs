@@ -451,6 +451,13 @@ impl Walker<'_> {
             Some("defonce") => self.all(rest.get(1..).unwrap_or_default()),
             Some("fn") => self.function(rest),
             Some("let") => self.binding(rest),
+            Some(name @ ("loop" | "again")) if !self.bound(Sym::intern(name), &head.marks) => {
+                if name == "loop" {
+                    self.binding(rest);
+                } else {
+                    self.all(rest);
+                }
+            }
             Some(".") => {
                 if let Some(object) = rest.first() {
                     self.form(object);

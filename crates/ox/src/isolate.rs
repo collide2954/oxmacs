@@ -141,6 +141,26 @@ fn header(form: &Syntax) -> Option<&[Syntax]> {
     }
 }
 
+fn defined_name(form: &Syntax) -> Option<Sym> {
+    let Datum::List(items) = &form.datum else {
+        return None;
+    };
+    let [head, target, ..] = items.as_slice() else {
+        return None;
+    };
+    if !matches!(
+        symbol(head),
+        Some("def" | "defonce" | "defrecord" | "deferror")
+    ) {
+        return None;
+    }
+    let name = match &target.datum {
+        Datum::List(signature) => symbol(signature.first()?)?,
+        _ => symbol(target)?,
+    };
+    Some(Sym::intern(name))
+}
+
 impl Isolate {
     pub fn new() -> Self {
         let mut isolate = Self {
@@ -368,6 +388,9 @@ impl Isolate {
         let (forms, errors) = read::read(source);
         if let Some(error) = errors.into_iter().next() {
             return Err(Error::at(error.span, error.message));
+        }
+        if let Some(found) = self.runtime.modules.get_mut(module) {
+            found.defined.extend(forms.iter().filter_map(defined_name));
         }
         let mut result = Value::Nil;
         for form in &forms {

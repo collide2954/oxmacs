@@ -15,12 +15,14 @@ use crate::vm::modules::{ModuleId, reference};
 
 const MAX_DEPTH: usize = 256;
 
-const SPECIAL: [&str; 20] = [
+const SPECIAL: [&str; 22] = [
     "if",
     "do",
     "def",
     "fn",
     "let",
+    "loop",
+    "again",
     "set!",
     ".",
     "defrecord",
@@ -287,7 +289,8 @@ impl Expander<'_> {
         let Some(name) = symbol(head) else {
             return Ok(rebuilt(form, Datum::List(self.all(items)?)));
         };
-        if SPECIAL.contains(&name) {
+        let rebound = matches!(name, "loop" | "again") && self.bound(name, &head.marks);
+        if SPECIAL.contains(&name) && !rebound {
             return self.special(form, name, items);
         }
         if !self.bound(name, &head.marks)
@@ -313,7 +316,7 @@ impl Expander<'_> {
             "fn" => self.function(form, items),
             "def" | "defmacro" => self.definition(form, items),
             "defrecord" => self.record(form, items),
-            "let" => self.binding(form, items),
+            "let" | "loop" => self.binding(form, items),
             "match" => self.match_form(form, items),
             "try" => self.try_form(form, items),
             "deferror" => self.error_form(form, items),

@@ -62,6 +62,11 @@ struct Local {
     boxed: bool,
 }
 
+struct Repeat {
+    start: u32,
+    registers: Vec<(Register, bool)>,
+}
+
 #[derive(Default)]
 struct Function {
     code: Code,
@@ -69,6 +74,7 @@ struct Function {
     locals: Vec<Local>,
     captured: Vec<(Sym, Marks, bool)>,
     itself: Option<(Sym, Marks)>,
+    loops: Vec<Repeat>,
 }
 
 struct Compiler<'a> {
@@ -133,6 +139,57 @@ fn text(syntax: &Syntax) -> &str {
     match &syntax.datum {
         Datum::Symbol(name) => name,
         _ => "",
+    }
+}
+
+fn misplaced_in(forms: &[Syntax]) -> Option<Span> {
+    forms.iter().find_map(|form| misplaced_again(form, false))
+}
+
+fn misplaced_before_last(forms: &[Syntax], tail: bool) -> Option<Span> {
+    let last = forms.len().checked_sub(1)?;
+    (0..)
+        .zip(forms)
+        .find_map(|(index, form)| misplaced_again(form, tail && index == last))
+}
+
+fn misplaced_again(form: &Syntax, tail: bool) -> Option<Span> {
+    let items = match &form.datum {
+        Datum::List(items) => items,
+        Datum::Vector(items) | Datum::Map(items) | Datum::Set(items) | Datum::Record(_, items) => {
+            return misplaced_in(items);
+        }
+        _ => return None,
+    };
+    let (head, rest) = items.split_first()?;
+    match text(head) {
+        "again" if !tail => Some(form.span),
+        "again" => misplaced_in(rest),
+        "quote" | "fn" | "def" | "defmacro" | "defonce" | "defrecord" | "deferror" => None,
+        "if" => {
+            let (test, branches) = rest.split_first()?;
+            misplaced_again(test, false).or_else(|| {
+                branches
+                    .iter()
+                    .find_map(|branch| misplaced_again(branch, tail))
+            })
+        }
+        "do" => misplaced_before_last(rest, tail),
+        "let" => {
+            let (bindings, body) = rest.split_first()?;
+            misplaced_again(bindings, false).or_else(|| misplaced_before_last(body, tail))
+        }
+        "loop" => misplaced_again(rest.first()?, false),
+        "match" => {
+            let (value, clauses) = rest.split_first()?;
+            misplaced_again(value, false).or_else(|| {
+                clauses.iter().find_map(|clause| match &clause.datum {
+                    Datum::Vector(parts) => misplaced_before_last(parts.get(1..)?, tail),
+                    _ => misplaced_again(clause, false),
+                })
+            })
+        }
+        _ => misplaced_in(items),
     }
 }
 
@@ -351,12 +408,19 @@ impl Compiler<'_> {
         let Datum::Symbol(name) = &head.datum else {
             return None;
         };
+        if matches!(name.as_str(), "loop" | "again")
+            && self.resolve(Sym::intern(name), &head.marks).is_some()
+        {
+            return None;
+        }
         match name.as_str() {
             "if" => Some(self.branch(rest, target, span, tail)),
             "do" => Some(self.sequence(rest, target, span, tail)),
             "def" => Some(self.define(rest, target, span)),
             "fn" => Some(self.function(rest, target, span)),
             "let" => Some(self.binding(rest, target, span, tail)),
+            "loop" => Some(self.repeat(rest, target, span, tail)),
+            "again" => Some(self.again(rest, span)),
             "set!" => Some(self.assign(rest, target, span)),
             "." => Some(self.field(rest, target, span)),
             "defrecord" => Some(self.record(rest, target, span)),
@@ -717,6 +781,108 @@ impl Compiler<'_> {
         }
         self.sequence(body, target, span, tail)?;
         self.current.locals.truncate(locals);
+        self.release(top);
+        Ok(())
+    }
+
+    fn repeat(
+        &mut self,
+        parts: &[Syntax],
+        target: Register,
+        span: Span,
+        tail: bool,
+    ) -> Result<(), Error> {
+        let Some((
+            Syntax {
+                datum: Datum::Vector(bindings),
+                ..
+            },
+            body,
+        )) = parts.split_first()
+        else {
+            return Err(Error::at(span, "loop takes a binding vector and a body"));
+        };
+        if bindings.len() % 2 == 1 {
+            return Err(Error::at(
+                span,
+                "loop bindings come in name and value pairs",
+            ));
+        }
+        if let Some(misplaced) = misplaced_before_last(body, true) {
+            return Err(Error::at(
+                misplaced,
+                "again must be the last thing its loop does",
+            ));
+        }
+        let top = self.current.top;
+        let locals = self.current.locals.len();
+        let mut registers = Vec::new();
+        for (index, pair) in bindings.chunks(2).enumerate() {
+            let [binder, value] = pair else {
+                continue;
+            };
+            let Datum::Symbol(name) = &binder.datum else {
+                return Err(Error::at(
+                    binder.span,
+                    "loop names must be plain names; destructure inside the loop with let",
+                ));
+            };
+            let scope = &bindings[(index + 1) * 2..];
+            let boxed = assigned_in(scope, name) || assigned_in(body, name);
+            let register = self.reserve(1, span)?;
+            self.expression(value, register)?;
+            if boxed {
+                self.emit(Op::MakeCell { register }, span);
+            }
+            self.current.locals.push(Local {
+                name: Sym::intern(name),
+                marks: binder.marks.clone(),
+                register,
+                boxed,
+            });
+            registers.push((register, boxed));
+        }
+        let start = self.here(span)?;
+        self.current.loops.push(Repeat { start, registers });
+        let compiled = self.sequence(body, target, span, tail);
+        self.current.loops.pop();
+        compiled?;
+        self.current.locals.truncate(locals);
+        self.release(top);
+        Ok(())
+    }
+
+    fn again(&mut self, arguments: &[Syntax], span: Span) -> Result<(), Error> {
+        let Some(repeat) = self.current.loops.last() else {
+            return Err(Error::at(span, "again only works at the end of a loop"));
+        };
+        let (start, registers) = (repeat.start, repeat.registers.clone());
+        if arguments.len() != registers.len() {
+            let count = registers.len();
+            let values = if count == 1 { "value" } else { "values" };
+            return Err(Error::at(
+                span,
+                format!("again takes {count} {values}, one for each name of its loop"),
+            ));
+        }
+        let top = self.current.top;
+        let base = self.reserve(arguments.len(), span)?;
+        for (offset, argument) in (0..).zip(arguments) {
+            self.expression(argument, base + offset)?;
+        }
+        for (offset, (register, boxed)) in (0..).zip(registers) {
+            self.emit(
+                Op::Move {
+                    to: register,
+                    from: base + offset,
+                },
+                span,
+            );
+            if boxed {
+                self.emit(Op::MakeCell { register }, span);
+            }
+        }
+        self.emit(Op::Jump { to: start }, span);
         self.release(top);
         Ok(())
     }

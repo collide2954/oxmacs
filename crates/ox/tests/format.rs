@@ -155,6 +155,12 @@ nil))
 body)
 (with-thing x
 body)
+(loop [i 0]
+(again i))
+(each [x xs]
+(f x))
+(case x
+[1 :one])
 ";
 
     assert_eq!(
@@ -174,6 +180,12 @@ body)
   body)
 (with-thing x
   body)
+(loop [i 0]
+  (again i))
+(each [x xs]
+  (f x))
+(case x
+  [1 :one])
 "
     );
 }

@@ -22,6 +22,7 @@ pub struct Module {
     pub places: HashMap<Sym, Place>,
     pub exports: Option<HashSet<Sym>>,
     pub imports: Vec<Import>,
+    pub defined: HashSet<Sym>,
 }
 
 #[derive(Debug, Clone)]
@@ -118,7 +119,14 @@ impl Runtime {
         {
             return Some((value, target, name));
         }
-        if module == PRELUDE {
+        let shadowed = macros
+            && (current.defined.contains(&name)
+                || current.globals.contains_key(&name)
+                || current
+                    .imports
+                    .iter()
+                    .any(|import| import.only.contains(&name)));
+        if module == PRELUDE || shadowed {
             return None;
         }
         let found = self.modules.get(PRELUDE)?.table(macros).get(&name)?;
