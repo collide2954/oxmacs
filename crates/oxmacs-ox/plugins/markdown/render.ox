@@ -144,3 +144,12 @@
                      (string/lines text))
         page (if (some? page.code) (code-block page) (flush page width))]
     (dissoc page :para :code :fence)))
+
+(test "lines are read into code, strong text and links"
+  (expect (= (inline "Use `x` with **care**, see [the start](start).")
+             [{text: "Use "} {text: "x" face: :constant} {text: " with "} {text: "care" face: :keyword}
+              {text: ", see "} {text: "the start" face: :link target: "start"} {text: "."}])))
+
+(test "a link of several words is one link"
+  (expect (= (get (render "See [the start page](start), then [more](next)." 80) :links)
+             [{start: 4 end: 18 target: "start" line: 0} {start: 25 end: 29 target: "next" line: 0}])))

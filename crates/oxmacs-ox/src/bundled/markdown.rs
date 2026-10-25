@@ -24,20 +24,6 @@ fn eval(editor: &mut Editor, ox: &mut Ox, source: &str) -> String {
 }
 
 #[test]
-fn lines_are_read_into_code_strong_text_and_links() {
-    let (_home, mut editor, mut ox) = started();
-
-    assert_eq!(
-        eval(
-            &mut editor,
-            &mut ox,
-            r#"(md/inline "Use `x` with **care**, see [the start](start).")"#
-        ),
-        r#"[{text: "Use "} {text: "x" face: :constant} {text: " with "} {text: "care" face: :keyword} {text: ", see "} {text: "the start" face: :link target: "start"} {text: "."}]"#
-    );
-}
-
-#[test]
 fn pages_wrap_to_their_width_and_keep_their_links_and_code() {
     let (_home, mut editor, mut ox) = started();
 
@@ -53,20 +39,6 @@ fn pages_wrap_to_their_width_and_keep_their_links_and_code() {
             r#"{lines: [[["Title" :heading]] [""] ["" "One" " " "two" " " "three" " " "four"] ["" "five" " " "six" " " ["seven" :link]] ["" "eight."] [""] ["  • " "a" " " "bullet" " " "that"] ["    " "wraps" " " "around"] [""] ["    " "(" ["def" :keyword] " " ["x" :function] " " ["1" :constant] ")"]] "#,
             r#"links: [{start: 9 end: 14 target: "next" line: 3}] headings: [{line: 0 title: "Title"}] blocks: [{first: 9 last: 9 source: "(def x 1)"}]}"#
         )
-    );
-}
-
-#[test]
-fn a_link_of_several_words_is_one_link() {
-    let (_home, mut editor, mut ox) = started();
-
-    assert_eq!(
-        eval(
-            &mut editor,
-            &mut ox,
-            r#"(get (md/render "See [the start page](start), then [more](next)." 80) :links)"#
-        ),
-        r#"[{start: 4 end: 18 target: "start" line: 0} {start: 25 end: 29 target: "next" line: 0}]"#
     );
 }
 
