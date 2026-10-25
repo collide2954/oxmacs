@@ -45,6 +45,38 @@ fn rotated_jpeg(path: &Path) {
 }
 
 #[test]
+fn images_decode_from_base64_bytes() {
+    let dir = tempfile::tempdir().unwrap();
+    let png = slashed(&dir.path().join("dot.png"));
+    let mut isolate = ox_library::isolate();
+    shown(
+        &mut isolate,
+        &format!("(await (image/save (image/new 3 2 :color :red) \"{png}\"))"),
+    );
+
+    assert_eq!(
+        shown(
+            &mut isolate,
+            &format!(
+                "(module (import (ox image) (ox file))) (image/info (await (image/decode (await (file/read-base64 \"{png}\")))))"
+            )
+        ),
+        "{width: 3 height: 2 format: \"png\" alpha: true}"
+    );
+    assert_eq!(
+        shown(
+            &mut isolate,
+            "(module (import (ox image) (ox crypto))) (image/width (await (image/decode (crypto/to-base64 \"<svg xmlns='http://www.w3.org/2000/svg' width='5' height='4'/>\"))))"
+        ),
+        "5"
+    );
+    assert!(
+        failure(&mut isolate, "(await (image/decode \"bm90IGFuIGltYWdl\"))")
+            .starts_with("Couldn't decode the image")
+    );
+}
+
+#[test]
 fn images_are_made_saved_and_opened_again() {
     let dir = tempfile::tempdir().unwrap();
     let png = slashed(&dir.path().join("dot.png"));

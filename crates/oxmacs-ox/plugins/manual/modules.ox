@@ -84,6 +84,7 @@ ox/net      TCP connections, with or without TLS
 ox/http     HTTP requests and URL encoding
 ox/crypto   Hashes, encryption with a password, random numbers, base64 and one-time codes
 ox/image    Opening, editing, drawing on and saving images, with filters and color adjustments
+ox/zip      Reading the files inside zip archives, such as EPUB books
 ox/ui       Widgets for plugin views: text, rows, columns, buttons, images and canvases; in oxmacs only
 ```
 

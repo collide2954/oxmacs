@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::BufWriter;
+use std::io::{BufRead, BufWriter, Cursor, Seek};
 use std::path::{Path, PathBuf};
 
 use image::codecs::jpeg::JpegEncoder;
@@ -22,14 +22,18 @@ fn extension(path: &Path) -> String {
 fn svg(path: &Path) -> Result<Image, String> {
     let data =
         fs::read(path).map_err(|error| format!("Couldn't read {}: {error}", path.display()))?;
+    svg_data(&data, &path.display().to_string())
+}
+
+fn svg_data(data: &[u8], shown: &str) -> Result<Image, String> {
     let mut options = resvg::usvg::Options::default();
     options.fontdb_mut().load_system_fonts();
-    let tree = resvg::usvg::Tree::from_data(&data, &options)
-        .map_err(|error| format!("Couldn't read {} as SVG: {error}", path.display()))?;
+    let tree = resvg::usvg::Tree::from_data(data, &options)
+        .map_err(|error| format!("Couldn't read {shown} as SVG: {error}"))?;
     let size = tree.size().to_int_size();
     super::room("open", size.width(), size.height())?;
     let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height())
-        .ok_or_else(|| format!("{} has no size to draw", path.display()))?;
+        .ok_or_else(|| format!("{shown} has no size to draw"))?;
     resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
     let pixels: Vec<u8> = pixmap
         .pixels()
@@ -40,7 +44,7 @@ fn svg(path: &Path) -> Result<Image, String> {
         })
         .collect();
     let pixels = image::RgbaImage::from_raw(size.width(), size.height(), pixels)
-        .ok_or_else(|| format!("{} drew to the wrong size", path.display()))?;
+        .ok_or_else(|| format!("{shown} drew to the wrong size"))?;
     let mut image = Image::new(pixels);
     image.format = Some("svg".to_owned());
     Ok(image)
@@ -65,6 +69,25 @@ pub(super) fn open(path: &Path) -> Result<Image, String> {
     let reader = ImageReader::open(path)
         .and_then(ImageReader::with_guessed_format)
         .map_err(|error| failed(&error))?;
+    decoded(reader, &failed)
+}
+
+pub(super) fn decode(bytes: &[u8]) -> Result<Image, String> {
+    let failed = |error: &dyn std::fmt::Display| format!("Couldn't decode the image: {error}");
+    let start = String::from_utf8_lossy(&bytes[..bytes.len().min(256)]).to_lowercase();
+    if start.contains("<svg") {
+        return svg_data(bytes, "the image").map_err(|error| failed(&error));
+    }
+    let reader = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|error| failed(&error))?;
+    decoded(reader, &failed)
+}
+
+fn decoded<R: BufRead + Seek>(
+    reader: ImageReader<R>,
+    failed: &dyn Fn(&dyn std::fmt::Display) -> String,
+) -> Result<Image, String> {
     let format = reader.format().map(format_name);
     let mut decoder = reader.into_decoder().map_err(|error| failed(&error))?;
     let exif = decoder.exif_metadata().ok().flatten();
@@ -165,6 +188,11 @@ pub(super) fn install(isolate: &mut Isolate) {
     isolate.define_native_in(MODULE, "open", 1, Some(1), |heap, arguments| {
         let path = PathBuf::from(text(heap, "open", "a path", arguments[0])?);
         later(heap, "open", move || open(&path))
+    });
+    isolate.define_native_in(MODULE, "decode", 1, Some(1), |heap, arguments| {
+        let bytes = crate::crypto::from_base64(text(heap, "decode", "base64 text", arguments[0])?)
+            .ok_or_else(|| Error::new("image/decode got text that isn't base64"))?;
+        later(heap, "decode", move || decode(&bytes))
     });
     isolate.define_native_in(MODULE, "probe", 1, Some(1), |heap, arguments| {
         let path = PathBuf::from(text(heap, "probe", "a path", arguments[0])?);

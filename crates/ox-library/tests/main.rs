@@ -6,3 +6,4 @@ mod image;
 mod net;
 mod process;
 mod sandbox;
+mod zip;

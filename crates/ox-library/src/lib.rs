@@ -5,6 +5,7 @@ mod http;
 pub mod image;
 mod net;
 mod process;
+mod zip;
 
 use ox::error::{Error, ErrorKind};
 use ox::heap::Heap;
@@ -33,6 +34,10 @@ pub const MODULES: &[(&str, &str)] = &[
         "ox/image",
         "Opening, editing, drawing on and saving images, with filters and color adjustments",
     ),
+    (
+        "ox/zip",
+        "Reading the files inside zip archives, such as EPUB books",
+    ),
 ];
 
 pub fn modules() -> Vec<(&'static str, &'static str)> {
@@ -57,6 +62,7 @@ pub fn install(isolate: &mut Isolate) {
     files::install(isolate);
     process::install(isolate);
     image::install(isolate);
+    zip::install(isolate);
     isolate.add_native_docs(DOCS);
 }
 
