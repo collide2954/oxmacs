@@ -1,10 +1,13 @@
 use crate::error::Error;
+use crate::forms::BUILT_IN;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::library::collections::{self, is_list};
+use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::equal::equal;
 use crate::vm::build::{full, make_map, make_vector};
+use crate::vm::modules::PRELUDE;
 
 use super::testing::PLAIN_HEADS;
 
@@ -431,4 +434,9 @@ pub(super) fn install(isolate: &mut Isolate) {
     isolate.define_expander("as->", 2, None, as_thread);
     isolate.define_expander("test", 1, None, test);
     isolate.define_expander("expect", 1, Some(1), expect);
+    for (name, form) in BUILT_IN {
+        isolate
+            .runtime_mut()
+            .set_form(PRELUDE, Sym::intern(name), Some(*form));
+    }
 }

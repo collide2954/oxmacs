@@ -7,6 +7,7 @@ use lsp_server::{Connection, ErrorCode, Message, Notification, Request, Response
 use ox::Isolate;
 use ox::check::Severity;
 use ox::describe::Kind;
+use ox::forms::Forms;
 use ox::names::{self, Definition};
 use ox::span::Span;
 use serde_json::{Value, json};
@@ -41,6 +42,7 @@ struct Document {
     text: String,
     path: Option<PathBuf>,
     name: String,
+    forms: Forms,
 }
 
 impl Document {
@@ -221,7 +223,12 @@ impl<'a> Server<'a> {
             document.text.clone(),
             document.path.clone(),
         );
-        let found = self.isolate(path.as_deref()).check(&name, &text);
+        let isolate = self.isolate(path.as_deref());
+        let found = isolate.check(&name, &text);
+        let forms = isolate.checked_forms(&name, &text);
+        if let Some(document) = self.documents.get_mut(uri) {
+            document.forms = forms;
+        }
         let shown: Vec<Value> = found
             .iter()
             .map(|diagnostic| {
@@ -250,8 +257,16 @@ impl<'a> Server<'a> {
                     .as_ref()
                     .map_or_else(|| uri.clone(), |path| path.display().to_string());
                 let text = params["textDocument"]["text"].as_str()?.to_owned();
-                self.documents
-                    .insert(uri.clone(), Document { text, path, name });
+                let forms = Forms::built_in();
+                self.documents.insert(
+                    uri.clone(),
+                    Document {
+                        text,
+                        path,
+                        name,
+                        forms,
+                    },
+                );
                 self.diagnostics(&uri)
             }
             "textDocument/didChange" => {
@@ -274,7 +289,7 @@ impl<'a> Server<'a> {
 
     fn lookup(&mut self, uri: &str, name: &str) -> Option<(String, Option<String>, Kind)> {
         let document = self.documents.get(uri)?;
-        if let Some(found) = names::definitions(&document.text)
+        if let Some(found) = names::definitions_with(&document.text, &document.forms)
             .into_iter()
             .find(|definition| definition.name == name)
         {
@@ -305,7 +320,7 @@ impl<'a> Server<'a> {
         let document = self.documents.get(&uri)?;
         let (module, path) = (document.module(), document.path.clone());
         let mut found: Vec<(String, Option<String>, Kind, Option<String>)> =
-            names::definitions(&text)
+            names::definitions_with(&text, &document.forms)
                 .into_iter()
                 .filter(|definition| definition.name.starts_with(&prefix))
                 .map(|definition| {
@@ -377,7 +392,7 @@ impl<'a> Server<'a> {
         ordered.extend(self.documents.keys().filter(|other| **other != uri));
         for candidate in ordered {
             let document = &self.documents[candidate];
-            if let Some(found) = names::definitions(&document.text)
+            if let Some(found) = names::definitions_with(&document.text, &document.forms)
                 .into_iter()
                 .find(|definition: &Definition| definition.name == wanted)
             {
@@ -438,8 +453,9 @@ impl<'a> Server<'a> {
 
     fn format(&self, params: &Value) -> Option<Value> {
         let uri = params["textDocument"]["uri"].as_str()?;
-        let text = &self.documents.get(uri)?.text;
-        let formatted = ox::format::format(text).ok()?;
+        let document = self.documents.get(uri)?;
+        let text = &document.text;
+        let formatted = ox::format::format_with(text, &document.forms).ok()?;
         if formatted == *text {
             return Some(json!([]));
         }
@@ -449,9 +465,10 @@ impl<'a> Server<'a> {
 
     fn symbols(&self, params: &Value) -> Option<Value> {
         let uri = params["textDocument"]["uri"].as_str()?;
-        let text = &self.documents.get(uri)?.text;
+        let document = self.documents.get(uri)?;
+        let text = &document.text;
         Some(Value::Array(
-            names::definitions(text)
+            names::definitions_with(text, &document.forms)
                 .into_iter()
                 .map(|definition| {
                     json!({

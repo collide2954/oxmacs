@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use crate::forms::Form;
 use crate::span::{Source, Span};
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -74,6 +75,7 @@ pub enum Op {
     Document {
         name: Sym,
         doc: u32,
+        form: u16,
     },
     SetGlobal {
         name: Sym,
@@ -224,4 +226,7 @@ pub struct Code {
     pub source: Option<Rc<Source>>,
     pub module: usize,
     pub spans: Vec<Span>,
+    pub forms: Vec<Form>,
 }
+
+pub const NO_FORM: u16 = u16::MAX;

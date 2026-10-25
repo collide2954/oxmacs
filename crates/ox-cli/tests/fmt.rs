@@ -40,6 +40,41 @@ fn ox_fmt_formats_in_place_and_check_only_reports() {
 }
 
 #[test]
+fn ox_fmt_indents_with_the_forms_of_imported_macros_and_editor_macros() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("kit.ox"),
+        "(defmacro ^{indent: 1} grouped [label & body] `(do ~@body))\n",
+    )
+    .unwrap();
+    let using = dir.path().join("using.ox");
+    fs::write(
+        &using,
+        "(module (import (kit :only [grouped])))\n(grouped \"a\"\n1)\n",
+    )
+    .unwrap();
+    let plugin = dir.path().join("plugins").join("hello");
+    fs::create_dir_all(&plugin).unwrap();
+    fs::write(
+        plugin.join("plugin.ox"),
+        "(plugin hello\n:version \"0.1.0\")\n",
+    )
+    .unwrap();
+
+    let (code, _, problem) = ox(&["fmt", dir.path().to_str().unwrap()]);
+
+    assert_eq!(code, 0, "{problem}");
+    assert_eq!(
+        fs::read_to_string(&using).unwrap(),
+        "(module (import (kit :only [grouped])))\n(grouped \"a\"\n  1)\n"
+    );
+    assert_eq!(
+        fs::read_to_string(plugin.join("plugin.ox")).unwrap(),
+        "(plugin hello\n  :version \"0.1.0\")\n"
+    );
+}
+
+#[test]
 fn ox_fmt_leaves_unreadable_files_alone_and_says_why() {
     let dir = tempfile::tempdir().unwrap();
     let broken = dir.path().join("broken.ox");

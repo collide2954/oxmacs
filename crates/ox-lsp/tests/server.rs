@@ -214,6 +214,34 @@ fn definitions_references_and_renames_follow_names() {
 }
 
 #[test]
+fn formatting_and_symbols_follow_the_forms_of_imported_macros() {
+    let (dir, file, mut client) = shapes();
+    std::fs::write(
+        dir.path().join("kit.ox"),
+        "(defmacro ^{indent: 1 defines: 0} defwidget [name & body] nil)\n",
+    )
+    .unwrap();
+    client.open(
+        &file,
+        "(module (import (kit :only [defwidget])))\n(defwidget dial\n1)",
+    );
+
+    let edits = client.request(
+        "textDocument/formatting",
+        json!({"textDocument": {"uri": file}, "options": {"tabSize": 2, "insertSpaces": true}}),
+    );
+    assert_eq!(
+        edits[0]["newText"],
+        json!("(module (import (kit :only [defwidget])))\n(defwidget dial\n  1)\n")
+    );
+    let symbols = client.request(
+        "textDocument/documentSymbol",
+        json!({"textDocument": {"uri": file}}),
+    );
+    assert_eq!(symbols[0]["name"], json!("dial"));
+}
+
+#[test]
 fn formatting_and_symbols_use_the_ox_tools() {
     let (_dir, file, mut client) = shapes();
     client.open(&file, "(def (f x)\nx)\n(def limit 5)");

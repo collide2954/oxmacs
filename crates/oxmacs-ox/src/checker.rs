@@ -4,6 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use ox::check::{Diagnostic, Severity};
+use ox::forms::Forms;
 use ox::span::line_column;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::external::diagnostics::{Diagnostic as Found, Severity as Level};
@@ -20,6 +21,7 @@ struct Done {
     path: PathBuf,
     source: String,
     found: Vec<Diagnostic>,
+    forms: Forms,
 }
 
 #[derive(Debug)]
@@ -42,11 +44,14 @@ fn serve(jobs: &Receiver<Job>, done: &Sender<Done>) {
         for root in check_roots(&job.path) {
             isolate.add_root(root);
         }
-        let found = isolate.check(&job.path.display().to_string(), &job.source);
+        let name = job.path.display().to_string();
+        let found = isolate.check(&name, &job.source);
+        let forms = isolate.checked_forms(&name, &job.source);
         let finished = Done {
             path: job.path,
             source: job.source,
             found,
+            forms,
         };
         if done.send(finished).is_err() {
             return;
@@ -161,6 +166,7 @@ impl Checker {
                     .map(|diagnostic| found(&done.path, &done.source, diagnostic))
                     .collect();
                 editor.replace_diagnostics(&done.path, findings);
+                crate::mode::remember_forms(editor, &done.path, done.forms);
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {
@@ -208,6 +214,41 @@ mod tests {
 
     fn rest(editor: &mut Editor, ox: &mut Ox, since: Instant, millis: u64) {
         ox.idle(editor, since, since + Duration::from_millis(millis));
+    }
+
+    #[test]
+    fn macros_a_file_imports_shape_its_highlighting_and_formatting() {
+        let (_home, mut editor, mut ox) = visiting(
+            &[
+                (
+                    "notes/kit.ox",
+                    "(defmacro ^{indent: 1 defines: 0} defwidget [name & body] nil)\n",
+                ),
+                (
+                    "notes/use.ox",
+                    "(module (import (kit :only [defwidget])))\n(defwidget dial\n1)\n",
+                ),
+            ],
+            "notes/use.ox",
+        );
+        let before = editor.line_style(1).spans;
+
+        rest(&mut editor, &mut ox, Instant::now(), 600);
+        settle(&mut editor, &mut ox);
+
+        assert_ne!(editor.line_style(1).spans, before);
+        assert_eq!(
+            editor.line_style(1).spans,
+            [
+                (1..10, oxmacs_core::theme::Highlight::Keyword),
+                (11..15, oxmacs_core::theme::Highlight::Function),
+            ]
+        );
+        crate::testing::keys(&mut editor, "C-c C-f");
+        assert_eq!(
+            editor.buffer().contents(),
+            "(module (import (kit :only [defwidget])))\n(defwidget dial\n  1)\n"
+        );
     }
 
     #[test]

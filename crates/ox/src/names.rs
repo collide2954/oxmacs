@@ -1,4 +1,5 @@
 use crate::describe::Kind;
+use crate::forms::Forms;
 use crate::read::{self, Datum, Syntax, split_meta};
 use crate::span::Span;
 
@@ -159,7 +160,21 @@ fn doc_of(body: &[Syntax]) -> Option<String> {
     }
 }
 
-fn definition(form: &Syntax) -> Option<Definition> {
+fn defined(rest: &[Syntax], at: usize) -> Option<(&Syntax, String, Option<String>)> {
+    let target = rest.get(at)?;
+    let name_syntax = match &target.datum {
+        Datum::List(parts) => parts.first()?,
+        _ => target,
+    };
+    let name = symbol(name_syntax)?;
+    let doc = match rest.get(at + 1).map(|item| &item.datum) {
+        Some(Datum::Str(text)) => Some(text.clone()),
+        _ => None,
+    };
+    Some((name_syntax, format!("({name})"), doc))
+}
+
+fn definition(form: &Syntax, forms: &Forms) -> Option<Definition> {
     let Datum::List(items) = &form.datum else {
         return None;
     };
@@ -199,15 +214,10 @@ fn definition(form: &Syntax) -> Option<Definition> {
             };
             (target, Kind::Record, signature(name, fields), None)
         }
-        ("defcommand", [target, summary, ..]) => {
-            let name = symbol(target)?;
-            let doc = match &summary.datum {
-                Datum::Str(text) => Some(text.clone()),
-                _ => None,
-            };
-            (target, Kind::Function, format!("({name})"), doc)
+        _ => {
+            let (name_syntax, signature, doc) = defined(rest, forms.defines(head)?)?;
+            (name_syntax, Kind::Function, signature, doc)
         }
-        _ => return None,
     };
     Some(Definition {
         name: symbol(name_syntax)?.to_owned(),
@@ -220,13 +230,20 @@ fn definition(form: &Syntax) -> Option<Definition> {
 }
 
 pub fn definitions(text: &str) -> Vec<Definition> {
+    definitions_with(text, &Forms::built_in())
+}
+
+pub fn definitions_with(text: &str, known: &Forms) -> Vec<Definition> {
     let (forms, _) = read::read(text);
-    forms.iter().filter_map(definition).collect()
+    forms
+        .iter()
+        .filter_map(|form| definition(form, known))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Definition, call_head, definitions, occurrences, short, symbol_at};
+    use super::{Definition, call_head, occurrences, short, symbol_at};
     use crate::describe::Kind;
 
     #[test]
@@ -265,6 +282,34 @@ mod tests {
     }
 
     #[test]
+    fn macros_that_define_names_are_listed_from_their_forms() {
+        let mut forms = crate::forms::Forms::built_in();
+        forms.insert(
+            "defwidget",
+            crate::forms::Form {
+                indent: Some(1),
+                defines: Some(0),
+            },
+        );
+
+        let found: Vec<(String, Option<String>)> = super::definitions_with(
+            "(defwidget dial \"Turns\" 1)\n(defrule (swap! a b) [b a])\n(other thing)",
+            &forms,
+        )
+        .into_iter()
+        .map(|definition| (definition.name, definition.doc))
+        .collect();
+
+        assert_eq!(
+            found,
+            [
+                ("dial".to_owned(), Some("Turns".to_owned())),
+                ("swap!".to_owned(), None),
+            ]
+        );
+    }
+
+    #[test]
     fn top_level_definitions_are_listed_with_their_signatures() {
         let text = "(def (area w h) \"Width times height.\" (* w h))
 (def ^:shadow limit 5)
@@ -272,19 +317,28 @@ mod tests {
 (defrecord Point [x y])
 (defcommand greet \"Say hello\" (message \"hi\"))
 (area 1 2)";
+        let mut forms = crate::forms::Forms::built_in();
+        forms.insert(
+            "defcommand",
+            crate::forms::Form {
+                indent: Some(2),
+                defines: Some(0),
+            },
+        );
 
-        let found: Vec<(String, Kind, String, Option<String>)> = definitions(text)
-            .into_iter()
-            .map(
-                |Definition {
-                     name,
-                     kind,
-                     signature,
-                     doc,
-                     ..
-                 }| (name, kind, signature, doc),
-            )
-            .collect();
+        let found: Vec<(String, Kind, String, Option<String>)> =
+            super::definitions_with(text, &forms)
+                .into_iter()
+                .map(
+                    |Definition {
+                         name,
+                         kind,
+                         signature,
+                         doc,
+                         ..
+                     }| (name, kind, signature, doc),
+                )
+                .collect();
 
         assert_eq!(
             found,

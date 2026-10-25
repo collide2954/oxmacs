@@ -90,13 +90,12 @@ fn editor_names() -> HashSet<String> {
     let documented = DOCS
         .lines()
         .filter_map(|line| line.strip_prefix('('))
-        .filter_map(|rest| rest.split([' ', ')']).next());
-    let defined = PRELUDE.lines().filter_map(|line| {
-        line.strip_prefix("(defmacro ")
-            .or_else(|| line.strip_prefix("(def ("))
-            .and_then(|rest| rest.split([' ', ')']).next())
-    });
-    documented.chain(defined).map(str::to_owned).collect()
+        .filter_map(|rest| rest.split([' ', ')']).next())
+        .map(str::to_owned);
+    let defined = ox::names::definitions_with(PRELUDE, &mode::EDITOR_FORMS)
+        .into_iter()
+        .map(|definition| definition.name);
+    documented.chain(defined).collect()
 }
 
 fn grouped(mut docs: Vec<ModuleDocs>) -> Vec<ModuleDocs> {

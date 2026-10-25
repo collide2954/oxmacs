@@ -13,6 +13,7 @@ use crate::compile::compile;
 use crate::describe::{self, Description, Docs, Kind, ModuleDocs};
 use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
+use crate::forms::Forms;
 use crate::heap::{Closure, Heap, Hold, Rooted};
 use crate::library;
 use crate::native::{Control, Drains, Native, NativeFn};
@@ -1302,6 +1303,59 @@ impl Isolate {
         found.sort();
         found.dedup();
         found
+    }
+
+    pub fn forms(&self, module: &str) -> Forms {
+        let id = self.module_id(module);
+        let modules = &self.runtime.modules;
+        let form_of =
+            |found: &Module, name: &Sym| found.forms.get(name).copied().unwrap_or_default();
+        let mut forms = Forms::special();
+        let current = modules.get(id);
+        if let Some(prelude) = modules.get(PRELUDE) {
+            let excluded = |name: &Sym| {
+                current.is_some_and(|current| {
+                    current
+                        .imports
+                        .iter()
+                        .any(|import| import.module == PRELUDE && import.exclude.contains(name))
+                })
+            };
+            for name in prelude.macros.keys().filter(|name| !excluded(name)) {
+                forms.insert(name.name(), form_of(prelude, name));
+            }
+        }
+        let Some(current) = current.filter(|_| id != PRELUDE) else {
+            return forms;
+        };
+        for name in current.macros.keys() {
+            forms.insert(name.name(), form_of(current, name));
+        }
+        for import in &current.imports {
+            let Some(target) = modules
+                .get(import.module)
+                .filter(|_| import.module != PRELUDE)
+            else {
+                continue;
+            };
+            for name in target.macros.keys().filter(|name| target.exports(**name)) {
+                let form = form_of(target, name);
+                forms.insert(format!("{}/{}", import.alias.name(), name.name()), form);
+                if import.only.contains(name) {
+                    forms.insert(name.name(), form);
+                }
+            }
+        }
+        forms
+    }
+
+    pub fn checked_forms(&self, name: &str, source: &str) -> Forms {
+        self.forms(&format!("#check:{name}")).scanned(source)
+    }
+
+    pub fn forms_for(&mut self, name: &str, source: &str) -> Forms {
+        self.check(name, source);
+        self.checked_forms(name, source)
     }
 
     pub fn examples(&self, name: &str) -> Vec<String> {

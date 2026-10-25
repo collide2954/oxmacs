@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::Runtime;
 use crate::describe::Place;
+use crate::forms::Form;
 use crate::symbol::Sym;
 use crate::value::Value;
 
@@ -23,6 +24,7 @@ pub struct Module {
     pub exports: Option<HashSet<Sym>>,
     pub imports: Vec<Import>,
     pub defined: HashSet<Sym>,
+    pub forms: HashMap<Sym, Form>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,7 +36,7 @@ pub struct Import {
 }
 
 impl Module {
-    fn exports(&self, name: Sym) -> bool {
+    pub(crate) fn exports(&self, name: Sym) -> bool {
         self.exports
             .as_ref()
             .is_none_or(|exported| exported.contains(&name))
@@ -168,6 +170,15 @@ impl Runtime {
     pub fn define(&mut self, module: ModuleId, name: Sym, value: Value) {
         if let Some(found) = self.module_mut(module) {
             found.globals.insert(name, value);
+        }
+    }
+
+    pub fn set_form(&mut self, module: ModuleId, name: Sym, form: Option<Form>) {
+        if let Some(found) = self.modules.get_mut(module) {
+            match form {
+                Some(form) => found.forms.insert(name, form),
+                None => found.forms.remove(&name),
+            };
         }
     }
 

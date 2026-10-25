@@ -1,5 +1,9 @@
+use std::collections::HashMap;
 use std::ops::Range;
-use std::sync::{Mutex, PoisonError};
+use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex, PoisonError};
+
+use ox::forms::{self, Forms};
 
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::{Editor, Formatter};
@@ -26,62 +30,10 @@ static OX: LanguageSpec = LanguageSpec {
     ],
 };
 
-const SPECIAL: &[&str] = &[
-    "def",
-    "defmacro",
-    "defrecord",
-    "deferror",
-    "defonce",
-    "defcommand",
-    "defrule",
-    "defrules",
-    "fn",
-    "let",
-    "loop",
-    "again",
-    "each",
-    "for",
-    "while",
-    "until",
-    "if",
-    "do",
-    "when",
-    "unless",
-    "cond",
-    "case",
-    "match",
-    "try",
-    "catch",
-    "finally",
-    "raise",
-    "set!",
-    "quote",
-    "module",
-    "import",
-    "export",
-    "and",
-    "or",
-    "spawn",
-    "gen",
-    "await",
-    "yield",
-    "when-let",
-    "if-let",
-    "plugin",
-    "use-plugin",
-    "else",
-];
+const CONTROL: &[&str] = &["raise", "await", "yield", "import", "export", "else"];
 
-const DEFINING: &[&str] = &[
-    "def",
-    "defmacro",
-    "defrecord",
-    "deferror",
-    "defonce",
-    "defcommand",
-    "defrule",
-    "defrules",
-];
+pub(crate) static EDITOR_FORMS: LazyLock<Forms> =
+    LazyLock::new(|| Forms::built_in().scanned(crate::PRELUDE));
 
 const CONSTANTS: &[&str] = &["nil", "true", "false"];
 
@@ -112,7 +64,7 @@ fn number(word: &str) -> bool {
         .starts_with(|character: char| character.is_ascii_digit())
 }
 
-fn word_spans(word: &str, start: usize, after_paren: bool, defining: bool) -> Spans {
+fn word_spans(word: &str, start: usize, after_paren: bool, defining: bool, known: &Forms) -> Spans {
     let end = start + word.chars().count();
     let offset = |index: usize| start + word[..index].chars().count();
     if word.starts_with(':') || word.ends_with(':') || number(word) || CONSTANTS.contains(&word) {
@@ -121,7 +73,7 @@ fn word_spans(word: &str, start: usize, after_paren: bool, defining: bool) -> Sp
     if defining {
         return vec![(start..end, Highlight::Function)];
     }
-    if after_paren && SPECIAL.contains(&word) {
+    if after_paren && (known.knows(word) || CONTROL.contains(&word)) {
         return vec![(start..end, Highlight::Keyword)];
     }
     if let Some(slash) = word
@@ -307,8 +259,6 @@ fn resume(chars: &[char], state: State, spans: &mut Spans) -> Result<usize, Stat
     open.map_or(Ok(at), Err)
 }
 
-const SUMMARIZED: &[&str] = &["defcommand", "defmode"];
-
 fn word_end(chars: &[char], from: usize) -> usize {
     (from..chars.len())
         .find(|index| delimits(chars[*index]))
@@ -344,6 +294,10 @@ fn reader_token(chars: &[char], at: usize) -> Option<(usize, Highlight)> {
 }
 
 fn highlight_with(text: &str, state: State) -> (Spans, State) {
+    highlight_in(text, state, &EDITOR_FORMS)
+}
+
+fn highlight_in(text: &str, state: State, known: &Forms) -> (Spans, State) {
     let chars: Vec<char> = text.chars().collect();
     let mut spans = Vec::new();
     let mut at = match resume(&chars, state, &mut spans) {
@@ -416,12 +370,9 @@ fn highlight_with(text: &str, state: State) -> (Spans, State) {
                 at += 1;
             }
             let word: String = chars[start..at].iter().collect();
-            spans.extend(word_spans(&word, start, after_paren, defining));
-            summary = defining
-                && head
-                    .as_deref()
-                    .is_some_and(|head| SUMMARIZED.contains(&head));
-            defining = after_paren && DEFINING.contains(&word.as_str());
+            spans.extend(word_spans(&word, start, after_paren, defining, known));
+            summary = defining && head.as_deref().is_some_and(|head| !forms::special(head));
+            defining = after_paren && known.defines(&word) == Some(0);
             if defining {
                 head = Some(word);
             }
@@ -538,6 +489,27 @@ impl Lexed {
     }
 }
 
+#[derive(Debug, Default)]
+struct FileForms(HashMap<PathBuf, Forms>);
+
+pub(crate) fn remember_forms(editor: &mut Editor, path: &Path, forms: Forms) {
+    if editor.plugin_state::<FileForms>().is_none() {
+        editor.set_plugin_state(FileForms::default());
+    }
+    if let Some(known) = editor.plugin_state_mut::<FileForms>() {
+        known.0.insert(path.to_path_buf(), forms);
+    }
+}
+
+fn forms_at<'e>(editor: &'e Editor, path: Option<&Path>) -> &'e Forms {
+    path.and_then(|path| editor.plugin_state::<FileForms>()?.0.get(path))
+        .unwrap_or(&EDITOR_FORMS)
+}
+
+fn forms_of<'e>(editor: &'e Editor, buffer: &Buffer) -> &'e Forms {
+    forms_at(editor, buffer.file().map(|file| file.path.as_path()))
+}
+
 fn highlight(editor: &Editor, id: BufferId, line: usize) -> Spans {
     let Some(buffer) = editor.buffer_by_id(id) else {
         return Vec::new();
@@ -546,14 +518,18 @@ fn highlight(editor: &Editor, id: BufferId, line: usize) -> Spans {
         || Starts::new(buffer, line).state(buffer, line),
         |lexed| lexed.state(buffer, line),
     );
-    highlight_with(&buffer.line_text(line), state).0
+    highlight_in(&buffer.line_text(line), state, forms_of(editor, buffer)).0
 }
 const LOOK_BACK: usize = 2000;
 
 const OX_FMT: Formatter = Formatter {
     name: "ox fmt",
-    format: |_, request| {
-        ox::format::format(request.text).map_err(|problem| format!("ox fmt: {problem}"))
+    format: |editor, request| {
+        let known = forms_at(editor, Some(request.path))
+            .clone()
+            .scanned(request.text);
+        ox::format::format_with(request.text, &known)
+            .map_err(|problem| format!("ox fmt: {problem}"))
     },
     regions: false,
     on_save: true,
@@ -567,7 +543,7 @@ fn indent(editor: &Editor, id: BufferId, line: usize) -> Option<usize> {
         .find(|candidate| buffer.line_text(*candidate).starts_with('('))
         .unwrap_or(floor);
     let before = buffer.text_in(buffer.line_start(first)..buffer.line_start(line));
-    ox::format::indentation(&before)
+    ox::format::indentation_with(&before, forms_of(editor, buffer))
 }
 
 pub fn install(editor: &mut Editor, scope: ScopeId) {

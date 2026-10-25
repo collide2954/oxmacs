@@ -561,7 +561,7 @@ impl Runtime {
             Op::DefineMacro { name, from } => {
                 self.define_macro(machine.code.module, name, machine.get(from));
             }
-            Op::Document { name, doc } => {
+            Op::Document { name, doc, form } => {
                 let text = self
                     .heap
                     .text(machine.code.constants[doc as usize])
@@ -574,6 +574,8 @@ impl Runtime {
                     .zip(span.copied())
                     .map(|(source, span)| Place { source, span });
                 self.document(machine.code.module, name, text, place);
+                let form = machine.code.forms.get(usize::from(form)).copied();
+                self.set_form(machine.code.module, name, form);
             }
             Op::DefineGlobal { name, from } => {
                 self.define(machine.code.module, name, machine.get(from));

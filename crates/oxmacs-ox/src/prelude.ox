@@ -1,21 +1,21 @@
-(defmacro defcommand [name summary & body]
+(defmacro ^{indent: 2 defines: 0} defcommand [name summary & body]
   "Defines an M-x command called name, described by summary, that runs body."
   `(define-command '~name ~summary (fn [] ~@body)))
 
-(defmacro with-buffer [buffer & body]
+(defmacro ^{indent: 1} with-buffer [buffer & body]
   "Runs body with buffer, a handle or a name, as the current buffer of this task, leaving the windows alone."
   `(do (enter-buffer ~buffer)
      (try (do ~@body) (finally (leave-buffer)))))
 
-(defmacro defmode [name title & options]
+(defmacro ^{indent: 2 defines: 0} defmode [name title & options]
   "Defines a major mode; see define-mode for its options."
   `(define-mode '~name ~title ~@options))
 
-(defmacro plugin [name & options]
+(defmacro ^{indent: 1} plugin [name & options]
   "The manifest in a plugin's plugin.ox: its :version, :summary, :requires, :entry file, :commands, :keys, :mode-keys, :modes, :settings, :start-screen, :startup-when, :wakes-for, :opens-directories and :opt-in."
   (list 'quote (cons name options)))
 
-(defmacro use-plugin [name & options]
+(defmacro ^{indent: 1} use-plugin [name & options]
   "Turns on the plugin called name, with :config for its settings or :disabled true."
   `(enable-plugin '~name ~@options))
 

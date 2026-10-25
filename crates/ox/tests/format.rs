@@ -1,7 +1,67 @@
-use ox::format::{format, indentation};
+use std::fs;
+
+use ox::Isolate;
+use ox::format::{format, format_with, indentation};
+use ox::forms::Form;
 
 fn formatted(source: &str) -> String {
     format(source).unwrap_or_else(|problem| panic!("{problem}"))
+}
+
+#[test]
+fn macros_declare_their_form_and_every_tool_reads_it() {
+    let mut isolate = Isolate::new();
+    isolate
+        .eval("(defmacro ^{indent: 1 defines: 0} defthing [name & body] `(def ~name (do ~@body)))")
+        .unwrap();
+
+    let forms = isolate.forms("user");
+
+    assert_eq!(
+        forms.get("defthing"),
+        Some(Form {
+            indent: Some(1),
+            defines: Some(0)
+        })
+    );
+    assert_eq!(forms.get("when").and_then(|form| form.indent), Some(1));
+    assert_eq!(forms.get("let").and_then(|form| form.indent), Some(1));
+    assert!(forms.knows("->"));
+    assert!(!forms.knows("map"));
+}
+
+#[test]
+fn a_files_forms_come_from_its_imports_and_its_own_macros() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("kit.ox"),
+        "(defmacro ^{indent: 1} with-kit [k & body] `(do ~@body))\n(defmacro ^{indent: 0} grouped [& body] `(do ~@body))",
+    )
+    .unwrap();
+    let mut isolate = Isolate::new();
+    isolate.add_root(dir.path());
+    let source = "(module (import (kit :as k :only [grouped])))\n(defmacro ^{indent: 2 defines: 0} defpair [a b & body] nil)\n(k/grouped 1\n2)\n(grouped 1\n2)\n(defpair x y\n1)\n";
+
+    let forms = isolate.forms_for("sample.ox", source);
+
+    assert_eq!(
+        forms.get("k/with-kit").and_then(|form| form.indent),
+        Some(1)
+    );
+    assert_eq!(forms.get("grouped").and_then(|form| form.indent), Some(0));
+    assert_eq!(forms.get("defpair").and_then(|form| form.defines), Some(0));
+    assert_eq!(
+        format_with(source, &forms).unwrap(),
+        "(module (import (kit :as k :only [grouped])))\n(defmacro ^{indent: 2 defines: 0} defpair [a b & body] nil)\n(k/grouped 1\n  2)\n(grouped 1\n  2)\n(defpair x y\n  1)\n"
+    );
+}
+
+#[test]
+fn metadata_keeps_its_place_when_lines_above_change() {
+    assert_eq!(
+        formatted("(f\nx)\n(def ^:shadow (g)\n1)\n(defmacro ^{indent: 1} m [x]\nx)\n"),
+        "(f\n x)\n(def ^:shadow (g)\n  1)\n(defmacro ^{indent: 1} m [x]\n  x)\n"
+    );
 }
 
 #[test]

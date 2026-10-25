@@ -5,6 +5,7 @@ pub mod describe;
 pub mod error;
 mod expand;
 pub mod format;
+pub mod forms;
 pub mod heap;
 mod isolate;
 mod library;

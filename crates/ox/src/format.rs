@@ -1,44 +1,6 @@
+use crate::forms::Forms;
 use crate::read::{self, Datum, Syntax};
 use crate::span::line_column;
-
-const BODIES: &[&str] = &[
-    "def",
-    "defmacro",
-    "defrecord",
-    "deferror",
-    "defonce",
-    "defcommand",
-    "defmode",
-    "defrule",
-    "defrules",
-    "fn",
-    "let",
-    "loop",
-    "each",
-    "for",
-    "while",
-    "until",
-    "case",
-    "when",
-    "unless",
-    "when-let",
-    "if-let",
-    "if",
-    "do",
-    "try",
-    "catch",
-    "finally",
-    "match",
-    "cond",
-    "module",
-    "test",
-    "gen",
-    "spawn",
-    "atomically",
-    "maybe",
-    "plugin",
-    "use-plugin",
-];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Shape {
@@ -80,16 +42,10 @@ struct Open {
     argument: Option<usize>,
 }
 
-#[derive(Debug, Default)]
-struct State {
+#[derive(Debug)]
+struct State<'f> {
     stack: Vec<Open>,
-}
-
-fn body(head: &str) -> bool {
-    BODIES.contains(&head)
-        || ["def", "with-", "when-", "if-"]
-            .iter()
-            .any(|prefix| head.starts_with(prefix))
+    forms: &'f Forms,
 }
 
 fn delimits(character: char) -> bool {
@@ -297,7 +253,7 @@ fn pieces(chars: &[char], start: usize, end: usize, literals: &[Literal]) -> Vec
                     at += 1;
                     Kind::Open(Shape::Collection)
                 }
-                Some('#') if chars.get(at + 1) == Some(&'{') => {
+                Some('#' | '^') if chars.get(at + 1) == Some(&'{') => {
                     at += 2;
                     Kind::Open(Shape::Collection)
                 }
@@ -362,7 +318,14 @@ fn render(pieces: &[Piece], tidy: bool) -> (String, Vec<usize>) {
     (text, columns)
 }
 
-impl State {
+impl<'f> State<'f> {
+    fn new(forms: &'f Forms) -> Self {
+        Self {
+            stack: Vec::new(),
+            forms,
+        }
+    }
+
     fn indentation(&self) -> usize {
         let Some(top) = self.stack.last() else {
             return 0;
@@ -372,7 +335,7 @@ impl State {
             Shape::Collection => aligned,
             Shape::List => match top.head.as_deref() {
                 None => top.column + 1,
-                Some(head) if body(head) => top.column + 2,
+                Some(head) if self.forms.body(head) => top.column + 2,
                 Some(head) if data(head) => aligned,
                 Some(_) => top.argument.unwrap_or(top.column + 1),
             },
@@ -452,17 +415,22 @@ fn same(before: &Syntax, after: &Syntax) -> bool {
         (Datum::Record(name, left), Datum::Record(other, right)) => {
             name == other && all(left, right)
         }
+        (Datum::Meta(left), Datum::Meta(right)) => all(left, right),
         (one, other) => one == other,
     }
 }
 
 pub fn indentation(before: &str) -> Option<usize> {
+    indentation_with(before, &Forms::built_in())
+}
+
+pub fn indentation_with(before: &str, forms: &Forms) -> Option<usize> {
     let chars: Vec<char> = before.chars().collect();
     let found = literals(&chars);
     if found.last().is_some_and(|literal| !literal.closed) {
         return None;
     }
-    let mut state = State::default();
+    let mut state = State::new(forms);
     for (line, (start, end)) in lines(&chars).into_iter().enumerate() {
         let pieces = pieces(&chars, start, end, &found);
         let columns = raw_columns(&pieces);
@@ -476,12 +444,16 @@ fn raw_columns(pieces: &[Piece]) -> Vec<usize> {
 }
 
 pub fn format(source: &str) -> Result<String, String> {
+    format_with(source, &Forms::built_in().scanned(source))
+}
+
+pub fn format_with(source: &str, known: &Forms) -> Result<String, String> {
     let (forms, errors) = read::read(source);
     if let Some(error) = errors.first() {
         let (line, column) = line_column(source, error.span.start);
         return Err(format!("{line}:{column}: {}", error.message));
     }
-    let out = layout(source);
+    let out = layout(source, known);
     let (again, _) = read::read(&out);
     let kept = again.len() == forms.len() && forms.iter().zip(&again).all(|(a, b)| same(a, b));
     if kept {
@@ -491,10 +463,10 @@ pub fn format(source: &str) -> Result<String, String> {
     }
 }
 
-fn layout(source: &str) -> String {
+fn layout(source: &str, forms: &Forms) -> String {
     let chars: Vec<char> = source.chars().collect();
     let found = literals(&chars);
-    let mut state = State::default();
+    let mut state = State::new(forms);
     let mut out: Vec<String> = Vec::new();
     let mut commented = false;
     for (start, end) in lines(&chars) {

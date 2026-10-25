@@ -147,6 +147,13 @@ An error nothing catches ends the command or task it happened in; oxmacs shows i
 (unless-zero 5 :ran)
 ```
 
+Metadata before a macro's name tells `ox fmt`, highlighting and go-to-definition how its calls look, in this file and in every file that imports it: `indent` counts the arguments before its body, which is indented by two, and `defines` names the argument that is a new definition, counting from 0.
+
+```text
+(defmacro ^{indent: 1 defines: 0} defwidget [name & body]
+  `(def ~name (widget ~@body)))
+```
+
 `defrule` writes a simple macro as a pattern and a template, where `...` repeats what it follows:
 
 ```

@@ -152,14 +152,7 @@ fn check_command(arguments: Vec<OsString>) -> ExitCode {
                 return ExitCode::from(2);
             }
         };
-        let mut isolate = if checker::editor_code(file) {
-            oxmacs_ox::checking_isolate()
-        } else {
-            Isolate::new()
-        };
-        for root in checker::check_roots(file).iter().chain(&roots) {
-            isolate.add_root(root);
-        }
+        let mut isolate = isolate_for(file, &roots);
         let name = file.display().to_string();
         let found = isolate.check(&name, &source);
         checked.push((name, source, found));
@@ -246,7 +239,8 @@ fn fmt_command(arguments: Vec<OsString>) -> ExitCode {
                 continue;
             }
         };
-        let formatted = match ox::format::format(&source) {
+        let forms = isolate_for(file, &[]).forms_for(&file.display().to_string(), &source);
+        let formatted = match ox::format::format_with(&source, &forms) {
             Ok(formatted) => formatted,
             Err(problem) => {
                 eprintln!("{}:{problem}", file.display());
@@ -289,6 +283,18 @@ fn profile_file(path: &Path) -> ExitCode {
         print!("{}", profile.report());
     }
     code
+}
+
+fn isolate_for(file: &Path, roots: &[PathBuf]) -> Isolate {
+    let mut isolate = if checker::editor_code(file) {
+        oxmacs_ox::checking_isolate()
+    } else {
+        Isolate::new()
+    };
+    for root in checker::check_roots(file).iter().chain(roots) {
+        isolate.add_root(root);
+    }
+    isolate
 }
 
 fn add_roots(isolate: &mut Isolate, path: &Path) {

@@ -395,7 +395,7 @@
  (. value :field & fields) "Reads a field of a record or map, and fields of that in turn. value.field is the short form."
  (quote form) "form itself, unevaluated; also written 'form."
  (quasiquote form) "form as data, written `form, with ~value filled in and ~@values spliced in."
- (defmacro name [params] (doc) & body) "Defines a macro: a function that runs when code is read and returns the code to use instead."
+ (defmacro name [params] (doc) & body) "Defines a macro: a function that runs when code is read and returns the code to use instead. (defmacro ^{{indent: 1 defines: 0}} name ...) tells ox fmt, highlighting and go-to-definition that its calls have one argument before a body and that the first names a definition."
  (defrecord Name [fields]) "Defines a record type and its constructor, (Name field ...). Fields are read with record.field."
  (deferror name [fields] (message)) "Defines an error type that raise can raise and catch can catch, with a message that may use its fields, keyword fields with their defaults included."
  (match value & clauses) "Tries each [pattern body...] clause in turn and evaluates the body of the first whose pattern matches value. A clause may add :when test. Raises a no-match-error when none does."

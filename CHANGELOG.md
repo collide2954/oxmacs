@@ -108,6 +108,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- Macros say how their calls look with metadata, `(defmacro ^{indent: 1 defines: 0} defwidget [name & body] …)`, and `ox fmt`, Ox highlighting and indentation in oxmacs, go-to-definition and `ox lsp` all read it, from Ox's own macros, the editor's, the file's and those of the modules it imports, in place of five hand-kept lists that disagreed. `defmode` names are now highlighted and found like `defcommand` names.
 - Ox has loops: `(loop [i 0] … (again (inc i)))` goes round in constant space, `for` builds a vector and `each` runs code for every item, both with nested bindings, `:when` and `:let`, and `while` and `until` repeat on changing state. `case` picks a clause by constant: `(case key [:up 1] [(:left :right) 2] [else 3])`.
 - `(ox math)` has `sqrt`, `pow`, `exp`, `log`, `log10`, `sin`, `cos`, `tan`, `atan2`, `pi`, `e`, `clamp`, `lerp`, and random numbers with `random`, `random-int` and `random-pick`. `pow` stays exact for whole numbers, so `(math/pow 2 100)` is the whole number, and a square root or logarithm out of range raises an error instead of giving NaN.
 - `ox/time` counts days for date arithmetic: `time/day-number` turns a date map into days from 1970-01-01, `time/date-of` turns them back into `:year`, `:month`, `:day` and `:weekday`, and `time/weekday-number` gives 0 for Monday through 6 for Sunday. The calendar uses them instead of its own copies.

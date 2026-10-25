@@ -8,10 +8,11 @@ use patterns::{Matching, Mode};
 use std::cell::Cell;
 use std::rc::Rc;
 
-use crate::bytecode::{Arity, Capture, Code, Op, Prim, Register};
+use crate::bytecode::{Arity, Capture, Code, NO_FORM, Op, Prim, Register};
 use crate::error::Error;
 use crate::expand::patterns::is_pattern;
 use crate::expand::quote::{MISPLACED_META, datum_value};
+use crate::forms::Form;
 use crate::heap::Heap;
 use crate::read::{Datum, Marks, Syntax, split_meta};
 use crate::span::{Source, Span};
@@ -449,7 +450,13 @@ impl Compiler<'_> {
         }
     }
 
-    fn document(&mut self, name: Sym, doc: Option<&str>, span: Span) -> Result<(), Error> {
+    fn document(
+        &mut self,
+        name: Sym,
+        doc: Option<&str>,
+        meta: Option<&[Syntax]>,
+        span: Span,
+    ) -> Result<(), Error> {
         let text = match doc {
             Some(doc) => self
                 .heap
@@ -458,13 +465,25 @@ impl Compiler<'_> {
             None => Value::Nil,
         };
         let doc = self.constant(text, span)?;
-        self.emit(Op::Document { name, doc }, span);
+        let form = match meta {
+            Some(meta) => {
+                let forms = &mut self.current.code.forms;
+                let index = u16::try_from(forms.len())
+                    .ok()
+                    .filter(|index| *index < NO_FORM)
+                    .ok_or_else(|| Error::at(span, "This file defines too many forms"))?;
+                forms.push(Form::of_meta(meta));
+                index
+            }
+            None => NO_FORM,
+        };
+        self.emit(Op::Document { name, doc, form }, span);
         Ok(())
     }
 
     fn define(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
         let malformed = || Error::at(span, "def takes a name and a value");
-        let (_, parts) = split_meta(parts);
+        let (meta, parts) = split_meta(parts);
         let mut doc = None;
         let name = match parts {
             [
@@ -525,7 +544,7 @@ impl Compiler<'_> {
             _ => return Err(malformed()),
         };
         self.emit(Op::DefineGlobal { name, from: target }, span);
-        self.document(name, doc, span)?;
+        self.document(name, doc, meta, span)?;
         self.load(Value::Symbol(name), target, span)
     }
 
@@ -594,12 +613,12 @@ impl Compiler<'_> {
         );
         self.load(record, target, span)?;
         self.emit(Op::DefineGlobal { name, from: target }, span);
-        self.document(name, None, span)?;
+        self.document(name, None, None, span)?;
         self.load(Value::Symbol(name), target, span)
     }
 
     fn define_once(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
-        let (_, parts) = split_meta(parts);
+        let (meta, parts) = split_meta(parts);
         let [
             Syntax {
                 datum: Datum::Symbol(name),
@@ -615,7 +634,7 @@ impl Compiler<'_> {
         self.emit(Op::JumpIfDefined { name, to: 0 }, span);
         self.expression(value, target)?;
         self.emit(Op::DefineGlobal { name, from: target }, span);
-        self.document(name, None, span)?;
+        self.document(name, None, meta, span)?;
         let end = self.here(span)?;
         self.patch(skip, end);
         self.load(Value::Symbol(name), target, span)
@@ -627,7 +646,7 @@ impl Compiler<'_> {
         target: Register,
         span: Span,
     ) -> Result<(), Error> {
-        let (_, parts) = split_meta(parts);
+        let (meta, parts) = split_meta(parts);
         let [
             Syntax {
                 datum: Datum::Symbol(name),
@@ -656,7 +675,7 @@ impl Compiler<'_> {
             span,
         )?;
         self.emit(Op::DefineMacro { name, from: target }, span);
-        self.document(name, doc, span)?;
+        self.document(name, doc, meta, span)?;
         self.load(Value::Symbol(name), target, span)
     }
 
