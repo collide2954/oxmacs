@@ -1307,3 +1307,243 @@ fn r_video() {
     film.hold(2.5);
     film.finish(&out);
 }
+
+fn news_home() -> PathBuf {
+    let user = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap();
+    let home = user.join("oxmacs-news-demo");
+    if home.join(".oxmacs-demo").exists() {
+        fs::remove_dir_all(&home).unwrap();
+    }
+    assert!(
+        !home.exists(),
+        "{} exists and wasn't made by this demo",
+        home.display()
+    );
+    fs::create_dir_all(&home).unwrap();
+    fs::write(home.join(".oxmacs-demo"), "").unwrap();
+    fs::write(
+        home.join("init.ox"),
+        "(settings {theme: :adwaita-dark animations: false font-size: 12})\n(use-plugin zap)\n(use-plugin keycast)\n",
+    )
+    .unwrap();
+    home
+}
+
+const NEWS_HEADER: &str = "(module (import (ox http) (ox xml) (ox string) (ox regex) (ox ui)))";
+
+const NEWS_FEED: &str = "(def feed \"https://blog.rust-lang.org/feed.xml\")";
+
+const NEWS_STATE: &str = "(defonce news (atom {entries: [] at: 0 open: false}))";
+
+const NEWS_PLAIN: &str = "(def (plain html)
+(string/trim (regex/replace \"[[:space:]]+\" (regex/replace \"<[^>]*>\" html \"\") \" \")))";
+
+const NEWS_ENTRY: &str = "(def (entry el)
+{title: (xml/text (xml/find el \"title\"))
+date: (string/slice (xml/text (xml/find el \"updated\")) 0 10)
+summary: (plain (or (xml/text (xml/find el \"content\")) \"\"))})";
+
+const NEWS_TRY: &str =
+    "(count (xml/find-all (xml/parse (get (await (http/get feed)) :body)) \"entry\"))";
+
+const NEWS_FETCH: &str = "(def (fetch)
+(let [reply (await (http/get feed))
+root (xml/parse reply.body)]
+(swap! news assoc :entries (map entry (xml/find-al root \"entry\")) :at 0 :open false)
+(count (get @news :entries))))";
+
+const NEWS_VIEW: &str = "(def (headline i)
+(let [now @news
+item (get now.entries i)]
+(ui/text \"{item.date}  {item.title}\" :face (if (= i now.at) :heading nil))))
+
+(def (page)
+(let [now @news
+chosen (get now.entries now.at)]
+(ui/column
+(ui/text \"The Rust blog\" :face :heading :size 20)
+(apply ui/column (map headline (range (count now.entries))))
+(ui/text (if now.open (string/truncate chosen.summary 600) \"\") :face :comment)
+:spacing 10)))
+
+(def (move by)
+(swap! news (fn [now]
+(assoc now :open false
+:at (max 0 (min (+ now.at by) (dec (count now.entries))))))))";
+
+const NEWS_COMMANDS: &str = "(defcommand news-next \"Next headline\" (move 1))
+(defcommand news-previous \"Previous headline\" (move -1))
+(defcommand news-read \"Read the headline\" (swap! news update :open not))
+(defcommand news \"Read the Rust blog\"
+(open-view \"*News*\" page :beside true :select true
+:keys {\"n\" 'news-next \"p\" 'news-previous \"RET\" 'news-read \"g\" 'news \"q\" 'quit-window})
+(fetch))";
+
+fn fading(film: &mut Film, app: &mut App, frames: usize) {
+    for _ in 0..frames {
+        thread::sleep(Duration::from_millis(100));
+        settle(app);
+        film.shot(app, 0.1);
+    }
+}
+
+fn flashing(app: &App) -> bool {
+    app.editor().flashing(Instant::now())
+}
+
+fn evaluate_above(film: &mut Film, app: &mut App) {
+    film.press(app, "C-p C-e");
+    film.press(app, "C-x C-e");
+    until(app, "the form's flash", flashing);
+    fading(film, app, 6);
+    film.press(app, "C-n");
+}
+
+fn view_texts(app: &App, name: &str) -> Vec<String> {
+    fn gathered(node: &Node, out: &mut Vec<String>) {
+        match node {
+            Node::Column { children, .. } | Node::Row { children, .. } => {
+                for child in children {
+                    gathered(child, out);
+                }
+            }
+            Node::Scrollable(child) => gathered(child, out),
+            Node::Text { text, .. } => out.push(text.clone()),
+            _ => {}
+        }
+    }
+    let editor = app.editor();
+    let mut out = Vec::new();
+    if let Some((_, view)) = editor
+        .buffer_named(name)
+        .and_then(|id| editor.plugin_buffer::<ViewBuffer>(id))
+    {
+        gathered(&view.node, &mut out);
+    }
+    out
+}
+
+fn start_news(film: &mut Film, app: &mut App) {
+    film.mark("start");
+    film.press(app, "C-x C-f");
+    film.type_slowly(app, "~/oxmacs-news-demo/news.ox");
+    film.press(app, "RET");
+    film.press(app, "C-x 3");
+    for form in [NEWS_HEADER, NEWS_FEED, NEWS_STATE, NEWS_PLAIN, NEWS_ENTRY] {
+        film.type_code(app, form);
+        evaluate_above(film, app);
+        film.press(app, "RET");
+    }
+}
+
+fn try_the_feed(film: &mut Film, app: &mut App) {
+    film.mark("repl");
+    film.press(app, "C-x o");
+    film.press(app, "C-c C-z");
+    film.type_slowly(app, NEWS_TRY);
+    film.press(app, "RET");
+    until(app, "the feed in the REPL", |app| {
+        text_of(app, "*ox repl*")
+            .rsplit_once(NEWS_TRY)
+            .is_some_and(|(_, after)| after.contains("ox>"))
+    });
+    fading(film, app, 6);
+    film.shot(app, 1.5);
+    film.press(app, "C-x o");
+}
+
+fn fetch_with_a_typo(film: &mut Film, app: &mut App) {
+    film.mark("typo");
+    film.type_code(app, NEWS_FETCH);
+    evaluate_above(film, app);
+    film.press(app, "RET");
+    film.type_code(app, "(fetch)");
+    rest(app, 0.7);
+    until(app, "the checker", |app| {
+        app.editor().pane().status().lint.is_some()
+    });
+    film.shot(app, 1.5);
+    film.press(app, "C-p C-e");
+    film.press(app, "C-x C-e");
+    until(app, "the failing fetch", flashing);
+    fading(film, app, 6);
+    film.shot(app, 2.0);
+}
+
+fn fix_the_typo(film: &mut Film, app: &mut App) {
+    film.mark("fix");
+    film.press(app, "M-<");
+    film.press(app, "C-s");
+    film.type_slowly(app, "find-al");
+    film.press(app, "RET");
+    film.type_slowly(app, "l");
+    film.press(app, "C-M-x");
+    until(app, "the fixed fetch's flash", flashing);
+    fading(film, app, 6);
+    film.press(app, "M-> C-p C-e");
+    film.press(app, "C-x C-e");
+    until(app, "the fetch", flashing);
+    fading(film, app, 6);
+    film.shot(app, 2.0);
+}
+
+fn build_the_view(film: &mut Film, app: &mut App) {
+    film.mark("view");
+    film.press(app, "M-> RET");
+    film.type_code(app, NEWS_VIEW);
+    film.press(app, "RET");
+    film.type_code(app, NEWS_COMMANDS);
+    film.press(app, "C-c C-b");
+    until(app, "the buffer's flashes", flashing);
+    fading(film, app, 30);
+}
+
+fn read_the_news(film: &mut Film, app: &mut App) {
+    film.mark("read");
+    command(film, app, "news");
+    until(app, "the headlines", |app| {
+        view_texts(app, "*News*").len() > 4
+    });
+    film.shot(app, 2.5);
+    for key in ["n", "n", "n", "p"] {
+        film.press(app, key);
+        film.shot(app, 0.6);
+    }
+    film.press(app, "RET");
+    film.shot(app, 4.0);
+    film.press(app, "n RET");
+    film.shot(app, 3.5);
+    film.press(app, "q");
+    film.shot(app, 1.0);
+}
+
+#[test]
+#[ignore = "renders a 16:9 video of zap and a newsfeed reader built in Ox into $OXMACS_NEWS_VIDEO"]
+fn news_video() {
+    let Ok(out) = std::env::var("OXMACS_NEWS_VIDEO") else {
+        return;
+    };
+    let out = PathBuf::from(out);
+    let home = news_home();
+    PUMPING.set(true);
+    let mut film = Film::new(out.with_extension("frames"))
+        .sized(Size::new(1280.0, 720.0))
+        .warmed(5)
+        .scaled_to(1280, 720);
+    let (mut app, booted) = App::boot(&[], Some(&home));
+    track(booted);
+    track(app.update(Message::Focus(true)));
+    settle(&mut app);
+    film.shot(&mut app, 1.5);
+    start_news(&mut film, &mut app);
+    try_the_feed(&mut film, &mut app);
+    fetch_with_a_typo(&mut film, &mut app);
+    fix_the_typo(&mut film, &mut app);
+    build_the_view(&mut film, &mut app);
+    read_the_news(&mut film, &mut app);
+    film.hold(2.5);
+    film.finish(&out);
+}
