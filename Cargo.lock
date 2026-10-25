@@ -3744,6 +3744,7 @@ dependencies = [
  "tree-sitter-rust",
  "tree-sitter-toml-ng",
  "unicode-width",
+ "winapi-util",
 ]
 
 [[package]]

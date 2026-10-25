@@ -108,13 +108,20 @@ fn resolved(path: &Path) -> PathBuf {
 }
 
 #[cfg(unix)]
-fn shared(metadata: &fs::Metadata) -> bool {
+fn shared(_: &Path, metadata: &fs::Metadata) -> bool {
     use std::os::unix::fs::MetadataExt;
     metadata.nlink() > 1
 }
 
-#[cfg(not(unix))]
-fn shared(_: &fs::Metadata) -> bool {
+#[cfg(windows)]
+fn shared(path: &Path, _: &fs::Metadata) -> bool {
+    fs::File::open(path)
+        .and_then(|file| winapi_util::file::information(&file))
+        .is_ok_and(|information| information.number_of_links() > 1)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn shared(_: &Path, _: &fs::Metadata) -> bool {
     false
 }
 
@@ -170,7 +177,10 @@ pub fn save(path: &Path, text: &str, format: Format) -> Result<DiskState, FileEr
     let target = resolved(path);
     let bytes = encode(text, format);
     let existing = fs::metadata(&target).ok();
-    let replaced = if existing.as_ref().is_some_and(shared) {
+    let replaced = if existing
+        .as_ref()
+        .is_some_and(|metadata| shared(&target, metadata))
+    {
         Replaced::InPlace
     } else {
         replace(&target, &bytes, existing.as_ref()).map_err(FileError::io(path))?
@@ -294,7 +304,6 @@ mod tests {
         assert_eq!(fs::read_to_string(&target).unwrap(), "new");
     }
 
-    #[cfg(unix)]
     #[test]
     fn saving_keeps_hard_links_together() {
         let dir = temp();
