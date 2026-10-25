@@ -18,7 +18,21 @@ pub const BUNDLED: &[Bundle] = &[
     R,
     ZAP,
     KEYCAST,
+    LANGUAGES,
 ];
+
+const LANGUAGES: Bundle = Bundle {
+    name: "languages",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/languages/plugin.ox")),
+        (
+            "languages.ox",
+            include_str!("../plugins/languages/languages.ox"),
+        ),
+        ("lexer.ox", include_str!("../plugins/languages/lexer.ox")),
+        ("specs.ox", include_str!("../plugins/languages/specs.ox")),
+    ],
+};
 
 const ZAP: Bundle = Bundle {
     name: "zap",
@@ -87,6 +101,7 @@ const MARKDOWN: Bundle = Bundle {
             include_str!("../plugins/markdown/markdown.ox"),
         ),
         ("render.ox", include_str!("../plugins/markdown/render.ox")),
+        ("style.ox", include_str!("../plugins/markdown/style.ox")),
     ],
 };
 
@@ -304,3 +319,6 @@ mod keycast;
 
 #[cfg(test)]
 mod dired;
+
+#[cfg(test)]
+mod languages;

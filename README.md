@@ -41,7 +41,7 @@ oxmacs is moving its features into Ox, an extension language of its own: a moder
 cargo run -p ox-cli -- hello.ox
 ```
 
-Most of oxmacs is bundled Ox plugins. Those on by default load the first time you use them; opt-in plugins stay off until `(use-plugin name)` in `init.ox`. The rest of the former Cargo-feature applets (Atlas, the database browser, the PDF viewer, Python, the extra themes and the animated start screen) return the same way.
+Most of oxmacs is bundled Ox plugins. Those on by default load the first time you use them; opt-in plugins stay off until `(use-plugin name)` in `init.ox`. The rest of the former Cargo-feature applets (Atlas, the database browser, the PDF viewer, the extra themes and the animated start screen) return the same way.
 
 | Plugin | Version | Default | What it does |
 | --- | --- | --- | --- |
@@ -51,9 +51,10 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `git` | 0.3.1 | opt-in | Git status and staging in the style of Magit |
 | `irc` | 0.9.7 | opt-in | An IRCv3 client in the style of ERC |
 | `keycast` | 0.2.2 | opt-in | Shows the keys you press and the commands they run, for demos |
+| `languages` | 0.1.0 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
 | `life` | 0.2.2 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.22 | on | The oxmacs tutorial and the Ox manual |
-| `markdown` | 0.2.1 | opt-in | Markdown rendered as styled text |
+| `manual` | 0.5.23 | on | The oxmacs tutorial and the Ox manual |
+| `markdown` | 0.2.2 | opt-in | Markdown rendered as styled text |
 | `processes` | 0.1.1 | on | List the processes oxmacs runs, with their usage |
 | `profiler` | 0.1.1 | on | Find where the Ox code in oxmacs spends its time |
 | `r` | 0.18.4 | opt-in | R consoles, plots, data and help in the style of ESS and RStudio |

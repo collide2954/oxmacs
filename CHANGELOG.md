@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- The bundled `languages` plugin, on by default, brings back the modes 0.14.0 removed: Python, Go, C, C++, TypeScript, TSX, JavaScript, JSON and Markdown, with highlighting, comments, indentation and their language servers (basedpyright, pyright or pylsp; gopls; clangd; typescript-language-server; marksman). `.md` files open in Markdown mode again, and the `markdown` plugin keeps the preview.
 - `define-language-server` takes `:programs`, servers to try in turn, such as basedpyright, pyright and pylsp, and `:runs true` when `M-x list-tools` can install a server by running its `:install` command.
 - `.editorconfig` files choose tabs or spaces (`indent_style`), the indent size and the tab width for the files they cover, ahead of the `indent-tabs` and `tab-width` settings, and a mode can default to tabs with `defmode`'s `:indent {tabs: true}`.
 - The `indent-tabs` setting indents with tabs, then spaces for what is left, instead of spaces only.
@@ -25,7 +26,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `(expect event.all-day)` checks the field, as `(expect (= event.all-day true))` does, instead of failing with `. is not defined`.
 - `file/write` and `file/write-base64` write a new file that then takes the old one's place, so a crash or full disk no longer leaves `custom.ox`, calendar events or other files a plugin writes half written. Files with other hard links are still written in place, and symlinks keep pointing at their targets.
 - Saving a file with hard links on Windows writes it in place, as on Linux and macOS, so its other names keep showing the same text.
-- `M-x list-tools` lists only the language servers of languages oxmacs knows, instead of offering to install pyright, marksman, clangd, gopls and typescript-language-server, which could never start.
+- `M-x list-tools` lists only the language servers of languages oxmacs knows, instead of offering to install servers for languages it has no mode for, which could never start.
 - Renaming or moving a file or folder with `R` in dired moves the buffers visiting it along, as dired did before it became a plugin, instead of leaving them on the old path, where saving brought the old file back.
 - A command run with `!` in the remote file browser that reads its input, such as `cat`, gets none and finishes, instead of hanging the host's connection and swallowing the commands after it.
 - Files read over sftp each pass through a file of their own, removed once read, so two reads at once no longer overwrite each other.
