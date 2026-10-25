@@ -50,6 +50,7 @@ pub use special::processes::{ProcessInfo, ProcessStatus};
 pub use windows::Arrangement;
 pub use windows::numbers::Gutter;
 pub use windows::pane::{Pane, ScreenRow};
+pub use windows::side::{Edge, Side};
 pub use windows::status::{BufferState, Status};
 pub use windows::tiling::{Axis, Rect, Tiling, WindowId};
 

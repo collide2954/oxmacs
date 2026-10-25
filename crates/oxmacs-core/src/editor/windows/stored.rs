@@ -103,14 +103,6 @@ impl Editor {
             ..parked
         })
     }
-
-    fn release_parked(&mut self, parked: Parked) {
-        if let Some(index) = self.buffers.position(|buffer| buffer.id() == parked.buffer)
-            && let Some(buffer) = self.buffers.get_mut(index)
-        {
-            buffer.remove_marker(parked.point);
-        }
-    }
 }
 
 #[cfg(test)]

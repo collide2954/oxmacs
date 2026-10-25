@@ -1,5 +1,6 @@
 pub(super) mod numbers;
 pub(super) mod pane;
+pub(super) mod side;
 pub(super) mod status;
 mod stored;
 pub(super) mod tiling;
@@ -67,6 +68,8 @@ pub(super) struct Windows {
     selected: WindowId,
     parked: Vec<(WindowId, Parked)>,
     stored: Vec<(String, stored::Stored)>,
+    side: Option<side::Side>,
+    main: WindowId,
     next: u64,
 }
 
@@ -77,6 +80,8 @@ impl Windows {
             selected: WindowId(0),
             parked: Vec::new(),
             stored: Vec::new(),
+            side: None,
+            main: WindowId(0),
             next: 1,
         }
     }
@@ -105,7 +110,7 @@ impl Editor {
 
     pub(super) fn beside(&mut self, place: impl FnOnce(&mut Self)) {
         let origin = self.windows.selected;
-        if self.windows.tiling.windows().len() == 1 {
+        if self.windows.tiling.windows().len() == 1 && !self.in_side() {
             self.split_window(Axis::Columns);
         }
         self.other_window();
@@ -217,6 +222,10 @@ impl Editor {
     }
 
     pub(super) fn split_window(&mut self, axis: Axis) {
+        if self.in_side() {
+            self.show_message("The side window can't be split");
+            return;
+        }
         let id = WindowId(self.windows.next);
         if !self.windows.tiling.split(self.windows.selected, axis, id) {
             return;
@@ -236,6 +245,14 @@ impl Editor {
         }
     }
 
+    fn release_parked(&mut self, parked: Parked) {
+        if let Some(index) = self.buffers.position(|buffer| buffer.id() == parked.buffer)
+            && let Some(buffer) = self.buffers.get_mut(index)
+        {
+            buffer.remove_marker(parked.point);
+        }
+    }
+
     pub fn select_window(&mut self, window: WindowId) {
         let Some(position) = self.windows.parked.iter().position(|(id, _)| *id == window) else {
             return;
@@ -243,6 +260,14 @@ impl Editor {
         let (_, target) = self.windows.parked.remove(position);
         let current = self.park();
         self.windows.parked.push((self.windows.selected, current));
+        if self
+            .windows
+            .tiling
+            .windows()
+            .contains(&self.windows.selected)
+        {
+            self.windows.main = self.windows.selected;
+        }
         self.windows.selected = window;
         self.show(target);
     }
@@ -269,6 +294,7 @@ impl Editor {
     pub(super) fn other_window(&mut self) {
         let windows = self.windows.tiling.windows();
         let Some(index) = windows.iter().position(|id| *id == self.windows.selected) else {
+            self.select_main_window();
             return;
         };
         let next = windows[(index + 1) % windows.len()];
@@ -276,6 +302,10 @@ impl Editor {
     }
 
     pub(super) fn delete_window(&mut self) {
+        if self.in_side() {
+            self.close_side();
+            return;
+        }
         let Some(next) = self.windows.tiling.remove(self.windows.selected) else {
             self.show_message("Attempt to delete minibuffer or sole ordinary window");
             return;
@@ -289,12 +319,17 @@ impl Editor {
     }
 
     pub(super) fn delete_other_windows(&mut self) {
-        for (_, parked) in self.windows.parked.drain(..) {
-            if let Some(index) = self.buffers.position(|buffer| buffer.id() == parked.buffer)
-                && let Some(buffer) = self.buffers.get_mut(index)
-            {
-                buffer.remove_marker(parked.point);
-            }
+        if self.in_side() {
+            self.show_message("The side window can't be the only window");
+            return;
+        }
+        let side = self.windows.side.map(|side| side.window);
+        let (kept, released): (Vec<_>, Vec<_>) = std::mem::take(&mut self.windows.parked)
+            .into_iter()
+            .partition(|(id, _)| Some(*id) == side);
+        self.windows.parked = kept;
+        for (_, parked) in released {
+            self.release_parked(parked);
         }
         self.windows.tiling = Tiling::Window(self.windows.selected);
     }
@@ -302,6 +337,13 @@ impl Editor {
     pub(super) fn windmove(&mut self, direction: Direction) {
         let rects = self.windows.tiling.rects();
         let Some((_, from)) = rects.iter().find(|(id, _)| *id == self.windows.selected) else {
+            let inward = match self.windows.side.map(|side| side.edge) {
+                Some(side::Edge::Left) => Direction::Right,
+                _ => Direction::Left,
+            };
+            if direction == inward {
+                self.select_main_window();
+            }
             return;
         };
         let overlap = |start: f32, length: f32, other_start: f32, other_length: f32| {
@@ -333,9 +375,18 @@ impl Editor {
             })
             .max_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(id, _)| id);
-        match target {
-            Some(id) => self.select_window(id),
-            None => self.show_message(format!(
+        let side = self
+            .windows
+            .side
+            .filter(|side| match (side.edge, direction) {
+                (side::Edge::Left, Direction::Left) => touches(from.x, 0.0),
+                (side::Edge::Right, Direction::Right) => touches(from.x + from.width, 1.0),
+                _ => false,
+            });
+        match (target, side) {
+            (Some(id), _) => self.select_window(id),
+            (None, Some(side)) => self.select_window(side.window),
+            (None, None) => self.show_message(format!(
                 "No window {} from the selected window",
                 direction.name()
             )),
@@ -425,6 +476,7 @@ impl Editor {
     }
 
     pub fn arrange_windows(&mut self, arrangement: &Arrangement, select: Option<BufferId>) {
+        self.select_main_window();
         self.delete_other_windows();
         let first = self.windows.selected;
         self.build_arrangement(first, arrangement);
@@ -508,6 +560,7 @@ impl Editor {
     }
 
     pub(super) fn rehome_windows(&mut self) {
+        self.keep_side_alive();
         let current = self.buffers.current().id();
         let missing: Vec<usize> = self
             .windows
