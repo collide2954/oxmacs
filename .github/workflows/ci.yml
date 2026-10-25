@@ -157,6 +157,7 @@ jobs:
           test "$("$folder/ox${{ matrix.exe }}" smoke.ox | tr -d '\r')" = 3
           test -x "$folder/oxmacs${{ matrix.exe }}"
           if [[ "${{ runner.os }}" != Windows ]]; then
+            "$folder/oxmacs" --version | grep -q '^oxmacs '
             tar -C dist -czf "dist/${{ matrix.executable }}.tar.gz" "${{ matrix.executable }}"
             rm -r "$folder"
           fi
@@ -216,7 +217,7 @@ jobs:
           dnf install -y rpmbuild/RPMS/*/*.rpm
           printf '(println (+ 1 2))\n' > /tmp/smoke.ox
           test "$(ox /tmp/smoke.ox)" = 3
-          test -x /usr/bin/oxmacs
+          oxmacs --version | grep -q '^oxmacs '
       - uses: actions/upload-artifact@v4
         with:
           name: rpm-fedora-${{ matrix.fedora }}
