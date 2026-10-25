@@ -128,16 +128,13 @@ impl Editor {
     pub fn diagnostic_counts(&self) -> Vec<(PathBuf, usize, usize)> {
         let mut counts: Vec<(PathBuf, usize, usize)> = Vec::new();
         for diagnostic in &self.lints.diagnostics {
-            let at = match counts
+            let known = counts
                 .iter()
-                .position(|(path, _, _)| *path == diagnostic.path)
-            {
-                Some(at) => at,
-                None => {
-                    counts.push((diagnostic.path.clone(), 0, 0));
-                    counts.len() - 1
-                }
-            };
+                .position(|(path, _, _)| *path == diagnostic.path);
+            let at = known.unwrap_or_else(|| {
+                counts.push((diagnostic.path.clone(), 0, 0));
+                counts.len() - 1
+            });
             match diagnostic.severity {
                 Severity::Error => counts[at].1 += 1,
                 Severity::Warning => counts[at].2 += 1,

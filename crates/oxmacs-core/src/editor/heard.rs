@@ -1,6 +1,7 @@
 use crate::editor::buffers::Mode;
 use crate::editor::{Cell, Clicks, Editor};
 use crate::input::{Key, KeyCode};
+use crate::plugin::PluginBuffer;
 use crate::text::BufferId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,12 +27,12 @@ impl Editor {
         std::mem::take(&mut self.heard)
     }
 
-    fn hears(&self, wants: fn(&dyn crate::plugin::PluginBuffer) -> bool) -> bool {
+    fn hears(&self, wants: fn(&dyn PluginBuffer) -> bool) -> bool {
         matches!(self.buffers.mode(0), Some(Mode::Plugin(view)) if wants(view.as_ref()))
     }
 
     pub(super) fn hear_click(&mut self, position: usize, clicks: Clicks, extend: bool) -> bool {
-        if extend || !self.hears(|view| view.hears_clicks()) {
+        if extend || !self.hears(PluginBuffer::hears_clicks) {
             return false;
         }
         let buffer = self.buffers.current_mut();
@@ -84,7 +85,7 @@ impl Editor {
         let Some(KeyCode::Char(typed)) = self.last_key.map(Key::code) else {
             return false;
         };
-        if self.minibuffer.is_some() || !self.hears(|view| view.hears_typing()) {
+        if self.minibuffer.is_some() || !self.hears(PluginBuffer::hears_typing) {
             return false;
         }
         let buffer = self.buffers.current().id();
