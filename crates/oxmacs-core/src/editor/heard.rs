@@ -55,13 +55,12 @@ impl Editor {
     }
 
     pub(super) fn hear_drag(&mut self, position: usize) -> bool {
-        match self.line_drag {
-            Some((id, _)) if id == self.buffers.current().id() => {
-                self.buffers.current_mut().set_point(position);
-                true
-            }
-            _ => false,
+        let current = self.buffers.current().id();
+        if self.line_drag.is_some_and(|(id, _)| id == current) {
+            self.buffers.current_mut().set_point(position);
+            return true;
         }
+        false
     }
 
     pub fn release(&mut self, cell: Cell) {

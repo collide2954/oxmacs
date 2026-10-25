@@ -68,7 +68,7 @@ fn tab<'a, M: Clone + 'a>(
     current: bool,
     look: Look,
     colors: Colors,
-    on: impl Fn(TabMessage) -> M,
+    on: impl Fn(TabMessage) -> M + Copy,
 ) -> Element<'a, M> {
     let hovered = look.hovered == Some(index);
     let ink = if current { colors.current } else { colors.text };

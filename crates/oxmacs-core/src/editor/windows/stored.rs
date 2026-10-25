@@ -70,9 +70,10 @@ impl Editor {
         self.windows.tiling = stored.tiling;
         self.windows.selected = stored.selected;
         self.rehome_windows();
-        match selected.filter(|parked| self.buffer_by_id(parked.buffer).is_some()) {
-            Some(parked) => self.show(parked),
-            None => self.reveal_point(),
+        if let Some(parked) = selected.filter(|parked| self.buffer_by_id(parked.buffer).is_some()) {
+            self.show(parked);
+        } else {
+            self.reveal_point();
         }
         true
     }

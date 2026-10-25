@@ -665,29 +665,30 @@ fn count(number: usize) -> Value {
     Value::Int(i64::try_from(number).unwrap_or(i64::MAX))
 }
 
+type Pick = fn(&LinesBuffer) -> Option<Hold>;
+
 fn heard(isolate: &mut Isolate, editor: &mut Editor) {
     for event in editor.take_heard() {
-        let (id, pick, arguments): (BufferId, fn(&LinesBuffer) -> Option<Hold>, Vec<Value>) =
-            match event {
-                Heard::Clicked {
-                    buffer,
-                    line,
-                    clicks,
-                } => (
-                    buffer,
-                    |view| view.clicked,
-                    vec![count(line), count(clicks)],
-                ),
-                Heard::Dropped { buffer, from, to } => {
-                    (buffer, |view| view.dropped, vec![count(from), count(to)])
-                }
-                Heard::Typed { buffer, text } => {
-                    let Ok(text) = isolate.heap_mut().string(&text) else {
-                        continue;
-                    };
-                    (buffer, |view| view.typed, vec![text])
-                }
-            };
+        let (id, pick, arguments): (BufferId, Pick, Vec<Value>) = match event {
+            Heard::Clicked {
+                buffer,
+                line,
+                clicks,
+            } => (
+                buffer,
+                |view| view.clicked,
+                vec![count(line), count(clicks)],
+            ),
+            Heard::Dropped { buffer, from, to } => {
+                (buffer, |view| view.dropped, vec![count(from), count(to)])
+            }
+            Heard::Typed { buffer, text } => {
+                let Ok(text) = isolate.heap_mut().string(&text) else {
+                    continue;
+                };
+                (buffer, |view| view.typed, vec![text])
+            }
+        };
         let Some(handler) = editor
             .plugin_buffer::<LinesBuffer>(id)
             .and_then(|(_, view)| pick(view))

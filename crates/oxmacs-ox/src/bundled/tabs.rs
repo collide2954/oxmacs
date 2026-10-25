@@ -22,11 +22,11 @@ fn bar(editor: &Editor) -> Option<TabBar> {
     tabbar::shown(editor).cloned()
 }
 
-fn tabs(names: &[&str], selected: usize) -> Option<TabBar> {
-    Some(TabBar {
+fn tabs(names: &[&str], selected: usize) -> TabBar {
+    TabBar {
         tabs: names.iter().map(|name| (*name).to_owned()).collect(),
         selected: Some(selected),
-    })
+    }
 }
 
 fn visit(editor: &mut Editor, ox: &mut Ox, name: &str) {
@@ -50,7 +50,7 @@ fn the_bar_waits_for_a_second_tab_unless_always_shown() {
     assert_eq!(bar(&editor), None);
 
     let (_home, editor, _ox) = started("(use-plugin tabs :config {show: :always})");
-    assert_eq!(bar(&editor), tabs(&["*scratch*"], 0));
+    assert_eq!(bar(&editor), Some(tabs(&["*scratch*"], 0)));
 }
 
 #[test]
@@ -62,15 +62,15 @@ fn each_tab_keeps_its_own_windows() {
     press(&mut editor, &mut ox, "C-x t 2");
     assert_eq!(shown(&editor), ["one"]);
     visit(&mut editor, &mut ox, "two");
-    assert_eq!(bar(&editor), tabs(&["one", "two"], 1));
+    assert_eq!(bar(&editor), Some(tabs(&["one", "two"], 1)));
 
     press(&mut editor, &mut ox, "C-x t o");
     assert_eq!(shown(&editor), ["one", "one"]);
-    assert_eq!(bar(&editor), tabs(&["one", "two"], 0));
+    assert_eq!(bar(&editor), Some(tabs(&["one", "two"], 0)));
 
     press(&mut editor, &mut ox, "C-TAB");
     assert_eq!(shown(&editor), ["two"]);
-    assert_eq!(bar(&editor), tabs(&["one", "two"], 1));
+    assert_eq!(bar(&editor), Some(tabs(&["one", "two"], 1)));
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn closed_tabs_come_back_with_their_windows() {
     assert_eq!(shown(&editor), ["one"]);
 
     press(&mut editor, &mut ox, "C-x t u");
-    assert_eq!(bar(&editor), tabs(&["one", "two"], 1));
+    assert_eq!(bar(&editor), Some(tabs(&["one", "two"], 1)));
     assert_eq!(shown(&editor), ["two", "one"]);
 
     press(&mut editor, &mut ox, "C-x t 0 C-x t 0");
@@ -102,15 +102,15 @@ fn tabs_can_be_named_switched_to_and_moved() {
     press(&mut editor, &mut ox, "C-x t r C-a C-k");
     typed(&mut editor, &mut ox, "work");
     press(&mut editor, &mut ox, "RET");
-    assert_eq!(bar(&editor), tabs(&["one", "work"], 1));
+    assert_eq!(bar(&editor), Some(tabs(&["one", "work"], 1)));
 
     press(&mut editor, &mut ox, "C-x t RET");
     typed(&mut editor, &mut ox, "one");
     press(&mut editor, &mut ox, "RET");
-    assert_eq!(bar(&editor), tabs(&["one", "work"], 0));
+    assert_eq!(bar(&editor), Some(tabs(&["one", "work"], 0)));
 
     press(&mut editor, &mut ox, "C-x t m");
-    assert_eq!(bar(&editor), tabs(&["work", "one"], 1));
+    assert_eq!(bar(&editor), Some(tabs(&["work", "one"], 1)));
     assert_eq!(shown(&editor), ["one"]);
 }
 
@@ -127,13 +127,13 @@ fn the_bar_selects_closes_adds_and_moves_tabs() {
 
     ox.tab_event(&mut editor, TabEvent::New);
     settle(&mut editor, &mut ox);
-    assert_eq!(bar(&editor), tabs(&["one", "one", "two"], 1));
+    assert_eq!(bar(&editor), Some(tabs(&["one", "one", "two"], 1)));
 
     ox.tab_event(&mut editor, TabEvent::Move { from: 2, to: 0 });
     settle(&mut editor, &mut ox);
-    assert_eq!(bar(&editor), tabs(&["two", "one", "one"], 2));
+    assert_eq!(bar(&editor), Some(tabs(&["two", "one", "one"], 2)));
 
     ox.tab_event(&mut editor, TabEvent::Close(0));
     settle(&mut editor, &mut ox);
-    assert_eq!(bar(&editor), tabs(&["one", "one"], 1));
+    assert_eq!(bar(&editor), Some(tabs(&["one", "one"], 1)));
 }
