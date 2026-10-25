@@ -57,7 +57,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `processes` | 0.1.1 | on | List the processes oxmacs runs, with their usage |
 | `profiler` | 0.1.1 | on | Find where the Ox code in oxmacs spends its time |
 | `r` | 0.18.4 | opt-in | R consoles, plots, data and help in the style of ESS and RStudio |
-| `remote` | 0.1.6 | on | Browse and edit files on other machines over ssh, sftp and ftp |
+| `remote` | 0.1.7 | on | Browse and edit files on other machines over ssh, sftp and ftp |
 | `screensaver` | 0.2.1 | opt-in | A starfield or matrix rain after a while without input |
 | `vault` | 0.2.1 | opt-in | An encrypted password vault with one-time codes and imports |
 | `weather` | 0.3.0 | opt-in | Forecasts from Open-Meteo |

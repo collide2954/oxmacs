@@ -1,11 +1,11 @@
 (module
   (import (ox process) (ox string) (ox crypto))
-  (export run! quote command-of close! interactive-command))
+  (export run! quoted command-of close! interactive-command))
 
 (defonce sessions (atom {}))
 (defonce locks (atom {}))
 
-(def (quote text)
+(def (quoted text)
   "text as one word for a POSIX shell."
   (str "'" (string/replace text "'" "'\\''") "'"))
 
@@ -93,3 +93,6 @@
                    (raise (ended host)))
                  (or (read-until process.lines marker [] on-line)
                      (raise (ended host)))))))
+
+(test "words are quoted for a POSIX shell"
+  (expect (= (quoted "it's") "'it'\\''s'")))

@@ -43,3 +43,8 @@
 (def (find-host name)
   (or (find (fn [host] (= host.name name)) (all-hosts))
       {name: name protocol: :ssh}))
+
+(test "ssh config hosts are read without their patterns"
+  (expect (= (map (fn [host] [host.name host.address host.user host.port])
+                  (parse-ssh-config "Host web web2\n  HostName 10.0.0.5\n  User ana\n  Port 2222\nHost *.internal\n  User ops\nHost git\n  HostName github.com # mine\n"))
+             [["web" "10.0.0.5" "ana" "2222"] ["web2" "10.0.0.5" "ana" "2222"] ["git" "github.com" nil nil]])))

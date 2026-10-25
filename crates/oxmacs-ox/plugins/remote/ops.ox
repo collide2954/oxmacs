@@ -102,12 +102,12 @@
       ((= protocol :sftp)
        (parse-listing (string/lines (get (sftp host [(str "ls -ln " (sftp-word dir))]) :stdout))))
       (else
-       (parse-listing (get (checked (shell/run! host (str "cd -- " (shell/quote dir) " && (ls -lAn --time-style=long-iso 2>/dev/null || ls -lAn)"))
+       (parse-listing (get (checked (shell/run! host (str "cd -- " (shell/quoted dir) " && (ls -lAn --time-style=long-iso 2>/dev/null || ls -lAn)"))
                                     (str "Couldn't list " dir))
                            :lines))))))
 
 (def (base64-of host remote on-line)
-  (get (checked (shell/run! host (str "base64 < " (shell/quote remote)) :on-line on-line) (str "Couldn't read " remote)) :lines))
+  (get (checked (shell/run! host (str "base64 < " (shell/quoted remote)) :on-line on-line) (str "Couldn't read " remote)) :lines))
 
 (def (read-text host remote)
   "The text of the file remote on host."
@@ -155,7 +155,7 @@
        (let [encoded (await (file/read-base64 local))
              end (str "__OX_END_" (crypto/random 4) "__")]
          (checked (shell/run! host (str "if printf '' | base64 -d >/dev/null 2>&1; then D='base64 -d'; else D='base64 -D'; fi; $D > "
-                                        (shell/quote remote) " <<'" end "'\n" (string/join "\n" (chunks encoded 76)) "\n" end))
+                                        (shell/quoted remote) " <<'" end "'\n" (string/join "\n" (chunks encoded 76)) "\n" end))
                   (str "Couldn't write " remote)))))
     remote))
 
@@ -164,31 +164,47 @@
   (let [protocol (hosts/protocol-of host)]
     (cond ((= protocol :ftp) (curl host "/" ["-Q" (str (if folder "RMD " "DELE ") remote)]))
       ((= protocol :sftp) (sftp host [(str (if folder "rmdir " "rm ") (sftp-word remote))]))
-      (else (checked (shell/run! host (str "rm -r -- " (shell/quote remote))) (str "Couldn't delete " remote))))))
+      (else (checked (shell/run! host (str "rm -r -- " (shell/quoted remote))) (str "Couldn't delete " remote))))))
 
 (def (rename! host from to)
   (let [protocol (hosts/protocol-of host)]
     (cond ((= protocol :ftp) (curl host "/" ["-Q" (str "RNFR " from) "-Q" (str "RNTO " to)]))
       ((= protocol :sftp) (sftp host [(str "rename " (sftp-word from) " " (sftp-word to))]))
-      (else (checked (shell/run! host (str "mv -- " (shell/quote from) " " (shell/quote to))) (str "Couldn't rename " from))))))
+      (else (checked (shell/run! host (str "mv -- " (shell/quoted from) " " (shell/quoted to))) (str "Couldn't rename " from))))))
 
 (def (make-dir! host remote)
   (let [protocol (hosts/protocol-of host)]
     (cond ((= protocol :ftp) (curl host "/" ["-Q" (str "MKD " remote)]))
       ((= protocol :sftp) (sftp host [(str "mkdir " (sftp-word remote))]))
-      (else (checked (shell/run! host (str "mkdir -p -- " (shell/quote remote))) (str "Couldn't make " remote))))))
+      (else (checked (shell/run! host (str "mkdir -p -- " (shell/quoted remote))) (str "Couldn't make " remote))))))
 
 (def (run host dir command)
   "Runs command in dir on host, returning its :status and :lines."
   (unless (can-run? host)
     (raise (error (str host.name " has no shell to run commands in"))))
-  (shell/run! host (str "cd -- " (shell/quote dir) " && {{ " command "\n} </dev/null")))
+  (shell/run! host (str "cd -- " (shell/quoted dir) " && {{ " command "\n} </dev/null")))
 
 (def (search host dir pattern)
   "The lines below dir on host that hold pattern, each a map of :path, :line and :text."
-  (let [found (run host dir (str "grep -rnI -- " (shell/quote pattern) " . | head -n 1000"))]
+  (let [found (run host dir (str "grep -rnI -- " (shell/quoted pattern) " . | head -n 1000"))]
     (vec (keep (fn [line]
                  (when-let [match (regex/find #"^\./(.*?):(\d+):(.*)$" line)]
                    (let [[file number text] match.groups]
                      {path: (join-path dir file) line: (string/to-number number) text: text})))
                found.lines))))
+
+(test "ls listings are read with folders first and links apart"
+  (expect (= (map (fn [entry] [entry.name entry.kind entry.size entry.target])
+                  (parse-listing ["total 12"
+                                  "drwxr-xr-x 2 1000 1000 4096 2026-10-23 09:30 src"
+                                  "-rw-r--r-- 1 1000 1000  120 2026-10-22 18:01 notes.txt"
+                                  "lrwxrwxrwx 1 1000 1000    9 2026-10-23 09:31 latest -> notes.txt"
+                                  "-rw-r--r--  1 501  20    64 Oct 23 09:30 bsd file.txt"
+                                  "drwxr-xr-x 2 1000 1000 4096 2026-10-23 09:30 ."]))
+             [["src" :dir 4096 nil] ["bsd file.txt" :file 64 nil] ["latest" :link 9 "notes.txt"] ["notes.txt" :file 120 nil]])))
+
+(test "remote paths join and climb"
+  (expect (= (parent-of "/a/b/") "/a"))
+  (expect (= (parent-of "/a") "/"))
+  (expect (= (parent-of "/") "/"))
+  (expect (= (join-path "/a/" "b") "/a/b")))

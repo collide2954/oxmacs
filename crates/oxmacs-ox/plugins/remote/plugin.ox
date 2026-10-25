@@ -1,5 +1,5 @@
 (plugin remote
-  :version "0.1.6"
+  :version "0.1.7"
   :requires {vault: "^0.2" customize: "^0.1"}
   :summary "Browse and edit files on other machines over ssh, sftp and ftp"
   :commands {remote: "Browse the files of a host over ssh, sftp or ftp"

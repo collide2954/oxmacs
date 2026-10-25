@@ -91,49 +91,6 @@ fn browsing() -> (tempfile::TempDir, tempfile::TempDir, Editor, Ox) {
 }
 
 #[test]
-fn ssh_config_hosts_are_read_without_their_patterns() {
-    let (_home, mut editor, mut ox) = started("");
-
-    let found = eval(
-        &mut editor,
-        &mut ox,
-        r#"(module (import (remote hosts :as hosts)))
-           (map (fn [host] [host.name host.address host.user host.port])
-                (hosts/parse-ssh-config "Host web web2\n  HostName 10.0.0.5\n  User ana\n  Port 2222\nHost *.internal\n  User ops\nHost git\n  HostName github.com # mine\n"))"#,
-    );
-
-    assert_eq!(
-        found,
-        r#"[["web" "10.0.0.5" "ana" "2222"] ["web2" "10.0.0.5" "ana" "2222"] ["git" "github.com" nil nil]]"#
-    );
-}
-
-#[test]
-fn listings_paths_and_quotes_are_understood() {
-    let (_home, mut editor, mut ox) = started("");
-
-    let found = eval(
-        &mut editor,
-        &mut ox,
-        r#"(module (import (remote ops :as ops) (remote shell :as shell)))
-           [(map (fn [entry] [entry.name entry.kind entry.size entry.target])
-                 (ops/parse-listing ["total 12"
-                                     "drwxr-xr-x 2 1000 1000 4096 2026-10-23 09:30 src"
-                                     "-rw-r--r-- 1 1000 1000  120 2026-10-22 18:01 notes.txt"
-                                     "lrwxrwxrwx 1 1000 1000    9 2026-10-23 09:31 latest -> notes.txt"
-                                     "-rw-r--r--  1 501  20    64 Oct 23 09:30 bsd file.txt"
-                                     "drwxr-xr-x 2 1000 1000 4096 2026-10-23 09:30 ."]))
-            (ops/parent-of "/a/b/") (ops/parent-of "/a") (ops/parent-of "/")
-            (ops/join-path "/a/" "b") (shell/quote "it's")]"#,
-    );
-
-    assert_eq!(
-        found,
-        r#"[[["src" :dir 4096 nil] ["bsd file.txt" :file 64 nil] ["latest" :link 9 "notes.txt"] ["notes.txt" :file 120 nil]] "/a" "/" "/" "/a/b" "'it'\\''s'"]"#
-    );
-}
-
-#[test]
 fn saved_hosts_go_to_custom_ox_once_and_leave_init_ox_alone() {
     let (home, mut editor, mut ox) = started(";; mine\n");
     for (name, address) in [("web", "10.0.0.5"), ("db", "10.0.0.6")] {
