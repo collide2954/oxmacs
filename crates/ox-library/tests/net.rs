@@ -94,6 +94,39 @@ fn closing_flushes_what_was_sent_first() {
 }
 
 #[test]
+fn a_line_holding_a_line_break_is_refused_instead_of_sent_as_two() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        BufReader::new(stream)
+            .lines()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>()
+    });
+    let mut isolate = ox_library::isolate();
+
+    let reply = evaluated(
+        &mut isolate,
+        &format!(
+            "(module (import (ox net)))
+(def conn (await (net/connect \"127.0.0.1\" {port})))
+(def refused [(try (net/send conn \"PRIVMSG #a :hi\\rQUIT\") (catch error e e.message))
+              (try (net/send conn \"PRIVMSG #a :hi\\nQUIT\") (catch error e e.message))])
+(net/send conn \"PRIVMSG #a :fine\")
+(net/close conn)
+refused"
+        ),
+    );
+
+    assert_eq!(server.join().unwrap(), ["PRIVMSG #a :fine"]);
+    assert_eq!(
+        reply,
+        r#"["net/send sends one line, without a line break" "net/send sends one line, without a line break"]"#
+    );
+}
+
+#[test]
 fn unreachable_servers_fail_the_promise() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();

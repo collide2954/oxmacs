@@ -87,7 +87,7 @@
 (http/encode text) "text made safe for a URL, with other characters written as %XX."
 (http/request method url {headers nil body nil user nil password nil}) "A promise of the response to a request with any method, such as :put or :propfind, as a map of :status, :headers and :body. :headers is a map, :body the text to send, and :user and :password log in with HTTP basic authentication."
 (net/connect host port {tls false}) "A promise of a connection to host on port, encrypted with :tls true: a map whose :lines channel gives each line the server sends and is closed when the connection ends."
-(net/send connection line) "Sends line to the server, ending it with CR LF; false when the connection has ended."
+(net/send connection line) "Sends line to the server, ending it with CR LF; false when the connection has ended. A line holding CR or LF raises an error instead of reaching the server as two."
 (net/close connection) "Ends the connection once what was sent has gone out."
 (crypto/random count) "count random bytes from the system, written as hex."
 (crypto/random-below bound) "A random whole number from 0 up to but not including bound, every one equally likely."

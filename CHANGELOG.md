@@ -4,6 +4,10 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Security
+
+- `net/send` refuses a line holding a carriage return or line feed instead of sending it to the server as two lines.
+
 ## [0.14.0] - 2026-10-25
 
 ### Added

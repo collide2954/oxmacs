@@ -229,6 +229,11 @@ pub fn install(isolate: &mut Isolate) {
     });
     isolate.define_native_in(MODULE, "send", 2, Some(2), |heap, arguments| {
         let line = print::display(heap, arguments[1]);
+        if line.contains(['\r', '\n']) {
+            return Err(Error::new(
+                "net/send sends one line, without a line break".to_owned(),
+            ));
+        }
         command(heap, "net/send", arguments[0], Command::Send(line))
     });
     isolate.define_native_in(MODULE, "close", 1, Some(1), |heap, arguments| {
