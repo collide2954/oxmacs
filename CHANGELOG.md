@@ -55,6 +55,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- zap flashes code that ran in the marked face and code that failed in the flagged face, which show better on dark themes; its `face` and `error-face` settings pick others.
 - A plugin imports another plugin's modules only when its manifest requires that plugin; the error says what to add to `:requires`. The calendar, irc, manual and remote plugins declare the plugins they use.
 - In Ox buffers and the Ox REPL, the signature of the call at point shows once point has rested for 0.4 seconds, as R's does, rather than being worked out again on every key.
 - The calendar, git, IRC, Markdown, screensaver, vault and weather plugins are opt-in: each stays off until `(use-plugin name)` in `init.ox`. Their modules can still be imported, so the remote file browser keeps using the vault.

@@ -1,8 +1,10 @@
 (plugin zap
-  :version "0.1.0"
+  :version "0.2.0"
   :opt-in true
   :summary "Flash the code you evaluate or send to a console, in the error color when it fails"
   :settings {flash: {type: :bool default: true doc: "Flash code as it runs; false leaves zap off"}
-             duration: {type: :int default: 500 doc: "Milliseconds a flash takes to fade out"}}
+             duration: {type: :int default: 500 doc: "Milliseconds a flash takes to fade out"}
+             face: {type: [:marked :region :added :success :link :warning] default: :marked doc: "The face code that ran flashes in"}
+             error-face: {type: [:flagged :removed :error :warning] default: :flagged doc: "The face code that failed flashes in"}}
   :startup-when :flash
   :entry "zap.ox")

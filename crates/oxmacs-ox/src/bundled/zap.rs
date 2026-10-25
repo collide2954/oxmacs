@@ -50,7 +50,7 @@ fn zap_is_off_until_use_plugin_turns_it_on() {
     let (_home, mut editor, mut ox) = visiting("(use-plugin zap)", "scratch.ox", "(+ 1 2)");
     let before = Instant::now();
     press(&mut editor, &mut ox, "C-x C-e");
-    assert_eq!(lit(&editor, 0, before), [(0..7, Highlight::Region)]);
+    assert_eq!(lit(&editor, 0, before), [(0..7, Highlight::Marked)]);
 }
 
 #[test]
@@ -60,14 +60,28 @@ fn failed_evaluations_flash_in_the_error_color() {
 
     press(&mut editor, &mut ox, "C-c C-k");
 
-    assert_eq!(lit(&editor, 0, before), [(0..9, Highlight::Region)]);
-    assert_eq!(lit(&editor, 1, before), [(0..7, Highlight::Removed)]);
+    assert_eq!(lit(&editor, 0, before), [(0..9, Highlight::Marked)]);
+    assert_eq!(lit(&editor, 1, before), [(0..7, Highlight::Flagged)]);
     assert_eq!(lit(&editor, 2, before), []);
 }
 
 #[test]
-fn flashes_fade_out_over_the_duration_setting() {
-    let (_home, mut editor, mut ox) = visiting("(use-plugin zap)", "scratch.ox", "(+ 1 2)");
+fn the_faces_of_flashes_are_settings() {
+    let (_home, mut editor, mut ox) = visiting(
+        "(use-plugin zap :config {duration: 60000 face: :success error-face: :error})",
+        "scratch.ox",
+        "(def a 1)\n(/ a 0)",
+    );
+    let before = Instant::now();
+
+    press(&mut editor, &mut ox, "C-c C-k");
+
+    assert_eq!(lit(&editor, 0, before), [(0..9, Highlight::Success)]);
+    assert_eq!(lit(&editor, 1, before), [(0..7, Highlight::Error)]);
+}
+
+#[test]
+fn flashes_fade_out_over_the_duration_setting() {    let (_home, mut editor, mut ox) = visiting("(use-plugin zap)", "scratch.ox", "(+ 1 2)");
     let before = Instant::now();
     press(&mut editor, &mut ox, "C-x C-e");
     let after = Instant::now();
@@ -97,7 +111,7 @@ fn the_repl_flashes_its_input() {
     typed(&mut editor, &mut ox, "(/ 1 0)");
     press(&mut editor, &mut ox, "RET");
 
-    assert_eq!(lit(&editor, 1, before), [(4..11, Highlight::Removed)]);
+    assert_eq!(lit(&editor, 1, before), [(4..11, Highlight::Flagged)]);
 }
 
 #[test]
@@ -112,7 +126,7 @@ fn other_plugins_zap_code_of_their_own() {
 
     assert_eq!(
         lit(&editor, 0, before),
-        [(0..3, Highlight::Region), (4..7, Highlight::Removed)]
+        [(0..3, Highlight::Marked), (4..7, Highlight::Flagged)]
     );
 }
 
@@ -139,7 +153,7 @@ fn regions_sent_to_any_console_flash() {
     press(&mut editor, &mut ox, "RET");
 
     assert_eq!(lit(&editor, 0, before), []);
-    assert_eq!(lit(&editor, 1, before), [(0..8, Highlight::Region)]);
+    assert_eq!(lit(&editor, 1, before), [(0..8, Highlight::Marked)]);
 }
 
 fn r_script(name: &str, text: &str) -> (tempfile::TempDir, Editor, Ox) {
@@ -166,7 +180,7 @@ fn r_statements_flash_as_they_are_sent() {
 
     press(&mut editor, &mut ox, "C-RET");
 
-    assert_eq!(lit(&editor, 0, before), [(0..6, Highlight::Region)]);
+    assert_eq!(lit(&editor, 0, before), [(0..6, Highlight::Marked)]);
     assert_eq!(lit(&editor, 1, before), []);
 }
 
@@ -181,8 +195,8 @@ fn r_markdown_chunks_flash_their_code() {
 
     press(&mut editor, &mut ox, "C-c C-a");
 
-    assert_eq!(lit(&editor, 1, before), [(0..6, Highlight::Region)]);
+    assert_eq!(lit(&editor, 1, before), [(0..6, Highlight::Marked)]);
     assert_eq!(lit(&editor, 4, before), []);
     assert_eq!(lit(&editor, 7, before), []);
-    assert_eq!(lit(&editor, 8, before), [(0..6, Highlight::Region)]);
+    assert_eq!(lit(&editor, 8, before), [(0..6, Highlight::Marked)]);
 }
