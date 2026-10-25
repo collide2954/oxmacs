@@ -127,7 +127,7 @@ fn text<'a>(heap: &'a Heap, name: &str, what: &str, value: Value) -> Result<&'a 
 
 fn number(heap: &Heap, name: &str, what: &str, value: Value) -> Result<f64, Error> {
     match value {
-        Value::Int(number) => Ok(ox::value::number::to_float(number)),
+        Value::Int(number) => Ok(ox::value::to_float(number)),
         Value::Float(number) => Ok(number),
         _ => Err(Error::new(format!(
             "image/{name} expects {what} as a number, got {}",

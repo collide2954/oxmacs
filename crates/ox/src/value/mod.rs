@@ -1,7 +1,9 @@
 pub(crate) mod equal;
 pub(crate) mod foreign;
 pub(crate) mod map;
-pub mod number;
+pub(crate) mod number;
+
+pub use number::to_float;
 pub mod print;
 pub(crate) mod promise;
 pub(crate) mod record;

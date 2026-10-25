@@ -187,8 +187,6 @@ pub fn bench(path: &Path, names: &[String], roots: &[PathBuf]) -> Result<String,
 mod tests {
     use std::time::Duration;
 
-    use ox::Isolate;
-
     use super::{Measure, bench, benchmarks, measure, row, shown};
 
     #[test]
