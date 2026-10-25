@@ -28,13 +28,9 @@ fn svg(path: &Path) -> Result<Image, String> {
         .map_err(|error| format!("Couldn't read {} as SVG: {error}", path.display()))?;
     let size = tree.size().to_int_size();
     super::room("open", size.width(), size.height())?;
-    let mut pixmap = resvg::tiny_skia::Pixmap::new(size.width(), size.height())
+    let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height())
         .ok_or_else(|| format!("{} has no size to draw", path.display()))?;
-    resvg::render(
-        &tree,
-        resvg::tiny_skia::Transform::default(),
-        &mut pixmap.as_mut(),
-    );
+    resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
     let pixels: Vec<u8> = pixmap
         .pixels()
         .iter()
