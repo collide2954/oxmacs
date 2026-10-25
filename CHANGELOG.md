@@ -10,6 +10,10 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Plugins move the buffers visiting a file or folder they renamed with `(move-visited-files from to)`.
 - The downloads and the Fedora package include `THIRD-PARTY-LICENSES.html`, the licenses of the crates oxmacs and ox are built from, beside the JetBrains Mono font's license and the highlight queries' notices.
 
+### Changed
+
+- oxmacs no longer builds image codecs it never uses, such as the AVIF encoder and OpenEXR, which iced's image support pulled in; it builds faster and its executables are smaller.
+
 ### Fixed
 
 - `file/write` and `file/write-base64` write a new file that then takes the old one's place, so a crash or full disk no longer leaves `custom.ox`, calendar events or other files a plugin writes half written. Files with other hard links are still written in place, and symlinks keep pointing at their targets.
