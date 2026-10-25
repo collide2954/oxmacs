@@ -1,6 +1,7 @@
 pub(super) mod numbers;
 pub(super) mod pane;
 pub(super) mod status;
+mod stored;
 pub(super) mod tiling;
 
 use crate::display::{Layout, Viewport};
@@ -65,6 +66,7 @@ pub(super) struct Windows {
     tiling: Tiling,
     selected: WindowId,
     parked: Vec<(WindowId, Parked)>,
+    stored: Vec<(String, stored::Stored)>,
     next: u64,
 }
 
@@ -74,6 +76,7 @@ impl Windows {
             tiling: Tiling::Window(WindowId(0)),
             selected: WindowId(0),
             parked: Vec::new(),
+            stored: Vec::new(),
             next: 1,
         }
     }
