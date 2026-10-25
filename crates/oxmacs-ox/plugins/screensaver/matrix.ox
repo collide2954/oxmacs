@@ -47,3 +47,9 @@
         seconds (/ frame.time 1000.0)]
     (mapcat (fn [column] (fall column seconds rows width height size))
             (range (int (/ frame.width width))))))
+
+(test "rain falls down its column"
+  (expect (every? (fn [c]
+                    (let [a (drop c 1.0 40) b (drop c 1.1 40)]
+                      (or (>= b.head a.head) (<= b.head 2))))
+                  (range 40))))

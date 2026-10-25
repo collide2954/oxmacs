@@ -40,3 +40,9 @@
         cy (/ frame.height 2.0)]
     (mapcat (fn [i] (glow (star i seconds) cx cy frame.width frame.height))
             (range (count field)))))
+
+(test "stars rush toward you"
+  (expect (every? (fn [i]
+                    (let [a (star i 2.0) b (star i 2.05)]
+                      (or (< b.z a.z) (< a.z 0.02))))
+                  (range 100))))

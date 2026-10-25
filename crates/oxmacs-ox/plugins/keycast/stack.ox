@@ -76,3 +76,16 @@
       (if (some (fn [left] (<= left 0)) fades)
         frame
         (apply min fades)))))
+
+(test "keys fade in their last moments and go after two seconds"
+  (let [casts (-> []
+                  (push {keys: ["C-n"] command: "next-line"} 0)
+                  (push {keys: ["C-p"] command: "previous-line"} 1000))
+        faded (fn [now] (map (fn [row] row.opacity) (rows (live casts now) now)))]
+    (expect (= (faded 1000) [0.6 1]))
+    (expect (= (faded 1800) [0.3 1]))
+    (expect (= (faded 2500) [1]))
+    (expect (= (faded 3000) []))
+    (expect (= (wait casts 1000) 600))
+    (expect (= (wait casts 1700) 50))
+    (expect (nil? (wait [] 3000)))))

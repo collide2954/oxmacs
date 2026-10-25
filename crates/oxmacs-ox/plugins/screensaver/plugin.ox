@@ -1,5 +1,5 @@
 (plugin screensaver
-  :version "0.2.1"
+  :version "0.2.2"
   :opt-in true
   :summary "A starfield or matrix rain after a while without input"
   :commands {screensaver-preview: "Show a screensaver until the next key or click"}

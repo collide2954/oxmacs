@@ -160,25 +160,6 @@ fn m_x_shows_the_command_it_ran() {
 }
 
 #[test]
-fn keys_fade_in_their_last_moments_and_go_after_two_seconds() {
-    let (_home, mut editor, mut ox) = casting("");
-
-    assert_eq!(
-        evaluated(
-            &mut editor,
-            &mut ox,
-            r#"(let [casts (-> []
-                             (stack/push {keys: ["C-n"] command: "next-line"} 0)
-                             (stack/push {keys: ["C-p"] command: "previous-line"} 1000))
-                     faded (fn [now] (map (fn [row] row.opacity) (stack/rows (stack/live casts now) now)))]
-                 [(faded 1000) (faded 1800) (faded 2500) (faded 3000)
-                  (stack/wait casts 1000) (stack/wait casts 1700) (stack/wait [] 3000)])"#
-        ),
-        "[[0.6 1] [0.3 1] [1] [] 600 50 nil]"
-    );
-}
-
-#[test]
 fn keys_can_show_large_at_the_bottom_center_or_in_the_mode_line() {
     let (_home, mut editor, mut ox) = casting(" :config {placement: :bottom-center}");
     press(&mut editor, &mut ox, "C-x h");

@@ -109,17 +109,9 @@ fn the_preview_offers_each_screensaver_by_name() {
 }
 
 #[test]
-fn stars_rush_toward_you_and_stay_on_screen() {
+fn stars_stay_on_screen() {
     let (_home, mut editor, mut ox) = started("");
 
-    assert_eq!(
-        evaluated(
-            &mut editor,
-            &mut ox,
-            "(every? (fn [i] (let [a (stars/star i 2.0) b (stars/star i 2.05)] (or (< b.z a.z) (< a.z 0.02)))) (range 100))"
-        ),
-        "true"
-    );
     let shapes = drawn_at(&mut editor, &mut ox, "stars", 1500);
     let circles: Vec<(f32, f32)> = shapes
         .iter()
@@ -140,14 +132,6 @@ fn stars_rush_toward_you_and_stay_on_screen() {
 fn rain_falls_in_columns_with_bright_heads_and_fading_trails() {
     let (_home, mut editor, mut ox) = started("");
 
-    assert_eq!(
-        evaluated(
-            &mut editor,
-            &mut ox,
-            "(every? (fn [c] (let [a (rain/drop c 1.0 40) b (rain/drop c 1.1 40)] (or (>= b.head a.head) (<= b.head 2)))) (range 40))"
-        ),
-        "true"
-    );
     let shapes = drawn_at(&mut editor, &mut ox, "rain", 4000);
     let mut heads = 0;
     let mut trails = 0;
