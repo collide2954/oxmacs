@@ -1,7 +1,7 @@
 use ox::heap::Heap;
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
-use oxmacs_core::editor::{Arrangement, Axis, Editor};
+use oxmacs_core::editor::{Arrangement, Axis, Edge, Editor};
 
 fn made(made: Result<Value, ox::heap::HeapFull>) -> Result<Value, Error> {
     made.map_err(|full| Error::new(full.to_string()))
@@ -101,7 +101,86 @@ fn read(heap: &Heap, editor: &Editor, value: Value) -> Result<Arrangement, Error
     Ok(Arrangement::Split { axis, parts })
 }
 
+fn show_side(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let name = crate::handles::name(heap, editor, "show-side-window", arguments[0])?;
+    let buffer = editor
+        .buffer_named(&name)
+        .ok_or_else(|| Error::new(format!("show-side-window: there is no buffer named {name}")))?;
+    let (mut edge, mut columns, mut select) = (Edge::Left, 30, false);
+    for pair in arguments[1..].chunks(2) {
+        match pair {
+            [Value::Keyword(option), value] if option.name() == "edge" => {
+                edge = match value {
+                    Value::Keyword(side) if side.name() == "left" => Edge::Left,
+                    Value::Keyword(side) if side.name() == "right" => Edge::Right,
+                    _ => {
+                        return Err(Error::new(format!(
+                            "show-side-window's :edge is :left or :right, got {}",
+                            print::brief(heap, *value)
+                        )));
+                    }
+                };
+            }
+            [Value::Keyword(option), Value::Int(width)] if option.name() == "width" => {
+                columns = usize::try_from(*width).unwrap_or(1).max(1);
+            }
+            [Value::Keyword(option), value] if option.name() == "select" => {
+                select = value.truthy();
+            }
+            _ => {
+                return Err(Error::new(
+                    "show-side-window takes :edge, :width as a whole number and :select",
+                ));
+            }
+        }
+    }
+    let window = editor.show_side(buffer, edge, columns);
+    if select {
+        editor.select_window(window);
+    }
+    Ok(Value::Nil)
+}
+
+fn side(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Error> {
+    let Some(side) = editor.side_window() else {
+        return Ok(Value::Nil);
+    };
+    let name = editor
+        .pane_of(side.window)
+        .map(|pane| pane.buffer().name().to_owned())
+        .unwrap_or_default();
+    let buffer = made(heap.string(&name))?;
+    let edge = Value::keyword(match side.edge {
+        Edge::Left => "left",
+        Edge::Right => "right",
+    });
+    heap.map_from(&[
+        Value::keyword("buffer"),
+        buffer,
+        Value::keyword("edge"),
+        edge,
+        Value::keyword("width"),
+        Value::Int(i64::try_from(side.columns).unwrap_or(i64::MAX)),
+        Value::keyword("selected"),
+        Value::Bool(editor.selected_window() == side.window),
+    ])
+}
+
 pub fn install(isolate: &mut Isolate) {
+    isolate.define_host_native::<Editor>("show-side-window", 1, None, show_side);
+    isolate.define_host_native::<Editor>("side-window", 0, Some(0), side);
+    isolate.define_host_native::<Editor>("close-side-window", 0, Some(0), |_, editor, _| {
+        editor.close_side();
+        Ok(Value::Nil)
+    });
+    isolate.define_host_native::<Editor>("select-main-window", 0, Some(0), |_, editor, _| {
+        editor.select_main_window();
+        Ok(Value::Nil)
+    });
+    isolate.define_host_native::<Editor>("select-side-window", 0, Some(0), |_, editor, _| {
+        editor.select_side_window();
+        Ok(Value::Nil)
+    });
     isolate.define_host_native::<Editor>("store-windows", 1, Some(1), |heap, editor, arguments| {
         editor.store_windows(&print::display(heap, arguments[0]));
         Ok(Value::Nil)
@@ -162,6 +241,41 @@ mod tests {
             Ok(shown) => shown,
             Err(error) => format!("error: {}", error.message),
         }
+    }
+
+    #[test]
+    fn side_windows_show_beside_the_others_and_close() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        ox.eval(&mut editor, r#"(open-buffer "*tree*" ["a"] :show false)"#)
+            .unwrap();
+
+        assert_eq!(eval(&mut editor, &mut ox, "(side-window)"), "nil");
+        eval(
+            &mut editor,
+            &mut ox,
+            r#"(show-side-window "*tree*" :edge :right :width 24 :select true)"#,
+        );
+        assert_eq!(editor.buffer().name(), "*tree*");
+        assert_eq!(
+            eval(&mut editor, &mut ox, "(side-window)"),
+            r#"{buffer: "*tree*" edge: :right width: 24 selected: true}"#
+        );
+        eval(&mut editor, &mut ox, "(select-main-window)");
+        assert_eq!(editor.buffer().name(), "*scratch*");
+        eval(&mut editor, &mut ox, "(select-side-window)");
+        assert_eq!(editor.buffer().name(), "*tree*");
+        eval(&mut editor, &mut ox, "(close-side-window)");
+        assert_eq!(eval(&mut editor, &mut ox, "(side-window)"), "nil");
+        assert_eq!(editor.buffer().name(), "*scratch*");
+        assert!(
+            eval(
+                &mut editor,
+                &mut ox,
+                r#"(show-side-window "*tree*" :edge :up)"#
+            )
+            .contains("show-side-window's :edge is :left or :right")
+        );
     }
 
     #[test]
