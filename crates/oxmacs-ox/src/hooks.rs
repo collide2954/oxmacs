@@ -248,6 +248,13 @@ pub fn open_directories(editor: &mut Editor, plugin: &str) {
     editor.on_open_directory(open_directory);
 }
 
+pub fn waiting(editor: &mut Editor) -> bool {
+    notice(editor);
+    editor
+        .plugin_state::<Hooks>()
+        .is_some_and(|hooks| !hooks.waiting.is_empty())
+}
+
 pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
     notice(editor);
     let waiting = hooks(editor)
@@ -645,6 +652,21 @@ mod tests {
         assert_eq!(seen(&mut editor, &mut ox), "2");
         press(&mut editor, &mut ox, "C-x b o t h e r RET");
         assert_eq!(seen(&mut editor, &mut ox), "3");
+    }
+
+    #[test]
+    fn window_changes_made_by_ox_commands_are_heard_in_the_same_tick() {
+        let (_home, mut editor, mut ox) = with_init(
+            r#"(def seen (atom 0)) (on-window-change :count (fn [] (swap! seen inc)))
+(defcommand other "Show another buffer" (show-text "*other*" "x"))"#,
+        );
+
+        let id = editor.command_named("other").unwrap();
+        editor.execute(id);
+        assert_eq!(ox.tick(&mut editor), crate::Pace::Running);
+        ox.tick(&mut editor);
+
+        assert_eq!(ox.eval(&mut editor, "@seen").unwrap(), "1");
     }
 
     #[test]

@@ -292,7 +292,7 @@ impl Ox {
         self.timed("views", refreshing);
         help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         self.timed("tick", started);
-        if repl::requests_waiting(editor) {
+        if repl::requests_waiting(editor) || hooks::waiting(editor) {
             return Pace::Running;
         }
         self.pace()
