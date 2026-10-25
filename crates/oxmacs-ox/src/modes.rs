@@ -295,10 +295,10 @@ fn rules(heap: &Heap, value: Value) -> Result<Rules, Error> {
                 found.width = usize::try_from(width).unwrap_or(0);
             }
             (Value::Keyword(key), value) if key.name() == "after" => {
-                found.after = Some(pattern(value)?)
+                found.after = Some(pattern(value)?);
             }
             (Value::Keyword(key), value) if key.name() == "dedent" => {
-                found.dedent = Some(pattern(value)?)
+                found.dedent = Some(pattern(value)?);
             }
             (Value::Keyword(key), Value::Bool(tabs)) if key.name() == "tabs" => {
                 found.tabs = Some(tabs);
@@ -549,6 +549,25 @@ fn stored(isolate: &mut Isolate, old: Option<Hold>, from: usize, fresh: Vec<Hold
     kept
 }
 
+fn resume(isolate: &Isolate, old: Option<&Cached>, lines: &[String]) -> (usize, Value) {
+    let from = old.map_or(0, |old| {
+        old.lines
+            .iter()
+            .zip(lines)
+            .take_while(|(was, now)| was == now)
+            .count()
+            .min(old.spans.len())
+    });
+    let incoming = old
+        .and_then(|old| old.states)
+        .filter(|_| from > 0)
+        .and_then(|states| isolate.held(states))
+        .and_then(|states| isolate.heap().elements(states))
+        .and_then(|states| states.get(from - 1).copied())
+        .unwrap_or(Value::Nil);
+    (from, incoming)
+}
+
 pub fn highlight(isolate: &mut Isolate, editor: &mut Editor) {
     let Some(defined) = editor.plugin_state::<Modes>().map(|modes| {
         modes
@@ -595,22 +614,7 @@ pub fn highlight(isolate: &mut Isolate, editor: &mut Editor) {
         let Some(function) = isolate.held(hold) else {
             continue;
         };
-        let from = old.as_ref().map_or(0, |old| {
-            old.lines
-                .iter()
-                .zip(&lines)
-                .take_while(|(was, now)| was == now)
-                .count()
-                .min(old.spans.len())
-        });
-        let incoming = old
-            .as_ref()
-            .and_then(|old| old.states)
-            .filter(|_| from > 0)
-            .and_then(|states| isolate.held(states))
-            .and_then(|states| isolate.heap().elements(states))
-            .and_then(|states| states.get(from - 1).copied())
-            .unwrap_or(Value::Nil);
+        let (from, incoming) = resume(isolate, old.as_ref(), &lines);
         let (mut spans, old_states) = old.map_or((Vec::new(), None), |old| (old.spans, old.states));
         spans.truncate(from);
         let found = highlight_lines(
