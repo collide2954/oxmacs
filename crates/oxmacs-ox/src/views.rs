@@ -281,6 +281,10 @@ fn text(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
             text_size = Some(size(heap, "text", value)?);
             continue;
         }
+        if value == Value::Nil {
+            face = None;
+            continue;
+        }
         let known = match value {
             Value::Keyword(name) => face_named(name.name()),
             _ => None,
@@ -753,6 +757,22 @@ mod tests {
                 ],
             }
         );
+    }
+
+    #[test]
+    fn text_with_no_face_is_plain() {
+        let (editor, _) = opened(
+            r#"(open-view "*plain*" (fn [] (row (text "a" :face nil) (text "b" :face (when false :heading)))))"#,
+        );
+
+        assert_eq!(
+            shown(&editor, "*plain*"),
+            Node::Row {
+                spacing: 0.0,
+                children: vec![text("a"), text("b")],
+            }
+        );
+        assert_eq!(logged(&editor), "");
     }
 
     #[test]
