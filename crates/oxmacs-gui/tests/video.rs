@@ -13,6 +13,7 @@ use iced::keyboard::{self, Key, Location, Modifiers};
 use iced::{Size, Task};
 use iced_runtime::Action;
 use iced_test::Simulator;
+use oxmacs_core::cli::Visit;
 use oxmacs_gui::app::{App, Message};
 use oxmacs_gui::fonts;
 use oxmacs_ox::views::{Node, ViewBuffer};
@@ -687,7 +688,7 @@ fn keycast_shots() {
         .unwrap();
         let notes = home.path().join("notes.md");
         fs::write(&notes, KEYCAST_NOTES).unwrap();
-        let visit = oxmacs_core::cli::Visit {
+        let visit = Visit {
             path: notes,
             line: None,
             column: None,
@@ -1433,11 +1434,18 @@ fn view_texts(app: &App, name: &str) -> Vec<String> {
     out
 }
 
-fn start_news(film: &mut Film, app: &mut App) {
+fn start_news(film: &mut Film, app: &mut App, home: &Path) {
     film.mark("start");
-    film.press(app, "C-x C-f");
-    film.type_slowly(app, "~/oxmacs-news-demo/news.ox");
-    film.press(app, "RET");
+    app.start(
+        &[Visit {
+            path: home.join("news.ox"),
+            line: None,
+            column: None,
+        }],
+        false,
+    );
+    settle(app);
+    film.shot(app, 0.8);
     film.press(app, "C-x 3");
     for form in [NEWS_HEADER, NEWS_FEED, NEWS_STATE, NEWS_PLAIN, NEWS_ENTRY] {
         film.type_code(app, form);
@@ -1564,7 +1572,7 @@ fn news_video() {
     track(app.update(Message::Focus(true)));
     settle(&mut app);
     film.shot(&mut app, 1.5);
-    start_news(&mut film, &mut app);
+    start_news(&mut film, &mut app, &home);
     try_the_feed(&mut film, &mut app);
     fetch_with_a_typo(&mut film, &mut app);
     fix_the_typo(&mut film, &mut app);
