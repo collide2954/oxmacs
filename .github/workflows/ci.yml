@@ -244,5 +244,5 @@ jobs:
           cd ..
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md."
-          find built executables -maxdepth 2 \( -name '*.rpm' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
+          find built executables -maxdepth 3 \( -name '*.rpm' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
             | xargs -0 gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber
