@@ -23,9 +23,6 @@
       (unless (= e.message "Quit")
         (message e.message)))))
 
-(def (each f coll)
-  (reduce (fn [_ item] (f item) nil) nil coll))
-
 (def (today)
   (let [now (time/local (time/now))]
     (rrule/day-number now.year now.month now.day)))
@@ -324,7 +321,8 @@
                    calendar (choose-calendar nil)]
                (when (empty? found)
                  (raise (error "That file has no events")))
-               (each (fn [event] (store/save-event! (merge event {calendar: calendar file: nil}))) found)
+               (each [event found]
+                 (store/save-event! (merge event {calendar: calendar file: nil})))
                (redraw!)
                (let [first-one (first found)]
                  (swap! view assoc :from (day-of first-one.start))

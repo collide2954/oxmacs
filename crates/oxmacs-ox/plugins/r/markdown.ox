@@ -115,9 +115,6 @@
       ((not (r-chunk? chunk)) (message "This is a {chunk.language} chunk, so R does not run it") nil)
       (else chunk))))
 
-(def (each f items)
-  (reduce (fn [_ item] (f item) nil) nil items))
-
 (def (leading text)
   (- (string/length text) (string/length (string/trim-start text))))
 
@@ -136,15 +133,15 @@
   (let [filled (filter (fn [at] (not (string/blank? (line-text at)))) (range top (+ bottom 1)))
         commented (every? (fn [at] (string/starts-with? (string/trim-start (line-text at)) "#")) filled)]
     (if commented
-      (each (fn [at]
-              (let [text (line-text at)
-                    start (+ (line-start at) (leading text))
-                    rest (string/trim-start text)
-                    width (if (string/starts-with? rest "# ") 2 1)]
-                (delete start (+ start width))))
-            filled)
+      (each [at filled
+             :let [text (line-text at)
+                   start (+ (line-start at) (leading text))
+                   width (if (string/starts-with? (string/trim-start text) "# ") 2 1)]]
+        (delete start (+ start width)))
       (let [column (apply min (map (fn [at] (leading (line-text at))) filled))]
-        (each (fn [at] (set-point (+ (line-start at) column)) (insert "# ")) filled)))))
+        (each [at filled]
+          (set-point (+ (line-start at) column))
+          (insert "# "))))))
 
 (def (toggle-html top bottom)
   (let [head (string/trim-start (line-text top))

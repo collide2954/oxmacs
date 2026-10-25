@@ -17,9 +17,6 @@
       (unless (= e.message "Quit")
         (message e.message)))))
 
-(def (each f coll)
-  (reduce (fn [_ item] (f item) nil) nil coll))
-
 (def (size-text size)
   (cond ((nil? size) "")
     ((< size 1024) (str size))

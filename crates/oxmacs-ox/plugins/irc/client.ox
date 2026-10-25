@@ -24,9 +24,6 @@
    "C-c C-h" 'irc-toggle-noise "C-c C-j" 'irc-join "C-c C-p" 'irc-part "C-c C-v" 'irc-preview
    "C-c C-b" 'irc-switch "C-c C-SPC" 'irc-next-active})
 
-(def (each f coll)
-  (reduce (fn [_ item] (f item) nil) nil coll))
-
 (def (fold text)
   (protocol/casefold (or text "")))
 
@@ -361,11 +358,10 @@
 
 (def (on-quit! name line)
   (let [reason (first line.params)]
-    (each (fn [channel]
-            (remove-name! name channel line.nick)
-            (when-let [buffer (buffer-of name channel)]
-              (event! buffer line :quit (str line.nick " quit" (if reason (str " (" reason ")") "")))))
-          (channels-with name line.nick))))
+    (each [channel (channels-with name line.nick)]
+      (remove-name! name channel line.nick)
+      (when-let [buffer (buffer-of name channel)]
+        (event! buffer line :quit (str line.nick " quit" (if reason (str " (" reason ")") "")))))))
 
 (def (on-nick! name line)
   (let [fresh (first line.params)
@@ -373,13 +369,12 @@
     (when (protocol/same-nick? old (my-nick name))
       (change-network! name assoc :nick fresh)
       (info! (server-buffer name) (str "You are now " fresh)))
-    (each (fn [channel]
-            (let [known (get-in (channel-entry name channel) [:names (fold old)])]
-              (remove-name! name channel old)
-              (add-name! name channel fresh (or (get known :prefix) ""))
-              (when-let [buffer (buffer-of name channel)]
-                (event! buffer line :nick (str old " is now " fresh)))))
-          (channels-with name old))
+    (each [channel (channels-with name old)
+           :let [known (get-in (channel-entry name channel) [:names (fold old)])]]
+      (remove-name! name channel old)
+      (add-name! name channel fresh (or (get known :prefix) ""))
+      (when-let [buffer (buffer-of name channel)]
+        (event! buffer line :nick (str old " is now " fresh))))
     (when-let [buffer (buffer-of name old)]
       (when (= (get (buffer-entry buffer) :kind) :query)
         (swap! state assoc-in [:buffers buffer :target] fresh)
@@ -475,17 +470,14 @@
 (def (on-names! name line)
   (let [channel (get line.params 2)
         names (string/words (or (last line.params) ""))]
-    (each (fn [given]
-            (let [[prefix nick] (split-prefix name given)
-                  nick (first (string/split nick "!" 2))]
-              (add-name! name channel nick prefix)))
-          names)))
+    (each [given names
+           :let [[prefix nick] (split-prefix name given)]]
+      (add-name! name channel (first (string/split nick "!" 2)) prefix))))
 
 (def (on-away! name line)
   (let [away (not (empty? line.params))]
-    (each (fn [channel]
-            (swap! state update-in [:networks name :channels (fold channel) :names (fold line.nick)] assoc :away away))
-          (channels-with name line.nick))))
+    (each [channel (channels-with name line.nick)]
+      (swap! state update-in [:networks name :channels (fold channel) :names (fold line.nick)] assoc :away away))))
 
 (def (on-mode! name line)
   (let [[target & changes] line.params]
@@ -528,7 +520,7 @@
                (on-message! name (merge first-line {params: [(first batch.arguments) text]
                                                     tags: (merge first-line.tags batch.tags)})
                             :privmsg))))
-          (else (each (fn [inner] (dispatch! name inner)) batch.lines)))))))
+          (else (each [inner batch.lines] (dispatch! name inner))))))))
 
 (def (on-numeric! name line)
   (let [code (string/to-number line.command)
@@ -572,15 +564,14 @@
       (send-command! name "MONITOR" ["+" (string/join "," wanted)]))))
 
 (def (on-monitor! name line online)
-  (each (fn [target]
-          (let [nick (first (string/split target "!" 2))
-                said (str nick (if online " is online" " is offline"))]
-            (info! (server-buffer name) said)
-            (when-let [buffer (buffer-of name nick)]
-              (info! buffer said))
-            (when (and online (plugin-setting 'irc :notify) (not (window-focused?)))
-              (notify name said))))
-        (remove string/blank? (string/split (or (last line.params) "") ","))))
+  (each [target (remove string/blank? (string/split (or (last line.params) "") ","))
+         :let [nick (first (string/split target "!" 2))
+               said (str nick (if online " is online" " is offline"))]]
+    (info! (server-buffer name) said)
+    (when-let [buffer (buffer-of name nick)]
+      (info! buffer said))
+    (when (and online (plugin-setting 'irc :notify) (not (window-focused?)))
+      (notify name said))))
 
 (def whois-replies (set ["301" "311" "312" "313" "317" "318" "319" "330" "338" "378" "379" "671" "276" "307" "320" "335"]))
 
@@ -726,19 +717,18 @@
                      [entry.target (str "timestamp=" (time/format last-one.time "%Y-%m-%dT%H:%M:%S%.3fZ" :zone "UTC"))]))))
 
 (def (tick!)
-  (each (fn [[buffer entry]]
-          (let [shown (buffer-shown? buffer)]
-            (cond ((and shown (not entry.shown))
-                   (swap! state assoc-in [:buffers buffer :shown] true)
-                   (note-seen! buffer)
-                   (mark-read! entry))
-              ((and (not shown) entry.shown)
-               (swap! state update-in [:buffers buffer] merge {shown: false})
-               (when entry.marker
-                 (swap! state assoc-in [:buffers buffer :marker] nil)
-                 (render! buffer)))
-              (else nil))))
-        (entries (get @state :buffers)))
+  (each [[buffer entry] (entries (get @state :buffers))
+         :let [shown (buffer-shown? buffer)]]
+    (cond ((and shown (not entry.shown))
+           (swap! state assoc-in [:buffers buffer :shown] true)
+           (note-seen! buffer)
+           (mark-read! entry))
+      ((and (not shown) entry.shown)
+       (swap! state update-in [:buffers buffer] merge {shown: false})
+       (when entry.marker
+         (swap! state assoc-in [:buffers buffer :marker] nil)
+         (render! buffer)))
+      (else nil)))
   (set-mode-line "irc-typing" (typing-text)))
 
 (def (watch!)
@@ -804,8 +794,8 @@
         wait (get backoff (min (dec attempts) (dec (count backoff))))
         said (str "Disconnected; trying again in " wait (if (= wait 1) " second" " seconds"))]
     (change-network! name assoc :attempts attempts)
-    (each (fn [buffer] (error! buffer said))
-          (if (= attempts 1) (network-buffers name) [(server-buffer name)]))
+    (each [buffer (if (= attempts 1) (network-buffers name) [(server-buffer name)])]
+      (error! buffer said))
     (sleep (time/seconds wait))
     (unless (or (connected? name) (get (network name) :quitting))
       (connect! old.config :sasl old.sasl))))
@@ -875,8 +865,8 @@
   "Sends text from buffer to its channel or person."
   (let [entry (buffer-entry buffer)
         tags (reply-tags entry)]
-    (each (fn [piece] (send-command! entry.network "PRIVMSG" [entry.target piece] :tags tags))
-          (protocol/split-message text 400))
+    (each [piece (protocol/split-message text 400)]
+      (send-command! entry.network "PRIVMSG" [entry.target piece] :tags tags))
     (local! buffer :privmsg text tags)
     (finish-reply! buffer)))
 
@@ -888,11 +878,14 @@
     (if (has-cap? name "draft/multiline")
       (let [reference (crypto/random 4)]
         (send-command! name "BATCH" [(str "+" reference) "draft/multiline" entry.target] :tags (reply-tags entry))
-        (each (fn [line] (send-command! name "PRIVMSG" [entry.target line] :tags {"batch" reference})) lines)
+        (each [line lines]
+          (send-command! name "PRIVMSG" [entry.target line] :tags {"batch" reference}))
         (send-command! name "BATCH" [(str "-" reference)])
         (local! buffer :privmsg (string/join "\n" lines) (reply-tags entry))
         (finish-reply! buffer))
-      (each (fn [line] (say! buffer line) (sleep 500)) lines))))
+      (each [line lines]
+        (say! buffer line)
+        (sleep 500)))))
 
 (def (act! buffer text)
   (let [entry (buffer-entry buffer)]
@@ -901,7 +894,8 @@
 
 (def (toggle-noise!)
   (swap! state update :noise not)
-  (each render! (irc-buffers))
+  (each [buffer (irc-buffers)]
+    (render! buffer))
   (get @state :noise))
 
 (def (clear-buffer! buffer)
