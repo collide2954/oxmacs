@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- A worker started in oxmacs can load a plugin's modules, its entry module included once the plugin has started: workers know the editor's Ox API, so a module that imports `(ox ui)` or uses the editor's macros loads, and a call that needs the editor raises "… isn't available here" instead of the module being missing.
 - `ox lsp` no longer crashes on a file URI with a `%` before a non-ASCII character, and it writes and reads file URIs the way the editor's LSP client does: every character outside the unreserved set is escaped, and Windows drive paths come back with backslashes and an upper-case drive letter.
 - Ox buffers show `#| … |#` block comments, nested ones and ones spanning lines included, and the form after `#;` as comments, and code after `#;` on the same line is no longer greyed out as if `;` started a line comment.
 - `ox fmt` keeps `#| … |#` block comments, nested ones included, exactly as written and goes on formatting the code after them, instead of indenting their text as code.

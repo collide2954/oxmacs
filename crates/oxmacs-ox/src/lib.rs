@@ -56,35 +56,44 @@ pub fn home() -> Option<PathBuf> {
         .or_else(|| dirs::home_dir().map(|home| home.join(".oxmacs")))
 }
 
-fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
-    let mut isolate = Isolate::new();
-    natives::install(&mut isolate);
-    overlays::install(&mut isolate);
-    settings::install(&mut isolate);
-    commands::install(&mut isolate);
-    plugins::install(&mut isolate);
-    views::install(&mut isolate);
-    buffers::install(&mut isolate);
-    handles::install(&mut isolate);
-    editing::install(&mut isolate);
-    hooks::install(&mut isolate);
-    flashes::install(&mut isolate);
-    keystrokes::install(&mut isolate);
-    processes::install(&mut isolate);
-    consoles::install(&mut isolate);
-    layout::install(&mut isolate);
-    servers::install(&mut isolate);
-    transients::install(&mut isolate);
-    modes::install(&mut isolate);
-    takeover::install(&mut isolate);
-    idle::install(&mut isolate);
-    prompts::install(&mut isolate, answers);
-    keepass::install(&mut isolate);
-    manual::install(&mut isolate);
+fn install_editor_api(isolate: &mut Isolate, answers: &prompts::Inbox) {
+    natives::install(isolate);
+    overlays::install(isolate);
+    settings::install(isolate);
+    commands::install(isolate);
+    plugins::install(isolate);
+    views::install(isolate);
+    buffers::install(isolate);
+    handles::install(isolate);
+    editing::install(isolate);
+    hooks::install(isolate);
+    flashes::install(isolate);
+    keystrokes::install(isolate);
+    processes::install(isolate);
+    consoles::install(isolate);
+    layout::install(isolate);
+    servers::install(isolate);
+    transients::install(isolate);
+    modes::install(isolate);
+    takeover::install(isolate);
+    idle::install(isolate);
+    prompts::install(isolate, answers);
+    keepass::install(isolate);
+    manual::install(isolate);
     isolate.add_native_docs(DOCS);
     if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
         panic!("The oxmacs prelude failed to load: {error}");
     }
+    isolate.set_worker_setup(worker_api);
+}
+
+fn worker_api(isolate: &mut Isolate) {
+    install_editor_api(isolate, &prompts::Inbox::default());
+}
+
+fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
+    let mut isolate = Isolate::new();
+    install_editor_api(&mut isolate, answers);
     isolate
 }
 

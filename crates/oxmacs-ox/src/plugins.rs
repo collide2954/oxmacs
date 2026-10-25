@@ -418,6 +418,14 @@ fn bundled_files(plugin: &str, files: &[(&str, &str)]) -> Vec<(String, String, S
         .collect()
 }
 
+fn preamble(plugin: &str) -> String {
+    format!("(def (setting key) (plugin-setting '{plugin} key))")
+}
+
+fn add_entry_source(isolate: &mut Isolate, plugin: &str, file: &str, text: &str) {
+    isolate.add_source(plugin, file, &format!("{} {text}", preamble(plugin)));
+}
+
 fn add_sources(
     isolate: &mut Isolate,
     plugin: &str,
@@ -958,6 +966,9 @@ pub fn reload_file(
         isolate.eval_module_with(editor, &module, &file, &text)
     }) {
         Ok(()) => {
+            if module == name {
+                add_entry_source(isolate, name, &file, &text);
+            }
             views::redraw(editor);
             editor.show_message(format!("Reloaded {module}"));
         }
@@ -1076,9 +1087,8 @@ fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) -> bool {
         log::report(editor, &Error::new(missing), None);
         return false;
     };
-    let preamble = format!("(def (setting key) (plugin-setting '{name} key))");
     let loaded = isolate
-        .eval_module_with(&mut (), name, "<plugin>", &preamble)
+        .eval_module_with(&mut (), name, "<plugin>", &preamble(name))
         .and_then(|()| {
             isolate.within(crate::PATIENT, |isolate| {
                 isolate.eval_module_with(editor, name, file, text)
@@ -1088,6 +1098,7 @@ fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) -> bool {
         log::report(editor, &error, Some((file, text)));
         return false;
     }
+    add_entry_source(isolate, name, file, text);
     let mut complete = true;
     for (command, _) in &plugin.manifest.commands {
         if !commands::defined(editor, command) {
@@ -1210,6 +1221,45 @@ mod tests {
             .and_then(|id| editor.buffer_by_id(id))
             .map(Buffer::contents)
             .unwrap_or_default()
+    }
+
+    const SHELF: Bundle = Bundle {
+        name: "shelf",
+        files: &[
+            (
+                "plugin.ox",
+                "(plugin shelf :version \"0.1.0\" :commands {shelf-show: \"Show\"} :entry \"shelf.ox\")",
+            ),
+            (
+                "shelf.ox",
+                "(def (double x) (* 2 x))\n(defcommand shelf-show \"Show\" (message (str (double 2))))",
+            ),
+            (
+                "label.ox",
+                "(module (import (ox ui)))\n(def (label n) (str \"n=\" n))\n(def (shown) (message \"from a worker\"))",
+            ),
+        ],
+    };
+
+    #[test]
+    fn workers_load_plugin_modules_with_the_editor_api_but_no_editor() {
+        let home = home_with(&[]);
+        let (mut editor, mut ox) = started(&[SHELF], home.path());
+        run(&mut editor, &mut ox, "shelf-show");
+
+        let found = ox
+            .eval(
+                &mut editor,
+                "[(await (worker 'shelf/label 'label 3))
+                  (try (await (worker 'shelf/label 'shown)) (catch error e e.message))
+                  (try (await (worker 'shelf 'double 21)) (catch error e e.message))]",
+            )
+            .unwrap();
+
+        assert_eq!(
+            found,
+            "[\"n=3\" \"message isn't available here\" \"define-command isn't available here\"]"
+        );
     }
 
     #[test]
