@@ -20,7 +20,20 @@ pub const BUNDLED: &[Bundle] = &[
     KEYCAST,
     LANGUAGES,
     TABS,
+    EXPLORER,
 ];
+
+const EXPLORER: Bundle = Bundle {
+    name: "explorer",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/explorer/plugin.ox")),
+        (
+            "explorer.ox",
+            include_str!("../plugins/explorer/explorer.ox"),
+        ),
+        ("tree.ox", include_str!("../plugins/explorer/tree.ox")),
+    ],
+};
 
 const TABS: Bundle = Bundle {
     name: "tabs",
@@ -336,3 +349,6 @@ mod languages;
 
 #[cfg(test)]
 mod tabs;
+
+#[cfg(test)]
+mod explorer;
