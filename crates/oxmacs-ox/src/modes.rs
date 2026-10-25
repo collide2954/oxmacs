@@ -697,12 +697,12 @@ mod tests {
         assert_eq!(ox.eval(&mut editor, "@ran").unwrap(), "1");
     }
 
-    const BLOCKS: &str = r##"(module (import (ox string)))
+    const BLOCKS: &str = r#"(module (import (ox string)))
         (defmode blocks "Blocks" :extensions ["blk"]
           :highlight (fn [line text open]
                        (let [inside (or open (string/starts-with? text "<<"))]
                          {spans: (if inside [[0 (string/length text) :string]] [])
-                          state: (and inside (not (string/ends-with? text ">>")))})))"##;
+                          state: (and inside (not (string/ends-with? text ">>")))})))"#;
 
     #[test]
     fn highlighters_carry_state_from_one_line_to_the_next() {
@@ -746,7 +746,7 @@ mod tests {
         let mut ox = Ox::new();
         let (_dir, mut editor) = opened(
             &mut ox,
-            r##"(defmode braces "Braces" :extensions ["brc"] :indent {width: 4 after: #"[{:]\s*$" dedent: #"^\s*}"})"##,
+            r#"(defmode braces "Braces" :extensions ["brc"] :indent {width: 4 after: #"[{:]\s*$" dedent: #"^\s*}"})"#,
             "a.brc",
             "if x {",
         );
@@ -761,7 +761,7 @@ mod tests {
     #[test]
     fn modes_can_indent_with_tabs_unless_editorconfig_says_otherwise() {
         let mut ox = Ox::new();
-        let source = r##"(defmode tabbed "Tabbed" :extensions ["tbd"] :indent {width: 4 after: #"\{\s*$" tabs: true})"##;
+        let source = r#"(defmode tabbed "Tabbed" :extensions ["tbd"] :indent {width: 4 after: #"\{\s*$" tabs: true})"#;
         let (dir, mut editor) = opened(&mut ox, source, "a.tbd", "if x {");
 
         press(&mut editor, &mut ox, "C-e RET y");
