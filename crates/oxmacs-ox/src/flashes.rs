@@ -20,10 +20,18 @@ struct Ran {
     failed: bool,
 }
 
+#[derive(Debug)]
+struct Sent {
+    console: BufferId,
+    source: BufferId,
+    ranges: Vec<Range<usize>>,
+}
+
 #[derive(Debug, Default)]
 struct Evaluations {
     handlers: Vec<(String, Hold)>,
     waiting: Vec<Ran>,
+    sent: Vec<Sent>,
 }
 
 fn listening(editor: &Editor) -> bool {
@@ -45,13 +53,40 @@ pub(crate) fn evaluated(editor: &mut Editor, buffer: BufferId, range: Range<usiz
     }
 }
 
-pub(crate) fn sent(editor: &mut Editor, source: BufferId, code: &str) {
+pub(crate) fn sent(editor: &mut Editor, console: BufferId, source: BufferId, code: &str) {
     if !listening(editor) {
         return;
     }
-    for range in editor.sent_ranges(source, code) {
-        evaluated(editor, source, range, false);
+    let ranges = editor.sent_ranges(source, code);
+    for range in &ranges {
+        evaluated(editor, source, range.clone(), false);
     }
+    if let Some(state) = editor.plugin_state_mut::<Evaluations>() {
+        state.sent.retain(|sent| sent.console != console);
+        state.sent.push(Sent {
+            console,
+            source,
+            ranges,
+        });
+    }
+}
+
+fn last_sent(editor: &mut Editor, console: BufferId) -> Option<Sent> {
+    let state = editor.plugin_state_mut::<Evaluations>()?;
+    let at = state.sent.iter().position(|sent| sent.console == console)?;
+    Some(state.sent.remove(at))
+}
+
+pub(crate) fn send_failed(editor: &mut Editor, console: BufferId) {
+    if let Some(sent) = last_sent(editor, console) {
+        for range in sent.ranges {
+            evaluated(editor, sent.source, range, true);
+        }
+    }
+}
+
+pub(crate) fn send_settled(editor: &mut Editor, console: BufferId) {
+    last_sent(editor, console);
 }
 
 fn int(number: usize) -> Value {

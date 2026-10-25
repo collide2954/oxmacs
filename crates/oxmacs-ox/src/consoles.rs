@@ -40,7 +40,13 @@ fn consoles(editor: &mut Editor) -> Option<&mut Consoles> {
     editor.plugin_state_mut::<Consoles>()
 }
 
+const ERRORS: &str = "\u{1}errors";
+
 fn heard(editor: &mut Editor, id: BufferId, kind: &str, payload: &str) {
+    if kind == ERRORS {
+        crate::flashes::send_failed(editor, id);
+        return;
+    }
     if let Some(consoles) = consoles(editor) {
         consoles
             .heard
@@ -49,6 +55,7 @@ fn heard(editor: &mut Editor, id: BufferId, kind: &str, payload: &str) {
 }
 
 fn idle(editor: &mut Editor, id: BufferId) {
+    crate::flashes::send_settled(editor, id);
     if let Some(consoles) = consoles(editor) {
         consoles.heard.push(Heard::Idle(id));
     }
@@ -67,7 +74,7 @@ fn text(heap: &Heap, native: &str, what: &str, value: Value) -> Result<String, E
     })
 }
 
-fn texts(heap: &Heap, value: Value) -> Result<Vec<String>, Error> {
+fn texts(heap: &Heap, value: Value, wanted: &str) -> Result<Vec<String>, Error> {
     heap.elements(value)
         .filter(|_| heap.text(value).is_none())
         .map(|items| {
@@ -78,7 +85,7 @@ fn texts(heap: &Heap, value: Value) -> Result<Vec<String>, Error> {
         })
         .ok_or_else(|| {
             Error::new(format!(
-                "console-start expects a vector of arguments for :args, got {}",
+                "console-start expects {wanted}, got {}",
                 print::brief(heap, value)
             ))
         })
@@ -119,6 +126,7 @@ struct Options {
     idle: Option<Value>,
     resized: Option<Value>,
     prompts: Vec<String>,
+    errors: Vec<String>,
     watches: Vec<(String, String)>,
 }
 
@@ -130,7 +138,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
         };
         match option.name() {
             "program" => found.program = Some(text(heap, "console-start", "a program", *value)?),
-            "args" => found.args = texts(heap, *value)?,
+            "args" => found.args = texts(heap, *value, "a vector of arguments for :args")?,
             "directory" => {
                 found.directory = Some(PathBuf::from(text(
                     heap,
@@ -145,7 +153,8 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
             "on-output" => found.output = Some(*value),
             "on-idle" => found.idle = Some(*value),
             "on-resize" => found.resized = Some(*value),
-            "prompts" => found.prompts = texts(heap, *value)?,
+            "prompts" => found.prompts = texts(heap, *value, "a vector of patterns for :prompts")?,
+            "errors" => found.errors = texts(heap, *value, "a vector of patterns for :errors")?,
             "watch" => found.watches = pairs(heap, *value, "watch")?,
             _ => return Err(unknown(heap, pair[0])),
         }
@@ -155,7 +164,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
-        "console-start takes :program, :args, :directory, :env, :label, :keys, :on-output, :on-idle, :on-resize, :prompts and :watch, not {}",
+        "console-start takes :program, :args, :directory, :env, :label, :keys, :on-output, :on-idle, :on-resize, :prompts, :errors and :watch, not {}",
         print::brief(heap, option)
     ))
 }
@@ -234,6 +243,12 @@ fn start(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Va
         watches: given
             .watches
             .into_iter()
+            .chain(
+                given
+                    .errors
+                    .into_iter()
+                    .map(|pattern| (ERRORS.to_owned(), pattern)),
+            )
             .map(|(kind, pattern)| Ok((kind, pattern_of(&pattern)?)))
             .collect::<Result<_, Error>>()?,
         name: name.clone(),
@@ -295,7 +310,7 @@ pub fn install(isolate: &mut Isolate) {
         if let Ok(source) = crate::handles::current(heap, editor)
             && source != id
         {
-            crate::flashes::sent(editor, source, &code);
+            crate::flashes::sent(editor, id, source, &code);
         }
         editor.console_evaluate(id, &code);
         Ok(Value::Nil)
@@ -662,6 +677,39 @@ mod tests {
         editor.session_output(job, &format!("{PROMPT}{PROMPT}"));
         let id = editor.buffer_named("*shell*").unwrap();
         assert_eq!(editor.buffer_by_id(id).unwrap().contents(), "$ ls\n$ pwd\n");
+    }
+
+    #[test]
+    fn an_error_line_after_a_send_reports_the_code_again_as_failed() {
+        let (mut editor, mut ox, job) = started(
+            r#"(console-start "*shell*" :program "shell" :args ["-i"] :env {TERM: "dumb"}
+               :prompts ["^> $"] :errors ["^Error"])"#,
+        );
+        editor.session_output(job, "> ");
+        settle(&mut editor, &mut ox);
+        editor.buffer_mut().insert_at(0, "ok\nboom\nlate\n");
+        ox.eval(
+            &mut editor,
+            "(def ran (atom [])) (on-evaluate :test (fn [b start end failed] (swap! ran conj [start end failed])))",
+        )
+        .unwrap();
+        let send = |editor: &mut Editor, ox: &mut Ox, code: &str, output: &str| {
+            ox.eval(editor, &format!("(console-send \"*shell*\" \"{code}\")"))
+                .unwrap();
+            editor.session_output(job, output);
+            settle(editor, ox);
+        };
+
+        send(&mut editor, &mut ox, "ok", "fine\n> ");
+        send(&mut editor, &mut ox, "boom", "Error: boom\n> ");
+        send(&mut editor, &mut ox, "late", "> ");
+        editor.session_output(job, "Error: from earlier\n> ");
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(
+            ox.eval(&mut editor, "@ran").unwrap(),
+            "[[0 2 false] [3 7 false] [3 7 true] [8 12 false]]"
+        );
     }
 
     #[test]

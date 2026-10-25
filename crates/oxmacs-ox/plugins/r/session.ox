@@ -209,7 +209,7 @@
           directory (or root (default-directory))
           name (if restarted existing (session-name directory))]
       (console-start name :program program :args (arguments) :directory directory :env env :label label :keys @keys
-                     :prompts (get @patterns :prompts) :watch (get @patterns :watch)
+                     :prompts (get @patterns :prompts) :errors ["^Error"] :watch (get @patterns :watch)
                      :on-output (fn [kind payload] (heard name kind payload))
                      :on-idle (fn [] (idle name))
                      :on-resize (fn [_] (fit name)))

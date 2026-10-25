@@ -91,6 +91,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `console-start` takes `:errors`, patterns of lines that mean the code just sent failed: such a line reports that code to `on-evaluate` again as failed, so zap flashes R code that raised an error in the error color.
 - `(ox xml)` reads XML into maps of `:tag`, `:attrs` and `:children` with `xml/parse`, finds elements along paths such as `"channel/item"` with `xml/find` and `xml/find-all`, reads `xml/text` and `xml/attr`, and writes the same maps back as XML with `xml/write`.
 - Every CI run keeps release builds of `oxmacs` and `ox` for Linux, macOS and Windows, and the Fedora 44 and 45 RPMs, as downloads on its page; version tags attach them all to the release. The Fedora packages are built by the main CI and published to the dnf repository only when every check passes.
 - Plugins can require other plugins and oxmacs itself in `plugin.ox`, as `:requires {markdown: "^0.2" ox: ">=0.14"}`. Required plugins start first, one that is off lends its modules without starting, and a plugin whose requirements are missing or the wrong version stays off and says why in `*ox log*`.

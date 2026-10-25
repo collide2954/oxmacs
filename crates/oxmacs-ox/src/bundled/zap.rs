@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::time::{Duration, Instant};
 
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Editor, Effect};
 use oxmacs_core::syntax::Language;
 use oxmacs_core::text::Buffer;
 use oxmacs_core::theme::Highlight;
@@ -81,7 +81,8 @@ fn the_faces_of_flashes_are_settings() {
 }
 
 #[test]
-fn flashes_fade_out_over_the_duration_setting() {    let (_home, mut editor, mut ox) = visiting("(use-plugin zap)", "scratch.ox", "(+ 1 2)");
+fn flashes_fade_out_over_the_duration_setting() {
+    let (_home, mut editor, mut ox) = visiting("(use-plugin zap)", "scratch.ox", "(+ 1 2)");
     let before = Instant::now();
     press(&mut editor, &mut ox, "C-x C-e");
     let after = Instant::now();
@@ -181,6 +182,27 @@ fn r_statements_flash_as_they_are_sent() {
     press(&mut editor, &mut ox, "C-RET");
 
     assert_eq!(lit(&editor, 0, before), [(0..6, Highlight::Marked)]);
+    assert_eq!(lit(&editor, 1, before), []);
+}
+
+#[test]
+fn r_errors_flash_the_statement_again_in_the_error_color() {
+    let (_home, mut editor, mut ox) = r_script("cars.R", "x <- z\ny <- 2\n");
+    press(&mut editor, &mut ox, "C-RET");
+    let job = editor
+        .take_effects()
+        .into_iter()
+        .find_map(|effect| match effect {
+            Effect::StartSession(job) => Some(job.id),
+            _ => None,
+        })
+        .unwrap();
+    let before = Instant::now();
+
+    editor.session_output(job, "Error: object 'z' not found\n");
+    settle(&mut editor, &mut ox);
+
+    assert_eq!(lit(&editor, 0, before), [(0..6, Highlight::Flagged)]);
     assert_eq!(lit(&editor, 1, before), []);
 }
 
