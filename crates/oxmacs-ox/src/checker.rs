@@ -3,7 +3,6 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
-use ox::Isolate;
 use ox::check::{Diagnostic, Severity};
 use ox::span::line_column;
 use oxmacs_core::editor::Editor;
@@ -15,7 +14,6 @@ pub const CHECK_PAUSE: Duration = Duration::from_millis(500);
 struct Job {
     path: PathBuf,
     source: String,
-    editor: bool,
 }
 
 struct Done {
@@ -39,13 +37,8 @@ pub(crate) struct Checker {
 
 fn serve(jobs: &Receiver<Job>, done: &Sender<Done>) {
     let mut editor = None;
-    let mut plain = None;
     for job in jobs {
-        let isolate = if job.editor {
-            editor.get_or_insert_with(crate::checking_isolate)
-        } else {
-            plain.get_or_insert_with(Isolate::new)
-        };
+        let isolate = editor.get_or_insert_with(crate::checking_isolate);
         for root in check_roots(&job.path) {
             isolate.add_root(root);
         }
@@ -140,7 +133,6 @@ impl Checker {
         self.checked.retain(|(checked, _)| *checked != id);
         self.checked.push((id, revision));
         let job = Job {
-            editor: editor_code(&path),
             path,
             source: editor.buffer().contents(),
         };
@@ -216,6 +208,24 @@ mod tests {
 
     fn rest(editor: &mut Editor, ox: &mut Ox, since: Instant, millis: u64) {
         ox.idle(editor, since, since + Duration::from_millis(millis));
+    }
+
+    #[test]
+    fn any_ox_file_open_in_oxmacs_is_checked_with_the_editor_api() {
+        let (_home, mut editor, mut ox) = visiting(
+            &[(
+                "notes/scratch.ox",
+                "(module (import (ox ui)))\n(ui/text \"hi\")\n(message \"hi\")\n",
+            )],
+            "notes/scratch.ox",
+        );
+
+        rest(&mut editor, &mut ox, Instant::now(), 600);
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(editor.pane().line_diagnostics(0), []);
+        assert_eq!(editor.pane().line_diagnostics(1), []);
+        assert_eq!(editor.pane().line_diagnostics(2), []);
     }
 
     #[test]

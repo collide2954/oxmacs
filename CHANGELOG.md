@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- The checker in oxmacs knows the editor API in every Ox file, not only `init.ox` and plugins, so a loose file that imports `(ox ui)` or calls `message` is no longer marked wrong; `ox check` still checks loose files as plain scripts.
 - `ui/text` takes `:face nil` as plain text, so a face can be chosen with `if` or `when`, instead of refusing it.
 - keycast no longer shows an empty pill for the letters typed into an incremental search.
 - `p`, `C-p` and `<up>` in dired move up onto `..`, where `RET` goes to the parent directory, instead of stopping at the first file.
