@@ -6,6 +6,11 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- A `deferror` message sees the defaults of keyword fields: with `(deferror parse-error [line {column 0}] "At {line}:{column}")`, `(parse-error 3)` says `At 3:0` instead of `At 3:`.
+- A module imported twice with different options, as `(ox string :as s)` and `(ox string :only [upper])`, keeps both instead of only the last.
+- `(empty? generator)` says `empty?` expects a collection instead of blaming `count`.
+- `ox --help` and the manual list `ox perf sample`.
+- A view that gets stuck the same way is reported once in `*ox log*` until it draws again, instead of on every change to the atoms it reads.
 - The checker in oxmacs knows the editor API in every Ox file, not only `init.ox` and plugins, so a loose file that imports `(ox ui)` or calls `message` is no longer marked wrong; `ox check` still checks loose files as plain scripts.
 - `ui/text` takes `:face nil` as plain text, so a face can be chosen with `if` or `when`, instead of refusing it.
 - keycast no longer shows an empty pill for the letters typed into an incremental search.
