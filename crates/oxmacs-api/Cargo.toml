@@ -1,0 +1,17 @@
+[package]
+name = "oxmacs-api"
+version.workspace = true
+description = "The shape of oxmacs's Ox API: its natives' signatures, its Ox macros and which files are editor code"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+ox.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

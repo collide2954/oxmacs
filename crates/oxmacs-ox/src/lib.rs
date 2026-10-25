@@ -47,8 +47,8 @@ pub use plugins::Bundle;
 const BUDGET: Duration = Duration::from_millis(4);
 const QUICK: Duration = Duration::from_millis(250);
 const PATIENT: Duration = Duration::from_secs(10);
-const PRELUDE: &str = include_str!("prelude.ox");
-const DOCS: &str = include_str!("docs.ox");
+const PRELUDE: &str = oxmacs_api::PRELUDE;
+const DOCS: &str = oxmacs_api::DOCS;
 
 pub fn home() -> Option<PathBuf> {
     std::env::var_os("OXMACS_HOME")
@@ -81,9 +81,7 @@ fn install_editor_api(isolate: &mut Isolate, answers: &prompts::Inbox) {
     keepass::install(isolate);
     manual::install(isolate);
     isolate.add_native_docs(DOCS);
-    if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
-        panic!("The oxmacs prelude failed to load: {error}");
-    }
+    oxmacs_api::extend_with_prelude(isolate);
     isolate.set_worker_setup(worker_api);
 }
 

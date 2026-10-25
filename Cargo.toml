@@ -6,6 +6,7 @@ default-members = [
     "crates/ox-lsp",
     "crates/ox-perf",
     "crates/oxmacs",
+    "crates/oxmacs-api",
     "crates/oxmacs-core",
     "crates/oxmacs-gui",
     "crates/oxmacs-ox",
@@ -40,6 +41,7 @@ ox-lsp = { path = "crates/ox-lsp" }
 ox-perf = { path = "crates/ox-perf" }
 oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
+oxmacs-api = { path = "crates/oxmacs-api" }
 oxmacs-ox = { path = "crates/oxmacs-ox" }
 native-theme = { version = "0.6.1", default-features = false }
 notify = "8.2.0"

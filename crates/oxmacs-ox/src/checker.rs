@@ -71,25 +71,7 @@ impl Worker {
     }
 }
 
-pub fn editor_code(path: &Path) -> bool {
-    path.file_name().is_some_and(|name| name == "init.ox")
-        || path
-            .parent()
-            .is_some_and(|folder| folder.join("plugin.ox").is_file())
-}
-
-pub fn check_roots(path: &Path) -> Vec<PathBuf> {
-    let Some(folder) = path.parent() else {
-        return Vec::new();
-    };
-    let mut roots = vec![folder.to_path_buf()];
-    if folder.join("plugin.ox").is_file()
-        && let Some(plugins) = folder.parent()
-    {
-        roots.push(plugins.to_path_buf());
-    }
-    roots
-}
+pub use oxmacs_api::{check_roots, editor_code};
 
 fn due(editor: &Editor) -> Option<(BufferId, u64, PathBuf)> {
     let buffer = editor.buffer();

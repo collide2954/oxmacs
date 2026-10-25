@@ -3665,6 +3665,7 @@ dependencies = [
  "ox",
  "ox-lsp",
  "ox-perf",
+ "oxmacs-api",
  "oxmacs-core",
  "oxmacs-ox",
  "serde_json",
@@ -3696,6 +3697,14 @@ version = "0.13.0"
 dependencies = [
  "oxmacs-core",
  "oxmacs-gui",
+]
+
+[[package]]
+name = "oxmacs-api"
+version = "0.13.0"
+dependencies = [
+ "ox",
+ "tempfile",
 ]
 
 [[package]]
@@ -3751,6 +3760,7 @@ dependencies = [
  "jiff",
  "keepass",
  "ox",
+ "oxmacs-api",
  "oxmacs-core",
  "regex",
  "semver",

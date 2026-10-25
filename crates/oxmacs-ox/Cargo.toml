@@ -14,6 +14,7 @@ dirs.workspace = true
 jiff.workspace = true
 keepass.workspace = true
 ox.workspace = true
+oxmacs-api.workspace = true
 oxmacs-core.workspace = true
 regex.workspace = true
 semver.workspace = true

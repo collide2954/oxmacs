@@ -10,7 +10,7 @@ use ox::error::ErrorKind;
 use ox::span::line_column;
 use ox::value::Value;
 use ox::{Error, Isolate, read};
-use oxmacs_ox::checker;
+use oxmacs_api as checker;
 
 const TEST_TASKS: std::time::Duration = std::time::Duration::from_secs(10);
 
@@ -200,7 +200,7 @@ fn language_server() -> ExitCode {
                 ox_lsp::Flavor::Plain
             }
         },
-        editor: oxmacs_ox::checking_isolate,
+        editor: oxmacs_api::checking_isolate,
         roots: checker::check_roots,
     };
     match ox_lsp::serve(&options) {
@@ -287,7 +287,7 @@ fn profile_file(path: &Path) -> ExitCode {
 
 fn isolate_for(file: &Path, roots: &[PathBuf]) -> Isolate {
     let mut isolate = if checker::editor_code(file) {
-        oxmacs_ox::checking_isolate()
+        oxmacs_api::checking_isolate()
     } else {
         Isolate::new()
     };
@@ -365,7 +365,7 @@ fn run_tests(paths: &[PathBuf]) -> ExitCode {
     for path in files {
         let source = fs::read_to_string(&path).unwrap_or_default();
         let mut isolate = if checker::editor_code(&path) {
-            oxmacs_ox::checking_isolate()
+            oxmacs_api::checking_isolate()
         } else {
             Isolate::new()
         };

@@ -1091,6 +1091,22 @@ impl Isolate {
         self.docs = OnceCell::new();
     }
 
+    pub fn define_stubs(&mut self, table: &'static str) {
+        let docs = describe::parse(&[table]);
+        for (shown, entry) in docs.entries.iter().filter(|(_, entry)| !entry.special) {
+            let (module, name) = match shown.split_once('/') {
+                Some((alias, name)) => (format!("ox/{alias}"), name),
+                None => ("ox".to_owned(), shown.as_str()),
+            };
+            let most = entry.most.filter(|_| entry.keywords == 0);
+            let missing = format!("{shown} isn't available here");
+            let function: Rc<NativeFn> =
+                Rc::new(move |_, _, _| Err(Error::new(missing.clone()).of(ErrorKind::Refused)));
+            self.install_native(&module, name, entry.least, most, function);
+        }
+        self.add_native_docs(table);
+    }
+
     fn docs(&self) -> &Docs {
         self.docs.get_or_init(|| describe::parse(&self.doc_tables))
     }

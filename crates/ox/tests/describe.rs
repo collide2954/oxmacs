@@ -88,6 +88,42 @@ fn natives_and_special_forms_are_described_from_the_library_docs() {
 }
 
 #[test]
+fn stubs_from_a_docs_table_keep_their_arity_and_docs_but_refuse_to_run() {
+    let mut isolate = Isolate::new();
+    isolate.define_stubs(
+        "(greet name (loud)) \"Greets name.\"\n(ui/label text {size 1}) \"A label.\"\n(special (never x) \"Not a native.\")",
+    );
+
+    assert_eq!(
+        isolate.eval("(greet \"a\")").unwrap_err().message,
+        "greet isn't available here"
+    );
+    assert_eq!(
+        isolate
+            .eval("(module (import (ox ui))) (ui/label \"x\" :size 2)")
+            .unwrap_err()
+            .message,
+        "ui/label isn't available here"
+    );
+    let found: Vec<String> = isolate
+        .check("sample.ox", "(greet)\n(greet 1 2 3)")
+        .into_iter()
+        .map(|diagnostic| diagnostic.message)
+        .collect();
+    assert_eq!(
+        found,
+        [
+            "greet takes 1 to 2 arguments, got 0",
+            "greet takes 1 to 2 arguments, got 3"
+        ]
+    );
+    let greet = described(&mut isolate, "greet");
+    assert_eq!(greet.signature, "(greet name (loud))");
+    assert_eq!(greet.doc.as_deref(), Some("Greets name."));
+    assert!(isolate.eval("never").is_err());
+}
+
+#[test]
 fn library_constants_are_described_with_their_docs() {
     let mut isolate = Isolate::new();
     isolate.eval("(module (import (ox math)))").unwrap();
