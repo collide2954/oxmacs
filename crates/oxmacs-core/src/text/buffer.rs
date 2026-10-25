@@ -78,6 +78,7 @@ pub struct Buffer {
     saved: u64,
     file: Option<FileInfo>,
     read_only: bool,
+    word_wrap: bool,
 }
 
 impl Buffer {
@@ -97,6 +98,7 @@ impl Buffer {
             saved: 0,
             file: None,
             read_only: false,
+            word_wrap: false,
         }
     }
 
@@ -106,6 +108,14 @@ impl Buffer {
 
     pub fn set_read_only(&mut self, read_only: bool) {
         self.read_only = read_only;
+    }
+
+    pub fn word_wrap(&self) -> bool {
+        self.word_wrap
+    }
+
+    pub fn set_word_wrap(&mut self, word_wrap: bool) {
+        self.word_wrap = word_wrap;
     }
 
     pub fn id(&self) -> BufferId {

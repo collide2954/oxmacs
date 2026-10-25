@@ -126,6 +126,50 @@ pub fn wrap(text: &str, width: usize, tab_width: usize) -> Vec<Row> {
     rows
 }
 
+pub fn wrap_words(text: &str, width: usize, tab_width: usize) -> Vec<Row> {
+    if width == 0 {
+        return wrap(text, width, tab_width);
+    }
+    let mut rows = vec![Row {
+        chars: 0..0,
+        column: 0,
+    }];
+    let mut column = 0;
+    let mut opening: Option<(usize, usize)> = None;
+    for (index, c) in text.chars().enumerate() {
+        let glyph = Glyph::of(c, column, tab_width).width();
+        let (start, from, filled) = rows.last().map_or((0, 0, false), |row| {
+            (row.column, row.chars.start, !row.chars.is_empty())
+        });
+        if filled && c != ' ' && column - start + glyph > width {
+            match opening.filter(|(at, _)| *at > from) {
+                Some((at, at_column)) => {
+                    if let Some(row) = rows.last_mut() {
+                        row.chars.end = at;
+                    }
+                    rows.push(Row {
+                        chars: at..index,
+                        column: at_column,
+                    });
+                }
+                None => rows.push(Row {
+                    chars: index..index,
+                    column,
+                }),
+            }
+            opening = None;
+        }
+        if let Some(row) = rows.last_mut() {
+            row.chars.end = index + 1;
+        }
+        column += glyph;
+        if c == ' ' {
+            opening = Some((index + 1, column));
+        }
+    }
+    rows
+}
+
 pub fn cursor_glyph(text: &str, index: usize, tab_width: usize) -> (String, usize) {
     match text.chars().nth(index) {
         None | Some('\t') => (String::new(), 1),
@@ -295,6 +339,29 @@ mod tests {
     #[test]
     fn a_zero_width_never_wraps() {
         assert_eq!(wrap("abcdef", 0, 8), [row(0..6, 0)]);
+    }
+
+    #[test]
+    fn word_wrapping_breaks_after_spaces() {
+        assert_eq!(
+            wrap_words("one two three", 8, 8),
+            [row(0..8, 0), row(8..13, 8)]
+        );
+        assert_eq!(
+            wrap_words("a bb ccc dddd", 6, 8),
+            [row(0..5, 0), row(5..9, 5), row(9..13, 9)]
+        );
+        assert_eq!(wrap_words("ab cd", 10, 8), [row(0..5, 0)]);
+        assert_eq!(wrap_words("abc  ", 3, 8), [row(0..5, 0)]);
+    }
+
+    #[test]
+    fn words_longer_than_a_row_break_where_they_must() {
+        assert_eq!(
+            wrap_words("abcdefgh ij", 3, 8),
+            [row(0..3, 0), row(3..6, 3), row(6..9, 6), row(9..11, 9)]
+        );
+        assert_eq!(wrap_words("abcdef", 0, 8), [row(0..6, 0)]);
     }
 
     fn glyph(text: &str, width: usize) -> (String, usize) {

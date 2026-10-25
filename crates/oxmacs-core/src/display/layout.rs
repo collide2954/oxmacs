@@ -1,4 +1,4 @@
-use crate::display::{Row, char_at_column, display_column, wrap};
+use crate::display::{Row, char_at_column, display_column, wrap, wrap_words};
 use crate::text::Buffer;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -24,7 +24,12 @@ impl<'a> Layout<'a> {
     }
 
     pub fn rows(&self, line: usize) -> Vec<Row> {
-        wrap(&self.buffer.line_text(line), self.width, self.tab_width)
+        let text = self.buffer.line_text(line);
+        if self.buffer.word_wrap() {
+            wrap_words(&text, self.width, self.tab_width)
+        } else {
+            wrap(&text, self.width, self.tab_width)
+        }
     }
 
     pub fn screen_line(&self, position: usize) -> ScreenLine {
@@ -207,6 +212,17 @@ mod tests {
 
         assert_eq!(layout.step(at(9, 7), 0), at(2, 2));
         assert_eq!(layout.step(at(1, 5), 0), at(1, 0));
+    }
+
+    #[test]
+    fn buffers_that_wrap_words_break_their_rows_after_spaces() {
+        let mut buffer = Buffer::with_text("t", "one two three");
+        buffer.set_word_wrap(true);
+        let layout = Layout::new(&buffer, 8, 8);
+
+        assert_eq!(layout.rows(0).len(), 2);
+        assert_eq!(layout.screen_line(8), at(0, 1));
+        assert_eq!(layout.column(9), 1);
     }
 
     #[test]
