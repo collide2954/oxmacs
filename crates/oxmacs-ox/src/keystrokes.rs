@@ -21,6 +21,8 @@ fn event(heap: &mut Heap, stroke: &Keystroke) -> Result<Value, Error> {
         keys,
         Value::keyword("command"),
         command,
+        Value::keyword("repeat"),
+        Value::Bool(stroke.repeated),
     ])
 }
 

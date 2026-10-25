@@ -9,6 +9,7 @@ pub struct Keystroke {
     pub keys: KeySequence,
     pub command: &'static str,
     pub typed: bool,
+    pub repeated: bool,
 }
 
 #[derive(Debug, Default)]
@@ -32,7 +33,13 @@ impl Editor {
         (self.keystrokes.watching && !self.macros.replaying()).then_some(self.keystrokes.count)
     }
 
-    pub(super) fn note_keystroke(&mut self, keys: Vec<Key>, command: CommandId, before: usize) {
+    pub(super) fn note_keystroke(
+        &mut self,
+        keys: Vec<Key>,
+        command: CommandId,
+        before: usize,
+        repeated: bool,
+    ) {
         if self.keystrokes.count != before {
             return;
         }
@@ -40,7 +47,7 @@ impl Editor {
         if command == Command::ExecuteExtendedCommand.into() {
             self.keystrokes.extended = Some(keys);
         } else {
-            self.push_keystroke(keys, command);
+            self.push_keystroke(keys, command, repeated);
         }
     }
 
@@ -54,17 +61,18 @@ impl Editor {
             .take()
             .or_else(|| self.where_is(Command::ExecuteExtendedCommand.into()));
         if let Some(keys) = keys {
-            self.push_keystroke(keys, command);
+            self.push_keystroke(keys, command, false);
         }
     }
 
-    fn push_keystroke(&mut self, keys: KeySequence, command: CommandId) {
+    fn push_keystroke(&mut self, keys: KeySequence, command: CommandId, repeated: bool) {
         let typed = command == Command::SelfInsertCommand.into();
         let command = self.commands.name(command);
         self.keystrokes.noted.push(Keystroke {
             keys,
             command,
             typed,
+            repeated,
         });
         self.keystrokes.count += 1;
     }
@@ -123,6 +131,34 @@ mod tests {
             ]
         );
         assert_eq!(noted(&mut editor), []);
+    }
+
+    #[test]
+    fn each_noted_command_says_whether_it_repeats_the_one_before() {
+        let mut editor = editor_with("one\ntwo\nthree\n", 0);
+        editor.watch_keystrokes();
+
+        press(&mut editor, "C-n C-n");
+        type_text(&mut editor, "a");
+        press(&mut editor, "C-n M-x");
+        type_text(&mut editor, "next-line");
+        press(&mut editor, "RET");
+
+        let repeated: Vec<(&str, bool)> = editor
+            .take_keystrokes()
+            .into_iter()
+            .filter(|stroke| !stroke.typed)
+            .map(|stroke| (stroke.command, stroke.repeated))
+            .collect();
+        assert_eq!(
+            repeated,
+            [
+                ("next-line", false),
+                ("next-line", true),
+                ("next-line", false),
+                ("next-line", false),
+            ]
+        );
     }
 
     #[test]

@@ -69,14 +69,24 @@ fn keys_show_only_once_keycast_is_used() {
 }
 
 #[test]
-fn typing_and_editing_keys_never_show() {
+fn typing_plain_newlines_and_indents_never_show() {
     let (_home, mut editor, mut ox) = casting("");
 
     typed(&mut editor, &mut ox, "hello there");
-    press(&mut editor, &mut ox, "DEL <home> <delete> <end>");
+    press(&mut editor, &mut ox, "RET TAB <delete>");
 
     assert_eq!(rows(&editor), Vec::<String>::new());
-    assert_eq!(editor.buffer().contents(), "ello ther");
+    assert!(editor.buffer().contents().starts_with("hello there\n"));
+    assert_eq!(
+        evaluated(
+            &mut editor,
+            &mut ox,
+            r#"(map stack/shown? [{keys: ["RET"] command: "newline"} {keys: ["TAB"] command: "indent-for-tab-command"}
+                                  {keys: ["TAB"] command: "ox-indent-or-complete"} {keys: ["RET"] command: "dired-find-file"}
+                                  {keys: ["TAB"] command: "git-toggle"}])"#
+        ),
+        "[false false false true true]"
+    );
 }
 
 #[test]
@@ -91,7 +101,7 @@ fn chords_named_keys_and_keys_special_buffers_bind_show() {
                  [["C-x" "C-s"] ["M-x"] ["s-a"] ["C--"] ["C-M-%"] ["RET"] ["TAB"] ["ESC" "ESC"] ["<up>"] ["S-<left>"] ["<f5>"] ["n"] ["SPC"] ["g" "r"]
                   ["DEL"] ["<home>"] ["<delete>"] ["<next>"] ["S-<home>"]])"#
         ),
-        "[true true true true true true true true true true true true true true false false false false false]"
+        "[true true true true true true true true true true true true true true true true false true true]"
     );
     ox.eval(
         &mut editor,
@@ -113,11 +123,23 @@ fn repeats_count_up_and_the_newest_three_stay_with_older_ones_fainter() {
     press(&mut editor, &mut ox, "C-n C-n C-n C-n");
     assert_eq!(rows(&editor), ["[C-n] ×4 next-line"]);
 
+    press(&mut editor, &mut ox, "C-p");
+    typed(&mut editor, &mut ox, "a");
+    press(&mut editor, &mut ox, "C-p");
+    assert_eq!(
+        rows(&editor),
+        [
+            "[C-n] ×4 next-line",
+            "[C-p] previous-line",
+            "[C-p] previous-line"
+        ]
+    );
+
     press(&mut editor, &mut ox, "C-p C-f C-b");
     assert_eq!(
         rows(&editor),
         [
-            "[C-p] previous-line",
+            "[C-p] ×2 previous-line",
             "[C-f] forward-char",
             "[C-b] backward-char"
         ]

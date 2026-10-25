@@ -90,7 +90,7 @@ customize    0.1.1    on       Change the editor's and plugins' settings in a fo
 dired        0.2.3    on       List directories and manage their files
 git          0.3.0    opt-in   Git status and staging in the style of Magit
 irc          0.9.2    opt-in   An IRCv3 client in the style of ERC
-keycast      0.1.0    opt-in   Shows the keys you press and the commands they run, for demos
+keycast      0.2.0    opt-in   Shows the keys you press and the commands they run, for demos
 life         0.2.0    opt-in   Conway's Game of Life on a canvas
 manual       0.5.7    on       The oxmacs tutorial and the Ox manual
 markdown     0.2.0    opt-in   Markdown rendered as styled text

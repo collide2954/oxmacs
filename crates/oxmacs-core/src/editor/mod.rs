@@ -575,9 +575,10 @@ impl Editor {
         let keys = mem::take(&mut self.pending);
         self.last_key = Some(key);
         let noting = self.noting_keystrokes();
+        let repeated = self.last_id == Some(command);
         self.run_id(command, shifted);
         if let Some(before) = noting {
-            self.note_keystroke(keys, command, before);
+            self.note_keystroke(keys, command, before, repeated);
         }
     }
 

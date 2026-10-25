@@ -12,24 +12,31 @@
   (regex/matches? "^(?:[CMSs]-)*[CMs]-." key))
 
 (def (named? key)
-  (regex/matches? "^(?:S-)?(?:RET|TAB|ESC|<(?:up|down|left|right|f[0-9]+)>)$" key))
+  (regex/matches? "^(?:S-)?(?:RET|TAB|ESC|DEL|<(?:up|down|left|right|home|end|prior|next|f[0-9]+)>)$" key))
 
 (def (letter? key)
   (or (= key "SPC") (= (count key) 1)))
 
+(def typing {"RET" ["newline"] "TAB" ["indent-for-tab-command" "ox-indent-or-complete"]})
+
+(def (typing? event)
+  (and (= (count event.keys) 1)
+       (some (fn [command] (= command event.command)) (get typing (first event.keys) []))))
+
 (def (shown? event)
-  "True when the keys of event are worth showing: a chord with Ctrl, Alt or Super, RET, TAB, ESC, an arrow or a function key, or plain letters a special buffer binds."
+  "True when the keys of event are worth showing: a chord with Ctrl, Alt or Super, RET, TAB, ESC, DEL, an arrow, <home>, <end>, a page key or a function key, or plain letters a special buffer binds; but not RET or TAB that only start a new line or indent."
   (let [keys event.keys]
-    (or (some (fn [key] (or (chord? key) (named? key))) keys)
-        (every? letter? keys))))
+    (and (not (typing? event))
+         (or (some (fn [key] (or (chord? key) (named? key))) keys)
+             (every? letter? keys)))))
 
 (def (same? cast event)
   (and (= cast.keys event.keys) (= cast.command event.command)))
 
 (def (push casts event now)
-  "casts with event pressed at now added at the end: pressing the newest again counts up, and only the newest three stay."
+  "casts with event pressed at now added at the end: running the newest command again straight away counts up, and only the newest three stay."
   (let [newest (last casts)]
-    (if (and newest (same? newest event))
+    (if (and newest event.repeat (same? newest event))
       (conj (pop casts) (assoc newest :count (inc newest.count) :at now))
       (let [all (conj casts {keys: event.keys command: event.command count: 1 at: now})]
         (vec (drop (max 0 (- (count all) most)) all))))))

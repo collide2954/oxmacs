@@ -55,6 +55,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- keycast shows `<home>`, `<end>`, the page keys and `DEL` as it does the arrows, hides `RET` and `TAB` when they only start a new line or indent, and counts a key as repeated only when its command ran just before, so typing between two presses shows them apart. `on-key-command` events carry `:repeat`.
 - zap flashes code that ran in the marked face and code that failed in the flagged face, which show better on dark themes; its `face` and `error-face` settings pick others.
 - A plugin imports another plugin's modules only when its manifest requires that plugin; the error says what to add to `:requires`. The calendar, irc, manual and remote plugins declare the plugins they use.
 - In Ox buffers and the Ox REPL, the signature of the call at point shows once point has rested for 0.4 seconds, as R's does, rather than being worked out again on every key.
