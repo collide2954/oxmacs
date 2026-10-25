@@ -41,7 +41,7 @@ When code you evaluate fails, the error shows beside the form and in `*ox log*`.
 (bind-key "C-c d" 'dired)
 ```
 
-`M-x customize` changes the same settings in a form and saves them to `~/.oxmacs/custom.ox`, which runs before `init.ox`, so `init.ox` wins. When `init.ox` fails, oxmacs keeps what ran before the error and shows `*ox log*`.
+`M-x customize` changes the same settings in a form and saves them to `~/.oxmacs/custom.ox`, which runs before `init.ox`, so `init.ox` wins. When `init.ox` fails, oxmacs keeps what ran before the error and shows `*ox log*`, and `oxmacs -q` starts without running `custom.ox` or `init.ox` at all.
 
 ## Next
 

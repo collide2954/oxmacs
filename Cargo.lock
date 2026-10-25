@@ -3709,6 +3709,7 @@ version = "0.14.0"
 dependencies = [
  "oxmacs-core",
  "oxmacs-gui",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

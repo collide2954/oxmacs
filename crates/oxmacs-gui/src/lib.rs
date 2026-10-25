@@ -19,17 +19,17 @@ use iced::{Size, window};
 use oxmacs_core::cli::Visit;
 use oxmacs_core::config::WindowMode;
 
-pub fn run(visits: Vec<Visit>) -> Result {
+pub fn run(visits: Vec<Visit>, init: bool) -> Result {
     crash::install(crash::folder());
     let home = oxmacs_ox::home();
-    let booted = App::boot(&visits, home.as_deref());
+    let booted = App::boot_with(&visits, home.as_deref(), init);
     let mode = booted.0.editor().config().window_mode;
     let booted = Cell::new(Some(booted));
     iced::application(
         move || {
             booted
                 .take()
-                .unwrap_or_else(|| App::boot(&visits, home.as_deref()))
+                .unwrap_or_else(|| App::boot_with(&visits, home.as_deref(), init))
         },
         App::update,
         App::view,

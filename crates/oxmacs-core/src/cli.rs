@@ -8,13 +8,40 @@ pub struct Visit {
     pub column: Option<usize>,
 }
 
-pub fn parse(args: impl IntoIterator<Item = OsString>) -> Vec<Visit> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Launch {
+    Edit { visits: Vec<Visit>, init: bool },
+    Help,
+    Version,
+    Unknown(String),
+}
+
+pub const HELP: &str = "\
+Usage: oxmacs [OPTION]... [+LINE[:COLUMN]] [FILE]...
+
+Opens each FILE, at LINE and COLUMN when +LINE[:COLUMN] comes before it.
+
+Options:
+  -q, --no-init   start without running custom.ox and init.ox
+      --help      show this help
+      --version   show the version
+      --          take everything after it as a file name
+";
+
+pub fn parse(args: impl IntoIterator<Item = OsString>) -> Launch {
     let mut visits = Vec::new();
+    let mut init = true;
     let mut position = None;
     let mut options = true;
     for arg in args {
-        if options && arg == "--" {
-            options = false;
+        if options && let Some(option) = arg.to_str().filter(|arg| arg.starts_with('-')) {
+            match option {
+                "--" => options = false,
+                "--help" => return Launch::Help,
+                "--version" => return Launch::Version,
+                "-q" | "--no-init" => init = false,
+                other => return Launch::Unknown(other.to_owned()),
+            }
             continue;
         }
         if options && let Some(found) = arg.to_str().and_then(parse_position) {
@@ -28,7 +55,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Vec<Visit> {
             column: column.flatten(),
         });
     }
-    visits
+    Launch::Edit { visits, init }
 }
 
 fn parse_position(arg: &str) -> Option<(usize, Option<usize>)> {
@@ -44,7 +71,10 @@ mod tests {
     use super::*;
 
     fn visits(args: &[&str]) -> Vec<Visit> {
-        parse(args.iter().map(OsString::from))
+        match parse(args.iter().map(OsString::from)) {
+            Launch::Edit { visits, .. } => visits,
+            other => panic!("{other:?}"),
+        }
     }
 
     fn visit(path: &str, line: Option<usize>, column: Option<usize>) -> Visit {
@@ -94,5 +124,65 @@ mod tests {
             visits(&["--", "+5", "--"]),
             [visit("+5", None, None), visit("--", None, None)]
         );
+    }
+
+    fn launch(args: &[&str]) -> Launch {
+        parse(args.iter().map(OsString::from))
+    }
+
+    #[test]
+    fn options_ask_for_help_the_version_or_no_init_files() {
+        assert_eq!(launch(&["--help"]), Launch::Help);
+        assert_eq!(launch(&["a.rs", "--version"]), Launch::Version);
+        assert_eq!(
+            launch(&["-q", "a.rs"]),
+            Launch::Edit {
+                visits: vec![visit("a.rs", None, None)],
+                init: false
+            }
+        );
+        assert_eq!(
+            launch(&["--no-init"]),
+            Launch::Edit {
+                visits: Vec::new(),
+                init: false
+            }
+        );
+        assert_eq!(
+            launch(&["a.rs"]),
+            Launch::Edit {
+                visits: vec![visit("a.rs", None, None)],
+                init: true
+            }
+        );
+    }
+
+    #[test]
+    fn unknown_options_are_refused_but_anything_after_a_double_dash_is_a_file() {
+        assert_eq!(
+            launch(&["--frobnicate", "a.rs"]),
+            Launch::Unknown("--frobnicate".to_owned())
+        );
+        assert_eq!(launch(&["-x"]), Launch::Unknown("-x".to_owned()));
+        assert_eq!(
+            launch(&["--", "--help", "-q"]),
+            Launch::Edit {
+                visits: vec![visit("--help", None, None), visit("-q", None, None)],
+                init: true
+            }
+        );
+    }
+
+    #[test]
+    fn the_help_names_every_option() {
+        for option in [
+            "--help",
+            "--version",
+            "-q, --no-init",
+            "+LINE[:COLUMN]",
+            "--",
+        ] {
+            assert!(HELP.contains(option), "{option}");
+        }
     }
 }

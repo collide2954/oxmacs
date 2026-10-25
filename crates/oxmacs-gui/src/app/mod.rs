@@ -119,13 +119,22 @@ impl App {
     }
 
     pub fn boot(visits: &[Visit], home: Option<&Path>) -> (Self, Task<Message>) {
+        Self::boot_with(visits, home, true)
+    }
+
+    pub fn boot_with(visits: &[Visit], home: Option<&Path>, init: bool) -> (Self, Task<Message>) {
         let mut app = Self::default();
         app.editor.add_language_servers(SERVERS);
         app.editor.set_recovery_folder(
             home.and(dirs::cache_dir())
                 .map(|cache| cache.join("oxmacs").join("recovery")),
         );
-        let started = app.start_ox(home);
+        let started = if init {
+            app.start_ox(home)
+        } else {
+            app.ox.start_without_init(&mut app.editor, home);
+            app.pending_effects()
+        };
         let splash = app.editor.config().splash;
         app.start(visits, splash);
         app.reduced_motion = prefers_reduced_motion();
@@ -582,6 +591,24 @@ mod tests {
             oxmacs_core::config::WindowMode::Maximized
         );
         assert_eq!(app.editor().buffer().name(), "*scratch*");
+    }
+
+    #[test]
+    fn booting_without_init_files_keeps_the_default_settings() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("init.ox"),
+            "(settings {window-mode: :maximized splash: false})",
+        )
+        .unwrap();
+
+        let (app, _) = App::boot_with(&[], Some(home.path()), false);
+
+        assert_eq!(
+            app.editor().config(),
+            &oxmacs_core::config::Config::default()
+        );
+        assert_eq!(app.editor().buffer().name(), "*oxmacs*");
     }
 
     #[test]

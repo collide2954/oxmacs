@@ -148,13 +148,23 @@ impl Ox {
     }
 
     pub fn start(&mut self, editor: &mut Editor, home: Option<&Path>) {
+        self.start_with(editor, home, true);
+    }
+
+    pub fn start_without_init(&mut self, editor: &mut Editor, home: Option<&Path>) {
+        self.start_with(editor, home, false);
+    }
+
+    fn start_with(&mut self, editor: &mut Editor, home: Option<&Path>, init: bool) {
         self.home = home.map(Path::to_path_buf);
         editor.let_host_play_macros();
         editor.set_init_path(home.map(|home| home.join("init.ox")));
         tools::install(editor);
         hooks::watch(editor);
         plugins::discover(&mut self.isolate, editor, self.bundled, home);
-        self.run_init(editor, home);
+        if init {
+            self.run_init(editor, home);
+        }
         plugins::wake_at_startup(&self.isolate, editor);
         views::refresh(&mut self.isolate, editor);
     }
@@ -512,6 +522,24 @@ mod tests {
 
         assert_eq!(editor.config().tab_width, 4);
         assert!(!editor.config().clock);
+        assert_eq!(
+            editor.init_path(),
+            Some(home.path().join("init.ox").as_path())
+        );
+    }
+
+    #[test]
+    fn starting_without_init_files_skips_custom_ox_and_init_ox_but_keeps_plugins() {
+        let home = home_with(&[
+            ("custom.ox", "(settings {clock: false})"),
+            ("init.ox", "(settings {tab-width: 7})"),
+        ]);
+        let mut editor = Editor::new();
+
+        Ox::new().start_without_init(&mut editor, Some(home.path()));
+
+        assert_eq!(editor.config(), &oxmacs_core::config::Config::default());
+        assert!(editor.command_named("dired").is_some());
         assert_eq!(
             editor.init_path(),
             Some(home.path().join("init.ox").as_path())
