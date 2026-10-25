@@ -124,6 +124,15 @@ impl App {
         self.ox.end_take_over(&mut self.editor);
     }
 
+    fn go_fullscreen(&mut self, id: window::Id, mode: window::Mode) -> Task<Message> {
+        self.before_fullscreen = Some(mode);
+        if self.editor.presentation().fullscreen {
+            window::set_mode(id, window::Mode::Fullscreen)
+        } else {
+            Task::none()
+        }
+    }
+
     fn drag_side(&mut self, delta: f32) {
         let Some(side) = self.editor.side_window() else {
             return;
@@ -271,12 +280,7 @@ impl App {
             Message::TakeoverSized(size) => self.takeover_size = Some(size),
             Message::Tab(event) => self.tab_message(event),
             Message::SideDragged(delta) => self.drag_side(delta),
-            Message::WindowModeBefore(id, mode) => {
-                self.before_fullscreen = Some(mode);
-                if self.editor.presentation().fullscreen {
-                    return window::set_mode(id, window::Mode::Fullscreen);
-                }
-            }
+            Message::WindowModeBefore(id, mode) => return self.go_fullscreen(id, mode),
             Message::Focus(focused) => self.focus_changed(focused),
             Message::Idle => self.idle(),
             Message::CloseRequested => self.editor.execute(Command::SaveBuffersKillOxmacs),
