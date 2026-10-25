@@ -172,7 +172,7 @@
    "C-c C-h" 'explorer-toggle-hidden "C-c C-g" 'explorer-refresh})
 
 (def (ensure-buffer root)
-  (open-buffer tree-buffer [""] :keys tree-keys :show false :directory root
+  (open-buffer tree-buffer [""] :keys tree-keys :show false :directory root :cursor :line
                :on-click clicked :on-drop dropped :on-type typed :on-resize resized))
 
 (def (quietly work)

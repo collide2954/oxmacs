@@ -148,6 +148,10 @@ impl<'a> Pane<'a> {
         any.downcast_ref()
     }
 
+    pub fn line_cursor(&self) -> bool {
+        matches!(self.editor.buffers.mode(self.index), Some(Mode::Plugin(view)) if view.line_cursor())
+    }
+
     pub fn header_lines(&self) -> Vec<(String, LineStyle)> {
         self.editor.header_lines_of(self.buffer().id())
     }

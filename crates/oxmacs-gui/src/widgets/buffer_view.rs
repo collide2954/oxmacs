@@ -33,6 +33,9 @@ const HEADER_RAISE: f32 = 0.06;
 const PILL_ALPHA: f32 = 0.22;
 const PILL_INSET: f32 = 0.08;
 const PILL_PADDING: f32 = 0.35;
+const LINE_CURSOR: f32 = 0.18;
+const LINE_CURSOR_UNFOCUSED: f32 = 0.07;
+const LINE_CURSOR_EDGE: f32 = 3.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewEvent {
@@ -392,6 +395,40 @@ impl<'a, Message> BufferView<'a, Message> {
         shell.capture_event();
     }
 
+    fn draw_line_cursor<Renderer>(&self, renderer: &mut Renderer, row: Rectangle, bounds: Rectangle)
+    where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        let color = style::color(self.faces.cursor);
+        let alpha = if self.focused() {
+            LINE_CURSOR
+        } else {
+            LINE_CURSOR_UNFOCUSED
+        };
+        renderer.fill_quad(
+            Quad {
+                bounds: Rectangle::new(
+                    Point::new(bounds.x, row.y),
+                    Size::new(bounds.width, row.height),
+                ),
+                ..Quad::default()
+            },
+            color.scale_alpha(alpha),
+        );
+        if self.focused() {
+            renderer.fill_quad(
+                Quad {
+                    bounds: Rectangle::new(
+                        Point::new(bounds.x, row.y),
+                        Size::new(LINE_CURSOR_EDGE, row.height),
+                    ),
+                    ..Quad::default()
+                },
+                color,
+            );
+        }
+    }
+
     fn cursor_block(&self, state: &State, bounds: Rectangle) -> Option<CursorBlock> {
         let cell = state.metrics.cell;
         let target = self.cursor_cell();
@@ -580,9 +617,13 @@ where
         let text_bounds = self.text_bounds(bounds, cell.width);
         let (lines, rows) = self.lay_out_rows(state, text_bounds);
         let line_of = |number: usize| lines.iter().find(|line| line.number == number);
-        let cursor = self.cursor_block(state, text_bounds);
+        let line_cursor = self.pane.line_cursor();
+        let cursor = self
+            .cursor_block(state, text_bounds)
+            .filter(|_| !line_cursor);
         let opacity = self.cursor_opacity(state);
         let behind = self.focused();
+        let point_line = self.pane.buffer().line_of(self.pane.point());
         renderer.with_layer(bounds, |renderer| {
             if let Some(gutter) = self.pane.gutter() {
                 self.draw_gutter(renderer, gutter, &rows, bounds, cell.width);
@@ -599,6 +640,9 @@ where
                         },
                         style::color(self.faces.highlight(background)),
                     );
+                }
+                if line_cursor && row.line == point_line {
+                    self.draw_line_cursor(renderer, *rectangle, bounds);
                 }
                 let selection = line
                     .highlight

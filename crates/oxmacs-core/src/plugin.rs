@@ -54,6 +54,10 @@ pub trait PluginBuffer: Any + Send + fmt::Debug {
         false
     }
 
+    fn line_cursor(&self) -> bool {
+        false
+    }
+
     fn unsaved(&self) -> bool {
         false
     }

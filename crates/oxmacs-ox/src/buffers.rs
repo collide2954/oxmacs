@@ -36,12 +36,17 @@ pub struct LinesBuffer {
     seen_line: Option<usize>,
     seen_width: Option<usize>,
     unsaved: bool,
+    line_cursor: bool,
     chat: Option<Chat>,
 }
 
 impl PluginBuffer for LinesBuffer {
     fn scope(&self) -> ScopeId {
         self.scope
+    }
+
+    fn line_cursor(&self) -> bool {
+        self.line_cursor
     }
 
     fn hears_clicks(&self) -> bool {
@@ -505,6 +510,7 @@ struct Options {
     clicked: Option<Value>,
     dropped: Option<Value>,
     typed: Option<Value>,
+    line_cursor: Option<bool>,
     line: Option<usize>,
     unsaved: Option<bool>,
     input: Option<String>,
@@ -526,6 +532,18 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
                 "on-click" => found.clicked = Some(*value),
                 "on-drop" => found.dropped = Some(*value),
                 "on-type" => found.typed = Some(*value),
+                "cursor" => {
+                    found.line_cursor = Some(match value {
+                        Value::Keyword(shape) if shape.name() == "line" => true,
+                        Value::Keyword(shape) if shape.name() == "block" => false,
+                        _ => {
+                            return Err(Error::new(format!(
+                                "open-buffer's :cursor is :block or :line, got {}",
+                                print::brief(heap, *value)
+                            )));
+                        }
+                    });
+                }
                 "line" => found.line = Some(number(heap, *value)?),
                 "unsaved" => found.unsaved = Some(value.truthy()),
                 "input" => found.input = Some(print::display(heap, *value)),
@@ -540,7 +558,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
-        "open-buffer takes :keys, :directory, :watch, :beside, :select, :on-move, :on-resize, :on-click, :on-drop, :on-type, :line, :unsaved, :input and :show, not {}",
+        "open-buffer takes :keys, :directory, :watch, :beside, :select, :on-move, :on-resize, :on-click, :on-drop, :on-type, :cursor, :line, :unsaved, :input and :show, not {}",
         print::brief(heap, option)
     ))
 }
@@ -607,6 +625,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
                 seen_line: None,
                 seen_width: None,
                 unsaved: false,
+                line_cursor: false,
                 chat: None,
             }
         })
@@ -630,6 +649,9 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         view.typed = hold(heap, view.typed, given.typed);
         if let Some(unsaved) = given.unsaved {
             view.unsaved = unsaved;
+        }
+        if let Some(line_cursor) = given.line_cursor {
+            view.line_cursor = line_cursor;
         }
     }
     bind(editor, id, given.bindings)?;
@@ -1031,6 +1053,22 @@ mod tests {
             .unwrap();
 
         assert_eq!(editor.pane_of(window).unwrap().point(), 4);
+    }
+
+    #[test]
+    fn plugin_buffers_can_show_point_as_a_whole_line() {
+        let (mut editor, mut ox) = opened(r#"(open-buffer "*rows*" ["a"])"#);
+        assert!(!editor.pane().line_cursor());
+
+        ox.eval(&mut editor, r#"(open-buffer "*rows*" ["a"] :cursor :line)"#)
+            .unwrap();
+        assert!(editor.pane().line_cursor());
+        assert!(
+            ox.eval(&mut editor, r#"(open-buffer "*rows*" ["a"] :cursor :bar)"#)
+                .unwrap_err()
+                .message
+                .contains("open-buffer's :cursor is :block or :line")
+        );
     }
 
     #[test]
