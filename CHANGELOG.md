@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Ox buffers show `#| … |#` block comments, nested ones and ones spanning lines included, and the form after `#;` as comments, and code after `#;` on the same line is no longer greyed out as if `;` started a line comment.
 - `ox fmt` keeps `#| … |#` block comments, nested ones included, exactly as written and goes on formatting the code after them, instead of indenting their text as code.
 - `ox FILE` waits for the tasks a file spawns and fails when one raises an error nothing catches, and `ox test` fails a test whose tasks raise, instead of both dropping unfinished tasks and their errors.
 - A module whose loading failed is loaded again, and its error reported again, the next time something imports it, instead of being used half loaded.
