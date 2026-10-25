@@ -509,15 +509,14 @@ impl Ox {
                 Request::Send => self.send(editor),
                 Request::Recall(older) => recall(editor, older),
                 Request::Saved(path) => {
-                    match self
+                    let loading = self
                         .evaluation
                         .loading
-                        .take_if(|(_, loading)| *loading == path)
-                    {
-                        Some((id, _)) => self.reload_whole(editor, id, &path),
-                        None => {
-                            self.reload(editor, &path);
-                        }
+                        .take_if(|(_, loading)| *loading == path);
+                    if let Some((id, _)) = loading {
+                        self.reload_whole(editor, id, &path);
+                    } else {
+                        self.reload(editor, &path);
                     }
                 }
                 Request::ReloadInit => {
