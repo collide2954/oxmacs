@@ -17,6 +17,8 @@
 (on-buffer-change key f) "Calls f after each command or Ox change with a buffer people type in and the edits made to it, a vector of {{start removed inserted}} in character offsets, in order. Changes f makes are reported too. Registering key again replaces its handler."
 (on-mode-enter key f) "Calls f with a buffer and the name of the mode it enters, when it opens in one or changes to another. Registering key again replaces its handler."
 (on-window-change key f) "Calls f after a command or Ox change that selects another window, shows another buffer in the selected window or changes the layout of the windows, once however many changed together. Registering key again replaces its handler."
+(on-diagnostics-change key f) "Calls f when the errors and warnings from language servers, linters and checkers change, once however many changed together. Registering key again replaces its handler."
+(diagnostic-counts) "The files with errors or warnings from language servers, linters and checkers, as a map of each path to {{errors: n warnings: n}}."
 (on-before-save key f) "Calls f with each buffer about to be saved, and saves it once f returns; an error in f cancels the save with its message, and quitting waits for it. Registering key again replaces its handler."
 (on-settings-change key f) "Calls f after the editor's settings change, once however many changed together. Registering key again replaces its handler."
 (on-processes-change key f) "Calls f when a process oxmacs runs starts, ends or reports its usage. Registering key again replaces its handler."

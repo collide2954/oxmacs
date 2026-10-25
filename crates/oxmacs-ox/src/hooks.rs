@@ -20,6 +20,7 @@ enum Waiting {
     Changed(BufferId, Vec<Splice>),
     Mode(BufferId, String),
     Windows,
+    Diagnostics,
 }
 
 type Seen = (WindowId, BufferId, Arrangement);
@@ -36,6 +37,8 @@ fn windows_seen(editor: &Editor) -> Seen {
 pub struct Hooks {
     windows: Vec<(String, Hold)>,
     seen_windows: Option<Seen>,
+    diagnostics: Vec<(String, Hold)>,
+    seen_diagnostics: u64,
     directory: Option<Hold>,
     opener: Option<String>,
     disk: Vec<(String, Hold)>,
@@ -146,6 +149,8 @@ fn notice(editor: &mut Editor) {
     let windows = (!known.windows.is_empty())
         .then(|| windows_seen(editor))
         .filter(|now| known.seen_windows.as_ref() != Some(now));
+    let revision = editor.diagnostics_revision();
+    let diagnosed = !known.diagnostics.is_empty() && known.seen_diagnostics != revision;
     let edits = if known.changed.is_empty() {
         Vec::new()
     } else {
@@ -165,6 +170,10 @@ fn notice(editor: &mut Editor) {
     if let Some(now) = windows {
         hooks.seen_windows = Some(now);
         hooks.waiting.push(Waiting::Windows);
+    }
+    if diagnosed {
+        hooks.seen_diagnostics = revision;
+        hooks.waiting.push(Waiting::Diagnostics);
     }
     for (id, mode) in modes {
         if hooks.languages.get(&id) != Some(&mode) {
@@ -304,6 +313,7 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
                 (held(editor, |hooks| &hooks.changed), vec![buffer, changes])
             }
             Waiting::Windows => (held(editor, |hooks| &hooks.windows), Vec::new()),
+            Waiting::Diagnostics => (held(editor, |hooks| &hooks.diagnostics), Vec::new()),
             Waiting::Mode(id, mode) => {
                 let Ok(buffer) = handles::handle(isolate.heap_mut(), editor, id) else {
                     continue;
@@ -362,6 +372,24 @@ pub(crate) fn keyed(heap: &mut Heap, handlers: &mut Vec<(String, Hold)>, argumen
     }
 }
 
+fn diagnostic_counts(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Error> {
+    let count = |number: usize| Value::Int(i64::try_from(number).unwrap_or(i64::MAX));
+    let mut items = Vec::new();
+    for (path, errors, warnings) in editor.diagnostic_counts() {
+        items.push(
+            heap.string(&path.display().to_string())
+                .map_err(|full| Error::new(full.to_string()))?,
+        );
+        items.push(heap.map_from(&[
+            Value::keyword("errors"),
+            count(errors),
+            Value::keyword("warnings"),
+            count(warnings),
+        ])?);
+    }
+    heap.map_from(&items)
+}
+
 fn install_buffer_hooks(isolate: &mut Isolate) {
     isolate.define_host_native::<Editor>(
         "on-buffer-open",
@@ -411,6 +439,22 @@ fn install_buffer_hooks(isolate: &mut Isolate) {
             Ok(Value::Nil)
         },
     );
+    isolate.define_host_native::<Editor>(
+        "on-diagnostics-change",
+        2,
+        Some(2),
+        |heap, editor, arguments| {
+            let revision = editor.diagnostics_revision();
+            if let Some(hooks) = hooks(editor) {
+                if hooks.diagnostics.is_empty() {
+                    hooks.seen_diagnostics = revision;
+                }
+                keyed(heap, &mut hooks.diagnostics, arguments);
+            }
+            Ok(Value::Nil)
+        },
+    );
+    isolate.define_host_native::<Editor>("diagnostic-counts", 0, Some(0), diagnostic_counts);
     isolate.define_host_native::<Editor>(
         "on-before-save",
         2,
@@ -601,6 +645,38 @@ mod tests {
         assert_eq!(seen(&mut editor, &mut ox), "2");
         press(&mut editor, &mut ox, "C-x b o t h e r RET");
         assert_eq!(seen(&mut editor, &mut ox), "3");
+    }
+
+    #[test]
+    fn diagnostics_are_counted_per_file_and_changes_reach_their_handlers() {
+        use oxmacs_core::external::diagnostics::{Diagnostic, Severity};
+
+        let (home, mut editor, mut ox) = with_init(
+            r"(def seen (atom 0)) (on-diagnostics-change :count (fn [] (swap! seen inc)))",
+        );
+        let path = home.path().join("main.rs");
+        let found = |severity| Diagnostic {
+            path: path.clone(),
+            start: (1, 1),
+            end: (1, 2),
+            severity,
+            message: "x".to_owned(),
+        };
+
+        editor.replace_diagnostics(
+            &path,
+            vec![found(Severity::Error), found(Severity::Warning)],
+        );
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(ox.eval(&mut editor, "@seen").unwrap(), "1");
+        let counts = ox
+            .eval(
+                &mut editor,
+                &format!("(get (diagnostic-counts) {:?})", path.display().to_string()),
+            )
+            .unwrap();
+        assert_eq!(counts, "{errors: 1 warnings: 1}");
     }
 
     #[test]
