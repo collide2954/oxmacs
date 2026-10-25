@@ -1,7 +1,6 @@
 (module
   (import (ox string) (ox time) (ox file) (ox path) (ox ui) (ox regex)
           (calendar ics :as ics)
-          (calendar rrule :as rrule)
           (calendar store :as store)
           (calendar caldav :as caldav)
           (calendar reminders :as reminders)))
@@ -25,14 +24,14 @@
 
 (def (today)
   (let [now (time/local (time/now))]
-    (rrule/day-number now.year now.month now.day)))
+    (time/day-number now)))
 
 (def (day-start days)
-  (time/instant (rrule/date-of days)))
+  (time/instant (time/date-of days)))
 
 (def (day-of millis)
   (let [local (time/local millis)]
-    (rrule/day-number local.year local.month local.day)))
+    (time/day-number local)))
 
 (def (clock millis)
   (time/format millis "%H:%M"))
@@ -202,7 +201,7 @@
   (let [match (regex/find "^(\\d{{4})-(\\d{{1,2})-(\\d{{1,2})$" (string/trim text))]
     (when match
       (let [[year month day] (map string/to-number match.groups)]
-        (rrule/day-number year month day)))))
+        (time/day-number {year: year month: month day: day})))))
 
 (def (parse-clock text)
   (let [match (regex/find "^(\\d{{1,2})(?::(\\d{{2}))?$" (string/trim text))]
@@ -228,10 +227,10 @@
     (if (string/blank? start-text)
       {start: (day-start day) end: (day-start (inc day)) all-day: true}
       (let [begins (or (parse-clock start-text) (raise (error "Write times like 9:30")))
-            start (time/instant (merge (rrule/date-of day) begins))
+            start (time/instant (merge (time/date-of day) begins))
             end-text (ask "Ends at: " :initial (clock (if (and initial (not initial.all-day)) (+ start (- initial.end initial.start)) (time/add start {hours: 1}))))
             ends (or (parse-clock end-text) (raise (error "Write times like 10:30")))
-            end (time/instant (merge (rrule/date-of day) ends))]
+            end (time/instant (merge (time/date-of day) ends))]
         {start: start end: (if (<= end start) (time/add end {days: 1}) end) all-day: false}))))
 
 (defcommand calendar-add "Add an event"
@@ -344,14 +343,14 @@
                    (message (if (empty? problems) "Calendars synced" (string/join "; " problems)))))))))
 
 (def (month-of days)
-  (let [date (rrule/date-of days)]
+  (let [date (time/date-of days)]
     {year: date.year month: date.month}))
 
 (def (draw-month!)
   (let [selected (or (get @view :day) (today))
         shown (month-of selected)
-        first-day (rrule/day-number shown.year shown.month 1)
-        start (- first-day (rrule/weekday-of first-day))
+        first-day (time/day-number {year: shown.year month: shown.month day: 1})
+        start (- first-day (time/weekday-number first-day))
         width (max 10 (// (- (or (buffer-width month-buffer) 84) 1) 7))
         found (store/occurrences (day-start start) (day-start (+ start 42)))
         on-day (fn [day] (filter (fn [found] (and (< found.start (day-start (inc day))) (> (max found.end (inc found.start)) (day-start day)))) found))
@@ -361,7 +360,7 @@
         week-lines (fn [week]
                      (let [days (range (+ start (* week 7)) (+ start (* week 7) 7))
                            numbers {line: (vec (map (fn [day]
-                                                      (let [date (rrule/date-of day)
+                                                      (let [date (time/date-of day)
                                                             face (cond ((= day selected) :keyword)
                                                                    ((= day (today)) :success)
                                                                    ((not= date.month shown.month) :comment)
@@ -406,11 +405,11 @@
   (draw-month!))
 
 (def (move-month! months)
-  (let [date (rrule/date-of (or (get @view :day) (today)))
+  (let [date (time/date-of (or (get @view :day) (today)))
         index (+ (* date.year 12) (dec date.month) months)
         year (// index 12)
         month (inc (mod index 12))]
-    (swap! view assoc :day (rrule/day-number year month (min date.day (time/days-in-month year month))))
+    (swap! view assoc :day (time/day-number {year: year month: month day: (min date.day (time/days-in-month year month))}))
     (draw-month!)))
 
 (defcommand calendar-month-forward "Select the next day" (move-day! 1))
@@ -431,7 +430,7 @@
 
 (def (week-start)
   (let [day (or (get @view :day) (today))]
-    (- day (rrule/weekday-of day))))
+    (- day (time/weekday-number day))))
 
 (def (week-shapes)
   (let [start (week-start)

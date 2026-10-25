@@ -118,14 +118,13 @@ fn repeating_events_follow_their_rules_across_daylight_saving() {
                 (count (starts (assoc standup :rrule "FREQ=DAILY;COUNT=3" :exdates []) from to))
                 (starts (merge standup {{rrule: "FREQ=MONTHLY;BYDAY=-1FR" exdates: []}}) from (time/instant "2027-01-01T00:00:00Z"))
                 (starts (merge standup {{start: (time/instant "2026-01-31T09:00:00Z") end: (time/instant "2026-01-31T10:00:00Z") zone: "UTC" rrule: "FREQ=MONTHLY" exdates: []}}) (time/instant "2026-01-01T00:00:00Z") (time/instant "2026-06-01T00:00:00Z"))
-                (starts (assoc standup :rrule "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261020T000000Z") from to)
-                (rrule/date-of (rrule/day-number 2028 2 29)) (rrule/weekday-of (rrule/day-number 2026 10 23))]"#
+                (starts (assoc standup :rrule "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261020T000000Z") from to)]"#
         ),
     );
 
     assert_eq!(
         found,
-        r#"[["Mon 19 07:00" "Mon 26 08:00" "Wed 28 08:00"] 3 ["Fri 30 08:00" "Fri 27 08:00" "Fri 25 08:00"] ["Sat 31 09:00" "Tue 31 09:00" "Sun 31 09:00"] ["Mon 19 07:00"] {year: 2028 month: 2 day: 29} 4]"#
+        r#"[["Mon 19 07:00" "Mon 26 08:00" "Wed 28 08:00"] 3 ["Fri 30 08:00" "Fri 27 08:00" "Fri 25 08:00"] ["Sat 31 09:00" "Tue 31 09:00" "Sun 31 09:00"] ["Mon 19 07:00"]]"#
     );
 }
 

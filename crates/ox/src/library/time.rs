@@ -214,6 +214,118 @@ fn days_in_month(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     Ok(Value::Int(i64::from(date.days_in_month())))
 }
 
+const WEEKDAYS: [&str; 7] = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+];
+const FARTHEST_YEAR: i64 = 1_000_000_000;
+
+fn leap(year: i64) -> bool {
+    year.rem_euclid(4) == 0 && (year.rem_euclid(100) != 0 || year.rem_euclid(400) == 0)
+}
+
+fn month_days(year: i64, month: i64) -> i64 {
+    match month {
+        2 if leap(year) => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    }
+}
+
+fn civil_days(year: i64, month: i64, day: i64) -> i64 {
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let of_era = year - era * 400;
+    let shifted = if month > 2 { month - 3 } else { month + 9 };
+    let of_year = (153 * shifted + 2) / 5 + day - 1;
+    era * 146_097 + of_era * 365 + of_era / 4 - of_era / 100 + of_year - 719_468
+}
+
+fn civil_date(days: i64) -> Option<(i64, i64, i64)> {
+    let shifted_days = days.checked_add(719_468)?;
+    let era = shifted_days.div_euclid(146_097);
+    let of_era = shifted_days - era * 146_097;
+    let year_of_era = (of_era - of_era / 1460 + of_era / 36_524 - of_era / 146_096) / 365;
+    let of_year = of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let shifted = (5 * of_year + 2) / 153;
+    let day = of_year - (153 * shifted + 2) / 5 + 1;
+    let month = if shifted < 10 {
+        shifted + 3
+    } else {
+        shifted - 9
+    };
+    let year = year_of_era.checked_add(era.checked_mul(400)?)? + i64::from(month <= 2);
+    Some((year, month, day))
+}
+
+fn weekday_number(days: i64) -> i64 {
+    (days.rem_euclid(7) + 3) % 7
+}
+
+fn day_number(heap: &Heap, value: Value) -> Result<Value, Error> {
+    let fields = heap.entries(value).unwrap_or_default();
+    let part = |name: &str| {
+        fields.iter().find_map(|(key, field)| match (key, field) {
+            (Value::Keyword(key), Value::Int(number)) if key.name() == name => Some(*number),
+            _ => None,
+        })
+    };
+    let (Some(year), Some(month), Some(day)) = (part("year"), part("month"), part("day")) else {
+        return Err(Error::new(format!(
+            "time/day-number expects a map with :year, :month and :day, got {}",
+            print::brief(heap, value)
+        ))
+        .of(ErrorKind::Type));
+    };
+    let real = year.abs() <= FARTHEST_YEAR
+        && (1..=12).contains(&month)
+        && (1..=month_days(year, month)).contains(&day);
+    if !real {
+        return Err(
+            Error::new(format!("time/day-number can't use {year}-{month}-{day}"))
+                .of(ErrorKind::Range),
+        );
+    }
+    Ok(Value::Int(civil_days(year, month, day)))
+}
+
+fn days_of(heap: &Heap, name: &str, value: Value) -> Result<i64, Error> {
+    let Value::Int(days) = value else {
+        return Err(Error::new(format!(
+            "{name} expects a whole number of days, got {}",
+            print::brief(heap, value)
+        ))
+        .of(ErrorKind::Type));
+    };
+    Ok(days)
+}
+
+fn date_of(heap: &mut Heap, value: Value) -> Result<Value, Error> {
+    let days = days_of(heap, "time/date-of", value)?;
+    let (year, month, day) = civil_date(days)
+        .ok_or_else(|| Error::new(format!("time/date-of can't use {days}")).of(ErrorKind::Range))?;
+    let weekday = WEEKDAYS[usize::try_from(weekday_number(days)).unwrap_or(0)];
+    make_map(
+        heap,
+        &[
+            Value::keyword("year"),
+            Value::Int(year),
+            Value::keyword("month"),
+            Value::Int(month),
+            Value::keyword("day"),
+            Value::Int(day),
+            Value::keyword("weekday"),
+            Value::keyword(weekday),
+        ],
+    )
+}
+
 fn fields(heap: &mut Heap, time: DateTime) -> Result<Value, Error> {
     let fields = [
         ("year", Value::Int(i64::from(time.year()))),
@@ -258,6 +370,19 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_native_in(MODULE, "add", 2, Some(4), add);
     isolate.define_native_in(MODULE, "format", 2, Some(4), format);
     isolate.define_native_in(MODULE, "days-in-month", 2, Some(2), days_in_month);
+    isolate.define_native_in(MODULE, "day-number", 1, Some(1), |heap, arguments| {
+        day_number(heap, arguments[0])
+    });
+    isolate.define_native_in(MODULE, "date-of", 1, Some(1), |heap, arguments| {
+        date_of(heap, arguments[0])
+    });
+    isolate.define_native_in(MODULE, "weekday-number", 1, Some(1), |heap, arguments| {
+        Ok(Value::Int(weekday_number(days_of(
+            heap,
+            "time/weekday-number",
+            arguments[0],
+        )?)))
+    });
     isolate.define_native_in(MODULE, "zone", 0, Some(0), |heap, _| {
         let zone = TimeZone::system();
         heap.string(zone.iana_name().unwrap_or("UTC")).map_err(full)

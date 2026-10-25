@@ -31,3 +31,16 @@
 (module (import (ox time))) (time/format 1792740600000 "%H:%M %A" :zone "Europe/Paris") ;=> "09:30 Friday"
 (module (import (ox time))) [(time/days-in-month 2028 2) (time/days-in-month 2026 4)] ;=> [29 30]
 (module (import (ox time))) (let [zone (time/zone)] (= (time/local 1792740600000) (time/local 1792740600000 zone))) ;=> true
+
+;; day numbers count days from 1970-01-01 for date arithmetic
+(module (import (ox time))) [(time/day-number {year: 1970 month: 1 day: 1}) (time/day-number {year: 2026 month: 10 day: 25}) (time/day-number {year: 1969 month: 12 day: 31})] ;=> [0 20751 -1]
+(module (import (ox time))) (time/day-number (time/parse "2000-03-01T10:00")) ;=> 11017
+(module (import (ox time))) [(time/date-of 20751) (time/date-of -1)] ;=> [{year: 2026 month: 10 day: 25 weekday: :sunday} {year: 1969 month: 12 day: 31 weekday: :wednesday}]
+(module (import (ox time))) [(time/date-of 11016) (time/date-of 10957)] ;=> [{year: 2000 month: 2 day: 29 weekday: :tuesday} {year: 2000 month: 1 day: 1 weekday: :saturday}]
+(module (import (ox time))) [(time/weekday-number 0) (time/weekday-number 20751) (time/weekday-number -3)] ;=> [3 6 0]
+(module (import (ox time))) (let [today 20751] (time/date-of (- today (time/weekday-number today)))) ;=> {year: 2026 month: 10 day: 19 weekday: :monday}
+(module (import (ox time))) (every? (fn [days] (= days (time/day-number (time/date-of days)))) (range -800000 800000 9973)) ;=> true
+(module (import (ox time))) (time/day-number {year: 2026 month: 2 day: 29}) ;! time/day-number can't use 2026-2-29
+(module (import (ox time))) (time/day-number {year: 2026 month: 13 day: 1}) ;! time/day-number can't use 2026-13-1
+(module (import (ox time))) (time/day-number {year: 2026 month: 2}) ;! time/day-number expects a map with :year, :month and :day, got {year: 2026 month: 2}
+(module (import (ox time))) (time/date-of 1.5) ;! time/date-of expects a whole number of days, got 1.5
