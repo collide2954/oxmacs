@@ -3670,7 +3670,6 @@ dependencies = [
  "image",
  "imageproc",
  "ox",
- "png 0.18.1",
  "rayon",
  "resvg",
  "ring",
