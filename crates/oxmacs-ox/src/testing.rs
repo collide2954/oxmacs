@@ -7,6 +7,7 @@ use oxmacs_core::input::KeySequence;
 use crate::{Ox, Pace, Wake};
 
 const LONG_SLEEP: Duration = Duration::from_millis(500);
+const SETTLE_LIMIT: Duration = Duration::from_secs(10);
 
 fn sleeping_long(ox: &Ox) -> bool {
     match ox.next_wake() {
@@ -17,14 +18,21 @@ fn sleeping_long(ox: &Ox) -> bool {
 }
 
 pub fn settle(editor: &mut Editor, ox: &mut Ox) {
-    let deadline = Instant::now() + Duration::from_secs(60);
+    let deadline = Instant::now() + SETTLE_LIMIT;
     let mut quiet = 0;
     while ox.tick(editor) != Pace::Idle
         && editor.minibuffer().is_none()
         && editor.question().is_none()
         && quiet < 3
-        && Instant::now() < deadline
     {
+        assert!(
+            Instant::now() < deadline,
+            "Ox didn't settle in {} s: {} tasks runnable, {} pending, checker busy: {}",
+            SETTLE_LIMIT.as_secs(),
+            ox.isolate.runnable(),
+            ox.isolate.pending(),
+            ox.checker.busy()
+        );
         quiet = if sleeping_long(ox) { quiet + 1 } else { 0 };
         thread::sleep(Duration::from_millis(1));
     }
