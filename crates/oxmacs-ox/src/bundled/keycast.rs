@@ -83,9 +83,9 @@ fn typing_plain_newlines_and_indents_never_show() {
             &mut ox,
             r#"(map stack/shown? [{keys: ["RET"] command: "newline"} {keys: ["TAB"] command: "indent-for-tab-command"}
                                   {keys: ["TAB"] command: "ox-indent-or-complete"} {keys: ["RET"] command: "dired-find-file"}
-                                  {keys: ["TAB"] command: "git-toggle"}])"#
+                                  {keys: ["TAB"] command: "git-toggle"} {keys: [] command: "isearch-printing-char"}])"#
         ),
-        "[false false false true true]"
+        "[false false false true true false]"
     );
 }
 

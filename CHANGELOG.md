@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- keycast no longer shows an empty pill for the letters typed into an incremental search.
 - `p`, `C-p` and `<up>` in dired move up onto `..`, where `RET` goes to the parent directory, instead of stopping at the first file.
 - The modules of plugins in your own folder can be imported before those plugins start, so a plugin there can be a library that is never turned on.
 - Holding a key to move through an Ox file no longer lags: highlighting remembers where each line's form left off instead of lexing from the start of the form for every line it draws.

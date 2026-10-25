@@ -26,7 +26,8 @@
 (def (shown? event)
   "True when the keys of event are worth showing: a chord with Ctrl, Alt or Super, RET, TAB, ESC, DEL, an arrow, <home>, <end>, a page key or a function key, or plain letters a special buffer binds; but not RET or TAB that only start a new line or indent."
   (let [keys event.keys]
-    (and (not (typing? event))
+    (and (not (empty? keys))
+         (not (typing? event))
          (or (some (fn [key] (or (chord? key) (named? key))) keys)
              (every? letter? keys)))))
 
