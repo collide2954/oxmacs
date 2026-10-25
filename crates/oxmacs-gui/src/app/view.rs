@@ -1,9 +1,9 @@
 use iced::widget::{
-    Column, Row, canvas, column, container, mouse_area, responsive, sensor, space, stack,
+    Column, Row, canvas, column, container, mouse_area, responsive, row, sensor, space, stack,
 };
 use iced::{Element, Length};
 use oxmacs_core::clock;
-use oxmacs_core::editor::{Axis, Pane, Tiling, WindowId};
+use oxmacs_core::editor::{Axis, Edge, Pane, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
 use oxmacs_ox::takeover::{self, Takeover};
 use oxmacs_ox::views::ViewBuffer;
@@ -16,13 +16,17 @@ use crate::widgets::drawing::Drawing;
 use crate::widgets::mode_line::{self, Look};
 use crate::widgets::{completions, echo_area, overlay, ox_view, tab_bar, transient};
 use crate::{style, units};
+
+const SIDE_TINT: f32 = 0.03;
+const SIDE_PADDING: f32 = 8.0;
+
 impl App {
     pub fn view(&self) -> Element<'_, Message> {
         let faces = self.faces();
         let offered = self.editor.completions();
         let windows = match takeover::current(&self.editor) {
             Some(shown) => self.takeover(shown, faces),
-            None => self.tile(self.editor.tiling(), Vec::new(), faces),
+            None => self.beside_side(self.tile(self.editor.tiling(), Vec::new(), faces), faces),
         };
         let floating = overlay::view(
             &overlays::shown(&self.editor),
@@ -106,6 +110,34 @@ impl App {
             mode_line::view(&pane.status(), &extras, self.mode_line_style, look)
         ]
         .into()
+    }
+
+    fn beside_side<'a>(&'a self, main: Element<'a, Message>, faces: Faces) -> Element<'a, Message> {
+        let Some(side) = self.editor.side_window() else {
+            return main;
+        };
+        let Some(pane) = self.editor.pane_of(side.window) else {
+            return main;
+        };
+        let mut tinted = faces;
+        tinted.default.background = faces
+            .default
+            .background
+            .mix(faces.default.foreground, SIDE_TINT);
+        let width = units::to_f32(side.columns) * units::cell_width(self.text_size) + SIDE_PADDING;
+        let panel = container(self.body(pane, side.window, tinted))
+            .width(Length::Fixed(width))
+            .height(Length::Fill);
+        let divider = Divider::new(
+            Axis::Columns,
+            1.0,
+            style::color(faces.mode_line_border),
+            Message::SideDragged,
+        );
+        match side.edge {
+            Edge::Left => row![panel, divider, main].into(),
+            Edge::Right => row![main, divider, panel].into(),
+        }
     }
 
     fn tile<'a>(

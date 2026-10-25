@@ -1,3 +1,9 @@
+const ADVANCE: f32 = 0.6;
+
+pub fn cell_width(text_size: f32) -> f32 {
+    text_size * ADVANCE
+}
+
 #[expect(
     clippy::cast_precision_loss,
     reason = "screen coordinates stay far below the f32 precision limit"

@@ -47,6 +47,7 @@ pub enum ViewEvent {
         extend: bool,
     },
     Dragged(Cell),
+    Released(Cell),
     NumberPressed {
         row: usize,
         extend: bool,
@@ -366,9 +367,15 @@ impl<'a, Message> BufferView<'a, Message> {
                 }
             }
             mouse::Event::ButtonReleased(mouse::Button::Left) => {
+                let pressed = state.dragging && !state.numbering;
                 state.dragging = false;
                 state.numbering = false;
-                return;
+                let Some(position) = cursor.position_from(bounds.position()).filter(|_| pressed)
+                else {
+                    return;
+                };
+                let position = Point::new(position.x - gutter, position.y);
+                ViewEvent::Released(cell_at(position, cell_size, top))
             }
             mouse::Event::WheelScrolled { delta } if cursor.is_over(bounds) => {
                 let (rows, carry) = wheel_rows(delta, cell_size.height, state.wheel_carry);

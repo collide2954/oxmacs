@@ -82,6 +82,7 @@ pub enum Message {
     TakeoverSized(iced::Size),
     EndTakeover,
     Tab(TabMessage),
+    SideDragged(f32),
     Focus(bool),
     Idle,
     CloseRequested,
@@ -548,6 +549,59 @@ mod tests {
             let _ = app.update(Message::Tab(message));
         }
         assert_eq!(app.editor().message(), Some("moved 0 to 1"));
+    }
+
+    fn with_side_window() -> App {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("init.ox"),
+            r#"(open-buffer "*tree*" ["src" "README.md"] :show false
+  :on-drop (fn [from to] (message "dropped {from} on {to}")))
+(show-side-window "*tree*" :width 20)"#,
+        )
+        .unwrap();
+        let mut app = App::default();
+        let _ = app.start_ox(Some(home.path()));
+        app
+    }
+
+    #[test]
+    fn side_windows_resize_by_whole_columns_as_their_divider_moves() {
+        let mut app = with_side_window();
+        let cell = crate::units::cell_width(app.text_size());
+
+        let _ = app.update(Message::SideDragged(cell * 4.2));
+        assert_eq!(app.editor().side_window().unwrap().columns, 24);
+        let _ = app.update(Message::SideDragged(cell * -30.0));
+        assert_eq!(app.editor().side_window().unwrap().columns, 10);
+
+        let mut ui = iced_test::simulator(app.view());
+        assert!(ui.find("-- *scratch*   L1 C0   (Ox)").is_ok());
+    }
+
+    #[test]
+    fn dropping_a_line_on_another_in_a_side_window_reaches_its_plugin() {
+        let mut app = with_side_window();
+        let side = app.editor().side_window().unwrap().window;
+        let at = |row| Cell { row, column: 0 };
+
+        for event in [
+            ViewEvent::Resized {
+                rows: 10,
+                columns: 20,
+            },
+            ViewEvent::Pressed {
+                cell: at(0),
+                clicks: Clicks::Single,
+                extend: false,
+            },
+            ViewEvent::Dragged(at(1)),
+            ViewEvent::Released(at(1)),
+        ] {
+            let _ = app.update(Message::View(side, event));
+        }
+
+        assert_eq!(app.editor().message(), Some("dropped 0 on 1"));
     }
 
     fn taken_over() -> App {

@@ -6,7 +6,7 @@ use iced::theme::Mode;
 use iced::time::Instant;
 use iced::{Task, clipboard, keyboard};
 use oxmacs_core::command::Command;
-use oxmacs_core::editor::{Effect, Job, Outcome, ServerId, WindowId};
+use oxmacs_core::editor::{Edge, Effect, Job, Outcome, ServerId, WindowId};
 use oxmacs_core::external::lsp;
 use oxmacs_core::external::notify;
 use oxmacs_core::external::process;
@@ -37,6 +37,7 @@ impl App {
                 }
             }
             ViewEvent::Dragged(cell) if selected => self.editor.drag(cell),
+            ViewEvent::Released(cell) if selected => self.editor.release(cell),
             ViewEvent::NumberPressed { row, extend } => {
                 if self.focus(window) {
                     self.last_input = self.now;
@@ -44,7 +45,7 @@ impl App {
                 }
             }
             ViewEvent::NumbersDragged(row) if selected => self.editor.drag_line_numbers(row),
-            ViewEvent::Dragged(_) | ViewEvent::NumbersDragged(_) => {}
+            ViewEvent::Dragged(_) | ViewEvent::Released(_) | ViewEvent::NumbersDragged(_) => {}
             ViewEvent::MiddleClicked(cell) => {
                 if self.focus(window) {
                     self.last_input = self.now;
@@ -121,6 +122,20 @@ impl App {
     fn end_takeover(&mut self) {
         self.last_input = self.now;
         self.ox.end_take_over(&mut self.editor);
+    }
+
+    fn drag_side(&mut self, delta: f32) {
+        let Some(side) = self.editor.side_window() else {
+            return;
+        };
+        let cell = units::cell_width(self.text_size);
+        let grown = match side.edge {
+            Edge::Left => delta,
+            Edge::Right => -delta,
+        };
+        let columns = ((units::to_f32(side.columns) * cell + grown) / cell).round();
+        self.editor
+            .resize_side(units::floor_to_usize(columns).max(SIDE_COLUMNS));
     }
 
     fn tab_message(&mut self, event: TabMessage) {
@@ -255,6 +270,7 @@ impl App {
             }
             Message::TakeoverSized(size) => self.takeover_size = Some(size),
             Message::Tab(event) => self.tab_message(event),
+            Message::SideDragged(delta) => self.drag_side(delta),
             Message::Focus(focused) => self.focus_changed(focused),
             Message::Idle => self.idle(),
             Message::CloseRequested => self.editor.execute(Command::SaveBuffersKillOxmacs),
@@ -407,6 +423,7 @@ impl App {
 }
 
 const HAS_PRIMARY_SELECTION: bool = cfg!(target_os = "linux");
+const SIDE_COLUMNS: usize = 10;
 const EXIT: &str = r#"{"jsonrpc":"2.0","method":"exit"}"#;
 
 fn open_externally(path: &Path) -> Result<(), String> {
