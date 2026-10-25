@@ -26,6 +26,7 @@ mod servers;
 mod settings;
 pub mod shapes;
 mod stacktrace;
+pub mod tabbar;
 pub mod takeover;
 #[cfg(test)]
 mod testing;
@@ -76,6 +77,7 @@ fn install_editor_api(isolate: &mut Isolate, answers: &prompts::Inbox) {
     transients::install(isolate);
     modes::install(isolate);
     takeover::install(isolate);
+    tabbar::install(isolate);
     idle::install(isolate);
     prompts::install(isolate, answers);
     keepass::install(isolate);
@@ -206,6 +208,10 @@ impl Ox {
 
     pub fn press(&mut self, editor: &mut Editor, buffer: BufferId, slot: usize) {
         views::press(&mut self.isolate, editor, buffer, slot);
+    }
+
+    pub fn tab_event(&mut self, editor: &mut Editor, event: tabbar::TabEvent) {
+        tabbar::event(&mut self.isolate, editor, event);
     }
 
     pub fn view_sized(&mut self, editor: &mut Editor, buffer: BufferId, width: u32, height: u32) {
