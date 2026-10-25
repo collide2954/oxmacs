@@ -37,8 +37,28 @@ struct Options {
     languages: Vec<(String, String)>,
     program: Option<String>,
     args: Vec<String>,
+    programs: Vec<(String, Vec<String>)>,
     roots: Vec<String>,
     install: String,
+    runs: bool,
+}
+
+fn programs(heap: &Heap, value: Value) -> Result<Vec<(String, Vec<String>)>, Error> {
+    let wrong = || {
+        Error::new(format!(
+            "{NATIVE} expects a vector of [program arg ...] vectors for :programs, got {}",
+            print::brief(heap, value)
+        ))
+    };
+    heap.elements(value)
+        .ok_or_else(wrong)?
+        .into_iter()
+        .map(|choice| {
+            let words = texts(heap, "programs", choice)?;
+            let (program, args) = words.split_first().ok_or_else(wrong)?;
+            Ok((program.clone(), args.to_vec()))
+        })
+        .collect()
 }
 
 fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
@@ -66,8 +86,10 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
             }
             "program" => found.program = Some(print::display(heap, *value)),
             "args" => found.args = texts(heap, "args", *value)?,
+            "programs" => found.programs = programs(heap, *value)?,
             "roots" => found.roots = texts(heap, "roots", *value)?,
             "install" => found.install = print::display(heap, *value),
+            "runs" => found.runs = value.truthy(),
             _ => return Err(unknown(heap, pair[0])),
         }
     }
@@ -76,7 +98,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
-        "{NATIVE} takes :languages, :program, :args, :roots and :install, not {}",
+        "{NATIVE} takes :languages, :program, :args, :programs, :roots, :install and :runs, not {}",
         print::brief(heap, option)
     ))
 }
@@ -84,10 +106,24 @@ fn unknown(heap: &Heap, option: Value) -> Error {
 fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = print::display(heap, arguments[0]);
     let given = options(heap, &arguments[1..])?;
-    let program = given
-        .program
-        .ok_or_else(|| Error::new(format!("{NATIVE} needs a :program")))?;
-    let args: Vec<&'static str> = given.args.into_iter().map(leak).collect();
+    let choices = match given.program {
+        Some(program) => vec![(program, given.args)],
+        None if !given.programs.is_empty() => given.programs,
+        None => {
+            return Err(Error::new(format!(
+                "{NATIVE} needs a :program or :programs"
+            )));
+        }
+    };
+    let programs: Vec<(&'static str, &'static [&'static str])> = choices
+        .into_iter()
+        .map(|(program, args)| {
+            (
+                leak(program),
+                leak_all(args.into_iter().map(leak).collect()),
+            )
+        })
+        .collect();
     let spec = ServerSpec {
         name: leak(name),
         languages: leak_all(
@@ -97,10 +133,10 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
                 .map(|(mode, id)| (leak(mode), leak(id)))
                 .collect(),
         ),
-        programs: leak_all(vec![(leak(program), leak_all(args))]),
+        programs: leak_all(programs),
         roots: leak_all(given.roots.into_iter().map(leak).collect()),
         install: leak(given.install),
-        runs: false,
+        runs: given.runs,
     };
     editor.add_language_servers(&[spec]);
     Ok(Value::Nil)
@@ -184,8 +220,50 @@ mod tests {
                 r#"(define-language-server "x" :colour 1)"#
             )
             .contains(
-                "define-language-server takes :languages, :program, :args, :roots and :install"
+                "define-language-server takes :languages, :program, :args, :programs, :roots, :install and :runs"
             )
+        );
+    }
+
+    #[test]
+    fn servers_try_their_programs_in_turn_and_say_when_list_tools_can_install_them() {
+        let folder = tempfile::tempdir().unwrap();
+        let second = folder.path().join("second-server");
+        std::fs::write(&second, "").unwrap();
+        let script = folder.path().join("a.R");
+        std::fs::write(&script, "x <- 1\n").unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        eval(
+            &mut editor,
+            &mut ox,
+            &format!(
+                r#"(define-language-server "turns" :languages {{"R" "r"}} :programs [["oxmacs-no-such-server" "--stdio"] [{:?} "--serve"]])
+                   (define-language-server "missing" :languages {{"R" "r"}} :programs [["oxmacs-no-such-server"]] :install "npm install -g missing" :runs true)"#,
+                second.display().to_string()
+            ),
+        );
+
+        editor.open_file(&script);
+        settle(&mut editor, &mut ox);
+
+        let started: Vec<_> = editor
+            .take_effects()
+            .into_iter()
+            .filter_map(|effect| match effect {
+                Effect::StartServer(_, launch) => Some(launch),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(started.len(), 1, "{started:?}");
+        assert_eq!(started[0].program, second);
+        assert_eq!(started[0].args, ["--serve"]);
+        let listed = editor.command_named("list-tools").unwrap();
+        editor.execute(listed);
+        let shown = editor.buffer().contents();
+        assert!(
+            shown.contains("not installed; i runs npm install -g missing"),
+            "{shown}"
         );
     }
 }

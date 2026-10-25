@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `define-language-server` takes `:programs`, servers to try in turn, such as basedpyright, pyright and pylsp, and `:runs true` when `M-x list-tools` can install a server by running its `:install` command.
 - `.editorconfig` files choose tabs or spaces (`indent_style`), the indent size and the tab width for the files they cover, ahead of the `indent-tabs` and `tab-width` settings, and a mode can default to tabs with `defmode`'s `:indent {tabs: true}`.
 - The `indent-tabs` setting indents with tabs, then spaces for what is left, instead of spaces only.
 - `defmode` takes `:indent {width: 4 after: #"[:{]\s*$" dedent: #"^\s*}"}`: `RET` and `TAB` indent one width past a line that opens a block and back on one that closes it. In modes without it, `RET` and `TAB` keep the indentation of the line above instead of starting at the margin and inserting a tab.
