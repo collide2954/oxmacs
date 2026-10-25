@@ -789,6 +789,7 @@ fn configure_plugin(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
         Some(plugin) => merge(heap, plugin, arguments[1]),
         None => vec![format!("There is no plugin named {name}")],
     };
+    start_if_due(heap, &mut plugins, &name);
     editor.set_plugin_state(plugins);
     for problem in problems {
         log::report(editor, &Error::new(problem), None);
@@ -840,6 +841,7 @@ fn enable(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
     let name = name_of(heap, arguments[0]);
     let mut plugins = editor.take_plugin_state::<Plugins>().unwrap_or_default();
     let problems = configure(heap, editor, &mut plugins, &name, &arguments[1..]);
+    start_if_due(heap, &mut plugins, &name);
     editor.set_plugin_state(plugins);
     for problem in problems {
         log::report(editor, &Error::new(problem), None);
@@ -893,36 +895,50 @@ pub fn install(isolate: &mut Isolate) {
     });
 }
 
+fn starts_by_itself(heap: &Heap, plugin: &Plugin) -> bool {
+    plugin.active
+        && !plugin.loaded
+        && plugin.manifest.startup_when.as_ref().is_some_and(|key| {
+            let configured = plugin
+                .config
+                .iter()
+                .find(|(name, _)| name == key)
+                .map(|(_, hold)| *hold);
+            let default = plugin
+                .manifest
+                .settings
+                .iter()
+                .find(|setting| setting.key == *key)
+                .and_then(|setting| setting.default);
+            configured
+                .or(default)
+                .and_then(|hold| heap.held(hold))
+                .is_some_and(Value::truthy)
+        })
+}
+
+fn start_if_due(heap: &Heap, plugins: &mut Plugins, name: &str) {
+    let due = plugins
+        .known
+        .iter()
+        .any(|plugin| plugin.manifest.name == name && starts_by_itself(heap, plugin));
+    if due && !plugins.waking.iter().any(|waiting| waiting == name) {
+        plugins.waking.push(name.to_owned());
+    }
+}
+
 pub fn wake_at_startup(isolate: &Isolate, editor: &mut Editor) {
     let Some(plugins) = editor.plugin_state_mut::<Plugins>() else {
         return;
     };
-    let woken: Vec<String> = plugins
+    let names: Vec<String> = plugins
         .known
         .iter()
-        .filter(|plugin| plugin.active && !plugin.loaded)
-        .filter(|plugin| {
-            plugin.manifest.startup_when.as_ref().is_some_and(|key| {
-                let configured = plugin
-                    .config
-                    .iter()
-                    .find(|(name, _)| name == key)
-                    .map(|(_, hold)| *hold);
-                let default = plugin
-                    .manifest
-                    .settings
-                    .iter()
-                    .find(|setting| setting.key == *key)
-                    .and_then(|setting| setting.default);
-                configured
-                    .or(default)
-                    .and_then(|hold| isolate.held(hold))
-                    .is_some_and(Value::truthy)
-            })
-        })
         .map(|plugin| plugin.manifest.name.clone())
         .collect();
-    plugins.waking.extend(woken);
+    for name in names {
+        start_if_due(isolate.heap(), plugins, &name);
+    }
 }
 
 pub fn reload_file(
@@ -1240,6 +1256,35 @@ mod tests {
             ),
         ],
     };
+
+    const PULSE: Bundle = Bundle {
+        name: "pulse",
+        files: &[
+            (
+                "plugin.ox",
+                "(plugin pulse :version \"0.1.0\" :opt-in true :settings {beat: {type: :bool default: true doc: \"Beat\"}} :startup-when :beat :entry \"pulse.ox\")",
+            ),
+            ("pulse.ox", "(message \"pulse started\")"),
+        ],
+    };
+
+    #[test]
+    fn use_plugin_starts_a_plugin_that_starts_by_itself_wherever_it_runs() {
+        let home = home_with(&[]);
+        let (mut editor, mut ox) = started(&[PULSE], home.path());
+        settle(&mut editor, &mut ox);
+        assert_eq!(editor.message(), None);
+
+        ox.eval(&mut editor, "(use-plugin pulse :config {beat: false})")
+            .unwrap();
+        settle(&mut editor, &mut ox);
+        assert_eq!(editor.message(), None);
+
+        ox.eval(&mut editor, "(use-plugin pulse :config {beat: true})")
+            .unwrap();
+        settle(&mut editor, &mut ox);
+        assert_eq!(editor.message(), Some("pulse started"));
+    }
 
     #[test]
     fn workers_load_plugin_modules_with_the_editor_api_but_no_editor() {
