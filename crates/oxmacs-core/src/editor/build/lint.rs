@@ -42,6 +42,7 @@ pub(in crate::editor) struct Lints {
     marks: Vec<Mark>,
     pub(in crate::editor) root: Option<PathBuf>,
     pub(in crate::editor) current: Option<usize>,
+    revision: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -120,12 +121,38 @@ impl Editor {
         self.linters.push((language, linter));
     }
 
+    pub fn diagnostics_revision(&self) -> u64 {
+        self.lints.revision
+    }
+
+    pub fn diagnostic_counts(&self) -> Vec<(PathBuf, usize, usize)> {
+        let mut counts: Vec<(PathBuf, usize, usize)> = Vec::new();
+        for diagnostic in &self.lints.diagnostics {
+            let at = match counts
+                .iter()
+                .position(|(path, _, _)| *path == diagnostic.path)
+            {
+                Some(at) => at,
+                None => {
+                    counts.push((diagnostic.path.clone(), 0, 0));
+                    counts.len() - 1
+                }
+            };
+            match diagnostic.severity {
+                Severity::Error => counts[at].1 += 1,
+                Severity::Warning => counts[at].2 += 1,
+            }
+        }
+        counts
+    }
+
     pub fn replace_diagnostics(&mut self, path: &Path, found: Vec<Diagnostic>) {
         self.lints
             .diagnostics
             .retain(|diagnostic| diagnostic.path != path);
         self.lints.diagnostics.extend(found);
         self.lints.diagnostics.sort();
+        self.lints.revision += 1;
         self.lints.current = None;
         self.mark_diagnostics();
         self.render_diagnostics_list();
@@ -237,6 +264,7 @@ impl Editor {
                 });
                 self.lints.diagnostics.extend(run.found);
                 self.lints.diagnostics.sort();
+                self.lints.revision += 1;
                 self.lints.root = Some(run.root);
                 self.lints.current = None;
                 self.errors_from = ErrorSource::Lint;
@@ -738,6 +766,37 @@ mod tests {
         editor.open_file(&main);
         assert_eq!(editor.pane().line_diagnostics(0), []);
         assert_eq!(editor.pane().status().lint, None);
+    }
+
+    #[test]
+    fn diagnostics_are_counted_per_file_and_each_change_bumps_a_revision() {
+        let (dir, mut editor) = project();
+        let main = dir.path().join("src").join("main.rs");
+        let other = dir.path().join("src").join("other.rs");
+        let found = |path: &Path, severity| Diagnostic {
+            path: path.to_path_buf(),
+            start: (1, 1),
+            end: (1, 2),
+            severity,
+            message: "x".to_owned(),
+        };
+        let before = editor.diagnostics_revision();
+
+        editor.replace_diagnostics(
+            &main,
+            vec![
+                found(&main, Severity::Error),
+                found(&main, Severity::Error),
+                found(&main, Severity::Warning),
+            ],
+        );
+        editor.replace_diagnostics(&other, vec![found(&other, Severity::Warning)]);
+
+        assert_eq!(editor.diagnostics_revision(), before + 2);
+        assert_eq!(
+            editor.diagnostic_counts(),
+            [(main.clone(), 2, 1), (other.clone(), 0, 1)]
+        );
     }
 
     #[test]
