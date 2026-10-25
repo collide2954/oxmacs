@@ -404,6 +404,18 @@ impl Expander<'_> {
     }
 
     fn definition(&mut self, form: &Syntax, items: &[Syntax]) -> Result<Syntax, Error> {
+        if let [head, meta, rest @ ..] = items
+            && matches!(meta.datum, Datum::Meta(_))
+        {
+            let mut plain = vec![head.clone()];
+            plain.extend_from_slice(rest);
+            let expanded = self.definition(form, &plain)?;
+            let Datum::List(mut out) = expanded.datum else {
+                return Ok(expanded);
+            };
+            out.insert(1, meta.clone());
+            return Ok(rebuilt(form, Datum::List(out)));
+        }
         let saved = self.locals.len();
         let out = match items {
             [head, signature, body @ ..] if matches!(signature.datum, Datum::List(_)) => {

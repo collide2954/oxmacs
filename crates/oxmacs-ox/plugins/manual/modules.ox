@@ -24,6 +24,17 @@ Each `.ox` file is a module. Its first form, `(module …)`, imports other modul
 
 A module runs once, the first time something imports it, and everything that imports it shares it. Two modules that import each other are an import cycle, which is an error.
 
+## Your names come first
+
+A module's own definitions take the place of built-in names, macros included: a module that defines `each` calls its own. `ox check` warns about it, in case it was an accident. Mark a definition that means it with `^:shadow`, or leave built-ins out of the whole module with `:exclude` on `(ox)`, the built-in names themselves. `ox/drop` still reaches the built-in one.
+
+```text
+(module (import (ox :exclude [count])))
+
+(def (count shelf) (ox/count shelf.books))
+(def ^:shadow (drop column seconds) …)
+```
+
 ## Where modules are found
 
 `(import (notes parse))` names the module `notes/parse`. The `ox` command finds it as `notes/parse.ox` in the folder of the file it runs. In oxmacs, a plugin's files are modules named after the plugin: `parse.ox` in the notes plugin is `notes/parse`, and the entry file is `notes` itself.

@@ -1,7 +1,7 @@
 mod syntax;
 
 use crate::span::Span;
-pub use syntax::{Datum, Marks, Syntax};
+pub use syntax::{Datum, Marks, Syntax, meta_flag, split_meta};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReadError {
@@ -40,6 +40,7 @@ enum Opener {
     Map,
     Set,
     Record(String),
+    Meta,
 }
 
 impl Opener {
@@ -47,7 +48,7 @@ impl Opener {
         match self {
             Self::List => ')',
             Self::Vector => ']',
-            Self::Map | Self::Set | Self::Record(_) => '}',
+            Self::Map | Self::Set | Self::Record(_) | Self::Meta => '}',
         }
     }
 
@@ -58,9 +59,12 @@ impl Opener {
             Self::Map => "{".to_owned(),
             Self::Set => "#{".to_owned(),
             Self::Record(name) => format!("#{name}{{"),
+            Self::Meta => "^{".to_owned(),
         }
     }
 }
+
+const META: &str = "^ takes a keyword or a map, as in ^:shadow or ^{indent: 1}";
 
 enum Frame {
     Collection {
@@ -203,6 +207,8 @@ impl<'a> Reader<'a> {
                     let datum = self.regex(start);
                     self.push(datum, start);
                 }
+                '^' if self.rest().starts_with("^{") => self.opening(Opener::Meta, start),
+                '^' => self.flag(start),
                 '#' if self.rest().starts_with("#;") => self.prefix(None, "#;", start),
                 '#' if self.rest().starts_with("#{") => self.opening(Opener::Set, start),
                 '#' => {
@@ -279,6 +285,22 @@ impl<'a> Reader<'a> {
             offset += part.len() + 1;
         }
         Some(Datum::List(parts))
+    }
+
+    fn flag(&mut self, start: usize) {
+        self.at += 1;
+        let after = self.at;
+        let token = self.token();
+        let Some(name) = token.strip_prefix(':').filter(|name| !name.is_empty()) else {
+            self.at = after;
+            self.error(start, META);
+            return;
+        };
+        let items = vec![
+            Syntax::new(Datum::Keyword(name.to_owned()), Span::new(after, self.at)),
+            Syntax::new(Datum::Bool(true), Span::new(after, self.at)),
+        ];
+        self.push(Datum::Meta(items), start);
     }
 
     fn push(&mut self, datum: Datum, start: usize) {
@@ -410,6 +432,7 @@ impl<'a> Reader<'a> {
             Opener::Set => Datum::Set(items),
             Opener::Map => Datum::Map(items),
             Opener::Record(name) => Datum::Record(name, items),
+            Opener::Meta => Datum::Meta(items),
         };
         self.place(Syntax {
             datum,
@@ -951,6 +974,40 @@ mod tests {
         assert_eq!(
             errors("#Point"),
             [("Unknown form #Point".to_owned(), Span::new(0, 6))]
+        );
+    }
+
+    #[test]
+    fn metadata_reads_as_an_item_of_its_own() {
+        assert_eq!(
+            errors("(def ^:shadow (each f xs) 1) (defmacro ^{indent: 1 defines: 0} m [] 1)"),
+            []
+        );
+        assert_eq!(
+            shapes("(def ^:shadow (each f xs) 1) (defmacro ^{indent: 1 defines: 0} m [] 1)"),
+            [
+                "(def ^{:shadow true} (each f xs) 1)",
+                "(defmacro ^{:indent 1 :defines 0} m [] 1)"
+            ]
+        );
+        let (forms, _) = read("(def ^:shadow x 1)");
+        let Datum::List(items) = &forms[0].datum else {
+            panic!("expected a list");
+        };
+        assert_eq!(items[1].span, Span::new(5, 13));
+        assert_eq!(
+            errors("^x ^ (f) ^{a: 1"),
+            [
+                (
+                    "^ takes a keyword or a map, as in ^:shadow or ^{indent: 1}".to_owned(),
+                    Span::new(0, 1)
+                ),
+                (
+                    "^ takes a keyword or a map, as in ^:shadow or ^{indent: 1}".to_owned(),
+                    Span::new(3, 4)
+                ),
+                ("This ^{ is never closed".to_owned(), Span::new(9, 11)),
+            ]
         );
     }
 

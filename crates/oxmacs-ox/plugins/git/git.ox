@@ -45,7 +45,7 @@
   (when (and row (not (= row.kind :info)) (not (= row.kind :blank)))
     row))
 
-(def (line-of rows wanted)
+(def ^:shadow (line-of rows wanted)
   (when wanted
     (first (filter (fn [i] (= (nth rows i) wanted)) (range (count rows))))))
 

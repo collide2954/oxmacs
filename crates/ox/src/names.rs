@@ -1,5 +1,5 @@
 use crate::describe::Kind;
-use crate::read::{self, Datum, Syntax};
+use crate::read::{self, Datum, Syntax, split_meta};
 use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,7 +164,7 @@ fn definition(form: &Syntax) -> Option<Definition> {
         return None;
     };
     let head = symbol(items.first()?)?;
-    let rest = &items[1..];
+    let rest = split_meta(&items[1..]).1;
     let (name_syntax, kind, signature, doc) = match (head, rest) {
         ("def" | "defonce", [target, body @ ..]) => match &target.datum {
             Datum::List(parts) => {
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn top_level_definitions_are_listed_with_their_signatures() {
         let text = "(def (area w h) \"Width times height.\" (* w h))
-(def limit 5)
+(def ^:shadow limit 5)
 (defmacro twice [x] `(do ~x ~x))
 (defrecord Point [x y])
 (defcommand greet \"Say hello\" (message \"hi\"))

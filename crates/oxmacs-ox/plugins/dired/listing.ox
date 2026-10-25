@@ -85,7 +85,7 @@
     (when (and (>= index 0) (< index (count listing.entries)))
       (nth listing.entries index))))
 
-(def (line-of listing name)
+(def ^:shadow (line-of listing name)
   (let [found (first (filter (fn [i] (= (get (nth listing.entries i) :name) name))
                              (range (count listing.entries))))]
     (when (some? found) (+ (first-entry-line listing) found))))

@@ -57,8 +57,11 @@ pub fn datum_value(heap: &mut Heap, syntax: &Syntax) -> Result<Value, Error> {
             make_set(heap, &items).map_err(|error| error.or_at(span))
         }
         Datum::Record(..) => Err(Error::at(span, "A record literal cannot be quoted")),
+        Datum::Meta(_) => Err(Error::at(span, MISPLACED_META)),
     }
 }
+
+pub const MISPLACED_META: &str = "^ metadata only goes before the name in def, defonce or defmacro";
 
 fn symbol(name: &str, span: Span) -> Syntax {
     Syntax {

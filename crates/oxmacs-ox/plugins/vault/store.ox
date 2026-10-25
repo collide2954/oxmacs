@@ -101,7 +101,7 @@
     (do (touch!)
       (get @state :entries))))
 
-(def (entries)
+(def ^:shadow (entries)
   "The entries of the unlocked vault, or nil when it is locked."
   (get @state :entries))
 

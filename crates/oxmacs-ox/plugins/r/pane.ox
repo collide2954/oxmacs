@@ -43,7 +43,7 @@
 
 (def (shown-page) (when (= (buffer-name) help-buffer) (get @state :page)))
 
-(def (send code)
+(def ^:shadow (send code)
   (when-let [running (session/ensure)]
     (session/show-console running false)
     (session/evaluate running code)))

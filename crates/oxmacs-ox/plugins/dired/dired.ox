@@ -174,7 +174,7 @@
 (def (files n)
   (if (= n 1) "1 file" "{n} files"))
 
-(def (delete flagged)
+(def ^:shadow (delete flagged)
   (when-let [listing (current)]
     (let [found (targets listing (if flagged :flagged :marked) (not flagged))]
       (if (empty? found)

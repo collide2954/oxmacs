@@ -18,6 +18,7 @@ pub enum Datum {
     Map(Vec<Syntax>),
     Set(Vec<Syntax>),
     Record(String, Vec<Syntax>),
+    Meta(Vec<Syntax>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
@@ -58,6 +59,28 @@ impl Syntax {
     }
 }
 
+pub fn split_meta(parts: &[Syntax]) -> (Option<&[Syntax]>, &[Syntax]) {
+    match parts.split_first() {
+        Some((
+            Syntax {
+                datum: Datum::Meta(items),
+                ..
+            },
+            rest,
+        )) => (Some(items), rest),
+        _ => (None, parts),
+    }
+}
+
+pub fn meta_flag(meta: Option<&[Syntax]>, name: &str) -> bool {
+    meta.is_some_and(|items| {
+        items.chunks(2).any(|pair| {
+            matches!(pair, [Syntax { datum: Datum::Keyword(key), .. }, value]
+                if key == name && !matches!(value.datum, Datum::Bool(false) | Datum::Nil))
+        })
+    })
+}
+
 fn joined(formatter: &mut fmt::Formatter<'_>, items: &[Syntax]) -> fmt::Result {
     for (index, item) in items.iter().enumerate() {
         if index > 0 {
@@ -85,6 +108,7 @@ impl fmt::Display for Syntax {
             Datum::Map(items) => ("{".to_owned(), items, "}"),
             Datum::Set(items) => ("#{".to_owned(), items, "}"),
             Datum::Record(name, items) => (format!("#{name}{{"), items, "}"),
+            Datum::Meta(items) => ("^{".to_owned(), items, "}"),
         };
         formatter.write_str(&open)?;
         joined(formatter, items)?;

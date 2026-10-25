@@ -315,9 +315,24 @@ fn word_end(chars: &[char], from: usize) -> usize {
         .unwrap_or(chars.len())
 }
 
+fn closing_brace(chars: &[char], open: usize) -> usize {
+    let mut depth = 0_usize;
+    for (index, character) in chars.iter().enumerate().skip(open) {
+        match character {
+            '{' => depth += 1,
+            '}' if depth <= 1 => return index + 1,
+            '}' => depth -= 1,
+            _ => {}
+        }
+    }
+    chars.len()
+}
+
 fn reader_token(chars: &[char], at: usize) -> Option<(usize, Highlight)> {
     let next = chars.get(at + 1).copied();
     match chars[at] {
+        '^' if next == Some('{') => Some((closing_brace(chars, at + 1), Highlight::Attribute)),
+        '^' if next == Some(':') => Some((word_end(chars, at + 1), Highlight::Attribute)),
         '\\' if next.is_some() => Some((word_end(chars, at + 2), Highlight::Constant)),
         '\'' if next.is_some_and(starts_symbol) => {
             Some((word_end(chars, at + 1), Highlight::Constant))
@@ -699,6 +714,27 @@ mod tests {
                 (12..16, Highlight::Function),
                 (17..27, Highlight::DocComment),
                 (29..31, Highlight::Function),
+            ]
+        );
+    }
+
+    #[test]
+    fn metadata_is_an_attribute_and_the_name_after_it_is_still_defined() {
+        assert_eq!(
+            highlight_line("(def ^:shadow (each f xs) 1)"),
+            [
+                (1..4, Highlight::Keyword),
+                (5..13, Highlight::Attribute),
+                (15..19, Highlight::Function),
+                (26..27, Highlight::Constant),
+            ]
+        );
+        assert_eq!(
+            highlight_line("(defmacro ^{indent: 1} twice [x] x)"),
+            [
+                (1..9, Highlight::Keyword),
+                (10..22, Highlight::Attribute),
+                (23..28, Highlight::Function),
             ]
         );
     }

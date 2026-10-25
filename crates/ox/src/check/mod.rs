@@ -6,7 +6,7 @@ use std::time::Duration;
 use crate::compile::parameters::parse_parameters;
 use crate::expand::patterns;
 use crate::native::arguments;
-use crate::read::{Datum, Marks, Syntax};
+use crate::read::{Datum, Marks, Syntax, meta_flag, split_meta};
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -83,6 +83,7 @@ pub(crate) struct Import {
     module: String,
     alias: Option<String>,
     only: Vec<String>,
+    exclude: Vec<String>,
     span: Span,
 }
 
@@ -96,6 +97,7 @@ impl Import {
             module: segments.join(" "),
             alias: segments.last().map(|last| (*last).to_owned()),
             only: Vec::new(),
+            exclude: Vec::new(),
             span: spec.span,
         };
         let mut options = items[segments.len()..].iter();
@@ -109,6 +111,11 @@ impl Import {
                         .only
                         .extend(names.iter().filter_map(symbol).map(str::to_owned));
                 }
+                (Datum::Keyword(word), Datum::Vector(names)) if word == "exclude" => {
+                    import
+                        .exclude
+                        .extend(names.iter().filter_map(symbol).map(str::to_owned));
+                }
                 _ => {}
             }
         }
@@ -116,7 +123,8 @@ impl Import {
     }
 
     fn used(&self, names: &HashSet<&str>) -> bool {
-        self.only.iter().any(|name| names.contains(name.as_str()))
+        !self.exclude.is_empty()
+            || self.only.iter().any(|name| names.contains(name.as_str()))
             || self.alias.as_ref().is_some_and(|alias| {
                 let prefix = format!("{alias}/");
                 names.iter().any(|name| name.starts_with(&prefix))
@@ -441,34 +449,71 @@ impl Walker<'_> {
                 }
             }
             Some(head @ ("def" | "defonce" | "defrecord" | "deferror" | "defmacro")) => {
-                let (name, shape) = match items.get(1).map(|item| &item.datum) {
-                    Some(Datum::Symbol(name)) => {
-                        let shape = match (head, items.get(2).map(|item| &item.datum)) {
+                let (meta, parts) = split_meta(&items[1..]);
+                let (target, shape) = match parts.first() {
+                    Some(
+                        target @ Syntax {
+                            datum: Datum::Symbol(_),
+                            ..
+                        },
+                    ) => {
+                        let shape = match (head, parts.get(1).map(|item| &item.datum)) {
                             ("defrecord", Some(Datum::Vector(fields))) => {
                                 Shape::of_parameters(fields)
                             }
                             ("def", Some(Datum::List(value))) => lambda_shape(value),
                             _ => None,
                         };
-                        (Some(name.as_str()), shape)
+                        (Some(target), shape)
                     }
-                    Some(Datum::List(signature)) => (
-                        signature.first().and_then(symbol),
+                    Some(Syntax {
+                        datum: Datum::List(signature),
+                        ..
+                    }) => (
+                        signature.first(),
                         Shape::of_parameters(signature.get(1..).unwrap_or_default()),
                     ),
                     _ => (None, None),
                 };
-                if let Some(name) = name {
-                    let name = Sym::intern(name);
-                    self.defined.insert(name);
-                    match shape.filter(|_| head != "defmacro") {
-                        Some(shape) => self.shapes.insert(name, shape),
-                        None => self.shapes.remove(&name),
-                    };
+                let Some((target, name)) =
+                    target.and_then(|target| Some((target, symbol(target)?)))
+                else {
+                    return;
+                };
+                let name = Sym::intern(name);
+                self.defined.insert(name);
+                match shape.filter(|_| head != "defmacro") {
+                    Some(shape) => self.shapes.insert(name, shape),
+                    None => self.shapes.remove(&name),
+                };
+                if !meta_flag(meta, "shadow") && self.shadows(name) {
+                    let name = name.name();
+                    self.found.push(Diagnostic::warning(
+                        "shadow",
+                        format!(
+                            "{name} shadows the built-in {name}; mark it ^:shadow, or leave the built-in out with (import (ox :exclude [{name}]))"
+                        ),
+                        target.span,
+                    ));
                 }
             }
             _ => {}
         }
+    }
+
+    fn shadows(&self, name: Sym) -> bool {
+        let Some(prelude) = self.runtime.modules.get(PRELUDE) else {
+            return false;
+        };
+        let excluded = self.runtime.modules.get(self.module).is_some_and(|module| {
+            module
+                .imports
+                .iter()
+                .any(|import| import.module == PRELUDE && import.exclude.contains(&name))
+        });
+        self.module != PRELUDE
+            && !excluded
+            && (prelude.globals.contains_key(&name) || prelude.macros.contains_key(&name))
     }
     fn bind(&mut self, name: &Syntax) {
         self.bind_as(name, false);
@@ -529,6 +574,10 @@ impl Walker<'_> {
     fn list(&mut self, items: &[Syntax]) {
         let Some((head, rest)) = items.split_first() else {
             return;
+        };
+        let rest = match symbol(head) {
+            Some("def" | "defonce" | "defmacro") => split_meta(rest).1,
+            _ => rest,
         };
         match symbol(head) {
             Some("quote" | "defrecord" | "module") => {}

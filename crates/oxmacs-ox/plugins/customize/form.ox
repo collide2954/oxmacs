@@ -30,7 +30,7 @@
    custom: setting.custom
    changed: (not= setting.value setting.saved)})
 
-(def (entries schema now saved custom plugins)
+(def ^:shadow (entries schema now saved custom plugins)
   "Every setting to list, the editor's and then each plugin's, with its :value, :saved, :custom and whether it :changed."
   (vec (concat (map (fn [setting] (core-entry setting now saved custom)) schema)
                (map plugin-entry plugins))))

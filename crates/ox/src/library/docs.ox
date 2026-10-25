@@ -385,7 +385,7 @@
 (special
  (if test then (else)) "Evaluates then when test is truthy and else, or nil, otherwise. Only false and nil are falsy."
  (do & body) "Evaluates each form of body in order and returns the last value."
- (def name (doc) value) "Defines name in this module. (def (name params) doc body...) defines a function; a string first in the body is its doc."
+ (def name (doc) value) "Defines name in this module. (def (name params) doc body...) defines a function; a string first in the body is its doc. (def ^:shadow name ...) takes the place of a built-in name on purpose, so ox check doesn't warn."
  (defonce name value) "Defines name like def, but only when it isn't defined yet, so reloading keeps its value."
  (fn (name) [params] & body) "A function. Parameters may be optional, as (name default), take the rest after &, or come last as keywords in a map of defaults."
  (let [name value ...] & body) "Binds each name to its value in turn, and evaluates body with them. Names may be patterns that destructure."
@@ -402,4 +402,4 @@
  (try & body) "Evaluates body. (catch type name body...) clauses handle errors of that type, and a (finally body...) clause runs whatever happens."
  (catch type name & body) "Inside try: handles an error of type, or of any type for error, binding it to name."
  (finally & body) "Inside try: runs after the body and any catch, whether or not an error was raised."
- (module & clauses) "The first form of a file: (import (ox string :as s)) and (import (lib names :only [f g])) bring in other modules, and (export f g) limits what this one shares.")
+ (module & clauses) "The first form of a file: (import (ox string :as s)) and (import (lib names :only [f g])) bring in other modules, (import (ox :exclude [count])) leaves built-in names out, and (export f g) limits what this one shares.")

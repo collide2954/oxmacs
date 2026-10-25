@@ -17,7 +17,7 @@
                flicker: (+ 0.08 (* 0.3 (noise/of [column :flicker])))})
             (range 400))))
 
-(def (drop column seconds rows)
+(def ^:shadow (drop column seconds rows)
   (let [c (nth columns (mod column (count columns)))
         cycle (+ rows c.length (int (* rows c.gap)))]
     {head: (int (mod (+ (* cycle c.start) (* seconds c.speed)) cycle))

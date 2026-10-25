@@ -219,6 +219,30 @@ fn escaped_regex_patterns_and_brace_heavy_strings_suggest_literals() {
 }
 
 #[test]
+fn shadowing_a_built_in_warns_unless_marked_or_excluded() {
+    let source = "(module (import (ox :exclude [count])))
+(def (count _xs) 0)
+(def ^:shadow (each _f _xs) nil)
+(def (map _f _xs) nil)
+(defmacro when [x] x)
+(def first-thing 1)
+(count (map 1 2))";
+    let message = |name: &str| {
+        format!(
+            "{name} shadows the built-in {name}; mark it ^:shadow, or leave the built-in out with (import (ox :exclude [{name}]))"
+        )
+    };
+
+    assert_eq!(
+        found(source),
+        [
+            (Severity::Warning, "map".to_owned(), message("map")),
+            (Severity::Warning, "when".to_owned(), message("when")),
+        ]
+    );
+}
+
+#[test]
 fn checking_a_file_again_forgets_what_it_defined_before() {
     let mut isolate = Isolate::new();
     let modules = isolate.module_count();

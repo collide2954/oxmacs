@@ -18,7 +18,7 @@ use crate::library;
 use crate::native::{Control, Drains, Native, NativeFn};
 use crate::portable::{Failure, Portable};
 use crate::profile::Profile;
-use crate::read::{self, Datum, Syntax};
+use crate::read::{self, Datum, Syntax, split_meta};
 use crate::span::{Source, Span};
 use crate::symbol::Sym;
 use crate::task::{Interrupter, Report, TaskId, Wake};
@@ -145,9 +145,8 @@ fn defined_name(form: &Syntax) -> Option<Sym> {
     let Datum::List(items) = &form.datum else {
         return None;
     };
-    let [head, target, ..] = items.as_slice() else {
-        return None;
-    };
+    let (head, rest) = items.split_first()?;
+    let target = split_meta(rest).1.first()?;
     if !matches!(
         symbol(head),
         Some("def" | "defonce" | "defrecord" | "deferror")
@@ -543,6 +542,7 @@ impl Isolate {
         };
         let mut alias = Sym::intern(last);
         let mut only = Vec::new();
+        let mut exclude = Vec::new();
         let mut options = items[segments.len()..].iter();
         while let Some(option) = options.next() {
             let value = options.next().ok_or_else(malformed)?;
@@ -552,6 +552,9 @@ impl Isolate {
                 }
                 (Datum::Keyword(word), Datum::Vector(names)) if word == "only" => {
                     only.extend(names.iter().filter_map(symbol).map(Sym::intern));
+                }
+                (Datum::Keyword(word), Datum::Vector(names)) if word == "exclude" => {
+                    exclude.extend(names.iter().filter_map(symbol).map(Sym::intern));
                 }
                 _ => return Err(malformed()),
             }
@@ -587,6 +590,7 @@ impl Isolate {
                 module: id,
                 alias,
                 only,
+                exclude,
             });
         }
         Ok(())

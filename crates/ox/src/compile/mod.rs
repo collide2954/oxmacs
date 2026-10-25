@@ -11,9 +11,9 @@ use std::rc::Rc;
 use crate::bytecode::{Arity, Capture, Code, Op, Prim, Register};
 use crate::error::Error;
 use crate::expand::patterns::is_pattern;
-use crate::expand::quote::datum_value;
+use crate::expand::quote::{MISPLACED_META, datum_value};
 use crate::heap::Heap;
-use crate::read::{Datum, Marks, Syntax};
+use crate::read::{Datum, Marks, Syntax, split_meta};
 use crate::span::{Source, Span};
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -302,6 +302,7 @@ impl Compiler<'_> {
             Datum::Record(name, items) => {
                 self.record_literal(name, &form.marks, items, target, form.span)
             }
+            Datum::Meta(_) => Err(Error::at(form.span, MISPLACED_META)),
             Datum::Nil
             | Datum::Bool(_)
             | Datum::Int(_)
@@ -463,6 +464,7 @@ impl Compiler<'_> {
 
     fn define(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
         let malformed = || Error::at(span, "def takes a name and a value");
+        let (_, parts) = split_meta(parts);
         let mut doc = None;
         let name = match parts {
             [
@@ -597,6 +599,7 @@ impl Compiler<'_> {
     }
 
     fn define_once(&mut self, parts: &[Syntax], target: Register, span: Span) -> Result<(), Error> {
+        let (_, parts) = split_meta(parts);
         let [
             Syntax {
                 datum: Datum::Symbol(name),
@@ -624,6 +627,7 @@ impl Compiler<'_> {
         target: Register,
         span: Span,
     ) -> Result<(), Error> {
+        let (_, parts) = split_meta(parts);
         let [
             Syntax {
                 datum: Datum::Symbol(name),

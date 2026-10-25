@@ -11,7 +11,7 @@
 (defonce state (atom {links: {} helpers: {} widths: {} owners: {} launched: 0}))
 (defonce handlers (atom {}))
 (defonce ready-hooks (atom {}))
-(defonce keys (atom {}))
+(defonce ^:shadow keys (atom {}))
 (defonce patterns (atom {prompts: [] watch: {}}))
 
 (def (use-keys! bindings) (reset! keys bindings))
@@ -251,7 +251,7 @@
 
 (defonce sending (atom nil))
 
-(def (send code)
+(def ^:shadow (send code)
   (let [mine (promise)
         before @sending]
     (reset! sending mine)

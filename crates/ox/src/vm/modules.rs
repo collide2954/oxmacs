@@ -30,6 +30,7 @@ pub struct Import {
     pub module: ModuleId,
     pub alias: Sym,
     pub only: Vec<Sym>,
+    pub exclude: Vec<Sym>,
 }
 
 impl Module {
@@ -126,7 +127,11 @@ impl Runtime {
                     .imports
                     .iter()
                     .any(|import| import.only.contains(&name)));
-        if module == PRELUDE || shadowed {
+        let excluded = current
+            .imports
+            .iter()
+            .any(|import| import.module == PRELUDE && import.exclude.contains(&name));
+        if module == PRELUDE || shadowed || excluded {
             return None;
         }
         let found = self.modules.get(PRELUDE)?.table(macros).get(&name)?;

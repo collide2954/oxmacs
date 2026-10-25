@@ -136,6 +136,34 @@ fn a_module_s_own_definitions_shadow_built_in_macros() {
 }
 
 #[test]
+fn definitions_carry_metadata_and_imports_of_ox_can_exclude_built_ins() {
+    let mut isolate = Isolate::new();
+
+    assert_eq!(
+        evaluated(
+            &mut isolate,
+            "(def ^:shadow (each f xs) (map f xs)) (defonce ^:shadow x 5) (defmacro ^{indent: 1 defines: 0} twice [y] `(do ~y ~y)) [(each inc [1 2]) x (twice 3)]"
+        ),
+        "[[2 3] 5 3]"
+    );
+    assert_eq!(
+        evaluated(&mut isolate, "[^:x 1]"),
+        "error: ^ metadata only goes before the name in def, defonce or defmacro"
+    );
+    assert_eq!(
+        evaluated(
+            &mut isolate,
+            "(module (import (ox :exclude [inc dec]))) (def (dec n) [:mine n]) [(dec 1) (ox/inc 1)]"
+        ),
+        "[[:mine 1] 2]"
+    );
+    assert_eq!(
+        evaluated(&mut isolate, "(inc 1)"),
+        "error: inc is not defined"
+    );
+}
+
+#[test]
 fn packages_import_only_the_packages_they_require() {
     let (_dir, mut isolate) = with_root(&[
         ("text/words.ox", "(def hello \"hi\")"),

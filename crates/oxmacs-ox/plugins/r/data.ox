@@ -25,7 +25,7 @@
 
 (def (environment-name session) "{(stem session)} environment*")
 
-(def (entries payload)
+(def ^:shadow (entries payload)
   (keep (fn [line]
           (let [fields (string/split line "\t" 5)]
             (when (>= (count fields) 4)

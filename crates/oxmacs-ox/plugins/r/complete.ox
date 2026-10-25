@@ -15,7 +15,7 @@
 (def (in-r?)
   (or (= (buffer-language) "R") (session/known? (buffer-name))))
 
-(def (line-start) (- (point) (current-column)))
+(def ^:shadow (line-start) (- (point) (current-column)))
 
 (def (complete explicit)
   (when (in-r?)
