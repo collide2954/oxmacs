@@ -66,19 +66,25 @@ impl Compiler<'_> {
         let message = template
             .cloned()
             .unwrap_or_else(|| Syntax::new(Datum::Str(name.to_owned()), span));
-        let extra = [
-            synthetic("message", message, span),
-            synthetic("traceback", Syntax::new(Datum::Nil, span), span),
-        ];
+        let nil = Syntax::new(Datum::Nil, span);
         let mut all = fields.clone();
-        let at = match all.last() {
-            Some(Syntax {
-                datum: Datum::Map(_),
-                ..
-            }) => all.len() - 1,
-            _ => all.len(),
-        };
-        all.splice(at..at, extra);
+        if let Some(Syntax {
+            datum: Datum::Map(keywords),
+            ..
+        }) = all.last_mut()
+        {
+            keywords.extend([
+                Syntax::new(Datum::Symbol("message".to_owned()), span),
+                message,
+                Syntax::new(Datum::Symbol("traceback".to_owned()), span),
+                nil,
+            ]);
+        } else {
+            all.extend([
+                synthetic("message", message, span),
+                synthetic("traceback", nil, span),
+            ]);
+        }
         self.define_record(name, &all, Family::Error, target, span)
     }
 
