@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 
-use super::{SERVERS, ServerId};
+use super::{SERVERS, ServerId, ServerSpec};
 use crate::config::Config;
 use crate::editor::test_support::{press, type_text};
 use crate::editor::{Editor, Effect};
@@ -722,11 +722,21 @@ static MARKDOWN: crate::syntax::LanguageSpec = crate::syntax::LanguageSpec {
     features: &[],
 };
 
+const MARKSMAN: ServerSpec = ServerSpec {
+    name: "marksman",
+    languages: &[("Markdown", "markdown")],
+    programs: &[("marksman", &["server"])],
+    roots: &[],
+    install: "",
+    runs: false,
+};
+
 #[test]
 fn list_tools_lists_only_the_servers_of_languages_oxmacs_knows() {
     let mut editor = Editor::new();
     editor.lsp.find = |_| None;
     editor.add_language_servers(SERVERS);
+    editor.add_language_servers(&[MARKSMAN]);
     let listed = |editor: &mut Editor| {
         press(editor, "M-x");
         type_text(editor, "list-tools");
@@ -741,15 +751,7 @@ fn list_tools_lists_only_the_servers_of_languages_oxmacs_knows() {
     for known in ["rust-analyzer", "taplo"] {
         assert!(names.iter().any(|name| name == known), "{names:?}");
     }
-    for unknown in [
-        "pyright",
-        "marksman",
-        "clangd",
-        "gopls",
-        "typescript-language-server",
-    ] {
-        assert!(!names.iter().any(|name| name == unknown), "{names:?}");
-    }
+    assert!(!names.iter().any(|name| name == "marksman"), "{names:?}");
 
     editor.add_language(crate::syntax::Language::new(&MARKDOWN), None);
     let names = listed(&mut editor);
