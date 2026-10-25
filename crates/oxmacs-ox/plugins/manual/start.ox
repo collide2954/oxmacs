@@ -19,7 +19,7 @@ Put point on the example below and press `x`. It runs in the REPL beside this wi
 
 ## Work in a file
 
-Open a file ending in `.ox` with `C-x C-f`, or try code in `*scratch*`, which starts in Ox mode and is never saved. `M-x ox-mode` turns Ox mode on in any buffer; every language has a mode command like it, such as `rust-mode` or `markdown-mode`. Ox buffers have these keys:
+Open a file ending in `.ox` with `C-x C-f`, or try code in `*scratch*`, which starts in Ox mode and is never saved. `M-x ox-mode` turns Ox mode on in any buffer; every language has a mode command like it, such as `rust-mode` or `git-commit-mode`. Ox buffers have these keys:
 
 - `C-x C-e` evaluates the form before point and shows the result beside it.
 - `C-M-x` evaluates the top-level form around point.
