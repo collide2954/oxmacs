@@ -145,6 +145,19 @@ fn packages_import_only_the_packages_they_require() {
 }
 
 #[test]
+fn a_module_can_be_imported_twice_with_different_options() {
+    let mut isolate = Isolate::new();
+
+    assert_eq!(
+        evaluated(
+            &mut isolate,
+            "(module (import (ox string :as s) (ox string :only [upper]))) [(upper \"a\") (s/lower \"B\")]"
+        ),
+        "[\"A\" \"b\"]"
+    );
+}
+
+#[test]
 fn import_cycles_are_named() {
     let (_dir, mut isolate) = with_root(&[
         ("a.ox", "(module (import (b)))"),

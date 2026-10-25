@@ -551,7 +551,9 @@ impl Isolate {
             }
         };
         if let Some(found) = self.runtime.module_mut(module) {
-            found.imports.retain(|import| import.module != id);
+            found
+                .imports
+                .retain(|import| import.module != id || import.alias != alias);
             found.imports.push(Import {
                 module: id,
                 alias,
