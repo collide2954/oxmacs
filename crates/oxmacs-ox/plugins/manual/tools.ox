@@ -16,6 +16,7 @@ ox fmt --check PATH…   list files that are not formatted
 ox test PATH…          run the test blocks in files or folders
 ox profile FILE        run a file and show where the time went
 ox perf bench FILE     benchmark the functions a file returns
+ox perf sample FILE NAME  sample where one benchmark spends its time
 ox lsp                 serve Ox to other editors over LSP
 ```
 

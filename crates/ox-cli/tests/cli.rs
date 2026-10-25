@@ -65,7 +65,8 @@ fn help_lists_the_subcommands_and_version_prints_the_version() {
             "ox fmt",
             "ox test",
             "ox profile",
-            "ox perf",
+            "ox perf bench",
+            "ox perf sample",
             "ox lsp",
         ] {
             assert!(

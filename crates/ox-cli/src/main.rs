@@ -25,6 +25,8 @@ const USAGE: &str = "usage: ox [FILE]
   ox test PATH...        run the test blocks in files or folders
   ox profile FILE        run a file and show where the time went
   ox perf bench FILE     benchmark the functions a file returns
+  ox perf sample FILE NAME
+                         sample where one benchmark spends its time
   ox lsp                 serve Ox to editors over the Language Server Protocol
   ox --version           print the version
 ";
