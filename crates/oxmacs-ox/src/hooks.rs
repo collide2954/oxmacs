@@ -12,6 +12,7 @@ use crate::{PATIENT, handles, log, plugins};
 #[derive(Debug, PartialEq)]
 enum Waiting {
     OpenDirectory(PathBuf),
+    OpenFile(PathBuf, String),
     DiskChanged,
     Saved(PathBuf),
     Configured,
@@ -35,6 +36,8 @@ fn windows_seen(editor: &Editor) -> Seen {
 
 #[derive(Debug, Default)]
 pub struct Hooks {
+    file_types: Vec<(String, Hold)>,
+    claimed_types: Vec<(String, String)>,
     windows: Vec<(String, Hold)>,
     seen_windows: Option<Seen>,
     diagnostics: Vec<(String, Hold)>,
@@ -74,6 +77,47 @@ fn open_directory(editor: &mut Editor, path: &Path) -> bool {
             .push(Waiting::OpenDirectory(path.to_path_buf()));
     }
     true
+}
+
+fn extension_of(path: &Path) -> Option<String> {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_lowercase)
+}
+
+fn open_typed_file(editor: &mut Editor, path: &Path) -> bool {
+    let Some(extension) = extension_of(path) else {
+        return false;
+    };
+    let Some(plugin) = editor.plugin_state::<Hooks>().and_then(|hooks| {
+        hooks
+            .claimed_types
+            .iter()
+            .find(|(known, _)| *known == extension)
+            .map(|(_, plugin)| plugin.clone())
+    }) else {
+        return false;
+    };
+    plugins::request_wake(editor, &plugin);
+    if let Some(hooks) = hooks(editor) {
+        hooks
+            .waiting
+            .push(Waiting::OpenFile(path.to_path_buf(), extension));
+    }
+    true
+}
+
+pub fn open_file_types(editor: &mut Editor, plugin: &str, extensions: &[String]) {
+    for extension in extensions {
+        let extension = extension.to_lowercase();
+        if let Some(hooks) = hooks(editor) {
+            hooks.claimed_types.retain(|(known, _)| *known != extension);
+            hooks
+                .claimed_types
+                .push((extension.clone(), plugin.to_owned()));
+        }
+        editor.on_open_file_type(&extension, open_typed_file);
+    }
 }
 
 fn disk_changed(editor: &mut Editor) {
@@ -319,6 +363,19 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
                 };
                 (held(editor, |hooks| &hooks.changed), vec![buffer, changes])
             }
+            Waiting::OpenFile(path, extension) => {
+                let handler = editor.plugin_state::<Hooks>().and_then(|hooks| {
+                    hooks
+                        .file_types
+                        .iter()
+                        .find(|(known, _)| *known == extension)
+                        .map(|(_, hold)| *hold)
+                });
+                let Ok(path) = isolate.heap_mut().string(&path.display().to_string()) else {
+                    continue;
+                };
+                (handler.into_iter().collect(), vec![path])
+            }
             Waiting::Windows => (held(editor, |hooks| &hooks.windows), Vec::new()),
             Waiting::Diagnostics => (held(editor, |hooks| &hooks.diagnostics), Vec::new()),
             Waiting::Mode(id, mode) => {
@@ -486,6 +543,25 @@ pub fn install(isolate: &mut Isolate) {
             Ok(Value::Nil)
         },
     );
+    isolate.define_host_native::<Editor>("on-open-file", 2, Some(2), |heap, editor, arguments| {
+        let extension = print::display(heap, arguments[0]).to_lowercase();
+        let hold = heap.hold(arguments[1]);
+        let Some(hooks) = hooks(editor) else {
+            return Ok(Value::Nil);
+        };
+        match hooks
+            .file_types
+            .iter_mut()
+            .find(|(known, _)| *known == extension)
+        {
+            Some((_, existing)) => {
+                let old = std::mem::replace(existing, hold);
+                heap.release(old);
+            }
+            None => hooks.file_types.push((extension, hold)),
+        }
+        Ok(Value::Nil)
+    });
     isolate.define_host_native::<Editor>(
         "on-disk-change",
         2,
@@ -744,6 +820,37 @@ mod tests {
 
         press(&mut editor, &mut ox, "C-x l");
         assert_eq!(editor.message(), Some("listing"));
+    }
+
+    const READER: Bundle = Bundle {
+        name: "reader",
+        files: &[
+            (
+                "plugin.ox",
+                r#"(plugin reader :opens-files ["book" "story"])"#,
+            ),
+            (
+                "reader.ox",
+                r#"(module (import (ox path)))
+(on-open-file "book" (fn [place] (message "reading {(path/name place)}")))"#,
+            ),
+        ],
+    };
+
+    #[test]
+    fn opening_a_claimed_file_type_wakes_its_plugin_and_reaches_its_handler() {
+        let home = tempfile::tempdir().unwrap();
+        let book = home.path().join("tale.BOOK");
+        std::fs::write(&book, "binary").unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::with_bundled(&[READER]);
+        ox.start(&mut editor, Some(home.path()));
+
+        assert!(editor.open_file(&book));
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(editor.message(), Some("reading tale.BOOK"));
+        assert_eq!(editor.buffer().name(), "*scratch*");
     }
 
     #[test]

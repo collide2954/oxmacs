@@ -11,6 +11,7 @@
 (run-command command) "Runs a command by name, as M-x would, such as (run-command 'load-theme)."
 (on-idle key seconds f) "Calls f once each time the editor has had focus and no input for seconds. Registering key again replaces its handler."
 (on-open-directory f) "Makes f the way directories open: it is called with the path of each one visited."
+(on-open-file extension f) "Makes f the way files ending in .extension open, such as \"epub\": it is called with the path of each one visited instead of reading it as text. A plugin claims the extensions it opens with :opens-files in its plugin.ox, which also wakes it. Registering extension again replaces its handler."
 (on-disk-change key f) "Calls f when files the editor shows change on disk. Registering key again replaces its handler."
 (on-saved key f) "Calls f with the path of each file the editor saves. Registering key again replaces its handler."
 (on-buffer-open key f) "Calls f with each buffer people type in, such as a file, when it opens; plugin buffers don't count. Registering key again replaces its handler."

@@ -55,6 +55,7 @@ struct Manifest {
     mode_keys: ModeKeys,
     start_screen: Vec<(String, String)>,
     opens_directories: bool,
+    opens_files: Vec<String>,
     opt_in: bool,
     modes: Vec<modes::Declared>,
     wakes_for: Vec<String>,
@@ -273,6 +274,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
         mode_keys: Vec::new(),
         start_screen: Vec::new(),
         opens_directories: false,
+        opens_files: Vec::new(),
         opt_in: false,
         modes: Vec::new(),
         wakes_for: Vec::new(),
@@ -315,6 +317,18 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
                 )?;
             }
             Some("opens-directories") => manifest.opens_directories = value.truthy(),
+            Some("opens-files") => {
+                manifest.opens_files = heap
+                    .elements(*value)
+                    .filter(|_| heap.text(*value).is_none())
+                    .and_then(|items| {
+                        items
+                            .into_iter()
+                            .map(|item| heap.text(item).map(str::to_owned))
+                            .collect()
+                    })
+                    .ok_or_else(|| ":opens-files must be a vector of file extensions".to_owned())?;
+            }
             Some("opt-in") => manifest.opt_in = value.truthy(),
             Some("modes") => manifest.modes = modes::declared(heap, *value)?,
             Some("requires") => manifest.requires = requires_of(heap, &manifest.name, *value)?,
@@ -484,6 +498,7 @@ fn stubs(editor: &mut Editor, plugin: &Plugin) {
     if plugin.manifest.opens_directories {
         hooks::open_directories(editor, &plugin.manifest.name);
     }
+    hooks::open_file_types(editor, &plugin.manifest.name, &plugin.manifest.opens_files);
     for declared in &plugin.manifest.modes {
         modes::declare(editor, &plugin.manifest.name, declared);
     }
