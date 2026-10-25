@@ -6,7 +6,7 @@ use ox::value::{Value, print};
 use ox::{Error, Isolate};
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::display::LineStyle;
-use oxmacs_core::editor::{Editor, InputLine};
+use oxmacs_core::editor::{Editor, Heard, InputLine};
 use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
@@ -30,6 +30,9 @@ pub struct LinesBuffer {
     watched: Option<PathBuf>,
     moved: Option<Hold>,
     resized: Option<Hold>,
+    clicked: Option<Hold>,
+    dropped: Option<Hold>,
+    typed: Option<Hold>,
     seen_line: Option<usize>,
     seen_width: Option<usize>,
     unsaved: bool,
@@ -39,6 +42,14 @@ pub struct LinesBuffer {
 impl PluginBuffer for LinesBuffer {
     fn scope(&self) -> ScopeId {
         self.scope
+    }
+
+    fn hears_clicks(&self) -> bool {
+        self.clicked.is_some() || self.dropped.is_some()
+    }
+
+    fn hears_typing(&self) -> bool {
+        self.typed.is_some()
     }
 
     fn input_line(&mut self) -> Option<&mut InputLine> {
@@ -485,6 +496,9 @@ struct Options {
     select: bool,
     moved: Option<Value>,
     resized: Option<Value>,
+    clicked: Option<Value>,
+    dropped: Option<Value>,
+    typed: Option<Value>,
     line: Option<usize>,
     unsaved: Option<bool>,
     input: Option<String>,
@@ -503,6 +517,9 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
                 "select" => found.select = value.truthy(),
                 "on-move" => found.moved = Some(*value),
                 "on-resize" => found.resized = Some(*value),
+                "on-click" => found.clicked = Some(*value),
+                "on-drop" => found.dropped = Some(*value),
+                "on-type" => found.typed = Some(*value),
                 "line" => found.line = Some(number(heap, *value)?),
                 "unsaved" => found.unsaved = Some(value.truthy()),
                 "input" => found.input = Some(print::display(heap, *value)),
@@ -517,7 +534,7 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
 
 fn unknown(heap: &Heap, option: Value) -> Error {
     Error::new(format!(
-        "open-buffer takes :keys, :directory, :watch, :beside, :select, :on-move, :on-resize, :line, :unsaved, :input and :show, not {}",
+        "open-buffer takes :keys, :directory, :watch, :beside, :select, :on-move, :on-resize, :on-click, :on-drop, :on-type, :line, :unsaved, :input and :show, not {}",
         print::brief(heap, option)
     ))
 }
@@ -578,6 +595,9 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
                 watched: None,
                 moved: None,
                 resized: None,
+                clicked: None,
+                dropped: None,
+                typed: None,
                 seen_line: None,
                 seen_width: None,
                 unsaved: false,
@@ -599,6 +619,9 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         }
         view.moved = hold(heap, view.moved, given.moved);
         view.resized = hold(heap, view.resized, given.resized);
+        view.clicked = hold(heap, view.clicked, given.clicked);
+        view.dropped = hold(heap, view.dropped, given.dropped);
+        view.typed = hold(heap, view.typed, given.typed);
         if let Some(unsaved) = given.unsaved {
             view.unsaved = unsaved;
         }
@@ -610,7 +633,48 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     Ok(Value::Nil)
 }
 
+fn count(number: usize) -> Value {
+    Value::Int(i64::try_from(number).unwrap_or(i64::MAX))
+}
+
+fn heard(isolate: &mut Isolate, editor: &mut Editor) {
+    for event in editor.take_heard() {
+        let (id, pick, arguments): (BufferId, fn(&LinesBuffer) -> Option<Hold>, Vec<Value>) =
+            match event {
+                Heard::Clicked {
+                    buffer,
+                    line,
+                    clicks,
+                } => (
+                    buffer,
+                    |view| view.clicked,
+                    vec![count(line), count(clicks)],
+                ),
+                Heard::Dropped { buffer, from, to } => {
+                    (buffer, |view| view.dropped, vec![count(from), count(to)])
+                }
+                Heard::Typed { buffer, text } => {
+                    let Ok(text) = isolate.heap_mut().string(&text) else {
+                        continue;
+                    };
+                    (buffer, |view| view.typed, vec![text])
+                }
+            };
+        let Some(handler) = editor
+            .plugin_buffer::<LinesBuffer>(id)
+            .and_then(|(_, view)| pick(view))
+            .and_then(|hold| isolate.held(hold))
+        else {
+            continue;
+        };
+        if let Err(error) = isolate.spawn(handler, &arguments) {
+            crate::log::report(editor, &error, None);
+        }
+    }
+}
+
 pub fn watch(isolate: &mut Isolate, editor: &mut Editor) {
+    heard(isolate, editor);
     let mut calls: Vec<(Hold, usize)> = Vec::new();
     let current = editor.buffer().id();
     for id in editor.plugin_buffers::<LinesBuffer>() {
@@ -943,6 +1007,33 @@ mod tests {
             "{:?}",
             editor.buffer_names()
         );
+    }
+
+    #[test]
+    fn plugin_buffers_hear_clicks_drops_and_typing() {
+        use oxmacs_core::editor::{Cell, Clicks};
+
+        let (mut editor, mut ox) = opened(
+            r#"(def heard (atom []))
+               (open-buffer "*tree*" ["a" "b" "c"]
+                 :on-click (fn [line clicks] (swap! heard conj [:click line clicks]))
+                 :on-drop (fn [from to] (swap! heard conj [:drop from to]))
+                 :on-type (fn [text] (swap! heard conj [:type text])))"#,
+        );
+        editor.resize_window(10, 20);
+        let row = |row| Cell { row, column: 0 };
+
+        editor.click(row(1), Clicks::Single, false);
+        editor.drag(row(2));
+        editor.release(row(2));
+        settle(&mut editor, &mut ox);
+        press(&mut editor, &mut ox, "x");
+
+        assert_eq!(
+            ox.eval(&mut editor, "@heard").unwrap(),
+            r#"[[:click 1 1] [:drop 1 2] [:type "x"]]"#
+        );
+        assert_eq!(editor.buffer().contents(), "a\nb\nc");
     }
 
     #[test]
