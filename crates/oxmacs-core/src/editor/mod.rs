@@ -60,7 +60,7 @@ use std::{env, mem};
 
 use buffers::{BufferList, Mode};
 
-use crate::command::{Command, CommandId, CommandSpec, Commands, DynamicSpec, Scope, ScopeId};
+use crate::command::{Command, CommandId, Commands, DynamicSpec, Scope, ScopeId};
 use crate::config::{Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::input::bindings::Keymaps;
@@ -372,6 +372,7 @@ impl Editor {
         self.tab_width
     }
 
+    #[cfg(test)]
     pub fn point_display_column(&self) -> usize {
         let buffer = self.buffers.current();
         motion::movement::display_column(buffer, buffer.point(), self.tab_width)
@@ -580,7 +581,8 @@ impl Editor {
         self.run_id(command.into(), false);
     }
 
-    pub fn add_command(&mut self, spec: CommandSpec) -> CommandId {
+    #[cfg(test)]
+    pub fn add_command(&mut self, spec: crate::command::CommandSpec) -> CommandId {
         self.commands.add(spec)
     }
 
@@ -690,6 +692,7 @@ mod tests {
 
     use super::test_support::{editor_with, lines, press, type_text};
     use super::*;
+    use crate::command::CommandSpec;
 
     fn say_hello(editor: &mut Editor) {
         editor.show_message("hello");

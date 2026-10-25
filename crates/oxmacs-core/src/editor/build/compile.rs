@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::editor::buffers::Mode;
-use crate::editor::build::errors::{ErrorPattern, ErrorSource, Errors};
+use crate::editor::build::errors::{ErrorSource, Errors};
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::tools;
@@ -75,11 +75,13 @@ impl Editor {
         tools::cargo_root(&directory).unwrap_or(directory)
     }
 
+    #[cfg(test)]
     pub fn compile_in(&mut self, command: impl Into<String>, directory: PathBuf) {
         self.start_compile(command.into(), directory);
     }
 
-    pub fn add_error_pattern(&mut self, pattern: ErrorPattern) {
+    #[cfg(test)]
+    pub fn add_error_pattern(&mut self, pattern: super::errors::ErrorPattern) {
         self.error_patterns.push(pattern);
     }
 

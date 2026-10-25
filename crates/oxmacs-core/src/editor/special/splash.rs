@@ -77,6 +77,7 @@ impl Editor {
         self.add_buffer_with(buffer, Mode::Splash(splash));
     }
 
+    #[cfg(test)]
     pub fn splash_shown(&self) -> bool {
         self.tiling()
             .windows()

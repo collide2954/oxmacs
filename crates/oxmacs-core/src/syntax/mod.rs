@@ -160,6 +160,7 @@ impl Syntax {
     }
 
     #[cfg(test)]
+    #[cfg(test)]
     pub(crate) fn assume_slow(&mut self) {
         self.slow = true;
     }

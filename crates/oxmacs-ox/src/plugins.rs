@@ -351,6 +351,7 @@ pub(crate) struct Listed {
 }
 
 #[cfg(test)]
+#[cfg(test)]
 pub(crate) fn catalog(isolate: &mut Isolate, bundles: &[Bundle]) -> Vec<Listed> {
     let mut listed: Vec<Listed> = bundles
         .iter()

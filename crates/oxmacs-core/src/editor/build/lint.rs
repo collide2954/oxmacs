@@ -114,6 +114,7 @@ pub(in crate::editor) const CARGO_LINT: Linter = Linter {
 };
 
 impl Editor {
+    #[cfg(test)]
     pub fn add_linter(&mut self, language: Language, linter: Linter) {
         self.linters.retain(|(known, _)| *known != language);
         self.linters.push((language, linter));

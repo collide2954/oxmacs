@@ -1487,13 +1487,6 @@ impl Isolate {
         self.runtime.stop_profiling()
     }
 
-    pub fn profile_snapshot(&self) -> Option<Profile> {
-        self.runtime
-            .profiler
-            .as_ref()
-            .map(|profiler| profiler.profile())
-    }
-
     pub fn record_tick(&mut self, kind: &str, took: Duration) {
         if let Some(profiler) = &mut self.runtime.profiler {
             profiler.tick(kind, took);

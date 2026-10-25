@@ -865,7 +865,7 @@ mod tests {
     }
 
     #[test]
-    fn plugins_ask_typed_and_multiple_choice_questions() {
+    fn plugins_ask_typed_questions() {
         let mut editor = Editor::new();
         editor.set_plugin_state(Answers::default());
 
@@ -878,24 +878,11 @@ mod tests {
         assert_eq!(editor.message(), Some("Please answer yes or no"));
         type_keys(&mut editor, "y e s RET");
 
-        editor.ask_choice(
-            "Overwrite b.txt?",
-            &['y', 'n', '!', 'q'],
-            |editor, choice| {
-                note(editor, choice.to_string());
-            },
-        );
-        assert_eq!(
-            editor.question().map(Question::prompt),
-            Some("Overwrite b.txt? (y, n, !, q) ")
-        );
-        type_keys(&mut editor, "!");
-
         assert_eq!(
             editor
                 .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
-            Some(vec!["true".to_owned(), "!".to_owned()])
+            Some(vec!["true".to_owned()])
         );
     }
 

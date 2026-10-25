@@ -389,6 +389,7 @@ fn highlight_in(text: &str, state: State, known: &Forms) -> (Spans, State) {
 }
 
 #[cfg(test)]
+#[cfg(test)]
 pub(crate) fn highlight_line(text: &str) -> Spans {
     highlight_with(text, State::default()).0
 }

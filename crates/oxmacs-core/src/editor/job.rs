@@ -84,6 +84,7 @@ impl Editor {
         self.notify_job(job, JobEvent::Output(chunk));
     }
 
+    #[cfg(test)]
     pub fn job_running(&self, job: JobId) -> bool {
         self.job_handlers.0.iter().any(|(known, _)| *known == job)
     }
@@ -92,6 +93,7 @@ impl Editor {
         self.effects.push(Effect::Send(job, text.into()));
     }
 
+    #[cfg(test)]
     pub fn stop_job(&mut self, job: JobId) {
         self.effects.push(Effect::Kill(job));
     }

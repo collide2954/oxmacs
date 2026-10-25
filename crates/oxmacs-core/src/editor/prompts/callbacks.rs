@@ -10,7 +10,6 @@ const YES_NO: &[char] = &['y', 'n'];
 
 type Offers = Box<dyn Fn(&Editor) -> Vec<Offer> + Send>;
 type Then = Box<dyn FnOnce(&mut Editor, bool) + Send>;
-type Choose = Box<dyn FnOnce(&mut Editor, char) + Send>;
 type Answered = Box<dyn FnOnce(&mut Editor, String) + Send>;
 type Chose = Box<dyn FnOnce(&mut Editor, Picked) + Send>;
 type Located = Box<dyn FnOnce(&mut Editor, PathBuf) + Send>;
@@ -58,14 +57,12 @@ impl From<&str> for Offer {
 
 pub(in crate::editor) enum Answer {
     YesNo(Then),
-    Choice(Choose),
 }
 
 impl Answer {
     pub(in crate::editor) fn give(self, editor: &mut Editor, answer: char) {
         match self {
             Self::YesNo(then) => then(editor, answer == 'y'),
-            Self::Choice(then) => then(editor, answer),
         }
     }
 }
@@ -216,6 +213,7 @@ impl Editor {
         }
     }
 
+    #[cfg(test)]
     pub fn prompt_styled(
         &mut self,
         prompt: &str,
@@ -256,6 +254,7 @@ impl Editor {
         );
     }
 
+    #[cfg(test)]
     pub fn ask_typed(
         &mut self,
         prompt: &str,
@@ -267,22 +266,6 @@ impl Editor {
             YES_NO,
             true,
             Answer::YesNo(Box::new(then)),
-        );
-    }
-
-    pub fn ask_choice(
-        &mut self,
-        prompt: &str,
-        choices: &'static [char],
-        then: impl FnOnce(&mut Editor, char) + Send + 'static,
-    ) {
-        let shown: Vec<String> = choices.iter().map(char::to_string).collect();
-        self.ask_for_callback(
-            prompt,
-            &shown.join(", "),
-            choices,
-            false,
-            Answer::Choice(Box::new(then)),
         );
     }
 

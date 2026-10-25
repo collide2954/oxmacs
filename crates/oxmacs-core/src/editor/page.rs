@@ -36,6 +36,7 @@ impl Page {
         self.line(&[(title, Some(Highlight::Heading))]);
     }
 
+    #[cfg(test)]
     pub fn set_background(&mut self, background: Option<Highlight>) {
         if let Some(style) = self.styles.last_mut() {
             style.background = background;
