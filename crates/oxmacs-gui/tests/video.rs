@@ -1326,7 +1326,7 @@ fn news_home() -> PathBuf {
     fs::write(home.join(".oxmacs-demo"), "").unwrap();
     fs::write(
         home.join("init.ox"),
-        "(settings {theme: :adwaita-dark animations: false font-size: 12})\n(use-plugin zap)\n(use-plugin keycast)\n",
+        "(settings {theme: :adwaita-dark animations: false font-size: 12})\n(use-plugin zap :config {duration: 4000})\n(use-plugin keycast)\n",
     )
     .unwrap();
     home
@@ -1382,12 +1382,19 @@ const NEWS_COMMANDS: &str = "(defcommand news-next \"Next headline\" (move 1))
 :keys {\"n\" 'news-next \"p\" 'news-previous \"RET\" 'news-read \"g\" 'news \"q\" 'quit-window})
 (fetch))";
 
-fn fading(film: &mut Film, app: &mut App, frames: usize) {
-    for _ in 0..frames {
-        thread::sleep(Duration::from_millis(100));
+const SLOWED: f64 = 8.0;
+
+fn fading(film: &mut Film, app: &mut App) {
+    let mut shown = Instant::now();
+    film.shot(app, 0.0);
+    while flashing(app) {
         settle(app);
-        film.shot(app, 0.1);
+        let now = Instant::now();
+        film.hold(now.duration_since(shown).as_secs_f64() / SLOWED);
+        shown = now;
+        film.shot(app, 0.0);
     }
+    film.hold(Instant::now().duration_since(shown).as_secs_f64() / SLOWED + 0.2);
 }
 
 fn flashing(app: &App) -> bool {
@@ -1398,7 +1405,7 @@ fn evaluate_above(film: &mut Film, app: &mut App) {
     film.press(app, "C-p C-e");
     film.press(app, "C-x C-e");
     until(app, "the form's flash", flashing);
-    fading(film, app, 6);
+    fading(film, app);
     film.press(app, "C-n");
 }
 
@@ -1450,7 +1457,7 @@ fn try_the_feed(film: &mut Film, app: &mut App) {
             .rsplit_once(NEWS_TRY)
             .is_some_and(|(_, after)| after.contains("ox>"))
     });
-    fading(film, app, 6);
+    fading(film, app);
     film.shot(app, 1.5);
     film.press(app, "C-x o");
 }
@@ -1469,12 +1476,13 @@ fn fetch_with_a_typo(film: &mut Film, app: &mut App) {
     film.press(app, "C-p C-e");
     film.press(app, "C-x C-e");
     until(app, "the failing fetch", flashing);
-    fading(film, app, 6);
+    fading(film, app);
     film.shot(app, 2.0);
 }
 
 fn fix_the_typo(film: &mut Film, app: &mut App) {
     film.mark("fix");
+    select(film, app, |name| name == "news.ox");
     film.press(app, "M-<");
     film.press(app, "C-s");
     film.type_slowly(app, "find-al");
@@ -1482,11 +1490,11 @@ fn fix_the_typo(film: &mut Film, app: &mut App) {
     film.type_slowly(app, "l");
     film.press(app, "C-M-x");
     until(app, "the fixed fetch's flash", flashing);
-    fading(film, app, 6);
+    fading(film, app);
     film.press(app, "M-> C-p C-e");
     film.press(app, "C-x C-e");
     until(app, "the fetch", flashing);
-    fading(film, app, 6);
+    fading(film, app);
     film.shot(app, 2.0);
 }
 
@@ -1498,7 +1506,7 @@ fn build_the_view(film: &mut Film, app: &mut App) {
     film.type_code(app, NEWS_COMMANDS);
     film.press(app, "C-c C-b");
     until(app, "the buffer's flashes", flashing);
-    fading(film, app, 30);
+    fading(film, app);
 }
 
 fn read_the_news(film: &mut Film, app: &mut App) {
@@ -1531,7 +1539,6 @@ fn news_video() {
     PUMPING.set(true);
     let mut film = Film::new(out.with_extension("frames"))
         .sized(Size::new(1280.0, 720.0))
-        .warmed(5)
         .scaled_to(1280, 720);
     let (mut app, booted) = App::boot(&[], Some(&home));
     track(booted);
