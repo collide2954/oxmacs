@@ -62,12 +62,12 @@ fn main() -> ExitCode {
         }
         Some(path) => {
             let path = PathBuf::from(path);
-            let mut isolate = Isolate::new();
+            let mut isolate = ox_library::isolate();
             add_roots(&mut isolate, &path);
             run_file(&mut isolate, &path)
         }
         None => {
-            let mut isolate = Isolate::new();
+            let mut isolate = ox_library::isolate();
             isolate.add_root(".");
             repl(&mut isolate)
         }
@@ -200,6 +200,7 @@ fn language_server() -> ExitCode {
                 ox_lsp::Flavor::Plain
             }
         },
+        plain: ox_library::isolate,
         editor: oxmacs_api::checking_isolate,
         roots: checker::check_roots,
     };
@@ -275,7 +276,7 @@ fn fmt_command(arguments: Vec<OsString>) -> ExitCode {
 }
 
 fn profile_file(path: &Path) -> ExitCode {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     add_roots(&mut isolate, path);
     isolate.start_profiling();
     let code = run_file(&mut isolate, path);
@@ -289,7 +290,7 @@ fn isolate_for(file: &Path, roots: &[PathBuf]) -> Isolate {
     let mut isolate = if checker::editor_code(file) {
         oxmacs_api::checking_isolate()
     } else {
-        Isolate::new()
+        ox_library::isolate()
     };
     for root in checker::check_roots(file).iter().chain(roots) {
         isolate.add_root(root);
@@ -367,7 +368,7 @@ fn run_tests(paths: &[PathBuf]) -> ExitCode {
         let mut isolate = if checker::editor_code(&path) {
             oxmacs_api::checking_isolate()
         } else {
-            Isolate::new()
+            ox_library::isolate()
         };
         add_roots(&mut isolate, &path);
         let file = path.display().to_string();

@@ -28,7 +28,7 @@ fn get_returns_the_status_headers_and_body() {
     let url = serve(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}",
     );
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,
@@ -43,7 +43,7 @@ fn get_returns_the_status_headers_and_body() {
 #[test]
 fn error_statuses_still_reply() {
     let url = serve("HTTP/1.1 404 Not Found\r\nContent-Length: 4\r\nConnection: close\r\n\r\ngone");
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,
@@ -60,7 +60,7 @@ fn unreachable_servers_fail_the_promise() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/", listener.local_addr().unwrap());
     drop(listener);
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let failed = evaluated(
         &mut isolate,
@@ -77,7 +77,7 @@ fn unreachable_servers_fail_the_promise() {
 
 #[test]
 fn query_text_is_percent_encoded() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     assert_eq!(
         evaluated(
@@ -137,7 +137,7 @@ fn echo() -> (String, thread::JoinHandle<String>) {
 #[test]
 fn requests_take_any_method_headers_a_body_and_a_login() {
     let (url, server) = echo();
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,
@@ -168,7 +168,7 @@ fn requests_take_any_method_headers_a_body_and_a_login() {
 #[test]
 fn requests_without_a_body_send_none() {
     let (url, server) = echo();
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,
@@ -188,7 +188,7 @@ fn requests_without_a_body_send_none() {
 
 #[test]
 fn request_options_are_checked() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     assert_eq!(
         evaluated(

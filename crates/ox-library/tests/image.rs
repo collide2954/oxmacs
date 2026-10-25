@@ -48,7 +48,7 @@ fn rotated_jpeg(path: &Path) {
 fn images_are_made_saved_and_opened_again() {
     let dir = tempfile::tempdir().unwrap();
     let png = slashed(&dir.path().join("dot.png"));
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     assert_eq!(
         shown(
@@ -99,7 +99,7 @@ fn jpeg_quality_changes_the_file_and_exif_orientation_is_applied() {
     let turned = dir.path().join("turned.jpg");
     rotated_jpeg(&turned);
     let turned = slashed(&turned);
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     shown(
         &mut isolate,
@@ -129,7 +129,7 @@ fn svg_files_are_drawn_and_colors_can_be_written_many_ways() {
     )
     .unwrap();
     let svg = slashed(&svg);
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     assert_eq!(
         shown(
@@ -155,7 +155,7 @@ fn svg_files_are_drawn_and_colors_can_be_written_many_ways() {
 fn mistakes_are_reported() {
     let dir = tempfile::tempdir().unwrap();
     let missing = slashed(&dir.path().join("missing.png"));
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     assert!(
         failure(&mut isolate, &format!("(await (image/open \"{missing}\"))"))
@@ -203,7 +203,7 @@ const HALVES: &str = "(def halves (image/canvas (image/new 2 2 :color :red) 4 2 
 
 #[test]
 fn geometry_resizes_crops_pads_and_turns_images() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     shown(&mut isolate, HALVES);
     let size = |isolate: &mut Isolate, source: &str| {
         shown(
@@ -314,7 +314,7 @@ fn adjusted(isolate: &mut Isolate, color: &str, change: &str) -> String {
 
 #[test]
 fn color_adjustments_follow_css_filters() {
-    let isolate = &mut Isolate::new();
+    let isolate = &mut ox_library::isolate();
 
     assert_eq!(
         adjusted(isolate, "[100 50 200]", "(image/brightness 1.5)"),
@@ -383,7 +383,7 @@ fn color_adjustments_follow_css_filters() {
 
 #[test]
 fn levels_curves_and_fewer_colors() {
-    let isolate = &mut Isolate::new();
+    let isolate = &mut ox_library::isolate();
     shown(isolate, HALVES);
 
     assert_eq!(
@@ -473,7 +473,7 @@ fn levels_curves_and_fewer_colors() {
 
 #[test]
 fn color_mistakes_are_reported() {
-    let isolate = &mut Isolate::new();
+    let isolate = &mut ox_library::isolate();
     shown(isolate, HALVES);
 
     assert_eq!(
@@ -506,7 +506,7 @@ const STRIPES: &str = "(def stripes (image/canvas (image/new 1 1 :color :white) 
 
 #[test]
 fn blurs_keep_edges_clean_and_flat_areas_flat() {
-    let isolate = &mut Isolate::new();
+    let isolate = &mut ox_library::isolate();
     shown(isolate, HALVES);
     shown(isolate, STRIPES);
 
@@ -550,7 +550,7 @@ fn blurs_keep_edges_clean_and_flat_areas_flat() {
 
 #[test]
 fn sharpening_edges_and_kernels() {
-    let isolate = &mut Isolate::new();
+    let isolate = &mut ox_library::isolate();
     shown(isolate, STRIPES);
     shown(
         isolate,
@@ -612,7 +612,7 @@ fn sharpening_edges_and_kernels() {
 
 #[test]
 fn noise_repeats_and_vignettes_darken_corners() {
-    let isolate = &mut Isolate::new();
+    let isolate = &mut ox_library::isolate();
     shown(isolate, "(def gray (image/new 4 4 :color [128 128 128]))");
 
     assert_eq!(
@@ -651,7 +651,7 @@ fn noise_repeats_and_vignettes_darken_corners() {
 
 #[test]
 fn filter_mistakes_are_reported() {
-    let isolate = &mut Isolate::new();
+    let isolate = &mut ox_library::isolate();
     shown(isolate, HALVES);
 
     assert_eq!(
@@ -676,7 +676,7 @@ const BLANK: &str = "(def blank (image/new 10 10 :color :white))";
 
 #[test]
 fn edits_draw_shapes_on_a_private_copy() {
-    let isolate = &mut Isolate::new();
+    let isolate = &mut ox_library::isolate();
     shown(isolate, BLANK);
 
     assert_eq!(
@@ -750,7 +750,7 @@ fn edits_draw_shapes_on_a_private_copy() {
 
 #[test]
 fn edit_is_built_in_and_waits_for_what_it_is_given() {
-    let isolate = &mut Isolate::new();
+    let isolate = &mut ox_library::isolate();
     shown(isolate, BLANK);
 
     assert_eq!(shown(isolate, "image/edit"), "#<native image/edit>");
@@ -784,7 +784,7 @@ fn edit_is_built_in_and_waits_for_what_it_is_given() {
 
 #[test]
 fn layers_blend_mask_and_tile() {
-    let isolate = &mut Isolate::new();
+    let isolate = &mut ox_library::isolate();
     shown(isolate, BLANK);
     shown(isolate, HALVES);
     shown(
@@ -851,7 +851,7 @@ fn layers_blend_mask_and_tile() {
 
 #[test]
 fn geometry_mistakes_are_reported() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     shown(&mut isolate, HALVES);
 
     assert_eq!(

@@ -9,6 +9,7 @@ license.workspace = true
 
 [dependencies]
 ox.workspace = true
+ox-library.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

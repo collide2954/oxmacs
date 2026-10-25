@@ -77,7 +77,7 @@ impl Runtime {
             .map_err(full)
     }
 
-    pub fn settle(&mut self, promise: Value, outcome: Promise) -> bool {
+    pub(crate) fn settle(&mut self, promise: Value, outcome: Promise) -> bool {
         match self.heap.promise_of(promise) {
             Some(Promise::Pending { .. }) => self.heap.set_promise(promise, outcome),
             _ => false,

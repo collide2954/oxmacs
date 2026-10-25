@@ -44,7 +44,7 @@ pub struct Native {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Drains {
+pub enum Drains {
     At(usize),
     From(usize),
     Last,

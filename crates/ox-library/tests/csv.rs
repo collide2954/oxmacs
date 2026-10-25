@@ -1,7 +1,5 @@
-use ox::Isolate;
-
 fn evaluated(source: &str) -> String {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     match isolate.eval(&format!("(module (import (ox csv))) {source}")) {
         Ok(value) => isolate.write(value),
         Err(error) => format!("error: {}", error.message),

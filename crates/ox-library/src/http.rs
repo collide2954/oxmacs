@@ -1,14 +1,14 @@
 use std::time::Duration;
 
-use crate::error::{Error, ErrorKind};
-use crate::heap::Heap;
-use crate::isolate::Isolate;
-use crate::library::crypto::to_base64;
-use crate::portable::{Failure, Portable};
-use crate::symbol::Sym;
-use crate::value::Value;
-use crate::value::print;
-use crate::vm::build::full;
+use crate::crypto::to_base64;
+use ox::Isolate;
+use ox::build::full;
+use ox::error::{Error, ErrorKind};
+use ox::heap::Heap;
+use ox::portable::{Failure, Portable};
+use ox::symbol::Sym;
+use ox::value::Value;
+use ox::value::print;
 
 const MODULE: &str = "ox/http";
 const TIMEOUT: Duration = Duration::from_secs(15);

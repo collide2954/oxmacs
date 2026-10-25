@@ -1,19 +1,12 @@
 pub(crate) mod collections;
-pub(crate) mod crypto;
-mod csv;
 pub(crate) mod errors;
-mod files;
-mod http;
-pub mod image;
 mod json;
 mod math;
-mod net;
 pub(crate) mod numbers;
 pub(crate) mod ordering;
 pub(crate) mod paths;
 mod patterns;
 mod prelude;
-mod process;
 mod regex;
 mod rules;
 mod strings;
@@ -45,7 +38,6 @@ pub const MODULES: &[(&str, &str)] = &[
         "Regular expressions: matching, finding, replacing and splitting",
     ),
     ("ox/json", "Reading and writing JSON"),
-    ("ox/csv", "Reading CSV into rows"),
     (
         "ox/xml",
         "Reading XML into maps, finding elements along paths, and writing XML",
@@ -61,24 +53,6 @@ pub const MODULES: &[(&str, &str)] = &[
     (
         "ox/path",
         "Taking paths apart and joining them, the home folder and ~ expansion",
-    ),
-    (
-        "ox/file",
-        "Reading, writing, listing, copying, renaming and removing files and folders",
-    ),
-    (
-        "ox/process",
-        "Running programs, talking to them while they run, and the environment",
-    ),
-    ("ox/net", "TCP connections, with or without TLS"),
-    ("ox/http", "HTTP requests and URL encoding"),
-    (
-        "ox/crypto",
-        "Hashes, encryption with a password, random numbers, base64 and one-time codes",
-    ),
-    (
-        "ox/image",
-        "Opening, editing, drawing on and saving images, with filters and color adjustments",
     ),
 ];
 const OUTSIDE_MODULES: [&str; 4] = ["ox/file", "ox/http", "ox/net", "ox/process"];
@@ -149,17 +123,10 @@ pub fn install(isolate: &mut Isolate) {
     time::install(isolate);
     json::install(isolate);
     xml::install(isolate);
-    http::install(isolate);
-    net::install(isolate);
-    crypto::install(isolate);
-    csv::install(isolate);
     strings::install(isolate);
     ordering::install(isolate);
     paths::install(isolate);
-    files::install(isolate);
-    process::install(isolate);
     regex::install(isolate);
-    image::install(isolate);
     isolate.define_native("=", 1, None, |heap, arguments| {
         Ok(Value::Bool(all_equal(heap, arguments)))
     });

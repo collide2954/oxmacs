@@ -704,7 +704,7 @@ impl Isolate {
         }
     }
 
-    pub(crate) fn define_routine(
+    pub fn define_routine(
         &mut self,
         name: &str,
         least: usize,
@@ -715,7 +715,7 @@ impl Isolate {
         self.define_routine_in("ox", name, least, most, drains, start);
     }
 
-    pub(crate) fn define_routine_in(
+    pub fn define_routine_in(
         &mut self,
         module: &str,
         name: &str,

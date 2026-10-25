@@ -3,14 +3,14 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use crate::error::Error;
-use crate::heap::Heap;
-use crate::isolate::Isolate;
-use crate::library::crypto::{from_base64, to_base64};
-use crate::library::paths::text;
-use crate::portable::{Failure, Portable};
-use crate::symbol::Sym;
-use crate::value::Value;
+use crate::crypto::{from_base64, to_base64};
+use crate::text;
+use ox::Isolate;
+use ox::error::Error;
+use ox::heap::Heap;
+use ox::portable::{Failure, Portable};
+use ox::symbol::Sym;
+use ox::value::Value;
 
 const MODULE: &str = "ox/file";
 

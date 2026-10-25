@@ -11,7 +11,7 @@ mod isolate;
 mod library;
 pub mod names;
 pub mod native;
-mod portable;
+pub mod portable;
 pub mod profile;
 pub mod read;
 pub mod span;
@@ -22,4 +22,5 @@ mod vm;
 
 pub use error::Error;
 pub use isolate::Isolate;
-pub use library::{MODULES, image};
+pub use library::MODULES;
+pub use vm::{Runtime, build, routine};

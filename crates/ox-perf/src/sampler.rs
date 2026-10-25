@@ -1,8 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use ox::Isolate;
-
 use crate::{benches, tables};
 
 const ROWS: usize = 40;
@@ -13,7 +11,7 @@ pub fn profile(
     roots: &[PathBuf],
     length: Duration,
 ) -> Result<String, String> {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     let found = benches::load(&mut isolate, path, roots)?;
     let benchmark = found
         .iter()

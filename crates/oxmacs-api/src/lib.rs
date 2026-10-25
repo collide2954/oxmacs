@@ -32,7 +32,7 @@ pub fn extend_with_prelude(isolate: &mut Isolate) {
 }
 
 pub fn checking_isolate() -> Isolate {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     isolate.define_stubs(DOCS);
     extend_with_prelude(&mut isolate);
     isolate

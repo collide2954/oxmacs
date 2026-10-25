@@ -9,6 +9,7 @@ license.workspace = true
 
 [dependencies]
 ox.workspace = true
+ox-library.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

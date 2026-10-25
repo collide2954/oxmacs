@@ -804,7 +804,7 @@ fn setup_saves_the_network_in_custom_ox_once() {
 }
 
 fn cheap_vault(home: &Path) {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     let made = isolate
         .eval(
             r#"(module (import (ox crypto) (ox json)))

@@ -21,7 +21,7 @@ fn directories_are_listed_by_name_with_their_details() {
     fs::write(dir.path().join("b.txt"), "hello").unwrap();
     fs::write(dir.path().join(".hidden"), "").unwrap();
     fs::create_dir(dir.path().join("a")).unwrap();
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let listed = evaluated(
         &mut isolate,
@@ -42,7 +42,7 @@ fn directories_are_listed_by_name_with_their_details() {
 fn appending_adds_to_the_end_and_makes_missing_files() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("log.txt");
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let done = evaluated(
         &mut isolate,
@@ -63,7 +63,7 @@ fn files_travel_as_base64_whatever_their_bytes() {
     let copy = dir.path().join("copy.bin");
     let bytes = [0_u8, 159, 146, 150, 255, 10];
     fs::write(&source, bytes).unwrap();
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let encoded = evaluated(
         &mut isolate,
@@ -106,7 +106,7 @@ fn links_in_listings_say_where_they_point() {
     if link(&target, &dir.path().join("shortcut")).is_err() {
         return;
     }
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let listed = evaluated(
         &mut isolate,
@@ -129,7 +129,7 @@ fn files_are_written_read_renamed_copied_and_removed() {
     let inside = literal(&dir.path().join("x").join("y").join("inner.txt"));
     let copied = literal(&dir.path().join("copy"));
     let copied_inside = literal(&dir.path().join("copy").join("y").join("inner.txt"));
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let results = evaluated(
         &mut isolate,
@@ -154,7 +154,7 @@ fn files_are_written_read_renamed_copied_and_removed() {
 fn failures_say_what_went_wrong() {
     let dir = tempfile::tempdir().unwrap();
     let missing = dir.path().join("missing.txt");
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let failed = evaluated(
         &mut isolate,
@@ -170,7 +170,7 @@ fn failures_say_what_went_wrong() {
 
 #[test]
 fn paths_are_joined_and_taken_apart() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     let joined = Path::new("a").join("b").join("c.txt");
     let joined = joined.display().to_string();
 

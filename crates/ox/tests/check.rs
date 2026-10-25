@@ -20,41 +20,6 @@ fn rewrite(path: &Path, text: &str, step: u64) {
 }
 
 #[test]
-fn checking_never_writes_files_or_runs_programs() {
-    let dir = tempfile::tempdir().unwrap();
-    let made = dir.path().join("made.txt");
-    let shown = made.display().to_string().replace('\\', "/");
-    fs::write(
-        dir.path().join("writer.ox"),
-        format!(
-            "(module (import (ox file)))\n(file/write \"{shown}\" \"x\")\n(def (hello) \"hi\")\n"
-        ),
-    )
-    .unwrap();
-    let mut isolate = Isolate::new();
-    isolate.add_root(dir.path());
-    let source = format!(
-        "(module (import (writer) (ox file) (ox process)))
-(defmacro sneaky [] (file/write \"{shown}\" \"y\") 1)
-(defmacro runs [] (process/run \"nothing-here\" []) 1)
-(sneaky)
-(runs)
-(writer/hello)
-"
-    );
-
-    assert_eq!(isolate.check("sample.ox", &source), []);
-    assert!(!made.exists());
-
-    isolate
-        .eval(&format!(
-            "(module (import (ox file)))\n(await (file/write \"{shown}\" \"z\"))"
-        ))
-        .unwrap();
-    assert!(made.exists());
-}
-
-#[test]
 fn modules_that_need_the_host_to_load_are_skipped_quietly() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(

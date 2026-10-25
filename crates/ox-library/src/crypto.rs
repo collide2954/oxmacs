@@ -7,13 +7,13 @@ use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::{digest, hmac};
 
-use crate::error::{Error, ErrorKind};
-use crate::heap::Heap;
-use crate::isolate::Isolate;
-use crate::library::paths::text;
-use crate::portable::{Failure, Portable};
-use crate::value::{Value, print};
-use crate::vm::build::full;
+use crate::text;
+use ox::Isolate;
+use ox::build::full;
+use ox::error::{Error, ErrorKind};
+use ox::heap::Heap;
+use ox::portable::{Failure, Portable};
+use ox::value::{Value, print};
 
 const MODULE: &str = "ox/crypto";
 const KEY_BYTES: usize = 32;

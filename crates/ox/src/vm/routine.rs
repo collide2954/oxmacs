@@ -14,19 +14,19 @@ use crate::vm::machine::Generator;
 pub(crate) const RAISED: u32 = 3;
 
 #[derive(Debug)]
-pub(crate) enum Next<'a> {
+pub enum Next<'a> {
     Return(Value),
     Call(Value, &'a [Value]),
     Catch(Value, &'a [Value]),
 }
 
 #[derive(Debug)]
-pub(crate) enum Started {
+pub enum Started {
     Done(Value),
     Running(Box<dyn Routine>),
 }
 
-pub(crate) trait Routine: fmt::Debug {
+pub trait Routine: fmt::Debug {
     fn resume(&mut self, runtime: &mut Runtime, value: Value) -> Result<Next<'_>, Error>;
 
     fn raised(&mut self, runtime: &mut Runtime, error: Value) -> Result<Next<'_>, Error> {
@@ -36,7 +36,7 @@ pub(crate) trait Routine: fmt::Debug {
     fn roots(&self, values: &mut Vec<Value>);
 }
 
-pub(crate) type Start = dyn Fn(&mut Runtime, Value, &[Value]) -> Result<Started, Error>;
+pub type Start = dyn Fn(&mut Runtime, Value, &[Value]) -> Result<Started, Error>;
 
 pub(crate) struct Resumable {
     pub(crate) start: Box<Start>,

@@ -6,11 +6,11 @@ use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 
 use super::{Image, MODULE, Options, later, text, wanted};
-use crate::error::Error;
-use crate::isolate::Isolate;
-use crate::portable::Portable;
-use crate::symbol::Sym;
-use crate::value::Value;
+use ox::Isolate;
+use ox::error::Error;
+use ox::portable::Portable;
+use ox::symbol::Sym;
+use ox::value::Value;
 
 fn extension(path: &Path) -> String {
     path.extension()

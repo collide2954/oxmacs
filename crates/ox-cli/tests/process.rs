@@ -1,10 +1,8 @@
 use std::fs;
 use std::path::Path;
 
-use ox::Isolate;
-
 fn evaluated(source: &str) -> String {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     let source = format!("(module (import (ox process))) {source}");
     match isolate.eval(&source) {
         Ok(value) => isolate.write(value),

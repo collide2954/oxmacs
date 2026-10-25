@@ -1,10 +1,10 @@
 use super::MODULE;
-use crate::error::Error;
-use crate::isolate::Isolate;
-use crate::symbol::Sym;
-use crate::value::Value;
-use crate::vm::Runtime;
-use crate::vm::routine::{Next, Routine, Started};
+use ox::Isolate;
+use ox::Runtime;
+use ox::error::Error;
+use ox::routine::{Next, Routine, Started};
+use ox::symbol::Sym;
+use ox::value::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step {

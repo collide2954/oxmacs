@@ -12,13 +12,13 @@ use image::RgbaImage;
 
 pub use colors::set_faces;
 
-use crate::error::{Error, ErrorKind};
-use crate::heap::Heap;
-use crate::isolate::Isolate;
-use crate::portable::{Failure, Portable};
-use crate::symbol::Sym;
-use crate::value::{Value, print};
-use crate::vm::build::{full, make_map, make_vector};
+use ox::Isolate;
+use ox::build::{full, make_map, make_vector};
+use ox::error::{Error, ErrorKind};
+use ox::heap::Heap;
+use ox::portable::{Failure, Portable};
+use ox::symbol::Sym;
+use ox::value::{Value, print};
 
 const MODULE: &str = "ox/image";
 const KIND: &str = "image";
@@ -127,7 +127,7 @@ fn text<'a>(heap: &'a Heap, name: &str, what: &str, value: Value) -> Result<&'a 
 
 fn number(heap: &Heap, name: &str, what: &str, value: Value) -> Result<f64, Error> {
     match value {
-        Value::Int(number) => Ok(crate::value::number::to_float(number)),
+        Value::Int(number) => Ok(ox::value::number::to_float(number)),
         Value::Float(number) => Ok(number),
         _ => Err(Error::new(format!(
             "image/{name} expects {what} as a number, got {}",

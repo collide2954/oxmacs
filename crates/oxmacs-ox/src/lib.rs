@@ -86,11 +86,12 @@ fn install_editor_api(isolate: &mut Isolate, answers: &prompts::Inbox) {
 }
 
 fn worker_api(isolate: &mut Isolate) {
+    ox_library::install(isolate);
     install_editor_api(isolate, &prompts::Inbox::default());
 }
 
 fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     install_editor_api(&mut isolate, answers);
     isolate
 }

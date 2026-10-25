@@ -1,10 +1,10 @@
 pub(crate) mod bind;
-pub(crate) mod build;
+pub mod build;
 pub(crate) mod convert;
 pub(crate) mod machine;
 pub(crate) mod modules;
 mod prims;
-pub(crate) mod routine;
+pub mod routine;
 mod tasks;
 mod workers;
 

@@ -8,7 +8,7 @@ fn evaluated(isolate: &mut Isolate, source: &str) -> String {
 }
 
 fn crypto(source: &str) -> String {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     evaluated(
         &mut isolate,
         &format!("(module (import (ox crypto) (ox string))) {source}"),

@@ -11,7 +11,7 @@ use crate::testing::{press, settle, typed};
 const PASSWORD: &str = "correct horse";
 
 fn cheap_vault(home: &Path, entries: &str) {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     let made = isolate
         .eval(&format!(
             "(module (import (ox crypto) (ox json)))

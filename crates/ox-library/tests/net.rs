@@ -26,7 +26,7 @@ fn lines_flow_both_ways_over_a_connection() {
             .unwrap();
         line
     });
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,
@@ -53,7 +53,7 @@ fn the_lines_end_when_the_server_closes() {
         let (mut stream, _) = listener.accept().unwrap();
         stream.write_all(b"bye\r\n").unwrap();
     });
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,
@@ -78,7 +78,7 @@ fn closing_flushes_what_was_sent_first() {
             .map(Result::unwrap)
             .collect::<Vec<_>>()
     });
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     evaluated(
         &mut isolate,
@@ -98,7 +98,7 @@ fn unreachable_servers_fail_the_promise() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     drop(listener);
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let failed = evaluated(
         &mut isolate,
@@ -116,7 +116,7 @@ fn unreachable_servers_fail_the_promise() {
 #[test]
 #[ignore = "talks TLS to example.com"]
 fn tls_reaches_a_public_server() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,

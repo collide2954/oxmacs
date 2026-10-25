@@ -17,7 +17,7 @@ fn echo() -> &'static str {
 
 #[test]
 fn run_collects_the_output_and_status() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,
@@ -32,7 +32,7 @@ fn run_collects_the_output_and_status() {
 
 #[test]
 fn started_processes_take_input_and_stream_lines() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,
@@ -51,7 +51,7 @@ fn started_processes_take_input_and_stream_lines() {
 
 #[test]
 fn errors_arrive_on_their_own_channel() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,
@@ -70,7 +70,7 @@ fn errors_arrive_on_their_own_channel() {
 
 #[test]
 fn processes_nobody_waits_for_let_the_isolate_rest() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     let long = if cfg!(windows) {
         r#"(process/start "ping" ["-n" "60" "127.0.0.1"])"#
     } else {
@@ -94,7 +94,7 @@ fn processes_nobody_waits_for_let_the_isolate_rest() {
 
 #[test]
 fn started_processes_can_be_killed() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
     let long = if cfg!(windows) {
         r#"(process/start "ping" ["-n" "60" "127.0.0.1"])"#
     } else {
@@ -117,7 +117,7 @@ fn started_processes_can_be_killed() {
 
 #[test]
 fn programs_are_found_on_the_path_and_the_system_is_named() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,
@@ -131,7 +131,7 @@ fn programs_are_found_on_the_path_and_the_system_is_named() {
 
 #[test]
 fn programs_that_cannot_start_raise() {
-    let mut isolate = Isolate::new();
+    let mut isolate = ox_library::isolate();
 
     let reply = evaluated(
         &mut isolate,

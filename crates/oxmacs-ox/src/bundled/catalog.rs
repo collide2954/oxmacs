@@ -7,7 +7,10 @@ use crate::plugins::{Listed, catalog};
 use crate::{EDITOR_MODULES, checking_isolate};
 
 fn modules() -> Vec<(&'static str, &'static str)> {
-    ox::MODULES.iter().chain(EDITOR_MODULES).copied().collect()
+    ox_library::modules()
+        .into_iter()
+        .chain(EDITOR_MODULES.iter().copied())
+        .collect()
 }
 
 fn workspace() -> &'static Path {

@@ -8,13 +8,13 @@ use std::time::Duration;
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 
-use crate::error::{Error, ErrorKind};
-use crate::heap::Heap;
-use crate::isolate::Isolate;
-use crate::library::paths::text;
-use crate::portable::{Channel, Failure, Portable, Sent};
-use crate::symbol::Sym;
-use crate::value::{Value, print};
+use crate::text;
+use ox::Isolate;
+use ox::error::{Error, ErrorKind};
+use ox::heap::Heap;
+use ox::portable::{Channel, Failure, Portable, Sent};
+use ox::symbol::Sym;
+use ox::value::{Value, print};
 
 const MODULE: &str = "ox/net";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);

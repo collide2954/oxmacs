@@ -71,6 +71,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- The Ox language crate keeps only the reader, compiler, VM, checker, formatter and core modules; files, processes, the network, HTTP, cryptography, CSV and images moved to an `ox-library` crate that oxmacs and the `ox` command install, so a change to the VM no longer rebuilds the image, TLS and crypto stacks. Workers get the same modules.
+- The `ox` binary no longer links the editor: it checks, tests and formats editor code against the editor API's signatures and macros from a small `oxmacs-api` crate, so it builds without the editor's grammars and stays the same when the editor changes. Calls that need the editor still say "… isn't available here".
 - keycast shows `<home>`, `<end>`, the page keys and `DEL` as it does the arrows, hides `RET` and `TAB` when they only start a new line or indent, and counts a key as repeated only when its command ran just before, so typing between two presses shows them apart. `on-key-command` events carry `:repeat`.
 - zap flashes code that ran in the marked face and code that failed in the flagged face, which show better on dark themes; its `face` and `error-face` settings pick others.
 - A plugin imports another plugin's modules only when its manifest requires that plugin; the error says what to add to `:requires`. The calendar, irc, manual and remote plugins declare the plugins they use.

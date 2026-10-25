@@ -23,6 +23,7 @@ pub enum Flavor {
 #[derive(Debug, Clone, Copy)]
 pub struct Options {
     pub flavor: fn(&Path) -> Flavor,
+    pub plain: fn() -> Isolate,
     pub editor: fn() -> Isolate,
     pub roots: fn(&Path) -> Vec<PathBuf>,
 }
@@ -31,6 +32,7 @@ impl Options {
     pub fn plain() -> Self {
         Self {
             flavor: |_| Flavor::Plain,
+            plain: Isolate::new,
             editor: Isolate::new,
             roots: |path| path.parent().map(Path::to_path_buf).into_iter().collect(),
         }
@@ -201,13 +203,13 @@ impl<'a> Server<'a> {
     fn isolate(&mut self, path: Option<&Path>) -> &mut Isolate {
         let flavor = path.map_or(Flavor::Plain, self.options.flavor);
         let roots = path.map(self.options.roots).unwrap_or_default();
-        let editor = self.options.editor;
+        let (plain, editor) = (self.options.plain, self.options.editor);
         let slot = match flavor {
             Flavor::Plain => &mut self.plain,
             Flavor::Editor => &mut self.editor,
         };
         let isolate = slot.get_or_insert_with(|| match flavor {
-            Flavor::Plain => Isolate::new(),
+            Flavor::Plain => plain(),
             Flavor::Editor => editor(),
         });
         for root in roots {

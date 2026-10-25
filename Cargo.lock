@@ -3633,29 +3633,15 @@ dependencies = [
 name = "ox"
 version = "0.13.0"
 dependencies = [
- "ab_glyph",
- "argon2",
- "chacha20poly1305",
- "image",
- "imageproc",
+ "getrandom 0.4.3",
  "jiff",
- "kamadak-exif",
  "num-bigint",
  "num-traits",
- "png 0.18.1",
- "rayon",
  "regex",
- "resvg",
- "ring",
  "roxmltree 0.21.1",
- "rustls",
  "serde",
  "serde_json",
  "tempfile",
- "tiny-skia 0.11.4",
- "trash",
- "ureq",
- "webpki-roots",
 ]
 
 [[package]]
@@ -3663,6 +3649,7 @@ name = "ox-cli"
 version = "0.13.0"
 dependencies = [
  "ox",
+ "ox-library",
  "ox-lsp",
  "ox-perf",
  "oxmacs-api",
@@ -3670,6 +3657,28 @@ dependencies = [
  "oxmacs-ox",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "ox-library"
+version = "0.13.0"
+dependencies = [
+ "argon2",
+ "chacha20poly1305",
+ "image",
+ "imageproc",
+ "ox",
+ "png 0.18.1",
+ "rayon",
+ "resvg",
+ "ring",
+ "rustls",
+ "serde_json",
+ "tempfile",
+ "tiny-skia 0.11.4",
+ "trash",
+ "ureq",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -3687,6 +3696,7 @@ name = "ox-perf"
 version = "0.13.0"
 dependencies = [
  "ox",
+ "ox-library",
  "tempfile",
  "windows-sys 0.61.2",
 ]
@@ -3704,6 +3714,7 @@ name = "oxmacs-api"
 version = "0.13.0"
 dependencies = [
  "ox",
+ "ox-library",
  "tempfile",
 ]
 
@@ -3760,6 +3771,7 @@ dependencies = [
  "jiff",
  "keepass",
  "ox",
+ "ox-library",
  "oxmacs-api",
  "oxmacs-core",
  "regex",

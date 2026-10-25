@@ -5,14 +5,14 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
 
-use crate::error::{Error, ErrorKind};
-use crate::heap::Heap;
-use crate::isolate::Isolate;
-use crate::library::paths::text;
-use crate::portable::{Channel, Failure, Portable, Sent};
-use crate::symbol::Sym;
-use crate::value::{Value, print};
-use crate::vm::build::full;
+use crate::text;
+use ox::Isolate;
+use ox::build::full;
+use ox::error::{Error, ErrorKind};
+use ox::heap::Heap;
+use ox::portable::{Channel, Failure, Portable, Sent};
+use ox::symbol::Sym;
+use ox::value::{Value, print};
 
 const MODULE: &str = "ox/process";
 const KEPT_LINES: usize = 4096;

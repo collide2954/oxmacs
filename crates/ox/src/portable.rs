@@ -9,7 +9,7 @@ use crate::symbol::Sym;
 use crate::value::record::Family;
 
 #[derive(Debug, Clone)]
-pub(crate) enum Portable {
+pub enum Portable {
     Nil,
     Bool(bool),
     Int(i64),
@@ -34,7 +34,7 @@ pub(crate) enum Portable {
     Foreign(Sym, Arc<dyn Any + Send + Sync>),
 }
 #[derive(Debug, Default)]
-pub(crate) struct Signal {
+pub struct Signal {
     raised: Mutex<bool>,
     condvar: Condvar,
 }
@@ -64,25 +64,27 @@ struct State {
 }
 
 #[derive(Debug)]
-pub(crate) struct Channel {
+pub struct Channel {
     capacity: usize,
     state: Mutex<State>,
 }
 
-pub(crate) enum Sent {
+#[derive(Debug)]
+pub enum Sent {
     Done,
     Full,
     Closed,
 }
 
-pub(crate) enum Received {
+#[derive(Debug)]
+pub enum Received {
     Item(Portable),
     Empty,
     Closed,
 }
 
 impl Channel {
-    pub(crate) fn new(capacity: usize) -> Self {
+    pub fn new(capacity: usize) -> Self {
         Self {
             capacity,
             state: Mutex::default(),
@@ -103,7 +105,7 @@ impl Channel {
         });
     }
 
-    pub(crate) fn send(&self, item: Portable) -> Sent {
+    pub fn send(&self, item: Portable) -> Sent {
         let mut state = self.state();
         if state.closed {
             return Sent::Closed;
@@ -130,7 +132,7 @@ impl Channel {
         Received::Item(item)
     }
 
-    pub(crate) fn close(&self) {
+    pub fn close(&self) {
         let mut state = self.state();
         state.closed = true;
         Self::changed(&mut state);
@@ -158,7 +160,7 @@ impl Channel {
 }
 
 #[derive(Debug)]
-pub(crate) struct Failure {
-    pub(crate) value: Option<Portable>,
-    pub(crate) message: String,
+pub struct Failure {
+    pub value: Option<Portable>,
+    pub message: String,
 }

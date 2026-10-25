@@ -1,9 +1,9 @@
-use crate::error::Error;
-use crate::heap::Heap;
-use crate::isolate::Isolate;
-use crate::library::paths::text;
-use crate::value::{Value, print};
-use crate::vm::build::full;
+use crate::text;
+use ox::Isolate;
+use ox::build::full;
+use ox::error::Error;
+use ox::heap::Heap;
+use ox::value::{Value, print};
 
 const MODULE: &str = "ox/csv";
 

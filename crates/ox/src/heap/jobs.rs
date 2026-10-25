@@ -56,7 +56,7 @@ impl Heap {
         })
     }
 
-    pub(crate) fn background(
+    pub fn background(
         &mut self,
         name: &str,
         work: impl FnOnce() -> Result<Portable, Failure> + Send + 'static,

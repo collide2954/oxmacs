@@ -1,7 +1,7 @@
 pub(crate) mod equal;
 pub(crate) mod foreign;
 pub(crate) mod map;
-pub(crate) mod number;
+pub mod number;
 pub mod print;
 pub(crate) mod promise;
 pub(crate) mod record;

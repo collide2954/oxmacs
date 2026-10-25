@@ -3,6 +3,7 @@ members = ["crates/*"]
 default-members = [
     "crates/ox",
     "crates/ox-cli",
+    "crates/ox-library",
     "crates/ox-lsp",
     "crates/ox-perf",
     "crates/oxmacs",
@@ -21,11 +22,11 @@ publish = false
 license = "Apache-2.0"
 
 [workspace.dependencies]
-ab_glyph = "0.2.32"
 argon2 = { version = "0.6.0", default-features = false, features = ["alloc"] }
 bitflags = "2.13.2"
 chacha20poly1305 = { version = "0.11.0", default-features = false, features = ["alloc"] }
 dirs = "7.0.0"
+getrandom = "0.4.3"
 iced = { version = "0.14.0", features = ["advanced", "canvas", "image"] }
 iced_runtime = "0.14.0"
 iced_test = "0.14.0"
@@ -33,10 +34,10 @@ image = { version = "0.25.10", default-features = false, features = ["bmp", "gif
 imageproc = { version = "0.27.0", default-features = false, features = ["rayon"] }
 indexmap = "2.14.2"
 jiff = "0.2.38"
-kamadak-exif = "0.6.1"
 keepass = "0.17.0"
 lsp-server = "0.10.0"
 ox = { path = "crates/ox" }
+ox-library = { path = "crates/ox-library" }
 ox-lsp = { path = "crates/ox-lsp" }
 ox-perf = { path = "crates/ox-perf" }
 oxmacs-core = { path = "crates/oxmacs-core" }

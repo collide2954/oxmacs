@@ -7,12 +7,25 @@ use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::library::collections;
-use crate::library::crypto::{below, random_bits};
 use crate::value::Value;
 use crate::value::number::{Number, shrink, to_float};
 use crate::value::print;
 
 const MODULE: &str = "ox/math";
+
+fn random_bits() -> Result<u64, Error> {
+    getrandom::u64().map_err(|_| Error::new("The system has no random numbers to give"))
+}
+
+fn below(bound: u64) -> Result<u64, Error> {
+    let limit = u64::MAX - u64::MAX % bound;
+    loop {
+        let drawn = random_bits()?;
+        if drawn < limit {
+            return Ok(drawn % bound);
+        }
+    }
+}
 
 fn float(heap: &Heap, name: &str, value: Value) -> Result<f64, Error> {
     Ok(Number::of(heap, name, value)?.float())

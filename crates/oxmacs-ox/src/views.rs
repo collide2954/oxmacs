@@ -21,7 +21,7 @@ pub enum Press {
 }
 
 #[derive(Debug, Clone)]
-pub struct Picture(pub Arc<ox::image::Image>);
+pub struct Picture(pub Arc<ox_library::image::Image>);
 
 impl Picture {
     pub fn key(&self) -> usize {
@@ -321,7 +321,7 @@ fn button(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 fn image(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
-    let picture = ox::image::image_of(heap, arguments[0])
+    let picture = ox_library::image::image_of(heap, arguments[0])
         .ok_or_else(|| wrong(heap, "image", "an image", arguments[0]))?;
     let (found, rest) = options(
         heap,

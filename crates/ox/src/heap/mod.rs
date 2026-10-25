@@ -500,7 +500,7 @@ impl Heap {
         self.promises.get(reference(value, Kind::Promise)?).copied()
     }
 
-    pub(crate) fn channel(&mut self, channel: Arc<Channel>) -> Result<Value, HeapFull> {
+    pub fn channel(&mut self, channel: Arc<Channel>) -> Result<Value, HeapFull> {
         let index = self.channels.alloc(channel)?;
         Ok(Value::Ref(Ref {
             kind: Kind::Channel,

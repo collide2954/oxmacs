@@ -5,10 +5,10 @@ use imageproc::contrast::otsu_level;
 use rayon::prelude::*;
 
 use super::{Image, MODULE, Options, colors, later, number, wanted};
-use crate::error::{Error, ErrorKind};
-use crate::heap::Heap;
-use crate::isolate::Isolate;
-use crate::value::{Value, print};
+use ox::Isolate;
+use ox::error::{Error, ErrorKind};
+use ox::heap::Heap;
+use ox::value::{Value, print};
 
 type Table = [u8; 256];
 type Matrix = [[f32; 3]; 3];

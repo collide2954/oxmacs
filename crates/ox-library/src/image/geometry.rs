@@ -3,10 +3,10 @@ use image::{Rgba, RgbaImage};
 use imageproc::geometric_transformations::{Border, Interpolation, Projection, warp_into};
 
 use super::{MODULE, Options, colors, later, number, room, roomy, size, wanted};
-use crate::error::{Error, ErrorKind};
-use crate::heap::Heap;
-use crate::isolate::Isolate;
-use crate::value::{Value, print};
+use ox::Isolate;
+use ox::error::{Error, ErrorKind};
+use ox::heap::Heap;
+use ox::value::{Value, print};
 
 const CLEAR: Rgba<u8> = Rgba([0, 0, 0, 0]);
 
