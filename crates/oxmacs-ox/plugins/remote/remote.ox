@@ -2,7 +2,8 @@
   (import (ox string) (ox file) (ox path) (ox process)
           (remote hosts :as hosts)
           (remote shell :as shell)
-          (remote ops :as ops)))
+          (remote ops :as ops)
+          (customize save :as save)))
 
 (def hosts-buffer "*Remote*")
 (def output-buffer "*remote output*")
@@ -264,13 +265,10 @@
                    user (string/trim (await (prompt "User (optional): ")))
                    host (merge {name: name protocol: (keyword protocol) address: address}
                                (if (= user "") {} {user: user}))
-                   others (vec (remove (fn [known] (= known.name name)) (or (plugin-setting 'remote :hosts) [])))
-                   init (path/join (oxmacs-home) "init.ox")
-                   old (if (await (file/exists? init)) (await (file/read init)) "")]
+                   others (vec (remove (fn [known] (= known.name name)) (or (plugin-setting 'remote :hosts) [])))]
                (when (string/blank? name)
                  (raise (error "A host needs a name")))
-               (await (file/write init (str old (if (or (= old "") (string/ends-with? old "\n")) "" "\n")
-                                            "(use-plugin remote :config {{hosts: " (pr-str (conj others host)) "})\n")))
-               (configure-plugin 'remote {hosts: (conj others host)})
-               (message (str "Saved " name " in init.ox"))
+               (message (if (save/plugin-setting! 'remote :hosts (conj others host))
+                          (str "Saved " name " in custom.ox, but init.ox sets the remote hosts too and wins; move them out of init.ox")
+                          (str "Saved " name " in custom.ox")))
                (run-command 'remote)))))

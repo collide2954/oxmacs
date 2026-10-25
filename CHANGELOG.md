@@ -13,7 +13,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - A command run with `!` in the remote file browser that reads its input, such as `cat`, gets none and finishes, instead of hanging the host's connection and swallowing the commands after it.
 - Files read over sftp each pass through a file of their own, removed once read, so two reads at once no longer overwrite each other.
 - The dnf repository on GitHub Pages is served: Pages was never turned on, so `oxmacs.repo` and `oxmacs-nightly.repo` were not found. Each publish now replaces the site with a single commit instead of keeping every old RPM in the repository's history.
-- Releases carry the Fedora RPMs again; 0.14.0's were attached by hand.
+- Releases carry the Fedora RPMs, as the README says; 0.14.0's were attached by hand.
+- `M-x remote-add-host` saves the hosts in `custom.ox`, as `M-x irc-setup` saves networks, instead of adding another `use-plugin` form to the end of `init.ox` each time.
 
 ### Security
 

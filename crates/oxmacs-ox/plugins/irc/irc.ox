@@ -1,12 +1,11 @@
 (module
-  (import (ox string) (ox file) (ox path) (ox http) (ox regex)
+  (import (ox string) (ox http) (ox regex)
           (irc protocol :as protocol)
           (irc format :as format)
           (irc client :as client)
           (irc logs :as logs)
           (vault store :as vault)
-          (customize form :as form)
-          (customize written :as written)))
+          (customize save :as save)))
 
 (def nicks-buffer "*irc nicks*")
 (def search-buffer "*irc search*")
@@ -50,23 +49,6 @@
                  (switch-to-buffer (client/server-buffer first-one.name))
                  (connect-all!))))))
 
-(def (networks-entry? entry)
-  (and (= entry.plugin "irc") (= entry.key :networks)))
-
-(def (save-networks! all)
-  (configure-plugin 'irc {networks: all})
-  (let [file (path/join (oxmacs-home) "custom.ox")
-        found (form/entries (settings-schema) (settings) (saved-settings) (custom-settings) (plugin-settings))
-        unsaved (some (fn [entry] (and entry.changed (not (networks-entry? entry)))) found)
-        mine (find networks-entry? found)
-        overridden (not= mine.saved mine.custom)
-        entries (map (fn [entry] (assoc entry :changed (networks-entry? entry))) found)]
-    (await (file/make-dir (path/parent file)))
-    (await (file/write file (written/text entries)))
-    (unless (or unsaved overridden)
-      (reload-init))
-    overridden))
-
 (defcommand irc-setup "Add an IRC network to your settings"
   (quietly (fn []
              (let [name (string/trim (await (prompt "Network name: " :initial "Libera")))
@@ -92,7 +74,7 @@
                  (raise (error "A network needs a nick")))
                (when (nil? (oxmacs-home))
                  (raise (error "There is no oxmacs home folder to save the network in")))
-               (message (if (save-networks! (conj others config))
+               (message (if (save/plugin-setting! 'irc :networks (conj others config))
                           (str "Saved " name " in custom.ox, but init.ox sets the IRC networks too and wins; move them out of init.ox")
                           (str "Saved " name " in custom.ox")))
                (when (await (yes-or-no (str "Connect to " name " now? ")))

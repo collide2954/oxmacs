@@ -134,6 +134,41 @@ fn listings_paths_and_quotes_are_understood() {
 }
 
 #[test]
+fn saved_hosts_go_to_custom_ox_once_and_leave_init_ox_alone() {
+    let (home, mut editor, mut ox) = started(";; mine\n");
+    for (name, address) in [("web", "10.0.0.5"), ("db", "10.0.0.6")] {
+        run(&mut editor, &mut ox, "remote-add-host");
+        answer(&mut editor, &mut ox, name);
+        answer(&mut editor, &mut ox, "ssh");
+        answer(&mut editor, &mut ox, address);
+        answer(&mut editor, &mut ox, "ana");
+    }
+
+    assert_eq!(
+        fs::read_to_string(home.path().join("init.ox")).unwrap(),
+        ";; mine\n"
+    );
+    let custom = fs::read_to_string(home.path().join("custom.ox")).unwrap();
+    assert_eq!(
+        custom.matches("(configure-plugin 'remote").count(),
+        1,
+        "{custom}"
+    );
+    assert!(
+        custom.contains(r#""web""#) && custom.contains(r#""db""#),
+        "{custom}"
+    );
+    assert_eq!(
+        eval(
+            &mut editor,
+            &mut ox,
+            "(map :name (plugin-setting 'remote :hosts))"
+        ),
+        r#"["web" "db"]"#
+    );
+}
+
+#[test]
 fn every_sftp_transfer_gets_a_file_of_its_own() {
     let (home, mut editor, mut ox) = started("");
 

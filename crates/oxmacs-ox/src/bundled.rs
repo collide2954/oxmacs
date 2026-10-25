@@ -165,6 +165,7 @@ const CUSTOMIZE: Bundle = Bundle {
             "written.ox",
             include_str!("../plugins/customize/written.ox"),
         ),
+        ("save.ox", include_str!("../plugins/customize/save.ox")),
     ],
 };
 
