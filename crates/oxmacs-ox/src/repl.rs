@@ -18,6 +18,7 @@ use oxmacs_core::theme::Highlight;
 use crate::{Ox, flashes, help, log, ox_mode, plugins, stacktrace, xref};
 
 pub const REPL: &str = "*ox repl*";
+pub const TESTS: &str = "*ox tests*";
 const PROMPT: &str = "ox> ";
 const GREETING: &str =
     "Ox. Type an expression and press RET; M-p and M-n step through what you typed.\n";
@@ -30,6 +31,7 @@ enum Request {
     EvalBuffer,
     LoadFile,
     Interrupt,
+    Test,
     Doc,
     Complete(bool),
     IndentOrComplete,
@@ -305,7 +307,7 @@ fn looking_up() -> [Spec; 5] {
     ]
 }
 
-fn evaluating() -> [Spec; 5] {
+fn evaluating() -> [Spec; 6] {
     [
         (
             "ox-eval-last-form",
@@ -341,6 +343,13 @@ fn evaluating() -> [Spec; 5] {
             Home::Mode,
             Request::Interrupt,
             &[(Home::Mode, "C-c C-c")],
+        ),
+        (
+            "ox-test",
+            "Run the tests in this Ox buffer and list how they went",
+            Home::Mode,
+            Request::Test,
+            &[(Home::Mode, "C-c C-t")],
         ),
     ]
 }
@@ -448,6 +457,57 @@ fn open_repl(editor: &mut Editor) {
     }
 }
 
+fn test_lines(editor: &Editor) -> Vec<String> {
+    let name = source_name(editor);
+    let source = editor.buffer().contents();
+    let path = editor.buffer().file().map(|file| file.path.clone());
+    let mut isolate = match &path {
+        Some(path) if !oxmacs_api::editor_code(path) => ox_library::isolate(),
+        _ => oxmacs_api::checking_isolate(),
+    };
+    for root in path
+        .as_deref()
+        .map(oxmacs_api::check_roots)
+        .unwrap_or_default()
+    {
+        isolate.add_root(root);
+    }
+    if let Err(error) = isolate.eval_named(&name, &source) {
+        return vec![format!("FAIL  {name}"), format!("      {}", error.message)];
+    }
+    let outcomes = ox::testing::run_registered(&mut isolate, &name);
+    let failed = outcomes
+        .iter()
+        .filter(|outcome| outcome.error.is_some())
+        .count();
+    let mut lines = Vec::new();
+    for outcome in &outcomes {
+        match &outcome.error {
+            None => lines.push(format!("ok    {}", outcome.name)),
+            Some(error) => {
+                lines.push(format!("FAIL  {}", outcome.name));
+                lines.extend(error.message.lines().map(|line| format!("      {line}")));
+            }
+        }
+    }
+    lines.push(match (outcomes.len(), failed) {
+        (0, _) => format!("No tests in {name}"),
+        (1, 0) => "1 test passed".to_owned(),
+        (total, 0) => format!("{total} tests passed"),
+        (total, failed) => format!("{total} tests, {failed} failed"),
+    });
+    lines
+}
+
+fn run_tests(editor: &mut Editor) {
+    let lines = test_lines(editor);
+    let origin = editor.buffer().id();
+    if let Ok(id) = editor.show_text(TESTS, &lines.join("\n"), None, true) {
+        editor.show_buffer(origin);
+        editor.display_buffer(id, None, false);
+    }
+}
+
 pub(crate) fn run_in_repl(editor: &mut Editor, code: String) {
     queue(editor, Request::Run(code));
 }
@@ -496,6 +556,7 @@ impl Ox {
                 Request::EvalBuffer => self.eval_buffer(editor),
                 Request::LoadFile => self.load_file(editor),
                 Request::Interrupt => self.interrupt(editor),
+                Request::Test => run_tests(editor),
                 Request::Doc => help::show_doc(&self.isolate, editor, self.home.as_deref()),
                 Request::Complete(explicit) => {
                     help::complete(&self.isolate, editor, self.home.as_deref(), explicit);
@@ -858,6 +919,25 @@ mod tests {
         let end = editor.buffer().len_chars();
         editor.buffer_mut().set_point(end);
         (editor, ox)
+    }
+
+    #[test]
+    fn c_c_c_t_runs_the_files_tests_and_lists_how_they_went() {
+        let home = home_with(&[(
+            "math.ox",
+            "(def (add a b) (+ a b))\n(test \"adds\" (expect (= (add 1 2) 3)))\n(test \"breaks\" (expect (= (add 1 1) 3)))\n",
+        )]);
+        let (mut editor, mut ox) = visiting(home.path(), "math.ox");
+
+        press(&mut editor, &mut ox, "C-c C-t");
+
+        let id = editor.buffer_named(super::TESTS).expect("a tests buffer");
+        let shown = editor.buffer_by_id(id).unwrap().contents();
+        assert!(shown.contains("ok    adds"), "{shown}");
+        assert!(shown.contains("FAIL  breaks"), "{shown}");
+        assert!(shown.ends_with("2 tests, 1 failed"), "{shown}");
+        assert_eq!(editor.buffer().name(), "math.ox");
+        assert!(editor.buffer_shown(id));
     }
 
     fn rewrite(editor: &mut Editor, ox: &mut Ox, text: &str) {

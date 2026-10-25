@@ -27,6 +27,7 @@ Open a file ending in `.ox` with `C-x C-f`, or try code in `*scratch*`, which st
 - `C-c C-d` shows the documentation of the name at point, `M-.` jumps to its definition, `M-,` comes back and `M-?` lists its uses.
 - `TAB` indents, or completes the name you started typing.
 - `C-c C-z` opens the REPL, and `C-c C-c` stops an evaluation that runs too long.
+- `C-c C-t` runs the buffer's `(test …)` blocks and lists how each went in `*ox tests*`.
 
 oxmacs checks the file once you pause typing, marking unknown names and wrong numbers of arguments, and formats it when you save.
 

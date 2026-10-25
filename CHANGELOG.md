@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `C-c C-t` (`M-x ox-test`) in Ox buffers runs the buffer's tests, unsaved edits included, as `ox test` would, and lists how each went in `*ox tests*` beside it.
 - `oxmacs --help` and `oxmacs --version` print to the terminal they ran from, Windows included, and `oxmacs -q` or `--no-init` starts without running `custom.ox` and `init.ox`. Other options are refused instead of opening a buffer named after them, and `--` still makes what follows file names.
 - Plugins move the buffers visiting a file or folder they renamed with `(move-visited-files from to)`.
 - The downloads and the Fedora package include `THIRD-PARTY-LICENSES.html`, the licenses of the crates oxmacs and ox are built from, beside the JetBrains Mono font's license and the highlight queries' notices.
