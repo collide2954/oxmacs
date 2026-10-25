@@ -19,7 +19,17 @@ pub const BUNDLED: &[Bundle] = &[
     ZAP,
     KEYCAST,
     LANGUAGES,
+    TABS,
 ];
+
+const TABS: Bundle = Bundle {
+    name: "tabs",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/tabs/plugin.ox")),
+        ("tabs.ox", include_str!("../plugins/tabs/tabs.ox")),
+        ("strip.ox", include_str!("../plugins/tabs/strip.ox")),
+    ],
+};
 
 const LANGUAGES: Bundle = Bundle {
     name: "languages",
@@ -322,3 +332,6 @@ mod dired;
 
 #[cfg(test)]
 mod languages;
+
+#[cfg(test)]
+mod tabs;
