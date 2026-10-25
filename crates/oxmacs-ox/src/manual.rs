@@ -6,7 +6,7 @@ use ox::value::{Value, print};
 use ox::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 
-use crate::{DOCS, PRELUDE, mode, tools, views};
+use crate::{DOCS, PRELUDE, ox_mode, repl, views};
 
 #[derive(Debug, Default)]
 struct Asked(Vec<Hold>);
@@ -56,7 +56,7 @@ fn highlight(heap: &mut Heap, lines: Value) -> Result<Value, Error> {
         .map(|line| print::display(heap, line))
         .collect();
     let borrowed: Vec<&str> = lines.iter().map(String::as_str).collect();
-    let spans = mode::highlight_lines(&borrowed);
+    let spans = ox_mode::highlight_lines(&borrowed);
     let rows = lines
         .iter()
         .zip(&spans)
@@ -81,7 +81,7 @@ pub fn install(isolate: &mut Isolate) {
         highlight(heap, arguments[0])
     });
     isolate.define_host_native::<Editor>("run-in-repl", 1, Some(1), |heap, editor, arguments| {
-        tools::run_in_repl(editor, print::display(heap, arguments[0]));
+        repl::run_in_repl(editor, print::display(heap, arguments[0]));
         Ok(Value::Nil)
     });
 }
@@ -92,7 +92,7 @@ fn editor_names() -> HashSet<String> {
         .filter_map(|line| line.strip_prefix('('))
         .filter_map(|rest| rest.split([' ', ')']).next())
         .map(str::to_owned);
-    let defined = ox::names::definitions_with(PRELUDE, &mode::EDITOR_FORMS)
+    let defined = ox::names::definitions_with(PRELUDE, &ox_mode::EDITOR_FORMS)
         .into_iter()
         .map(|definition| definition.name);
     documented.chain(defined).collect()
@@ -143,8 +143,8 @@ mod tests {
     use oxmacs_core::editor::Editor;
 
     use crate::Ox;
+    use crate::repl::REPL;
     use crate::testing::{home_with, settle};
-    use crate::tools::REPL;
 
     fn started() -> (tempfile::TempDir, Editor, Ox) {
         let home = home_with(&[]);

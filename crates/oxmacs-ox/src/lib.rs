@@ -14,13 +14,14 @@ mod keystrokes;
 mod layout;
 mod log;
 mod manual;
-mod mode;
 mod modes;
 mod natives;
 pub mod overlays;
+mod ox_mode;
 mod plugins;
 mod processes;
 mod prompts;
+mod repl;
 mod servers;
 mod settings;
 pub mod shapes;
@@ -28,7 +29,6 @@ mod stacktrace;
 pub mod takeover;
 #[cfg(test)]
 mod testing;
-mod tools;
 mod transients;
 pub mod views;
 mod xref;
@@ -118,7 +118,7 @@ pub struct Ox {
     bundled: &'static [Bundle],
     home: Option<PathBuf>,
     answers: prompts::Inbox,
-    evaluation: tools::Evaluation,
+    evaluation: repl::Evaluation,
     checker: checker::Checker,
     help: help::Help,
 }
@@ -141,7 +141,7 @@ impl Ox {
             bundled,
             home: None,
             answers,
-            evaluation: tools::Evaluation::default(),
+            evaluation: repl::Evaluation::default(),
             checker: checker::Checker::default(),
             help: help::Help::default(),
         }
@@ -159,7 +159,7 @@ impl Ox {
         self.home = home.map(Path::to_path_buf);
         editor.let_host_play_macros();
         editor.set_init_path(home.map(|home| home.join("init.ox")));
-        tools::install(editor);
+        repl::install(editor);
         hooks::watch(editor);
         plugins::discover(&mut self.isolate, editor, self.bundled, home);
         if init {
@@ -286,7 +286,7 @@ impl Ox {
         self.timed("views", refreshing);
         help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         self.timed("tick", started);
-        if tools::requests_waiting(editor) {
+        if repl::requests_waiting(editor) {
             return Pace::Running;
         }
         self.pace()

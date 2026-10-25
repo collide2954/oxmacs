@@ -8,7 +8,7 @@ use oxmacs_core::config::schema::{self, Kind, SETTINGS, Setting};
 use oxmacs_core::editor::Editor;
 use serde_json::Value as Json;
 
-use crate::tools;
+use crate::repl;
 
 fn made(made: Result<Value, impl ToString>) -> Result<Value, Error> {
     made.map_err(|full| Error::new(full.to_string()))
@@ -218,7 +218,7 @@ pub fn install(isolate: &mut Isolate) {
         custom(heap, editor)
     });
     isolate.define_host_native::<Editor>("reload-init", 0, Some(0), |_, editor, _| {
-        tools::reload_init(editor);
+        repl::reload_init(editor);
         Ok(Value::Nil)
     });
     isolate.define_host_native::<Editor>("oxmacs-home", 0, Some(0), |heap, editor, _| {

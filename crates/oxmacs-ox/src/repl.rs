@@ -15,7 +15,7 @@ use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
-use crate::{Ox, flashes, help, log, mode, plugins, stacktrace, xref};
+use crate::{Ox, flashes, help, log, ox_mode, plugins, stacktrace, xref};
 
 pub const REPL: &str = "*ox repl*";
 const PROMPT: &str = "ox> ";
@@ -139,7 +139,7 @@ fn last_expression(text: &str) -> Option<Range<usize>> {
                     last = Some(prefixed(text, open)..at + 1);
                 }
             }
-            _ if mode::delimits(character) => {}
+            _ if ox_mode::delimits(character) => {}
             _ => {
                 let mut end = at + character.len_utf8();
                 if character == '\\'
@@ -148,7 +148,7 @@ fn last_expression(text: &str) -> Option<Range<usize>> {
                     end = next_at + next.len_utf8();
                 }
                 while let Some((next_at, next)) = chars.peek().copied() {
-                    if mode::delimits(next) {
+                    if ox_mode::delimits(next) {
                         break;
                     }
                     end = next_at + next.len_utf8();
@@ -385,7 +385,7 @@ pub fn install(editor: &mut Editor) {
         waiting: Vec::new(),
         repl: Some(repl_scope),
     });
-    mode::install(editor, mode_scope);
+    ox_mode::install(editor, mode_scope);
     let scope = |home: Home| match home {
         Home::Mode => mode_scope,
         Home::Repl => repl_scope,
@@ -462,7 +462,7 @@ fn indent_or_complete(editor: &mut Editor) {
     let after_name = buffer
         .chars_before(buffer.point())
         .next()
-        .is_some_and(|character| !mode::delimits(character) && !"'`~@#".contains(character));
+        .is_some_and(|character| !ox_mode::delimits(character) && !"'`~@#".contains(character));
     if unchanged && after_name && !selecting {
         queue(editor, Request::Complete(true));
     }

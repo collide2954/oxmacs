@@ -10,7 +10,7 @@ use oxmacs_core::editor::Editor;
 use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
 
-use crate::{mode, plugins, stacktrace, tools};
+use crate::{ox_mode, plugins, repl, stacktrace};
 
 pub const DOC: &str = "*ox doc*";
 pub(crate) const SIGNATURE_PAUSE: Duration = Duration::from_millis(400);
@@ -42,13 +42,13 @@ impl PluginBuffer for DocView {
 struct DocScope(ScopeId);
 
 pub(crate) fn in_ox(editor: &Editor) -> bool {
-    editor.language() == Some(mode::language()) || tools::in_repl(editor)
+    editor.language() == Some(ox_mode::language()) || repl::in_repl(editor)
 }
 
 pub(crate) fn module(editor: &Editor, home: Option<&Path>) -> String {
     let path = editor.buffer().file().map(|file| file.path.clone());
     path.zip(home)
-        .and_then(|(path, home)| tools::plugin_file(home, &path))
+        .and_then(|(path, home)| repl::plugin_file(home, &path))
         .map_or_else(
             || "user".to_owned(),
             |(plugin, file)| plugins::module_of(editor, &plugin, &file),
@@ -152,7 +152,7 @@ fn typed_name(editor: &Editor) -> (usize, String) {
     let point = buffer.point();
     let typed: String = buffer
         .chars_before(point)
-        .take_while(|character| !mode::delimits(*character) && !"'`~@#".contains(*character))
+        .take_while(|character| !ox_mode::delimits(*character) && !"'`~@#".contains(*character))
         .collect();
     let typed: String = typed.chars().rev().collect();
     (point - typed.chars().count(), typed)

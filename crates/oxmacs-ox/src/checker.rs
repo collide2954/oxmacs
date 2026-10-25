@@ -148,7 +148,7 @@ impl Checker {
                     .map(|diagnostic| found(&done.path, &done.source, diagnostic))
                     .collect();
                 editor.replace_diagnostics(&done.path, findings);
-                crate::mode::remember_forms(editor, &done.path, done.forms);
+                crate::ox_mode::remember_forms(editor, &done.path, done.forms);
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {

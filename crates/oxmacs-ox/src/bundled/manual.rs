@@ -6,8 +6,8 @@ use oxmacs_core::theme::Highlight;
 
 use crate::Ox;
 use crate::log::LOG;
+use crate::repl::REPL;
 use crate::testing::{home_with, press, settle, typed};
-use crate::tools::REPL;
 
 const MANUAL: &str = "*Ox manual*";
 
