@@ -7,7 +7,7 @@ use ox::{Error, Isolate};
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
-use oxmacs_core::text::BufferId;
+use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
 use crate::log;
@@ -129,10 +129,29 @@ pub fn wakes(editor: &Editor) -> Vec<String> {
     found
 }
 
+#[derive(Debug)]
+struct Cached {
+    revision: u64,
+    lines: Vec<String>,
+    spans: Vec<Spans>,
+    states: Option<Hold>,
+}
+
 #[derive(Debug, Default)]
 struct Modes {
     defined: Vec<Mode>,
-    cache: HashMap<BufferId, (u64, Vec<Spans>)>,
+    cache: HashMap<BufferId, Cached>,
+}
+
+impl Modes {
+    fn forget(&mut self, heap: &mut Heap, keep: impl Fn(&BufferId) -> bool) {
+        let gone: Vec<BufferId> = self.cache.keys().filter(|id| !keep(id)).copied().collect();
+        for id in gone {
+            if let Some(states) = self.cache.remove(&id).and_then(|cached| cached.states) {
+                heap.release(states);
+            }
+        }
+    }
 }
 
 fn modes(editor: &mut Editor) -> Option<&mut Modes> {
@@ -224,7 +243,7 @@ fn cached(editor: &Editor, id: BufferId, line: usize) -> Spans {
     editor
         .plugin_state::<Modes>()
         .and_then(|modes| modes.cache.get(&id))
-        .and_then(|(_, lines)| lines.get(line))
+        .and_then(|cached| cached.spans.get(line))
         .cloned()
         .unwrap_or_default()
 }
@@ -268,7 +287,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     let Some(modes) = modes(editor) else {
         return Ok(Value::Nil);
     };
-    modes.cache.clear();
+    modes.forget(heap, |_| false);
     match modes
         .defined
         .iter_mut()
@@ -331,26 +350,89 @@ fn spans(heap: &Heap, title: &str, value: Value) -> Result<Spans, Error> {
         .collect()
 }
 
+fn takes_state(heap: &Heap, function: Value) -> bool {
+    if let Some(closure) = heap.closure_of(function) {
+        let arity = &closure.code.arity;
+        return arity.required <= 3 && (arity.rest || arity.required + arity.optional >= 3);
+    }
+    heap.native_of(function)
+        .is_some_and(|native| native.least <= 3 && native.most.is_none_or(|most| most >= 3))
+}
+
+fn field(heap: &Heap, map: Value, key: &str) -> Option<Value> {
+    heap.entries(map)?
+        .into_iter()
+        .find(|(found, _)| *found == Value::keyword(key))
+        .map(|(_, value)| value)
+}
+
+struct Highlighted {
+    spans: Vec<Spans>,
+    states: Vec<Hold>,
+}
+
 fn highlight_lines(
     isolate: &mut Isolate,
     editor: &mut Editor,
     title: &str,
     function: Value,
     lines: &[String],
-) -> Result<Vec<Spans>, Error> {
-    let mut found = Vec::with_capacity(lines.len());
-    for (number, text) in lines.iter().enumerate() {
+    from: usize,
+    mut state: Value,
+) -> Result<Highlighted, Error> {
+    let stateful = takes_state(isolate.heap(), function);
+    let mut found = Highlighted {
+        spans: Vec::with_capacity(lines.len() - from),
+        states: Vec::with_capacity(lines.len() - from),
+    };
+    let outcome = (from..lines.len()).try_for_each(|number| {
         let shown = isolate
             .heap_mut()
-            .string(text)
+            .string(&lines[number])
             .map_err(|full| Error::new(full.to_string()))?;
         let line = Value::Int(i64::try_from(number).unwrap_or(i64::MAX));
+        let arguments = if stateful {
+            vec![line, shown, state]
+        } else {
+            vec![line, shown]
+        };
         let result = isolate.within(crate::QUICK, |isolate| {
-            isolate.call_with(editor, function, &[line, shown])
+            isolate.call_with(editor, function, &arguments)
         })?;
-        found.push(spans(isolate.heap_mut(), title, result)?);
+        let heap = isolate.heap_mut();
+        let (shape, next) = match field(heap, result, "spans") {
+            Some(shape) => (shape, field(heap, result, "state").unwrap_or(Value::Nil)),
+            None => (result, Value::Nil),
+        };
+        found.spans.push(spans(heap, title, shape)?);
+        found.states.push(heap.hold(next));
+        state = next;
+        Ok(())
+    });
+    match outcome {
+        Ok(()) => Ok(found),
+        Err(error) => {
+            for hold in found.states {
+                isolate.release(hold);
+            }
+            Err(error)
+        }
     }
-    Ok(found)
+}
+
+fn stored(isolate: &mut Isolate, old: Option<Hold>, from: usize, fresh: Vec<Hold>) -> Option<Hold> {
+    let mut states: Vec<Value> = old
+        .and_then(|old| isolate.held(old))
+        .and_then(|old| isolate.heap().elements(old))
+        .map(|old| old.into_iter().take(from).collect())
+        .unwrap_or_default();
+    states.extend(fresh.iter().filter_map(|hold| isolate.held(*hold)));
+    let vector = ox::build::make_vector(isolate.heap_mut(), &states).ok();
+    let kept = vector.map(|vector| isolate.hold(vector));
+    for hold in fresh.into_iter().chain(old) {
+        isolate.release(hold);
+    }
+    kept
 }
 
 pub fn highlight(isolate: &mut Isolate, editor: &mut Editor) {
@@ -372,37 +454,90 @@ pub fn highlight(isolate: &mut Isolate, editor: &mut Editor) {
         else {
             continue;
         };
-        let Some(buffer) = editor.buffer_by_id(*id) else {
+        let Some(revision) = editor.buffer_by_id(*id).map(Buffer::revision) else {
             continue;
         };
-        let revision = buffer.revision();
         let fresh = editor
             .plugin_state::<Modes>()
             .and_then(|modes| modes.cache.get(id))
-            .is_some_and(|(seen, _)| *seen == revision);
-        if !fresh {
-            let lines: Vec<String> = (0..buffer.len_lines())
-                .map(|line| buffer.line_text(line).into_owned())
-                .collect();
-            work.push((*id, *language, *hold, revision, lines));
+            .is_some_and(|cached| cached.revision == revision);
+        if fresh {
+            continue;
         }
+        let old = editor
+            .plugin_state_mut::<Modes>()
+            .and_then(|modes| modes.cache.remove(id));
+        let lines: Vec<String> = editor
+            .buffer_by_id(*id)
+            .map(|buffer| {
+                (0..buffer.len_lines())
+                    .map(|line| buffer.line_text(line).into_owned())
+                    .collect()
+            })
+            .unwrap_or_default();
+        work.push((*id, *language, *hold, revision, lines, old));
     }
-    for (id, language, hold, revision, lines) in work {
+    for (id, language, hold, revision, lines, old) in work {
         let Some(function) = isolate.held(hold) else {
             continue;
         };
-        let found = highlight_lines(isolate, editor, language.name(), function, &lines)
-            .unwrap_or_else(|error| {
+        let from = old.as_ref().map_or(0, |old| {
+            old.lines
+                .iter()
+                .zip(&lines)
+                .take_while(|(was, now)| was == now)
+                .count()
+                .min(old.spans.len())
+        });
+        let incoming = old
+            .as_ref()
+            .and_then(|old| old.states)
+            .filter(|_| from > 0)
+            .and_then(|states| isolate.held(states))
+            .and_then(|states| isolate.heap().elements(states))
+            .and_then(|states| states.get(from - 1).copied())
+            .unwrap_or(Value::Nil);
+        let (mut spans, old_states) = old.map_or((Vec::new(), None), |old| (old.spans, old.states));
+        spans.truncate(from);
+        let found = highlight_lines(
+            isolate,
+            editor,
+            language.name(),
+            function,
+            &lines,
+            from,
+            incoming,
+        );
+        let states = match found {
+            Ok(found) => {
+                spans.extend(found.spans);
+                stored(isolate, old_states, from, found.states)
+            }
+            Err(error) => {
                 log::report(editor, &error, None);
-                vec![Vec::new(); lines.len()]
-            });
+                spans.resize(lines.len(), Vec::new());
+                if let Some(old) = old_states {
+                    isolate.release(old);
+                }
+                None
+            }
+        };
         if let Some(modes) = modes(editor) {
-            modes.cache.insert(id, (revision, found));
+            modes.cache.insert(
+                id,
+                Cached {
+                    revision,
+                    lines,
+                    spans,
+                    states,
+                },
+            );
         }
     }
     let alive: HashSet<BufferId> = ids.into_iter().collect();
+    let heap = isolate.heap_mut();
     if let Some(modes) = modes(editor) {
-        modes.cache.retain(|id, _| alive.contains(id));
+        modes.forget(heap, |id| alive.contains(id));
     }
 }
 #[cfg(test)]
@@ -442,6 +577,39 @@ mod tests {
 
         press(&mut editor, &mut ox, "C-c C-c");
         assert_eq!(ox.eval(&mut editor, "@ran").unwrap(), "1");
+    }
+
+    const BLOCKS: &str = r##"(module (import (ox string)))
+        (defmode blocks "Blocks" :extensions ["blk"]
+          :highlight (fn [line text open]
+                       (let [inside (or open (string/starts-with? text "<<"))]
+                         {spans: (if inside [[0 (string/length text) :string]] [])
+                          state: (and inside (not (string/ends-with? text ">>")))})))"##;
+
+    #[test]
+    fn highlighters_carry_state_from_one_line_to_the_next() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.blk");
+        std::fs::write(&path, "plain\n<< one\ntwo\nthree >>\nafter").unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        ox.eval(&mut editor, BLOCKS).unwrap();
+
+        editor.open_file(&path);
+        settle(&mut editor, &mut ox);
+
+        let styled = |editor: &Editor| -> Vec<bool> {
+            (0..5)
+                .map(|line| !editor.line_style(line).spans.is_empty())
+                .collect()
+        };
+        assert_eq!(styled(&editor), [false, true, true, true, false]);
+
+        press(&mut editor, &mut ox, "C-n C-a C-d C-d");
+        assert_eq!(styled(&editor), [false, false, false, false, false]);
+
+        press(&mut editor, &mut ox, "C-n < <");
+        assert_eq!(styled(&editor), [false, false, true, true, false]);
     }
 
     const NOTES_PLUGIN: crate::Bundle = crate::Bundle {

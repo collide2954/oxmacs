@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- A `defmode` highlighter that takes a third argument gets the state it returned for the line before, by returning `{spans: [...] state: x}`, so highlighting can carry strings, comments and blocks across lines; after an edit, only the lines from the first changed one are highlighted again.
 - `C-c C-t` (`M-x ox-test`) in Ox buffers runs the buffer's tests, unsaved edits included, as `ox test` would, and lists how each went in `*ox tests*` beside it.
 - `oxmacs --help` and `oxmacs --version` print to the terminal they ran from, Windows included, and `oxmacs -q` or `--no-init` starts without running `custom.ox` and `init.ox`. Other options are refused instead of opening a buffer named after them, and `--` still makes what follows file names.
 - Plugins move the buffers visiting a file or folder they renamed with `(move-visited-files from to)`.
