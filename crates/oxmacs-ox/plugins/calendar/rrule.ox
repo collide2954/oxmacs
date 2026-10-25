@@ -114,3 +114,22 @@
                            [made found stopped] (reduce step [made found false] starts)]
                        (if stopped found (walk (inc k) made found)))))]
         (walk first-k 0 [])))))
+
+(def sample-standup
+  "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:standup@example.com\r\nDTSTART;TZID=Europe/Paris:20261019T090000\r\nDTEND;TZID=Europe/Paris:20261019T091500\r\nRRULE:FREQ=WEEKLY;BYDAY=MO,WE\r\nEXDATE;TZID=Europe/Paris:20261021T090000\r\nSUMMARY:Standup\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+
+(test "repeating events follow their rules across daylight saving"
+  (let [standup (ics/event-of (first (ics/components (ics/parse sample-standup) "VEVENT")))
+        starts (fn [event from to]
+                 (map (fn [found] (time/format found.start "%a %d %H:%M" :zone "UTC")) (expand event from to)))
+        from (time/instant "2026-10-18T00:00:00Z")
+        to (time/instant "2026-11-01T00:00:00Z")]
+    (expect (= (starts standup from to) ["Mon 19 07:00" "Mon 26 08:00" "Wed 28 08:00"]))
+    (expect (= (count (starts (assoc standup :rrule "FREQ=DAILY;COUNT=3" :exdates []) from to)) 3))
+    (expect (= (starts (merge standup {rrule: "FREQ=MONTHLY;BYDAY=-1FR" exdates: []}) from (time/instant "2027-01-01T00:00:00Z"))
+               ["Fri 30 08:00" "Fri 27 08:00" "Fri 25 08:00"]))
+    (expect (= (starts (merge standup {start: (time/instant "2026-01-31T09:00:00Z") end: (time/instant "2026-01-31T10:00:00Z")
+                                       zone: "UTC" rrule: "FREQ=MONTHLY" exdates: []})
+                       (time/instant "2026-01-01T00:00:00Z") (time/instant "2026-06-01T00:00:00Z"))
+               ["Sat 31 09:00" "Tue 31 09:00" "Sun 31 09:00"]))
+    (expect (= (starts (assoc standup :rrule "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261020T000000Z") from to) ["Mon 19 07:00"]))))

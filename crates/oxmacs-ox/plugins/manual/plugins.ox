@@ -85,7 +85,7 @@ oxmacs ships these plugins. Those on by default load the first time you use them
 
 ```table
 Plugin       Version  Default  What it does
-calendar     0.2.3    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
+calendar     0.2.4    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
 customize    0.1.3    on       Change the editor's and plugins' settings in a form
 dired        0.2.5    on       List directories and manage their files
 git          0.3.1    opt-in   Git status and staging in the style of Magit

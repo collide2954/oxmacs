@@ -198,3 +198,30 @@
 (def (write-event event)
   "An iCalendar file holding one event."
   (write-calendar [event]))
+
+(def sample-calendar
+  "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:standup@example.com\r\nDTSTART;TZID=Europe/Paris:20261019T090000\r\nDTEND;TZID=Europe/Paris:20261019T091500\r\nRRULE:FREQ=WEEKLY;BYDAY=MO,WE\r\nEXDATE;TZID=Europe/Paris:20261021T090000\r\nSUMMARY:Stand\r\n up\\, daily\r\nLOCATION:Room 1\\; east\r\nDESCRIPTION:Line one\\nLine two\r\nORGANIZER;CN=Bo:mailto:bo@example.com\r\nATTENDEE;CN=Ana;PARTSTAT=NEEDS-ACTION:mailto:ana@example.com\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:trip@example.com\r\nDTSTART;VALUE=DATE:20261023\r\nDTEND;VALUE=DATE:20261025\r\nSUMMARY:Trip\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+
+(test "icalendar files are read with folding, escapes, zones and alarms"
+  (let [[standup trip] (map event-of (components (parse sample-calendar) "VEVENT"))]
+    (expect (= standup.summary "Standup, daily"))
+    (expect (= standup.location "Room 1; east"))
+    (expect (= standup.description "Line one\nLine two"))
+    (expect (= standup.start (time/instant "2026-10-19T07:00:00Z")))
+    (expect (= (- standup.end standup.start) 900000))
+    (expect (= standup.zone "Europe/Paris"))
+    (expect (= standup.rrule "FREQ=WEEKLY;BYDAY=MO,WE"))
+    (expect (= (count standup.exdates) 1))
+    (expect (= standup.alarms [{before: 900000}]))
+    (expect (= standup.organizer.email "bo@example.com"))
+    (expect (= (get (first standup.attendees) :status) "NEEDS-ACTION"))
+    (expect trip.all-day)
+    (expect (= (- trip.end trip.start) (time/days 2)))))
+
+(test "events write back as the same event"
+  (let [events (map event-of (components (parse sample-calendar) "VEVENT"))
+        again (map event-of (components (parse (write-calendar events)) "VEVENT"))
+        fields (fn [event]
+                 (select-keys event [:uid :summary :start :end :all-day :zone :location :description
+                                     :rrule :exdates :alarms :organizer :attendees]))]
+    (expect (= (map fields events) (map fields again)))))
