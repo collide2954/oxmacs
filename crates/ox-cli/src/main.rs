@@ -12,6 +12,8 @@ use ox::value::Value;
 use ox::{Error, Isolate, read};
 use oxmacs_ox::checker;
 
+const TEST_TASKS: std::time::Duration = std::time::Duration::from_secs(10);
+
 #[global_allocator]
 static ALLOCATOR: ox_perf::Counting = ox_perf::Counting;
 
@@ -303,8 +305,19 @@ fn run_file(isolate: &mut Isolate, path: &Path) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let Err(error) = isolate.eval_named(&path.display().to_string(), &source) else {
-        return ExitCode::SUCCESS;
+    let error = match isolate.eval_named(&path.display().to_string(), &source) {
+        Ok(_) => {
+            let unhandled = isolate.finish_tasks(None);
+            for error in &unhandled {
+                eprintln!("{}: {}", place(error, path, &source), error.message);
+            }
+            return if unhandled.is_empty() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            };
+        }
+        Err(error) => error,
     };
     eprintln!("{}: {}", place(&error, path, &source), error.message);
     if error.traceback.len() > 1 {
@@ -376,8 +389,14 @@ fn run_tests(paths: &[PathBuf]) -> ExitCode {
                 continue;
             }
             total += 1;
-            match isolate.call(run, &[]) {
-                Ok(_) => println!("ok    {name}"),
+            let ran = isolate.call(run, &[]).and_then(|_| {
+                match isolate.finish_tasks(Some(TEST_TASKS)).into_iter().next() {
+                    Some(error) => Err(error),
+                    None => Ok(()),
+                }
+            });
+            match ran {
+                Ok(()) => println!("ok    {name}"),
                 Err(error) => {
                     failed += 1;
                     report(&name, &error, &path, &source);

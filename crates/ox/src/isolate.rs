@@ -32,6 +32,8 @@ use crate::vm::routine::{Resumable, Started};
 use crate::vm::{Runtime, Sources};
 
 const LIBRARY_DOCS: &str = include_str!("library/docs.ox");
+const TASK_SLICE: Duration = Duration::from_millis(50);
+const IDLE_POLL: Duration = Duration::from_millis(2);
 
 fn modified(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).and_then(|found| found.modified()).ok()
@@ -413,10 +415,7 @@ impl Isolate {
             .map_err(|error| Error::new(format!("{}: {error}", path.display())))?;
         let result = self.evaluate_module(name, &path.display().to_string(), &source, host);
         if result.is_ok() {
-            self.broken.remove(name);
             self.files.insert(name.to_owned(), (path, changed));
-        } else {
-            self.broken.insert(name.to_owned());
         }
         result
     }
@@ -464,6 +463,11 @@ impl Isolate {
         self.loading.push(name.to_owned());
         let result = self.eval_in(module, file, source, host);
         self.loading.pop();
+        if result.is_ok() {
+            self.broken.remove(name);
+        } else {
+            self.broken.insert(name.to_owned());
+        }
         result.map(|_| module)
     }
 
@@ -538,8 +542,10 @@ impl Isolate {
             .get(&name)
             .copied()
             .filter(|_| !self.loading.contains(&name));
-        let reload =
-            loaded.filter(|_| self.runtime.sandboxed && self.stale(&name, &mut HashSet::new()));
+        let reload = loaded.filter(|_| {
+            self.broken.contains(&name)
+                || (self.runtime.sandboxed && self.stale(&name, &mut HashSet::new()))
+        });
         let id = match loaded {
             Some(id) if reload.is_none() => id,
             _ => {
@@ -767,6 +773,25 @@ impl Isolate {
 
     pub fn runnable(&self) -> usize {
         self.runtime.runnable()
+    }
+
+    pub fn finish_tasks(&mut self, limit: Option<Duration>) -> Vec<Error> {
+        let stop = limit.map(|limit| Instant::now() + limit);
+        let mut unhandled = Vec::new();
+        while self.pending() > 0 && stop.is_none_or(|stop| Instant::now() < stop) {
+            unhandled.extend(self.run(TASK_SLICE).unhandled);
+            if self.runnable() > 0 {
+                continue;
+            }
+            let until = match self.next_wake() {
+                Wake::Never => break,
+                Wake::Soon => Instant::now() + IDLE_POLL,
+                Wake::At(when) => when,
+            };
+            let until = stop.map_or(until, |stop| until.min(stop));
+            std::thread::sleep(until.saturating_duration_since(Instant::now()));
+        }
+        unhandled
     }
 
     pub fn pending(&self) -> usize {

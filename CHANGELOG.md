@@ -6,6 +6,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- `ox FILE` waits for the tasks a file spawns and fails when one raises an error nothing catches, and `ox test` fails a test whose tasks raise, instead of both dropping unfinished tasks and their errors.
+- A module whose loading failed is loaded again, and its error reported again, the next time something imports it, instead of being used half loaded.
 - `worker` loads modules the isolate holds in memory, such as the bundled plugins' modules in oxmacs: `(await (worker 'markdown/render 'inline "a"))` works instead of saying there is no such module.
 - `ox test` works on a plugin folder: it skips the manifest, finds the plugin's modules, runs only the tests each file defines, and lists a file that needs the editor to load as skipped instead of failing it. `ox FILE` and `ox profile` find a plugin's modules too.
 - A `deferror` message sees the defaults of keyword fields: with `(deferror parse-error [line {column 0}] "At {line}:{column}")`, `(parse-error 3)` says `At 3:0` instead of `At 3:`.

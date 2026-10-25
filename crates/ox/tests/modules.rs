@@ -158,6 +158,27 @@ fn a_module_can_be_imported_twice_with_different_options() {
 }
 
 #[test]
+fn a_module_that_failed_to_load_fails_again_on_the_next_import() {
+    let (dir, mut isolate) = with_root(&[("shaky.ox", "(def ok 1)\n(/ 1 0)\n(def later 2)")]);
+
+    for _ in 0..2 {
+        assert_eq!(
+            evaluated(&mut isolate, "(module (import (shaky))) shaky/ok"),
+            "error: Division by zero"
+        );
+    }
+
+    write(dir.path(), "shaky.ox", "(def ok 1)\n(def later 2)");
+    assert_eq!(
+        evaluated(
+            &mut isolate,
+            "(module (import (shaky))) [shaky/ok shaky/later]"
+        ),
+        "[1 2]"
+    );
+}
+
+#[test]
 fn import_cycles_are_named() {
     let (_dir, mut isolate) = with_root(&[
         ("a.ox", "(module (import (b)))"),

@@ -43,6 +43,36 @@ fn files_run_and_print() {
 }
 
 #[test]
+fn files_wait_for_their_tasks_and_fail_when_one_raises() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("tasks.ox");
+    fs::write(
+        &path,
+        "(spawn (do (sleep 30) (println \"late\")))\n(println \"main done\")",
+    )
+    .unwrap();
+
+    let output = ox().arg(&path).output().unwrap();
+
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "main done\nlate\n");
+
+    fs::write(
+        &path,
+        "(spawn (do (sleep 10) (raise (error \"boom in a task\"))))\n(println \"main\")",
+    )
+    .unwrap();
+    let failing = ox().arg(&path).output().unwrap();
+
+    assert_eq!(failing.status.code(), Some(1));
+    assert!(
+        text(&failing.stderr).contains("boom in a task"),
+        "{}",
+        text(&failing.stderr)
+    );
+}
+
+#[test]
 fn files_may_start_with_a_byte_order_mark() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("notepad.ox");
@@ -249,6 +279,27 @@ fn files_in_a_plugin_folder_import_its_modules() {
 
     assert!(output.status.success(), "{}", text(&output.stderr));
     assert_eq!(text(&output.stdout), "Hello\n");
+}
+
+#[test]
+fn ox_test_fails_a_test_whose_tasks_raise() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("tasks.ox"),
+        "(test \"leaves a task that fails\" (spawn (do (sleep 10) (raise (error \"late boom\")))) (expect true))\n(test \"waits for its task\" (def seen (atom nil)) (spawn (reset! seen :done)) (expect true))",
+    )
+    .unwrap();
+
+    let output = ox().arg("test").arg(dir.path()).output().unwrap();
+
+    let shown = text(&output.stdout);
+    assert_eq!(output.status.code(), Some(1), "{shown}");
+    assert!(
+        shown.contains("FAIL  leaves a task that fails\n"),
+        "{shown}"
+    );
+    assert!(shown.contains("late boom"), "{shown}");
+    assert!(shown.contains("ok    waits for its task\n"), "{shown}");
 }
 
 #[test]

@@ -20,7 +20,7 @@ ox perf sample FILE NAME  sample where one benchmark spends its time
 ox lsp                 serve Ox to other editors over LSP
 ```
 
-Outside the editor there is no editor API. `ox FILE`, `ox test` and the REPL have the core library and the `ox/...` modules, and find a file's imports in its folder; in a plugin folder they also find the other plugins' modules.
+Outside the editor there is no editor API. `ox FILE`, `ox test` and the REPL have the core library and the `ox/...` modules, and find a file's imports in its folder; in a plugin folder they also find the other plugins' modules. `ox FILE` waits for the tasks the file spawns, as long as they run, and exits with a failure status when one raises an error nothing catches.
 
 ## Checking
 
@@ -49,7 +49,7 @@ FAIL  greeting is polite
 2 tests, 1 failed
 ```
 
-A test fails when its body raises, and `expect` raises when its check is false. Each file runs in a fresh isolate without the editor and runs only its own tests; a file that calls the editor while it loads is listed as `skip`, so keep the logic you test in modules that don't need it. `ox test` exits with a failure status when a test fails, for CI.
+A test fails when its body raises, or a task it spawned raises within ten seconds, and `expect` raises when its check is false. Each file runs in a fresh isolate without the editor and runs only its own tests; a file that calls the editor while it loads is listed as `skip`, so keep the logic you test in modules that don't need it. `ox test` exits with a failure status when a test fails, for CI.
 
 ## Profiling
 
