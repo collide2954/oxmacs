@@ -1,10 +1,8 @@
 mod builtin;
 mod color;
-mod registry;
 
 pub use builtin::{ADWAITA, ADWAITA_DARK};
 pub use color::Color;
-use registry::Registry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Appearance {
@@ -212,26 +210,23 @@ impl Theme {
     }
 }
 
-static REGISTRY: Registry = Registry::new();
-
 pub fn builtin() -> [&'static Theme; 2] {
     [&ADWAITA, &ADWAITA_DARK]
 }
 
-pub fn register(themes: &'static [Theme]) {
-    REGISTRY.register(themes);
-}
-
 pub fn all() -> Vec<&'static Theme> {
-    REGISTRY.all()
+    builtin().to_vec()
 }
 
 pub fn find(name: &str) -> Option<&'static Theme> {
-    REGISTRY.find(name)
+    builtin().into_iter().find(|theme| theme.name == name)
 }
 
 pub fn counterpart(theme: &Theme) -> &'static Theme {
-    REGISTRY.counterpart(theme)
+    for_appearance(match theme.appearance {
+        Appearance::Light => Appearance::Dark,
+        Appearance::Dark => Appearance::Light,
+    })
 }
 
 const READABLE: f64 = 4.5;

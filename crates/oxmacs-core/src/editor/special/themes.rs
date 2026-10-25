@@ -5,15 +5,6 @@ use crate::theme::{self, Theme};
 const SYSTEM: &str = "system";
 
 impl Editor {
-    pub fn add_themes(&mut self, themes: &'static [Theme]) {
-        theme::register(themes);
-        for theme in themes {
-            if !self.themes.iter().any(|known| known.name == theme.name) {
-                self.themes.push(theme);
-            }
-        }
-    }
-
     pub fn themes(&self) -> &[&'static Theme] {
         &self.themes
     }

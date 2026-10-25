@@ -96,7 +96,7 @@ mod tests {
     use serde_json::json;
     use std::sync::Arc;
 
-    use crate::theme::{self, ADWAITA, ADWAITA_DARK, Highlight, Theme};
+    use crate::theme::Highlight;
 
     use super::*;
 
@@ -423,47 +423,6 @@ mod tests {
         editor.display_buffer(plots, None, true);
         assert_eq!(editor.buffer().name(), "*plots*");
         assert_eq!(editor.tiling().windows().len(), 3);
-    }
-
-    static PALETTE: [Theme; 2] = [
-        Theme {
-            name: "palette-light",
-            ..ADWAITA
-        },
-        Theme {
-            name: "palette-dark",
-            ..ADWAITA_DARK
-        },
-    ];
-
-    #[test]
-    fn added_themes_can_be_loaded_configured_and_toggled() {
-        let mut editor = Editor::new();
-
-        editor.add_themes(&PALETTE);
-        type_keys(&mut editor, "M-x l o a d - t h e m e RET");
-        let labels: Vec<String> = editor
-            .completions()
-            .into_iter()
-            .map(|completion| completion.label)
-            .collect();
-
-        assert_eq!(
-            labels,
-            [
-                "adwaita",
-                "adwaita-dark",
-                "palette-light",
-                "palette-dark",
-                "system"
-            ]
-        );
-        assert!(
-            Config::default()
-                .with("theme", json!("palette-dark"))
-                .is_ok()
-        );
-        assert_eq!(theme::counterpart(&PALETTE[1]).name, "palette-light");
     }
 
     fn fetch_effects(editor: &mut Editor) -> Vec<(crate::editor::FetchId, String)> {
