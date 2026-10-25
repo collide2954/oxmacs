@@ -120,6 +120,10 @@ impl Paint {
     }
 }
 
+pub fn height(size: f32) -> f32 {
+    EDGE + size * LINE_HEIGHT + 2.0 * BREATH
+}
+
 pub fn view<'a, Message: 'a>(
     status: &Status,
     extras: &[String],

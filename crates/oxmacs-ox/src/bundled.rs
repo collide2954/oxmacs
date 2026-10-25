@@ -17,6 +17,7 @@ pub const BUNDLED: &[Bundle] = &[
     MANUAL,
     R,
     ZAP,
+    KEYCAST,
 ];
 
 const ZAP: Bundle = Bundle {
@@ -24,6 +25,15 @@ const ZAP: Bundle = Bundle {
     files: &[
         ("plugin.ox", include_str!("../plugins/zap/plugin.ox")),
         ("zap.ox", include_str!("../plugins/zap/zap.ox")),
+    ],
+};
+
+const KEYCAST: Bundle = Bundle {
+    name: "keycast",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/keycast/plugin.ox")),
+        ("keycast.ox", include_str!("../plugins/keycast/keycast.ox")),
+        ("stack.ox", include_str!("../plugins/keycast/stack.ox")),
     ],
 };
 
@@ -510,6 +520,9 @@ mod r;
 
 #[cfg(test)]
 mod zap;
+
+#[cfg(test)]
+mod keycast;
 
 #[cfg(test)]
 mod dired {

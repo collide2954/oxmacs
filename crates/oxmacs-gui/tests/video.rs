@@ -408,7 +408,7 @@ fn demo_home() -> PathBuf {
     .unwrap();
     fs::write(
         home.join("init.ox"),
-        "(settings {theme: :adwaita-dark mode-line-style: :powerline animations: false font-size: 11})\n(use-plugin git)\n(use-plugin markdown)\n(use-plugin calendar)\n(use-plugin screensaver)\n",
+        "(settings {theme: :adwaita-dark mode-line-style: :powerline animations: false font-size: 11})\n(use-plugin git)\n(use-plugin markdown)\n(use-plugin calendar)\n(use-plugin screensaver)\n(use-plugin keycast)\n",
     )
     .unwrap();
     git(&home, &["init", "-q", "-b", "main"]);
@@ -660,6 +660,52 @@ fn demo_video() {
     show_calendar(&mut film, &mut app);
     show_matrix(&mut film, &mut app);
     film.finish(&out);
+}
+
+const KEYCAST_NOTES: &str = "# Keys worth showing\n\nC-n moves down a line.\nC-x C-s saves.\nM-x runs any command by name.\n";
+
+#[test]
+#[ignore = "renders snapshots of the keycast plugin into $OXMACS_KEYCAST_SHOTS"]
+fn keycast_shots() {
+    let Ok(out) = std::env::var("OXMACS_KEYCAST_SHOTS") else {
+        return;
+    };
+    let shots = [
+        ("bottom-right", "adwaita-dark", "bottom-right"),
+        ("bottom-center", "adwaita-dark", "bottom-center"),
+        ("mode-line", "adwaita-dark", "mode-line"),
+        ("light", "adwaita", "bottom-right"),
+    ];
+    for (name, theme, placement) in shots {
+        let home = tempfile::tempdir().unwrap();
+        fs::write(
+            home.path().join("init.ox"),
+            format!(
+                "(settings {{theme: :{theme} mode-line-style: :powerline animations: false font-size: 11}})\n(use-plugin keycast :config {{placement: :{placement}}})\n"
+            ),
+        )
+        .unwrap();
+        let notes = home.path().join("notes.md");
+        fs::write(&notes, KEYCAST_NOTES).unwrap();
+        let visit = oxmacs_core::cli::Visit {
+            path: notes,
+            line: None,
+            column: None,
+        };
+        let mut film = Film::new(PathBuf::from(&out).join(name)).sized(Size::new(960.0, 540.0));
+        let (mut app, _) = App::boot(&[visit], Some(home.path()));
+        settle(&mut app);
+        for chord in ["C-n", "C-n", "C-n", "C-x", "C-s", "M-x"] {
+            keys(&mut app, chord);
+            settle(&mut app);
+        }
+        for c in "end-of-buffer".chars() {
+            type_char(&mut app, c);
+        }
+        keys(&mut app, "RET");
+        settle(&mut app);
+        film.shot(&mut app, 1.0);
+    }
 }
 
 fn show_tutorial(film: &mut Film, app: &mut App) {
@@ -957,7 +1003,7 @@ fn r_home() -> PathBuf {
     fs::write(home.join(".oxmacs-demo"), "").unwrap();
     fs::write(
         home.join("init.ox"),
-        "(settings {theme: :adwaita-dark animations: false font-size: 12})\n(use-plugin r :config {language-server: false})\n",
+        "(settings {theme: :adwaita-dark animations: false font-size: 12})\n(use-plugin r :config {language-server: false})\n(use-plugin keycast)\n",
     )
     .unwrap();
     fs::write(home.join("analysis").join("cars.R"), CARS).unwrap();

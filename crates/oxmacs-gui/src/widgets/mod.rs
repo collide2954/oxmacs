@@ -4,6 +4,7 @@ pub mod divider;
 pub mod drawing;
 pub mod echo_area;
 pub mod mode_line;
+pub mod overlay;
 pub mod ox_view;
 pub mod popup;
 pub mod powerline;

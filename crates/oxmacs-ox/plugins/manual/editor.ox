@@ -72,13 +72,20 @@ Four hooks follow the buffers people type in, leaving plugin buffers out. `on-bu
     (set-buffer-text (string/trim-end (buffer-text))))))
 ```
 
-`on-disk-change` and `on-settings-change` take a key and a function the same way, and `on-processes-change` follows the processes oxmacs runs, which `processes` lists. `(on-open-directory f)` makes `f` the way directories open, with no key; a plugin that does this declares `:opens-directories true`, as dired does. `every` repeats work on a timer.
+`on-disk-change` and `on-settings-change` take a key and a function the same way, and `on-processes-change` follows the processes oxmacs runs, which `processes` lists. `on-key-command` hears each command run from the keyboard, other than typing, with the `keys` pressed and the `command` they ran, as the keycast plugin shows them. `(on-open-directory f)` makes `f` the way directories open, with no key; a plugin that does this declares `:opens-directories true`, as dired does. `every` repeats work on a timer.
 
 ## The mode line and notifications
 
 ```
 (set-mode-line :status "Ready")
 (set-mode-line :status nil)
+```
+
+`set-overlay` floats rows over the windows, at the bottom right or larger at the bottom center, each row a vector of text and `[text face]` pieces, where the face `:keycap` draws a key. `nil` takes them away.
+
+```
+(set-overlay :hint [[["C-x" :keycap] ["C-s" :keycap] "save-buffer"]])
+(set-overlay :hint nil)
 ```
 
 `notify` shows a desktop notification, and `clipboard-set` copies text without touching the kill ring, for secrets.

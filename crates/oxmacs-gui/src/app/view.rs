@@ -1,8 +1,11 @@
-use iced::widget::{Column, Row, canvas, column, container, mouse_area, responsive, sensor, space};
+use iced::widget::{
+    Column, Row, canvas, column, container, mouse_area, responsive, sensor, space, stack,
+};
 use iced::{Element, Length};
 use oxmacs_core::clock;
 use oxmacs_core::editor::{Axis, Pane, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
+use oxmacs_ox::overlays;
 use oxmacs_ox::takeover::{self, Takeover};
 use oxmacs_ox::views::ViewBuffer;
 
@@ -11,7 +14,7 @@ use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
 use crate::widgets::drawing::Drawing;
 use crate::widgets::mode_line::{self, Look};
-use crate::widgets::{completions, echo_area, ox_view, transient};
+use crate::widgets::{completions, echo_area, overlay, ox_view, transient};
 use crate::{style, units};
 impl App {
     pub fn view(&self) -> Element<'_, Message> {
@@ -21,8 +24,17 @@ impl App {
             Some(shown) => self.takeover(shown, faces),
             None => self.tile(self.editor.tiling(), Vec::new(), faces),
         };
+        let floating = overlay::view(
+            &overlays::shown(&self.editor),
+            faces,
+            self.font,
+            self.text_size,
+            mode_line::height(self.text_size),
+        );
         column![
-            windows,
+            stack![windows, floating]
+                .width(Length::Fill)
+                .height(Length::Fill),
             transient::view(&self.editor, faces, self.font, self.text_size),
             echo_area::view(
                 &self.editor,

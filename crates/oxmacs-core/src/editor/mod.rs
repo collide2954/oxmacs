@@ -6,6 +6,7 @@ mod editing;
 mod effect;
 mod flash;
 mod job;
+mod keystrokes;
 mod languages;
 mod lsp;
 mod motion;
@@ -29,6 +30,7 @@ pub use console::{ConsoleHook, ConsoleSpec, MarkerHook};
 pub use editing::format::{FormatRequest, Formatter};
 pub use effect::{Effect, FetchId};
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
+pub use keystrokes::Keystroke;
 pub use languages::registry::{LineHighlighter, LineIndenter};
 pub use lsp::{SERVERS, ServerId, ServerSpec};
 pub use motion::mouse::{Cell, Clicks};
@@ -124,6 +126,7 @@ pub struct Editor {
     processes: special::processes::Processes,
     toolbox: special::toolbox::Toolbox,
     pending: Vec<Key>,
+    keystrokes: keystrokes::Keystrokes,
     last_key: Option<Key>,
     last_command: Option<Command>,
     command_history: Vec<CommandId>,
@@ -221,6 +224,7 @@ impl Editor {
             processes: special::processes::Processes::default(),
             toolbox: special::toolbox::Toolbox::default(),
             pending: Vec::new(),
+            keystrokes: keystrokes::Keystrokes::default(),
             last_key: None,
             last_command: None,
             command_history: Vec::new(),
@@ -399,6 +403,7 @@ impl Editor {
             minibuffer.note = None;
         }
         if self.quits_pending_sequence(key) {
+            self.pending.push(key);
             self.dispatch(key, Command::KeyboardQuit.into(), false);
             return;
         }
@@ -567,9 +572,13 @@ impl Editor {
     }
 
     fn dispatch(&mut self, key: Key, command: CommandId, shifted: bool) {
-        self.pending.clear();
+        let keys = mem::take(&mut self.pending);
         self.last_key = Some(key);
+        let noting = self.noting_keystrokes();
         self.run_id(command, shifted);
+        if let Some(before) = noting {
+            self.note_keystroke(keys, command, before);
+        }
     }
 
     pub fn execute(&mut self, command: impl Into<CommandId>) {

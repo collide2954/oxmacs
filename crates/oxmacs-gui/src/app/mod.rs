@@ -453,6 +453,24 @@ mod tests {
         assert!(ui.find("☂ bring one").is_ok());
     }
 
+    #[test]
+    fn plugin_overlays_float_over_the_windows() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("init.ox"),
+            r#"(set-overlay :keys [[["C-x" :keycap] ["C-s" :keycap] "save-buffer"]])"#,
+        )
+        .unwrap();
+        let mut app = App::default();
+        let _ = app.start_ox(Some(home.path()));
+
+        let mut ui = iced_test::simulator(app.view());
+
+        assert!(ui.find("save-buffer").is_ok());
+        assert!(ui.find("C-s").is_ok());
+        assert!(ui.find("-- *scratch*   L1 C0").is_ok());
+    }
+
     fn taken_over() -> App {
         let home = tempfile::tempdir().unwrap();
         std::fs::write(

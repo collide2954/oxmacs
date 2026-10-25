@@ -10,12 +10,14 @@ mod help;
 mod hooks;
 pub mod idle;
 mod keepass;
+mod keystrokes;
 mod layout;
 mod log;
 mod manual;
 mod mode;
 mod modes;
 mod natives;
+pub mod overlays;
 mod plugins;
 mod processes;
 mod prompts;
@@ -57,6 +59,7 @@ pub fn home() -> Option<PathBuf> {
 fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     let mut isolate = Isolate::new();
     natives::install(&mut isolate);
+    overlays::install(&mut isolate);
     settings::install(&mut isolate);
     commands::install(&mut isolate);
     plugins::install(&mut isolate);
@@ -66,6 +69,7 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     editing::install(&mut isolate);
     hooks::install(&mut isolate);
     flashes::install(&mut isolate);
+    keystrokes::install(&mut isolate);
     processes::install(&mut isolate);
     consoles::install(&mut isolate);
     layout::install(&mut isolate);
@@ -282,6 +286,7 @@ impl Ox {
         }
         plugins::wake_waiting(&mut self.isolate, editor);
         hooks::run(&mut self.isolate, editor);
+        keystrokes::run(&mut self.isolate, editor);
         consoles::run(&mut self.isolate, editor);
         buffers::watch(&mut self.isolate, editor);
         commands::run_waiting(&mut self.isolate, editor);
