@@ -57,3 +57,26 @@
     (random-cells)
     (cells (map (fn [[x y]] [(+ x 37) (+ y 28)])
                 (get patterns pattern (get patterns :acorn))))))
+
+(test "a blinker turns and turns back"
+  (let [blinker (cells [[0 1] [1 1] [2 1]])]
+    (expect (= (step blinker) (cells [[1 0] [1 1] [1 2]])))
+    (expect (= (step (step blinker)) blinker))))
+
+(test "a block stays and a lone cell dies"
+  (let [block (cells [[0 0] [1 0] [0 1] [1 1]])]
+    (expect (= (step block) block))
+    (expect (empty? (step (cells [[0 0]]))))))
+
+(test "a glider moves one cell down and right every four generations"
+  (let [glider (cells [[1 0] [2 1] [0 2] [1 2] [2 2]])
+        later (reduce (fn [now _] (step now)) glider (range 4))]
+    (expect (= later (cells (map (fn [[x y]] [(+ x 1) (+ y 1)]) (points glider)))))))
+
+(test "cells far from the middle live by the same rules"
+  (expect (= (points (step (cells [[-5000 -7000] [-4999 -7000] [-4998 -7000]])))
+             [[-4999 -7001] [-4999 -7000] [-4999 -6999]])))
+
+(test "patterns start from their cells"
+  (expect (= (count (seeded :acorn)) 7))
+  (expect (<= (count (seeded :random)) (* width height))))

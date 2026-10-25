@@ -1,5 +1,5 @@
 (plugin life
-  :version "0.2.1"
+  :version "0.2.2"
   :summary "Conway's Game of Life on a canvas"
   :commands {life: "Watch Conway's Game of Life"}
   :settings {pattern: {type: [:acorn :r-pentomino :glider :random] default: :acorn doc: "The pattern life starts from"}
