@@ -46,7 +46,7 @@ oxmacs-api = { path = "crates/oxmacs-api" }
 oxmacs-ox = { path = "crates/oxmacs-ox" }
 native-theme = { version = "0.6.1", default-features = false }
 notify = "8.2.0"
-num-bigint = "0.4.8"
+num-bigint = "0.5.1"
 num-traits = "0.2.19"
 open = "5.4.4"
 rayon = "1.12.0"
