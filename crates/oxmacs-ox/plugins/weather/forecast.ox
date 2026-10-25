@@ -148,3 +148,57 @@
 (def (brief forecast)
   (let [now forecast.now]
     "{(icon now.condition now.day)} {(degrees now.temperature)}"))
+
+(def places-sample #r#"{"results":[{"id":2950159,"name":"Berlin","latitude":52.52437,"longitude":13.41053,"country_code":"DE","timezone":"Europe/Berlin","country":"Germany","admin1":"Land Berlin"}],"generationtime_ms":0.9}"#)
+
+(def forecast-sample #r#"{
+    "latitude": 52.52, "longitude": 13.42, "timezone": "Europe/Berlin",
+    "current_units": {"temperature_2m": "°C", "wind_speed_10m": "km/h"},
+    "current": {"time": "2026-10-19T14:15", "temperature_2m": 13.2, "apparent_temperature": 11.04,
+                "relative_humidity_2m": 71, "is_day": 1, "weather_code": 3,
+                "wind_speed_10m": 11.5, "wind_direction_10m": 250},
+    "hourly": {"time": ["2026-10-19T13:00", "2026-10-19T14:00", "2026-10-19T15:00", "2026-10-19T16:00"],
+               "temperature_2m": [12.9, 13.1, 12.4, null],
+               "precipitation_probability": [5, 10, null, 40],
+               "weather_code": [2, 3, 61, 80]},
+    "daily": {"time": ["2026-10-19", "2026-10-20"],
+              "weather_code": [3, 95],
+              "temperature_2m_max": [14.1, 17.6],
+              "temperature_2m_min": [6.5, 9.0],
+              "precipitation_probability_max": [10, 85],
+              "sunrise": ["2026-10-19T07:32", "2026-10-20T07:34"],
+              "sunset": ["2026-10-19T18:09", "2026-10-20T18:07"]}
+}"#)
+
+(test "places are looked up by name"
+  (expect (= (geocode-url "São Paulo")
+             "https://geocoding-api.open-meteo.com/v1/search?name=S%C3%A3o%20Paulo&count=1&language=en&format=json"))
+  (expect (= (place-label (parse-place places-sample)) "Berlin, Land Berlin, Germany"))
+  (expect (nil? (parse-place "{{}}"))))
+
+(test "forecasts ask for the configured units"
+  (let [place (parse-place places-sample)
+        metric (forecast-url place :metric)
+        imperial (forecast-url place :imperial)]
+    (expect (string/starts-with? metric "https://api.open-meteo.com/v1/forecast?latitude=52.52437&longitude=13.41053&"))
+    (expect (string/includes? metric "&timezone=auto&forecast_days=7"))
+    (expect (not (string/includes? metric "fahrenheit")))
+    (expect (string/ends-with? imperial "&temperature_unit=fahrenheit&wind_speed_unit=mph"))))
+
+(test "forecasts are read from Open-Meteo's JSON"
+  (let [forecast (parse-forecast forecast-sample)]
+    (expect (= forecast.now.condition :overcast))
+    (expect (= (round forecast.now.temperature) 13))
+    (expect (= [forecast.temperature-unit forecast.wind-unit] ["°C" "km/h"]))
+    (expect (= (count forecast.days) 2))
+    (expect (= (get (nth forecast.days 1) :condition) :thunderstorm))
+    (expect (= (get (nth forecast.days 1) :rain) 85))
+    (expect (nil? (get (nth forecast.hours 3) :temperature)))
+    (expect (nil? (get (nth forecast.hours 2) :rain)))
+    (expect (= (map (fn [hour] (clock hour.time)) (upcoming forecast 2)) ["14:00" "15:00"]))))
+
+(test "small helpers format the weather"
+  (expect (= (map compass [250 0 359]) ["WSW" "N" "N"]))
+  (expect (= (sparkline [1 nil 3 2]) "▁ █▅"))
+  (expect (= (brief (parse-forecast forecast-sample)) "☁ 13°"))
+  (expect (= (percent nil) "–")))

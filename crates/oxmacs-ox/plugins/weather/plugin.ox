@@ -1,5 +1,5 @@
 (plugin weather
-  :version "0.3.0"
+  :version "0.3.1"
   :opt-in true
   :summary "Forecasts from Open-Meteo"
   :commands {weather: "Show the weather for your location"

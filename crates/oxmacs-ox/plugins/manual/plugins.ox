@@ -100,7 +100,7 @@ r            0.18.4   opt-in   R consoles, plots, data and help in the style of 
 remote       0.1.7    on       Browse and edit files on other machines over ssh, sftp and ftp
 screensaver  0.2.1    opt-in   A starfield or matrix rain after a while without input
 vault        0.2.1    opt-in   An encrypted password vault with one-time codes and imports
-weather      0.3.0    opt-in   Forecasts from Open-Meteo
+weather      0.3.1    opt-in   Forecasts from Open-Meteo
 zap          0.2.0    opt-in   Flash the code you evaluate or send to a console, in the error color when it fails
 ```
 
