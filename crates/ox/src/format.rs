@@ -411,11 +411,11 @@ fn same(before: &Syntax, after: &Syntax) -> bool {
         (Datum::List(left), Datum::List(right))
         | (Datum::Vector(left), Datum::Vector(right))
         | (Datum::Map(left), Datum::Map(right))
-        | (Datum::Set(left), Datum::Set(right)) => all(left, right),
+        | (Datum::Set(left), Datum::Set(right))
+        | (Datum::Meta(left), Datum::Meta(right)) => all(left, right),
         (Datum::Record(name, left), Datum::Record(other, right)) => {
             name == other && all(left, right)
         }
-        (Datum::Meta(left), Datum::Meta(right)) => all(left, right),
         (one, other) => one == other,
     }
 }
