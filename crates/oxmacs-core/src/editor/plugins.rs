@@ -18,16 +18,6 @@ fn downcast<T: PluginBuffer>(view: &dyn PluginBuffer) -> Option<&T> {
 }
 
 impl Editor {
-    pub fn on_display(&mut self, handler: fn(&mut Editor)) {
-        self.display_handlers.push(handler);
-    }
-
-    pub(super) fn tell_display(&mut self) {
-        for handler in self.display_handlers.clone() {
-            handler(self);
-        }
-    }
-
     pub fn repeated(&self) -> bool {
         self.repeated
     }
@@ -42,19 +32,6 @@ impl Editor {
 
     pub fn move_points(&mut self, id: BufferId, to: impl Fn(usize, usize) -> Option<usize>) {
         self.move_windows(id, to);
-    }
-
-    pub fn hide_buffer(&mut self, id: BufferId) -> bool {
-        let Some(window) = self.window_showing(id) else {
-            return false;
-        };
-        let origin = self.selected_window();
-        self.select_window(window);
-        self.delete_window();
-        if origin != window {
-            self.select_window(origin);
-        }
-        true
     }
 
     pub fn open_externally(&mut self, target: impl Into<PathBuf>) {
@@ -122,24 +99,6 @@ impl Editor {
         Ok(buffer.id())
     }
 
-    pub fn insert_text(&mut self, text: &str) -> bool {
-        if self.refuse_read_only() {
-            return false;
-        }
-        self.buffers.current_mut().insert(text);
-        true
-    }
-
-    pub fn on_command(&mut self, handler: fn(&mut Editor)) {
-        self.command_handlers.push(handler);
-    }
-
-    pub(super) fn tell_command(&mut self) {
-        for handler in self.command_handlers.clone() {
-            handler(self);
-        }
-    }
-
     pub fn on_disk_change(&mut self, handler: fn(&mut Editor)) {
         self.disk_handlers.push(handler);
     }
@@ -148,26 +107,6 @@ impl Editor {
         for handler in self.disk_handlers.clone() {
             handler(self);
         }
-    }
-
-    pub fn add_file_opener(
-        &mut self,
-        extensions: &'static [&'static str],
-        open: fn(&mut Editor, &Path) -> bool,
-    ) {
-        self.file_openers.push((extensions, open));
-    }
-
-    pub(super) fn file_opener(&self, path: &Path) -> Option<fn(&mut Editor, &Path) -> bool> {
-        let extension = path.extension()?.to_str()?;
-        self.file_openers
-            .iter()
-            .find(|(extensions, _)| {
-                extensions
-                    .iter()
-                    .any(|known| known.eq_ignore_ascii_case(extension))
-            })
-            .map(|(_, open)| *open)
     }
 
     pub fn on_open_directory(&mut self, handler: fn(&mut Editor, &Path) -> bool) {
@@ -204,14 +143,6 @@ impl Editor {
         self.buffers.get_mut(index)
     }
 
-    pub fn home(&self) -> Option<&Path> {
-        self.home.as_deref()
-    }
-
-    pub fn set_home(&mut self, home: Option<PathBuf>) {
-        self.home = home;
-    }
-
     pub fn file_moved(&mut self, from: &Path, to: &Path) {
         for index in 0..self.buffers.len() {
             if let Some(file) = self.buffers.get_mut(index).and_then(Buffer::file_mut)
@@ -239,6 +170,7 @@ impl Editor {
         self.buffers.iter().map(Buffer::id).collect()
     }
 
+    #[cfg(test)]
     pub fn buffer_visiting(&self, path: &Path) -> Option<BufferId> {
         let index = self
             .buffers
@@ -250,16 +182,6 @@ impl Editor {
         self.buffers
             .position(|buffer| buffer.id() == id)
             .is_some_and(|index| self.save_buffer_at(index))
-    }
-
-    pub fn on_quit(&mut self, handler: fn(&mut Editor)) {
-        self.quit_handlers.push(handler);
-    }
-
-    pub fn quitting(&mut self) {
-        for handler in self.quit_handlers.clone() {
-            handler(self);
-        }
     }
 
     pub fn on_configured(&mut self, handler: fn(&mut Editor)) {
@@ -289,6 +211,7 @@ impl Editor {
             .collect()
     }
 
+    #[cfg(test)]
     pub fn open_plugin_buffer(&mut self, name: &str, view: impl PluginBuffer) -> BufferId {
         let mut buffer = Buffer::with_text(name, "");
         buffer.set_read_only(true);
@@ -329,16 +252,6 @@ impl Editor {
                 command,
                 Command::DeleteBackwardChar | Command::BackwardDeleteWord
             )
-    }
-
-    pub fn with_plugin_state<T: Any + Send, R>(
-        &mut self,
-        work: impl FnOnce(&mut Editor, &mut T) -> R,
-    ) -> Option<R> {
-        let mut state = self.plugin_states.take::<T>()?;
-        let result = work(self, &mut state);
-        self.plugin_states.set(state);
-        Some(result)
     }
 
     pub fn plugin_buffers<T: PluginBuffer>(&self) -> Vec<BufferId> {

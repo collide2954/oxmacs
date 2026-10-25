@@ -328,20 +328,6 @@ mod tests {
     }
 
     #[test]
-    fn plugins_insert_text_unless_the_buffer_is_read_only() {
-        let mut editor = Editor::new();
-
-        assert!(editor.insert_text("ab"));
-        assert_eq!(editor.buffer().contents(), "ab");
-        assert_eq!(editor.buffer().point(), 2);
-        type_keys(&mut editor, "C-x C-q");
-
-        assert!(!editor.insert_text("c"));
-        assert_eq!(editor.buffer().contents(), "ab");
-        assert_eq!(editor.message(), Some("Buffer is read-only: *scratch*"));
-    }
-
-    #[test]
     fn buffers_can_keep_header_lines_above_their_text() {
         let mut editor = Editor::new();
         let id = editor.open_plugin_buffer("*table*", blank());
@@ -553,26 +539,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn plugins_say_goodbye_when_the_editor_quits() {
-        let mut editor = Editor::new();
-        editor.set_plugin_state(Answers::default());
-        editor.on_quit(|editor| {
-            if let Some(answers) = editor.plugin_state_mut::<Answers>() {
-                answers.0.push("bye".to_owned());
-            }
-        });
-
-        editor.quitting();
-
-        assert_eq!(
-            editor
-                .plugin_state::<Answers>()
-                .map(|answers| answers.0.clone()),
-            Some(vec!["bye".to_owned()])
-        );
-    }
-
     #[derive(Debug)]
     struct Shell {
         scope: ScopeId,
@@ -715,10 +681,8 @@ mod tests {
     }
 
     #[test]
-    fn plugins_see_where_their_buffers_show_and_hear_before_each_display() {
+    fn plugins_see_where_their_buffers_show() {
         let mut editor = Editor::new();
-        editor.set_plugin_state(Answers::default());
-        editor.on_display(|editor| note(editor, "display".to_owned()));
         let scope = editor.add_scope("*Board*");
         let id = editor.add_plugin_buffer_with("*Board*", |buffer| {
             buffer.insert_at(0, "one\ntwo\nthree");
@@ -737,23 +701,15 @@ mod tests {
         assert_eq!(editor.buffer_width(id), Some(32));
         editor.move_points(id, |_, end| Some(end));
         assert_eq!(editor.buffer().point(), 13);
-        editor.prepare_display();
-        assert_eq!(
-            editor
-                .plugin_state::<Answers>()
-                .map(|answers| answers.0.clone()),
-            Some(vec!["display".to_owned(), "display".to_owned()])
-        );
     }
 
     #[test]
-    fn plugins_hear_after_each_command_and_around_each_save() {
+    fn plugins_hear_around_each_save() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("plan.txt");
         std::fs::write(&path, "one\n").unwrap();
         let mut editor = Editor::new();
         editor.set_plugin_state(Answers::default());
-        editor.on_command(|editor| note(editor, "command".to_owned()));
         editor.on_save(|editor, id| {
             if let Some(buffer) = editor.buffer_by_id_mut(id) {
                 buffer.insert_at(0, "# ");
@@ -785,14 +741,7 @@ mod tests {
             editor
                 .plugin_state::<Answers>()
                 .map(|answers| answers.0.clone()),
-            Some(vec![
-                "command".to_owned(),
-                "command".to_owned(),
-                "command".to_owned(),
-                "saving".to_owned(),
-                "saved plan.txt".to_owned(),
-                "command".to_owned(),
-            ])
+            Some(vec!["saving".to_owned(), "saved plan.txt".to_owned()])
         );
     }
 
@@ -802,8 +751,6 @@ mod tests {
         let path = dir.path().join("plan.txt");
         std::fs::write(&path, "one\ntwo\nthree\n").unwrap();
         let mut editor = Editor::new();
-        editor.set_home(Some(dir.path().to_owned()));
-        assert_eq!(editor.home(), Some(dir.path()));
         assert_eq!(editor.buffer_visiting(&path), None);
 
         editor.open_file(&path);
@@ -993,14 +940,6 @@ mod tests {
         );
     }
 
-    fn open_as_document(editor: &mut Editor, path: &Path) -> bool {
-        let name = path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned());
-        editor.show_message(format!("document {}", name.unwrap_or_default()));
-        true
-    }
-
     #[derive(Debug)]
     struct Viewer {
         scope: ScopeId,
@@ -1046,21 +985,7 @@ mod tests {
         assert_eq!(editor.pane().line_pills(1), []);
         assert_eq!(editor.visited_files(), [file]);
     }
-    #[test]
-    fn plugins_open_the_file_types_they_claim() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("paper.PDF"), b"%PDF\xFF").unwrap();
-        std::fs::write(dir.path().join("notes.txt"), "plain").unwrap();
-        let mut editor = Editor::new();
-        editor.add_file_opener(&["pdf"], open_as_document);
 
-        assert!(editor.open_file(&dir.path().join("paper.PDF")));
-        assert_eq!(editor.message(), Some("document paper.PDF"));
-        assert_eq!(editor.buffer_names(), ["*scratch*"]);
-
-        assert!(editor.open_file(&dir.path().join("notes.txt")));
-        assert_eq!(editor.buffer().contents(), "plain");
-    }
     #[test]
     fn moved_files_keep_their_buffers() {
         let dir = tempfile::tempdir().unwrap();
@@ -1160,7 +1085,7 @@ mod tests {
     }
 
     #[test]
-    fn plugins_open_links_outside_and_hide_buffers_they_showed() {
+    fn plugins_open_links_outside() {
         let mut editor = Editor::new();
         editor.open_externally("https://example.org");
         assert_eq!(
@@ -1169,16 +1094,6 @@ mod tests {
                 "https://example.org".into()
             )]
         );
-        let scope = editor.add_scope("*Board*");
-        let id = editor.add_plugin_buffer_with("*Board*", |_| Board(scope));
-        let origin = editor.selected_window();
-        editor.show_buffer_beside(id);
-        editor.select_window(origin);
-
-        assert!(editor.hide_buffer(id));
-        assert_eq!(editor.tiling().windows(), [origin]);
-        assert_eq!(editor.selected_window(), origin);
-        assert!(!editor.hide_buffer(id));
     }
 
     #[test]
@@ -1248,23 +1163,6 @@ mod tests {
         assert_eq!(editor.minibuffer_highlights(), [(0..2, Highlight::Keyword)]);
         type_keys(&mut editor, "C-g");
         assert_eq!(editor.minibuffer_highlights(), []);
-    }
-
-    #[test]
-    fn plugins_borrow_their_state_while_they_change_the_editor() {
-        let mut editor = Editor::new();
-        editor.set_plugin_state(Count(1));
-
-        let hidden = editor.with_plugin_state(|editor, count: &mut Count| {
-            count.0 += 1;
-            editor.show_message("busy");
-            editor.plugin_state::<Count>().is_none()
-        });
-
-        assert_eq!(hidden, Some(true));
-        assert_eq!(editor.plugin_state::<Count>().map(|count| count.0), Some(2));
-        assert_eq!(editor.message(), Some("busy"));
-        assert_eq!(editor.with_plugin_state(|_, _: &mut String| ()), None);
     }
 
     #[test]

@@ -233,7 +233,6 @@ impl App {
     }
 
     fn quit(&mut self) {
-        self.editor.quitting();
         let _ = self.pending_effects();
         for (_, killer) in self.jobs.drain(..) {
             killer.kill();

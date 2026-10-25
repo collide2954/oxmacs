@@ -461,7 +461,6 @@ impl Editor {
         }
         self.render_help();
         self.render_tools();
-        self.tell_display();
     }
 
     pub(super) fn width_showing(&self, buffer: BufferId) -> Option<usize> {

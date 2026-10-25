@@ -13,7 +13,6 @@ impl Editor {
             self.buffers.sync_syntax_lazily(index);
         }
         self.paren_pair = self.find_paren_pair();
-        self.tell_display();
     }
 
     fn pairs(&self) -> &'static [(char, char)] {

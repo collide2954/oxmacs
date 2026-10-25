@@ -72,8 +72,6 @@ use crate::theme::{self, Appearance, Highlight, Theme};
 
 const DEFAULT_ROWS: usize = 24;
 
-type FileOpener = (&'static [&'static str], fn(&mut Editor, &Path) -> bool);
-
 #[derive(Debug, Clone, Copy)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -156,12 +154,8 @@ pub struct Editor {
     splash_entries: Vec<(CommandId, String)>,
     mode_line_segments: Vec<plugins::Segment>,
     configured_handlers: Vec<fn(&mut Editor)>,
-    quit_handlers: Vec<fn(&mut Editor)>,
-    display_handlers: Vec<fn(&mut Editor)>,
-    command_handlers: Vec<fn(&mut Editor)>,
     disk_handlers: Vec<fn(&mut Editor)>,
     directory_handler: Option<fn(&mut Editor, &Path) -> bool>,
-    file_openers: Vec<FileOpener>,
     save_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
     saved_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
     opened_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
@@ -255,12 +249,8 @@ impl Editor {
 
             mode_line_segments: Vec::new(),
             configured_handlers: Vec::new(),
-            quit_handlers: Vec::new(),
-            display_handlers: Vec::new(),
-            command_handlers: Vec::new(),
             disk_handlers: Vec::new(),
             directory_handler: None,
-            file_openers: Vec::new(),
             save_handlers: Vec::new(),
             saved_handlers: Vec::new(),
             opened_handlers: Vec::new(),
@@ -659,7 +649,6 @@ impl Editor {
         } else if let Some(run) = shared {
             run(self);
         }
-        self.tell_command();
         self.refresh_minibuffer();
         self.reveal_point();
     }
@@ -675,7 +664,6 @@ impl Editor {
             self.prepare_motion_selection(shifted);
         }
         self.perform(command, goal_column, previous);
-        self.tell_command();
         self.reset_selection(command);
         self.refresh_minibuffer();
         self.refresh_popup(command);
