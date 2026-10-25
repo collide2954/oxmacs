@@ -8,11 +8,8 @@ use ox::check::report::{self, Format};
 use ox::check::{Diagnostic, Severity};
 use ox::error::ErrorKind;
 use ox::span::line_column;
-use ox::value::Value;
 use ox::{Error, Isolate, read};
 use oxmacs_api as checker;
-
-const TEST_TASKS: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[global_allocator]
 static ALLOCATOR: ox_perf::Counting = ox_perf::Counting;
@@ -340,16 +337,6 @@ fn report(name: &str, error: &Error, path: &Path, source: &str) {
     }
 }
 
-fn field(isolate: &Isolate, map: Value, key: &str) -> Value {
-    isolate
-        .heap()
-        .entries(map)
-        .unwrap_or_default()
-        .into_iter()
-        .find(|(found, _)| *found == Value::keyword(key))
-        .map_or(Value::Nil, |(_, value)| value)
-}
-
 fn run_tests(paths: &[PathBuf]) -> ExitCode {
     let mut files = Vec::new();
     let wanted: Vec<PathBuf> = if paths.is_empty() {
@@ -382,28 +369,13 @@ fn run_tests(paths: &[PathBuf]) -> ExitCode {
             report(&path.display().to_string(), &error, &path, &source);
             continue;
         }
-        let Ok(tests) = isolate.eval("(vec @registered-tests)") else {
-            continue;
-        };
-        for test in isolate.heap().elements(tests).unwrap_or_default() {
-            let name = isolate.write(field(&isolate, test, "name"));
-            let name = name.trim_matches('"').to_owned();
-            let run = field(&isolate, test, "run");
-            if isolate.file_of(run).is_some_and(|defined| defined != file) {
-                continue;
-            }
+        for outcome in ox::testing::run_registered(&mut isolate, &file) {
             total += 1;
-            let ran = isolate.call(run, &[]).and_then(|_| {
-                match isolate.finish_tasks(Some(TEST_TASKS)).into_iter().next() {
-                    Some(error) => Err(error),
-                    None => Ok(()),
-                }
-            });
-            match ran {
-                Ok(()) => println!("ok    {name}"),
-                Err(error) => {
+            match outcome.error {
+                None => println!("ok    {}", outcome.name),
+                Some(error) => {
                     failed += 1;
-                    report(&name, &error, &path, &source);
+                    report(&outcome.name, &error, &path, &source);
                 }
             }
         }
