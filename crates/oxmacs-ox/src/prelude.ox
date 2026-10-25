@@ -12,7 +12,7 @@
   `(define-mode '~name ~title ~@options))
 
 (defmacro plugin [name & options]
-  "The manifest in a plugin's plugin.ox: its :version, :description, :entry file, :commands, :modes and :settings."
+  "The manifest in a plugin's plugin.ox: its :version, :summary, :requires, :entry file, :commands, :keys, :mode-keys, :modes, :settings, :start-screen, :startup-when, :wakes-for, :opens-directories and :opt-in."
   (list 'quote (cons name options)))
 
 (defmacro use-plugin [name & options]
