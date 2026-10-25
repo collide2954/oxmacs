@@ -160,6 +160,91 @@ pub(crate) fn unused_imports(imports: &[Import], forms: &[&Syntax]) -> Vec<Diagn
         .collect()
 }
 
+const REGEX_FUNCTIONS: [&str; 5] = ["find", "find-all", "matches?", "replace", "split"];
+
+fn literal<'s>(source: &'s str, syntax: &Syntax) -> Option<&'s str> {
+    if !matches!(syntax.datum, Datum::Str(_)) {
+        return None;
+    }
+    let text = source.get(syntax.span.start as usize..syntax.span.end as usize)?;
+    text.starts_with('"').then_some(text)
+}
+
+fn regex_call(regex: &[&Import], head: &Syntax) -> bool {
+    let Some(name) = symbol(head) else {
+        return false;
+    };
+    regex.iter().any(|import| match name.split_once('/') {
+        Some((alias, short)) => {
+            import.alias.as_deref() == Some(alias) && REGEX_FUNCTIONS.contains(&short)
+        }
+        None => import.only.iter().any(|only| only == name) && REGEX_FUNCTIONS.contains(&name),
+    })
+}
+
+fn strings_in(source: &str, regex: &[&Import], form: &Syntax, found: &mut Vec<Diagnostic>) {
+    let items = match &form.datum {
+        Datum::List(items) => {
+            let pattern = items
+                .first()
+                .filter(|head| regex_call(regex, head))
+                .and_then(|_| items.get(1))
+                .filter(|pattern| {
+                    literal(source, pattern).is_some_and(|text| {
+                        text.replace("\\\"", "").contains('\\') || text.contains("{{")
+                    })
+                });
+            if let Some(pattern) = pattern {
+                found.push(Diagnostic::warning(
+                    "regex-string",
+                    "this pattern escapes backslashes or braces; a regex literal, #\"…\", needs no escapes",
+                    pattern.span,
+                ));
+            }
+            items
+                .iter()
+                .filter(|item| pattern.is_none_or(|pattern| !std::ptr::eq(*item, pattern)))
+                .for_each(|item| strings_in(source, regex, item, found));
+            return;
+        }
+        Datum::Vector(items) | Datum::Map(items) | Datum::Set(items) | Datum::Record(_, items) => {
+            items
+        }
+        Datum::Str(_) => {
+            let Some(text) = literal(source, form) else {
+                return;
+            };
+            let escapes = text.matches("{{").count();
+            if escapes >= 2 && !text.replace("\\\"", "").contains('\\') {
+                found.push(Diagnostic::warning(
+                    "braces",
+                    format!(
+                        "this string escapes braces {escapes} times; a raw string, #r\"…\", needs no escapes"
+                    ),
+                    form.span,
+                ));
+            }
+            return;
+        }
+        _ => return,
+    };
+    for item in items {
+        strings_in(source, regex, item, found);
+    }
+}
+
+pub(crate) fn strings(source: &str, imports: &[Import], forms: &[&Syntax]) -> Vec<Diagnostic> {
+    let regex: Vec<&Import> = imports
+        .iter()
+        .filter(|import| import.module == "ox regex")
+        .collect();
+    let mut found = Vec::new();
+    for form in forms {
+        strings_in(source, &regex, form, &mut found);
+    }
+    found
+}
+
 impl Unknown {
     pub(crate) fn add(&mut self, spec: &Syntax) {
         let Some(import) = Import::of(spec) else {

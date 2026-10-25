@@ -996,6 +996,7 @@ impl Isolate {
         found.extend(check::names(&self.runtime, module, &expanded, &unknown));
         let body: Vec<&Syntax> = forms.iter().filter(|form| header(form).is_none()).collect();
         found.extend(check::unused_imports(&imports, &body));
+        found.extend(check::strings(source, &imports, &body));
         found.sort_by_key(|diagnostic| (diagnostic.span.start, diagnostic.span.end));
         found.dedup();
         found

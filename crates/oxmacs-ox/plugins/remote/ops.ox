@@ -181,7 +181,7 @@
   "The lines below dir on host that hold pattern, each a map of :path, :line and :text."
   (let [found (run host dir (str "grep -rnI -- " (shell/quote pattern) " . | head -n 1000"))]
     (vec (keep (fn [line]
-                 (when-let [match (regex/find "^\\./(.*?):(\\d+):(.*)$" line)]
+                 (when-let [match (regex/find #"^\./(.*?):(\d+):(.*)$" line)]
                    (let [[file number text] match.groups]
                      {path: (join-path dir file) line: (string/to-number number) text: text})))
                found.lines))))

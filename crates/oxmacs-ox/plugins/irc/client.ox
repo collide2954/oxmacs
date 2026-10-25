@@ -229,7 +229,7 @@
              (entries (or (get (network name) :channels) {})))))
 
 (def (mentions? name text)
-  (let [words (map (fn [match] (fold match.text)) (regex/find-all "[^\\s,.:;!?()<>\"']+" text))
+  (let [words (map (fn [match] (fold match.text)) (regex/find-all #"[^\s,.:;!?()<>\"']+" text))
         wanted (set (map fold (cons (my-nick name) (or (plugin-setting 'irc :highlights) []))))]
     (some (fn [word] (contains? wanted word)) words)))
 

@@ -181,6 +181,44 @@ fn undefined_names_are_errors_that_suggest_a_close_name() {
 }
 
 #[test]
+fn escaped_regex_patterns_and_brace_heavy_strings_suggest_literals() {
+    let source = r#"(module (import (ox regex) (ox regex :as re :only [split])))
+(regex/find "^(\\d{{4}})$" "2026")
+(re/matches? "a+" "aa")
+(split "\\s+" "a b")
+(regex/find #"\d+" "1")
+(regex/find "\"[^\"]*\"" "a")
+(str "{{\"a\": 1, \"b\": {{}}}}")
+(str "{{one}} only" "{{a}} \n {{b}}")
+(def x 1)
+(regex/find "{x}\\d" "1")"#;
+    let pattern =
+        r#"this pattern escapes backslashes or braces; a regex literal, #"…", needs no escapes"#;
+
+    assert_eq!(
+        found(source),
+        [
+            (
+                Severity::Warning,
+                r#""^(\\d{{4}})$""#.to_owned(),
+                pattern.to_owned()
+            ),
+            (
+                Severity::Warning,
+                r#""\\s+""#.to_owned(),
+                pattern.to_owned()
+            ),
+            (
+                Severity::Warning,
+                r#""{{\"a\": 1, \"b\": {{}}}}""#.to_owned(),
+                r#"this string escapes braces 2 times; a raw string, #r"…", needs no escapes"#
+                    .to_owned()
+            ),
+        ]
+    );
+}
+
+#[test]
 fn checking_a_file_again_forgets_what_it_defined_before() {
     let mut isolate = Isolate::new();
     let modules = isolate.module_count();

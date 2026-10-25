@@ -12,7 +12,7 @@
 </C:calendar-query>")
 
 (def (xml-text text)
-  (let [inner (if-let [found (regex/find "(?s)<!\\[CDATA\\[(.*)\\]\\]>" text)] (first found.groups) text)]
+  (let [inner (if-let [found (regex/find #"(?s)<!\[CDATA\[(.*)\]\]>" text)] (first found.groups) text)]
     (-> inner
         (string/replace "&lt;" "<")
         (string/replace "&gt;" ">")
@@ -33,7 +33,7 @@
                (let [block match.text]
                  (when-let [href (tag-text block "href")]
                    {href: href etag: (tag-text block "getetag") data: (tag-text block "calendar-data")})))
-             (regex/find-all "(?s)<(?:[A-Za-z0-9_-]+:)?response\\b.*?</(?:[A-Za-z0-9_-]+:)?response>" body))))
+             (regex/find-all #"(?s)<(?:[A-Za-z0-9_-]+:)?response\b.*?</(?:[A-Za-z0-9_-]+:)?response>" body))))
 
 (def (origin url)
   (or (get (regex/find "^[a-zA-Z]+://[^/]+" url) :text) ""))

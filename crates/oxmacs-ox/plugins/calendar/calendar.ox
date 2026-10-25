@@ -198,13 +198,13 @@
   (reminders/default-minutes))
 
 (def (parse-date text)
-  (let [match (regex/find "^(\\d{{4})-(\\d{{1,2})-(\\d{{1,2})$" (string/trim text))]
+  (let [match (regex/find #"^(\d{4})-(\d{1,2})-(\d{1,2})$" (string/trim text))]
     (when match
       (let [[year month day] (map string/to-number match.groups)]
         (time/day-number {year: year month: month day: day})))))
 
 (def (parse-clock text)
-  (let [match (regex/find "^(\\d{{1,2})(?::(\\d{{2}))?$" (string/trim text))]
+  (let [match (regex/find #"^(\d{1,2})(?::(\d{2}))?$" (string/trim text))]
     (when match
       {hour: (string/to-number (first match.groups)) minute: (or (string/to-number (or (second match.groups) "0")) 0)})))
 

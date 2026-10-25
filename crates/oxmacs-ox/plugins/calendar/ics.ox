@@ -92,7 +92,7 @@
   "An iCalendar duration such as PT1H30M or -P1D in milliseconds."
   (let [given (string/trim (or text ""))
         negative (string/starts-with? given "-")
-        match (regex/find "P(?:(\\d+)W)?(?:(\\d+)D)?(?:T(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?)?" given)
+        match (regex/find #"P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?" given)
         part (fn [index] (or (string/to-number (or (get (get match :groups) index) "")) 0))
         total (+ (* (part 0) 604800000) (* (part 1) 86400000) (* (part 2) 3600000) (* (part 3) 60000) (* (part 4) 1000))]
     (if negative (- total) total)))

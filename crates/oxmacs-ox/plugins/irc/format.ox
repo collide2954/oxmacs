@@ -46,7 +46,7 @@
 (def (words-of segments)
   (vec (mapcat (fn [segment]
                  (let [[text face] (if (string? segment) [segment nil] segment)]
-                   (map (fn [match] [match.text face]) (regex/find-all "\\s+|\\S+" text))))
+                   (map (fn [match] [match.text face]) (regex/find-all #"\s+|\S+" text))))
                segments)))
 
 (def (chop word width)
