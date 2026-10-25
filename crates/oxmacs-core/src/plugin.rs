@@ -46,6 +46,14 @@ pub trait PluginBuffer: Any + Send + fmt::Debug {
         Vec::new()
     }
 
+    fn hears_clicks(&self) -> bool {
+        false
+    }
+
+    fn hears_typing(&self) -> bool {
+        false
+    }
+
     fn unsaved(&self) -> bool {
         false
     }

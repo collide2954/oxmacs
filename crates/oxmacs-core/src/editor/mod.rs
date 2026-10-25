@@ -5,6 +5,7 @@ mod dispatch;
 mod editing;
 mod effect;
 mod flash;
+mod heard;
 mod job;
 mod keystrokes;
 mod languages;
@@ -29,6 +30,7 @@ pub use build::lint::{LintRun, Linter};
 pub use console::{ConsoleHook, ConsoleSpec, MarkerHook};
 pub use editing::format::{FormatRequest, Formatter};
 pub use effect::{Effect, FetchId};
+pub use heard::Heard;
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
 pub use keystrokes::Keystroke;
 pub use languages::registry::{LineHighlighter, LineIndenter};
@@ -145,6 +147,8 @@ pub struct Editor {
     macros: editing::macros::Macros,
     drag_anchor: Option<usize>,
     line_anchor: Option<usize>,
+    line_drag: Option<(crate::text::BufferId, usize)>,
+    heard: Vec<Heard>,
     primary: Option<Range<usize>>,
     effects: Vec<Effect>,
     clipboard_history: Vec<String>,
@@ -239,6 +243,8 @@ impl Editor {
             macros: editing::macros::Macros::default(),
             drag_anchor: None,
             line_anchor: None,
+            line_drag: None,
+            heard: Vec::new(),
             primary: None,
             effects: Vec::new(),
             clipboard_history: Vec::new(),
@@ -690,6 +696,9 @@ impl Editor {
     }
 
     fn run(&mut self, command: Command, shifted: bool) {
+        if command == Command::SelfInsertCommand && self.hear_typing() {
+            return;
+        }
         if command.modifies_text() && self.refuse_read_only() {
             return;
         }

@@ -20,6 +20,10 @@ impl Editor {
     pub fn click(&mut self, cell: Cell, clicks: Clicks, extend: bool) {
         self.end_command_chain();
         let position = self.position_at(cell);
+        self.line_drag = None;
+        if self.hear_click(position, clicks, extend) {
+            return;
+        }
         if clicks == Clicks::Single && !extend && self.buffers.splash(0).is_some() {
             let buffer = self.buffers.current_mut();
             buffer.deactivate_mark();
@@ -99,10 +103,13 @@ impl Editor {
     }
 
     pub fn drag(&mut self, cell: Cell) {
+        let position = self.position_at(cell);
+        if self.hear_drag(position) {
+            return;
+        }
         let Some(anchor) = self.drag_anchor else {
             return;
         };
-        let position = self.position_at(cell);
         let buffer = self.buffers.current_mut();
         if !buffer.mark_active() {
             buffer.set_mark(anchor);
@@ -186,7 +193,7 @@ impl Editor {
         self.goal_column = Some(goal);
     }
 
-    fn position_at(&self, cell: Cell) -> usize {
+    pub(in crate::editor) fn position_at(&self, cell: Cell) -> usize {
         let layout = self.layout();
         let rows = isize::try_from(cell.row).unwrap_or(isize::MAX);
         layout.position_at(layout.step(self.viewport.top(), rows), cell.column)
