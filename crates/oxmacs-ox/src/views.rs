@@ -105,6 +105,7 @@ struct Open {
     scope: ScopeId,
     resized: Option<Hold>,
     size: Option<(u32, u32)>,
+    failed: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -481,6 +482,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     let index = if let Some(index) = views.open.iter().position(|view| view.name == name) {
         heap.release(views.open[index].function);
         views.open[index].function = function;
+        views.open[index].failed = None;
         if let Some(resized) = resized
             && let Some(old) = views.open[index].resized.replace(resized)
         {
@@ -507,6 +509,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             scope,
             resized,
             size: None,
+            failed: None,
         });
         views.open.len() - 1
     };
@@ -626,6 +629,20 @@ pub fn redraw(editor: &mut Editor) {
     }
 }
 
+fn newly_failed(editor: &mut Editor, buffer: BufferId, message: &str) -> bool {
+    let Some(view) = editor
+        .plugin_state_mut::<Views>()
+        .and_then(|views| views.open.iter_mut().find(|view| view.buffer == buffer))
+    else {
+        return true;
+    };
+    if view.failed.as_deref() == Some(message) {
+        return false;
+    }
+    view.failed = Some(message.to_owned());
+    true
+}
+
 pub fn refresh(isolate: &mut Isolate, editor: &mut Editor) {
     let writes = isolate.heap().atom_writes();
     let Some(views) = editor.plugin_state_mut::<Views>() else {
@@ -647,7 +664,9 @@ pub fn refresh(isolate: &mut Isolate, editor: &mut Editor) {
         let (node, callbacks) = match render(isolate, editor, function) {
             Ok(rendered) => rendered,
             Err(error) => {
-                log::report(editor, &error, None);
+                if newly_failed(editor, buffer, &error.message) {
+                    log::report(editor, &error, None);
+                }
                 continue;
             }
         };
@@ -655,6 +674,7 @@ pub fn refresh(isolate: &mut Isolate, editor: &mut Editor) {
             .plugin_state_mut::<Views>()
             .and_then(|views| views.open.iter_mut().find(|view| view.buffer == buffer))
         {
+            view.failed = None;
             for old in std::mem::replace(&mut view.callbacks, callbacks) {
                 isolate.release(old);
             }
@@ -919,6 +939,26 @@ mod tests {
             "{}",
             logged(&editor)
         );
+    }
+
+    #[test]
+    fn a_view_stuck_the_same_way_is_reported_once_until_it_draws_again() {
+        let (mut editor, mut ox) = opened(
+            r#"(def stuck (atom true)) (def (spin) (spin)) (open-view "*maybe*" (fn [] (when @stuck (spin)) (text "ok")))"#,
+        );
+        let reports = |editor: &Editor| logged(editor).matches("took longer").count();
+        assert_eq!(reports(&editor), 1);
+
+        ox.eval(&mut editor, "(reset! stuck :still)").unwrap();
+        settle(&mut editor, &mut ox);
+        assert_eq!(reports(&editor), 1);
+
+        ox.eval(&mut editor, "(reset! stuck false)").unwrap();
+        settle(&mut editor, &mut ox);
+        assert_eq!(shown(&editor, "*maybe*"), text("ok"));
+        ox.eval(&mut editor, "(reset! stuck true)").unwrap();
+        settle(&mut editor, &mut ox);
+        assert_eq!(reports(&editor), 2);
     }
 
     #[test]
