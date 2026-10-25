@@ -94,11 +94,12 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
       - name: Clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-      - name: Ox format and check
+      - name: Ox format, check and test
         if: matrix.os == 'ubuntu-latest'
         run: |
           cargo run -q -p ox-cli --locked -- fmt --check crates/oxmacs-ox/plugins crates/oxmacs-ox/src crates/oxmacs-api/src crates/ox/src/library crates/ox-library/src crates/ox-perf/benchmarks
           cargo run -q -p ox-cli --locked -- check crates/oxmacs-ox/plugins
+          cargo run -q -p ox-cli --locked -- test crates/oxmacs-ox/plugins
 
   check:
     name: ${{ matrix.name }}
