@@ -19,6 +19,8 @@ use crate::{style, units};
 
 const SIDE_TINT: f32 = 0.03;
 const SIDE_PADDING: f32 = 8.0;
+const COLUMN_PADDING: f32 = 8.0;
+const COLUMN_MARGIN: f32 = 1.5;
 
 impl App {
     pub fn view(&self) -> Element<'_, Message> {
@@ -35,8 +37,10 @@ impl App {
             self.text_size,
             mode_line::height(self.text_size),
         );
+        let chrome =
+            !self.editor.presentation().hide_chrome && takeover::current(&self.editor).is_none();
         let tabs: Element<'_, Message> = match tabbar::shown(&self.editor) {
-            Some(bar) if takeover::current(&self.editor).is_none() => tab_bar::view(
+            Some(bar) if chrome => tab_bar::view(
                 bar,
                 tab_bar::Look {
                     faces,
@@ -113,7 +117,11 @@ impl App {
     }
 
     fn beside_side<'a>(&'a self, main: Element<'a, Message>, faces: Faces) -> Element<'a, Message> {
-        let Some(side) = self.editor.side_window() else {
+        let Some(side) = self
+            .editor
+            .side_window()
+            .filter(|_| !self.editor.presentation().hide_chrome)
+        else {
             return main;
         };
         let Some(pane) = self.editor.pane_of(side.window) else {
@@ -200,6 +208,9 @@ impl App {
         };
         let active = pane.is_selected();
         let body = self.body(pane, window, faces);
+        if self.editor.presentation().hide_chrome {
+            return body;
+        }
         let last = self.editor.tiling().windows().last() == Some(&window);
         let segments = if last {
             self.editor.mode_line_segments()
@@ -245,7 +256,7 @@ impl App {
             .into();
         }
 
-        container(BufferView::new(
+        let text = container(BufferView::new(
             pane,
             window,
             faces,
@@ -259,7 +270,22 @@ impl App {
             Message::View,
         ))
         .padding([0, 4])
-        .height(Length::Fill)
-        .into()
+        .height(Length::Fill);
+        let side = self.editor.side_window().map(|side| side.window);
+        match self
+            .editor
+            .presentation()
+            .column
+            .filter(|_| side != Some(window))
+        {
+            Some(columns) => container(text.width(Length::Fixed(
+                units::to_f32(columns) * units::cell_width(self.text_size) + COLUMN_PADDING,
+            )))
+            .center_x(Length::Fill)
+            .padding([self.text_size * COLUMN_MARGIN, 0.0])
+            .height(Length::Fill)
+            .into(),
+            None => text.into(),
+        }
     }
 }

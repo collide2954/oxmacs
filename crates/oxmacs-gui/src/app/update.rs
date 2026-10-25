@@ -4,7 +4,7 @@ use iced::font::Family;
 use iced::futures::channel::mpsc;
 use iced::theme::Mode;
 use iced::time::Instant;
-use iced::{Task, clipboard, keyboard};
+use iced::{Task, clipboard, keyboard, window};
 use oxmacs_core::command::Command;
 use oxmacs_core::editor::{Edge, Effect, Job, Outcome, ServerId, WindowId};
 use oxmacs_core::external::lsp;
@@ -271,6 +271,12 @@ impl App {
             Message::TakeoverSized(size) => self.takeover_size = Some(size),
             Message::Tab(event) => self.tab_message(event),
             Message::SideDragged(delta) => self.drag_side(delta),
+            Message::WindowModeBefore(id, mode) => {
+                self.before_fullscreen = Some(mode);
+                if self.editor.presentation().fullscreen {
+                    return window::set_mode(id, window::Mode::Fullscreen);
+                }
+            }
             Message::Focus(focused) => self.focus_changed(focused),
             Message::Idle => self.idle(),
             Message::CloseRequested => self.editor.execute(Command::SaveBuffersKillOxmacs),
@@ -376,6 +382,16 @@ impl App {
             Effect::Notify { title, body } => {
                 notify::send(&title, &body);
                 Task::none()
+            }
+            Effect::Fullscreen(true) => window::latest().and_then(|id| {
+                window::mode(id).map(move |mode| Message::WindowModeBefore(id, mode))
+            }),
+            Effect::Fullscreen(false) => {
+                let mode = self
+                    .before_fullscreen
+                    .take()
+                    .unwrap_or(window::Mode::Windowed);
+                window::latest().and_then(move |id| window::set_mode(id, mode))
             }
         }
     }

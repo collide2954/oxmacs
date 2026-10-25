@@ -50,6 +50,10 @@ impl<'a> Pane<'a> {
         }
     }
 
+    pub(in crate::editor) fn editor(&self) -> &'a Editor {
+        self.editor
+    }
+
     pub fn buffer(&self) -> &'a Buffer {
         self.editor
             .buffers
@@ -70,6 +74,9 @@ impl<'a> Pane<'a> {
     }
 
     pub fn gutter(&self) -> Option<Gutter> {
+        if self.editor.presentation.hide_chrome {
+            return None;
+        }
         let style = self.editor.line_numbers_at(self.index)?;
         let buffer = self.buffer();
         Some(Gutter::new(

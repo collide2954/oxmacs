@@ -16,6 +16,7 @@ mod notes;
 mod opening;
 mod page;
 mod plugins;
+mod presentation;
 mod prompts;
 mod search;
 mod special;
@@ -37,6 +38,7 @@ pub use languages::registry::{LineHighlighter, LineIndenter};
 pub use lsp::{SERVERS, ServerId, ServerSpec};
 pub use motion::mouse::{Cell, Clicks};
 pub use page::{Page, clip, fill};
+pub use presentation::Presentation;
 pub use prompts::callbacks::{InputStyle, Offer, Picked};
 pub use prompts::input_line::InputLine;
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
@@ -149,6 +151,7 @@ pub struct Editor {
     line_anchor: Option<usize>,
     line_drag: Option<(crate::text::BufferId, usize)>,
     heard: Vec<Heard>,
+    presentation: Presentation,
     primary: Option<Range<usize>>,
     effects: Vec<Effect>,
     clipboard_history: Vec<String>,
@@ -245,6 +248,7 @@ impl Editor {
             line_anchor: None,
             line_drag: None,
             heard: Vec::new(),
+            presentation: Presentation::default(),
             primary: None,
             effects: Vec::new(),
             clipboard_history: Vec::new(),
@@ -360,6 +364,10 @@ impl Editor {
     }
 
     pub(super) fn reveal_point(&mut self) {
+        if self.presentation.typewriter {
+            self.center_point();
+            return;
+        }
         let layout = Layout::new(
             self.buffers.current(),
             self.viewport.wrap_width(),

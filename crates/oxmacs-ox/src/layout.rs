@@ -1,7 +1,7 @@
 use ox::heap::Heap;
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
-use oxmacs_core::editor::{Arrangement, Axis, Edge, Editor};
+use oxmacs_core::editor::{Arrangement, Axis, Edge, Editor, Presentation};
 
 fn made(made: Result<Value, ox::heap::HeapFull>) -> Result<Value, Error> {
     made.map_err(|full| Error::new(full.to_string()))
@@ -166,7 +166,80 @@ fn side(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Erro
     ])
 }
 
+const PRESENTATION: &str =
+    "set-presentation takes :width, :hide-chrome, :dim, :typewriter and :fullscreen";
+
+fn set_presentation(
+    heap: &mut Heap,
+    editor: &mut Editor,
+    arguments: &[Value],
+) -> Result<Value, Error> {
+    let mut shown = Presentation::default();
+    if arguments[0] != Value::Nil {
+        let entries = heap
+            .entries(arguments[0])
+            .ok_or_else(|| Error::new(PRESENTATION))?;
+        for (key, value) in entries {
+            let Value::Keyword(key) = key else {
+                return Err(Error::new(PRESENTATION));
+            };
+            match (key.name(), value) {
+                ("width", Value::Int(columns)) => shown.column = usize::try_from(columns).ok(),
+                ("width", Value::Nil) => shown.column = None,
+                ("hide-chrome", _) => shown.hide_chrome = value.truthy(),
+                ("dim", _) => shown.dim = value.truthy(),
+                ("typewriter", _) => shown.typewriter = value.truthy(),
+                ("fullscreen", _) => shown.fullscreen = value.truthy(),
+                _ => return Err(Error::new(PRESENTATION)),
+            }
+        }
+    }
+    editor.set_presentation(shown);
+    Ok(Value::Nil)
+}
+
+fn presentation(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Error> {
+    let shown = editor.presentation();
+    let width = shown.column.map_or(Value::Nil, |columns| {
+        Value::Int(i64::try_from(columns).unwrap_or(i64::MAX))
+    });
+    heap.map_from(&[
+        Value::keyword("width"),
+        width,
+        Value::keyword("hide-chrome"),
+        Value::Bool(shown.hide_chrome),
+        Value::keyword("dim"),
+        Value::Bool(shown.dim),
+        Value::keyword("typewriter"),
+        Value::Bool(shown.typewriter),
+        Value::keyword("fullscreen"),
+        Value::Bool(shown.fullscreen),
+    ])
+}
+
+fn word_wrapped(heap: &Heap, editor: &Editor, arguments: &[Value]) -> Result<bool, Error> {
+    let id = match arguments.first() {
+        Some(buffer) => crate::handles::target(heap, editor, "word-wrap?", *buffer)?,
+        None => editor.buffer().id(),
+    };
+    Ok(editor
+        .buffer_by_id(id)
+        .is_some_and(oxmacs_core::text::Buffer::word_wrap))
+}
+
 pub fn install(isolate: &mut Isolate) {
+    isolate.define_host_native::<Editor>("set-word-wrap", 2, Some(2), |heap, editor, arguments| {
+        let id = crate::handles::target(heap, editor, "set-word-wrap", arguments[0])?;
+        if let Some(buffer) = editor.buffer_by_id_mut(id) {
+            buffer.set_word_wrap(arguments[1].truthy());
+        }
+        Ok(Value::Nil)
+    });
+    isolate.define_host_native::<Editor>("word-wrap?", 0, Some(1), |heap, editor, arguments| {
+        word_wrapped(heap, editor, arguments).map(Value::Bool)
+    });
+    isolate.define_host_native::<Editor>("set-presentation", 1, Some(1), set_presentation);
+    isolate.define_host_native::<Editor>("presentation", 0, Some(0), presentation);
     isolate.define_host_native::<Editor>("show-side-window", 1, None, show_side);
     isolate.define_host_native::<Editor>("side-window", 0, Some(0), side);
     isolate.define_host_native::<Editor>("close-side-window", 0, Some(0), |_, editor, _| {
@@ -241,6 +314,51 @@ mod tests {
             Ok(shown) => shown,
             Err(error) => format!("error: {}", error.message),
         }
+    }
+
+    #[test]
+    fn buffers_wrap_words_when_asked() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+
+        assert_eq!(eval(&mut editor, &mut ox, "(word-wrap?)"), "false");
+        eval(&mut editor, &mut ox, r#"(set-word-wrap "*scratch*" true)"#);
+
+        assert!(editor.buffer().word_wrap());
+        assert_eq!(
+            eval(&mut editor, &mut ox, r#"(word-wrap? "*scratch*")"#),
+            "true"
+        );
+    }
+
+    #[test]
+    fn presentations_change_how_the_windows_look_and_read_back() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+
+        eval(
+            &mut editor,
+            &mut ox,
+            "(set-presentation {width: 72 hide-chrome: true dim: true typewriter: true fullscreen: true})",
+        );
+
+        let shown = editor.presentation();
+        assert_eq!(shown.column, Some(72));
+        assert!(shown.hide_chrome && shown.dim && shown.typewriter && shown.fullscreen);
+        assert_eq!(
+            eval(&mut editor, &mut ox, "(presentation)"),
+            "{width: 72 hide-chrome: true dim: true typewriter: true fullscreen: true}"
+        );
+        eval(&mut editor, &mut ox, "(set-presentation nil)");
+        assert_eq!(
+            editor.presentation(),
+            oxmacs_core::editor::Presentation::default()
+        );
+        assert!(
+            eval(&mut editor, &mut ox, "(set-presentation {zoom: 2})").contains(
+                "set-presentation takes :width, :hide-chrome, :dim, :typewriter and :fullscreen"
+            )
+        );
     }
 
     #[test]

@@ -36,6 +36,7 @@ const PILL_PADDING: f32 = 0.35;
 const LINE_CURSOR: f32 = 0.18;
 const LINE_CURSOR_UNFOCUSED: f32 = 0.07;
 const LINE_CURSOR_EDGE: f32 = 3.0;
+const DIMMED: f32 = 0.3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewEvent {
@@ -741,6 +742,7 @@ struct DrawnLine<'a> {
     flashes: Vec<((usize, Option<usize>), Highlight, f32)>,
     diagnostics: Vec<((usize, Option<usize>), Severity)>,
     note: Option<(String, Highlight)>,
+    dimmed: bool,
 }
 
 impl<'a, Message> BufferView<'a, Message> {
@@ -755,6 +757,7 @@ impl<'a, Message> BufferView<'a, Message> {
         let shift = state.shift();
         let now = state.frame.unwrap_or_else(Instant::now);
         let selection = buffer.selection();
+        let focus = self.pane.focus_lines();
         let mut lines: Vec<DrawnLine<'a>> = Vec::new();
         let mut rows = Vec::new();
         for row in self
@@ -816,6 +819,9 @@ impl<'a, Message> BufferView<'a, Message> {
                     flashes,
                     style: self.pane.line_style(row.line),
                     text,
+                    dimmed: focus
+                        .as_ref()
+                        .is_some_and(|lines| !lines.contains(&row.line)),
                 });
             }
             let y = bounds.y + (signed_to_f32(row.offset) + shift) * cell.height;
@@ -841,12 +847,14 @@ impl<'a, Message> BufferView<'a, Message> {
     {
         let foreground = style::color(self.faces.default.foreground);
         let tab_width = self.pane.tab_width();
+        let fade = if line.dimmed { DIMMED } else { 1.0 };
         for segment in
             display::segments_in(&line.text, row.chars.clone(), &line.style.spans, tab_width)
         {
             let color = segment
                 .face
-                .map_or(foreground, |face| style::color(self.faces.highlight(face)));
+                .map_or(foreground, |face| style::color(self.faces.highlight(face)))
+                .scale_alpha(fade);
             let x = to_f32(segment.column - row.column) * cell_width;
             renderer.fill_text(
                 self.text(segment.text, Size::new(f32::INFINITY, rectangle.height)),
@@ -868,7 +876,7 @@ impl<'a, Message> BufferView<'a, Message> {
             );
         }
         let columns = self.pane.viewport().columns();
-        if row.end_column.is_some() && columns > 0 {
+        if row.end_column.is_some() && columns > 0 && !self.pane.buffer().word_wrap() {
             let x = to_f32(columns - 1) * cell_width;
             renderer.fill_text(
                 self.text(CONTINUATION.to_owned(), rectangle.size()),

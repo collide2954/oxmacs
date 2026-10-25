@@ -41,6 +41,7 @@ pub enum Effect {
     ToServer(ServerId, String),
     StopServer(ServerId),
     Notify { title: String, body: String },
+    Fullscreen(bool),
 }
 
 impl Editor {

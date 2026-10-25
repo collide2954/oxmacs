@@ -48,6 +48,7 @@ pub struct App {
     focused_since: Option<Instant>,
     tab_hover: Option<usize>,
     tab_drag: Option<usize>,
+    before_fullscreen: Option<window::Mode>,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +84,7 @@ pub enum Message {
     EndTakeover,
     Tab(TabMessage),
     SideDragged(f32),
+    WindowModeBefore(window::Id, window::Mode),
     Focus(bool),
     Idle,
     CloseRequested,
@@ -120,6 +122,7 @@ impl App {
             focused_since: Some(Instant::now()),
             tab_hover: None,
             tab_drag: None,
+            before_fullscreen: None,
         };
         app.configure(config);
         app
@@ -602,6 +605,22 @@ mod tests {
         }
 
         assert_eq!(app.editor().message(), Some("dropped 0 on 1"));
+    }
+
+    #[test]
+    fn hidden_chrome_drops_the_mode_lines_tab_bar_and_side_window() {
+        let mut app = with_tab_bar();
+        app.editor
+            .set_presentation(oxmacs_core::editor::Presentation {
+                hide_chrome: true,
+                column: Some(60),
+                ..oxmacs_core::editor::Presentation::default()
+            });
+
+        let mut ui = iced_test::simulator(app.view());
+
+        assert!(ui.find("-- *scratch*   L1 C0   (Ox)").is_err());
+        assert!(ui.find("notes").is_err());
     }
 
     fn taken_over() -> App {
