@@ -47,7 +47,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | --- | --- | --- | --- |
 | `calendar` | 0.2.3 | opt-in | Calendars in .ics files, with CalDAV sync, reminders and invitations |
 | `customize` | 0.1.3 | on | Change the editor's and plugins' settings in a form |
-| `dired` | 0.2.4 | on | List directories and manage their files |
+| `dired` | 0.2.5 | on | List directories and manage their files |
 | `git` | 0.3.1 | opt-in | Git status and staging in the style of Magit |
 | `irc` | 0.9.6 | opt-in | An IRCv3 client in the style of ERC |
 | `keycast` | 0.2.1 | opt-in | Shows the keys you press and the commands they run, for demos |

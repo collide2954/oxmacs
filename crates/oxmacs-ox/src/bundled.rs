@@ -736,6 +736,47 @@ mod dired {
     }
 
     #[test]
+    fn renaming_moves_the_buffers_visiting_what_moved() {
+        let dir = workspace();
+        let (_home, mut editor, mut ox) = listed(dir.path());
+        editor.open_file(&dir.path().join("a.txt"));
+        editor.open_file(&dir.path().join("sub").join("c.txt"));
+        editor.open_file(dir.path());
+        settle(&mut editor, &mut ox);
+        let visiting = |editor: &Editor, name: &str| {
+            editor
+                .buffer_named(name)
+                .and_then(|id| editor.buffer_by_id(id))
+                .and_then(|buffer| buffer.file())
+                .map(|file| file.path.clone())
+        };
+
+        assert_eq!(at_point(&editor), format!("sub{MAIN_SEPARATOR}"));
+        press(&mut editor, &mut ox, "R");
+        typed(&mut editor, &mut ox, "inner");
+        press(&mut editor, &mut ox, "RET g");
+        let line = lines(&editor)
+            .iter()
+            .position(|line| line.ends_with("a.txt"))
+            .unwrap();
+        let start = editor.buffer().line_start(line + 1);
+        editor.buffer_mut().set_point(start);
+        press(&mut editor, &mut ox, "R");
+        typed(&mut editor, &mut ox, "moved.txt");
+        press(&mut editor, &mut ox, "RET");
+
+        assert_eq!(
+            visiting(&editor, "c.txt"),
+            Some(dir.path().join("inner").join("c.txt"))
+        );
+        assert_eq!(
+            visiting(&editor, "moved.txt"),
+            Some(dir.path().join("moved.txt"))
+        );
+        assert_eq!(visiting(&editor, "a.txt"), None);
+    }
+
+    #[test]
     fn marks_made_while_a_listing_refreshes_are_kept() {
         let dir = workspace();
         let (_home, mut editor, mut ox) = listed(dir.path());

@@ -444,6 +444,17 @@ pub fn install(isolate: &mut Isolate) {
         Ok(Value::Bool(editor.open_file(&path)))
     });
     isolate.define_host_native::<Editor>(
+        "move-visited-files",
+        2,
+        Some(2),
+        |heap, editor, arguments| {
+            let from = path_of(heap, "move-visited-files", arguments[0])?;
+            let to = path_of(heap, "move-visited-files", arguments[1])?;
+            editor.file_moved(&from, &to);
+            Ok(Value::Nil)
+        },
+    );
+    isolate.define_host_native::<Editor>(
         "open-externally",
         1,
         Some(1),

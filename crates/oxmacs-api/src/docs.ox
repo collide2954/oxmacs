@@ -56,6 +56,7 @@
 (remember-location (buffer) (position)) "Remembers the current place, or position in buffer, a handle or a name, so M-, comes back to it after a jump."
 (just-typed?) "True when the last command typed a character into the buffer."
 (open-file path) "Visits the file at path, returning whether it opened."
+(move-visited-files from to) "Points the buffers visiting the file from, or files in the folder from, at to, after it was renamed or moved there."
 (open-externally path) "Opens a path or URL in the system's own application."
 (buffer-file) "The path of the file the current buffer visits, or nil."
 (default-directory) "The folder of the current buffer, where file prompts start."

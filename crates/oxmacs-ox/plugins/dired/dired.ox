@@ -217,7 +217,10 @@
                               to (if into (path/join target entry.name) target)]
                           (when (or (not (await (file/exists? to)))
                                     (await (yes-or-no "Overwrite {(path/abbreviate to)}?")))
-                            (await (if moving (file/rename from to) (file/copy from to))))))
+                            (if moving
+                              (do (await (file/rename from to))
+                                (move-visited-files from to))
+                              (await (file/copy from to))))))
                       found)
                  (refresh-all)
                  (message "{(if moving "Moved" "Copied")} {(files (count found))}"))))))))))
