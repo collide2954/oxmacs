@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use ox::heap::{Heap, Hold};
 use ox::value::{Value, print};
 use ox::{Error, Isolate};
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Arrangement, Editor, WindowId};
 use oxmacs_core::text::{BufferId, Splice};
 
 use crate::{PATIENT, handles, log, plugins};
@@ -19,10 +19,23 @@ enum Waiting {
     Opened(BufferId),
     Changed(BufferId, Vec<Splice>),
     Mode(BufferId, String),
+    Windows,
+}
+
+type Seen = (WindowId, BufferId, Arrangement);
+
+fn windows_seen(editor: &Editor) -> Seen {
+    (
+        editor.selected_window(),
+        editor.buffer().id(),
+        editor.window_arrangement(),
+    )
 }
 
 #[derive(Debug, Default)]
 pub struct Hooks {
+    windows: Vec<(String, Hold)>,
+    seen_windows: Option<Seen>,
     directory: Option<Hold>,
     opener: Option<String>,
     disk: Vec<(String, Hold)>,
@@ -130,6 +143,9 @@ fn notice(editor: &mut Editor) {
         return;
     };
     let watching_modes = !known.modes.is_empty();
+    let windows = (!known.windows.is_empty())
+        .then(|| windows_seen(editor))
+        .filter(|now| known.seen_windows.as_ref() != Some(now));
     let edits = if known.changed.is_empty() {
         Vec::new()
     } else {
@@ -145,6 +161,10 @@ fn notice(editor: &mut Editor) {
     };
     for (id, splices) in edits {
         hooks.waiting.push(Waiting::Changed(id, splices));
+    }
+    if let Some(now) = windows {
+        hooks.seen_windows = Some(now);
+        hooks.waiting.push(Waiting::Windows);
     }
     for (id, mode) in modes {
         if hooks.languages.get(&id) != Some(&mode) {
@@ -283,6 +303,7 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
                 };
                 (held(editor, |hooks| &hooks.changed), vec![buffer, changes])
             }
+            Waiting::Windows => (held(editor, |hooks| &hooks.windows), Vec::new()),
             Waiting::Mode(id, mode) => {
                 let Ok(buffer) = handles::handle(isolate.heap_mut(), editor, id) else {
                     continue;
@@ -375,6 +396,21 @@ fn install_buffer_hooks(isolate: &mut Isolate) {
         }
         Ok(Value::Nil)
     });
+    isolate.define_host_native::<Editor>(
+        "on-window-change",
+        2,
+        Some(2),
+        |heap, editor, arguments| {
+            let now = windows_seen(editor);
+            if let Some(hooks) = hooks(editor) {
+                if hooks.windows.is_empty() {
+                    hooks.seen_windows = Some(now);
+                }
+                keyed(heap, &mut hooks.windows, arguments);
+            }
+            Ok(Value::Nil)
+        },
+    );
     isolate.define_host_native::<Editor>(
         "on-before-save",
         2,
@@ -549,6 +585,22 @@ mod tests {
             ox.eval(&mut editor, "@heard").unwrap(),
             format!(r#"[[:open "notes.rs"] [:mode "{mode}"] [:change "notes.rs" 0 0 1 1]]"#)
         );
+    }
+
+    #[test]
+    fn window_changes_reach_their_handlers_once_each() {
+        let (_home, mut editor, mut ox) =
+            with_init(r"(def seen (atom 0)) (on-window-change :count (fn [] (swap! seen inc)))");
+        let seen = |editor: &mut Editor, ox: &mut Ox| ox.eval(editor, "@seen").unwrap();
+
+        press(&mut editor, &mut ox, "x");
+        assert_eq!(seen(&mut editor, &mut ox), "0");
+        press(&mut editor, &mut ox, "C-x 2");
+        assert_eq!(seen(&mut editor, &mut ox), "1");
+        press(&mut editor, &mut ox, "C-x o");
+        assert_eq!(seen(&mut editor, &mut ox), "2");
+        press(&mut editor, &mut ox, "C-x b o t h e r RET");
+        assert_eq!(seen(&mut editor, &mut ox), "3");
     }
 
     #[test]

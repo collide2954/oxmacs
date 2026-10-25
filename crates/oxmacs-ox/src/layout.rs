@@ -102,6 +102,29 @@ fn read(heap: &Heap, editor: &Editor, value: Value) -> Result<Arrangement, Error
 }
 
 pub fn install(isolate: &mut Isolate) {
+    isolate.define_host_native::<Editor>("store-windows", 1, Some(1), |heap, editor, arguments| {
+        editor.store_windows(&print::display(heap, arguments[0]));
+        Ok(Value::Nil)
+    });
+    isolate.define_host_native::<Editor>(
+        "recall-windows",
+        1,
+        Some(1),
+        |heap, editor, arguments| {
+            Ok(Value::Bool(
+                editor.recall_windows(&print::display(heap, arguments[0])),
+            ))
+        },
+    );
+    isolate.define_host_native::<Editor>(
+        "forget-windows",
+        1,
+        Some(1),
+        |heap, editor, arguments| {
+            editor.forget_windows(&print::display(heap, arguments[0]));
+            Ok(Value::Nil)
+        },
+    );
     isolate.define_host_native::<Editor>("window-layout", 0, Some(0), |heap, editor, _| {
         let arrangement = editor.window_arrangement();
         shown(heap, editor, &arrangement)
@@ -139,6 +162,36 @@ mod tests {
             Ok(shown) => shown,
             Err(error) => format!("error: {}", error.message),
         }
+    }
+
+    #[test]
+    fn window_layouts_are_stored_and_recalled_by_key() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        ox.eval(&mut editor, r#"(open-buffer "*a*" [] :show false)"#)
+            .unwrap();
+        eval(
+            &mut editor,
+            &mut ox,
+            r#"(arrange-windows [:columns "*a*" "*scratch*"] :select "*scratch*")"#,
+        );
+
+        assert_eq!(eval(&mut editor, &mut ox, "(store-windows :one)"), "nil");
+        eval(&mut editor, &mut ox, r#"(arrange-windows "*a*")"#);
+        assert_eq!(eval(&mut editor, &mut ox, "(recall-windows :one)"), "true");
+
+        assert_eq!(editor.buffer().name(), "*scratch*");
+        assert_eq!(
+            eval(&mut editor, &mut ox, "(window-layout)"),
+            r#"[:columns [0.5 "*a*"] [0.5 "*scratch*"]]"#
+        );
+        assert_eq!(eval(&mut editor, &mut ox, "(recall-windows :one)"), "false");
+        eval(
+            &mut editor,
+            &mut ox,
+            "(store-windows :two) (forget-windows :two)",
+        );
+        assert_eq!(eval(&mut editor, &mut ox, "(recall-windows :two)"), "false");
     }
 
     #[test]
