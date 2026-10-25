@@ -4,6 +4,10 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- The downloads and the Fedora package include `THIRD-PARTY-LICENSES.html`, the licenses of the crates oxmacs and ox are built from, beside the JetBrains Mono font's license and the highlight queries' notices.
+
 ### Fixed
 
 - A command run with `!` in the remote file browser that reads its input, such as `cat`, gets none and finishes, instead of hanging the host's connection and swallowing the commands after it.

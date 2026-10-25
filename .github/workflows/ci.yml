@@ -49,6 +49,25 @@ jobs:
           tool: cargo-deny
       - run: cargo deny check
 
+  notices:
+    name: Third-party licenses
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+      - run: cargo about generate --locked -c packaging/licenses/about.toml -o THIRD-PARTY-LICENSES.html packaging/licenses/about.hbs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notices
+          path: THIRD-PARTY-LICENSES.html
+          if-no-files-found: error
+
   clippy:
     name: clippy (${{ matrix.name }})
     needs: fmt
@@ -83,7 +102,7 @@ jobs:
 
   check:
     name: ${{ matrix.name }}
-    needs: clippy
+    needs: [clippy, notices]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     strategy:
@@ -107,6 +126,9 @@ jobs:
             rustflags: -C target-feature=+crt-static
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: notices
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.99.1
@@ -129,7 +151,8 @@ jobs:
           folder="dist/${{ matrix.executable }}"
           mkdir -p "$folder"
           cp "target/release/oxmacs${{ matrix.exe }}" "target/release/ox${{ matrix.exe }}" "$folder/"
-          cp LICENSE-APACHE README.md CHANGELOG.md "$folder/"
+          cp LICENSE-APACHE README.md CHANGELOG.md THIRD-PARTY-LICENSES.html crates/oxmacs-gui/fonts/JetBrainsMono-OFL.txt "$folder/"
+          cp crates/oxmacs-core/queries/NOTICE.md "$folder/QUERIES-NOTICE.md"
           printf '(println (+ 1 2))\n' > smoke.ox
           test "$("$folder/ox${{ matrix.exe }}" smoke.ox | tr -d '\r')" = 3
           test -x "$folder/oxmacs${{ matrix.exe }}"
@@ -146,7 +169,7 @@ jobs:
 
   fedora:
     name: Fedora ${{ matrix.fedora }}
-    needs: clippy
+    needs: [clippy, notices]
     runs-on: ubuntu-latest
     container: registry.fedoraproject.org/fedora:${{ matrix.fedora }}
     timeout-minutes: 90
@@ -158,6 +181,9 @@ jobs:
       - name: Install build tools
         run: dnf install -y --setopt=install_weak_deps=False gcc git-core rpm-build desktop-file-utils findutils
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: notices
       - name: Install Rust
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none

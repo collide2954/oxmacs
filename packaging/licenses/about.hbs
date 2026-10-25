@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oxmacs third-party licenses</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 60em; margin: 2em auto; padding: 0 1em; line-height: 1.5; }
+pre { white-space: pre-wrap; background: #f4f4f4; padding: 1em; }
+</style>
+</head>
+<body>
+<h1>Third-party licenses</h1>
+<p>oxmacs and ox are built from these Rust crates, under these licenses. oxmacs also bundles the JetBrains Mono font, under the SIL Open Font License 1.1 in JetBrainsMono-OFL.txt, and highlight queries adapted from tree-sitter grammars, whose MIT notices are in QUERIES-NOTICE.md.</p>
+<ul>
+{{#each overview}}
+<li><a href="#{{id}}">{{name}}</a> ({{count}})</li>
+{{/each}}
+</ul>
+{{#each licenses}}
+<h2 id="{{id}}">{{name}}</h2>
+<p>Used by:</p>
+<ul>
+{{#each used_by}}
+<li>{{crate.name}} {{crate.version}}</li>
+{{/each}}
+</ul>
+<pre>{{text}}</pre>
+{{/each}}
+</body>
+</html>
