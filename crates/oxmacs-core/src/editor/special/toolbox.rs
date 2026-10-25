@@ -490,7 +490,16 @@ impl Editor {
                 (*tool, self.tool_state(*tool), latest)
             })
             .collect();
-        let specs = self.server_specs();
+        let languages = self.languages();
+        let specs: Vec<_> = self
+            .server_specs()
+            .into_iter()
+            .filter(|spec| {
+                languages
+                    .iter()
+                    .any(|language| spec.language_id(language.name()).is_some())
+            })
+            .collect();
         let name_width = tools
             .iter()
             .map(|tool| tool.name.chars().count() + 2)

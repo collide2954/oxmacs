@@ -12,6 +12,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- `M-x list-tools` lists only the language servers of languages oxmacs knows, instead of offering to install pyright, marksman, clangd, gopls and typescript-language-server, which could never start.
 - Renaming or moving a file or folder with `R` in dired moves the buffers visiting it along, as dired did before it became a plugin, instead of leaving them on the old path, where saving brought the old file back.
 - A command run with `!` in the remote file browser that reads its input, such as `cat`, gets none and finishes, instead of hanging the host's connection and swallowing the commands after it.
 - Files read over sftp each pass through a file of their own, removed once read, so two reads at once no longer overwrite each other.

@@ -708,6 +708,54 @@ fn inlay_hints_show_faintly_at_the_end_of_their_lines_until_an_edit() {
     assert_eq!(editor.pane().line_note(1), None);
 }
 
+static MARKDOWN: crate::syntax::LanguageSpec = crate::syntax::LanguageSpec {
+    name: "Markdown",
+    extensions: &["md"],
+    file_names: &[],
+    aliases: &["markdown"],
+    line_comment: None,
+    pairs: &[],
+    indentation: crate::syntax::Indentation::KEEP,
+    grammar: None,
+    grammars: &[],
+    outline: crate::syntax::Outline::NONE,
+    features: &[],
+};
+
+#[test]
+fn list_tools_lists_only_the_servers_of_languages_oxmacs_knows() {
+    let mut editor = Editor::new();
+    editor.lsp.find = |_| None;
+    editor.add_language_servers(SERVERS);
+    let listed = |editor: &mut Editor| {
+        press(editor, "M-x");
+        type_text(editor, "list-tools");
+        press(editor, "RET");
+        crate::editor::test_support::lines(editor)
+            .iter()
+            .filter_map(|line| line.trim_start().split(' ').next().map(str::to_owned))
+            .collect::<Vec<_>>()
+    };
+
+    let names = listed(&mut editor);
+    for known in ["rust-analyzer", "taplo"] {
+        assert!(names.iter().any(|name| name == known), "{names:?}");
+    }
+    for unknown in [
+        "pyright",
+        "marksman",
+        "clangd",
+        "gopls",
+        "typescript-language-server",
+    ] {
+        assert!(!names.iter().any(|name| name == unknown), "{names:?}");
+    }
+
+    editor.add_language(crate::syntax::Language::new(&MARKDOWN), None);
+    let names = listed(&mut editor);
+    assert!(names.iter().any(|name| name == "marksman"), "{names:?}");
+}
+
 #[test]
 fn list_tools_names_the_language_servers_and_offers_to_install_them() {
     let mut editor = Editor::new();
@@ -733,9 +781,6 @@ fn list_tools_names_the_language_servers_and_offers_to_install_them() {
             .ends_with("✗ not installed; i runs rustup component add rust-analyzer")
     );
     assert!(shown[row("taplo")].contains("✓ found taplo"));
-    assert!(shown[row("marksman")].ends_with(
-        "✗ not installed; download marksman from https://github.com/artempyanykh/marksman/releases"
-    ));
     let line = row("rust-analyzer");
     let buffer = editor.buffer_mut();
     let start = buffer.line_start(line);
