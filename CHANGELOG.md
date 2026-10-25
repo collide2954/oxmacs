@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `.editorconfig` files choose tabs or spaces (`indent_style`), the indent size and the tab width for the files they cover, ahead of the `indent-tabs` and `tab-width` settings, and a mode can default to tabs with `defmode`'s `:indent {tabs: true}`.
 - The `indent-tabs` setting indents with tabs, then spaces for what is left, instead of spaces only.
 - `defmode` takes `:indent {width: 4 after: #"[:{]\s*$" dedent: #"^\s*}"}`: `RET` and `TAB` indent one width past a line that opens a block and back on one that closes it. In modes without it, `RET` and `TAB` keep the indentation of the line above instead of starting at the margin and inserting a tab.
 - A `defmode` highlighter that takes a third argument gets the state it returned for the line before, by returning `{spans: [...] state: x}`, so highlighting can carry strings, comments and blocks across lines; after an edit, only the lines from the first changed one are highlighted again.

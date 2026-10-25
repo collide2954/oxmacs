@@ -52,7 +52,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `irc` | 0.9.7 | opt-in | An IRCv3 client in the style of ERC |
 | `keycast` | 0.2.2 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `life` | 0.2.2 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.21 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.22 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.1 | opt-in | Markdown rendered as styled text |
 | `processes` | 0.1.1 | on | List the processes oxmacs runs, with their usage |
 | `profiler` | 0.1.1 | on | Find where the Ox code in oxmacs spends its time |
@@ -94,7 +94,7 @@ oxmacs is configured in Ox, in `~/.oxmacs/init.ox` (`OXMACS_HOME` moves the fold
 (bind-key "C-c w" 'weather)
 ```
 
-`M-x customize` changes settings in a form and saves them to `~/.oxmacs/custom.ox`, which runs before `init.ox`, so `init.ox` wins. `M-x find-init-file` opens `init.ox`, and saving it applies it at once. `oxmacs -q` starts without running either file, and `oxmacs --help` lists the other options.
+`M-x customize` changes settings in a form and saves them to `~/.oxmacs/custom.ox`, which runs before `init.ox`, so `init.ox` wins. `M-x find-init-file` opens `init.ox`, and saving it applies it at once. `oxmacs -q` starts without running either file, and `oxmacs --help` lists the other options. A project's `.editorconfig` chooses tabs or spaces, the indent size and the tab width for its files, ahead of the `indent-tabs` and `tab-width` settings.
 
 ## Development
 

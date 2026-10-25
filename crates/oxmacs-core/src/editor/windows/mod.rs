@@ -4,9 +4,9 @@ pub(super) mod status;
 pub(super) mod tiling;
 
 use crate::display::{Layout, Viewport};
-use crate::editor::Editor;
 use crate::editor::windows::pane::Pane;
 use crate::editor::windows::tiling::{Axis, Tiling, WindowId};
+use crate::editor::{Editor, tab_width_in};
 use crate::text::{Buffer, BufferId, Marker};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,7 +185,11 @@ impl Editor {
                 continue;
             };
             text.set_marker(parked.point, point);
-            let layout = Layout::new(text, parked.viewport.wrap_width(), tab_width);
+            let layout = Layout::new(
+                text,
+                parked.viewport.wrap_width(),
+                tab_width_in(text, tab_width),
+            );
             parked.viewport.reveal(layout.screen_line(point), &layout);
         }
     }
@@ -375,7 +379,11 @@ impl Editor {
         let Some(buffer) = self.buffers.get(index) else {
             return;
         };
-        let layout = Layout::new(buffer, parked.viewport.wrap_width(), tab_width);
+        let layout = Layout::new(
+            buffer,
+            parked.viewport.wrap_width(),
+            tab_width_in(buffer, tab_width),
+        );
         parked.viewport.scroll_by(delta, &layout);
         let point = buffer.marker(parked.point).unwrap_or(0);
         let spot = layout.screen_line(point);
@@ -487,7 +495,11 @@ impl Editor {
         else {
             return;
         };
-        let layout = Layout::new(buffer, parked.viewport.wrap_width(), tab_width);
+        let layout = Layout::new(
+            buffer,
+            parked.viewport.wrap_width(),
+            tab_width_in(buffer, tab_width),
+        );
         let point = buffer.marker(parked.point).unwrap_or(0);
         parked.viewport.reveal(layout.screen_line(point), &layout);
     }

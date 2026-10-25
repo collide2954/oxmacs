@@ -68,6 +68,13 @@ use crate::input::{Key, KeyCode, KeyParseError, KeySequence, Keymap, Lookup, Mod
 use crate::plugin::States;
 use crate::syntax::Language;
 use crate::text::Buffer;
+
+pub(in crate::editor) fn tab_width_in(buffer: &Buffer, fallback: usize) -> usize {
+    buffer
+        .file()
+        .and_then(|file| file.style.tab_width)
+        .unwrap_or(fallback)
+}
 use crate::theme::{self, Appearance, Highlight, Theme};
 
 const DEFAULT_ROWS: usize = 24;
@@ -341,7 +348,7 @@ impl Editor {
         Layout::new(
             self.buffers.current(),
             self.viewport.wrap_width(),
-            self.tab_width,
+            tab_width_in(self.buffers.current(), self.tab_width),
         )
     }
 
@@ -349,7 +356,7 @@ impl Editor {
         let layout = Layout::new(
             self.buffers.current(),
             self.viewport.wrap_width(),
-            self.tab_width,
+            tab_width_in(self.buffers.current(), self.tab_width),
         );
         let spot = layout.screen_line(self.buffers.current().point());
         self.viewport.reveal(spot, &layout);
@@ -372,10 +379,36 @@ impl Editor {
         self.tab_width
     }
 
+    pub fn tab_width_of(&self, id: crate::text::BufferId) -> usize {
+        self.buffer_by_id(id).map_or(self.tab_width, |buffer| {
+            tab_width_in(buffer, self.tab_width)
+        })
+    }
+
+    pub fn indent_size_of(&self, id: crate::text::BufferId) -> Option<usize> {
+        self.buffer_by_id(id)?.file()?.style.indent
+    }
+
+    pub fn indent_tabs_of(&self, id: crate::text::BufferId) -> bool {
+        self.buffer_by_id(id)
+            .and_then(|buffer| buffer.file())
+            .and_then(|file| file.style.tabs)
+            .or_else(|| {
+                self.buffer_language(id)
+                    .and_then(|language| self.registered(language))
+                    .and_then(|known| known.tabs)
+            })
+            .unwrap_or(self.config.indent_tabs)
+    }
+
     #[cfg(test)]
     pub fn point_display_column(&self) -> usize {
         let buffer = self.buffers.current();
-        motion::movement::display_column(buffer, buffer.point(), self.tab_width)
+        motion::movement::display_column(
+            buffer,
+            buffer.point(),
+            tab_width_in(buffer, self.tab_width),
+        )
     }
 
     pub fn mode_line(&self) -> String {

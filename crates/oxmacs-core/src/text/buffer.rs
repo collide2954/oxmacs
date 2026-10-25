@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use ropey::Rope;
 
+use crate::files::editorconfig::{self, Style};
 use crate::files::{DiskState, Format};
 use crate::text::history::{Edit, History};
 
@@ -15,6 +16,7 @@ pub struct FileInfo {
     pub format: Format,
     pub disk: Option<DiskState>,
     pub changed_on_disk: bool,
+    pub style: Style,
 }
 
 impl FileInfo {
@@ -24,7 +26,13 @@ impl FileInfo {
             format,
             disk,
             changed_on_disk: false,
+            style: Style::default(),
         }
+    }
+
+    pub fn styled(mut self) -> Self {
+        self.style = editorconfig::style_for(&self.path);
+        self
     }
 }
 

@@ -101,13 +101,17 @@ impl Editor {
     }
 
     fn indent_line(&mut self, line: usize) {
+        let id = self.buffers.current().id();
+        let tab = self.tab_width_of(id).max(1);
+        let tabs = self.indent_tabs_of(id);
         let target = if let Some(indent) = self.indenter() {
-            indent(self, self.buffers.current().id(), line)
+            indent(self, id, line)
         } else {
             self.sync_syntax();
+            let unit = self.indent_size_of(id);
             self.buffers
                 .syntax(0)
-                .and_then(|syntax| syntax.indentation(self.buffers.current(), line, self.tab_width))
+                .and_then(|syntax| syntax.indentation_in(self.buffers.current(), line, tab, unit))
         };
         let Some(target) = target else {
             return;
@@ -116,8 +120,7 @@ impl Editor {
         let start = buffer.line_start(line);
         let text = buffer.line_text(line);
         let leading = text.chars().take_while(|c| matches!(c, ' ' | '\t')).count();
-        let wanted = if self.config.indent_tabs {
-            let tab = self.tab_width.max(1);
+        let wanted = if tabs {
             format!("{}{}", "\t".repeat(target / tab), " ".repeat(target % tab))
         } else {
             " ".repeat(target)
@@ -230,6 +233,46 @@ mod tests {
                 "\t}",
                 "}"
             ]
+        );
+    }
+
+    fn visiting(editorconfig: &str, text: &str) -> (tempfile::TempDir, Editor) {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".editorconfig"), editorconfig).unwrap();
+        std::fs::write(dir.path().join("a.rs"), text).unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&dir.path().join("a.rs"));
+        (dir, editor)
+    }
+
+    #[test]
+    fn editorconfig_chooses_tabs_and_their_width_for_its_files() {
+        let (_dir, mut editor) = visiting(
+            "[*.rs]\nindent_style = tab\ntab_width = 2\n",
+            "fn a() {\nif b {\nc();\n}\n}\n",
+        );
+        assert_eq!(editor.pane().tab_width(), 2);
+
+        press(&mut editor, "C-x h C-M-\\");
+
+        assert_eq!(
+            lines(&editor),
+            ["fn a() {", "\tif b {", "\t\tc();", "\t}", "}"]
+        );
+    }
+
+    #[test]
+    fn editorconfig_sets_the_indent_size() {
+        let (_dir, mut editor) = visiting(
+            "[*]\nindent_style = space\nindent_size = 2\n",
+            "fn a() {\nif b {\nc();\n}\n}\n",
+        );
+
+        press(&mut editor, "C-x h C-M-\\");
+
+        assert_eq!(
+            lines(&editor),
+            ["fn a() {", "  if b {", "    c();", "  }", "}"]
         );
     }
 

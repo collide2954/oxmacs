@@ -15,6 +15,16 @@ const LITERALS: &[&str] = &[
 
 impl Syntax {
     pub fn indentation(&self, buffer: &Buffer, line: usize, tab_width: usize) -> Option<usize> {
+        self.indentation_in(buffer, line, tab_width, None)
+    }
+
+    pub fn indentation_in(
+        &self,
+        buffer: &Buffer,
+        line: usize,
+        tab_width: usize,
+        unit: Option<usize>,
+    ) -> Option<usize> {
         if let Some(guess) = self.language.indentation().guess {
             return guess(self, buffer, line, tab_width);
         }
@@ -35,7 +45,7 @@ impl Syntax {
                 .map(|open| (ancestor, open))
         });
         let rules = self.language.indentation();
-        let unit = rules.unit;
+        let unit = unit.unwrap_or(rules.unit);
         let Some((container, open)) = container else {
             return Some(if rules.continues {
                 continuation(rules, statement(node, tree.root_node()), line, &rest) * unit

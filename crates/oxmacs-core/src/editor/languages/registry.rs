@@ -17,6 +17,7 @@ pub(in crate::editor) struct Registered {
     pub(in crate::editor) scope: Option<ScopeId>,
     pub(in crate::editor) highlight: Option<LineHighlighter>,
     pub(in crate::editor) indent: Option<LineIndenter>,
+    pub(in crate::editor) tabs: Option<bool>,
 }
 
 pub(in crate::editor) fn built_in() -> Vec<Registered> {
@@ -31,6 +32,7 @@ pub(in crate::editor) fn built_in() -> Vec<Registered> {
         scope: scope.map(ScopeId::from),
         highlight: None,
         indent: None,
+        tabs: None,
     })
     .collect()
 }
@@ -50,6 +52,7 @@ impl Editor {
             scope,
             highlight: None,
             indent: None,
+            tabs: None,
         });
         self.add_mode_command(language);
     }
@@ -88,6 +91,16 @@ impl Editor {
             .find(|known| known.language == language)
         {
             known.indent = Some(indent);
+        }
+    }
+
+    pub fn set_indent_tabs(&mut self, language: Language, tabs: bool) {
+        if let Some(known) = self
+            .languages
+            .iter_mut()
+            .find(|known| known.language == language)
+        {
+            known.tabs = Some(tabs);
         }
     }
 

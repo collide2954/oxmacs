@@ -138,7 +138,7 @@ impl Editor {
         let known = self.languages();
         let buffer = self.buffers.current_mut();
         let format = buffer.file().map(|file| file.format).unwrap_or_default();
-        buffer.set_file(FileInfo::new(path, format, None));
+        buffer.set_file(FileInfo::new(path, format, None).styled());
         if language.is_some() {
             self.buffers.set_language(0, language, &known);
         }
@@ -268,7 +268,7 @@ impl Editor {
         match files::load(&path) {
             Ok(loaded) => {
                 let mut buffer = Buffer::with_text(path.display().to_string(), &loaded.text);
-                buffer.set_file(FileInfo::new(path.clone(), loaded.format, loaded.disk));
+                buffer.set_file(FileInfo::new(path.clone(), loaded.format, loaded.disk).styled());
                 buffer.set_read_only(loaded.read_only);
                 self.add_buffer(buffer);
                 self.mark_buffer(0);
@@ -353,7 +353,7 @@ impl Editor {
         match files::save(&path, &text, format) {
             Ok(disk) => {
                 if let Some(buffer) = self.buffers.get_mut(index) {
-                    buffer.set_file(FileInfo::new(path.clone(), format, Some(disk)));
+                    buffer.set_file(FileInfo::new(path.clone(), format, Some(disk)).styled());
                     buffer.mark_saved();
                 }
                 self.forget_recovery(&path);

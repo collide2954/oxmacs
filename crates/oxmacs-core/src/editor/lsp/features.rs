@@ -438,7 +438,7 @@ impl Editor {
         };
         let params = json!({
             "textDocument": {"uri": uri},
-            "options": {"tabSize": self.tab_width, "insertSpaces": true}
+            "options": {"tabSize": self.indent_size_of(buffer).unwrap_or_else(|| self.tab_width_of(buffer)), "insertSpaces": !self.indent_tabs_of(buffer)}
         });
         self.ask_server(
             id,

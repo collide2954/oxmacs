@@ -5,6 +5,7 @@ use std::time::Instant;
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
 use crate::editor::buffers::Mode;
 use crate::editor::motion::movement::display_column;
+use crate::editor::tab_width_in;
 use crate::editor::windows::status::{BufferState, Status};
 use crate::editor::{Editor, Gutter, PopupView};
 use crate::external::diagnostics::Severity;
@@ -84,15 +85,11 @@ impl<'a> Pane<'a> {
     }
 
     pub fn tab_width(&self) -> usize {
-        self.editor.tab_width
+        tab_width_in(self.buffer(), self.editor.tab_width)
     }
 
     fn layout(&self) -> Layout<'a> {
-        Layout::new(
-            self.buffer(),
-            self.viewport.wrap_width(),
-            self.editor.tab_width,
-        )
+        Layout::new(self.buffer(), self.viewport.wrap_width(), self.tab_width())
     }
 
     pub fn screen_rows(&self, from: isize, count: usize) -> Vec<ScreenRow> {
@@ -170,7 +167,7 @@ impl<'a> Pane<'a> {
     pub fn cursor_glyph(&self) -> (String, usize) {
         let buffer = self.buffer();
         let line = buffer.line_text(buffer.line_of(self.point));
-        display::cursor_glyph(&line, buffer.column(self.point), self.editor.tab_width)
+        display::cursor_glyph(&line, buffer.column(self.point), self.tab_width())
     }
 
     pub fn line_style(&self, line: usize) -> LineStyle {
@@ -232,7 +229,7 @@ impl<'a> Pane<'a> {
             state,
             name: buffer.name().to_owned(),
             line: buffer.line_of(self.point) + 1,
-            column: display_column(buffer, self.point, self.editor.tab_width),
+            column: display_column(buffer, self.point, self.tab_width()),
             position: match self.editor.buffers.mode(self.index) {
                 Some(Mode::Plugin(view)) => view.position(),
                 _ => None,
