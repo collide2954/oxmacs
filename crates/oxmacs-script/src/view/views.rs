@@ -1,7 +1,7 @@
-use ox_lang::native::expected;
 use std::sync::Arc;
 
 use ox_lang::heap::{Heap, Hold};
+use ox_lang::native::expected;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::ScopeId;

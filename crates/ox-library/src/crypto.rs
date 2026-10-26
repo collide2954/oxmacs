@@ -1,4 +1,3 @@
-use ox_lang::native::expected;
 use std::fmt::Write as _;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -12,6 +11,7 @@ use crate::text;
 use ox_lang::Isolate;
 use ox_lang::error::Error;
 use ox_lang::heap::Heap;
+use ox_lang::native::expected;
 use ox_lang::portable::{Failure, Portable};
 use ox_lang::value::Value;
 

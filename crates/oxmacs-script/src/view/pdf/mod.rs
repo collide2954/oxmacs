@@ -1,7 +1,6 @@
 mod engine;
 pub mod words;
 
-use ox_lang::native::{count, expected, field, text};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,7 +8,7 @@ use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError};
 use std::time::SystemTime;
 
 use ox_lang::heap::Heap;
-use ox_lang::native::given;
+use ox_lang::native::{count, expected, field, given, text};
 use ox_lang::portable::{Failure, Portable};
 use ox_lang::value::Value;
 use ox_lang::{Error, Isolate};

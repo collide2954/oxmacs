@@ -1,4 +1,3 @@
-use ox_lang::native::expected;
 use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -13,6 +12,7 @@ use crate::text;
 use ox_lang::Isolate;
 use ox_lang::error::Error;
 use ox_lang::heap::Heap;
+use ox_lang::native::expected;
 use ox_lang::portable::{Channel, Failure, Portable, Sent};
 use ox_lang::symbol::Sym;
 use ox_lang::value::{Value, print};

@@ -1,4 +1,3 @@
-use ox_lang::native::name_of;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -10,6 +9,7 @@ use crate::text;
 use ox_lang::Isolate;
 use ox_lang::error::{Error, ErrorKind};
 use ox_lang::heap::Heap;
+use ox_lang::native::name_of;
 use ox_lang::portable::{Channel, Failure, Portable, Sent};
 use ox_lang::value::{Value, print};
 

@@ -1,4 +1,3 @@
-use ox_lang::native::{expected, field, number};
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -7,6 +6,7 @@ use ox_lang::Isolate;
 use ox_lang::build::make_vector;
 use ox_lang::error::Error;
 use ox_lang::heap::Heap;
+use ox_lang::native::{expected, field, number};
 use ox_lang::symbol::Sym;
 use ox_lang::value::Value;
 

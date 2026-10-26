@@ -1,11 +1,10 @@
-use ox_lang::native::{field, name_of};
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 use regex::Regex;
 
 use ox_lang::heap::{Heap, Hold};
-use ox_lang::native::given;
+use ox_lang::native::{field, given, name_of};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::ScopeId;

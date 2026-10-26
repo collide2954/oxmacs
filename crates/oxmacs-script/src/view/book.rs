@@ -1,8 +1,7 @@
-use ox_lang::native::{count, expected, field};
 use std::sync::Arc;
 
 use ox_lang::heap::Heap;
-use ox_lang::native::given;
+use ox_lang::native::{count, expected, field, given};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::theme::Highlight;

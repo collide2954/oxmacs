@@ -1,6 +1,5 @@
 use ox_lang::heap::Heap;
-use ox_lang::native::given;
-use ox_lang::native::name_of;
+use ox_lang::native::{given, name_of};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::{Editor, ServerSpec};
