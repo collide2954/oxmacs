@@ -62,33 +62,44 @@ fn type_of(heap: &Heap, value: Value) -> Value {
 }
 
 fn define(isolate: &mut Isolate, name: &str, test: fn(&Heap, Value) -> bool) {
-    isolate.define_native(name, 1, Some(1), move |heap, arguments| {
-        Ok(Value::Bool(test(heap, arguments[0])))
-    });
+    isolate
+        .native("ox", name)
+        .arity(1, Some(1))
+        .function(move |heap, arguments| Ok(Value::Bool(test(heap, arguments[0]))));
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native("keyword", 1, Some(1), |heap, arguments| {
-        Ok(Value::Keyword(Sym::intern(&named(
-            heap,
-            "keyword",
-            arguments[0],
-        )?)))
-    });
-    isolate.define_native("symbol", 1, Some(1), |heap, arguments| {
-        Ok(Value::Symbol(Sym::intern(&named(
-            heap,
-            "symbol",
-            arguments[0],
-        )?)))
-    });
-    isolate.define_native("name", 1, Some(1), |heap, arguments| {
-        let found = named(heap, "name", arguments[0])?;
-        heap.string(&found).map_err(full)
-    });
-    isolate.define_native("type", 1, Some(1), |heap, arguments| {
-        Ok(type_of(heap, arguments[0]))
-    });
+    isolate
+        .native("ox", "keyword")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            Ok(Value::Keyword(Sym::intern(&named(
+                heap,
+                "keyword",
+                arguments[0],
+            )?)))
+        });
+    isolate
+        .native("ox", "symbol")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            Ok(Value::Symbol(Sym::intern(&named(
+                heap,
+                "symbol",
+                arguments[0],
+            )?)))
+        });
+    isolate
+        .native("ox", "name")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let found = named(heap, "name", arguments[0])?;
+            heap.string(&found).map_err(full)
+        });
+    isolate
+        .native("ox", "type")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(type_of(heap, arguments[0])));
     define(isolate, "int?", |heap, value| {
         matches!(value, Value::Int(_)) || heap.bigint_of(value).is_some()
     });

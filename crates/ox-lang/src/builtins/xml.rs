@@ -420,24 +420,38 @@ fn write(heap: &Heap, value: Value, out: &mut String) -> Result<(), Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "parse", 1, Some(3), parse);
-    isolate.define_native_in(MODULE, "find", 2, Some(2), |heap, arguments| {
-        let found = along(heap, "xml/find", arguments)?;
-        Ok(found.first().copied().unwrap_or(Value::Nil))
-    });
-    isolate.define_native_in(MODULE, "find-all", 2, Some(2), |heap, arguments| {
-        let found = along(heap, "xml/find-all", arguments)?;
-        make_vector(heap, &found)
-    });
-    isolate.define_native_in(MODULE, "text", 1, Some(1), |heap, arguments| {
-        text(heap, arguments[0])
-    });
-    isolate.define_native_in(MODULE, "attr", 2, Some(2), |heap, arguments| {
-        attr(heap, arguments[0], arguments[1])
-    });
-    isolate.define_native_in(MODULE, "write", 1, Some(1), |heap, arguments| {
-        let mut out = String::new();
-        write(heap, arguments[0], &mut out)?;
-        heap.string(&out).map_err(full)
-    });
+    isolate
+        .native(MODULE, "parse")
+        .arity(1, Some(3))
+        .function(parse);
+    isolate
+        .native(MODULE, "find")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let found = along(heap, "xml/find", arguments)?;
+            Ok(found.first().copied().unwrap_or(Value::Nil))
+        });
+    isolate
+        .native(MODULE, "find-all")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let found = along(heap, "xml/find-all", arguments)?;
+            make_vector(heap, &found)
+        });
+    isolate
+        .native(MODULE, "text")
+        .arity(1, Some(1))
+        .function(|heap, arguments| text(heap, arguments[0]));
+    isolate
+        .native(MODULE, "attr")
+        .arity(2, Some(2))
+        .function(|heap, arguments| attr(heap, arguments[0], arguments[1]));
+    isolate
+        .native(MODULE, "write")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let mut out = String::new();
+            write(heap, arguments[0], &mut out)?;
+            heap.string(&out).map_err(full)
+        });
 }

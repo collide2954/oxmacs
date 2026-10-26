@@ -73,12 +73,15 @@ impl Routine for Profile {
 }
 
 pub(super) fn install(isolate: &mut Isolate) {
-    isolate.define_routine("profile", 1, Some(1), None, |_, _, arguments| {
-        Ok(Started::Running(Box::new(Profile {
-            work: arguments[0],
-            step: Step::Starting,
-            mine: false,
-            failure: Value::Nil,
-        })))
-    });
+    isolate
+        .native("ox", "profile")
+        .arity(1, Some(1))
+        .routine(|_, _, arguments| {
+            Ok(Started::Running(Box::new(Profile {
+                work: arguments[0],
+                step: Step::Starting,
+                mine: false,
+                failure: Value::Nil,
+            })))
+        });
 }

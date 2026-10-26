@@ -8,11 +8,14 @@ struct Log(Vec<String>);
 
 fn noting() -> Isolate {
     let mut isolate = Isolate::new();
-    isolate.define_host_native::<Log>("note", 1, Some(1), |heap, log, arguments| {
-        log.0
-            .push(ox_lang::value::print::display(heap, arguments[0]));
-        Ok(Value::Nil)
-    });
+    isolate
+        .native("ox", "note")
+        .arity(1, Some(1))
+        .host::<Log>(|heap, log, arguments| {
+            log.0
+                .push(ox_lang::value::print::display(heap, arguments[0]));
+            Ok(Value::Nil)
+        });
     isolate
 }
 
@@ -74,7 +77,7 @@ fn held_values_survive_collection_until_released() {
 #[test]
 fn natives_can_hand_slow_work_to_a_thread_that_answers_with_json() {
     let mut isolate = Isolate::new();
-    isolate.define_native("slow-lookup", 1, Some(1), |heap, arguments| {
+    isolate.native("ox", "slow-lookup").arity(1, Some(1)).function(|heap, arguments| {
         let wanted = ox_lang::value::print::display(heap, arguments[0]);
         heap.background_json("slow-lookup", move || {
             if wanted == "missing" {
@@ -97,7 +100,10 @@ fn natives_can_hand_slow_work_to_a_thread_that_answers_with_json() {
 #[test]
 fn natives_that_panic_raise_an_error_and_leave_the_isolate_working() {
     let mut isolate = Isolate::new();
-    isolate.define_native("boom", 0, Some(0), |_, _| panic!("oh no"));
+    isolate
+        .native("ox", "boom")
+        .arity(0, Some(0))
+        .function(|_, _| panic!("oh no"));
 
     let error = isolate.eval("(boom)").unwrap_err();
 

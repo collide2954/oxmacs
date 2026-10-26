@@ -313,26 +313,33 @@ mod tests {
 
     fn isolate() -> Isolate {
         let mut isolate = Isolate::new();
-        isolate.define_routine("each-call", 2, Some(2), None, |runtime, _, arguments| {
-            let items = collections::sequence(&mut runtime.heap, "each-call", arguments[1])?;
-            Ok(Started::Running(Box::new(EachCall {
-                function: arguments[0],
-                items,
-                at: 0,
-                results: Vec::new(),
-            })))
-        });
-        isolate.define_routine("guarded", 2, Some(2), None, |_, _, arguments| {
-            Ok(Started::Running(Box::new(Guarded {
-                first: arguments[0],
-                then: arguments[1],
-                step: 0,
-                held: [Value::Nil],
-            })))
-        });
-        isolate.define_routine("at-once", 1, Some(1), None, |_, _, arguments| {
-            Ok(Started::Done(arguments[0]))
-        });
+        isolate
+            .native("ox", "each-call")
+            .arity(2, Some(2))
+            .routine(|runtime, _, arguments| {
+                let items = collections::sequence(&mut runtime.heap, "each-call", arguments[1])?;
+                Ok(Started::Running(Box::new(EachCall {
+                    function: arguments[0],
+                    items,
+                    at: 0,
+                    results: Vec::new(),
+                })))
+            });
+        isolate
+            .native("ox", "guarded")
+            .arity(2, Some(2))
+            .routine(|_, _, arguments| {
+                Ok(Started::Running(Box::new(Guarded {
+                    first: arguments[0],
+                    then: arguments[1],
+                    step: 0,
+                    held: [Value::Nil],
+                })))
+            });
+        isolate
+            .native("ox", "at-once")
+            .arity(1, Some(1))
+            .routine(|_, _, arguments| Ok(Started::Done(arguments[0])));
         isolate
     }
 

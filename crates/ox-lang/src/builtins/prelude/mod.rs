@@ -69,9 +69,11 @@ fn stretch(
 pub(crate) fn install(isolate: &mut Isolate) {
     errors::install(isolate);
     functions::install(isolate);
-    isolate.define_draining("vec", 1, Some(1), Drains::At(0), |heap, arguments| {
-        collections::vec(heap, arguments[0])
-    });
+    isolate
+        .native("ox", "vec")
+        .arity(1, Some(1))
+        .drains(Drains::At(0))
+        .function(|heap, arguments| collections::vec(heap, arguments[0]));
     sequences::install(isolate);
     maps::install(isolate);
     testing::install(isolate);

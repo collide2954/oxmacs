@@ -45,62 +45,85 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_control("profiler-start", 0, Some(0), Control::ProfileStart);
     isolate.define_control("profiler-stop", 0, Some(0), Control::ProfileStop);
     isolate.define_control("profiler-snapshot", 0, Some(0), Control::ProfileSnapshot);
-    isolate.define_native("chan", 0, Some(1), |heap, arguments| {
-        let size = match arguments.first() {
-            None => 32,
-            Some(Value::Int(size)) if *size >= 1 => usize::try_from(*size).unwrap_or(usize::MAX),
-            Some(other) => {
-                return Err(expected(heap, "chan", "a size of at least 1", *other));
-            }
-        };
-        heap.channel(Arc::new(Channel::new(size))).map_err(full)
-    });
-    isolate.define_native("close", 1, Some(1), |heap, arguments| {
-        let channel = heap
-            .channel_of(arguments[0])
-            .ok_or_else(|| expected(heap, "close", "a channel", arguments[0]))?;
-        channel.close();
-        Ok(Value::Nil)
-    });
-    isolate.define_native("chan?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(heap.channel_of(arguments[0]).is_some()))
-    });
-    isolate.define_native("promise", 0, Some(0), |heap, _| {
-        heap.promise(Promise::Pending { awaited: false })
-            .map_err(full)
-    });
-    isolate.define_native("deliver", 2, Some(2), |heap, arguments| {
-        settle(
-            heap,
-            "deliver",
-            arguments[0],
-            Promise::Delivered(arguments[1]),
-        )
-    });
-    isolate.define_native("fail", 2, Some(2), |heap, arguments| {
-        settle(heap, "fail", arguments[0], Promise::Failed(arguments[1]))
-    });
-    isolate.define_native("done?", 1, Some(1), |heap, arguments| {
-        if let Some(generator) = heap.generator_of(arguments[0]) {
-            return Ok(Value::Bool(matches!(generator, Generator::Done)));
-        }
-        if let Some(channel) = heap.channel_of(arguments[0]) {
-            return Ok(Value::Bool(channel.done()));
-        }
-        match heap.promise_of(arguments[0]) {
-            Some(promise) => Ok(Value::Bool(!matches!(promise, Promise::Pending { .. }))),
-            None => Err(expected(
+    isolate
+        .native("ox", "chan")
+        .arity(0, Some(1))
+        .function(|heap, arguments| {
+            let size = match arguments.first() {
+                None => 32,
+                Some(Value::Int(size)) if *size >= 1 => {
+                    usize::try_from(*size).unwrap_or(usize::MAX)
+                }
+                Some(other) => {
+                    return Err(expected(heap, "chan", "a size of at least 1", *other));
+                }
+            };
+            heap.channel(Arc::new(Channel::new(size))).map_err(full)
+        });
+    isolate
+        .native("ox", "close")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let channel = heap
+                .channel_of(arguments[0])
+                .ok_or_else(|| expected(heap, "close", "a channel", arguments[0]))?;
+            channel.close();
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "chan?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(Value::Bool(heap.channel_of(arguments[0]).is_some())));
+    isolate
+        .native("ox", "promise")
+        .arity(0, Some(0))
+        .function(|heap, _| {
+            heap.promise(Promise::Pending { awaited: false })
+                .map_err(full)
+        });
+    isolate
+        .native("ox", "deliver")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            settle(
                 heap,
-                "done?",
-                "a generator, a promise or a channel",
+                "deliver",
                 arguments[0],
-            )),
-        }
-    });
-    isolate.define_native("generator?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(heap.generator_of(arguments[0]).is_some()))
-    });
-    isolate.define_native("promise?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(heap.promise_of(arguments[0]).is_some()))
-    });
+                Promise::Delivered(arguments[1]),
+            )
+        });
+    isolate
+        .native("ox", "fail")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            settle(heap, "fail", arguments[0], Promise::Failed(arguments[1]))
+        });
+    isolate
+        .native("ox", "done?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            if let Some(generator) = heap.generator_of(arguments[0]) {
+                return Ok(Value::Bool(matches!(generator, Generator::Done)));
+            }
+            if let Some(channel) = heap.channel_of(arguments[0]) {
+                return Ok(Value::Bool(channel.done()));
+            }
+            match heap.promise_of(arguments[0]) {
+                Some(promise) => Ok(Value::Bool(!matches!(promise, Promise::Pending { .. }))),
+                None => Err(expected(
+                    heap,
+                    "done?",
+                    "a generator, a promise or a channel",
+                    arguments[0],
+                )),
+            }
+        });
+    isolate
+        .native("ox", "generator?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(Value::Bool(heap.generator_of(arguments[0]).is_some())));
+    isolate
+        .native("ox", "promise?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(Value::Bool(heap.promise_of(arguments[0]).is_some())));
 }

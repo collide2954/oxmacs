@@ -108,50 +108,68 @@ fn found(
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native("regex", 1, Some(1), |heap, arguments| {
-        let regex = regex_of(heap, "compile", arguments[0])?;
-        heap.shared("regex", Arc::new((*regex).clone()))
-            .map_err(full)
-    });
-    isolate.define_native_in(MODULE, "matches?", 2, Some(2), |heap, arguments| {
-        let regex = regex_of(heap, "matches?", arguments[0])?;
-        Ok(Value::Bool(regex.is_match(text(
-            heap,
-            "matches?",
-            arguments[1],
-        )?)))
-    });
-    isolate.define_native_in(MODULE, "find", 2, Some(2), |heap, arguments| {
-        let regex = regex_of(heap, "find", arguments[0])?;
-        let whole = text(heap, "find", arguments[1])?.to_owned();
-        match regex.captures(&whole) {
-            Some(captures) => found(heap, &regex, &whole, &captures),
-            None => Ok(Value::Nil),
-        }
-    });
-    isolate.define_native_in(MODULE, "find-all", 2, Some(2), |heap, arguments| {
-        let regex = regex_of(heap, "find-all", arguments[0])?;
-        let whole = text(heap, "find-all", arguments[1])?.to_owned();
-        let mut all = Vec::new();
-        for captures in regex.captures_iter(&whole) {
-            all.push(found(heap, &regex, &whole, &captures)?);
-        }
-        heap.vector_from(&all).map_err(full)
-    });
-    isolate.define_native_in(MODULE, "replace", 3, Some(3), |heap, arguments| {
-        let regex = regex_of(heap, "replace", arguments[0])?;
-        let whole = text(heap, "replace", arguments[1])?;
-        let with = text(heap, "replace", arguments[2])?;
-        let replaced = regex.replace_all(whole, with).into_owned();
-        heap.string(&replaced).map_err(full)
-    });
-    isolate.define_native_in(MODULE, "split", 2, Some(2), |heap, arguments| {
-        let regex = regex_of(heap, "split", arguments[0])?;
-        let whole = text(heap, "split", arguments[1])?.to_owned();
-        let parts = regex
-            .split(&whole)
-            .map(|part| heap.string(part).map_err(full))
-            .collect::<Result<Vec<_>, _>>()?;
-        heap.vector_from(&parts).map_err(full)
-    });
+    isolate
+        .native("ox", "regex")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let regex = regex_of(heap, "compile", arguments[0])?;
+            heap.shared("regex", Arc::new((*regex).clone()))
+                .map_err(full)
+        });
+    isolate
+        .native(MODULE, "matches?")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let regex = regex_of(heap, "matches?", arguments[0])?;
+            Ok(Value::Bool(regex.is_match(text(
+                heap,
+                "matches?",
+                arguments[1],
+            )?)))
+        });
+    isolate
+        .native(MODULE, "find")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let regex = regex_of(heap, "find", arguments[0])?;
+            let whole = text(heap, "find", arguments[1])?.to_owned();
+            match regex.captures(&whole) {
+                Some(captures) => found(heap, &regex, &whole, &captures),
+                None => Ok(Value::Nil),
+            }
+        });
+    isolate
+        .native(MODULE, "find-all")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let regex = regex_of(heap, "find-all", arguments[0])?;
+            let whole = text(heap, "find-all", arguments[1])?.to_owned();
+            let mut all = Vec::new();
+            for captures in regex.captures_iter(&whole) {
+                all.push(found(heap, &regex, &whole, &captures)?);
+            }
+            heap.vector_from(&all).map_err(full)
+        });
+    isolate
+        .native(MODULE, "replace")
+        .arity(3, Some(3))
+        .function(|heap, arguments| {
+            let regex = regex_of(heap, "replace", arguments[0])?;
+            let whole = text(heap, "replace", arguments[1])?;
+            let with = text(heap, "replace", arguments[2])?;
+            let replaced = regex.replace_all(whole, with).into_owned();
+            heap.string(&replaced).map_err(full)
+        });
+    isolate
+        .native(MODULE, "split")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let regex = regex_of(heap, "split", arguments[0])?;
+            let whole = text(heap, "split", arguments[1])?.to_owned();
+            let parts = regex
+                .split(&whole)
+                .map(|part| heap.string(part).map_err(full))
+                .collect::<Result<Vec<_>, _>>()?;
+            heap.vector_from(&parts).map_err(full)
+        });
 }

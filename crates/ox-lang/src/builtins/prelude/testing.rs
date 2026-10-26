@@ -53,14 +53,21 @@ pub(super) fn install(isolate: &mut Isolate) {
         .unwrap_or(Value::Nil);
     isolate.define("registered-tests", tests);
     isolate.define("plain-heads", heads);
-    isolate.define_native("shown-plainly?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(shown_plainly(heap, arguments[0])))
-    });
-    isolate.define_draining("explain", 2, Some(2), Drains::At(1), |heap, arguments| {
-        explain(heap, arguments[0], arguments[1])
-    });
-    isolate.define_native("profile-report", 1, Some(1), |heap, arguments| {
-        let report = collections::get(heap, &[arguments[0], Value::keyword("report")]);
-        output(heap, &[report], false)
-    });
+    isolate
+        .native("ox", "shown-plainly?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(Value::Bool(shown_plainly(heap, arguments[0]))));
+    isolate
+        .native("ox", "explain")
+        .arity(2, Some(2))
+        .drains(Drains::At(1))
+        .function(|heap, arguments| explain(heap, arguments[0], arguments[1]));
+    isolate
+        .native("ox", "profile-report")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let report = collections::get(heap, &[arguments[0], Value::keyword("report")]);
+            output(heap, &[report], false)
+        });
 }

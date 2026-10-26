@@ -17,13 +17,16 @@ pub(crate) fn catches(heap: &Heap, value: Value, kind: Value) -> bool {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native("raise", 1, Some(1), |heap, arguments| {
-        Err(raised(heap, arguments[0]))
-    });
-    isolate.define_native("#catchable?", 1, Some(1), |_, arguments| {
-        Ok(Value::Bool(arguments[0] != interrupt_marker()))
-    });
-    isolate.define_native("#catches?", 2, Some(2), |heap, arguments| {
-        Ok(Value::Bool(catches(heap, arguments[0], arguments[1])))
-    });
+    isolate
+        .native("ox", "raise")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Err(raised(heap, arguments[0])));
+    isolate
+        .native("ox", "#catchable?")
+        .arity(1, Some(1))
+        .function(|_, arguments| Ok(Value::Bool(arguments[0] != interrupt_marker())));
+    isolate
+        .native("ox", "#catches?")
+        .arity(2, Some(2))
+        .function(|heap, arguments| Ok(Value::Bool(catches(heap, arguments[0], arguments[1]))));
 }

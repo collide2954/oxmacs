@@ -45,52 +45,73 @@ fn field(heap: &Heap, value: Value, key: Value) -> Value {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native("#=", 2, Some(2), |heap, arguments| {
-        Ok(Value::Bool(equal(heap, arguments[0], arguments[1])))
-    });
-    isolate.define_native("#sequential?", 3, Some(3), |heap, arguments| {
-        let count = index(arguments[1]);
-        let fits = items(heap, arguments[0]).is_some_and(|found| {
-            if arguments[2].truthy() {
-                found.len() >= count
-            } else {
-                found.len() == count
-            }
+    isolate
+        .native("ox", "#=")
+        .arity(2, Some(2))
+        .function(|heap, arguments| Ok(Value::Bool(equal(heap, arguments[0], arguments[1]))));
+    isolate
+        .native("ox", "#sequential?")
+        .arity(3, Some(3))
+        .function(|heap, arguments| {
+            let count = index(arguments[1]);
+            let fits = items(heap, arguments[0]).is_some_and(|found| {
+                if arguments[2].truthy() {
+                    found.len() >= count
+                } else {
+                    found.len() == count
+                }
+            });
+            Ok(Value::Bool(fits))
         });
-        Ok(Value::Bool(fits))
-    });
-    isolate.define_native("#item", 2, Some(2), |heap, arguments| {
-        Ok(items(heap, arguments[0])
-            .and_then(|found| found.get(index(arguments[1])).copied())
-            .unwrap_or(Value::Nil))
-    });
-    isolate.define_native("#from", 2, Some(2), |heap, arguments| {
-        let found = items(heap, arguments[0]).unwrap_or_default();
-        let rest = found.get(index(arguments[1])..).unwrap_or_default();
-        let vector = Vector::from_items(heap, rest).map_err(full)?;
-        heap.vector(vector).map_err(full)
-    });
-    isolate.define_native("#keyed?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(
-            heap.map_of(arguments[0]).is_some() || heap.record_of(arguments[0]).is_some(),
-        ))
-    });
-    isolate.define_native("#has?", 2, Some(2), |heap, arguments| {
-        Ok(Value::Bool(has(heap, arguments[0], arguments[1])))
-    });
-    isolate.define_native("#field", 2, Some(2), |heap, arguments| {
-        Ok(field(heap, arguments[0], arguments[1]))
-    });
-    isolate.define_native("#instance?", 2, Some(2), |heap, arguments| {
-        Ok(Value::Bool(
-            heap.record_of(arguments[0])
-                .is_some_and(|record| record.kind == arguments[1]),
-        ))
-    });
-    isolate.define_native("#no-match", 1, Some(1), |heap, arguments| {
-        Err(
-            Error::new(format!("No match for {}", print::brief(heap, arguments[0])))
-                .of(ErrorKind::NoMatch),
-        )
-    });
+    isolate
+        .native("ox", "#item")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            Ok(items(heap, arguments[0])
+                .and_then(|found| found.get(index(arguments[1])).copied())
+                .unwrap_or(Value::Nil))
+        });
+    isolate
+        .native("ox", "#from")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let found = items(heap, arguments[0]).unwrap_or_default();
+            let rest = found.get(index(arguments[1])..).unwrap_or_default();
+            let vector = Vector::from_items(heap, rest).map_err(full)?;
+            heap.vector(vector).map_err(full)
+        });
+    isolate
+        .native("ox", "#keyed?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            Ok(Value::Bool(
+                heap.map_of(arguments[0]).is_some() || heap.record_of(arguments[0]).is_some(),
+            ))
+        });
+    isolate
+        .native("ox", "#has?")
+        .arity(2, Some(2))
+        .function(|heap, arguments| Ok(Value::Bool(has(heap, arguments[0], arguments[1]))));
+    isolate
+        .native("ox", "#field")
+        .arity(2, Some(2))
+        .function(|heap, arguments| Ok(field(heap, arguments[0], arguments[1])));
+    isolate
+        .native("ox", "#instance?")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            Ok(Value::Bool(
+                heap.record_of(arguments[0])
+                    .is_some_and(|record| record.kind == arguments[1]),
+            ))
+        });
+    isolate
+        .native("ox", "#no-match")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            Err(
+                Error::new(format!("No match for {}", print::brief(heap, arguments[0])))
+                    .of(ErrorKind::NoMatch),
+            )
+        });
 }

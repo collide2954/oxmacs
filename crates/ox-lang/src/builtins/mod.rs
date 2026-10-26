@@ -131,60 +131,86 @@ pub fn install(isolate: &mut Isolate) {
     ordering::install(isolate);
     paths::install(isolate);
     regex::install(isolate);
-    isolate.define_native("=", 1, None, |heap, arguments| {
-        Ok(Value::Bool(all_equal(heap, arguments)))
-    });
-    isolate.define_native("not=", 1, None, |heap, arguments| {
-        Ok(Value::Bool(!all_equal(heap, arguments)))
-    });
-    isolate.define_native("identical?", 2, Some(2), |_, arguments| {
-        Ok(Value::Bool(identical(arguments[0], arguments[1])))
-    });
-    isolate.define_native("atom", 1, Some(1), |heap, arguments| {
-        heap.atom(arguments[0])
-            .map_err(|full| Error::new(full.to_string()))
-    });
-    isolate.define_native("atom?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(heap.atom_get(arguments[0]).is_some()))
-    });
-    isolate.define_native("deref", 1, Some(1), |heap, arguments| {
-        heap.atom_get(arguments[0])
-            .ok_or_else(|| not_an_atom(heap, "deref", arguments[0]))
-    });
-    isolate.define_native("reset!", 2, Some(2), |heap, arguments| {
-        if heap.atom_set(arguments[0], arguments[1]) {
-            Ok(arguments[1])
-        } else {
-            Err(not_an_atom(heap, "reset!", arguments[0]))
-        }
-    });
-    isolate.define_native("compare-and-set!", 3, Some(3), |heap, arguments| {
-        let current = heap
-            .atom_get(arguments[0])
-            .ok_or_else(|| not_an_atom(heap, "compare-and-set!", arguments[0]))?;
-        if !identical(current, arguments[1]) {
-            return Ok(Value::Bool(false));
-        }
-        Ok(Value::Bool(heap.atom_set(arguments[0], arguments[2])))
-    });
-    isolate.define_native("hash", 1, Some(1), |heap, arguments| {
-        Ok(Value::Int(i64::from_ne_bytes(
-            hash(heap, arguments[0]).to_ne_bytes(),
-        )))
-    });
-    isolate.define_native("str", 0, None, join);
-    isolate.define_native("pr-str", 1, Some(1), |heap, arguments| {
-        let shown = print::write(heap, arguments[0]);
-        heap.string(&shown)
-            .map_err(|full| Error::new(full.to_string()))
-    });
+    isolate
+        .native("ox", "=")
+        .arity(1, None)
+        .function(|heap, arguments| Ok(Value::Bool(all_equal(heap, arguments))));
+    isolate
+        .native("ox", "not=")
+        .arity(1, None)
+        .function(|heap, arguments| Ok(Value::Bool(!all_equal(heap, arguments))));
+    isolate
+        .native("ox", "identical?")
+        .arity(2, Some(2))
+        .function(|_, arguments| Ok(Value::Bool(identical(arguments[0], arguments[1]))));
+    isolate
+        .native("ox", "atom")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            heap.atom(arguments[0])
+                .map_err(|full| Error::new(full.to_string()))
+        });
+    isolate
+        .native("ox", "atom?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(Value::Bool(heap.atom_get(arguments[0]).is_some())));
+    isolate
+        .native("ox", "deref")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            heap.atom_get(arguments[0])
+                .ok_or_else(|| not_an_atom(heap, "deref", arguments[0]))
+        });
+    isolate
+        .native("ox", "reset!")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            if heap.atom_set(arguments[0], arguments[1]) {
+                Ok(arguments[1])
+            } else {
+                Err(not_an_atom(heap, "reset!", arguments[0]))
+            }
+        });
+    isolate
+        .native("ox", "compare-and-set!")
+        .arity(3, Some(3))
+        .function(|heap, arguments| {
+            let current = heap
+                .atom_get(arguments[0])
+                .ok_or_else(|| not_an_atom(heap, "compare-and-set!", arguments[0]))?;
+            if !identical(current, arguments[1]) {
+                return Ok(Value::Bool(false));
+            }
+            Ok(Value::Bool(heap.atom_set(arguments[0], arguments[2])))
+        });
+    isolate
+        .native("ox", "hash")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            Ok(Value::Int(i64::from_ne_bytes(
+                hash(heap, arguments[0]).to_ne_bytes(),
+            )))
+        });
+    isolate.native("ox", "str").arity(0, None).function(join);
+    isolate
+        .native("ox", "pr-str")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let shown = print::write(heap, arguments[0]);
+            heap.string(&shown)
+                .map_err(|full| Error::new(full.to_string()))
+        });
     collections::install(isolate);
     prelude::install(isolate);
 
-    isolate.define_native("print", 0, None, |heap, arguments| {
-        output(heap, arguments, false)
-    });
-    isolate.define_native("println", 0, None, |heap, arguments| {
-        output(heap, arguments, true)
-    });
+    isolate
+        .native("ox", "print")
+        .arity(0, None)
+        .outside()
+        .function(|heap, arguments| output(heap, arguments, false));
+    isolate
+        .native("ox", "println")
+        .arity(0, None)
+        .outside()
+        .function(|heap, arguments| output(heap, arguments, true));
 }

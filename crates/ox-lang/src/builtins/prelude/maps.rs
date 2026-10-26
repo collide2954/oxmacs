@@ -211,38 +211,45 @@ impl Routine for MergeWith {
 }
 
 pub(super) fn install(isolate: &mut Isolate) {
-    isolate.define_draining("get-in", 2, None, Drains::At(1), |heap, arguments| {
-        let found = get_in(heap, arguments[0], arguments[1])?;
-        Ok(match arguments.get(2) {
-            Some(default) if found == Value::Nil => *default,
-            _ => found,
-        })
-    });
-    isolate.define_native("assoc-in", 3, Some(3), |heap, arguments| {
-        assoc_in(heap, arguments[0], arguments[1], arguments[2])
-    });
-    isolate.define_native("merge", 0, None, merge);
-    isolate.define_draining(
-        "select-keys",
-        2,
-        Some(2),
-        Drains::At(1),
-        |heap, arguments| select_keys(heap, arguments[0], arguments[1]),
-    );
-    isolate.define_routine("update-in", 3, None, None, |runtime, _, arguments| {
-        update_in(runtime, arguments)
-    });
-    isolate.define_routine("merge-with", 1, None, None, |_, _, arguments| {
-        Ok(Started::Running(Box::new(MergeWith {
-            function: arguments[0],
-            maps: arguments[1..].to_vec(),
-            next_map: 0,
-            current: Value::Nil,
-            keys: Vec::new(),
-            next_key: 0,
-            merged: None,
-            pair: [Value::Nil; 2],
-            waiting: None,
-        })))
-    });
+    isolate
+        .native("ox", "get-in")
+        .arity(2, None)
+        .drains(Drains::At(1))
+        .function(|heap, arguments| {
+            let found = get_in(heap, arguments[0], arguments[1])?;
+            Ok(match arguments.get(2) {
+                Some(default) if found == Value::Nil => *default,
+                _ => found,
+            })
+        });
+    isolate
+        .native("ox", "assoc-in")
+        .arity(3, Some(3))
+        .function(|heap, arguments| assoc_in(heap, arguments[0], arguments[1], arguments[2]));
+    isolate.native("ox", "merge").arity(0, None).function(merge);
+    isolate
+        .native("ox", "select-keys")
+        .arity(2, Some(2))
+        .drains(Drains::At(1))
+        .function(|heap, arguments| select_keys(heap, arguments[0], arguments[1]));
+    isolate
+        .native("ox", "update-in")
+        .arity(3, None)
+        .routine(|runtime, _, arguments| update_in(runtime, arguments));
+    isolate
+        .native("ox", "merge-with")
+        .arity(1, None)
+        .routine(|_, _, arguments| {
+            Ok(Started::Running(Box::new(MergeWith {
+                function: arguments[0],
+                maps: arguments[1..].to_vec(),
+                next_map: 0,
+                current: Value::Nil,
+                keys: Vec::new(),
+                next_key: 0,
+                merged: None,
+                pair: [Value::Nil; 2],
+                waiting: None,
+            })))
+        });
 }

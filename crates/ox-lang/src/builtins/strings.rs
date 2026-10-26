@@ -42,18 +42,24 @@ fn strings(heap: &mut Heap, parts: &[String]) -> Result<Value, Error> {
 }
 
 fn unary(isolate: &mut Isolate, name: &'static str, change: fn(&str) -> String) {
-    isolate.define_native_in(MODULE, name, 1, Some(1), move |heap, arguments| {
-        let changed = change(text(heap, name, arguments[0])?);
-        heap.string(&changed).map_err(full)
-    });
+    isolate
+        .native(MODULE, name)
+        .arity(1, Some(1))
+        .function(move |heap, arguments| {
+            let changed = change(text(heap, name, arguments[0])?);
+            heap.string(&changed).map_err(full)
+        });
 }
 
 fn test(isolate: &mut Isolate, name: &'static str, holds: fn(&str, &str) -> bool) {
-    isolate.define_native_in(MODULE, name, 2, Some(2), move |heap, arguments| {
-        let whole = text(heap, name, arguments[0])?;
-        let part = text(heap, name, arguments[1])?;
-        Ok(Value::Bool(holds(whole, part)))
-    });
+    isolate
+        .native(MODULE, name)
+        .arity(2, Some(2))
+        .function(move |heap, arguments| {
+            let whole = text(heap, name, arguments[0])?;
+            let part = text(heap, name, arguments[1])?;
+            Ok(Value::Bool(holds(whole, part)))
+        });
 }
 
 fn capitalize(text: &str) -> String {
@@ -111,25 +117,31 @@ fn slice(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 fn install_shaping(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "words", 1, Some(1), |heap, arguments| {
-        let parts: Vec<String> = text(heap, "words", arguments[0])?
-            .split_whitespace()
-            .map(str::to_owned)
-            .collect();
-        strings(heap, &parts)
-    });
+    isolate
+        .native(MODULE, "words")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let parts: Vec<String> = text(heap, "words", arguments[0])?
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect();
+            strings(heap, &parts)
+        });
     unary(isolate, "reverse", |text| text.chars().rev().collect());
-    isolate.define_native_in(MODULE, "truncate", 2, Some(2), |heap, arguments| {
-        let whole = text(heap, "truncate", arguments[0])?.to_owned();
-        let width = count(heap, "truncate", arguments[1])?;
-        let cut = if whole.chars().count() <= width {
-            whole
-        } else {
-            let kept: String = whole.chars().take(width.saturating_sub(1)).collect();
-            format!("{kept}…")
-        };
-        heap.string(&cut).map_err(full)
-    });
+    isolate
+        .native(MODULE, "truncate")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let whole = text(heap, "truncate", arguments[0])?.to_owned();
+            let width = count(heap, "truncate", arguments[1])?;
+            let cut = if whole.chars().count() <= width {
+                whole
+            } else {
+                let kept: String = whole.chars().take(width.saturating_sub(1)).collect();
+                format!("{kept}…")
+            };
+            heap.string(&cut).map_err(full)
+        });
 }
 
 pub fn install(isolate: &mut Isolate) {
@@ -144,90 +156,123 @@ pub fn install(isolate: &mut Isolate) {
     });
     test(isolate, "ends-with?", |whole, part| whole.ends_with(part));
     test(isolate, "includes?", |whole, part| whole.contains(part));
-    isolate.define_native_in(MODULE, "blank?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(
-            text(heap, "blank?", arguments[0])?.trim().is_empty(),
-        ))
-    });
-    isolate.define_native_in(MODULE, "length", 1, Some(1), |heap, arguments| {
-        let length = text(heap, "length", arguments[0])?.chars().count();
-        Ok(Value::Int(i64::try_from(length).unwrap_or(i64::MAX)))
-    });
-    isolate.define_native_in(MODULE, "split", 2, Some(3), |heap, arguments| {
-        let whole = text(heap, "split", arguments[0])?;
-        let separator = text(heap, "split", arguments[1])?;
-        let parts: Vec<String> = match arguments.get(2) {
-            Some(limit) => whole
-                .splitn(count(heap, "split", *limit)?, separator)
-                .map(str::to_owned)
-                .collect(),
-            None => whole.split(separator).map(str::to_owned).collect(),
-        };
-        strings(heap, &parts)
-    });
+    isolate
+        .native(MODULE, "blank?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            Ok(Value::Bool(
+                text(heap, "blank?", arguments[0])?.trim().is_empty(),
+            ))
+        });
+    isolate
+        .native(MODULE, "length")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let length = text(heap, "length", arguments[0])?.chars().count();
+            Ok(Value::Int(i64::try_from(length).unwrap_or(i64::MAX)))
+        });
+    isolate
+        .native(MODULE, "split")
+        .arity(2, Some(3))
+        .function(|heap, arguments| {
+            let whole = text(heap, "split", arguments[0])?;
+            let separator = text(heap, "split", arguments[1])?;
+            let parts: Vec<String> = match arguments.get(2) {
+                Some(limit) => whole
+                    .splitn(count(heap, "split", *limit)?, separator)
+                    .map(str::to_owned)
+                    .collect(),
+                None => whole.split(separator).map(str::to_owned).collect(),
+            };
+            strings(heap, &parts)
+        });
     install_shaping(isolate);
-    isolate.define_native_in(MODULE, "lines", 1, Some(1), |heap, arguments| {
-        let parts: Vec<String> = text(heap, "lines", arguments[0])?
-            .lines()
-            .map(str::to_owned)
-            .collect();
-        strings(heap, &parts)
-    });
-    isolate.define_native_in(MODULE, "chars", 1, Some(1), |heap, arguments| {
-        let chars: Vec<Value> = text(heap, "chars", arguments[0])?
-            .chars()
-            .map(Value::Char)
-            .collect();
-        make_vector(heap, &chars)
-    });
-    isolate.define_native_in(MODULE, "join", 1, Some(2), |heap, arguments| {
-        let (separator, items) = match arguments {
-            [items] => (String::new(), *items),
-            [separator, items, ..] => (text(heap, "join", *separator)?.to_owned(), *items),
-            [] => return Ok(Value::Nil),
-        };
-        let parts: Vec<String> = heap
-            .elements(items)
-            .ok_or_else(|| {
-                Error::new(format!(
-                    "string/join expects a sequence, got {}",
-                    print::brief(heap, items)
-                ))
-                .of(ErrorKind::Type)
-            })?
-            .into_iter()
-            .map(|item| print::display(heap, item))
-            .collect();
-        heap.string(&parts.join(&separator)).map_err(full)
-    });
-    isolate.define_native_in(MODULE, "replace", 3, Some(3), |heap, arguments| {
-        let whole = text(heap, "replace", arguments[0])?;
-        let from = text(heap, "replace", arguments[1])?;
-        let to = text(heap, "replace", arguments[2])?;
-        let replaced = whole.replace(from, to);
-        heap.string(&replaced).map_err(full)
-    });
-    isolate.define_native_in(MODULE, "index-of", 2, Some(2), |heap, arguments| {
-        let whole = text(heap, "index-of", arguments[0])?;
-        let part = text(heap, "index-of", arguments[1])?;
-        Ok(whole.find(part).map_or(Value::Nil, |at| {
-            Value::Int(i64::try_from(whole[..at].chars().count()).unwrap_or(i64::MAX))
-        }))
-    });
-    isolate.define_native_in(MODULE, "repeat", 2, Some(2), |heap, arguments| {
-        let part = text(heap, "repeat", arguments[0])?;
-        let times = count(heap, "repeat", arguments[1])?;
-        let repeated = part.repeat(times);
-        heap.string(&repeated).map_err(full)
-    });
-    isolate.define_native_in(MODULE, "slice", 2, Some(3), slice);
-    isolate.define_native_in(MODULE, "to-number", 1, Some(1), |heap, arguments| {
-        Ok(number(text(heap, "to-number", arguments[0])?))
-    });
-    isolate.define_native_in(MODULE, "pad-start", 2, Some(3), |heap, arguments| {
-        pad(heap, "pad-start", arguments, true)
-    });
-    isolate.define_native_in(MODULE, "pad-end", 2, Some(3), |heap, arguments| {
-        pad(heap, "pad-end", arguments, false)
-    });
+    isolate
+        .native(MODULE, "lines")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let parts: Vec<String> = text(heap, "lines", arguments[0])?
+                .lines()
+                .map(str::to_owned)
+                .collect();
+            strings(heap, &parts)
+        });
+    isolate
+        .native(MODULE, "chars")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let chars: Vec<Value> = text(heap, "chars", arguments[0])?
+                .chars()
+                .map(Value::Char)
+                .collect();
+            make_vector(heap, &chars)
+        });
+    isolate
+        .native(MODULE, "join")
+        .arity(1, Some(2))
+        .function(|heap, arguments| {
+            let (separator, items) = match arguments {
+                [items] => (String::new(), *items),
+                [separator, items, ..] => (text(heap, "join", *separator)?.to_owned(), *items),
+                [] => return Ok(Value::Nil),
+            };
+            let parts: Vec<String> = heap
+                .elements(items)
+                .ok_or_else(|| {
+                    Error::new(format!(
+                        "string/join expects a sequence, got {}",
+                        print::brief(heap, items)
+                    ))
+                    .of(ErrorKind::Type)
+                })?
+                .into_iter()
+                .map(|item| print::display(heap, item))
+                .collect();
+            heap.string(&parts.join(&separator)).map_err(full)
+        });
+    isolate
+        .native(MODULE, "replace")
+        .arity(3, Some(3))
+        .function(|heap, arguments| {
+            let whole = text(heap, "replace", arguments[0])?;
+            let from = text(heap, "replace", arguments[1])?;
+            let to = text(heap, "replace", arguments[2])?;
+            let replaced = whole.replace(from, to);
+            heap.string(&replaced).map_err(full)
+        });
+    isolate
+        .native(MODULE, "index-of")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let whole = text(heap, "index-of", arguments[0])?;
+            let part = text(heap, "index-of", arguments[1])?;
+            Ok(whole.find(part).map_or(Value::Nil, |at| {
+                Value::Int(i64::try_from(whole[..at].chars().count()).unwrap_or(i64::MAX))
+            }))
+        });
+    isolate
+        .native(MODULE, "repeat")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let part = text(heap, "repeat", arguments[0])?;
+            let times = count(heap, "repeat", arguments[1])?;
+            let repeated = part.repeat(times);
+            heap.string(&repeated).map_err(full)
+        });
+    isolate
+        .native(MODULE, "slice")
+        .arity(2, Some(3))
+        .function(slice);
+    isolate
+        .native(MODULE, "to-number")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(number(text(heap, "to-number", arguments[0])?)));
+    isolate
+        .native(MODULE, "pad-start")
+        .arity(2, Some(3))
+        .function(|heap, arguments| pad(heap, "pad-start", arguments, true));
+    isolate
+        .native(MODULE, "pad-end")
+        .arity(2, Some(3))
+        .function(|heap, arguments| pad(heap, "pad-end", arguments, false));
 }

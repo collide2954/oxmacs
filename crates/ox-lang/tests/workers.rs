@@ -198,12 +198,15 @@ fn the_host_runs_workers_from_its_frame_loop() {
 }
 
 fn snapshot_natives(isolate: &mut Isolate) {
-    isolate.define_native("snapshot-text-length", 1, Some(1), |heap, arguments| {
-        let text = heap
-            .foreign_of::<String>(arguments[0])
-            .ok_or_else(|| ox_lang::Error::new("expected a snapshot"))?;
-        Ok(Value::Int(i64::try_from(text.len()).unwrap_or(0)))
-    });
+    isolate
+        .native("ox", "snapshot-text-length")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let text = heap
+                .foreign_of::<String>(arguments[0])
+                .ok_or_else(|| ox_lang::Error::new("expected a snapshot"))?;
+            Ok(Value::Int(i64::try_from(text.len()).unwrap_or(0)))
+        });
 }
 
 #[test]

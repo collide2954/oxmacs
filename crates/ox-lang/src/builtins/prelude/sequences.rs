@@ -430,61 +430,87 @@ impl Routine for TakeWhile {
 }
 
 pub(super) fn install(isolate: &mut Isolate) {
-    isolate.define_draining("distinct", 1, Some(1), Drains::At(0), |heap, arguments| {
-        distinct(heap, arguments[0])
-    });
-    isolate.define_routine("take", 2, Some(2), None, |runtime, _, arguments| {
-        let (count, coll) = (arguments[0], arguments[1]);
-        if is_generator(&runtime.heap, coll) {
-            return Ok(Started::Running(Box::new(Pull {
-                generator: coll,
-                count,
-                at: Value::Int(0),
-                out: Vec::new(),
-                pulled: false,
-            })));
-        }
-        let heap = &mut runtime.heap;
-        let items = sequence(heap, "take", coll)?;
-        let taken = take(heap, count, &items)?;
-        make_vector(heap, &taken).map(Started::Done)
-    });
-    isolate.define_draining("drop", 2, Some(2), Drains::At(1), |heap, arguments| {
-        let items = sequence(heap, "drop", arguments[1])?;
-        let kept = drop(heap, arguments[0], &items)?;
-        make_vector(heap, &kept)
-    });
-    isolate.define_draining("chunk", 2, Some(2), Drains::At(1), |heap, arguments| {
-        let groups = chunk(heap, "chunk", arguments[0], arguments[1])?;
-        make_vector(heap, &groups)
-    });
-    isolate.define_draining("partition", 2, Some(2), Drains::At(1), |heap, arguments| {
-        let size = arguments[0];
-        let groups = chunk(heap, "partition", size, arguments[1])?;
-        let whole: Vec<Value> = groups
-            .into_iter()
-            .filter(|group| {
-                let length = heap.vector_of(*group).map_or(0, |group| group.count);
-                equal(heap, int(length), size)
-            })
-            .collect();
-        make_vector(heap, &whole)
-    });
-    isolate.define_draining("flatten", 1, Some(1), Drains::At(0), |heap, arguments| {
-        flatten(heap, arguments[0])
-    });
-    isolate.define_draining(
-        "frequencies",
-        1,
-        Some(1),
-        Drains::At(0),
-        |heap, arguments| frequencies(heap, arguments[0]),
-    );
-    isolate.define_draining("zip", 0, None, Drains::From(0), zip);
-    isolate.define_draining("interleave", 0, None, Drains::From(0), interleave);
-    isolate.define_native("repeat", 2, Some(2), |heap, arguments| {
-        repeat(heap, arguments[0], arguments[1])
-    });
+    isolate
+        .native("ox", "distinct")
+        .arity(1, Some(1))
+        .drains(Drains::At(0))
+        .function(|heap, arguments| distinct(heap, arguments[0]));
+    isolate
+        .native("ox", "take")
+        .arity(2, Some(2))
+        .routine(|runtime, _, arguments| {
+            let (count, coll) = (arguments[0], arguments[1]);
+            if is_generator(&runtime.heap, coll) {
+                return Ok(Started::Running(Box::new(Pull {
+                    generator: coll,
+                    count,
+                    at: Value::Int(0),
+                    out: Vec::new(),
+                    pulled: false,
+                })));
+            }
+            let heap = &mut runtime.heap;
+            let items = sequence(heap, "take", coll)?;
+            let taken = take(heap, count, &items)?;
+            make_vector(heap, &taken).map(Started::Done)
+        });
+    isolate
+        .native("ox", "drop")
+        .arity(2, Some(2))
+        .drains(Drains::At(1))
+        .function(|heap, arguments| {
+            let items = sequence(heap, "drop", arguments[1])?;
+            let kept = drop(heap, arguments[0], &items)?;
+            make_vector(heap, &kept)
+        });
+    isolate
+        .native("ox", "chunk")
+        .arity(2, Some(2))
+        .drains(Drains::At(1))
+        .function(|heap, arguments| {
+            let groups = chunk(heap, "chunk", arguments[0], arguments[1])?;
+            make_vector(heap, &groups)
+        });
+    isolate
+        .native("ox", "partition")
+        .arity(2, Some(2))
+        .drains(Drains::At(1))
+        .function(|heap, arguments| {
+            let size = arguments[0];
+            let groups = chunk(heap, "partition", size, arguments[1])?;
+            let whole: Vec<Value> = groups
+                .into_iter()
+                .filter(|group| {
+                    let length = heap.vector_of(*group).map_or(0, |group| group.count);
+                    equal(heap, int(length), size)
+                })
+                .collect();
+            make_vector(heap, &whole)
+        });
+    isolate
+        .native("ox", "flatten")
+        .arity(1, Some(1))
+        .drains(Drains::At(0))
+        .function(|heap, arguments| flatten(heap, arguments[0]));
+    isolate
+        .native("ox", "frequencies")
+        .arity(1, Some(1))
+        .drains(Drains::At(0))
+        .function(|heap, arguments| frequencies(heap, arguments[0]));
+    isolate
+        .native("ox", "zip")
+        .arity(0, None)
+        .drains(Drains::From(0))
+        .function(zip);
+    isolate
+        .native("ox", "interleave")
+        .arity(0, None)
+        .drains(Drains::From(0))
+        .function(interleave);
+    isolate
+        .native("ox", "repeat")
+        .arity(2, Some(2))
+        .function(|heap, arguments| repeat(heap, arguments[0], arguments[1]));
     install_callers(isolate);
 }
 
@@ -503,27 +529,30 @@ fn install_callers(isolate: &mut Isolate) {
         ("sort-by", Mode::SortBy, Some(2), Drains::At(1)),
     ];
     for (name, mode, most, drains) in each {
-        isolate.define_routine(name, 2, most, Some(drains), move |runtime, _, arguments| {
-            Each::start(name, mode, runtime, arguments)
-        });
+        isolate
+            .native("ox", name)
+            .arity(2, most)
+            .drains(drains)
+            .routine(move |runtime, _, arguments| Each::start(name, mode, runtime, arguments));
     }
-    isolate.define_routine("take-while", 2, Some(2), None, |runtime, _, arguments| {
-        if !is_generator(&runtime.heap, arguments[1]) {
-            return Each::start("take-while", Mode::TakeWhile, runtime, arguments);
-        }
-        Ok(Started::Running(Box::new(TakeWhile {
-            generator: arguments[1],
-            keep: arguments[0],
-            out: Vec::new(),
-            item: [Value::Nil],
-            pulling: None,
-        })))
-    });
-    isolate.define_routine(
-        "reduce",
-        1,
-        None,
-        Some(Drains::Last),
-        |runtime, _, arguments| reduce(runtime, arguments),
-    );
+    isolate
+        .native("ox", "take-while")
+        .arity(2, Some(2))
+        .routine(|runtime, _, arguments| {
+            if !is_generator(&runtime.heap, arguments[1]) {
+                return Each::start("take-while", Mode::TakeWhile, runtime, arguments);
+            }
+            Ok(Started::Running(Box::new(TakeWhile {
+                generator: arguments[1],
+                keep: arguments[0],
+                out: Vec::new(),
+                item: [Value::Nil],
+                pulling: None,
+            })))
+        });
+    isolate
+        .native("ox", "reduce")
+        .arity(1, None)
+        .drains(Drains::Last)
+        .routine(|runtime, _, arguments| reduce(runtime, arguments));
 }

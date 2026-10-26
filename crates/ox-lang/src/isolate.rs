@@ -674,27 +674,12 @@ impl Isolate {
     ) {
         let native = Native {
             control: Some(control),
+            outside: control == Control::Worker,
             ..plain("ox", name, least, most, only_from_ox(name))
         };
         if let Some(value) = self.install("ox", name, native) {
             self.runtime.controls.insert(control, value);
         }
-    }
-
-    pub(crate) fn define_draining(
-        &mut self,
-        name: &str,
-        least: usize,
-        most: Option<usize>,
-        drains: Drains,
-        function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
-    ) {
-        let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
-        let native = Native {
-            drains: Some(drains),
-            ..plain("ox", name, least, most, function)
-        };
-        self.install("ox", name, native);
     }
 
     pub(crate) fn define_expander(

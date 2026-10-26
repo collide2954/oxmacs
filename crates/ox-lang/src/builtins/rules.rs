@@ -295,5 +295,8 @@ fn expand_rules(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native("expand-rules", 4, Some(4), expand_rules);
+    isolate
+        .native("ox", "expand-rules")
+        .arity(4, Some(4))
+        .function(expand_rules);
 }

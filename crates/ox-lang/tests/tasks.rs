@@ -348,10 +348,13 @@ fn natives_know_which_task_is_calling_them() {
     let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
     let mut isolate = Isolate::new();
     let record = std::rc::Rc::clone(&seen);
-    isolate.define_native("whose", 0, Some(0), move |heap, _| {
-        record.borrow_mut().push(heap.running_task());
-        Ok(Value::Nil)
-    });
+    isolate
+        .native("ox", "whose")
+        .arity(0, Some(0))
+        .function(move |heap, _| {
+            record.borrow_mut().push(heap.running_task());
+            Ok(Value::Nil)
+        });
     let both = isolate.eval("(fn [] (whose) (sleep 1) (whose))").unwrap();
 
     isolate.eval("(whose)").unwrap();

@@ -359,34 +359,59 @@ fn scale(heap: &Heap, name: &str, value: Value, factor: i64) -> Result<Value, Er
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "now", 0, Some(0), |_, _| {
-        Ok(Value::Int(Timestamp::now().as_millisecond()))
-    });
-    isolate.define_native_in(MODULE, "parse", 1, Some(1), |heap, arguments| {
-        parse(heap, arguments[0])
-    });
-    isolate.define_native_in(MODULE, "local", 1, Some(2), local);
-    isolate.define_native_in(MODULE, "instant", 1, Some(3), instant);
-    isolate.define_native_in(MODULE, "add", 2, Some(4), add);
-    isolate.define_native_in(MODULE, "format", 2, Some(4), format);
-    isolate.define_native_in(MODULE, "days-in-month", 2, Some(2), days_in_month);
-    isolate.define_native_in(MODULE, "day-number", 1, Some(1), |heap, arguments| {
-        day_number(heap, arguments[0])
-    });
-    isolate.define_native_in(MODULE, "date-of", 1, Some(1), |heap, arguments| {
-        date_of(heap, arguments[0])
-    });
-    isolate.define_native_in(MODULE, "weekday-number", 1, Some(1), |heap, arguments| {
-        Ok(Value::Int(weekday_number(days_of(
-            heap,
-            "time/weekday-number",
-            arguments[0],
-        )?)))
-    });
-    isolate.define_native_in(MODULE, "zone", 0, Some(0), |heap, _| {
-        let zone = TimeZone::system();
-        heap.string(zone.iana_name().unwrap_or("UTC")).map_err(full)
-    });
+    isolate
+        .native(MODULE, "now")
+        .arity(0, Some(0))
+        .function(|_, _| Ok(Value::Int(Timestamp::now().as_millisecond())));
+    isolate
+        .native(MODULE, "parse")
+        .arity(1, Some(1))
+        .function(|heap, arguments| parse(heap, arguments[0]));
+    isolate
+        .native(MODULE, "local")
+        .arity(1, Some(2))
+        .function(local);
+    isolate
+        .native(MODULE, "instant")
+        .arity(1, Some(3))
+        .function(instant);
+    isolate
+        .native(MODULE, "add")
+        .arity(2, Some(4))
+        .function(add);
+    isolate
+        .native(MODULE, "format")
+        .arity(2, Some(4))
+        .function(format);
+    isolate
+        .native(MODULE, "days-in-month")
+        .arity(2, Some(2))
+        .function(days_in_month);
+    isolate
+        .native(MODULE, "day-number")
+        .arity(1, Some(1))
+        .function(|heap, arguments| day_number(heap, arguments[0]));
+    isolate
+        .native(MODULE, "date-of")
+        .arity(1, Some(1))
+        .function(|heap, arguments| date_of(heap, arguments[0]));
+    isolate
+        .native(MODULE, "weekday-number")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            Ok(Value::Int(weekday_number(days_of(
+                heap,
+                "time/weekday-number",
+                arguments[0],
+            )?)))
+        });
+    isolate
+        .native(MODULE, "zone")
+        .arity(0, Some(0))
+        .function(|heap, _| {
+            let zone = TimeZone::system();
+            heap.string(zone.iana_name().unwrap_or("UTC")).map_err(full)
+        });
     for (name, factor) in [
         ("millis", 1),
         ("seconds", 1_000),
@@ -395,8 +420,9 @@ pub fn install(isolate: &mut Isolate) {
         ("days", 86_400_000),
     ] {
         let shown = format!("time/{name}");
-        isolate.define_native_in(MODULE, name, 1, Some(1), move |heap, arguments| {
-            scale(heap, &shown, arguments[0], factor)
-        });
+        isolate
+            .native(MODULE, name)
+            .arity(1, Some(1))
+            .function(move |heap, arguments| scale(heap, &shown, arguments[0], factor));
     }
 }

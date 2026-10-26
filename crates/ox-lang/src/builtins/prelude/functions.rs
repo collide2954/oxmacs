@@ -285,17 +285,14 @@ fn install_makers(isolate: &mut Isolate) {
             })))
         },
     ));
-    isolate.define_routine(
-        "complement",
-        1,
-        Some(1),
-        None,
-        move |runtime, _, arguments| {
+    isolate
+        .native("ox", "complement")
+        .arity(1, Some(1))
+        .routine(move |runtime, _, arguments| {
             runtime
                 .native_closure(&negate, &arguments[..1])
                 .map(Started::Done)
-        },
-    );
+        });
     let compose = Rc::new(Resumable::closure(
         "& args",
         |runtime, callee, arguments| {
@@ -306,16 +303,19 @@ fn install_makers(isolate: &mut Isolate) {
             })))
         },
     ));
-    isolate.define_routine("comp", 0, None, None, move |runtime, _, arguments| {
-        if arguments.is_empty() {
-            let identity = runtime
-                .lookup(PRELUDE, Sym::intern("identity"))
-                .unwrap_or(Value::Nil);
-            return Ok(Started::Done(identity));
-        }
-        let order: Vec<Value> = arguments.iter().rev().copied().collect();
-        runtime.native_closure(&compose, &order).map(Started::Done)
-    });
+    isolate
+        .native("ox", "comp")
+        .arity(0, None)
+        .routine(move |runtime, _, arguments| {
+            if arguments.is_empty() {
+                let identity = runtime
+                    .lookup(PRELUDE, Sym::intern("identity"))
+                    .unwrap_or(Value::Nil);
+                return Ok(Started::Done(identity));
+            }
+            let order: Vec<Value> = arguments.iter().rev().copied().collect();
+            runtime.native_closure(&compose, &order).map(Started::Done)
+        });
     let fill = Rc::new(Resumable::closure(
         "& more",
         |runtime, callee, arguments| {
@@ -325,9 +325,12 @@ fn install_makers(isolate: &mut Isolate) {
             Ok(Started::Running(Box::new(Forward::new(function, given))))
         },
     ));
-    isolate.define_routine("partial", 1, None, None, move |runtime, _, arguments| {
-        runtime.native_closure(&fill, arguments).map(Started::Done)
-    });
+    isolate
+        .native("ox", "partial")
+        .arity(1, None)
+        .routine(move |runtime, _, arguments| {
+            runtime.native_closure(&fill, arguments).map(Started::Done)
+        });
     let juxt = Rc::new(Resumable::closure(
         "& args",
         |runtime, callee, arguments| {
@@ -339,17 +342,23 @@ fn install_makers(isolate: &mut Isolate) {
             })))
         },
     ));
-    isolate.define_routine("juxt", 0, None, None, move |runtime, _, arguments| {
-        runtime.native_closure(&juxt, arguments).map(Started::Done)
-    });
+    isolate
+        .native("ox", "juxt")
+        .arity(0, None)
+        .routine(move |runtime, _, arguments| {
+            runtime.native_closure(&juxt, arguments).map(Started::Done)
+        });
     let memo = Rc::new(Resumable::closure("& args", memoized));
-    isolate.define_routine("memoize", 1, Some(1), None, move |runtime, _, arguments| {
-        let empty = runtime.heap.map(Map::EMPTY).map_err(full)?;
-        let seen = runtime.heap.atom(empty).map_err(full)?;
-        runtime
-            .native_closure(&memo, &[arguments[0], seen])
-            .map(Started::Done)
-    });
+    isolate
+        .native("ox", "memoize")
+        .arity(1, Some(1))
+        .routine(move |runtime, _, arguments| {
+            let empty = runtime.heap.map(Map::EMPTY).map_err(full)?;
+            let seen = runtime.heap.atom(empty).map_err(full)?;
+            runtime
+                .native_closure(&memo, &[arguments[0], seen])
+                .map(Started::Done)
+        });
 }
 
 fn install_tasks(isolate: &mut Isolate) {
@@ -360,10 +369,13 @@ fn install_tasks(isolate: &mut Isolate) {
             beat: Beat::Sleep,
         })))
     }));
-    isolate.define_routine("every", 2, Some(2), None, move |runtime, _, arguments| {
-        let ticking = runtime.native_closure(&tick, arguments)?;
-        runtime.spawn_promise(ticking).map(Started::Done)
-    });
+    isolate
+        .native("ox", "every")
+        .arity(2, Some(2))
+        .routine(move |runtime, _, arguments| {
+            let ticking = runtime.native_closure(&tick, arguments)?;
+            runtime.spawn_promise(ticking).map(Started::Done)
+        });
     let step = Rc::new(Resumable::closure("", |runtime, callee, _| {
         Ok(Started::Running(Box::new(Iterate {
             function: captured(&runtime.heap, callee, 0),
@@ -371,60 +383,72 @@ fn install_tasks(isolate: &mut Isolate) {
             stage: Stage::Yield,
         })))
     }));
-    isolate.define_routine("iterate", 2, Some(2), None, move |runtime, _, arguments| {
-        let stepping = runtime.native_closure(&step, arguments)?;
-        runtime.make_generator(stepping).map(Started::Done)
-    });
+    isolate
+        .native("ox", "iterate")
+        .arity(2, Some(2))
+        .routine(move |runtime, _, arguments| {
+            let stepping = runtime.native_closure(&step, arguments)?;
+            runtime.make_generator(stepping).map(Started::Done)
+        });
 }
 
 pub(super) fn install(isolate: &mut Isolate) {
-    isolate.define_native("identity", 1, Some(1), |_, arguments| Ok(arguments[0]));
-    isolate.define_native("not", 1, Some(1), |_, arguments| {
-        Ok(Value::Bool(!arguments[0].truthy()))
-    });
-    isolate.define_native("nil?", 1, Some(1), |_, arguments| {
-        Ok(Value::Bool(identical(arguments[0], Value::Nil)))
-    });
-    isolate.define_native("some?", 1, Some(1), |_, arguments| {
-        Ok(Value::Bool(!identical(arguments[0], Value::Nil)))
-    });
+    isolate
+        .native("ox", "identity")
+        .arity(1, Some(1))
+        .function(|_, arguments| Ok(arguments[0]));
+    isolate
+        .native("ox", "not")
+        .arity(1, Some(1))
+        .function(|_, arguments| Ok(Value::Bool(!arguments[0].truthy())));
+    isolate
+        .native("ox", "nil?")
+        .arity(1, Some(1))
+        .function(|_, arguments| Ok(Value::Bool(identical(arguments[0], Value::Nil))));
+    isolate
+        .native("ox", "some?")
+        .arity(1, Some(1))
+        .function(|_, arguments| Ok(Value::Bool(!identical(arguments[0], Value::Nil))));
     let always = Rc::new(Resumable::closure("& _", |runtime, callee, _| {
         Ok(Started::Done(captured(&runtime.heap, callee, 0)))
     }));
-    isolate.define_routine(
-        "constantly",
-        1,
-        Some(1),
-        None,
-        move |runtime, _, arguments| {
+    isolate
+        .native("ox", "constantly")
+        .arity(1, Some(1))
+        .routine(move |runtime, _, arguments| {
             runtime
                 .native_closure(&always, &arguments[..1])
                 .map(Started::Done)
-        },
-    );
-    isolate.define_routine("swap!", 2, None, None, |runtime, _, arguments| {
-        let current = deref(&runtime.heap, arguments[0])?;
-        let mut given = vec![current];
-        given.extend_from_slice(&arguments[2..]);
-        Ok(Started::Running(Box::new(Swap {
-            atom: arguments[0],
-            function: arguments[1],
-            arguments: given,
-            called: false,
-        })))
-    });
-    isolate.define_routine("update", 3, None, None, |runtime, _, arguments| {
-        let current = collections::get(&runtime.heap, &arguments[..2]);
-        let mut given = vec![current];
-        given.extend_from_slice(&arguments[3..]);
-        Ok(Started::Running(Box::new(Update {
-            coll: arguments[0],
-            key: arguments[1],
-            function: arguments[2],
-            arguments: given,
-            called: false,
-        })))
-    });
+        });
+    isolate
+        .native("ox", "swap!")
+        .arity(2, None)
+        .routine(|runtime, _, arguments| {
+            let current = deref(&runtime.heap, arguments[0])?;
+            let mut given = vec![current];
+            given.extend_from_slice(&arguments[2..]);
+            Ok(Started::Running(Box::new(Swap {
+                atom: arguments[0],
+                function: arguments[1],
+                arguments: given,
+                called: false,
+            })))
+        });
+    isolate
+        .native("ox", "update")
+        .arity(3, None)
+        .routine(|runtime, _, arguments| {
+            let current = collections::get(&runtime.heap, &arguments[..2]);
+            let mut given = vec![current];
+            given.extend_from_slice(&arguments[3..]);
+            Ok(Started::Running(Box::new(Update {
+                coll: arguments[0],
+                key: arguments[1],
+                function: arguments[2],
+                arguments: given,
+                called: false,
+            })))
+        });
     install_makers(isolate);
     install_tasks(isolate);
 }

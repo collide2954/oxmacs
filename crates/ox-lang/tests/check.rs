@@ -28,9 +28,10 @@ fn modules_that_need_the_host_to_load_are_skipped_quietly() {
     )
     .unwrap();
     let mut isolate = Isolate::new();
-    isolate.define_host_native::<String>("register-it", 1, Some(1), |_, _, _| {
-        Ok(ox_lang::value::Value::Nil)
-    });
+    isolate
+        .native("ox", "register-it")
+        .arity(1, Some(1))
+        .host::<String>(|_, _, _| Ok(ox_lang::value::Value::Nil));
     isolate.add_root(dir.path());
 
     assert_eq!(

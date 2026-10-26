@@ -213,12 +213,16 @@ fn write(heap: &Heap, value: Value, out: &mut String) -> Result<(), Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "read", 1, Some(1), |heap, arguments| {
-        read(heap, arguments[0])
-    });
-    isolate.define_native_in(MODULE, "write", 1, Some(1), |heap, arguments| {
-        let mut out = String::new();
-        write(heap, arguments[0], &mut out)?;
-        heap.string(&out).map_err(full)
-    });
+    isolate
+        .native(MODULE, "read")
+        .arity(1, Some(1))
+        .function(|heap, arguments| read(heap, arguments[0]));
+    isolate
+        .native(MODULE, "write")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let mut out = String::new();
+            write(heap, arguments[0], &mut out)?;
+            heap.string(&out).map_err(full)
+        });
 }

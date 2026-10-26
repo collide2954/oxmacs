@@ -79,14 +79,20 @@ pub(crate) fn sort(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error>
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native("sort", 1, Some(1), sort);
-    isolate.define_native("compare", 2, Some(2), |heap, arguments| {
-        let ordering = order(heap, arguments[0], arguments[1])
-            .ok_or_else(|| incomparable(heap, "compare", arguments[0], arguments[1]))?;
-        Ok(Value::Int(match ordering {
-            Ordering::Less => -1,
-            Ordering::Equal => 0,
-            Ordering::Greater => 1,
-        }))
-    });
+    isolate
+        .native("ox", "sort")
+        .arity(1, Some(1))
+        .function(sort);
+    isolate
+        .native("ox", "compare")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let ordering = order(heap, arguments[0], arguments[1])
+                .ok_or_else(|| incomparable(heap, "compare", arguments[0], arguments[1]))?;
+            Ok(Value::Int(match ordering {
+                Ordering::Less => -1,
+                Ordering::Equal => 0,
+                Ordering::Greater => 1,
+            }))
+        });
 }

@@ -18,13 +18,16 @@ impl Drop for Watched {
 
 fn counting() -> Isolate {
     let mut isolate = Isolate::new();
-    isolate.define_native("hit!", 1, Some(1), |heap, arguments| {
-        let counter = heap
-            .foreign_of::<Counter>(arguments[0])
-            .ok_or_else(|| Error::new("hit! expects a counter"))?;
-        counter.hits.set(counter.hits.get() + 1);
-        Ok(Value::Int(counter.hits.get()))
-    });
+    isolate
+        .native("ox", "hit!")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let counter = heap
+                .foreign_of::<Counter>(arguments[0])
+                .ok_or_else(|| Error::new("hit! expects a counter"))?;
+            counter.hits.set(counter.hits.get() + 1);
+            Ok(Value::Int(counter.hits.get()))
+        });
     isolate
 }
 

@@ -163,10 +163,14 @@ pub fn install(isolate: &mut Isolate) {
         Value::Float(consts::E),
         "The base of natural logarithms, 2.718281828459045.",
     );
-    isolate.define_native_in(MODULE, "sqrt", 1, Some(1), |heap, arguments| {
-        root(heap, arguments[0])
-    });
-    isolate.define_native_in(MODULE, "pow", 2, Some(2), power);
+    isolate
+        .native(MODULE, "sqrt")
+        .arity(1, Some(1))
+        .function(|heap, arguments| root(heap, arguments[0]));
+    isolate
+        .native(MODULE, "pow")
+        .arity(2, Some(2))
+        .function(power);
     for (name, apply) in [
         ("exp", f64::exp as fn(f64) -> f64),
         ("sin", f64::sin),
@@ -174,37 +178,53 @@ pub fn install(isolate: &mut Isolate) {
         ("tan", f64::tan),
     ] {
         let shown = format!("math/{name}");
-        isolate.define_native_in(MODULE, name, 1, Some(1), move |heap, arguments| {
-            Ok(Value::Float(apply(float(heap, &shown, arguments[0])?)))
-        });
+        isolate
+            .native(MODULE, name)
+            .arity(1, Some(1))
+            .function(move |heap, arguments| {
+                Ok(Value::Float(apply(float(heap, &shown, arguments[0])?)))
+            });
     }
     for (name, apply) in [("log", f64::ln as fn(f64) -> f64), ("log10", f64::log10)] {
         let shown = format!("math/{name}");
-        isolate.define_native_in(MODULE, name, 1, Some(1), move |heap, arguments| {
-            Ok(Value::Float(apply(above_zero(heap, &shown, arguments[0])?)))
-        });
+        isolate
+            .native(MODULE, name)
+            .arity(1, Some(1))
+            .function(move |heap, arguments| {
+                Ok(Value::Float(apply(above_zero(heap, &shown, arguments[0])?)))
+            });
     }
-    isolate.define_native_in(MODULE, "atan2", 2, Some(2), |heap, arguments| {
-        let y = float(heap, "math/atan2", arguments[0])?;
-        let x = float(heap, "math/atan2", arguments[1])?;
-        Ok(Value::Float(y.atan2(x)))
-    });
-    isolate.define_native_in(MODULE, "clamp", 3, Some(3), |heap, arguments| {
-        clamp(heap, arguments)
-    });
-    isolate.define_native_in(MODULE, "lerp", 3, Some(3), |heap, arguments| {
-        let a = float(heap, "math/lerp", arguments[0])?;
-        let b = float(heap, "math/lerp", arguments[1])?;
-        let t = float(heap, "math/lerp", arguments[2])?;
-        Ok(Value::Float((b - a).mul_add(t, a)))
-    });
-    isolate.define_native_in(MODULE, "random", 0, Some(0), |_, _| {
-        Ok(Value::Float(fraction()?))
-    });
-    isolate.define_native_in(MODULE, "random-int", 1, Some(2), |heap, arguments| {
-        random_int(heap, arguments)
-    });
-    isolate.define_native_in(MODULE, "random-pick", 1, Some(1), |heap, arguments| {
-        random_pick(heap, arguments[0])
-    });
+    isolate
+        .native(MODULE, "atan2")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let y = float(heap, "math/atan2", arguments[0])?;
+            let x = float(heap, "math/atan2", arguments[1])?;
+            Ok(Value::Float(y.atan2(x)))
+        });
+    isolate
+        .native(MODULE, "clamp")
+        .arity(3, Some(3))
+        .function(|heap, arguments| clamp(heap, arguments));
+    isolate
+        .native(MODULE, "lerp")
+        .arity(3, Some(3))
+        .function(|heap, arguments| {
+            let a = float(heap, "math/lerp", arguments[0])?;
+            let b = float(heap, "math/lerp", arguments[1])?;
+            let t = float(heap, "math/lerp", arguments[2])?;
+            Ok(Value::Float((b - a).mul_add(t, a)))
+        });
+    isolate
+        .native(MODULE, "random")
+        .arity(0, Some(0))
+        .function(|_, _| Ok(Value::Float(fraction()?)));
+    isolate
+        .native(MODULE, "random-int")
+        .arity(1, Some(2))
+        .function(|heap, arguments| random_int(heap, arguments));
+    isolate
+        .native(MODULE, "random-pick")
+        .arity(1, Some(1))
+        .function(|heap, arguments| random_pick(heap, arguments[0]));
 }

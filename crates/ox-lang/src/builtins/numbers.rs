@@ -173,107 +173,142 @@ fn install_rounding(isolate: &mut Isolate) {
         ("ceil", f64::ceil),
         ("int", f64::trunc),
     ] {
-        isolate.define_native(name, 1, Some(1), move |heap, arguments| {
-            one(heap, name, arguments[0], |number| number.whole(name, how))
-        });
+        isolate
+            .native("ox", name)
+            .arity(1, Some(1))
+            .function(move |heap, arguments| {
+                one(heap, name, arguments[0], |number| number.whole(name, how))
+            });
     }
-    isolate.define_native("float", 1, Some(1), |heap, arguments| {
-        one(heap, "float", arguments[0], |number| {
-            Ok(Number::Float(number.float()))
-        })
-    });
-    isolate.define_native("abs", 1, Some(1), |heap, arguments| {
-        one(heap, "abs", arguments[0], |number| {
-            Ok(if number.sign().is_some_and(Ordering::is_lt) {
-                number.negate()
-            } else {
-                number
+    isolate
+        .native("ox", "float")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            one(heap, "float", arguments[0], |number| {
+                Ok(Number::Float(number.float()))
             })
-        })
-    });
-    isolate.define_native("mod", 2, Some(2), |heap, arguments| {
-        reduce(heap, "mod", arguments, Ok, |a, b| a.modulo(&b))
-    });
-    isolate.define_native("rem", 2, Some(2), |heap, arguments| {
-        reduce(heap, "rem", arguments, Ok, |a, b| a.remainder(&b))
-    });
-    isolate.define_native("zero?", 1, Some(1), |heap, arguments| {
-        sign(heap, "zero?", arguments[0], Ordering::is_eq)
-    });
-    isolate.define_native("pos?", 1, Some(1), |heap, arguments| {
-        sign(heap, "pos?", arguments[0], Ordering::is_gt)
-    });
-    isolate.define_native("neg?", 1, Some(1), |heap, arguments| {
-        sign(heap, "neg?", arguments[0], Ordering::is_lt)
-    });
-    isolate.define_native("even?", 1, Some(1), |heap, arguments| {
-        parity(heap, "even?", arguments[0], true)
-    });
-    isolate.define_native("odd?", 1, Some(1), |heap, arguments| {
-        parity(heap, "odd?", arguments[0], false)
-    });
+        });
+    isolate
+        .native("ox", "abs")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            one(heap, "abs", arguments[0], |number| {
+                Ok(if number.sign().is_some_and(Ordering::is_lt) {
+                    number.negate()
+                } else {
+                    number
+                })
+            })
+        });
+    isolate
+        .native("ox", "mod")
+        .arity(2, Some(2))
+        .function(|heap, arguments| reduce(heap, "mod", arguments, Ok, |a, b| a.modulo(&b)));
+    isolate
+        .native("ox", "rem")
+        .arity(2, Some(2))
+        .function(|heap, arguments| reduce(heap, "rem", arguments, Ok, |a, b| a.remainder(&b)));
+    isolate
+        .native("ox", "zero?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| sign(heap, "zero?", arguments[0], Ordering::is_eq));
+    isolate
+        .native("ox", "pos?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| sign(heap, "pos?", arguments[0], Ordering::is_gt));
+    isolate
+        .native("ox", "neg?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| sign(heap, "neg?", arguments[0], Ordering::is_lt));
+    isolate
+        .native("ox", "even?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| parity(heap, "even?", arguments[0], true));
+    isolate
+        .native("ox", "odd?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| parity(heap, "odd?", arguments[0], false));
 }
 
 pub fn install(isolate: &mut Isolate) {
     install_rounding(isolate);
-    isolate.define_native("==", 1, None, |heap, arguments| {
-        chain(heap, "==", arguments, Ordering::is_eq)
-    });
-    isolate.define_native("+", 0, None, sum);
-    isolate.define_native("*", 0, None, |heap, arguments| {
-        if let Some(product) = quick(arguments, i64::checked_mul, |a, b| a * b) {
-            return Ok(product);
-        }
-        fold(heap, "*", Number::Int(1), arguments, |a, b| {
-            Ok(a.multiply(&b))
-        })
-    });
-    isolate.define_native("inc", 1, Some(1), |heap, arguments| {
-        step(heap, "inc", arguments[0], 1)
-    });
-    isolate.define_native("dec", 1, Some(1), |heap, arguments| {
-        step(heap, "dec", arguments[0], -1)
-    });
-    isolate.define_native("-", 1, None, |heap, arguments| {
-        if let Some(difference) = quick(arguments, i64::checked_sub, |a, b| a - b) {
-            return Ok(difference);
-        }
-        reduce(
-            heap,
-            "-",
-            arguments,
-            |only| Ok(only.negate()),
-            |a, b| Ok(a.subtract(&b)),
-        )
-    });
-    isolate.define_native("/", 1, None, |heap, arguments| {
-        reduce(
-            heap,
-            "/",
-            arguments,
-            |only| Number::Int(1).divide(&only),
-            |a, b| a.divide(&b),
-        )
-    });
-    isolate.define_native("//", 2, Some(2), |heap, arguments| {
-        reduce(heap, "//", arguments, Ok, |a, b| a.floor_divide(&b))
-    });
-    isolate.define_native("min", 1, None, |heap, arguments| {
-        extreme(heap, "min", arguments, Ordering::is_lt)
-    });
-    isolate.define_native("max", 1, None, |heap, arguments| {
-        extreme(heap, "max", arguments, Ordering::is_gt)
-    });
-    isolate.define_native("<", 1, None, |heap, arguments| {
-        chain(heap, "<", arguments, Ordering::is_lt)
-    });
-    isolate.define_native("<=", 1, None, |heap, arguments| {
-        chain(heap, "<=", arguments, Ordering::is_le)
-    });
-    isolate.define_native(">", 1, None, |heap, arguments| {
-        chain(heap, ">", arguments, Ordering::is_gt)
-    });
-    isolate.define_native(">=", 1, None, |heap, arguments| {
-        chain(heap, ">=", arguments, Ordering::is_ge)
-    });
+    isolate
+        .native("ox", "==")
+        .arity(1, None)
+        .function(|heap, arguments| chain(heap, "==", arguments, Ordering::is_eq));
+    isolate.native("ox", "+").arity(0, None).function(sum);
+    isolate
+        .native("ox", "*")
+        .arity(0, None)
+        .function(|heap, arguments| {
+            if let Some(product) = quick(arguments, i64::checked_mul, |a, b| a * b) {
+                return Ok(product);
+            }
+            fold(heap, "*", Number::Int(1), arguments, |a, b| {
+                Ok(a.multiply(&b))
+            })
+        });
+    isolate
+        .native("ox", "inc")
+        .arity(1, Some(1))
+        .function(|heap, arguments| step(heap, "inc", arguments[0], 1));
+    isolate
+        .native("ox", "dec")
+        .arity(1, Some(1))
+        .function(|heap, arguments| step(heap, "dec", arguments[0], -1));
+    isolate
+        .native("ox", "-")
+        .arity(1, None)
+        .function(|heap, arguments| {
+            if let Some(difference) = quick(arguments, i64::checked_sub, |a, b| a - b) {
+                return Ok(difference);
+            }
+            reduce(
+                heap,
+                "-",
+                arguments,
+                |only| Ok(only.negate()),
+                |a, b| Ok(a.subtract(&b)),
+            )
+        });
+    isolate
+        .native("ox", "/")
+        .arity(1, None)
+        .function(|heap, arguments| {
+            reduce(
+                heap,
+                "/",
+                arguments,
+                |only| Number::Int(1).divide(&only),
+                |a, b| a.divide(&b),
+            )
+        });
+    isolate
+        .native("ox", "//")
+        .arity(2, Some(2))
+        .function(|heap, arguments| reduce(heap, "//", arguments, Ok, |a, b| a.floor_divide(&b)));
+    isolate
+        .native("ox", "min")
+        .arity(1, None)
+        .function(|heap, arguments| extreme(heap, "min", arguments, Ordering::is_lt));
+    isolate
+        .native("ox", "max")
+        .arity(1, None)
+        .function(|heap, arguments| extreme(heap, "max", arguments, Ordering::is_gt));
+    isolate
+        .native("ox", "<")
+        .arity(1, None)
+        .function(|heap, arguments| chain(heap, "<", arguments, Ordering::is_lt));
+    isolate
+        .native("ox", "<=")
+        .arity(1, None)
+        .function(|heap, arguments| chain(heap, "<=", arguments, Ordering::is_le));
+    isolate
+        .native("ox", ">")
+        .arity(1, None)
+        .function(|heap, arguments| chain(heap, ">", arguments, Ordering::is_gt));
+    isolate
+        .native("ox", ">=")
+        .arity(1, None)
+        .function(|heap, arguments| chain(heap, ">=", arguments, Ordering::is_ge));
 }

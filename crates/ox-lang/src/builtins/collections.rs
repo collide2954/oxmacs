@@ -526,125 +526,182 @@ fn cons(heap: &mut Heap, item: Value, collection: Value) -> Result<Value, Error>
 }
 
 fn install_sequences(isolate: &mut Isolate) {
-    isolate.define_native("first", 1, Some(1), |heap, arguments| {
-        first(heap, arguments[0])
-    });
-    isolate.define_native("second", 1, Some(1), |heap, arguments| {
-        second(heap, arguments[0])
-    });
-    isolate.define_native("last", 1, Some(1), |heap, arguments| {
-        last(heap, arguments[0])
-    });
-    isolate.define_native("rest", 1, Some(1), |heap, arguments| {
-        rest(heap, arguments[0])
-    });
-    isolate.define_native("empty?", 1, Some(1), |heap, arguments| {
-        empty(heap, arguments[0])
-    });
-    isolate.define_native("range", 1, Some(3), range);
-    isolate.define_native("concat", 0, None, |heap, arguments| {
-        let mut items = Vec::new();
-        for value in arguments {
-            items.extend(sequence(heap, "concat", *value)?);
-        }
-        vector_of(heap, &items)
-    });
-    isolate.define_native("reverse", 1, Some(1), |heap, arguments| {
-        let mut items = sequence(heap, "reverse", arguments[0])?;
-        items.reverse();
-        vector_of(heap, &items)
-    });
-    isolate.define_native("cons", 2, Some(2), |heap, arguments| {
-        cons(heap, arguments[0], arguments[1])
-    });
-    isolate.define_native("into", 2, Some(2), |heap, arguments| {
-        let items = sequence(heap, "into", arguments[1])?;
-        conj(heap, arguments[0], &items)
-    });
+    isolate
+        .native("ox", "first")
+        .arity(1, Some(1))
+        .function(|heap, arguments| first(heap, arguments[0]));
+    isolate
+        .native("ox", "second")
+        .arity(1, Some(1))
+        .function(|heap, arguments| second(heap, arguments[0]));
+    isolate
+        .native("ox", "last")
+        .arity(1, Some(1))
+        .function(|heap, arguments| last(heap, arguments[0]));
+    isolate
+        .native("ox", "rest")
+        .arity(1, Some(1))
+        .function(|heap, arguments| rest(heap, arguments[0]));
+    isolate
+        .native("ox", "empty?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| empty(heap, arguments[0]));
+    isolate
+        .native("ox", "range")
+        .arity(1, Some(3))
+        .function(range);
+    isolate
+        .native("ox", "concat")
+        .arity(0, None)
+        .function(|heap, arguments| {
+            let mut items = Vec::new();
+            for value in arguments {
+                items.extend(sequence(heap, "concat", *value)?);
+            }
+            vector_of(heap, &items)
+        });
+    isolate
+        .native("ox", "reverse")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let mut items = sequence(heap, "reverse", arguments[0])?;
+            items.reverse();
+            vector_of(heap, &items)
+        });
+    isolate
+        .native("ox", "cons")
+        .arity(2, Some(2))
+        .function(|heap, arguments| cons(heap, arguments[0], arguments[1]));
+    isolate
+        .native("ox", "into")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let items = sequence(heap, "into", arguments[1])?;
+            conj(heap, arguments[0], &items)
+        });
 }
 
 pub fn install(isolate: &mut Isolate) {
     install_sequences(isolate);
-    isolate.define_native("count", 1, Some(1), |heap, arguments| {
-        count(heap, arguments[0])
-    });
-    isolate.define_native("nth", 2, Some(2), |heap, arguments| {
-        nth(heap, arguments[0], arguments[1])
-    });
-    isolate.define_native("get", 2, Some(3), |heap, arguments| {
-        Ok(get(heap, arguments))
-    });
-    isolate.define_native("vector", 0, None, vector_of);
-    isolate.define_native("map?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(heap.map_of(arguments[0]).is_some()))
-    });
-    isolate.define_native("dissoc", 1, None, |heap, arguments| {
-        dissoc(heap, arguments[0], &arguments[1..])
-    });
-    isolate.define_native("contains?", 2, Some(2), |heap, arguments| {
-        contains(heap, arguments[0], arguments[1])
-    });
-    isolate.define_native("set", 1, Some(1), |heap, arguments| set(heap, arguments[0]));
-    isolate.define_native("apply", 2, None, |_, _| {
-        Err(Error::new("apply is handled by the VM"))
-    });
-    isolate.define_native("#list", 0, None, |heap, arguments| {
-        heap.list(arguments.iter().copied()).map_err(full)
-    });
-    isolate.define_native("#vec", 1, Some(1), |heap, arguments| {
-        vec(heap, arguments[0])
-    });
-    isolate.define_native("#concat", 0, None, |heap, arguments| {
-        let mut items = Vec::new();
-        for value in arguments {
-            items.extend(sequence(heap, "~@", *value)?);
-        }
-        heap.list(items.into_iter()).map_err(full)
-    });
-    isolate.define_native("with", 1, None, |heap, arguments| {
-        with(heap, arguments[0], &arguments[1..])
-    });
-    isolate.define_native("record?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(heap.record_of(arguments[0]).is_some()))
-    });
-    isolate.define_native("set?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(heap.set_of(arguments[0]).is_some()))
-    });
-    isolate.define_native("disj", 1, None, |heap, arguments| {
-        disj(heap, arguments[0], &arguments[1..])
-    });
-    isolate.define_native("keys", 1, Some(1), |heap, arguments| {
-        let map = map_or_nil(heap, "keys", arguments[0])?;
-        let keys: Vec<Value> = map.entries(heap).into_iter().map(|(key, _)| key).collect();
-        vector_of(heap, &keys)
-    });
-    isolate.define_native("vals", 1, Some(1), |heap, arguments| {
-        let map = map_or_nil(heap, "vals", arguments[0])?;
-        let values: Vec<Value> = map
-            .entries(heap)
-            .into_iter()
-            .map(|(_, value)| value)
-            .collect();
-        vector_of(heap, &values)
-    });
-    isolate.define_native("entries", 1, Some(1), |heap, arguments| {
-        let map = map_or_nil(heap, "entries", arguments[0])?;
-        entries(heap, map)
-    });
-    isolate.define_native("vector?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(heap.vector_of(arguments[0]).is_some()))
-    });
-    isolate.define_native("list", 0, None, |heap, arguments| {
-        heap.list(arguments.iter().copied()).map_err(full)
-    });
-    isolate.define_native("conj", 1, None, |heap, arguments| {
-        conj(heap, arguments[0], &arguments[1..])
-    });
-    isolate.define_native("assoc", 3, None, |heap, arguments| {
-        assoc(heap, arguments[0], &arguments[1..])
-    });
-    isolate.define_native("pop", 1, Some(1), |heap, arguments| pop(heap, arguments[0]));
-    isolate.define_native("peek", 1, Some(1), |heap, arguments| {
-        peek(heap, arguments[0])
-    });
+    isolate
+        .native("ox", "count")
+        .arity(1, Some(1))
+        .function(|heap, arguments| count(heap, arguments[0]));
+    isolate
+        .native("ox", "nth")
+        .arity(2, Some(2))
+        .function(|heap, arguments| nth(heap, arguments[0], arguments[1]));
+    isolate
+        .native("ox", "get")
+        .arity(2, Some(3))
+        .function(|heap, arguments| Ok(get(heap, arguments)));
+    isolate
+        .native("ox", "vector")
+        .arity(0, None)
+        .function(vector_of);
+    isolate
+        .native("ox", "map?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(Value::Bool(heap.map_of(arguments[0]).is_some())));
+    isolate
+        .native("ox", "dissoc")
+        .arity(1, None)
+        .function(|heap, arguments| dissoc(heap, arguments[0], &arguments[1..]));
+    isolate
+        .native("ox", "contains?")
+        .arity(2, Some(2))
+        .function(|heap, arguments| contains(heap, arguments[0], arguments[1]));
+    isolate
+        .native("ox", "set")
+        .arity(1, Some(1))
+        .function(|heap, arguments| set(heap, arguments[0]));
+    isolate
+        .native("ox", "apply")
+        .arity(2, None)
+        .function(|_, _| Err(Error::new("apply is handled by the VM")));
+    isolate
+        .native("ox", "#list")
+        .arity(0, None)
+        .function(|heap, arguments| heap.list(arguments.iter().copied()).map_err(full));
+    isolate
+        .native("ox", "#vec")
+        .arity(1, Some(1))
+        .function(|heap, arguments| vec(heap, arguments[0]));
+    isolate
+        .native("ox", "#concat")
+        .arity(0, None)
+        .function(|heap, arguments| {
+            let mut items = Vec::new();
+            for value in arguments {
+                items.extend(sequence(heap, "~@", *value)?);
+            }
+            heap.list(items.into_iter()).map_err(full)
+        });
+    isolate
+        .native("ox", "with")
+        .arity(1, None)
+        .function(|heap, arguments| with(heap, arguments[0], &arguments[1..]));
+    isolate
+        .native("ox", "record?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(Value::Bool(heap.record_of(arguments[0]).is_some())));
+    isolate
+        .native("ox", "set?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(Value::Bool(heap.set_of(arguments[0]).is_some())));
+    isolate
+        .native("ox", "disj")
+        .arity(1, None)
+        .function(|heap, arguments| disj(heap, arguments[0], &arguments[1..]));
+    isolate
+        .native("ox", "keys")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let map = map_or_nil(heap, "keys", arguments[0])?;
+            let keys: Vec<Value> = map.entries(heap).into_iter().map(|(key, _)| key).collect();
+            vector_of(heap, &keys)
+        });
+    isolate
+        .native("ox", "vals")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let map = map_or_nil(heap, "vals", arguments[0])?;
+            let values: Vec<Value> = map
+                .entries(heap)
+                .into_iter()
+                .map(|(_, value)| value)
+                .collect();
+            vector_of(heap, &values)
+        });
+    isolate
+        .native("ox", "entries")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let map = map_or_nil(heap, "entries", arguments[0])?;
+            entries(heap, map)
+        });
+    isolate
+        .native("ox", "vector?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(Value::Bool(heap.vector_of(arguments[0]).is_some())));
+    isolate
+        .native("ox", "list")
+        .arity(0, None)
+        .function(|heap, arguments| heap.list(arguments.iter().copied()).map_err(full));
+    isolate
+        .native("ox", "conj")
+        .arity(1, None)
+        .function(|heap, arguments| conj(heap, arguments[0], &arguments[1..]));
+    isolate
+        .native("ox", "assoc")
+        .arity(3, None)
+        .function(|heap, arguments| assoc(heap, arguments[0], &arguments[1..]));
+    isolate
+        .native("ox", "pop")
+        .arity(1, Some(1))
+        .function(|heap, arguments| pop(heap, arguments[0]));
+    isolate
+        .native("ox", "peek")
+        .arity(1, Some(1))
+        .function(|heap, arguments| peek(heap, arguments[0]));
 }
