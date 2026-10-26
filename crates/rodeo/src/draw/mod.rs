@@ -1,3 +1,7 @@
+mod quad;
+
+pub use quad::Instance;
+
 use std::ops::Range;
 
 use crate::color::Color;

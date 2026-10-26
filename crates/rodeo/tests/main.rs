@@ -8,6 +8,7 @@ mod draw;
 mod ease;
 mod grid;
 mod particles;
+mod quad;
 mod random;
 mod rect;
 mod sweep;
