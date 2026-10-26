@@ -1,0 +1,18 @@
+[package]
+name = "rodeo"
+version.workspace = true
+description = "The native core of rodeo, Ox's 2D game engine: draw lists, textures, audio, collision, Tiled maps and game math"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+autotests = false
+
+[dependencies]
+
+[lints]
+workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/main.rs"
