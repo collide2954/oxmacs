@@ -1,7 +1,7 @@
 use iced::widget::canvas::{self, Frame, Geometry, Path, Stroke, Text};
 use iced::{Color, Font, Pixels, Point, Rectangle, Renderer, Size, Theme, mouse};
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_ox::shapes::{Ink, Paint, Shape};
+use oxmacs_script::shapes::{Ink, Paint, Shape};
 
 use crate::style;
 
@@ -154,7 +154,7 @@ impl<Message> canvas::Program<Message> for Drawing<'_> {
 mod tests {
     use iced::Color;
     use oxmacs_core::theme::{ADWAITA, Highlight};
-    use oxmacs_ox::shapes::{Ink, Paint, Shape};
+    use oxmacs_script::shapes::{Ink, Paint, Shape};
 
     use super::color;
     use crate::style;

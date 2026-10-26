@@ -49,9 +49,9 @@ fn how_fast_ox_files_scroll() {
     let home = tempfile::tempdir().unwrap();
     let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     for name in [
-        "oxmacs-ox/plugins/r/plugin.ox",
-        "oxmacs-ox/plugins/r/session.ox",
-        "oxmacs-ox/src/help.rs",
+        "oxmacs-script/plugins/r/plugin.ox",
+        "oxmacs-script/plugins/r/session.ox",
+        "oxmacs-script/src/help.rs",
     ] {
         let (mut app, _) = App::boot(&[], Some(home.path()));
         app.start(

@@ -17,7 +17,7 @@ oxmacs-api.workspace = true
 
 [dev-dependencies]
 oxmacs-core.workspace = true
-oxmacs-ox.workspace = true
+oxmacs-script.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 

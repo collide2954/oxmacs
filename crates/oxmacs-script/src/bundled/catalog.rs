@@ -107,7 +107,7 @@ fn sorted(mut names: Vec<String>) -> Vec<String> {
 
 #[test]
 fn every_plugin_folder_and_file_is_bundled() {
-    let folder = workspace().join("crates/oxmacs-ox/plugins");
+    let folder = workspace().join("crates/oxmacs-script/plugins");
     let mut on_disk: Vec<(String, Vec<String>)> = fs::read_dir(&folder)
         .unwrap()
         .map(|entry| entry.unwrap().path())
@@ -181,7 +181,7 @@ fn the_readme_lists_every_plugin_and_module() {
 
 #[test]
 fn the_manual_lists_every_plugin_and_module() {
-    let manual = workspace().join("crates/oxmacs-ox/plugins/manual");
+    let manual = workspace().join("crates/oxmacs-script/plugins/manual");
     let plugins_page = fs::read_to_string(manual.join("plugins.ox")).unwrap();
     let modules_page = fs::read_to_string(manual.join("modules.ox")).unwrap();
     let (plugins, modules) = (text_plugins(), text_modules());

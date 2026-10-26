@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use oxmacs_core::editor::Editor;
 use oxmacs_core::input::KeySequence;
-use oxmacs_ox::Ox;
+use oxmacs_script::Ox;
 
 fn timed(label: &str, runs: usize, mut work: impl FnMut()) -> Duration {
     let mut times = Vec::with_capacity(runs);

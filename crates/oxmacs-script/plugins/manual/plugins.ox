@@ -114,5 +114,5 @@ zen          0.1.0    opt-in   Distraction-free writing in one centered column
 
 ## Learn from the bundled plugins
 
-dired, git, weather, irc, calendar, vault, remote, markdown and this manual are all plugins written this way. Their sources are in the oxmacs repository under `crates/oxmacs-ox/plugins`.
+dired, git, weather, irc, calendar, vault, remote, markdown and this manual are all plugins written this way. Their sources are in the oxmacs repository under `crates/oxmacs-script/plugins`.
 "##})

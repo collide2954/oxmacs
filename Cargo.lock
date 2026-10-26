@@ -3855,7 +3855,7 @@ dependencies = [
  "ox-perf",
  "oxmacs-api",
  "oxmacs-core",
- "oxmacs-ox",
+ "oxmacs-script",
  "serde_json",
  "tempfile",
 ]
@@ -3977,7 +3977,7 @@ dependencies = [
  "notify",
  "open",
  "oxmacs-core",
- "oxmacs-ox",
+ "oxmacs-script",
  "rodeo",
  "serde_json",
  "skrifa 0.49.0",
@@ -3987,7 +3987,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oxmacs-ox"
+name = "oxmacs-script"
 version = "0.14.0"
 dependencies = [
  "dirs",

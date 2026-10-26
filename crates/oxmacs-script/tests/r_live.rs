@@ -2,7 +2,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 use oxmacs_core::editor::Editor;
-use oxmacs_ox::Ox;
+use oxmacs_script::Ox;
 
 fn unquoted(shown: &str) -> String {
     shown

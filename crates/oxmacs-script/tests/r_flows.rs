@@ -6,8 +6,8 @@ use oxmacs_core::editor::{Editor, Effect, JobId, ServerId};
 use oxmacs_core::external::lsp::{self, Server};
 use oxmacs_core::external::process::{self, Event, Handle};
 use oxmacs_core::input::KeySequence;
-use oxmacs_ox::views::{Node, ViewBuffer};
-use oxmacs_ox::{Ox, Pace};
+use oxmacs_script::views::{Node, ViewBuffer};
+use oxmacs_script::{Ox, Pace};
 
 struct Live {
     _home: tempfile::TempDir,

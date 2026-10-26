@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use oxmacs_core::editor::{Editor, Effect, ServerId, ServerSpec};
 use oxmacs_core::external::lsp::{self, Event, Server};
-use oxmacs_ox::Ox;
+use oxmacs_script::Ox;
 
 const OX_LSP: ServerSpec = ServerSpec {
     name: "ox lsp",

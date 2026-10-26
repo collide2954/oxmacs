@@ -1,5 +1,5 @@
 [package]
-name = "oxmacs-ox"
+name = "oxmacs-script"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

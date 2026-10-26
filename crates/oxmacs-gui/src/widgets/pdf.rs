@@ -10,8 +10,8 @@ use iced::advanced::{Clipboard, Shell, Widget};
 use iced::widget::image::Handle;
 use iced::{Border, Color, Element, Event, Length, Point, Rectangle, Size, Theme, Vector, window};
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_ox::pdf::{self, Bitmap, Document, Go, Ink, PageSize, Target, View, Zoom, words};
-use oxmacs_ox::views::{Arg, Press};
+use oxmacs_script::pdf::{self, Bitmap, Document, Go, Ink, PageSize, Target, View, Zoom, words};
+use oxmacs_script::views::{Arg, Press};
 
 use crate::{style, units};
 

@@ -33,7 +33,7 @@ ox-perf = { path = "crates/ox-perf" }
 oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
 oxmacs-api = { path = "crates/oxmacs-api" }
-oxmacs-ox = { path = "crates/oxmacs-ox" }
+oxmacs-script = { path = "crates/oxmacs-script" }
 native-theme = { version = "0.6.1", default-features = false }
 notify = "8.2.0"
 num-bigint = "0.5.1"
