@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Added
 
+- `(ui/pages (ui/document blocks))` sets text in pages like a book: paragraphs, headings, quotes, list items, preformatted lines, images and rules made of runs with italics, bold, code and links, in a serif, sans or monospace typeface, broken between whole lines with headings kept with what follows, one page or two side by side, with a running header and page numbers, colored marks, text selected by dragging, clickable links and page turns from the mouse wheel. It tells Ox where each page starts, so a plugin can turn pages and remember its place.
 - `(ox zip)` reads zip archives, such as EPUB books: `zip/entries` lists what is inside, and `zip/read` and `zip/read-base64` read an entry as text or bytes. `image/decode` makes an image from base64 bytes. Built on the zip crate.
 - `xml/parse` reads XHTML with `:html true`: whitespace between elements stays and HTML entities such as `&nbsp;` and `&mdash;` are understood.
 - Plugins open the files they claim with `:opens-files ["epub"]` in their `plugin.ox` and `(on-open-file "epub" f)`, instead of the file opening as text.

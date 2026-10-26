@@ -240,9 +240,12 @@ impl App {
                 font: self.font,
                 size: self.text_size,
             };
-            let drawn = ox_view::view(&shown.node, look, move |slot| {
-                Message::OxPress(buffer, slot)
-            });
+            let drawn = ox_view::view(
+                &shown.node,
+                look,
+                move |slot| Message::OxPress(buffer, slot),
+                move |slot, args| Message::OxCall(buffer, slot, args),
+            );
             let sized = sensor(container(drawn).width(Length::Fill).height(Length::Fill))
                 .on_show(move |size| Message::ViewSized(buffer, size))
                 .on_resize(move |size| Message::ViewSized(buffer, size));

@@ -1,3 +1,4 @@
+pub mod book;
 mod buffers;
 mod bundled;
 pub mod checker;
@@ -64,6 +65,7 @@ fn install_editor_api(isolate: &mut Isolate, answers: &prompts::Inbox) {
     commands::install(isolate);
     plugins::install(isolate);
     views::install(isolate);
+    book::install(isolate);
     buffers::install(isolate);
     handles::install(isolate);
     editing::install(isolate);
@@ -100,7 +102,7 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
 
 pub const EDITOR_MODULES: &[(&str, &str)] = &[(
     "ox/ui",
-    "Widgets for plugin views: text, rows, columns, buttons, images and canvases; in oxmacs only",
+    "Widgets for plugin views: text, rows, columns, buttons, images, canvases and book pages; in oxmacs only",
 )];
 
 pub fn checking_isolate() -> Isolate {
@@ -208,6 +210,16 @@ impl Ox {
 
     pub fn press(&mut self, editor: &mut Editor, buffer: BufferId, slot: usize) {
         views::press(&mut self.isolate, editor, buffer, slot);
+    }
+
+    pub fn call(
+        &mut self,
+        editor: &mut Editor,
+        buffer: BufferId,
+        slot: usize,
+        args: Vec<views::Arg>,
+    ) {
+        views::call(&mut self.isolate, editor, buffer, slot, &args);
     }
 
     pub fn tab_event(&mut self, editor: &mut Editor, event: tabbar::TabEvent) {

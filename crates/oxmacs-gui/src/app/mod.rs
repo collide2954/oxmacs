@@ -79,6 +79,7 @@ pub enum Message {
     ToolInstalled(Managed, Result<PathBuf, String>),
     OxTick,
     OxPress(BufferId, usize),
+    OxCall(BufferId, usize, Vec<oxmacs_ox::views::Arg>),
     ViewSized(BufferId, iced::Size),
     TakeoverSized(iced::Size),
     EndTakeover,
@@ -621,6 +622,46 @@ mod tests {
 
         assert!(ui.find("-- *scratch*   L1 C0   (Ox)").is_err());
         assert!(ui.find("notes").is_err());
+    }
+
+    #[test]
+    fn book_pages_tell_ox_where_each_page_starts() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("init.ox"),
+            r#"(module (import (ox ui)))
+(def heard (atom nil))
+(def words "It was a bright cold day in April, and the clocks were striking thirteen. ")
+(def doc (ui/document (vec (map (fn [_] {kind: :paragraph runs: [(apply str (repeat 6 words))]}) (range 40)))))
+(open-view "*book*" (fn [] (ui/pages doc :spread :single :on-pages (fn [starts turn] (reset! heard [(count starts) turn (first starts)])))))"#,
+        )
+        .unwrap();
+        let mut app = App::default();
+        let _ = app.start_ox(Some(home.path()));
+
+        let mut ui = iced_test::Simulator::with_size(
+            iced::Settings::default(),
+            iced::Size::new(800.0, 600.0),
+            app.view(),
+        );
+        let _ = ui.simulate([Event::Mouse(iced::mouse::Event::CursorMoved {
+            position: iced::Point::new(10.0, 10.0),
+        })]);
+        let messages: Vec<Message> = ui.into_messages().collect();
+        for message in messages {
+            let _ = app.update(message);
+        }
+
+        let heard = app.ox.eval(&mut app.editor, "@heard").unwrap();
+        let pages: usize = heard
+            .trim_start_matches('[')
+            .split(' ')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(pages > 3, "{heard}");
+        assert!(heard.ends_with(" 1 [0 0]]"), "{heard}");
     }
 
     fn taken_over() -> App {

@@ -78,7 +78,7 @@ fn lines(node: &Node, out: &mut Vec<String>) {
         }
         Node::Text { text, .. } => out.push(text.clone()),
         Node::Button { label, .. } => out.push(label.clone()),
-        Node::Space { .. } | Node::Canvas { .. } | Node::Image { .. } => {}
+        Node::Space { .. } | Node::Canvas { .. } | Node::Image { .. } | Node::Pages(_) => {}
         Node::Scrollable(child) => lines(child, out),
     }
 }

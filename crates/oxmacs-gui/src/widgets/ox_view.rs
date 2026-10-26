@@ -5,10 +5,11 @@ use iced::widget::{
 };
 use iced::{Border, Color, ContentFit, Element, Font, Length};
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_ox::views::{Node, Picture, Press};
+use oxmacs_ox::views::{Arg, Node, Picture, Press};
 
 use crate::style;
 use crate::widgets::drawing::Drawing;
+use crate::widgets::pages::PagesView;
 
 const FRAME: f32 = 2.0;
 const FRAME_RADIUS: f32 = 4.0;
@@ -17,7 +18,7 @@ thread_local! {
     static PICTURES: RefCell<Vec<(Picture, image::Handle)>> = const { RefCell::new(Vec::new()) };
 }
 
-fn handle(picture: &Picture) -> image::Handle {
+pub(crate) fn handle(picture: &Picture) -> image::Handle {
     PICTURES.with_borrow_mut(|known| {
         known.retain(|(kept, _)| !kept.unused());
         if let Some((_, handle)) = known.iter().find(|(kept, _)| kept.key() == picture.key()) {
@@ -41,15 +42,16 @@ pub fn view<'a, Message: Clone + 'a>(
     node: &'a Node,
     look: Look,
     press: impl Fn(usize) -> Message + Copy + 'a,
+    call: impl Fn(usize, Vec<Arg>) -> Message + Copy + 'a,
 ) -> Element<'a, Message> {
     match node {
         Node::Column { spacing, children } => {
-            Column::with_children(children.iter().map(|child| view(child, look, press)))
+            Column::with_children(children.iter().map(|child| view(child, look, press, call)))
                 .spacing(*spacing)
                 .into()
         }
         Node::Row { spacing, children } => {
-            Row::with_children(children.iter().map(|child| view(child, look, press)))
+            Row::with_children(children.iter().map(|child| view(child, look, press, call)))
                 .spacing(*spacing)
                 .into()
         }
@@ -124,7 +126,8 @@ pub fn view<'a, Message: Clone + 'a>(
                 _ => framed.into(),
             }
         }
-        Node::Scrollable(child) => scrollable(view(child, look, press))
+        Node::Pages(pages) => PagesView::new(pages, look.faces, look.font, call).into(),
+        Node::Scrollable(child) => scrollable(view(child, look, press, call))
             .height(Length::Fill)
             .into(),
     }

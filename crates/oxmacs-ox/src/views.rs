@@ -82,6 +82,15 @@ pub enum Node {
         press: Option<Press>,
         selected: bool,
     },
+    Pages(Box<crate::book::Pages>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Arg {
+    Nil,
+    Int(i64),
+    Text(String),
+    List(Vec<Arg>),
 }
 
 #[derive(Debug)]
@@ -593,6 +602,15 @@ fn number(node: Node, callbacks: &mut Vec<Hold>) -> Node {
                 selected,
             }
         }
+        Node::Pages(mut pages) => {
+            for press in pages.presses() {
+                if let Some(Press::Held(hold)) = press.take() {
+                    callbacks.push(hold);
+                    *press = Some(Press::Slot(callbacks.len() - 1));
+                }
+            }
+            Node::Pages(pages)
+        }
         other => other,
     }
 }
@@ -688,6 +706,54 @@ pub fn refresh(isolate: &mut Isolate, editor: &mut Editor) {
     let writes = isolate.heap().atom_writes();
     if let Some(views) = editor.plugin_state_mut::<Views>() {
         views.seen = writes;
+    }
+}
+
+fn value(heap: &mut Heap, arg: &Arg) -> Result<Value, Error> {
+    match arg {
+        Arg::Nil => Ok(Value::Nil),
+        Arg::Int(number) => Ok(Value::Int(*number)),
+        Arg::Text(text) => heap
+            .string(text)
+            .map_err(|full| Error::new(full.to_string())),
+        Arg::List(items) => {
+            let mut values = Vec::with_capacity(items.len());
+            for item in items {
+                values.push(value(heap, item)?);
+            }
+            heap.vector_from(&values)
+                .map_err(|full| Error::new(full.to_string()))
+        }
+    }
+}
+
+pub fn call(
+    isolate: &mut Isolate,
+    editor: &mut Editor,
+    buffer: BufferId,
+    slot: usize,
+    args: &[Arg],
+) {
+    let callback = editor
+        .plugin_state::<Views>()
+        .and_then(|views| views.open.iter().find(|view| view.buffer == buffer))
+        .and_then(|view| view.callbacks.get(slot).copied())
+        .and_then(|hold| isolate.held(hold));
+    let Some(callback) = callback else {
+        return;
+    };
+    let mut values = Vec::with_capacity(args.len());
+    for arg in args {
+        match value(isolate.heap_mut(), arg) {
+            Ok(made) => values.push(made),
+            Err(error) => {
+                log::report(editor, &error, None);
+                return;
+            }
+        }
+    }
+    if let Err(error) = isolate.spawn(callback, &values) {
+        log::report(editor, &error, None);
     }
 }
 

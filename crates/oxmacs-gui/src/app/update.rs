@@ -267,6 +267,9 @@ impl App {
                 self.editor.server_event(id, event);
             }
             Message::OxPress(buffer, slot) => self.ox.press(&mut self.editor, buffer, slot),
+            Message::OxCall(buffer, slot, args) => {
+                self.ox.call(&mut self.editor, buffer, slot, args)
+            }
             Message::ViewSized(buffer, size) => {
                 let pixels =
                     |extent: f32| u32::try_from(units::floor_to_usize(extent)).unwrap_or(u32::MAX);

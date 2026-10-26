@@ -6,6 +6,7 @@ pub mod echo_area;
 pub mod mode_line;
 pub mod overlay;
 pub mod ox_view;
+pub mod pages;
 pub mod popup;
 pub mod powerline;
 pub mod tab_bar;
