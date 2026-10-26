@@ -38,7 +38,7 @@ pub use keystrokes::Keystroke;
 pub use languages::registry::{LineHighlighter, LineIndenter};
 pub use lsp::{SERVERS, ServerId, ServerSpec};
 pub use motion::mouse::{Cell, Clicks};
-pub use page::{Page, clip, fill};
+pub use page::{Page, fill};
 pub use presentation::Presentation;
 pub use prompts::callbacks::{InputStyle, Offer, Picked};
 pub use prompts::input_line::InputLine;

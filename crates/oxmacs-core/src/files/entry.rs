@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::cmp::Reverse;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -37,48 +36,11 @@ impl Entry {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[must_use]
-pub enum Sort {
-    #[default]
-    Name,
-    Newest,
-    Largest,
-}
-
-impl Sort {
-    pub fn next(self) -> Self {
-        match self {
-            Self::Name => Self::Newest,
-            Self::Newest => Self::Largest,
-            Self::Largest => Self::Name,
-        }
-    }
-
-    pub fn label(self) -> Option<&'static str> {
-        match self {
-            Self::Name => None,
-            Self::Newest => Some("newest first"),
-            Self::Largest => Some("largest first"),
-        }
-    }
-}
-
-pub fn sort(entries: &mut [Entry], sort: Sort) {
-    match sort {
-        Sort::Name => entries.sort_by_cached_key(|entry| {
-            let name = entry.display_name().to_lowercase();
-            (!entry.is_dir(), name.starts_with('.'), name)
-        }),
-        Sort::Newest => entries.sort_by_cached_key(|entry| {
-            let name = entry.display_name().to_lowercase();
-            (!entry.is_dir(), Reverse(entry.modified), name)
-        }),
-        Sort::Largest => entries.sort_by_cached_key(|entry| {
-            let name = entry.display_name().to_lowercase();
-            (!entry.is_dir(), Reverse(entry.size), name)
-        }),
-    }
+pub fn sort_by_name(entries: &mut [Entry]) {
+    entries.sort_by_cached_key(|entry| {
+        let name = entry.display_name().to_lowercase();
+        (!entry.is_dir(), name.starts_with('.'), name)
+    });
 }
 
 pub fn read_entries(directory: &Path) -> io::Result<Vec<Entry>> {
@@ -144,46 +106,12 @@ mod tests {
     fn name_order_puts_directories_first_and_dotfiles_last() {
         let mut entries = sample();
 
-        sort(&mut entries, Sort::Name);
+        sort_by_name(&mut entries);
 
         assert_eq!(
             names(&entries),
             ["zdir", ".git", "A.txt", "b.txt", ".hidden"]
         );
-    }
-
-    #[test]
-    fn newest_order_keeps_directories_first() {
-        let mut entries = sample();
-
-        sort(&mut entries, Sort::Newest);
-
-        assert_eq!(
-            names(&entries),
-            [".git", "zdir", ".hidden", "A.txt", "b.txt"]
-        );
-    }
-
-    #[test]
-    fn largest_order_keeps_directories_first() {
-        let mut entries = sample();
-
-        sort(&mut entries, Sort::Largest);
-
-        assert_eq!(
-            names(&entries),
-            [".git", "zdir", "A.txt", ".hidden", "b.txt"]
-        );
-    }
-
-    #[test]
-    fn sort_orders_cycle_and_describe_themselves() {
-        assert_eq!(Sort::Name.next(), Sort::Newest);
-        assert_eq!(Sort::Newest.next(), Sort::Largest);
-        assert_eq!(Sort::Largest.next(), Sort::Name);
-        assert_eq!(Sort::Name.label(), None);
-        assert_eq!(Sort::Newest.label(), Some("newest first"));
-        assert_eq!(Sort::Largest.label(), Some("largest first"));
     }
 
     #[test]
@@ -193,7 +121,7 @@ mod tests {
         fs::create_dir(dir.path().join("sub")).unwrap();
 
         let mut entries = read_entries(dir.path()).unwrap();
-        sort(&mut entries, Sort::Name);
+        sort_by_name(&mut entries);
 
         assert_eq!(names(&entries), ["sub", "a.txt"]);
         assert_eq!(entries[0].kind, Kind::Directory);

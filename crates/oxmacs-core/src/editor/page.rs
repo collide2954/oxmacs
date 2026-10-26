@@ -81,15 +81,6 @@ pub fn fill(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-pub fn clip(text: &str, width: usize) -> String {
-    if text.chars().count() <= width {
-        return text.to_owned();
-    }
-    let mut clipped: String = text.chars().take(width.saturating_sub(1)).collect();
-    clipped.push('…');
-    clipped
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,13 +119,6 @@ mod tests {
         assert_eq!(page.line_count(), 2);
         assert_eq!(page.styles[0].background, None);
         assert_eq!(page.styles[1].background, Some(Highlight::Region));
-    }
-
-    #[test]
-    fn clipping_keeps_short_text_and_ends_long_text_with_an_ellipsis() {
-        assert_eq!(clip("short", 8), "short");
-        assert_eq!(clip("exactly8", 8), "exactly8");
-        assert_eq!(clip("much too long", 8), "much to…");
     }
 
     #[test]

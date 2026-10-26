@@ -4,7 +4,7 @@ use std::path::{self, Path, PathBuf};
 use crate::cli::Visit;
 use crate::editor::prompts::minibuffer::{PathListing, Purpose};
 use crate::editor::{Choice, Editor};
-use crate::files::{self, Sort, paths};
+use crate::files::{self, paths};
 use crate::text::{Buffer, FileInfo};
 
 impl Editor {
@@ -68,7 +68,7 @@ impl Editor {
             return;
         }
         let mut entries = files::read_entries(&directory).unwrap_or_default();
-        files::sort(&mut entries, Sort::Name);
+        files::sort_by_name(&mut entries);
         if let Some(minibuffer) = &mut self.minibuffer {
             minibuffer.listing = Some(PathListing { directory, entries });
         }

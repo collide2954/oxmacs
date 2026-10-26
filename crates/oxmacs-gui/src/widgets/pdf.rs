@@ -90,11 +90,6 @@ pub fn page_at(sheets: &[Sheet], offset: f32, height: f32) -> usize {
         .map_or(0, |sheet| sheet.page)
 }
 
-pub fn zoomed(scale: f32, factor: f32) -> f32 {
-    let wanted = (scale / PIXELS_PER_POINT * factor).clamp(pdf::MIN_SCALE, pdf::MAX_SCALE);
-    (wanted * 100.0).round() / 100.0
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Key {
     path: PathBuf,
@@ -907,13 +902,6 @@ mod tests {
         assert_eq!(page_at(&placed, 700.0, 600.0), 1);
         assert_eq!(page_at(&placed, 100_000.0, 600.0), 4);
         assert_eq!(page_at(&[], 0.0, 600.0), 0);
-    }
-
-    #[test]
-    fn zooming_starts_from_the_scale_shown_and_stays_in_bounds() {
-        assert!(close(zoomed(PIXELS_PER_POINT, 1.25), 1.25));
-        assert!(close(zoomed(7.0 * PIXELS_PER_POINT, 2.0), pdf::MAX_SCALE));
-        assert!(close(zoomed(0.2 * PIXELS_PER_POINT, 0.5), pdf::MIN_SCALE));
     }
 
     fn key(page: usize, width: usize) -> Key {
