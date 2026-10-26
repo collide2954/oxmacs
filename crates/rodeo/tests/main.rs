@@ -2,6 +2,7 @@ mod animation;
 mod camera;
 mod clock;
 mod collide;
+mod color;
 mod ease;
 mod grid;
 mod random;

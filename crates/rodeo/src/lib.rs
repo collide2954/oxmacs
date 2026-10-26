@@ -2,6 +2,7 @@ pub mod animation;
 pub mod camera;
 pub mod clock;
 pub mod collide;
+pub mod color;
 pub mod ease;
 pub mod random;
 pub mod rect;
