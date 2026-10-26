@@ -311,6 +311,18 @@ pub struct Map {
     pub layers: Vec<Layer>,
 }
 
+fn owner(tilesets: &[Tileset], gid: u32) -> Option<(&Tileset, u32)> {
+    let gid = gid & !FLAGS;
+    if gid == 0 {
+        return None;
+    }
+    let tileset = tilesets
+        .iter()
+        .filter(|tileset| tileset.first_gid <= gid)
+        .max_by_key(|tileset| tileset.first_gid)?;
+    Some((tileset, gid - tileset.first_gid))
+}
+
 fn find<'a>(layers: &'a [Layer], name: &str) -> Option<&'a Layer> {
     layers.iter().find_map(|layer| {
         if layer.name == name {
@@ -342,17 +354,30 @@ impl Map {
         find(&self.layers, name)
     }
 
+    pub fn objects(&self) -> impl Iterator<Item = &Object> {
+        let mut layers: Vec<&Layer> = self.layers.iter().rev().collect();
+        let mut current: std::slice::Iter<'_, Object> = [].iter();
+        std::iter::from_fn(move || {
+            loop {
+                if let Some(object) = current.next() {
+                    return Some(object);
+                }
+                let layer = layers.pop()?;
+                match &layer.kind {
+                    LayerKind::Objects(objects) => current = objects.iter(),
+                    LayerKind::Group(children) => layers.extend(children.iter().rev()),
+                    _ => {}
+                }
+            }
+        })
+    }
+
+    pub fn object(&self, name: &str) -> Option<&Object> {
+        self.objects().find(|object| object.name == name)
+    }
+
     pub fn tileset_for(&self, gid: u32) -> Option<(&Tileset, u32)> {
-        let gid = gid & !FLAGS;
-        if gid == 0 {
-            return None;
-        }
-        let tileset = self
-            .tilesets
-            .iter()
-            .filter(|tileset| tileset.first_gid <= gid)
-            .max_by_key(|tileset| tileset.first_gid)?;
-        Some((tileset, gid - tileset.first_gid))
+        owner(&self.tilesets, gid)
     }
 
     pub fn tile_info(&self, gid: u32) -> Option<&TileInfo> {

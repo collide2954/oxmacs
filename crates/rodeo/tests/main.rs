@@ -11,5 +11,6 @@ mod rect;
 mod sweep;
 mod tiled;
 mod tiled_data;
+mod tiled_objects;
 mod tiles;
 mod vec;

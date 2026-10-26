@@ -5,7 +5,8 @@ use std::str::FromStr;
 use roxmltree::{Document, Node};
 
 use super::{
-    Error, Image, Layer, LayerKind, Map, Properties, Property, TileInfo, TileLayer, Tileset, data,
+    Error, Image, Layer, LayerKind, Map, Object, Properties, Property, Shape, Text, Tile, TileInfo,
+    TileLayer, Tileset, data,
 };
 use crate::animation::{Animation, Frame};
 use crate::color::Color;
@@ -221,7 +222,10 @@ impl Context {
                     properties: self.properties(tile)?,
                     image: self.image(tile)?,
                     animation: self.animation(tile)?,
-                    collision: Vec::new(),
+                    collision: match child(tile, "objectgroup") {
+                        Some(group) => self.objects(group, &[])?,
+                        None => Vec::new(),
+                    },
                 },
             );
         }
@@ -250,17 +254,119 @@ impl Context {
         })
     }
 
-    fn layers(&self, parent: Node<'_, '_>) -> Result<Vec<Layer>, Error> {
-        parent
-            .children()
-            .filter_map(|node| self.layer(node).transpose())
+    fn points(&self, node: Node<'_, '_>) -> Result<Vec<Vec2>, Error> {
+        let text = node.attribute("points").unwrap_or_default();
+        text.split_whitespace()
+            .map(|pair| {
+                let (x, y) = pair.split_once(',').unwrap_or((pair, ""));
+                Ok(Vec2::new(
+                    self.parsed(node, "points", x)?,
+                    self.parsed(node, "points", y)?,
+                ))
+            })
             .collect()
     }
 
-    fn layer(&self, node: Node<'_, '_>) -> Result<Option<Layer>, Error> {
+    fn text(&self, node: Node<'_, '_>) -> Result<Text, Error> {
+        let defaults = Text::default();
+        Ok(Text {
+            content: node.text().unwrap_or_default().to_owned(),
+            font_family: node
+                .attribute("fontfamily")
+                .map_or(defaults.font_family, str::to_owned),
+            pixel_size: self.number(node, "pixelsize", defaults.pixel_size)?,
+            wrap: flag(node, "wrap", false),
+            color: self.color(node, "color")?.unwrap_or(defaults.color),
+            bold: flag(node, "bold", false),
+            italic: flag(node, "italic", false),
+            horizontal: self.number(node, "halign", defaults.horizontal)?,
+            vertical: self.number(node, "valign", defaults.vertical)?,
+        })
+    }
+
+    fn shape(&self, node: Node<'_, '_>) -> Result<Option<Shape>, Error> {
+        for part in node.children().filter(Node::is_element) {
+            let shape = match part.tag_name().name() {
+                "ellipse" => Shape::Ellipse,
+                "point" => Shape::Point,
+                "polygon" => Shape::Polygon(self.points(part)?),
+                "polyline" => Shape::Polyline(self.points(part)?),
+                "text" => Shape::Text(self.text(part)?),
+                _ => continue,
+            };
+            return Ok(Some(shape));
+        }
+        Ok(None)
+    }
+
+    fn fill_object(&self, node: Node<'_, '_>, object: &mut Object) -> Result<(), Error> {
+        object.id = self.number(node, "id", object.id)?;
+        if let Some(name) = node.attribute("name") {
+            name.clone_into(&mut object.name);
+        }
+        if node.has_attribute("class") || node.has_attribute("type") {
+            object.class = class_of(node);
+        }
+        object.x = self.number(node, "x", object.x)?;
+        object.y = self.number(node, "y", object.y)?;
+        object.width = self.number(node, "width", object.width)?;
+        object.height = self.number(node, "height", object.height)?;
+        if node.has_attribute("rotation") {
+            object.rotation = self.number(node, "rotation", 0.0_f64)?.to_radians();
+        }
+        object.visible = flag(node, "visible", object.visible);
+        if node.has_attribute("gid") {
+            object.tile = Tile::from_raw(self.number(node, "gid", 0)?);
+        }
+        if let Some(shape) = self.shape(node)? {
+            object.shape = shape;
+        }
+        object.properties.extend(self.properties(node)?);
+        Ok(())
+    }
+
+    fn object(&self, node: Node<'_, '_>, tilesets: &[Tileset]) -> Result<Object, Error> {
+        let mut object = Object::default();
+        self.fill_object(node, &mut object)?;
+        if let Some(tile) = object.tile {
+            if object.width == 0.0 && object.height == 0.0 {
+                if let Some((tileset, _)) = super::owner(tilesets, tile.gid) {
+                    let size = tileset.tile_size();
+                    object.width = size.x;
+                    object.height = size.y;
+                }
+            }
+            let corner = Vec2::new(0.0, -object.height).rotated(object.rotation);
+            object.x += corner.x;
+            object.y += corner.y;
+        }
+        Ok(object)
+    }
+
+    fn objects(&self, node: Node<'_, '_>, tilesets: &[Tileset]) -> Result<Vec<Object>, Error> {
+        elements(node, "object")
+            .map(|object| self.object(object, tilesets))
+            .collect()
+    }
+
+    fn layers(&self, parent: Node<'_, '_>, tilesets: &[Tileset]) -> Result<Vec<Layer>, Error> {
+        parent
+            .children()
+            .filter_map(|node| self.layer(node, tilesets).transpose())
+            .collect()
+    }
+
+    fn layer(&self, node: Node<'_, '_>, tilesets: &[Tileset]) -> Result<Option<Layer>, Error> {
         let name = text_of(node, "name");
         let kind = match node.tag_name().name() {
             "layer" => LayerKind::Tiles(self.tile_layer(node, &name)?),
+            "objectgroup" => LayerKind::Objects(self.objects(node, tilesets)?),
+            "imagelayer" => LayerKind::Image {
+                image: self.image(node)?,
+                repeat_x: flag(node, "repeatx", false),
+                repeat_y: flag(node, "repeaty", false),
+            },
+            "group" => LayerKind::Group(self.layers(node, tilesets)?),
             _ => return Ok(None),
         };
         Ok(Some(Layer {
@@ -370,7 +476,7 @@ pub(super) fn map(text: &str, path: &Path) -> Result<Map, Error> {
     }
     let tilesets = elements(root, "tileset")
         .map(|node| context.tileset(node))
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(Map {
         path: path.to_owned(),
         width: context.required(root, "width")?,
@@ -381,7 +487,7 @@ pub(super) fn map(text: &str, path: &Path) -> Result<Map, Error> {
         background: context.color(root, "backgroundcolor")?,
         class: class_of(root),
         properties: context.properties(root)?,
-        layers: context.layers(root)?,
+        layers: context.layers(root, &tilesets)?,
         tilesets,
     })
 }
