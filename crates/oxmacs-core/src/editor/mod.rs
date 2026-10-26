@@ -27,6 +27,7 @@ mod watching;
 mod windows;
 
 pub use crate::external::diagnostics::{Diagnostic, LintLine, Severity};
+pub use buffers::files::Visit;
 pub use build::errors::{ErrorAt, ErrorPattern};
 pub use build::lint::{LintRun, Linter};
 pub use console::{ConsoleHook, ConsoleSpec, MarkerHook};

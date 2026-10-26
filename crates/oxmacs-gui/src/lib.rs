@@ -16,8 +16,8 @@ use std::cell::Cell;
 
 use app::App;
 use iced::{Size, window};
-use oxmacs_core::cli::Visit;
 use oxmacs_core::config::WindowMode;
+use oxmacs_core::editor::Visit;
 
 pub fn run(visits: Vec<Visit>, init: bool) -> Result {
     crash::install(crash::folder());

@@ -7,7 +7,7 @@ use iced::Size;
 use iced::keyboard::key::{Code, Named, Physical};
 use iced::keyboard::{self, Key, Location, Modifiers};
 use iced_test::Simulator;
-use oxmacs_core::cli::Visit;
+use oxmacs_core::editor::Visit;
 use oxmacs_gui::app::{App, Message};
 use oxmacs_gui::fonts;
 

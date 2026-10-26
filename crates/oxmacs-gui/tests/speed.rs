@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use iced::keyboard::key::{Code, Named, Physical};
 use iced::keyboard::{self, Key, Location, Modifiers};
-use oxmacs_core::cli::Visit;
+use oxmacs_core::editor::Visit;
 use oxmacs_gui::app::{App, Message};
 
 fn key(app: &mut App, key: Key, text: Option<&str>) {

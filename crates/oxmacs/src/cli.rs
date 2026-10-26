@@ -1,12 +1,7 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Visit {
-    pub path: PathBuf,
-    pub line: Option<usize>,
-    pub column: Option<usize>,
-}
+use oxmacs_core::editor::Visit;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Launch {

@@ -1,11 +1,17 @@
 use std::fs;
 use std::path::{self, Path, PathBuf};
 
-use crate::cli::Visit;
 use crate::editor::prompts::minibuffer::{PathListing, Purpose};
 use crate::editor::{Choice, Editor};
 use crate::files::{self, paths};
 use crate::text::{Buffer, FileInfo};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Visit {
+    pub path: PathBuf,
+    pub line: Option<usize>,
+    pub column: Option<usize>,
+}
 
 impl Editor {
     pub fn set_working_directory(&mut self, directory: PathBuf) {
@@ -395,7 +401,7 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use crate::cli::Visit;
+    use super::Visit;
     use crate::editor::Editor;
     use crate::editor::test_support::{labels, minibuffer_input, press, type_text};
 

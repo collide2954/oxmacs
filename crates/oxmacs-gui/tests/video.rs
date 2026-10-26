@@ -16,7 +16,7 @@ use iced::keyboard::{self, Key, Location, Modifiers};
 use iced::{Size, Task};
 use iced_runtime::Action;
 use iced_test::Simulator;
-use oxmacs_core::cli::Visit;
+use oxmacs_core::editor::Visit;
 use oxmacs_gui::app::{App, Message};
 use oxmacs_gui::fonts;
 use oxmacs_script::view::views::{Node, ViewBuffer};

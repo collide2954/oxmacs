@@ -5,9 +5,9 @@ use std::sync::Arc;
 use ox_lang::Error;
 use ox_lang::error::{ErrorKind, Frame};
 use ox_lang::symbol::Sym;
-use oxmacs_core::cli::Visit;
 use oxmacs_core::command::{Command, DynamicSpec, ScopeId};
 use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::Visit;
 use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
 

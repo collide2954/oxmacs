@@ -1,9 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod cli;
+
 use std::ffi::OsString;
 use std::process::ExitCode;
 
-use oxmacs_core::cli::{self, Launch};
+use cli::Launch;
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
