@@ -107,35 +107,41 @@ fn id_of(heap: &Heap, name: &str, value: Value) -> Result<u64, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("processes", 0, Some(0), |heap, editor, _| {
-        let found = editor
-            .processes()
-            .iter()
-            .map(|process| info(heap, editor, process))
-            .collect::<Result<Vec<Value>, Error>>()?;
-        made(heap.vector_from(&found))
-    });
+    isolate
+        .native("ox", "processes")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            let found = editor
+                .processes()
+                .iter()
+                .map(|process| info(heap, editor, process))
+                .collect::<Result<Vec<Value>, Error>>()?;
+            made(heap.vector_from(&found))
+        });
     for (name, force) in [("stop-process", false), ("kill-process", true)] {
-        isolate.define_host_native::<Editor>(name, 1, Some(1), move |heap, editor, arguments| {
-            let id = id_of(heap, name, arguments[0])?;
-            editor.stop_process(id, force).map_err(Error::new)?;
+        isolate.native("ox", name).arity(1, Some(1)).host::<Editor>(
+            move |heap, editor, arguments| {
+                let id = id_of(heap, name, arguments[0])?;
+                editor.stop_process(id, force).map_err(Error::new)?;
+                Ok(Value::Nil)
+            },
+        );
+    }
+    isolate
+        .native("ox", "visit-process")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let id = id_of(heap, "visit-process", arguments[0])?;
+            editor.visit_process(id).map_err(Error::new)?;
             Ok(Value::Nil)
         });
-    }
-    isolate.define_host_native::<Editor>("visit-process", 1, Some(1), |heap, editor, arguments| {
-        let id = id_of(heap, "visit-process", arguments[0])?;
-        editor.visit_process(id).map_err(Error::new)?;
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>(
-        "watch-process-usage",
-        1,
-        Some(1),
-        |_, editor, arguments| {
+    isolate
+        .native("ox", "watch-process-usage")
+        .arity(1, Some(1))
+        .host::<Editor>(|_, editor, arguments| {
             editor.watch_process_usage(arguments[0].truthy());
             Ok(Value::Nil)
-        },
-    );
+        });
 }
 
 #[cfg(test)]

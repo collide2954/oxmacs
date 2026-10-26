@@ -280,7 +280,7 @@ mod tests {
                 .into_iter()
                 .map(|(_, severity)| severity)
                 .collect::<Vec<_>>(),
-            [oxmacs_core::editor::Severity::Error]
+            [Severity::Error]
         );
     }
 

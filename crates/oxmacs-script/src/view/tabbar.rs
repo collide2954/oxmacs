@@ -147,7 +147,10 @@ pub fn event(isolate: &mut Isolate, editor: &mut Editor, event: TabEvent) {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>(NAME, 1, None, set_tab_bar);
+    isolate
+        .native("ox", NAME)
+        .arity(1, None)
+        .host::<Editor>(set_tab_bar);
 }
 
 #[cfg(test)]

@@ -457,17 +457,14 @@ fn held(game: &Game, name: &str, keys: &BTreeSet<String>) -> bool {
 }
 
 fn input(isolate: &mut Isolate, name: &'static str, pick: fn(&Game) -> &BTreeSet<String>) {
-    isolate.define_host_native_in::<Editor>(
-        MODULE,
-        name,
-        1,
-        Some(1),
-        move |heap, editor, arguments| {
+    isolate
+        .native(MODULE, name)
+        .arity(1, Some(1))
+        .host::<Editor>(move |heap, editor, arguments| {
             let key = key_name(heap, name, arguments[0])?;
             let game = playing(editor)?;
             Ok(Value::Bool(held(game, &key, pick(game))))
-        },
-    );
+        });
 }
 
 fn actions(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
@@ -738,26 +735,31 @@ fn text(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
 }
 
 fn control(isolate: &mut Isolate, name: &'static str, act: fn(&mut Game)) {
-    isolate.define_host_native::<Editor>(name, 0, Some(0), move |_, editor, _| {
-        act(playing(editor)?);
-        Ok(Value::Nil)
-    });
+    isolate
+        .native("ox", name)
+        .arity(0, Some(0))
+        .host::<Editor>(move |_, editor, _| {
+            act(playing(editor)?);
+            Ok(Value::Nil)
+        });
 }
 
 fn measure(isolate: &mut Isolate, name: &'static str, read: fn(&Game) -> Value) {
-    isolate.define_host_native_in::<Editor>(MODULE, name, 0, Some(0), move |_, editor, _| {
-        Ok(read(playing(editor)?))
-    });
+    isolate
+        .native(MODULE, name)
+        .arity(0, Some(0))
+        .host::<Editor>(move |_, editor, _| Ok(read(playing(editor)?)));
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("play-game", 1, None, play);
-    isolate.define_host_native_in::<Editor>(
-        MODULE,
-        "screen",
-        2,
-        None,
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "play-game")
+        .arity(1, None)
+        .host::<Editor>(play);
+    isolate
+        .native(MODULE, "screen")
+        .arity(2, None)
+        .host::<Editor>(|heap, editor, arguments| {
             let width = number(heap, "screen", arguments[0])?;
             let height = number(heap, "screen", arguments[1])?;
             let options = Options::read(heap, "screen", &arguments[2..], &["smooth"])?;
@@ -768,15 +770,17 @@ pub fn install(isolate: &mut Isolate) {
             game.smooth = options.get("smooth").is_some_and(Value::truthy);
             game.dirty = true;
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native_in::<Editor>(MODULE, "size", 0, Some(0), |heap, editor, _| {
-        let (width, height) = playing(editor)?.size;
-        make_vector(
-            heap,
-            &[Value::Int(i64::from(width)), Value::Int(i64::from(height))],
-        )
-    });
+        });
+    isolate
+        .native(MODULE, "size")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            let (width, height) = playing(editor)?.size;
+            make_vector(
+                heap,
+                &[Value::Int(i64::from(width)), Value::Int(i64::from(height))],
+            )
+        });
     control(isolate, "pause-game", |game| {
         game.clock.pause();
         game.dirty = true;
@@ -795,20 +799,29 @@ pub fn install(isolate: &mut Isolate) {
         game.clock.step_once();
     });
     control(isolate, "restart-game", |game| game.restart = true);
-    isolate.define_host_native::<Editor>("stop-game", 0, Some(0), |_, editor, _| {
-        stop(editor);
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("game-speed", 1, Some(1), |heap, editor, arguments| {
-        let factor = number(heap, "game-speed", arguments[0])?;
-        playing(editor)?.clock.set_scale(factor);
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("game-playing?", 0, Some(0), |_, editor, _| {
-        Ok(Value::Bool(game(editor).is_some_and(|game| {
-            game.phase == Phase::Running && !game.clock.paused()
-        })))
-    });
+    isolate
+        .native("ox", "stop-game")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| {
+            stop(editor);
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "game-speed")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let factor = number(heap, "game-speed", arguments[0])?;
+            playing(editor)?.clock.set_scale(factor);
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "game-playing?")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| {
+            Ok(Value::Bool(game(editor).is_some_and(|game| {
+                game.phase == Phase::Running && !game.clock.paused()
+            })))
+        });
     install_time_and_input(isolate);
     install_drawing(isolate);
     isolate.add_native_docs(DOCS);
@@ -826,27 +839,25 @@ fn install_time_and_input(isolate: &mut Isolate) {
     input(isolate, "held?", |game| &game.held);
     input(isolate, "pressed?", |game| &game.pressed);
     input(isolate, "released?", |game| &game.released);
-    isolate.define_host_native_in::<Editor>(MODULE, "actions", 1, Some(1), actions);
+    isolate
+        .native(MODULE, "actions")
+        .arity(1, Some(1))
+        .host::<Editor>(actions);
 }
 
 fn install_drawing(isolate: &mut Isolate) {
-    isolate.define_host_native_in::<Editor>(
-        MODULE,
-        "clear",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+    isolate
+        .native(MODULE, "clear")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let paint = color(heap, "clear", arguments[0])?;
             playing(editor)?.list.background = paint;
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native_in::<Editor>(
-        MODULE,
-        "fade",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native(MODULE, "fade")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             let paint = color(heap, "fade", arguments[0])?;
             let amount = number(heap, "fade", arguments[1])?;
             playing(editor)?.list.fade = Some(Color {
@@ -854,25 +865,35 @@ fn install_drawing(isolate: &mut Isolate) {
                 ..paint
             });
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native_in::<Editor>(MODULE, "rect", 2, None, |heap, editor, arguments| {
-        shape(heap, editor, arguments, "rect")
-    });
-    isolate.define_host_native_in::<Editor>(
-        MODULE,
-        "circle",
-        3,
-        None,
-        |heap, editor, arguments| shape(heap, editor, arguments, "circle"),
-    );
-    isolate.define_host_native_in::<Editor>(MODULE, "line", 3, None, |heap, editor, arguments| {
-        shape(heap, editor, arguments, "line")
-    });
-    isolate.define_host_native_in::<Editor>(MODULE, "text", 2, None, text);
-    isolate.define_host_native_in::<Editor>(MODULE, "image", 1, Some(1), image);
-    isolate.define_host_native_in::<Editor>(MODULE, "cells", 3, Some(3), cells);
-    isolate.define_host_native_in::<Editor>(MODULE, "sprite", 2, None, sprite);
+        });
+    isolate
+        .native(MODULE, "rect")
+        .arity(2, None)
+        .host::<Editor>(|heap, editor, arguments| shape(heap, editor, arguments, "rect"));
+    isolate
+        .native(MODULE, "circle")
+        .arity(3, None)
+        .host::<Editor>(|heap, editor, arguments| shape(heap, editor, arguments, "circle"));
+    isolate
+        .native(MODULE, "line")
+        .arity(3, None)
+        .host::<Editor>(|heap, editor, arguments| shape(heap, editor, arguments, "line"));
+    isolate
+        .native(MODULE, "text")
+        .arity(2, None)
+        .host::<Editor>(text);
+    isolate
+        .native(MODULE, "image")
+        .arity(1, Some(1))
+        .host::<Editor>(image);
+    isolate
+        .native(MODULE, "cells")
+        .arity(3, Some(3))
+        .host::<Editor>(cells);
+    isolate
+        .native(MODULE, "sprite")
+        .arity(2, None)
+        .host::<Editor>(sprite);
 }
 
 fn stop(editor: &mut Editor) {

@@ -477,44 +477,42 @@ fn diagnostic_counts(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Resul
 }
 
 fn install_buffer_hooks(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>(
-        "on-buffer-open",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "on-buffer-open")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             if let Some(hooks) = hooks(editor) {
                 keyed(heap, &mut hooks.opened, arguments);
             }
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>(
-        "on-buffer-change",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "on-buffer-change")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             editor.track_edits();
             if let Some(hooks) = hooks(editor) {
                 keyed(heap, &mut hooks.changed, arguments);
             }
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>("on-mode-enter", 2, Some(2), |heap, editor, arguments| {
-        let known = languages(editor);
-        if let Some(hooks) = hooks(editor) {
-            if hooks.modes.is_empty() {
-                hooks.languages = known.into_iter().collect();
+        });
+    isolate
+        .native("ox", "on-mode-enter")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
+            let known = languages(editor);
+            if let Some(hooks) = hooks(editor) {
+                if hooks.modes.is_empty() {
+                    hooks.languages = known.into_iter().collect();
+                }
+                keyed(heap, &mut hooks.modes, arguments);
             }
-            keyed(heap, &mut hooks.modes, arguments);
-        }
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>(
-        "on-window-change",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "on-window-change")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             let now = windows_seen(editor);
             if let Some(hooks) = hooks(editor) {
                 if hooks.windows.is_empty() {
@@ -523,13 +521,11 @@ fn install_buffer_hooks(isolate: &mut Isolate) {
                 keyed(heap, &mut hooks.windows, arguments);
             }
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>(
-        "on-diagnostics-change",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "on-diagnostics-change")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             let revision = editor.diagnostics_revision();
             if let Some(hooks) = hooks(editor) {
                 if hooks.diagnostics.is_empty() {
@@ -538,116 +534,122 @@ fn install_buffer_hooks(isolate: &mut Isolate) {
                 keyed(heap, &mut hooks.diagnostics, arguments);
             }
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>("diagnostic-counts", 0, Some(0), diagnostic_counts);
-    isolate.define_host_native::<Editor>(
-        "on-before-save",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "diagnostic-counts")
+        .arity(0, Some(0))
+        .host::<Editor>(diagnostic_counts);
+    isolate
+        .native("ox", "on-before-save")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             editor.hold_saves();
             if let Some(hooks) = hooks(editor) {
                 keyed(heap, &mut hooks.before_save, arguments);
             }
             Ok(Value::Nil)
-        },
-    );
+        });
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>(
-        "on-open-directory",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "on-open-directory")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             on_open_directory(heap, editor, arguments);
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>("on-open-file", 2, Some(2), |heap, editor, arguments| {
-        on_open_file(heap, editor, arguments);
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>(
-        "on-disk-change",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "on-open-file")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
+            on_open_file(heap, editor, arguments);
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "on-disk-change")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             if let Some(hooks) = hooks(editor) {
                 keyed(heap, &mut hooks.disk, arguments);
             }
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>("on-saved", 2, Some(2), |heap, editor, arguments| {
-        if let Some(hooks) = hooks(editor) {
-            keyed(heap, &mut hooks.saved, arguments);
-        }
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>(
-        "on-settings-change",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "on-saved")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
+            if let Some(hooks) = hooks(editor) {
+                keyed(heap, &mut hooks.saved, arguments);
+            }
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "on-settings-change")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             if let Some(hooks) = hooks(editor) {
                 keyed(heap, &mut hooks.configured, arguments);
             }
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>(
-        "on-processes-change",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "on-processes-change")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             if let Some(hooks) = hooks(editor) {
                 keyed(heap, &mut hooks.processes, arguments);
             }
             Ok(Value::Nil)
-        },
-    );
+        });
     install_buffer_hooks(isolate);
-    isolate.define_host_native::<Editor>("open-file", 1, Some(1), |heap, editor, arguments| {
-        let path = path_of(heap, "open-file", arguments[0])?;
-        Ok(Value::Bool(editor.open_file(&path)))
-    });
-    isolate.define_host_native::<Editor>(
-        "move-visited-files",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "open-file")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let path = path_of(heap, "open-file", arguments[0])?;
+            Ok(Value::Bool(editor.open_file(&path)))
+        });
+    isolate
+        .native("ox", "move-visited-files")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             let from = path_of(heap, "move-visited-files", arguments[0])?;
             let to = path_of(heap, "move-visited-files", arguments[1])?;
             editor.file_moved(&from, &to);
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>(
-        "open-externally",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "open-externally")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let path = path_of(heap, "open-externally", arguments[0])?;
             editor.open_externally(path);
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>("buffer-file", 0, Some(0), |heap, editor, _| {
-        let path = editor.buffer().file().map(|file| file.path.clone());
-        shown(heap, path.as_deref())
-    });
-    isolate.define_host_native::<Editor>("default-directory", 0, Some(0), |heap, editor, _| {
-        let directory = editor.default_directory();
-        shown(heap, Some(&directory))
-    });
-    isolate.define_host_native::<Editor>("close-buffer", 1, Some(1), |heap, editor, arguments| {
-        if let Ok(id) = handles::target(heap, editor, "close-buffer", arguments[0]) {
-            editor.close_buffer(id);
-        }
-        Ok(Value::Nil)
-    });
+        });
+    isolate
+        .native("ox", "buffer-file")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            let path = editor.buffer().file().map(|file| file.path.clone());
+            shown(heap, path.as_deref())
+        });
+    isolate
+        .native("ox", "default-directory")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            let directory = editor.default_directory();
+            shown(heap, Some(&directory))
+        });
+    isolate
+        .native("ox", "close-buffer")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            if let Ok(id) = handles::target(heap, editor, "close-buffer", arguments[0]) {
+                editor.close_buffer(id);
+            }
+            Ok(Value::Nil)
+        });
 }
 #[cfg(test)]
 mod tests {

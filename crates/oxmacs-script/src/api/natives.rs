@@ -34,30 +34,46 @@ fn set_mode_line(heap: &Heap, editor: &mut Editor, arguments: &[Value]) {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("message", 1, Some(1), |heap, editor, arguments| {
-        editor.show_message(print::display(heap, arguments[0]));
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("set-mode-line", 2, Some(2), |heap, editor, arguments| {
-        set_mode_line(heap, editor, arguments);
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("clipboard-set", 1, Some(1), |heap, editor, arguments| {
-        editor.copy_secret(print::display(heap, arguments[0]));
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("copy-text", 1, Some(1), |heap, editor, arguments| {
-        editor.copy_text(print::display(heap, arguments[0]));
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("notify", 2, Some(2), |heap, editor, arguments| {
-        let title = print::display(heap, arguments[0]);
-        editor.notify(title, print::display(heap, arguments[1]));
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("window-focused?", 0, Some(0), |_, editor, _| {
-        Ok(Value::Bool(editor.focused()))
-    });
+    isolate
+        .native("ox", "message")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            editor.show_message(print::display(heap, arguments[0]));
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "set-mode-line")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
+            set_mode_line(heap, editor, arguments);
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "clipboard-set")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            editor.copy_secret(print::display(heap, arguments[0]));
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "copy-text")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            editor.copy_text(print::display(heap, arguments[0]));
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "notify")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
+            let title = print::display(heap, arguments[0]);
+            editor.notify(title, print::display(heap, arguments[1]));
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "window-focused?")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| Ok(Value::Bool(editor.focused())));
 }
 
 #[cfg(test)]

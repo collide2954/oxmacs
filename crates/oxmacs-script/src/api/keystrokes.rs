@@ -27,11 +27,10 @@ fn event(heap: &mut Heap, stroke: &Keystroke) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>(
-        "on-key-command",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "on-key-command")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             editor.watch_keystrokes();
             if editor.plugin_state::<Listeners>().is_none() {
                 editor.set_plugin_state(Listeners::default());
@@ -40,8 +39,7 @@ pub fn install(isolate: &mut Isolate) {
                 hooks::keyed(heap, &mut listeners.0, arguments);
             }
             Ok(Value::Nil)
-        },
-    );
+        });
 }
 
 pub fn run(isolate: &mut Isolate, editor: &mut Editor) {

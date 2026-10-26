@@ -123,11 +123,12 @@ fn prompt(
 
 pub fn install(isolate: &mut Isolate, inbox: &Inbox) {
     let asking = Arc::clone(inbox);
-    isolate.define_host_native::<Editor>("prompt", 1, None, move |heap, editor, arguments| {
-        prompt(heap, editor, arguments, &asking)
-    });
+    isolate
+        .native("ox", "prompt")
+        .arity(1, None)
+        .host::<Editor>(move |heap, editor, arguments| prompt(heap, editor, arguments, &asking));
     let locating = Arc::clone(inbox);
-    isolate.define_host_native::<Editor>("prompt-path", 1, None, move |heap, editor, arguments| {
+    isolate.native("ox", "prompt-path").arity(1, None).host::<Editor>(move |heap, editor, arguments| {
         let question = print::display(heap, arguments[0]);
         let directories = arguments[1..]
             .chunks(2)
@@ -148,17 +149,15 @@ pub fn install(isolate: &mut Isolate, inbox: &Inbox) {
         Ok(promise)
     });
     let deciding = Arc::clone(inbox);
-    isolate.define_host_native::<Editor>(
-        "yes-or-no",
-        1,
-        Some(1),
-        move |heap, editor, arguments| {
+    isolate
+        .native("ox", "yes-or-no")
+        .arity(1, Some(1))
+        .host::<Editor>(move |heap, editor, arguments| {
             let question = print::display(heap, arguments[0]);
             let (promise, reply) = reply(heap, &deciding)?;
             editor.ask(&question, move |_, yes| reply.send(Answer::Choice(yes)));
             Ok(promise)
-        },
-    );
+        });
 }
 
 pub fn deliver(isolate: &mut Isolate, inbox: &Inbox) {

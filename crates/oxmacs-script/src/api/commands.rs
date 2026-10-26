@@ -76,9 +76,18 @@ fn run(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Valu
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("define-command", 3, Some(3), define);
-    isolate.define_host_native::<Editor>("bind-key", 2, Some(2), bind);
-    isolate.define_host_native::<Editor>("run-command", 1, Some(1), run);
+    isolate
+        .native("ox", "define-command")
+        .arity(3, Some(3))
+        .host::<Editor>(define);
+    isolate
+        .native("ox", "bind-key")
+        .arity(2, Some(2))
+        .host::<Editor>(bind);
+    isolate
+        .native("ox", "run-command")
+        .arity(1, Some(1))
+        .host::<Editor>(run);
 }
 
 pub fn queue(editor: &mut Editor, name: &str) {

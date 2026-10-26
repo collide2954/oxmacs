@@ -423,7 +423,10 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("define-mode", 2, None, define);
+    isolate
+        .native("ox", "define-mode")
+        .arity(2, None)
+        .host::<Editor>(define);
 }
 
 fn spans(heap: &Heap, title: &str, value: Value) -> Result<Spans, Error> {

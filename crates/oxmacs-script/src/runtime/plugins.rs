@@ -893,23 +893,28 @@ fn setting(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("enable-plugin", 1, None, |heap, editor, arguments| {
-        enable(heap, editor, arguments);
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("plugin-setting", 2, Some(2), setting);
-    isolate.define_host_native::<Editor>(
-        "configure-plugin",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "enable-plugin")
+        .arity(1, None)
+        .host::<Editor>(|heap, editor, arguments| {
+            enable(heap, editor, arguments);
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "plugin-setting")
+        .arity(2, Some(2))
+        .host::<Editor>(setting);
+    isolate
+        .native("ox", "configure-plugin")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             configure_plugin(heap, editor, arguments);
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>("plugin-settings", 0, Some(0), |heap, editor, _| {
-        plugin_settings(heap, editor)
-    });
+        });
+    isolate
+        .native("ox", "plugin-settings")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| plugin_settings(heap, editor));
 }
 
 fn starts_by_itself(heap: &Heap, plugin: &Plugin) -> bool {

@@ -804,91 +804,136 @@ fn region_lines(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Val
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("open-buffer", 2, None, open);
-    isolate.define_host_native::<Editor>("set-lines", 2, Some(6), set_lines);
-    isolate.define_host_native::<Editor>("current-line", 0, Some(0), current_line);
-    isolate.define_host_native::<Editor>("append-lines", 2, Some(2), append);
-    isolate.define_host_native::<Editor>("take-input", 0, Some(0), take_input);
-    isolate.define_host_native::<Editor>("input-text", 0, Some(1), input_text);
-    isolate.define_host_native::<Editor>("input-point", 0, Some(0), input_point);
-    isolate.define_host_native::<Editor>("set-input", 2, Some(4), set_input);
-    isolate.define_host_native::<Editor>("current-column", 0, Some(0), |heap, editor, _| {
-        let buffer = crate::api::handles::current_buffer(heap, editor)?;
-        let point = buffer.point();
-        let column = point - buffer.line_start(buffer.line_of(point));
-        Ok(Value::Int(i64::try_from(column).unwrap_or(i64::MAX)))
-    });
-    isolate.define_host_native::<Editor>("line-text", 1, Some(1), |heap, editor, arguments| {
-        let line = number(heap, arguments[0])?;
-        let buffer = crate::api::handles::current_buffer(heap, editor)?;
-        if line >= buffer.len_lines() {
-            return Ok(Value::Nil);
-        }
-        heap.string(&buffer.line_text(line))
-            .map_err(|full| Error::new(full.to_string()))
-    });
-    isolate.define_host_native::<Editor>("goto-line", 1, Some(2), goto_line);
-    isolate.define_host_native::<Editor>(
-        "buffer-exists?",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "open-buffer")
+        .arity(2, None)
+        .host::<Editor>(open);
+    isolate
+        .native("ox", "set-lines")
+        .arity(2, Some(6))
+        .host::<Editor>(set_lines);
+    isolate
+        .native("ox", "current-line")
+        .arity(0, Some(0))
+        .host::<Editor>(current_line);
+    isolate
+        .native("ox", "append-lines")
+        .arity(2, Some(2))
+        .host::<Editor>(append);
+    isolate
+        .native("ox", "take-input")
+        .arity(0, Some(0))
+        .host::<Editor>(take_input);
+    isolate
+        .native("ox", "input-text")
+        .arity(0, Some(1))
+        .host::<Editor>(input_text);
+    isolate
+        .native("ox", "input-point")
+        .arity(0, Some(0))
+        .host::<Editor>(input_point);
+    isolate
+        .native("ox", "set-input")
+        .arity(2, Some(4))
+        .host::<Editor>(set_input);
+    isolate
+        .native("ox", "current-column")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            let buffer = crate::api::handles::current_buffer(heap, editor)?;
+            let point = buffer.point();
+            let column = point - buffer.line_start(buffer.line_of(point));
+            Ok(Value::Int(i64::try_from(column).unwrap_or(i64::MAX)))
+        });
+    isolate
+        .native("ox", "line-text")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let line = number(heap, arguments[0])?;
+            let buffer = crate::api::handles::current_buffer(heap, editor)?;
+            if line >= buffer.len_lines() {
+                return Ok(Value::Nil);
+            }
+            heap.string(&buffer.line_text(line))
+                .map_err(|full| Error::new(full.to_string()))
+        });
+    isolate
+        .native("ox", "goto-line")
+        .arity(1, Some(2))
+        .host::<Editor>(goto_line);
+    isolate
+        .native("ox", "buffer-exists?")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             Ok(Value::Bool(crate::api::handles::live(
                 heap,
                 editor,
                 arguments[0],
             )))
-        },
-    );
-    isolate.define_host_native::<Editor>("buffer-width", 1, Some(1), |heap, editor, arguments| {
-        let id = crate::api::handles::target(heap, editor, "buffer-width", arguments[0]).ok();
-        Ok(id
-            .and_then(|id| editor.buffer_width(id))
-            .map_or(Value::Nil, |width| {
-                Value::Int(i64::try_from(width).unwrap_or(i64::MAX))
-            }))
-    });
-    isolate.define_host_native::<Editor>("region-lines", 0, Some(0), region_lines);
-    isolate.define_host_native::<Editor>("buffer-shown?", 1, Some(1), |heap, editor, arguments| {
-        let id = crate::api::handles::target(heap, editor, "buffer-shown?", arguments[0]).ok();
-        Ok(Value::Bool(id.is_some_and(|id| editor.buffer_shown(id))))
-    });
-    isolate.define_host_native::<Editor>("deactivate-mark", 0, Some(0), |heap, editor, _| {
-        crate::api::handles::current_buffer_mut(heap, editor)?.deactivate_mark();
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>(
-        "switch-to-buffer",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "buffer-width")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let id = crate::api::handles::target(heap, editor, "buffer-width", arguments[0]).ok();
+            Ok(id
+                .and_then(|id| editor.buffer_width(id))
+                .map_or(Value::Nil, |width| {
+                    Value::Int(i64::try_from(width).unwrap_or(i64::MAX))
+                }))
+        });
+    isolate
+        .native("ox", "region-lines")
+        .arity(0, Some(0))
+        .host::<Editor>(region_lines);
+    isolate
+        .native("ox", "buffer-shown?")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let id = crate::api::handles::target(heap, editor, "buffer-shown?", arguments[0]).ok();
+            Ok(Value::Bool(id.is_some_and(|id| editor.buffer_shown(id))))
+        });
+    isolate
+        .native("ox", "deactivate-mark")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            crate::api::handles::current_buffer_mut(heap, editor)?.deactivate_mark();
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "switch-to-buffer")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let id = crate::api::handles::target(heap, editor, "switch-to-buffer", arguments[0])?;
             editor.show_buffer(id);
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>("buffer-text", 0, Some(0), |heap, editor, _| {
-        let text = crate::api::handles::current_buffer(heap, editor)?.contents();
-        heap.string(&text)
-            .map_err(|full| Error::new(full.to_string()))
-    });
-    isolate.define_host_native::<Editor>(
-        "set-buffer-text",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "buffer-text")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            let text = crate::api::handles::current_buffer(heap, editor)?.contents();
+            heap.string(&text)
+                .map_err(|full| Error::new(full.to_string()))
+        });
+    isolate
+        .native("ox", "set-buffer-text")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let text = print::display(heap, arguments[0]);
             crate::api::handles::current_buffer_mut(heap, editor)?.replace_text(&text);
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>("buffer-name", 0, Some(0), |heap, editor, _| {
-        let name = crate::api::handles::current_buffer(heap, editor)?
-            .name()
-            .to_owned();
-        heap.string(&name)
-            .map_err(|full| Error::new(full.to_string()))
-    });
+        });
+    isolate
+        .native("ox", "buffer-name")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            let name = crate::api::handles::current_buffer(heap, editor)?
+                .name()
+                .to_owned();
+            heap.string(&name)
+                .map_err(|full| Error::new(full.to_string()))
+        });
 }
 
 #[cfg(test)]

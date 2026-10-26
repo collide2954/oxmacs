@@ -370,57 +370,74 @@ fn image(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(UI, "column", 0, None, |heap, arguments| {
-        stack(heap, "column", arguments, false)
-    });
-    isolate.define_native_in(UI, "row", 0, None, |heap, arguments| {
-        stack(heap, "row", arguments, true)
-    });
-    isolate.define_native_in(UI, "text", 1, None, text);
-    isolate.define_native_in(UI, "button", 1, None, button);
-    isolate.define_native_in(UI, "space", 0, Some(1), |heap, arguments| {
-        let size = match arguments.first() {
-            Some(value) => Some(size(heap, "space", *value)?),
-            None => None,
-        };
-        widget(heap, "space", Node::Space { size })
-    });
-    isolate.define_native_in(UI, "scrollable", 1, Some(1), |heap, arguments| {
-        let mut nodes = Vec::new();
-        children(heap, "scrollable", &arguments[..1], &mut nodes)?;
-        let child = nodes
-            .into_iter()
-            .next()
-            .unwrap_or(Node::Space { size: None });
-        widget(heap, "scrollable", Node::Scrollable(Box::new(child)))
-    });
-    isolate.define_native_in(UI, "canvas", 1, None, |heap, arguments| {
-        let drawn = shapes::shapes(heap, arguments[0])?;
-        let (found, rest) = options(heap, "canvas", &arguments[1..], &["height", "relative"])?;
-        if let Some(extra) = rest.first() {
-            return Err(wrong(heap, "canvas", "options after its shapes", *extra));
-        }
-        let mut height = None;
-        let mut relative = false;
-        for (option, value) in found {
-            if option == "relative" {
-                relative = value.truthy();
-            } else {
-                height = Some(size(heap, "canvas", value)?);
+    isolate
+        .native(UI, "column")
+        .arity(0, None)
+        .function(|heap, arguments| stack(heap, "column", arguments, false));
+    isolate
+        .native(UI, "row")
+        .arity(0, None)
+        .function(|heap, arguments| stack(heap, "row", arguments, true));
+    isolate.native(UI, "text").arity(1, None).function(text);
+    isolate.native(UI, "button").arity(1, None).function(button);
+    isolate
+        .native(UI, "space")
+        .arity(0, Some(1))
+        .function(|heap, arguments| {
+            let size = match arguments.first() {
+                Some(value) => Some(size(heap, "space", *value)?),
+                None => None,
+            };
+            widget(heap, "space", Node::Space { size })
+        });
+    isolate
+        .native(UI, "scrollable")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let mut nodes = Vec::new();
+            children(heap, "scrollable", &arguments[..1], &mut nodes)?;
+            let child = nodes
+                .into_iter()
+                .next()
+                .unwrap_or(Node::Space { size: None });
+            widget(heap, "scrollable", Node::Scrollable(Box::new(child)))
+        });
+    isolate
+        .native(UI, "canvas")
+        .arity(1, None)
+        .function(|heap, arguments| {
+            let drawn = shapes::shapes(heap, arguments[0])?;
+            let (found, rest) = options(heap, "canvas", &arguments[1..], &["height", "relative"])?;
+            if let Some(extra) = rest.first() {
+                return Err(wrong(heap, "canvas", "options after its shapes", *extra));
             }
-        }
-        widget(
-            heap,
-            "canvas",
-            Node::Canvas {
-                shapes: drawn,
-                height,
-                relative,
-            },
-        )
-    });
-    isolate.define_native_in(UI, "image", 1, Some(9), image);
-    isolate.define_host_native::<Editor>("open-view", 2, None, open);
+            let mut height = None;
+            let mut relative = false;
+            for (option, value) in found {
+                if option == "relative" {
+                    relative = value.truthy();
+                } else {
+                    height = Some(size(heap, "canvas", value)?);
+                }
+            }
+            widget(
+                heap,
+                "canvas",
+                Node::Canvas {
+                    shapes: drawn,
+                    height,
+                    relative,
+                },
+            )
+        });
+    isolate
+        .native(UI, "image")
+        .arity(1, Some(9))
+        .function(image);
+    isolate
+        .native("ox", "open-view")
+        .arity(2, None)
+        .host::<Editor>(open);
 }
 
 fn keys(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, Error> {

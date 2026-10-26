@@ -211,12 +211,21 @@ fn on_evaluate(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("flash", 2, Some(6), flash);
-    isolate.define_host_native::<Editor>("zap", 2, Some(4), zap);
-    isolate.define_host_native::<Editor>("on-evaluate", 2, Some(2), |heap, editor, arguments| {
-        on_evaluate(heap, editor, arguments);
-        Ok(Value::Nil)
-    });
+    isolate
+        .native("ox", "flash")
+        .arity(2, Some(6))
+        .host::<Editor>(flash);
+    isolate
+        .native("ox", "zap")
+        .arity(2, Some(4))
+        .host::<Editor>(zap);
+    isolate
+        .native("ox", "on-evaluate")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
+            on_evaluate(heap, editor, arguments);
+            Ok(Value::Nil)
+        });
 }
 
 pub fn run(isolate: &mut Isolate, editor: &mut Editor) {

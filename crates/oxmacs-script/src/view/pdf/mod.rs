@@ -541,12 +541,10 @@ fn failure(message: String) -> Failure {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native_in::<Editor>(
-        MODULE,
-        "library",
-        0,
-        Some(1),
-        |heap, editor, arguments| {
+    isolate
+        .native(MODULE, "library")
+        .arity(0, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             editor.add_managed_tool(PDFIUM);
             let configured = arguments
                 .first()
@@ -562,26 +560,33 @@ pub fn install(isolate: &mut Isolate) {
                     .map_err(|full| Error::new(full.to_string())),
                 None => Ok(Value::Nil),
             }
-        },
-    );
-    isolate.define_native_in(MODULE, "open", 1, Some(1), |heap, arguments| {
-        let path = PathBuf::from(text_of(heap, "pdf/open", arguments[0])?);
-        heap.background("ox pdf/open", move || {
-            open(&path)
-                .map(|(revision, document)| opened(revision, &document))
-                .map_err(failure)
-        })
-    });
-    isolate.define_native_in(MODULE, "search", 2, Some(2), |heap, arguments| {
-        let path = PathBuf::from(text_of(heap, "pdf/search", arguments[0])?);
-        let query = text_of(heap, "pdf/search", arguments[1])?.to_owned();
-        heap.background("ox pdf/search", move || {
-            texts(&path)
-                .map(|pages| found(words::search(&pages, &query)))
-                .map_err(failure)
-        })
-    });
-    isolate.define_native_in(UI, "pdf", 1, None, view);
+        });
+    isolate
+        .native(MODULE, "open")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text_of(heap, "pdf/open", arguments[0])?);
+            heap.background("ox pdf/open", move || {
+                open(&path)
+                    .map(|(revision, document)| opened(revision, &document))
+                    .map_err(failure)
+            })
+        });
+    isolate
+        .native(MODULE, "search")
+        .arity(2, Some(2))
+        .outside()
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text_of(heap, "pdf/search", arguments[0])?);
+            let query = text_of(heap, "pdf/search", arguments[1])?.to_owned();
+            heap.background("ox pdf/search", move || {
+                texts(&path)
+                    .map(|pages| found(words::search(&pages, &query)))
+                    .map_err(failure)
+            })
+        });
+    isolate.native(UI, "pdf").arity(1, None).function(view);
 }
 
 #[cfg(test)]

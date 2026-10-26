@@ -38,11 +38,14 @@ fn read(path: &str, password: &str) -> Result<Json, String> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("vault-read-kdbx", 2, Some(2), |heap, _, arguments| {
-        let path = print::display(heap, arguments[0]);
-        let password = print::display(heap, arguments[1]);
-        heap.background_json("vault-read-kdbx", move || read(&path, &password))
-    });
+    isolate
+        .native("ox", "vault-read-kdbx")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, _, arguments| {
+            let path = print::display(heap, arguments[0]);
+            let password = print::display(heap, arguments[1]);
+            heap.background_json("vault-read-kdbx", move || read(&path, &password))
+        });
 }
 
 #[cfg(test)]

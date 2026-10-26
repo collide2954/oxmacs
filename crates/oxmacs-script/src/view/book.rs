@@ -397,8 +397,11 @@ fn pages(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(UI, "document", 1, Some(1), document);
-    isolate.define_native_in(UI, "pages", 1, None, pages);
+    isolate
+        .native(UI, "document")
+        .arity(1, Some(1))
+        .function(document);
+    isolate.native(UI, "pages").arity(1, None).function(pages);
 }
 
 #[cfg(test)]

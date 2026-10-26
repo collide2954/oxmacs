@@ -153,18 +153,31 @@ fn leave(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Err
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("current-buffer", 0, Some(0), |heap, editor, _| {
-        let id = current(heap, editor)?;
-        handle(heap, editor, id)
-    });
-    isolate.define_host_native::<Editor>("buffer?", 1, Some(1), |heap, _, arguments| {
-        Ok(Value::Bool(of(heap, arguments[0]).is_some()))
-    });
-    isolate.define_host_native::<Editor>("buffer-live?", 1, Some(1), |heap, editor, arguments| {
-        Ok(Value::Bool(live(heap, editor, arguments[0])))
-    });
-    isolate.define_host_native::<Editor>("enter-buffer", 1, Some(1), enter);
-    isolate.define_host_native::<Editor>("leave-buffer", 0, Some(0), leave);
+    isolate
+        .native("ox", "current-buffer")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            let id = current(heap, editor)?;
+            handle(heap, editor, id)
+        });
+    isolate
+        .native("ox", "buffer?")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, _, arguments| Ok(Value::Bool(of(heap, arguments[0]).is_some())));
+    isolate
+        .native("ox", "buffer-live?")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            Ok(Value::Bool(live(heap, editor, arguments[0])))
+        });
+    isolate
+        .native("ox", "enter-buffer")
+        .arity(1, Some(1))
+        .host::<Editor>(enter);
+    isolate
+        .native("ox", "leave-buffer")
+        .arity(0, Some(0))
+        .host::<Editor>(leave);
 }
 
 #[cfg(test)]

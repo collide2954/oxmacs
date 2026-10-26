@@ -128,7 +128,10 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("transient", 2, Some(2), open);
+    isolate
+        .native("ox", "transient")
+        .arity(2, Some(2))
+        .host::<Editor>(open);
 }
 
 pub fn run_waiting(isolate: &mut Isolate, editor: &mut Editor) {

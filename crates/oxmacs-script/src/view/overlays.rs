@@ -196,7 +196,10 @@ fn set_overlay(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Res
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>(NAME, 2, None, set_overlay);
+    isolate
+        .native("ox", NAME)
+        .arity(2, None)
+        .host::<Editor>(set_overlay);
 }
 
 #[cfg(test)]

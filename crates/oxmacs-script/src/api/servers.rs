@@ -143,10 +143,14 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>(NATIVE, 1, None, define);
-    isolate.define_host_native::<Editor>("language-server-ready?", 0, Some(0), |_, editor, _| {
-        Ok(Value::Bool(editor.lsp_serves_here()))
-    });
+    isolate
+        .native("ox", NATIVE)
+        .arity(1, None)
+        .host::<Editor>(define);
+    isolate
+        .native("ox", "language-server-ready?")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| Ok(Value::Bool(editor.lsp_serves_here())));
 }
 
 #[cfg(test)]

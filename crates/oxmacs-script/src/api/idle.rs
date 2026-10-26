@@ -70,7 +70,10 @@ fn on_idle(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("on-idle", 3, Some(3), on_idle);
+    isolate
+        .native("ox", "on-idle")
+        .arity(3, Some(3))
+        .host::<Editor>(on_idle);
 }
 
 pub fn run(isolate: &mut Isolate, editor: &mut Editor, since: Instant, now: Instant) {

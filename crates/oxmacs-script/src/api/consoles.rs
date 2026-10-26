@@ -303,64 +303,63 @@ fn console(heap: &Heap, editor: &Editor, native: &str, value: Value) -> Result<B
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("console-start", 1, None, start);
-    isolate.define_host_native::<Editor>("console-send", 2, Some(2), |heap, editor, arguments| {
-        let id = console(heap, editor, "console-send", arguments[0])?;
-        let code = print::display(heap, arguments[1]);
-        if let Ok(source) = crate::api::handles::current(heap, editor)
-            && source != id
-        {
-            crate::api::flashes::sent(editor, id, source, &code);
-        }
-        editor.console_evaluate(id, &code);
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>(
-        "console-request",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "console-start")
+        .arity(1, None)
+        .host::<Editor>(start);
+    isolate
+        .native("ox", "console-send")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
+            let id = console(heap, editor, "console-send", arguments[0])?;
+            let code = print::display(heap, arguments[1]);
+            if let Ok(source) = crate::api::handles::current(heap, editor)
+                && source != id
+            {
+                crate::api::flashes::sent(editor, id, source, &code);
+            }
+            editor.console_evaluate(id, &code);
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "console-request")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             let id = console(heap, editor, "console-request", arguments[0])?;
             let call = print::display(heap, arguments[1]);
             Ok(Value::Bool(editor.console_request(id, &call)))
-        },
-    );
+        });
     install_states(isolate);
     install_history(isolate);
 }
 
 fn install_states(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>(
-        "console-running?",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "console-running?")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let name = print::display(heap, arguments[0]);
             Ok(Value::Bool(
                 editor
                     .buffer_named(&name)
                     .is_some_and(|id| editor.console_running(id)),
             ))
-        },
-    );
-    isolate.define_host_native::<Editor>(
-        "console-waiting?",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "console-waiting?")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let name = print::display(heap, arguments[0]);
             Ok(Value::Bool(
                 editor
                     .buffer_named(&name)
                     .is_some_and(|id| editor.console_waiting(id)),
             ))
-        },
-    );
-    isolate.define_host_native::<Editor>(
-        "console-prompt",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "console-prompt")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let name = print::display(heap, arguments[0]);
             match editor
                 .buffer_named(&name)
@@ -369,46 +368,45 @@ fn install_states(isolate: &mut Isolate) {
                 Some(prompt) => made(heap.string(&prompt)),
                 None => Ok(Value::Nil),
             }
-        },
-    );
-    isolate.define_host_native::<Editor>("consoles", 1, Some(1), |heap, editor, arguments| {
-        let label = print::display(heap, arguments[0]);
-        let names = editor
-            .consoles(&label)
-            .into_iter()
-            .filter_map(|id| {
-                editor
-                    .buffer_by_id(id)
-                    .map(|buffer| buffer.name().to_owned())
-            })
-            .collect::<Vec<String>>();
-        let mut values = Vec::with_capacity(names.len());
-        for name in names {
-            values.push(made(heap.string(&name))?);
-        }
-        made(heap.vector_from(&values))
-    });
+        });
+    isolate
+        .native("ox", "consoles")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let label = print::display(heap, arguments[0]);
+            let names = editor
+                .consoles(&label)
+                .into_iter()
+                .filter_map(|id| {
+                    editor
+                        .buffer_by_id(id)
+                        .map(|buffer| buffer.name().to_owned())
+                })
+                .collect::<Vec<String>>();
+            let mut values = Vec::with_capacity(names.len());
+            for name in names {
+                values.push(made(heap.string(&name))?);
+            }
+            made(heap.vector_from(&values))
+        });
 }
 
 fn install_history(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>(
-        "console-history",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "console-history")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let id = console(heap, editor, "console-history", arguments[0])?;
             let mut items = Vec::new();
             for input in editor.console_history(id) {
                 items.push(made(heap.string(&input))?);
             }
             made(heap.vector_from(&items))
-        },
-    );
-    isolate.define_host_native::<Editor>(
-        "set-console-history",
-        2,
-        Some(2),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "set-console-history")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             let id = console(heap, editor, "set-console-history", arguments[0])?;
             let items = heap
                 .elements(arguments[1])
@@ -424,13 +422,15 @@ fn install_history(isolate: &mut Isolate) {
                 .collect();
             editor.set_console_history(id, items);
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>("console-input-start", 0, Some(0), |_, editor, _| {
-        Ok(editor.console_input_start().map_or(Value::Nil, |start| {
-            Value::Int(i64::try_from(start).unwrap_or(i64::MAX))
-        }))
-    });
+        });
+    isolate
+        .native("ox", "console-input-start")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| {
+            Ok(editor.console_input_start().map_or(Value::Nil, |start| {
+                Value::Int(i64::try_from(start).unwrap_or(i64::MAX))
+            }))
+        });
 }
 
 pub fn run(isolate: &mut Isolate, editor: &mut Editor) {

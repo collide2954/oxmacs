@@ -93,10 +93,13 @@ fn region(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Er
 }
 
 fn line_native(isolate: &mut Isolate, name: &'static str, find: fn(&Buffer, usize) -> usize) {
-    isolate.define_host_native::<Editor>(name, 1, Some(1), move |heap, editor, arguments| {
-        let at = position(heap, name, arguments[0])?;
-        Ok(int(find(current_buffer(heap, editor)?, at)))
-    });
+    isolate
+        .native("ox", name)
+        .arity(1, Some(1))
+        .host::<Editor>(move |heap, editor, arguments| {
+            let at = position(heap, name, arguments[0])?;
+            Ok(int(find(current_buffer(heap, editor)?, at)))
+        });
 }
 
 fn marker(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
@@ -111,57 +114,84 @@ fn marker(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("point", 0, Some(0), |heap, editor, _| {
-        Ok(int(current_buffer(heap, editor)?.point()))
-    });
-    isolate.define_host_native::<Editor>("set-point", 1, Some(1), |heap, editor, arguments| {
-        let at = position(heap, "set-point", arguments[0])?;
-        current_buffer_mut(heap, editor)?.set_point(at);
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("buffer-size", 0, Some(0), |heap, editor, _| {
-        Ok(int(current_buffer(heap, editor)?.len_chars()))
-    });
-    isolate.define_host_native::<Editor>("insert", 1, Some(1), insert);
-    isolate.define_host_native::<Editor>("delete", 2, Some(2), delete);
-    isolate.define_host_native::<Editor>("text-between", 2, Some(2), between);
-    isolate.define_host_native::<Editor>("region", 0, Some(0), region);
+    isolate
+        .native("ox", "point")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| Ok(int(current_buffer(heap, editor)?.point())));
+    isolate
+        .native("ox", "set-point")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let at = position(heap, "set-point", arguments[0])?;
+            current_buffer_mut(heap, editor)?.set_point(at);
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "buffer-size")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| Ok(int(current_buffer(heap, editor)?.len_chars())));
+    isolate
+        .native("ox", "insert")
+        .arity(1, Some(1))
+        .host::<Editor>(insert);
+    isolate
+        .native("ox", "delete")
+        .arity(2, Some(2))
+        .host::<Editor>(delete);
+    isolate
+        .native("ox", "text-between")
+        .arity(2, Some(2))
+        .host::<Editor>(between);
+    isolate
+        .native("ox", "region")
+        .arity(0, Some(0))
+        .host::<Editor>(region);
     line_native(isolate, "line-start", Buffer::line_start);
     line_native(isolate, "line-end", Buffer::line_end);
     line_native(isolate, "line-of", Buffer::line_of);
-    isolate.define_host_native::<Editor>("marker", 1, Some(1), marker);
-    isolate.define_host_native::<Editor>("marker?", 1, Some(1), |heap, _, arguments| {
-        Ok(Value::Bool(
-            heap.foreign_of::<Placed>(arguments[0]).is_some(),
-        ))
-    });
-    isolate.define_host_native::<Editor>(
-        "marker-position",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "marker")
+        .arity(1, Some(1))
+        .host::<Editor>(marker);
+    isolate
+        .native("ox", "marker?")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, _, arguments| {
+            Ok(Value::Bool(
+                heap.foreign_of::<Placed>(arguments[0]).is_some(),
+            ))
+        });
+    isolate
+        .native("ox", "marker-position")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let (id, marker) = placed(heap, "marker-position", arguments[0])?;
             Ok(editor
                 .buffer_by_id(id)
                 .and_then(|buffer| buffer.marker(marker))
                 .map_or(Value::Nil, int))
-        },
-    );
-    isolate.define_host_native::<Editor>("move-marker", 2, Some(2), |heap, editor, arguments| {
-        let (id, marker) = placed(heap, "move-marker", arguments[0])?;
-        let at = position(heap, "move-marker", arguments[1])?;
-        if let Some(buffer) = editor.buffer_by_id_mut(id) {
-            buffer.set_marker(marker, at);
-        }
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("marker-buffer", 1, Some(1), |heap, editor, arguments| {
-        let (id, _) = placed(heap, "marker-buffer", arguments[0])?;
-        if editor.buffer_by_id(id).is_none() {
-            return Ok(Value::Nil);
-        }
-        crate::api::handles::handle(heap, editor, id)
-    });
+        });
+    isolate
+        .native("ox", "move-marker")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
+            let (id, marker) = placed(heap, "move-marker", arguments[0])?;
+            let at = position(heap, "move-marker", arguments[1])?;
+            if let Some(buffer) = editor.buffer_by_id_mut(id) {
+                buffer.set_marker(marker, at);
+            }
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "marker-buffer")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let (id, _) = placed(heap, "marker-buffer", arguments[0])?;
+            if editor.buffer_by_id(id).is_none() {
+                return Ok(Value::Nil);
+            }
+            crate::api::handles::handle(heap, editor, id)
+        });
     install_syntax(isolate);
     install_places(isolate);
 }
@@ -313,30 +343,33 @@ fn complete(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result
 }
 
 fn install_syntax(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("statement-at", 1, Some(1), |heap, editor, arguments| {
-        let at = position(heap, "statement-at", arguments[0])?;
-        let found = editor.statement_at(at);
-        range(heap, found)
-    });
-    isolate.define_host_native::<Editor>(
-        "statement-after",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "statement-at")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let at = position(heap, "statement-at", arguments[0])?;
+            let found = editor.statement_at(at);
+            range(heap, found)
+        });
+    isolate
+        .native("ox", "statement-after")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let at = position(heap, "statement-after", arguments[0])?;
             Ok(editor.statement_after(at).map_or(Value::Nil, int))
-        },
-    );
-    isolate.define_host_native::<Editor>("defun-around", 1, Some(1), |heap, editor, arguments| {
-        let at = position(heap, "defun-around", arguments[0])?;
-        let found = editor.defun_around(at);
-        range(heap, found)
-    });
-    isolate.define_host_native::<Editor>(
-        "buffer-language",
-        0,
-        Some(1),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "defun-around")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let at = position(heap, "defun-around", arguments[0])?;
+            let found = editor.defun_around(at);
+            range(heap, found)
+        });
+    isolate
+        .native("ox", "buffer-language")
+        .arity(0, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let id = match arguments.first() {
                 Some(buffer) => target(heap, editor, "buffer-language", *buffer).ok(),
                 None => Some(crate::api::handles::current(heap, editor)?),
@@ -345,29 +378,30 @@ fn install_syntax(isolate: &mut Isolate) {
                 Some(language) => text(heap, language.name()),
                 None => Ok(Value::Nil),
             }
-        },
-    );
-    isolate.define_host_native::<Editor>("buffer-list", 0, Some(0), |heap, editor, _| {
-        let names: Vec<String> = editor
-            .buffer_names()
-            .into_iter()
-            .map(str::to_owned)
-            .collect();
-        let mut values = Vec::with_capacity(names.len());
-        for name in names {
-            values.push(text(heap, &name)?);
-        }
-        heap.vector_from(&values)
-            .map_err(|full| Error::new(full.to_string()))
-    });
+        });
+    isolate
+        .native("ox", "buffer-list")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            let names: Vec<String> = editor
+                .buffer_names()
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+            let mut values = Vec::with_capacity(names.len());
+            for name in names {
+                values.push(text(heap, &name)?);
+            }
+            heap.vector_from(&values)
+                .map_err(|full| Error::new(full.to_string()))
+        });
 }
 
 fn install_places(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>(
-        "buffer-contents",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "buffer-contents")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             let found = target(heap, editor, "buffer-contents", arguments[0])
                 .ok()
                 .and_then(|id| editor.buffer_by_id(id))
@@ -376,23 +410,35 @@ fn install_places(isolate: &mut Isolate) {
                 Some(contents) => text(heap, &contents),
                 None => Ok(Value::Nil),
             }
-        },
-    );
-    isolate.define_host_native::<Editor>("display-buffer", 1, None, display);
-    isolate.define_host_native::<Editor>("set-header", 2, Some(2), header);
-    isolate.define_host_native::<Editor>("show-text", 2, Some(6), show_text);
-    isolate.define_host_native::<Editor>("prompting?", 0, Some(0), |_, editor, _| {
-        Ok(Value::Bool(editor.prompting()))
-    });
-    isolate.define_host_native::<Editor>("complete-at", 2, Some(3), complete);
-    isolate.define_host_native::<Editor>("completion-shown?", 0, Some(0), |_, editor, _| {
-        Ok(Value::Bool(editor.pane().popup().is_some()))
-    });
-    isolate.define_host_native::<Editor>(
-        "remember-location",
-        0,
-        Some(2),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "display-buffer")
+        .arity(1, None)
+        .host::<Editor>(display);
+    isolate
+        .native("ox", "set-header")
+        .arity(2, Some(2))
+        .host::<Editor>(header);
+    isolate
+        .native("ox", "show-text")
+        .arity(2, Some(6))
+        .host::<Editor>(show_text);
+    isolate
+        .native("ox", "prompting?")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| Ok(Value::Bool(editor.prompting())));
+    isolate
+        .native("ox", "complete-at")
+        .arity(2, Some(3))
+        .host::<Editor>(complete);
+    isolate
+        .native("ox", "completion-shown?")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| Ok(Value::Bool(editor.pane().popup().is_some())));
+    isolate
+        .native("ox", "remember-location")
+        .arity(0, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
             let location = match arguments {
                 [buffer, at] => (
                     target(heap, editor, "remember-location", *buffer)?,
@@ -402,11 +448,11 @@ fn install_places(isolate: &mut Isolate) {
             };
             editor.remember_location(location);
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>("just-typed?", 0, Some(0), |_, editor, _| {
-        Ok(Value::Bool(editor.just_typed()))
-    });
+        });
+    isolate
+        .native("ox", "just-typed?")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| Ok(Value::Bool(editor.just_typed())));
 }
 
 #[cfg(test)]

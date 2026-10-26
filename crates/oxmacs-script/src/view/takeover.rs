@@ -82,11 +82,17 @@ fn take_over(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("take-over", 1, None, take_over);
-    isolate.define_host_native::<Editor>("end-take-over", 0, Some(0), |heap, editor, _| {
-        end(heap, editor);
-        Ok(Value::Nil)
-    });
+    isolate
+        .native("ox", "take-over")
+        .arity(1, None)
+        .host::<Editor>(take_over);
+    isolate
+        .native("ox", "end-take-over")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            end(heap, editor);
+            Ok(Value::Nil)
+        });
 }
 
 pub fn finish(isolate: &mut Isolate, editor: &mut Editor) {

@@ -202,28 +202,36 @@ fn schema_of(heap: &mut Heap, editor: &Editor) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("settings", 0, Some(1), |heap, editor, arguments| {
-        match arguments.first() {
+    isolate
+        .native("ox", "settings")
+        .arity(0, Some(1))
+        .host::<Editor>(|heap, editor, arguments| match arguments.first() {
             Some(changes) => change(heap, editor, *changes),
             None => as_map(heap, editor.config()),
-        }
-    });
-    isolate.define_host_native::<Editor>("settings-schema", 0, Some(0), |heap, editor, _| {
-        schema_of(heap, editor)
-    });
-    isolate.define_host_native::<Editor>("saved-settings", 0, Some(0), |heap, editor, _| {
-        saved(heap, editor)
-    });
-    isolate.define_host_native::<Editor>("custom-settings", 0, Some(0), |heap, editor, _| {
-        custom(heap, editor)
-    });
-    isolate.define_host_native::<Editor>("reload-init", 0, Some(0), |_, editor, _| {
-        repl::reload_init(editor);
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("oxmacs-home", 0, Some(0), |heap, editor, _| {
-        home(heap, editor)
-    });
+        });
+    isolate
+        .native("ox", "settings-schema")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| schema_of(heap, editor));
+    isolate
+        .native("ox", "saved-settings")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| saved(heap, editor));
+    isolate
+        .native("ox", "custom-settings")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| custom(heap, editor));
+    isolate
+        .native("ox", "reload-init")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| {
+            repl::reload_init(editor);
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "oxmacs-home")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| home(heap, editor));
 }
 
 #[cfg(test)]

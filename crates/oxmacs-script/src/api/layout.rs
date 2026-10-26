@@ -228,64 +228,92 @@ fn word_wrapped(heap: &Heap, editor: &Editor, arguments: &[Value]) -> Result<boo
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("set-word-wrap", 2, Some(2), |heap, editor, arguments| {
-        let id = crate::api::handles::target(heap, editor, "set-word-wrap", arguments[0])?;
-        if let Some(buffer) = editor.buffer_by_id_mut(id) {
-            buffer.set_word_wrap(arguments[1].truthy());
-        }
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("word-wrap?", 0, Some(1), |heap, editor, arguments| {
-        word_wrapped(heap, editor, arguments).map(Value::Bool)
-    });
-    isolate.define_host_native::<Editor>("set-presentation", 1, Some(1), set_presentation);
-    isolate.define_host_native::<Editor>("presentation", 0, Some(0), presentation);
-    isolate.define_host_native::<Editor>("show-side-window", 1, None, show_side);
-    isolate.define_host_native::<Editor>("side-window", 0, Some(0), side);
-    isolate.define_host_native::<Editor>("close-side-window", 0, Some(0), |_, editor, _| {
-        editor.close_side();
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("select-main-window", 0, Some(0), |_, editor, _| {
-        editor.select_main_window();
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("select-side-window", 0, Some(0), |_, editor, _| {
-        editor.select_side_window();
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>("store-windows", 1, Some(1), |heap, editor, arguments| {
-        editor.store_windows(&print::display(heap, arguments[0]));
-        Ok(Value::Nil)
-    });
-    isolate.define_host_native::<Editor>(
-        "recall-windows",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+    isolate
+        .native("ox", "set-word-wrap")
+        .arity(2, Some(2))
+        .host::<Editor>(|heap, editor, arguments| {
+            let id = crate::api::handles::target(heap, editor, "set-word-wrap", arguments[0])?;
+            if let Some(buffer) = editor.buffer_by_id_mut(id) {
+                buffer.set_word_wrap(arguments[1].truthy());
+            }
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "word-wrap?")
+        .arity(0, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            word_wrapped(heap, editor, arguments).map(Value::Bool)
+        });
+    isolate
+        .native("ox", "set-presentation")
+        .arity(1, Some(1))
+        .host::<Editor>(set_presentation);
+    isolate
+        .native("ox", "presentation")
+        .arity(0, Some(0))
+        .host::<Editor>(presentation);
+    isolate
+        .native("ox", "show-side-window")
+        .arity(1, None)
+        .host::<Editor>(show_side);
+    isolate
+        .native("ox", "side-window")
+        .arity(0, Some(0))
+        .host::<Editor>(side);
+    isolate
+        .native("ox", "close-side-window")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| {
+            editor.close_side();
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "select-main-window")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| {
+            editor.select_main_window();
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "select-side-window")
+        .arity(0, Some(0))
+        .host::<Editor>(|_, editor, _| {
+            editor.select_side_window();
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "store-windows")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            editor.store_windows(&print::display(heap, arguments[0]));
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "recall-windows")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             Ok(Value::Bool(
                 editor.recall_windows(&print::display(heap, arguments[0])),
             ))
-        },
-    );
-    isolate.define_host_native::<Editor>(
-        "forget-windows",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "forget-windows")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
             editor.forget_windows(&print::display(heap, arguments[0]));
             Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native::<Editor>("window-layout", 0, Some(0), |heap, editor, _| {
-        let arrangement = editor.window_arrangement();
-        shown(heap, editor, &arrangement)
-    });
-    isolate.define_host_native::<Editor>(
-        "arrange-windows",
-        1,
-        Some(3),
-        |heap, editor, arguments| {
+        });
+    isolate
+        .native("ox", "window-layout")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            let arrangement = editor.window_arrangement();
+            shown(heap, editor, &arrangement)
+        });
+    isolate
+        .native("ox", "arrange-windows")
+        .arity(1, Some(3))
+        .host::<Editor>(|heap, editor, arguments| {
             let arrangement = read(heap, editor, arguments[0])?;
             let select = match &arguments[1..] {
                 [Value::Keyword(option), name] if option.name() == "select" => {
@@ -299,8 +327,7 @@ pub fn install(isolate: &mut Isolate) {
             };
             editor.arrange_windows(&arrangement, select);
             Ok(Value::Nil)
-        },
-    );
+        });
 }
 
 #[cfg(test)]

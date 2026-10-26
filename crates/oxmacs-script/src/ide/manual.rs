@@ -66,24 +66,31 @@ fn highlight(heap: &mut Heap, lines: Value) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native::<Editor>("ox-reference", 0, Some(0), |heap, editor, _| {
-        let promise = heap.new_promise().map_err(full)?;
-        let hold = heap.hold(promise);
-        if editor.plugin_state::<Asked>().is_none() {
-            editor.set_plugin_state(Asked::default());
-        }
-        if let Some(asked) = editor.plugin_state_mut::<Asked>() {
-            asked.0.push(hold);
-        }
-        Ok(promise)
-    });
-    isolate.define_host_native::<Editor>("ox-highlight", 1, Some(1), |heap, _, arguments| {
-        highlight(heap, arguments[0])
-    });
-    isolate.define_host_native::<Editor>("run-in-repl", 1, Some(1), |heap, editor, arguments| {
-        repl::run_in_repl(editor, print::display(heap, arguments[0]));
-        Ok(Value::Nil)
-    });
+    isolate
+        .native("ox", "ox-reference")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| {
+            let promise = heap.new_promise().map_err(full)?;
+            let hold = heap.hold(promise);
+            if editor.plugin_state::<Asked>().is_none() {
+                editor.set_plugin_state(Asked::default());
+            }
+            if let Some(asked) = editor.plugin_state_mut::<Asked>() {
+                asked.0.push(hold);
+            }
+            Ok(promise)
+        });
+    isolate
+        .native("ox", "ox-highlight")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, _, arguments| highlight(heap, arguments[0]));
+    isolate
+        .native("ox", "run-in-repl")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            repl::run_in_repl(editor, print::display(heap, arguments[0]));
+            Ok(Value::Nil)
+        });
 }
 
 fn editor_names() -> HashSet<String> {
