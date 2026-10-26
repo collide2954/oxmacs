@@ -41,7 +41,7 @@ fn vectors_mix_clamp_reflect_and_approach() {
 fn bad_vectors_explain_themselves() {
     assert_eq!(
         vec("(vec/add [1] [2 3])"),
-        "error: vec/add expects a point as [x y] or {x: … y: …}, got [1]"
+        "error: vec/add expects a point as [x y] or a map of :x and :y, got [1]"
     );
     assert_eq!(
         vec("(vec/scale [1 2] :big)"),

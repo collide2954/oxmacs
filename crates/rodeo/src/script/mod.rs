@@ -1,22 +1,61 @@
+mod camera;
+mod collide;
+mod ease;
+mod random;
+mod rect;
+mod tiled;
 mod vec;
 
 use ox::Isolate;
-use ox::build::make_vector;
+use ox::build::{make_map, make_vector};
 use ox::error::{Error, ErrorKind};
 use ox::heap::Heap;
 use ox::value::{Value, print, to_float};
 
+use crate::rect::Rect;
 use crate::vec::Vec2;
 
 pub const DOCS: &str = include_str!("docs.ox");
 
-pub const MODULES: &[(&str, &str)] = &[(
-    "rodeo/vec",
-    "Plain [x y] vectors for games: adding, scaling, lengths, angles and turning",
-)];
+pub const MODULES: &[(&str, &str)] = &[
+    (
+        "rodeo/vec",
+        "Plain [x y] vectors for games: adding, scaling, lengths, angles and turning",
+    ),
+    (
+        "rodeo/rect",
+        "Plain [x y w h] rectangles: edges, centers, overlaps, unions and clamping",
+    ),
+    (
+        "rodeo/ease",
+        "Easing curves for tweens, from linear to bounce",
+    ),
+    (
+        "rodeo/random",
+        "Seeded random numbers kept in atoms, so replays and rewinds repeat them",
+    ),
+    (
+        "rodeo/camera",
+        "Cameras as plain maps: following, bounds, zoom, shake and world to screen points",
+    ),
+    (
+        "rodeo/collide",
+        "Overlaps, swept boxes that slide along walls, tile collision and spatial grids",
+    ),
+    (
+        "rodeo/tiled",
+        "Tiled .tmx maps as plain data: layers, tiles, objects, properties and tilesets",
+    ),
+];
 
 pub fn install(isolate: &mut Isolate) {
     vec::install(isolate);
+    rect::install(isolate);
+    ease::install(isolate);
+    random::install(isolate);
+    camera::install(isolate);
+    collide::install(isolate);
+    tiled::install(isolate);
     isolate.add_native_docs(DOCS);
 }
 
@@ -70,10 +109,57 @@ fn numbers<const COUNT: usize>(
 
 pub(crate) fn point(heap: &Heap, name: &str, value: Value) -> Result<Vec2, Error> {
     let [x, y] = numbers(heap, name, value, ["x", "y"])
-        .ok_or_else(|| wrong(heap, name, "a point as [x y] or {x: … y: …}", value))??;
+        .ok_or_else(|| wrong(heap, name, "a point as [x y] or a map of :x and :y", value))??;
     Ok(Vec2::new(x, y))
+}
+
+pub(crate) fn rect(heap: &Heap, name: &str, value: Value) -> Result<Rect, Error> {
+    let [x, y, w, h] = numbers(heap, name, value, ["x", "y", "w", "h"]).ok_or_else(|| {
+        wrong(
+            heap,
+            name,
+            "a rect as [x y w h] or a map of :x, :y, :w and :h",
+            value,
+        )
+    })??;
+    Ok(Rect::new(x, y, w, h))
 }
 
 pub(crate) fn point_value(heap: &mut Heap, point: Vec2) -> Result<Value, Error> {
     make_vector(heap, &[Value::Float(point.x), Value::Float(point.y)])
+}
+
+pub(crate) fn rect_value(heap: &mut Heap, rect: Rect) -> Result<Value, Error> {
+    make_vector(
+        heap,
+        &[
+            Value::Float(rect.x),
+            Value::Float(rect.y),
+            Value::Float(rect.w),
+            Value::Float(rect.h),
+        ],
+    )
+}
+
+pub(crate) fn map_value(heap: &mut Heap, pairs: &[(&str, Value)]) -> Result<Value, Error> {
+    let items: Vec<Value> = pairs
+        .iter()
+        .flat_map(|(key, value)| [Value::keyword(key), *value])
+        .collect();
+    make_map(heap, &items)
+}
+
+pub(crate) fn bits(value: i64) -> u64 {
+    u64::from_ne_bytes(value.to_ne_bytes())
+}
+
+pub(crate) fn signed(value: u64) -> i64 {
+    i64::from_ne_bytes(value.to_ne_bytes())
+}
+
+pub(crate) fn name_of<'a>(heap: &'a Heap, value: Value) -> Option<&'a str> {
+    match value {
+        Value::Keyword(word) => Some(word.name()),
+        _ => heap.text(value),
+    }
 }

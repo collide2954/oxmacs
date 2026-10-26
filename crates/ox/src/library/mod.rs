@@ -57,7 +57,7 @@ pub const MODULES: &[(&str, &str)] = &[
 ];
 const OUTSIDE_MODULES: [&str; 4] = ["ox/file", "ox/http", "ox/net", "ox/process"];
 
-const OUTSIDE_NATIVES: [&str; 7] = [
+const OUTSIDE_NATIVES: [&str; 8] = [
     "print",
     "println",
     "profile-report",
@@ -65,6 +65,7 @@ const OUTSIDE_NATIVES: [&str; 7] = [
     "image/open",
     "image/probe",
     "image/save",
+    "tiled/load",
 ];
 
 pub(crate) fn reaches_outside(module: &str, shown: &str) -> bool {
