@@ -22,7 +22,16 @@ pub const BUNDLED: &[Bundle] = &[
     TABS,
     EXPLORER,
     ZEN,
+    RODEO,
 ];
+
+const RODEO: Bundle = Bundle {
+    name: "rodeo",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/rodeo/plugin.ox")),
+        ("rodeo.ox", include_str!("../plugins/rodeo/rodeo.ox")),
+    ],
+};
 
 const ZEN: Bundle = Bundle {
     name: "zen",
@@ -365,3 +374,6 @@ mod explorer;
 
 #[cfg(test)]
 mod zen;
+
+#[cfg(test)]
+mod rodeo;
