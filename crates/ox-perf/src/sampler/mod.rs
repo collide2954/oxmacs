@@ -42,7 +42,6 @@ mod native {
 }
 
 #[cfg(all(windows, target_arch = "x86_64"))]
-#[path = "sampler/windows.rs"]
 mod native;
 
 #[cfg(test)]
