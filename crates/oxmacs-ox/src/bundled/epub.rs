@@ -122,9 +122,9 @@ impl Reader {
         }
     }
 
-    fn call(&mut self, slot: usize, args: Vec<Arg>) {
+    fn call(&mut self, slot: usize, args: &[Arg]) {
         let id = self.editor.buffer_named("sample.epub").unwrap();
-        self.ox.call(&mut self.editor, id, slot, &args);
+        self.ox.call(&mut self.editor, id, slot, args);
         settle(&mut self.editor, &mut self.ox);
     }
 
@@ -133,7 +133,7 @@ impl Reader {
             .iter()
             .map(|(block, offset)| Arg::List(vec![Arg::Int(*block), Arg::Int(*offset)]))
             .collect();
-        self.call(0, vec![Arg::List(starts), Arg::Int(1)]);
+        self.call(0, &[Arg::List(starts), Arg::Int(1)]);
     }
 
     fn first_text(&self) -> String {
@@ -206,7 +206,7 @@ fn contents_and_links_jump_to_their_place() {
     press(&mut reader.editor, &mut reader.ox, "RET");
     assert_eq!(reader.first_text(), "Chapter Two");
 
-    reader.call(3, vec![Arg::Text("OEBPS/text/three.xhtml#end".to_owned())]);
+    reader.call(3, &[Arg::Text("OEBPS/text/three.xhtml#end".to_owned())]);
     assert_eq!(reader.first_text(), "The End");
     assert_eq!(reader.pages().at, At::Anchor(2, 0));
 }
@@ -236,7 +236,7 @@ fn highlights_and_places_are_remembered() {
     reader.paged(&[(0, 0), (2, 0)]);
     reader.call(
         2,
-        vec![
+        &[
             Arg::List(vec![Arg::Int(1), Arg::Int(0)]),
             Arg::List(vec![Arg::Int(1), Arg::Int(7)]),
         ],

@@ -270,16 +270,7 @@ impl App {
             Message::OxCall(buffer, slot, args) => {
                 self.ox.call(&mut self.editor, buffer, slot, &args);
             }
-            Message::ViewSized(buffer, size) => {
-                let pixels =
-                    |extent: f32| u32::try_from(units::floor_to_usize(extent)).unwrap_or(u32::MAX);
-                self.ox.view_sized(
-                    &mut self.editor,
-                    buffer,
-                    pixels(size.width),
-                    pixels(size.height),
-                );
-            }
+            Message::ViewSized(buffer, size) => self.view_sized(buffer, size),
             Message::TakeoverSized(size) => self.takeover_size = Some(size),
             Message::Tab(event) => self.tab_message(event),
             Message::SideDragged(delta) => self.drag_side(delta),
@@ -296,6 +287,16 @@ impl App {
             return iced::exit();
         }
         self.pending_effects()
+    }
+
+    fn view_sized(&mut self, buffer: oxmacs_core::text::BufferId, size: iced::Size) {
+        let pixels = |extent: f32| u32::try_from(units::floor_to_usize(extent)).unwrap_or(u32::MAX);
+        self.ox.view_sized(
+            &mut self.editor,
+            buffer,
+            pixels(size.width),
+            pixels(size.height),
+        );
     }
 
     fn quit(&mut self) {

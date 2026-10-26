@@ -1202,7 +1202,8 @@ mod tests {
 
     #[test]
     fn only_rows_inside_the_window_are_laid_out_since_some_renderers_do_not_clip_text() {
-        let text: String = (0..50).map(|number| format!("line {number}\n")).collect();
+        let lines: Vec<String> = (0..50).map(|number| format!("line {number}")).collect();
+        let text = lines.join("\n") + "\n";
         let mut buffer = Buffer::with_text("t", &text);
         buffer.set_point(0);
         let mut editor = oxmacs_core::editor::Editor::with_buffer(buffer);

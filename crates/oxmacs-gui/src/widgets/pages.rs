@@ -113,6 +113,57 @@ struct Laid<P> {
     height: f32,
 }
 
+struct Setting {
+    x: f32,
+    size: f32,
+    font: Font,
+    align: text::Alignment,
+    above: f32,
+    below: f32,
+    prefix: String,
+}
+
+fn pictured<P>(picture: &oxmacs_ox::views::Picture, page: Size, y: f32) -> Laid<P> {
+    let (natural_width, natural_height) = picture.size();
+    let (natural_width, natural_height) = (
+        crate::units::to_f32(usize::try_from(natural_width).unwrap_or(1)),
+        crate::units::to_f32(usize::try_from(natural_height).unwrap_or(1)),
+    );
+    let scale = (page.width / natural_width)
+        .min(page.height * TALLEST_IMAGE / natural_height)
+        .min(2.0);
+    let (width, height) = (natural_width * scale, natural_height * scale);
+    Laid {
+        look: Look::Image(ox_view::handle(picture)),
+        x: (page.width - width) / 2.0,
+        y,
+        width,
+        height,
+    }
+}
+
+fn pieces<P>(blocks: &[Laid<P>], source: &[Block]) -> Vec<Piece> {
+    blocks
+        .iter()
+        .zip(source)
+        .map(|(laid, block)| Piece {
+            y: laid.y,
+            height: laid.height,
+            line: match &laid.look {
+                Look::Text(shaped) => Some(shaped.line),
+                _ => None,
+            },
+            keep_with_next: matches!(
+                block,
+                Block::Text {
+                    kind: Kind::Heading(_),
+                    ..
+                }
+            ),
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Key {
     document: usize,
@@ -295,8 +346,8 @@ impl<'a, Message> PagesView<'a, Message> {
     }
 
     fn spans(&self, runs: &[Run], font: Font, size: f32) -> Vec<Span<'static, (), Font>> {
-        let ink = style::color(self.faces.default.foreground);
-        let link = style::color(self.faces.link);
+        let plain = style::color(self.faces.default.foreground);
+        let linked = style::color(self.faces.link);
         runs.iter()
             .map(|run| {
                 let mut chosen = if run.code { self.mono } else { font };
@@ -310,15 +361,132 @@ impl<'a, Message> PagesView<'a, Message> {
                 Span::new(run.text.clone())
                     .font(chosen)
                     .size(size)
-                    .color(if run.link.is_some() { link } else { ink })
+                    .color(if run.link.is_some() { linked } else { plain })
             })
             .collect()
+    }
+
+    fn setting(&self, kind: &Kind, follows_body: bool) -> Setting {
+        let em = self.pages.size;
+        let base = self.base();
+        let plain = Setting {
+            x: 0.0,
+            size: em,
+            font: base,
+            align: text::Alignment::Left,
+            above: 0.0,
+            below: 0.0,
+            prefix: String::new(),
+        };
+        match kind {
+            Kind::Body => Setting {
+                align: text::Alignment::Justified,
+                prefix: if follows_body {
+                    INDENT.to_owned()
+                } else {
+                    String::new()
+                },
+                ..plain
+            },
+            Kind::Heading(level) => {
+                let scale =
+                    [1.7, 1.4, 1.2, 1.1, 1.0, 1.0][usize::from(level.saturating_sub(1)).min(5)];
+                let mut bold = base;
+                bold.weight = Weight::Bold;
+                Setting {
+                    size: em * scale,
+                    font: bold,
+                    align: if *level <= 2 {
+                        text::Alignment::Center
+                    } else {
+                        text::Alignment::Left
+                    },
+                    above: em * 1.4,
+                    below: em * 0.8,
+                    ..plain
+                }
+            }
+            Kind::Quote => Setting {
+                x: em * 1.6,
+                size: em * 0.95,
+                align: text::Alignment::Justified,
+                above: em * 0.5,
+                below: em * 0.5,
+                ..plain
+            },
+            Kind::Item { marker, depth } => Setting {
+                x: em * 1.4 * f32::from(*depth),
+                above: em * 0.15,
+                below: em * 0.15,
+                prefix: format!("{marker} "),
+                ..plain
+            },
+            Kind::Pre => Setting {
+                x: em,
+                size: em * 0.85,
+                font: self.mono,
+                ..plain
+            },
+            Kind::Verse => Setting { x: em, ..plain },
+            Kind::Center => Setting {
+                align: text::Alignment::Center,
+                above: em * 0.5,
+                below: em * 0.5,
+                ..plain
+            },
+        }
+    }
+
+    fn shaped<P: text::Paragraph<Font = Font>>(
+        &self,
+        runs: &[Run],
+        setting: &Setting,
+        width: f32,
+    ) -> Shaped<P> {
+        let mut spans = Vec::new();
+        if !setting.prefix.is_empty() {
+            spans.push(
+                Span::new(setting.prefix.clone())
+                    .font(self.base())
+                    .size(setting.size)
+                    .color(style::color(self.faces.default.foreground)),
+            );
+        }
+        spans.extend(self.spans(runs, setting.font, setting.size));
+        let paragraph = P::with_spans(Text {
+            content: spans.as_slice(),
+            bounds: Size::new(width, f32::INFINITY),
+            size: Pixels(setting.size),
+            line_height: text::LineHeight::Relative(LINE),
+            font: setting.font,
+            align_x: setting.align,
+            align_y: Vertical::Top,
+            shaping: text::Shaping::Advanced,
+            wrapping: text::Wrapping::WordOrGlyph,
+        });
+        let mut text = setting.prefix.clone();
+        let mut links = Vec::new();
+        let mut at = setting.prefix.chars().count();
+        for run in runs {
+            let length = run.text.chars().count();
+            if let Some(target) = &run.link {
+                links.push((at..at + length, target.clone()));
+            }
+            at += length;
+            text.push_str(&run.text);
+        }
+        Shaped {
+            paragraph,
+            prefix: setting.prefix.chars().count(),
+            text,
+            links,
+            line: setting.size * LINE,
+        }
     }
 
     fn typeset<P: text::Paragraph<Font = Font>>(&self, bounds: Size) -> Typeset<P> {
         let (page, spread) = self.geometry(bounds);
         let em = self.pages.size;
-        let base = self.base();
         let mut blocks = Vec::new();
         let mut y = 0.0;
         let mut previous: Option<&Block> = None;
@@ -332,157 +500,30 @@ impl<'a, Message> PagesView<'a, Message> {
                             ..
                         })
                     );
-                    let (x, size, font, align, above, below, prefix) = match kind {
-                        Kind::Body => (
-                            0.0,
-                            em,
-                            base,
-                            text::Alignment::Justified,
-                            0.0,
-                            0.0,
-                            if follows_body {
-                                INDENT.to_owned()
-                            } else {
-                                String::new()
-                            },
-                        ),
-                        Kind::Heading(level) => {
-                            let scale = [1.7, 1.4, 1.2, 1.1, 1.0, 1.0]
-                                [usize::from(level.saturating_sub(1)).min(5)];
-                            let mut bold = base;
-                            bold.weight = Weight::Bold;
-                            let align = if *level <= 2 {
-                                text::Alignment::Center
-                            } else {
-                                text::Alignment::Left
-                            };
-                            (
-                                0.0,
-                                em * scale,
-                                bold,
-                                align,
-                                em * 1.4,
-                                em * 0.8,
-                                String::new(),
-                            )
-                        }
-                        Kind::Quote => (
-                            em * 1.6,
-                            em * 0.95,
-                            base,
-                            text::Alignment::Justified,
-                            em * 0.5,
-                            em * 0.5,
-                            String::new(),
-                        ),
-                        Kind::Item { marker, depth } => (
-                            em * 1.4 * f32::from(*depth),
-                            em,
-                            base,
-                            text::Alignment::Left,
-                            em * 0.15,
-                            em * 0.15,
-                            format!("{marker} "),
-                        ),
-                        Kind::Pre => (
-                            em,
-                            em * 0.85,
-                            self.mono,
-                            text::Alignment::Left,
-                            0.0,
-                            0.0,
-                            String::new(),
-                        ),
-                        Kind::Verse => {
-                            (em, em, base, text::Alignment::Left, 0.0, 0.0, String::new())
-                        }
-                        Kind::Center => (
-                            0.0,
-                            em,
-                            base,
-                            text::Alignment::Center,
-                            em * 0.5,
-                            em * 0.5,
-                            String::new(),
-                        ),
-                    };
+                    let setting = self.setting(kind, follows_body);
                     let after_body = follows_body && !matches!(kind, Kind::Body);
-                    y += above + if after_body { em * 0.4 } else { 0.0 };
+                    y += setting.above + if after_body { em * 0.4 } else { 0.0 };
                     let inset = if matches!(kind, Kind::Quote) {
-                        2.0 * x
+                        2.0 * setting.x
                     } else {
-                        x
+                        setting.x
                     };
                     let width = (page.width - inset).max(em * 4.0);
-                    let mut spans = Vec::new();
-                    if !prefix.is_empty() {
-                        spans.push(
-                            Span::new(prefix.clone())
-                                .font(base)
-                                .size(size)
-                                .color(style::color(self.faces.default.foreground)),
-                        );
-                    }
-                    spans.extend(self.spans(runs, font, size));
-                    let paragraph = P::with_spans(Text {
-                        content: spans.as_slice(),
-                        bounds: Size::new(width, f32::INFINITY),
-                        size: Pixels(size),
-                        line_height: text::LineHeight::Relative(LINE),
-                        font,
-                        align_x: align,
-                        align_y: Vertical::Top,
-                        shaping: text::Shaping::Advanced,
-                        wrapping: text::Wrapping::WordOrGlyph,
-                    });
-                    let line = size * LINE;
-                    let height = paragraph.min_bounds().height.max(line);
-                    let mut text = prefix.clone();
-                    let mut links = Vec::new();
-                    let mut at = prefix.chars().count();
-                    for run in runs {
-                        let length = run.text.chars().count();
-                        if let Some(target) = &run.link {
-                            links.push((at..at + length, target.clone()));
-                        }
-                        at += length;
-                        text.push_str(&run.text);
-                    }
+                    let shaped = self.shaped::<P>(runs, &setting, width);
+                    let height = shaped.paragraph.min_bounds().height.max(shaped.line);
                     let laid = Laid {
-                        look: Look::Text(Shaped {
-                            paragraph,
-                            prefix: prefix.chars().count(),
-                            text,
-                            links,
-                            line,
-                        }),
-                        x,
+                        look: Look::Text(shaped),
+                        x: setting.x,
                         y,
                         width,
                         height,
                     };
-                    y += height + below;
+                    y += height + setting.below;
                     laid
                 }
                 Block::Image { picture, .. } => {
-                    let (natural_width, natural_height) = picture.size();
-                    let (natural_width, natural_height) = (
-                        crate::units::to_f32(usize::try_from(natural_width).unwrap_or(1)),
-                        crate::units::to_f32(usize::try_from(natural_height).unwrap_or(1)),
-                    );
-                    let scale = (page.width / natural_width)
-                        .min(page.height * TALLEST_IMAGE / natural_height)
-                        .min(2.0);
-                    let (width, height) = (natural_width * scale, natural_height * scale);
-                    y += em * 0.5;
-                    let laid = Laid {
-                        look: Look::Image(ox_view::handle(picture)),
-                        x: (page.width - width) / 2.0,
-                        y,
-                        width,
-                        height,
-                    };
-                    y += height + em * 0.5;
+                    let laid = pictured(picture, page, y + em * 0.5);
+                    y = laid.y + laid.height + em * 0.5;
                     laid
                 }
                 Block::Rule => {
@@ -501,30 +542,7 @@ impl<'a, Message> PagesView<'a, Message> {
             blocks.push(laid);
             previous = Some(block);
         }
-        let pieces: Vec<Piece> = blocks
-            .iter()
-            .map(|laid| Piece {
-                y: laid.y,
-                height: laid.height,
-                line: match &laid.look {
-                    Look::Text(shaped) => Some(shaped.line),
-                    _ => None,
-                },
-                keep_with_next: false,
-            })
-            .zip(&self.pages.document.0.blocks)
-            .map(|(piece, block)| Piece {
-                keep_with_next: matches!(
-                    block,
-                    Block::Text {
-                        kind: Kind::Heading(_),
-                        ..
-                    }
-                ),
-                ..piece
-            })
-            .collect();
-        let starts = paginate(&pieces, page.height);
+        let starts = paginate(&pieces(&blocks, &self.pages.document.0.blocks), page.height);
         Typeset {
             key: self.key(bounds),
             page,
@@ -773,8 +791,6 @@ where
         let origins = self.page_origins(typeset.page, typeset.spread, bounds);
         let first = typeset.first_shown(self.pages.at);
         let pages = if typeset.spread { 2 } else { 1 };
-        let ink = style::color(self.faces.default.foreground);
-        let faint = style::color(self.faces.shadow);
         if typeset.spread {
             let x = origins[1].x - GUTTER * em / 2.0;
             renderer.fill_quad(
@@ -788,6 +804,22 @@ where
                 style::color(self.faces.mode_line_border).scale_alpha(0.6),
             );
         }
+        let marks = self.marks(state.selection);
+        for (side, origin) in origins.iter().take(pages).enumerate() {
+            self.draw_page(
+                renderer,
+                typeset,
+                &marks,
+                (first + side, side),
+                *origin,
+                bounds,
+            );
+        }
+    }
+}
+
+impl<Message> PagesView<'_, Message> {
+    fn marks(&self, selection: Option<(Anchor, Anchor)>) -> Vec<(Anchor, Anchor, Color)> {
         let mut marks: Vec<(Anchor, Anchor, Color)> = self
             .pages
             .marks
@@ -800,115 +832,159 @@ where
                 )
             })
             .collect();
-        if let Some((from, to)) = state.selection {
+        if let Some((from, to)) = selection {
             marks.push((
                 from,
                 to,
                 style::color(self.faces.highlight(Highlight::Region)).scale_alpha(SELECTION_ALPHA),
             ));
         }
-        for (side, origin) in origins.iter().take(pages).enumerate() {
-            let page = first + side;
-            let Some((start, end)) = typeset.band(page) else {
+        marks
+    }
+
+    fn small_text(
+        &self,
+        page: Size,
+        origin: Point,
+        content: String,
+        y: f32,
+        align: text::Alignment,
+    ) -> (Text<String, Font>, Point) {
+        let em = self.pages.size;
+        let x = match align {
+            text::Alignment::Center => origin.x + page.width / 2.0,
+            text::Alignment::Right => origin.x + page.width,
+            _ => origin.x,
+        };
+        (
+            Text {
+                content,
+                bounds: Size::new(page.width, em * 2.0),
+                size: Pixels(em * SMALL),
+                line_height: text::LineHeight::default(),
+                font: self.base(),
+                align_x: align,
+                align_y: Vertical::Top,
+                shaping: text::Shaping::Advanced,
+                wrapping: text::Wrapping::None,
+            },
+            Point::new(x, y),
+        )
+    }
+
+    fn draw_page<Renderer>(
+        &self,
+        renderer: &mut Renderer,
+        typeset: &Typeset<Renderer::Paragraph>,
+        marks: &[(Anchor, Anchor, Color)],
+        (page, side): (usize, usize),
+        origin: Point,
+        bounds: Rectangle,
+    ) where
+        Renderer: text::Renderer<Font = Font> + image::Renderer<Handle = Handle>,
+    {
+        let em = self.pages.size;
+        let faint = style::color(self.faces.shadow);
+        let Some((start, end)) = typeset.band(page) else {
+            return;
+        };
+        let clip = Rectangle::new(
+            Point::new(origin.x - em, origin.y),
+            Size::new(typeset.page.width + 2.0 * em, end - start + 1.0),
+        );
+        let header = if side == 0 {
+            &self.pages.header.0
+        } else {
+            &self.pages.header.1
+        };
+        if !header.is_empty() {
+            let (text, at) = self.small_text(
+                typeset.page,
+                origin,
+                header.clone(),
+                bounds.y + TOP * em * 0.4,
+                match (typeset.spread, side) {
+                    (false, _) => text::Alignment::Center,
+                    (true, 0) => text::Alignment::Left,
+                    (true, _) => text::Alignment::Right,
+                },
+            );
+            renderer.fill_text(text, at, faint, bounds);
+        }
+        let (number, at) = self.small_text(
+            typeset.page,
+            origin,
+            format!("{}", page + 1),
+            origin.y + typeset.page.height + BOTTOM * em * 0.35,
+            text::Alignment::Center,
+        );
+        renderer.fill_text(number, at, faint, bounds);
+        for (index, laid) in typeset.blocks.iter().enumerate() {
+            if laid.y + laid.height < start - EPSILON || laid.y > end + EPSILON {
                 continue;
-            };
-            let clip = Rectangle::new(
-                Point::new(origin.x - em, origin.y),
-                Size::new(typeset.page.width + 2.0 * em, end - start + 1.0),
-            );
-            let header = if side == 0 {
-                &self.pages.header.0
-            } else {
-                &self.pages.header.1
-            };
-            let header_text = |content: String, y: f32, align: text::Alignment| {
-                let x = match align {
-                    text::Alignment::Center => origin.x + typeset.page.width / 2.0,
-                    text::Alignment::Right => origin.x + typeset.page.width,
-                    _ => origin.x,
-                };
-                (
-                    Text {
-                        content,
-                        bounds: Size::new(typeset.page.width, em * 2.0),
-                        size: Pixels(em * SMALL),
-                        line_height: text::LineHeight::default(),
-                        font: self.base(),
-                        align_x: align,
-                        align_y: Vertical::Top,
-                        shaping: text::Shaping::Advanced,
-                        wrapping: text::Wrapping::None,
-                    },
-                    Point::new(x, y),
-                )
-            };
-            if !header.is_empty() {
-                let (text, at) = header_text(
-                    header.clone(),
-                    bounds.y + TOP * em * 0.4,
-                    match (typeset.spread, side) {
-                        (false, _) => text::Alignment::Center,
-                        (true, 0) => text::Alignment::Left,
-                        (true, _) => text::Alignment::Right,
-                    },
-                );
-                renderer.fill_text(text, at, faint, bounds);
             }
-            let (number, at) = header_text(
-                format!("{}", page + 1),
-                origin.y + typeset.page.height + BOTTOM * em * 0.35,
-                text::Alignment::Center,
-            );
-            renderer.fill_text(number, at, faint, bounds);
-            for (index, laid) in typeset.blocks.iter().enumerate() {
-                if laid.y + laid.height < start - EPSILON || laid.y > end + EPSILON {
-                    continue;
+            let top_left = Point::new(origin.x + laid.x, origin.y + laid.y - start);
+            match &laid.look {
+                Look::Text(shaped) => {
+                    draw_marks(renderer, shaped, marks, index, top_left, laid.width);
+                    renderer.fill_paragraph(
+                        &shaped.paragraph,
+                        top_left,
+                        style::color(self.faces.default.foreground),
+                        clip,
+                    );
                 }
-                let top_left = Point::new(origin.x + laid.x, origin.y + laid.y - start);
-                match &laid.look {
-                    Look::Text(shaped) => {
-                        for (from, to, color) in &marks {
-                            if index < from.0 || index > to.0 {
-                                continue;
-                            }
-                            let first_char = if index == from.0 { from.1 } else { 0 };
-                            let last_char = if index == to.0 {
-                                to.1
-                            } else {
-                                shaped.text.chars().count()
-                            };
-                            for rectangle in covered(shaped, first_char, last_char, laid.width) {
-                                renderer.fill_quad(
-                                    Quad {
-                                        bounds: Rectangle::new(
-                                            Point::new(
-                                                top_left.x + rectangle.x,
-                                                top_left.y + rectangle.y,
-                                            ),
-                                            rectangle.size(),
-                                        ),
-                                        ..Quad::default()
-                                    },
-                                    *color,
-                                );
-                            }
-                        }
-                        renderer.fill_paragraph(&shaped.paragraph, top_left, ink, clip);
-                    }
-                    Look::Image(handle) => {
-                        renderer.draw_image(
-                            Image::new(handle.clone()),
-                            Rectangle::new(top_left, Size::new(laid.width, laid.height)),
-                            clip,
-                        );
-                    }
-                    Look::Rule => {
-                        let (text, at) =
-                            header_text("⁂".to_owned(), top_left.y, text::Alignment::Center);
-                        renderer.fill_text(text, at, faint, clip);
-                    }
+                Look::Image(handle) => {
+                    renderer.draw_image(
+                        Image::new(handle.clone()),
+                        Rectangle::new(top_left, Size::new(laid.width, laid.height)),
+                        clip,
+                    );
+                }
+                Look::Rule => {
+                    let (text, at) = self.small_text(
+                        typeset.page,
+                        origin,
+                        "⁂".to_owned(),
+                        top_left.y,
+                        text::Alignment::Center,
+                    );
+                    renderer.fill_text(text, at, faint, clip);
                 }
             }
+        }
+    }
+}
+
+fn draw_marks<Renderer: text::Renderer>(
+    renderer: &mut Renderer,
+    shaped: &Shaped<Renderer::Paragraph>,
+    marks: &[(Anchor, Anchor, Color)],
+    index: usize,
+    top_left: Point,
+    width: f32,
+) {
+    for (from, to, color) in marks {
+        if index < from.0 || index > to.0 {
+            continue;
+        }
+        let first_char = if index == from.0 { from.1 } else { 0 };
+        let last_char = if index == to.0 {
+            to.1
+        } else {
+            shaped.text.chars().count()
+        };
+        for rectangle in covered(shaped, first_char, last_char, width) {
+            renderer.fill_quad(
+                Quad {
+                    bounds: Rectangle::new(
+                        Point::new(top_left.x + rectangle.x, top_left.y + rectangle.y),
+                        rectangle.size(),
+                    ),
+                    ..Quad::default()
+                },
+                *color,
+            );
         }
     }
 }
