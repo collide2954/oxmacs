@@ -1,3 +1,7 @@
+mod sweep;
+
+pub use sweep::{Contact, Hit, Moved, slide, sweep};
+
 use crate::rect::Rect;
 use crate::vec::Vec2;
 

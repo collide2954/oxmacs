@@ -5,4 +5,5 @@ mod collide;
 mod ease;
 mod random;
 mod rect;
+mod sweep;
 mod vec;
