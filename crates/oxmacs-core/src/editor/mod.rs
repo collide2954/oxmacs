@@ -433,6 +433,10 @@ impl Editor {
         self.pane().mode_line()
     }
 
+    pub fn keys_pending(&self) -> bool {
+        !self.pending.is_empty()
+    }
+
     pub fn handle_key(&mut self, mut key: Key) {
         if self.note_macro_key(key) {
             return;

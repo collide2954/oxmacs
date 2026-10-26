@@ -3959,6 +3959,7 @@ name = "oxmacs-ox"
 version = "0.14.0"
 dependencies = [
  "dirs",
+ "image",
  "jiff",
  "keepass",
  "ox",
@@ -3966,6 +3967,7 @@ dependencies = [
  "oxmacs-api",
  "oxmacs-core",
  "regex",
+ "rodeo",
  "semver",
  "serde_json",
  "tempfile",

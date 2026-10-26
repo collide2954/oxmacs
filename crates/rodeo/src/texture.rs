@@ -79,6 +79,10 @@ impl Textures {
         id
     }
 
+    pub fn id_at(&self, index: usize) -> Option<TextureId> {
+        (index < self.textures.len()).then(|| TextureId(u32::try_from(index).unwrap_or(u32::MAX)))
+    }
+
     pub fn get(&self, id: TextureId) -> Option<&Texture> {
         self.textures.get(id.index())
     }

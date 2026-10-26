@@ -6,6 +6,7 @@ mod commands;
 mod consoles;
 mod editing;
 mod flashes;
+pub mod games;
 mod handles;
 mod help;
 mod hooks;
@@ -79,6 +80,8 @@ fn install_editor_api(isolate: &mut Isolate, answers: &prompts::Inbox) {
     transients::install(isolate);
     modes::install(isolate);
     takeover::install(isolate);
+    games::install(isolate);
+    rodeo::script::install(isolate);
     tabbar::install(isolate);
     idle::install(isolate);
     prompts::install(isolate, answers);
@@ -165,6 +168,7 @@ impl Ox {
         editor.set_init_path(home.map(|home| home.join("init.ox")));
         repl::install(editor);
         hooks::watch(editor);
+        games::watch(editor);
         plugins::discover(&mut self.isolate, editor, self.bundled, home);
         if init {
             self.run_init(editor, home);
@@ -177,6 +181,12 @@ impl Ox {
         let started = self.isolate.profiling().then(Instant::now);
         takeover::frame(&mut self.isolate, editor, now, size, font_size);
         self.timed("frame", started);
+    }
+
+    pub fn games_frame(&mut self, editor: &mut Editor, now: Instant) {
+        let started = self.isolate.profiling().then(Instant::now);
+        games::frame(&mut self.isolate, editor, now);
+        self.timed("game", started);
     }
 
     fn timed(&mut self, kind: &str, started: Option<Instant>) {
