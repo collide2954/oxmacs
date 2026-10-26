@@ -3,8 +3,10 @@ use std::time::{Duration, Instant};
 use oxmacs_core::editor::Editor;
 
 use crate::Ox;
-use crate::api::games;
 use crate::testing::{press, settle, typed};
+use oxmacs_core::view::game;
+
+use crate::api::games;
 
 fn started() -> (tempfile::TempDir, Editor, Ox) {
     let home = tempfile::tempdir().unwrap();
@@ -24,7 +26,7 @@ fn command(editor: &mut Editor, ox: &mut Ox, name: &str) {
 
 fn status(editor: &Editor) -> Option<String> {
     let id = editor.buffer_named("*game*")?;
-    games::screen(editor, id)?.status.clone()
+    game::screen(editor, id)?.status.clone()
 }
 
 #[test]
@@ -48,7 +50,7 @@ fn a_new_game_plays_beside_its_code_and_hears_keys() {
     let start = Instant::now();
     ox.games_frame(&mut editor, start);
     let id = editor.buffer_named("*game*").unwrap();
-    let screen = games::screen(&editor, id).unwrap();
+    let screen = game::screen(&editor, id).unwrap();
     assert_eq!(&screen.pixels[..4], &[0x1d, 0x2b, 0x53, 255]);
     assert_eq!(screen.captions[0].text, "Arrows move, space jumps");
 

@@ -3,7 +3,6 @@ pub mod audio;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ox_lang::build::{make_map, make_vector};
@@ -14,10 +13,9 @@ use ox_lang::{Error, Isolate};
 use ox_library::color::Color;
 use ox_library::geometry::Rect;
 use ox_library::geometry::Vec2;
-use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::Editor;
-use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
+use oxmacs_core::view::game::{Caption, GameBuffer, Screen};
 use rodeo::atlas::Atlas;
 use rodeo::clock::Clock;
 use rodeo::draw::{DrawList, Outline, Shape, Sprite, Viewport, raster};
@@ -30,52 +28,6 @@ const NAME: &str = "*game*";
 const SIZE: (u32, u32) = (320, 180);
 
 pub const DOCS: &str = oxmacs_api::GAME_DOCS;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Caption {
-    pub text: String,
-    pub at: (f32, f32),
-    pub size: f32,
-    pub color: [u8; 4],
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Screen {
-    pub width: u32,
-    pub height: u32,
-    pub pixels: Arc<[u8]>,
-    pub generation: u64,
-    pub smooth: bool,
-    pub captions: Vec<Caption>,
-    pub status: Option<String>,
-}
-
-impl Screen {
-    fn blank((width, height): (u32, u32)) -> Self {
-        let count = usize::try_from(u64::from(width) * u64::from(height) * 4).unwrap_or(0);
-        Self {
-            width,
-            height,
-            pixels: vec![0; count].into(),
-            generation: 0,
-            smooth: false,
-            captions: Vec::new(),
-            status: Some("Loading".to_owned()),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct GameBuffer {
-    scope: ScopeId,
-    pub screen: Screen,
-}
-
-impl PluginBuffer for GameBuffer {
-    fn scope(&self) -> ScopeId {
-        self.scope
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
@@ -159,12 +111,6 @@ pub fn placement(screen: &Screen, width: f64, height: f64) -> Placement {
         height: fit.size.y,
         scale: fit.scale,
     }
-}
-
-pub fn screen(editor: &Editor, buffer: BufferId) -> Option<&Screen> {
-    editor
-        .plugin_buffer::<GameBuffer>(buffer)
-        .map(|(_, view)| &view.screen)
 }
 
 pub fn active(editor: &Editor) -> bool {
@@ -1164,8 +1110,9 @@ mod tests {
 
     use oxmacs_core::editor::Editor;
 
-    use super::{GameBuffer, screen, wants_keys};
+    use super::wants_keys;
     use crate::Ox;
+    use oxmacs_core::view::game::{GameBuffer, screen};
 
     fn game_file(source: &str) -> (tempfile::TempDir, String) {
         let folder = tempfile::tempdir().unwrap();

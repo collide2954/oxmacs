@@ -1,4 +1,5 @@
 pub mod book;
+pub mod game;
 pub mod overlays;
 pub mod pdf;
 pub mod shapes;

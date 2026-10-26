@@ -3,7 +3,8 @@ use std::cell::RefCell;
 use iced::widget::canvas::{self, Frame, Geometry, Image, Text};
 use iced::widget::image::{FilterMethod, Handle};
 use iced::{Color, Font, Pixels, Point, Rectangle, Renderer, Size, Theme, mouse};
-use oxmacs_script::api::games::{self, Screen};
+use oxmacs_core::view::game::Screen;
+use oxmacs_script::api::games;
 
 const LETTERBOX: Color = Color::from_rgb(0.05, 0.05, 0.07);
 const STATUS: f32 = 0.06;
@@ -114,7 +115,7 @@ impl<Message> canvas::Program<Message> for GameScreen<'_> {
 #[cfg(test)]
 mod tests {
     use iced::Size;
-    use oxmacs_script::api::games::Screen;
+    use oxmacs_core::view::game::Screen;
 
     use super::placement;
 

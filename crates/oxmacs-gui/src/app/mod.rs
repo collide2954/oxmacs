@@ -783,7 +783,7 @@ mod tests {
         let _ = app.update(Message::Tick(Instant::now()));
 
         let id = app.editor().buffer_named("*game*").unwrap();
-        let screen = games::screen(app.editor(), id).unwrap();
+        let screen = oxmacs_core::view::game::screen(app.editor(), id).unwrap();
         assert!(screen.generation > 0);
         assert_eq!(&screen.pixels[..4], &[255, 0, 0, 255]);
         assert_eq!(screen.captions[0].text, "SCORE 3");

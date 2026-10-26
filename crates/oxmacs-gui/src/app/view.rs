@@ -8,7 +8,6 @@ use oxmacs_core::theme::Theme as Faces;
 use oxmacs_core::view::ViewBuffer;
 use oxmacs_core::view::takeover::{self, Takeover};
 use oxmacs_core::view::{overlays, tabbar};
-use oxmacs_script::api::games;
 
 use super::{App, Message};
 use crate::widgets::buffer_view::{BufferView, Motion};
@@ -236,7 +235,7 @@ impl App {
 
     fn body<'a>(&'a self, pane: Pane<'a>, window: WindowId, faces: Faces) -> Element<'a, Message> {
         let buffer = pane.buffer().id();
-        if let Some(screen) = games::screen(&self.editor, buffer) {
+        if let Some(screen) = oxmacs_core::view::game::screen(&self.editor, buffer) {
             let drawn = canvas(GameScreen {
                 screen,
                 font: self.font,
