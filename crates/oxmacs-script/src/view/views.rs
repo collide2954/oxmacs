@@ -11,7 +11,8 @@ use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Highlight, NICK_COLORS};
 
 use crate::ide::log;
-use crate::view::shapes::{self, Shape};
+use crate::view::shapes;
+use oxmacs_core::view::shapes::Shape;
 
 const UI: &str = "ox/ui";
 

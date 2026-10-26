@@ -3,7 +3,7 @@ use iced::font::Family;
 use iced::widget::{Column, Row, Stack, container, text};
 use iced::{Border, Element, Font, Length, Padding, Shadow, Vector};
 use oxmacs_core::theme::{Color, Theme as Faces};
-use oxmacs_script::view::overlays::{Look, Overlay, Piece, Place, Row as Line};
+use oxmacs_core::view::overlays::{Look, Overlay, Piece, Place, Row as Line};
 
 use crate::style;
 
@@ -202,7 +202,7 @@ fn keycap<'a, Message: 'a>(label: Element<'a, Message>, paint: Paint) -> Element
 mod tests {
     use iced::Element;
     use oxmacs_core::theme::{ADWAITA, ADWAITA_DARK, Highlight};
-    use oxmacs_script::view::overlays::{Look, Overlay, Piece, Place, Row};
+    use oxmacs_core::view::overlays::{Look, Overlay, Piece, Place, Row};
 
     use super::*;
     use crate::fonts;

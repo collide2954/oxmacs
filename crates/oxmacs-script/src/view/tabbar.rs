@@ -2,28 +2,14 @@ use ox_lang::heap::{Heap, Hold};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
+use oxmacs_core::view::tabbar::{TabBar, TabEvent};
 
 use crate::ide::log;
 
 const NAME: &str = "set-tab-bar";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TabBar {
-    pub tabs: Vec<String>,
-    pub selected: Option<usize>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TabEvent {
-    Select(usize),
-    Close(usize),
-    New,
-    Move { from: usize, to: usize },
-}
-
 #[derive(Debug, Default)]
 struct Bar {
-    shown: Option<TabBar>,
     select: Option<Hold>,
     close: Option<Hold>,
     new: Option<Hold>,
@@ -42,12 +28,6 @@ impl Bar {
         .flatten()
         .collect()
     }
-}
-
-pub fn shown(editor: &Editor) -> Option<&TabBar> {
-    editor
-        .plugin_state::<Bar>()
-        .and_then(|bar| bar.shown.as_ref())
 }
 
 fn wrong(heap: &Heap, wanted: &str, value: Value) -> Error {
@@ -72,21 +52,23 @@ fn set_tab_bar(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Res
     for old in bar.holds() {
         heap.release(old);
     }
-    bar.shown = None;
     let result = fill(heap, &mut bar, arguments);
     if result.is_err() {
         for hold in bar.holds() {
             heap.release(hold);
         }
-        bar.shown = None;
     }
     editor.set_plugin_state(bar);
-    result.map(|()| Value::Nil)
+    match &result {
+        Ok(Some(tabs)) => editor.set_plugin_state(tabs.clone()),
+        _ => drop(editor.take_plugin_state::<TabBar>()),
+    }
+    result.map(|_| Value::Nil)
 }
 
-fn fill(heap: &mut Heap, bar: &mut Bar, arguments: &[Value]) -> Result<(), Error> {
+fn fill(heap: &mut Heap, bar: &mut Bar, arguments: &[Value]) -> Result<Option<TabBar>, Error> {
     if arguments[0] == Value::Nil {
-        return Ok(());
+        return Ok(None);
     }
     let tabs: Vec<String> = heap
         .elements(arguments[0])
@@ -106,8 +88,7 @@ fn fill(heap: &mut Heap, bar: &mut Bar, arguments: &[Value]) -> Result<(), Error
             tabs.len()
         )));
     }
-    bar.shown = Some(TabBar { tabs, selected });
-    Ok(())
+    Ok(Some(TabBar { tabs, selected }))
 }
 
 fn count(number: usize) -> Value {
@@ -143,8 +124,8 @@ pub fn install(isolate: &mut Isolate) {
 #[cfg(test)]
 mod tests {
     use oxmacs_core::editor::Editor;
+    use oxmacs_core::view::tabbar::{TabBar, TabEvent, shown};
 
-    use super::{TabBar, TabEvent, shown};
     use crate::Ox;
     use crate::testing::settle;
 

@@ -1,53 +1,9 @@
 use ox_lang::Error;
 use ox_lang::heap::Heap;
 use ox_lang::value::{Value, print};
-use oxmacs_core::theme::Highlight;
+use oxmacs_core::view::shapes::{Ink, Paint, Shape};
 
 use crate::view::views::face_named;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Ink {
-    Foreground,
-    Background,
-    Face(Highlight),
-    Rgb(u8, u8, u8),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Paint {
-    pub ink: Ink,
-    pub alpha: f32,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Shape {
-    Rect {
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        paint: Paint,
-    },
-    Circle {
-        x: f32,
-        y: f32,
-        radius: f32,
-        paint: Paint,
-    },
-    Line {
-        from: (f32, f32),
-        to: (f32, f32),
-        width: f32,
-        paint: Paint,
-    },
-    Text {
-        x: f32,
-        y: f32,
-        text: String,
-        size: Option<f32>,
-        paint: Paint,
-    },
-}
 
 const SHAPES: &str = "[:rect x y width height color], [:circle x y radius color], [:line x1 y1 x2 y2 color width] or [:text x y text color size]";
 

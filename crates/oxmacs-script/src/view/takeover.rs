@@ -6,7 +6,8 @@ use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 
 use crate::ide::log;
-use crate::view::shapes::{self, Ink, Paint, Shape};
+use crate::view::shapes;
+use oxmacs_core::view::shapes::{Ink, Paint, Shape};
 
 const FASTEST: i64 = 30;
 
@@ -191,8 +192,8 @@ mod tests {
     use super::current;
     use crate::Ox;
     use crate::testing::settle;
-    use crate::view::shapes::{Ink, Paint, Shape};
     use crate::view::views::{Node, ViewBuffer};
+    use oxmacs_core::view::shapes::{Ink, Paint, Shape};
 
     fn paint(ink: Ink, alpha: f32) -> Paint {
         Paint { ink, alpha }

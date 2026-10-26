@@ -6,8 +6,8 @@ use oxmacs_core::input::KeySequence;
 
 use crate::Ox;
 use crate::testing::{press, settle, started};
-use crate::view::shapes::Shape;
 use crate::view::views::{Node, ViewBuffer};
+use oxmacs_core::view::shapes::Shape;
 
 fn until(editor: &mut Editor, ox: &mut Ox, done: impl Fn(&Editor) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(10);

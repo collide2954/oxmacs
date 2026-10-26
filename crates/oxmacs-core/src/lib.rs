@@ -13,3 +13,4 @@ pub mod syntax;
 pub mod testing;
 pub mod text;
 pub mod theme;
+pub mod view;

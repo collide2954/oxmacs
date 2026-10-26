@@ -2,7 +2,7 @@ use oxmacs_core::editor::Editor;
 
 use crate::Ox;
 use crate::testing::{press, settle, started, typed};
-use crate::view::tabbar::{self, TabBar, TabEvent};
+use oxmacs_core::view::tabbar::{self, TabBar, TabEvent};
 
 fn tabbed() -> (tempfile::TempDir, Editor, Ox) {
     started("(use-plugin tabs)")

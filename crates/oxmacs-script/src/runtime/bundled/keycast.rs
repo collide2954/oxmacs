@@ -2,7 +2,7 @@ use oxmacs_core::editor::Editor;
 
 use crate::Ox;
 use crate::testing::{press, settle, started, typed};
-use crate::view::overlays::{self, Look, Place};
+use oxmacs_core::view::overlays::{self, Look, Place};
 
 fn casting(config: &str) -> (tempfile::TempDir, Editor, Ox) {
     started(&format!("(use-plugin keycast{config})"))

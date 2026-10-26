@@ -2,53 +2,11 @@ use ox_lang::heap::Heap;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
-use oxmacs_core::theme::Highlight;
+use oxmacs_core::view::overlays::{Look, Overlay, Overlays, Piece, Place, Row};
 
 use crate::view::views;
 
 const NAME: &str = "set-overlay";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Place {
-    BottomRight,
-    BottomCenter,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Look {
-    Plain,
-    Face(Highlight),
-    Keycap,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Piece {
-    pub text: String,
-    pub look: Look,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Row {
-    pub pieces: Vec<Piece>,
-    pub opacity: f32,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Overlay {
-    pub place: Place,
-    pub scale: f32,
-    pub rows: Vec<Row>,
-}
-
-#[derive(Debug, Default)]
-struct Overlays(Vec<(String, Overlay)>);
-
-pub fn shown(editor: &Editor) -> Vec<&Overlay> {
-    editor
-        .plugin_state::<Overlays>()
-        .map(|overlays| overlays.0.iter().map(|(_, overlay)| overlay).collect())
-        .unwrap_or_default()
-}
 
 fn wrong(heap: &Heap, wanted: &str, value: Value) -> Error {
     Error::new(format!(
@@ -202,8 +160,8 @@ pub fn install(isolate: &mut Isolate) {
 mod tests {
     use oxmacs_core::editor::Editor;
     use oxmacs_core::theme::Highlight;
+    use oxmacs_core::view::overlays::{Look, Overlay, Piece, Place, Row, shown};
 
-    use super::{Look, Overlay, Piece, Place, Row, shown};
     use crate::Ox;
 
     fn piece(text: &str, look: Look) -> Piece {

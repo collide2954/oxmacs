@@ -192,7 +192,7 @@ impl Ox {
         view::views::call(&mut self.isolate, editor, buffer, slot, args);
     }
 
-    pub fn tab_event(&mut self, editor: &mut Editor, event: view::tabbar::TabEvent) {
+    pub fn tab_event(&mut self, editor: &mut Editor, event: oxmacs_core::view::tabbar::TabEvent) {
         view::tabbar::event(&mut self.isolate, editor, event);
     }
 

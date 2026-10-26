@@ -1,7 +1,7 @@
 use iced::widget::{Row, column, container, mouse_area, row, space, text};
 use iced::{Alignment, Element, Font, Length, mouse};
 use oxmacs_core::theme::{Color, Theme as Faces};
-use oxmacs_script::view::tabbar::TabBar;
+use oxmacs_core::view::tabbar::TabBar;
 
 use crate::style;
 

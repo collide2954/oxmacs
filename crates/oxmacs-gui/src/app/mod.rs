@@ -705,7 +705,7 @@ mod tests {
     #[test]
     fn frames_draw_the_takeover_at_its_size() {
         use oxmacs_core::theme::Highlight;
-        use oxmacs_script::view::shapes::{Ink, Paint, Shape};
+        use oxmacs_core::view::shapes::{Ink, Paint, Shape};
 
         let mut app = taken_over();
         assert!(app.is_animating());
