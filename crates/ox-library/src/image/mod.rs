@@ -157,31 +157,14 @@ struct Options<'a> {
 }
 
 impl<'a> Options<'a> {
-    fn read(
-        heap: &Heap,
-        name: &'static str,
-        rest: &'a [Value],
-        known: &[&str],
-    ) -> Result<Self, Error> {
-        let mut pairs = Vec::new();
-        for pair in rest.chunks(2) {
-            match pair {
-                [Value::Keyword(key), value] if known.contains(&key.name()) => {
-                    pairs.push((key.name(), *value));
-                }
-                [other, ..] => {
-                    let listed: Vec<String> = known.iter().map(|key| format!(":{key}")).collect();
-                    return Err(Error::new(format!(
-                        "image/{name} takes {}, not {}",
-                        listed.join(", "),
-                        print::brief(heap, *other)
-                    ))
-                    .of(ErrorKind::Arity));
-                }
-                [] => {}
-            }
-        }
-        Ok(Self { name, pairs })
+    fn slots(name: &'static str, known: &[&'a str], values: &[Value]) -> Self {
+        let pairs = known
+            .iter()
+            .zip(values)
+            .filter(|(_, value)| **value != Value::Nil)
+            .map(|(key, value)| (*key, *value))
+            .collect();
+        Self { name, pairs }
     }
 
     fn get(&self, key: &str) -> Option<Value> {
@@ -250,12 +233,13 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "new")
-        .arity(2, Some(4))
+        .arity(2, Some(2))
+        .keywords(&["color"])
         .function(|heap, arguments| {
             let width = size(heap, "new", "a width", arguments[0])?;
             let height = size(heap, "new", "a height", arguments[1])?;
             roomy("new", width, height)?;
-            let options = Options::read(heap, "new", &arguments[2..], &["color"])?;
+            let options = Options::slots("new", &["color"], &arguments[2..]);
             let color = match options.get("color") {
                 Some(value) => colors::color(heap, "new", value)?,
                 None => image::Rgba([0, 0, 0, 0]),

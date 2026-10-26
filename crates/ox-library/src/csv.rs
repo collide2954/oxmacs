@@ -3,7 +3,7 @@ use ox_lang::Isolate;
 use ox_lang::build::full;
 use ox_lang::error::Error;
 use ox_lang::heap::Heap;
-use ox_lang::value::{Value, print};
+use ox_lang::value::Value;
 
 const MODULE: &str = "ox/csv";
 
@@ -60,20 +60,7 @@ fn rows(text: &str) -> Result<Vec<Vec<String>>, Error> {
 
 fn read(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let found = rows(text(heap, "csv/read", arguments[0])?)?;
-    let mut header = false;
-    for pair in arguments[1..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "header" => {
-                header = value.truthy();
-            }
-            _ => {
-                return Err(Error::new(format!(
-                    "csv/read takes :header, not {}",
-                    print::brief(heap, pair[0])
-                )));
-            }
-        }
-    }
+    let header = arguments[1].truthy();
     let mut built = Vec::with_capacity(found.len());
     if header {
         let mut found = found.into_iter();
@@ -103,5 +90,9 @@ fn read(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.native(MODULE, "read").arity(1, None).function(read);
+    isolate
+        .native(MODULE, "read")
+        .arity(1, Some(1))
+        .keywords(&["header"])
+        .function(read);
 }

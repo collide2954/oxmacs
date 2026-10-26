@@ -198,26 +198,11 @@ fn command(heap: &Heap, name: &str, connection: Value, command: Command) -> Resu
     Ok(Value::Bool(sent))
 }
 
-fn options(heap: &Heap, given: &[Value]) -> Result<bool, Error> {
-    let mut tls = false;
-    for pair in given.chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "tls" => tls = value.truthy(),
-            _ => {
-                return Err(Error::new(format!(
-                    "net/connect takes :tls, not {}",
-                    print::brief(heap, pair[0])
-                )));
-            }
-        }
-    }
-    Ok(tls)
-}
-
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "connect")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&["tls"])
         .outside()
         .function(|heap, arguments| {
             let host = text(heap, "net/connect", arguments[0])?.to_owned();
@@ -226,7 +211,7 @@ pub fn install(isolate: &mut Isolate) {
                 _ => None,
             }
             .ok_or_else(|| wrong(heap, "net/connect", "a port number", arguments[1]))?;
-            let tls = options(heap, &arguments[2..])?;
+            let tls = arguments[2].truthy();
             heap.background(&format!("ox net/connect {host}"), move || {
                 connect(host, port, tls)
             })

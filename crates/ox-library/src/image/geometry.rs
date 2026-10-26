@@ -261,12 +261,13 @@ pub(super) fn install(isolate: &mut Isolate) {
 fn install_scaling(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "resize")
-        .arity(2, Some(6))
+        .arity(2, Some(2))
+        .keywords(&["height", "filter"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "resize", arguments[0])?;
             let width = size(heap, "resize", "a width", arguments[1])?;
-            let options = Options::read(heap, "resize", &arguments[2..], &["height", "filter"])?;
+            let options = Options::slots("resize", &["height", "filter"], &arguments[2..]);
             let filter = filter(heap, "resize", &options)?;
             let height = match options.get("height") {
                 Some(value) => size(heap, "resize", ":height", value)?,
@@ -283,18 +284,18 @@ fn install_scaling(isolate: &mut Isolate) {
     for (name, cover) in [("fit", false), ("fill", true)] {
         isolate
             .native(MODULE, name)
-            .arity(3, Some(5))
+            .arity(3, Some(3))
+            .keywords(&["filter"])
             .suspends()
             .function(move |heap, arguments| {
                 let image = wanted(heap, name, arguments[0])?;
                 let width = size(heap, name, "a width", arguments[1])?;
                 let height = size(heap, name, "a height", arguments[2])?;
-                let options = Options::read(
-                    heap,
+                let options = Options::slots(
                     if cover { "fill" } else { "fit" },
-                    &arguments[3..],
                     &["filter"],
-                )?;
+                    &arguments[3..],
+                );
                 let filter = filter(heap, name, &options)?;
                 later(heap, name, move || {
                     let (from_width, from_height) = image.pixels.dimensions();
@@ -354,17 +355,17 @@ fn install_layout(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "pad")
-        .arity(2, Some(12))
+        .arity(2, Some(2))
+        .keywords(&["top", "right", "bottom", "left", "color"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "pad", arguments[0])?;
             let amount = whole(heap, "pad", "an amount", arguments[1])?;
-            let options = Options::read(
-                heap,
+            let options = Options::slots(
                 "pad",
-                &arguments[2..],
                 &["top", "right", "bottom", "left", "color"],
-            )?;
+                &arguments[2..],
+            );
             let side = |key: &str| -> Result<i64, Error> {
                 options.get(key).map_or(Ok(amount), |value| {
                     whole(heap, "pad", &format!(":{key}"), value)
@@ -391,13 +392,14 @@ fn install_layout(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "canvas")
-        .arity(3, Some(7))
+        .arity(3, Some(3))
+        .keywords(&["anchor", "color"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "canvas", arguments[0])?;
             let width = size(heap, "canvas", "a width", arguments[1])?;
             let height = size(heap, "canvas", "a height", arguments[2])?;
-            let options = Options::read(heap, "canvas", &arguments[3..], &["anchor", "color"])?;
+            let options = Options::slots("canvas", &["anchor", "color"], &arguments[3..]);
             let (across, down) = anchor(heap, &options)?;
             let color = fill_color(heap, "canvas", &options)?;
             roomy("canvas", width, height)?;
@@ -414,12 +416,13 @@ fn install_layout(isolate: &mut Isolate) {
 fn install_turns(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "rotate")
-        .arity(2, Some(6))
+        .arity(2, Some(2))
+        .keywords(&["color", "expand"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "rotate", arguments[0])?;
             let degrees = number(heap, "rotate", "an angle in degrees", arguments[1])?;
-            let options = Options::read(heap, "rotate", &arguments[2..], &["color", "expand"])?;
+            let options = Options::slots("rotate", &["color", "expand"], &arguments[2..]);
             let color = fill_color(heap, "rotate", &options)?;
             let expand = options.get("expand").is_none_or(Value::truthy);
             later(heap, "rotate", move || {
@@ -453,11 +456,12 @@ fn install_turns(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "trim")
-        .arity(1, Some(3))
+        .arity(1, Some(1))
+        .keywords(&["tolerance"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "trim", arguments[0])?;
-            let options = Options::read(heap, "trim", &arguments[1..], &["tolerance"])?;
+            let options = Options::slots("trim", &["tolerance"], &arguments[1..]);
             let tolerance = options.number(heap, "tolerance", 0.0)?;
             later(heap, "trim", move || {
                 Ok(image.with(trim(&image.pixels, tolerance)))
@@ -468,7 +472,8 @@ fn install_turns(isolate: &mut Isolate) {
 fn install_warps(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "affine")
-        .arity(2, Some(4))
+        .arity(2, Some(2))
+        .keywords(&["color"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "affine", arguments[0])?;
@@ -498,7 +503,7 @@ fn install_warps(isolate: &mut Isolate) {
             let [xx, xy, x0, yx, yy, y0] = matrix;
             let projection = Projection::from_matrix([xx, xy, x0, yx, yy, y0, 0.0, 0.0, 1.0])
                 .ok_or_else(|| Error::new("image/affine's matrix can't be inverted"))?;
-            let options = Options::read(heap, "affine", &arguments[2..], &["color"])?;
+            let options = Options::slots("affine", &["color"], &arguments[2..]);
             let color = fill_color(heap, "affine", &options)?;
             later(heap, "affine", move || {
                 Ok(image.with(warped(&image.pixels, projection, color)))
@@ -506,7 +511,8 @@ fn install_warps(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "perspective")
-        .arity(3, Some(5))
+        .arity(3, Some(3))
+        .keywords(&["color"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "perspective", arguments[0])?;
@@ -514,7 +520,7 @@ fn install_warps(isolate: &mut Isolate) {
             let to = points(heap, "perspective", arguments[2])?;
             let projection = Projection::from_control_points(from, to)
                 .ok_or_else(|| Error::new("image/perspective can't map those points"))?;
-            let options = Options::read(heap, "perspective", &arguments[3..], &["color"])?;
+            let options = Options::slots("perspective", &["color"], &arguments[3..]);
             let color = fill_color(heap, "perspective", &options)?;
             later(heap, "perspective", move || {
                 Ok(image.with(warped(&image.pixels, projection, color)))

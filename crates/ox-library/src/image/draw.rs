@@ -567,16 +567,16 @@ fn install_edits(isolate: &mut Isolate) {
 }
 
 fn install_shapes(isolate: &mut Isolate) {
-    let most = |least: usize, keys: &[&str]| Some(least + 2 * keys.len());
     isolate
         .native(MODULE, "rect!")
-        .arity(5, most(5, &RECT))
+        .arity(5, Some(5))
+        .keywords(&RECT)
         .suspends()
         .function(|heap, arguments| {
             let [x, y] = coordinates(heap, "rect!", &arguments[1..3])?;
             let width = factor(heap, "rect!", arguments[3])?;
             let height = factor(heap, "rect!", arguments[4])?;
-            let options = Options::read(heap, "rect!", &arguments[5..], &RECT)?;
+            let options = Options::slots("rect!", &RECT, &arguments[5..]);
             let radius = narrow(options.number(heap, "radius", 0.0)?);
             let style = Style::read(heap, "rect!", &options, false)?;
             shape(
@@ -589,11 +589,12 @@ fn install_shapes(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "ellipse!")
-        .arity(5, most(5, &SHAPE))
+        .arity(5, Some(5))
+        .keywords(&SHAPE)
         .suspends()
         .function(|heap, arguments| {
             let [x, y, across, down] = coordinates(heap, "ellipse!", &arguments[1..5])?;
-            let options = Options::read(heap, "ellipse!", &arguments[5..], &SHAPE)?;
+            let options = Options::slots("ellipse!", &SHAPE, &arguments[5..]);
             let style = Style::read(heap, "ellipse!", &options, false)?;
             let path = Rect::from_xywh(x - across, y - down, across * 2.0, down * 2.0)
                 .and_then(PathBuilder::from_oval);
@@ -601,11 +602,12 @@ fn install_shapes(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "circle!")
-        .arity(4, most(4, &SHAPE))
+        .arity(4, Some(4))
+        .keywords(&SHAPE)
         .suspends()
         .function(|heap, arguments| {
             let [x, y, radius] = coordinates(heap, "circle!", &arguments[1..4])?;
-            let options = Options::read(heap, "circle!", &arguments[4..], &SHAPE)?;
+            let options = Options::slots("circle!", &SHAPE, &arguments[4..]);
             let style = Style::read(heap, "circle!", &options, false)?;
             shape(
                 heap,
@@ -617,21 +619,23 @@ fn install_shapes(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "polygon!")
-        .arity(2, most(2, &SHAPE))
+        .arity(2, Some(2))
+        .keywords(&SHAPE)
         .suspends()
         .function(|heap, arguments| {
             let points = point_list(heap, "polygon!", arguments[1])?;
-            let options = Options::read(heap, "polygon!", &arguments[2..], &SHAPE)?;
+            let options = Options::slots("polygon!", &SHAPE, &arguments[2..]);
             let style = Style::read(heap, "polygon!", &options, false)?;
             shape(heap, "polygon!", arguments[0], style, joined(&points, true))
         });
     isolate
         .native(MODULE, "line!")
-        .arity(5, most(5, &LINE))
+        .arity(5, Some(5))
+        .keywords(&LINE)
         .suspends()
         .function(|heap, arguments| {
             let [x1, y1, x2, y2] = coordinates(heap, "line!", &arguments[1..5])?;
-            let options = Options::read(heap, "line!", &arguments[5..], &LINE)?;
+            let options = Options::slots("line!", &LINE, &arguments[5..]);
             let style = Style::read(heap, "line!", &options, true)?;
             shape(
                 heap,
@@ -643,11 +647,12 @@ fn install_shapes(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "polyline!")
-        .arity(2, most(2, &LINE))
+        .arity(2, Some(2))
+        .keywords(&LINE)
         .suspends()
         .function(|heap, arguments| {
             let points = point_list(heap, "polyline!", arguments[1])?;
-            let options = Options::read(heap, "polyline!", &arguments[2..], &LINE)?;
+            let options = Options::slots("polyline!", &LINE, &arguments[2..]);
             let style = Style::read(heap, "polyline!", &options, true)?;
             shape(
                 heap,
@@ -663,7 +668,8 @@ fn install_layers(isolate: &mut Isolate) {
     const PASTE: [&str; 4] = ["blend", "opacity", "mask", "scale"];
     isolate
         .native(MODULE, "paste!")
-        .arity(4, Some(12))
+        .arity(4, Some(4))
+        .keywords(&PASTE)
         .suspends()
         .function(|heap, arguments| {
             let top = wanted(heap, "paste!", arguments[1])?;
@@ -671,7 +677,7 @@ fn install_layers(isolate: &mut Isolate) {
                 coordinate(heap, "paste!", arguments[2])?,
                 coordinate(heap, "paste!", arguments[3])?,
             );
-            let options = Options::read(heap, "paste!", &arguments[4..], &PASTE)?;
+            let options = Options::slots("paste!", &PASTE, &arguments[4..]);
             let paint = PixmapPaint {
                 opacity: opacity(heap, "paste!", &options)?,
                 blend_mode: blend(heap, "paste!", &options)?,

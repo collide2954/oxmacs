@@ -214,13 +214,14 @@ pub(super) fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "save")
-        .arity(2, Some(6))
+        .arity(2, Some(2))
+        .keywords(&["quality", "format"])
         .outside()
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "save", arguments[0])?;
             let path = PathBuf::from(text(heap, "save", "a path", arguments[1])?);
-            let options = Options::read(heap, "save", &arguments[2..], &["quality", "format"])?;
+            let options = Options::slots("save", &["quality", "format"], &arguments[2..]);
             let quality = options.number(heap, "quality", 90.0)?;
             let given = match options.get("format") {
                 Some(Value::Keyword(name)) => Some(name.name().to_owned()),

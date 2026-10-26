@@ -130,47 +130,31 @@ fn asked(heap: &Heap, arguments: &[Value]) -> Result<Asked, Error> {
         url: text(heap, "http/request", arguments[1])?.to_owned(),
         ..Asked::default()
     };
-    let mut user = None;
-    let mut password = None;
-    for pair in arguments[2..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "headers" => {
-                let entries = heap.entries(*value).ok_or_else(|| {
-                    Error::new(format!(
-                        "http/request expects a map for :headers, got {}",
-                        print::brief(heap, *value)
-                    ))
-                })?;
-                asked.headers = entries
-                    .into_iter()
-                    .map(|(name, given)| (named(heap, name), print::display(heap, given)))
-                    .collect();
-            }
-            [Value::Keyword(option), value] if option.name() == "body" => {
-                asked.body = (*value != Value::Nil).then(|| print::display(heap, *value));
-            }
-            [Value::Keyword(option), value] if option.name() == "user" => {
-                user = Some(print::display(heap, *value));
-            }
-            [Value::Keyword(option), value] if option.name() == "password" => {
-                password = Some(print::display(heap, *value));
-            }
-            _ => {
-                return Err(Error::new(format!(
-                    "http/request takes :headers, :body, :user and :password, not {}",
-                    print::brief(heap, pair[0])
-                )));
-            }
-        }
+    let [headers, body, user, password] = [arguments[2], arguments[3], arguments[4], arguments[5]];
+    if headers != Value::Nil {
+        let entries = heap.entries(headers).ok_or_else(|| {
+            Error::new(format!(
+                "http/request expects a map for :headers, got {}",
+                print::brief(heap, headers)
+            ))
+            .of(ErrorKind::Type)
+        })?;
+        asked.headers = entries
+            .into_iter()
+            .map(|(name, given)| (named(heap, name), print::display(heap, given)))
+            .collect();
     }
-    asked.login = user.map(|user| (user, password.unwrap_or_default()));
+    asked.body = (body != Value::Nil).then(|| print::display(heap, body));
+    let shown = |value: Value| (value != Value::Nil).then(|| print::display(heap, value));
+    asked.login = shown(user).map(|user| (user, shown(password).unwrap_or_default()));
     Ok(asked)
 }
 
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "request")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&["headers", "body", "user", "password"])
         .outside()
         .function(|heap, arguments| {
             let asked = asked(heap, arguments)?;

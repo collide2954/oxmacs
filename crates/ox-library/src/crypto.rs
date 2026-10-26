@@ -148,29 +148,15 @@ fn counted(heap: &Heap, name: &str, value: Value) -> Result<u64, Error> {
 fn options<'a>(
     heap: &Heap,
     name: &str,
-    given: &[Value],
+    slots: &[Value],
     known: &[&'a str],
 ) -> Result<Vec<(&'a str, u64)>, Error> {
-    let mut found = Vec::new();
-    for pair in given.chunks(2) {
-        let option = match pair {
-            [Value::Keyword(option), _] => known.iter().find(|known| **known == option.name()),
-            _ => None,
-        }
-        .ok_or_else(|| {
-            Error::new(format!(
-                "{name} takes {}, not {}",
-                known
-                    .iter()
-                    .map(|known| format!(":{known}"))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                print::brief(heap, pair[0])
-            ))
-        })?;
-        found.push((*option, counted(heap, name, pair[1])?));
-    }
-    Ok(found)
+    known
+        .iter()
+        .zip(slots)
+        .filter(|(_, value)| **value != Value::Nil)
+        .map(|(option, value)| Ok((*option, counted(heap, name, *value)?)))
+        .collect()
 }
 
 fn chosen(found: &[(&str, u64)], name: &str, default: u64) -> u64 {
@@ -330,7 +316,8 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "derive-key")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&["memory", "iterations", "parallelism"])
         .function(derive_key);
     isolate
         .native(MODULE, "seal")
@@ -342,7 +329,8 @@ pub fn install(isolate: &mut Isolate) {
         .function(open);
     isolate
         .native(MODULE, "totp")
-        .arity(1, None)
+        .arity(1, Some(1))
+        .keywords(&["time", "step", "digits"])
         .function(one_time);
     isolate
         .native(MODULE, "sha256")

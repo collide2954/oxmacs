@@ -75,24 +75,15 @@ fn parse(heap: &Heap, name: &str, arguments: &[Value]) -> Result<Run, Error> {
             .collect(),
         ..Run::default()
     };
-    for pair in arguments[2..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "cwd" => {
-                run.directory = Some(PathBuf::from(text(heap, "process/run", *value)?));
-            }
-            [Value::Keyword(option), value] if option.name() == "env" => {
-                run.environment = environment(heap, *value)?;
-            }
-            [Value::Keyword(option), value] if option.name() == "input" => {
-                run.input = Some(text(heap, "process/run", *value)?.to_owned());
-            }
-            _ => {
-                return Err(Error::new(format!(
-                    "process/run takes :cwd, :env and :input, not {}",
-                    print::brief(heap, pair[0])
-                )));
-            }
-        }
+    let [cwd, env, input] = [arguments[2], arguments[3], arguments[4]];
+    if cwd != Value::Nil {
+        run.directory = Some(PathBuf::from(text(heap, name, cwd)?));
+    }
+    if env != Value::Nil {
+        run.environment = environment(heap, env)?;
+    }
+    if input != Value::Nil {
+        run.input = Some(text(heap, name, input)?.to_owned());
     }
     Ok(run)
 }
@@ -262,7 +253,8 @@ fn wrong_for(heap: &Heap, name: &str, value: Value) -> Error {
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "start")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&["cwd", "env", "input"])
         .outside()
         .function(start);
     isolate
@@ -301,7 +293,8 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "run")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&["cwd", "env", "input"])
         .outside()
         .function(|heap, arguments| {
             let run = parse(heap, "process/run", arguments)?;

@@ -535,16 +535,16 @@ fn install_mixes(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "balance")
-        .arity(1, Some(9))
+        .arity(1, Some(1))
+        .keywords(&["red", "green", "blue", "neutral"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "balance", arguments[0])?;
-            let options = Options::read(
-                heap,
+            let options = Options::slots(
                 "balance",
-                &arguments[1..],
                 &["red", "green", "blue", "neutral"],
-            )?;
+                &arguments[1..],
+            );
             let mut factors = [1.0_f32; 3];
             for (by, key) in factors.iter_mut().zip(["red", "green", "blue"]) {
                 if let Some(value) = options.get(key) {
@@ -571,16 +571,16 @@ fn install_mixes(isolate: &mut Isolate) {
 fn install_levels(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "levels")
-        .arity(1, Some(11))
+        .arity(1, Some(1))
+        .keywords(&["black", "white", "gamma", "output-black", "output-white"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "levels", arguments[0])?;
-            let options = Options::read(
-                heap,
+            let options = Options::slots(
                 "levels",
-                &arguments[1..],
                 &["black", "white", "gamma", "output-black", "output-white"],
-            )?;
+                &arguments[1..],
+            );
             let black = level(heap, "levels", "black", options.get("black"), 0.0)?;
             let white = level(heap, "levels", "white", options.get("white"), 255.0)?;
             let low = level(
@@ -616,12 +616,13 @@ fn install_levels(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "curves")
-        .arity(2, Some(4))
+        .arity(2, Some(2))
+        .keywords(&["channel"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "curves", arguments[0])?;
             let points = curve_points(heap, arguments[1])?;
-            let options = Options::read(heap, "curves", &arguments[2..], &["channel"])?;
+            let options = Options::slots("curves", &["channel"], &arguments[2..]);
             let chosen = match options.get("channel") {
                 None => Some(0..3),
                 Some(Value::Keyword(keyword)) => match keyword.name() {
@@ -688,13 +689,14 @@ fn install_reductions(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "replace")
-        .arity(3, Some(5))
+        .arity(3, Some(3))
+        .keywords(&["tolerance"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "replace", arguments[0])?;
             let from = colors::color(heap, "replace", arguments[1])?;
             let to = colors::color(heap, "replace", arguments[2])?;
-            let options = Options::read(heap, "replace", &arguments[3..], &["tolerance"])?;
+            let options = Options::slots("replace", &["tolerance"], &arguments[3..]);
             let tolerance = options.number(heap, "tolerance", 0.0)?;
             changed(heap, "replace", image, move |pixels| {
                 each(pixels, |pixel| {
@@ -710,12 +712,13 @@ fn install_reductions(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "quantize")
-        .arity(2, Some(4))
+        .arity(2, Some(2))
+        .keywords(&["dither"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "quantize", arguments[0])?;
             let palette = palette(heap, arguments[1])?;
-            let options = Options::read(heap, "quantize", &arguments[2..], &["dither"])?;
+            let options = Options::slots("quantize", &["dither"], &arguments[2..]);
             let dither = options.get("dither").is_none_or(Value::truthy);
             changed(heap, "quantize", image, move |pixels| {
                 let palette = match palette {

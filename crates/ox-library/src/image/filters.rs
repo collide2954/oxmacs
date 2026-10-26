@@ -611,13 +611,14 @@ fn install_sharpening(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "unsharp")
-        .arity(3, Some(5))
+        .arity(3, Some(3))
+        .keywords(&["threshold"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "unsharp", arguments[0])?;
             let sigma = radius(heap, "unsharp", arguments[1])?;
             let amount = factor(heap, "unsharp", arguments[2])?;
-            let options = Options::read(heap, "unsharp", &arguments[3..], &["threshold"])?;
+            let options = Options::slots("unsharp", &["threshold"], &arguments[3..]);
             let threshold = narrow(options.number(heap, "threshold", 0.0)?);
             changed(heap, "unsharp", image, move |pixels| {
                 *pixels = unsharp(pixels, sigma, amount, threshold);
@@ -625,12 +626,12 @@ fn install_sharpening(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "edges")
-        .arity(1, Some(7))
+        .arity(1, Some(1))
+        .keywords(&["method", "low", "high"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "edges", arguments[0])?;
-            let options =
-                Options::read(heap, "edges", &arguments[1..], &["method", "low", "high"])?;
+            let options = Options::slots("edges", &["method", "low", "high"], &arguments[1..]);
             let thin = match options.get("method") {
                 None => false,
                 Some(Value::Keyword(keyword)) if keyword.name() == "sobel" => false,
@@ -668,12 +669,13 @@ fn install_sharpening(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "convolve")
-        .arity(2, Some(6))
+        .arity(2, Some(2))
+        .keywords(&["divisor", "offset"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "convolve", arguments[0])?;
             let kernel = kernel(heap, arguments[1])?;
-            let options = Options::read(heap, "convolve", &arguments[2..], &["divisor", "offset"])?;
+            let options = Options::slots("convolve", &["divisor", "offset"], &arguments[2..]);
             let sum: f32 = kernel.iter().flatten().sum();
             let fallback = if sum.abs() < f32::EPSILON { 1.0 } else { sum };
             let divisor = match options.get("divisor") {
@@ -694,12 +696,13 @@ fn install_sharpening(isolate: &mut Isolate) {
 fn install_effects(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "noise")
-        .arity(2, Some(6))
+        .arity(2, Some(2))
+        .keywords(&["seed", "mono"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "noise", arguments[0])?;
             let amount = radius(heap, "noise", arguments[1])?;
-            let options = Options::read(heap, "noise", &arguments[2..], &["seed", "mono"])?;
+            let options = Options::slots("noise", &["seed", "mono"], &arguments[2..]);
             let seed = match options.get("seed") {
                 None => 0,
                 Some(Value::Int(seed)) => u64::from_ne_bytes(seed.to_ne_bytes()),
@@ -718,16 +721,14 @@ fn install_effects(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "vignette")
-        .arity(1, Some(6))
+        .arity(1, Some(2))
+        .keywords(&["radius", "color"])
         .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "vignette", arguments[0])?;
-            let given = arguments
-                .get(1)
-                .filter(|value| matches!(value, Value::Int(_) | Value::Float(_)));
+            let given = Some(&arguments[1]).filter(|value| **value != Value::Nil);
             let amount = strength(heap, "vignette", given)?;
-            let rest = &arguments[if given.is_some() { 2 } else { 1 }..];
-            let options = Options::read(heap, "vignette", rest, &["radius", "color"])?;
+            let options = Options::slots("vignette", &["radius", "color"], &arguments[2..]);
             let radius = narrow(options.number(heap, "radius", 0.5)?.clamp(0.0, 1.0));
             let color = match options.get("color") {
                 Some(value) => colors::color(heap, "vignette", value)?,

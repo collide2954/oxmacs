@@ -195,6 +195,6 @@ fn request_options_are_checked() {
             &mut isolate,
             "(module (import (ox http))) (http/request :get \"http://localhost/\" :colour \"red\")"
         ),
-        "error: http/request takes :headers, :body, :user and :password, not :colour"
+        "error: http/request has no keyword parameter :colour"
     );
 }
