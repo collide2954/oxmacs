@@ -4476,6 +4476,9 @@ dependencies = [
 [[package]]
 name = "rodeo"
 version = "0.14.0"
+dependencies = [
+ "strum",
+]
 
 [[package]]
 name = "ropey"

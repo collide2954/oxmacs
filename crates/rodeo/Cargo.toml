@@ -9,6 +9,7 @@ license.workspace = true
 autotests = false
 
 [dependencies]
+strum.workspace = true
 
 [lints]
 workspace = true
