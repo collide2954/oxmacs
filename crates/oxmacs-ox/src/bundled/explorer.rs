@@ -169,6 +169,23 @@ fn typing_filters_the_tree_and_del_and_c_g_take_it_back() {
 }
 
 #[test]
+fn opening_a_found_file_clears_the_filter_but_peeking_keeps_it() {
+    let project = project();
+    let (_home, mut editor, mut ox) = opened(project.path(), "src/main.rs");
+
+    typed(&mut editor, &mut ox, "gui");
+    press(&mut editor, &mut ox, "SPC");
+    assert_eq!(editor.buffer().name(), TREE);
+    assert_eq!(tree(&editor), ["▾ docs", "    guide.md"]);
+
+    press(&mut editor, &mut ox, "RET");
+    assert_eq!(editor.buffer().name(), "guide.md");
+    press(&mut editor, &mut ox, "C-x C-d");
+    typed(&mut editor, &mut ox, "lib");
+    assert_eq!(tree(&editor), ["▾ src", "    lib.rs"]);
+}
+
+#[test]
 fn the_tree_follows_the_file_shown_in_the_other_windows() {
     let project = project();
     let (_home, mut editor, mut ox) = opened(project.path(), "src/main.rs");

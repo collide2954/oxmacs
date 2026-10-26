@@ -209,6 +209,9 @@
     (draw row.path)))
 
 (def (visit place stay)
+  (when (and (not stay) (filtering? @state))
+    (swap! state assoc :filter "")
+    (draw place))
   (select-main-window)
   (open-file place)
   (when stay (select-side-window)))

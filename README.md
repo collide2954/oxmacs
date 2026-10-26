@@ -48,14 +48,14 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `calendar` | 0.2.4 | opt-in | Calendars in .ics files, with CalDAV sync, reminders and invitations |
 | `customize` | 0.1.3 | on | Change the editor's and plugins' settings in a form |
 | `dired` | 0.2.5 | on | List directories and manage their files |
-| `epub` | 0.1.0 | opt-in | Read EPUB books in pages, with contents, search, highlights, notes and a library |
-| `explorer` | 0.1.0 | on | A file tree beside the windows that follows the file you're in |
+| `epub` | 0.1.1 | opt-in | Read EPUB books in pages, with contents, search, highlights, notes and a library |
+| `explorer` | 0.1.1 | on | A file tree beside the windows that follows the file you're in |
 | `git` | 0.3.1 | opt-in | Git status and staging in the style of Magit |
 | `irc` | 0.9.7 | opt-in | An IRCv3 client in the style of ERC |
 | `keycast` | 0.2.2 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `languages` | 0.1.0 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
 | `life` | 0.2.2 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.32 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.33 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.3 | opt-in | Markdown rendered as styled text |
 | `pdf` | 0.1.0 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
 | `processes` | 0.1.1 | on | List the processes oxmacs runs, with their usage |
@@ -63,7 +63,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `r` | 0.18.6 | opt-in | R consoles, plots, data and help in the style of ESS and RStudio |
 | `remote` | 0.1.7 | on | Browse and edit files on other machines over ssh, sftp and ftp |
 | `screensaver` | 0.2.2 | opt-in | A starfield or matrix rain after a while without input |
-| `tabs` | 0.1.0 | opt-in | Workspace tabs across the top, each keeping its own windows |
+| `tabs` | 0.1.1 | opt-in | Workspace tabs across the top, each keeping its own windows |
 | `vault` | 0.2.1 | opt-in | An encrypted password vault with one-time codes and imports |
 | `weather` | 0.3.1 | opt-in | Forecasts from Open-Meteo |
 | `zap` | 0.2.0 | opt-in | Flash the code you evaluate or send to a console, in the error color when it fails |

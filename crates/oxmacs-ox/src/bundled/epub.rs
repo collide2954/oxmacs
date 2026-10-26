@@ -297,3 +297,19 @@ fn the_library_shows_the_books_in_a_folder() {
     assert!(shown.contains("A Sample Voyage"), "{shown}");
     assert!(shown.contains("Ada Lovelace"), "{shown}");
 }
+
+#[test]
+fn files_that_are_not_books_say_so_plainly() {
+    let mut reader = reader("");
+    let broken = reader.books.path().join("broken.epub");
+    std::fs::write(&broken, "not a zip").unwrap();
+
+    assert!(reader.editor.open_file(&broken));
+    settle(&mut reader.editor, &mut reader.ox);
+    let said = reader.editor.message().unwrap_or_default().to_owned();
+    assert!(said.starts_with("Couldn't open broken.epub"), "{said}");
+    assert_eq!(reader.editor.buffer_named("broken.epub"), None);
+
+    press(&mut reader.editor, &mut reader.ox, "C-x 2");
+    assert_eq!(reader.editor.message(), None);
+}

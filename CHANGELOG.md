@@ -40,6 +40,9 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Opening a file from a filtered explorer tree clears the filter, so the next search starts afresh instead of adding to the old one.
+- A new tab opened while the explorer or another side window is selected shows the main window's buffer, not the side window's.
+- A file that isn't a readable EPUB says why it couldn't be opened without an Ox error from the mode line.
 - An R background job says it finished only after the last of its error output is shown, instead of sometimes printing that output after "Finished".
 - Text no longer spills past the bottom of a window over its mode line and the echo area where oxmacs draws without a GPU, as under WSL: a window draws only the rows that fit in it instead of relying on the renderer to cut off the rest.
 - `set-lines` with `:line` moves every window showing the buffer there, not only the selected one.

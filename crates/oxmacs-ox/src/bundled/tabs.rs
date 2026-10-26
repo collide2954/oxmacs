@@ -137,3 +137,21 @@ fn the_bar_selects_closes_adds_and_moves_tabs() {
     settle(&mut editor, &mut ox);
     assert_eq!(bar(&editor), Some(tabs(&["one", "one"], 1)));
 }
+
+#[test]
+fn a_new_tab_from_a_side_window_shows_the_main_windows_buffer() {
+    let (_home, mut editor, mut ox) = tabbed();
+    visit(&mut editor, &mut ox, "notes");
+    ox.eval(
+        &mut editor,
+        "(open-buffer \"*side*\" [\"tree\"] :show false) (show-side-window \"*side*\" :select true)",
+    )
+    .unwrap();
+    settle(&mut editor, &mut ox);
+    assert_eq!(editor.buffer().name(), "*side*");
+
+    press(&mut editor, &mut ox, "C-x t 2");
+
+    assert_eq!(shown(&editor), ["notes"]);
+    assert_eq!(bar(&editor), Some(tabs(&["notes", "notes"], 1)));
+}

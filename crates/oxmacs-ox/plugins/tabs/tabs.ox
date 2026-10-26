@@ -45,6 +45,7 @@
     (switch-to-buffer "*scratch*")))
 
 (def (open-tab fresh)
+  (select-main-window)
   (atomically
     (let [s @state
           at (inc s.current)]

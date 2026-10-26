@@ -1,5 +1,5 @@
 (plugin epub
-  :version "0.1.0"
+  :version "0.1.1"
   :opt-in true
   :summary "Read EPUB books in pages, with contents, search, highlights, notes and a library"
   :commands {epub-library: "Show the books in a folder as covers"

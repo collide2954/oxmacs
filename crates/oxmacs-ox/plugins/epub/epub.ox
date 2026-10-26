@@ -69,10 +69,9 @@
         {blocks: blocks ids: read.ids sources: (keep :src read.blocks)}))))
 
 (def (show-progress)
-  (if-let [book (current)]
-    (do
-      (set-mode-line :epub "{(inc book.chapter)}/{(count book.chapters)} · {(or book.progress 0)}%"))
-    (set-mode-line :epub nil)))
+  (let [book (current)]
+    (set-mode-line :epub (when (and book book.chapters)
+                           "{(inc book.chapter)}/{(count book.chapters)} · {(or book.progress 0)}%"))))
 
 (def (update-book name change)
   (swap! books update name (fn [book] (when book (change book)))))
