@@ -5,7 +5,7 @@ use iced::widget::{
 };
 use iced::{Border, Color, ContentFit, Element, Font, Length};
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_script::views::{Arg, Node, Picture, Press};
+use oxmacs_script::view::views::{Arg, Node, Picture, Press};
 
 use crate::style;
 use crate::widgets::drawing::Drawing;

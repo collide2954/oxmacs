@@ -18,7 +18,7 @@ use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_script::{Ox, Pace, Wake, games, takeover};
+use oxmacs_script::{Ox, Pace, Wake, api::games, view::takeover};
 
 use crate::watcher::Watched;
 use crate::widgets::buffer_view::ViewEvent;
@@ -79,7 +79,7 @@ pub enum Message {
     ToolInstalled(Managed, Result<PathBuf, String>),
     OxTick,
     OxPress(BufferId, usize),
-    OxCall(BufferId, usize, Vec<oxmacs_script::views::Arg>),
+    OxCall(BufferId, usize, Vec<oxmacs_script::view::views::Arg>),
     ViewSized(BufferId, iced::Size),
     TakeoverSized(iced::Size),
     EndTakeover,
@@ -705,7 +705,7 @@ mod tests {
     #[test]
     fn frames_draw_the_takeover_at_its_size() {
         use oxmacs_core::theme::Highlight;
-        use oxmacs_script::shapes::{Ink, Paint, Shape};
+        use oxmacs_script::view::shapes::{Ink, Paint, Shape};
 
         let mut app = taken_over();
         assert!(app.is_animating());

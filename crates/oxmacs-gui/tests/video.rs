@@ -19,7 +19,7 @@ use iced_test::Simulator;
 use oxmacs_core::cli::Visit;
 use oxmacs_gui::app::{App, Message};
 use oxmacs_gui::fonts;
-use oxmacs_script::views::{Node, ViewBuffer};
+use oxmacs_script::view::views::{Node, ViewBuffer};
 
 thread_local! {
     static PUMPING: Cell<bool> = const { Cell::new(false) };

@@ -1,41 +1,9 @@
-pub mod book;
-mod buffers;
-mod bundled;
-pub mod checker;
-mod commands;
-mod consoles;
-mod editing;
-mod flashes;
-pub mod games;
-mod handles;
-mod help;
-mod hooks;
-pub mod idle;
-mod keepass;
-mod keystrokes;
-mod layout;
-mod log;
-mod manual;
-mod modes;
-mod natives;
-pub mod overlays;
-mod ox_mode;
-pub mod pdf;
-mod plugins;
-mod processes;
-mod prompts;
-mod repl;
-mod servers;
-mod settings;
-pub mod shapes;
-mod stacktrace;
-pub mod tabbar;
-pub mod takeover;
+pub mod api;
+pub mod ide;
+mod runtime;
 #[cfg(test)]
 mod testing;
-mod transients;
-pub mod views;
-mod xref;
+pub mod view;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -46,7 +14,7 @@ use ox_lang::{Error, Isolate};
 use oxmacs_core::config::Config;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::text::BufferId;
-pub use plugins::Bundle;
+pub use runtime::plugins::Bundle;
 
 const BUDGET: Duration = Duration::from_millis(4);
 const QUICK: Duration = Duration::from_millis(250);
@@ -60,35 +28,35 @@ pub fn home() -> Option<PathBuf> {
         .or_else(|| dirs::home_dir().map(|home| home.join(".oxmacs")))
 }
 
-fn install_editor_api(isolate: &mut Isolate, answers: &prompts::Inbox) {
-    natives::install(isolate);
-    overlays::install(isolate);
-    settings::install(isolate);
-    commands::install(isolate);
-    plugins::install(isolate);
-    views::install(isolate);
-    book::install(isolate);
-    pdf::install(isolate);
-    buffers::install(isolate);
-    handles::install(isolate);
-    editing::install(isolate);
-    hooks::install(isolate);
-    flashes::install(isolate);
-    keystrokes::install(isolate);
-    processes::install(isolate);
-    consoles::install(isolate);
-    layout::install(isolate);
-    servers::install(isolate);
-    transients::install(isolate);
-    modes::install(isolate);
-    takeover::install(isolate);
-    games::install(isolate);
+fn install_editor_api(isolate: &mut Isolate, answers: &api::prompts::Inbox) {
+    api::natives::install(isolate);
+    view::overlays::install(isolate);
+    api::settings::install(isolate);
+    api::commands::install(isolate);
+    runtime::plugins::install(isolate);
+    view::views::install(isolate);
+    view::book::install(isolate);
+    view::pdf::install(isolate);
+    api::buffers::install(isolate);
+    api::handles::install(isolate);
+    api::editing::install(isolate);
+    api::hooks::install(isolate);
+    api::flashes::install(isolate);
+    api::keystrokes::install(isolate);
+    api::processes::install(isolate);
+    api::consoles::install(isolate);
+    api::layout::install(isolate);
+    api::servers::install(isolate);
+    api::transients::install(isolate);
+    runtime::modes::install(isolate);
+    view::takeover::install(isolate);
+    api::games::install(isolate);
     rodeo::script::install(isolate);
-    tabbar::install(isolate);
-    idle::install(isolate);
-    prompts::install(isolate, answers);
-    keepass::install(isolate);
-    manual::install(isolate);
+    view::tabbar::install(isolate);
+    api::idle::install(isolate);
+    api::prompts::install(isolate, answers);
+    api::keepass::install(isolate);
+    ide::manual::install(isolate);
     isolate.add_native_docs(DOCS);
     oxmacs_api::extend_with_prelude(isolate);
     isolate.set_worker_setup(worker_api);
@@ -96,10 +64,10 @@ fn install_editor_api(isolate: &mut Isolate, answers: &prompts::Inbox) {
 
 fn worker_api(isolate: &mut Isolate) {
     ox_library::install(isolate);
-    install_editor_api(isolate, &prompts::Inbox::default());
+    install_editor_api(isolate, &api::prompts::Inbox::default());
 }
 
-fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
+fn editor_isolate(answers: &api::prompts::Inbox) -> Isolate {
     let mut isolate = ox_library::isolate();
     install_editor_api(&mut isolate, answers);
     isolate
@@ -121,7 +89,7 @@ pub const EDITOR_MODULES: &[(&str, &str)] = &[
 ];
 
 pub fn checking_isolate() -> Isolate {
-    editor_isolate(&prompts::Inbox::default())
+    editor_isolate(&api::prompts::Inbox::default())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,10 +104,10 @@ pub struct Ox {
     isolate: Isolate,
     bundled: &'static [Bundle],
     home: Option<PathBuf>,
-    answers: prompts::Inbox,
-    evaluation: repl::Evaluation,
-    checker: checker::Checker,
-    help: help::Help,
+    answers: api::prompts::Inbox,
+    evaluation: ide::repl::Evaluation,
+    checker: ide::checker::Checker,
+    help: ide::help::Help,
 }
 
 impl Default for Ox {
@@ -150,19 +118,19 @@ impl Default for Ox {
 
 impl Ox {
     pub fn new() -> Self {
-        Self::with_bundled(bundled::BUNDLED)
+        Self::with_bundled(runtime::bundled::BUNDLED)
     }
 
     pub fn with_bundled(bundled: &'static [Bundle]) -> Self {
-        let answers = prompts::Inbox::default();
+        let answers = api::prompts::Inbox::default();
         Self {
             isolate: editor_isolate(&answers),
             bundled,
             home: None,
             answers,
-            evaluation: repl::Evaluation::default(),
-            checker: checker::Checker::default(),
-            help: help::Help::default(),
+            evaluation: ide::repl::Evaluation::default(),
+            checker: ide::checker::Checker::default(),
+            help: ide::help::Help::default(),
         }
     }
 
@@ -178,26 +146,26 @@ impl Ox {
         self.home = home.map(Path::to_path_buf);
         editor.let_host_play_macros();
         editor.set_init_path(home.map(|home| home.join("init.ox")));
-        repl::install(editor);
-        hooks::watch(editor);
-        games::watch(editor);
-        plugins::discover(&mut self.isolate, editor, self.bundled, home);
+        ide::repl::install(editor);
+        api::hooks::watch(editor);
+        api::games::watch(editor);
+        runtime::plugins::discover(&mut self.isolate, editor, self.bundled, home);
         if init {
             self.run_init(editor, home);
         }
-        plugins::wake_at_startup(&self.isolate, editor);
-        views::refresh(&mut self.isolate, editor);
+        runtime::plugins::wake_at_startup(&self.isolate, editor);
+        view::views::refresh(&mut self.isolate, editor);
     }
 
     pub fn frame(&mut self, editor: &mut Editor, now: Instant, size: (f32, f32), font_size: f32) {
         let started = self.isolate.profiling().then(Instant::now);
-        takeover::frame(&mut self.isolate, editor, now, size, font_size);
+        view::takeover::frame(&mut self.isolate, editor, now, size, font_size);
         self.timed("frame", started);
     }
 
     pub fn games_frame(&mut self, editor: &mut Editor, now: Instant) {
         let started = self.isolate.profiling().then(Instant::now);
-        games::frame(&mut self.isolate, editor, now);
+        api::games::frame(&mut self.isolate, editor, now);
         self.timed("game", started);
     }
 
@@ -209,17 +177,17 @@ impl Ox {
 
     pub fn idle(&mut self, editor: &mut Editor, since: Instant, now: Instant) {
         let rested = now.saturating_duration_since(since);
-        idle::run(&mut self.isolate, editor, since, now);
-        if rested >= help::SIGNATURE_PAUSE {
-            help::echo_signature(&self.isolate, editor, self.home.as_deref(), &mut self.help);
+        api::idle::run(&mut self.isolate, editor, since, now);
+        if rested >= ide::help::SIGNATURE_PAUSE {
+            ide::help::echo_signature(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         }
         self.checker.run(editor, rested);
     }
 
     pub fn idle_wait(&self, editor: &Editor, since: Instant) -> Option<Duration> {
         let check = self.checker.wait(editor);
-        let signature = help::signature_wait(editor, &self.help);
-        idle::next(editor, since)
+        let signature = ide::help::signature_wait(editor, &self.help);
+        api::idle::next(editor, since)
             .into_iter()
             .chain(check)
             .chain(signature)
@@ -227,11 +195,11 @@ impl Ox {
     }
 
     pub fn end_take_over(&mut self, editor: &mut Editor) {
-        takeover::finish(&mut self.isolate, editor);
+        view::takeover::finish(&mut self.isolate, editor);
     }
 
     pub fn press(&mut self, editor: &mut Editor, buffer: BufferId, slot: usize) {
-        views::press(&mut self.isolate, editor, buffer, slot);
+        view::views::press(&mut self.isolate, editor, buffer, slot);
     }
 
     pub fn call(
@@ -239,17 +207,17 @@ impl Ox {
         editor: &mut Editor,
         buffer: BufferId,
         slot: usize,
-        args: &[views::Arg],
+        args: &[view::views::Arg],
     ) {
-        views::call(&mut self.isolate, editor, buffer, slot, args);
+        view::views::call(&mut self.isolate, editor, buffer, slot, args);
     }
 
-    pub fn tab_event(&mut self, editor: &mut Editor, event: tabbar::TabEvent) {
-        tabbar::event(&mut self.isolate, editor, event);
+    pub fn tab_event(&mut self, editor: &mut Editor, event: view::tabbar::TabEvent) {
+        view::tabbar::event(&mut self.isolate, editor, event);
     }
 
     pub fn view_sized(&mut self, editor: &mut Editor, buffer: BufferId, width: u32, height: u32) {
-        views::sized(&mut self.isolate, editor, buffer, (width, height));
+        view::views::sized(&mut self.isolate, editor, buffer, (width, height));
     }
 
     fn run_init(&mut self, editor: &mut Editor, home: Option<&Path>) -> bool {
@@ -259,14 +227,14 @@ impl Ox {
         if editor.config() != &Config::default() {
             editor.reconfigure(&Config::default());
         }
-        plugins::reset_configs(self.isolate.heap_mut(), editor);
+        runtime::plugins::reset_configs(self.isolate.heap_mut(), editor);
         let custom = self.run_file(editor, &home.join("custom.ox"));
-        settings::mark_custom(editor);
-        plugins::mark_custom(self.isolate.heap_mut(), editor);
+        api::settings::mark_custom(editor);
+        runtime::plugins::mark_custom(self.isolate.heap_mut(), editor);
         let init = self.run_file(editor, &home.join("init.ox"));
-        settings::mark_saved(editor);
-        plugins::mark_saved(self.isolate.heap_mut(), editor);
-        hooks::settings_changed(editor);
+        api::settings::mark_saved(editor);
+        runtime::plugins::mark_saved(self.isolate.heap_mut(), editor);
+        api::hooks::settings_changed(editor);
         custom && init
     }
 
@@ -278,8 +246,8 @@ impl Ox {
         if let Err(error) = self.isolate.within(PATIENT, |isolate| {
             isolate.eval_named_with(editor, &name, &source)
         }) {
-            log::report(editor, &error, Some((&name, &source)));
-            log::show(editor);
+            ide::log::report(editor, &error, Some((&name, &source)));
+            ide::log::show(editor);
             return false;
         }
         true
@@ -317,16 +285,16 @@ impl Ox {
                 editor.stop_macro();
             }
         }
-        buffers::watch(&mut self.isolate, editor);
+        api::buffers::watch(&mut self.isolate, editor);
         let highlighting = self.isolate.profiling().then(Instant::now);
-        modes::highlight(&mut self.isolate, editor);
+        runtime::modes::highlight(&mut self.isolate, editor);
         self.timed("highlight", highlighting);
         let refreshing = self.isolate.profiling().then(Instant::now);
-        views::refresh(&mut self.isolate, editor);
+        view::views::refresh(&mut self.isolate, editor);
         self.timed("views", refreshing);
-        help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
+        ide::help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         self.timed("tick", started);
-        if repl::requests_waiting(editor) || hooks::waiting(editor) {
+        if ide::repl::requests_waiting(editor) || api::hooks::waiting(editor) {
             return Pace::Running;
         }
         self.pace()
@@ -334,24 +302,24 @@ impl Ox {
 
     fn drain(&mut self, editor: &mut Editor) -> bool {
         let mut failed = false;
-        hooks::release_saves(&mut self.isolate, editor);
+        api::hooks::release_saves(&mut self.isolate, editor);
         self.handle_requests(editor);
-        for plugin in modes::wakes(editor)
+        for plugin in runtime::modes::wakes(editor)
             .into_iter()
-            .chain(plugins::woken_by_modes(editor))
+            .chain(runtime::plugins::woken_by_modes(editor))
         {
-            plugins::request_wake(editor, &plugin);
+            runtime::plugins::request_wake(editor, &plugin);
         }
-        plugins::wake_waiting(&mut self.isolate, editor);
-        hooks::run(&mut self.isolate, editor);
-        keystrokes::run(&mut self.isolate, editor);
-        consoles::run(&mut self.isolate, editor);
-        buffers::watch(&mut self.isolate, editor);
-        commands::run_waiting(&mut self.isolate, editor);
-        transients::run_waiting(&mut self.isolate, editor);
-        takeover::run_endings(&mut self.isolate, editor);
-        prompts::deliver(&mut self.isolate, &self.answers);
-        manual::deliver(&mut self.isolate, editor);
+        runtime::plugins::wake_waiting(&mut self.isolate, editor);
+        api::hooks::run(&mut self.isolate, editor);
+        api::keystrokes::run(&mut self.isolate, editor);
+        api::consoles::run(&mut self.isolate, editor);
+        api::buffers::watch(&mut self.isolate, editor);
+        api::commands::run_waiting(&mut self.isolate, editor);
+        api::transients::run_waiting(&mut self.isolate, editor);
+        view::takeover::run_endings(&mut self.isolate, editor);
+        api::prompts::deliver(&mut self.isolate, &self.answers);
+        ide::manual::deliver(&mut self.isolate, editor);
         let deadline = Instant::now() + BUDGET;
         while self.isolate.pending() > 0 {
             let before = self.evaluating();
@@ -361,7 +329,7 @@ impl Ox {
             let evaluated = self.evaluated(editor, report.finished);
             for error in report.unhandled.into_iter().chain(evaluated) {
                 failed = true;
-                log::report(editor, &error, None);
+                ide::log::report(editor, &error, None);
             }
             self.advance(editor);
             let after = self.evaluating();
@@ -369,7 +337,7 @@ impl Ox {
                 break;
             }
         }
-        flashes::run(&mut self.isolate, editor);
+        api::flashes::run(&mut self.isolate, editor);
         failed
     }
 }
@@ -378,7 +346,7 @@ impl Ox {
 mod tests {
     use oxmacs_core::editor::Editor;
 
-    use super::{Ox, Pace, log};
+    use super::{Ox, Pace, ide};
     use crate::testing::{home_with, press, settle};
 
     #[test]
@@ -547,7 +515,7 @@ mod tests {
         press(&mut editor, &mut ox, "C-c g");
 
         assert_eq!(editor.message(), Some("Hello"));
-        assert_eq!(editor.buffer_named(log::LOG), None);
+        assert_eq!(editor.buffer_named(ide::log::LOG), None);
     }
 
     #[test]
@@ -597,7 +565,7 @@ mod tests {
         Ox::new().start(&mut editor, Some(home.path()));
 
         assert!(!editor.config().clock);
-        let log = editor.buffer_named(log::LOG).unwrap();
+        let log = editor.buffer_named(ide::log::LOG).unwrap();
         let text = editor.buffer_by_id(log).unwrap().contents();
         assert!(
             text.contains("custom.ox:1:1: tab-width must be at least 1"),
@@ -618,7 +586,7 @@ mod tests {
 
         assert!(editor.command_named("greet").is_some());
         assert!(editor.command_named("later").is_none());
-        let log = editor.buffer_named(log::LOG).unwrap();
+        let log = editor.buffer_named(ide::log::LOG).unwrap();
         assert!(editor.buffer_shown(log));
         let text = editor.buffer_by_id(log).unwrap().contents();
         assert!(text.contains("init.ox:2:1: Division by zero"), "{text}");
@@ -632,7 +600,7 @@ mod tests {
         Ox::new().start(&mut editor, Some(home.path()));
         Ox::new().start(&mut editor, None);
 
-        assert_eq!(editor.buffer_named(log::LOG), None);
+        assert_eq!(editor.buffer_named(ide::log::LOG), None);
         assert_eq!(editor.message(), None);
     }
 

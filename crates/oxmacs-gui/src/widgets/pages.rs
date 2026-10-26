@@ -12,8 +12,8 @@ use iced::font::{Style, Weight};
 use iced::widget::image::Handle;
 use iced::{Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme};
 use oxmacs_core::theme::{Highlight, Theme as Faces};
-use oxmacs_script::book::{At, Block, Kind, Pages, Run, Spread, Typeface};
-use oxmacs_script::views::{Arg, Press};
+use oxmacs_script::view::book::{At, Block, Kind, Pages, Run, Spread, Typeface};
+use oxmacs_script::view::views::{Arg, Press};
 
 use crate::widgets::ox_view;
 use crate::{fonts, style};
@@ -232,7 +232,7 @@ struct Setting {
     prefix: String,
 }
 
-fn pictured<P>(picture: &oxmacs_script::views::Picture, page: Size, y: f32) -> Laid<P> {
+fn pictured<P>(picture: &oxmacs_script::view::views::Picture, page: Size, y: f32) -> Laid<P> {
     let (natural_width, natural_height) = picture.size();
     let (natural_width, natural_height) = (
         crate::units::to_f32(usize::try_from(natural_width).unwrap_or(1)),

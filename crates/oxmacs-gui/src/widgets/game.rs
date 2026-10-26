@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use iced::widget::canvas::{self, Frame, Geometry, Image, Text};
 use iced::widget::image::{FilterMethod, Handle};
 use iced::{Color, Font, Pixels, Point, Rectangle, Renderer, Size, Theme, mouse};
-use oxmacs_script::games::Screen;
+use oxmacs_script::api::games::Screen;
 use rodeo::draw::Viewport;
 use rodeo::vec::Vec2;
 
@@ -120,7 +120,7 @@ impl<Message> canvas::Program<Message> for GameScreen<'_> {
 #[cfg(test)]
 mod tests {
     use iced::Size;
-    use oxmacs_script::games::Screen;
+    use oxmacs_script::api::games::Screen;
 
     use super::placement;
 

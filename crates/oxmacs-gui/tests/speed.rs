@@ -51,7 +51,7 @@ fn how_fast_ox_files_scroll() {
     for name in [
         "oxmacs-script/plugins/r/plugin.ox",
         "oxmacs-script/plugins/r/session.ox",
-        "oxmacs-script/src/help.rs",
+        "oxmacs-script/src/ide/help.rs",
     ] {
         let (mut app, _) = App::boot(&[], Some(home.path()));
         app.start(

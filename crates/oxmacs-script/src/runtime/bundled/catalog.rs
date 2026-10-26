@@ -1,0 +1,197 @@
+use std::fmt::Write as _;
+use std::fs;
+use std::path::Path;
+
+use super::BUNDLED;
+use crate::runtime::plugins::{Listed, catalog};
+use crate::{EDITOR_MODULES, checking_isolate};
+
+fn modules() -> Vec<(&'static str, &'static str)> {
+    ox_library::modules()
+        .into_iter()
+        .chain(EDITOR_MODULES.iter().copied())
+        .chain(rodeo::script::MODULES.iter().copied())
+        .collect()
+}
+
+fn workspace() -> &'static Path {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .unwrap()
+}
+
+fn plugins() -> Vec<Listed> {
+    catalog(&mut checking_isolate(), BUNDLED)
+}
+
+fn shown_module(name: &str) -> String {
+    if name == "ox" {
+        "prelude".to_owned()
+    } else {
+        name.to_owned()
+    }
+}
+
+fn markdown_plugins() -> String {
+    let mut table =
+        String::from("| Plugin | Version | Default | What it does |\n| --- | --- | --- | --- |\n");
+    for plugin in plugins() {
+        let default = if plugin.opt_in { "opt-in" } else { "on" };
+        let _ = writeln!(
+            table,
+            "| `{}` | {} | {default} | {} |",
+            plugin.name, plugin.version, plugin.summary
+        );
+    }
+    table
+}
+
+fn markdown_modules() -> String {
+    let mut table = String::from("| Module | What it gives |\n| --- | --- |\n");
+    for (name, summary) in modules() {
+        let shown = shown_module(name);
+        let shown = if name == "ox" {
+            shown
+        } else {
+            format!("`{shown}`")
+        };
+        let _ = writeln!(table, "| {shown} | {summary} |");
+    }
+    table
+}
+
+fn text_plugins() -> String {
+    let listed = plugins();
+    let width = listed
+        .iter()
+        .map(|plugin| plugin.name.len())
+        .max()
+        .unwrap_or(6);
+    let mut table = format!(
+        "```table\n{:width$}  Version  Default  What it does\n",
+        "Plugin"
+    );
+    for plugin in listed {
+        let default = if plugin.opt_in { "opt-in" } else { "on" };
+        let _ = writeln!(
+            table,
+            "{:width$}  {:7}  {default:7}  {}",
+            plugin.name,
+            plugin.version.to_string(),
+            plugin.summary
+        );
+    }
+    table.push_str("```\n");
+    table
+}
+
+fn text_modules() -> String {
+    let width = modules()
+        .iter()
+        .map(|(name, _)| shown_module(name).len())
+        .max()
+        .unwrap_or(6);
+    let mut table = format!("```table\n{:width$}  What it gives\n", "Module");
+    for (name, summary) in modules() {
+        let _ = writeln!(table, "{:width$}  {summary}", shown_module(name));
+    }
+    table.push_str("```\n");
+    table
+}
+
+fn sorted(mut names: Vec<String>) -> Vec<String> {
+    names.sort();
+    names
+}
+
+#[test]
+fn every_plugin_folder_and_file_is_bundled() {
+    let folder = workspace().join("crates/oxmacs-script/plugins");
+    let mut on_disk: Vec<(String, Vec<String>)> = fs::read_dir(&folder)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.is_dir())
+        .map(|path| {
+            let files = fs::read_dir(&path)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+                .collect();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            (name, sorted(files))
+        })
+        .collect();
+    on_disk.sort();
+    let mut bundled: Vec<(String, Vec<String>)> = BUNDLED
+        .iter()
+        .map(|bundle| {
+            let files = bundle
+                .files
+                .iter()
+                .map(|(name, _)| (*name).to_owned())
+                .collect();
+            (bundle.name.to_owned(), sorted(files))
+        })
+        .collect();
+    bundled.sort();
+
+    assert_eq!(bundled, on_disk);
+}
+
+#[test]
+fn every_built_in_module_is_described() {
+    let isolate = checking_isolate();
+    let installed: Vec<String> = isolate
+        .module_names()
+        .into_iter()
+        .filter(|name| {
+            ["ox", "rodeo"]
+                .iter()
+                .any(|root| name == root || name.starts_with(&format!("{root}/")))
+        })
+        .collect();
+    let described: Vec<&str> = modules().into_iter().map(|(name, _)| name).collect();
+
+    let missing: Vec<&String> = installed
+        .iter()
+        .filter(|name| !described.contains(&name.as_str()))
+        .collect();
+    let gone: Vec<&&str> = described
+        .iter()
+        .filter(|name| !installed.iter().any(|known| known == *name))
+        .collect();
+    assert!(missing.is_empty(), "undescribed modules: {missing:?}");
+    assert!(
+        gone.is_empty(),
+        "described modules that don't exist: {gone:?}"
+    );
+}
+
+#[test]
+fn the_readme_lists_every_plugin_and_module() {
+    let readme = fs::read_to_string(workspace().join("README.md")).unwrap();
+
+    for table in [markdown_plugins(), markdown_modules()] {
+        assert!(
+            readme.contains(&table),
+            "README.md should hold this table:\n\n{table}"
+        );
+    }
+}
+
+#[test]
+fn the_manual_lists_every_plugin_and_module() {
+    let manual = workspace().join("crates/oxmacs-script/plugins/manual");
+    let plugins_page = fs::read_to_string(manual.join("plugins.ox")).unwrap();
+    let modules_page = fs::read_to_string(manual.join("modules.ox")).unwrap();
+    let (plugins, modules) = (text_plugins(), text_modules());
+
+    assert!(
+        plugins_page.contains(&plugins),
+        "plugins.ox should hold:\n\n{plugins}"
+    );
+    assert!(
+        modules_page.contains(&modules),
+        "modules.ox should hold:\n\n{modules}"
+    );
+}
