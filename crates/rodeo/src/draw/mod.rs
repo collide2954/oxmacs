@@ -1,5 +1,6 @@
 pub mod effects;
 mod quad;
+pub mod raster;
 mod viewport;
 
 pub use quad::Instance;

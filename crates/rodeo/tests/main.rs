@@ -12,6 +12,7 @@ mod grid;
 mod particles;
 mod quad;
 mod random;
+mod raster;
 mod rect;
 mod script_docs;
 mod script_vec;
