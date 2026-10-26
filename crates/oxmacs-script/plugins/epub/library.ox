@@ -51,23 +51,23 @@
   (or @blank-cover (reset! blank-cover (image/new cover-width cover-height :color "#9a9996"))))
 
 (def (cell book open)
-  (ui/column :spacing 4
-             (ui/image (or book.cover (blank)) :width cover-width :height cover-height
+  (ui/column (ui/image (or book.cover (blank)) :width cover-width :height cover-height
                        :on-press (fn [] (open book.path)))
              (ui/text (string/truncate book.title 20))
              (ui/text (string/truncate (or book.creator "") 22) :face :comment)
-             (ui/text (if book.progress "{book.progress}% read" "New") :face (if book.progress :success :comment))))
+             (ui/text (if book.progress "{book.progress}% read" "New") :face (if book.progress :success :comment))
+             :spacing 4))
 
 (def (view shelf open)
   "The library view of shelf, a map of :folder, :books and the view's :width; clicking a cover calls open with its path."
   (ui/scrollable
-   (ui/column :spacing 22
-              (ui/text "Library" :face :heading :size 24)
+   (ui/column (ui/text "Library" :face :heading :size 24)
               (ui/text (if shelf.folder (path/abbreviate shelf.folder) "") :face :comment)
               (if (empty? shelf.books)
                 (ui/text "Looking for books…" :face :comment)
                 (for [row (chunk (per-row shelf.width) shelf.books)]
-                  (ui/row :spacing gap (for [book row] (cell book open))))))))
+                  (ui/row (for [book row] (cell book open)) :spacing gap)))
+              :spacing 22)))
 
 (test "places match whichever separators they use"
   (expect (same-place? "C:\\books\\ox.epub" "C:/books/ox.epub"))

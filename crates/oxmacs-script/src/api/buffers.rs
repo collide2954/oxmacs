@@ -2,6 +2,7 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use ox_lang::heap::{Heap, Hold};
+use ox_lang::native::given;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{Command, ScopeId};
@@ -426,12 +427,9 @@ fn input_point(_: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, 
 fn set_input(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = crate::view::views::buffer_name(heap, editor, "set-input", arguments[0])?;
     let text = print::display(heap, arguments[1]);
-    let point = match arguments.get(2..) {
-        Some([Value::Keyword(option), value]) if option.name() == "point" => {
-            Some(number(heap, *value)?)
-        }
-        Some([]) | None => None,
-        Some(_) => return Err(Error::new("set-input takes :point")),
+    let point = match arguments[2] {
+        Value::Nil => None,
+        given => Some(number(heap, given)?),
     };
     let id = editor
         .buffer_named(&name)
@@ -517,50 +515,58 @@ struct Options {
     hidden: bool,
 }
 
-fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
+const OPEN_BUFFER: [&str; 15] = [
+    "keys",
+    "directory",
+    "watch",
+    "beside",
+    "select",
+    "on-move",
+    "on-resize",
+    "on-click",
+    "on-drop",
+    "on-type",
+    "cursor",
+    "line",
+    "unsaved",
+    "input",
+    "show",
+];
+
+fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
     let mut found = Options::default();
-    for pair in given.chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] => match option.name() {
-                "keys" => found.bindings = keys(heap, *value)?,
-                "directory" => found.directory = Some(PathBuf::from(print::display(heap, *value))),
-                "watch" => found.watched = Some(PathBuf::from(print::display(heap, *value))),
-                "beside" => found.beside = value.truthy(),
-                "select" => found.select = value.truthy(),
-                "on-move" => found.moved = Some(*value),
-                "on-resize" => found.resized = Some(*value),
-                "on-click" => found.clicked = Some(*value),
-                "on-drop" => found.dropped = Some(*value),
-                "on-type" => found.typed = Some(*value),
-                "cursor" => {
-                    found.line_cursor = Some(match value {
-                        Value::Keyword(shape) if shape.name() == "line" => true,
-                        Value::Keyword(shape) if shape.name() == "block" => false,
-                        _ => {
-                            return Err(Error::new(format!(
-                                "open-buffer's :cursor is :block or :line, got {}",
-                                print::brief(heap, *value)
-                            )));
-                        }
-                    });
-                }
-                "line" => found.line = Some(number(heap, *value)?),
-                "unsaved" => found.unsaved = Some(value.truthy()),
-                "input" => found.input = Some(print::display(heap, *value)),
-                "show" => found.hidden = !value.truthy(),
-                _ => return Err(unknown(heap, pair[0])),
-            },
-            _ => return Err(unknown(heap, pair[0])),
+    for (option, value) in given(&OPEN_BUFFER, slots) {
+        match option {
+            "keys" => found.bindings = keys(heap, value)?,
+            "directory" => found.directory = Some(PathBuf::from(print::display(heap, value))),
+            "watch" => found.watched = Some(PathBuf::from(print::display(heap, value))),
+            "beside" => found.beside = value.truthy(),
+            "select" => found.select = value.truthy(),
+            "on-move" => found.moved = Some(value),
+            "on-resize" => found.resized = Some(value),
+            "on-click" => found.clicked = Some(value),
+            "on-drop" => found.dropped = Some(value),
+            "on-type" => found.typed = Some(value),
+            "cursor" => {
+                found.line_cursor = Some(match value {
+                    Value::Keyword(shape) if shape.name() == "line" => true,
+                    Value::Keyword(shape) if shape.name() == "block" => false,
+                    _ => {
+                        return Err(Error::new(format!(
+                            "open-buffer's :cursor is :block or :line, got {}",
+                            print::brief(heap, value)
+                        )));
+                    }
+                });
+            }
+            "line" => found.line = Some(number(heap, value)?),
+            "unsaved" => found.unsaved = Some(value.truthy()),
+            "input" => found.input = Some(print::display(heap, value)),
+            "show" => found.hidden = !value.truthy(),
+            _ => {}
         }
     }
     Ok(found)
-}
-
-fn unknown(heap: &Heap, option: Value) -> Error {
-    Error::new(format!(
-        "open-buffer takes :keys, :directory, :watch, :beside, :select, :on-move, :on-resize, :on-click, :on-drop, :on-type, :cursor, :line, :unsaved, :input and :show, not {}",
-        print::brief(heap, option)
-    ))
 }
 
 fn hold(heap: &mut Heap, old: Option<Hold>, value: Option<Value>) -> Option<Hold> {
@@ -738,19 +744,11 @@ fn set_lines(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
     let id = plugin_buffer(editor, &name)
         .ok_or_else(|| Error::new(format!("There is no plugin buffer named {name}")))?;
     let rendered = render(heap, "set-lines", arguments[1])?;
-    let mut line = None;
-    let mut unsaved = None;
-    for pair in arguments[2..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "line" => {
-                line = Some(number(heap, *value)?);
-            }
-            [Value::Keyword(option), value] if option.name() == "unsaved" => {
-                unsaved = Some(value.truthy());
-            }
-            _ => return Err(Error::new("set-lines takes :line and :unsaved")),
-        }
-    }
+    let line = match arguments[2] {
+        Value::Nil => None,
+        given => Some(number(heap, given)?),
+    };
+    let unsaved = (arguments[3] != Value::Nil).then(|| arguments[3].truthy());
     fill(editor, id, rendered, line);
     if let Some(unsaved) = unsaved
         && let Some((_, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id)
@@ -806,11 +804,13 @@ fn region_lines(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Val
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "open-buffer")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&OPEN_BUFFER)
         .host::<Editor>(open);
     isolate
         .native("ox", "set-lines")
-        .arity(2, Some(6))
+        .arity(2, Some(2))
+        .keywords(&["line", "unsaved"])
         .host::<Editor>(set_lines);
     isolate
         .native("ox", "current-line")
@@ -834,7 +834,8 @@ pub fn install(isolate: &mut Isolate) {
         .host::<Editor>(input_point);
     isolate
         .native("ox", "set-input")
-        .arity(2, Some(4))
+        .arity(2, Some(2))
+        .keywords(&["point"])
         .host::<Editor>(set_input);
     isolate
         .native("ox", "current-column")

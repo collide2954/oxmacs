@@ -194,35 +194,15 @@ fn size(heap: &Heap, name: &str, value: Value) -> Result<f32, Error> {
     }
 }
 
-type Options<'a> = (Vec<(&'static str, Value)>, &'a [Value]);
+fn size_given(heap: &Heap, name: &str, value: Value) -> Result<Option<f32>, Error> {
+    match value {
+        Value::Nil => Ok(None),
+        given => size(heap, name, given).map(Some),
+    }
+}
 
-fn options<'a>(
-    heap: &Heap,
-    name: &str,
-    arguments: &'a [Value],
-    known: &[&str],
-) -> Result<Options<'a>, Error> {
-    let mut found = Vec::new();
-    let mut rest = arguments;
-    while let [Value::Keyword(key), value, more @ ..] = rest {
-        if !known.contains(&key.name()) {
-            break;
-        }
-        found.push((key.name(), *value));
-        rest = more;
-    }
-    if let [Value::Keyword(key), ..] = rest
-        && known.contains(&key.name())
-    {
-        return Err(Error::new(format!("{name}'s :{} has no value", key.name())));
-    }
-    if let Some(stray) = rest.iter().find(|value| matches!(value, Value::Keyword(_))) {
-        return Err(Error::new(format!(
-            "{name} doesn't take {}",
-            print::brief(heap, *stray)
-        )));
-    }
-    Ok((found, rest))
+fn pressed(heap: &mut Heap, value: Value) -> Option<Press> {
+    (value != Value::Nil).then(|| Press::Held(heap.hold(value)))
 }
 
 fn children(heap: &Heap, name: &str, values: &[Value], out: &mut Vec<Node>) -> Result<(), Error> {
@@ -256,20 +236,9 @@ fn widget(heap: &mut Heap, name: &str, node: Node) -> Result<Value, Error> {
 }
 
 fn stack(heap: &mut Heap, name: &str, arguments: &[Value], row: bool) -> Result<Value, Error> {
-    let trailing = match arguments {
-        [.., Value::Keyword(key), _] if key.name() == "spacing" => 2,
-        _ => 0,
-    };
-    let (inside, last) = arguments.split_at(arguments.len() - trailing);
-    let mut given = last.to_vec();
-    given.extend_from_slice(inside);
-    let (found, rest) = options(heap, name, &given, &["spacing"])?;
-    let mut spacing = 0.0;
-    for (_, value) in found {
-        spacing = size(heap, name, value)?;
-    }
+    let spacing = size_given(heap, name, arguments[0])?.unwrap_or(0.0);
     let mut nodes = Vec::new();
-    children(heap, name, rest, &mut nodes)?;
+    children(heap, name, &arguments[1..], &mut nodes)?;
     let node = if row {
         Node::Row {
             spacing,
@@ -286,32 +255,17 @@ fn stack(heap: &mut Heap, name: &str, arguments: &[Value], row: bool) -> Result<
 
 fn text(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let shown = print::display(heap, arguments[0]);
-    let (found, rest) = options(heap, "text", &arguments[1..], &["face", "size"])?;
-    if let Some(extra) = rest.first() {
-        return Err(wrong(heap, "text", "options after its value", *extra));
-    }
-    let mut face = None;
-    let mut text_size = None;
-    for (key, value) in found {
-        if key == "size" {
-            text_size = Some(size(heap, "text", value)?);
-            continue;
-        }
-        if value == Value::Nil {
-            face = None;
-            continue;
-        }
-        let known = match value {
-            Value::Keyword(name) => face_named(name.name()),
-            _ => None,
-        };
-        face = Some(known.ok_or_else(|| {
-            Error::new(format!(
+    let face = match arguments[1] {
+        Value::Nil => None,
+        Value::Keyword(name) if face_named(name.name()).is_some() => face_named(name.name()),
+        other => {
+            return Err(Error::new(format!(
                 "text doesn't know the face {}",
-                print::brief(heap, value)
-            ))
-        })?);
-    }
+                print::brief(heap, other)
+            )));
+        }
+    };
+    let text_size = size_given(heap, "text", arguments[2])?;
     widget(
         heap,
         "text",
@@ -325,37 +279,17 @@ fn text(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 
 fn button(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let label = print::display(heap, arguments[0]);
-    let (found, rest) = options(heap, "button", &arguments[1..], &["on-press"])?;
-    if let Some(extra) = rest.first() {
-        return Err(wrong(heap, "button", "options after its label", *extra));
-    }
-    let press = found
-        .first()
-        .map(|(_, function)| Press::Held(heap.hold(*function)));
+    let press = pressed(heap, arguments[1]);
     widget(heap, "button", Node::Button { label, press })
 }
 
 fn image(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let picture = ox_library::image::image_of(heap, arguments[0])
         .ok_or_else(|| wrong(heap, "image", "an image", arguments[0]))?;
-    let (found, rest) = options(
-        heap,
-        "image",
-        &arguments[1..],
-        &["width", "height", "on-press", "selected"],
-    )?;
-    if let Some(extra) = rest.first() {
-        return Err(wrong(heap, "image", "options after the image", *extra));
-    }
-    let (mut width, mut height, mut press, mut selected) = (None, None, None, false);
-    for (option, value) in found {
-        match option {
-            "on-press" => press = Some(Press::Held(heap.hold(value))),
-            "selected" => selected = value.truthy(),
-            "width" => width = Some(size(heap, "image", value)?),
-            _ => height = Some(size(heap, "image", value)?),
-        }
-    }
+    let width = size_given(heap, "image", arguments[1])?;
+    let height = size_given(heap, "image", arguments[2])?;
+    let selected = arguments[4].truthy();
+    let press = pressed(heap, arguments[3]);
     widget(
         heap,
         "image",
@@ -373,13 +307,23 @@ pub fn install(isolate: &mut Isolate) {
     isolate
         .native(UI, "column")
         .arity(0, None)
+        .keywords(&["spacing"])
         .function(|heap, arguments| stack(heap, "column", arguments, false));
     isolate
         .native(UI, "row")
         .arity(0, None)
+        .keywords(&["spacing"])
         .function(|heap, arguments| stack(heap, "row", arguments, true));
-    isolate.native(UI, "text").arity(1, None).function(text);
-    isolate.native(UI, "button").arity(1, None).function(button);
+    isolate
+        .native(UI, "text")
+        .arity(1, Some(1))
+        .keywords(&["face", "size"])
+        .function(text);
+    isolate
+        .native(UI, "button")
+        .arity(1, Some(1))
+        .keywords(&["on-press"])
+        .function(button);
     isolate
         .native(UI, "space")
         .arity(0, Some(1))
@@ -404,22 +348,12 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(UI, "canvas")
-        .arity(1, None)
+        .arity(1, Some(1))
+        .keywords(&["height", "relative"])
         .function(|heap, arguments| {
             let drawn = shapes::shapes(heap, arguments[0])?;
-            let (found, rest) = options(heap, "canvas", &arguments[1..], &["height", "relative"])?;
-            if let Some(extra) = rest.first() {
-                return Err(wrong(heap, "canvas", "options after its shapes", *extra));
-            }
-            let mut height = None;
-            let mut relative = false;
-            for (option, value) in found {
-                if option == "relative" {
-                    relative = value.truthy();
-                } else {
-                    height = Some(size(heap, "canvas", value)?);
-                }
-            }
+            let height = size_given(heap, "canvas", arguments[1])?;
+            let relative = arguments[2].truthy();
             widget(
                 heap,
                 "canvas",
@@ -432,11 +366,13 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(UI, "image")
-        .arity(1, Some(9))
+        .arity(1, Some(1))
+        .keywords(&["width", "height", "on-press", "selected"])
         .function(image);
     isolate
         .native("ox", "open-view")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&OPEN_VIEW)
         .host::<Editor>(open);
 }
 
@@ -471,38 +407,27 @@ pub(crate) fn buffer_name(
     crate::api::handles::name(heap, editor, native, value)
 }
 
+const OPEN_VIEW: [&str; 6] = ["keys", "beside", "select", "show", "on-resize", "watch"];
+
 fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = buffer_name(heap, editor, "open-view", arguments[0])?;
-    let (found, rest) = options(
-        heap,
-        "open-view",
-        &arguments[2..],
-        &["keys", "beside", "select", "show", "on-resize", "watch"],
-    )?;
-    if let Some(extra) = rest.first() {
-        return Err(wrong(
-            heap,
-            "open-view",
-            "options after its function",
-            *extra,
-        ));
-    }
-    let mut bindings = Vec::new();
-    let (mut beside, mut select, mut show, mut resized) = (false, false, true, None);
-    let mut watched = None;
-    for (option, value) in found {
-        match option {
-            "beside" => beside = value.truthy(),
-            "select" => select = value.truthy(),
-            "show" => show = value.truthy(),
-            "on-resize" => resized = Some(value),
-            "watch" => {
-                watched = (value != Value::Nil)
-                    .then(|| std::path::PathBuf::from(print::display(heap, value)));
-            }
-            _ => bindings = keys(heap, value)?,
-        }
-    }
+    let [keyed, beside, select, show, resized, watched] = [
+        arguments[2],
+        arguments[3],
+        arguments[4],
+        arguments[5],
+        arguments[6],
+        arguments[7],
+    ];
+    let bindings = match keyed {
+        Value::Nil => Vec::new(),
+        keyed => keys(heap, keyed)?,
+    };
+    let (beside, select) = (beside.truthy(), select.truthy());
+    let show = show == Value::Nil || show.truthy();
+    let resized = (resized != Value::Nil).then_some(resized);
+    let watched =
+        (watched != Value::Nil).then(|| std::path::PathBuf::from(print::display(heap, watched)));
     let mut views = editor.take_plugin_state::<Views>().unwrap_or_default();
     let (alive, closed): (Vec<Open>, Vec<Open>) = std::mem::take(&mut views.open)
         .into_iter()
@@ -860,7 +785,7 @@ mod tests {
     #[test]
     fn views_build_widget_trees_in_their_own_buffer() {
         let (editor, _) = opened(
-            r#"(open-view "*hello*" (fn [] (column :spacing 4 (text "Hello" :face :heading :size 18) (row (text 1) nil [(text "a") (text "b")]) (space) (space 8) (scrollable (text "long")))))"#,
+            r#"(open-view "*hello*" (fn [] (column (text "Hello" :face :heading :size 18) (row (text 1) nil [(text "a") (text "b")]) (space) (space 8) (scrollable (text "long")) :spacing 4)))"#,
         );
 
         assert_eq!(editor.buffer().name(), "*hello*");

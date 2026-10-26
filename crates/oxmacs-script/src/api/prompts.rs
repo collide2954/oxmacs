@@ -82,6 +82,13 @@ fn offers(heap: &Heap, value: Value) -> Result<Vec<Offer>, Error> {
     })
 }
 
+fn shown(heap: &Heap, value: Value) -> String {
+    match value {
+        Value::Nil => String::new(),
+        given => print::display(heap, given),
+    }
+}
+
 fn prompt(
     heap: &mut Heap,
     editor: &mut Editor,
@@ -89,28 +96,12 @@ fn prompt(
     inbox: &Inbox,
 ) -> Result<Value, Error> {
     let question = print::display(heap, arguments[0]);
-    let mut initial = String::new();
-    let mut choices = None;
-    let mut secret = false;
-    for pair in arguments[1..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "initial" => {
-                initial = print::display(heap, *value);
-            }
-            [Value::Keyword(option), value] if option.name() == "choices" => {
-                choices = Some(offers(heap, *value)?);
-            }
-            [Value::Keyword(option), value] if option.name() == "secret" => {
-                secret = value.truthy();
-            }
-            _ => {
-                return Err(Error::new(format!(
-                    "prompt takes :initial, :choices and :secret, not {}",
-                    print::brief(heap, pair[0])
-                )));
-            }
-        }
-    }
+    let initial = shown(heap, arguments[1]);
+    let choices = match arguments[2] {
+        Value::Nil => None,
+        offered => Some(offers(heap, offered)?),
+    };
+    let secret = arguments[3].truthy();
     let (promise, reply) = reply(heap, inbox)?;
     let done = move |_: &mut Editor, text| reply.send(Answer::Text(text));
     match choices {
@@ -125,29 +116,24 @@ pub fn install(isolate: &mut Isolate, inbox: &Inbox) {
     let asking = Arc::clone(inbox);
     isolate
         .native("ox", "prompt")
-        .arity(1, None)
+        .arity(1, Some(1))
+        .keywords(&["initial", "choices", "secret"])
         .host::<Editor>(move |heap, editor, arguments| prompt(heap, editor, arguments, &asking));
     let locating = Arc::clone(inbox);
-    isolate.native("ox", "prompt-path").arity(1, None).host::<Editor>(move |heap, editor, arguments| {
-        let question = print::display(heap, arguments[0]);
-        let directories = arguments[1..]
-            .chunks(2)
-            .any(|pair| matches!(pair, [Value::Keyword(option), value] if option.name() == "directories" && value.truthy()));
-        let initial = arguments[1..]
-            .chunks(2)
-            .find_map(|pair| match pair {
-                [Value::Keyword(option), value] if option.name() == "initial" => {
-                    Some(print::display(heap, *value))
-                }
-                _ => None,
-            })
-            .unwrap_or_default();
-        let (promise, reply) = reply(heap, &locating)?;
-        editor.prompt_path_with(&question, directories, &initial, move |_, path| {
-            reply.send(Answer::Text(path.display().to_string()));
+    isolate
+        .native("ox", "prompt-path")
+        .arity(1, Some(1))
+        .keywords(&["directories", "initial"])
+        .host::<Editor>(move |heap, editor, arguments| {
+            let question = print::display(heap, arguments[0]);
+            let directories = arguments[1].truthy();
+            let initial = shown(heap, arguments[2]);
+            let (promise, reply) = reply(heap, &locating)?;
+            editor.prompt_path_with(&question, directories, &initial, move |_, path| {
+                reply.send(Answer::Text(path.display().to_string()));
+            });
+            Ok(promise)
         });
-        Ok(promise)
-    });
     let deciding = Arc::clone(inbox);
     isolate
         .native("ox", "yes-or-no")

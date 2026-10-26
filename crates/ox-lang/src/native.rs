@@ -70,6 +70,17 @@ impl fmt::Debug for Native {
     }
 }
 
+pub fn given<'a>(
+    names: &'a [&'a str],
+    slots: &'a [Value],
+) -> impl Iterator<Item = (&'a str, Value)> + 'a {
+    names
+        .iter()
+        .zip(slots)
+        .filter(|(_, value)| **value != Value::Nil)
+        .map(|(name, value)| (*name, *value))
+}
+
 pub fn arguments(count: usize) -> String {
     if count == 1 {
         "1 argument".to_owned()

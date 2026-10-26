@@ -207,35 +207,16 @@ fn range(heap: &mut Heap, found: Option<Range<usize>>) -> Result<Value, Error> {
 
 fn display(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let id = target(heap, editor, "display-buffer", arguments[0])?;
+    let [below, right_of, select] = [arguments[1], arguments[2], arguments[3]];
     let mut near = None;
-    let mut select = false;
-    for pair in arguments[1..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "select" => {
-                select = value.truthy();
-            }
-            [Value::Keyword(option), value]
-                if matches!(option.name(), "below" | "right-of") && *value != Value::Nil =>
-            {
-                let axis = if option.name() == "below" {
-                    Axis::Rows
-                } else {
-                    Axis::Columns
-                };
-                near = target(heap, editor, "display-buffer", *value)
-                    .ok()
-                    .map(|other| (other, axis));
-            }
-            [Value::Keyword(option), Value::Nil]
-                if matches!(option.name(), "below" | "right-of") => {}
-            _ => {
-                return Err(Error::new(format!(
-                    "display-buffer takes :below, :right-of and :select, not {}",
-                    print::brief(heap, pair[0])
-                )));
-            }
+    for (beside, axis) in [(below, Axis::Rows), (right_of, Axis::Columns)] {
+        if beside != Value::Nil {
+            near = target(heap, editor, "display-buffer", beside)
+                .ok()
+                .map(|other| (other, axis));
         }
     }
+    let select = select.truthy();
     editor.display_buffer(id, near, select);
     Ok(Value::Nil)
 }
@@ -294,29 +275,18 @@ fn header(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
 fn show_text(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = crate::api::handles::name(heap, editor, "show-text", arguments[0])?;
     let shown = print::display(heap, arguments[1]);
-    let mut language = None;
-    let mut read_only = false;
-    for pair in arguments[2..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "mode" => {
-                let mode = print::display(heap, *value);
-                language = Some(
-                    editor
-                        .language_named(&mode)
-                        .ok_or_else(|| Error::new(format!("There is no mode called {mode}")))?,
-                );
-            }
-            [Value::Keyword(option), value] if option.name() == "read-only" => {
-                read_only = value.truthy();
-            }
-            _ => {
-                return Err(Error::new(format!(
-                    "show-text takes :mode and :read-only, not {}",
-                    print::brief(heap, pair[0])
-                )));
-            }
+    let language = match arguments[2] {
+        Value::Nil => None,
+        given => {
+            let mode = print::display(heap, given);
+            Some(
+                editor
+                    .language_named(&mode)
+                    .ok_or_else(|| Error::new(format!("There is no mode called {mode}")))?,
+            )
         }
-    }
+    };
+    let read_only = arguments[3].truthy();
     editor
         .show_text(&name, &shown, language, read_only)
         .map_err(Error::new)?;
@@ -413,7 +383,8 @@ fn install_places(isolate: &mut Isolate) {
         });
     isolate
         .native("ox", "display-buffer")
-        .arity(1, None)
+        .arity(1, Some(1))
+        .keywords(&["below", "right-of", "select"])
         .host::<Editor>(display);
     isolate
         .native("ox", "set-header")
@@ -421,7 +392,8 @@ fn install_places(isolate: &mut Isolate) {
         .host::<Editor>(header);
     isolate
         .native("ox", "show-text")
-        .arity(2, Some(6))
+        .arity(2, Some(2))
+        .keywords(&["mode", "read-only"])
         .host::<Editor>(show_text);
     isolate
         .native("ox", "prompting?")

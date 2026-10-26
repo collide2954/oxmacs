@@ -41,32 +41,25 @@ fn end(heap: &mut Heap, editor: &mut Editor) {
 }
 
 fn take_over(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
-    let mut background = Paint {
-        ink: Ink::Background,
-        alpha: 1.0,
+    let background = match arguments[1] {
+        Value::Nil => Paint {
+            ink: Ink::Background,
+            alpha: 1.0,
+        },
+        given => shapes::paint(heap, given)?,
     };
-    let mut on_end = None;
-    let mut every = Duration::from_millis(1000 / FASTEST.unsigned_abs());
-    for pair in arguments[1..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "background" => {
-                background = shapes::paint(heap, *value)?;
-            }
-            [Value::Keyword(option), value] if option.name() == "on-end" => {
-                on_end = Some(*value);
-            }
-            [Value::Keyword(option), value] if option.name() == "fps" => {
-                let Value::Int(fps @ 1..=FASTEST) = *value else {
-                    return Err(Error::new(format!(
-                        "take-over :fps must be a whole number from 1 to {FASTEST}, got {}",
-                        print::brief(heap, *value)
-                    )));
-                };
-                every = Duration::from_millis(1000 / fps.unsigned_abs());
-            }
-            _ => return Err(Error::new("take-over takes :background, :on-end and :fps")),
+    let on_end = (arguments[2] != Value::Nil).then_some(arguments[2]);
+    let fps = match arguments[3] {
+        Value::Nil => FASTEST,
+        Value::Int(fps @ 1..=FASTEST) => fps,
+        other => {
+            return Err(Error::new(format!(
+                "take-over :fps must be a whole number from 1 to {FASTEST}, got {}",
+                print::brief(heap, other)
+            )));
         }
-    }
+    };
+    let every = Duration::from_millis(1000 / fps.unsigned_abs());
     end(heap, editor);
     let takeover = Takeover {
         draw: heap.hold(arguments[0]),
@@ -84,7 +77,8 @@ fn take_over(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "take-over")
-        .arity(1, None)
+        .arity(1, Some(1))
+        .keywords(&["background", "on-end", "fps"])
         .host::<Editor>(take_over);
     isolate
         .native("ox", "end-take-over")

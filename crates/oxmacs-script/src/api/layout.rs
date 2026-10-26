@@ -106,34 +106,28 @@ fn show_side(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
     let buffer = editor
         .buffer_named(&name)
         .ok_or_else(|| Error::new(format!("show-side-window: there is no buffer named {name}")))?;
-    let (mut edge, mut columns, mut select) = (Edge::Left, 30, false);
-    for pair in arguments[1..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "edge" => {
-                edge = match value {
-                    Value::Keyword(side) if side.name() == "left" => Edge::Left,
-                    Value::Keyword(side) if side.name() == "right" => Edge::Right,
-                    _ => {
-                        return Err(Error::new(format!(
-                            "show-side-window's :edge is :left or :right, got {}",
-                            print::brief(heap, *value)
-                        )));
-                    }
-                };
-            }
-            [Value::Keyword(option), Value::Int(width)] if option.name() == "width" => {
-                columns = usize::try_from(*width).unwrap_or(1).max(1);
-            }
-            [Value::Keyword(option), value] if option.name() == "select" => {
-                select = value.truthy();
-            }
-            _ => {
-                return Err(Error::new(
-                    "show-side-window takes :edge, :width as a whole number and :select",
-                ));
-            }
+    let edge = match arguments[1] {
+        Value::Nil => Edge::Left,
+        Value::Keyword(side) if side.name() == "left" => Edge::Left,
+        Value::Keyword(side) if side.name() == "right" => Edge::Right,
+        other => {
+            return Err(Error::new(format!(
+                "show-side-window's :edge is :left or :right, got {}",
+                print::brief(heap, other)
+            )));
         }
-    }
+    };
+    let columns = match arguments[2] {
+        Value::Nil => 30,
+        Value::Int(width) => usize::try_from(width).unwrap_or(1).max(1),
+        other => {
+            return Err(Error::new(format!(
+                "show-side-window's :width is a whole number, got {}",
+                print::brief(heap, other)
+            )));
+        }
+    };
+    let select = arguments[3].truthy();
     let window = editor.show_side(buffer, edge, columns);
     if select {
         editor.select_window(window);
@@ -227,6 +221,21 @@ fn word_wrapped(heap: &Heap, editor: &Editor, arguments: &[Value]) -> Result<boo
         .is_some_and(oxmacs_core::text::Buffer::word_wrap))
 }
 
+fn arrange(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let arrangement = read(heap, editor, arguments[0])?;
+    let select = match arguments[1] {
+        Value::Nil => None,
+        name => {
+            let name = print::display(heap, name);
+            Some(editor.buffer_named(&name).ok_or_else(|| {
+                Error::new(format!("arrange-windows: there is no buffer named {name}"))
+            })?)
+        }
+    };
+    editor.arrange_windows(&arrangement, select);
+    Ok(Value::Nil)
+}
+
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "set-word-wrap")
@@ -254,7 +263,8 @@ pub fn install(isolate: &mut Isolate) {
         .host::<Editor>(presentation);
     isolate
         .native("ox", "show-side-window")
-        .arity(1, None)
+        .arity(1, Some(1))
+        .keywords(&["edge", "width", "select"])
         .host::<Editor>(show_side);
     isolate
         .native("ox", "side-window")
@@ -312,22 +322,9 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native("ox", "arrange-windows")
-        .arity(1, Some(3))
-        .host::<Editor>(|heap, editor, arguments| {
-            let arrangement = read(heap, editor, arguments[0])?;
-            let select = match &arguments[1..] {
-                [Value::Keyword(option), name] if option.name() == "select" => {
-                    let name = print::display(heap, *name);
-                    Some(editor.buffer_named(&name).ok_or_else(|| {
-                        Error::new(format!("arrange-windows: there is no buffer named {name}"))
-                    })?)
-                }
-                [] => None,
-                _ => return Err(Error::new("arrange-windows takes :select")),
-            };
-            editor.arrange_windows(&arrangement, select);
-            Ok(Value::Nil)
-        });
+        .arity(1, Some(1))
+        .keywords(&["select"])
+        .host::<Editor>(arrange);
 }
 
 #[cfg(test)]

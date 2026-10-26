@@ -566,11 +566,12 @@ const STUDIO: &str = r##"(module
       (image/polygon! c [[190 230] [207 212] [224 230]] :fill "#e76f51"))))
 
 (def (render)
-  (ui/column :spacing 6
+  (ui/column
     (ui/text (str "Studio   reload " @reloads) :face :heading)
     (if-let [picture @shown]
       (ui/image picture)
-      (ui/text "Rendering..." :face :comment))))
+      (ui/text "Rendering..." :face :comment))
+    :spacing 6))
 
 (swap! reloads inc)
 (open-view "*Studio*" render :beside true)

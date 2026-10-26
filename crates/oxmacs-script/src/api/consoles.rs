@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use ox_lang::heap::{Heap, Hold};
+use ox_lang::native::given;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::ScopeId;
@@ -130,43 +131,48 @@ struct Options {
     watches: Vec<(String, String)>,
 }
 
-fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
+const START: [&str; 12] = [
+    "program",
+    "args",
+    "directory",
+    "env",
+    "label",
+    "keys",
+    "on-output",
+    "on-idle",
+    "on-resize",
+    "prompts",
+    "errors",
+    "watch",
+];
+
+fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
     let mut found = Options::default();
-    for pair in given.chunks(2) {
-        let [Value::Keyword(option), value] = pair else {
-            return Err(unknown(heap, pair[0]));
-        };
-        match option.name() {
-            "program" => found.program = Some(text(heap, "console-start", "a program", *value)?),
-            "args" => found.args = texts(heap, *value, "a vector of arguments for :args")?,
+    for (option, value) in given(&START, slots) {
+        match option {
+            "program" => found.program = Some(text(heap, "console-start", "a program", value)?),
+            "args" => found.args = texts(heap, value, "a vector of arguments for :args")?,
             "directory" => {
                 found.directory = Some(PathBuf::from(text(
                     heap,
                     "console-start",
                     "a folder",
-                    *value,
+                    value,
                 )?));
             }
-            "env" => found.env = pairs(heap, *value, "env")?,
-            "label" => found.label = Some(print::display(heap, *value)),
-            "keys" => found.keys = pairs(heap, *value, "keys")?,
-            "on-output" => found.output = Some(*value),
-            "on-idle" => found.idle = Some(*value),
-            "on-resize" => found.resized = Some(*value),
-            "prompts" => found.prompts = texts(heap, *value, "a vector of patterns for :prompts")?,
-            "errors" => found.errors = texts(heap, *value, "a vector of patterns for :errors")?,
-            "watch" => found.watches = pairs(heap, *value, "watch")?,
-            _ => return Err(unknown(heap, pair[0])),
+            "env" => found.env = pairs(heap, value, "env")?,
+            "label" => found.label = Some(print::display(heap, value)),
+            "keys" => found.keys = pairs(heap, value, "keys")?,
+            "on-output" => found.output = Some(value),
+            "on-idle" => found.idle = Some(value),
+            "on-resize" => found.resized = Some(value),
+            "prompts" => found.prompts = texts(heap, value, "a vector of patterns for :prompts")?,
+            "errors" => found.errors = texts(heap, value, "a vector of patterns for :errors")?,
+            "watch" => found.watches = pairs(heap, value, "watch")?,
+            _ => {}
         }
     }
     Ok(found)
-}
-
-fn unknown(heap: &Heap, option: Value) -> Error {
-    Error::new(format!(
-        "console-start takes :program, :args, :directory, :env, :label, :keys, :on-output, :on-idle, :on-resize, :prompts, :errors and :watch, not {}",
-        print::brief(heap, option)
-    ))
 }
 
 fn leaked(editor: &mut Editor, label: &str) -> &'static str {
@@ -305,7 +311,8 @@ fn console(heap: &Heap, editor: &Editor, native: &str, value: Value) -> Result<B
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "console-start")
-        .arity(1, None)
+        .arity(1, Some(1))
+        .keywords(&START)
         .host::<Editor>(start);
     isolate
         .native("ox", "console-send")

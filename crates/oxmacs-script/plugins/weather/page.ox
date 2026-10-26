@@ -51,12 +51,12 @@
 (def (page state location)
   (let [forecast state.forecast]
     (scrollable
-     (column :spacing 2
-             (row (text "Weather" :face :heading) (text "  {(place-name state location)}"))
+     (column (row (text "Weather" :face :heading) (text "  {(place-name state location)}"))
              (text "g refreshes   q quits" :face :comment)
              (space 8)
              (when state.problem (text state.problem :face :error))
              (when state.fetching (text "Fetching the forecast…" :face :comment))
              (when forecast [(now-section forecast) (hours-section forecast) (days-section forecast)])
              (space 8)
-             (text "Weather data by Open-Meteo.com" :face :comment)))))
+             (text "Weather data by Open-Meteo.com" :face :comment)
+             :spacing 2))))

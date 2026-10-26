@@ -161,18 +161,13 @@ fn set_overlay(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Res
         scale: 1.0,
         rows: Vec::new(),
     };
-    for pair in arguments[2..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "place" => {
-                overlay.place = place(heap, *value)?;
-            }
-            [Value::Keyword(option), value] if option.name() == "scale" => {
-                overlay.scale = number(*value)
-                    .filter(|scale| *scale > 0.0)
-                    .ok_or_else(|| wrong(heap, ":scale must be a number above 0", *value))?;
-            }
-            _ => return Err(Error::new(format!("{NAME} takes :place and :scale"))),
-        }
+    if arguments[2] != Value::Nil {
+        overlay.place = place(heap, arguments[2])?;
+    }
+    if arguments[3] != Value::Nil {
+        overlay.scale = number(arguments[3])
+            .filter(|scale| *scale > 0.0)
+            .ok_or_else(|| wrong(heap, ":scale must be a number above 0", arguments[3]))?;
     }
     let rows = heap
         .elements(arguments[1])
@@ -198,7 +193,8 @@ fn set_overlay(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Res
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", NAME)
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&["place", "scale"])
         .host::<Editor>(set_overlay);
 }
 
@@ -319,7 +315,7 @@ mod tests {
         );
         assert_eq!(
             error(&mut ox, &mut editor, r#"(set-overlay :x ["a"] :size 2)"#),
-            "set-overlay takes :place and :scale"
+            "set-overlay has no keyword parameter :size"
         );
         assert_eq!(shown(&editor), Vec::<&Overlay>::new());
     }

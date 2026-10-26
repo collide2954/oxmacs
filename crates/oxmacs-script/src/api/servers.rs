@@ -1,4 +1,5 @@
 use ox_lang::heap::Heap;
+use ox_lang::native::given;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::{Editor, ServerSpec};
@@ -61,16 +62,23 @@ fn programs(heap: &Heap, value: Value) -> Result<Vec<(String, Vec<String>)>, Err
         .collect()
 }
 
-fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
+const DEFINE: [&str; 7] = [
+    "languages",
+    "program",
+    "args",
+    "programs",
+    "roots",
+    "install",
+    "runs",
+];
+
+fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
     let mut found = Options::default();
-    for pair in given.chunks(2) {
-        let [Value::Keyword(option), value] = pair else {
-            return Err(unknown(heap, pair[0]));
-        };
-        match option.name() {
+    for (option, value) in given(&DEFINE, slots) {
+        match option {
             "languages" => {
                 found.languages = heap
-                    .entries(*value)
+                    .entries(value)
                     .map(|entries| {
                         entries
                             .into_iter()
@@ -80,27 +88,19 @@ fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
                     .ok_or_else(|| {
                         Error::new(format!(
                             "{NATIVE} expects a map of mode names to language ids for :languages, got {}",
-                            print::brief(heap, *value)
+                            print::brief(heap, value)
                         ))
                     })?;
             }
-            "program" => found.program = Some(print::display(heap, *value)),
-            "args" => found.args = texts(heap, "args", *value)?,
-            "programs" => found.programs = programs(heap, *value)?,
-            "roots" => found.roots = texts(heap, "roots", *value)?,
-            "install" => found.install = print::display(heap, *value),
-            "runs" => found.runs = value.truthy(),
-            _ => return Err(unknown(heap, pair[0])),
+            "program" => found.program = Some(print::display(heap, value)),
+            "args" => found.args = texts(heap, "args", value)?,
+            "programs" => found.programs = programs(heap, value)?,
+            "roots" => found.roots = texts(heap, "roots", value)?,
+            "install" => found.install = print::display(heap, value),
+            _ => found.runs = value.truthy(),
         }
     }
     Ok(found)
-}
-
-fn unknown(heap: &Heap, option: Value) -> Error {
-    Error::new(format!(
-        "{NATIVE} takes :languages, :program, :args, :programs, :roots, :install and :runs, not {}",
-        print::brief(heap, option)
-    ))
 }
 
 fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
@@ -145,7 +145,8 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", NATIVE)
-        .arity(1, None)
+        .arity(1, Some(1))
+        .keywords(&DEFINE)
         .host::<Editor>(define);
     isolate
         .native("ox", "language-server-ready?")
@@ -223,9 +224,7 @@ mod tests {
                 &mut ox,
                 r#"(define-language-server "x" :colour 1)"#
             )
-            .contains(
-                "define-language-server takes :languages, :program, :args, :programs, :roots, :install and :runs"
-            )
+            .contains("define-language-server has no keyword parameter :colour")
         );
     }
 

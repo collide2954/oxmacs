@@ -144,44 +144,21 @@ fn milliseconds(heap: &Heap, value: Value) -> Result<Duration, Error> {
 
 fn flash(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let (buffer, range) = span(heap, editor, "flash", arguments)?;
-    let mut shown = Highlight::Region;
-    let mut duration = DURATION;
-    for pair in arguments[2..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "face" => {
-                shown = face(heap, *value)?;
-            }
-            [Value::Keyword(option), value] if option.name() == "duration" => {
-                duration = milliseconds(heap, *value)?;
-            }
-            _ => {
-                return Err(Error::new(format!(
-                    "flash takes :face and :duration, not {}",
-                    print::brief(heap, pair[0])
-                )));
-            }
-        }
-    }
+    let shown = match arguments[2] {
+        Value::Nil => Highlight::Region,
+        given => face(heap, given)?,
+    };
+    let duration = match arguments[3] {
+        Value::Nil => DURATION,
+        given => milliseconds(heap, given)?,
+    };
     editor.flash(buffer, range, shown, duration, Instant::now());
     Ok(Value::Nil)
 }
 
 fn zap(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let (buffer, range) = span(heap, editor, "zap", arguments)?;
-    let mut failed = false;
-    for pair in arguments[2..].chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] if option.name() == "error" => {
-                failed = value.truthy();
-            }
-            _ => {
-                return Err(Error::new(format!(
-                    "zap takes :error, not {}",
-                    print::brief(heap, pair[0])
-                )));
-            }
-        }
-    }
+    let failed = arguments[2].truthy();
     let last = editor.buffer_by_id(buffer).map_or(0, Buffer::len_chars);
     evaluated(
         editor,
@@ -213,11 +190,13 @@ fn on_evaluate(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "flash")
-        .arity(2, Some(6))
+        .arity(2, Some(2))
+        .keywords(&["face", "duration"])
         .host::<Editor>(flash);
     isolate
         .native("ox", "zap")
-        .arity(2, Some(4))
+        .arity(2, Some(2))
+        .keywords(&["error"])
         .host::<Editor>(zap);
     isolate
         .native("ox", "on-evaluate")
@@ -316,7 +295,7 @@ mod tests {
         );
         assert_eq!(
             eval(&mut editor, &mut ox, "(flash 0 1 :speed 3)"),
-            "error: flash takes :face and :duration, not :speed"
+            "error: flash has no keyword parameter :speed"
         );
     }
 

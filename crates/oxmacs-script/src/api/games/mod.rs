@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use ox_lang::build::{make_map, make_vector};
 use ox_lang::heap::{Heap, Hold};
+use ox_lang::native::given;
 use ox_lang::value::{Value, print, to_float};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::ScopeId;
@@ -312,26 +313,11 @@ struct Options {
 }
 
 impl Options {
-    fn read(heap: &Heap, name: &str, rest: &[Value], known: &[&str]) -> Result<Self, Error> {
-        let mut pairs = Vec::new();
-        for pair in rest.chunks(2) {
-            match pair {
-                [Value::Keyword(key), value] if known.contains(&key.name()) => {
-                    pairs.push((key.name().to_owned(), *value));
-                }
-                [other, ..] => {
-                    let listed: Vec<String> = known.iter().map(|key| format!(":{key}")).collect();
-                    return Err(Error::new(format!(
-                        "{} takes {}, not {}",
-                        shown(name),
-                        listed.join(", "),
-                        print::brief(heap, *other)
-                    )));
-                }
-                [] => {}
-            }
-        }
-        Ok(Self { pairs })
+    fn slots(known: &[&str], values: &[Value]) -> Self {
+        let pairs = given(known, values)
+            .map(|(key, value)| (key.to_owned(), value))
+            .collect();
+        Self { pairs }
     }
 
     fn get(&self, key: &str) -> Option<Value> {
@@ -379,12 +365,7 @@ fn play(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         .text(arguments[0])
         .map(PathBuf::from)
         .ok_or_else(|| wrong(heap, "play-game", "the path of an Ox file", arguments[0]))?;
-    let options = Options::read(
-        heap,
-        "play-game",
-        &arguments[1..],
-        &["size", "smooth", "rate"],
-    )?;
+    let options = Options::slots(&["size", "smooth", "rate"], &arguments[1..]);
     let size = match options.get("size") {
         Some(value) => size_of(heap, "play-game", value)?,
         None => SIZE,
@@ -528,7 +509,7 @@ fn shape(
             &["width", "layer"],
         ),
     };
-    let options = Options::read(heap, name, rest, known)?;
+    let options = Options::slots(known, rest);
     let stroke = options
         .get("stroke")
         .map(|value| number(heap, name, value))
@@ -648,15 +629,13 @@ fn sprite(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     let name = "sprite";
     let index = image_id(heap, arguments[0])?;
     let at = point(heap, name, arguments[1])?;
-    let options = Options::read(
-        heap,
-        name,
-        &arguments[2..],
+    let options = Options::slots(
         &[
             "region", "rotation", "scale", "origin", "flip-x", "flip-y", "tint", "flash",
             "outline", "layer",
         ],
-    )?;
+        &arguments[2..],
+    );
     let region = options
         .get("region")
         .map(|value| rect(heap, name, value))
@@ -718,7 +697,7 @@ fn sprite(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
 fn text(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let shown = print::display(heap, arguments[0]);
     let at = point(heap, "text", arguments[1])?;
-    let options = Options::read(heap, "text", &arguments[2..], &["color", "size", "layer"])?;
+    let options = Options::slots(&["color", "size", "layer"], &arguments[2..]);
     let paint = options
         .get("color")
         .map(|value| color(heap, "text", value))
@@ -754,15 +733,17 @@ fn measure(isolate: &mut Isolate, name: &'static str, read: fn(&Game) -> Value) 
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "play-game")
-        .arity(1, None)
+        .arity(1, Some(1))
+        .keywords(&["size", "smooth", "rate"])
         .host::<Editor>(play);
     isolate
         .native(MODULE, "screen")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&["smooth"])
         .host::<Editor>(|heap, editor, arguments| {
             let width = number(heap, "screen", arguments[0])?;
             let height = number(heap, "screen", arguments[1])?;
-            let options = Options::read(heap, "screen", &arguments[2..], &["smooth"])?;
+            let options = Options::slots(&["smooth"], &arguments[2..]);
             let pair = make_vector(heap, &[Value::Float(width), Value::Float(height)])?;
             let size = size_of(heap, "screen", pair)?;
             let game = playing(editor)?;
@@ -868,19 +849,23 @@ fn install_drawing(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "rect")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&["stroke", "layer"])
         .host::<Editor>(|heap, editor, arguments| shape(heap, editor, arguments, "rect"));
     isolate
         .native(MODULE, "circle")
-        .arity(3, None)
+        .arity(3, Some(3))
+        .keywords(&["stroke", "layer"])
         .host::<Editor>(|heap, editor, arguments| shape(heap, editor, arguments, "circle"));
     isolate
         .native(MODULE, "line")
-        .arity(3, None)
+        .arity(3, Some(3))
+        .keywords(&["width", "layer"])
         .host::<Editor>(|heap, editor, arguments| shape(heap, editor, arguments, "line"));
     isolate
         .native(MODULE, "text")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&["color", "size", "layer"])
         .host::<Editor>(text);
     isolate
         .native(MODULE, "image")
@@ -892,7 +877,11 @@ fn install_drawing(isolate: &mut Isolate) {
         .host::<Editor>(cells);
     isolate
         .native(MODULE, "sprite")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&[
+            "region", "rotation", "scale", "origin", "flip-x", "flip-y", "tint", "flash",
+            "outline", "layer",
+        ])
         .host::<Editor>(sprite);
 }
 

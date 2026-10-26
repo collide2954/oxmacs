@@ -4,6 +4,7 @@ use std::ops::Range;
 use regex::Regex;
 
 use ox_lang::heap::{Heap, Hold};
+use ox_lang::native::given;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::ScopeId;
@@ -314,37 +315,35 @@ fn rules(heap: &Heap, value: Value) -> Result<Rules, Error> {
     Ok(found)
 }
 
-fn options(heap: &Heap, given: &[Value]) -> Result<Options, Error> {
+const DEFINE_MODE: [&str; 6] = [
+    "extensions",
+    "file-names",
+    "comment",
+    "keys",
+    "highlight",
+    "indent",
+];
+
+fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
     let mut found = Options::default();
-    for pair in given.chunks(2) {
-        match pair {
-            [Value::Keyword(option), value] => match option.name() {
-                "extensions" => found.extensions = texts(heap, *value)?,
-                "file-names" => found.file_names = texts(heap, *value)?,
-                "comment" => found.comment = Some(print::display(heap, *value)),
-                "keys" => {
-                    found.keys = heap
-                        .entries(*value)
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|(key, command)| (name_of(heap, key), name_of(heap, command)))
-                        .collect();
-                }
-                "highlight" => found.highlight = Some(*value),
-                "indent" => found.indent = rules(heap, *value)?,
-                _ => return Err(unknown(heap, pair[0])),
-            },
-            _ => return Err(unknown(heap, pair[0])),
+    for (option, value) in given(&DEFINE_MODE, slots) {
+        match option {
+            "extensions" => found.extensions = texts(heap, value)?,
+            "file-names" => found.file_names = texts(heap, value)?,
+            "comment" => found.comment = Some(print::display(heap, value)),
+            "keys" => {
+                found.keys = heap
+                    .entries(value)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(key, command)| (name_of(heap, key), name_of(heap, command)))
+                    .collect();
+            }
+            "highlight" => found.highlight = Some(value),
+            _ => found.indent = rules(heap, value)?,
         }
     }
     Ok(found)
-}
-
-fn unknown(heap: &Heap, option: Value) -> Error {
-    Error::new(format!(
-        "define-mode takes :extensions, :file-names, :comment, :keys, :highlight and :indent, not {}",
-        print::brief(heap, option)
-    ))
 }
 
 fn cached(editor: &Editor, id: BufferId, line: usize) -> Spans {
@@ -425,7 +424,8 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "define-mode")
-        .arity(2, None)
+        .arity(2, Some(2))
+        .keywords(&DEFINE_MODE)
         .host::<Editor>(define);
 }
 

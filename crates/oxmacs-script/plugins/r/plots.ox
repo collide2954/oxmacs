@@ -75,11 +75,11 @@
 (def (grid name plots)
   (let [across plots.gallery.columns
         paths plots.gallery.paths]
-    (ui/column :spacing 4
-               (map (fn [row] (ui/row :spacing 4
-                                      (map (fn [index] (thumbnail name plots index (nth paths index)))
-                                           (range (* row across) (min (count paths) (* (+ row 1) across))))))
-                    (range (// (+ (count paths) across -1) across))))))
+    (ui/column (map (fn [row] (ui/row (map (fn [index] (thumbnail name plots index (nth paths index)))
+                                           (range (* row across) (min (count paths) (* (+ row 1) across))))
+                                      :spacing 4))
+                    (range (// (+ (count paths) across -1) across)))
+               :spacing 4)))
 
 (def (render name)
   (let [plots (get @views name)]

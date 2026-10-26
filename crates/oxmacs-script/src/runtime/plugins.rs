@@ -827,22 +827,12 @@ fn configure(
     else {
         return vec![format!("There is no plugin named {name}")];
     };
-    let mut problems = Vec::new();
-    let mut disabled = false;
-    for pair in options.chunks(2) {
-        let [option, value] = pair else {
-            problems.push(format!("{} has no value", print::brief(heap, pair[0])));
-            continue;
-        };
-        match keyword(*option) {
-            Some("disabled") => disabled = value.truthy(),
-            Some("config") => problems.extend(merge(heap, plugin, *value)),
-            _ => problems.push(format!(
-                "use-plugin takes :config and :disabled, not {}",
-                print::brief(heap, *option)
-            )),
-        }
-    }
+    let [config, disabled] = [options[0], options[1]];
+    let problems = match config {
+        Value::Nil => Vec::new(),
+        config => merge(heap, plugin, config),
+    };
+    let disabled = disabled.truthy();
     plugin.active = !disabled;
     if disabled {
         for (command, _) in &plugin.manifest.commands {
@@ -895,7 +885,8 @@ fn setting(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "enable-plugin")
-        .arity(1, None)
+        .arity(1, Some(1))
+        .keywords(&["config", "disabled"])
         .host::<Editor>(|heap, editor, arguments| {
             enable(heap, editor, arguments);
             Ok(Value::Nil)

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use ox_lang::heap::Heap;
+use ox_lang::native::given;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::theme::Highlight;
@@ -328,14 +329,8 @@ fn pages(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         on_select: None,
         on_link: None,
     };
-    for pair in arguments[1..].chunks(2) {
-        let [Value::Keyword(option), value] = pair else {
-            return Err(Error::new(
-                "ui/pages takes :at, :typeface, :size, :spread, :marks, :header, :on-pages, :on-turn, :on-select and :on-link",
-            ));
-        };
-        let value = *value;
-        match option.name() {
+    for (option, value) in given(&PAGES, &arguments[1..]) {
+        match option {
             "at" => {
                 shown.at = match value {
                     Value::Keyword(name) if name.name() == "end" => At::End,
@@ -384,24 +379,36 @@ fn pages(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
             "on-pages" => shown.on_pages = Some(Press::Held(heap.hold(value))),
             "on-turn" => shown.on_turn = Some(Press::Held(heap.hold(value))),
             "on-select" => shown.on_select = Some(Press::Held(heap.hold(value))),
-            "on-link" => shown.on_link = Some(Press::Held(heap.hold(value))),
-            _ => {
-                return Err(Error::new(
-                    "ui/pages takes :at, :typeface, :size, :spread, :marks, :header, :on-pages, :on-turn, :on-select and :on-link",
-                ));
-            }
+            _ => shown.on_link = Some(Press::Held(heap.hold(value))),
         }
     }
     heap.foreign("pages", Node::Pages(Box::new(shown)))
         .map_err(|full| Error::new(full.to_string()))
 }
 
+const PAGES: [&str; 10] = [
+    "at",
+    "typeface",
+    "size",
+    "spread",
+    "marks",
+    "header",
+    "on-pages",
+    "on-turn",
+    "on-select",
+    "on-link",
+];
+
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native(UI, "document")
         .arity(1, Some(1))
         .function(document);
-    isolate.native(UI, "pages").arity(1, None).function(pages);
+    isolate
+        .native(UI, "pages")
+        .arity(1, Some(1))
+        .keywords(&PAGES)
+        .function(pages);
 }
 
 #[cfg(test)]

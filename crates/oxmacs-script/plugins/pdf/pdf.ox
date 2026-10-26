@@ -42,11 +42,11 @@
       (cond
         [(nil? doc) (ui/text "")]
         [doc.error
-         (ui/column :spacing 14
-                    (ui/space 40)
+         (ui/column (ui/space 40)
                     (ui/text doc.error :face :warning)
                     (when doc.missing
-                      (ui/button "Open the tool list" :on-press (fn [] (run-command 'list-tools)))))]
+                      (ui/button "Open the tool list" :on-press (fn [] (run-command 'list-tools))))
+                    :spacing 14)]
         [(nil? doc.pages) (ui/column (ui/space 40) (ui/text "Opening {name}…" :face :comment))]
         [else
          (ui/pdf doc.path

@@ -10,6 +10,7 @@ use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError};
 use std::time::SystemTime;
 
 use ox_lang::heap::Heap;
+use ox_lang::native::given;
 use ox_lang::portable::{Failure, Portable};
 use ox_lang::symbol::Sym;
 use ox_lang::value::{Value, print};
@@ -428,7 +429,17 @@ fn go(heap: &Heap, value: Value) -> Result<Option<(i64, Go)>, Error> {
     Ok(Some((id, to)))
 }
 
-const OPTIONS: &str = "ui/pdf takes :revision, :zoom, :continuous, :dark, :marks, :go, :on-view, :on-select and :on-link";
+const PDF: [&str; 9] = [
+    "revision",
+    "zoom",
+    "continuous",
+    "dark",
+    "marks",
+    "go",
+    "on-view",
+    "on-select",
+    "on-link",
+];
 
 fn view(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let path = PathBuf::from(text_of(heap, "ui/pdf", arguments[0])?);
@@ -444,12 +455,8 @@ fn view(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         on_select: None,
         on_link: None,
     };
-    for pair in arguments[1..].chunks(2) {
-        let [Value::Keyword(option), value] = pair else {
-            return Err(Error::new(OPTIONS));
-        };
-        let value = *value;
-        match option.name() {
+    for (option, value) in given(&PDF, &arguments[1..]) {
+        match option {
             "revision" => {
                 shown.revision = u64::try_from(whole(heap, "ui/pdf", value)?).unwrap_or_default();
             }
@@ -460,8 +467,7 @@ fn view(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
             "go" => shown.go = go(heap, value)?,
             "on-view" => shown.on_view = Some(Press::Held(heap.hold(value))),
             "on-select" => shown.on_select = Some(Press::Held(heap.hold(value))),
-            "on-link" => shown.on_link = Some(Press::Held(heap.hold(value))),
-            _ => return Err(Error::new(OPTIONS)),
+            _ => shown.on_link = Some(Press::Held(heap.hold(value))),
         }
     }
     heap.foreign("pdf", Node::Pdf(Box::new(shown)))
@@ -586,7 +592,11 @@ pub fn install(isolate: &mut Isolate) {
                     .map_err(failure)
             })
         });
-    isolate.native(UI, "pdf").arity(1, None).function(view);
+    isolate
+        .native(UI, "pdf")
+        .arity(1, Some(1))
+        .keywords(&PDF)
+        .function(view);
 }
 
 #[cfg(test)]

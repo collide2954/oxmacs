@@ -94,26 +94,12 @@ fn fill(heap: &mut Heap, bar: &mut Bar, arguments: &[Value]) -> Result<(), Error
         .into_iter()
         .map(|label| print::display(heap, label))
         .collect();
-    let mut selected = None;
-    for pair in arguments[1..].chunks(2) {
-        let [Value::Keyword(option), value] = pair else {
-            return Err(Error::new(format!(
-                "{NAME} takes :selected, :on-select, :on-close, :on-new and :on-move"
-            )));
-        };
-        match option.name() {
-            "selected" => selected = index(heap, *value)?,
-            "on-select" => bar.select = Some(heap.hold(*value)),
-            "on-close" => bar.close = Some(heap.hold(*value)),
-            "on-new" => bar.new = Some(heap.hold(*value)),
-            "on-move" => bar.moved = Some(heap.hold(*value)),
-            _ => {
-                return Err(Error::new(format!(
-                    "{NAME} takes :selected, :on-select, :on-close, :on-new and :on-move"
-                )));
-            }
-        }
-    }
+    let selected = index(heap, arguments[1])?;
+    let mut held = |value: Value| (value != Value::Nil).then(|| heap.hold(value));
+    bar.select = held(arguments[2]);
+    bar.close = held(arguments[3]);
+    bar.new = held(arguments[4]);
+    bar.moved = held(arguments[5]);
     if selected.is_some_and(|at| at >= tabs.len()) {
         return Err(Error::new(format!(
             "{NAME}'s :selected is past the last of {} tabs",
@@ -149,7 +135,8 @@ pub fn event(isolate: &mut Isolate, editor: &mut Editor, event: TabEvent) {
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", NAME)
-        .arity(1, None)
+        .arity(1, Some(1))
+        .keywords(&["selected", "on-select", "on-close", "on-new", "on-move"])
         .host::<Editor>(set_tab_bar);
 }
 
@@ -218,7 +205,7 @@ mod tests {
             ),
             (
                 r#"(set-tab-bar ["a"] :color 3)"#,
-                "set-tab-bar takes :selected, :on-select, :on-close, :on-new and :on-move",
+                "set-tab-bar has no keyword parameter :color",
             ),
         ] {
             assert_eq!(ox.eval(&mut editor, source).unwrap_err().message, message);
