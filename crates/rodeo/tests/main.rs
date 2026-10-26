@@ -3,6 +3,7 @@ mod camera;
 mod clock;
 mod collide;
 mod ease;
+mod grid;
 mod random;
 mod rect;
 mod sweep;

@@ -1,5 +1,7 @@
+mod grid;
 mod sweep;
 
+pub use grid::Grid;
 pub use sweep::{Contact, Hit, Moved, slide, sweep};
 
 use crate::rect::Rect;
