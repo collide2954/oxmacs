@@ -399,6 +399,9 @@ impl<'a, Message> PagesView<'a, Message> {
                             0.0,
                             String::new(),
                         ),
+                        Kind::Verse => {
+                            (em, em, base, text::Alignment::Left, 0.0, 0.0, String::new())
+                        }
                         Kind::Center => (
                             0.0,
                             em,

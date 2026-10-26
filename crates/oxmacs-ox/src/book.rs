@@ -26,6 +26,7 @@ pub enum Kind {
     Item { marker: String, depth: u8 },
     Pre,
     Center,
+    Verse,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -184,6 +185,7 @@ fn block(heap: &Heap, value: Value) -> Result<Block, Error> {
         "paragraph" => text(Kind::Body),
         "quote" => text(Kind::Quote),
         "center" => text(Kind::Center),
+        "verse" => text(Kind::Verse),
         "heading" => {
             let level = count(heap, "ui/document", field(heap, value, "level"))?;
             text(Kind::Heading(u8::try_from(level.clamp(1, 6)).unwrap_or(1)))
@@ -229,7 +231,7 @@ fn block(heap: &Heap, value: Value) -> Result<Block, Error> {
         }
         "rule" => Ok(Block::Rule),
         other => Err(Error::new(format!(
-            "ui/document doesn't know blocks of kind :{other}; use :paragraph, :heading, :quote, :item, :pre, :center, :image or :rule"
+            "ui/document doesn't know blocks of kind :{other}; use :paragraph, :heading, :quote, :item, :pre, :center, :verse, :image or :rule"
         ))),
     }
 }
@@ -416,6 +418,7 @@ mod tests {
                        {kind: :item runs: ["x"] marker: "1." depth: 1}
                        {kind: :pre text: "code"}
                        {kind: :rule}
+                       {kind: :verse runs: ["Tyger Tyger"]}
                        {kind: :image image: (image/new 2 2) alt: "dot"}]))
 (open-view "*book*" (fn [] (ui/pages doc :at [1 3] :typeface :sans :size 20 :spread :double
                                          :marks [{from: [1 0] to: [1 2] face: :marked}]
@@ -440,7 +443,7 @@ mod tests {
 
         let pages = shown(&editor);
         let blocks = &pages.document.0.blocks;
-        assert_eq!(blocks.len(), 6);
+        assert_eq!(blocks.len(), 7);
         assert_eq!(
             blocks[1],
             Block::Text {
@@ -480,7 +483,14 @@ mod tests {
             }
         ));
         assert_eq!(blocks[4], Block::Rule);
-        assert!(matches!(&blocks[5], Block::Image { alt, .. } if alt == "dot"));
+        assert!(matches!(
+            &blocks[5],
+            Block::Text {
+                kind: Kind::Verse,
+                ..
+            }
+        ));
+        assert!(matches!(&blocks[6], Block::Image { alt, .. } if alt == "dot"));
         assert_eq!(pages.at, At::Anchor(1, 3));
         assert_eq!(pages.typeface, Typeface::Sans);
         assert_eq!(pages.spread, Spread::Double);
