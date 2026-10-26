@@ -141,6 +141,26 @@ fn every_sftp_transfer_gets_a_file_of_its_own() {
 }
 
 #[test]
+fn remote_files_are_edited_through_copies_inside_the_oxmacs_home() {
+    let (_home, mut editor, mut ox) = started("");
+
+    let found = eval(
+        &mut editor,
+        &mut ox,
+        r#"(module (import (remote ops :as ops) (ox path)))
+           (let [base (path/join (oxmacs-home) "remote")]
+             [(= (ops/local-copy {name: "box:2"} "/home/ana/notes.txt")
+                 (path/join base "box_2" "home" "ana" "notes.txt"))
+              (= (ops/local-copy {name: "win"} "C:\\Users\\ana\\a.txt")
+                 (path/join base "win" "C_" "Users" "ana" "a.txt"))
+              (= (ops/local-copy {name: "a/b"} "/srv/../etc/./why?.txt")
+                 (path/join base "a_b" "srv" "etc" "why_.txt"))])"#,
+    );
+
+    assert_eq!(found, "[true true true]");
+}
+
+#[test]
 fn remote_files_open_locally_and_go_back_when_saved() {
     let (far, _home, mut editor, mut ox) = browsing();
     let listing = editor.buffer().contents();

@@ -106,12 +106,8 @@
              (let [found (browser)]
                (browse! found.host (ops/parent-of found.dir))))))
 
-(def (cache-path host remote)
-  (path/join (oxmacs-home) "remote" (string/replace host.name ":" "_")
-             (string/replace (string/replace remote ":" "_") "/" (path/separator))))
-
 (def (open-remote! host remote {line nil})
-  (let [local (cache-path host remote)]
+  (let [local (ops/local-copy host remote)]
     (message (str "Fetching " remote "…"))
     (await (file/make-dir (path/parent local)))
     (await (file/write local (ops/read-text host remote)))

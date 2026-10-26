@@ -4,7 +4,7 @@
           (remote hosts :as hosts)
           (vault store :as vault))
   (export home list-dir parse-listing read-text download! upload! remove! rename! make-dir! run search join-path
-          parent-of ftp-url can-run? transfer-file))
+          parent-of ftp-url can-run? transfer-file local-copy))
 
 (def listing-pattern
   "^([-dlbcpsD])([-rwxsStT]{{9})\\S*\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\d{{4}-\\d{{2}-\\d{{2} \\d{{2}:\\d{{2}|[A-Z][a-z]{{2}\\s+\\d{{1,2}\\s+(?:\\d{{4}|\\d{{1,2}:\\d{{2}))\\s(.*)$")
@@ -79,6 +79,17 @@
 (def (transfer-file)
   "A file of its own in the oxmacs home for one sftp transfer to pass through."
   (path/join (oxmacs-home) "remote" (str ".transfer-" (crypto/random 8))))
+
+(def unsafe-characters [":" "<" ">" "\"" "|" "?" "*" "/" "\\"])
+
+(def (safe-name text)
+  (reduce (fn [out bad] (string/replace out bad "_")) text unsafe-characters))
+
+(def (local-copy host remote)
+  "The local file a remote file on host is edited through, inside the oxmacs home's remote folder."
+  (let [parts (remove (fn [part] (contains? #{"" "." ".."} part))
+                      (string/split (string/replace remote "\\" "/") "/"))]
+    (apply path/join (concat [(oxmacs-home) "remote" (safe-name host.name)] (map safe-name parts)))))
 
 (def (sftp-word text)
   (str "\"" (string/replace (string/replace text "\\" "\\\\") "\"" "\\\"") "\""))
