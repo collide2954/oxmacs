@@ -444,7 +444,7 @@ impl<'a, Message> BufferView<'a, Message> {
             bounds.x + column * cell.width,
             bounds.y + (row + state.shift()) * cell.height,
         );
-        if origin.y + cell.height <= bounds.y || origin.y >= bounds.y + bounds.height {
+        if !within(origin.y, cell.height, bounds) {
             return None;
         }
         let (glyph, width) = self.pane.cursor_glyph();
@@ -764,6 +764,10 @@ impl<'a, Message> BufferView<'a, Message> {
             .pane
             .screen_rows(floor_to_isize(-shift), self.pane.viewport().rows() + 2)
         {
+            let y = bounds.y + (signed_to_f32(row.offset) + shift) * cell.height;
+            if !within(y, cell.height, bounds) {
+                continue;
+            }
             if lines.last().is_none_or(|line| line.number != row.line) {
                 let text = buffer.line_text(row.line);
                 let span = buffer.line_start(row.line)..buffer.line_end(row.line);
@@ -824,7 +828,6 @@ impl<'a, Message> BufferView<'a, Message> {
                         .is_some_and(|lines| !lines.contains(&row.line)),
                 });
             }
-            let y = bounds.y + (signed_to_f32(row.offset) + shift) * cell.height;
             let rectangle = Rectangle::new(
                 Point::new(bounds.x, y),
                 Size::new(bounds.width, cell.height),
@@ -1005,6 +1008,11 @@ fn clicks(kind: click::Kind) -> Clicks {
         click::Kind::Double => Clicks::Double,
         click::Kind::Triple => Clicks::Triple,
     }
+}
+
+fn within(y: f32, height: f32, bounds: Rectangle) -> bool {
+    const SLACK: f32 = 0.5;
+    y >= bounds.y - SLACK && y + height <= bounds.y + bounds.height + SLACK
 }
 
 pub fn is_monospaced(narrow_width: f32, wide_width: f32) -> bool {
@@ -1190,6 +1198,46 @@ mod tests {
         assert_eq!(lines[1].flashes, [((0, Some(1)), Highlight::Removed, 1.0)]);
         assert!(view.pane.flashing(now));
         assert!(!view.pane.flashing(now + Duration::from_millis(500)));
+    }
+
+    #[test]
+    fn only_rows_inside_the_window_are_laid_out_since_some_renderers_do_not_clip_text() {
+        let text: String = (0..50).map(|number| format!("line {number}\n")).collect();
+        let mut buffer = Buffer::with_text("t", &text);
+        buffer.set_point(0);
+        let mut editor = oxmacs_core::editor::Editor::with_buffer(buffer);
+        let window = editor.selected_window();
+        editor.resize_pane(window, 5, 40);
+        let view = BufferView::new(
+            editor.pane(),
+            window,
+            oxmacs_core::theme::ADWAITA,
+            Font::MONOSPACE,
+            16.0,
+            Motion {
+                enabled: false,
+                last_input: Instant::now(),
+                blink_interval: Duration::ZERO,
+            },
+            ignored,
+        );
+        let state = State {
+            metrics: Metrics {
+                cell: CELL,
+                ..Metrics::default()
+            },
+            ..State::default()
+        };
+        let body = Rectangle::new(Point::new(0.0, 30.0), Size::new(400.0, 5.0 * CELL.height));
+
+        let (_, rows) = view.lay_out_rows(&state, body);
+
+        assert_eq!(rows.len(), 5);
+        assert!(
+            rows.iter()
+                .all(|(_, row)| row.y >= body.y && row.y + row.height <= body.y + body.height),
+            "{rows:?}"
+        );
     }
 
     #[test]

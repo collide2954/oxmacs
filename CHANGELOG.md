@@ -34,6 +34,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Text no longer spills past the bottom of a window over its mode line and the echo area where oxmacs draws without a GPU, as under WSL: a window draws only the rows that fit in it instead of relying on the renderer to cut off the rest.
 - `set-lines` with `:line` moves every window showing the buffer there, not only the selected one.
 - Hooks such as `on-window-change` hear what an Ox command changed as soon as it finishes, instead of at the next key press.
 - `(expect event.all-day)` checks the field, as `(expect (= event.all-day true))` does, instead of failing with `. is not defined`.
