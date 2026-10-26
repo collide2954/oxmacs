@@ -6,7 +6,7 @@
 (clipboard-set text) "Puts text on the system clipboard without adding it to the kill ring, for secrets."
 (notify title body) "Shows a desktop notification with title and body."
 (window-focused?) "True while the oxmacs window has the keyboard focus."
-(vault-read-kdbx path password) "A promise of the entries of the KeePass database at path, each a map of :title, :username, :password, :url, :notes, :totp and :group, leaving out its recycle bin."
+(keepass/read path password) "A promise of the entries of the KeePass database at path, each a map of :title, :username, :password, :url, :notes, :totp and :group, leaving out its recycle bin."
 (define-command name summary f) "Adds an M-x command called name that calls f. defcommand is the usual way to write one."
 (bind-key keys command) "Binds a key sequence such as \"C-c g\" to a command everywhere."
 (run-command command) "Runs a command by name, as M-x would, such as (run-command 'load-theme)."

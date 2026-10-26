@@ -39,12 +39,13 @@ fn read(path: &str, password: &str) -> Result<Json, String> {
 
 pub fn install(isolate: &mut Isolate) {
     isolate
-        .native("ox", "vault-read-kdbx")
+        .native("ox/keepass", "read")
         .arity(2, Some(2))
+        .outside()
         .host::<Editor>(|heap, _, arguments| {
             let path = print::display(heap, arguments[0]);
             let password = print::display(heap, arguments[1]);
-            heap.background_json("vault-read-kdbx", move || read(&path, &password))
+            heap.background_json("keepass/read", move || read(&path, &password))
         });
 }
 
@@ -82,7 +83,7 @@ mod tests {
         ox.eval(
             &mut editor,
             &format!(
-                "(def found (atom nil)) (spawn (reset! found (await (vault-read-kdbx {:?} \"open sesame\"))))",
+                "(module (import (ox keepass))) (def found (atom nil)) (spawn (reset! found (await (keepass/read {:?} \"open sesame\"))))",
                 path.display().to_string()
             ),
         )
@@ -100,7 +101,7 @@ mod tests {
         ox.eval(
             &mut editor,
             &format!(
-                "(spawn (reset! found (try (await (vault-read-kdbx {:?} \"wrong\")) (catch error e e.message))))",
+                "(module (import (ox keepass))) (spawn (reset! found (try (await (keepass/read {:?} \"wrong\")) (catch error e e.message))))",
                 path.display().to_string()
             ),
         )

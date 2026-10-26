@@ -1,5 +1,5 @@
 (module
-  (import (ox csv) (ox file) (ox path) (ox process) (ox string))
+  (import (ox csv) (ox file) (ox keepass) (ox path) (ox process) (ox string))
   (export bitwarden one-password pass keepass))
 
 (def (filled value)
@@ -75,4 +75,4 @@
 (def (keepass file password)
   "The entries of a KeePass database."
   (vec (map (fn [entry] (dissoc entry :group))
-            (await (vault-read-kdbx file password)))))
+            (await (keepass/read file password)))))

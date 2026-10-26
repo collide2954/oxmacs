@@ -86,6 +86,7 @@ ox/crypto      Hashes, encryption with a password, random numbers, base64 and on
 ox/image       Opening, editing, drawing on and saving images, with filters and color adjustments
 ox/zip         Reading the files inside zip archives, such as EPUB books
 ox/pdf         PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only
+ox/keepass     KeePass databases: reading their entries; in oxmacs only
 ox/ui          Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only
 rodeo          Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only
 rodeo/vec      Plain [x y] vectors for games: adding, scaling, lengths, angles and turning

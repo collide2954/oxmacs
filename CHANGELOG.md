@@ -37,6 +37,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `vault-read-kdbx` is now `keepass/read` in `(ox keepass)`, and like every native that reads files it doesn't run while code is only being checked.
 - `ox check`, `ox test`, `ox lsp`, `ox perf` and `C-c C-t` know rodeo's game modules and the editor's own modules, `(ox ui)`, `(ox pdf)` and `(rodeo)`, in every file, so a game checks clean outside oxmacs instead of failing with `No module named rodeo`. The rest of the editor API is known in editor code: `init.ox`, `custom.ox`, plugin folders and files in the oxmacs home.
 - Ox files open in oxmacs are checked the way `ox check` checks them, so a script outside the oxmacs home that calls an editor function such as `message` is flagged instead of passing in the editor and failing under `ox`.
 - R Markdown prose is styled as Markdown's is, with quotes, list markers, `code`, **strong** text and links as well as headings.
@@ -162,6 +163,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `vault-read-kdbx` is now `keepass/read` in `(ox keepass)`, and like every native that reads files it doesn't run while code is only being checked.
 - `ox check`, `ox test`, `ox lsp`, `ox perf` and `C-c C-t` know rodeo's game modules and the editor's own modules, `(ox ui)`, `(ox pdf)` and `(rodeo)`, in every file, so a game checks clean outside oxmacs instead of failing with `No module named rodeo`. The rest of the editor API is known in editor code: `init.ox`, `custom.ox`, plugin folders and files in the oxmacs home.
 - Ox files open in oxmacs are checked the way `ox check` checks them, so a script outside the oxmacs home that calls an editor function such as `message` is flagged instead of passing in the editor and failing under `ox`.
 - Settings are Ox: `(settings {theme: :adwaita-dark tab-width: 4})` in `~/.oxmacs/init.ox` sets them, and plugins take theirs from `use-plugin`'s `:config`. `custom.ox` and `init.ox` run before the window opens, so the theme, font and window mode apply from the first frame, and saving either runs both again from fresh settings. `M-x find-init-file` replaces `find-config-file`.
@@ -227,6 +229,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `vault-read-kdbx` is now `keepass/read` in `(ox keepass)`, and like every native that reads files it doesn't run while code is only being checked.
 - `ox check`, `ox test`, `ox lsp`, `ox perf` and `C-c C-t` know rodeo's game modules and the editor's own modules, `(ox ui)`, `(ox pdf)` and `(rodeo)`, in every file, so a game checks clean outside oxmacs instead of failing with `No module named rodeo`. The rest of the editor API is known in editor code: `init.ox`, `custom.ox`, plugin folders and files in the oxmacs home.
 - Ox files open in oxmacs are checked the way `ox check` checks them, so a script outside the oxmacs home that calls an editor function such as `message` is flagged instead of passing in the editor and failing under `ox`.
 - `M-x load-theme` starts on the theme in use and previews the selected theme across the whole editor; `C-g` puts the old one back.
@@ -256,6 +259,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `vault-read-kdbx` is now `keepass/read` in `(ox keepass)`, and like every native that reads files it doesn't run while code is only being checked.
 - `ox check`, `ox test`, `ox lsp`, `ox perf` and `C-c C-t` know rodeo's game modules and the editor's own modules, `(ox ui)`, `(ox pdf)` and `(rodeo)`, in every file, so a game checks clean outside oxmacs instead of failing with `No module named rodeo`. The rest of the editor API is known in editor code: `init.ox`, `custom.ox`, plugin folders and files in the oxmacs home.
 - Ox files open in oxmacs are checked the way `ox check` checks them, so a script outside the oxmacs home that calls an editor function such as `message` is flagged instead of passing in the editor and failing under `ox`.
 - The project is now called oxmacs: the binary, window title, `*oxmacs*` splash, `about-oxmacs`, `kill-oxmacs`, `save-buffers-kill-oxmacs` and `oxmacs-doctor`. Settings now live in the `oxmacs` folder of the platform config directory.
@@ -294,6 +298,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `vault-read-kdbx` is now `keepass/read` in `(ox keepass)`, and like every native that reads files it doesn't run while code is only being checked.
 - `ox check`, `ox test`, `ox lsp`, `ox perf` and `C-c C-t` know rodeo's game modules and the editor's own modules, `(ox ui)`, `(ox pdf)` and `(rodeo)`, in every file, so a game checks clean outside oxmacs instead of failing with `No module named rodeo`. The rest of the editor API is known in editor code: `init.ox`, `custom.ox`, plugin folders and files in the oxmacs home.
 - Ox files open in oxmacs are checked the way `ox check` checks them, so a script outside the oxmacs home that calls an editor function such as `message` is flagged instead of passing in the editor and failing under `ox`.
 - The `*mx*` splash lists `C-s` for search.
@@ -308,6 +313,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `vault-read-kdbx` is now `keepass/read` in `(ox keepass)`, and like every native that reads files it doesn't run while code is only being checked.
 - `ox check`, `ox test`, `ox lsp`, `ox perf` and `C-c C-t` know rodeo's game modules and the editor's own modules, `(ox ui)`, `(ox pdf)` and `(rodeo)`, in every file, so a game checks clean outside oxmacs instead of failing with `No module named rodeo`. The rest of the editor API is known in editor code: `init.ox`, `custom.ox`, plugin folders and files in the oxmacs home.
 - Ox files open in oxmacs are checked the way `ox check` checks them, so a script outside the oxmacs home that calls an editor function such as `message` is flagged instead of passing in the editor and failing under `ox`.
 - Long lines wrap onto continuation rows marked with `\`, like Emacs; `C-n`/`C-p`, the mouse wheel and clicks work by screen rows.
@@ -338,6 +344,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `vault-read-kdbx` is now `keepass/read` in `(ox keepass)`, and like every native that reads files it doesn't run while code is only being checked.
 - `ox check`, `ox test`, `ox lsp`, `ox perf` and `C-c C-t` know rodeo's game modules and the editor's own modules, `(ox ui)`, `(ox pdf)` and `(rodeo)`, in every file, so a game checks clean outside oxmacs instead of failing with `No module named rodeo`. The rest of the editor API is known in editor code: `init.ox`, `custom.ox`, plugin folders and files in the oxmacs home.
 - Ox files open in oxmacs are checked the way `ox check` checks them, so a script outside the oxmacs home that calls an editor function such as `message` is flagged instead of passing in the editor and failing under `ox`.
 - `RET` on a bare directory in `C-x C-f` opens it in dired instead of showing `[Directory]`.
@@ -408,6 +415,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `vault-read-kdbx` is now `keepass/read` in `(ox keepass)`, and like every native that reads files it doesn't run while code is only being checked.
 - `ox check`, `ox test`, `ox lsp`, `ox perf` and `C-c C-t` know rodeo's game modules and the editor's own modules, `(ox ui)`, `(ox pdf)` and `(rodeo)`, in every file, so a game checks clean outside oxmacs instead of failing with `No module named rodeo`. The rest of the editor API is known in editor code: `init.ox`, `custom.ox`, plugin folders and files in the oxmacs home.
 - Ox files open in oxmacs are checked the way `ox check` checks them, so a script outside the oxmacs home that calls an editor function such as `message` is flagged instead of passing in the editor and failing under `ox`.
 - Binary moved to `crates/mx`; the repository root is a virtual workspace.

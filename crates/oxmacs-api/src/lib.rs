@@ -44,6 +44,10 @@ const EDITOR_MODULES: &[(&str, &str)] = &[
         "PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only",
     ),
     (
+        "ox/keepass",
+        "KeePass databases: reading their entries; in oxmacs only",
+    ),
+    (
         "ox/ui",
         "Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only",
     ),
