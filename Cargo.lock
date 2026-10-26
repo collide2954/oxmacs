@@ -3846,7 +3846,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ox-cli"
+name = "ox"
 version = "0.14.0"
 dependencies = [
  "ox-lang",

@@ -38,7 +38,7 @@ Every CI run builds `oxmacs` and `ox` in release mode for Linux (x86_64), macOS 
 oxmacs is moving its features into Ox, an extension language of its own: a modern Scheme with a fast bytecode VM, built in [crates/ox-lang](crates/ox-lang), with its file, process, network, HTTP, cryptography, CSV and image modules in [crates/ox-library](crates/ox-library), and documented in the Ox manual inside oxmacs, on `C-h i`. The `ox` command runs `.ox` files and opens a REPL, and `ox check`, `ox test`, `ox profile` and `ox perf` check, test, profile and benchmark Ox code:
 
 ```sh
-cargo run -p ox-cli -- hello.ox
+cargo run -p ox -- hello.ox
 ```
 
 Most of oxmacs is bundled Ox plugins. Those on by default load the first time you use them; opt-in plugins stay off until `(use-plugin name)` in `init.ox`. The rest of the former Cargo-feature applets (Atlas, the database browser, the extra themes and the animated start screen) return the same way.

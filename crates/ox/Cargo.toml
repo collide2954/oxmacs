@@ -1,5 +1,5 @@
 [package]
-name = "ox-cli"
+name = "ox"
 version.workspace = true
 description = "The ox command: run, test, check, profile and benchmark Ox code"
 edition.workspace = true
@@ -7,10 +7,6 @@ rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
 autotests = false
-
-[[bin]]
-name = "ox"
-path = "src/main.rs"
 
 [dependencies]
 ox-lang.workspace = true

@@ -100,9 +100,9 @@ jobs:
       - name: Ox format, check and test
         if: matrix.os == 'ubuntu-latest'
         run: |
-          cargo run -q -p ox-cli --locked -- fmt --check crates/oxmacs-ox/plugins crates/oxmacs-ox/src crates/oxmacs-api/src crates/ox-lang/src/library crates/ox-library/src crates/ox-perf/benchmarks crates/rodeo/src
-          cargo run -q -p ox-cli --locked -- check crates/oxmacs-ox/plugins
-          cargo run -q -p ox-cli --locked -- test crates/oxmacs-ox/plugins
+          cargo run -q -p ox --locked -- fmt --check crates/oxmacs-ox/plugins crates/oxmacs-ox/src crates/oxmacs-api/src crates/ox-lang/src/library crates/ox-library/src crates/ox-perf/benchmarks crates/rodeo/src
+          cargo run -q -p ox --locked -- check crates/oxmacs-ox/plugins
+          cargo run -q -p ox --locked -- test crates/oxmacs-ox/plugins
 
   check:
     name: ${{ matrix.name }}
@@ -149,7 +149,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
-        run: cargo build --release --locked -p oxmacs -p ox-cli
+        run: cargo build --release --locked -p oxmacs -p ox
       - name: Package the executables
         id: package
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -201,7 +201,7 @@ jobs:
           key: fedora-${{ matrix.fedora }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
       - name: Build
-        run: cargo build --release --locked -p oxmacs -p ox-cli
+        run: cargo build --release --locked -p oxmacs -p ox
       - name: Version
         id: version
         run: |

@@ -10,7 +10,7 @@ const OX_LSP: ServerSpec = ServerSpec {
     languages: &[("Ox", "ox")],
     programs: &[(env!("CARGO_BIN_EXE_ox"), &["lsp"])],
     roots: &["init.ox"],
-    install: "cargo install --path crates/ox-cli",
+    install: "cargo install --path crates/ox",
     runs: true,
 };
 
