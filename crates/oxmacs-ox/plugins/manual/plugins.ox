@@ -96,11 +96,11 @@ irc          0.9.7    opt-in   An IRCv3 client in the style of ERC
 keycast      0.2.2    opt-in   Shows the keys you press and the commands they run, for demos
 languages    0.1.0    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
 life         0.2.2    opt-in   Conway's Game of Life on a canvas
-manual       0.5.30   on       The oxmacs tutorial and the Ox manual
+manual       0.5.31   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.3    opt-in   Markdown rendered as styled text
 processes    0.1.1    on       List the processes oxmacs runs, with their usage
 profiler     0.1.1    on       Find where the Ox code in oxmacs spends its time
-r            0.18.5   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
+r            0.18.6   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
 remote       0.1.7    on       Browse and edit files on other machines over ssh, sftp and ftp
 screensaver  0.2.2    opt-in   A starfield or matrix rain after a while without input
 tabs         0.1.0    opt-in   Workspace tabs across the top, each keeping its own windows

@@ -42,9 +42,10 @@
                              [[help-line :comment]]
                              []]
                      :keys job-keys :beside true)
-        (spawn (pump process.errors buffer run on-line :warning))
-        (spawn (do (pump process.lines buffer run on-line nil)
-                 (finished buffer run (await process.exit))))
+        (let [errors (spawn (pump process.errors buffer run on-line :warning))]
+          (spawn (do (pump process.lines buffer run on-line nil)
+                   (await errors)
+                   (finished buffer run (await process.exit)))))
         process))))
 
 (defcommand r-job-stop "Stop the job of this buffer"
