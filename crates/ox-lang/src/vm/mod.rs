@@ -22,12 +22,12 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::builtins::collections;
 use crate::bytecode::{Capture, Code, Op, Prim, Register};
 use crate::describe::Place;
 use crate::error::{Error, ErrorKind, Frame as Trace};
 use crate::heap::{Closure, Heap};
 use crate::isolate::Isolate;
-use crate::library::collections;
 use crate::native::{Control, NativeFn};
 use crate::portable::Portable;
 use crate::profile::{Profile, Profiler};

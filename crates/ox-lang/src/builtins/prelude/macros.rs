@@ -1,8 +1,8 @@
+use crate::builtins::collections::{self, is_list};
 use crate::error::Error;
 use crate::forms::BUILT_IN;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
-use crate::library::collections::{self, is_list};
 use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::equal::equal;

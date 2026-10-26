@@ -1,6 +1,6 @@
+use crate::builtins::errors::catches;
 use crate::error::{Error, ErrorKind};
 use crate::isolate::Isolate;
-use crate::library::errors::catches;
 use crate::native::Control;
 use crate::value::Value;
 use crate::vm::Runtime;

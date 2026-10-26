@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
 
+use crate::builtins::collections;
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
-use crate::library::collections;
 use crate::value::Value;
 use crate::value::equal::identical;
 use crate::value::number::Number;

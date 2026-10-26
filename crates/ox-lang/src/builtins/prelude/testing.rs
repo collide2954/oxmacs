@@ -1,8 +1,8 @@
+use crate::builtins::collections;
+use crate::builtins::output;
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
-use crate::library::collections;
-use crate::library::output;
 use crate::native::Drains;
 use crate::value::{Value, print};
 use crate::vm::build::{full, make_set, make_vector};

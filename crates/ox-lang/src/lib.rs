@@ -1,3 +1,4 @@
+mod builtins;
 pub mod bytecode;
 pub mod check;
 mod compile;
@@ -8,7 +9,6 @@ pub mod format;
 pub mod forms;
 pub mod heap;
 mod isolate;
-mod library;
 pub mod names;
 pub mod native;
 pub mod portable;
@@ -21,7 +21,7 @@ pub mod testing;
 pub mod value;
 mod vm;
 
+pub use builtins::MODULES;
 pub use error::Error;
 pub use isolate::Isolate;
-pub use library::MODULES;
 pub use vm::{Runtime, build, routine};

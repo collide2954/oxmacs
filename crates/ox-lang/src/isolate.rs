@@ -7,6 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
+use crate::builtins;
 use crate::bytecode::Prim;
 use crate::check::{self, Diagnostic};
 use crate::compile::compile;
@@ -15,7 +16,6 @@ use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
 use crate::forms::Forms;
 use crate::heap::{Closure, Heap, Hold, Rooted};
-use crate::library;
 use crate::native::{Control, Drains, Native, NativeFn};
 use crate::portable::{Failure, Portable};
 use crate::profile::Profile;
@@ -32,7 +32,7 @@ use crate::vm::modules::{Import, Module, ModuleId, PRELUDE, USER};
 use crate::vm::routine::{Resumable, Started};
 use crate::vm::{Runtime, Sources};
 
-const LIBRARY_DOCS: &str = include_str!("library/docs.ox");
+const LIBRARY_DOCS: &str = include_str!("builtins/docs.ox");
 const TASK_SLICE: Duration = Duration::from_millis(50);
 const IDLE_POLL: Duration = Duration::from_millis(2);
 
@@ -172,7 +172,7 @@ impl Isolate {
             doc_tables: vec![LIBRARY_DOCS],
             docs: OnceCell::new(),
         };
-        library::install(&mut isolate);
+        builtins::install(&mut isolate);
         let apply = isolate.runtime.lookup(PRELUDE, Sym::intern("apply"));
         isolate.runtime.apply = apply.unwrap_or(Value::Nil);
         for prim in Prim::ALL {
@@ -775,7 +775,7 @@ impl Isolate {
 
     fn install(&mut self, module: &str, name: &str, native: Native) -> Option<Value> {
         let native = Native {
-            outside: library::reaches_outside(module, native.name.name()),
+            outside: builtins::reaches_outside(module, native.name.name()),
             ..native
         };
         let place = self.runtime.module_named(module);

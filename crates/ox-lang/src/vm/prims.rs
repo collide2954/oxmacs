@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 
+use crate::builtins::numbers::{quick, quick_holds};
 use crate::bytecode::Prim;
 use crate::heap::Heap;
-use crate::library::numbers::{quick, quick_holds};
 use crate::value::Value;
 
 pub(crate) fn quick_prim(heap: &Heap, prim: Prim, a: Value, b: Value) -> Option<Value> {

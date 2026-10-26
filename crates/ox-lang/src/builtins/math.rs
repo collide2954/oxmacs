@@ -3,10 +3,10 @@ use std::f64::consts;
 
 use num_bigint::BigInt;
 
+use crate::builtins::collections;
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
-use crate::library::collections;
 use crate::value::Value;
 use crate::value::number::{Number, shrink, to_float};
 use crate::value::print;

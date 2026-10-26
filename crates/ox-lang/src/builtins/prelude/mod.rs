@@ -8,10 +8,10 @@ mod testing;
 
 use std::cmp::Ordering;
 
+use crate::builtins::{collections, numbers};
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
-use crate::library::{collections, numbers};
 use crate::native::Drains;
 use crate::value::Value;
 

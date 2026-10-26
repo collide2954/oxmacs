@@ -1,7 +1,7 @@
+use crate::builtins::collections::{self, map_or_nil};
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
-use crate::library::collections::{self, map_or_nil};
 use crate::native::Drains;
 use crate::symbol::Sym;
 use crate::value::Value;

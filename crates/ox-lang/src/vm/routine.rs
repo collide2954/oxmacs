@@ -240,9 +240,9 @@ impl Routine for Drain {
 #[cfg(test)]
 mod tests {
     use super::{Next, Routine, Started};
+    use crate::builtins::collections;
     use crate::error::Error;
     use crate::isolate::Isolate;
-    use crate::library::collections;
     use crate::span::Span;
     use crate::value::Value;
     use crate::vm::Runtime;

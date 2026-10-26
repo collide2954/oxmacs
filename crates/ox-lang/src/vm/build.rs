@@ -1,6 +1,6 @@
+use crate::builtins::collections;
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
-use crate::library::collections;
 use crate::native::arguments;
 use crate::symbol::Sym;
 use crate::value::Value;

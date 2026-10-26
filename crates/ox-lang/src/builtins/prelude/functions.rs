@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
+use crate::builtins::{collections, not_an_atom};
 use crate::error::Error;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
-use crate::library::{collections, not_an_atom};
 use crate::native::Control;
 use crate::symbol::Sym;
 use crate::value::Value;
