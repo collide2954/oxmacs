@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use ox::Isolate;
+use ox_lang::Isolate;
 
 fn evaluated(isolate: &mut Isolate, source: &str) -> String {
     let source = format!("(module (import (ox file) (ox path))) {source}");

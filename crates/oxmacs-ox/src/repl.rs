@@ -5,10 +5,10 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use ox::span::Span;
-use ox::task::TaskId;
-use ox::value::Value;
-use ox::{Error, read};
+use ox_lang::span::Span;
+use ox_lang::task::TaskId;
+use ox_lang::value::Value;
+use ox_lang::{Error, read};
 use oxmacs_core::command::{Command, CommandId, DynamicSpec, Scope, ScopeId};
 use oxmacs_core::editor::{Editor, InputLine};
 use oxmacs_core::plugin::PluginBuffer;
@@ -475,7 +475,7 @@ fn test_lines(editor: &Editor) -> Vec<String> {
     if let Err(error) = isolate.eval_named(&name, &source) {
         return vec![format!("FAIL  {name}"), format!("      {}", error.message)];
     }
-    let outcomes = ox::testing::run_registered(&mut isolate, &name);
+    let outcomes = ox_lang::testing::run_registered(&mut isolate, &name);
     let failed = outcomes
         .iter()
         .filter(|outcome| outcome.error.is_some())

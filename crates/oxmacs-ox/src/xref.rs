@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ox::Isolate;
-use ox::describe::Kind;
-use ox::names;
-use ox::span::line_column;
+use ox_lang::Isolate;
+use ox_lang::describe::Kind;
+use ox_lang::names;
+use ox_lang::span::line_column;
 use oxmacs_core::editor::Editor;
 
 use crate::help;

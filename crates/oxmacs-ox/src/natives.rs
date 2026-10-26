@@ -1,6 +1,6 @@
-use ox::Isolate;
-use ox::heap::Heap;
-use ox::value::{Value, print};
+use ox_lang::Isolate;
+use ox_lang::heap::Heap;
+use ox_lang::value::{Value, print};
 use oxmacs_core::editor::Editor;
 
 #[derive(Debug, Default)]

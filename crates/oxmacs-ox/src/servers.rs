@@ -1,6 +1,6 @@
-use ox::heap::Heap;
-use ox::value::{Value, print};
-use ox::{Error, Isolate};
+use ox_lang::heap::Heap;
+use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::{Editor, ServerSpec};
 
 const NATIVE: &str = "define-language-server";

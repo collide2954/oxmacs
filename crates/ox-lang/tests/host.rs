@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use ox::Isolate;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::value::Value;
 
 #[derive(Debug, Default)]
 struct Log(Vec<String>);
@@ -9,7 +9,8 @@ struct Log(Vec<String>);
 fn noting() -> Isolate {
     let mut isolate = Isolate::new();
     isolate.define_host_native::<Log>("note", 1, Some(1), |heap, log, arguments| {
-        log.0.push(ox::value::print::display(heap, arguments[0]));
+        log.0
+            .push(ox_lang::value::print::display(heap, arguments[0]));
         Ok(Value::Nil)
     });
     isolate
@@ -74,7 +75,7 @@ fn held_values_survive_collection_until_released() {
 fn natives_can_hand_slow_work_to_a_thread_that_answers_with_json() {
     let mut isolate = Isolate::new();
     isolate.define_native("slow-lookup", 1, Some(1), |heap, arguments| {
-        let wanted = ox::value::print::display(heap, arguments[0]);
+        let wanted = ox_lang::value::print::display(heap, arguments[0]);
         heap.background_json("slow-lookup", move || {
             if wanted == "missing" {
                 return Err(format!("No {wanted} here"));

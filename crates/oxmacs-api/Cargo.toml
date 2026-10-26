@@ -8,7 +8,7 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
-ox.workspace = true
+ox-lang.workspace = true
 ox-library.workspace = true
 
 [dev-dependencies]

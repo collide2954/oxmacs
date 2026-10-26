@@ -1,11 +1,11 @@
-use ox::Isolate;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::value::Value;
 
 fn doubling() -> Isolate {
     let mut isolate = Isolate::new();
     isolate.define_native_awaiting("double", 1, Some(1), |_, arguments| match arguments[0] {
         Value::Int(number) => Ok(Value::Int(number * 2)),
-        _ => Err(ox::Error::new("double expects a whole number")),
+        _ => Err(ox_lang::Error::new("double expects a whole number")),
     });
     isolate
 }

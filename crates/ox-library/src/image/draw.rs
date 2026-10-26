@@ -9,10 +9,10 @@ use tiny_skia::{
 
 use super::adjust::{byte, factor, luma, narrow, outside, strength, unit};
 use super::{Image, MODULE, Options, colors, image_of, later, number, roomy, size, stored, wanted};
-use ox::Isolate;
-use ox::error::{Error, ErrorKind};
-use ox::heap::Heap;
-use ox::value::{Value, print};
+use ox_lang::Isolate;
+use ox_lang::error::{Error, ErrorKind};
+use ox_lang::heap::Heap;
+use ox_lang::value::{Value, print};
 
 const CANVAS: &str = "canvas";
 const SHAPE: [&str; 8] = [
@@ -509,7 +509,7 @@ fn install_edits(isolate: &mut Isolate) {
             painting: Mutex::new(Some((image.with(RgbaImage::new(0, 0)), pixmap))),
         };
         heap.shared(CANVAS, Arc::new(canvas))
-            .map_err(ox::build::full)
+            .map_err(ox_lang::build::full)
     });
     isolate.define_native_in(MODULE, "end-edit", 1, Some(1), |heap, arguments| {
         let canvas = canvas_of(heap, "end-edit", arguments[0])?;

@@ -13,7 +13,7 @@ name = "ox"
 path = "src/main.rs"
 
 [dependencies]
-ox.workspace = true
+ox-lang.workspace = true
 ox-library.workspace = true
 ox-lsp.workspace = true
 ox-perf.workspace = true

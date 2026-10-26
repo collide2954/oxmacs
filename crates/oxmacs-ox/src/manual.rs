@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
-use ox::describe::ModuleDocs;
-use ox::heap::{Heap, HeapFull, Hold};
-use ox::value::{Value, print};
-use ox::{Error, Isolate};
+use ox_lang::describe::ModuleDocs;
+use ox_lang::heap::{Heap, HeapFull, Hold};
+use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 
 use crate::{DOCS, PRELUDE, ox_mode, repl, views};
@@ -92,7 +92,7 @@ fn editor_names() -> HashSet<String> {
         .filter_map(|line| line.strip_prefix('('))
         .filter_map(|rest| rest.split([' ', ')']).next())
         .map(str::to_owned);
-    let defined = ox::names::definitions_with(PRELUDE, &ox_mode::EDITOR_FORMS)
+    let defined = ox_lang::names::definitions_with(PRELUDE, &ox_mode::EDITOR_FORMS)
         .into_iter()
         .map(|definition| definition.name);
     documented.chain(defined).collect()

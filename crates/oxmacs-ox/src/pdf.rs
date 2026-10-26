@@ -9,11 +9,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError};
 use std::time::SystemTime;
 
-use ox::heap::Heap;
-use ox::portable::{Failure, Portable};
-use ox::symbol::Sym;
-use ox::value::{Value, print};
-use ox::{Error, Isolate};
+use ox_lang::heap::Heap;
+use ox_lang::portable::{Failure, Portable};
+use ox_lang::symbol::Sym;
+use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::external::managed::PDFIUM;
 

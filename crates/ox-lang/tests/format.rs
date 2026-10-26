@@ -1,8 +1,8 @@
 use std::fs;
 
-use ox::Isolate;
-use ox::format::{format, format_with, indentation};
-use ox::forms::Form;
+use ox_lang::Isolate;
+use ox_lang::format::{format, format_with, indentation};
+use ox_lang::forms::Form;
 
 fn formatted(source: &str) -> String {
     format(source).unwrap_or_else(|problem| panic!("{problem}"))

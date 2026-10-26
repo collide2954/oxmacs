@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use ox::build::{make_map, make_vector};
-use ox::heap::{Heap, Hold};
-use ox::value::{Value, print, to_float};
-use ox::{Error, Isolate};
+use ox_lang::build::{make_map, make_vector};
+use ox_lang::heap::{Heap, Hold};
+use ox_lang::value::{Value, print, to_float};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::plugin::PluginBuffer;

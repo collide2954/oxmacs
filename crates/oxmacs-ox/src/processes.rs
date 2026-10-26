@@ -1,9 +1,9 @@
-use ox::heap::Heap;
-use ox::value::{Value, print};
-use ox::{Error, Isolate};
+use ox_lang::heap::Heap;
+use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::{Editor, ProcessInfo, ProcessStatus};
 
-fn made(made: Result<Value, ox::heap::HeapFull>) -> Result<Value, Error> {
+fn made(made: Result<Value, ox_lang::heap::HeapFull>) -> Result<Value, Error> {
     made.map_err(|full| Error::new(full.to_string()))
 }
 

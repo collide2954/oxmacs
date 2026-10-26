@@ -3,7 +3,7 @@ use std::path::Path;
 
 use image::codecs::jpeg::JpegEncoder;
 use image::{ImageEncoder, RgbImage};
-use ox::Isolate;
+use ox_lang::Isolate;
 
 fn slashed(path: &Path) -> String {
     path.display().to_string().replace('\\', "/")

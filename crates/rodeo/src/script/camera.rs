@@ -1,7 +1,7 @@
-use ox::Isolate;
-use ox::error::Error;
-use ox::heap::Heap;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::error::Error;
+use ox_lang::heap::Heap;
+use ox_lang::value::Value;
 
 use super::{bits, field, map_value, number, point, point_value, rect, rect_value, signed, wrong};
 use crate::camera::Camera;

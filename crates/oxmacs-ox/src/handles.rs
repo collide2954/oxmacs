@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use ox::heap::Heap;
-use ox::task::TaskId;
-use ox::value::{Value, print};
-use ox::{Error, Isolate};
+use ox_lang::heap::Heap;
+use ox_lang::task::TaskId;
+use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::text::{Buffer, BufferId};
 

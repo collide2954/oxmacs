@@ -5,12 +5,12 @@ use std::time::UNIX_EPOCH;
 
 use crate::crypto::{from_base64, to_base64};
 use crate::text;
-use ox::Isolate;
-use ox::error::Error;
-use ox::heap::Heap;
-use ox::portable::{Failure, Portable};
-use ox::symbol::Sym;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::error::Error;
+use ox_lang::heap::Heap;
+use ox_lang::portable::{Failure, Portable};
+use ox_lang::symbol::Sym;
+use ox_lang::value::Value;
 
 const MODULE: &str = "ox/file";
 

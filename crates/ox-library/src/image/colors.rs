@@ -3,9 +3,9 @@ use std::collections::HashMap;
 
 use image::Rgba;
 
-use ox::error::{Error, ErrorKind};
-use ox::heap::Heap;
-use ox::value::{Value, print};
+use ox_lang::error::{Error, ErrorKind};
+use ox_lang::heap::Heap;
+use ox_lang::value::{Value, print};
 
 thread_local! {
     static FACES: RefCell<HashMap<String, [u8; 4]>> = RefCell::new(HashMap::new());

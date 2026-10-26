@@ -1,4 +1,4 @@
-use ox::Isolate;
+use ox_lang::Isolate;
 
 fn ops(source: &str) -> Vec<String> {
     let mut isolate = Isolate::new();

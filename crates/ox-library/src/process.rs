@@ -6,13 +6,13 @@ use std::thread;
 use std::time::Duration;
 
 use crate::text;
-use ox::Isolate;
-use ox::build::full;
-use ox::error::{Error, ErrorKind};
-use ox::heap::Heap;
-use ox::portable::{Channel, Failure, Portable, Sent};
-use ox::symbol::Sym;
-use ox::value::{Value, print};
+use ox_lang::Isolate;
+use ox_lang::build::full;
+use ox_lang::error::{Error, ErrorKind};
+use ox_lang::heap::Heap;
+use ox_lang::portable::{Channel, Failure, Portable, Sent};
+use ox_lang::symbol::Sym;
+use ox_lang::value::{Value, print};
 
 const MODULE: &str = "ox/process";
 const KEPT_LINES: usize = 4096;

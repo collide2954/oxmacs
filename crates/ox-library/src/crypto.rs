@@ -8,12 +8,12 @@ use ring::rand::{SecureRandom, SystemRandom};
 use ring::{digest, hmac};
 
 use crate::text;
-use ox::Isolate;
-use ox::build::full;
-use ox::error::{Error, ErrorKind};
-use ox::heap::Heap;
-use ox::portable::{Failure, Portable};
-use ox::value::{Value, print};
+use ox_lang::Isolate;
+use ox_lang::build::full;
+use ox_lang::error::{Error, ErrorKind};
+use ox_lang::heap::Heap;
+use ox_lang::portable::{Failure, Portable};
+use ox_lang::value::{Value, print};
 
 const MODULE: &str = "ox/crypto";
 const KEY_BYTES: usize = 32;

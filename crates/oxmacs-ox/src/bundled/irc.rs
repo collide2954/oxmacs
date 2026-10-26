@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use ox::value::print;
+use ox_lang::value::print;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::input::KeySequence;
 use oxmacs_core::text::Buffer;

@@ -97,7 +97,7 @@ fn tilesets_give_regions_properties_and_animations() {
 
 #[test]
 fn loading_reaches_outside_and_explains_failures() {
-    let mut isolate = ox::Isolate::new();
+    let mut isolate = ox_lang::Isolate::new();
     rodeo::script::install(&mut isolate);
     let load = isolate
         .eval("(module (import (rodeo tiled))) tiled/load")

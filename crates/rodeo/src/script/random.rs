@@ -1,8 +1,8 @@
-use ox::Isolate;
-use ox::build::{full, make_vector};
-use ox::error::{Error, ErrorKind};
-use ox::heap::Heap;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::build::{full, make_vector};
+use ox_lang::error::{Error, ErrorKind};
+use ox_lang::heap::Heap;
+use ox_lang::value::Value;
 
 use super::{bits, number, signed, wrong};
 use crate::random::{Random, noise};

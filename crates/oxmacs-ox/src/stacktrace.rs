@@ -2,9 +2,9 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::sync::Arc;
 
-use ox::Error;
-use ox::error::{ErrorKind, Frame};
-use ox::symbol::Sym;
+use ox_lang::Error;
+use ox_lang::error::{ErrorKind, Frame};
+use ox_lang::symbol::Sym;
 use oxmacs_core::cli::Visit;
 use oxmacs_core::command::{Command, DynamicSpec, ScopeId};
 use oxmacs_core::editor::Editor;

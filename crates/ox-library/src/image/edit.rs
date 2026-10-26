@@ -1,10 +1,10 @@
 use super::MODULE;
-use ox::Isolate;
-use ox::Runtime;
-use ox::error::Error;
-use ox::routine::{Next, Routine, Started};
-use ox::symbol::Sym;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::Runtime;
+use ox_lang::error::Error;
+use ox_lang::routine::{Next, Routine, Started};
+use ox_lang::symbol::Sym;
+use ox_lang::value::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step {

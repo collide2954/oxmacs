@@ -1,6 +1,6 @@
-use ox::Error;
-use ox::heap::Heap;
-use ox::value::{Value, print};
+use ox_lang::Error;
+use ox_lang::heap::Heap;
+use ox_lang::value::{Value, print};
 use oxmacs_core::theme::Highlight;
 
 use crate::views::face_named;

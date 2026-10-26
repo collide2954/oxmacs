@@ -3,7 +3,7 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex, PoisonError};
 
-use ox::forms::{self, Forms};
+use ox_lang::forms::{self, Forms};
 
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::{Editor, Formatter};
@@ -532,7 +532,7 @@ const OX_FMT: Formatter = Formatter {
         let known = forms_at(editor, Some(request.path))
             .clone()
             .scanned(request.text);
-        ox::format::format_with(request.text, &known)
+        ox_lang::format::format_with(request.text, &known)
             .map_err(|problem| format!("ox fmt: {problem}"))
     },
     regions: false,
@@ -547,7 +547,7 @@ fn indent(editor: &Editor, id: BufferId, line: usize) -> Option<usize> {
         .find(|candidate| buffer.line_text(*candidate).starts_with('('))
         .unwrap_or(floor);
     let before = buffer.text_in(buffer.line_start(first)..buffer.line_start(line));
-    ox::format::indentation_with(&before, forms_of(editor, buffer))
+    ox_lang::format::indentation_with(&before, forms_of(editor, buffer))
 }
 
 pub fn install(editor: &mut Editor, scope: ScopeId) {

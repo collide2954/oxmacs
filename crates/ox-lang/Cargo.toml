@@ -1,5 +1,5 @@
 [package]
-name = "ox"
+name = "ox-lang"
 version.workspace = true
 description = "Ox, the extension language of oxmacs"
 edition.workspace = true

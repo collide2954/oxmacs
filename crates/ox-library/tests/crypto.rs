@@ -1,4 +1,4 @@
-use ox::Isolate;
+use ox_lang::Isolate;
 
 fn evaluated(isolate: &mut Isolate, source: &str) -> String {
     match isolate.eval(source) {

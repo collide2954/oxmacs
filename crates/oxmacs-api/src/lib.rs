@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use ox::Isolate;
+use ox_lang::Isolate;
 
 pub const DOCS: &str = include_str!("docs.ox");
 pub const PRELUDE: &str = include_str!("prelude.ox");

@@ -1,8 +1,8 @@
-use ox::Isolate;
-use ox::build::make_vector;
-use ox::error::Error;
-use ox::heap::Heap;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::build::make_vector;
+use ox_lang::error::Error;
+use ox_lang::heap::Heap;
+use ox_lang::value::Value;
 
 use super::{name_of, number, point, point_value, wrong};
 use crate::ease::Ease;

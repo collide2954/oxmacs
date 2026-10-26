@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use ox::heap::Heap;
-use ox::value::{Value, print};
-use ox::{Error, Isolate};
+use ox_lang::heap::Heap;
+use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::theme::Highlight;
 
 use crate::views::{self, Node, Picture, Press};

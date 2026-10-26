@@ -1,8 +1,8 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use ox::value::Value;
-use ox::{Error, Isolate};
+use ox_lang::value::Value;
+use ox_lang::{Error, Isolate};
 
 struct Counter {
     hits: Cell<i64>,

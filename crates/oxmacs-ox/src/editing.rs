@@ -1,9 +1,9 @@
 use std::ops::Range;
 use std::sync::Arc;
 
-use ox::heap::Heap;
-use ox::value::{Value, print};
-use ox::{Error, Isolate};
+use ox_lang::heap::Heap;
+use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::display::LineStyle;
 use oxmacs_core::editor::{Axis, Editor};
 use oxmacs_core::text::{Buffer, BufferId, Marker};

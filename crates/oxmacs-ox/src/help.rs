@@ -2,9 +2,9 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::time::Duration;
 
-use ox::Isolate;
-use ox::describe::{Description, Kind};
-use ox::names::{call_head, symbol_at};
+use ox_lang::Isolate;
+use ox_lang::describe::{Description, Kind};
+use ox_lang::names::{call_head, symbol_at};
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::plugin::PluginBuffer;

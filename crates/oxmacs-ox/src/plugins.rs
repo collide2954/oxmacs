@@ -2,10 +2,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use ox::heap::{Heap, Hold};
-use ox::symbol::Sym;
-use ox::value::{Value, print};
-use ox::{Error, Isolate};
+use ox_lang::heap::{Heap, Hold};
+use ox_lang::symbol::Sym;
+use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{DynamicSpec, Scope};
 use oxmacs_core::editor::Editor;
 use semver::{Version, VersionReq};
@@ -725,8 +725,9 @@ pub fn mark_custom(heap: &mut Heap, editor: &mut Editor) {
 }
 
 fn kind_value(heap: &mut Heap, kind: &Kind) -> Result<(Value, Value), Error> {
-    let made =
-        |made: Result<Value, ox::heap::HeapFull>| made.map_err(|full| Error::new(full.to_string()));
+    let made = |made: Result<Value, ox_lang::heap::HeapFull>| {
+        made.map_err(|full| Error::new(full.to_string()))
+    };
     Ok(match kind {
         Kind::Text => (Value::keyword("string"), Value::Nil),
         Kind::Int => (Value::keyword("int"), Value::Nil),
@@ -749,8 +750,9 @@ fn configured(heap: &Heap, config: &[(String, Hold)], key: &str) -> Value {
 }
 
 fn plugin_settings(heap: &mut Heap, editor: &mut Editor) -> Result<Value, Error> {
-    let made =
-        |made: Result<Value, ox::heap::HeapFull>| made.map_err(|full| Error::new(full.to_string()));
+    let made = |made: Result<Value, ox_lang::heap::HeapFull>| {
+        made.map_err(|full| Error::new(full.to_string()))
+    };
     let plugins = editor.take_plugin_state::<Plugins>().unwrap_or_default();
     let mut found = Vec::new();
     for plugin in plugins.known.iter().filter(|plugin| plugin.active) {

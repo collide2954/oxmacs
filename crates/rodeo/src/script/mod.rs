@@ -6,11 +6,11 @@ mod rect;
 mod tiled;
 mod vec;
 
-use ox::Isolate;
-use ox::build::{make_map, make_vector};
-use ox::error::{Error, ErrorKind};
-use ox::heap::Heap;
-use ox::value::{Value, print, to_float};
+use ox_lang::Isolate;
+use ox_lang::build::{make_map, make_vector};
+use ox_lang::error::{Error, ErrorKind};
+use ox_lang::heap::Heap;
+use ox_lang::value::{Value, print, to_float};
 
 use crate::rect::Rect;
 use crate::vec::Vec2;

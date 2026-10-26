@@ -2,8 +2,8 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ox::Isolate;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::value::Value;
 
 const JOBS: &str = r#"
 (defrecord hit [file line])
@@ -201,7 +201,7 @@ fn snapshot_natives(isolate: &mut Isolate) {
     isolate.define_native("snapshot-text-length", 1, Some(1), |heap, arguments| {
         let text = heap
             .foreign_of::<String>(arguments[0])
-            .ok_or_else(|| ox::Error::new("expected a snapshot"))?;
+            .ok_or_else(|| ox_lang::Error::new("expected a snapshot"))?;
         Ok(Value::Int(i64::try_from(text.len()).unwrap_or(0)))
     });
 }

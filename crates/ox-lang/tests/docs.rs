@@ -1,4 +1,4 @@
-use ox::Isolate;
+use ox_lang::Isolate;
 
 #[test]
 fn docstrings_describe_functions_macros_and_values() {

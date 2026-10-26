@@ -2,12 +2,12 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
-use ox::Isolate;
-use ox::build::{full, make_vector};
-use ox::error::Error;
-use ox::heap::Heap;
-use ox::symbol::Sym;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::build::{full, make_vector};
+use ox_lang::error::Error;
+use ox_lang::heap::Heap;
+use ox_lang::symbol::Sym;
+use ox_lang::value::Value;
 
 use super::{field, map_value, number, point, point_value, rect, rect_value, wrong};
 use crate::collide::{Circle, Grid, Moved, move_in_tiles, penetration, slide, sweep};

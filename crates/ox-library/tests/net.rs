@@ -2,7 +2,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::thread;
 
-use ox::Isolate;
+use ox_lang::Isolate;
 
 fn evaluated(isolate: &mut Isolate, source: &str) -> String {
     match isolate.eval(source) {

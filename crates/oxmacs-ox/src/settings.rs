@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use ox::heap::Heap;
-use ox::value::{Value, print};
-use ox::{Error, Isolate};
+use ox_lang::heap::Heap;
+use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::config::Config;
 use oxmacs_core::config::schema::{self, Kind, SETTINGS, Setting};
 use oxmacs_core::editor::Editor;

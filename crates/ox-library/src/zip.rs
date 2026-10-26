@@ -2,9 +2,9 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use ox::Isolate;
-use ox::portable::{Failure, Portable};
-use ox::symbol::Sym;
+use ox_lang::Isolate;
+use ox_lang::portable::{Failure, Portable};
+use ox_lang::symbol::Sym;
 use zip::ZipArchive;
 
 use crate::crypto::to_base64;

@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use ox::Isolate;
-use ox::build::{full, make_map, make_vector};
-use ox::error::Error;
-use ox::heap::Heap;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::build::{full, make_map, make_vector};
+use ox_lang::error::Error;
+use ox_lang::heap::Heap;
+use ox_lang::value::Value;
 
 use super::{field, map_value, point_value, rect_value, wrong};
 use crate::color::Color;

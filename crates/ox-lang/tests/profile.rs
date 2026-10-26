@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use ox::Isolate;
-use ox::profile::Kind;
+use ox_lang::Isolate;
+use ox_lang::profile::Kind;
 
 const BUSY: &str = "(def (leaf n) (reduce + 0 (range n)))
 (def (branch) (leaf 200) (leaf 200))

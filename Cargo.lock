@@ -3846,7 +3846,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "ox"
+name = "ox-cli"
+version = "0.14.0"
+dependencies = [
+ "ox-lang",
+ "ox-library",
+ "ox-lsp",
+ "ox-perf",
+ "oxmacs-api",
+ "oxmacs-core",
+ "oxmacs-ox",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "ox-lang"
 version = "0.14.0"
 dependencies = [
  "getrandom 0.4.3",
@@ -3861,21 +3876,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ox-cli"
-version = "0.14.0"
-dependencies = [
- "ox",
- "ox-library",
- "ox-lsp",
- "ox-perf",
- "oxmacs-api",
- "oxmacs-core",
- "oxmacs-ox",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "ox-library"
 version = "0.14.0"
 dependencies = [
@@ -3883,7 +3883,7 @@ dependencies = [
  "chacha20poly1305",
  "image",
  "imageproc",
- "ox",
+ "ox-lang",
  "rayon",
  "resvg",
  "ring",
@@ -3904,7 +3904,7 @@ name = "ox-lsp"
 version = "0.14.0"
 dependencies = [
  "lsp-server",
- "ox",
+ "ox-lang",
  "serde_json",
  "tempfile",
 ]
@@ -3913,7 +3913,7 @@ dependencies = [
 name = "ox-perf"
 version = "0.14.0"
 dependencies = [
- "ox",
+ "ox-lang",
  "ox-library",
  "tempfile",
  "windows-sys 0.61.2",
@@ -3932,7 +3932,7 @@ dependencies = [
 name = "oxmacs-api"
 version = "0.14.0"
 dependencies = [
- "ox",
+ "ox-lang",
  "ox-library",
  "tempfile",
 ]
@@ -3994,7 +3994,7 @@ dependencies = [
  "image",
  "jiff",
  "keepass",
- "ox",
+ "ox-lang",
  "ox-library",
  "oxmacs-api",
  "oxmacs-core",
@@ -4712,7 +4712,7 @@ dependencies = [
  "base64 0.23.1",
  "flate2",
  "image",
- "ox",
+ "ox-lang",
  "rodio",
  "roxmltree 0.21.2",
  "serde",

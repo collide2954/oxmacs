@@ -2,9 +2,9 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use ox::Isolate;
-use ox::heap::Hold;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::heap::Hold;
+use ox_lang::value::Value;
 
 use crate::counting;
 

@@ -4,12 +4,12 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use lsp_server::{Connection, ErrorCode, Message, Notification, Request, Response};
-use ox::Isolate;
-use ox::check::Severity;
-use ox::describe::Kind;
-use ox::forms::Forms;
-use ox::names::{self, Definition};
-use ox::span::Span;
+use ox_lang::Isolate;
+use ox_lang::check::Severity;
+use ox_lang::describe::Kind;
+use ox_lang::forms::Forms;
+use ox_lang::names::{self, Definition};
+use ox_lang::span::Span;
 use serde_json::{Value, json};
 
 type Failure = Box<dyn Error + Send + Sync>;
@@ -457,7 +457,7 @@ impl<'a> Server<'a> {
         let uri = params["textDocument"]["uri"].as_str()?;
         let document = self.documents.get(uri)?;
         let text = &document.text;
-        let formatted = ox::format::format_with(text, &document.forms).ok()?;
+        let formatted = ox_lang::format::format_with(text, &document.forms).ok()?;
         if formatted == *text {
             return Some(json!([]));
         }

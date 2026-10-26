@@ -1,5 +1,5 @@
-use ox::Isolate;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::value::Value;
 
 use super::{number, point, point_value, rect, rect_value};
 use crate::rect::Rect;

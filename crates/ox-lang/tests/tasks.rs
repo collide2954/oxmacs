@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use ox::Isolate;
-use ox::task::TaskId;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::task::TaskId;
+use ox_lang::value::Value;
 
 fn finish(isolate: &mut Isolate, task: TaskId) -> (Result<String, String>, usize) {
     for rounds in 1..10_000 {

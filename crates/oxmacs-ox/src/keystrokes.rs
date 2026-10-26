@@ -1,6 +1,6 @@
-use ox::heap::{Heap, HeapFull, Hold};
-use ox::value::Value;
-use ox::{Error, Isolate};
+use ox_lang::heap::{Heap, HeapFull, Hold};
+use ox_lang::value::Value;
+use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::{Editor, Keystroke};
 
 use crate::{hooks, log};

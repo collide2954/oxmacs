@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use ox::Isolate;
+use ox_lang::Isolate;
 
 fn write(root: &Path, name: &str, text: &str) {
     let path = root.join(name);

@@ -1,7 +1,7 @@
 use std::fmt::Write as _;
 
-use ox::Error;
-use ox::span::line_column;
+use ox_lang::Error;
+use ox_lang::span::line_column;
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::plugin::PluginBuffer;
@@ -109,7 +109,7 @@ pub fn show(editor: &mut Editor) {
 
 #[cfg(test)]
 mod tests {
-    use ox::Isolate;
+    use ox_lang::Isolate;
     use oxmacs_core::editor::Editor;
 
     use super::{LOG, report};

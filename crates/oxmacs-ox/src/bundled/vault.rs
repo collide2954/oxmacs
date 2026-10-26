@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use ox::value::print;
+use ox_lang::value::print;
 use oxmacs_core::editor::{Editor, Effect};
 
 use crate::Ox;

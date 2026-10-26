@@ -100,7 +100,7 @@ jobs:
       - name: Ox format, check and test
         if: matrix.os == 'ubuntu-latest'
         run: |
-          cargo run -q -p ox-cli --locked -- fmt --check crates/oxmacs-ox/plugins crates/oxmacs-ox/src crates/oxmacs-api/src crates/ox/src/library crates/ox-library/src crates/ox-perf/benchmarks crates/rodeo/src
+          cargo run -q -p ox-cli --locked -- fmt --check crates/oxmacs-ox/plugins crates/oxmacs-ox/src crates/oxmacs-api/src crates/ox-lang/src/library crates/ox-library/src crates/ox-perf/benchmarks crates/rodeo/src
           cargo run -q -p ox-cli --locked -- check crates/oxmacs-ox/plugins
           cargo run -q -p ox-cli --locked -- test crates/oxmacs-ox/plugins
 

@@ -2,8 +2,8 @@ use std::fs::File;
 
 use keepass::db::fields;
 use keepass::{Database, DatabaseKey};
-use ox::Isolate;
-use ox::value::print;
+use ox_lang::Isolate;
+use ox_lang::value::print;
 use oxmacs_core::editor::Editor;
 use serde_json::{Value as Json, json};
 

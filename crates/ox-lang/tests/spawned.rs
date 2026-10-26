@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
-use ox::Isolate;
-use ox::task::Wake;
-use ox::value::Value;
+use ox_lang::Isolate;
+use ox_lang::task::Wake;
+use ox_lang::value::Value;
 
 fn finished(isolate: &mut Isolate) -> Vec<Result<String, String>> {
     let report = isolate.run(Duration::from_millis(50));

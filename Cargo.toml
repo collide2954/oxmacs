@@ -26,7 +26,7 @@ indexmap = "2.14.2"
 jiff = "0.2.38"
 keepass = "0.17.0"
 lsp-server = "0.10.0"
-ox = { path = "crates/ox" }
+ox-lang = { path = "crates/ox-lang" }
 ox-library = { path = "crates/ox-library" }
 ox-lsp = { path = "crates/ox-lsp" }
 ox-perf = { path = "crates/ox-perf" }

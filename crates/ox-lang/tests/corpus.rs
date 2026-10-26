@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
 
-use ox::Isolate;
+use ox_lang::Isolate;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Outcome {

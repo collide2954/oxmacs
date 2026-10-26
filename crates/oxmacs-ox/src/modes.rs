@@ -3,9 +3,9 @@ use std::ops::Range;
 
 use regex::Regex;
 
-use ox::heap::{Heap, Hold};
-use ox::value::{Value, print};
-use ox::{Error, Isolate};
+use ox_lang::heap::{Heap, Hold};
+use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
@@ -541,7 +541,7 @@ fn stored(isolate: &mut Isolate, old: Option<Hold>, from: usize, fresh: Vec<Hold
         .map(|old| old.into_iter().take(from).collect())
         .unwrap_or_default();
     states.extend(fresh.iter().filter_map(|hold| isolate.held(*hold)));
-    let vector = ox::build::make_vector(isolate.heap_mut(), &states).ok();
+    let vector = ox_lang::build::make_vector(isolate.heap_mut(), &states).ok();
     let kept = vector.map(|vector| isolate.hold(vector));
     for hold in fresh.into_iter().chain(old) {
         isolate.release(hold);

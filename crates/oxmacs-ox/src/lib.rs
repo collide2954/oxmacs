@@ -41,8 +41,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-pub use ox::task::Wake;
-use ox::{Error, Isolate};
+pub use ox_lang::task::Wake;
+use ox_lang::{Error, Isolate};
 use oxmacs_core::config::Config;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::text::BufferId;

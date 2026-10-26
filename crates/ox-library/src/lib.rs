@@ -7,10 +7,10 @@ mod net;
 mod process;
 mod zip;
 
-use ox::error::{Error, ErrorKind};
-use ox::heap::Heap;
-use ox::value::{Value, print};
-use ox::{Isolate, MODULES as CORE};
+use ox_lang::error::{Error, ErrorKind};
+use ox_lang::heap::Heap;
+use ox_lang::value::{Value, print};
+use ox_lang::{Isolate, MODULES as CORE};
 
 pub const DOCS: &str = include_str!("docs.ox");
 

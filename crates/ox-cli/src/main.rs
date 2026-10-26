@@ -4,11 +4,11 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::{env, fs};
 
-use ox::check::report::{self, Format};
-use ox::check::{Diagnostic, Severity};
-use ox::error::ErrorKind;
-use ox::span::line_column;
-use ox::{Error, Isolate, read};
+use ox_lang::check::report::{self, Format};
+use ox_lang::check::{Diagnostic, Severity};
+use ox_lang::error::ErrorKind;
+use ox_lang::span::line_column;
+use ox_lang::{Error, Isolate, read};
 use oxmacs_api as checker;
 
 #[global_allocator]
@@ -238,7 +238,7 @@ fn fmt_command(arguments: Vec<OsString>) -> ExitCode {
             }
         };
         let forms = isolate_for(file, &[]).forms_for(&file.display().to_string(), &source);
-        let formatted = match ox::format::format_with(&source, &forms) {
+        let formatted = match ox_lang::format::format_with(&source, &forms) {
             Ok(formatted) => formatted,
             Err(problem) => {
                 eprintln!("{}:{problem}", file.display());
@@ -369,7 +369,7 @@ fn run_tests(paths: &[PathBuf]) -> ExitCode {
             report(&path.display().to_string(), &error, &path, &source);
             continue;
         }
-        for outcome in ox::testing::run_registered(&mut isolate, &file) {
+        for outcome in ox_lang::testing::run_registered(&mut isolate, &file) {
             total += 1;
             match outcome.error {
                 None => println!("ok    {}", outcome.name),

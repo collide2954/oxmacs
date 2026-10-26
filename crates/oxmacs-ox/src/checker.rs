@@ -3,9 +3,9 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
-use ox::check::{Diagnostic, Severity};
-use ox::forms::Forms;
-use ox::span::line_column;
+use ox_lang::check::{Diagnostic, Severity};
+use ox_lang::forms::Forms;
+use ox_lang::span::line_column;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::external::diagnostics::{Diagnostic as Found, Severity as Level};
 use oxmacs_core::text::BufferId;

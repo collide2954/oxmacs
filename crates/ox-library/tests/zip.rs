@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use ox::Isolate;
+use ox_lang::Isolate;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 

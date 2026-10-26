@@ -1,6 +1,6 @@
 #[test]
 fn every_native_is_documented_with_its_arity() {
-    let mut isolate = ox::Isolate::new();
+    let mut isolate = ox_lang::Isolate::new();
     rodeo::script::install(&mut isolate);
     let problems = isolate.undocumented();
     assert!(problems.is_empty(), "{}", problems.join("\n"));

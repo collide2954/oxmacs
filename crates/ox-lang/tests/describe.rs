@@ -1,5 +1,5 @@
-use ox::Isolate;
-use ox::describe::{Description, Kind};
+use ox_lang::Isolate;
+use ox_lang::describe::{Description, Kind};
 
 const SHAPES: &str = "(module (import (ox string :as s)))
 (def (area w h) \"Width times height.\" (* w h))

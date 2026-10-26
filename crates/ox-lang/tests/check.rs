@@ -2,8 +2,8 @@ use std::fs;
 use std::path::Path;
 use std::time::{Duration, UNIX_EPOCH};
 
-use ox::Isolate;
-use ox::check::{Diagnostic, Severity};
+use ox_lang::Isolate;
+use ox_lang::check::{Diagnostic, Severity};
 
 fn messages(found: &[Diagnostic]) -> Vec<&str> {
     found.iter().map(|found| found.message.as_str()).collect()
@@ -29,7 +29,7 @@ fn modules_that_need_the_host_to_load_are_skipped_quietly() {
     .unwrap();
     let mut isolate = Isolate::new();
     isolate.define_host_native::<String>("register-it", 1, Some(1), |_, _, _| {
-        Ok(ox::value::Value::Nil)
+        Ok(ox_lang::value::Value::Nil)
     });
     isolate.add_root(dir.path());
 

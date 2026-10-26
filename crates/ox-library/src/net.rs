@@ -9,12 +9,12 @@ use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 
 use crate::text;
-use ox::Isolate;
-use ox::error::{Error, ErrorKind};
-use ox::heap::Heap;
-use ox::portable::{Channel, Failure, Portable, Sent};
-use ox::symbol::Sym;
-use ox::value::{Value, print};
+use ox_lang::Isolate;
+use ox_lang::error::{Error, ErrorKind};
+use ox_lang::heap::Heap;
+use ox_lang::portable::{Channel, Failure, Portable, Sent};
+use ox_lang::symbol::Sym;
+use ox_lang::value::{Value, print};
 
 const MODULE: &str = "ox/net";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);

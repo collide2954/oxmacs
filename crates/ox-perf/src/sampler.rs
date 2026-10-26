@@ -70,7 +70,7 @@ mod tests {
         let report = profile(&file, "spin", &[], Duration::from_millis(500)).unwrap();
 
         assert!(report.starts_with("Self time by function ("), "{report}");
-        assert!(report.contains("ox::vm::Runtime::"), "{report}");
+        assert!(report.contains("ox_lang::vm::Runtime::"), "{report}");
     }
 
     #[test]
@@ -86,7 +86,7 @@ mod tests {
 
         let report = profile(&file, "grow", &[], Duration::from_secs(2)).unwrap();
 
-        assert!(report.contains("ox::vm::Runtime::"), "{report}");
+        assert!(report.contains("ox_lang::vm::Runtime::"), "{report}");
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use ox::Isolate;
+use ox_lang::Isolate;
 
 fn evaluated(isolate: &mut Isolate, source: &str) -> String {
     match isolate.eval(source) {
@@ -81,11 +81,11 @@ fn processes_nobody_waits_for_let_the_isolate_rest() {
             "(module (import (ox process))) (def running {long}) nil"
         ))
         .unwrap();
-    assert_eq!(isolate.next_wake(), ox::task::Wake::Never);
+    assert_eq!(isolate.next_wake(), ox_lang::task::Wake::Never);
 
     isolate.eval("(spawn (await running.exit))").unwrap();
     let _ = isolate.run(std::time::Duration::from_millis(10));
-    assert_eq!(isolate.next_wake(), ox::task::Wake::Soon);
+    assert_eq!(isolate.next_wake(), ox_lang::task::Wake::Soon);
 
     isolate
         .eval("(module (import (ox process))) (process/kill running)")

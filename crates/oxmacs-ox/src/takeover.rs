@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
-use ox::heap::{Heap, Hold};
-use ox::value::{Value, print};
-use ox::{Error, Isolate};
+use ox_lang::heap::{Heap, Hold};
+use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 
 use crate::log;
