@@ -3914,7 +3914,7 @@ name = "ox-perf"
 version = "0.14.0"
 dependencies = [
  "ox-lang",
- "ox-library",
+ "oxmacs-api",
  "tempfile",
  "windows-sys 0.61.2",
 ]
@@ -3932,8 +3932,10 @@ dependencies = [
 name = "oxmacs-api"
 version = "0.14.0"
 dependencies = [
+ "dirs",
  "ox-lang",
  "ox-library",
+ "rodeo",
  "tempfile",
 ]
 
@@ -3976,6 +3978,7 @@ dependencies = [
  "native-theme",
  "notify",
  "open",
+ "oxmacs-api",
  "oxmacs-core",
  "oxmacs-script",
  "rodeo",

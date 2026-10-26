@@ -166,7 +166,7 @@ pub fn missing(name: &str, found: &[Benchmark]) -> String {
 }
 
 pub fn bench(path: &Path, names: &[String], roots: &[PathBuf]) -> Result<String, String> {
-    let mut isolate = ox_library::isolate();
+    let mut isolate = oxmacs_api::plain_isolate();
     let found = load(&mut isolate, path, roots)?;
     if let Some(name) = names
         .iter()
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn benchmark_files_end_with_names_of_functions_or_counted_functions() {
-        let mut isolate = ox_library::isolate();
+        let mut isolate = oxmacs_api::plain_isolate();
         let value = isolate
             .eval("{fast: (fn [] 1) counted: [1000 (fn [] (+ 1 2))]}")
             .unwrap();
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn measuring_runs_a_benchmark_at_least_five_times_and_counts_its_allocations() {
-        let mut isolate = ox_library::isolate();
+        let mut isolate = oxmacs_api::plain_isolate();
         let value = isolate
             .eval("(def runs (atom 0)) {grow: (fn [] (swap! runs inc) (vec (range 100)))}")
             .unwrap();
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn rows_show_the_time_per_item_when_a_benchmark_has_a_count() {
-        let mut isolate = ox_library::isolate();
+        let mut isolate = oxmacs_api::plain_isolate();
         let value = isolate
             .eval("{loop: [1000 (fn [] 1)] once: (fn [] 2)}")
             .unwrap();

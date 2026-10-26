@@ -28,7 +28,7 @@ const MODULE: &str = "rodeo";
 const NAME: &str = "*game*";
 const SIZE: (u32, u32) = (320, 180);
 
-pub const DOCS: &str = include_str!("games.ox");
+pub const DOCS: &str = oxmacs_api::GAME_DOCS;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Caption {

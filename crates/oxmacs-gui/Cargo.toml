@@ -13,6 +13,7 @@ workspace = true
 dirs.workspace = true
 iced.workspace = true
 jiff.workspace = true
+oxmacs-api.workspace = true
 oxmacs-core.workspace = true
 oxmacs-script.workspace = true
 native-theme.workspace = true

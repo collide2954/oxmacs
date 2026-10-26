@@ -8,8 +8,10 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+dirs.workspace = true
 ox-lang.workspace = true
 ox-library.workspace = true
+rodeo.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

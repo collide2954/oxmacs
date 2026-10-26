@@ -11,7 +11,7 @@ pub fn profile(
     roots: &[PathBuf],
     length: Duration,
 ) -> Result<String, String> {
-    let mut isolate = ox_library::isolate();
+    let mut isolate = oxmacs_api::plain_isolate();
     let found = benches::load(&mut isolate, path, roots)?;
     let benchmark = found
         .iter()

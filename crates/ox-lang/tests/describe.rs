@@ -1,5 +1,5 @@
-use ox_lang::Isolate;
 use ox_lang::describe::{Description, Kind};
+use ox_lang::{Isolate, Stubs};
 
 const SHAPES: &str = "(module (import (ox string :as s)))
 (def (area w h) \"Width times height.\" (* w h))
@@ -92,6 +92,7 @@ fn stubs_from_a_docs_table_keep_their_arity_and_docs_but_refuse_to_run() {
     let mut isolate = Isolate::new();
     isolate.define_stubs(
         "(greet name (loud)) \"Greets name.\"\n(ui/label text {size 1}) \"A label.\"\n(special (never x) \"Not a native.\")",
+        Stubs::All,
     );
 
     assert_eq!(

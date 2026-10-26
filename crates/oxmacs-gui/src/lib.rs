@@ -21,7 +21,7 @@ use oxmacs_core::config::WindowMode;
 
 pub fn run(visits: Vec<Visit>, init: bool) -> Result {
     crash::install(crash::folder());
-    let home = oxmacs_script::home();
+    let home = oxmacs_api::home();
     let booted = App::boot_with(&visits, home.as_deref(), init);
     let mode = booted.0.editor().config().window_mode;
     let booted = Cell::new(Some(booted));

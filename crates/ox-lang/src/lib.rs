@@ -22,5 +22,5 @@ pub mod value;
 mod vm;
 
 pub use error::Error;
-pub use isolate::Isolate;
+pub use isolate::{Isolate, Stubs};
 pub use vm::{Runtime, build, routine};

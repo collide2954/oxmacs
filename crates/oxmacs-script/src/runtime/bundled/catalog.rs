@@ -3,11 +3,11 @@ use std::fs;
 use std::path::Path;
 
 use super::BUNDLED;
-use crate::checking_isolate;
+use crate::isolate;
 use crate::runtime::plugins::{Listed, catalog};
 
 fn modules() -> Vec<(String, String)> {
-    checking_isolate().modules()
+    isolate().modules()
 }
 
 fn workspace() -> &'static Path {
@@ -18,7 +18,7 @@ fn workspace() -> &'static Path {
 }
 
 fn plugins() -> Vec<Listed> {
-    catalog(&mut checking_isolate(), BUNDLED)
+    catalog(&mut isolate(), BUNDLED)
 }
 
 fn shown_module(name: &str) -> String {
@@ -136,7 +136,7 @@ fn every_plugin_folder_and_file_is_bundled() {
 
 #[test]
 fn every_built_in_module_is_described() {
-    let isolate = checking_isolate();
+    let isolate = isolate();
     let installed: Vec<String> = isolate
         .module_names()
         .into_iter()

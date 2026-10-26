@@ -22,12 +22,6 @@ const PATIENT: Duration = Duration::from_secs(10);
 const PRELUDE: &str = oxmacs_api::PRELUDE;
 const DOCS: &str = oxmacs_api::DOCS;
 
-pub fn home() -> Option<PathBuf> {
-    std::env::var_os("OXMACS_HOME")
-        .map(PathBuf::from)
-        .or_else(|| dirs::home_dir().map(|home| home.join(".oxmacs")))
-}
-
 fn install_editor_api(isolate: &mut Isolate, answers: &api::prompts::Inbox) {
     oxmacs_api::add_editor_modules(isolate);
     api::natives::install(isolate);
@@ -74,7 +68,7 @@ fn editor_isolate(answers: &api::prompts::Inbox) -> Isolate {
     isolate
 }
 
-pub fn checking_isolate() -> Isolate {
+pub fn isolate() -> Isolate {
     editor_isolate(&api::prompts::Inbox::default())
 }
 
@@ -167,7 +161,7 @@ impl Ox {
         if rested >= ide::help::SIGNATURE_PAUSE {
             ide::help::echo_signature(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         }
-        self.checker.run(editor, rested);
+        self.checker.run(editor, rested, self.home.as_deref());
     }
 
     pub fn idle_wait(&self, editor: &Editor, since: Instant) -> Option<Duration> {
@@ -350,9 +344,32 @@ mod tests {
 
     #[test]
     fn everything_the_editor_adds_to_ox_is_documented() {
-        let problems = super::checking_isolate().undocumented();
+        let problems = super::isolate().undocumented();
 
         assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
+    #[test]
+    fn the_checking_stubs_take_what_the_editor_natives_take() {
+        let real = super::isolate().natives();
+        let stubs = oxmacs_api::editor_isolate().natives();
+
+        let missing: Vec<&String> = real
+            .iter()
+            .map(|(name, _, _)| name)
+            .filter(|name| !stubs.iter().any(|(stub, _, _)| stub == *name))
+            .collect();
+        let different: Vec<String> = stubs
+            .iter()
+            .filter_map(|(name, least, most)| {
+                let (_, real_least, real_most) = real.iter().find(|(known, _, _)| known == name)?;
+                (least != real_least || (most.is_some() && most != real_most)).then(|| {
+                    format!("{name}: stub {least}..{most:?}, editor {real_least}..{real_most:?}")
+                })
+            })
+            .collect();
+        assert!(missing.is_empty(), "no stub for {missing:?}");
+        assert!(different.is_empty(), "{}", different.join("\n"));
     }
 
     #[test]

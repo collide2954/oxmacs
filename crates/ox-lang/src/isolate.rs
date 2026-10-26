@@ -111,6 +111,13 @@ pub(crate) fn work(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stubs {
+    All,
+    Modules,
+    Globals,
+}
+
 #[derive(Debug)]
 pub struct Isolate {
     runtime: Runtime,
@@ -1101,15 +1108,29 @@ impl Isolate {
     }
 
     pub fn add_native_docs(&mut self, table: &'static str) {
+        if self.doc_tables.contains(&table) {
+            return;
+        }
         self.doc_tables.push(table);
         self.docs = OnceCell::new();
     }
 
-    pub fn define_stubs(&mut self, table: &'static str) {
+    fn module_for_alias(&self, alias: &str) -> String {
+        self.summaries
+            .iter()
+            .map(|(name, _)| name)
+            .find(|name| name.rsplit('/').next() == Some(alias))
+            .cloned()
+            .unwrap_or_else(|| format!("ox/{alias}"))
+    }
+
+    pub fn define_stubs(&mut self, table: &'static str, which: Stubs) {
         let docs = describe::parse(&[table]);
         for (shown, entry) in docs.entries.iter().filter(|(_, entry)| !entry.special) {
             let (module, name) = match shown.split_once('/') {
-                Some((alias, name)) => (format!("ox/{alias}"), name),
+                Some(_) if which == Stubs::Globals => continue,
+                Some((alias, name)) => (self.module_for_alias(alias), name),
+                None if which == Stubs::Modules => continue,
                 None => ("ox".to_owned(), shown.as_str()),
             };
             let most = entry.most.filter(|_| entry.keywords == 0);
@@ -1429,6 +1450,22 @@ impl Isolate {
                     .map(str::to_owned)
             })
             .collect()
+    }
+
+    pub fn natives(&self) -> Vec<(String, usize, Option<usize>)> {
+        let heap = &self.runtime.heap;
+        let mut found: Vec<(String, usize, Option<usize>)> = self
+            .runtime
+            .modules
+            .iter()
+            .flat_map(|module| &module.globals)
+            .filter_map(|(_, value)| heap.native_of(*value))
+            .filter(|native| native.parameters().is_none())
+            .map(|native| (native.name.name().to_owned(), native.least, native.most))
+            .collect();
+        found.sort();
+        found.dedup();
+        found
     }
 
     pub fn undocumented(&self) -> Vec<String> {

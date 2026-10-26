@@ -465,16 +465,9 @@ fn test_lines(editor: &Editor) -> Vec<String> {
     let source = editor.buffer().contents();
     let path = editor.buffer().file().map(|file| file.path.clone());
     let mut isolate = match &path {
-        Some(path) if !oxmacs_api::editor_code(path) => ox_library::isolate(),
-        _ => oxmacs_api::checking_isolate(),
+        Some(path) => oxmacs_api::isolate_for(path),
+        None => oxmacs_api::editor_isolate(),
     };
-    for root in path
-        .as_deref()
-        .map(oxmacs_api::check_roots)
-        .unwrap_or_default()
-    {
-        isolate.add_root(root);
-    }
     if let Err(error) = isolate.eval_named(&name, &source) {
         return vec![format!("FAIL  {name}"), format!("      {}", error.message)];
     }

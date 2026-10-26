@@ -10,12 +10,12 @@ autotests = false
 
 [dependencies]
 ox-lang.workspace = true
-ox-library.workspace = true
 ox-lsp.workspace = true
 ox-perf.workspace = true
 oxmacs-api.workspace = true
 
 [dev-dependencies]
+ox-library.workspace = true
 oxmacs-core.workspace = true
 oxmacs-script.workspace = true
 serde_json.workspace = true

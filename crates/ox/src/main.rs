@@ -59,12 +59,12 @@ fn main() -> ExitCode {
         }
         Some(path) => {
             let path = PathBuf::from(path);
-            let mut isolate = ox_library::isolate();
+            let mut isolate = oxmacs_api::plain_isolate();
             add_roots(&mut isolate, &path);
             run_file(&mut isolate, &path)
         }
         None => {
-            let mut isolate = ox_library::isolate();
+            let mut isolate = oxmacs_api::plain_isolate();
             isolate.add_root(".");
             repl(&mut isolate)
         }
@@ -197,8 +197,8 @@ fn language_server() -> ExitCode {
                 ox_lsp::Flavor::Plain
             }
         },
-        plain: ox_library::isolate,
-        editor: oxmacs_api::checking_isolate,
+        plain: oxmacs_api::plain_isolate,
+        editor: oxmacs_api::editor_isolate,
         roots: checker::check_roots,
     };
     match ox_lsp::serve(&options) {
@@ -273,7 +273,7 @@ fn fmt_command(arguments: Vec<OsString>) -> ExitCode {
 }
 
 fn profile_file(path: &Path) -> ExitCode {
-    let mut isolate = ox_library::isolate();
+    let mut isolate = oxmacs_api::plain_isolate();
     add_roots(&mut isolate, path);
     isolate.start_profiling();
     let code = run_file(&mut isolate, path);
@@ -284,12 +284,8 @@ fn profile_file(path: &Path) -> ExitCode {
 }
 
 fn isolate_for(file: &Path, roots: &[PathBuf]) -> Isolate {
-    let mut isolate = if checker::editor_code(file) {
-        oxmacs_api::checking_isolate()
-    } else {
-        ox_library::isolate()
-    };
-    for root in checker::check_roots(file).iter().chain(roots) {
+    let mut isolate = oxmacs_api::isolate_for(file);
+    for root in roots {
         isolate.add_root(root);
     }
     isolate
@@ -352,12 +348,7 @@ fn run_tests(paths: &[PathBuf]) -> ExitCode {
     let (mut total, mut failed) = (0_usize, 0_usize);
     for path in files {
         let source = fs::read_to_string(&path).unwrap_or_default();
-        let mut isolate = if checker::editor_code(&path) {
-            oxmacs_api::checking_isolate()
-        } else {
-            ox_library::isolate()
-        };
-        add_roots(&mut isolate, &path);
+        let mut isolate = oxmacs_api::isolate_for(&path);
         let file = path.display().to_string();
         if let Err(error) = isolate.eval_named(&file, &source) {
             if error.kind == ErrorKind::Refused {

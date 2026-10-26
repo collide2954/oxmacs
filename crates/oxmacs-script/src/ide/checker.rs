@@ -15,6 +15,7 @@ pub const CHECK_PAUSE: Duration = Duration::from_millis(500);
 struct Job {
     path: PathBuf,
     source: String,
+    editor_code: bool,
 }
 
 struct Done {
@@ -38,9 +39,13 @@ pub(crate) struct Checker {
 }
 
 fn serve(jobs: &Receiver<Job>, done: &Sender<Done>) {
-    let mut editor = None;
+    let (mut plain, mut editor) = (None, None);
     for job in jobs {
-        let isolate = editor.get_or_insert_with(crate::checking_isolate);
+        let isolate = if job.editor_code {
+            editor.get_or_insert_with(oxmacs_api::editor_isolate)
+        } else {
+            plain.get_or_insert_with(oxmacs_api::plain_isolate)
+        };
         for root in check_roots(&job.path) {
             isolate.add_root(root);
         }
@@ -71,7 +76,7 @@ impl Worker {
     }
 }
 
-pub use oxmacs_api::{check_roots, editor_code};
+use oxmacs_api::{check_roots, editor_code_in};
 
 fn due(editor: &Editor) -> Option<(BufferId, u64, PathBuf)> {
     let buffer = editor.buffer();
@@ -107,7 +112,7 @@ impl Checker {
         self.busy
     }
 
-    pub(crate) fn run(&mut self, editor: &Editor, rested: Duration) {
+    pub(crate) fn run(&mut self, editor: &Editor, rested: Duration, home: Option<&Path>) {
         if rested < CHECK_PAUSE || self.busy {
             return;
         }
@@ -120,6 +125,7 @@ impl Checker {
         self.checked.retain(|(checked, _)| *checked != id);
         self.checked.push((id, revision));
         let job = Job {
+            editor_code: editor_code_in(&path, home),
             path,
             source: editor.buffer().contents(),
         };
@@ -234,7 +240,7 @@ mod tests {
     }
 
     #[test]
-    fn any_ox_file_open_in_oxmacs_is_checked_with_the_editor_api() {
+    fn files_in_the_oxmacs_home_are_checked_with_the_editor_api() {
         let (_home, mut editor, mut ox) = visiting(
             &[(
                 "notes/scratch.ox",
@@ -249,6 +255,33 @@ mod tests {
         assert_eq!(editor.pane().line_diagnostics(0), []);
         assert_eq!(editor.pane().line_diagnostics(1), []);
         assert_eq!(editor.pane().line_diagnostics(2), []);
+    }
+
+    #[test]
+    fn other_ox_files_are_checked_as_ox_check_does() {
+        let elsewhere = tempfile::tempdir().unwrap();
+        let script = elsewhere.path().join("script.ox");
+        std::fs::write(
+            &script,
+            "(module (import (ox ui)))\n(ui/text \"hi\")\n(message \"hi\")\n",
+        )
+        .unwrap();
+        let (_home, mut editor, mut ox) = visiting(&[], "unused.ox");
+        editor.open_file(&script);
+
+        rest(&mut editor, &mut ox, Instant::now(), 600);
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(editor.pane().line_diagnostics(1), []);
+        assert_eq!(
+            editor
+                .pane()
+                .line_diagnostics(2)
+                .into_iter()
+                .map(|(_, severity)| severity)
+                .collect::<Vec<_>>(),
+            [oxmacs_core::editor::Severity::Error]
+        );
     }
 
     #[test]
