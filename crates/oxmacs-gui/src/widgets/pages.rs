@@ -8,15 +8,15 @@ use iced::advanced::text::{self, Span, Text};
 use iced::advanced::widget::tree::{self, Tree};
 use iced::advanced::{Clipboard, Shell, Widget};
 use iced::alignment::Vertical;
-use iced::font::{Family, Style, Weight};
+use iced::font::{Style, Weight};
 use iced::widget::image::Handle;
 use iced::{Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme};
 use oxmacs_core::theme::{Highlight, Theme as Faces};
 use oxmacs_ox::book::{At, Block, Kind, Pages, Run, Spread, Typeface};
 use oxmacs_ox::views::{Arg, Press};
 
-use crate::style;
 use crate::widgets::ox_view;
+use crate::{fonts, style};
 
 const MEASURE: f32 = 32.0;
 const LINE: f32 = 1.55;
@@ -252,14 +252,8 @@ impl<'a, Message> PagesView<'a, Message> {
 
     fn base(&self) -> Font {
         match self.pages.typeface {
-            Typeface::Serif => Font {
-                family: Family::Serif,
-                ..Font::DEFAULT
-            },
-            Typeface::Sans => Font {
-                family: Family::SansSerif,
-                ..Font::DEFAULT
-            },
+            Typeface::Serif => fonts::serif(),
+            Typeface::Sans => fonts::sans(),
             Typeface::Mono => self.mono,
         }
     }
@@ -827,7 +821,12 @@ where
             } else {
                 &self.pages.header.1
             };
-            let header_text = |content: String, x: f32, y: f32, align: text::Alignment| {
+            let header_text = |content: String, y: f32, align: text::Alignment| {
+                let x = match align {
+                    text::Alignment::Center => origin.x + typeset.page.width / 2.0,
+                    text::Alignment::Right => origin.x + typeset.page.width,
+                    _ => origin.x,
+                };
                 (
                     Text {
                         content,
@@ -846,19 +845,17 @@ where
             if !header.is_empty() {
                 let (text, at) = header_text(
                     header.clone(),
-                    origin.x,
                     bounds.y + TOP * em * 0.4,
-                    if side == 0 && typeset.spread {
-                        text::Alignment::Left
-                    } else {
-                        text::Alignment::Right
+                    match (typeset.spread, side) {
+                        (false, _) => text::Alignment::Center,
+                        (true, 0) => text::Alignment::Left,
+                        (true, _) => text::Alignment::Right,
                     },
                 );
                 renderer.fill_text(text, at, faint, bounds);
             }
             let (number, at) = header_text(
                 format!("{}", page + 1),
-                origin.x,
                 origin.y + typeset.page.height + BOTTOM * em * 0.35,
                 text::Alignment::Center,
             );
@@ -906,12 +903,8 @@ where
                         );
                     }
                     Look::Rule => {
-                        let (text, at) = header_text(
-                            "⁂".to_owned(),
-                            origin.x,
-                            top_left.y,
-                            text::Alignment::Center,
-                        );
+                        let (text, at) =
+                            header_text("⁂".to_owned(), top_left.y, text::Alignment::Center);
                         renderer.fill_text(text, at, faint, clip);
                     }
                 }
