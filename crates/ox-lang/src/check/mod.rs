@@ -306,13 +306,18 @@ impl Shape {
             .record_type_of(value)
             .map_or(value, |kind| kind.constructor);
         if let Some(native) = heap.native_of(callee) {
+            let pairs = 2 * native.keywords.len();
             return Some(Self {
                 required: native.least,
                 optional: native
                     .most
-                    .map_or(0, |most| most.saturating_sub(native.least)),
+                    .map_or(0, |most| most.saturating_sub(native.least + pairs)),
                 rest: native.most.is_none(),
-                keywords: Vec::new(),
+                keywords: native
+                    .keywords
+                    .iter()
+                    .map(|name| name.name().to_owned())
+                    .collect(),
             });
         }
         let arity = &heap.closure_of(callee)?.code.arity;

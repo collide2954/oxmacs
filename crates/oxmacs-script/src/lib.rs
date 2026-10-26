@@ -356,16 +356,15 @@ mod tests {
 
         let missing: Vec<&String> = real
             .iter()
-            .map(|(name, _, _)| name)
-            .filter(|name| !stubs.iter().any(|(stub, _, _)| stub == *name))
+            .map(|(name, _)| name)
+            .filter(|name| !stubs.iter().any(|(stub, _)| stub == *name))
             .collect();
         let different: Vec<String> = stubs
             .iter()
-            .filter_map(|(name, least, most)| {
-                let (_, real_least, real_most) = real.iter().find(|(known, _, _)| known == name)?;
-                (least != real_least || (most.is_some() && most != real_most)).then(|| {
-                    format!("{name}: stub {least}..{most:?}, editor {real_least}..{real_most:?}")
-                })
+            .filter_map(|(name, shape)| {
+                let (_, real_shape) = real.iter().find(|(known, _)| known == name)?;
+                (shape != real_shape)
+                    .then(|| format!("{name}: stub ({shape}), editor ({real_shape})"))
             })
             .collect();
         assert!(missing.is_empty(), "no stub for {missing:?}");

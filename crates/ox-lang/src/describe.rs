@@ -68,13 +68,17 @@ pub(crate) struct Entry {
     pub least: usize,
     pub most: Option<usize>,
     pub positional: Option<usize>,
-    pub keywords: usize,
+    pub keywords: Vec<String>,
 }
 
 impl Entry {
-    pub fn fits(&self, least: usize, most: Option<usize>) -> bool {
-        let pairs = self.positional.map(|most| most + 2 * self.keywords);
-        least == self.least && (most == self.most || (self.keywords > 0 && most == pairs))
+    pub fn fits(&self, least: usize, most: Option<usize>, keywords: &[Sym]) -> bool {
+        let pairs = self.positional.map(|most| most + 2 * self.keywords.len());
+        let named = keywords.len() == self.keywords.len()
+            && keywords
+                .iter()
+                .all(|keyword| self.keywords.iter().any(|known| known == keyword.name()));
+        named && least == self.least && most == pairs
     }
 }
 
@@ -100,9 +104,17 @@ fn entry(signature: &Syntax, doc: &Syntax, special: bool) -> Option<(String, Ent
                 .rest
                 .is_none()
                 .then_some(least + parsed.optional.len());
-            (least, most, parsed.keywords.len())
+            let keywords = parsed
+                .keywords
+                .iter()
+                .filter_map(|(name, _)| match &name.datum {
+                    Datum::Symbol(word) => Some(word.clone()),
+                    _ => None,
+                })
+                .collect();
+            (least, most, keywords)
         }
-        Err(_) if special => (0, None, 0),
+        Err(_) if special => (0, None, Vec::new()),
         Err(_) => return None,
     };
     let shown: Vec<String> = parameters.iter().map(ToString::to_string).collect();
@@ -113,7 +125,7 @@ fn entry(signature: &Syntax, doc: &Syntax, special: bool) -> Option<(String, Ent
             doc: doc.clone(),
             special,
             least,
-            most: most.filter(|_| keywords == 0),
+            most: most.filter(|_| keywords.is_empty()),
             positional: most,
             keywords,
         },

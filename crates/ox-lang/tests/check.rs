@@ -258,7 +258,7 @@ fn reader_errors_and_malformed_forms_are_reported_where_they_are() {
 
 #[test]
 fn calls_with_the_wrong_arguments_are_errors_worded_like_the_runtime() {
-    let source = "(module (import (ox string)))
+    let source = "(module (import (ox string) (ox time)))
 (def (area w h) (* w h))
 (def (greet name (greeting \"Hi\")) (str greeting name))
 (def (total & items) (reduce + 0 items))
@@ -275,6 +275,7 @@ fn calls_with_the_wrong_arguments_are_errors_worded_like_the_runtime() {
 (Point 1)
 (inc 1 2)
 (string/upper \"a\" \"b\")
+(time/format 0 \"%Y\" :place \"UTC\")
 (let [area (fn [x] x)] (area 1))";
 
     assert_eq!(
@@ -314,6 +315,11 @@ fn calls_with_the_wrong_arguments_are_errors_worded_like_the_runtime() {
                 Severity::Error,
                 "string/upper".to_owned(),
                 "string/upper takes 1 argument, got 2".to_owned()
+            ),
+            (
+                Severity::Error,
+                "time/format".to_owned(),
+                "time/format has no keyword parameter :place".to_owned()
             ),
         ]
     );

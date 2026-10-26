@@ -648,17 +648,6 @@ impl Isolate {
         }
     }
 
-    fn install_native(
-        &mut self,
-        module: &str,
-        name: &str,
-        least: usize,
-        most: Option<usize>,
-        function: Rc<NativeFn>,
-    ) {
-        self.install(module, name, plain(module, name, least, most, function));
-    }
-
     pub(crate) fn install(&mut self, module: &str, name: &str, native: Native) -> Option<Value> {
         let place = self.runtime.module_named(module);
         let value = self.runtime.heap.native(native).ok()?;
@@ -1006,11 +995,12 @@ impl Isolate {
                 None if which == Stubs::Modules => continue,
                 None => ("ox".to_owned(), shown.as_str()),
             };
-            let most = entry.most.filter(|_| entry.keywords == 0);
+            let keywords: Vec<&str> = entry.keywords.iter().map(String::as_str).collect();
             let missing = format!("{shown} isn't available here");
-            let function: Rc<NativeFn> =
-                Rc::new(move |_, _, _| Err(Error::new(missing.clone()).of(ErrorKind::Refused)));
-            self.install_native(&module, name, entry.least, most, function);
+            self.native(&module, name)
+                .arity(entry.least, entry.positional)
+                .keywords(&keywords)
+                .function(move |_, _| Err(Error::new(missing.clone()).of(ErrorKind::Refused)));
         }
         self.add_native_docs(table);
     }
@@ -1325,16 +1315,23 @@ impl Isolate {
             .collect()
     }
 
-    pub fn natives(&self) -> Vec<(String, usize, Option<usize>)> {
+    pub fn natives(&self) -> Vec<(String, String)> {
         let heap = &self.runtime.heap;
-        let mut found: Vec<(String, usize, Option<usize>)> = self
+        let mut found: Vec<(String, String)> = self
             .runtime
             .modules
             .iter()
             .flat_map(|module| &module.globals)
             .filter_map(|(_, value)| heap.native_of(*value))
             .filter(|native| native.parameters().is_none())
-            .map(|native| (native.name.name().to_owned(), native.least, native.most))
+            .map(|native| {
+                let mut keywords = native.keywords.to_vec();
+                keywords.sort_by_key(|keyword| keyword.name());
+                (
+                    native.name.name().to_owned(),
+                    describe::fallback_with(native.least, native.most, &keywords),
+                )
+            })
             .collect();
         found.sort();
         found.dedup();
@@ -1351,11 +1348,11 @@ impl Isolate {
             natives.insert(shown);
             match docs.entries.get(shown) {
                 None => problems.push(format!("{shown} has no doc entry")),
-                Some(entry) if !entry.fits(native.least, native.most) => {
+                Some(entry) if !entry.fits(native.least, native.most, &native.keywords) => {
                     problems.push(format!(
-                        "{shown} takes {} arguments but its doc entry shows {}",
-                        describe::fallback(native.least, native.most),
-                        describe::fallback(entry.least, entry.most)
+                        "{shown} takes {} but its doc entry shows {}",
+                        describe::fallback_with(native.least, native.most, &native.keywords),
+                        entry.parameters
                     ));
                 }
                 Some(_) => {}
