@@ -215,28 +215,38 @@ fn options(heap: &Heap, given: &[Value]) -> Result<bool, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "connect", 2, None, |heap, arguments| {
-        let host = text(heap, "net/connect", arguments[0])?.to_owned();
-        let port = match arguments[1] {
-            Value::Int(port) => u16::try_from(port).ok(),
-            _ => None,
-        }
-        .ok_or_else(|| wrong(heap, "net/connect", "a port number", arguments[1]))?;
-        let tls = options(heap, &arguments[2..])?;
-        heap.background(&format!("ox net/connect {host}"), move || {
-            connect(host, port, tls)
-        })
-    });
-    isolate.define_native_in(MODULE, "send", 2, Some(2), |heap, arguments| {
-        let line = print::display(heap, arguments[1]);
-        if line.contains(['\r', '\n']) {
-            return Err(Error::new(
-                "net/send sends one line, without a line break".to_owned(),
-            ));
-        }
-        command(heap, "net/send", arguments[0], Command::Send(line))
-    });
-    isolate.define_native_in(MODULE, "close", 1, Some(1), |heap, arguments| {
-        command(heap, "net/close", arguments[0], Command::Close)
-    });
+    isolate
+        .native(MODULE, "connect")
+        .arity(2, None)
+        .outside()
+        .function(|heap, arguments| {
+            let host = text(heap, "net/connect", arguments[0])?.to_owned();
+            let port = match arguments[1] {
+                Value::Int(port) => u16::try_from(port).ok(),
+                _ => None,
+            }
+            .ok_or_else(|| wrong(heap, "net/connect", "a port number", arguments[1]))?;
+            let tls = options(heap, &arguments[2..])?;
+            heap.background(&format!("ox net/connect {host}"), move || {
+                connect(host, port, tls)
+            })
+        });
+    isolate
+        .native(MODULE, "send")
+        .arity(2, Some(2))
+        .outside()
+        .function(|heap, arguments| {
+            let line = print::display(heap, arguments[1]);
+            if line.contains(['\r', '\n']) {
+                return Err(Error::new(
+                    "net/send sends one line, without a line break".to_owned(),
+                ));
+            }
+            command(heap, "net/send", arguments[0], Command::Send(line))
+        });
+    isolate
+        .native(MODULE, "close")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| command(heap, "net/close", arguments[0], Command::Close));
 }

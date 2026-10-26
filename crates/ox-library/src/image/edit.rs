@@ -59,11 +59,14 @@ impl Routine for Edit {
 }
 
 pub(super) fn install(isolate: &mut Isolate) {
-    isolate.define_routine_in(MODULE, "edit", 2, Some(2), None, |_, _, arguments| {
-        Ok(Started::Running(Box::new(Edit {
-            change: arguments[1],
-            held: [arguments[0]],
-            step: Step::Begin,
-        })))
-    });
+    isolate
+        .native(MODULE, "edit")
+        .arity(2, Some(2))
+        .routine(|_, _, arguments| {
+            Ok(Started::Running(Box::new(Edit {
+                change: arguments[1],
+                held: [arguments[0]],
+                step: Step::Begin,
+            })))
+        });
 }

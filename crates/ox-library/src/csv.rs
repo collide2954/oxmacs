@@ -103,5 +103,5 @@ fn read(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "read", 1, None, read);
+    isolate.native(MODULE, "read").arity(1, None).function(read);
 }

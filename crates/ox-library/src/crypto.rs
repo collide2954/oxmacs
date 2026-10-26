@@ -310,37 +310,64 @@ fn one_time(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "random", 1, Some(1), |heap, arguments| {
-        let count = usize::try_from(counted(heap, "crypto/random", arguments[0])?).unwrap_or(0);
-        let bytes = random(count)?;
-        string(heap, &hex(&bytes))
-    });
-    isolate.define_native_in(MODULE, "random-below", 1, Some(1), |heap, arguments| {
-        let bound = counted(heap, "crypto/random-below", arguments[0])?;
-        if bound == 0 {
-            return Err(Error::new("crypto/random-below needs a bound above 0"));
-        }
-        Ok(Value::Int(i64::try_from(below(bound)?).unwrap_or(0)))
-    });
-    isolate.define_native_in(MODULE, "derive-key", 2, None, derive_key);
-    isolate.define_native_in(MODULE, "seal", 2, Some(2), seal);
-    isolate.define_native_in(MODULE, "open", 2, Some(2), open);
-    isolate.define_native_in(MODULE, "totp", 1, None, one_time);
-    isolate.define_native_in(MODULE, "sha256", 1, Some(1), |heap, arguments| {
-        let given = text(heap, "crypto/sha256", arguments[0])?;
-        let digest = digest::digest(&digest::SHA256, given.as_bytes());
-        string(heap, &hex(digest.as_ref()))
-    });
-    isolate.define_native_in(MODULE, "to-base64", 1, Some(1), |heap, arguments| {
-        let encoded = to_base64(text(heap, "crypto/to-base64", arguments[0])?.as_bytes());
-        string(heap, &encoded)
-    });
-    isolate.define_native_in(MODULE, "from-base64", 1, Some(1), |heap, arguments| {
-        let decoded = heap
-            .text(arguments[0])
-            .and_then(from_base64)
-            .and_then(|bytes| String::from_utf8(bytes).ok())
-            .ok_or_else(|| Error::new("crypto/from-base64 expects base64 of text"))?;
-        string(heap, &decoded)
-    });
+    isolate
+        .native(MODULE, "random")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let count = usize::try_from(counted(heap, "crypto/random", arguments[0])?).unwrap_or(0);
+            let bytes = random(count)?;
+            string(heap, &hex(&bytes))
+        });
+    isolate
+        .native(MODULE, "random-below")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let bound = counted(heap, "crypto/random-below", arguments[0])?;
+            if bound == 0 {
+                return Err(Error::new("crypto/random-below needs a bound above 0"));
+            }
+            Ok(Value::Int(i64::try_from(below(bound)?).unwrap_or(0)))
+        });
+    isolate
+        .native(MODULE, "derive-key")
+        .arity(2, None)
+        .function(derive_key);
+    isolate
+        .native(MODULE, "seal")
+        .arity(2, Some(2))
+        .function(seal);
+    isolate
+        .native(MODULE, "open")
+        .arity(2, Some(2))
+        .function(open);
+    isolate
+        .native(MODULE, "totp")
+        .arity(1, None)
+        .function(one_time);
+    isolate
+        .native(MODULE, "sha256")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let given = text(heap, "crypto/sha256", arguments[0])?;
+            let digest = digest::digest(&digest::SHA256, given.as_bytes());
+            string(heap, &hex(digest.as_ref()))
+        });
+    isolate
+        .native(MODULE, "to-base64")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let encoded = to_base64(text(heap, "crypto/to-base64", arguments[0])?.as_bytes());
+            string(heap, &encoded)
+        });
+    isolate
+        .native(MODULE, "from-base64")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let decoded = heap
+                .text(arguments[0])
+                .and_then(from_base64)
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                .ok_or_else(|| Error::new("crypto/from-base64 expects base64 of text"))?;
+            string(heap, &decoded)
+        });
 }

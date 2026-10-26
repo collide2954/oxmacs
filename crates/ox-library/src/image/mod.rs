@@ -237,59 +237,78 @@ fn color_value(heap: &mut Heap, color: image::Rgba<u8>) -> Result<Value, Error> 
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "image?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(image_of(heap, arguments[0]).is_some()))
-    });
-    isolate.define_native_in(MODULE, "color", 1, Some(1), |heap, arguments| {
-        let color = colors::color(heap, "color", arguments[0])?;
-        color_value(heap, color)
-    });
-    isolate.define_native_in(MODULE, "new", 2, Some(4), |heap, arguments| {
-        let width = size(heap, "new", "a width", arguments[0])?;
-        let height = size(heap, "new", "a height", arguments[1])?;
-        roomy("new", width, height)?;
-        let options = Options::read(heap, "new", &arguments[2..], &["color"])?;
-        let color = match options.get("color") {
-            Some(value) => colors::color(heap, "new", value)?,
-            None => image::Rgba([0, 0, 0, 0]),
-        };
-        stored(
-            heap,
-            Image::new(RgbaImage::from_pixel(width, height, color)),
-        )
-    });
-    isolate.define_native_awaiting_in(MODULE, "info", 1, Some(1), |heap, arguments| {
-        let image = wanted(heap, "info", arguments[0])?;
-        info(heap, &image)
-    });
-    isolate.define_native_awaiting_in(MODULE, "width", 1, Some(1), |heap, arguments| {
-        Ok(int(wanted(heap, "width", arguments[0])?.pixels.width()))
-    });
-    isolate.define_native_awaiting_in(MODULE, "height", 1, Some(1), |heap, arguments| {
-        Ok(int(wanted(heap, "height", arguments[0])?.pixels.height()))
-    });
-    isolate.define_native_awaiting_in(MODULE, "pixel", 3, Some(3), |heap, arguments| {
-        let image = wanted(heap, "pixel", arguments[0])?;
-        let place = |value: Value| match value {
-            Value::Int(number) => u32::try_from(number).ok(),
-            _ => None,
-        };
-        let pixel = place(arguments[1])
-            .zip(place(arguments[2]))
-            .and_then(|(x, y)| image.pixels.get_pixel_checked(x, y))
-            .copied()
-            .ok_or_else(|| {
-                Error::new(format!(
-                    "image/pixel expects a point inside the {}×{} image, got {} {}",
-                    image.pixels.width(),
-                    image.pixels.height(),
-                    print::brief(heap, arguments[1]),
-                    print::brief(heap, arguments[2])
-                ))
-                .of(ErrorKind::Range)
-            })?;
-        color_value(heap, pixel)
-    });
+    isolate
+        .native(MODULE, "image?")
+        .arity(1, Some(1))
+        .function(|heap, arguments| Ok(Value::Bool(image_of(heap, arguments[0]).is_some())));
+    isolate
+        .native(MODULE, "color")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let color = colors::color(heap, "color", arguments[0])?;
+            color_value(heap, color)
+        });
+    isolate
+        .native(MODULE, "new")
+        .arity(2, Some(4))
+        .function(|heap, arguments| {
+            let width = size(heap, "new", "a width", arguments[0])?;
+            let height = size(heap, "new", "a height", arguments[1])?;
+            roomy("new", width, height)?;
+            let options = Options::read(heap, "new", &arguments[2..], &["color"])?;
+            let color = match options.get("color") {
+                Some(value) => colors::color(heap, "new", value)?,
+                None => image::Rgba([0, 0, 0, 0]),
+            };
+            stored(
+                heap,
+                Image::new(RgbaImage::from_pixel(width, height, color)),
+            )
+        });
+    isolate
+        .native(MODULE, "info")
+        .arity(1, Some(1))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "info", arguments[0])?;
+            info(heap, &image)
+        });
+    isolate
+        .native(MODULE, "width")
+        .arity(1, Some(1))
+        .suspends()
+        .function(|heap, arguments| Ok(int(wanted(heap, "width", arguments[0])?.pixels.width())));
+    isolate
+        .native(MODULE, "height")
+        .arity(1, Some(1))
+        .suspends()
+        .function(|heap, arguments| Ok(int(wanted(heap, "height", arguments[0])?.pixels.height())));
+    isolate
+        .native(MODULE, "pixel")
+        .arity(3, Some(3))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "pixel", arguments[0])?;
+            let place = |value: Value| match value {
+                Value::Int(number) => u32::try_from(number).ok(),
+                _ => None,
+            };
+            let pixel = place(arguments[1])
+                .zip(place(arguments[2]))
+                .and_then(|(x, y)| image.pixels.get_pixel_checked(x, y))
+                .copied()
+                .ok_or_else(|| {
+                    Error::new(format!(
+                        "image/pixel expects a point inside the {}×{} image, got {} {}",
+                        image.pixels.width(),
+                        image.pixels.height(),
+                        print::brief(heap, arguments[1]),
+                        print::brief(heap, arguments[2])
+                    ))
+                    .of(ErrorKind::Range)
+                })?;
+            color_value(heap, pixel)
+        });
     io::install(isolate);
     geometry::install(isolate);
     adjust::install(isolate);

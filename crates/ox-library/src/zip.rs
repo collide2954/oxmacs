@@ -68,23 +68,35 @@ fn bytes(path: &Path, name: &str) -> Result<Vec<u8>, Failure> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "entries", 1, Some(1), |heap, arguments| {
-        let path = PathBuf::from(text(heap, "zip/entries", arguments[0])?);
-        heap.background("ox zip/entries", move || entries(&path))
-    });
-    isolate.define_native_in(MODULE, "read", 2, Some(2), |heap, arguments| {
-        let path = PathBuf::from(text(heap, "zip/read", arguments[0])?);
-        let name = text(heap, "zip/read", arguments[1])?.to_owned();
-        heap.background("ox zip/read", move || {
-            bytes(&path, &name)
-                .map(|read| Portable::String(String::from_utf8_lossy(&read).as_ref().into()))
-        })
-    });
-    isolate.define_native_in(MODULE, "read-base64", 2, Some(2), |heap, arguments| {
-        let path = PathBuf::from(text(heap, "zip/read-base64", arguments[0])?);
-        let name = text(heap, "zip/read-base64", arguments[1])?.to_owned();
-        heap.background("ox zip/read-base64", move || {
-            bytes(&path, &name).map(|read| Portable::String(to_base64(&read).into()))
-        })
-    });
+    isolate
+        .native(MODULE, "entries")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text(heap, "zip/entries", arguments[0])?);
+            heap.background("ox zip/entries", move || entries(&path))
+        });
+    isolate
+        .native(MODULE, "read")
+        .arity(2, Some(2))
+        .outside()
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text(heap, "zip/read", arguments[0])?);
+            let name = text(heap, "zip/read", arguments[1])?.to_owned();
+            heap.background("ox zip/read", move || {
+                bytes(&path, &name)
+                    .map(|read| Portable::String(String::from_utf8_lossy(&read).as_ref().into()))
+            })
+        });
+    isolate
+        .native(MODULE, "read-base64")
+        .arity(2, Some(2))
+        .outside()
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text(heap, "zip/read-base64", arguments[0])?);
+            let name = text(heap, "zip/read-base64", arguments[1])?.to_owned();
+            heap.background("ox zip/read-base64", move || {
+                bytes(&path, &name).map(|read| Portable::String(to_base64(&read).into()))
+            })
+        });
 }

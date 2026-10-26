@@ -185,41 +185,58 @@ fn probe(path: &Path) -> Result<Portable, String> {
     ]))
 }
 pub(super) fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "open", 1, Some(1), |heap, arguments| {
-        let path = PathBuf::from(text(heap, "open", "a path", arguments[0])?);
-        later(heap, "open", move || open(&path))
-    });
-    isolate.define_native_in(MODULE, "decode", 1, Some(1), |heap, arguments| {
-        let bytes = crate::crypto::from_base64(text(heap, "decode", "base64 text", arguments[0])?)
-            .ok_or_else(|| Error::new("image/decode got text that isn't base64"))?;
-        later(heap, "decode", move || decode(&bytes))
-    });
-    isolate.define_native_in(MODULE, "probe", 1, Some(1), |heap, arguments| {
-        let path = PathBuf::from(text(heap, "probe", "a path", arguments[0])?);
-        heap.background("ox image/probe", move || {
-            probe(&path).map_err(super::failure)
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "save", 2, Some(6), |heap, arguments| {
-        let image = wanted(heap, "save", arguments[0])?;
-        let path = PathBuf::from(text(heap, "save", "a path", arguments[1])?);
-        let options = Options::read(heap, "save", &arguments[2..], &["quality", "format"])?;
-        let quality = options.number(heap, "quality", 90.0)?;
-        let given = match options.get("format") {
-            Some(Value::Keyword(name)) => Some(name.name().to_owned()),
-            Some(value) => Some(text(heap, "save", "a format", value)?.to_owned()),
-            None => None,
-        };
-        let format = chosen_format(&path, given.as_deref()).map_err(Error::new)?;
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "clamped to 1..=100"
-        )]
-        let quality = quality.clamp(1.0, 100.0).round() as u8;
-        let shown = path.display().to_string();
-        heap.background_json("ox image/save", move || {
-            save(&image, &path, format, quality).map(|()| serde_json::Value::String(shown))
-        })
-    });
+    isolate
+        .native(MODULE, "open")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text(heap, "open", "a path", arguments[0])?);
+            later(heap, "open", move || open(&path))
+        });
+    isolate
+        .native(MODULE, "decode")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let bytes =
+                crate::crypto::from_base64(text(heap, "decode", "base64 text", arguments[0])?)
+                    .ok_or_else(|| Error::new("image/decode got text that isn't base64"))?;
+            later(heap, "decode", move || decode(&bytes))
+        });
+    isolate
+        .native(MODULE, "probe")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text(heap, "probe", "a path", arguments[0])?);
+            heap.background("ox image/probe", move || {
+                probe(&path).map_err(super::failure)
+            })
+        });
+    isolate
+        .native(MODULE, "save")
+        .arity(2, Some(6))
+        .outside()
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "save", arguments[0])?;
+            let path = PathBuf::from(text(heap, "save", "a path", arguments[1])?);
+            let options = Options::read(heap, "save", &arguments[2..], &["quality", "format"])?;
+            let quality = options.number(heap, "quality", 90.0)?;
+            let given = match options.get("format") {
+                Some(Value::Keyword(name)) => Some(name.name().to_owned()),
+                Some(value) => Some(text(heap, "save", "a format", value)?.to_owned()),
+                None => None,
+            };
+            let format = chosen_format(&path, given.as_deref()).map_err(Error::new)?;
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "clamped to 1..=100"
+            )]
+            let quality = quality.clamp(1.0, 100.0).round() as u8;
+            let shown = path.display().to_string();
+            heap.background_json("ox image/save", move || {
+                save(&image, &path, format, quality).map(|()| serde_json::Value::String(shown))
+            })
+        });
 }

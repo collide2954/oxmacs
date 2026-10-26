@@ -422,36 +422,48 @@ fn install_tones(isolate: &mut Isolate) {
         ("exposure", any, |value, stops| value * stops.exp2()),
     ];
     for (name, check, curve) in tones {
-        isolate.define_native_awaiting_in(MODULE, name, 2, Some(2), move |heap, arguments| {
-            let image = wanted(heap, name, arguments[0])?;
-            let amount = check(heap, name, arguments[1])?;
-            let shared = table(|value| curve(value, amount));
-            changed(heap, name, image, move |pixels| {
+        isolate
+            .native(MODULE, name)
+            .arity(2, Some(2))
+            .suspends()
+            .function(move |heap, arguments| {
+                let image = wanted(heap, name, arguments[0])?;
+                let amount = check(heap, name, arguments[1])?;
+                let shared = table(|value| curve(value, amount));
+                changed(heap, name, image, move |pixels| {
+                    looked_up(pixels, &rgb_tables(shared, shared, shared));
+                })
+            });
+    }
+    isolate
+        .native(MODULE, "invert")
+        .arity(1, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "invert", arguments[0])?;
+            let amount = strength(heap, "invert", arguments.get(1))?;
+            let shared = table(|value| value * (1.0 - amount) + (1.0 - value) * amount);
+            changed(heap, "invert", image, move |pixels| {
                 looked_up(pixels, &rgb_tables(shared, shared, shared));
             })
         });
-    }
-    isolate.define_native_awaiting_in(MODULE, "invert", 1, Some(2), |heap, arguments| {
-        let image = wanted(heap, "invert", arguments[0])?;
-        let amount = strength(heap, "invert", arguments.get(1))?;
-        let shared = table(|value| value * (1.0 - amount) + (1.0 - value) * amount);
-        changed(heap, "invert", image, move |pixels| {
-            looked_up(pixels, &rgb_tables(shared, shared, shared));
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "posterize", 2, Some(2), |heap, arguments| {
-        let image = wanted(heap, "posterize", arguments[0])?;
-        let levels = match arguments[1] {
-            Value::Int(levels) if (2..=256).contains(&levels) => {
-                f32::from(u16::try_from(levels - 1).unwrap_or(1))
-            }
-            other => return Err(outside(heap, "posterize", "2 to 256 levels", other)),
-        };
-        let shared = table(|value| (value * levels).round() / levels);
-        changed(heap, "posterize", image, move |pixels| {
-            looked_up(pixels, &rgb_tables(shared, shared, shared));
-        })
-    });
+    isolate
+        .native(MODULE, "posterize")
+        .arity(2, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "posterize", arguments[0])?;
+            let levels = match arguments[1] {
+                Value::Int(levels) if (2..=256).contains(&levels) => {
+                    f32::from(u16::try_from(levels - 1).unwrap_or(1))
+                }
+                other => return Err(outside(heap, "posterize", "2 to 256 levels", other)),
+            };
+            let shared = table(|value| (value * levels).round() / levels);
+            changed(heap, "posterize", image, move |pixels| {
+                looked_up(pixels, &rgb_tables(shared, shared, shared));
+            })
+        });
 }
 
 fn install_mixes(isolate: &mut Isolate) {
@@ -460,222 +472,264 @@ fn install_mixes(isolate: &mut Isolate) {
         ("hue", any, hue),
     ];
     for (name, check, matrix) in mixes {
-        isolate.define_native_awaiting_in(MODULE, name, 2, Some(2), move |heap, arguments| {
-            let image = wanted(heap, name, arguments[0])?;
-            let matrix = matrix(check(heap, name, arguments[1])?);
-            changed(heap, name, image, move |pixels| {
-                each(pixels, |pixel| applied(pixel, &matrix));
-            })
-        });
+        isolate
+            .native(MODULE, name)
+            .arity(2, Some(2))
+            .suspends()
+            .function(move |heap, arguments| {
+                let image = wanted(heap, name, arguments[0])?;
+                let matrix = matrix(check(heap, name, arguments[1])?);
+                changed(heap, name, image, move |pixels| {
+                    each(pixels, |pixel| applied(pixel, &matrix));
+                })
+            });
     }
     for (name, target) in [("grayscale", GRAY), ("sepia", SEPIA)] {
-        isolate.define_native_awaiting_in(MODULE, name, 1, Some(2), move |heap, arguments| {
-            let image = wanted(heap, name, arguments[0])?;
-            let matrix = blend(&IDENTITY, &target, strength(heap, name, arguments.get(1))?);
-            changed(heap, name, image, move |pixels| {
-                each(pixels, |pixel| applied(pixel, &matrix));
+        isolate
+            .native(MODULE, name)
+            .arity(1, Some(2))
+            .suspends()
+            .function(move |heap, arguments| {
+                let image = wanted(heap, name, arguments[0])?;
+                let matrix = blend(&IDENTITY, &target, strength(heap, name, arguments.get(1))?);
+                changed(heap, name, image, move |pixels| {
+                    each(pixels, |pixel| applied(pixel, &matrix));
+                })
+            });
+    }
+    isolate
+        .native(MODULE, "vibrance")
+        .arity(2, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "vibrance", arguments[0])?;
+            let by = factor(heap, "vibrance", arguments[1])?;
+            changed(heap, "vibrance", image, move |pixels| {
+                each(pixels, |pixel| {
+                    let rgb = &pixel[..3];
+                    let low = rgb.iter().copied().min().unwrap_or(0);
+                    let high = rgb.iter().copied().max().unwrap_or(0);
+                    let muted = 1.0 - unit(high - low);
+                    applied(
+                        pixel,
+                        &blend(&CSS_GRAY, &IDENTITY, 1.0 + (by - 1.0) * muted),
+                    );
+                });
             })
         });
-    }
-    isolate.define_native_awaiting_in(MODULE, "vibrance", 2, Some(2), |heap, arguments| {
-        let image = wanted(heap, "vibrance", arguments[0])?;
-        let by = factor(heap, "vibrance", arguments[1])?;
-        changed(heap, "vibrance", image, move |pixels| {
-            each(pixels, |pixel| {
-                let rgb = &pixel[..3];
-                let low = rgb.iter().copied().min().unwrap_or(0);
-                let high = rgb.iter().copied().max().unwrap_or(0);
-                let muted = 1.0 - unit(high - low);
-                applied(
-                    pixel,
-                    &blend(&CSS_GRAY, &IDENTITY, 1.0 + (by - 1.0) * muted),
-                );
+    isolate
+        .native(MODULE, "tint")
+        .arity(2, Some(3))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "tint", arguments[0])?;
+            let color = colors::color(heap, "tint", arguments[1])?;
+            let amount = strength(heap, "tint", arguments.get(2))?;
+            let [red, green, blue] = [0, 1, 2].map(|channel| {
+                let by = 1.0 + (unit(color[channel]) - 1.0) * amount;
+                table(|value| value * by)
             });
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "tint", 2, Some(3), |heap, arguments| {
-        let image = wanted(heap, "tint", arguments[0])?;
-        let color = colors::color(heap, "tint", arguments[1])?;
-        let amount = strength(heap, "tint", arguments.get(2))?;
-        let [red, green, blue] = [0, 1, 2].map(|channel| {
-            let by = 1.0 + (unit(color[channel]) - 1.0) * amount;
-            table(|value| value * by)
+            changed(heap, "tint", image, move |pixels| {
+                looked_up(pixels, &rgb_tables(red, green, blue));
+            })
         });
-        changed(heap, "tint", image, move |pixels| {
-            looked_up(pixels, &rgb_tables(red, green, blue));
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "balance", 1, Some(9), |heap, arguments| {
-        let image = wanted(heap, "balance", arguments[0])?;
-        let options = Options::read(
-            heap,
-            "balance",
-            &arguments[1..],
-            &["red", "green", "blue", "neutral"],
-        )?;
-        let mut factors = [1.0_f32; 3];
-        for (by, key) in factors.iter_mut().zip(["red", "green", "blue"]) {
-            if let Some(value) = options.get(key) {
-                *by = factor(heap, "balance", value)?;
-            }
-        }
-        if let Some(value) = options.get("neutral") {
-            let neutral = colors::color(heap, "balance", value)?;
-            let rgb = [unit(neutral[0]), unit(neutral[1]), unit(neutral[2])];
-            let mean = rgb.iter().sum::<f32>() / 3.0;
-            for (by, channel) in factors.iter_mut().zip(rgb) {
-                if channel > 0.0 {
-                    *by *= mean / channel;
+    isolate
+        .native(MODULE, "balance")
+        .arity(1, Some(9))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "balance", arguments[0])?;
+            let options = Options::read(
+                heap,
+                "balance",
+                &arguments[1..],
+                &["red", "green", "blue", "neutral"],
+            )?;
+            let mut factors = [1.0_f32; 3];
+            for (by, key) in factors.iter_mut().zip(["red", "green", "blue"]) {
+                if let Some(value) = options.get(key) {
+                    *by = factor(heap, "balance", value)?;
                 }
             }
-        }
-        let [red, green, blue] = factors.map(|by| table(|value| value * by));
-        changed(heap, "balance", image, move |pixels| {
-            looked_up(pixels, &rgb_tables(red, green, blue));
-        })
-    });
+            if let Some(value) = options.get("neutral") {
+                let neutral = colors::color(heap, "balance", value)?;
+                let rgb = [unit(neutral[0]), unit(neutral[1]), unit(neutral[2])];
+                let mean = rgb.iter().sum::<f32>() / 3.0;
+                for (by, channel) in factors.iter_mut().zip(rgb) {
+                    if channel > 0.0 {
+                        *by *= mean / channel;
+                    }
+                }
+            }
+            let [red, green, blue] = factors.map(|by| table(|value| value * by));
+            changed(heap, "balance", image, move |pixels| {
+                looked_up(pixels, &rgb_tables(red, green, blue));
+            })
+        });
 }
 
 fn install_levels(isolate: &mut Isolate) {
-    isolate.define_native_awaiting_in(MODULE, "levels", 1, Some(11), |heap, arguments| {
-        let image = wanted(heap, "levels", arguments[0])?;
-        let options = Options::read(
-            heap,
-            "levels",
-            &arguments[1..],
-            &["black", "white", "gamma", "output-black", "output-white"],
-        )?;
-        let black = level(heap, "levels", "black", options.get("black"), 0.0)?;
-        let white = level(heap, "levels", "white", options.get("white"), 255.0)?;
-        let low = level(
-            heap,
-            "levels",
-            "output-black",
-            options.get("output-black"),
-            0.0,
-        )?;
-        let high = level(
-            heap,
-            "levels",
-            "output-white",
-            options.get("output-white"),
-            255.0,
-        )?;
-        let gamma = match options.get("gamma") {
-            Some(value) => above_zero(heap, "levels", value)?,
-            None => 1.0,
-        };
-        if white <= black {
-            return Err(Error::new("image/levels expects :white above :black").of(ErrorKind::Range));
-        }
-        let shared = table(|value| {
-            let along = ((value * 255.0 - black) / (white - black)).clamp(0.0, 1.0);
-            (low + (high - low) * along.powf(1.0 / gamma)) / 255.0
+    isolate
+        .native(MODULE, "levels")
+        .arity(1, Some(11))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "levels", arguments[0])?;
+            let options = Options::read(
+                heap,
+                "levels",
+                &arguments[1..],
+                &["black", "white", "gamma", "output-black", "output-white"],
+            )?;
+            let black = level(heap, "levels", "black", options.get("black"), 0.0)?;
+            let white = level(heap, "levels", "white", options.get("white"), 255.0)?;
+            let low = level(
+                heap,
+                "levels",
+                "output-black",
+                options.get("output-black"),
+                0.0,
+            )?;
+            let high = level(
+                heap,
+                "levels",
+                "output-white",
+                options.get("output-white"),
+                255.0,
+            )?;
+            let gamma = match options.get("gamma") {
+                Some(value) => above_zero(heap, "levels", value)?,
+                None => 1.0,
+            };
+            if white <= black {
+                return Err(
+                    Error::new("image/levels expects :white above :black").of(ErrorKind::Range)
+                );
+            }
+            let shared = table(|value| {
+                let along = ((value * 255.0 - black) / (white - black)).clamp(0.0, 1.0);
+                (low + (high - low) * along.powf(1.0 / gamma)) / 255.0
+            });
+            changed(heap, "levels", image, move |pixels| {
+                looked_up(pixels, &rgb_tables(shared, shared, shared));
+            })
         });
-        changed(heap, "levels", image, move |pixels| {
-            looked_up(pixels, &rgb_tables(shared, shared, shared));
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "curves", 2, Some(4), |heap, arguments| {
-        let image = wanted(heap, "curves", arguments[0])?;
-        let points = curve_points(heap, arguments[1])?;
-        let options = Options::read(heap, "curves", &arguments[2..], &["channel"])?;
-        let chosen = match options.get("channel") {
-            None => Some(0..3),
-            Some(Value::Keyword(keyword)) => match keyword.name() {
-                "all" => Some(0..3),
-                "red" => Some(0..1),
-                "green" => Some(1..2),
-                "blue" => Some(2..3),
-                "alpha" => Some(3..4),
-                _ => None,
-            },
-            Some(_) => None,
-        };
-        let Some(chosen) = chosen else {
-            return Err(Error::new(format!(
-                "image/curves takes :channel :all, :red, :green, :blue or :alpha, not {}",
-                print::brief(heap, options.get("channel").unwrap_or(Value::Nil))
-            ))
-            .of(ErrorKind::Type));
-        };
-        let curve = curve_table(&points);
-        let mut tables = [table(|value| value); 4];
-        for slot in chosen {
-            tables[slot] = curve;
-        }
-        changed(heap, "curves", image, move |pixels| {
-            looked_up(pixels, &tables);
-        })
-    });
+    isolate
+        .native(MODULE, "curves")
+        .arity(2, Some(4))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "curves", arguments[0])?;
+            let points = curve_points(heap, arguments[1])?;
+            let options = Options::read(heap, "curves", &arguments[2..], &["channel"])?;
+            let chosen = match options.get("channel") {
+                None => Some(0..3),
+                Some(Value::Keyword(keyword)) => match keyword.name() {
+                    "all" => Some(0..3),
+                    "red" => Some(0..1),
+                    "green" => Some(1..2),
+                    "blue" => Some(2..3),
+                    "alpha" => Some(3..4),
+                    _ => None,
+                },
+                Some(_) => None,
+            };
+            let Some(chosen) = chosen else {
+                return Err(Error::new(format!(
+                    "image/curves takes :channel :all, :red, :green, :blue or :alpha, not {}",
+                    print::brief(heap, options.get("channel").unwrap_or(Value::Nil))
+                ))
+                .of(ErrorKind::Type));
+            };
+            let curve = curve_table(&points);
+            let mut tables = [table(|value| value); 4];
+            for slot in chosen {
+                tables[slot] = curve;
+            }
+            changed(heap, "curves", image, move |pixels| {
+                looked_up(pixels, &tables);
+            })
+        });
 }
 
 fn install_reductions(isolate: &mut Isolate) {
-    isolate.define_native_awaiting_in(MODULE, "threshold", 1, Some(2), |heap, arguments| {
-        let image = wanted(heap, "threshold", arguments[0])?;
-        let wrong = |value| outside(heap, "threshold", "a level from 0 to 255 or :otsu", value);
-        let cut = match arguments.get(1).copied() {
-            None => Some(128),
-            Some(Value::Keyword(keyword)) if keyword.name() == "otsu" => None,
-            Some(value @ (Value::Int(_) | Value::Float(_))) => {
-                let found = number(heap, "threshold", "a level", value)?;
-                if !(0.0..=255.0).contains(&found) {
-                    return Err(wrong(value));
+    isolate
+        .native(MODULE, "threshold")
+        .arity(1, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "threshold", arguments[0])?;
+            let wrong = |value| outside(heap, "threshold", "a level from 0 to 255 or :otsu", value);
+            let cut = match arguments.get(1).copied() {
+                None => Some(128),
+                Some(Value::Keyword(keyword)) if keyword.name() == "otsu" => None,
+                Some(value @ (Value::Int(_) | Value::Float(_))) => {
+                    let found = number(heap, "threshold", "a level", value)?;
+                    if !(0.0..=255.0).contains(&found) {
+                        return Err(wrong(value));
+                    }
+                    Some(byte(narrow(found) / 255.0))
                 }
-                Some(byte(narrow(found) / 255.0))
-            }
-            Some(other) => return Err(wrong(other)),
-        };
-        changed(heap, "threshold", image, move |pixels| {
-            let cut = cut.unwrap_or_else(|| {
-                otsu_level(&GrayImage::from_fn(
-                    pixels.width(),
-                    pixels.height(),
-                    |x, y| Luma([luma(&pixels.get_pixel(x, y).0)]),
-                ))
-            });
-            each(pixels, |pixel| {
-                let shade = if luma(pixel) > cut { 255 } else { 0 };
-                pixel[..3].fill(shade);
-            });
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "replace", 3, Some(5), |heap, arguments| {
-        let image = wanted(heap, "replace", arguments[0])?;
-        let from = colors::color(heap, "replace", arguments[1])?;
-        let to = colors::color(heap, "replace", arguments[2])?;
-        let options = Options::read(heap, "replace", &arguments[3..], &["tolerance"])?;
-        let tolerance = options.number(heap, "tolerance", 0.0)?;
-        changed(heap, "replace", image, move |pixels| {
-            each(pixels, |pixel| {
-                let close = pixel
-                    .iter()
-                    .zip(from.0)
-                    .all(|(have, want)| f64::from(have.abs_diff(want)) <= tolerance);
-                if close {
-                    pixel.copy_from_slice(&to.0);
-                }
-            });
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "quantize", 2, Some(4), |heap, arguments| {
-        let image = wanted(heap, "quantize", arguments[0])?;
-        let palette = palette(heap, arguments[1])?;
-        let options = Options::read(heap, "quantize", &arguments[2..], &["dither"])?;
-        let dither = options.get("dither").is_none_or(Value::truthy);
-        changed(heap, "quantize", image, move |pixels| {
-            let palette = match palette {
-                Palette::Count(count) => median_cut(pixels, count),
-                Palette::Colors(colors) => colors,
+                Some(other) => return Err(wrong(other)),
             };
-            if dither {
-                dithered(pixels, &palette);
-            } else {
-                each(pixels, |pixel| {
-                    let goal = [0, 1, 2].map(|channel| f32::from(pixel[channel]));
-                    pixel[..3].copy_from_slice(&nearest(&palette, goal));
+            changed(heap, "threshold", image, move |pixels| {
+                let cut = cut.unwrap_or_else(|| {
+                    otsu_level(&GrayImage::from_fn(
+                        pixels.width(),
+                        pixels.height(),
+                        |x, y| Luma([luma(&pixels.get_pixel(x, y).0)]),
+                    ))
                 });
-            }
-        })
-    });
+                each(pixels, |pixel| {
+                    let shade = if luma(pixel) > cut { 255 } else { 0 };
+                    pixel[..3].fill(shade);
+                });
+            })
+        });
+    isolate
+        .native(MODULE, "replace")
+        .arity(3, Some(5))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "replace", arguments[0])?;
+            let from = colors::color(heap, "replace", arguments[1])?;
+            let to = colors::color(heap, "replace", arguments[2])?;
+            let options = Options::read(heap, "replace", &arguments[3..], &["tolerance"])?;
+            let tolerance = options.number(heap, "tolerance", 0.0)?;
+            changed(heap, "replace", image, move |pixels| {
+                each(pixels, |pixel| {
+                    let close = pixel
+                        .iter()
+                        .zip(from.0)
+                        .all(|(have, want)| f64::from(have.abs_diff(want)) <= tolerance);
+                    if close {
+                        pixel.copy_from_slice(&to.0);
+                    }
+                });
+            })
+        });
+    isolate
+        .native(MODULE, "quantize")
+        .arity(2, Some(4))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "quantize", arguments[0])?;
+            let palette = palette(heap, arguments[1])?;
+            let options = Options::read(heap, "quantize", &arguments[2..], &["dither"])?;
+            let dither = options.get("dither").is_none_or(Value::truthy);
+            changed(heap, "quantize", image, move |pixels| {
+                let palette = match palette {
+                    Palette::Count(count) => median_cut(pixels, count),
+                    Palette::Colors(colors) => colors,
+                };
+                if dither {
+                    dithered(pixels, &palette);
+                } else {
+                    each(pixels, |pixel| {
+                        let goal = [0, 1, 2].map(|channel| f32::from(pixel[channel]));
+                        pixel[..3].copy_from_slice(&nearest(&palette, goal));
+                    });
+                }
+            })
+        });
 }

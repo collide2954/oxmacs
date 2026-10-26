@@ -168,18 +168,30 @@ fn asked(heap: &Heap, arguments: &[Value]) -> Result<Asked, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "request", 2, None, |heap, arguments| {
-        let asked = asked(heap, arguments)?;
-        heap.background(&format!("ox http/request {}", asked.url), move || {
-            send(&asked)
-        })
-    });
-    isolate.define_native_in(MODULE, "get", 1, Some(1), |heap, arguments| {
-        let url = text(heap, "http/get", arguments[0])?.to_owned();
-        heap.background("ox http/get", move || get(&url))
-    });
-    isolate.define_native_in(MODULE, "encode", 1, Some(1), |heap, arguments| {
-        let encoded = encode(text(heap, "http/encode", arguments[0])?);
-        heap.string(&encoded).map_err(full)
-    });
+    isolate
+        .native(MODULE, "request")
+        .arity(2, None)
+        .outside()
+        .function(|heap, arguments| {
+            let asked = asked(heap, arguments)?;
+            heap.background(&format!("ox http/request {}", asked.url), move || {
+                send(&asked)
+            })
+        });
+    isolate
+        .native(MODULE, "get")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let url = text(heap, "http/get", arguments[0])?.to_owned();
+            heap.background("ox http/get", move || get(&url))
+        });
+    isolate
+        .native(MODULE, "encode")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let encoded = encode(text(heap, "http/encode", arguments[0])?);
+            heap.string(&encoded).map_err(full)
+        });
 }

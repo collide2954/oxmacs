@@ -502,173 +502,220 @@ pub(super) fn install(isolate: &mut Isolate) {
 }
 
 fn install_edits(isolate: &mut Isolate) {
-    isolate.define_native_awaiting_in(MODULE, "begin-edit", 1, Some(1), |heap, arguments| {
-        let image = wanted(heap, "begin-edit", arguments[0])?;
-        let pixmap = to_pixmap(&image.pixels);
-        let canvas = Canvas {
-            painting: Mutex::new(Some((image.with(RgbaImage::new(0, 0)), pixmap))),
-        };
-        heap.shared(CANVAS, Arc::new(canvas))
-            .map_err(ox_lang::build::full)
-    });
-    isolate.define_native_in(MODULE, "end-edit", 1, Some(1), |heap, arguments| {
-        let canvas = canvas_of(heap, "end-edit", arguments[0])?;
-        let taken = canvas
-            .painting
-            .lock()
-            .map_err(|_| Error::new("image/end-edit found its canvas broken"))?
-            .take();
-        let Some((image, pixmap)) = taken else {
-            return Err(Error::new(
-                "image/end-edit was given a canvas whose edit has ended",
-            ));
-        };
-        stored(heap, image.with(from_pixmap(pixmap)))
-    });
-    isolate.define_native_awaiting_in(MODULE, "set-pixel!", 4, Some(4), |heap, arguments| {
-        let [x, y] = [arguments[1], arguments[2]].map(|value| match value {
-            Value::Int(number) => u32::try_from(number).ok(),
-            _ => None,
+    isolate
+        .native(MODULE, "begin-edit")
+        .arity(1, Some(1))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "begin-edit", arguments[0])?;
+            let pixmap = to_pixmap(&image.pixels);
+            let canvas = Canvas {
+                painting: Mutex::new(Some((image.with(RgbaImage::new(0, 0)), pixmap))),
+            };
+            heap.shared(CANVAS, Arc::new(canvas))
+                .map_err(ox_lang::build::full)
         });
-        let (Some(x), Some(y)) = (x, y) else {
-            return Err(outside(
-                heap,
-                "set-pixel!",
-                "a point inside the image",
-                arguments[1],
-            ));
-        };
-        let color = colors::color(heap, "set-pixel!", arguments[3])?;
-        drawn(heap, "set-pixel!", arguments[0], move |pixmap| {
-            let width = pixmap.width();
-            if x >= width || y >= pixmap.height() {
-                return Err(format!(
-                    "image/set-pixel! expects a point inside the {width}×{} image, got {x} {y}",
-                    pixmap.height()
+    isolate
+        .native(MODULE, "end-edit")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let canvas = canvas_of(heap, "end-edit", arguments[0])?;
+            let taken = canvas
+                .painting
+                .lock()
+                .map_err(|_| Error::new("image/end-edit found its canvas broken"))?
+                .take();
+            let Some((image, pixmap)) = taken else {
+                return Err(Error::new(
+                    "image/end-edit was given a canvas whose edit has ended",
                 ));
-            }
-            let index = usize::try_from(y * width + x).unwrap_or(0);
-            pixmap.pixels_mut()[index] =
-                ColorU8::from_rgba(color[0], color[1], color[2], color[3]).premultiply();
-            Ok(())
-        })
-    });
+            };
+            stored(heap, image.with(from_pixmap(pixmap)))
+        });
+    isolate
+        .native(MODULE, "set-pixel!")
+        .arity(4, Some(4))
+        .suspends()
+        .function(|heap, arguments| {
+            let [x, y] = [arguments[1], arguments[2]].map(|value| match value {
+                Value::Int(number) => u32::try_from(number).ok(),
+                _ => None,
+            });
+            let (Some(x), Some(y)) = (x, y) else {
+                return Err(outside(
+                    heap,
+                    "set-pixel!",
+                    "a point inside the image",
+                    arguments[1],
+                ));
+            };
+            let color = colors::color(heap, "set-pixel!", arguments[3])?;
+            drawn(heap, "set-pixel!", arguments[0], move |pixmap| {
+                let width = pixmap.width();
+                if x >= width || y >= pixmap.height() {
+                    return Err(format!(
+                        "image/set-pixel! expects a point inside the {width}×{} image, got {x} {y}",
+                        pixmap.height()
+                    ));
+                }
+                let index = usize::try_from(y * width + x).unwrap_or(0);
+                pixmap.pixels_mut()[index] =
+                    ColorU8::from_rgba(color[0], color[1], color[2], color[3]).premultiply();
+                Ok(())
+            })
+        });
 }
 
 fn install_shapes(isolate: &mut Isolate) {
     let most = |least: usize, keys: &[&str]| Some(least + 2 * keys.len());
-    isolate.define_native_awaiting_in(MODULE, "rect!", 5, most(5, &RECT), |heap, arguments| {
-        let [x, y] = coordinates(heap, "rect!", &arguments[1..3])?;
-        let width = factor(heap, "rect!", arguments[3])?;
-        let height = factor(heap, "rect!", arguments[4])?;
-        let options = Options::read(heap, "rect!", &arguments[5..], &RECT)?;
-        let radius = narrow(options.number(heap, "radius", 0.0)?);
-        let style = Style::read(heap, "rect!", &options, false)?;
-        shape(
-            heap,
-            "rect!",
-            arguments[0],
-            style,
-            rounded(x, y, width, height, radius),
-        )
-    });
-    isolate.define_native_awaiting_in(MODULE, "ellipse!", 5, most(5, &SHAPE), |heap, arguments| {
-        let [x, y, across, down] = coordinates(heap, "ellipse!", &arguments[1..5])?;
-        let options = Options::read(heap, "ellipse!", &arguments[5..], &SHAPE)?;
-        let style = Style::read(heap, "ellipse!", &options, false)?;
-        let path = Rect::from_xywh(x - across, y - down, across * 2.0, down * 2.0)
-            .and_then(PathBuilder::from_oval);
-        shape(heap, "ellipse!", arguments[0], style, path)
-    });
-    isolate.define_native_awaiting_in(MODULE, "circle!", 4, most(4, &SHAPE), |heap, arguments| {
-        let [x, y, radius] = coordinates(heap, "circle!", &arguments[1..4])?;
-        let options = Options::read(heap, "circle!", &arguments[4..], &SHAPE)?;
-        let style = Style::read(heap, "circle!", &options, false)?;
-        shape(
-            heap,
-            "circle!",
-            arguments[0],
-            style,
-            PathBuilder::from_circle(x, y, radius),
-        )
-    });
-    isolate.define_native_awaiting_in(MODULE, "polygon!", 2, most(2, &SHAPE), |heap, arguments| {
-        let points = point_list(heap, "polygon!", arguments[1])?;
-        let options = Options::read(heap, "polygon!", &arguments[2..], &SHAPE)?;
-        let style = Style::read(heap, "polygon!", &options, false)?;
-        shape(heap, "polygon!", arguments[0], style, joined(&points, true))
-    });
-    isolate.define_native_awaiting_in(MODULE, "line!", 5, most(5, &LINE), |heap, arguments| {
-        let [x1, y1, x2, y2] = coordinates(heap, "line!", &arguments[1..5])?;
-        let options = Options::read(heap, "line!", &arguments[5..], &LINE)?;
-        let style = Style::read(heap, "line!", &options, true)?;
-        shape(
-            heap,
-            "line!",
-            arguments[0],
-            style,
-            joined(&[(x1, y1), (x2, y2)], false),
-        )
-    });
-    isolate.define_native_awaiting_in(MODULE, "polyline!", 2, most(2, &LINE), |heap, arguments| {
-        let points = point_list(heap, "polyline!", arguments[1])?;
-        let options = Options::read(heap, "polyline!", &arguments[2..], &LINE)?;
-        let style = Style::read(heap, "polyline!", &options, true)?;
-        shape(
-            heap,
-            "polyline!",
-            arguments[0],
-            style,
-            joined(&points, false),
-        )
-    });
+    isolate
+        .native(MODULE, "rect!")
+        .arity(5, most(5, &RECT))
+        .suspends()
+        .function(|heap, arguments| {
+            let [x, y] = coordinates(heap, "rect!", &arguments[1..3])?;
+            let width = factor(heap, "rect!", arguments[3])?;
+            let height = factor(heap, "rect!", arguments[4])?;
+            let options = Options::read(heap, "rect!", &arguments[5..], &RECT)?;
+            let radius = narrow(options.number(heap, "radius", 0.0)?);
+            let style = Style::read(heap, "rect!", &options, false)?;
+            shape(
+                heap,
+                "rect!",
+                arguments[0],
+                style,
+                rounded(x, y, width, height, radius),
+            )
+        });
+    isolate
+        .native(MODULE, "ellipse!")
+        .arity(5, most(5, &SHAPE))
+        .suspends()
+        .function(|heap, arguments| {
+            let [x, y, across, down] = coordinates(heap, "ellipse!", &arguments[1..5])?;
+            let options = Options::read(heap, "ellipse!", &arguments[5..], &SHAPE)?;
+            let style = Style::read(heap, "ellipse!", &options, false)?;
+            let path = Rect::from_xywh(x - across, y - down, across * 2.0, down * 2.0)
+                .and_then(PathBuilder::from_oval);
+            shape(heap, "ellipse!", arguments[0], style, path)
+        });
+    isolate
+        .native(MODULE, "circle!")
+        .arity(4, most(4, &SHAPE))
+        .suspends()
+        .function(|heap, arguments| {
+            let [x, y, radius] = coordinates(heap, "circle!", &arguments[1..4])?;
+            let options = Options::read(heap, "circle!", &arguments[4..], &SHAPE)?;
+            let style = Style::read(heap, "circle!", &options, false)?;
+            shape(
+                heap,
+                "circle!",
+                arguments[0],
+                style,
+                PathBuilder::from_circle(x, y, radius),
+            )
+        });
+    isolate
+        .native(MODULE, "polygon!")
+        .arity(2, most(2, &SHAPE))
+        .suspends()
+        .function(|heap, arguments| {
+            let points = point_list(heap, "polygon!", arguments[1])?;
+            let options = Options::read(heap, "polygon!", &arguments[2..], &SHAPE)?;
+            let style = Style::read(heap, "polygon!", &options, false)?;
+            shape(heap, "polygon!", arguments[0], style, joined(&points, true))
+        });
+    isolate
+        .native(MODULE, "line!")
+        .arity(5, most(5, &LINE))
+        .suspends()
+        .function(|heap, arguments| {
+            let [x1, y1, x2, y2] = coordinates(heap, "line!", &arguments[1..5])?;
+            let options = Options::read(heap, "line!", &arguments[5..], &LINE)?;
+            let style = Style::read(heap, "line!", &options, true)?;
+            shape(
+                heap,
+                "line!",
+                arguments[0],
+                style,
+                joined(&[(x1, y1), (x2, y2)], false),
+            )
+        });
+    isolate
+        .native(MODULE, "polyline!")
+        .arity(2, most(2, &LINE))
+        .suspends()
+        .function(|heap, arguments| {
+            let points = point_list(heap, "polyline!", arguments[1])?;
+            let options = Options::read(heap, "polyline!", &arguments[2..], &LINE)?;
+            let style = Style::read(heap, "polyline!", &options, true)?;
+            shape(
+                heap,
+                "polyline!",
+                arguments[0],
+                style,
+                joined(&points, false),
+            )
+        });
 }
 
 fn install_layers(isolate: &mut Isolate) {
     const PASTE: [&str; 4] = ["blend", "opacity", "mask", "scale"];
-    isolate.define_native_awaiting_in(MODULE, "paste!", 4, Some(12), |heap, arguments| {
-        let top = wanted(heap, "paste!", arguments[1])?;
-        let at = (
-            coordinate(heap, "paste!", arguments[2])?,
-            coordinate(heap, "paste!", arguments[3])?,
-        );
-        let options = Options::read(heap, "paste!", &arguments[4..], &PASTE)?;
-        let paint = PixmapPaint {
-            opacity: opacity(heap, "paste!", &options)?,
-            blend_mode: blend(heap, "paste!", &options)?,
-            quality: FilterQuality::Bicubic,
-        };
-        let scale = match options.get("scale") {
-            Some(value) => factor(heap, "paste!", value)?,
-            None => 1.0,
-        };
-        let mask = options
-            .get("mask")
-            .map(|value| wanted(heap, "paste!", value))
-            .transpose()?;
-        drawn(heap, "paste!", arguments[0], move |pixmap| {
-            let mask = mask.map(|mask| mask.pixels.clone());
-            pasted(pixmap, &top.pixels, at, scale, paint, mask.as_ref());
-            Ok(())
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "mask", 2, Some(2), |heap, arguments| {
-        let image = wanted(heap, "mask", arguments[0])?;
-        let mask = wanted(heap, "mask", arguments[1])?;
-        later(heap, "mask", move || {
-            let (width, height) = image.pixels.dimensions();
-            let mut pixels = image.pixels.clone();
-            masked(&mut pixels, &sized_mask(&mask.pixels, width, height));
-            Ok(image.with(pixels))
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "tile", 3, Some(3), |heap, arguments| {
-        let image = wanted(heap, "tile", arguments[0])?;
-        let width = size(heap, "tile", "a width", arguments[1])?;
-        let height = size(heap, "tile", "a height", arguments[2])?;
-        roomy("tile", width, height)?;
-        later(heap, "tile", move || {
-            Ok(image.with(tiled(&image.pixels, width, height)))
-        })
-    });
+    isolate
+        .native(MODULE, "paste!")
+        .arity(4, Some(12))
+        .suspends()
+        .function(|heap, arguments| {
+            let top = wanted(heap, "paste!", arguments[1])?;
+            let at = (
+                coordinate(heap, "paste!", arguments[2])?,
+                coordinate(heap, "paste!", arguments[3])?,
+            );
+            let options = Options::read(heap, "paste!", &arguments[4..], &PASTE)?;
+            let paint = PixmapPaint {
+                opacity: opacity(heap, "paste!", &options)?,
+                blend_mode: blend(heap, "paste!", &options)?,
+                quality: FilterQuality::Bicubic,
+            };
+            let scale = match options.get("scale") {
+                Some(value) => factor(heap, "paste!", value)?,
+                None => 1.0,
+            };
+            let mask = options
+                .get("mask")
+                .map(|value| wanted(heap, "paste!", value))
+                .transpose()?;
+            drawn(heap, "paste!", arguments[0], move |pixmap| {
+                let mask = mask.map(|mask| mask.pixels.clone());
+                pasted(pixmap, &top.pixels, at, scale, paint, mask.as_ref());
+                Ok(())
+            })
+        });
+    isolate
+        .native(MODULE, "mask")
+        .arity(2, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "mask", arguments[0])?;
+            let mask = wanted(heap, "mask", arguments[1])?;
+            later(heap, "mask", move || {
+                let (width, height) = image.pixels.dimensions();
+                let mut pixels = image.pixels.clone();
+                masked(&mut pixels, &sized_mask(&mask.pixels, width, height));
+                Ok(image.with(pixels))
+            })
+        });
+    isolate
+        .native(MODULE, "tile")
+        .arity(3, Some(3))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "tile", arguments[0])?;
+            let width = size(heap, "tile", "a width", arguments[1])?;
+            let height = size(heap, "tile", "a height", arguments[2])?;
+            roomy("tile", width, height)?;
+            later(heap, "tile", move || {
+                Ok(image.with(tiled(&image.pixels, width, height)))
+            })
+        });
 }

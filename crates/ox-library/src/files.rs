@@ -238,10 +238,14 @@ fn single(
     name: &'static str,
     work: fn(PathBuf) -> Result<Portable, Failure>,
 ) {
-    isolate.define_native_in(MODULE, name, 1, Some(1), move |heap, arguments| {
-        let path = PathBuf::from(text(heap, &format!("file/{name}"), arguments[0])?);
-        heap.background(&format!("ox file/{name}"), move || work(path))
-    });
+    isolate
+        .native(MODULE, name)
+        .arity(1, Some(1))
+        .outside()
+        .function(move |heap, arguments| {
+            let path = PathBuf::from(text(heap, &format!("file/{name}"), arguments[0])?);
+            heap.background(&format!("ox file/{name}"), move || work(path))
+        });
 }
 
 fn pair(
@@ -249,12 +253,16 @@ fn pair(
     name: &'static str,
     work: fn(PathBuf, PathBuf) -> Result<Portable, Failure>,
 ) {
-    isolate.define_native_in(MODULE, name, 2, Some(2), move |heap, arguments| {
-        let shown = format!("file/{name}");
-        let from = PathBuf::from(text(heap, &shown, arguments[0])?);
-        let to = PathBuf::from(text(heap, &shown, arguments[1])?);
-        heap.background(&format!("ox {shown}"), move || work(from, to))
-    });
+    isolate
+        .native(MODULE, name)
+        .arity(2, Some(2))
+        .outside()
+        .function(move |heap, arguments| {
+            let shown = format!("file/{name}");
+            let from = PathBuf::from(text(heap, &shown, arguments[0])?);
+            let to = PathBuf::from(text(heap, &shown, arguments[1])?);
+            heap.background(&format!("ox {shown}"), move || work(from, to))
+        });
 }
 
 fn write(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
@@ -288,8 +296,16 @@ fn write_base64(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "append", 2, Some(2), append);
-    isolate.define_native_in(MODULE, "write-base64", 2, Some(2), write_base64);
+    isolate
+        .native(MODULE, "append")
+        .arity(2, Some(2))
+        .outside()
+        .function(append);
+    isolate
+        .native(MODULE, "write-base64")
+        .arity(2, Some(2))
+        .outside()
+        .function(write_base64);
     single(isolate, "read-base64", |path| {
         fs::read(&path)
             .map(|bytes| string(&to_base64(&bytes)))
@@ -322,5 +338,9 @@ pub fn install(isolate: &mut Isolate) {
     pair(isolate, "copy", |from, to| {
         done(copy_tree(&from, &to), "copy", &from)
     });
-    isolate.define_native_in(MODULE, "write", 2, Some(2), write);
+    isolate
+        .native(MODULE, "write")
+        .arity(2, Some(2))
+        .outside()
+        .function(write);
 }

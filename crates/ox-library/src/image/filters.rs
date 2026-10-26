@@ -546,151 +546,195 @@ pub(super) fn install(isolate: &mut Isolate) {
 }
 
 fn install_blurs(isolate: &mut Isolate) {
-    isolate.define_native_awaiting_in(MODULE, "blur", 2, Some(2), |heap, arguments| {
-        let image = wanted(heap, "blur", arguments[0])?;
-        let sigma = radius(heap, "blur", arguments[1])?;
-        changed(heap, "blur", image, move |pixels| {
-            *pixels = blurred(pixels, sigma);
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "box-blur", 2, Some(2), |heap, arguments| {
-        let image = wanted(heap, "box-blur", arguments[0])?;
-        let reach = to_index(radius(heap, "box-blur", arguments[1])?.round());
-        changed(heap, "box-blur", image, move |pixels| {
-            *pixels = box_blurred(pixels, reach);
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "median", 2, Some(2), |heap, arguments| {
-        let image = wanted(heap, "median", arguments[0])?;
-        let reach = to_index(radius(heap, "median", arguments[1])?.round());
-        let reach = u32::try_from(reach).unwrap_or(u32::MAX);
-        changed(heap, "median", image, move |pixels| {
-            *pixels = median(pixels, reach);
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "pixelate", 2, Some(2), |heap, arguments| {
-        let image = wanted(heap, "pixelate", arguments[0])?;
-        let block = size(heap, "pixelate", "a block size", arguments[1])?;
-        let block = usize::try_from(block).unwrap_or(usize::MAX);
-        changed(heap, "pixelate", image, move |pixels| {
-            *pixels = pixelated(pixels, block);
-        })
-    });
+    isolate
+        .native(MODULE, "blur")
+        .arity(2, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "blur", arguments[0])?;
+            let sigma = radius(heap, "blur", arguments[1])?;
+            changed(heap, "blur", image, move |pixels| {
+                *pixels = blurred(pixels, sigma);
+            })
+        });
+    isolate
+        .native(MODULE, "box-blur")
+        .arity(2, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "box-blur", arguments[0])?;
+            let reach = to_index(radius(heap, "box-blur", arguments[1])?.round());
+            changed(heap, "box-blur", image, move |pixels| {
+                *pixels = box_blurred(pixels, reach);
+            })
+        });
+    isolate
+        .native(MODULE, "median")
+        .arity(2, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "median", arguments[0])?;
+            let reach = to_index(radius(heap, "median", arguments[1])?.round());
+            let reach = u32::try_from(reach).unwrap_or(u32::MAX);
+            changed(heap, "median", image, move |pixels| {
+                *pixels = median(pixels, reach);
+            })
+        });
+    isolate
+        .native(MODULE, "pixelate")
+        .arity(2, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "pixelate", arguments[0])?;
+            let block = size(heap, "pixelate", "a block size", arguments[1])?;
+            let block = usize::try_from(block).unwrap_or(usize::MAX);
+            changed(heap, "pixelate", image, move |pixels| {
+                *pixels = pixelated(pixels, block);
+            })
+        });
 }
 
 fn install_sharpening(isolate: &mut Isolate) {
-    isolate.define_native_awaiting_in(MODULE, "sharpen", 1, Some(2), |heap, arguments| {
-        let image = wanted(heap, "sharpen", arguments[0])?;
-        let amount = match arguments.get(1) {
-            Some(value) => factor(heap, "sharpen", *value)?,
-            None => 1.0,
-        };
-        changed(heap, "sharpen", image, move |pixels| {
-            *pixels = unsharp(pixels, 1.0, amount, 0.0);
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "unsharp", 3, Some(5), |heap, arguments| {
-        let image = wanted(heap, "unsharp", arguments[0])?;
-        let sigma = radius(heap, "unsharp", arguments[1])?;
-        let amount = factor(heap, "unsharp", arguments[2])?;
-        let options = Options::read(heap, "unsharp", &arguments[3..], &["threshold"])?;
-        let threshold = narrow(options.number(heap, "threshold", 0.0)?);
-        changed(heap, "unsharp", image, move |pixels| {
-            *pixels = unsharp(pixels, sigma, amount, threshold);
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "edges", 1, Some(7), |heap, arguments| {
-        let image = wanted(heap, "edges", arguments[0])?;
-        let options = Options::read(heap, "edges", &arguments[1..], &["method", "low", "high"])?;
-        let thin = match options.get("method") {
-            None => false,
-            Some(Value::Keyword(keyword)) if keyword.name() == "sobel" => false,
-            Some(Value::Keyword(keyword)) if keyword.name() == "canny" => true,
-            Some(other) => {
-                return Err(Error::new(format!(
-                    "image/edges takes :method :sobel or :canny, not {}",
-                    print::brief(heap, other)
-                ))
-                .of(ErrorKind::Type));
-            }
-        };
-        let low = narrow(options.number(heap, "low", 20.0)?) * 4.0;
-        let high = narrow(options.number(heap, "high", 50.0)?) * 4.0;
-        changed(heap, "edges", image, move |pixels| {
-            *pixels = if thin {
-                canny_lines(pixels, low, high)
-            } else {
-                sobel(pixels)
+    isolate
+        .native(MODULE, "sharpen")
+        .arity(1, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "sharpen", arguments[0])?;
+            let amount = match arguments.get(1) {
+                Some(value) => factor(heap, "sharpen", *value)?,
+                None => 1.0,
             };
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "emboss", 1, Some(2), |heap, arguments| {
-        let image = wanted(heap, "emboss", arguments[0])?;
-        let amount = strength(heap, "emboss", arguments.get(1))?;
-        let kernel: Vec<Vec<f32>> = EMBOSS.iter().map(|row| row.to_vec()).collect();
-        changed(heap, "emboss", image, move |pixels| {
-            let embossed = convolved(pixels, &kernel, 1.0, 0.0);
-            *pixels = mixed_toward(pixels, &embossed, amount);
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "convolve", 2, Some(6), |heap, arguments| {
-        let image = wanted(heap, "convolve", arguments[0])?;
-        let kernel = kernel(heap, arguments[1])?;
-        let options = Options::read(heap, "convolve", &arguments[2..], &["divisor", "offset"])?;
-        let sum: f32 = kernel.iter().flatten().sum();
-        let fallback = if sum.abs() < f32::EPSILON { 1.0 } else { sum };
-        let divisor = match options.get("divisor") {
-            Some(value) => narrow(number(heap, "convolve", ":divisor", value)?),
-            None => fallback,
-        };
-        if divisor.abs() < f32::EPSILON {
-            return Err(
-                Error::new("image/convolve can't divide by a :divisor of 0").of(ErrorKind::Range)
-            );
-        }
-        let offset = narrow(options.number(heap, "offset", 0.0)?);
-        changed(heap, "convolve", image, move |pixels| {
-            *pixels = convolved(pixels, &kernel, divisor, offset);
-        })
-    });
+            changed(heap, "sharpen", image, move |pixels| {
+                *pixels = unsharp(pixels, 1.0, amount, 0.0);
+            })
+        });
+    isolate
+        .native(MODULE, "unsharp")
+        .arity(3, Some(5))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "unsharp", arguments[0])?;
+            let sigma = radius(heap, "unsharp", arguments[1])?;
+            let amount = factor(heap, "unsharp", arguments[2])?;
+            let options = Options::read(heap, "unsharp", &arguments[3..], &["threshold"])?;
+            let threshold = narrow(options.number(heap, "threshold", 0.0)?);
+            changed(heap, "unsharp", image, move |pixels| {
+                *pixels = unsharp(pixels, sigma, amount, threshold);
+            })
+        });
+    isolate
+        .native(MODULE, "edges")
+        .arity(1, Some(7))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "edges", arguments[0])?;
+            let options =
+                Options::read(heap, "edges", &arguments[1..], &["method", "low", "high"])?;
+            let thin = match options.get("method") {
+                None => false,
+                Some(Value::Keyword(keyword)) if keyword.name() == "sobel" => false,
+                Some(Value::Keyword(keyword)) if keyword.name() == "canny" => true,
+                Some(other) => {
+                    return Err(Error::new(format!(
+                        "image/edges takes :method :sobel or :canny, not {}",
+                        print::brief(heap, other)
+                    ))
+                    .of(ErrorKind::Type));
+                }
+            };
+            let low = narrow(options.number(heap, "low", 20.0)?) * 4.0;
+            let high = narrow(options.number(heap, "high", 50.0)?) * 4.0;
+            changed(heap, "edges", image, move |pixels| {
+                *pixels = if thin {
+                    canny_lines(pixels, low, high)
+                } else {
+                    sobel(pixels)
+                };
+            })
+        });
+    isolate
+        .native(MODULE, "emboss")
+        .arity(1, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "emboss", arguments[0])?;
+            let amount = strength(heap, "emboss", arguments.get(1))?;
+            let kernel: Vec<Vec<f32>> = EMBOSS.iter().map(|row| row.to_vec()).collect();
+            changed(heap, "emboss", image, move |pixels| {
+                let embossed = convolved(pixels, &kernel, 1.0, 0.0);
+                *pixels = mixed_toward(pixels, &embossed, amount);
+            })
+        });
+    isolate
+        .native(MODULE, "convolve")
+        .arity(2, Some(6))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "convolve", arguments[0])?;
+            let kernel = kernel(heap, arguments[1])?;
+            let options = Options::read(heap, "convolve", &arguments[2..], &["divisor", "offset"])?;
+            let sum: f32 = kernel.iter().flatten().sum();
+            let fallback = if sum.abs() < f32::EPSILON { 1.0 } else { sum };
+            let divisor = match options.get("divisor") {
+                Some(value) => narrow(number(heap, "convolve", ":divisor", value)?),
+                None => fallback,
+            };
+            if divisor.abs() < f32::EPSILON {
+                return Err(Error::new("image/convolve can't divide by a :divisor of 0")
+                    .of(ErrorKind::Range));
+            }
+            let offset = narrow(options.number(heap, "offset", 0.0)?);
+            changed(heap, "convolve", image, move |pixels| {
+                *pixels = convolved(pixels, &kernel, divisor, offset);
+            })
+        });
 }
 
 fn install_effects(isolate: &mut Isolate) {
-    isolate.define_native_awaiting_in(MODULE, "noise", 2, Some(6), |heap, arguments| {
-        let image = wanted(heap, "noise", arguments[0])?;
-        let amount = radius(heap, "noise", arguments[1])?;
-        let options = Options::read(heap, "noise", &arguments[2..], &["seed", "mono"])?;
-        let seed = match options.get("seed") {
-            None => 0,
-            Some(Value::Int(seed)) => u64::from_ne_bytes(seed.to_ne_bytes()),
-            Some(other) => {
-                return Err(Error::new(format!(
-                    "image/noise expects a whole number :seed, got {}",
-                    print::brief(heap, other)
-                ))
-                .of(ErrorKind::Type));
-            }
-        };
-        let mono = options.get("mono").is_some_and(Value::truthy);
-        changed(heap, "noise", image, move |pixels| {
-            noisy(pixels, amount, seed, mono);
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "vignette", 1, Some(6), |heap, arguments| {
-        let image = wanted(heap, "vignette", arguments[0])?;
-        let given = arguments
-            .get(1)
-            .filter(|value| matches!(value, Value::Int(_) | Value::Float(_)));
-        let amount = strength(heap, "vignette", given)?;
-        let rest = &arguments[if given.is_some() { 2 } else { 1 }..];
-        let options = Options::read(heap, "vignette", rest, &["radius", "color"])?;
-        let radius = narrow(options.number(heap, "radius", 0.5)?.clamp(0.0, 1.0));
-        let color = match options.get("color") {
-            Some(value) => colors::color(heap, "vignette", value)?,
-            None => Rgba([0, 0, 0, 255]),
-        };
-        changed(heap, "vignette", image, move |pixels| {
-            vignetted(pixels, amount, radius, color);
-        })
-    });
+    isolate
+        .native(MODULE, "noise")
+        .arity(2, Some(6))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "noise", arguments[0])?;
+            let amount = radius(heap, "noise", arguments[1])?;
+            let options = Options::read(heap, "noise", &arguments[2..], &["seed", "mono"])?;
+            let seed = match options.get("seed") {
+                None => 0,
+                Some(Value::Int(seed)) => u64::from_ne_bytes(seed.to_ne_bytes()),
+                Some(other) => {
+                    return Err(Error::new(format!(
+                        "image/noise expects a whole number :seed, got {}",
+                        print::brief(heap, other)
+                    ))
+                    .of(ErrorKind::Type));
+                }
+            };
+            let mono = options.get("mono").is_some_and(Value::truthy);
+            changed(heap, "noise", image, move |pixels| {
+                noisy(pixels, amount, seed, mono);
+            })
+        });
+    isolate
+        .native(MODULE, "vignette")
+        .arity(1, Some(6))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "vignette", arguments[0])?;
+            let given = arguments
+                .get(1)
+                .filter(|value| matches!(value, Value::Int(_) | Value::Float(_)));
+            let amount = strength(heap, "vignette", given)?;
+            let rest = &arguments[if given.is_some() { 2 } else { 1 }..];
+            let options = Options::read(heap, "vignette", rest, &["radius", "color"])?;
+            let radius = narrow(options.number(heap, "radius", 0.5)?.clamp(0.0, 1.0));
+            let color = match options.get("color") {
+                Some(value) => colors::color(heap, "vignette", value)?,
+                None => Rgba([0, 0, 0, 255]),
+            };
+            changed(heap, "vignette", image, move |pixels| {
+                vignetted(pixels, amount, radius, color);
+            })
+        });
 }

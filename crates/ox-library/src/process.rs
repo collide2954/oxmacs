@@ -260,51 +260,81 @@ fn wrong_for(heap: &Heap, name: &str, value: Value) -> Error {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "start", 2, None, start);
-    isolate.define_native_in(MODULE, "write", 2, Some(2), |heap, arguments| {
-        let text = print::display(heap, arguments[1]);
-        let started = started(heap, "process/write", arguments[0])?;
-        let mut input = locked(&started.input);
-        let written = input.as_mut().is_some_and(|stdin| {
-            stdin
-                .write_all(text.as_bytes())
-                .and_then(|()| stdin.flush())
-                .is_ok()
+    isolate
+        .native(MODULE, "start")
+        .arity(2, None)
+        .outside()
+        .function(start);
+    isolate
+        .native(MODULE, "write")
+        .arity(2, Some(2))
+        .outside()
+        .function(|heap, arguments| {
+            let text = print::display(heap, arguments[1]);
+            let started = started(heap, "process/write", arguments[0])?;
+            let mut input = locked(&started.input);
+            let written = input.as_mut().is_some_and(|stdin| {
+                stdin
+                    .write_all(text.as_bytes())
+                    .and_then(|()| stdin.flush())
+                    .is_ok()
+            });
+            Ok(Value::Bool(written))
         });
-        Ok(Value::Bool(written))
-    });
-    isolate.define_native_in(MODULE, "close-input", 1, Some(1), |heap, arguments| {
-        let started = started(heap, "process/close-input", arguments[0])?;
-        locked(&started.input).take();
-        Ok(Value::Nil)
-    });
-    isolate.define_native_in(MODULE, "kill", 1, Some(1), |heap, arguments| {
-        let started = started(heap, "process/kill", arguments[0])?;
-        let _ = locked(&started.child).kill();
-        Ok(Value::Nil)
-    });
-    isolate.define_native_in(MODULE, "run", 2, None, |heap, arguments| {
-        let run = parse(heap, "process/run", arguments)?;
-        let label = format!("ox process/run {}", run.program);
-        heap.background(&label, move || execute(&run))
-    });
-    isolate.define_native_in(MODULE, "env", 1, Some(1), |heap, arguments| {
-        let name = text(heap, "process/env", arguments[0])?.to_owned();
-        match std::env::var(&name) {
-            Ok(value) => heap.string(&value).map_err(full),
-            Err(_) => Ok(Value::Nil),
-        }
-    });
-    isolate.define_native_in(MODULE, "which", 1, Some(1), |heap, arguments| {
-        let program = text(heap, "process/which", arguments[0])?.to_owned();
-        match which(&program) {
-            Some(path) => heap.string(&path.display().to_string()).map_err(full),
-            None => Ok(Value::Nil),
-        }
-    });
-    isolate.define_native_in(MODULE, "os", 0, Some(0), |_, _| {
-        Ok(Value::keyword(std::env::consts::OS))
-    });
+    isolate
+        .native(MODULE, "close-input")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let started = started(heap, "process/close-input", arguments[0])?;
+            locked(&started.input).take();
+            Ok(Value::Nil)
+        });
+    isolate
+        .native(MODULE, "kill")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let started = started(heap, "process/kill", arguments[0])?;
+            let _ = locked(&started.child).kill();
+            Ok(Value::Nil)
+        });
+    isolate
+        .native(MODULE, "run")
+        .arity(2, None)
+        .outside()
+        .function(|heap, arguments| {
+            let run = parse(heap, "process/run", arguments)?;
+            let label = format!("ox process/run {}", run.program);
+            heap.background(&label, move || execute(&run))
+        });
+    isolate
+        .native(MODULE, "env")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let name = text(heap, "process/env", arguments[0])?.to_owned();
+            match std::env::var(&name) {
+                Ok(value) => heap.string(&value).map_err(full),
+                Err(_) => Ok(Value::Nil),
+            }
+        });
+    isolate
+        .native(MODULE, "which")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let program = text(heap, "process/which", arguments[0])?.to_owned();
+            match which(&program) {
+                Some(path) => heap.string(&path.display().to_string()).map_err(full),
+                None => Ok(Value::Nil),
+            }
+        });
+    isolate
+        .native(MODULE, "os")
+        .arity(0, Some(0))
+        .outside()
+        .function(|_, _| Ok(Value::keyword(std::env::consts::OS)));
 }
 
 fn which(program: &str) -> Option<PathBuf> {

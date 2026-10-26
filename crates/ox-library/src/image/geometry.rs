@@ -258,214 +258,262 @@ pub(super) fn install(isolate: &mut Isolate) {
 }
 
 fn install_scaling(isolate: &mut Isolate) {
-    isolate.define_native_awaiting_in(MODULE, "resize", 2, Some(6), |heap, arguments| {
-        let image = wanted(heap, "resize", arguments[0])?;
-        let width = size(heap, "resize", "a width", arguments[1])?;
-        let options = Options::read(heap, "resize", &arguments[2..], &["height", "filter"])?;
-        let filter = filter(heap, "resize", &options)?;
-        let height = match options.get("height") {
-            Some(value) => size(heap, "resize", ":height", value)?,
-            None => scaled(
-                image.pixels.height(),
-                f64::from(width) / f64::from(image.pixels.width()),
-            ),
-        };
-        roomy("resize", width, height)?;
-        later(heap, "resize", move || {
-            Ok(image.with(imageops::resize(&image.pixels, width, height, filter)))
-        })
-    });
-    for (name, cover) in [("fit", false), ("fill", true)] {
-        isolate.define_native_awaiting_in(MODULE, name, 3, Some(5), move |heap, arguments| {
-            let image = wanted(heap, name, arguments[0])?;
-            let width = size(heap, name, "a width", arguments[1])?;
-            let height = size(heap, name, "a height", arguments[2])?;
-            let options = Options::read(
-                heap,
-                if cover { "fill" } else { "fit" },
-                &arguments[3..],
-                &["filter"],
-            )?;
-            let filter = filter(heap, name, &options)?;
-            later(heap, name, move || {
-                let (from_width, from_height) = image.pixels.dimensions();
-                let across = f64::from(width) / f64::from(from_width);
-                let down = f64::from(height) / f64::from(from_height);
-                let by = if cover {
-                    across.max(down)
-                } else {
-                    across.min(down)
-                };
-                let (to_width, to_height) = (scaled(from_width, by), scaled(from_height, by));
-                room(name, to_width, to_height)?;
-                let resized = imageops::resize(&image.pixels, to_width, to_height, filter);
-                if !cover {
-                    return Ok(image.with(resized));
-                }
-                let left = to_u32(offset(resized.width(), width, 0.5));
-                let top = to_u32(offset(resized.height(), height, 0.5));
-                Ok(image.with(imageops::crop_imm(&resized, left, top, width, height).to_image()))
+    isolate
+        .native(MODULE, "resize")
+        .arity(2, Some(6))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "resize", arguments[0])?;
+            let width = size(heap, "resize", "a width", arguments[1])?;
+            let options = Options::read(heap, "resize", &arguments[2..], &["height", "filter"])?;
+            let filter = filter(heap, "resize", &options)?;
+            let height = match options.get("height") {
+                Some(value) => size(heap, "resize", ":height", value)?,
+                None => scaled(
+                    image.pixels.height(),
+                    f64::from(width) / f64::from(image.pixels.width()),
+                ),
+            };
+            roomy("resize", width, height)?;
+            later(heap, "resize", move || {
+                Ok(image.with(imageops::resize(&image.pixels, width, height, filter)))
             })
         });
+    for (name, cover) in [("fit", false), ("fill", true)] {
+        isolate
+            .native(MODULE, name)
+            .arity(3, Some(5))
+            .suspends()
+            .function(move |heap, arguments| {
+                let image = wanted(heap, name, arguments[0])?;
+                let width = size(heap, name, "a width", arguments[1])?;
+                let height = size(heap, name, "a height", arguments[2])?;
+                let options = Options::read(
+                    heap,
+                    if cover { "fill" } else { "fit" },
+                    &arguments[3..],
+                    &["filter"],
+                )?;
+                let filter = filter(heap, name, &options)?;
+                later(heap, name, move || {
+                    let (from_width, from_height) = image.pixels.dimensions();
+                    let across = f64::from(width) / f64::from(from_width);
+                    let down = f64::from(height) / f64::from(from_height);
+                    let by = if cover {
+                        across.max(down)
+                    } else {
+                        across.min(down)
+                    };
+                    let (to_width, to_height) = (scaled(from_width, by), scaled(from_height, by));
+                    room(name, to_width, to_height)?;
+                    let resized = imageops::resize(&image.pixels, to_width, to_height, filter);
+                    if !cover {
+                        return Ok(image.with(resized));
+                    }
+                    let left = to_u32(offset(resized.width(), width, 0.5));
+                    let top = to_u32(offset(resized.height(), height, 0.5));
+                    Ok(image
+                        .with(imageops::crop_imm(&resized, left, top, width, height).to_image()))
+                })
+            });
     }
-    isolate.define_native_awaiting_in(MODULE, "thumbnail", 2, Some(2), |heap, arguments| {
-        let image = wanted(heap, "thumbnail", arguments[0])?;
-        let most = size(heap, "thumbnail", "a size", arguments[1])?;
-        later(heap, "thumbnail", move || {
-            let (width, height) = image.pixels.dimensions();
-            let by = (f64::from(most) / f64::from(width.max(height))).min(1.0);
-            Ok(image.with(imageops::thumbnail(
-                &image.pixels,
-                scaled(width, by),
-                scaled(height, by),
-            )))
-        })
-    });
+    isolate
+        .native(MODULE, "thumbnail")
+        .arity(2, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "thumbnail", arguments[0])?;
+            let most = size(heap, "thumbnail", "a size", arguments[1])?;
+            later(heap, "thumbnail", move || {
+                let (width, height) = image.pixels.dimensions();
+                let by = (f64::from(most) / f64::from(width.max(height))).min(1.0);
+                Ok(image.with(imageops::thumbnail(
+                    &image.pixels,
+                    scaled(width, by),
+                    scaled(height, by),
+                )))
+            })
+        });
 }
 
 fn install_layout(isolate: &mut Isolate) {
-    isolate.define_native_awaiting_in(MODULE, "crop", 5, Some(5), |heap, arguments| {
-        let image = wanted(heap, "crop", arguments[0])?;
-        let x = whole(heap, "crop", "x", arguments[1])?;
-        let y = whole(heap, "crop", "y", arguments[2])?;
-        let width = size(heap, "crop", "a width", arguments[3])?;
-        let height = size(heap, "crop", "a height", arguments[4])?;
-        later(heap, "crop", move || {
-            Ok(image.with(crop(&image.pixels, x, y, width, height)?))
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "pad", 2, Some(12), |heap, arguments| {
-        let image = wanted(heap, "pad", arguments[0])?;
-        let amount = whole(heap, "pad", "an amount", arguments[1])?;
-        let options = Options::read(
-            heap,
-            "pad",
-            &arguments[2..],
-            &["top", "right", "bottom", "left", "color"],
-        )?;
-        let side = |key: &str| -> Result<i64, Error> {
-            options.get(key).map_or(Ok(amount), |value| {
-                whole(heap, "pad", &format!(":{key}"), value)
+    isolate
+        .native(MODULE, "crop")
+        .arity(5, Some(5))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "crop", arguments[0])?;
+            let x = whole(heap, "crop", "x", arguments[1])?;
+            let y = whole(heap, "crop", "y", arguments[2])?;
+            let width = size(heap, "crop", "a width", arguments[3])?;
+            let height = size(heap, "crop", "a height", arguments[4])?;
+            later(heap, "crop", move || {
+                Ok(image.with(crop(&image.pixels, x, y, width, height)?))
             })
-        };
-        let (top, right, bottom, left) =
-            (side("top")?, side("right")?, side("bottom")?, side("left")?);
-        let color = fill_color(heap, "pad", &options)?;
-        later(heap, "pad", move || {
-            let width = i64::from(image.pixels.width()) + left + right;
-            let height = i64::from(image.pixels.height()) + top + bottom;
-            if width < 1 || height < 1 {
-                return Err("image/pad would leave no pixels".to_owned());
-            }
-            room("pad", to_u32(width), to_u32(height))?;
-            Ok(image.with(placed(
-                &image.pixels,
-                to_u32(width),
-                to_u32(height),
-                (left, top),
-                color,
-            )))
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "canvas", 3, Some(7), |heap, arguments| {
-        let image = wanted(heap, "canvas", arguments[0])?;
-        let width = size(heap, "canvas", "a width", arguments[1])?;
-        let height = size(heap, "canvas", "a height", arguments[2])?;
-        let options = Options::read(heap, "canvas", &arguments[3..], &["anchor", "color"])?;
-        let (across, down) = anchor(heap, &options)?;
-        let color = fill_color(heap, "canvas", &options)?;
-        roomy("canvas", width, height)?;
-        later(heap, "canvas", move || {
-            let at = (
-                offset(width, image.pixels.width(), across),
-                offset(height, image.pixels.height(), down),
-            );
-            Ok(image.with(placed(&image.pixels, width, height, at, color)))
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "rotate", 2, Some(6), |heap, arguments| {
-        let image = wanted(heap, "rotate", arguments[0])?;
-        let degrees = number(heap, "rotate", "an angle in degrees", arguments[1])?;
-        let options = Options::read(heap, "rotate", &arguments[2..], &["color", "expand"])?;
-        let color = fill_color(heap, "rotate", &options)?;
-        let expand = options.get("expand").is_none_or(Value::truthy);
-        later(heap, "rotate", move || {
-            Ok(image.with(rotate(&image.pixels, degrees, color, expand)?))
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "flip", 2, Some(2), |heap, arguments| {
-        let image = wanted(heap, "flip", arguments[0])?;
-        let horizontal = match arguments[1] {
-            Value::Keyword(keyword) if keyword.name() == "horizontal" => true,
-            Value::Keyword(keyword) if keyword.name() == "vertical" => false,
-            other => {
-                return Err(Error::new(format!(
-                    "image/flip takes :horizontal or :vertical, not {}",
-                    print::brief(heap, other)
-                ))
-                .of(ErrorKind::Type));
-            }
-        };
-        later(heap, "flip", move || {
-            Ok(image.with(if horizontal {
-                imageops::flip_horizontal(&image.pixels)
-            } else {
-                imageops::flip_vertical(&image.pixels)
-            }))
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "trim", 1, Some(3), |heap, arguments| {
-        let image = wanted(heap, "trim", arguments[0])?;
-        let options = Options::read(heap, "trim", &arguments[1..], &["tolerance"])?;
-        let tolerance = options.number(heap, "tolerance", 0.0)?;
-        later(heap, "trim", move || {
-            Ok(image.with(trim(&image.pixels, tolerance)))
-        })
-    });
+        });
+    isolate
+        .native(MODULE, "pad")
+        .arity(2, Some(12))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "pad", arguments[0])?;
+            let amount = whole(heap, "pad", "an amount", arguments[1])?;
+            let options = Options::read(
+                heap,
+                "pad",
+                &arguments[2..],
+                &["top", "right", "bottom", "left", "color"],
+            )?;
+            let side = |key: &str| -> Result<i64, Error> {
+                options.get(key).map_or(Ok(amount), |value| {
+                    whole(heap, "pad", &format!(":{key}"), value)
+                })
+            };
+            let (top, right, bottom, left) =
+                (side("top")?, side("right")?, side("bottom")?, side("left")?);
+            let color = fill_color(heap, "pad", &options)?;
+            later(heap, "pad", move || {
+                let width = i64::from(image.pixels.width()) + left + right;
+                let height = i64::from(image.pixels.height()) + top + bottom;
+                if width < 1 || height < 1 {
+                    return Err("image/pad would leave no pixels".to_owned());
+                }
+                room("pad", to_u32(width), to_u32(height))?;
+                Ok(image.with(placed(
+                    &image.pixels,
+                    to_u32(width),
+                    to_u32(height),
+                    (left, top),
+                    color,
+                )))
+            })
+        });
+    isolate
+        .native(MODULE, "canvas")
+        .arity(3, Some(7))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "canvas", arguments[0])?;
+            let width = size(heap, "canvas", "a width", arguments[1])?;
+            let height = size(heap, "canvas", "a height", arguments[2])?;
+            let options = Options::read(heap, "canvas", &arguments[3..], &["anchor", "color"])?;
+            let (across, down) = anchor(heap, &options)?;
+            let color = fill_color(heap, "canvas", &options)?;
+            roomy("canvas", width, height)?;
+            later(heap, "canvas", move || {
+                let at = (
+                    offset(width, image.pixels.width(), across),
+                    offset(height, image.pixels.height(), down),
+                );
+                Ok(image.with(placed(&image.pixels, width, height, at, color)))
+            })
+        });
+    isolate
+        .native(MODULE, "rotate")
+        .arity(2, Some(6))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "rotate", arguments[0])?;
+            let degrees = number(heap, "rotate", "an angle in degrees", arguments[1])?;
+            let options = Options::read(heap, "rotate", &arguments[2..], &["color", "expand"])?;
+            let color = fill_color(heap, "rotate", &options)?;
+            let expand = options.get("expand").is_none_or(Value::truthy);
+            later(heap, "rotate", move || {
+                Ok(image.with(rotate(&image.pixels, degrees, color, expand)?))
+            })
+        });
+    isolate
+        .native(MODULE, "flip")
+        .arity(2, Some(2))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "flip", arguments[0])?;
+            let horizontal = match arguments[1] {
+                Value::Keyword(keyword) if keyword.name() == "horizontal" => true,
+                Value::Keyword(keyword) if keyword.name() == "vertical" => false,
+                other => {
+                    return Err(Error::new(format!(
+                        "image/flip takes :horizontal or :vertical, not {}",
+                        print::brief(heap, other)
+                    ))
+                    .of(ErrorKind::Type));
+                }
+            };
+            later(heap, "flip", move || {
+                Ok(image.with(if horizontal {
+                    imageops::flip_horizontal(&image.pixels)
+                } else {
+                    imageops::flip_vertical(&image.pixels)
+                }))
+            })
+        });
+    isolate
+        .native(MODULE, "trim")
+        .arity(1, Some(3))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "trim", arguments[0])?;
+            let options = Options::read(heap, "trim", &arguments[1..], &["tolerance"])?;
+            let tolerance = options.number(heap, "tolerance", 0.0)?;
+            later(heap, "trim", move || {
+                Ok(image.with(trim(&image.pixels, tolerance)))
+            })
+        });
 }
 
 fn install_warps(isolate: &mut Isolate) {
-    isolate.define_native_awaiting_in(MODULE, "affine", 2, Some(4), |heap, arguments| {
-        let image = wanted(heap, "affine", arguments[0])?;
-        let wrong = || {
-            Error::new(format!(
-                "image/affine expects a matrix [a b c d e f], got {}",
-                print::brief(heap, arguments[1])
-            ))
-            .of(ErrorKind::Type)
-        };
-        let items = heap.elements(arguments[1]).ok_or_else(wrong)?;
-        let numbers: Vec<f32> = items
-            .iter()
-            .map(|item| number(heap, "affine", "a matrix entry", *item))
-            .collect::<Result<Vec<f64>, Error>>()?
-            .into_iter()
-            .map(|entry| {
-                #[expect(clippy::cast_possible_truncation, reason = "matrix entries fit in f32")]
-                let narrowed = entry as f32;
-                narrowed
+    isolate
+        .native(MODULE, "affine")
+        .arity(2, Some(4))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "affine", arguments[0])?;
+            let wrong = || {
+                Error::new(format!(
+                    "image/affine expects a matrix [a b c d e f], got {}",
+                    print::brief(heap, arguments[1])
+                ))
+                .of(ErrorKind::Type)
+            };
+            let items = heap.elements(arguments[1]).ok_or_else(wrong)?;
+            let numbers: Vec<f32> = items
+                .iter()
+                .map(|item| number(heap, "affine", "a matrix entry", *item))
+                .collect::<Result<Vec<f64>, Error>>()?
+                .into_iter()
+                .map(|entry| {
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "matrix entries fit in f32"
+                    )]
+                    let narrowed = entry as f32;
+                    narrowed
+                })
+                .collect();
+            let matrix: [f32; 6] = numbers.as_slice().try_into().map_err(|_| wrong())?;
+            let [xx, xy, x0, yx, yy, y0] = matrix;
+            let projection = Projection::from_matrix([xx, xy, x0, yx, yy, y0, 0.0, 0.0, 1.0])
+                .ok_or_else(|| Error::new("image/affine's matrix can't be inverted"))?;
+            let options = Options::read(heap, "affine", &arguments[2..], &["color"])?;
+            let color = fill_color(heap, "affine", &options)?;
+            later(heap, "affine", move || {
+                Ok(image.with(warped(&image.pixels, projection, color)))
             })
-            .collect();
-        let matrix: [f32; 6] = numbers.as_slice().try_into().map_err(|_| wrong())?;
-        let [xx, xy, x0, yx, yy, y0] = matrix;
-        let projection = Projection::from_matrix([xx, xy, x0, yx, yy, y0, 0.0, 0.0, 1.0])
-            .ok_or_else(|| Error::new("image/affine's matrix can't be inverted"))?;
-        let options = Options::read(heap, "affine", &arguments[2..], &["color"])?;
-        let color = fill_color(heap, "affine", &options)?;
-        later(heap, "affine", move || {
-            Ok(image.with(warped(&image.pixels, projection, color)))
-        })
-    });
-    isolate.define_native_awaiting_in(MODULE, "perspective", 3, Some(5), |heap, arguments| {
-        let image = wanted(heap, "perspective", arguments[0])?;
-        let from = points(heap, "perspective", arguments[1])?;
-        let to = points(heap, "perspective", arguments[2])?;
-        let projection = Projection::from_control_points(from, to)
-            .ok_or_else(|| Error::new("image/perspective can't map those points"))?;
-        let options = Options::read(heap, "perspective", &arguments[3..], &["color"])?;
-        let color = fill_color(heap, "perspective", &options)?;
-        later(heap, "perspective", move || {
-            Ok(image.with(warped(&image.pixels, projection, color)))
-        })
-    });
+        });
+    isolate
+        .native(MODULE, "perspective")
+        .arity(3, Some(5))
+        .suspends()
+        .function(|heap, arguments| {
+            let image = wanted(heap, "perspective", arguments[0])?;
+            let from = points(heap, "perspective", arguments[1])?;
+            let to = points(heap, "perspective", arguments[2])?;
+            let projection = Projection::from_control_points(from, to)
+                .ok_or_else(|| Error::new("image/perspective can't map those points"))?;
+            let options = Options::read(heap, "perspective", &arguments[3..], &["color"])?;
+            let color = fill_color(heap, "perspective", &options)?;
+            later(heap, "perspective", move || {
+                Ok(image.with(warped(&image.pixels, projection, color)))
+            })
+        });
 }
