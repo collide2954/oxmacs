@@ -7,30 +7,26 @@ use oxmacs_core::editor::Editor;
 
 use crate::ide::log;
 use crate::view::shapes;
-use oxmacs_core::view::shapes::{Ink, Paint, Shape};
+use oxmacs_core::view::shapes::{Ink, Paint};
+use oxmacs_core::view::takeover::Takeover;
 
 const FASTEST: i64 = 30;
 
 #[derive(Debug)]
-pub struct Takeover {
+struct Running {
     draw: Hold,
     on_end: Option<Hold>,
     started: Option<Instant>,
     drawn: Option<Instant>,
     every: Duration,
-    pub background: Paint,
-    pub shapes: Vec<Shape>,
 }
 
 #[derive(Debug, Default)]
 struct Endings(Vec<Hold>);
 
-pub fn current(editor: &Editor) -> Option<&Takeover> {
-    editor.plugin_state::<Takeover>()
-}
-
 fn end(heap: &mut Heap, editor: &mut Editor) {
-    let Some(takeover) = editor.take_plugin_state::<Takeover>() else {
+    drop(editor.take_plugin_state::<Takeover>());
+    let Some(takeover) = editor.take_plugin_state::<Running>() else {
         return;
     };
     heap.release(takeover.draw);
@@ -62,16 +58,18 @@ fn take_over(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
     };
     let every = Duration::from_millis(1000 / fps.unsigned_abs());
     end(heap, editor);
-    let takeover = Takeover {
+    let running = Running {
         draw: heap.hold(arguments[0]),
         on_end: on_end.map(|function| heap.hold(function)),
         started: None,
         drawn: None,
         every,
+    };
+    editor.set_plugin_state(running);
+    editor.set_plugin_state(Takeover {
         background,
         shapes: Vec::new(),
-    };
-    editor.set_plugin_state(takeover);
+    });
     Ok(Value::Nil)
 }
 
@@ -143,7 +141,7 @@ pub fn frame(
     size: (f32, f32),
     font_size: f32,
 ) {
-    let Some(takeover) = editor.plugin_state_mut::<Takeover>() else {
+    let Some(takeover) = editor.plugin_state_mut::<Running>() else {
         return;
     };
     if takeover
@@ -189,10 +187,10 @@ mod tests {
     use oxmacs_core::editor::Editor;
     use oxmacs_core::theme::Highlight;
 
-    use super::current;
     use crate::Ox;
     use crate::testing::settle;
     use oxmacs_core::view::shapes::{Ink, Paint, Shape};
+    use oxmacs_core::view::takeover::current;
     use oxmacs_core::view::{Node, ViewBuffer};
 
     fn paint(ink: Ink, alpha: f32) -> Paint {

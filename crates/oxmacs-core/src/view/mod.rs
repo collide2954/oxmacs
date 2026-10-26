@@ -3,6 +3,7 @@ pub mod overlays;
 pub mod pdf;
 pub mod shapes;
 pub mod tabbar;
+pub mod takeover;
 
 use std::fmt;
 use std::path::{Path, PathBuf};

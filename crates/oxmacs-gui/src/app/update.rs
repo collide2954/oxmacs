@@ -13,7 +13,8 @@ use oxmacs_core::external::process;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
 use oxmacs_core::view::tabbar::TabEvent;
-use oxmacs_script::{api::games, view::takeover};
+use oxmacs_core::view::takeover;
+use oxmacs_script::api::games;
 
 use super::{App, Message, transition};
 use crate::keys::{self, Platform};

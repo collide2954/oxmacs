@@ -6,9 +6,9 @@ use oxmacs_core::clock;
 use oxmacs_core::editor::{Axis, Edge, Pane, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
 use oxmacs_core::view::ViewBuffer;
+use oxmacs_core::view::takeover::{self, Takeover};
 use oxmacs_core::view::{overlays, tabbar};
 use oxmacs_script::api::games;
-use oxmacs_script::view::takeover::{self, Takeover};
 
 use super::{App, Message};
 use crate::widgets::buffer_view::{BufferView, Motion};

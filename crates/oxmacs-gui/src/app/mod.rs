@@ -18,7 +18,8 @@ use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_script::{Ox, Pace, Wake, api::games, view::takeover};
+use oxmacs_core::view::takeover;
+use oxmacs_script::{Ox, Pace, Wake, api::games};
 
 use crate::watcher::Watched;
 use crate::widgets::buffer_view::ViewEvent;

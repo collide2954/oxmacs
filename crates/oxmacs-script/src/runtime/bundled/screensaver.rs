@@ -4,8 +4,9 @@ use oxmacs_core::editor::Editor;
 use oxmacs_core::theme::Highlight;
 
 use crate::testing::{press, settle};
-use crate::{Ox, api::idle, view::takeover};
+use crate::{Ox, api::idle};
 use oxmacs_core::view::shapes::{Ink, Shape};
+use oxmacs_core::view::takeover;
 
 const IMPORTS: &str =
     "(module (import (screensaver starfield :as stars) (screensaver matrix :as rain)))";
