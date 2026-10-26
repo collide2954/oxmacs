@@ -4,6 +4,9 @@
 (module (import (ox xml))) (xml/parse "<?xml version=\"1.0\"?><feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:m=\"urn:m\"><m:thumb m:url=\"u\"/></feed>") ;=> {tag: "feed" attrs: {} children: [{tag: "thumb" attrs: {url: "u"} children: []}]}
 (module (import (ox xml))) (xml/parse "<a><b></a>") ;! xml/parse can't read this: expected 'b' tag, not 'a' at 1:7
 (module (import (ox xml))) (xml/parse 5) ;! xml/parse expects a string, got 5
+(module (import (ox xml))) (xml/parse "<p><i>a</i> <b>b</b>&nbsp;&mdash;&eacute;&nope;</p>" :html true) ;=> {tag: "p" attrs: {} children: [{tag: "i" attrs: {} children: ["a"]} " " {tag: "b" attrs: {} children: ["b"]} " —é�"]}
+(module (import (ox xml))) (xml/parse "<p>a&amp;b</p>" :html false) ;=> {tag: "p" attrs: {} children: ["a&b"]}
+(module (import (ox xml))) (xml/parse "<p/>" :strict true) ;! xml/parse takes :html
 
 ;; finds elements by a path of child tag names
 (module (import (ox xml))) (def rss (xml/parse "<rss><channel><title>News</title><item><title>One</title></item><item><title>Two</title><link>l2</link></item></channel></rss>")) (xml/text (xml/find rss "channel/title")) ;=> "News"

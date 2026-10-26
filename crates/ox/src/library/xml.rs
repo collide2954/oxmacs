@@ -9,7 +9,160 @@ use crate::vm::build::{full, make_map, make_vector};
 const MODULE: &str = "ox/xml";
 const DEEPEST: usize = 1000;
 
-fn element(heap: &mut Heap, node: Node<'_, '_>, depth: usize) -> Result<Value, Error> {
+const ENTITIES: &[(&str, char)] = &[
+    ("nbsp", '\u{a0}'),
+    ("ensp", '\u{2002}'),
+    ("emsp", '\u{2003}'),
+    ("thinsp", '\u{2009}'),
+    ("zwnj", '\u{200c}'),
+    ("zwj", '\u{200d}'),
+    ("shy", '\u{ad}'),
+    ("ndash", '–'),
+    ("mdash", '—'),
+    ("hellip", '…'),
+    ("lsquo", '‘'),
+    ("rsquo", '’'),
+    ("sbquo", '‚'),
+    ("ldquo", '“'),
+    ("rdquo", '”'),
+    ("bdquo", '„'),
+    ("laquo", '«'),
+    ("raquo", '»'),
+    ("lsaquo", '‹'),
+    ("rsaquo", '›'),
+    ("bull", '•'),
+    ("middot", '·'),
+    ("dagger", '†'),
+    ("Dagger", '‡'),
+    ("para", '¶'),
+    ("sect", '§'),
+    ("copy", '©'),
+    ("reg", '®'),
+    ("trade", '™'),
+    ("deg", '°'),
+    ("plusmn", '±'),
+    ("times", '×'),
+    ("divide", '÷'),
+    ("frac12", '½'),
+    ("frac14", '¼'),
+    ("frac34", '¾'),
+    ("sup1", '¹'),
+    ("sup2", '²'),
+    ("sup3", '³'),
+    ("cent", '¢'),
+    ("pound", '£'),
+    ("euro", '€'),
+    ("yen", '¥'),
+    ("iexcl", '¡'),
+    ("iquest", '¿'),
+    ("prime", '′'),
+    ("Prime", '″'),
+    ("larr", '←'),
+    ("rarr", '→'),
+    ("uarr", '↑'),
+    ("darr", '↓'),
+    ("hearts", '♥'),
+    ("Agrave", 'À'),
+    ("Aacute", 'Á'),
+    ("Acirc", 'Â'),
+    ("Atilde", 'Ã'),
+    ("Auml", 'Ä'),
+    ("Aring", 'Å'),
+    ("AElig", 'Æ'),
+    ("Ccedil", 'Ç'),
+    ("Egrave", 'È'),
+    ("Eacute", 'É'),
+    ("Ecirc", 'Ê'),
+    ("Euml", 'Ë'),
+    ("Igrave", 'Ì'),
+    ("Iacute", 'Í'),
+    ("Icirc", 'Î'),
+    ("Iuml", 'Ï'),
+    ("Ntilde", 'Ñ'),
+    ("Ograve", 'Ò'),
+    ("Oacute", 'Ó'),
+    ("Ocirc", 'Ô'),
+    ("Otilde", 'Õ'),
+    ("Ouml", 'Ö'),
+    ("Oslash", 'Ø'),
+    ("Ugrave", 'Ù'),
+    ("Uacute", 'Ú'),
+    ("Ucirc", 'Û'),
+    ("Uuml", 'Ü'),
+    ("Yacute", 'Ý'),
+    ("szlig", 'ß'),
+    ("agrave", 'à'),
+    ("aacute", 'á'),
+    ("acirc", 'â'),
+    ("atilde", 'ã'),
+    ("auml", 'ä'),
+    ("aring", 'å'),
+    ("aelig", 'æ'),
+    ("ccedil", 'ç'),
+    ("egrave", 'è'),
+    ("eacute", 'é'),
+    ("ecirc", 'ê'),
+    ("euml", 'ë'),
+    ("igrave", 'ì'),
+    ("iacute", 'í'),
+    ("icirc", 'î'),
+    ("iuml", 'ï'),
+    ("ntilde", 'ñ'),
+    ("ograve", 'ò'),
+    ("oacute", 'ó'),
+    ("ocirc", 'ô'),
+    ("otilde", 'õ'),
+    ("ouml", 'ö'),
+    ("oslash", 'ø'),
+    ("ugrave", 'ù'),
+    ("uacute", 'ú'),
+    ("ucirc", 'û'),
+    ("uuml", 'ü'),
+    ("yacute", 'ý'),
+    ("yuml", 'ÿ'),
+    ("oelig", 'œ'),
+    ("OElig", 'Œ'),
+    ("scaron", 'š'),
+    ("Scaron", 'Š'),
+    ("alpha", 'α'),
+    ("beta", 'β'),
+    ("gamma", 'γ'),
+    ("delta", 'δ'),
+    ("pi", 'π'),
+    ("sigma", 'σ'),
+    ("omega", 'ω'),
+];
+
+const XML_ENTITIES: &[&str] = &["amp", "lt", "gt", "quot", "apos"];
+
+fn html_entities(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find('&') {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 1..];
+        let name_end = after
+            .find(|character: char| !character.is_ascii_alphanumeric())
+            .unwrap_or(after.len());
+        let name = &after[..name_end];
+        let closed = after[name_end..].starts_with(';');
+        if !closed || name.is_empty() || XML_ENTITIES.contains(&name) {
+            out.push('&');
+            rest = after;
+            continue;
+        }
+        let character = ENTITIES
+            .iter()
+            .find(|(known, _)| *known == name)
+            .map_or('\u{fffd}', |(_, character)| *character);
+        out.push(character);
+        rest = &after[name_end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn element(heap: &mut Heap, node: Node<'_, '_>, depth: usize, html: bool) -> Result<Value, Error> {
     if depth > DEEPEST {
         return Err(Error::new(format!(
             "xml/parse can't read elements nested more than {DEEPEST} deep"
@@ -25,10 +178,10 @@ fn element(heap: &mut Heap, node: Node<'_, '_>, depth: usize) -> Result<Value, E
     let mut children = Vec::new();
     for child in node.children() {
         if child.is_element() {
-            children.push(element(heap, child, depth + 1)?);
+            children.push(element(heap, child, depth + 1, html)?);
         } else if child.is_text()
             && let Some(text) = child.text()
-            && !text.trim().is_empty()
+            && (html || !text.trim().is_empty())
         {
             children.push(heap.string(text).map_err(full)?);
         }
@@ -47,21 +200,27 @@ fn element(heap: &mut Heap, node: Node<'_, '_>, depth: usize) -> Result<Value, E
     )
 }
 
-fn parse(heap: &mut Heap, value: Value) -> Result<Value, Error> {
-    let Some(text) = heap.text(value).map(str::to_owned) else {
+fn parse(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let Some(text) = heap.text(arguments[0]).map(str::to_owned) else {
         return Err(Error::new(format!(
             "xml/parse expects a string, got {}",
-            print::brief(heap, value)
+            print::brief(heap, arguments[0])
         ))
         .of(ErrorKind::Type));
     };
+    let html = match &arguments[1..] {
+        [] => false,
+        [Value::Keyword(option), on] if option.name() == "html" => on.truthy(),
+        _ => return Err(Error::new("xml/parse takes :html")),
+    };
+    let text = if html { html_entities(&text) } else { text };
     let options = ParsingOptions {
         allow_dtd: true,
         ..ParsingOptions::default()
     };
     let document = Document::parse_with_options(&text, options)
         .map_err(|error| Error::new(format!("xml/parse can't read this: {error}")))?;
-    element(heap, document.root_element(), 0)
+    element(heap, document.root_element(), 0, html)
 }
 
 fn named(heap: &Heap, key: Value, name: &str) -> bool {
@@ -261,9 +420,7 @@ fn write(heap: &Heap, value: Value, out: &mut String) -> Result<(), Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "parse", 1, Some(1), |heap, arguments| {
-        parse(heap, arguments[0])
-    });
+    isolate.define_native_in(MODULE, "parse", 1, Some(3), parse);
     isolate.define_native_in(MODULE, "find", 2, Some(2), |heap, arguments| {
         let found = along(heap, "xml/find", arguments)?;
         Ok(found.first().copied().unwrap_or(Value::Nil))

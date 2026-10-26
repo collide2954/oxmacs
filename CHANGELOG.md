@@ -7,6 +7,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 ### Added
 
 - `(ox zip)` reads zip archives, such as EPUB books: `zip/entries` lists what is inside, and `zip/read` and `zip/read-base64` read an entry as text or bytes. `image/decode` makes an image from base64 bytes. Built on the zip crate.
+- `xml/parse` reads XHTML with `:html true`: whitespace between elements stays and HTML entities such as `&nbsp;` and `&mdash;` are understood.
 - Plugins open the files they claim with `:opens-files ["epub"]` in their `plugin.ox` and `(on-open-file "epub" f)`, instead of the file opening as text.
 - `zen` 0.1.0, opt-in: `M-x zen` writes without distractions and comes back the same way. The text sits in one centered column (`width`, 80 characters), wrapped between words (`wrap-words`); the other windows, the mode lines, line numbers, tab bar and side window go away and return afterwards (`hide-chrome`); every paragraph but the one you are in fades (`dim`); the line you type on stays in the middle of the window (`typewriter`); and the frame fills the screen (`fullscreen`). Each part is on by default and has its own setting.
 - Plugins change how the windows look with `set-presentation`, which centers a text column, hides the mode lines, line numbers, tab bar and side window, fades all but the current paragraph, keeps point's line in the middle and fills the screen, and wrap a buffer's long lines between words with `set-word-wrap`.

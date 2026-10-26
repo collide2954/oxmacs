@@ -214,7 +214,7 @@
 
 (json/read text) "The value that JSON text describes: objects become maps with keyword keys, and arrays vectors."
 (json/write value) "value as JSON text. Map keys must be keywords or strings."
-(xml/parse text) "The root element of XML text, as a map of :tag, its name; :attrs, a map of its attributes; and :children, a vector of its child elements and text. Names lose their namespace prefixes, text that is only whitespace is left out, and so are comments."
+(xml/parse text {html false}) "The root element of XML text, as a map of :tag, its name; :attrs, a map of its attributes; and :children, a vector of its child elements and text. Names lose their namespace prefixes, text that is only whitespace is left out, and so are comments. With :html true, as for XHTML, whitespace between elements stays and HTML entities such as &nbsp; and &mdash; are read too."
 (xml/find element path) "The first element along path below element, child tag names joined by /, such as \"channel/item\"; nil when there is none or element is nil."
 (xml/find-all element path) "Every element along path below element, such as \"channel/item\", in document order."
 (xml/text element) "All the text inside element and its descendants, joined; a string is its own text, and nil gives nil."
