@@ -83,6 +83,12 @@ impl Random {
     }
 }
 
+pub fn noise(seed: u64, index: u64) -> f64 {
+    let mut state = seed ^ index.wrapping_mul(0xd1b5_4a32_d192_ed03);
+    let bits = splitmix64(&mut state);
+    (f64::from_bits((1023 << 52) | (bits >> 12)) - 1.0).mul_add(2.0, -1.0)
+}
+
 fn splitmix64(state: &mut u64) -> u64 {
     *state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
     let mut mixed = *state;
