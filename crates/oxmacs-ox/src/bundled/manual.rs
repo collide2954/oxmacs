@@ -1,6 +1,6 @@
 use std::fs;
 
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Editor, Effect};
 use oxmacs_core::text::Buffer;
 use oxmacs_core::theme::Highlight;
 
@@ -342,6 +342,73 @@ fn c_h_t_opens_your_own_copy_of_the_tutorial_where_you_left_it() {
     press(&mut editor, &mut ox, "C-x k RET");
     press(&mut editor, &mut ox, "C-h t");
     assert_eq!(editor.buffer().line_of(editor.buffer().point()), 12);
+}
+
+const TUTORIAL: &str = include_str!("../../plugins/manual/tutorial.ox");
+
+fn tutorial_block(after: &str) -> String {
+    let lines: Vec<&str> = TUTORIAL
+        .lines()
+        .skip_while(|line| !line.starts_with(after))
+        .skip(1)
+        .skip_while(|line| line.trim().is_empty())
+        .take_while(|line| line.starts_with("  ") || line.trim().is_empty())
+        .map(|line| line.strip_prefix("  ").unwrap_or(line))
+        .collect();
+    lines.join("\n").trim_end().to_owned()
+}
+
+#[test]
+fn the_tutorials_exercises_do_what_it_says() {
+    let (home, mut editor, mut ox) = started();
+    editor.set_home_directory(Some(home.path().to_path_buf()));
+    assert!(
+        TUTORIAL
+            .contains(">> Move to the next line, cut it with C-w, then paste it twice with C-y.")
+    );
+    press(&mut editor, &mut ox, "C-h t");
+
+    go_to(&mut editor, "Copy me.");
+    press(&mut editor, &mut ox, "C-w");
+    for _ in 0..2 {
+        press(&mut editor, &mut ox, "C-y");
+        assert!(editor.take_effects().contains(&Effect::ReadClipboard));
+        editor.paste(None);
+    }
+    assert_eq!(
+        lines(&editor)
+            .iter()
+            .filter(|line| *line == "Copy me.")
+            .count(),
+        2
+    );
+
+    press(&mut editor, &mut ox, "C-x C-f");
+    typed(&mut editor, &mut ox, "~/hello.ox");
+    press(&mut editor, &mut ox, "RET");
+    assert_eq!(
+        editor.buffer().file().map(|file| file.path.clone()),
+        Some(home.path().join("hello.ox"))
+    );
+    editor.paste(Some(tutorial_block(">> Now type the lines below")));
+    press(&mut editor, &mut ox, "C-x C-e M-x");
+    typed(&mut editor, &mut ox, "hello");
+    press(&mut editor, &mut ox, "RET");
+    assert_eq!(editor.message(), Some("Hello from Ox"));
+}
+
+#[test]
+fn the_tutorials_configuration_works_in_a_fresh_init_ox() {
+    let init = tutorial_block(">> Add these lines to init.ox");
+    let home = home_with(&[("init.ox", init.as_str())]);
+    let mut editor = Editor::new();
+    let mut ox = Ox::new();
+    ox.start(&mut editor, Some(home.path()));
+    settle(&mut editor, &mut ox);
+
+    assert_eq!(logged(&editor), "");
+    press(&mut editor, &mut ox, "C-c h");
+    assert_eq!(editor.message(), Some("Hello from Ox"));
 }
 
 #[test]

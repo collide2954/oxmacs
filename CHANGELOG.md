@@ -65,6 +65,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Opening a remote file no longer writes its local copy over the file at the same path on this machine: copies live in the oxmacs home's `remote` folder, one folder per host, with the characters Windows refuses in names replaced.
 - `file/copy` refuses to copy a file onto itself or onto another of its hard links, which emptied it, and a folder into itself, which never finished, and it copies links as links instead of following them. `file/remove` removes a link to a folder on Windows instead of failing, and leaves the folder it points to alone.
 - Language server edits for text that changed after they were asked for, from formatting, renames, code actions or the server itself, are dropped with a message instead of landing in the wrong places. Formatting on save through a language server now formats first and writes once, and still saves when the server fails or stops.
+- The `C-h t` tutorial teaches the cut and paste keys oxmacs has (`C-w`, `M-w`, `C-y` and `M-y`, with `C-k` deleting the rest of the line), and its configuration step defines the command it binds, so the `init.ox` it leaves no longer fails at every start.
 
 ### Security
 

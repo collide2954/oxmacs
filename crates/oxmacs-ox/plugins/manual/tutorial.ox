@@ -30,17 +30,18 @@ The arrow keys, Home, End and the mouse work too.
 
 2. EDITING
 
-Type to insert text. DEL deletes the character before point and C-d
-the one after it.
+Type to insert text. DEL deletes the character before point, C-d the
+one after it, and C-k the rest of the line.
 
-  C-k  kill to the end of the line   C-y  yank (paste) it back
-  C-/  undo                          M-y  after C-y, an older kill
+  C-w  cut       C-y  paste
+  M-w  copy      M-y  paste something copied earlier
+  C-/  undo
 
-C-SPC sets the mark; move, and the text between is the region.
-C-w kills the region, M-w copies it.
+C-SPC sets the mark; move, and the text between is the region. C-w
+and M-w cut and copy the region, or the whole line when there is none.
 
 >> Delete the repeated words in this this this sentence.
->> Move to the next line, kill it with C-k, then yank it back twice.
+>> Move to the next line, cut it with C-w, then paste it twice with C-y.
 Copy me.
 
 
@@ -105,7 +106,13 @@ oxmacs starts. Saving it applies it at once.
 >> Add these lines to init.ox and save it:
 
   (settings {tab-width: 4})
+
+  (defcommand hello "Say hello"
+    (message "Hello from Ox"))
+
   (bind-key "C-c h" 'hello)
+
+>> Press C-c h.
 
 M-x customize changes settings in a form instead.
 
