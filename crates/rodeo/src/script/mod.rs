@@ -8,9 +8,10 @@ mod vec;
 
 use ox_lang::Isolate;
 use ox_lang::build::{make_map, make_vector};
-use ox_lang::error::{Error, ErrorKind};
+use ox_lang::error::Error;
 use ox_lang::heap::Heap;
-use ox_lang::value::{Value, print, to_float};
+use ox_lang::native::{expected, field, number};
+use ox_lang::value::Value;
 
 use crate::rect::Rect;
 use crate::vec::Vec2;
@@ -62,28 +63,8 @@ pub fn install(isolate: &mut Isolate) {
     isolate.add_native_docs(DOCS);
 }
 
-pub(crate) fn wrong(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
-    Error::new(format!(
-        "{name} expects {what}, got {}",
-        print::brief(heap, value)
-    ))
-    .of(ErrorKind::Type)
-}
-
-pub(crate) fn number(heap: &Heap, name: &str, value: Value) -> Result<f64, Error> {
-    match value {
-        Value::Int(number) => Ok(to_float(number)),
-        Value::Float(number) => Ok(number),
-        _ => Err(wrong(heap, name, "a number", value)),
-    }
-}
-
 pub(crate) fn items(heap: &Heap, value: Value) -> Option<Vec<Value>> {
     heap.vector_of(value).map(|vector| vector.items(heap))
-}
-
-pub(crate) fn field(heap: &Heap, value: Value, key: &str) -> Option<Value> {
-    heap.map_of(value)?.get(heap, Value::keyword(key))
 }
 
 fn numbers<const COUNT: usize>(
@@ -112,13 +93,13 @@ fn numbers<const COUNT: usize>(
 
 pub(crate) fn point(heap: &Heap, name: &str, value: Value) -> Result<Vec2, Error> {
     let [x, y] = numbers(heap, name, value, ["x", "y"])
-        .ok_or_else(|| wrong(heap, name, "a point as [x y] or a map of :x and :y", value))??;
+        .ok_or_else(|| expected(heap, name, "a point as [x y] or a map of :x and :y", value))??;
     Ok(Vec2::new(x, y))
 }
 
 pub(crate) fn rect(heap: &Heap, name: &str, value: Value) -> Result<Rect, Error> {
     let [x, y, w, h] = numbers(heap, name, value, ["x", "y", "w", "h"]).ok_or_else(|| {
-        wrong(
+        expected(
             heap,
             name,
             "a rect as [x y w h] or a map of :x, :y, :w and :h",

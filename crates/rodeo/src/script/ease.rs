@@ -2,9 +2,10 @@ use ox_lang::Isolate;
 use ox_lang::build::make_vector;
 use ox_lang::error::Error;
 use ox_lang::heap::Heap;
+use ox_lang::native::{expected, number};
 use ox_lang::value::Value;
 
-use super::{name_of, number, point, point_value, wrong};
+use super::{name_of, point, point_value};
 use crate::ease::Ease;
 
 const MODULE: &str = "rodeo/ease";
@@ -12,7 +13,7 @@ const MODULE: &str = "rodeo/ease";
 fn ease(heap: &Heap, name: &str, value: Value) -> Result<Ease, Error> {
     name_of(heap, value)
         .and_then(|text| text.parse().ok())
-        .ok_or_else(|| wrong(heap, name, "an ease such as :quad-in or :bounce-out", value))
+        .ok_or_else(|| expected(heap, name, "an ease such as :quad-in or :bounce-out", value))
 }
 
 fn between(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {

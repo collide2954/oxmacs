@@ -1,6 +1,7 @@
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
+use crate::native::expected;
 use crate::value::Value;
 use crate::value::map::Map;
 use crate::value::print;
@@ -9,14 +10,6 @@ use crate::value::vector::Vector;
 
 fn int(number: usize) -> Value {
     Value::Int(i64::try_from(number).unwrap_or(i64::MAX))
-}
-
-pub(crate) fn expected(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
-    Error::new(format!(
-        "{name} expects {what}, got {}",
-        print::brief(heap, value)
-    ))
-    .of(ErrorKind::Type)
 }
 
 pub(crate) fn out_of_range(index: i64, kind: &str, count: usize, unit: &str) -> Error {

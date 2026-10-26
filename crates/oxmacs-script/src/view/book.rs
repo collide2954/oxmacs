@@ -1,3 +1,4 @@
+use ox_lang::native::{count, expected, field};
 use std::sync::Arc;
 
 use ox_lang::heap::Heap;
@@ -114,30 +115,6 @@ impl Pages {
     }
 }
 
-fn wrong(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
-    Error::new(format!(
-        "{name} expects {wanted}, got {}",
-        print::brief(heap, value)
-    ))
-}
-
-fn field(heap: &Heap, map: Value, name: &str) -> Value {
-    heap.entries(map)
-        .unwrap_or_default()
-        .into_iter()
-        .find(|(key, _)| matches!(key, Value::Keyword(found) if found.name() == name))
-        .map_or(Value::Nil, |(_, value)| value)
-}
-
-fn count(heap: &Heap, name: &str, value: Value) -> Result<usize, Error> {
-    match value {
-        Value::Int(number) => {
-            usize::try_from(number).map_err(|_| wrong(heap, name, "a whole number", value))
-        }
-        _ => Err(wrong(heap, name, "a whole number", value)),
-    }
-}
-
 fn run(heap: &Heap, value: Value) -> Result<Run, Error> {
     if let Some(text) = heap.text(value) {
         return Ok(Run {
@@ -146,18 +123,18 @@ fn run(heap: &Heap, value: Value) -> Result<Run, Error> {
         });
     }
     if heap.entries(value).is_none() {
-        return Err(wrong(heap, "ui/document", "runs of text or maps", value));
+        return Err(expected(heap, "ui/document", "runs of text or maps", value));
     }
-    let text = field(heap, value, "text");
-    let link = field(heap, value, "link");
+    let text = field(heap, value, "text").unwrap_or_default();
+    let link = field(heap, value, "link").unwrap_or_default();
     Ok(Run {
         text: heap
             .text(text)
-            .ok_or_else(|| wrong(heap, "ui/document", "a run's :text as a string", text))?
+            .ok_or_else(|| expected(heap, "ui/document", "a run's :text as a string", text))?
             .to_owned(),
-        italic: field(heap, value, "italic").truthy(),
-        bold: field(heap, value, "bold").truthy(),
-        code: field(heap, value, "code").truthy(),
+        italic: field(heap, value, "italic").unwrap_or_default().truthy(),
+        bold: field(heap, value, "bold").unwrap_or_default().truthy(),
+        code: field(heap, value, "code").unwrap_or_default().truthy(),
         link: (link != Value::Nil).then(|| print::display(heap, link)),
     })
 }
@@ -165,21 +142,21 @@ fn run(heap: &Heap, value: Value) -> Result<Run, Error> {
 fn runs(heap: &Heap, value: Value) -> Result<Vec<Run>, Error> {
     heap.elements(value)
         .filter(|_| heap.text(value).is_none())
-        .ok_or_else(|| wrong(heap, "ui/document", "a vector of :runs", value))?
+        .ok_or_else(|| expected(heap, "ui/document", "a vector of :runs", value))?
         .into_iter()
         .map(|item| run(heap, item))
         .collect()
 }
 
 fn block(heap: &Heap, value: Value) -> Result<Block, Error> {
-    let kind = field(heap, value, "kind");
+    let kind = field(heap, value, "kind").unwrap_or_default();
     let Value::Keyword(kind) = kind else {
-        return Err(wrong(heap, "ui/document", "blocks with a :kind", value));
+        return Err(expected(heap, "ui/document", "blocks with a :kind", value));
     };
     let text = |kind: Kind| -> Result<Block, Error> {
         Ok(Block::Text {
             kind,
-            runs: runs(heap, field(heap, value, "runs"))?,
+            runs: runs(heap, field(heap, value, "runs").unwrap_or_default())?,
         })
     };
     match kind.name() {
@@ -188,12 +165,16 @@ fn block(heap: &Heap, value: Value) -> Result<Block, Error> {
         "center" => text(Kind::Center),
         "verse" => text(Kind::Verse),
         "heading" => {
-            let level = count(heap, "ui/document", field(heap, value, "level"))?;
+            let level = count(
+                heap,
+                "ui/document",
+                field(heap, value, "level").unwrap_or_default(),
+            )?;
             text(Kind::Heading(u8::try_from(level.clamp(1, 6)).unwrap_or(1)))
         }
         "item" => {
-            let marker = print::display(heap, field(heap, value, "marker"));
-            let depth = match field(heap, value, "depth") {
+            let marker = print::display(heap, field(heap, value, "marker").unwrap_or_default());
+            let depth = match field(heap, value, "depth").unwrap_or_default() {
                 Value::Nil => 0,
                 given => count(heap, "ui/document", given)?,
             };
@@ -207,13 +188,13 @@ fn block(heap: &Heap, value: Value) -> Result<Block, Error> {
             })
         }
         "pre" => {
-            let body = field(heap, value, "text");
+            let body = field(heap, value, "text").unwrap_or_default();
             Ok(Block::Text {
                 kind: Kind::Pre,
                 runs: vec![Run {
                     text: heap
                         .text(body)
-                        .ok_or_else(|| wrong(heap, "ui/document", "a :pre block's :text", body))?
+                        .ok_or_else(|| expected(heap, "ui/document", "a :pre block's :text", body))?
                         .to_owned(),
                     code: true,
                     ..Run::default()
@@ -221,10 +202,10 @@ fn block(heap: &Heap, value: Value) -> Result<Block, Error> {
             })
         }
         "image" => {
-            let image = field(heap, value, "image");
+            let image = field(heap, value, "image").unwrap_or_default();
             let picture = ox_library::image::image_of(heap, image)
-                .ok_or_else(|| wrong(heap, "ui/document", "an :image block's image", image))?;
-            let alt = field(heap, value, "alt");
+                .ok_or_else(|| expected(heap, "ui/document", "an :image block's image", image))?;
+            let alt = field(heap, value, "alt").unwrap_or_default();
             Ok(Block::Image {
                 picture: Picture(picture),
                 alt: heap.text(alt).unwrap_or_default().to_owned(),
@@ -240,7 +221,7 @@ fn block(heap: &Heap, value: Value) -> Result<Block, Error> {
 fn document(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let blocks = heap
         .elements(arguments[0])
-        .ok_or_else(|| wrong(heap, "ui/document", "a vector of blocks", arguments[0]))?
+        .ok_or_else(|| expected(heap, "ui/document", "a vector of blocks", arguments[0]))?
         .into_iter()
         .map(|item| block(heap, item))
         .collect::<Result<Vec<Block>, Error>>()?;
@@ -251,24 +232,32 @@ fn document(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 fn anchor(heap: &Heap, name: &str, value: Value) -> Result<(usize, usize), Error> {
     match heap.elements(value).as_deref() {
         Some([block, offset]) => Ok((count(heap, name, *block)?, count(heap, name, *offset)?)),
-        _ => Err(wrong(heap, name, "[block character]", value)),
+        _ => Err(expected(heap, name, "[block character]", value)),
     }
 }
 
 fn marks(heap: &Heap, value: Value) -> Result<Vec<Mark>, Error> {
     heap.elements(value)
-        .ok_or_else(|| wrong(heap, "ui/pages", "a vector of :marks", value))?
+        .ok_or_else(|| expected(heap, "ui/pages", "a vector of :marks", value))?
         .into_iter()
         .map(|item| {
-            let face = field(heap, item, "face");
+            let face = field(heap, item, "face").unwrap_or_default();
             Ok(Mark {
-                from: anchor(heap, "ui/pages", field(heap, item, "from"))?,
-                to: anchor(heap, "ui/pages", field(heap, item, "to"))?,
+                from: anchor(
+                    heap,
+                    "ui/pages",
+                    field(heap, item, "from").unwrap_or_default(),
+                )?,
+                to: anchor(
+                    heap,
+                    "ui/pages",
+                    field(heap, item, "to").unwrap_or_default(),
+                )?,
                 face: match face {
                     Value::Keyword(name) => views::face_named(name.name()),
                     _ => None,
                 }
-                .ok_or_else(|| wrong(heap, "ui/pages", "a mark's :face", face))?,
+                .ok_or_else(|| expected(heap, "ui/pages", "a mark's :face", face))?,
             })
         })
         .collect()
@@ -289,7 +278,7 @@ fn choice<T: Copy>(
     }
     .ok_or_else(|| {
         let names: Vec<String> = known.iter().map(|(name, _)| format!(":{name}")).collect();
-        wrong(
+        expected(
             heap,
             "ui/pages",
             &format!(":{option} as {}", names.join(" or ")),
@@ -307,7 +296,7 @@ fn size(heap: &Heap, value: Value) -> Result<f32, Error> {
     match value {
         Value::Int(number) => Ok(number as f32),
         Value::Float(number) => Ok(number as f32),
-        _ => Err(wrong(heap, "ui/pages", "a :size in pixels", value)),
+        _ => Err(expected(heap, "ui/pages", "a :size in pixels", value)),
     }
 }
 
@@ -315,7 +304,7 @@ fn pages(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let document = heap
         .foreign_of::<Handle>(arguments[0])
         .cloned()
-        .ok_or_else(|| wrong(heap, "ui/pages", "a ui/document", arguments[0]))?;
+        .ok_or_else(|| expected(heap, "ui/pages", "a ui/document", arguments[0]))?;
     let mut shown = Pages {
         document,
         at: At::Anchor(0, 0),

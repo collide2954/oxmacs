@@ -3,6 +3,7 @@ mod engine;
 mod sample;
 pub mod words;
 
+use ox_lang::native::{count, expected, field, text};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,7 +13,7 @@ use std::time::SystemTime;
 use ox_lang::heap::Heap;
 use ox_lang::native::given;
 use ox_lang::portable::{Failure, Portable};
-use ox_lang::value::{Value, print};
+use ox_lang::value::Value;
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::external::managed::PDFIUM;
@@ -303,26 +304,6 @@ impl View {
     }
 }
 
-fn wrong(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
-    Error::new(format!(
-        "{name} expects {wanted}, got {}",
-        print::brief(heap, value)
-    ))
-}
-
-fn text_of<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> {
-    heap.text(value)
-        .ok_or_else(|| wrong(heap, name, "a string", value))
-}
-
-fn field(heap: &Heap, map: Value, name: &str) -> Value {
-    heap.entries(map)
-        .unwrap_or_default()
-        .into_iter()
-        .find(|(key, _)| matches!(key, Value::Keyword(found) if found.name() == name))
-        .map_or(Value::Nil, |(_, value)| value)
-}
-
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -332,16 +313,7 @@ fn number(heap: &Heap, name: &str, value: Value) -> Result<f32, Error> {
     match value {
         Value::Int(number) => Ok(number as f32),
         Value::Float(number) => Ok(number as f32),
-        _ => Err(wrong(heap, name, "a number", value)),
-    }
-}
-
-fn whole(heap: &Heap, name: &str, value: Value) -> Result<usize, Error> {
-    match value {
-        Value::Int(number) => {
-            usize::try_from(number).map_err(|_| wrong(heap, name, "a whole number", value))
-        }
-        _ => Err(wrong(heap, name, "a whole number", value)),
+        _ => Err(expected(heap, name, "a number", value)),
     }
 }
 
@@ -353,7 +325,7 @@ fn rect(heap: &Heap, value: Value) -> Result<Rect, Error> {
             right: number(heap, "ui/pdf", *right)?,
             bottom: number(heap, "ui/pdf", *bottom)?,
         }),
-        _ => Err(wrong(
+        _ => Err(expected(
             heap,
             "ui/pdf",
             "a mark's :rect as [left top right bottom]",
@@ -364,13 +336,17 @@ fn rect(heap: &Heap, value: Value) -> Result<Rect, Error> {
 
 fn marks(heap: &Heap, value: Value) -> Result<Vec<Mark>, Error> {
     heap.elements(value)
-        .ok_or_else(|| wrong(heap, "ui/pdf", "a vector of :marks", value))?
+        .ok_or_else(|| expected(heap, "ui/pdf", "a vector of :marks", value))?
         .into_iter()
         .map(|item| {
             Ok(Mark {
-                page: whole(heap, "ui/pdf", field(heap, item, "page"))?,
-                rect: rect(heap, field(heap, item, "rect"))?,
-                current: field(heap, item, "current").truthy(),
+                page: count(
+                    heap,
+                    "ui/pdf",
+                    field(heap, item, "page").unwrap_or_default(),
+                )?,
+                rect: rect(heap, field(heap, item, "rect").unwrap_or_default())?,
+                current: field(heap, item, "current").unwrap_or_default().truthy(),
             })
         })
         .collect()
@@ -383,7 +359,7 @@ fn zoom(heap: &Heap, value: Value) -> Result<Zoom, Error> {
         Value::Int(_) | Value::Float(_) => Ok(Zoom::Scale(
             number(heap, "ui/pdf", value)?.clamp(MIN_SCALE, MAX_SCALE),
         )),
-        _ => Err(wrong(
+        _ => Err(expected(
             heap,
             "ui/pdf",
             ":zoom as :fit-width, :fit-page or a scale",
@@ -399,16 +375,16 @@ fn go(heap: &Heap, value: Value) -> Result<Option<(i64, Go)>, Error> {
     if value == Value::Nil {
         return Ok(None);
     }
-    let Value::Int(id) = field(heap, value, "id") else {
-        return Err(wrong(heap, "ui/pdf", ":go with a whole :id", value));
+    let Value::Int(id) = field(heap, value, "id").unwrap_or_default() else {
+        return Err(expected(heap, "ui/pdf", ":go with a whole :id", value));
     };
-    let page = field(heap, value, "page");
-    let lines = field(heap, value, "lines");
-    let screens = field(heap, value, "screens");
+    let page = field(heap, value, "page").unwrap_or_default();
+    let lines = field(heap, value, "lines").unwrap_or_default();
+    let screens = field(heap, value, "screens").unwrap_or_default();
     let to = if page != Value::Nil {
-        let y = field(heap, value, "y");
+        let y = field(heap, value, "y").unwrap_or_default();
         Go::Page {
-            page: whole(heap, "ui/pdf", page)?,
+            page: count(heap, "ui/pdf", page)?,
             y: (y != Value::Nil)
                 .then(|| number(heap, "ui/pdf", y))
                 .transpose()?,
@@ -418,7 +394,7 @@ fn go(heap: &Heap, value: Value) -> Result<Option<(i64, Go)>, Error> {
     } else if screens != Value::Nil {
         Go::Screens(number(heap, "ui/pdf", screens)?)
     } else {
-        return Err(wrong(
+        return Err(expected(
             heap,
             "ui/pdf",
             ":go with a :page, :lines or :screens",
@@ -441,7 +417,7 @@ const PDF: [&str; 9] = [
 ];
 
 fn view(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
-    let path = PathBuf::from(text_of(heap, "ui/pdf", arguments[0])?);
+    let path = PathBuf::from(text(heap, "ui/pdf", arguments[0])?);
     let mut shown = View {
         path,
         revision: 0,
@@ -457,7 +433,7 @@ fn view(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     for (option, value) in given(&PDF, &arguments[1..]) {
         match option {
             "revision" => {
-                shown.revision = u64::try_from(whole(heap, "ui/pdf", value)?).unwrap_or_default();
+                shown.revision = u64::try_from(count(heap, "ui/pdf", value)?).unwrap_or_default();
             }
             "zoom" => shown.zoom = zoom(heap, value)?,
             "continuous" => shown.continuous = value.truthy(),
@@ -473,7 +449,7 @@ fn view(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         .map_err(Error::from)
 }
 
-fn count(number: usize) -> Portable {
+fn portable(number: usize) -> Portable {
     i64::try_from(number).map_or(Portable::Nil, Portable::Int)
 }
 
@@ -491,13 +467,13 @@ fn opened(revision: u64, document: &Document) -> Portable {
                     Portable::keyword("title"),
                     Portable::String(heading.title.as_str().into()),
                 ),
-                (Portable::keyword("page"), count(heading.page)),
-                (Portable::keyword("depth"), count(heading.depth)),
+                (Portable::keyword("page"), portable(heading.page)),
+                (Portable::keyword("depth"), portable(heading.depth)),
             ])
         })
         .collect();
     Portable::Map(vec![
-        (Portable::keyword("pages"), count(document.pages.len())),
+        (Portable::keyword("pages"), portable(document.pages.len())),
         (
             Portable::keyword("revision"),
             i64::try_from(revision).map_or(Portable::Nil, Portable::Int),
@@ -532,7 +508,7 @@ fn found(matches: Vec<words::Found>) -> Portable {
                     })
                     .collect();
                 Portable::Map(vec![
-                    (Portable::keyword("page"), count(found.page)),
+                    (Portable::keyword("page"), portable(found.page)),
                     (Portable::keyword("rects"), Portable::Vector(rects)),
                 ])
             })
@@ -573,7 +549,7 @@ pub fn install(isolate: &mut Isolate) {
         .arity(1, Some(1))
         .outside()
         .function(|heap, arguments| {
-            let path = PathBuf::from(text_of(heap, "pdf/open", arguments[0])?);
+            let path = PathBuf::from(text(heap, "pdf/open", arguments[0])?);
             heap.background("ox pdf/open", move || {
                 open(&path)
                     .map(|(revision, document)| opened(revision, &document))
@@ -585,8 +561,8 @@ pub fn install(isolate: &mut Isolate) {
         .arity(2, Some(2))
         .outside()
         .function(|heap, arguments| {
-            let path = PathBuf::from(text_of(heap, "pdf/search", arguments[0])?);
-            let query = text_of(heap, "pdf/search", arguments[1])?.to_owned();
+            let path = PathBuf::from(text(heap, "pdf/search", arguments[0])?);
+            let query = text(heap, "pdf/search", arguments[1])?.to_owned();
             heap.background("ox pdf/search", move || {
                 texts(&path)
                     .map(|pages| found(words::search(&pages, &query)))

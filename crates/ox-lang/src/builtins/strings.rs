@@ -1,37 +1,12 @@
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
+use crate::native::{count, text};
 use crate::value::Value;
 use crate::value::print;
 use crate::vm::build::make_vector;
 
 const MODULE: &str = "ox/string";
-
-fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> {
-    heap.text(value).ok_or_else(|| {
-        Error::new(format!(
-            "string/{name} expects a string, got {}",
-            print::brief(heap, value)
-        ))
-        .of(ErrorKind::Type)
-    })
-}
-
-fn count(heap: &Heap, name: &str, value: Value) -> Result<usize, Error> {
-    match value {
-        Value::Int(number) => usize::try_from(number).map_err(|_| {
-            Error::new(format!(
-                "string/{name} expects a count of 0 or more, got {number}"
-            ))
-            .of(ErrorKind::Range)
-        }),
-        _ => Err(Error::new(format!(
-            "string/{name} expects a whole number, got {}",
-            print::brief(heap, value)
-        ))
-        .of(ErrorKind::Type)),
-    }
-}
 
 fn strings(heap: &mut Heap, parts: &[String]) -> Result<Value, Error> {
     let values = parts
@@ -42,22 +17,24 @@ fn strings(heap: &mut Heap, parts: &[String]) -> Result<Value, Error> {
 }
 
 fn unary(isolate: &mut Isolate, name: &'static str, change: fn(&str) -> String) {
+    let shown = format!("string/{name}");
     isolate
         .native(MODULE, name)
         .arity(1, Some(1))
         .function(move |heap, arguments| {
-            let changed = change(text(heap, name, arguments[0])?);
+            let changed = change(text(heap, &shown, arguments[0])?);
             heap.string(&changed).map_err(Error::from)
         });
 }
 
 fn test(isolate: &mut Isolate, name: &'static str, holds: fn(&str, &str) -> bool) {
+    let shown = format!("string/{name}");
     isolate
         .native(MODULE, name)
         .arity(2, Some(2))
         .function(move |heap, arguments| {
-            let whole = text(heap, name, arguments[0])?;
-            let part = text(heap, name, arguments[1])?;
+            let whole = text(heap, &shown, arguments[0])?;
+            let part = text(heap, &shown, arguments[1])?;
             Ok(Value::Bool(holds(whole, part)))
         });
 }
@@ -99,11 +76,11 @@ fn number(text: &str) -> Value {
 }
 
 fn slice(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
-    let whole = text(heap, "slice", arguments[0])?.to_owned();
+    let whole = text(heap, "string/slice", arguments[0])?.to_owned();
     let length = whole.chars().count();
-    let start = count(heap, "slice", arguments[1])?;
+    let start = count(heap, "string/slice", arguments[1])?;
     let end = match arguments.get(2) {
-        Some(end) => count(heap, "slice", *end)?,
+        Some(end) => count(heap, "string/slice", *end)?,
         None => length,
     };
     if start > end || end > length {
@@ -121,7 +98,7 @@ fn install_shaping(isolate: &mut Isolate) {
         .native(MODULE, "words")
         .arity(1, Some(1))
         .function(|heap, arguments| {
-            let parts: Vec<String> = text(heap, "words", arguments[0])?
+            let parts: Vec<String> = text(heap, "string/words", arguments[0])?
                 .split_whitespace()
                 .map(str::to_owned)
                 .collect();
@@ -132,8 +109,8 @@ fn install_shaping(isolate: &mut Isolate) {
         .native(MODULE, "truncate")
         .arity(2, Some(2))
         .function(|heap, arguments| {
-            let whole = text(heap, "truncate", arguments[0])?.to_owned();
-            let width = count(heap, "truncate", arguments[1])?;
+            let whole = text(heap, "string/truncate", arguments[0])?.to_owned();
+            let width = count(heap, "string/truncate", arguments[1])?;
             let cut = if whole.chars().count() <= width {
                 whole
             } else {
@@ -161,25 +138,25 @@ pub fn install(isolate: &mut Isolate) {
         .arity(1, Some(1))
         .function(|heap, arguments| {
             Ok(Value::Bool(
-                text(heap, "blank?", arguments[0])?.trim().is_empty(),
+                text(heap, "string/blank?", arguments[0])?.trim().is_empty(),
             ))
         });
     isolate
         .native(MODULE, "length")
         .arity(1, Some(1))
         .function(|heap, arguments| {
-            let length = text(heap, "length", arguments[0])?.chars().count();
+            let length = text(heap, "string/length", arguments[0])?.chars().count();
             Ok(Value::Int(i64::try_from(length).unwrap_or(i64::MAX)))
         });
     isolate
         .native(MODULE, "split")
         .arity(2, Some(3))
         .function(|heap, arguments| {
-            let whole = text(heap, "split", arguments[0])?;
-            let separator = text(heap, "split", arguments[1])?;
+            let whole = text(heap, "string/split", arguments[0])?;
+            let separator = text(heap, "string/split", arguments[1])?;
             let parts: Vec<String> = match arguments.get(2) {
                 Some(limit) => whole
-                    .splitn(count(heap, "split", *limit)?, separator)
+                    .splitn(count(heap, "string/split", *limit)?, separator)
                     .map(str::to_owned)
                     .collect(),
                 None => whole.split(separator).map(str::to_owned).collect(),
@@ -195,7 +172,7 @@ fn install_pieces(isolate: &mut Isolate) {
         .native(MODULE, "lines")
         .arity(1, Some(1))
         .function(|heap, arguments| {
-            let parts: Vec<String> = text(heap, "lines", arguments[0])?
+            let parts: Vec<String> = text(heap, "string/lines", arguments[0])?
                 .lines()
                 .map(str::to_owned)
                 .collect();
@@ -205,7 +182,7 @@ fn install_pieces(isolate: &mut Isolate) {
         .native(MODULE, "chars")
         .arity(1, Some(1))
         .function(|heap, arguments| {
-            let chars: Vec<Value> = text(heap, "chars", arguments[0])?
+            let chars: Vec<Value> = text(heap, "string/chars", arguments[0])?
                 .chars()
                 .map(Value::Char)
                 .collect();
@@ -217,7 +194,9 @@ fn install_pieces(isolate: &mut Isolate) {
         .function(|heap, arguments| {
             let (separator, items) = match arguments {
                 [items] => (String::new(), *items),
-                [separator, items, ..] => (text(heap, "join", *separator)?.to_owned(), *items),
+                [separator, items, ..] => {
+                    (text(heap, "string/join", *separator)?.to_owned(), *items)
+                }
                 [] => return Ok(Value::Nil),
             };
             let parts: Vec<String> = heap
@@ -238,9 +217,9 @@ fn install_pieces(isolate: &mut Isolate) {
         .native(MODULE, "replace")
         .arity(3, Some(3))
         .function(|heap, arguments| {
-            let whole = text(heap, "replace", arguments[0])?;
-            let from = text(heap, "replace", arguments[1])?;
-            let to = text(heap, "replace", arguments[2])?;
+            let whole = text(heap, "string/replace", arguments[0])?;
+            let from = text(heap, "string/replace", arguments[1])?;
+            let to = text(heap, "string/replace", arguments[2])?;
             let replaced = whole.replace(from, to);
             heap.string(&replaced).map_err(Error::from)
         });
@@ -248,8 +227,8 @@ fn install_pieces(isolate: &mut Isolate) {
         .native(MODULE, "index-of")
         .arity(2, Some(2))
         .function(|heap, arguments| {
-            let whole = text(heap, "index-of", arguments[0])?;
-            let part = text(heap, "index-of", arguments[1])?;
+            let whole = text(heap, "string/index-of", arguments[0])?;
+            let part = text(heap, "string/index-of", arguments[1])?;
             Ok(whole.find(part).map_or(Value::Nil, |at| {
                 Value::Int(i64::try_from(whole[..at].chars().count()).unwrap_or(i64::MAX))
             }))
@@ -258,8 +237,8 @@ fn install_pieces(isolate: &mut Isolate) {
         .native(MODULE, "repeat")
         .arity(2, Some(2))
         .function(|heap, arguments| {
-            let part = text(heap, "repeat", arguments[0])?;
-            let times = count(heap, "repeat", arguments[1])?;
+            let part = text(heap, "string/repeat", arguments[0])?;
+            let times = count(heap, "string/repeat", arguments[1])?;
             let repeated = part.repeat(times);
             heap.string(&repeated).map_err(Error::from)
         });
@@ -270,13 +249,13 @@ fn install_pieces(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "to-number")
         .arity(1, Some(1))
-        .function(|heap, arguments| Ok(number(text(heap, "to-number", arguments[0])?)));
+        .function(|heap, arguments| Ok(number(text(heap, "string/to-number", arguments[0])?)));
     isolate
         .native(MODULE, "pad-start")
         .arity(2, Some(3))
-        .function(|heap, arguments| pad(heap, "pad-start", arguments, true));
+        .function(|heap, arguments| pad(heap, "string/pad-start", arguments, true));
     isolate
         .native(MODULE, "pad-end")
         .arity(2, Some(3))
-        .function(|heap, arguments| pad(heap, "pad-end", arguments, false));
+        .function(|heap, arguments| pad(heap, "string/pad-end", arguments, false));
 }

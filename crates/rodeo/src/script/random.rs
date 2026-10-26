@@ -2,22 +2,16 @@ use ox_lang::Isolate;
 use ox_lang::build::make_vector;
 use ox_lang::error::{Error, ErrorKind};
 use ox_lang::heap::Heap;
+use ox_lang::native::{expected, number, whole};
 use ox_lang::value::Value;
 
-use super::{bits, number, signed, wrong};
+use super::{bits, signed};
 use crate::random::{Random, noise};
 
 const MODULE: &str = "rodeo/random";
 
-fn whole(heap: &Heap, name: &str, value: Value) -> Result<i64, Error> {
-    match value {
-        Value::Int(number) => Ok(number),
-        _ => Err(wrong(heap, name, "a whole number", value)),
-    }
-}
-
 fn state(heap: &Heap, name: &str, rng: Value) -> Result<Random, Error> {
-    let missing = || wrong(heap, name, "a generator from random/new", rng);
+    let missing = || expected(heap, name, "a generator from random/new", rng);
     let held = heap.atom_get(rng).ok_or_else(missing)?;
     let parts = heap
         .vector_of(held)
@@ -76,7 +70,7 @@ fn int(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 fn pick(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let items = heap
         .elements(arguments[1])
-        .ok_or_else(|| wrong(heap, "random/pick", "a collection", arguments[1]))?;
+        .ok_or_else(|| expected(heap, "random/pick", "a collection", arguments[1]))?;
     let chosen = draw(heap, "random/pick", arguments[0], |random| {
         random.pick(&items).copied()
     })?;
@@ -86,7 +80,7 @@ fn pick(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 fn shuffle(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let mut items = heap
         .elements(arguments[1])
-        .ok_or_else(|| wrong(heap, "random/shuffle", "a collection", arguments[1]))?;
+        .ok_or_else(|| expected(heap, "random/shuffle", "a collection", arguments[1]))?;
     draw(heap, "random/shuffle", arguments[0], |random| {
         random.shuffle(&mut items);
     })?;

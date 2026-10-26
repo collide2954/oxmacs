@@ -1,3 +1,4 @@
+use ox_lang::native::expected;
 use std::sync::Arc;
 
 use ox_lang::heap::{Heap, Hold};
@@ -174,13 +175,6 @@ pub(crate) fn face_named(name: &str) -> Option<Highlight> {
         .map(|(_, highlight)| *highlight)
 }
 
-fn wrong(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
-    Error::new(format!(
-        "{name} expects {wanted}, got {}",
-        print::brief(heap, value)
-    ))
-}
-
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -190,7 +184,7 @@ fn size(heap: &Heap, name: &str, value: Value) -> Result<f32, Error> {
     match value {
         Value::Int(number) => Ok(number as f32),
         Value::Float(number) => Ok(number as f32),
-        _ => Err(wrong(heap, name, "a number", value)),
+        _ => Err(expected(heap, name, "a number", value)),
     }
 }
 
@@ -284,7 +278,7 @@ fn button(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 
 fn image(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let picture = ox_library::image::image_of(heap, arguments[0])
-        .ok_or_else(|| wrong(heap, "image", "an image", arguments[0]))?;
+        .ok_or_else(|| expected(heap, "image", "an image", arguments[0]))?;
     let width = size_given(heap, "image", arguments[1])?;
     let height = size_given(heap, "image", arguments[2])?;
     let selected = arguments[4].truthy();
@@ -382,7 +376,7 @@ fn keys(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, Error> {
     };
     heap.entries(value)
         .ok_or_else(|| {
-            wrong(
+            expected(
                 heap,
                 "open-view",
                 "a map of keys to commands for :keys",

@@ -1,5 +1,6 @@
 use ox_lang::heap::Heap;
 use ox_lang::native::given;
+use ox_lang::native::name_of;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::{Editor, ServerSpec};
@@ -12,13 +13,6 @@ fn leak(text: String) -> &'static str {
 
 fn leak_all<T>(items: Vec<T>) -> &'static [T] {
     Box::leak(items.into_boxed_slice())
-}
-
-fn name_of(heap: &Heap, value: Value) -> String {
-    match value {
-        Value::Keyword(name) | Value::Symbol(name) => name.name().to_owned(),
-        _ => print::display(heap, value),
-    }
 }
 
 fn texts(heap: &Heap, option: &str, value: Value) -> Result<Vec<String>, Error> {

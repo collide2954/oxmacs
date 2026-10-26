@@ -1,22 +1,14 @@
 use std::sync::Arc;
 
-use crate::error::{Error, ErrorKind};
+use crate::error::Error;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::native::Control;
+use crate::native::expected;
 use crate::portable::Channel;
 use crate::value::Value;
-use crate::value::print;
 use crate::value::promise::Promise;
 use crate::vm::machine::Generator;
-
-fn expected(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
-    Error::new(format!(
-        "{name} expects {wanted}, got {}",
-        print::brief(heap, value)
-    ))
-    .of(ErrorKind::Type)
-}
 
 fn settle(heap: &mut Heap, name: &str, promise: Value, outcome: Promise) -> Result<Value, Error> {
     match heap.promise_of(promise) {

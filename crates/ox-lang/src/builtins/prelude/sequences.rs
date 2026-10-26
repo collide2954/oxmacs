@@ -1,8 +1,9 @@
-use crate::builtins::collections::{self, expected, is_list};
+use crate::builtins::collections::{self, is_list};
 use crate::builtins::ordering;
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
+use crate::native::expected;
 use crate::native::{Control, Drains};
 use crate::value::Value;
 use crate::value::equal::equal;

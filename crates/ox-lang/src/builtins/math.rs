@@ -7,6 +7,7 @@ use crate::builtins::collections;
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
+use crate::native::whole;
 use crate::value::Value;
 use crate::value::number::{Number, shrink, to_float};
 use crate::value::print;
@@ -99,21 +100,10 @@ fn clamp(heap: &Heap, arguments: &[Value]) -> Result<Value, Error> {
     })
 }
 
-fn whole(heap: &Heap, value: Value) -> Result<i64, Error> {
-    let Value::Int(number) = value else {
-        return Err(Error::new(format!(
-            "math/random-int expects whole numbers, got {}",
-            print::brief(heap, value)
-        ))
-        .of(ErrorKind::Type));
-    };
-    Ok(number)
-}
-
 fn random_int(heap: &Heap, arguments: &[Value]) -> Result<Value, Error> {
     let (low, high) = match arguments {
         [bound] => {
-            let bound = whole(heap, *bound)?;
+            let bound = whole(heap, "math/random-int", *bound)?;
             if bound <= 0 {
                 return Err(Error::new(format!(
                     "math/random-int needs a bound above 0, got {bound}"
@@ -122,7 +112,10 @@ fn random_int(heap: &Heap, arguments: &[Value]) -> Result<Value, Error> {
             }
             (0, bound)
         }
-        _ => (whole(heap, arguments[0])?, whole(heap, arguments[1])?),
+        _ => (
+            whole(heap, "math/random-int", arguments[0])?,
+            whole(heap, "math/random-int", arguments[1])?,
+        ),
     };
     if high <= low {
         return Err(Error::new(format!(

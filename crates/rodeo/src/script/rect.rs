@@ -1,7 +1,8 @@
 use ox_lang::Isolate;
+use ox_lang::native::number;
 use ox_lang::value::Value;
 
-use super::{number, point, point_value, rect, rect_value};
+use super::{point, point_value, rect, rect_value};
 use crate::rect::Rect;
 use crate::vec::Vec2;
 

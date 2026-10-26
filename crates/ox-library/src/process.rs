@@ -1,3 +1,4 @@
+use ox_lang::native::name_of;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -31,13 +32,6 @@ fn wrong(heap: &Heap, expected: &str, value: Value) -> Error {
         print::brief(heap, value)
     ))
     .of(ErrorKind::Type)
-}
-
-fn name_of(heap: &Heap, value: Value) -> String {
-    match value {
-        Value::Keyword(name) | Value::Symbol(name) => name.name().to_owned(),
-        _ => print::display(heap, value),
-    }
 }
 
 fn environment(heap: &Heap, value: Value) -> Result<Vec<(String, Option<String>)>, Error> {

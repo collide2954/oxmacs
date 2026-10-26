@@ -1,3 +1,4 @@
+use ox_lang::native::{expected, field};
 use std::path::Path;
 
 use ox_lang::Isolate;
@@ -6,7 +7,7 @@ use ox_lang::error::Error;
 use ox_lang::heap::Heap;
 use ox_lang::value::Value;
 
-use super::{field, map_value, point_value, rect_value, wrong};
+use super::{map_value, point_value, rect_value};
 use crate::color::Color;
 use crate::rect::Rect;
 use crate::tiled::{
@@ -356,7 +357,7 @@ fn every_object(heap: &Heap, level: Value) -> Vec<Value> {
 
 fn wanted_name<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> {
     heap.text(value)
-        .ok_or_else(|| wrong(heap, name, "a name", value))
+        .ok_or_else(|| expected(heap, name, "a name", value))
 }
 
 fn whole(heap: &Heap, value: Value, key: &str, default: i64) -> i64 {
@@ -370,7 +371,7 @@ fn tile_at(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let name = "tiled/tile";
     let layer = arguments[0];
     let (Value::Int(column), Value::Int(row)) = (arguments[1], arguments[2]) else {
-        return Err(wrong(heap, name, "a whole column and row", arguments[1]));
+        return Err(expected(heap, name, "a whole column and row", arguments[1]));
     };
     let (column, row) = (
         column - whole(heap, layer, "x", 0),
@@ -385,7 +386,7 @@ fn tile_at(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     }
     let data = field(heap, layer, "data")
         .and_then(|data| heap.vector_of(data))
-        .ok_or_else(|| wrong(heap, name, "a tile layer from tiled/load", layer))?;
+        .ok_or_else(|| expected(heap, name, "a tile layer from tiled/load", layer))?;
     let index = usize::try_from(row * width + column).unwrap_or(usize::MAX);
     let raw = match data.get(heap, index) {
         Some(Value::Int(raw)) => u32::try_from(raw).unwrap_or(0),
@@ -399,7 +400,7 @@ fn tile_at(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 
 fn region(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let Value::Int(gid) = arguments[1] else {
-        return Err(wrong(heap, "tiled/region", "a tile id", arguments[1]));
+        return Err(expected(heap, "tiled/region", "a tile id", arguments[1]));
     };
     let gid = gid & 0x0FFF_FFFF;
     let owner = items(heap, field(heap, arguments[0], "tilesets"))
@@ -454,7 +455,7 @@ pub fn install(isolate: &mut Isolate) {
         .outside()
         .function(|heap, arguments| {
             let wanted = heap.text(arguments[0]).map(str::to_owned).ok_or_else(|| {
-                wrong(heap, "tiled/load", "the path of a .tmx file", arguments[0])
+                expected(heap, "tiled/load", "the path of a .tmx file", arguments[0])
             })?;
             let loaded = Map::load(&wanted).map_err(|error| Error::new(error.to_string()))?;
             map(heap, &loaded)

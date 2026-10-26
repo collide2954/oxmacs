@@ -1,3 +1,4 @@
+use ox_lang::native::expected;
 use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -10,7 +11,7 @@ use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 
 use crate::text;
 use ox_lang::Isolate;
-use ox_lang::error::{Error, ErrorKind};
+use ox_lang::error::Error;
 use ox_lang::heap::Heap;
 use ox_lang::portable::{Channel, Failure, Portable, Sent};
 use ox_lang::symbol::Sym;
@@ -163,14 +164,6 @@ fn connect(host: String, port: u16, tls: bool) -> Result<Portable, Failure> {
     ]))
 }
 
-fn wrong(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
-    Error::new(format!(
-        "{name} expects {wanted}, got {}",
-        print::brief(heap, value)
-    ))
-    .of(ErrorKind::Type)
-}
-
 fn socket<'a>(heap: &'a Heap, name: &str, connection: Value) -> Result<&'a Socket, Error> {
     heap.entries(connection)
         .and_then(|entries| {
@@ -180,7 +173,7 @@ fn socket<'a>(heap: &'a Heap, name: &str, connection: Value) -> Result<&'a Socke
             })
         })
         .and_then(|value| heap.foreign_of::<Socket>(value))
-        .ok_or_else(|| wrong(heap, name, "a connection from net/connect", connection))
+        .ok_or_else(|| expected(heap, name, "a connection from net/connect", connection))
 }
 
 fn command(heap: &Heap, name: &str, connection: Value, command: Command) -> Result<Value, Error> {
@@ -206,7 +199,7 @@ pub fn install(isolate: &mut Isolate) {
                 Value::Int(port) => u16::try_from(port).ok(),
                 _ => None,
             }
-            .ok_or_else(|| wrong(heap, "net/connect", "a port number", arguments[1]))?;
+            .ok_or_else(|| expected(heap, "net/connect", "a port number", arguments[1]))?;
             let tls = arguments[2].truthy();
             heap.background(&format!("ox net/connect {host}"), move || {
                 connect(host, port, tls)

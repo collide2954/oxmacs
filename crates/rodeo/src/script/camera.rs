@@ -1,24 +1,18 @@
 use ox_lang::Isolate;
 use ox_lang::error::Error;
 use ox_lang::heap::Heap;
+use ox_lang::native::{expected, field, number, whole};
 use ox_lang::value::Value;
 
-use super::{bits, field, map_value, number, point, point_value, rect, rect_value, signed, wrong};
+use super::{bits, map_value, point, point_value, rect, rect_value, signed};
 use crate::camera::Camera;
 use crate::vec::Vec2;
 
 const MODULE: &str = "rodeo/camera";
 
-fn whole(heap: &Heap, name: &str, value: Value) -> Result<u64, Error> {
-    match value {
-        Value::Int(number) => Ok(bits(number)),
-        _ => Err(wrong(heap, name, "a whole number", value)),
-    }
-}
-
 fn camera(heap: &Heap, name: &str, value: Value) -> Result<Camera, Error> {
     if heap.map_of(value).is_none() {
-        return Err(wrong(heap, name, "a camera from camera/new", value));
+        return Err(expected(heap, name, "a camera from camera/new", value));
     }
     let get = |key: &str| field(heap, value, key).filter(|found| *found != Value::Nil);
     let view = match get("view") {
@@ -48,10 +42,10 @@ fn camera(heap: &Heap, name: &str, value: Value) -> Result<Camera, Error> {
         made.shake_decay = number(heap, name, found)?;
     }
     if let Some(found) = get("shake-seed") {
-        made.shake_seed = whole(heap, name, found)?;
+        made.shake_seed = bits(whole(heap, name, found)?);
     }
     if let Some(found) = get("shake-ticks") {
-        made.shake_ticks = whole(heap, name, found)?;
+        made.shake_ticks = bits(whole(heap, name, found)?);
     }
     Ok(made)
 }

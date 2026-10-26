@@ -4,6 +4,7 @@ use crate::crypto::to_base64;
 use ox_lang::Isolate;
 use ox_lang::error::{Error, ErrorKind};
 use ox_lang::heap::Heap;
+use ox_lang::native::{name_of, text};
 use ox_lang::portable::{Failure, Portable};
 use ox_lang::value::Value;
 use ox_lang::value::print;
@@ -12,16 +13,6 @@ const MODULE: &str = "ox/http";
 const TIMEOUT: Duration = Duration::from_secs(15);
 const USER_AGENT: &str = concat!("ox/", env!("CARGO_PKG_VERSION"));
 const HEX: &[u8; 16] = b"0123456789ABCDEF";
-
-fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> {
-    heap.text(value).ok_or_else(|| {
-        Error::new(format!(
-            "{name} expects a string, got {}",
-            print::brief(heap, value)
-        ))
-        .of(ErrorKind::Type)
-    })
-}
 
 fn encode(text: &str) -> String {
     let mut encoded = String::new();
@@ -114,16 +105,9 @@ fn send(asked: &Asked) -> Result<Portable, Failure> {
     ]))
 }
 
-fn named(heap: &Heap, value: Value) -> String {
-    match value {
-        Value::Keyword(name) | Value::Symbol(name) => name.name().to_owned(),
-        _ => print::display(heap, value),
-    }
-}
-
 fn asked(heap: &Heap, arguments: &[Value]) -> Result<Asked, Error> {
     let mut asked = Asked {
-        method: named(heap, arguments[0]).to_ascii_uppercase(),
+        method: name_of(heap, arguments[0]).to_ascii_uppercase(),
         url: text(heap, "http/request", arguments[1])?.to_owned(),
         ..Asked::default()
     };
@@ -138,7 +122,7 @@ fn asked(heap: &Heap, arguments: &[Value]) -> Result<Asked, Error> {
         })?;
         asked.headers = entries
             .into_iter()
-            .map(|(name, given)| (named(heap, name), print::display(heap, given)))
+            .map(|(name, given)| (name_of(heap, name), print::display(heap, given)))
             .collect();
     }
     asked.body = (body != Value::Nil).then(|| print::display(heap, body));

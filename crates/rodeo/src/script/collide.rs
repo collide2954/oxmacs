@@ -1,3 +1,4 @@
+use ox_lang::native::{expected, field, number};
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -9,7 +10,7 @@ use ox_lang::heap::Heap;
 use ox_lang::symbol::Sym;
 use ox_lang::value::Value;
 
-use super::{field, map_value, number, point, point_value, rect, rect_value, wrong};
+use super::{map_value, point, point_value, rect, rect_value};
 use crate::collide::{Circle, Grid, Moved, move_in_tiles, penetration, slide, sweep};
 use crate::rect::Rect;
 use crate::vec::Vec2;
@@ -46,7 +47,7 @@ impl Key {
         match value {
             Value::Int(number) => Ok(Self::Int(number)),
             Value::Keyword(word) => Ok(Self::Word(word)),
-            _ => Err(wrong(
+            _ => Err(expected(
                 heap,
                 name,
                 "an id: a whole number or a keyword",
@@ -67,7 +68,7 @@ type Handle = RefCell<Grid<Key>>;
 
 fn grid<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a Handle, Error> {
     heap.foreign_of::<Handle>(value)
-        .ok_or_else(|| wrong(heap, name, "a grid from collide/grid", value))
+        .ok_or_else(|| expected(heap, name, "a grid from collide/grid", value))
 }
 
 enum Body {
@@ -87,7 +88,7 @@ fn body(heap: &Heap, name: &str, value: Value) -> Result<Body, Error> {
         return match items.as_slice() {
             [x, y, r] => circle(*x, *y, *r),
             [_, _, _, _] => Ok(Body::Box(rect(heap, name, value)?)),
-            _ => Err(wrong(heap, name, what, value)),
+            _ => Err(expected(heap, name, what, value)),
         };
     }
     match (
@@ -98,7 +99,7 @@ fn body(heap: &Heap, name: &str, value: Value) -> Result<Body, Error> {
         (Some(x), Some(y), Some(r)) => circle(x, y, r),
         _ => rect(heap, name, value)
             .map(Body::Box)
-            .map_err(|_| wrong(heap, name, what, value)),
+            .map_err(|_| expected(heap, name, what, value)),
     }
 }
 
@@ -146,7 +147,7 @@ fn sliding(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let delta = point(heap, name, arguments[1])?;
     let solids = heap
         .elements(arguments[2])
-        .ok_or_else(|| wrong(heap, name, "a vector of rects", arguments[2]))?
+        .ok_or_else(|| expected(heap, name, "a vector of rects", arguments[2]))?
         .into_iter()
         .map(|solid| rect(heap, name, solid))
         .collect::<Result<Vec<_>, _>>()?;
@@ -162,12 +163,12 @@ fn gids(heap: &Heap, name: &str, value: Option<Value>) -> Result<Option<BTreeSet
     };
     let items = heap
         .elements(value)
-        .ok_or_else(|| wrong(heap, name, "a vector of tile ids", value))?;
+        .ok_or_else(|| expected(heap, name, "a vector of tile ids", value))?;
     items
         .into_iter()
         .map(|item| match item {
             Value::Int(gid) => Ok(gid),
-            _ => Err(wrong(heap, name, "a tile id", item)),
+            _ => Err(expected(heap, name, "a tile id", item)),
         })
         .collect::<Result<BTreeSet<_>, _>>()
         .map(Some)
@@ -182,7 +183,7 @@ fn whole_field(
 ) -> Result<i64, Error> {
     match field(heap, layer, key).or(default.map(Value::Int)) {
         Some(Value::Int(found)) => Ok(found),
-        _ => Err(wrong(
+        _ => Err(expected(
             heap,
             name,
             "a tile layer from tiled/load, with :data, :width and :height",
@@ -213,7 +214,7 @@ fn through_tiles(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let top = whole_field(heap, name, layer, "y", Some(0))?;
     let data = field(heap, layer, "data")
         .and_then(|data| heap.vector_of(data))
-        .ok_or_else(|| wrong(heap, name, "a tile layer with :data", layer))?;
+        .ok_or_else(|| expected(heap, name, "a tile layer with :data", layer))?;
     let reader: &Heap = heap;
     let solid = |column: i64, row: i64| {
         let (column, row) = (column - left, row - top);

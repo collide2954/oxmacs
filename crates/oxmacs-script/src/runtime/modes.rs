@@ -1,3 +1,4 @@
+use ox_lang::native::{field, name_of};
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
@@ -257,13 +258,6 @@ fn texts(heap: &Heap, value: Value) -> Result<Vec<String>, Error> {
         })
 }
 
-fn name_of(heap: &Heap, value: Value) -> String {
-    match value {
-        Value::Keyword(name) | Value::Symbol(name) => name.name().to_owned(),
-        _ => print::display(heap, value),
-    }
-}
-
 #[derive(Default)]
 struct Options {
     extensions: Vec<String>,
@@ -474,13 +468,6 @@ fn takes_state(heap: &Heap, function: Value) -> bool {
     }
     heap.native_of(function)
         .is_some_and(|native| native.least <= 3 && native.most.is_none_or(|most| most >= 3))
-}
-
-fn field(heap: &Heap, map: Value, key: &str) -> Option<Value> {
-    heap.entries(map)?
-        .into_iter()
-        .find(|(found, _)| *found == Value::keyword(key))
-        .map(|(_, value)| value)
 }
 
 struct Highlighted {

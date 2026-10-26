@@ -1,3 +1,4 @@
+use ox_lang::native::name_of;
 use std::path::PathBuf;
 
 use ox_lang::heap::{Heap, Hold};
@@ -86,13 +87,6 @@ fn texts(heap: &Heap, value: Value, wanted: &str) -> Result<Vec<String>, Error> 
                 print::brief(heap, value)
             ))
         })
-}
-
-fn name_of(heap: &Heap, value: Value) -> String {
-    match value {
-        Value::Keyword(name) | Value::Symbol(name) => name.name().to_owned(),
-        _ => print::display(heap, value),
-    }
 }
 
 fn pairs(heap: &Heap, value: Value, option: &str) -> Result<Vec<(String, String)>, Error> {

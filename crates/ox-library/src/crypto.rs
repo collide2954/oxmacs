@@ -1,3 +1,4 @@
+use ox_lang::native::expected;
 use std::fmt::Write as _;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -9,10 +10,10 @@ use ring::{digest, hmac};
 
 use crate::text;
 use ox_lang::Isolate;
-use ox_lang::error::{Error, ErrorKind};
+use ox_lang::error::Error;
 use ox_lang::heap::Heap;
 use ox_lang::portable::{Failure, Portable};
-use ox_lang::value::{Value, print};
+use ox_lang::value::Value;
 
 const MODULE: &str = "ox/crypto";
 const KEY_BYTES: usize = 32;
@@ -121,26 +122,18 @@ pub(crate) fn below(bound: u64) -> Result<u64, Error> {
     }
 }
 
-fn wrong(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
-    Error::new(format!(
-        "{name} expects {wanted}, got {}",
-        print::brief(heap, value)
-    ))
-    .of(ErrorKind::Type)
-}
-
 fn key(heap: &Heap, name: &str, value: Value) -> Result<XChaCha20Poly1305, Error> {
     heap.text(value)
         .and_then(unhex)
         .filter(|bytes| bytes.len() == KEY_BYTES)
         .and_then(|bytes| XChaCha20Poly1305::new_from_slice(&bytes).ok())
-        .ok_or_else(|| wrong(heap, name, "a key from crypto/derive-key", value))
+        .ok_or_else(|| expected(heap, name, "a key from crypto/derive-key", value))
 }
 
 fn counted(heap: &Heap, name: &str, value: Value) -> Result<u64, Error> {
     match value {
         Value::Int(number) if number >= 0 => Ok(number.unsigned_abs()),
-        _ => Err(wrong(heap, name, "a whole number", value)),
+        _ => Err(expected(heap, name, "a whole number", value)),
     }
 }
 
@@ -214,7 +207,7 @@ fn derive_key(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         .and_then(unhex)
         .filter(|salt| salt.len() >= 8)
         .ok_or_else(|| {
-            wrong(
+            expected(
                 heap,
                 "crypto/derive-key",
                 "a salt from crypto/random",

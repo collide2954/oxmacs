@@ -28,6 +28,7 @@ use crate::describe::Place;
 use crate::error::{Error, ErrorKind, Frame as Trace};
 use crate::heap::{Closure, Heap};
 use crate::isolate::Isolate;
+use crate::native::expected;
 use crate::native::{Control, NativeFn};
 use crate::portable::Portable;
 use crate::profile::{Profile, Profiler};
@@ -38,7 +39,6 @@ use crate::value::Value;
 use crate::value::equal::identical;
 use crate::value::map::Map;
 use crate::value::number::to_float;
-use crate::value::print;
 use crate::value::promise::Promise;
 use crate::value::record::Record;
 use crate::vm::bind::{Binding, bind};
@@ -389,32 +389,24 @@ impl Runtime {
         }
     }
 
-    fn expected(&self, name: &str, wanted: &str, value: Value) -> Error {
-        Error::new(format!(
-            "{name} expects {wanted}, got {}",
-            print::brief(&self.heap, value)
-        ))
-        .of(ErrorKind::Type)
-    }
-
     fn wait_of(&self, flow: Flow) -> Result<(Wait, Landing), Error> {
         match flow {
             Flow::Await(promise, landing) => {
                 self.heap
                     .promise_of(promise)
-                    .ok_or_else(|| self.expected("await", "a promise", promise))?;
+                    .ok_or_else(|| expected(&self.heap, "await", "a promise", promise))?;
                 Ok((Wait::Promise(promise), landing))
             }
             Flow::Receive(channel, landing) => {
                 self.heap
                     .channel_of(channel)
-                    .ok_or_else(|| self.expected("receive", "a channel", channel))?;
+                    .ok_or_else(|| expected(&self.heap, "receive", "a channel", channel))?;
                 Ok((Wait::Receive(channel), landing))
             }
             Flow::Send(channel, item, landing) => {
                 self.heap
                     .channel_of(channel)
-                    .ok_or_else(|| self.expected("send", "a channel", channel))?;
+                    .ok_or_else(|| expected(&self.heap, "send", "a channel", channel))?;
                 let item = self.portable(item, "through a channel")?;
                 Ok((Wait::Send(channel, item), landing))
             }
@@ -422,7 +414,14 @@ impl Runtime {
                 let millis = match time {
                     Value::Int(millis) => to_float(millis),
                     Value::Float(millis) => millis,
-                    _ => return Err(self.expected("sleep", "a number of milliseconds", time)),
+                    _ => {
+                        return Err(expected(
+                            &self.heap,
+                            "sleep",
+                            "a number of milliseconds",
+                            time,
+                        ));
+                    }
                 };
                 let delay =
                     Duration::try_from_secs_f64(millis.max(0.0) / 1000.0).unwrap_or(Duration::MAX);
@@ -454,7 +453,7 @@ impl Runtime {
 
     fn take_generator(&mut self, value: Value) -> Result<Option<(Machine, Landing)>, Error> {
         if self.heap.generator_of(value).is_none() {
-            return Err(self.expected("next", "a generator", value));
+            return Err(expected(&self.heap, "next", "a generator", value));
         }
         let Some(generator) = self.heap.generator_mut(value) else {
             return Ok(None);
