@@ -506,10 +506,11 @@ impl Editor {
     }
 
     pub(in crate::editor) fn finish_formatting_saves(&mut self) -> bool {
-        let waiting = self.lsp.formatting_saves.clone();
-        waiting.into_iter().fold(true, |all, buffer| {
-            self.finish_formatting_save(buffer) && all
-        })
+        let mut written = true;
+        for buffer in self.lsp.formatting_saves.clone() {
+            written &= self.finish_formatting_save(buffer);
+        }
+        written
     }
 
     pub(in crate::editor) fn lsp_code_actions(&mut self) {

@@ -238,13 +238,13 @@ fn list_nth(heap: &Heap, list: Value, position: usize) -> Option<Value> {
 }
 
 fn list_last(heap: &Heap, list: Value) -> Value {
-    let mut last = Value::Nil;
+    let mut found = Value::Nil;
     let mut rest = list;
     while let Some(pair) = heap.pair_of(rest) {
-        last = pair.head;
+        found = pair.head;
         rest = pair.tail;
     }
-    last
+    found
 }
 
 fn counted(heap: &Heap, native: &str, value: Value) -> Result<Value, Error> {
