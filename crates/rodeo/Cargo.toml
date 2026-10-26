@@ -12,6 +12,7 @@ autotests = false
 base64.workspace = true
 flate2.workspace = true
 image.workspace = true
+rodio.workspace = true
 roxmltree.workspace = true
 serde.workspace = true
 serde_json.workspace = true

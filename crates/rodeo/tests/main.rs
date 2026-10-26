@@ -1,5 +1,6 @@
 mod animation;
 mod atlas;
+mod audio;
 mod camera;
 mod clock;
 mod collide;

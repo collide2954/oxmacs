@@ -55,6 +55,7 @@ open = "5.4.4"
 rayon = "1.12.0"
 regex = "1.13.1"
 rodeo = { path = "crates/rodeo" }
+rodio = { version = "0.23.0", default-features = false, features = ["playback", "flac", "mp3", "vorbis", "wav"] }
 resvg = { version = "0.49.0", default-features = false, features = ["text", "system-fonts"] }
 ring = "0.17.14"
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
