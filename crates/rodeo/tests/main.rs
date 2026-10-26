@@ -4,6 +4,7 @@ mod camera;
 mod clock;
 mod collide;
 mod color;
+mod draw;
 mod ease;
 mod grid;
 mod particles;
