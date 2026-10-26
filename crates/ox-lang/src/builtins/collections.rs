@@ -583,6 +583,7 @@ fn install_sequences(isolate: &mut Isolate) {
 
 pub fn install(isolate: &mut Isolate) {
     install_sequences(isolate);
+    install_structures(isolate);
     isolate
         .native("ox", "count")
         .arity(1, Some(1))
@@ -619,6 +620,9 @@ pub fn install(isolate: &mut Isolate) {
         .native("ox", "apply")
         .arity(2, None)
         .function(|_, _| Err(Error::new("apply is handled by the VM")));
+}
+
+fn install_structures(isolate: &mut Isolate) {
     isolate
         .native("ox", "#list")
         .arity(0, None)

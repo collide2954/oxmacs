@@ -138,7 +138,7 @@ fn install_shaping(isolate: &mut Isolate) {
                 whole
             } else {
                 let kept: String = whole.chars().take(width.saturating_sub(1)).collect();
-                format!("{kept}…")
+                format!("{kept}â€¦")
             };
             heap.string(&cut).map_err(full)
         });
@@ -187,6 +187,10 @@ pub fn install(isolate: &mut Isolate) {
             strings(heap, &parts)
         });
     install_shaping(isolate);
+    install_pieces(isolate);
+}
+
+fn install_pieces(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "lines")
         .arity(1, Some(1))

@@ -861,6 +861,10 @@ pub fn install(isolate: &mut Isolate) {
         .native("ox", "goto-line")
         .arity(1, Some(2))
         .host::<Editor>(goto_line);
+    install_queries(isolate);
+}
+
+fn install_queries(isolate: &mut Isolate) {
     isolate
         .native("ox", "buffer-exists?")
         .arity(1, Some(1))

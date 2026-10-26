@@ -50,7 +50,7 @@ fn keywords_reach_a_native_in_the_order_it_declared_them() {
 fn natives_and_functions_refuse_wrong_keywords_the_same_way() {
     let mut isolate = labels();
     isolate
-        .eval(r#"(def (shout text {size 1 face nil}) text)"#)
+        .eval("(def (shout text {size 1 face nil}) text)")
         .unwrap();
 
     for name in ["label", "shout"] {

@@ -74,7 +74,7 @@ fn crop(pixels: &RgbaImage, x: i64, y: i64, width: u32, height: u32) -> Result<R
     let (left, top) = (to_u32(x), to_u32(y));
     if x < 0 || y < 0 || left >= pixels.width() || top >= pixels.height() {
         return Err(format!(
-            "image/crop starts at {x},{y}, outside a {}×{} image",
+            "image/crop starts at {x},{y}, outside a {}Ã—{} image",
             pixels.width(),
             pixels.height()
         ));
@@ -254,6 +254,7 @@ fn warped(pixels: &RgbaImage, projection: Projection, color: Rgba<u8>) -> RgbaIm
 pub(super) fn install(isolate: &mut Isolate) {
     install_scaling(isolate);
     install_layout(isolate);
+    install_turns(isolate);
     install_warps(isolate);
 }
 
@@ -408,6 +409,9 @@ fn install_layout(isolate: &mut Isolate) {
                 Ok(image.with(placed(&image.pixels, width, height, at, color)))
             })
         });
+}
+
+fn install_turns(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "rotate")
         .arity(2, Some(6))
