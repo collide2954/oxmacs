@@ -63,6 +63,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `M-x remote-add-host` saves the hosts in `custom.ox`, as `M-x irc-setup` saves networks, instead of adding another `use-plugin` form to the end of `init.ox` each time.
 - The explorer reads git status without rewriting `.git/index` and without walking the folders git ignores, so it opens and refreshes several times faster in large repositories, and it runs no git at all outside a repository.
 - Opening a remote file no longer writes its local copy over the file at the same path on this machine: copies live in the oxmacs home's `remote` folder, one folder per host, with the characters Windows refuses in names replaced.
+- `file/copy` refuses to copy a file onto itself or onto another of its hard links, which emptied it, and a folder into itself, which never finished, and it copies links as links instead of following them. `file/remove` removes a link to a folder on Windows instead of failing, and leaves the folder it points to alone.
 
 ### Security
 

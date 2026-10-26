@@ -87,22 +87,96 @@ fn list(directory: &Path) -> Result<Portable, Failure> {
     Ok(Portable::Vector(entries))
 }
 
-fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
-    if fs::metadata(from)?.is_dir() {
-        fs::create_dir_all(to)?;
-        for found in fs::read_dir(from)? {
-            let found = found?;
-            copy_tree(&found.path(), &to.join(found.file_name()))?;
-        }
-        Ok(())
-    } else {
-        fs::copy(from, to).map(|_| ())
+fn refused(reason: String) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidInput, reason)
+}
+
+fn resolved(path: &Path) -> Option<PathBuf> {
+    fs::canonicalize(path).ok().or_else(|| {
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())?;
+        Some(fs::canonicalize(parent).ok()?.join(path.file_name()?))
+    })
+}
+
+fn check_copy(from: &Path, to: &Path) -> io::Result<()> {
+    if same_file::is_same_file(from, to).unwrap_or(false) {
+        return Err(refused(format!("it is the same file as {}", to.display())));
     }
+    let source = fs::canonicalize(from)?;
+    if fs::symlink_metadata(from)?.is_dir()
+        && resolved(to).is_some_and(|target| target.starts_with(&source))
+    {
+        return Err(refused(format!("{} would land inside it", to.display())));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn copy_link(from: &Path, to: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(fs::read_link(from)?, to)
+}
+
+#[cfg(windows)]
+fn copy_link(from: &Path, to: &Path) -> io::Result<()> {
+    use std::os::windows::fs::{FileTypeExt, symlink_dir, symlink_file};
+    let target = fs::read_link(from)?;
+    let made = if fs::symlink_metadata(from)?.file_type().is_symlink_dir() {
+        symlink_dir(&target, to)
+    } else {
+        symlink_file(&target, to)
+    };
+    made.map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!("can't make the link {} again: {error}", from.display()),
+        )
+    })
+}
+
+#[cfg(not(any(unix, windows)))]
+fn copy_link(from: &Path, _: &Path) -> io::Result<()> {
+    Err(refused(format!("can't copy the link {}", from.display())))
+}
+
+fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
+    check_copy(from, to)?;
+    let mut work = vec![(from.to_path_buf(), to.to_path_buf())];
+    while let Some((from, to)) = work.pop() {
+        let kind = fs::symlink_metadata(&from)?.file_type();
+        if kind.is_symlink() {
+            copy_link(&from, &to)?;
+        } else if kind.is_dir() {
+            fs::create_dir_all(&to)?;
+            for found in fs::read_dir(&from)? {
+                let found = found?;
+                work.push((found.path(), to.join(found.file_name())));
+            }
+        } else {
+            fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn folder_link(kind: fs::FileType) -> bool {
+    use std::os::windows::fs::FileTypeExt;
+    kind.is_symlink_dir()
+}
+
+#[cfg(not(windows))]
+fn folder_link(_: fs::FileType) -> bool {
+    false
 }
 
 fn remove(path: &Path) -> io::Result<()> {
-    if fs::symlink_metadata(path)?.is_dir() {
+    let kind = fs::symlink_metadata(path)?.file_type();
+    if kind.is_dir() {
         fs::remove_dir_all(path)
+    } else if folder_link(kind) {
+        fs::remove_dir(path)
     } else {
         fs::remove_file(path)
     }

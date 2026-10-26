@@ -218,6 +218,94 @@ fn files_are_written_read_renamed_copied_and_removed() {
 }
 
 #[test]
+fn copying_onto_itself_or_into_itself_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let note = dir.path().join("note.txt");
+    fs::write(&note, "keep me").unwrap();
+    let alias = dir.path().join("alias.txt");
+    fs::hard_link(&note, &alias).unwrap();
+    let folder = dir.path().join("folder");
+    fs::create_dir(&folder).unwrap();
+    fs::write(folder.join("inner.txt"), "deep").unwrap();
+    let mut isolate = ox_library::isolate();
+
+    let refused = evaluated(
+        &mut isolate,
+        &format!(
+            "(map (fn [[from to]] (try (await (file/copy from to)) :copied (catch error e e.message)))
+                  [[{note} {note}] [{note} {alias}] [{folder} {within}]])",
+            note = literal(&note),
+            alias = literal(&alias),
+            folder = literal(&folder),
+            within = literal(&folder.join("again")),
+        ),
+    );
+
+    assert!(!refused.contains(":copied"), "{refused}");
+    assert_eq!(
+        refused.matches("is the same file as").count(),
+        2,
+        "{refused}"
+    );
+    assert!(refused.contains("would land inside it"), "{refused}");
+    assert_eq!(fs::read_to_string(&note).unwrap(), "keep me");
+    assert!(!folder.join("again").exists());
+}
+
+#[cfg(unix)]
+fn folder_link(target: &Path, at: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, at)
+}
+
+#[cfg(windows)]
+fn folder_link(target: &Path, at: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_dir(target, at)
+}
+
+#[test]
+fn copies_keep_links_as_links_and_removing_a_link_leaves_its_target() {
+    let dir = tempfile::tempdir().unwrap();
+    let elsewhere = dir.path().join("elsewhere");
+    fs::create_dir(&elsewhere).unwrap();
+    fs::write(elsewhere.join("kept.txt"), "kept").unwrap();
+    let source = dir.path().join("source");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("real.txt"), "real").unwrap();
+    if link(&source.join("real.txt"), &source.join("shortcut")).is_err()
+        || folder_link(&elsewhere, &source.join("away")).is_err()
+    {
+        return;
+    }
+    let copy = dir.path().join("copy");
+    let mut isolate = ox_library::isolate();
+
+    let done = evaluated(
+        &mut isolate,
+        &format!(
+            "(await (file/copy {source} {copy}))
+             (await (file/remove {away}))",
+            source = literal(&source),
+            copy = literal(&copy),
+            away = literal(&copy.join("away")),
+        ),
+    );
+
+    assert_eq!(done, "nil");
+    assert_eq!(fs::read_to_string(copy.join("real.txt")).unwrap(), "real");
+    assert!(
+        fs::symlink_metadata(copy.join("shortcut"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert!(!copy.join("away").exists());
+    assert_eq!(
+        fs::read_to_string(elsewhere.join("kept.txt")).unwrap(),
+        "kept"
+    );
+}
+
+#[test]
 fn failures_say_what_went_wrong() {
     let dir = tempfile::tempdir().unwrap();
     let missing = dir.path().join("missing.txt");
