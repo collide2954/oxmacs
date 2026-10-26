@@ -50,13 +50,14 @@
 
 (def (git-status root)
   (try
-    (let [result (await (process/run "git" ["status" "--porcelain=v1" "-z" "--ignored"] :cwd root))]
+    (let [result (await (process/run "git" ["--no-optional-locks" "status" "--porcelain=v1" "-z" "--ignored=matching"]
+                                     :cwd root))]
       (if (= result.status 0) (tree/parse-status result.stdout) {}))
     (catch error _e {})))
 
 (def (load-git)
   (let [root (get @state :root)
-        states (await (git-status root))
+        states (if (get @state :repo) (await (git-status root)) {})
         keyed (fn [found] (reduce (fn [out [rel change]] (assoc out (key-of (absolute root rel)) change)) {} (entries found)))
         ignored (set (keep (fn [[rel change]] (when (= change :ignored) (absolute root rel))) (entries states)))]
     (swap! state assoc :changes (merge (keyed states) (keyed (tree/roll-up states))) :ignored ignored)))

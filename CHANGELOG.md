@@ -61,6 +61,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - The dnf repository on GitHub Pages is served: Pages was never turned on, so `oxmacs.repo` and `oxmacs-nightly.repo` were not found. Each publish now replaces the site with a single commit instead of keeping every old RPM in the repository's history.
 - Releases carry the Fedora RPMs, as the README says; 0.14.0's were attached by hand.
 - `M-x remote-add-host` saves the hosts in `custom.ox`, as `M-x irc-setup` saves networks, instead of adding another `use-plugin` form to the end of `init.ox` each time.
+- The explorer reads git status without rewriting `.git/index` and without walking the folders git ignores, so it opens and refreshes several times faster in large repositories, and it runs no git at all outside a repository.
 
 ### Security
 

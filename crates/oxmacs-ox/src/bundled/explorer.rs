@@ -285,3 +285,40 @@ fn git_changes_and_ignored_files_show_in_the_tree() {
         "{rows:?}"
     );
 }
+
+#[test]
+fn reading_git_status_leaves_the_repository_untouched() {
+    let project = project();
+    git(project.path(), &["init", "-q"]);
+    git(project.path(), &["add", "."]);
+    git(
+        project.path(),
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-q",
+            "-m",
+            "start",
+        ],
+    );
+    let later = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
+    fs::File::options()
+        .write(true)
+        .open(project.path().join("src").join("lib.rs"))
+        .unwrap()
+        .set_modified(later)
+        .unwrap();
+    let index = project.path().join(".git").join("index");
+    let before = fs::read(&index).unwrap();
+
+    let (_home, editor, _ox) = opened(project.path(), "src/main.rs");
+
+    assert!(tree(&editor).iter().any(|row| row.starts_with("▾ src")));
+    assert!(
+        fs::read(&index).unwrap() == before,
+        "git status rewrote .git/index"
+    );
+}
