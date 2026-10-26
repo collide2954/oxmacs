@@ -16,7 +16,7 @@ use crate::error::{Error, ErrorKind};
 use crate::expand::expand;
 use crate::forms::Forms;
 use crate::heap::{Closure, Heap, Hold, Rooted};
-use crate::native::{Control, Drains, Native, NativeFn};
+use crate::native::{Control, Native, NativeFn};
 use crate::portable::{Failure, Portable};
 use crate::profile::Profile;
 use crate::read::{self, Datum, Syntax, split_meta};
@@ -29,7 +29,6 @@ use crate::value::promise::Promise;
 use crate::value::record::Family;
 use crate::vm::build::full;
 use crate::vm::modules::{Import, Module, ModuleId, PRELUDE, USER};
-use crate::vm::routine::{Resumable, Started};
 use crate::vm::{Runtime, Sources};
 
 const LIBRARY_DOCS: &str = include_str!("builtins/docs.ox");
@@ -607,56 +606,6 @@ impl Isolate {
         Ok(())
     }
 
-    pub fn define_native(
-        &mut self,
-        name: &str,
-        least: usize,
-        most: Option<usize>,
-        function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
-    ) {
-        self.define_native_in("ox", name, least, most, function);
-    }
-
-    pub fn define_native_in(
-        &mut self,
-        module: &str,
-        name: &str,
-        least: usize,
-        most: Option<usize>,
-        function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
-    ) {
-        let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
-        self.install_native(module, name, least, most, function);
-    }
-
-    pub fn define_host_native<T: Any>(
-        &mut self,
-        name: &str,
-        least: usize,
-        most: Option<usize>,
-        function: impl Fn(&mut Heap, &mut T, &[Value]) -> Result<Value, Error> + 'static,
-    ) {
-        self.define_host_native_in::<T>("ox", name, least, most, function);
-    }
-
-    pub fn define_host_native_in<T: Any>(
-        &mut self,
-        module: &str,
-        name: &str,
-        least: usize,
-        most: Option<usize>,
-        function: impl Fn(&mut Heap, &mut T, &[Value]) -> Result<Value, Error> + 'static,
-    ) {
-        let missing = format!("{} isn't available here", shown_name(module, name));
-        let function: Rc<NativeFn> = Rc::new(move |heap, host, arguments| {
-            let Some(host) = host.downcast_mut::<T>() else {
-                return Err(Error::new(missing.clone()).of(ErrorKind::Refused));
-            };
-            function(heap, host, arguments)
-        });
-        self.install_native(module, name, least, most, function);
-    }
-
     pub(crate) fn define_value_in(&mut self, module: &str, name: &str, value: Value, doc: &str) {
         let place = self.runtime.module_named(module);
         let name = Sym::intern(name);
@@ -699,64 +648,6 @@ impl Isolate {
         }
     }
 
-    pub fn define_routine(
-        &mut self,
-        name: &str,
-        least: usize,
-        most: Option<usize>,
-        drains: Option<Drains>,
-        start: impl Fn(&mut Runtime, Value, &[Value]) -> Result<Started, Error> + 'static,
-    ) {
-        self.define_routine_in("ox", name, least, most, drains, start);
-    }
-
-    pub fn define_routine_in(
-        &mut self,
-        module: &str,
-        name: &str,
-        least: usize,
-        most: Option<usize>,
-        drains: Option<Drains>,
-        start: impl Fn(&mut Runtime, Value, &[Value]) -> Result<Started, Error> + 'static,
-    ) {
-        let shown = shown_name(module, name);
-        let native = Native {
-            resumable: Some(Rc::new(Resumable::new(
-                Sym::intern(&shown),
-                Box::new(start),
-            ))),
-            drains,
-            ..plain(module, name, least, most, only_from_ox(&shown))
-        };
-        self.install(module, name, native);
-    }
-
-    pub fn define_native_awaiting(
-        &mut self,
-        name: &str,
-        least: usize,
-        most: Option<usize>,
-        function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
-    ) {
-        self.define_native_awaiting_in("ox", name, least, most, function);
-    }
-
-    pub fn define_native_awaiting_in(
-        &mut self,
-        module: &str,
-        name: &str,
-        least: usize,
-        most: Option<usize>,
-        function: impl Fn(&mut Heap, &[Value]) -> Result<Value, Error> + 'static,
-    ) {
-        let function: Rc<NativeFn> = Rc::new(move |heap, _, arguments| function(heap, arguments));
-        let native = Native {
-            awaits: true,
-            ..plain(module, name, least, most, function)
-        };
-        self.install(module, name, native);
-    }
-
     fn install_native(
         &mut self,
         module: &str,
@@ -769,10 +660,6 @@ impl Isolate {
     }
 
     pub(crate) fn install(&mut self, module: &str, name: &str, native: Native) -> Option<Value> {
-        let native = Native {
-            outside: native.outside || builtins::reaches_outside(module, native.name.name()),
-            ..native
-        };
         let place = self.runtime.module_named(module);
         let value = self.runtime.heap.native(native).ok()?;
         self.runtime.define(place, Sym::intern(name), value);
@@ -1696,10 +1583,13 @@ mod tests {
     #[test]
     fn rust_functions_can_be_called_from_ox() {
         let mut isolate = Isolate::new();
-        isolate.define_native("twice", 1, Some(1), |_, arguments| match arguments {
-            [Value::Int(number)] => Ok(Value::Int(number * 2)),
-            _ => Err(Error::new("twice expects an integer")),
-        });
+        isolate
+            .native("ox", "twice")
+            .arity(1, Some(1))
+            .function(|_, arguments| match arguments {
+                [Value::Int(number)] => Ok(Value::Int(number * 2)),
+                _ => Err(Error::new("twice expects an integer")),
+            });
 
         assert_eq!(isolate.eval("(twice 21)"), Ok(Value::Int(42)));
         assert_eq!(
