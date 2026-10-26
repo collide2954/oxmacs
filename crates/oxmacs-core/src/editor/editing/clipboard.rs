@@ -7,7 +7,6 @@ impl Editor {
         &self.clipboard_history
     }
 
-    #[cfg(test)]
     pub fn copy_text(&mut self, text: impl Into<String>) {
         let text = text.into();
         if text.is_empty() {

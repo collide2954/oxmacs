@@ -46,6 +46,10 @@ pub fn install(isolate: &mut Isolate) {
         editor.copy_secret(print::display(heap, arguments[0]));
         Ok(Value::Nil)
     });
+    isolate.define_host_native::<Editor>("copy-text", 1, Some(1), |heap, editor, arguments| {
+        editor.copy_text(print::display(heap, arguments[0]));
+        Ok(Value::Nil)
+    });
     isolate.define_host_native::<Editor>("notify", 2, Some(2), |heap, editor, arguments| {
         let title = print::display(heap, arguments[0]);
         editor.notify(title, print::display(heap, arguments[1]));
@@ -84,6 +88,20 @@ mod tests {
         )
         .unwrap();
         assert_eq!(editor.mode_line_segments(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn ox_copies_text_to_the_kill_ring_and_clipboard() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+
+        ox.eval(&mut editor, r#"(copy-text "a passage")"#).unwrap();
+
+        assert_eq!(editor.clipboard_history(), ["a passage"]);
+        assert_eq!(
+            editor.take_effects(),
+            [Effect::WriteClipboard("a passage".to_owned())]
+        );
     }
 
     #[test]
