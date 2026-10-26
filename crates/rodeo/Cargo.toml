@@ -11,6 +11,7 @@ autotests = false
 [dependencies]
 base64.workspace = true
 flate2.workspace = true
+image.workspace = true
 roxmltree.workspace = true
 strum.workspace = true
 thiserror.workspace = true

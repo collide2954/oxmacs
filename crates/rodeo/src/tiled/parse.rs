@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use roxmltree::{Document, Node};
@@ -11,6 +11,7 @@ use super::{
 };
 use crate::animation::{Animation, Frame};
 use crate::color::Color;
+use crate::paths::normalized;
 use crate::vec::Vec2;
 
 pub(super) fn read(path: &Path) -> Result<String, Error> {
@@ -70,22 +71,6 @@ pub(super) fn tiled_color(text: &str) -> Option<Color> {
         8 => Some(Color::rgba8(byte(2)?, byte(4)?, byte(6)?, byte(0)?)),
         _ => None,
     }
-}
-
-fn normalized(path: &Path) -> PathBuf {
-    let mut parts = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir
-                if matches!(parts.components().next_back(), Some(Component::Normal(_))) =>
-            {
-                parts.pop();
-            }
-            other => parts.push(other),
-        }
-    }
-    parts
 }
 
 struct Context {

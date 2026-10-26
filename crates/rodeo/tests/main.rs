@@ -9,6 +9,7 @@ mod particles;
 mod random;
 mod rect;
 mod sweep;
+mod texture;
 mod tiled;
 mod tiled_data;
 mod tiled_files;
