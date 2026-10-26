@@ -1,5 +1,6 @@
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::cell::RefCell;
+use std::collections::{BTreeMap, HashMap};
+use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
 use roxmltree::{Document, Node};
@@ -71,9 +72,26 @@ pub(super) fn tiled_color(text: &str) -> Option<Color> {
     }
 }
 
+fn normalized(path: &Path) -> PathBuf {
+    let mut parts = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir
+                if matches!(parts.components().next_back(), Some(Component::Normal(_))) =>
+            {
+                parts.pop();
+            }
+            other => parts.push(other),
+        }
+    }
+    parts
+}
+
 struct Context {
     path: PathBuf,
     folder: PathBuf,
+    templates: RefCell<HashMap<PathBuf, Object>>,
 }
 
 impl Context {
@@ -81,7 +99,45 @@ impl Context {
         Self {
             path: path.to_owned(),
             folder: path.parent().map(Path::to_owned).unwrap_or_default(),
+            templates: RefCell::new(HashMap::new()),
         }
+    }
+
+    fn template(&self, path: &Path, tilesets: &[Tileset]) -> Result<Object, Error> {
+        if let Some(object) = self.templates.borrow().get(path) {
+            return Ok(object.clone());
+        }
+        let text = read(path)?;
+        let document = document(&text, path)?;
+        let root = document.root_element();
+        let context = Context::new(path);
+        if !root.has_tag_name("template") {
+            return Err(context.invalid("isn't a Tiled template"));
+        }
+        let node = child(root, "object").ok_or_else(|| context.invalid("has no object"))?;
+        let mut object = Object::default();
+        context.fill_object(node, &mut object)?;
+        if let (Some(tile), Some(tileset)) = (object.tile, child(root, "tileset")) {
+            let first: u32 = context.required(tileset, "firstgid")?;
+            let source = context.resolve(&context.required::<String>(tileset, "source")?);
+            let used = tilesets
+                .iter()
+                .find(|loaded| loaded.source.as_deref() == Some(source.as_path()))
+                .ok_or_else(|| {
+                    context.invalid(format!(
+                        "uses the tileset {}, which the map doesn't load",
+                        source.display()
+                    ))
+                })?;
+            object.tile = Some(Tile {
+                gid: used.first_gid + tile.gid.saturating_sub(first),
+                ..tile
+            });
+        }
+        self.templates
+            .borrow_mut()
+            .insert(path.to_owned(), object.clone());
+        Ok(object)
     }
 
     fn invalid(&self, message: impl Into<String>) -> Error {
@@ -92,7 +148,7 @@ impl Context {
     }
 
     fn resolve(&self, relative: &str) -> PathBuf {
-        self.folder.join(relative)
+        normalized(&self.folder.join(relative))
     }
 
     fn parsed<T: FromStr>(&self, node: Node<'_, '_>, name: &str, text: &str) -> Result<T, Error> {
@@ -326,7 +382,10 @@ impl Context {
     }
 
     fn object(&self, node: Node<'_, '_>, tilesets: &[Tileset]) -> Result<Object, Error> {
-        let mut object = Object::default();
+        let mut object = match node.attribute("template") {
+            Some(template) => self.template(&self.resolve(template), tilesets)?,
+            None => Object::default(),
+        };
         self.fill_object(node, &mut object)?;
         if let Some(tile) = object.tile {
             if object.width == 0.0 && object.height == 0.0 {

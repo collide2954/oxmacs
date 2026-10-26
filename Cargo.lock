@@ -4481,6 +4481,7 @@ dependencies = [
  "flate2",
  "roxmltree 0.21.2",
  "strum",
+ "tempfile",
  "thiserror 2.0.21",
 ]
 
