@@ -4001,9 +4001,11 @@ dependencies = [
  "pdfium-render",
  "regex",
  "rodeo",
+ "rodio",
  "semver",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.21",
  "zip",
 ]
 
@@ -4713,7 +4715,6 @@ dependencies = [
  "flate2",
  "image",
  "ox-lang",
- "rodio",
  "roxmltree 0.21.2",
  "serde",
  "serde_json",

@@ -1,3 +1,5 @@
+pub mod audio;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,6 +27,7 @@ use crate::ide::log;
 const MODULE: &str = "rodeo";
 const NAME: &str = "*game*";
 const SIZE: (u32, u32) = (320, 180);
+
 pub const DOCS: &str = include_str!("games.ox");
 
 #[derive(Debug, Clone, PartialEq)]

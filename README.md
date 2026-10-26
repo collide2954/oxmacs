@@ -6,7 +6,7 @@ oxmacs feels like Emacs to use: the same keys, a minibuffer, `M-x`, buffers, win
 
 ## Building
 
-You need Rust 1.99.1; `rust-toolchain.toml` picks it for you.
+You need Rust 1.99.1; `rust-toolchain.toml` picks it for you. On Linux you also need a C compiler, pkg-config and the ALSA headers (`libasound2-dev` on Debian and Ubuntu, `alsa-lib-devel` on Fedora) for game sound.
 
 ```sh
 cargo run -p oxmacs --release
