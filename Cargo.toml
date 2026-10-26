@@ -1,18 +1,5 @@
 [workspace]
 members = ["crates/*"]
-default-members = [
-    "crates/ox",
-    "crates/ox-cli",
-    "crates/ox-library",
-    "crates/ox-lsp",
-    "crates/ox-perf",
-    "crates/oxmacs",
-    "crates/oxmacs-api",
-    "crates/oxmacs-core",
-    "crates/oxmacs-gui",
-    "crates/oxmacs-ox",
-    "crates/rodeo",
-]
 resolver = "3"
 
 [workspace.package]
