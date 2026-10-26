@@ -1,3 +1,4 @@
+pub mod effects;
 mod quad;
 
 pub use quad::Instance;

@@ -6,6 +6,7 @@ mod collide;
 mod color;
 mod draw;
 mod ease;
+mod effects;
 mod grid;
 mod particles;
 mod quad;
