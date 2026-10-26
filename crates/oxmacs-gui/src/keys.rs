@@ -42,6 +42,33 @@ pub fn translate(
     }
 }
 
+pub fn starts_prefix(key: &IcedKey, modifiers: IcedModifiers) -> bool {
+    modifiers.control() && matches!(key, IcedKey::Character(text) if text.eq_ignore_ascii_case("x"))
+}
+
+pub fn game_key(key: &IcedKey) -> Option<String> {
+    let name = match key {
+        IcedKey::Named(named) => match named {
+            Named::ArrowLeft => "left",
+            Named::ArrowRight => "right",
+            Named::ArrowUp => "up",
+            Named::ArrowDown => "down",
+            Named::Space => "space",
+            Named::Enter => "enter",
+            Named::Escape => "escape",
+            Named::Tab => "tab",
+            Named::Backspace => "backspace",
+            Named::Shift => "shift",
+            Named::Control => "control",
+            Named::Alt => "alt",
+            _ => return None,
+        },
+        IcedKey::Character(_) => return single_char(key).map(|c| c.to_lowercase().collect()),
+        IcedKey::Unidentified => return None,
+    };
+    Some(name.to_owned())
+}
+
 fn single_char(key: &IcedKey) -> Option<char> {
     let IcedKey::Character(text) = key else {
         return None;
@@ -178,6 +205,21 @@ mod tests {
                 "{notation}"
             );
         }
+    }
+
+    #[test]
+    fn games_hear_keys_by_plain_names() {
+        let name = |key: IcedKey| game_key(&key);
+        assert_eq!(
+            name(IcedKey::Named(Named::ArrowLeft)).as_deref(),
+            Some("left")
+        );
+        assert_eq!(name(IcedKey::Named(Named::Space)).as_deref(), Some("space"));
+        assert_eq!(name(IcedKey::Character("Z".into())).as_deref(), Some("z"));
+        assert_eq!(name(IcedKey::Named(Named::F1)), None);
+        assert!(starts_prefix(&IcedKey::Character("x".into()), CTRL));
+        assert!(!starts_prefix(&IcedKey::Character("x".into()), NONE));
+        assert!(!starts_prefix(&IcedKey::Character("c".into()), CTRL));
     }
 
     #[test]

@@ -13,7 +13,7 @@ use oxmacs_core::external::process;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 
 use oxmacs_ox::tabbar::TabEvent;
-use oxmacs_ox::takeover;
+use oxmacs_ox::{games, takeover};
 
 use super::{App, Message, transition};
 use crate::keys::{self, Platform};
@@ -95,6 +95,7 @@ impl App {
         {
             self.theme_fade = None;
         }
+        self.ox.games_frame(&mut self.editor, now);
         if let Some(size) = self.takeover_size {
             self.ox.frame(
                 &mut self.editor,
@@ -204,6 +205,21 @@ impl App {
                 if takeover::current(&self.editor).is_some() =>
             {
                 self.end_takeover();
+            }
+            Message::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
+                if games::wants_keys(&self.editor) && !keys::starts_prefix(&key, modifiers) =>
+            {
+                self.last_input = self.now;
+                if let Some(name) = keys::game_key(&key) {
+                    games::key(&mut self.editor, &name, true);
+                }
+            }
+            Message::Keyboard(keyboard::Event::KeyReleased { key, .. })
+                if games::active(&self.editor) =>
+            {
+                if let Some(name) = keys::game_key(&key) {
+                    games::key(&mut self.editor, &name, false);
+                }
             }
             Message::Keyboard(keyboard::Event::KeyPressed {
                 key,

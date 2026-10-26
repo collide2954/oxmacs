@@ -129,7 +129,8 @@ fn game_mut(editor: &mut Editor) -> Option<&mut Game> {
 }
 
 fn playing(editor: &mut Editor) -> Result<&mut Game, Error> {
-    game_mut(editor).ok_or_else(|| Error::new("No game is running; M-x rodeo-play starts one"))
+    game_mut(editor)
+        .ok_or_else(|| Error::new("No game is running; play-game or M-x rodeo-play starts one"))
 }
 
 pub fn screen(editor: &Editor, buffer: BufferId) -> Option<&Screen> {
@@ -192,9 +193,18 @@ pub fn reload(editor: &mut Editor, path: &Path) {
     }
 }
 
+fn shown(name: &str) -> String {
+    if name.contains("game") {
+        name.to_owned()
+    } else {
+        format!("rodeo/{name}")
+    }
+}
+
 fn wrong(heap: &Heap, name: &str, what: &str, value: Value) -> Error {
     Error::new(format!(
-        "rodeo/{name} expects {what}, got {}",
+        "{} expects {what}, got {}",
+        shown(name),
         print::brief(heap, value)
     ))
 }
@@ -309,7 +319,8 @@ impl Options {
                 [other, ..] => {
                     let listed: Vec<String> = known.iter().map(|key| format!(":{key}")).collect();
                     return Err(Error::new(format!(
-                        "rodeo/{name} takes {}, not {}",
+                        "{} takes {}, not {}",
+                        shown(name),
                         listed.join(", "),
                         print::brief(heap, *other)
                     )));
@@ -338,7 +349,7 @@ impl Options {
         match self.get("layer") {
             None => Ok(0),
             Some(Value::Int(layer)) => i32::try_from(layer)
-                .map_err(|_| Error::new(format!("rodeo/{name} :layer is too far from 0"))),
+                .map_err(|_| Error::new(format!("{} :layer is too far from 0", shown(name)))),
             Some(other) => Err(wrong(heap, name, ":layer as a whole number", other)),
         }
     }
@@ -357,22 +368,27 @@ fn size_of(heap: &Heap, name: &str, value: Value) -> Result<(u32, u32), Error> {
     };
     side(found[0])
         .zip(side(found[1]))
-        .ok_or_else(|| Error::new(format!("rodeo/{name} takes sizes from 1 to 4096 pixels")))
+        .ok_or_else(|| Error::new(format!("{} takes sizes from 1 to 4096 pixels", shown(name))))
 }
 
 fn play(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let path = heap
         .text(arguments[0])
         .map(PathBuf::from)
-        .ok_or_else(|| wrong(heap, "play", "the path of an Ox file", arguments[0]))?;
-    let options = Options::read(heap, "play", &arguments[1..], &["size", "smooth", "rate"])?;
+        .ok_or_else(|| wrong(heap, "play-game", "the path of an Ox file", arguments[0]))?;
+    let options = Options::read(
+        heap,
+        "play-game",
+        &arguments[1..],
+        &["size", "smooth", "rate"],
+    )?;
     let size = match options.get("size") {
-        Some(value) => size_of(heap, "play", value)?,
+        Some(value) => size_of(heap, "play-game", value)?,
         None => SIZE,
     };
     let rate = match options.get("rate") {
         Some(Value::Int(rate @ 1..=240)) => u32::try_from(rate).unwrap_or(60),
-        Some(other) => return Err(wrong(heap, "play", ":rate from 1 to 240", other)),
+        Some(other) => return Err(wrong(heap, "play-game", ":rate from 1 to 240", other)),
         None => 60,
     };
     let smooth = options.get("smooth").is_some_and(Value::truthy);
@@ -719,7 +735,7 @@ fn text(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
 }
 
 fn control(isolate: &mut Isolate, name: &'static str, act: fn(&mut Game)) {
-    isolate.define_host_native_in::<Editor>(MODULE, name, 0, Some(0), move |_, editor, _| {
+    isolate.define_host_native::<Editor>(name, 0, Some(0), move |_, editor, _| {
         act(playing(editor)?);
         Ok(Value::Nil)
     });
@@ -732,7 +748,7 @@ fn measure(isolate: &mut Isolate, name: &'static str, read: fn(&Game) -> Value) 
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_host_native_in::<Editor>(MODULE, "play", 1, None, play);
+    isolate.define_host_native::<Editor>("play-game", 1, None, play);
     isolate.define_host_native_in::<Editor>(
         MODULE,
         "screen",
@@ -758,11 +774,11 @@ pub fn install(isolate: &mut Isolate) {
             &[Value::Int(i64::from(width)), Value::Int(i64::from(height))],
         )
     });
-    control(isolate, "pause", |game| {
+    control(isolate, "pause-game", |game| {
         game.clock.pause();
         game.dirty = true;
     });
-    control(isolate, "resume", |game| {
+    control(isolate, "resume-game", |game| {
         game.clock.resume();
         if game.phase == Phase::Failed {
             game.phase = Phase::Running;
@@ -771,27 +787,21 @@ pub fn install(isolate: &mut Isolate) {
         game.last = None;
         game.dirty = true;
     });
-    control(isolate, "step", |game| {
+    control(isolate, "step-game", |game| {
         game.clock.pause();
         game.clock.step_once();
     });
-    control(isolate, "restart", |game| game.restart = true);
-    isolate.define_host_native_in::<Editor>(MODULE, "stop", 0, Some(0), |_, editor, _| {
+    control(isolate, "restart-game", |game| game.restart = true);
+    isolate.define_host_native::<Editor>("stop-game", 0, Some(0), |_, editor, _| {
         stop(editor);
         Ok(Value::Nil)
     });
-    isolate.define_host_native_in::<Editor>(
-        MODULE,
-        "speed",
-        1,
-        Some(1),
-        |heap, editor, arguments| {
-            let factor = number(heap, "speed", arguments[0])?;
-            playing(editor)?.clock.set_scale(factor);
-            Ok(Value::Nil)
-        },
-    );
-    isolate.define_host_native_in::<Editor>(MODULE, "playing?", 0, Some(0), |_, editor, _| {
+    isolate.define_host_native::<Editor>("game-speed", 1, Some(1), |heap, editor, arguments| {
+        let factor = number(heap, "game-speed", arguments[0])?;
+        playing(editor)?.clock.set_scale(factor);
+        Ok(Value::Nil)
+    });
+    isolate.define_host_native::<Editor>("game-playing?", 0, Some(0), |_, editor, _| {
         Ok(Value::Bool(game(editor).is_some_and(|game| {
             game.phase == Phase::Running && !game.clock.paused()
         })))
@@ -1141,7 +1151,7 @@ mod tests {
         let (folder, path) = game_file(source);
         ox.eval(
             &mut editor,
-            &format!("(module (import (rodeo))) (rodeo/play \"{path}\" :size [4 4])"),
+            &format!("(module (import (rodeo))) (play-game \"{path}\" :size [4 4])"),
         )
         .unwrap();
         let start = Instant::now();
@@ -1216,7 +1226,7 @@ mod tests {
             "(defonce fixed (atom 0)) (def (tick) (swap! fixed inc))",
         )
         .unwrap();
-        ox.eval(&mut editor, "(rodeo/resume)").unwrap();
+        ox.eval(&mut editor, "(resume-game)").unwrap();
         ox.games_frame(&mut editor, start + sixtieths(2));
         ox.games_frame(&mut editor, start + sixtieths(4));
         assert_eq!(ox.eval(&mut editor, "@fixed").unwrap(), "2");
@@ -1266,7 +1276,7 @@ mod tests {
         let shown = path.display().to_string().replace('\\', "/");
         ox.eval(
             &mut editor,
-            &format!("(module (import (rodeo))) (rodeo/play \"{shown}\" :size [4 5])"),
+            &format!("(module (import (rodeo))) (play-game \"{shown}\" :size [4 5])"),
         )
         .unwrap();
         ox.games_frame(&mut editor, Instant::now());
@@ -1280,7 +1290,7 @@ mod tests {
     #[test]
     fn stopping_closes_the_window() {
         let (mut editor, mut ox, _, _folder) = playing(COUNTER);
-        ox.eval(&mut editor, "(rodeo/stop)").unwrap();
+        ox.eval(&mut editor, "(stop-game)").unwrap();
         assert!(editor.buffer_named("*game*").is_none());
         assert!(!super::active(&editor));
     }

@@ -7,12 +7,13 @@ use oxmacs_core::editor::{Axis, Edge, Pane, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
 use oxmacs_ox::takeover::{self, Takeover};
 use oxmacs_ox::views::ViewBuffer;
-use oxmacs_ox::{overlays, tabbar};
+use oxmacs_ox::{games, overlays, tabbar};
 
 use super::{App, Message};
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
 use crate::widgets::drawing::Drawing;
+use crate::widgets::game::GameScreen;
 use crate::widgets::mode_line::{self, Look};
 use crate::widgets::{completions, echo_area, overlay, ox_view, tab_bar, transient};
 use crate::{style, units};
@@ -234,6 +235,18 @@ impl App {
 
     fn body<'a>(&'a self, pane: Pane<'a>, window: WindowId, faces: Faces) -> Element<'a, Message> {
         let buffer = pane.buffer().id();
+        if let Some(screen) = games::screen(&self.editor, buffer) {
+            let drawn = canvas(GameScreen {
+                screen,
+                font: self.font,
+                size: self.text_size,
+            })
+            .width(Length::Fill)
+            .height(Length::Fill);
+            return mouse_area(drawn)
+                .on_press(Message::FocusWindow(window))
+                .into();
+        }
         if let Some((_, shown)) = self.editor.plugin_buffer::<ViewBuffer>(buffer) {
             let look = ox_view::Look {
                 faces,

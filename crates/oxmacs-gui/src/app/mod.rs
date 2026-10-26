@@ -18,7 +18,7 @@ use oxmacs_core::external::process::{self, Handle};
 use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_ox::{Ox, Pace, Wake, takeover};
+use oxmacs_ox::{Ox, Pace, Wake, games, takeover};
 
 use crate::watcher::Watched;
 use crate::widgets::buffer_view::ViewEvent;
@@ -217,7 +217,10 @@ impl App {
             .theme_fade
             .as_ref()
             .is_some_and(|(_, fade)| fade.is_animating(self.now));
-        fading || self.reveal.is_animating(self.now) || takeover::current(&self.editor).is_some()
+        fading
+            || self.reveal.is_animating(self.now)
+            || takeover::current(&self.editor).is_some()
+            || games::active(&self.editor)
     }
 
     fn rested_since(&self) -> Option<Instant> {
@@ -746,6 +749,61 @@ mod tests {
         let _ = app.update(Message::EndTakeover);
 
         assert!(takeover::current(app.editor()).is_none());
+    }
+
+    fn playing_game() -> (App, tempfile::TempDir) {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("game.ox");
+        std::fs::write(
+            &path,
+            r##"(module (import (rodeo)))
+(defonce heard (atom []))
+(def (tick) (when (rodeo/pressed? :a) (swap! heard conj :a)))
+(def (draw) (rodeo/clear "#ff0000") (rodeo/text "SCORE 3" [2 2]))
+"##,
+        )
+        .unwrap();
+        let mut app = App::default();
+        let shown = path.display().to_string().replace('\\', "/");
+        app.ox
+            .eval(
+                &mut app.editor,
+                &format!("(module (import (rodeo))) (play-game \"{shown}\")"),
+            )
+            .unwrap();
+        (app, folder)
+    }
+
+    #[test]
+    fn a_running_game_keeps_frames_coming_and_fills_its_screen() {
+        let (mut app, _folder) = playing_game();
+        assert!(app.is_animating());
+
+        let _ = app.update(Message::Tick(Instant::now()));
+
+        let id = app.editor().buffer_named("*game*").unwrap();
+        let screen = games::screen(app.editor(), id).unwrap();
+        assert!(screen.generation > 0);
+        assert_eq!(&screen.pixels[..4], &[255, 0, 0, 255]);
+        assert_eq!(screen.captions[0].text, "SCORE 3");
+        let _ = iced_test::simulator(app.view());
+    }
+
+    #[test]
+    fn keys_go_to_a_selected_game_but_c_x_stays_with_the_editor() {
+        let (mut app, _folder) = playing_game();
+        let start = Instant::now();
+        let _ = app.update(Message::Tick(start));
+        let game = app.editor().buffer().id();
+
+        press(&mut app, "a", Modifiers::empty());
+        let _ = app.update(Message::Tick(start + Duration::from_millis(20)));
+
+        assert_eq!(app.ox.eval(&mut app.editor, "@heard").unwrap(), "[:a]");
+        assert_eq!(app.editor().message(), None);
+        press(&mut app, "x", Modifiers::CTRL);
+        press(&mut app, "o", Modifiers::empty());
+        assert_ne!(app.editor().buffer().id(), game);
     }
 
     #[test]
