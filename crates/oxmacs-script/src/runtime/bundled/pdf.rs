@@ -4,10 +4,9 @@ use oxmacs_core::editor::Editor;
 
 use crate::Ox;
 use crate::testing::{press, settle, typed};
-use crate::view::pdf::{
-    self, Document, Go, Heading, Link, PageSize, PageText, Rect, Target, View, Zoom,
-};
+use crate::view::pdf::{Go, View, Zoom};
 use crate::view::views::{Arg, Node, ViewBuffer};
+use oxmacs_pdf::{Document, Heading, Link, PageSize, PageText, Rect, Target};
 
 const LETTER: PageSize = PageSize {
     width: 612.0,
@@ -55,7 +54,7 @@ fn viewer(config: &str) -> Viewer {
         },
         target: Target::Page(3),
     });
-    pdf::preload(
+    oxmacs_pdf::preload(
         &paper,
         Document {
             pages: vec![LETTER; 5],
@@ -178,7 +177,7 @@ fn a_closed_pdf_opens_again_and_one_of_the_same_name_gets_its_own_buffer() {
     let other = viewer.papers.path().join("drafts").join("paper.pdf");
     std::fs::create_dir_all(other.parent().unwrap()).unwrap();
     std::fs::write(&other, "%PDF-1.7").unwrap();
-    pdf::preload(
+    oxmacs_pdf::preload(
         &other,
         Document {
             pages: vec![LETTER; 2],

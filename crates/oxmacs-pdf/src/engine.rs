@@ -8,7 +8,7 @@ use pdfium_render::prelude::{
     PdfRenderConfig, Pdfium, PdfiumError, PdfiumInternalError, Pixels,
 };
 
-use super::{Bitmap, Document, Heading, Ink, Link, PageSize, PageText, Rect, Target, recolor};
+use crate::{Bitmap, Document, Heading, Ink, Link, PageSize, PageText, Rect, Target, recolor};
 
 const STOPPED: &str = "PDFium stopped";
 const OUTLINE_LIMIT: usize = 10_000;

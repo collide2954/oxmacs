@@ -3980,13 +3980,20 @@ dependencies = [
  "open",
  "oxmacs-api",
  "oxmacs-core",
+ "oxmacs-pdf",
  "oxmacs-script",
  "rodeo",
  "serde_json",
  "skrifa 0.49.0",
  "tempfile",
  "ureq",
- "zip",
+]
+
+[[package]]
+name = "oxmacs-pdf"
+version = "0.14.0"
+dependencies = [
+ "pdfium-render",
 ]
 
 [[package]]
@@ -4001,7 +4008,7 @@ dependencies = [
  "ox-library",
  "oxmacs-api",
  "oxmacs-core",
- "pdfium-render",
+ "oxmacs-pdf",
  "regex",
  "rodeo",
  "rodio",

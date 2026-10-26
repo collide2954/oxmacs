@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use super::{Link, PageText, Rect};
+use crate::{Link, PageText, Rect};
 
 fn same_line(last: &Rect, next: &Rect) -> bool {
     let middle = f32::midpoint(next.top, next.bottom);
@@ -135,8 +135,8 @@ pub fn search(pages: &[PageText], query: &str) -> Vec<Found> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::Target;
     use super::*;
+    use crate::Target;
 
     fn line(text: &str, top: f32) -> PageText {
         let boxes = (0..text.chars().count())
