@@ -417,6 +417,26 @@ fn shown(heap: &mut Heap, path: Option<&Path>) -> Result<Value, Error> {
     }
 }
 
+fn on_open_file(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
+    let extension = print::display(heap, arguments[0]).to_lowercase();
+    let hold = heap.hold(arguments[1]);
+    let Some(hooks) = hooks(editor) else {
+        heap.release(hold);
+        return;
+    };
+    match hooks
+        .file_types
+        .iter_mut()
+        .find(|(known, _)| *known == extension)
+    {
+        Some((_, existing)) => {
+            let old = std::mem::replace(existing, hold);
+            heap.release(old);
+        }
+        None => hooks.file_types.push((extension, hold)),
+    }
+}
+
 fn on_open_directory(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
     let hold = heap.hold(arguments[0]);
     if let Some(old) = hooks(editor).and_then(|hooks| hooks.directory.replace(hold)) {
@@ -544,22 +564,7 @@ pub fn install(isolate: &mut Isolate) {
         },
     );
     isolate.define_host_native::<Editor>("on-open-file", 2, Some(2), |heap, editor, arguments| {
-        let extension = print::display(heap, arguments[0]).to_lowercase();
-        let hold = heap.hold(arguments[1]);
-        let Some(hooks) = hooks(editor) else {
-            return Ok(Value::Nil);
-        };
-        match hooks
-            .file_types
-            .iter_mut()
-            .find(|(known, _)| *known == extension)
-        {
-            Some((_, existing)) => {
-                let old = std::mem::replace(existing, hold);
-                heap.release(old);
-            }
-            None => hooks.file_types.push((extension, hold)),
-        }
+        on_open_file(heap, editor, arguments);
         Ok(Value::Nil)
     });
     isolate.define_host_native::<Editor>(

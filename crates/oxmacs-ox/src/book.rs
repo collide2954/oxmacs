@@ -521,7 +521,7 @@ mod tests {
             &mut editor,
             id,
             0,
-            vec![
+            &[
                 Arg::List(vec![
                     Arg::List(vec![Arg::Int(0), Arg::Int(0)]),
                     Arg::List(vec![Arg::Int(1), Arg::Int(9)]),
@@ -529,7 +529,7 @@ mod tests {
                 Arg::Int(2),
             ],
         );
-        ox.call(&mut editor, id, 1, vec![Arg::Int(-1)]);
+        ox.call(&mut editor, id, 1, &[Arg::Int(-1)]);
         settle(&mut editor, &mut ox);
 
         assert_eq!(

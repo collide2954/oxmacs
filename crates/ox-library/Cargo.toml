@@ -24,10 +24,10 @@ tiny-skia.workspace = true
 trash.workspace = true
 ureq.workspace = true
 webpki-roots.workspace = true
+zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 winapi-util.workspace = true
-zip.workspace = true
 
 [lints]
 workspace = true

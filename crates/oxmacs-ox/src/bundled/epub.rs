@@ -124,7 +124,7 @@ impl Reader {
 
     fn call(&mut self, slot: usize, args: Vec<Arg>) {
         let id = self.editor.buffer_named("sample.epub").unwrap();
-        self.ox.call(&mut self.editor, id, slot, args);
+        self.ox.call(&mut self.editor, id, slot, &args);
         settle(&mut self.editor, &mut self.ox);
     }
 

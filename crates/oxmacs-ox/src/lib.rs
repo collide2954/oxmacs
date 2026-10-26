@@ -217,9 +217,9 @@ impl Ox {
         editor: &mut Editor,
         buffer: BufferId,
         slot: usize,
-        args: Vec<views::Arg>,
+        args: &[views::Arg],
     ) {
-        views::call(&mut self.isolate, editor, buffer, slot, &args);
+        views::call(&mut self.isolate, editor, buffer, slot, args);
     }
 
     pub fn tab_event(&mut self, editor: &mut Editor, event: tabbar::TabEvent) {

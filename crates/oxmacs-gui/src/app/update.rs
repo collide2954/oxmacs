@@ -268,7 +268,7 @@ impl App {
             }
             Message::OxPress(buffer, slot) => self.ox.press(&mut self.editor, buffer, slot),
             Message::OxCall(buffer, slot, args) => {
-                self.ox.call(&mut self.editor, buffer, slot, args)
+                self.ox.call(&mut self.editor, buffer, slot, &args);
             }
             Message::ViewSized(buffer, size) => {
                 let pixels =
