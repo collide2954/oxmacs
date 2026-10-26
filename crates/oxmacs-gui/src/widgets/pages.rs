@@ -91,12 +91,121 @@ fn chars_of(text: &str, byte: usize) -> usize {
         .map_or(0, |before| before.chars().count())
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Row {
+    pub top: f32,
+    pub height: f32,
+    pub start: usize,
+    pub end: usize,
+    pub glyphs: Vec<(usize, usize, f32, f32)>,
+}
+
+impl Row {
+    fn left(&self) -> f32 {
+        self.glyphs.first().map_or(0.0, |glyph| glyph.2)
+    }
+
+    fn right(&self) -> f32 {
+        self.glyphs.last().map_or(0.0, |glyph| glyph.2 + glyph.3)
+    }
+
+    pub fn x_at(&self, byte: usize) -> f32 {
+        for (start, end, x, width) in &self.glyphs {
+            if byte < *end {
+                if byte <= *start {
+                    return *x;
+                }
+                let part = crate::units::to_f32(byte - start) / crate::units::to_f32(end - start);
+                return x + width * part;
+            }
+        }
+        self.right()
+    }
+
+    pub fn byte_at(&self, x: f32) -> usize {
+        self.glyphs
+            .iter()
+            .find(|(_, _, left, width)| x < left + width / 2.0)
+            .map_or(self.end, |glyph| glyph.0)
+    }
+}
+
+pub fn row_of(rows: &[Row], byte: usize) -> usize {
+    rows.iter().rposition(|row| row.start <= byte).unwrap_or(0)
+}
+
+pub fn row_at(rows: &[Row], y: f32) -> Option<&Row> {
+    rows.iter()
+        .rfind(|row| row.top <= y + EPSILON)
+        .or(rows.first())
+}
+
+pub fn spans_of(rows: &[Row], from: usize, to: usize) -> Vec<Rectangle> {
+    if to <= from || rows.is_empty() {
+        return Vec::new();
+    }
+    let (first, last) = (row_of(rows, from), row_of(rows, to.saturating_sub(1)));
+    (first..=last)
+        .map(|at| {
+            let row = &rows[at];
+            let left = if at == first {
+                row.x_at(from)
+            } else {
+                row.left()
+            };
+            let right = if at == last {
+                row.x_at(to)
+            } else {
+                row.right()
+            };
+            Rectangle::new(
+                Point::new(left, row.top),
+                Size::new((right - left).max(0.0), row.height),
+            )
+        })
+        .collect()
+}
+
+pub trait Buffered {
+    fn rows(&self, text: &str) -> Vec<Row>;
+}
+
+impl Buffered for iced::advanced::graphics::text::Paragraph {
+    fn rows(&self, text: &str) -> Vec<Row> {
+        let mut starts = vec![0];
+        starts.extend(
+            text.char_indices()
+                .filter(|(_, character)| *character == '\n')
+                .map(|(at, _)| at + 1),
+        );
+        self.buffer()
+            .layout_runs()
+            .map(|run| {
+                let base = starts.get(run.line_i).copied().unwrap_or(text.len());
+                let glyphs: Vec<(usize, usize, f32, f32)> = run
+                    .glyphs
+                    .iter()
+                    .map(|glyph| (base + glyph.start, base + glyph.end, glyph.x, glyph.w))
+                    .collect();
+                Row {
+                    top: run.line_top,
+                    height: run.line_height,
+                    start: glyphs.first().map_or(base, |glyph| glyph.0),
+                    end: glyphs.last().map_or(base, |glyph| glyph.1),
+                    glyphs,
+                }
+            })
+            .collect()
+    }
+}
+
 struct Shaped<P> {
     paragraph: P,
     text: String,
     prefix: usize,
     links: Vec<(std::ops::Range<usize>, String)>,
     line: f32,
+    rows: Vec<Row>,
 }
 
 enum Look<P> {
@@ -201,11 +310,7 @@ impl<P: text::Paragraph> Typeset<P> {
         }
         match &laid.look {
             Look::Text(shaped) => {
-                let point = Point::new(0.0, (flow - laid.y + shaped.line / 2.0).max(0.0));
-                let byte = match shaped.paragraph.hit_test(point) {
-                    Some(text::Hit::CharOffset(byte)) => byte,
-                    None => 0,
-                };
+                let byte = row_at(&shaped.rows, flow - laid.y).map_or(0, |row| row.start);
                 (
                     index,
                     chars_of(&shaped.text, byte).saturating_sub(shaped.prefix),
@@ -223,9 +328,9 @@ impl<P: text::Paragraph> Typeset<P> {
             Look::Text(shaped) => {
                 let byte = byte_of(&shaped.text, offset + shaped.prefix);
                 shaped
-                    .paragraph
-                    .grapheme_position(0, byte)
-                    .map_or(laid.y, |point| laid.y + point.y)
+                    .rows
+                    .get(row_of(&shaped.rows, byte))
+                    .map_or(laid.y, |row| laid.y + row.top)
             }
             Look::Image(_) | Look::Rule => laid.y,
         }
@@ -437,7 +542,7 @@ impl<'a, Message> PagesView<'a, Message> {
         }
     }
 
-    fn shaped<P: text::Paragraph<Font = Font>>(
+    fn shaped<P: text::Paragraph<Font = Font> + Buffered>(
         &self,
         runs: &[Run],
         setting: &Setting,
@@ -476,6 +581,7 @@ impl<'a, Message> PagesView<'a, Message> {
             text.push_str(&run.text);
         }
         Shaped {
+            rows: paragraph.rows(&text),
             paragraph,
             prefix: setting.prefix.chars().count(),
             text,
@@ -484,7 +590,7 @@ impl<'a, Message> PagesView<'a, Message> {
         }
     }
 
-    fn typeset<P: text::Paragraph<Font = Font>>(&self, bounds: Size) -> Typeset<P> {
+    fn typeset<P: text::Paragraph<Font = Font> + Buffered>(&self, bounds: Size) -> Typeset<P> {
         let (page, spread) = self.geometry(bounds);
         let em = self.pages.size;
         let mut blocks = Vec::new();
@@ -593,18 +699,25 @@ fn located<P: text::Paragraph>(
             return Some(((index, 0), None));
         };
         let inside = Point::new(local.x - laid.x, flow - laid.y);
-        let byte = match shaped.paragraph.hit_test(inside) {
-            Some(text::Hit::CharOffset(byte)) => byte,
-            None => 0,
-        };
-        let chars = chars_of(&shaped.text, byte);
-        let link = shaped.paragraph.hit_span(inside).and_then(|_| {
-            shaped
-                .links
-                .iter()
-                .find(|(range, _)| range.contains(&chars))
-                .map(|(_, target)| target.clone())
-        });
+        let row = row_at(&shaped.rows, inside.y)?;
+        let chars = chars_of(&shaped.text, row.byte_at(inside.x));
+        let over = (row.left()..row.right()).contains(&inside.x);
+        let link = over
+            .then(|| {
+                let under = chars_of(
+                    &shaped.text,
+                    row.glyphs
+                        .iter()
+                        .find(|(_, _, left, width)| inside.x < left + width)
+                        .map_or(row.end, |glyph| glyph.0),
+                );
+                shaped
+                    .links
+                    .iter()
+                    .find(|(range, _)| range.contains(&under))
+                    .map(|(_, target)| target.clone())
+            })
+            .flatten();
         return Some(((index, chars.saturating_sub(shaped.prefix)), link));
     }
     None
@@ -620,6 +733,7 @@ fn anchor_arg((block, offset): Anchor) -> Arg {
 impl<Message, Renderer> Widget<Message, Theme, Renderer> for PagesView<'_, Message>
 where
     Renderer: text::Renderer<Font = Font> + image::Renderer<Handle = Handle>,
+    Renderer::Paragraph: Buffered,
 {
     fn tag(&self) -> tree::Tag {
         tree::Tag::of::<State<Renderer::Paragraph>>()
@@ -882,6 +996,7 @@ impl<Message> PagesView<'_, Message> {
         bounds: Rectangle,
     ) where
         Renderer: text::Renderer<Font = Font> + image::Renderer<Handle = Handle>,
+        Renderer::Paragraph: Buffered,
     {
         let em = self.pages.size;
         let faint = style::color(self.faces.shadow);
@@ -926,7 +1041,7 @@ impl<Message> PagesView<'_, Message> {
             let top_left = Point::new(origin.x + laid.x, origin.y + laid.y - start);
             match &laid.look {
                 Look::Text(shaped) => {
-                    draw_marks(renderer, shaped, marks, index, top_left, laid.width);
+                    draw_marks(renderer, shaped, marks, index, top_left, clip);
                     renderer.fill_paragraph(
                         &shaped.paragraph,
                         top_left,
@@ -962,7 +1077,7 @@ fn draw_marks<Renderer: text::Renderer>(
     marks: &[(Anchor, Anchor, Color)],
     index: usize,
     top_left: Point,
-    width: f32,
+    clip: Rectangle,
 ) {
     for (from, to, color) in marks {
         if index < from.0 || index > to.0 {
@@ -974,67 +1089,39 @@ fn draw_marks<Renderer: text::Renderer>(
         } else {
             shaped.text.chars().count()
         };
-        for rectangle in covered(shaped, first_char, last_char, width) {
-            renderer.fill_quad(
-                Quad {
-                    bounds: Rectangle::new(
-                        Point::new(top_left.x + rectangle.x, top_left.y + rectangle.y),
-                        rectangle.size(),
-                    ),
-                    ..Quad::default()
-                },
-                *color,
+        for rectangle in covered(shaped, first_char, last_char) {
+            let placed = Rectangle::new(
+                Point::new(top_left.x + rectangle.x, top_left.y + rectangle.y),
+                rectangle.size(),
             );
+            if let Some(shown) = placed.intersection(&clip)
+                && shown.height > 1.5
+            {
+                renderer.fill_quad(
+                    Quad {
+                        bounds: shown,
+                        ..Quad::default()
+                    },
+                    *color,
+                );
+            }
         }
     }
 }
 
-fn covered<P: text::Paragraph>(
-    shaped: &Shaped<P>,
-    from: usize,
-    to: usize,
-    width: f32,
-) -> Vec<Rectangle> {
-    if to <= from {
-        return Vec::new();
-    }
-    let position = |chars: usize| {
-        let byte = byte_of(&shaped.text, chars + shaped.prefix);
-        shaped.paragraph.grapheme_position(0, byte)
-    };
-    let bounds = shaped.paragraph.min_bounds();
-    let start = position(from).unwrap_or(Point::ORIGIN);
-    let end = position(to)
-        .unwrap_or_else(|| Point::new(bounds.width, (bounds.height - shaped.line).max(0.0)));
-    let line = shaped.line;
-    if (start.y - end.y).abs() < line / 2.0 {
-        return vec![Rectangle::new(
-            start,
-            Size::new((end.x - start.x).max(0.0), line),
-        )];
-    }
-    let mut rectangles = vec![Rectangle::new(
-        start,
-        Size::new((width - start.x).max(0.0), line),
-    )];
-    let middle = end.y - start.y - line;
-    if middle > EPSILON {
-        rectangles.push(Rectangle::new(
-            Point::new(0.0, start.y + line),
-            Size::new(width, middle),
-        ));
-    }
-    rectangles.push(Rectangle::new(
-        Point::new(0.0, end.y),
-        Size::new(end.x, line),
-    ));
-    rectangles
+fn covered<P>(shaped: &Shaped<P>, from: usize, to: usize) -> Vec<Rectangle> {
+    spans_of(
+        &shaped.rows,
+        byte_of(&shaped.text, from + shaped.prefix),
+        byte_of(&shaped.text, to + shaped.prefix),
+    )
 }
 
 impl<'a, Message: 'a, Renderer> From<PagesView<'a, Message>>
     for Element<'a, Message, Theme, Renderer>
 where
     Renderer: text::Renderer<Font = Font> + image::Renderer<Handle = Handle> + 'a,
+    Renderer::Paragraph: Buffered,
 {
     fn from(view: PagesView<'a, Message>) -> Self {
         Element::new(view)
@@ -1052,6 +1139,60 @@ mod tests {
             line: Some(10.0),
             keep_with_next: false,
         }
+    }
+
+    fn row(top: f32, bytes: std::ops::Range<usize>) -> Row {
+        Row {
+            top,
+            height: 20.0,
+            start: bytes.start,
+            end: bytes.end,
+            glyphs: bytes
+                .clone()
+                .map(|at| {
+                    let x = crate::units::to_f32(at - bytes.start) * 10.0;
+                    (at, at + 1, x, 10.0)
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn marks_cover_each_row_they_cross() {
+        let rows = [row(0.0, 0..10), row(20.0, 10..20)];
+
+        assert_eq!(
+            spans_of(&rows, 2, 5),
+            [Rectangle::new(Point::new(20.0, 0.0), Size::new(30.0, 20.0))]
+        );
+        assert_eq!(
+            spans_of(&rows, 8, 13),
+            [
+                Rectangle::new(Point::new(80.0, 0.0), Size::new(20.0, 20.0)),
+                Rectangle::new(Point::new(0.0, 20.0), Size::new(30.0, 20.0)),
+            ]
+        );
+        assert_eq!(spans_of(&rows, 10, 20).len(), 1);
+        assert_eq!(spans_of(&rows, 4, 4), []);
+    }
+
+    #[test]
+    fn places_are_found_on_their_rows_by_byte_and_by_point() {
+        let rows = [row(0.0, 0..10), row(20.0, 10..20)];
+        let wide = Row {
+            glyphs: vec![(0, 3, 0.0, 30.0), (3, 4, 30.0, 10.0)],
+            ..row(0.0, 0..4)
+        };
+
+        assert_eq!(row_of(&rows, 15), 1);
+        assert_eq!(row_of(&rows, 0), 0);
+        assert_eq!(row_at(&rows, 25.0).map(|found| found.start), Some(10));
+        assert_eq!(row_at(&rows, -5.0).map(|found| found.start), Some(0));
+        assert!((wide.x_at(1) - 10.0).abs() < 0.01);
+        assert!((wide.x_at(9) - 40.0).abs() < 0.01);
+        assert_eq!(rows[0].byte_at(14.0), 1);
+        assert_eq!(rows[0].byte_at(16.0), 2);
+        assert_eq!(rows[0].byte_at(500.0), 10);
     }
 
     #[test]
