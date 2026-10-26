@@ -25,6 +25,7 @@ serde_json.workspace = true
 [dev-dependencies]
 keepass = { workspace = true, features = ["save_kdbx4"] }
 tempfile.workspace = true
+zip.workspace = true
 
 [[test]]
 name = "integration"

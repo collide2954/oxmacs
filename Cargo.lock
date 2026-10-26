@@ -3777,6 +3777,7 @@ dependencies = [
  "iced",
  "iced_runtime",
  "iced_test",
+ "image",
  "jiff",
  "native-theme",
  "notify",
@@ -3787,6 +3788,7 @@ dependencies = [
  "skrifa 0.49.0",
  "tempfile",
  "ureq",
+ "zip",
 ]
 
 [[package]]
@@ -3804,6 +3806,7 @@ dependencies = [
  "semver",
  "serde_json",
  "tempfile",
+ "zip",
 ]
 
 [[package]]
