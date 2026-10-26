@@ -1,3 +1,4 @@
+mod builder;
 mod builtins;
 pub mod bytecode;
 pub mod check;
@@ -21,6 +22,7 @@ pub mod testing;
 pub mod value;
 mod vm;
 
+pub use builder::NativeBuilder;
 pub use error::Error;
 pub use isolate::{Isolate, Stubs};
 pub use vm::{Runtime, build, routine};

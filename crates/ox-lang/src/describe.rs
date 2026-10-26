@@ -4,6 +4,7 @@ use std::rc::Rc;
 use crate::compile::parameters::parse_parameters;
 use crate::read::{self, Datum, Syntax};
 use crate::span::{Source, Span, line_column};
+use crate::symbol::Sym;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -167,6 +168,16 @@ pub(crate) fn parse(tables: &[&str]) -> Docs {
         entries: found,
         broken,
     }
+}
+
+pub(crate) fn fallback_with(least: usize, most: Option<usize>, keywords: &[Sym]) -> String {
+    if keywords.is_empty() {
+        return fallback(least, most);
+    }
+    let positional = most.map(|most| most.saturating_sub(2 * keywords.len()));
+    let names: Vec<&str> = keywords.iter().map(|keyword| keyword.name()).collect();
+    let shown = format!("{} {{{}}}", fallback(least, positional), names.join(" "));
+    shown.trim_start().to_owned()
 }
 
 pub(crate) fn fallback(least: usize, most: Option<usize>) -> String {

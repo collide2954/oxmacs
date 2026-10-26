@@ -154,6 +154,7 @@ impl Runtime {
                 control: None,
                 awaits: false,
                 outside: false,
+                keywords: Box::new([]),
                 resumable: Some(Rc::clone(kind)),
                 drains: None,
                 captured: captured.into(),

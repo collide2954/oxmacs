@@ -1,4 +1,4 @@
-use crate::bytecode::Code;
+use crate::bytecode::{Arity, Code};
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::native::arguments;
@@ -15,8 +15,7 @@ fn name(code: &Code) -> &'static str {
     code.name.map_or("fn", Sym::name)
 }
 
-pub fn arity_error(code: &Code, count: usize) -> Error {
-    let arity = &code.arity;
+fn wrong_count(name: &str, arity: &Arity, count: usize) -> Error {
     let required = usize::from(arity.required);
     let wanted = if arity.rest {
         format!("at least {}", arguments(required))
@@ -28,31 +27,38 @@ pub fn arity_error(code: &Code, count: usize) -> Error {
     } else {
         arguments(required)
     };
-    Error::new(format!("{} takes {wanted}, got {count}", name(code))).of(ErrorKind::Arity)
+    Error::new(format!("{name} takes {wanted}, got {count}")).of(ErrorKind::Arity)
 }
 
-fn unknown_keyword(heap: &Heap, code: &Code, value: Value) -> Error {
+fn unknown_keyword(heap: &Heap, name: &str, value: Value) -> Error {
     Error::new(format!(
-        "{} has no keyword parameter {}",
-        name(code),
+        "{name} has no keyword parameter {}",
         print::brief(heap, value)
     ))
     .of(ErrorKind::Arity)
 }
 
 pub fn bind(heap: &mut Heap, code: &Code, arguments: &[Value]) -> Result<Binding, Error> {
-    let arity = &code.arity;
+    bind_to(heap, name(code), &code.arity, arguments)
+}
+
+pub(crate) fn bind_to(
+    heap: &mut Heap,
+    name: &str,
+    arity: &Arity,
+    arguments: &[Value],
+) -> Result<Binding, Error> {
     let count = arguments.len();
     let required = usize::from(arity.required);
     if arity.simple() {
         return if count == required {
             Ok(Binding::Direct)
         } else {
-            Err(arity_error(code, count))
+            Err(wrong_count(name, arity, count))
         };
     }
     if count < required {
-        return Err(arity_error(code, count));
+        return Err(wrong_count(name, arity, count));
     }
     let named_start = (required..count)
         .find(|index| {
@@ -79,28 +85,27 @@ pub fn bind(heap: &mut Heap, code: &Code, arguments: &[Value]) -> Result<Binding
         values.push(rest);
     } else if let Some(first) = extra.first() {
         if !arity.keywords.is_empty() && matches!(first, Value::Keyword(_)) {
-            return Err(unknown_keyword(heap, code, *first));
+            return Err(unknown_keyword(heap, name, *first));
         }
-        return Err(arity_error(code, count));
+        return Err(wrong_count(name, arity, count));
     }
     let mut named = vec![None; arity.keywords.len()];
     for pair in arguments[named_start..].chunks(2) {
         match pair {
             [Value::Keyword(keyword), value] => {
                 let Some(index) = arity.keywords.iter().position(|known| known == keyword) else {
-                    return Err(unknown_keyword(heap, code, pair[0]));
+                    return Err(unknown_keyword(heap, name, pair[0]));
                 };
                 named[index] = Some(*value);
             }
             [Value::Keyword(keyword)] => {
                 return Err(Error::new(format!(
-                    "{} was given :{} without a value",
-                    name(code),
+                    "{name} was given :{} without a value",
                     keyword.name()
                 ))
                 .of(ErrorKind::Arity));
             }
-            [other, ..] => return Err(unknown_keyword(heap, code, *other)),
+            [other, ..] => return Err(unknown_keyword(heap, name, *other)),
             [] => {}
         }
     }

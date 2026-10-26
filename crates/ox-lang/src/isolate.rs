@@ -40,7 +40,7 @@ fn modified(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).and_then(|found| found.modified()).ok()
 }
 
-fn shown_name(module: &str, name: &str) -> String {
+pub(crate) fn shown_name(module: &str, name: &str) -> String {
     match module.rsplit_once('/') {
         _ if module == "ox" => name.to_owned(),
         Some((_, last)) => format!("{last}/{name}"),
@@ -48,7 +48,7 @@ fn shown_name(module: &str, name: &str) -> String {
     }
 }
 
-fn plain(
+pub(crate) fn plain(
     module: &str,
     name: &str,
     least: usize,
@@ -63,13 +63,14 @@ fn plain(
         control: None,
         awaits: false,
         outside: false,
+        keywords: Box::new([]),
         resumable: None,
         drains: None,
         captured: Box::new([]),
     }
 }
 
-fn only_from_ox(name: &str) -> Rc<NativeFn> {
+pub(crate) fn only_from_ox(name: &str) -> Rc<NativeFn> {
     let message = format!("{name} can only be called from Ox");
     Rc::new(move |_, _, _| Err(Error::new(message.clone())))
 }
@@ -782,9 +783,9 @@ impl Isolate {
         self.install(module, name, plain(module, name, least, most, function));
     }
 
-    fn install(&mut self, module: &str, name: &str, native: Native) -> Option<Value> {
+    pub(crate) fn install(&mut self, module: &str, name: &str, native: Native) -> Option<Value> {
         let native = Native {
-            outside: builtins::reaches_outside(module, native.name.name()),
+            outside: native.outside || builtins::reaches_outside(module, native.name.name()),
             ..native
         };
         let place = self.runtime.module_named(module);
@@ -1279,7 +1280,7 @@ impl Isolate {
             let entry = self.docs().entries.get(native.name.name());
             doc = entry.map(|entry| entry.doc.clone());
             let parameters = entry.map_or_else(
-                || describe::fallback(native.least, native.most),
+                || describe::fallback_with(native.least, native.most, &native.keywords),
                 |entry| entry.parameters.clone(),
             );
             let kind = if macros { Kind::Macro } else { Kind::Native };

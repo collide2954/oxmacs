@@ -38,6 +38,7 @@ pub struct Native {
     pub control: Option<Control>,
     pub awaits: bool,
     pub outside: bool,
+    pub keywords: Box<[Sym]>,
     pub(crate) resumable: Option<Rc<Resumable>>,
     pub(crate) drains: Option<Drains>,
     pub(crate) captured: Box<[Value]>,
@@ -83,6 +84,9 @@ impl Native {
     }
 
     pub fn check(&self, count: usize) -> Result<(), Error> {
+        if !self.keywords.is_empty() {
+            return Ok(());
+        }
         let fits = count >= self.least && self.most.is_none_or(|most| count <= most);
         if fits {
             return Ok(());

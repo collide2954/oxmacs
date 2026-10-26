@@ -8,6 +8,7 @@ mod foreign;
 mod format;
 mod host;
 mod modules;
+mod natives;
 mod profile;
 mod spawned;
 mod tasks;
