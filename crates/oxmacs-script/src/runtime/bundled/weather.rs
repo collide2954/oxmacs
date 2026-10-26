@@ -2,7 +2,7 @@ use oxmacs_core::editor::Editor;
 
 use crate::Ox;
 use crate::testing::{press, settle};
-use crate::view::views::{Node, ViewBuffer};
+use oxmacs_core::view::{Node, ViewBuffer};
 
 const PLACES: &str = r#"{"results":[{"id":2950159,"name":"Berlin","latitude":52.52437,"longitude":13.41053,"country_code":"DE","timezone":"Europe/Berlin","country":"Germany","admin1":"Land Berlin"}],"generationtime_ms":0.9}"#;
 
@@ -62,7 +62,7 @@ fn evaluated(editor: &mut Editor, ox: &mut Ox, source: &str) -> String {
     }
 }
 
-fn lines(node: &Node, out: &mut Vec<String>) {
+fn lines(node: &Node<usize>, out: &mut Vec<String>) {
     match node {
         Node::Column { children, .. } => {
             for child in children {

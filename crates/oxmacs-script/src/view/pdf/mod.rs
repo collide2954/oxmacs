@@ -7,53 +7,12 @@ use ox_lang::value::Value;
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::external::managed::PDFIUM;
+use oxmacs_core::view::Node;
+use oxmacs_core::view::pdf::{Go, MAX_SCALE, MIN_SCALE, Mark, View, Zoom};
 use oxmacs_pdf::{Document, Rect, open, texts, use_library, words};
-
-use crate::view::views::{Node, Press};
 
 const MODULE: &str = "ox/pdf";
 const UI: &str = "ox/ui";
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Zoom {
-    FitWidth,
-    FitPage,
-    Scale(f32),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Go {
-    Page { page: usize, y: Option<f32> },
-    Lines(f32),
-    Screens(f32),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Mark {
-    pub page: usize,
-    pub rect: Rect,
-    pub current: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct View {
-    pub path: PathBuf,
-    pub revision: u64,
-    pub zoom: Zoom,
-    pub continuous: bool,
-    pub dark: bool,
-    pub marks: Vec<Mark>,
-    pub go: Option<(i64, Go)>,
-    pub on_view: Option<Press>,
-    pub on_select: Option<Press>,
-    pub on_link: Option<Press>,
-}
-
-impl View {
-    pub(crate) fn presses(&mut self) -> [&mut Option<Press>; 3] {
-        [&mut self.on_view, &mut self.on_select, &mut self.on_link]
-    }
-}
-
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -117,9 +76,6 @@ fn zoom(heap: &Heap, value: Value) -> Result<Zoom, Error> {
         )),
     }
 }
-
-pub const MIN_SCALE: f32 = 0.25;
-pub const MAX_SCALE: f32 = 8.0;
 
 fn go(heap: &Heap, value: Value) -> Result<Option<(i64, Go)>, Error> {
     if value == Value::Nil {
@@ -190,9 +146,9 @@ fn view(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
             "dark" => shown.dark = value.truthy(),
             "marks" => shown.marks = marks(heap, value)?,
             "go" => shown.go = go(heap, value)?,
-            "on-view" => shown.on_view = Some(Press::Held(heap.hold(value))),
-            "on-select" => shown.on_select = Some(Press::Held(heap.hold(value))),
-            _ => shown.on_link = Some(Press::Held(heap.hold(value))),
+            "on-view" => shown.on_view = Some(heap.hold(value)),
+            "on-select" => shown.on_select = Some(heap.hold(value)),
+            _ => shown.on_link = Some(heap.hold(value)),
         }
     }
     heap.foreign("pdf", Node::Pdf(Box::new(shown)))
@@ -324,10 +280,10 @@ mod tests {
     use oxmacs_core::editor::Editor;
     use oxmacs_core::external::managed::PDFIUM;
 
-    use super::{Go, Mark, Zoom};
     use crate::Ox;
     use crate::testing::settle;
-    use crate::view::views::{Node, Press, ViewBuffer};
+    use oxmacs_core::view::pdf::{Go, Mark, Zoom};
+    use oxmacs_core::view::{Node, ViewBuffer};
     use oxmacs_pdf::{Document, Heading, PageSize, PageText, Rect};
 
     const LETTER: PageSize = PageSize {
@@ -504,7 +460,7 @@ mod tests {
                 }
             ))
         );
-        assert_eq!(view.on_view, Some(Press::Slot(0)));
+        assert_eq!(view.on_view, Some(0));
         assert_eq!(view.on_select, None);
     }
 

@@ -4,8 +4,8 @@ use oxmacs_core::editor::Editor;
 
 use crate::Ox;
 use crate::testing::{Chapter, Epub, PIXEL, press, settle, typed, write_epub};
-use crate::view::book::{At, Block, Kind, Pages};
-use crate::view::views::{Arg, Node, ViewBuffer};
+use oxmacs_core::view::book::{At, Block, Kind, Pages};
+use oxmacs_core::view::{Arg, Node, ViewBuffer};
 
 const SAMPLE: Epub<'_> = Epub {
     title: "A Sample Voyage",
@@ -73,7 +73,7 @@ impl Reader {
         settle(&mut self.editor, &mut self.ox);
     }
 
-    fn pages(&self) -> Pages {
+    fn pages(&self) -> Pages<usize> {
         let id = self.editor.buffer_named("sample.epub").unwrap();
         match &self.editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node {
             Node::Pages(pages) => (**pages).clone(),

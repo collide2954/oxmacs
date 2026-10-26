@@ -192,8 +192,8 @@ mod tests {
     use super::current;
     use crate::Ox;
     use crate::testing::settle;
-    use crate::view::views::{Node, ViewBuffer};
     use oxmacs_core::view::shapes::{Ink, Paint, Shape};
+    use oxmacs_core::view::{Node, ViewBuffer};
 
     fn paint(ink: Ink, alpha: f32) -> Paint {
         Paint { ink, alpha }

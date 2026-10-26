@@ -4,8 +4,8 @@ use oxmacs_core::editor::Editor;
 
 use crate::Ox;
 use crate::testing::{press, settle, typed};
-use crate::view::pdf::{Go, View, Zoom};
-use crate::view::views::{Arg, Node, ViewBuffer};
+use oxmacs_core::view::pdf::{Go, View, Zoom};
+use oxmacs_core::view::{Arg, Node, ViewBuffer};
 use oxmacs_pdf::{Document, Heading, Link, PageSize, PageText, Rect, Target};
 
 const LETTER: PageSize = PageSize {
@@ -107,7 +107,7 @@ impl Viewer {
         settle(&mut self.editor, &mut self.ox);
     }
 
-    fn view(&self) -> View {
+    fn view(&self) -> View<usize> {
         let id = self.editor.buffer_named("paper.pdf").unwrap();
         match &self.editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node {
             Node::Pdf(view) => (**view).clone(),

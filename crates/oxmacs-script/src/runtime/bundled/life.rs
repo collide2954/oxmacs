@@ -6,8 +6,8 @@ use oxmacs_core::input::KeySequence;
 
 use crate::Ox;
 use crate::testing::{press, settle, started};
-use crate::view::views::{Node, ViewBuffer};
 use oxmacs_core::view::shapes::Shape;
+use oxmacs_core::view::{Node, ViewBuffer};
 
 fn until(editor: &mut Editor, ox: &mut Ox, done: impl Fn(&Editor) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -17,7 +17,7 @@ fn until(editor: &mut Editor, ox: &mut Ox, done: impl Fn(&Editor) -> bool) {
     }
 }
 
-fn walk(node: &Node, texts: &mut Vec<String>, cells: &mut usize) {
+fn walk(node: &Node<usize>, texts: &mut Vec<String>, cells: &mut usize) {
     match node {
         Node::Column { children, .. } | Node::Row { children, .. } => {
             for child in children {

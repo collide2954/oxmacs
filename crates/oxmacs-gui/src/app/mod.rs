@@ -79,7 +79,7 @@ pub enum Message {
     ToolInstalled(Managed, Result<PathBuf, String>),
     OxTick,
     OxPress(BufferId, usize),
-    OxCall(BufferId, usize, Vec<oxmacs_script::view::views::Arg>),
+    OxCall(BufferId, usize, Vec<oxmacs_core::view::Arg>),
     ViewSized(BufferId, iced::Size),
     TakeoverSized(iced::Size),
     EndTakeover,

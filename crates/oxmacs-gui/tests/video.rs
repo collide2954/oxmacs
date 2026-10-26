@@ -18,8 +18,8 @@ use iced::{Size, Task};
 use iced_runtime::Action;
 use iced_test::Simulator;
 use oxmacs_core::editor::Visit;
+use oxmacs_core::view::{Node, ViewBuffer};
 use oxmacs_gui::app::{App, Message};
-use oxmacs_script::view::views::{Node, ViewBuffer};
 
 use support::{chord, settings, typed};
 
@@ -559,7 +559,7 @@ fn studio_home() -> PathBuf {
 }
 
 fn picture_key(app: &App) -> Option<usize> {
-    fn found(node: &Node) -> Option<usize> {
+    fn found(node: &Node<usize>) -> Option<usize> {
         match node {
             Node::Column { children, .. } | Node::Row { children, .. } => {
                 children.iter().find_map(found)
@@ -1069,7 +1069,7 @@ fn open_cars(film: &mut Film, app: &mut App) {
     film.press(app, "C-n");
 }
 
-fn images(node: &Node) -> usize {
+fn images(node: &Node<usize>) -> usize {
     match node {
         Node::Image { .. } => 1,
         Node::Column { children, .. } | Node::Row { children, .. } => {
@@ -1390,7 +1390,7 @@ fn evaluate_above(film: &mut Film, app: &mut App) {
 }
 
 fn view_texts(app: &App, name: &str) -> Vec<String> {
-    fn gathered(node: &Node, out: &mut Vec<String>) {
+    fn gathered(node: &Node<usize>, out: &mut Vec<String>) {
         match node {
             Node::Column { children, .. } | Node::Row { children, .. } => {
                 for child in children {
@@ -1644,7 +1644,7 @@ fn showcase_home() -> PathBuf {
     home
 }
 
-fn shown_node(app: &App, name: &str, wanted: fn(&Node) -> bool) -> bool {
+fn shown_node(app: &App, name: &str, wanted: fn(&Node<usize>) -> bool) -> bool {
     let editor = app.editor();
     editor
         .buffer_named(name)

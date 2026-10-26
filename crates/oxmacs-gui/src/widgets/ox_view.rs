@@ -5,7 +5,7 @@ use iced::widget::{
 };
 use iced::{Border, Color, ContentFit, Element, Font, Length};
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_script::view::views::{Arg, Node, Picture, Press};
+use oxmacs_core::view::{Arg, Node, Picture};
 
 use crate::style;
 use crate::widgets::drawing::Drawing;
@@ -40,7 +40,7 @@ pub struct Look {
 }
 
 pub fn view<'a, Message: Clone + 'a>(
-    node: &'a Node,
+    node: &'a Node<usize>,
     look: Look,
     press: impl Fn(usize) -> Message + Copy + 'a,
     call: impl Fn(usize, Vec<Arg>) -> Message + Copy + 'a,
@@ -71,10 +71,7 @@ pub fn view<'a, Message: Clone + 'a>(
                 .into()
         }
         Node::Button { label, press: slot } => {
-            let message = match slot {
-                Some(Press::Slot(slot)) => Some(press(*slot)),
-                _ => None,
-            };
+            let message = slot.map(press);
             button(text(label.as_str()).font(look.font).size(look.size))
                 .on_press_maybe(message)
                 .into()
@@ -123,7 +120,7 @@ pub fn view<'a, Message: Clone + 'a>(
                     ..container::Style::default()
                 });
             match slot {
-                Some(Press::Slot(slot)) => mouse_area(framed).on_press(press(*slot)).into(),
+                Some(slot) => mouse_area(framed).on_press(press(*slot)).into(),
                 _ => framed.into(),
             }
         }

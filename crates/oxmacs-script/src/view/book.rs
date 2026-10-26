@@ -4,115 +4,14 @@ use ox_lang::heap::Heap;
 use ox_lang::native::{count, expected, field, given};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::theme::Highlight;
+use oxmacs_core::view::Node;
+use oxmacs_core::view::book::{
+    At, Block, Document, Handle, Kind, Mark, Pages, Run, Spread, Typeface,
+};
 
-use crate::view::views::{self, Node, Picture, Press};
+use crate::view::views;
 
 const UI: &str = "ox/ui";
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Run {
-    pub text: String,
-    pub italic: bool,
-    pub bold: bool,
-    pub code: bool,
-    pub link: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Kind {
-    Body,
-    Heading(u8),
-    Quote,
-    Item { marker: String, depth: u8 },
-    Pre,
-    Center,
-    Verse,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Block {
-    Text { kind: Kind, runs: Vec<Run> },
-    Image { picture: Picture, alt: String },
-    Rule,
-}
-
-impl Block {
-    pub fn text(&self) -> String {
-        match self {
-            Self::Text { runs, .. } => runs.iter().map(|run| run.text.as_str()).collect(),
-            Self::Image { alt, .. } => alt.clone(),
-            Self::Rule => String::new(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Document {
-    pub blocks: Vec<Block>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Handle(pub Arc<Document>);
-
-impl PartialEq for Handle {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum At {
-    Anchor(usize, usize),
-    End,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Typeface {
-    Serif,
-    Sans,
-    Mono,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Spread {
-    Auto,
-    Single,
-    Double,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Mark {
-    pub from: (usize, usize),
-    pub to: (usize, usize),
-    pub face: Highlight,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Pages {
-    pub document: Handle,
-    pub at: At,
-    pub typeface: Typeface,
-    pub size: f32,
-    pub spread: Spread,
-    pub marks: Vec<Mark>,
-    pub header: (String, String),
-    pub on_pages: Option<Press>,
-    pub on_turn: Option<Press>,
-    pub on_select: Option<Press>,
-    pub on_link: Option<Press>,
-}
-
-impl Pages {
-    pub(crate) fn presses(&mut self) -> [&mut Option<Press>; 4] {
-        [
-            &mut self.on_pages,
-            &mut self.on_turn,
-            &mut self.on_select,
-            &mut self.on_link,
-        ]
-    }
-}
 
 fn run(heap: &Heap, value: Value) -> Result<Run, Error> {
     if let Some(text) = heap.text(value) {
@@ -206,7 +105,7 @@ fn block(heap: &Heap, value: Value) -> Result<Block, Error> {
                 .ok_or_else(|| expected(heap, "ui/document", "an :image block's image", image))?;
             let alt = field(heap, value, "alt").unwrap_or_default();
             Ok(Block::Image {
-                picture: Picture(picture),
+                picture: views::picture(picture),
                 alt: heap.text(alt).unwrap_or_default().to_owned(),
             })
         }
@@ -364,10 +263,10 @@ fn pages(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
                 };
                 shown.header = (part(0), part(1));
             }
-            "on-pages" => shown.on_pages = Some(Press::Held(heap.hold(value))),
-            "on-turn" => shown.on_turn = Some(Press::Held(heap.hold(value))),
-            "on-select" => shown.on_select = Some(Press::Held(heap.hold(value))),
-            _ => shown.on_link = Some(Press::Held(heap.hold(value))),
+            "on-pages" => shown.on_pages = Some(heap.hold(value)),
+            "on-turn" => shown.on_turn = Some(heap.hold(value)),
+            "on-select" => shown.on_select = Some(heap.hold(value)),
+            _ => shown.on_link = Some(heap.hold(value)),
         }
     }
     heap.foreign("pages", Node::Pages(Box::new(shown)))
@@ -403,11 +302,11 @@ pub fn install(isolate: &mut Isolate) {
 mod tests {
     use oxmacs_core::editor::Editor;
     use oxmacs_core::theme::Highlight;
+    use oxmacs_core::view::book::{At, Block, Kind, Mark, Pages, Run, Spread, Typeface};
+    use oxmacs_core::view::{Arg, Node, ViewBuffer};
 
-    use super::{At, Block, Kind, Mark, Run, Spread, Typeface};
     use crate::Ox;
     use crate::testing::settle;
-    use crate::view::views::{Arg, Node, Press, ViewBuffer};
 
     const BOOK: &str = r##"(module (import (ox ui) (ox image)))
 (def heard (atom []))
@@ -424,7 +323,7 @@ mod tests {
                                          :on-pages (fn [starts turn] (swap! heard conj [:pages starts turn]))
                                          :on-turn (fn [by] (swap! heard conj [:turn by])))))"##;
 
-    fn shown(editor: &Editor) -> super::Pages {
+    fn shown(editor: &Editor) -> Pages<usize> {
         let id = editor.buffer_named("*book*").unwrap();
         match &editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node {
             Node::Pages(pages) => (**pages).clone(),
@@ -502,8 +401,8 @@ mod tests {
             }]
         );
         assert_eq!(pages.header, ("Book".to_owned(), "One".to_owned()));
-        assert_eq!(pages.on_pages, Some(Press::Slot(0)));
-        assert_eq!(pages.on_turn, Some(Press::Slot(1)));
+        assert_eq!(pages.on_pages, Some(0));
+        assert_eq!(pages.on_turn, Some(1));
         assert_eq!(pages.on_select, None);
     }
 

@@ -187,7 +187,7 @@ impl Ox {
         editor: &mut Editor,
         buffer: BufferId,
         slot: usize,
-        args: &[view::views::Arg],
+        args: &[oxmacs_core::view::Arg],
     ) {
         view::views::call(&mut self.isolate, editor, buffer, slot, args);
     }

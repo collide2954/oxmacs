@@ -12,8 +12,8 @@ use iced::font::{Style, Weight};
 use iced::widget::image::Handle;
 use iced::{Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme};
 use oxmacs_core::theme::{Highlight, Theme as Faces};
-use oxmacs_script::view::book::{At, Block, Kind, Pages, Run, Spread, Typeface};
-use oxmacs_script::view::views::{Arg, Press};
+use oxmacs_core::view::Arg;
+use oxmacs_core::view::book::{At, Block, Kind, Pages, Run, Spread, Typeface};
 
 use crate::widgets::ox_view;
 use crate::{fonts, style};
@@ -232,7 +232,7 @@ struct Setting {
     prefix: String,
 }
 
-fn pictured<P>(picture: &oxmacs_script::view::views::Picture, page: Size, y: f32) -> Laid<P> {
+fn pictured<P>(picture: &oxmacs_core::view::Picture, page: Size, y: f32) -> Laid<P> {
     let (natural_width, natural_height) = picture.size();
     let (natural_width, natural_height) = (
         crate::units::to_f32(usize::try_from(natural_width).unwrap_or(1)),
@@ -376,7 +376,7 @@ struct State<P> {
 }
 
 pub struct PagesView<'a, Message> {
-    pages: &'a Pages,
+    pages: &'a Pages<usize>,
     faces: Faces,
     mono: Font,
     on_call: Box<dyn Fn(usize, Vec<Arg>) -> Message + 'a>,
@@ -393,7 +393,7 @@ impl<Message> std::fmt::Debug for PagesView<'_, Message> {
 
 impl<'a, Message> PagesView<'a, Message> {
     pub fn new(
-        pages: &'a Pages,
+        pages: &'a Pages<usize>,
         faces: Faces,
         mono: Font,
         on_call: impl Fn(usize, Vec<Arg>) -> Message + 'a,
@@ -414,11 +414,8 @@ impl<'a, Message> PagesView<'a, Message> {
         }
     }
 
-    fn call(&self, press: Option<&Press>, args: Vec<Arg>) -> Option<Message> {
-        match press {
-            Some(Press::Slot(slot)) => Some((self.on_call)(*slot, args)),
-            _ => None,
-        }
+    fn call(&self, press: Option<&usize>, args: Vec<Arg>) -> Option<Message> {
+        press.map(|slot| (self.on_call)(*slot, args))
     }
 
     fn key(&self, bounds: Size) -> Key {

@@ -3947,6 +3947,7 @@ dependencies = [
  "dirs",
  "indexmap 2.14.2",
  "jiff",
+ "oxmacs-pdf",
  "regex",
  "ring",
  "ropey",

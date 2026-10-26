@@ -6,111 +6,38 @@ use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::Editor;
-use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Highlight, NICK_COLORS};
+use oxmacs_core::view::{Arg, Node, Picture, Pixels, ViewBuffer};
 
 use crate::ide::log;
 use crate::view::shapes;
-use oxmacs_core::view::shapes::Shape;
 
 const UI: &str = "ox/ui";
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Press {
-    Held(Hold),
-    Slot(usize),
-}
+#[derive(Debug)]
+struct ImagePixels(Arc<ox_library::image::Image>);
 
-#[derive(Debug, Clone)]
-pub struct Picture(pub Arc<ox_library::image::Image>);
-
-impl Picture {
-    pub fn key(&self) -> usize {
-        Arc::as_ptr(&self.0) as usize
-    }
-
-    pub fn unused(&self) -> bool {
-        Arc::strong_count(&self.0) == 1
-    }
-
-    pub fn size(&self) -> (u32, u32) {
+impl Pixels for ImagePixels {
+    fn size(&self) -> (u32, u32) {
         self.0.pixels.dimensions()
     }
 
-    pub fn rgba(&self) -> Vec<u8> {
-        self.0.pixels.as_raw().clone()
+    fn rgba(&self) -> &[u8] {
+        self.0.pixels.as_raw()
+    }
+
+    fn key(&self) -> usize {
+        Arc::as_ptr(&self.0) as usize
+    }
+
+    fn unused(&self) -> bool {
+        Arc::strong_count(&self.0) == 1
     }
 }
 
-impl PartialEq for Picture {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Node {
-    Column {
-        spacing: f32,
-        children: Vec<Node>,
-    },
-    Row {
-        spacing: f32,
-        children: Vec<Node>,
-    },
-    Text {
-        text: String,
-        face: Option<Highlight>,
-        size: Option<f32>,
-    },
-    Button {
-        label: String,
-        press: Option<Press>,
-    },
-    Space {
-        size: Option<f32>,
-    },
-    Scrollable(Box<Node>),
-    Canvas {
-        shapes: Vec<Shape>,
-        height: Option<f32>,
-        relative: bool,
-    },
-    Image {
-        picture: Picture,
-        width: Option<f32>,
-        height: Option<f32>,
-        press: Option<Press>,
-        selected: bool,
-    },
-    Pages(Box<crate::view::book::Pages>),
-    Pdf(Box<crate::view::pdf::View>),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Arg {
-    Nil,
-    Int(i64),
-    Text(String),
-    List(Vec<Arg>),
-}
-
-#[derive(Debug)]
-pub struct ViewBuffer {
-    scope: ScopeId,
-    watched: Option<std::path::PathBuf>,
-    pub node: Node,
-}
-
-impl PluginBuffer for ViewBuffer {
-    fn scope(&self) -> ScopeId {
-        self.scope
-    }
-
-    fn watched(&self) -> Option<&std::path::Path> {
-        self.watched.as_deref()
-    }
+pub(crate) fn picture(image: Arc<ox_library::image::Image>) -> Picture {
+    Picture(Arc::new(ImagePixels(image)))
 }
 
 #[derive(Debug)]
@@ -196,16 +123,21 @@ fn size_given(heap: &Heap, name: &str, value: Value) -> Result<Option<f32>, Erro
     }
 }
 
-fn pressed(heap: &mut Heap, value: Value) -> Option<Press> {
-    (value != Value::Nil).then(|| Press::Held(heap.hold(value)))
+pub(crate) fn pressed(heap: &mut Heap, value: Value) -> Option<Hold> {
+    (value != Value::Nil).then(|| heap.hold(value))
 }
 
-fn children(heap: &Heap, name: &str, values: &[Value], out: &mut Vec<Node>) -> Result<(), Error> {
+fn children(
+    heap: &Heap,
+    name: &str,
+    values: &[Value],
+    out: &mut Vec<Node<Hold>>,
+) -> Result<(), Error> {
     for value in values {
         if *value == Value::Nil {
             continue;
         }
-        if let Some(node) = heap.foreign_of::<Node>(*value) {
+        if let Some(node) = heap.foreign_of::<Node<Hold>>(*value) {
             out.push(node.clone());
         } else if let Some(text) = heap.text(*value) {
             out.push(Node::Text {
@@ -225,7 +157,7 @@ fn children(heap: &Heap, name: &str, values: &[Value], out: &mut Vec<Node>) -> R
     Ok(())
 }
 
-fn widget(heap: &mut Heap, name: &str, node: Node) -> Result<Value, Error> {
+fn widget(heap: &mut Heap, name: &str, node: Node<Hold>) -> Result<Value, Error> {
     heap.foreign(name, node).map_err(Error::from)
 }
 
@@ -278,7 +210,7 @@ fn button(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 fn image(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
-    let picture = ox_library::image::image_of(heap, arguments[0])
+    let image = ox_library::image::image_of(heap, arguments[0])
         .ok_or_else(|| expected(heap, "image", "an image", arguments[0]))?;
     let width = size_given(heap, "image", arguments[1])?;
     let height = size_given(heap, "image", arguments[2])?;
@@ -288,7 +220,7 @@ fn image(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         heap,
         "image",
         Node::Image {
-            picture: Picture(picture),
+            picture: picture(image),
             width,
             height,
             press,
@@ -510,76 +442,18 @@ pub fn sized(isolate: &mut Isolate, editor: &mut Editor, buffer: BufferId, size:
     }
 }
 
-fn number(node: Node, callbacks: &mut Vec<Hold>) -> Node {
-    match node {
-        Node::Column { spacing, children } => Node::Column {
-            spacing,
-            children: children
-                .into_iter()
-                .map(|child| number(child, callbacks))
-                .collect(),
-        },
-        Node::Row { spacing, children } => Node::Row {
-            spacing,
-            children: children
-                .into_iter()
-                .map(|child| number(child, callbacks))
-                .collect(),
-        },
-        Node::Scrollable(child) => Node::Scrollable(Box::new(number(*child, callbacks))),
-        Node::Button {
-            label,
-            press: Some(Press::Held(hold)),
-        } => {
-            callbacks.push(hold);
-            Node::Button {
-                label,
-                press: Some(Press::Slot(callbacks.len() - 1)),
-            }
-        }
-        Node::Image {
-            picture,
-            width,
-            height,
-            press: Some(Press::Held(hold)),
-            selected,
-        } => {
-            callbacks.push(hold);
-            Node::Image {
-                picture,
-                width,
-                height,
-                press: Some(Press::Slot(callbacks.len() - 1)),
-                selected,
-            }
-        }
-        Node::Pages(mut pages) => {
-            for press in pages.presses() {
-                if let Some(Press::Held(hold)) = press.take() {
-                    callbacks.push(hold);
-                    *press = Some(Press::Slot(callbacks.len() - 1));
-                }
-            }
-            Node::Pages(pages)
-        }
-        Node::Pdf(mut view) => {
-            for press in view.presses() {
-                if let Some(Press::Held(hold)) = press.take() {
-                    callbacks.push(hold);
-                    *press = Some(Press::Slot(callbacks.len() - 1));
-                }
-            }
-            Node::Pdf(view)
-        }
-        other => other,
-    }
+fn number(node: Node<Hold>, callbacks: &mut Vec<Hold>) -> Node<usize> {
+    node.map(&mut |hold| {
+        callbacks.push(hold);
+        callbacks.len() - 1
+    })
 }
 
 fn render(
     isolate: &mut Isolate,
     editor: &mut Editor,
     function: Hold,
-) -> Result<(Node, Vec<Hold>), Error> {
+) -> Result<(Node<usize>, Vec<Hold>), Error> {
     let function = isolate
         .held(function)
         .ok_or_else(|| Error::new("A view lost its function"))?;
@@ -588,7 +462,7 @@ fn render(
     })?;
     let node = isolate
         .heap()
-        .foreign_of::<Node>(value)
+        .foreign_of::<Node<Hold>>(value)
         .cloned()
         .ok_or_else(|| {
             Error::new(format!(
@@ -733,13 +607,13 @@ mod tests {
     use oxmacs_core::text::Buffer;
     use oxmacs_core::theme::Highlight;
 
-    use super::{Node, Press, ViewBuffer};
     use crate::testing::{keys, settle};
     use crate::{Ox, ide::log};
+    use oxmacs_core::view::{Node, ViewBuffer};
 
     const UI: &str = "(module (import (ox ui :only [column row text button space scrollable])))";
 
-    fn shown(editor: &Editor, name: &str) -> Node {
+    fn shown(editor: &Editor, name: &str) -> Node<usize> {
         let id = editor.buffer_named(name).unwrap();
         editor
             .plugin_buffer::<ViewBuffer>(id)
@@ -749,7 +623,7 @@ mod tests {
             .clone()
     }
 
-    fn text(value: &str) -> Node {
+    fn text(value: &str) -> Node<usize> {
         Node::Text {
             text: value.to_owned(),
             face: None,
@@ -872,12 +746,7 @@ mod tests {
                     width,
                     height,
                     ..
-                } => (
-                    picture.0.pixels.width(),
-                    picture.0.pixels.height(),
-                    *width,
-                    *height,
-                ),
+                } => (picture.size().0, picture.size().1, *width, *height),
                 other => panic!("not an image: {other:?}"),
             })
             .collect();
@@ -917,16 +786,16 @@ mod tests {
         let Node::Row { children, .. } = shown(&editor, "*thumbs*") else {
             panic!("not a row");
         };
-        let marks: Vec<(Option<Press>, bool)> = children
+        let marks: Vec<(Option<usize>, bool)> = children
             .iter()
             .map(|child| match child {
                 Node::Image {
                     press, selected, ..
-                } => (press.clone(), *selected),
+                } => (*press, *selected),
                 other => panic!("not an image: {other:?}"),
             })
             .collect();
-        assert_eq!(marks, [(Some(Press::Slot(0)), true), (None, false)]);
+        assert_eq!(marks, [(Some(0), true), (None, false)]);
         let id = editor.buffer_named("*thumbs*").unwrap();
         ox.press(&mut editor, id, 0);
         settle(&mut editor, &mut ox);
@@ -1008,7 +877,7 @@ mod tests {
             children[1],
             Node::Button {
                 label: "More".to_owned(),
-                press: Some(Press::Slot(0)),
+                press: Some(0),
             }
         );
         let id = editor.buffer_named("*count*").unwrap();
@@ -1025,7 +894,7 @@ mod tests {
                     text("2"),
                     Node::Button {
                         label: "More".to_owned(),
-                        press: Some(Press::Slot(0)),
+                        press: Some(0),
                     },
                 ],
             }

@@ -10,9 +10,9 @@ use iced::advanced::{Clipboard, Shell, Widget};
 use iced::widget::image::Handle;
 use iced::{Border, Color, Element, Event, Length, Point, Rectangle, Size, Theme, Vector, window};
 use oxmacs_core::theme::Theme as Faces;
+use oxmacs_core::view::Arg;
+use oxmacs_core::view::pdf::{Go, View, Zoom};
 use oxmacs_pdf::{self as pdf, Bitmap, Document, Ink, PageSize, Target, words};
-use oxmacs_script::view::pdf::{Go, View, Zoom};
-use oxmacs_script::view::views::{Arg, Press};
 
 use crate::{style, units};
 
@@ -259,7 +259,7 @@ struct State {
 }
 
 pub struct PdfView<'a, Message> {
-    view: &'a View,
+    view: &'a View<usize>,
     faces: Faces,
     on_call: Box<dyn Fn(usize, Vec<Arg>) -> Message + 'a>,
 }
@@ -275,7 +275,7 @@ impl<Message> std::fmt::Debug for PdfView<'_, Message> {
 
 impl<'a, Message> PdfView<'a, Message> {
     pub fn new(
-        view: &'a View,
+        view: &'a View<usize>,
         faces: Faces,
         on_call: impl Fn(usize, Vec<Arg>) -> Message + 'a,
     ) -> Self {
@@ -286,11 +286,8 @@ impl<'a, Message> PdfView<'a, Message> {
         }
     }
 
-    fn call(&self, press: Option<&Press>, args: Vec<Arg>) -> Option<Message> {
-        match press {
-            Some(Press::Slot(slot)) => Some((self.on_call)(*slot, args)),
-            _ => None,
-        }
+    fn call(&self, press: Option<&usize>, args: Vec<Arg>) -> Option<Message> {
+        press.map(|slot| (self.on_call)(*slot, args))
     }
 
     fn arrange(&self, document: &Document, state: &State) -> (Vec<Sheet>, Size) {

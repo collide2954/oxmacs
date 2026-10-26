@@ -6,7 +6,7 @@ use oxmacs_core::editor::{Editor, Effect, JobId, ServerId};
 use oxmacs_core::external::lsp::{self, Server};
 use oxmacs_core::external::process::{self, Event, Handle};
 use oxmacs_core::input::KeySequence;
-use oxmacs_script::view::views::{Node, ViewBuffer};
+use oxmacs_core::view::{Node, ViewBuffer};
 use oxmacs_script::{Ox, Pace};
 
 struct Live {
@@ -163,7 +163,7 @@ fn contents(editor: &Editor, name: &str) -> String {
         .unwrap_or_default()
 }
 
-fn has_image(node: &Node) -> bool {
+fn has_image(node: &Node<usize>) -> bool {
     match node {
         Node::Image { .. } => true,
         Node::Column { children, .. } | Node::Row { children, .. } => {

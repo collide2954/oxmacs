@@ -1,7 +1,7 @@
 use oxmacs_core::editor::{Axis, Effect, JobId, Tiling, WindowId};
 
 use super::{CONSOLE, PLOTS, PROMPT, R, script};
-use crate::view::views::{Node, ViewBuffer};
+use oxmacs_core::view::{Node, ViewBuffer};
 
 fn plot(r: &mut R, job: JobId, fields: &str) {
     r.output(job, &format!("\u{1}plot\u{2}{fields}\u{3}{PROMPT}"));
@@ -23,7 +23,7 @@ fn gallery(r: &mut R, name: &str) -> String {
     ))
 }
 
-fn texts(node: &Node, out: &mut Vec<String>) {
+fn texts(node: &Node<usize>, out: &mut Vec<String>) {
     match node {
         Node::Column { children, .. } | Node::Row { children, .. } => {
             for child in children {
@@ -422,7 +422,7 @@ fn plots_show_their_image_once_it_is_read() {
     assert_eq!(r.logged(), "");
 }
 
-fn images(node: &Node, out: &mut Vec<(u32, u32, Option<f32>, Option<f32>)>) {
+fn images(node: &Node<usize>, out: &mut Vec<(u32, u32, Option<f32>, Option<f32>)>) {
     match node {
         Node::Column { children, .. } | Node::Row { children, .. } => {
             for child in children {
@@ -434,12 +434,7 @@ fn images(node: &Node, out: &mut Vec<(u32, u32, Option<f32>, Option<f32>)>) {
             width,
             height,
             ..
-        } => out.push((
-            picture.0.pixels.width(),
-            picture.0.pixels.height(),
-            *width,
-            *height,
-        )),
+        } => out.push((picture.size().0, picture.size().1, *width, *height)),
         Node::Scrollable(child) => images(child, out),
         _ => {}
     }

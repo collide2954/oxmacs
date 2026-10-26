@@ -17,6 +17,7 @@ bitflags.workspace = true
 dirs.workspace = true
 indexmap.workspace = true
 jiff.workspace = true
+oxmacs-pdf.workspace = true
 regex.workspace = true
 ring.workspace = true
 ropey.workspace = true
