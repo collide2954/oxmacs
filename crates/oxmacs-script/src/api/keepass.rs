@@ -3,38 +3,38 @@ use std::fs::File;
 use keepass::db::fields;
 use keepass::{Database, DatabaseKey};
 use ox_lang::Isolate;
+use ox_lang::portable::{Failure, Portable};
 use ox_lang::value::print;
 use oxmacs_core::editor::Editor;
-use serde_json::{Value as Json, json};
 
-fn field(value: Option<&str>) -> Json {
-    value.map_or(Json::Null, |text| Json::String(text.to_owned()))
+fn field(value: Option<&str>) -> Portable {
+    value.map_or(Portable::Nil, |text| Portable::String(text.into()))
 }
 
-fn read(path: &str, password: &str) -> Result<Json, String> {
+fn read(path: &str, password: &str) -> Result<Portable, Failure> {
     let mut file = File::open(path).map_err(|error| format!("Couldn't open {path}: {error}"))?;
     let key = DatabaseKey::new().with_password(password);
     let database = Database::open(&mut file, key).map_err(|error| {
         format!("Couldn't open the KeePass database (wrong password?): {error}")
     })?;
     let binned = database.recycle_bin().map(|bin| bin.id());
-    let entries: Vec<Json> = database
+    let entries: Vec<Portable> = database
         .iter_all_entries()
         .filter(|entry| binned.is_none_or(|bin| entry.parent().id() != bin))
         .map(|entry| {
             let group = entry.parent();
-            json!({
-                "title": field(entry.get_title()),
-                "username": field(entry.get_username()),
-                "password": field(entry.get_password()),
-                "url": field(entry.get_url()),
-                "notes": field(entry.get(fields::NOTES)),
-                "totp": field(entry.get_raw_otp_value()),
-                "group": group.name.clone(),
-            })
+            Portable::keyed([
+                ("title", field(entry.get_title())),
+                ("username", field(entry.get_username())),
+                ("password", field(entry.get_password())),
+                ("url", field(entry.get_url())),
+                ("notes", field(entry.get(fields::NOTES))),
+                ("totp", field(entry.get_raw_otp_value())),
+                ("group", Portable::String(group.name.as_str().into())),
+            ])
         })
         .collect();
-    Ok(Json::Array(entries))
+    Ok(Portable::Vector(entries))
 }
 
 pub fn install(isolate: &mut Isolate) {
@@ -45,7 +45,7 @@ pub fn install(isolate: &mut Isolate) {
         .host::<Editor>(|heap, _, arguments| {
             let path = print::display(heap, arguments[0]);
             let password = print::display(heap, arguments[1]);
-            heap.background_json("keepass/read", move || read(&path, &password))
+            heap.background("keepass/read", move || read(&path, &password))
         });
 }
 

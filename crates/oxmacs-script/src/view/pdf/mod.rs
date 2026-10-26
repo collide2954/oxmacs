@@ -516,13 +516,6 @@ fn found(matches: Vec<words::Found>) -> Portable {
     )
 }
 
-fn failure(message: String) -> Failure {
-    Failure {
-        value: None,
-        message,
-    }
-}
-
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "library")
@@ -553,7 +546,7 @@ pub fn install(isolate: &mut Isolate) {
             heap.background("ox pdf/open", move || {
                 open(&path)
                     .map(|(revision, document)| opened(revision, &document))
-                    .map_err(failure)
+                    .map_err(Failure::from)
             })
         });
     isolate
@@ -566,7 +559,7 @@ pub fn install(isolate: &mut Isolate) {
             heap.background("ox pdf/search", move || {
                 texts(&path)
                     .map(|pages| found(words::search(&pages, &query)))
-                    .map_err(failure)
+                    .map_err(Failure::from)
             })
         });
     isolate

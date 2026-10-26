@@ -98,20 +98,13 @@ fn portable(image: Image) -> Portable {
     Portable::Foreign(Sym::intern(KIND), Arc::new(image))
 }
 
-fn failure(message: String) -> Failure {
-    Failure {
-        value: None,
-        message,
-    }
-}
-
 fn later(
     heap: &mut Heap,
     name: &str,
     work: impl FnOnce() -> Result<Image, String> + Send + 'static,
 ) -> Result<Value, Error> {
     heap.background(&format!("ox image/{name}"), move || {
-        work().map(portable).map_err(failure)
+        work().map(portable).map_err(Failure::from)
     })
 }
 

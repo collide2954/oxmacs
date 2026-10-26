@@ -8,7 +8,7 @@ use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 use super::{Image, MODULE, Options, later, text, wanted};
 use ox_lang::Isolate;
 use ox_lang::error::Error;
-use ox_lang::portable::Portable;
+use ox_lang::portable::{Failure, Portable};
 use ox_lang::symbol::Sym;
 use ox_lang::value::Value;
 
@@ -209,7 +209,7 @@ pub(super) fn install(isolate: &mut Isolate) {
         .function(|heap, arguments| {
             let path = PathBuf::from(text(heap, "probe", "a path", arguments[0])?);
             heap.background("ox image/probe", move || {
-                probe(&path).map_err(super::failure)
+                probe(&path).map_err(Failure::from)
             })
         });
     isolate
@@ -236,8 +236,10 @@ pub(super) fn install(isolate: &mut Isolate) {
             )]
             let quality = quality.clamp(1.0, 100.0).round() as u8;
             let shown = path.display().to_string();
-            heap.background_json("ox image/save", move || {
-                save(&image, &path, format, quality).map(|()| serde_json::Value::String(shown))
+            heap.background("ox image/save", move || {
+                save(&image, &path, format, quality)
+                    .map(|()| Portable::String(shown.into()))
+                    .map_err(Failure::from)
             })
         });
 }

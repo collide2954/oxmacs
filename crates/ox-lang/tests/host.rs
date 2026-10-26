@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use ox_lang::Isolate;
+use ox_lang::portable::{Failure, Portable};
 use ox_lang::value::Value;
 
 #[derive(Debug, Default)]
@@ -75,17 +76,32 @@ fn held_values_survive_collection_until_released() {
 }
 
 #[test]
-fn natives_can_hand_slow_work_to_a_thread_that_answers_with_json() {
+fn natives_can_hand_slow_work_to_a_thread() {
     let mut isolate = Isolate::new();
-    isolate.native("ox", "slow-lookup").arity(1, Some(1)).function(|heap, arguments| {
-        let wanted = ox_lang::value::print::display(heap, arguments[0]);
-        heap.background_json("slow-lookup", move || {
-            if wanted == "missing" {
-                return Err(format!("No {wanted} here"));
-            }
-            Ok(serde_json::json!({"name": wanted, "tags": ["a", "b"], "size": 2, "ratio": 0.5, "gone": null}))
-        })
-    });
+    isolate
+        .native("ox", "slow-lookup")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let wanted = ox_lang::value::print::display(heap, arguments[0]);
+            heap.background("slow-lookup", move || {
+                if wanted == "missing" {
+                    return Err(Failure::from(format!("No {wanted} here")));
+                }
+                Ok(Portable::keyed([
+                    ("name", Portable::String(wanted.into())),
+                    (
+                        "tags",
+                        Portable::Vector(vec![
+                            Portable::String("a".into()),
+                            Portable::String("b".into()),
+                        ]),
+                    ),
+                    ("size", Portable::Int(2)),
+                    ("ratio", Portable::Float(0.5)),
+                    ("gone", Portable::Nil),
+                ]))
+            })
+        });
 
     let found = isolate
         .eval(r#"(let [found (await (slow-lookup "mail"))] [found.name found.tags found.size found.ratio found.gone (try (await (slow-lookup "missing")) (catch error e e.message))])"#)

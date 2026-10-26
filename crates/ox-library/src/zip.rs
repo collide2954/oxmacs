@@ -12,16 +12,9 @@ use crate::text;
 
 const MODULE: &str = "ox/zip";
 
-fn failure(message: String) -> Failure {
-    Failure {
-        value: None,
-        message,
-    }
-}
-
 fn open(path: &Path) -> Result<ZipArchive<File>, Failure> {
     let failed = |error: &dyn std::fmt::Display| {
-        failure(format!("Couldn't open {}: {error}", path.display()))
+        Failure::from(format!("Couldn't open {}: {error}", path.display()))
     };
     let file = File::open(path).map_err(|error| failed(&error))?;
     ZipArchive::new(file).map_err(|error| failed(&error))
@@ -33,7 +26,7 @@ fn entries(path: &Path) -> Result<Portable, Failure> {
     let mut found = Vec::with_capacity(archive.len());
     for index in 0..archive.len() {
         let unreadable = |error: &dyn std::fmt::Display| {
-            failure(format!("Couldn't read {}: {error}", path.display()))
+            Failure::from(format!("Couldn't read {}: {error}", path.display()))
         };
         let entry = archive
             .by_index_raw(index)
@@ -54,7 +47,7 @@ fn entries(path: &Path) -> Result<Portable, Failure> {
 fn bytes(path: &Path, name: &str) -> Result<Vec<u8>, Failure> {
     let mut archive = open(path)?;
     let failed = |error: &dyn std::fmt::Display| {
-        failure(format!(
+        Failure::from(format!(
             "Couldn't read {name} from {}: {error}",
             path.display()
         ))

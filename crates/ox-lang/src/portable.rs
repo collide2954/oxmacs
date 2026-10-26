@@ -180,3 +180,12 @@ pub struct Failure {
     pub value: Option<Portable>,
     pub message: String,
 }
+
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Self {
+            value: None,
+            message,
+        }
+    }
+}
