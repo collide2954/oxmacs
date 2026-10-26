@@ -249,7 +249,7 @@ mod tests {
         };
         assert_eq!(pages_of("hello"), [0, 1]);
         assert_eq!(pages_of("again"), [0, 1]);
-        assert!(pages_of("Again").is_empty());
-        assert!(pages_of("  ").is_empty());
+        assert_eq!(pages_of("Again"), Vec::<usize>::new());
+        assert_eq!(pages_of("  "), Vec::<usize>::new());
     }
 }

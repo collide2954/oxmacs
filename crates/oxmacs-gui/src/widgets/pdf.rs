@@ -205,6 +205,10 @@ fn cache() -> MutexGuard<'static, Cache> {
     CACHE.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+pub fn drawing() -> bool {
+    !cache().pending.is_empty()
+}
+
 fn drawn(key: &Key) -> Option<Handle> {
     let mut known = cache();
     let found = known.find(key);
@@ -880,7 +884,10 @@ mod tests {
         assert_eq!(single.len(), 1);
         assert_eq!(single[0].page, 1);
         assert!(close(single[0].top, GAP));
-        assert!(sheets(&[], Some(0), Zoom::FitWidth, WINDOW).0.is_empty());
+        assert_eq!(
+            sheets(&[], Some(0), Zoom::FitWidth, WINDOW).0,
+            Vec::<Sheet>::new()
+        );
     }
 
     #[test]
