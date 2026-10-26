@@ -163,10 +163,22 @@
    "h" 'epub-highlight "N" 'epub-note "H" 'epub-notes "M-w" 'epub-copy
    "+" 'epub-larger "=" 'epub-larger "-" 'epub-smaller "i" 'epub-info "q" 'quit-window})
 
+(def (living all)
+  (reduce (fn [out [name book]] (if (buffer-exists? name) (assoc out name book) out)) {} (entries all)))
+
+(def (showing place)
+  (first (keep (fn [[name book]] (when (= book.path place) name)) (entries @books))))
+
+(def (free-name base)
+  (loop [n 1]
+    (let [name (if (= n 1) base "{base}<{n}>")]
+      (if (buffer-exists? name) (again (inc n)) name))))
+
 (def (open-book place)
-  (let [name (path/name place)]
-    (if (get @books name)
-      (switch-to-buffer name)
+  (swap! books living)
+  (if-let [name (showing place)]
+    (switch-to-buffer name)
+    (let [name (free-name (path/name place))]
       (try
         (swap! books assoc name {path: place title: (path/stem place) docs: {}})
         (open-view name (render name) :keys book-keys)

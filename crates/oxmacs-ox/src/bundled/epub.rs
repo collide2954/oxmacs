@@ -176,6 +176,27 @@ fn opening_an_epub_shows_its_cover_then_its_chapters_in_pages() {
 }
 
 #[test]
+fn a_closed_book_opens_again_and_one_of_the_same_name_gets_its_own_buffer() {
+    let mut reader = reader("");
+    reader.open();
+    press(&mut reader.editor, &mut reader.ox, "C-x k RET");
+    assert!(reader.editor.buffer_named("sample.epub").is_none());
+
+    reader.open();
+    assert_eq!(reader.editor.buffer().name(), "sample.epub");
+    assert_eq!(reader.pages().header.0, "A Sample Voyage");
+
+    let other = reader.books.path().join("more");
+    std::fs::create_dir_all(&other).unwrap();
+    let second = sample(&other);
+    assert!(reader.editor.open_file(&second));
+    settle(&mut reader.editor, &mut reader.ox);
+
+    assert_eq!(reader.editor.buffer().name(), "sample.epub<2>");
+    assert!(reader.editor.buffer_named("sample.epub").is_some());
+}
+
+#[test]
 fn pages_turn_within_chapters_and_across_them() {
     let mut reader = reader("");
     reader.open();

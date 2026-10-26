@@ -151,6 +151,52 @@ fn pdfs_open_as_pages_with_their_place_in_the_mode_line() {
     );
 }
 
+fn shown_path(editor: &Editor, name: &str) -> Option<PathBuf> {
+    let id = editor.buffer_named(name)?;
+    match &editor.plugin_buffer::<ViewBuffer>(id)?.1.node {
+        Node::Pdf(view) => Some(view.path.clone()),
+        _ => None,
+    }
+}
+
+#[test]
+fn a_closed_pdf_opens_again_and_one_of_the_same_name_gets_its_own_buffer() {
+    let mut viewer = viewer("");
+    viewer.open();
+    viewer.press("C-x k RET");
+    assert!(viewer.editor.buffer_named("paper.pdf").is_none());
+
+    viewer.open();
+    assert_eq!(viewer.editor.buffer().name(), "paper.pdf");
+    assert_eq!(
+        shown_path(&viewer.editor, "paper.pdf"),
+        Some(viewer.paper.clone())
+    );
+
+    let other = viewer.papers.path().join("drafts").join("paper.pdf");
+    std::fs::create_dir_all(other.parent().unwrap()).unwrap();
+    std::fs::write(&other, "%PDF-1.7").unwrap();
+    pdf::preload(
+        &other,
+        Document {
+            pages: vec![LETTER; 2],
+            outline: Vec::new(),
+            title: None,
+            author: None,
+        },
+        vec![line("draft"), line("end")],
+    );
+    assert!(viewer.editor.open_file(&other));
+    settle(&mut viewer.editor, &mut viewer.ox);
+
+    assert_eq!(viewer.editor.buffer().name(), "paper.pdf<2>");
+    assert_eq!(shown_path(&viewer.editor, "paper.pdf<2>"), Some(other));
+    assert_eq!(
+        shown_path(&viewer.editor, "paper.pdf"),
+        Some(viewer.paper.clone())
+    );
+}
+
 #[test]
 fn keys_turn_scroll_and_jump_between_pages() {
     let mut viewer = viewer("");

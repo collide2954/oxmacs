@@ -93,18 +93,29 @@
         (update-doc name (fn [doc] (assoc doc :error e.message :missing (nil? (library)))))
         false))))
 
+(def (living all)
+  (reduce (fn [out [name doc]] (if (buffer-exists? name) (assoc out name doc) out)) {} (entries all)))
+
+(def (showing place)
+  (first (keep (fn [[name doc]] (when (= doc.path place) name)) (entries @docs))))
+
+(def (free-name base)
+  (loop [n 1]
+    (let [name (if (= n 1) base "{base}<{n}>")]
+      (if (buffer-exists? name) (again (inc n)) name))))
+
 (def (open-document place)
-  (let [name (path/name place)]
-    (if (get @docs name)
-      (switch-to-buffer name)
-      (do
-        (swap! docs assoc name {path: place zoom: (start-zoom) continuous: (setting :continuous)
-                                dark: (setting :theme-colors)})
-        (open-view name (render name) :keys doc-keys :watch (path/parent place))
-        (load name)
-        (when-let [doc (get @docs name)]
-          (when doc.pages
-            (message "{(or doc.title (path/stem place))}{(if doc.author " by {doc.author}" "")} · {doc.pages} pages")))))))
+  (swap! docs living)
+  (if-let [name (showing place)]
+    (switch-to-buffer name)
+    (let [name (free-name (path/name place))]
+      (swap! docs assoc name {path: place zoom: (start-zoom) continuous: (setting :continuous)
+                              dark: (setting :theme-colors)})
+      (open-view name (render name) :keys doc-keys :watch (path/parent place))
+      (load name)
+      (when-let [doc (get @docs name)]
+        (when doc.pages
+          (message "{(or doc.title (path/stem place))}{(if doc.author " by {doc.author}" "")} · {doc.pages} pages"))))))
 
 (on-open-file "pdf" (fn [place] (open-document place)))
 
