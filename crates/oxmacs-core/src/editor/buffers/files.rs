@@ -315,11 +315,10 @@ impl Editor {
         let by_server = self.settings.format_on_save
             && self.formatter_for(index).is_none()
             && self.lsp_formats(index);
-        let written = self.write_buffer_at(index, self.settings.format_on_save || always);
-        if written && by_server {
-            self.lsp_format(index, true);
+        if by_server && self.format_then_save(index) {
+            return true;
         }
-        written
+        self.write_buffer_at(index, self.settings.format_on_save || always)
     }
 
     pub(in crate::editor) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {

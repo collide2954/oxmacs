@@ -647,6 +647,106 @@ fn servers_format_languages_oxmacs_has_no_formatter_for() {
     assert_eq!(editor.buffer().contents(), "a = 1\n");
 }
 
+fn toml_with_a_formatter() -> (tempfile::TempDir, Editor) {
+    let dir = project();
+    fs::write(dir.path().join("notes.toml"), "a=1\n").unwrap();
+    let mut editor = editor();
+    editor.open_file(&dir.path().join("notes.toml"));
+    editor.take_effects();
+    reply(
+        &mut editor,
+        &json!({"jsonrpc": "2.0", "id": 1, "result": {"capabilities": {"documentFormattingProvider": true}}}),
+    );
+    editor.take_effects();
+    (dir, editor)
+}
+
+fn spaced() -> Value {
+    json!([{"range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 3}}, "newText": "a = 1"}])
+}
+
+const STALE: &str = "The text changed while the server worked on it, so its edits were dropped";
+
+#[test]
+fn edits_for_text_that_changed_since_the_request_are_dropped() {
+    let (_dir, mut editor) = toml_with_a_formatter();
+    press(&mut editor, "C-c C-f");
+    let request = asked(&mut editor, "textDocument/formatting");
+    press(&mut editor, "M->");
+    type_text(&mut editor, "b=2");
+
+    answer(&mut editor, &request, &spaced());
+
+    assert_eq!(editor.buffer().contents(), "a=1\nb=2");
+    assert_eq!(editor.message(), Some(STALE));
+}
+
+#[test]
+fn renames_for_text_that_changed_since_the_request_are_dropped() {
+    let (dir, mut editor) = capable();
+    let main = super::protocol::uri(&dir.path().join("src/main.rs"));
+    press(&mut editor, "C-f C-f C-f C-f <f2> C-a C-k");
+    type_text(&mut editor, "start");
+    press(&mut editor, "RET");
+    let request = asked(&mut editor, "textDocument/rename");
+    press(&mut editor, "C-a");
+    type_text(&mut editor, "pub ");
+
+    answer(
+        &mut editor,
+        &request,
+        &json!({"changes": {main: [
+            {"range": {"start": {"line": 0, "character": 3}, "end": {"line": 0, "character": 7}}, "newText": "start"}
+        ]}}),
+    );
+
+    assert!(editor.buffer().contents().starts_with("pub fn main() {"));
+    assert_eq!(editor.message(), Some(STALE));
+}
+
+#[test]
+fn format_on_save_through_a_server_formats_first_and_writes_once() {
+    let (dir, mut editor) = toml_with_a_formatter();
+    editor.settings.format_on_save = true;
+    let path = dir.path().join("notes.toml");
+    press(&mut editor, "M->");
+    type_text(&mut editor, "b=2");
+    press(&mut editor, "RET");
+
+    press(&mut editor, "C-x C-s");
+    let request = asked(&mut editor, "textDocument/formatting");
+    assert_eq!(fs::read_to_string(&path).unwrap(), "a=1\n");
+    answer(&mut editor, &request, &spaced());
+
+    assert_eq!(fs::read_to_string(&path).unwrap(), "a = 1\nb=2\n");
+    assert!(!editor.buffer().is_modified());
+}
+
+#[test]
+fn format_on_save_still_saves_when_the_server_fails_or_stops() {
+    let (dir, mut editor) = toml_with_a_formatter();
+    editor.settings.format_on_save = true;
+    let path = dir.path().join("notes.toml");
+    press(&mut editor, "M->");
+    type_text(&mut editor, "b=2");
+    press(&mut editor, "RET");
+
+    press(&mut editor, "C-x C-s");
+    let request = asked(&mut editor, "textDocument/formatting");
+    reply(
+        &mut editor,
+        &json!({"jsonrpc": "2.0", "id": request["id"], "error": {"code": -32603, "message": "broken"}}),
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), "a=1\nb=2\n");
+
+    type_text(&mut editor, "c=3");
+    press(&mut editor, "RET");
+    press(&mut editor, "C-x C-s");
+    asked(&mut editor, "textDocument/formatting");
+    editor.server_event(ServerId(0), Event::Exited(None));
+    assert_eq!(fs::read_to_string(&path).unwrap(), "a=1\nb=2\nc=3\n");
+}
+
 #[test]
 fn edits_the_server_asks_for_are_applied() {
     let (dir, mut editor) = capable();

@@ -76,6 +76,7 @@ pub(in crate::editor) struct Clients {
     signature_shown: Option<String>,
     hints: Vec<Hints>,
     hints_asked: Option<(BufferId, u64)>,
+    formatting_saves: Vec<BufferId>,
     pub(in crate::editor) find: fn(&str) -> Option<PathBuf>,
 }
 
@@ -97,6 +98,7 @@ impl Default for Clients {
             signature_shown: None,
             hints: Vec::new(),
             hints_asked: None,
+            formatting_saves: Vec::new(),
             find: on_path,
         }
     }
@@ -440,12 +442,25 @@ impl Editor {
             .pending
             .iter()
             .any(|(_, pending)| *pending == Pending::Shutdown);
+        let saving: Vec<BufferId> = client
+            .pending
+            .iter()
+            .filter_map(|(_, pending)| match pending {
+                Pending::Feature(features::Asked::Format {
+                    buffer, save: true, ..
+                }) => Some(*buffer),
+                _ => None,
+            })
+            .collect();
         client.state = State::Stopped(reason.clone());
         client.pending.clear();
         client.progress.clear();
         let name = client.spec.name;
         let note = reason.clone().unwrap_or_else(|| "exited".to_owned());
         self.server_log(id, &format!("stopped: {note}"));
+        for buffer in saving {
+            self.finish_formatting_save(buffer);
+        }
         if !expected && let Some(reason) = reason {
             self.show_message(format!("{name} stopped: {reason}; M-x lsp-log shows why"));
         }
@@ -654,6 +669,12 @@ impl Editor {
                 .unwrap_or("failed")
                 .to_owned();
             self.server_log(id, &format!("request failed: {text}"));
+            if let Pending::Feature(features::Asked::Format {
+                buffer, save: true, ..
+            }) = pending
+            {
+                self.finish_formatting_save(buffer);
+            }
             return;
         }
         let result = message.get("result").cloned().unwrap_or(Value::Null);

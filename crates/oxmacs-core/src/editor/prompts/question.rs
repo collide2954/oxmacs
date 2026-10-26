@@ -100,6 +100,10 @@ impl Editor {
         true
     }
 
+    fn quit_after_saves(&mut self) {
+        self.quit_requested = self.finish_formatting_saves();
+    }
+
     pub(in crate::editor) fn save_some_buffers(&mut self, then_quit: bool) {
         let remaining: Vec<PathBuf> = self
             .buffers
@@ -116,7 +120,9 @@ impl Editor {
 
     fn ask_next_save(&mut self, remaining: Vec<PathBuf>, then_quit: bool) {
         let Some(path) = remaining.first() else {
-            self.quit_requested |= then_quit;
+            if then_quit {
+                self.quit_after_saves();
+            }
             return;
         };
         let shown = paths::abbreviate(path, self.home.as_deref());
@@ -152,7 +158,11 @@ impl Editor {
                         self.ask_next_save(Vec::new(), then_quit);
                     }
                 }
-                _ => self.quit_requested |= then_quit,
+                _ => {
+                    if then_quit {
+                        self.quit_after_saves();
+                    }
+                }
             },
             Pending::Overwrite { path } => {
                 if answer == 'y' {

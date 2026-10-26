@@ -28,18 +28,25 @@ pub(in crate::editor) enum Asked {
     },
     Rename {
         name: String,
+        at: (BufferId, u64),
     },
     Format {
         buffer: BufferId,
+        revision: u64,
         save: bool,
     },
     Hints {
         buffer: BufferId,
         revision: u64,
     },
-    CodeActions,
+    CodeActions {
+        at: (BufferId, u64),
+    },
     Command,
 }
+
+pub(super) const STALE: &str =
+    "The text changed while the server worked on it, so its edits were dropped";
 
 fn capable(client: &Client, capability: &str) -> bool {
     client
@@ -409,8 +416,25 @@ impl Editor {
             }
             let mut params = params;
             params["newName"] = json!(wanted);
-            editor.ask_server(id, "textDocument/rename", &params, Asked::Rename { name });
+            let at = editor.revision_here();
+            editor.ask_server(
+                id,
+                "textDocument/rename",
+                &params,
+                Asked::Rename { name, at },
+            );
         });
+    }
+
+    fn revision_here(&self) -> (BufferId, u64) {
+        let buffer = self.buffers.current();
+        (buffer.id(), buffer.revision())
+    }
+
+    pub(super) fn changed_since(&self, (buffer, revision): (BufferId, u64)) -> bool {
+        self.buffers
+            .iter()
+            .any(|known| known.id() == buffer && known.revision() != revision)
     }
 
     pub(in crate::editor) fn lsp_formats(&self, index: usize) -> bool {
@@ -424,17 +448,21 @@ impl Editor {
         })
     }
 
-    pub(in crate::editor) fn lsp_format(&mut self, index: usize, save: bool) {
+    pub(in crate::editor) fn lsp_format(&mut self, index: usize, save: bool) -> bool {
         self.sync_servers();
-        let Some(buffer) = self.buffers.get(index).map(crate::text::Buffer::id) else {
-            return;
+        let Some((buffer, revision)) = self
+            .buffers
+            .get(index)
+            .map(|buffer| (buffer.id(), buffer.revision()))
+        else {
+            return false;
         };
         let Some((id, uri)) = self.lsp.running.iter().find_map(|client| {
             let document = client.document(buffer)?;
             (client.state == State::Ready && capable(client, "documentFormattingProvider"))
                 .then(|| (client.id, document.uri.clone()))
         }) else {
-            return;
+            return false;
         };
         let params = json!({
             "textDocument": {"uri": uri},
@@ -444,8 +472,44 @@ impl Editor {
             id,
             "textDocument/formatting",
             &params,
-            Asked::Format { buffer, save },
+            Asked::Format {
+                buffer,
+                revision,
+                save,
+            },
         );
+        true
+    }
+
+    pub(in crate::editor) fn format_then_save(&mut self, index: usize) -> bool {
+        let Some(buffer) = self.buffers.get(index).map(crate::text::Buffer::id) else {
+            return false;
+        };
+        if self.lsp.formatting_saves.contains(&buffer) {
+            return true;
+        }
+        if !self.lsp_format(index, true) {
+            return false;
+        }
+        self.lsp.formatting_saves.push(buffer);
+        true
+    }
+
+    pub(in crate::editor) fn finish_formatting_save(&mut self, buffer: BufferId) -> bool {
+        if !self.lsp.formatting_saves.contains(&buffer) {
+            return true;
+        }
+        self.lsp.formatting_saves.retain(|known| *known != buffer);
+        self.buffers
+            .position(|known| known.id() == buffer)
+            .is_none_or(|index| self.write_buffer_at(index, false))
+    }
+
+    pub(in crate::editor) fn finish_formatting_saves(&mut self) -> bool {
+        let waiting = self.lsp.formatting_saves.clone();
+        waiting.into_iter().fold(true, |all, buffer| {
+            self.finish_formatting_save(buffer) && all
+        })
     }
 
     pub(in crate::editor) fn lsp_code_actions(&mut self) {
@@ -476,13 +540,19 @@ impl Editor {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        let at = params["position"].clone();
+        let position = params["position"].clone();
         let asked = json!({
             "textDocument": {"uri": uri},
-            "range": {"start": at, "end": at},
+            "range": {"start": position, "end": position},
             "context": {"diagnostics": around}
         });
-        self.ask_server(id, "textDocument/codeAction", &asked, Asked::CodeActions);
+        let at = self.revision_here();
+        self.ask_server(
+            id,
+            "textDocument/codeAction",
+            &asked,
+            Asked::CodeActions { at },
+        );
     }
 
     pub(super) fn answered(&mut self, id: ServerId, asked: Asked, result: &Value) {
@@ -496,20 +566,24 @@ impl Editor {
             Asked::Hover => self.hovered(result),
             Asked::Definition { origin } => self.defined(id, origin, result),
             Asked::References { name } => self.referenced(id, &name, result),
-            Asked::Rename { name } => {
-                let encoding = self.encoding_of(id);
-                let (places, changed) = self.apply_workspace_edit(encoding, result);
-                self.show_message(if places == 0 {
-                    format!("Nothing to rename for {name}")
-                } else {
-                    format!(
-                        "Renamed {name} in {places} places in {changed} files; C-x s saves them"
-                    )
-                });
+            Asked::Rename { name, at } => {
+                if let Some((places, changed)) = self.apply_workspace_edit(id, Some(at), result) {
+                    self.show_message(if places == 0 {
+                        format!("Nothing to rename for {name}")
+                    } else {
+                        format!(
+                            "Renamed {name} in {places} places in {changed} files; C-x s saves them"
+                        )
+                    });
+                }
             }
-            Asked::Format { buffer, save } => self.formatted(id, buffer, save, result),
+            Asked::Format {
+                buffer,
+                revision,
+                save,
+            } => self.formatted(id, (buffer, revision), save, result),
             Asked::Hints { buffer, revision } => self.hinted(buffer, revision, result),
-            Asked::CodeActions => self.offer_actions(id, result),
+            Asked::CodeActions { at } => self.offer_actions(id, at, result),
             Asked::Command => {}
         }
     }
@@ -671,19 +745,26 @@ impl Editor {
         self.show_locations(&format!("{count} {noun} to {name}"), places);
     }
 
-    fn formatted(&mut self, id: ServerId, buffer: BufferId, save: bool, result: &Value) {
-        let Some(index) = self.buffers.position(|known| known.id() == buffer) else {
+    fn formatted(&mut self, id: ServerId, at: (BufferId, u64), save: bool, result: &Value) {
+        let buffer = at.0;
+        if save && !self.lsp.formatting_saves.contains(&buffer) {
             return;
-        };
-        let edits = result.as_array().cloned().unwrap_or_default();
-        let encoding = self.encoding_of(id);
-        let changed = self.apply_text_edits(index, encoding, &edits) > 0;
-        if save && changed {
-            self.write_buffer_at(index, false);
+        }
+        let stale = self.changed_since(at);
+        if !stale && let Some(index) = self.buffers.position(|known| known.id() == buffer) {
+            let edits = result.as_array().cloned().unwrap_or_default();
+            let encoding = self.encoding_of(id);
+            self.apply_text_edits(index, encoding, &edits);
+        }
+        if save {
+            self.finish_formatting_save(buffer);
+        }
+        if stale {
+            self.show_message(STALE);
         }
     }
 
-    fn offer_actions(&mut self, id: ServerId, result: &Value) {
+    fn offer_actions(&mut self, id: ServerId, at: (BufferId, u64), result: &Value) {
         let actions = result.as_array().cloned().unwrap_or_default();
         if actions.is_empty() {
             self.show_message("No code actions here");
@@ -708,16 +789,18 @@ impl Editor {
                         .cloned(),
                 };
                 if let Some(action) = chosen {
-                    editor.run_action(id, &action);
+                    editor.run_action(id, at, &action);
                 }
             },
         );
     }
 
-    fn run_action(&mut self, id: ServerId, action: &Value) {
+    fn run_action(&mut self, id: ServerId, at: (BufferId, u64), action: &Value) {
         if let Some(edit) = action.get("edit") {
-            let encoding = self.encoding_of(id);
-            self.apply_workspace_edit(encoding, edit);
+            if self.apply_workspace_edit(id, Some(at), edit).is_none() {
+                return;
+            }
+            self.sync_servers();
         }
         let command = match action.get("command") {
             Some(Value::String(_)) => Some(action.clone()),
@@ -734,8 +817,11 @@ impl Editor {
     }
 
     pub(super) fn applied_edit(&mut self, id: ServerId, params: &Value) -> Value {
-        let encoding = self.encoding_of(id);
-        let (places, _) = self.apply_workspace_edit(encoding, &params["edit"]);
-        json!({"applied": places > 0 || !files(&params["edit"]).is_empty()})
+        match self.apply_workspace_edit(id, None, &params["edit"]) {
+            Some((places, _)) => {
+                json!({"applied": places > 0 || !files(&params["edit"]).is_empty()})
+            }
+            None => json!({"applied": false, "failureReason": STALE}),
+        }
     }
 }

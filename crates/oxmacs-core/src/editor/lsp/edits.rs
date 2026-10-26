@@ -3,9 +3,10 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use super::{Encoding, number, protocol};
+use super::features::STALE;
+use super::{Encoding, ServerId, number, protocol};
 use crate::editor::Editor;
-use crate::text::Buffer;
+use crate::text::{Buffer, BufferId};
 
 pub(super) fn position(buffer: &Buffer, encoding: Encoding, at: &Value) -> usize {
     let line = number(&at["line"]);
@@ -73,11 +74,50 @@ impl Editor {
         ranges.len()
     }
 
+    fn outdated(&self, id: ServerId, edit: &Value) -> bool {
+        let Some(client) = self.lsp.running.iter().find(|client| client.id == id) else {
+            return false;
+        };
+        let versions: Vec<(PathBuf, Option<i64>)> = edit
+            .get("documentChanges")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|change| {
+                let path = protocol::path(change["textDocument"]["uri"].as_str()?)?;
+                Some((path, change["textDocument"]["version"].as_i64()))
+            })
+            .chain(files(edit).into_iter().map(|(path, _)| (path, None)))
+            .collect();
+        versions.iter().any(|(path, version)| {
+            self.buffers
+                .iter()
+                .filter(|buffer| buffer.file().is_some_and(|file| file.path == *path))
+                .any(|buffer| {
+                    client.document(buffer.id()).is_some_and(|document| {
+                        document.revision != buffer.revision()
+                            || version.is_some_and(|version| version != document.version)
+                    })
+                })
+        })
+    }
+
     pub(super) fn apply_workspace_edit(
         &mut self,
-        encoding: Encoding,
+        id: ServerId,
+        at: Option<(BufferId, u64)>,
         edit: &Value,
-    ) -> (usize, usize) {
+    ) -> Option<(usize, usize)> {
+        if at.is_some_and(|at| self.changed_since(at)) || self.outdated(id, edit) {
+            self.show_message(STALE);
+            return None;
+        }
+        let encoding = self
+            .lsp
+            .running
+            .iter()
+            .find(|client| client.id == id)
+            .map_or(Encoding::Utf16, |client| client.encoding);
         let origin = self.buffers.current().id();
         let mut places = 0;
         let mut changed = 0;
@@ -97,6 +137,6 @@ impl Editor {
         if let Some(index) = self.buffers.position(|buffer| buffer.id() == origin) {
             self.select_buffer(index);
         }
-        (places, changed)
+        Some((places, changed))
     }
 }
