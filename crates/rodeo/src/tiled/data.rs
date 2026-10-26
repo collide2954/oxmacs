@@ -45,8 +45,10 @@ fn base64(node: Node<'_, '_>, compression: Option<&str>) -> Result<Vec<u32>, Str
         ));
     }
     Ok(bytes
-        .chunks_exact(4)
-        .map(|tile| u32::from_le_bytes([tile[0], tile[1], tile[2], tile[3]]))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|tile| u32::from_le_bytes(*tile))
         .collect())
 }
 

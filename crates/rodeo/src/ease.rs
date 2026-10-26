@@ -87,7 +87,7 @@ impl Ease {
                 if t < 0.5 {
                     (1.0 - (1.0 - (2.0 * t).powi(2)).sqrt()) / 2.0
                 } else {
-                    ((1.0 - (-2.0 * t + 2.0).powi(2)).sqrt() + 1.0) / 2.0
+                    f64::midpoint((1.0 - (-2.0 * t + 2.0).powi(2)).sqrt(), 1.0)
                 }
             }
             Self::BackIn => (BACK + 1.0) * t.powi(3) - BACK * t * t,
@@ -97,9 +97,10 @@ impl Ease {
                 if t < 0.5 {
                     (2.0 * t).powi(2) * ((overshoot + 1.0) * 2.0 * t - overshoot) / 2.0
                 } else {
-                    ((2.0 * t - 2.0).powi(2) * ((overshoot + 1.0) * (t * 2.0 - 2.0) + overshoot)
-                        + 2.0)
-                        / 2.0
+                    f64::midpoint(
+                        (2.0 * t - 2.0).powi(2) * ((overshoot + 1.0) * (t * 2.0 - 2.0) + overshoot),
+                        2.0,
+                    )
                 }
             }
             Self::ElasticIn => ends(t).unwrap_or_else(|| {
@@ -122,7 +123,7 @@ impl Ease {
                 if t < 0.5 {
                     (1.0 - bounce_out(1.0 - 2.0 * t)) / 2.0
                 } else {
-                    (1.0 + bounce_out(2.0 * t - 1.0)) / 2.0
+                    f64::midpoint(1.0, bounce_out(2.0 * t - 1.0))
                 }
             }
         }

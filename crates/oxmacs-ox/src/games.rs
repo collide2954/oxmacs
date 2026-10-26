@@ -545,7 +545,7 @@ fn shape(
             to,
             width: options.number(heap, name, "width", 1.0)?,
         },
-        other => other,
+        other @ Shape::Polygon { .. } => other,
     };
     let paint = color(heap, name, paint)?;
     let layer = options.layer(heap, name)?;
@@ -1196,12 +1196,12 @@ mod tests {
     #[test]
     fn keys_reach_the_game_as_held_pressed_and_released() {
         let (mut editor, mut ox, start, _folder) = playing(
-            r#"(module (import (rodeo)))
+            r"(module (import (rodeo)))
 (defonce seen (atom []))
 (rodeo/actions {jump: [:space :up]})
 (def (tick)
   (swap! seen conj [(rodeo/held? :left) (rodeo/pressed? :left) (rodeo/released? :left) (rodeo/held? :jump)]))
-"#,
+",
         );
         assert!(wants_keys(&editor));
         super::key(&mut editor, "left", true);
@@ -1218,9 +1218,9 @@ mod tests {
     #[test]
     fn errors_pause_the_game_until_it_is_fixed_and_resumed() {
         let (mut editor, mut ox, start, _folder) = playing(
-            r#"(module (import (rodeo)))
+            r"(module (import (rodeo)))
 (def (tick) (/ 1 0))
-"#,
+",
         );
         ox.games_frame(&mut editor, start + sixtieths(1));
         let id = editor.buffer_named("*game*").unwrap();

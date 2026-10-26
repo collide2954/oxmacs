@@ -201,45 +201,13 @@ impl App {
         }
         let shown = self.faces();
         match message {
-            Message::Keyboard(keyboard::Event::KeyPressed { .. }) | Message::EndTakeover
-                if takeover::current(&self.editor).is_some() =>
-            {
-                self.end_takeover();
-            }
-            Message::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
-                if games::wants_keys(&self.editor) && !keys::starts_prefix(&key, modifiers) =>
-            {
-                self.last_input = self.now;
-                if let Some(name) = keys::game_key(&key) {
-                    games::key(&mut self.editor, &name, true);
+            Message::Keyboard(event) => self.keyboard(event),
+            Message::EndTakeover => {
+                if takeover::current(&self.editor).is_some() {
+                    self.end_takeover();
                 }
             }
-            Message::Keyboard(keyboard::Event::KeyReleased { key, .. })
-                if games::active(&self.editor) =>
-            {
-                if let Some(name) = keys::game_key(&key) {
-                    games::key(&mut self.editor, &name, false);
-                }
-            }
-            Message::Keyboard(keyboard::Event::KeyPressed {
-                key,
-                modified_key,
-                modifiers,
-                ..
-            }) => {
-                if let Some(key) =
-                    keys::translate(&key, &modified_key, modifiers, Platform::current())
-                {
-                    self.last_input = self.now;
-                    self.editor.handle_key(key);
-                    self.sync_reveal();
-                }
-            }
-            Message::Keyboard(_)
-            | Message::Opened(Ok(()))
-            | Message::Clock
-            | Message::OxTick
-            | Message::EndTakeover => {}
+            Message::Opened(Ok(())) | Message::Clock | Message::OxTick => {}
             Message::View(window, event) => self.handle_view_event(window, event),
             Message::Divider { path, index, delta } => {
                 if let Some(at) = self.editor.tiling().boundary(&path, index) {
@@ -303,6 +271,42 @@ impl App {
             return iced::exit();
         }
         self.pending_effects()
+    }
+
+    fn keyboard(&mut self, event: keyboard::Event) {
+        match event {
+            keyboard::Event::KeyPressed { .. } if takeover::current(&self.editor).is_some() => {
+                self.end_takeover();
+            }
+            keyboard::Event::KeyPressed { key, modifiers, .. }
+                if games::wants_keys(&self.editor) && !keys::starts_prefix(&key, modifiers) =>
+            {
+                self.last_input = self.now;
+                if let Some(name) = keys::game_key(&key) {
+                    games::key(&mut self.editor, &name, true);
+                }
+            }
+            keyboard::Event::KeyReleased { key, .. } if games::active(&self.editor) => {
+                if let Some(name) = keys::game_key(&key) {
+                    games::key(&mut self.editor, &name, false);
+                }
+            }
+            keyboard::Event::KeyPressed {
+                key,
+                modified_key,
+                modifiers,
+                ..
+            } => {
+                if let Some(key) =
+                    keys::translate(&key, &modified_key, modifiers, Platform::current())
+                {
+                    self.last_input = self.now;
+                    self.editor.handle_key(key);
+                    self.sync_reveal();
+                }
+            }
+            _ => {}
+        }
     }
 
     fn view_sized(&mut self, buffer: oxmacs_core::text::BufferId, size: iced::Size) {

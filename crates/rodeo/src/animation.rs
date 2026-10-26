@@ -52,8 +52,8 @@ impl Animation {
         let forward = match self.direction {
             Direction::Forward => true,
             Direction::Reverse => false,
-            Direction::PingPong => index % 2 == 0,
-            Direction::PingPongReverse => index % 2 == 1,
+            Direction::PingPong => index.is_multiple_of(2),
+            Direction::PingPongReverse => !index.is_multiple_of(2),
         };
         let count = self.frames.len();
         let mut order: Vec<usize> = if forward {

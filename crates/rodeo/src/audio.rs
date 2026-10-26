@@ -39,7 +39,7 @@ pub struct Sound {
     samples: Arc<[f32]>,
 }
 
-struct Samples {
+struct Clip {
     samples: Arc<[f32]>,
     at: usize,
     channels: ChannelCount,
@@ -48,7 +48,7 @@ struct Samples {
     duration: Duration,
 }
 
-impl Iterator for Samples {
+impl Iterator for Clip {
     type Item = f32;
 
     fn next(&mut self) -> Option<f32> {
@@ -64,7 +64,7 @@ impl Iterator for Samples {
     }
 }
 
-impl Source for Samples {
+impl Source for Clip {
     fn current_span_len(&self) -> Option<usize> {
         None
     }
@@ -145,7 +145,7 @@ impl<S: Source> Iterator for Controlled<S> {
             return self.finish();
         }
         let channels = usize::from(self.inner.channels().get());
-        if self.emitted % channels == 0 {
+        if self.emitted.is_multiple_of(channels) {
             self.holding = self.controls.paused.load(Ordering::Relaxed);
         }
         let sample = if self.holding {
@@ -157,7 +157,7 @@ impl<S: Source> Iterator for Controlled<S> {
             }
         };
         self.emitted += 1;
-        if self.emitted % self.chunk == 0 {
+        if self.emitted.is_multiple_of(self.chunk) {
             self.inner.set_factor(self.controls.pitch());
         }
         Some(sample)
@@ -258,8 +258,8 @@ impl Sound {
         )
     }
 
-    fn source(&self, looping: bool) -> Samples {
-        Samples {
+    fn source(&self, looping: bool) -> Clip {
+        Clip {
             samples: Arc::clone(&self.samples),
             at: 0,
             channels: self.channels,

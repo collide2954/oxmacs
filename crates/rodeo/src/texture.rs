@@ -40,7 +40,7 @@ pub struct Texture {
 
 #[derive(Debug, Default)]
 pub struct Textures {
-    textures: Vec<Texture>,
+    loaded: Vec<Texture>,
     paths: HashMap<PathBuf, TextureId>,
     generation: u64,
 }
@@ -61,11 +61,11 @@ impl Textures {
     }
 
     pub fn len(&self) -> usize {
-        self.textures.len()
+        self.loaded.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.textures.is_empty()
+        self.loaded.is_empty()
     }
 
     fn next_generation(&mut self) -> u64 {
@@ -74,17 +74,17 @@ impl Textures {
     }
 
     fn push(&mut self, texture: Texture) -> TextureId {
-        let id = TextureId(u32::try_from(self.textures.len()).unwrap_or(u32::MAX));
-        self.textures.push(texture);
+        let id = TextureId(u32::try_from(self.loaded.len()).unwrap_or(u32::MAX));
+        self.loaded.push(texture);
         id
     }
 
     pub fn id_at(&self, index: usize) -> Option<TextureId> {
-        (index < self.textures.len()).then(|| TextureId(u32::try_from(index).unwrap_or(u32::MAX)))
+        (index < self.loaded.len()).then(|| TextureId(u32::try_from(index).unwrap_or(u32::MAX)))
     }
 
     pub fn get(&self, id: TextureId) -> Option<&Texture> {
-        self.textures.get(id.index())
+        self.loaded.get(id.index())
     }
 
     pub fn id(&self, path: impl AsRef<Path>) -> Option<TextureId> {
@@ -136,7 +136,7 @@ impl Textures {
         };
         let (width, height, pixels) = decode(&path)?;
         let generation = self.next_generation();
-        let texture = &mut self.textures[id.index()];
+        let texture = &mut self.loaded[id.index()];
         texture.width = width;
         texture.height = height;
         texture.pixels = pixels;

@@ -41,7 +41,7 @@ fn particles_move_age_and_die() {
     assert_eq!(emitter.particles()[0].position, Vec2::new(5.0, 0.0));
     assert_eq!(emitter.particles()[0].progress(), 0.5);
     emitter.update(0.6);
-    assert!(emitter.particles().is_empty());
+    assert_eq!(emitter.particles(), []);
 }
 
 #[test]

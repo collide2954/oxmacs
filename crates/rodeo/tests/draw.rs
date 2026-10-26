@@ -105,7 +105,7 @@ fn lists_clear_between_frames_and_hold_screen_effects() {
     list.clear();
     assert!(list.is_empty());
     assert_eq!(list.fade, None);
-    assert!(list.palettes().is_empty());
+    assert_eq!(list.palettes(), []);
     assert_eq!(list.background, Color::rgba8(10, 20, 30, 255));
-    assert!(list.finish().is_empty());
+    assert_eq!(list.finish(), []);
 }

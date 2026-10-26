@@ -127,7 +127,7 @@ fn texel(textures: &Textures, sprite: &Sprite, x: i64, y: i64) -> Color {
         return Color::TRANSPARENT;
     };
     match texture.pixels.get(at..at + 4) {
-        Some(&[r, g, b, a]) => Color::rgba8(r, g, b, a),
+        Some(&[red, green, blue, alpha]) => Color::rgba8(red, green, blue, alpha),
         _ => Color::TRANSPARENT,
     }
 }
@@ -233,7 +233,7 @@ fn inside_polygon(point: Vec2, points: &[Vec2]) -> bool {
 fn draw_shape(canvas: &mut Canvas, shape: &Shape, color: Color) {
     match shape {
         Shape::Rect { rect, stroke: None } => {
-            canvas.fill(*rect, color, |point| rect.contains(point))
+            canvas.fill(*rect, color, |point| rect.contains(point));
         }
         Shape::Rect {
             rect,

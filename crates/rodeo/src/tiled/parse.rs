@@ -373,12 +373,13 @@ impl Context {
         };
         self.fill_object(node, &mut object)?;
         if let Some(tile) = object.tile {
-            if object.width == 0.0 && object.height == 0.0 {
-                if let Some((tileset, _)) = super::owner(tilesets, tile.gid) {
-                    let size = tileset.tile_size();
-                    object.width = size.x;
-                    object.height = size.y;
-                }
+            if object.width == 0.0
+                && object.height == 0.0
+                && let Some((tileset, _)) = super::owner(tilesets, tile.gid)
+            {
+                let size = tileset.tile_size();
+                object.width = size.x;
+                object.height = size.y;
             }
             let corner = Vec2::new(0.0, -object.height).rotated(object.rotation);
             object.x += corner.x;

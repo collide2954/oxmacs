@@ -76,5 +76,5 @@ fn boxes_starting_inside_a_solid_can_leave_it() {
         &[solid],
     );
     assert_eq!(moved.rect, Rect::new(35.0, 5.0, 4.0, 4.0));
-    assert!(moved.contacts.is_empty());
+    assert_eq!(moved.contacts, []);
 }

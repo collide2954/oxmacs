@@ -103,7 +103,7 @@ pub fn slide(moving: Rect, delta: Vec2, solids: &[Rect]) -> Moved {
             index,
             normal: hit.normal,
         });
-        left = left * (1.0 - hit.time);
+        left *= 1.0 - hit.time;
         if hit.normal.x == 0.0 {
             left.y = 0.0;
         } else {
