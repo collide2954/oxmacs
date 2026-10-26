@@ -60,7 +60,7 @@ impl Vec2 {
     }
 
     pub fn perpendicular(self) -> Self {
-        Self::new(-self.y, self.x)
+        Self::new(0.0 - self.y, self.x)
     }
 
     pub fn lerp(self, other: Self, t: f64) -> Self {
