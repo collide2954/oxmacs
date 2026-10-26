@@ -120,6 +120,7 @@ pub struct Isolate {
     packages: HashMap<String, Vec<String>>,
     doc_tables: Vec<&'static str>,
     docs: OnceCell<Docs>,
+    summaries: Vec<(String, String)>,
 }
 
 impl Default for Isolate {
@@ -171,6 +172,7 @@ impl Isolate {
             packages: HashMap::new(),
             doc_tables: vec![LIBRARY_DOCS],
             docs: OnceCell::new(),
+            summaries: Vec::new(),
         };
         builtins::install(&mut isolate);
         let apply = isolate.runtime.lookup(PRELUDE, Sym::intern("apply"));
@@ -1080,6 +1082,18 @@ impl Isolate {
 
     pub fn module_count(&self) -> usize {
         self.runtime.modules.len()
+    }
+
+    pub fn add_module(&mut self, name: &str, summary: &str) {
+        self.runtime.module_named(name);
+        match self.summaries.iter_mut().find(|(known, _)| known == name) {
+            Some(entry) => summary.clone_into(&mut entry.1),
+            None => self.summaries.push((name.to_owned(), summary.to_owned())),
+        }
+    }
+
+    pub fn modules(&self) -> Vec<(String, String)> {
+        self.summaries.clone()
     }
 
     pub fn doc(&self, name: &str) -> Option<String> {

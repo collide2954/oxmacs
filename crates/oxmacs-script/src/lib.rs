@@ -29,6 +29,7 @@ pub fn home() -> Option<PathBuf> {
 }
 
 fn install_editor_api(isolate: &mut Isolate, answers: &api::prompts::Inbox) {
+    oxmacs_api::add_editor_modules(isolate);
     api::natives::install(isolate);
     view::overlays::install(isolate);
     api::settings::install(isolate);
@@ -72,21 +73,6 @@ fn editor_isolate(answers: &api::prompts::Inbox) -> Isolate {
     install_editor_api(&mut isolate, answers);
     isolate
 }
-
-pub const EDITOR_MODULES: &[(&str, &str)] = &[
-    (
-        "ox/pdf",
-        "PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only",
-    ),
-    (
-        "ox/ui",
-        "Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only",
-    ),
-    (
-        "rodeo",
-        "Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only",
-    ),
-];
 
 pub fn checking_isolate() -> Isolate {
     editor_isolate(&api::prompts::Inbox::default())

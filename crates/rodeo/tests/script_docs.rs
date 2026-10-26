@@ -8,9 +8,12 @@ fn every_native_is_documented_with_its_arity() {
 
 #[test]
 fn modules_are_listed() {
-    let names: Vec<&str> = rodeo::script::MODULES
-        .iter()
-        .map(|(name, _)| *name)
-        .collect();
-    assert!(names.contains(&"rodeo/vec"));
+    let mut isolate = ox_lang::Isolate::new();
+    rodeo::script::install(&mut isolate);
+    assert!(
+        isolate
+            .modules()
+            .iter()
+            .any(|(name, _)| name == "rodeo/vec")
+    );
 }

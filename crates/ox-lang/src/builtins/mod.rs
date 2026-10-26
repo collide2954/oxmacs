@@ -24,7 +24,7 @@ use crate::value::Value;
 use crate::value::equal::{equal, hash, identical};
 use crate::value::print;
 
-pub const MODULES: &[(&str, &str)] = &[
+const MODULES: &[(&str, &str)] = &[
     (
         "ox",
         "Numbers, collections, text, records, errors, pattern matching, tasks, channels and promises, there without an import",
@@ -114,6 +114,9 @@ fn all_equal(heap: &Heap, arguments: &[Value]) -> bool {
 }
 
 pub fn install(isolate: &mut Isolate) {
+    for (name, summary) in MODULES {
+        isolate.add_module(name, summary);
+    }
     numbers::install(isolate);
     math::install(isolate);
     errors::install(isolate);

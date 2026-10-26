@@ -3,15 +3,11 @@ use std::fs;
 use std::path::Path;
 
 use super::BUNDLED;
+use crate::checking_isolate;
 use crate::runtime::plugins::{Listed, catalog};
-use crate::{EDITOR_MODULES, checking_isolate};
 
-fn modules() -> Vec<(&'static str, &'static str)> {
-    ox_library::modules()
-        .into_iter()
-        .chain(EDITOR_MODULES.iter().copied())
-        .chain(rodeo::script::MODULES.iter().copied())
-        .collect()
+fn modules() -> Vec<(String, String)> {
+    checking_isolate().modules()
 }
 
 fn workspace() -> &'static Path {
@@ -50,7 +46,7 @@ fn markdown_plugins() -> String {
 fn markdown_modules() -> String {
     let mut table = String::from("| Module | What it gives |\n| --- | --- |\n");
     for (name, summary) in modules() {
-        let shown = shown_module(name);
+        let shown = shown_module(&name);
         let shown = if name == "ox" {
             shown
         } else {
@@ -94,7 +90,7 @@ fn text_modules() -> String {
         .unwrap_or(6);
     let mut table = format!("```table\n{:width$}  What it gives\n", "Module");
     for (name, summary) in modules() {
-        let _ = writeln!(table, "{:width$}  {summary}", shown_module(name));
+        let _ = writeln!(table, "{:width$}  {summary}", shown_module(&name));
     }
     table.push_str("```\n");
     table
@@ -150,13 +146,13 @@ fn every_built_in_module_is_described() {
                 .any(|root| name == root || name.starts_with(&format!("{root}/")))
         })
         .collect();
-    let described: Vec<&str> = modules().into_iter().map(|(name, _)| name).collect();
+    let described: Vec<String> = modules().into_iter().map(|(name, _)| name).collect();
 
     let missing: Vec<&String> = installed
         .iter()
-        .filter(|name| !described.contains(&name.as_str()))
+        .filter(|name| !described.contains(name))
         .collect();
-    let gone: Vec<&&str> = described
+    let gone: Vec<&String> = described
         .iter()
         .filter(|name| !installed.iter().any(|known| known == *name))
         .collect();

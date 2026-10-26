@@ -25,6 +25,27 @@ pub fn check_roots(path: &Path) -> Vec<PathBuf> {
     roots
 }
 
+const EDITOR_MODULES: &[(&str, &str)] = &[
+    (
+        "ox/pdf",
+        "PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only",
+    ),
+    (
+        "ox/ui",
+        "Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only",
+    ),
+    (
+        "rodeo",
+        "Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only",
+    ),
+];
+
+pub fn add_editor_modules(isolate: &mut Isolate) {
+    for (name, summary) in EDITOR_MODULES {
+        isolate.add_module(name, summary);
+    }
+}
+
 pub fn extend_with_prelude(isolate: &mut Isolate) {
     if let Err(error) = isolate.extend_prelude("oxmacs/prelude.ox", PRELUDE) {
         panic!("The oxmacs prelude failed to load: {error}");

@@ -21,7 +21,6 @@ pub mod testing;
 pub mod value;
 mod vm;
 
-pub use builtins::MODULES;
 pub use error::Error;
 pub use isolate::Isolate;
 pub use vm::{Runtime, build, routine};

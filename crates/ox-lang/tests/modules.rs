@@ -327,3 +327,34 @@ fn hosts_can_look_inside_collections() {
     assert_eq!(heap.elements(map), None);
     assert_eq!(heap.entries(list), None);
 }
+
+#[test]
+fn modules_are_listed_with_their_summaries_in_the_order_they_were_added() {
+    let mut isolate = Isolate::new();
+    isolate.add_module("game/tools", "Helpers for games");
+    isolate.add_module("game/tools", "Small helpers for games");
+
+    let listed = isolate.modules();
+
+    assert_eq!(listed[0].0, "ox");
+    assert!(
+        listed
+            .iter()
+            .any(|(name, summary)| name == "ox/string" && summary.starts_with("Text:"))
+    );
+    assert_eq!(
+        listed.last(),
+        Some(&(
+            "game/tools".to_owned(),
+            "Small helpers for games".to_owned()
+        ))
+    );
+    assert_eq!(
+        listed
+            .iter()
+            .filter(|(name, _)| name == "game/tools")
+            .count(),
+        1
+    );
+    assert!(isolate.module_names().contains(&"game/tools".to_owned()));
+}

@@ -7,14 +7,14 @@ mod net;
 mod process;
 mod zip;
 
+use ox_lang::Isolate;
 use ox_lang::error::{Error, ErrorKind};
 use ox_lang::heap::Heap;
 use ox_lang::value::{Value, print};
-use ox_lang::{Isolate, MODULES as CORE};
 
 pub const DOCS: &str = include_str!("docs.ox");
 
-pub const MODULES: &[(&str, &str)] = &[
+const MODULES: &[(&str, &str)] = &[
     ("ox/csv", "Reading CSV into rows"),
     (
         "ox/file",
@@ -40,10 +40,6 @@ pub const MODULES: &[(&str, &str)] = &[
     ),
 ];
 
-pub fn modules() -> Vec<(&'static str, &'static str)> {
-    CORE.iter().chain(MODULES).copied().collect()
-}
-
 pub(crate) fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> {
     heap.text(value).ok_or_else(|| {
         Error::new(format!(
@@ -55,6 +51,9 @@ pub(crate) fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a s
 }
 
 pub fn install(isolate: &mut Isolate) {
+    for (name, summary) in MODULES {
+        isolate.add_module(name, summary);
+    }
     http::install(isolate);
     net::install(isolate);
     crypto::install(isolate);

@@ -17,7 +17,7 @@ use crate::vec::Vec2;
 
 pub const DOCS: &str = include_str!("docs.ox");
 
-pub const MODULES: &[(&str, &str)] = &[
+const MODULES: &[(&str, &str)] = &[
     (
         "rodeo/vec",
         "Plain [x y] vectors for games: adding, scaling, lengths, angles and turning",
@@ -49,6 +49,9 @@ pub const MODULES: &[(&str, &str)] = &[
 ];
 
 pub fn install(isolate: &mut Isolate) {
+    for (name, summary) in MODULES {
+        isolate.add_module(name, summary);
+    }
     vec::install(isolate);
     rect::install(isolate);
     ease::install(isolate);
