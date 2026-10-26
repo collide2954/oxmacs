@@ -45,13 +45,10 @@ fn zone_named(name: &str) -> Result<TimeZone, Error> {
     TimeZone::get(name).map_err(|_| Error::new(format!("There is no time zone called {name}")))
 }
 
-fn zone_option(heap: &Heap, name: &str, rest: &[Value]) -> Result<TimeZone, Error> {
-    match rest {
-        [] | [_, Value::Nil] => Ok(TimeZone::system()),
-        [Value::Keyword(option), value] if option.name() == "zone" => {
-            zone_named(&print::display(heap, *value))
-        }
-        _ => Err(Error::new(format!("{name} takes :zone"))),
+fn zone_option(heap: &Heap, zone: Value) -> Result<TimeZone, Error> {
+    match zone {
+        Value::Nil => Ok(TimeZone::system()),
+        named => zone_named(&print::display(heap, named)),
     }
 }
 
@@ -115,7 +112,7 @@ fn civil(heap: &Heap, fields: &[(Value, Value)]) -> Result<DateTime, Error> {
 }
 
 fn instant(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
-    let zone = zone_option(heap, "time/instant", &arguments[1..])?;
+    let zone = zone_option(heap, arguments[1])?;
     let given = arguments[0];
     let unreadable = || {
         Error::new(format!(
@@ -142,7 +139,7 @@ fn instant(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 
 fn add(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let start = moment(heap, "time/add", arguments[0])?;
-    let zone = zone_option(heap, "time/add", &arguments[2..])?;
+    let zone = zone_option(heap, arguments[2])?;
     let fields = heap.entries(arguments[1]).ok_or_else(|| {
         Error::new(format!(
             "time/add expects a map of amounts, got {}",
@@ -189,7 +186,7 @@ fn add(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 fn format(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let start = moment(heap, "time/format", arguments[0])?;
     let pattern = print::display(heap, arguments[1]);
-    let zone = zone_option(heap, "time/format", &arguments[2..])?;
+    let zone = zone_option(heap, arguments[2])?;
     let text = jiff::fmt::strtime::format(&pattern, &start.to_zoned(zone))
         .map_err(|error| Error::new(format!("time/format can't use {pattern:?}: {error}")))?;
     heap.string(&text).map_err(full)
@@ -373,15 +370,18 @@ pub fn install(isolate: &mut Isolate) {
         .function(local);
     isolate
         .native(MODULE, "instant")
-        .arity(1, Some(3))
+        .arity(1, Some(1))
+        .keywords(&["zone"])
         .function(instant);
     isolate
         .native(MODULE, "add")
-        .arity(2, Some(4))
+        .arity(2, Some(2))
+        .keywords(&["zone"])
         .function(add);
     isolate
         .native(MODULE, "format")
-        .arity(2, Some(4))
+        .arity(2, Some(2))
+        .keywords(&["zone"])
         .function(format);
     isolate
         .native(MODULE, "days-in-month")

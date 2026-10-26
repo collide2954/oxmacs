@@ -26,3 +26,6 @@
 #r#"{"a": "b"}"# ;=> "{{\"a\": \"b\"}}"
 #r##"say "#hi"#"## ;=> "say \"#hi\"#"
 (count #r"\n") ;=> 2
+
+(module (import (ox time))) (time/format 0 "%Y" :place "UTC") ;! time/format has no keyword parameter :place
+(module (import (ox time))) (time/format 0 "%Y" :zone "UTC") ;=> "1970"

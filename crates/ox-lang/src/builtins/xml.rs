@@ -208,11 +208,7 @@ fn parse(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         ))
         .of(ErrorKind::Type));
     };
-    let html = match &arguments[1..] {
-        [] => false,
-        [Value::Keyword(option), on] if option.name() == "html" => on.truthy(),
-        _ => return Err(Error::new("xml/parse takes :html")),
-    };
+    let html = arguments[1].truthy();
     let text = if html { html_entities(&text) } else { text };
     let options = ParsingOptions {
         allow_dtd: true,
@@ -422,7 +418,8 @@ fn write(heap: &Heap, value: Value, out: &mut String) -> Result<(), Error> {
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "parse")
-        .arity(1, Some(3))
+        .arity(1, Some(1))
+        .keywords(&["html"])
         .function(parse);
     isolate
         .native(MODULE, "find")
