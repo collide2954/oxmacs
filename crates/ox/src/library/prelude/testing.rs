@@ -29,7 +29,7 @@ pub(super) fn shown_plainly(heap: &Heap, form: Value) -> bool {
 fn explain(heap: &mut Heap, form: Value, values: Value) -> Result<Value, Error> {
     let operands = collections::rest(heap, form)?;
     let mut text = print::write(heap, form);
-    for pair in zipped(heap, &[operands, values])? {
+    for pair in zipped(heap, "explain", &[operands, values])? {
         if !shown_plainly(heap, pair[0]) {
             text.push_str("\n  ");
             text.push_str(&print::write(heap, pair[0]));

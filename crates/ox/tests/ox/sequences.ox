@@ -34,3 +34,10 @@
 
 ;; threading that names the value or stops at nil
 [(some-> {a: {b: 1}} :a :b) (some-> {a: nil} :a :b) (some-> {a: 2} :a (+ 10)) (as-> 1 x (+ x 1) (* x 3))] ;=> [1 nil 12 6]
+
+;; first, second, last, rest, count, nth and empty? don't copy the collection
+[(rest [1 2 3]) (rest (rest [1 2 3])) (rest [1]) (rest [])] ;=> [[2 3] [3] [] []]
+[(conj (rest [1 2 3]) 4) (assoc (rest [1 2 3]) 0 :a) (pop (rest [1 2 3])) (= (rest [1 2 3]) [2 3])] ;=> [[2 3 4] [:a 3] [2] true]
+(def v (rest (vec (range 100)))) [(count v) (first v) (second v) (last v) (nth v 40) (empty? v)] ;=> [99 1 2 99 41 false]
+(loop [v (vec (range 2000)) n 0] (if (empty? v) n (again (rest v) (+ n (first v))))) ;=> 1999000
+[(second (list 1 2 3)) (last (list 1 2 3)) (count (list 1 2 3)) (nth (list 1 2 3) 2) (empty? (list)) (last "abc") (second "abc")] ;=> [2 3 3 3 true \c \b]

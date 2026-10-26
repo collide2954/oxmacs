@@ -8,6 +8,7 @@ const MASK: usize = WIDTH - 1;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vector {
     pub count: usize,
+    start: usize,
     shift: u32,
     root: Value,
     tail: Value,
@@ -47,6 +48,7 @@ fn assoc_in(
 impl Vector {
     pub const EMPTY: Self = Self {
         count: 0,
+        start: 0,
         shift: BITS,
         root: Value::Nil,
         tail: Value::Nil,
@@ -79,10 +81,26 @@ impl Vector {
         };
         Ok(Self {
             count: items.len(),
+            start: 0,
             shift,
             root,
             tail,
         })
+    }
+
+    pub fn rest(self) -> Self {
+        if self.count <= 1 {
+            return Self::EMPTY;
+        }
+        Self {
+            count: self.count - 1,
+            start: self.start + 1,
+            ..self
+        }
+    }
+
+    fn end(self) -> usize {
+        self.start + self.count
     }
 
     pub fn children(self) -> [Value; 2] {
@@ -90,10 +108,10 @@ impl Vector {
     }
 
     fn tail_offset(self) -> usize {
-        if self.count < WIDTH {
+        if self.end() < WIDTH {
             0
         } else {
-            ((self.count - 1) >> BITS) << BITS
+            ((self.end() - 1) >> BITS) << BITS
         }
     }
 
@@ -118,19 +136,26 @@ impl Vector {
         if index >= self.count {
             return None;
         }
-        heap.node_items(self.leaf_node(heap, index))
-            .get(index & MASK)
+        let at = self.start + index;
+        heap.node_items(self.leaf_node(heap, at))
+            .get(at & MASK)
             .copied()
     }
 
     pub fn items(self, heap: &Heap) -> Vec<Value> {
         let mut items = Vec::with_capacity(self.count);
-        while items.len() < self.count {
-            let leaf = heap.node_items(self.leaf_node(heap, items.len()));
-            if leaf.is_empty() {
+        let mut at = self.start;
+        while at < self.end() {
+            let leaf = heap.node_items(self.leaf_node(heap, at));
+            let Some(slice) = leaf.get(at & MASK..) else {
+                break;
+            };
+            let taken = slice.len().min(self.end() - at);
+            if taken == 0 {
                 break;
             }
-            items.extend_from_slice(leaf);
+            items.extend_from_slice(&slice[..taken]);
+            at += taken;
         }
         items
     }
@@ -147,7 +172,7 @@ impl Vector {
                 ..self
             });
         }
-        let (root, shift) = if (self.count >> BITS) > (1 << self.shift) {
+        let (root, shift) = if (self.end() >> BITS) > (1 << self.shift) {
             let path = new_path(heap, self.shift, self.tail)?;
             (heap.node(Box::new([self.root, path]))?, self.shift + BITS)
         } else {
@@ -156,6 +181,7 @@ impl Vector {
         let tail = heap.node(Box::new([item]))?;
         Ok(Self {
             count: self.count + 1,
+            start: self.start,
             shift,
             root,
             tail,
@@ -163,7 +189,7 @@ impl Vector {
     }
 
     fn push_tail(self, heap: &mut Heap, level: u32, parent: Value) -> Result<Value, HeapFull> {
-        let slot = ((self.count - 1) >> level) & MASK;
+        let slot = ((self.end() - 1) >> level) & MASK;
         let mut children = heap.node_items(parent).to_vec();
         let child = if level == BITS {
             self.tail
@@ -192,6 +218,7 @@ impl Vector {
         if index == self.count {
             return self.conj(heap, item).map(Some);
         }
+        let index = self.start + index;
         if index >= self.tail_offset() {
             let mut items = heap.node_items(self.tail).to_vec();
             if let Some(place) = items.get_mut(index & MASK) {
@@ -219,7 +246,7 @@ impl Vector {
                 ..self
             }));
         }
-        let tail = self.leaf_node(heap, self.count - 2);
+        let tail = self.leaf_node(heap, self.end() - 2);
         let mut root = self.pop_tail(heap, self.shift, self.root)?;
         let mut shift = self.shift;
         if shift > BITS
@@ -230,6 +257,7 @@ impl Vector {
         }
         Ok(Some(Self {
             count: self.count - 1,
+            start: self.start,
             shift,
             root,
             tail,
@@ -237,7 +265,7 @@ impl Vector {
     }
 
     fn pop_tail(self, heap: &mut Heap, level: u32, node: Value) -> Result<Value, HeapFull> {
-        let slot = ((self.count - 2) >> level) & MASK;
+        let slot = ((self.end() - 2) >> level) & MASK;
         let mut children = heap.node_items(node).to_vec();
         if level > BITS {
             let child = children.get(slot).copied().unwrap_or(Value::Nil);
@@ -320,6 +348,35 @@ mod tests {
                     .is_none()
             );
         }
+    }
+
+    #[test]
+    fn the_rest_of_a_vector_holds_the_items_after_the_first_and_grows_and_shrinks_like_one() {
+        let mut heap = Heap::default();
+        for size in [1, 2, 31, 32, 33, 64, 65, 1057] {
+            let items = numbers(size);
+            let mut view = Vector::from_items(&mut heap, &items).unwrap();
+            for dropped in 1..=size.min(70) {
+                view = view.rest();
+                let expected = &items[dropped..];
+                assert_eq!(view.count, expected.len(), "{size} {dropped}");
+                assert_eq!(view.items(&heap), expected, "{size} {dropped}");
+                if let Some(last) = expected.len().checked_sub(1) {
+                    assert_eq!(view.get(&heap, last), Some(expected[last]));
+                    let changed = view.assoc(&mut heap, 0, Value::Nil).unwrap().unwrap();
+                    assert_eq!(changed.get(&heap, 0), Some(Value::Nil));
+                    assert_eq!(changed.items(&heap)[1..], expected[1..]);
+                    let popped = view.pop(&mut heap).unwrap().unwrap();
+                    assert_eq!(popped.items(&heap), expected[..last], "{size} {dropped}");
+                }
+                assert_eq!(view.get(&heap, expected.len()), None);
+                let grown = view.conj(&mut heap, Value::Nil).unwrap();
+                let mut longer = expected.to_vec();
+                longer.push(Value::Nil);
+                assert_eq!(grown.items(&heap), longer, "{size} {dropped}");
+            }
+        }
+        assert_eq!(Vector::EMPTY.rest().count, 0);
     }
 
     #[test]

@@ -14,7 +14,7 @@
 ;; take and drop count like the rest of Ox
 [(take -1 [1 2]) (take 2.5 [1 2 3 4]) (take 9 nil) (take 1 "ab") (take 1 {a: 1})] ;=> [[] [1 2 3] [] [\a] [[:a 1]]]
 (take :x [1]) ;! min expects numbers, got :x
-(take 1 5) ;! vec expects a collection, got 5
+(take 1 5) ;! take expects a collection, got 5
 (take :x (gen (yield 1))) ;! < expects numbers, got :x
 (let [g (gen (yield 1) (yield 2) (yield 3))] [(take 2 g) (next g)]) ;=> [[1 2] 3]
 (take 5 (gen (yield 1))) ;=> [1]
@@ -32,20 +32,20 @@
 (chunk 0 [1]) ;! chunk expects a size other than 0, got 0
 (partition 0.0 [1]) ;! partition expects a size other than 0, got 0.0
 (flatten [1 nil [2 (list 3 nil)] #{4} {a: 1} "s"]) ;=> [1 2 3 #{4} {a: 1} "s"]
-(flatten 5) ;! vec expects a collection, got 5
+(flatten 5) ;! flatten expects a collection, got 5
 [(distinct [1 1.0 1 "a" "a"]) (distinct "abca")] ;=> [[1 1.0 "a"] [\a \b \c]]
 (frequencies "abca") ;=> {\a 2 \b 1 \c 1}
 (frequencies [[1] [1] (list 1)]) ;=> {[1] 3}
 [(zip [1 2]) (zip [1 2] nil) (interleave [1] [2] [3 4])] ;=> [[[1] [2]] [] [1 2 3]]
 (zip) ;! map takes at least 2 arguments, got 1
 (interleave) ;! map takes at least 2 arguments, got 1
-(zip [1] 5) ;! vec expects a collection, got 5
+(zip [1] 5) ;! zip expects a collection, got 5
 [(repeat 0 :a) (repeat -2 :a) (repeat 2 nil)] ;=> [[] [] [nil nil]]
 (repeat :a 1) ;! range expects integers, got :a
 
 ;; nested maps
 [(get-in {a: nil} [:a :b] :d) (get-in {a: false} [:a :b]) (get-in [1 [2 3]] [1 0]) (get-in {a: 1} [] :d) (get-in nil [:a] :d :e)] ;=> [:d nil 2 {a: 1} :d]
-(get-in {} 5) ;! vec expects a collection, got 5
+(get-in {} 5) ;! get-in expects a collection, got 5
 [(merge) (merge nil nil) (merge {} nil) (merge {a: 1} {a: nil})] ;=> [nil nil {} {a: nil}]
 (merge 5) ;! keys expects a map, got 5
 (merge {a: 1} [1 2]) ;! keys expects a map, got [1 2]
@@ -65,7 +65,7 @@
 [(shown-plainly? 1) (shown-plainly? 'a) (shown-plainly? "s") (shown-plainly? 99999999999999999999) (shown-plainly? [1])] ;=> [true false true true false]
 [(explain '(= (+ 1 1) 3) [2 3]) (explain '(f "a" x) ["a" 1]) (explain '(f) [])] ;=> ["(= (+ 1 1) 3)\n  (+ 1 1) => 2" "(f \"a\" x)\n  x => 1" "(f)"]
 (explain 5 []) ;! rest expects a collection, got 5
-(explain '(f a) 5) ;! vec expects a collection, got 5
+(explain '(f a) 5) ;! explain expects a collection, got 5
 
 ;; functions that call the functions they are given
 [complement comp partial juxt memoize swap! update every iterate] ;=> [#<native complement> #<native comp> #<native partial> #<native juxt> #<native memoize> #<native swap!> #<native update> #<native every> #<native iterate>]
@@ -81,16 +81,16 @@
 (update 5 :a inc) ;! inc expects numbers, got nil
 (update {} :a 5) ;! 5 is not a function
 [(map inc []) (map vector [1 2] [3] [4 5]) (map inc nil) (map identity "ab") (map identity {a: 1})] ;=> [[] [[1 3 4]] [] [\a \b] [[:a 1]]]
-(map inc 5) ;! vec expects a collection, got 5
-(map inc [1] 5) ;! vec expects a collection, got 5
+(map inc 5) ;! map expects a collection, got 5
+(map inc [1] 5) ;! map expects a collection, got 5
 (map 5 [1]) ;! 5 is not a function
 (map (fn [] 1) [1]) ;! fn takes 0 arguments, got 1
 (map inc [:a]) ;! inc expects numbers, got :a
 [(filter :a [{a: 1} {b: 2}]) (remove :a [{a: 1} {b: 2}]) (keep :a [{a: 1} {b: 2} {a: false}])] ;=> [[{a: 1}] [{b: 2}] [1 false]]
-(filter even? 5) ;! vec expects a collection, got 5
+(filter even? 5) ;! filter expects a collection, got 5
 (remove 5 [1]) ;! 5 is not a function
 [(reduce + [1]) (reduce + 1 []) (reduce +) (reduce + 1 2 [3]) (reduce conj [] "ab")] ;=> [1 1 nil 4 [\a \b]]
-(reduce + 5) ;! vec expects a collection, got 5
+(reduce + 5) ;! reduce expects a collection, got 5
 (reduce 5 [1 2]) ;! 5 is not a function
 (reduce + :x [1]) ;! + expects numbers, got :x
 [(some even? []) (some :a [{} {a: false} {a: 2}]) (every? even? []) (every? identity [1 nil]) (find nil? [1 nil 2]) (find even? [1])] ;=> [nil 2 true false nil nil]

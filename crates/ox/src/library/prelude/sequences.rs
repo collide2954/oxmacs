@@ -11,7 +11,8 @@ use crate::vm::Runtime;
 use crate::vm::build::{full, make_vector};
 use crate::vm::routine::{Forward, Next, Routine, Started, finished, is_generator};
 
-use super::{int, items, less, plus, smaller, stretch};
+use super::{int, less, plus, smaller, stretch};
+use collections::sequence;
 
 fn drop(heap: &mut Heap, count: Value, items: &[Value]) -> Result<Vec<Value>, Error> {
     let total = int(items.len());
@@ -33,7 +34,7 @@ fn zero(value: Value) -> bool {
 }
 
 fn chunk(heap: &mut Heap, name: &str, size: Value, coll: Value) -> Result<Vec<Value>, Error> {
-    let items = items(heap, coll)?;
+    let items = sequence(heap, name, coll)?;
     let total = int(items.len());
     let mut groups = Vec::new();
     let mut at = Value::Int(0);
@@ -61,14 +62,14 @@ fn chunk(heap: &mut Heap, name: &str, size: Value, coll: Value) -> Result<Vec<Va
 
 fn flatten(heap: &mut Heap, coll: Value) -> Result<Value, Error> {
     let mut out = Vec::new();
-    let mut levels = vec![items(heap, coll)?.into_iter()];
+    let mut levels = vec![sequence(heap, "flatten", coll)?.into_iter()];
     while let Some(level) = levels.last_mut() {
         let Some(item) = level.next() else {
             levels.pop();
             continue;
         };
         if heap.vector_of(item).is_some() || is_list(heap, item) {
-            levels.push(items(heap, item)?.into_iter());
+            levels.push(sequence(heap, "flatten", item)?.into_iter());
         } else {
             out.push(item);
         }
@@ -79,7 +80,7 @@ fn flatten(heap: &mut Heap, coll: Value) -> Result<Value, Error> {
 fn distinct(heap: &mut Heap, coll: Value) -> Result<Value, Error> {
     let mut seen = Map::EMPTY;
     let mut out = Vec::new();
-    for item in items(heap, coll)? {
+    for item in sequence(heap, "distinct", coll)? {
         if seen.get(heap, item).is_none() {
             seen = seen.assoc(heap, item, Value::Bool(true)).map_err(full)?;
             out.push(item);
@@ -90,7 +91,7 @@ fn distinct(heap: &mut Heap, coll: Value) -> Result<Value, Error> {
 
 fn frequencies(heap: &mut Heap, coll: Value) -> Result<Value, Error> {
     let mut counts = Map::EMPTY;
-    for item in items(heap, coll)? {
+    for item in sequence(heap, "frequencies", coll)? {
         let seen = counts.get(heap, item).unwrap_or(Value::Int(0));
         let count = plus(heap, Value::Int(1), seen)?;
         counts = counts.assoc(heap, item, count).map_err(full)?;
@@ -98,13 +99,17 @@ fn frequencies(heap: &mut Heap, coll: Value) -> Result<Value, Error> {
     heap.map(counts).map_err(full)
 }
 
-pub(super) fn zipped(heap: &mut Heap, colls: &[Value]) -> Result<Vec<Vec<Value>>, Error> {
+pub(super) fn zipped(
+    heap: &mut Heap,
+    name: &str,
+    colls: &[Value],
+) -> Result<Vec<Vec<Value>>, Error> {
     if colls.is_empty() {
         return Err(Error::new("map takes at least 2 arguments, got 1").of(ErrorKind::Arity));
     }
     let all = colls
         .iter()
-        .map(|coll| items(heap, *coll))
+        .map(|coll| sequence(heap, name, *coll))
         .collect::<Result<Vec<_>, Error>>()?;
     let shortest = all.iter().map(Vec::len).min().unwrap_or(0);
     Ok((0..shortest)
@@ -113,7 +118,7 @@ pub(super) fn zipped(heap: &mut Heap, colls: &[Value]) -> Result<Vec<Vec<Value>>
 }
 
 fn zip(heap: &mut Heap, colls: &[Value]) -> Result<Value, Error> {
-    let tuples = zipped(heap, colls)?
+    let tuples = zipped(heap, "zip", colls)?
         .iter()
         .map(|tuple| make_vector(heap, tuple))
         .collect::<Result<Vec<_>, Error>>()?;
@@ -121,7 +126,10 @@ fn zip(heap: &mut Heap, colls: &[Value]) -> Result<Value, Error> {
 }
 
 fn interleave(heap: &mut Heap, colls: &[Value]) -> Result<Value, Error> {
-    let items: Vec<Value> = zipped(heap, colls)?.into_iter().flatten().collect();
+    let items: Vec<Value> = zipped(heap, "interleave", colls)?
+        .into_iter()
+        .flatten()
+        .collect();
     make_vector(heap, &items)
 }
 
@@ -192,10 +200,15 @@ struct Each {
 }
 
 impl Each {
-    fn start(mode: Mode, runtime: &mut Runtime, arguments: &[Value]) -> Result<Started, Error> {
+    fn start(
+        name: &str,
+        mode: Mode,
+        runtime: &mut Runtime,
+        arguments: &[Value],
+    ) -> Result<Started, Error> {
         let columns = arguments[1..]
             .iter()
-            .map(|coll| items(&mut runtime.heap, *coll))
+            .map(|coll| sequence(&mut runtime.heap, name, *coll))
             .collect::<Result<Vec<_>, Error>>()?;
         let length = columns.iter().map(Vec::len).min().unwrap_or(0);
         Ok(Started::Running(Box::new(Self {
@@ -252,7 +265,7 @@ impl Each {
             Mode::MapCat => {
                 let mut items = Vec::new();
                 for part in &self.out {
-                    items.extend(collections::sequence(heap, "concat", *part)?);
+                    items.extend(sequence(heap, "concat", *part)?);
                 }
                 make_vector(heap, &items)
             }
@@ -301,7 +314,7 @@ fn sorted(heap: &mut Heap, items: &[Value], keys: &[Value]) -> Result<Value, Err
     let pairs = make_vector(heap, &pairs)?;
     let order = ordering::sort(heap, &[pairs])?;
     let mut out = Vec::with_capacity(items.len());
-    for pair in collections::sequence(heap, "sort", order)? {
+    for pair in sequence(heap, "sort", order)? {
         let at = heap.vector_of(pair).and_then(|pair| pair.get(heap, 1));
         if let Some(Value::Int(at)) = at
             && let Some(item) = usize::try_from(at).ok().and_then(|at| items.get(at))
@@ -343,8 +356,9 @@ impl Routine for Reduce {
 fn reduce(runtime: &mut Runtime, arguments: &[Value]) -> Result<Started, Error> {
     let function = arguments[0];
     let given = &arguments[1..];
-    let mut items = items(
+    let mut items = sequence(
         &mut runtime.heap,
+        "reduce",
         given.last().copied().unwrap_or(Value::Nil),
     )?;
     let start = if given.len() == 1 {
@@ -431,12 +445,12 @@ pub(super) fn install(isolate: &mut Isolate) {
             })));
         }
         let heap = &mut runtime.heap;
-        let items = items(heap, coll)?;
+        let items = sequence(heap, "take", coll)?;
         let taken = take(heap, count, &items)?;
         make_vector(heap, &taken).map(Started::Done)
     });
     isolate.define_draining("drop", 2, Some(2), Drains::At(1), |heap, arguments| {
-        let items = items(heap, arguments[1])?;
+        let items = sequence(heap, "drop", arguments[1])?;
         let kept = drop(heap, arguments[0], &items)?;
         make_vector(heap, &kept)
     });
@@ -490,12 +504,12 @@ fn install_callers(isolate: &mut Isolate) {
     ];
     for (name, mode, most, drains) in each {
         isolate.define_routine(name, 2, most, Some(drains), move |runtime, _, arguments| {
-            Each::start(mode, runtime, arguments)
+            Each::start(name, mode, runtime, arguments)
         });
     }
     isolate.define_routine("take-while", 2, Some(2), None, |runtime, _, arguments| {
         if !is_generator(&runtime.heap, arguments[1]) {
-            return Each::start(Mode::TakeWhile, runtime, arguments);
+            return Each::start("take-while", Mode::TakeWhile, runtime, arguments);
         }
         Ok(Started::Running(Box::new(TakeWhile {
             generator: arguments[1],

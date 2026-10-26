@@ -19,10 +19,6 @@ fn int(count: usize) -> Value {
     Value::Int(i64::try_from(count).unwrap_or(i64::MAX))
 }
 
-fn items(heap: &mut Heap, coll: Value) -> Result<Vec<Value>, Error> {
-    collections::sequence(heap, "vec", coll)
-}
-
 fn less(heap: &Heap, a: Value, b: Value) -> Result<bool, Error> {
     Ok(numbers::chain(heap, "<", &[a, b], Ordering::is_lt)?.truthy())
 }

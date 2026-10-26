@@ -32,4 +32,7 @@
  thread: [n (repeated (fn [] (-> 1 inc (+ 2) (* 3))))]
  cond: [n (repeated (fn [] (cond ((= 1 2) :a) ((= 1 3) :b) (else :c))))]
  and-or: [n (repeated (fn [] (or (and 1 nil) (and 2 3))))]
- small-map: [n (repeated (fn [] (map inc small)))]}
+ small-map: [n (repeated (fn [] (map inc small)))]
+ rest-loop: [n (fn [] (loop [v numbers total 0] (if (empty? v) total (again (rest v) (+ total (first v))))))]
+ list-walk: [n (let [items (apply list numbers)] (fn [] (loop [l items c 0] (if (empty? l) c (again (rest l) (inc c))))))]
+ last: [n (repeated (fn [] (last numbers)))]}

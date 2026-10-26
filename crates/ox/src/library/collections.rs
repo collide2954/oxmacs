@@ -219,6 +219,34 @@ pub(crate) fn count(heap: &Heap, value: Value) -> Result<Value, Error> {
     counted(heap, "count", value)
 }
 
+fn list_length(heap: &Heap, list: Value) -> usize {
+    let mut length = 0;
+    let mut rest = list;
+    while let Some(pair) = heap.pair_of(rest) {
+        length += 1;
+        rest = pair.tail;
+    }
+    length
+}
+
+fn list_nth(heap: &Heap, list: Value, position: usize) -> Option<Value> {
+    let mut rest = list;
+    for _ in 0..position {
+        rest = heap.pair_of(rest)?.tail;
+    }
+    heap.pair_of(rest).map(|pair| pair.head)
+}
+
+fn list_last(heap: &Heap, list: Value) -> Value {
+    let mut last = Value::Nil;
+    let mut rest = list;
+    while let Some(pair) = heap.pair_of(rest) {
+        last = pair.head;
+        rest = pair.tail;
+    }
+    last
+}
+
 fn counted(heap: &Heap, native: &str, value: Value) -> Result<Value, Error> {
     if let Some(length) = heap.length(value) {
         return Ok(int(length));
@@ -230,7 +258,7 @@ fn counted(heap: &Heap, native: &str, value: Value) -> Result<Value, Error> {
         return Ok(int(map.count));
     }
     if is_list(heap, value) {
-        return Ok(int(heap.items(value).len()));
+        return Ok(int(list_length(heap, value)));
     }
     Err(expected(heap, native, "a collection", value))
 }
@@ -255,10 +283,9 @@ fn nth(heap: &Heap, collection: Value, wanted: Value) -> Result<Value, Error> {
     if !is_list(heap, collection) {
         return Err(expected(heap, "nth", "a collection", collection));
     }
-    let items = heap.items(collection);
     position
-        .and_then(|position| items.get(position).copied())
-        .ok_or_else(|| out_of_range(wanted, "list", items.len(), "item"))
+        .and_then(|position| list_nth(heap, collection, position))
+        .ok_or_else(|| out_of_range(wanted, "list", list_length(heap, collection), "item"))
 }
 
 pub fn get(heap: &Heap, arguments: &[Value]) -> Value {
@@ -412,8 +439,52 @@ pub(crate) fn rest(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
             .pair_of(collection)
             .map_or(Value::Nil, |pair| pair.tail));
     }
+    if let Some(vector) = heap.vector_of(collection) {
+        return store(heap, vector.rest());
+    }
     let items = sequence(heap, "rest", collection)?;
     vector_of(heap, items.get(1..).unwrap_or_default())
+}
+
+fn second(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
+    if is_list(heap, collection) {
+        return Ok(list_nth(heap, collection, 1).unwrap_or(Value::Nil));
+    }
+    if let Some(vector) = heap.vector_of(collection) {
+        return Ok(vector.get(heap, 1).unwrap_or(Value::Nil));
+    }
+    if let Some(text) = heap.text(collection) {
+        return Ok(text.chars().nth(1).map_or(Value::Nil, Value::Char));
+    }
+    let items = sequence(heap, "second", collection)?;
+    Ok(items.get(1).copied().unwrap_or(Value::Nil))
+}
+
+fn last(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
+    if is_list(heap, collection) {
+        return Ok(list_last(heap, collection));
+    }
+    if let Some(vector) = heap.vector_of(collection) {
+        return Ok(vector
+            .count
+            .checked_sub(1)
+            .and_then(|last| vector.get(heap, last))
+            .unwrap_or(Value::Nil));
+    }
+    if let Some(text) = heap.text(collection) {
+        return Ok(text.chars().last().map_or(Value::Nil, Value::Char));
+    }
+    let items = sequence(heap, "last", collection)?;
+    Ok(items.last().copied().unwrap_or(Value::Nil))
+}
+
+fn empty(heap: &Heap, collection: Value) -> Result<Value, Error> {
+    if is_list(heap, collection) {
+        return Ok(Value::Bool(collection == Value::Nil));
+    }
+    Ok(Value::Bool(
+        counted(heap, "empty?", collection)? == Value::Int(0),
+    ))
 }
 
 pub(crate) fn range(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
@@ -459,20 +530,16 @@ fn install_sequences(isolate: &mut Isolate) {
         first(heap, arguments[0])
     });
     isolate.define_native("second", 1, Some(1), |heap, arguments| {
-        let items = sequence(heap, "second", arguments[0])?;
-        Ok(items.get(1).copied().unwrap_or(Value::Nil))
+        second(heap, arguments[0])
     });
     isolate.define_native("last", 1, Some(1), |heap, arguments| {
-        let items = sequence(heap, "last", arguments[0])?;
-        Ok(items.last().copied().unwrap_or(Value::Nil))
+        last(heap, arguments[0])
     });
     isolate.define_native("rest", 1, Some(1), |heap, arguments| {
         rest(heap, arguments[0])
     });
     isolate.define_native("empty?", 1, Some(1), |heap, arguments| {
-        Ok(Value::Bool(
-            counted(heap, "empty?", arguments[0])? == Value::Int(0),
-        ))
+        empty(heap, arguments[0])
     });
     isolate.define_native("range", 1, Some(3), range);
     isolate.define_native("concat", 0, None, |heap, arguments| {

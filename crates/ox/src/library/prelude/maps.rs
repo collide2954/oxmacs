@@ -11,11 +11,9 @@ use crate::vm::build::full;
 use crate::vm::modules::PRELUDE;
 use crate::vm::routine::{Next, Routine, Started, is_generator};
 
-use super::items;
-
 pub(super) fn get_in(heap: &mut Heap, map: Value, path: Value) -> Result<Value, Error> {
     let mut found = map;
-    for key in items(heap, path)? {
+    for key in collections::sequence(heap, "get-in", path)? {
         if found != Value::Nil {
             found = collections::get(heap, &[found, key]);
         }
@@ -68,7 +66,7 @@ fn merge(heap: &mut Heap, maps: &[Value]) -> Result<Value, Error> {
 
 fn select_keys(heap: &mut Heap, map: Value, wanted: Value) -> Result<Value, Error> {
     let mut selected = Map::EMPTY;
-    for key in items(heap, wanted)? {
+    for key in collections::sequence(heap, "select-keys", wanted)? {
         if collections::contains(heap, map, key)?.truthy() {
             let value = collections::get(heap, &[map, key]);
             selected = selected.assoc(heap, key, value).map_err(full)?;
