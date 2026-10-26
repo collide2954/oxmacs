@@ -9,6 +9,7 @@ License:        Apache-2.0
 URL:            https://github.com/collide2954/oxmacs
 ExclusiveArch:  x86_64
 
+Requires:       alsa-lib
 Requires:       libX11
 Requires:       libXcursor
 Requires:       libXi
