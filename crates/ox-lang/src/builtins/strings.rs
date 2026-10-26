@@ -138,7 +138,7 @@ fn install_shaping(isolate: &mut Isolate) {
                 whole
             } else {
                 let kept: String = whole.chars().take(width.saturating_sub(1)).collect();
-                format!("{kept}â€¦")
+                format!("{kept}…")
             };
             heap.string(&cut).map_err(full)
         });

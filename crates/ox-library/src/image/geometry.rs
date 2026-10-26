@@ -74,7 +74,7 @@ fn crop(pixels: &RgbaImage, x: i64, y: i64, width: u32, height: u32) -> Result<R
     let (left, top) = (to_u32(x), to_u32(y));
     if x < 0 || y < 0 || left >= pixels.width() || top >= pixels.height() {
         return Err(format!(
-            "image/crop starts at {x},{y}, outside a {}Ã—{} image",
+            "image/crop starts at {x},{y}, outside a {}×{} image",
             pixels.width(),
             pixels.height()
         ));
