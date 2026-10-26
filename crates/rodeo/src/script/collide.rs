@@ -196,20 +196,9 @@ fn through_tiles(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let moving = rect(heap, name, arguments[0])?;
     let delta = point(heap, name, arguments[1])?;
     let layer = arguments[2];
-    let mut size = field(heap, layer, "tile-size");
-    let mut only = None;
-    let mut except = None;
-    for pair in arguments[3..].chunks(2) {
-        match pair {
-            [Value::Keyword(key), value] if key.name() == "tile-size" => size = Some(*value),
-            [Value::Keyword(key), value] if key.name() == "only" => only = Some(*value),
-            [Value::Keyword(key), value] if key.name() == "except" => except = Some(*value),
-            [other, ..] => {
-                return Err(wrong(heap, name, ":tile-size, :only or :except", *other));
-            }
-            [] => {}
-        }
-    }
+    let given = |value: Value| (value != Value::Nil).then_some(value);
+    let size = given(arguments[3]).or_else(|| field(heap, layer, "tile-size"));
+    let (only, except) = (given(arguments[4]), given(arguments[5]));
     let size = size
         .map(|value| point(heap, name, value))
         .transpose()?
@@ -289,7 +278,8 @@ pub fn install(isolate: &mut Isolate) {
         .function(sliding);
     isolate
         .native(MODULE, "move-in-tiles")
-        .arity(3, None)
+        .arity(3, Some(3))
+        .keywords(&["tile-size", "only", "except"])
         .function(through_tiles);
     isolate
         .native(MODULE, "grid")
