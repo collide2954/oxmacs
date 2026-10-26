@@ -4481,6 +4481,8 @@ dependencies = [
  "flate2",
  "image",
  "roxmltree 0.21.2",
+ "serde",
+ "serde_json",
  "strum",
  "tempfile",
  "thiserror 2.0.21",
