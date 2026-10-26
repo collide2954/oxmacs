@@ -55,13 +55,14 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `keycast` | 0.2.2 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `languages` | 0.1.0 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
 | `life` | 0.2.2 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.34 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.35 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.3 | opt-in | Markdown rendered as styled text |
 | `pdf` | 0.1.0 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
 | `processes` | 0.1.1 | on | List the processes oxmacs runs, with their usage |
 | `profiler` | 0.1.1 | on | Find where the Ox code in oxmacs spends its time |
 | `r` | 0.18.6 | opt-in | R consoles, plots, data and help in the style of ESS and RStudio |
 | `remote` | 0.1.7 | on | Browse and edit files on other machines over ssh, sftp and ftp |
+| `rodeo` | 0.1.0 | opt-in | Play 2D games written in Ox beside their code, and change them while they run |
 | `screensaver` | 0.2.2 | opt-in | A starfield or matrix rain after a while without input |
 | `tabs` | 0.1.1 | opt-in | Workspace tabs across the top, each keeping its own windows |
 | `vault` | 0.2.1 | opt-in | An encrypted password vault with one-time codes and imports |
@@ -91,6 +92,14 @@ Ox code uses these built-in modules, importing them as in `(import (ox file))`; 
 | `ox/zip` | Reading the files inside zip archives, such as EPUB books |
 | `ox/pdf` | PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only |
 | `ox/ui` | Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only |
+| `rodeo` | Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only |
+| `rodeo/vec` | Plain [x y] vectors for games: adding, scaling, lengths, angles and turning |
+| `rodeo/rect` | Plain [x y w h] rectangles: edges, centers, overlaps, unions and clamping |
+| `rodeo/ease` | Easing curves for tweens, from linear to bounce |
+| `rodeo/random` | Seeded random numbers kept in atoms, so replays and rewinds repeat them |
+| `rodeo/camera` | Cameras as plain maps: following, bounds, zoom, shake and world to screen points |
+| `rodeo/collide` | Overlaps, swept boxes that slide along walls, tile collision and spatial grids |
+| `rodeo/tiled` | Tiled .tmx maps as plain data: layers, tiles, objects, properties and tilesets |
 
 ## Configuration
 

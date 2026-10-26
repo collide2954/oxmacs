@@ -24,7 +24,16 @@ pub const BUNDLED: &[Bundle] = &[
     ZEN,
     EPUB,
     PDF,
+    RODEO,
 ];
+
+const RODEO: Bundle = Bundle {
+    name: "rodeo",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/rodeo/plugin.ox")),
+        ("rodeo.ox", include_str!("../plugins/rodeo/rodeo.ox")),
+    ],
+};
 
 const PDF: Bundle = Bundle {
     name: "pdf",
@@ -394,3 +403,6 @@ mod epub;
 
 #[cfg(test)]
 mod pdf;
+
+#[cfg(test)]
+mod rodeo;

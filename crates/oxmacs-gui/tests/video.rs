@@ -129,6 +129,7 @@ struct Film {
     uploads: usize,
     output: Option<(u32, u32)>,
     pace: f64,
+    clock: Option<Instant>,
 }
 
 impl Film {
@@ -143,6 +144,14 @@ impl Film {
             uploads: 0,
             output: None,
             pace: 1.0,
+            clock: None,
+        }
+    }
+
+    fn ticking(self, start: Instant) -> Self {
+        Self {
+            clock: Some(start),
+            ..self
         }
     }
 
@@ -177,6 +186,11 @@ impl Film {
             track(app.update(message));
         }
         self.frames.push((stem, seconds));
+        if let Some(clock) = &mut self.clock {
+            *clock += Duration::from_secs_f64(seconds);
+            let now = *clock;
+            track(app.update(Message::Tick(now)));
+        }
     }
 
     fn mark(&self, scene: &str) {
@@ -189,6 +203,14 @@ impl Film {
     fn hold(&mut self, seconds: f64) {
         if let Some(last) = self.frames.last_mut() {
             last.1 += seconds * self.pace;
+        }
+    }
+
+    fn play(&mut self, app: &mut App, seconds: f64) {
+        let mut left = seconds;
+        while left > 0.0 {
+            self.shot(app, 1.0 / 30.0);
+            left -= 1.0 / 30.0;
         }
     }
 
@@ -1912,5 +1934,199 @@ fn showcase_video() {
     write_in_zen(&mut film, &mut app);
     round_the_tabs(&mut film, &mut app);
     film.hold(2.5);
+    film.finish(&out);
+}
+
+const JUMP: &str = r##"(module (import (rodeo)))
+
+(rodeo/screen 256 144)
+(rodeo/actions {left: [:left] right: [:right] jump: [:space :up]})
+
+(def ground 108)
+(def speed 90)
+(def gravity 600)
+(def jump -240)
+
+(defonce player (atom {x: 30 y: ground vy: 0}))
+
+(def (tick)
+  (let [p @player
+        dt (rodeo/dt)
+        across (cond ((rodeo/held? :left) (- speed)) ((rodeo/held? :right) speed) (else 0))
+        standing (>= p.y ground)
+        vy (if (and standing (rodeo/pressed? :jump)) jump (+ p.vy (* gravity dt)))
+        y (min ground (+ p.y (* vy dt)))]
+    (reset! player {x: (mod (+ p.x (* across dt)) 256) y: y vy: (if (>= y ground) 0 vy)})))
+
+(def (draw)
+  (let [p @player]
+    (rodeo/clear "#1d2b53")
+    (rodeo/rect [0 124 256 20] "#008751")
+    (rodeo/rect [p.x p.y 12 16] "#ff004d")))
+"##;
+
+fn rodeo_home() -> PathBuf {
+    let user = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap();
+    let home = user.join("oxmacs-rodeo-demo");
+    if home.join(".oxmacs-demo").exists() {
+        fs::remove_dir_all(&home).unwrap();
+    }
+    assert!(
+        !home.exists(),
+        "{} exists and wasn't made by this demo",
+        home.display()
+    );
+    fs::create_dir_all(&home).unwrap();
+    fs::write(home.join(".oxmacs-demo"), "").unwrap();
+    fs::write(
+        home.join("init.ox"),
+        "(settings {theme: :adwaita-dark animations: false font-size: 12})\n(use-plugin rodeo)\n",
+    )
+    .unwrap();
+    fs::write(home.join("jump.ox"), JUMP).unwrap();
+    home
+}
+
+fn game_key(app: &mut App, named: Named, down: bool) {
+    let key = Key::Named(named);
+    let event = if down {
+        keyboard::Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: Physical::Code(Code::ArrowRight),
+            location: Location::Standard,
+            modifiers: Modifiers::empty(),
+            text: None,
+            repeat: false,
+        }
+    } else {
+        keyboard::Event::KeyReleased {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: Physical::Code(Code::ArrowRight),
+            location: Location::Standard,
+            modifiers: Modifiers::empty(),
+        }
+    };
+    track(app.update(Message::Keyboard(event)));
+}
+
+fn tap(film: &mut Film, app: &mut App, named: Named) {
+    game_key(app, named, true);
+    film.play(app, 0.1);
+    game_key(app, named, false);
+}
+
+fn rodeo_open(film: &mut Film, app: &mut App) {
+    film.mark("open");
+    film.shot(app, 2.0);
+    command(film, app, "rodeo-play");
+    settle(app);
+    film.play(app, 1.2);
+}
+
+fn rodeo_run(film: &mut Film, app: &mut App) {
+    film.mark("run");
+    game_key(app, Named::ArrowRight, true);
+    film.play(app, 1.0);
+    tap(film, app, Named::Space);
+    film.play(app, 1.2);
+    game_key(app, Named::ArrowRight, false);
+    film.play(app, 0.6);
+}
+
+fn find(film: &mut Film, app: &mut App, text: &str) {
+    film.press(app, "M-< C-s");
+    film.type_slowly(app, text);
+    film.press(app, "RET");
+}
+
+fn rodeo_restyle(film: &mut Film, app: &mut App) {
+    film.mark("restyle");
+    film.press(app, "C-x o");
+    find(film, app, "ff004d");
+    film.press(app, "DEL DEL DEL DEL DEL DEL");
+    film.type_slowly(app, "ffa300");
+    film.press(app, "C-M-x");
+    film.play(app, 1.5);
+    find(film, app, "#1d2b53\")");
+    film.press(app, "RET");
+    film.type_slowly(app, "(rodeo/circle [210 34] 14 \"#ffec27\"");
+    film.press(app, "C-M-x");
+    film.play(app, 1.5);
+}
+
+fn rodeo_jump(film: &mut Film, app: &mut App) {
+    film.mark("jump");
+    find(film, app, "-240");
+    film.press(app, "DEL DEL DEL");
+    film.type_slowly(app, "340");
+    film.press(app, "C-M-x");
+    film.play(app, 0.4);
+    film.press(app, "C-x o");
+    game_key(app, Named::ArrowLeft, true);
+    film.play(app, 0.5);
+    tap(film, app, Named::Space);
+    film.play(app, 1.4);
+    tap(film, app, Named::Space);
+    film.play(app, 1.4);
+    game_key(app, Named::ArrowLeft, false);
+    film.play(app, 0.5);
+}
+
+fn rodeo_break(film: &mut Film, app: &mut App) {
+    film.mark("break");
+    film.press(app, "C-x o");
+    find(film, app, "12 16");
+    film.press(app, "DEL DEL DEL");
+    film.press(app, "C-M-x");
+    film.play(app, 2.5);
+    film.type_slowly(app, " 16");
+    film.press(app, "C-M-x");
+    film.play(app, 0.5);
+    command(film, app, "rodeo-pause");
+    film.play(app, 1.5);
+}
+
+fn rodeo_save(film: &mut Film, app: &mut App) {
+    film.mark("save");
+    film.press(app, "C-x C-s");
+    film.play(app, 2.0);
+}
+
+#[test]
+#[ignore = "renders a 16:9 video of a rodeo game changing while it runs into $OXMACS_RODEO_VIDEO"]
+fn rodeo_video() {
+    let Ok(out) = std::env::var("OXMACS_RODEO_VIDEO") else {
+        return;
+    };
+    let out = PathBuf::from(out);
+    let home = rodeo_home();
+    PUMPING.set(true);
+    let mut film = Film::new(out.with_extension("frames"))
+        .sized(Size::new(1280.0, 720.0))
+        .scaled_to(1280, 720)
+        .ticking(Instant::now());
+    let visit = Visit {
+        path: home.join("jump.ox"),
+        line: None,
+        column: None,
+    };
+    let (mut app, booted) = App::boot(&[visit], Some(&home));
+    track(booted);
+    track(app.update(Message::Focus(true)));
+    settle(&mut app);
+    rodeo_open(&mut film, &mut app);
+    if std::env::var_os("OXMACS_RODEO_SHORT").is_none() {
+        rodeo_run(&mut film, &mut app);
+        rodeo_restyle(&mut film, &mut app);
+        rodeo_jump(&mut film, &mut app);
+        rodeo_break(&mut film, &mut app);
+        rodeo_save(&mut film, &mut app);
+    }
+    film.hold(1.5);
     film.finish(&out);
 }

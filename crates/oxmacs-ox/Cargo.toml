@@ -20,10 +20,12 @@ oxmacs-api.workspace = true
 oxmacs-core.workspace = true
 pdfium-render.workspace = true
 regex.workspace = true
+rodeo.workspace = true
 semver.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+image.workspace = true
 keepass = { workspace = true, features = ["save_kdbx4"] }
 tempfile.workspace = true
 zip.workspace = true
