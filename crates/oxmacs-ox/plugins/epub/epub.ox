@@ -391,7 +391,7 @@
   (show-shelf)
   (let [kept (remembered)]
     (each [place (library/found folder)]
-      (let [card (library/card place (find (fn [book] (= book.path place)) kept))]
+      (let [card (library/card place (find (fn [book] (library/same-place? book.path place)) kept))]
         (swap! shelf update :books conj card)))
     (message "{(count (get @shelf :books))} books in {(path/abbreviate folder)}")))
 

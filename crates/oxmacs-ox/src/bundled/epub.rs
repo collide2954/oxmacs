@@ -299,6 +299,38 @@ fn the_library_shows_the_books_in_a_folder() {
 }
 
 #[test]
+fn the_library_shows_how_far_each_book_was_read_however_its_folder_is_spelled() {
+    let mut reader = reader("");
+    reader.open();
+    press(&mut reader.editor, &mut reader.ox, "]");
+    reader.paged(&[(0, 0), (2, 0)]);
+    let folder = reader.books.path().display().to_string().replace('\\', "/");
+    reader
+        .ox
+        .eval(
+            &mut reader.editor,
+            &format!("(configure-plugin 'epub {{library: {folder:?}}})"),
+        )
+        .unwrap();
+
+    press(&mut reader.editor, &mut reader.ox, "M-x");
+    typed(&mut reader.editor, &mut reader.ox, "epub-library");
+    press(&mut reader.editor, &mut reader.ox, "RET");
+
+    let id = reader.editor.buffer_named("*epub library*").unwrap();
+    let shown = format!(
+        "{:?}",
+        reader
+            .editor
+            .plugin_buffer::<ViewBuffer>(id)
+            .unwrap()
+            .1
+            .node
+    );
+    assert!(shown.contains("% read"), "{shown}");
+}
+
+#[test]
 fn files_that_are_not_books_say_so_plainly() {
     let mut reader = reader("");
     let broken = reader.books.path().join("broken.epub");

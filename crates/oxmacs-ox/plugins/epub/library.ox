@@ -1,7 +1,7 @@
 (module
   (import (ox file) (ox image) (ox path) (ox string) (ox ui) (ox zip)
           (epub package :as package))
-  (export buffer found card view per-row))
+  (export buffer found card view per-row same-place?))
 
 (def buffer "*epub library*")
 (def cover-width 132)
@@ -37,6 +37,10 @@
      cover: (when read read.cover)
      progress: (when kept kept.progress)}))
 
+(def (same-place? a b)
+  "True when paths a and b name the same file, whichever separators they are written with."
+  (= (string/replace a "\\" "/") (string/replace b "\\" "/")))
+
 (def (per-row width)
   "How many covers fit side by side in width pixels."
   (max 1 (// (- width 40) (+ cover-width gap))))
@@ -64,6 +68,10 @@
                 (ui/text "Looking for books…" :face :comment)
                 (for [row (chunk (per-row shelf.width) shelf.books)]
                   (ui/row :spacing gap (for [book row] (cell book open))))))))
+
+(test "places match whichever separators they use"
+  (expect (same-place? "C:\\books\\ox.epub" "C:/books/ox.epub"))
+  (expect (not (same-place? "C:/books/ox.epub" "C:/books/hedge.epub"))))
 
 (test "covers fill the width"
   (expect (= (per-row 900) 5))
