@@ -126,11 +126,14 @@ impl Editor {
             .flatten()
     }
 
-    #[cfg(test)]
     pub fn add_managed_tool(&mut self, tool: Managed) {
         if !self.toolbox.tools.contains(&tool) {
             self.toolbox.tools.push(tool);
         }
+    }
+
+    pub fn set_tools_root(&mut self, root: Option<PathBuf>) {
+        self.tools_root = root;
     }
 
     pub fn installed_tool(&self, tool: Managed) -> Option<(String, PathBuf)> {

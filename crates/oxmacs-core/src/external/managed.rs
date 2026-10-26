@@ -53,6 +53,25 @@ pub const AIR: Managed = Managed {
     setting: Some("air-program"),
 };
 
+pub const PDFIUM: Managed = Managed {
+    name: "pdfium",
+    repository: "bblanchon/pdfium-binaries",
+    summary: "Draws pages for the PDF viewer",
+    group: "PDF",
+    form: Form::Library,
+    tag_prefix: "chromium/",
+    archives: &[
+        ("windows", "x86_64", "pdfium-win-x64.tgz"),
+        ("windows", "aarch64", "pdfium-win-arm64.tgz"),
+        ("macos", "x86_64", "pdfium-mac-x64.tgz"),
+        ("macos", "aarch64", "pdfium-mac-arm64.tgz"),
+        ("linux", "x86_64", "pdfium-linux-x64.tgz"),
+        ("linux", "aarch64", "pdfium-linux-arm64.tgz"),
+    ],
+    checksum: Checksum::Digest,
+    setting: None,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Asset {
     pub name: String,
@@ -555,25 +574,10 @@ mod tests {
         assert_eq!(AIR.locate(None, None, None), None);
     }
 
-    const LIBRARY: Managed = Managed {
-        name: "pdfium",
-        repository: "bblanchon/pdfium-binaries",
-        summary: "PDF engine",
-        group: "PDF",
-        form: Form::Library,
-        tag_prefix: "chromium/",
-        archives: &[
-            ("windows", "aarch64", "pdfium-win-arm64.tgz"),
-            ("linux", "x86_64", "pdfium-linux-x64.tgz"),
-        ],
-        checksum: Checksum::Digest,
-        setting: None,
-    };
-
     #[test]
     fn libraries_are_named_the_way_the_platform_names_them() {
         assert_eq!(
-            LIBRARY.binary(),
+            PDFIUM.binary(),
             format!(
                 "{}pdfium{}",
                 env::consts::DLL_PREFIX,
@@ -586,23 +590,23 @@ mod tests {
     #[test]
     fn archives_come_from_each_tools_table() {
         assert_eq!(
-            LIBRARY.archive("windows", "aarch64").as_deref(),
+            PDFIUM.archive("windows", "aarch64").as_deref(),
             Some("pdfium-win-arm64.tgz")
         );
-        assert_eq!(LIBRARY.archive("macos", "aarch64"), None);
+        assert_eq!(PDFIUM.archive("freebsd", "x86_64"), None);
     }
 
     #[test]
     fn tags_lose_the_tools_prefix() {
         let tagged = r#"{"tag_name": "chromium/8111", "assets": []}"#;
 
-        assert_eq!(LIBRARY.parse_release(tagged).unwrap().version, "8111");
+        assert_eq!(PDFIUM.parse_release(tagged).unwrap().version, "8111");
         assert!(AIR.parse_release(tagged).is_err());
     }
 
     #[test]
     fn assets_carry_their_published_digest() {
-        let release = LIBRARY
+        let release = PDFIUM
             .parse_release(
                 r#"{"tag_name": "chromium/8111", "assets": [
                     {"name": "pdfium-linux-x64.tgz", "browser_download_url": "https://example.com/p.tgz", "size": 3828739, "digest": "sha256:BDC6"},
@@ -621,19 +625,19 @@ mod tests {
     #[test]
     fn libraries_are_not_looked_for_on_the_path() {
         let on_path = tempfile::tempdir().unwrap();
-        fs::write(on_path.path().join(LIBRARY.binary()), "library").unwrap();
+        fs::write(on_path.path().join(PDFIUM.binary()), "library").unwrap();
         let search = env::join_paths([on_path.path()]).unwrap();
 
-        assert_eq!(LIBRARY.locate(None, None, Some(&search)), None);
+        assert_eq!(PDFIUM.locate(None, None, Some(&search)), None);
     }
 
     #[test]
     fn libraries_install_from_wherever_their_archive_keeps_them() {
         let root = tempfile::tempdir().unwrap();
-        let (_dir, bytes) = packed(LIBRARY, "pdfium/lib", "library");
+        let (_dir, bytes) = packed(PDFIUM, "pdfium/lib", "library");
 
         let installed = install(
-            LIBRARY,
+            PDFIUM,
             "8111",
             "pdfium-linux-x64.tgz",
             &bytes,
@@ -647,10 +651,10 @@ mod tests {
             root.path()
                 .join("pdfium")
                 .join("8111")
-                .join(LIBRARY.binary())
+                .join(PDFIUM.binary())
         );
         assert_eq!(
-            LIBRARY.installed(root.path()),
+            PDFIUM.installed(root.path()),
             Some(("8111".to_owned(), installed))
         );
     }
