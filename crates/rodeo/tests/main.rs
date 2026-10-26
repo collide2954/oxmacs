@@ -1,3 +1,4 @@
+mod animation;
 mod camera;
 mod clock;
 mod ease;
