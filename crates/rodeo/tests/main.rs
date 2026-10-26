@@ -9,5 +9,6 @@ mod particles;
 mod random;
 mod rect;
 mod sweep;
+mod tiled;
 mod tiles;
 mod vec;

@@ -7,4 +7,5 @@ pub mod ease;
 pub mod particles;
 pub mod random;
 pub mod rect;
+pub mod tiled;
 pub mod vec;

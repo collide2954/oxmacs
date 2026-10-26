@@ -4477,7 +4477,9 @@ dependencies = [
 name = "rodeo"
 version = "0.14.0"
 dependencies = [
+ "roxmltree 0.21.2",
  "strum",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
