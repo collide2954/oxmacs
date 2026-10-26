@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use oxmacs_core::editor::Editor;
+use oxmacs_core::view::UiEvent;
 
 use crate::Ox;
 use crate::testing::{press, settle, typed};
@@ -121,7 +122,14 @@ impl Viewer {
 
     fn call(&mut self, slot: usize, args: &[Arg]) {
         let id = self.editor.buffer_named("paper.pdf").unwrap();
-        self.ox.call(&mut self.editor, id, slot, args);
+        self.ox.event(
+            &mut self.editor,
+            UiEvent::Call {
+                buffer: id,
+                slot,
+                args: args.to_vec(),
+            },
+        );
         settle(&mut self.editor, &mut self.ox);
     }
 

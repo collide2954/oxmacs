@@ -124,6 +124,7 @@ pub fn install(isolate: &mut Isolate) {
 #[cfg(test)]
 mod tests {
     use oxmacs_core::editor::Editor;
+    use oxmacs_core::view::UiEvent;
     use oxmacs_core::view::tabbar::{TabBar, TabEvent, shown};
 
     use crate::Ox;
@@ -157,7 +158,7 @@ mod tests {
             TabEvent::New,
             TabEvent::Move { from: 0, to: 1 },
         ] {
-            ox.tab_event(&mut editor, happened);
+            ox.event(&mut editor, UiEvent::Tab(happened));
         }
         settle(&mut editor, &mut ox);
         assert_eq!(

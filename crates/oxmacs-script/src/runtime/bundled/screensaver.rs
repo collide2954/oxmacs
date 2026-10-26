@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 
 use oxmacs_core::editor::Editor;
 use oxmacs_core::theme::Highlight;
+use oxmacs_core::view::UiEvent;
 
 use crate::testing::{press, settle};
 use crate::{Ox, api::idle};
@@ -60,7 +61,7 @@ fn going_idle_starts_the_chosen_screensaver_until_input() {
             .iter()
             .all(|shape| matches!(shape, Shape::Text { .. }))
     );
-    ox.end_take_over(&mut editor);
+    ox.event(&mut editor, UiEvent::EndTakeOver);
     settle(&mut editor, &mut ox);
     assert!(takeover::current(&editor).is_none());
 }

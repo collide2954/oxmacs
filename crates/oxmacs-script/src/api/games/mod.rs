@@ -129,7 +129,7 @@ pub fn wants_keys(editor: &Editor) -> bool {
         && editor.question().is_none()
 }
 
-pub fn key(editor: &mut Editor, name: &str, down: bool) {
+pub(crate) fn key(editor: &mut Editor, name: &str, down: bool) {
     let Some(game) = game_mut(editor) else {
         return;
     };

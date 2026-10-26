@@ -11,6 +11,7 @@ use oxmacs_core::external::lsp;
 use oxmacs_core::external::notify;
 use oxmacs_core::external::process;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
+use oxmacs_core::view::UiEvent;
 
 use oxmacs_core::view::tabbar::TabEvent;
 use oxmacs_core::view::takeover;
@@ -123,7 +124,7 @@ impl App {
 
     fn end_takeover(&mut self) {
         self.last_input = self.now;
-        self.ox.end_take_over(&mut self.editor);
+        self.ox.event(&mut self.editor, UiEvent::EndTakeOver);
     }
 
     fn go_fullscreen(&mut self, id: window::Id, mode: window::Mode) -> Task<Message> {
@@ -179,7 +180,7 @@ impl App {
         };
         if let Some(happened) = happened {
             self.last_input = self.now;
-            self.ox.tab_event(&mut self.editor, happened);
+            self.ox.event(&mut self.editor, UiEvent::Tab(happened));
         }
     }
 
@@ -251,9 +252,13 @@ impl App {
                 }
                 self.editor.server_event(id, event);
             }
-            Message::OxPress(buffer, slot) => self.ox.press(&mut self.editor, buffer, slot),
+            Message::OxPress(buffer, slot) => {
+                self.ox
+                    .event(&mut self.editor, UiEvent::Press { buffer, slot });
+            }
             Message::OxCall(buffer, slot, args) => {
-                self.ox.call(&mut self.editor, buffer, slot, &args);
+                self.ox
+                    .event(&mut self.editor, UiEvent::Call { buffer, slot, args });
             }
             Message::ViewSized(buffer, size) => self.view_sized(buffer, size),
             Message::TakeoverSized(size) => self.takeover_size = Some(size),
@@ -284,12 +289,14 @@ impl App {
             {
                 self.last_input = self.now;
                 if let Some(name) = keys::game_key(&key) {
-                    games::key(&mut self.editor, &name, true);
+                    self.ox
+                        .event(&mut self.editor, UiEvent::GameKey { name, down: true });
                 }
             }
             keyboard::Event::KeyReleased { key, .. } if games::active(&self.editor) => {
                 if let Some(name) = keys::game_key(&key) {
-                    games::key(&mut self.editor, &name, false);
+                    self.ox
+                        .event(&mut self.editor, UiEvent::GameKey { name, down: false });
                 }
             }
             keyboard::Event::KeyPressed {
@@ -312,11 +319,13 @@ impl App {
 
     fn view_sized(&mut self, buffer: oxmacs_core::text::BufferId, size: iced::Size) {
         let pixels = |extent: f32| u32::try_from(units::floor_to_usize(extent)).unwrap_or(u32::MAX);
-        self.ox.view_sized(
+        self.ox.event(
             &mut self.editor,
-            buffer,
-            pixels(size.width),
-            pixels(size.height),
+            UiEvent::Sized {
+                buffer,
+                width: pixels(size.width),
+                height: pixels(size.height),
+            },
         );
     }
 

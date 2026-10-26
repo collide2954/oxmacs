@@ -302,6 +302,7 @@ pub fn install(isolate: &mut Isolate) {
 mod tests {
     use oxmacs_core::editor::Editor;
     use oxmacs_core::theme::Highlight;
+    use oxmacs_core::view::UiEvent;
     use oxmacs_core::view::book::{At, Block, Kind, Mark, Pages, Run, Spread, Typeface};
     use oxmacs_core::view::{Arg, Node, ViewBuffer};
 
@@ -414,19 +415,28 @@ mod tests {
         settle(&mut editor, &mut ox);
         let id = editor.buffer_named("*book*").unwrap();
 
-        ox.call(
+        ox.event(
             &mut editor,
-            id,
-            0,
-            &[
-                Arg::List(vec![
-                    Arg::List(vec![Arg::Int(0), Arg::Int(0)]),
-                    Arg::List(vec![Arg::Int(1), Arg::Int(9)]),
-                ]),
-                Arg::Int(2),
-            ],
+            UiEvent::Call {
+                buffer: id,
+                slot: 0,
+                args: vec![
+                    Arg::List(vec![
+                        Arg::List(vec![Arg::Int(0), Arg::Int(0)]),
+                        Arg::List(vec![Arg::Int(1), Arg::Int(9)]),
+                    ]),
+                    Arg::Int(2),
+                ],
+            },
         );
-        ox.call(&mut editor, id, 1, &[Arg::Int(-1)]);
+        ox.event(
+            &mut editor,
+            UiEvent::Call {
+                buffer: id,
+                slot: 1,
+                args: vec![Arg::Int(-1)],
+            },
+        );
         settle(&mut editor, &mut ox);
 
         assert_eq!(

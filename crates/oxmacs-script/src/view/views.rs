@@ -606,6 +606,7 @@ mod tests {
     use oxmacs_core::editor::Editor;
     use oxmacs_core::text::Buffer;
     use oxmacs_core::theme::Highlight;
+    use oxmacs_core::view::UiEvent;
 
     use crate::testing::{keys, settle};
     use crate::{Ox, ide::log};
@@ -797,7 +798,13 @@ mod tests {
             .collect();
         assert_eq!(marks, [(Some(0), true), (None, false)]);
         let id = editor.buffer_named("*thumbs*").unwrap();
-        ox.press(&mut editor, id, 0);
+        ox.event(
+            &mut editor,
+            UiEvent::Press {
+                buffer: id,
+                slot: 0,
+            },
+        );
         settle(&mut editor, &mut ox);
         assert_eq!(ox.eval(&mut editor, "@pressed").unwrap(), "1");
     }
@@ -811,7 +818,14 @@ mod tests {
         assert!(!editor.buffer_shown(id));
 
         for (width, height) in [(800, 600), (800, 600), (640, 600)] {
-            ox.view_sized(&mut editor, id, width, height);
+            ox.event(
+                &mut editor,
+                UiEvent::Sized {
+                    buffer: id,
+                    width,
+                    height,
+                },
+            );
             settle(&mut editor, &mut ox);
         }
 
@@ -882,8 +896,20 @@ mod tests {
         );
         let id = editor.buffer_named("*count*").unwrap();
 
-        ox.press(&mut editor, id, 0);
-        ox.press(&mut editor, id, 0);
+        ox.event(
+            &mut editor,
+            UiEvent::Press {
+                buffer: id,
+                slot: 0,
+            },
+        );
+        ox.event(
+            &mut editor,
+            UiEvent::Press {
+                buffer: id,
+                slot: 0,
+            },
+        );
         settle(&mut editor, &mut ox);
 
         assert_eq!(

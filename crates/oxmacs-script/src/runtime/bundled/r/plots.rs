@@ -1,4 +1,5 @@
 use oxmacs_core::editor::{Axis, Effect, JobId, Tiling, WindowId};
+use oxmacs_core::view::UiEvent;
 
 use super::{CONSOLE, PLOTS, PROMPT, R, script};
 use oxmacs_core::view::{Node, ViewBuffer};
@@ -48,7 +49,14 @@ fn written(r: &R, name: &str) -> Vec<String> {
 
 fn sized(r: &mut R, name: &str, width: u32, height: u32) {
     let id = r.editor.buffer_named(name).unwrap();
-    r.ox.view_sized(&mut r.editor, id, width, height);
+    r.ox.event(
+        &mut r.editor,
+        UiEvent::Sized {
+            buffer: id,
+            width,
+            height,
+        },
+    );
     crate::testing::settle(&mut r.editor, &mut r.ox);
 }
 

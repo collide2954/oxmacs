@@ -13,7 +13,7 @@ pub use ox_lang::task::Wake;
 use ox_lang::{Error, Isolate};
 use oxmacs_core::config::Config;
 use oxmacs_core::editor::Editor;
-use oxmacs_core::text::BufferId;
+use oxmacs_core::view::UiEvent;
 pub use runtime::plugins::Bundle;
 
 const BUDGET: Duration = Duration::from_millis(4);
@@ -173,30 +173,22 @@ impl Ox {
             .min()
     }
 
-    pub fn end_take_over(&mut self, editor: &mut Editor) {
-        view::takeover::finish(&mut self.isolate, editor);
-    }
-
-    pub fn press(&mut self, editor: &mut Editor, buffer: BufferId, slot: usize) {
-        view::views::press(&mut self.isolate, editor, buffer, slot);
-    }
-
-    pub fn call(
-        &mut self,
-        editor: &mut Editor,
-        buffer: BufferId,
-        slot: usize,
-        args: &[oxmacs_core::view::Arg],
-    ) {
-        view::views::call(&mut self.isolate, editor, buffer, slot, args);
-    }
-
-    pub fn tab_event(&mut self, editor: &mut Editor, event: oxmacs_core::view::tabbar::TabEvent) {
-        view::tabbar::event(&mut self.isolate, editor, event);
-    }
-
-    pub fn view_sized(&mut self, editor: &mut Editor, buffer: BufferId, width: u32, height: u32) {
-        view::views::sized(&mut self.isolate, editor, buffer, (width, height));
+    pub fn event(&mut self, editor: &mut Editor, event: UiEvent) {
+        let isolate = &mut self.isolate;
+        match event {
+            UiEvent::Press { buffer, slot } => view::views::press(isolate, editor, buffer, slot),
+            UiEvent::Call { buffer, slot, args } => {
+                view::views::call(isolate, editor, buffer, slot, &args);
+            }
+            UiEvent::Sized {
+                buffer,
+                width,
+                height,
+            } => view::views::sized(isolate, editor, buffer, (width, height)),
+            UiEvent::Tab(happened) => view::tabbar::event(isolate, editor, happened),
+            UiEvent::GameKey { name, down } => api::games::key(editor, &name, down),
+            UiEvent::EndTakeOver => view::takeover::finish(isolate, editor),
+        }
     }
 
     fn run_init(&mut self, editor: &mut Editor, home: Option<&Path>) -> bool {

@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use crate::command::ScopeId;
 use crate::plugin::PluginBuffer;
+use crate::text::BufferId;
 use crate::theme::Highlight;
 use shapes::Shape;
 
@@ -132,6 +133,30 @@ impl<P> Node<P> {
             Self::Pdf(view) => Node::Pdf(Box::new(view.map(press))),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UiEvent {
+    Press {
+        buffer: BufferId,
+        slot: usize,
+    },
+    Call {
+        buffer: BufferId,
+        slot: usize,
+        args: Vec<Arg>,
+    },
+    Sized {
+        buffer: BufferId,
+        width: u32,
+        height: u32,
+    },
+    Tab(tabbar::TabEvent),
+    GameKey {
+        name: String,
+        down: bool,
+    },
+    EndTakeOver,
 }
 
 #[derive(Debug, Clone, PartialEq)]

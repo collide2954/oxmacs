@@ -1,4 +1,5 @@
 use oxmacs_core::editor::Editor;
+use oxmacs_core::view::UiEvent;
 
 use crate::Ox;
 use crate::testing::{press, settle, started, typed};
@@ -111,19 +112,19 @@ fn the_bar_selects_closes_adds_and_moves_tabs() {
     press(&mut editor, &mut ox, "C-x t 2");
     visit(&mut editor, &mut ox, "two");
 
-    ox.tab_event(&mut editor, TabEvent::Select(0));
+    ox.event(&mut editor, UiEvent::Tab(TabEvent::Select(0)));
     settle(&mut editor, &mut ox);
     assert_eq!(shown(&editor), ["one"]);
 
-    ox.tab_event(&mut editor, TabEvent::New);
+    ox.event(&mut editor, UiEvent::Tab(TabEvent::New));
     settle(&mut editor, &mut ox);
     assert_eq!(bar(&editor), Some(tabs(&["one", "one", "two"], 1)));
 
-    ox.tab_event(&mut editor, TabEvent::Move { from: 2, to: 0 });
+    ox.event(&mut editor, UiEvent::Tab(TabEvent::Move { from: 2, to: 0 }));
     settle(&mut editor, &mut ox);
     assert_eq!(bar(&editor), Some(tabs(&["two", "one", "one"], 2)));
 
-    ox.tab_event(&mut editor, TabEvent::Close(0));
+    ox.event(&mut editor, UiEvent::Tab(TabEvent::Close(0)));
     settle(&mut editor, &mut ox);
     assert_eq!(bar(&editor), Some(tabs(&["one", "one"], 1)));
 }

@@ -182,6 +182,7 @@ pub fn frame(
 }
 #[cfg(test)]
 mod tests {
+    use oxmacs_core::view::UiEvent;
     use std::time::{Duration, Instant};
 
     use oxmacs_core::editor::Editor;
@@ -305,7 +306,7 @@ mod tests {
         ox.eval(&mut editor, DRAW).unwrap();
         assert!(current(&editor).is_some());
 
-        ox.end_take_over(&mut editor);
+        ox.event(&mut editor, UiEvent::EndTakeOver);
         settle(&mut editor, &mut ox);
 
         assert!(current(&editor).is_none());
