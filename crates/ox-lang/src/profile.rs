@@ -16,6 +16,7 @@ use crate::vm::modules::{self, Module};
 const LIBRARY: &str = "ox";
 const SHOWN_SHARE: f64 = 0.5;
 const FLAT_ROWS: usize = 40;
+const SLOWEST_TICKS: usize = 10;
 const KEPT_TICKS: usize = 500;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -537,11 +538,26 @@ impl Profile {
         Some(found)
     }
 
+    fn shown<'a>(&self, branches: &'a [Branch]) -> impl Iterator<Item = &'a Branch> + 'a {
+        let busy = self.busy;
+        branches
+            .iter()
+            .filter(move |branch| share(branch.total, busy) >= SHOWN_SHARE)
+    }
+
+    fn shown_functions(&self) -> impl Iterator<Item = &FunctionStats> {
+        self.functions
+            .iter()
+            .filter(|stats| !stats.total.is_zero())
+            .take(FLAT_ROWS)
+    }
+
+    fn slowest_ticks(&self) -> impl Iterator<Item = &Tick> {
+        self.ticks.iter().take(SLOWEST_TICKS)
+    }
+
     fn tree_rows(&self, out: &mut String, branches: &[Branch], depth: usize) {
-        for branch in branches {
-            if share(branch.total, self.busy) < SHOWN_SHARE {
-                continue;
-            }
+        for branch in self.shown(branches) {
             let calls = if branch.kind == Kind::Plugin {
                 String::new()
             } else {
@@ -571,7 +587,7 @@ impl Profile {
         );
         if !self.ticks.is_empty() {
             out.push_str("\nSlowest ticks\n");
-            for tick in self.ticks.iter().take(10) {
+            for tick in self.slowest_ticks() {
                 let _ = writeln!(out, "  {}  {}", shown(tick.took), tick.kind);
             }
         }
@@ -586,10 +602,7 @@ impl Profile {
             "\n{:<40}{:>9}{:>9}{:>9}",
             "Functions by self time", "self", "total", "calls"
         );
-        for stats in self.functions.iter().take(FLAT_ROWS) {
-            if stats.own.is_zero() && stats.total.is_zero() {
-                continue;
-            }
+        for stats in self.shown_functions() {
             row(
                 &mut out,
                 0,
@@ -606,21 +619,14 @@ impl Profile {
     }
 
     pub fn to_value(&self, heap: &mut Heap) -> Result<Value, Error> {
-        let tree = self
-            .tree
-            .iter()
-            .map(|branch| branch_value(heap, branch))
-            .collect::<Result<Vec<_>, _>>()?;
-        let tree = vector(heap, &tree)?;
+        let tree = self.branches_value(heap, &self.tree)?;
         let functions = self
-            .functions
-            .iter()
-            .map(|stats| function_value(heap, stats))
+            .shown_functions()
+            .map(|stats| self.function_value(heap, stats))
             .collect::<Result<Vec<_>, _>>()?;
         let functions = vector(heap, &functions)?;
         let ticks = self
-            .ticks
-            .iter()
+            .slowest_ticks()
             .map(|tick| {
                 let kind = text(heap, &tick.kind)?;
                 heap.map_from(&[
@@ -684,55 +690,68 @@ fn place_values(heap: &mut Heap, place: Option<&Place>) -> Result<(Value, Value)
     }
 }
 
-fn branch_value(heap: &mut Heap, branch: &Branch) -> Result<Value, Error> {
-    let children = branch
-        .children
-        .iter()
-        .map(|child| branch_value(heap, child))
-        .collect::<Result<Vec<_>, _>>()?;
-    let children = vector(heap, &children)?;
-    let label = text(heap, &branch.label)?;
-    let (file, line) = place_values(heap, branch.place.as_ref())?;
-    heap.map_from(&[
-        Value::keyword("name"),
-        label,
-        Value::keyword("kind"),
-        kind_value(branch.kind),
-        Value::keyword("total"),
-        Value::Float(milliseconds(branch.total)),
-        Value::keyword("self"),
-        Value::Float(milliseconds(branch.own)),
-        Value::keyword("calls"),
-        count(branch.calls),
-        Value::keyword("file"),
-        file,
-        Value::keyword("line"),
-        line,
-        Value::keyword("children"),
-        children,
-    ])
-}
+impl Profile {
+    fn branches_value(&self, heap: &mut Heap, branches: &[Branch]) -> Result<Value, Error> {
+        let values = self
+            .shown(branches)
+            .map(|branch| self.branch_value(heap, branch))
+            .collect::<Result<Vec<_>, _>>()?;
+        vector(heap, &values)
+    }
 
-fn function_value(heap: &mut Heap, stats: &FunctionStats) -> Result<Value, Error> {
-    let label = text(heap, &stats.label)?;
-    let module = text(heap, &stats.module)?;
-    let (file, line) = place_values(heap, stats.place.as_ref())?;
-    heap.map_from(&[
-        Value::keyword("name"),
-        label,
-        Value::keyword("module"),
-        module,
-        Value::keyword("kind"),
-        kind_value(stats.kind),
-        Value::keyword("total"),
-        Value::Float(milliseconds(stats.total)),
-        Value::keyword("self"),
-        Value::Float(milliseconds(stats.own)),
-        Value::keyword("calls"),
-        count(stats.calls),
-        Value::keyword("file"),
-        file,
-        Value::keyword("line"),
-        line,
-    ])
+    fn branch_value(&self, heap: &mut Heap, branch: &Branch) -> Result<Value, Error> {
+        let children = self.branches_value(heap, &branch.children)?;
+        let label = text(heap, &branch.label)?;
+        let (file, line) = place_values(heap, branch.place.as_ref())?;
+        heap.map_from(&[
+            Value::keyword("name"),
+            label,
+            Value::keyword("kind"),
+            kind_value(branch.kind),
+            Value::keyword("total"),
+            Value::Float(milliseconds(branch.total)),
+            Value::keyword("self"),
+            Value::Float(milliseconds(branch.own)),
+            Value::keyword("total-share"),
+            Value::Float(share(branch.total, self.busy)),
+            Value::keyword("self-share"),
+            Value::Float(share(branch.own, self.busy)),
+            Value::keyword("calls"),
+            count(branch.calls),
+            Value::keyword("file"),
+            file,
+            Value::keyword("line"),
+            line,
+            Value::keyword("children"),
+            children,
+        ])
+    }
+
+    fn function_value(&self, heap: &mut Heap, stats: &FunctionStats) -> Result<Value, Error> {
+        let label = text(heap, &stats.label)?;
+        let module = text(heap, &stats.module)?;
+        let (file, line) = place_values(heap, stats.place.as_ref())?;
+        heap.map_from(&[
+            Value::keyword("name"),
+            label,
+            Value::keyword("module"),
+            module,
+            Value::keyword("kind"),
+            kind_value(stats.kind),
+            Value::keyword("total"),
+            Value::Float(milliseconds(stats.total)),
+            Value::keyword("self"),
+            Value::Float(milliseconds(stats.own)),
+            Value::keyword("total-share"),
+            Value::Float(share(stats.total, self.busy)),
+            Value::keyword("self-share"),
+            Value::Float(share(stats.own, self.busy)),
+            Value::keyword("calls"),
+            count(stats.calls),
+            Value::keyword("file"),
+            file,
+            Value::keyword("line"),
+            line,
+        ])
+    }
 }

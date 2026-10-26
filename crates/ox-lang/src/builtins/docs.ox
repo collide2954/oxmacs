@@ -162,7 +162,7 @@
 (profiler-start) "Starts sampling where Ox spends its time, returning true when this call started it. profile is the easy way in."
 (profiler-stop) "Stops the profiler and returns its report as a map, or nil when it wasn't running."
 (profiler-snapshot) "The profiler's report so far, as a map, while it keeps running; nil when it isn't."
-(profile work) "Calls work while profiling and returns the report as a map; its :report is the printed table."
+(profile work) "Calls work while profiling and returns the report as a map of :wall, :busy and :samples, the :tree of calls above 0.5% and the 40 :functions with the most self time, each with its :total-share and :self-share of the busy time, the 10 slowest :ticks, and :report, the printed table."
 (profile-report found) "Prints the :report of a profile."
 (shown-plainly? form) "True when form reads the same as its value, so expect doesn't repeat it."
 (explain form values) "The text expect shows when form failed: the form, then what each argument evaluated to."
