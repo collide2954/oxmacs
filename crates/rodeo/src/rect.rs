@@ -1,6 +1,7 @@
 use crate::vec::Vec2;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[must_use]
 pub struct Rect {
     pub x: f64,
     pub y: f64,
@@ -50,10 +51,8 @@ impl Rect {
     }
 
     pub fn contains(self, point: Vec2) -> bool {
-        point.x >= self.left()
-            && point.x < self.right()
-            && point.y >= self.top()
-            && point.y < self.bottom()
+        (self.left()..self.right()).contains(&point.x)
+            && (self.top()..self.bottom()).contains(&point.y)
     }
 
     pub fn overlaps(self, other: Self) -> bool {

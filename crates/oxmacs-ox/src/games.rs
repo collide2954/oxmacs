@@ -806,6 +806,12 @@ pub fn install(isolate: &mut Isolate) {
             game.phase == Phase::Running && !game.clock.paused()
         })))
     });
+    install_time_and_input(isolate);
+    install_drawing(isolate);
+    isolate.add_native_docs(DOCS);
+}
+
+fn install_time_and_input(isolate: &mut Isolate) {
     measure(isolate, "time", |game| Value::Float(game.clock.seconds()));
     measure(isolate, "ticks", |game| {
         Value::Int(i64::try_from(game.clock.ticks()).unwrap_or(i64::MAX))
@@ -818,6 +824,9 @@ pub fn install(isolate: &mut Isolate) {
     input(isolate, "pressed?", |game| &game.pressed);
     input(isolate, "released?", |game| &game.released);
     isolate.define_host_native_in::<Editor>(MODULE, "actions", 1, Some(1), actions);
+}
+
+fn install_drawing(isolate: &mut Isolate) {
     isolate.define_host_native_in::<Editor>(
         MODULE,
         "clear",
@@ -861,7 +870,6 @@ pub fn install(isolate: &mut Isolate) {
     isolate.define_host_native_in::<Editor>(MODULE, "image", 1, Some(1), image);
     isolate.define_host_native_in::<Editor>(MODULE, "cells", 3, Some(3), cells);
     isolate.define_host_native_in::<Editor>(MODULE, "sprite", 2, None, sprite);
-    isolate.add_native_docs(DOCS);
 }
 
 fn stop(editor: &mut Editor) {

@@ -157,7 +157,7 @@ pub(crate) fn signed(value: u64) -> i64 {
     i64::from_ne_bytes(value.to_ne_bytes())
 }
 
-pub(crate) fn name_of<'a>(heap: &'a Heap, value: Value) -> Option<&'a str> {
+pub(crate) fn name_of(heap: &Heap, value: Value) -> Option<&str> {
     match value {
         Value::Keyword(word) => Some(word.name()),
         _ => heap.text(value),
