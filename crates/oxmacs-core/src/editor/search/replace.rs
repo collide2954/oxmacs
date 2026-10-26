@@ -327,7 +327,7 @@ fn regexp_word(regex: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, press, type_text};
+    use crate::testing::{editor_with, press, type_text};
     use crate::theme::Highlight;
 
     fn prompt(editor: &Editor) -> String {

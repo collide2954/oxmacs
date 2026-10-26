@@ -6,23 +6,7 @@ use std::time::{Duration, Instant};
 use oxmacs_core::editor::Editor;
 
 use crate::Ox;
-use crate::testing::{press, settle, typed};
-
-fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
-    let home = tempfile::tempdir().unwrap();
-    fs::write(home.path().join("init.ox"), init).unwrap();
-    let mut editor = Editor::new();
-    let mut ox = Ox::new();
-    ox.start(&mut editor, Some(home.path()));
-    settle(&mut editor, &mut ox);
-    (home, editor, ox)
-}
-
-fn run(editor: &mut Editor, ox: &mut Ox, command: &str) {
-    let id = editor.command_named(command).unwrap();
-    editor.execute(id);
-    settle(editor, ox);
-}
+use crate::testing::{press, run_command, started, typed};
 
 fn answer(editor: &mut Editor, ox: &mut Ox, text: &str) {
     typed(editor, ox, text);
@@ -77,7 +61,7 @@ fn browsing() -> (tempfile::TempDir, tempfile::TempDir, Editor, Ox) {
     fs::write(far.path().join("src").join("main.txt"), "a needle here\n").unwrap();
     let (home, mut editor, mut ox) = started(&with_box(far.path()));
 
-    run(&mut editor, &mut ox, "remote");
+    run_command(&mut editor, &mut ox, "remote");
     assert_eq!(editor.buffer().name(), "*Remote*");
     go_to(&mut editor, "box");
     press(&mut editor, &mut ox, "RET");
@@ -94,7 +78,7 @@ fn browsing() -> (tempfile::TempDir, tempfile::TempDir, Editor, Ox) {
 fn saved_hosts_go_to_custom_ox_once_and_leave_init_ox_alone() {
     let (home, mut editor, mut ox) = started(";; mine\n");
     for (name, address) in [("web", "10.0.0.5"), ("db", "10.0.0.6")] {
-        run(&mut editor, &mut ox, "remote-add-host");
+        run_command(&mut editor, &mut ox, "remote-add-host");
         answer(&mut editor, &mut ox, name);
         answer(&mut editor, &mut ox, "ssh");
         answer(&mut editor, &mut ox, address);

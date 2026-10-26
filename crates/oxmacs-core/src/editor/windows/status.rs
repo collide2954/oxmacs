@@ -60,7 +60,7 @@ mod tests {
 
     use super::{BufferState, Status};
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, press};
+    use crate::testing::{editor_with, press};
 
     #[test]
     fn the_status_describes_the_buffer_in_parts() {

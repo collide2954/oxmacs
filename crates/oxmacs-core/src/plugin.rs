@@ -104,7 +104,7 @@ mod tests {
     use crate::display::LineStyle;
     use crate::editor::Page;
     use crate::editor::{Editor, InputLine, Question};
-    use crate::input::KeySequence;
+    use crate::testing::press;
     use serde_json::json;
     use std::sync::Arc;
 
@@ -138,10 +138,7 @@ mod tests {
         let mut editor = Editor::new();
 
         install_counter(&mut editor);
-        let keys: KeySequence = "C-c + C-c +".parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-        }
+        press(&mut editor, "C-c + C-c +");
 
         assert_eq!(editor.plugin_state::<Count>().map(|count| count.0), Some(2));
     }
@@ -223,25 +220,18 @@ mod tests {
         editor.bind(scope, "+", more).ok();
     }
 
-    fn type_keys(editor: &mut Editor, notation: &str) {
-        let keys: KeySequence = notation.parse().unwrap();
-        for key in keys.keys() {
-            editor.handle_key(*key);
-        }
-    }
-
     #[test]
     fn plugin_buffers_have_their_own_keys_text_and_styles() {
         let mut editor = Editor::new();
         install_greetings(&mut editor);
 
-        type_keys(&mut editor, "C-c g + +");
+        press(&mut editor, "C-c g + +");
 
         assert_eq!(editor.buffer().name(), "*Greeter*");
         assert!(editor.buffer().is_read_only());
         assert_eq!(editor.buffer().contents(), "Hello 2 times\n");
         assert_eq!(editor.line_style(0).spans, [(0..13, Highlight::Heading)]);
-        type_keys(&mut editor, "C-x b RET +");
+        press(&mut editor, "C-x b RET +");
         assert_eq!(editor.buffer().name(), "*scratch*");
         assert_eq!(editor.buffer().contents(), "+");
     }
@@ -266,28 +256,28 @@ mod tests {
             note,
         );
         assert_eq!(editor.minibuffer().unwrap().prompt(), "Fruit: ");
-        type_keys(&mut editor, "a n");
+        press(&mut editor, "a n");
         let offered: Vec<String> = editor
             .completions()
             .into_iter()
             .map(|completion| completion.label)
             .collect();
         assert_eq!(offered, ["banana"]);
-        type_keys(&mut editor, "RET");
+        press(&mut editor, "RET");
 
         editor.prompt("Name: ", note);
         assert!(!editor.minibuffer().unwrap().completes());
-        type_keys(&mut editor, "z o e RET");
+        press(&mut editor, "z o e RET");
 
         editor.prompt_with_text("Port: ", "66", note);
-        type_keys(&mut editor, "9 7 RET");
+        press(&mut editor, "9 7 RET");
 
         editor.ask("Keep it?", |editor, keep| note(editor, keep.to_string()));
         assert_eq!(editor.question().unwrap().prompt(), "Keep it? (y or n) ");
-        type_keys(&mut editor, "y");
+        press(&mut editor, "y");
 
         editor.ask("Again?", |editor, keep| note(editor, keep.to_string()));
-        type_keys(&mut editor, "C-g");
+        press(&mut editor, "C-g");
 
         assert_eq!(
             editor
@@ -324,12 +314,12 @@ mod tests {
             .map(|completion| completion.annotation)
             .collect();
         assert_eq!(notes, [Some("irc.libera.chat:6697".to_owned()), None]);
-        type_keys(&mut editor, "C-g");
+        press(&mut editor, "C-g");
 
         editor.prompt_secret("Password: ", note);
         assert!(editor.minibuffer().unwrap().is_secret());
         assert!(!editor.minibuffer().unwrap().completes());
-        type_keys(&mut editor, "s 3 c r 3 t RET");
+        press(&mut editor, "s 3 c r 3 t RET");
 
         assert_eq!(
             editor
@@ -563,13 +553,13 @@ mod tests {
         assert_eq!(editor.buffer().name(), "*scratch*");
         editor.show_buffer(id);
 
-        type_keys(&mut editor, "h i RET");
+        press(&mut editor, "h i RET");
         assert_eq!(editor.buffer().contents(), "> ");
-        type_keys(&mut editor, "C-a x");
+        press(&mut editor, "C-a x");
         assert_eq!(editor.buffer().contents(), "> x");
-        type_keys(&mut editor, "DEL DEL");
+        press(&mut editor, "DEL DEL");
         assert_eq!(editor.buffer().contents(), "> ");
-        type_keys(&mut editor, "M-p");
+        press(&mut editor, "M-p");
         assert_eq!(editor.buffer().contents(), "> hi");
 
         assert_eq!(
@@ -597,14 +587,14 @@ mod tests {
         });
         editor.bind(Scope::Global, "C-c h", id).unwrap();
 
-        type_keys(&mut editor, "C-c h M-x n o t e - h i RET");
+        press(&mut editor, "C-c h M-x n o t e - h i RET");
         assert_eq!(
             editor.command_named("next-line"),
             Some(crate::command::Command::NextLine.into())
         );
         assert_eq!(editor.command_named("note-hi"), Some(id));
         assert!(editor.remove_dynamic_command("note-hi"));
-        type_keys(&mut editor, "C-c h");
+        press(&mut editor, "C-c h");
 
         assert_eq!(editor.command_named("note-hi"), None);
         assert_eq!(
@@ -628,7 +618,7 @@ mod tests {
         });
         editor.bind(Scope::Global, "C-c r", command).unwrap();
 
-        type_keys(&mut editor, "C-c r C-c r C-f C-c r");
+        press(&mut editor, "C-c r C-c r C-f C-c r");
 
         assert_eq!(
             editor
@@ -705,7 +695,7 @@ mod tests {
         editor.open_file(&path);
         editor.set_plugin_state(Answers::default());
 
-        type_keys(&mut editor, "C-e x C-c s C-x C-s");
+        press(&mut editor, "C-e x C-c s C-x C-s");
 
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "# onex\n");
         assert_eq!(
@@ -740,7 +730,7 @@ mod tests {
             "zero\none\ntwo\nthree\n"
         );
         assert_eq!(editor.buffer().point(), 14);
-        type_keys(&mut editor, "M-,");
+        press(&mut editor, "M-,");
         assert_eq!(editor.buffer().point(), 0);
     }
 
@@ -857,13 +847,13 @@ mod tests {
         });
         assert_eq!(editor.minibuffer().unwrap().prompt(), "Copy to: ");
         assert_eq!(editor.completions().len(), 2);
-        type_keys(&mut editor, "n o t RET");
+        press(&mut editor, "n o t RET");
 
         editor.prompt_path("Directory: ", true, |editor, path| {
             note(editor, path.display().to_string());
         });
         assert_eq!(editor.completions().len(), 1);
-        type_keys(&mut editor, "s u b / RET");
+        press(&mut editor, "s u b / RET");
 
         assert_eq!(
             editor
@@ -886,9 +876,9 @@ mod tests {
             editor.question().map(Question::prompt),
             Some("Delete it? (yes or no) ")
         );
-        type_keys(&mut editor, "y RET");
+        press(&mut editor, "y RET");
         assert_eq!(editor.message(), Some("Please answer yes or no"));
-        type_keys(&mut editor, "y e s RET");
+        press(&mut editor, "y e s RET");
 
         assert_eq!(
             editor
@@ -1072,11 +1062,11 @@ mod tests {
         editor.set_plugin_state(Answers::default());
 
         ask(&mut editor);
-        type_keys(&mut editor, "C-n RET");
+        press(&mut editor, "C-n RET");
         ask(&mut editor);
-        type_keys(&mut editor, "G a r d e n RET");
+        press(&mut editor, "G a r d e n RET");
         ask(&mut editor);
-        type_keys(&mut editor, "I n b M-RET");
+        press(&mut editor, "I n b M-RET");
 
         assert_eq!(
             editor
@@ -1096,7 +1086,7 @@ mod tests {
         editor.set_plugin_state(Answers::default());
         editor.prompt_with("Server: ", |_| vec![Offer::from("libera")], note);
 
-        type_keys(&mut editor, "l i M-RET");
+        press(&mut editor, "l i M-RET");
 
         assert_eq!(
             editor
@@ -1116,10 +1106,10 @@ mod tests {
             |_, text| vec![(0..text.chars().count(), Highlight::Keyword)],
             |_, _| {},
         );
-        type_keys(&mut editor, "a b");
+        press(&mut editor, "a b");
 
         assert_eq!(editor.minibuffer_highlights(), [(0..2, Highlight::Keyword)]);
-        type_keys(&mut editor, "C-g");
+        press(&mut editor, "C-g");
         assert_eq!(editor.minibuffer_highlights(), []);
     }
 

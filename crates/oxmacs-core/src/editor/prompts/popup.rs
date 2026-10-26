@@ -166,7 +166,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, press, type_text};
+    use crate::testing::{editor_with, press, type_text};
 
     fn offered(text: &str, point: usize, start: usize, candidates: &[&str]) -> Editor {
         let mut editor = editor_with(text, point);

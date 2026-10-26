@@ -30,7 +30,7 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::test_support::{editor_with, press};
+    use crate::testing::{editor_with, press};
 
     #[test]
     fn going_back_returns_to_remembered_places_in_order() {

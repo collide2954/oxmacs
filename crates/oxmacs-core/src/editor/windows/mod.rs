@@ -590,8 +590,8 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::test_support::{editor_with, press, type_text};
     use crate::editor::{Editor, WindowId};
+    use crate::testing::{editor_with, press, type_text};
 
     fn second(editor: &Editor) -> WindowId {
         editor.tiling().windows()[1]

@@ -1,12 +1,11 @@
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 use oxmacs_core::editor::{Cell, Clicks, Editor};
 use oxmacs_core::theme::Highlight;
 
 use crate::Ox;
-use crate::testing::{press, question, settle, typed};
+use crate::testing::{git, press, question, settle, typed};
 
 const TREE: &str = "*explorer*";
 
@@ -66,17 +65,6 @@ fn line_at_point(editor: &Editor) -> String {
         .line_text(buffer.line_of(buffer.point()))
         .trim()
         .to_owned()
-}
-
-fn git(directory: &Path, args: &[&str]) {
-    let mut command = Command::new("git");
-    for (name, _) in std::env::vars_os() {
-        if name.to_string_lossy().starts_with("GIT_") {
-            command.env_remove(name);
-        }
-    }
-    let output = command.args(args).current_dir(directory).output().unwrap();
-    assert!(output.status.success(), "git {args:?}");
 }
 
 #[test]

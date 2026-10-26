@@ -449,8 +449,8 @@ fn capitalize(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::test_support::{editor_with, press, type_text};
     use crate::editor::{Cell, Clicks, Editor, Effect};
+    use crate::testing::{editor_with, press, type_text};
     use crate::theme::Highlight;
 
     #[test]

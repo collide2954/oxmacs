@@ -65,7 +65,7 @@ impl Editor {
 mod tests {
     use crate::command::Command;
     use crate::editor::Editor;
-    use crate::editor::test_support::{labels, press, type_text};
+    use crate::testing::{labels, press, type_text};
     use crate::theme::Appearance;
 
     fn load(editor: &mut Editor, name: &str) {

@@ -280,7 +280,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::editor::Effect;
-    use crate::editor::test_support::{editor_with, press};
+    use crate::testing::{editor_with, press};
 
     const LINES: &str = "one\ntwo\nthree\nfour\n";
 

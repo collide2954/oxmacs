@@ -47,8 +47,8 @@ mod tests {
     use serde_json::json;
 
     use crate::config::Config;
-    use crate::editor::test_support::{press, type_text};
     use crate::editor::{Editor, Effect};
+    use crate::testing::{press, type_text};
 
     #[test]
     fn reconfiguring_applies_at_once_and_tells_the_ui() {

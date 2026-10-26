@@ -11,17 +11,7 @@ const IMPORTS: &str =
     "(module (import (screensaver starfield :as stars) (screensaver matrix :as rain)))";
 
 fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
-    let home = tempfile::tempdir().unwrap();
-    std::fs::write(
-        home.path().join("init.ox"),
-        format!("(use-plugin screensaver)\n{init}"),
-    )
-    .unwrap();
-    let mut editor = Editor::new();
-    let mut ox = Ox::new();
-    ox.start(&mut editor, Some(home.path()));
-    settle(&mut editor, &mut ox);
-    (home, editor, ox)
+    crate::testing::started(&format!("(use-plugin screensaver)\n{init}"))
 }
 
 fn drawn(editor: &mut Editor, ox: &mut Ox, at: Instant) -> Vec<Shape> {

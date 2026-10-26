@@ -346,8 +346,8 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::editor::test_support::{press, type_text};
     use crate::editor::{Cell, Clicks, Effect, ErrorAt, Outcome};
+    use crate::testing::{press, type_text};
 
     #[test]
     fn headers_set_the_severity() {

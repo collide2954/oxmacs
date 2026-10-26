@@ -398,9 +398,9 @@ impl Editor {
 pub(crate) mod fixtures {
     use std::fs;
 
-    use crate::editor::test_support::{press, type_text};
     use crate::editor::{Editor, Effect, Job, JobId, Outcome};
     use crate::external::diagnostics::sample;
+    use crate::testing::{press, type_text};
 
     pub(crate) const FINISHED: &str = r#"{"reason":"build-finished","success":false}"#;
 
@@ -470,10 +470,10 @@ mod tests {
 
     use super::fixtures::{FINISHED, linting, project, report, reported, save, spawned};
     use crate::config::Config;
-    use crate::editor::test_support::{press, type_text};
     use crate::editor::{Editor, Effect, Job, LintLine, LintRun, Linter, Outcome};
     use crate::external::diagnostics::{Diagnostic, Severity, sample};
     use crate::syntax::{Indentation, Language, LanguageSpec, Outline};
+    use crate::testing::{press, type_text};
 
     static SHOUTY: LanguageSpec = LanguageSpec {
         name: "Shouty",

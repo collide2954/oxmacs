@@ -109,7 +109,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, press, type_text};
+    use crate::testing::{editor_with, press, type_text};
 
     #[test]
     fn stored_windows_come_back_with_their_buffers_points_and_selection() {

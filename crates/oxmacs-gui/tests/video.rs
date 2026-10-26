@@ -1,5 +1,6 @@
 mod sample_book;
 mod sample_paper;
+mod support;
 
 use std::cell::{Cell, RefCell};
 use std::fmt::Write as _;
@@ -18,8 +19,9 @@ use iced_runtime::Action;
 use iced_test::Simulator;
 use oxmacs_core::editor::Visit;
 use oxmacs_gui::app::{App, Message};
-use oxmacs_gui::fonts;
 use oxmacs_script::view::views::{Node, ViewBuffer};
+
+use support::{chord, settings, typed};
 
 thread_local! {
     static PUMPING: Cell<bool> = const { Cell::new(false) };
@@ -111,15 +113,6 @@ const LIFE_END: &str = "(def (draw)
 (do (swap! world (fn [now] {cells: (step now.cells) generation: (inc now.generation)}))
 nil)
 :stop))))";
-
-fn settings() -> iced::Settings {
-    iced::Settings {
-        fonts: vec![fonts::JETBRAINS_MONO_REGULAR.into()],
-        default_font: fonts::EDITOR,
-        antialiasing: true,
-        ..iced::Settings::default()
-    }
-}
 
 struct Film {
     folder: PathBuf,
@@ -327,58 +320,12 @@ impl Film {
     }
 }
 
-fn key(app: &mut App, key: Key, text: Option<&str>, modifiers: Modifiers) {
-    track(app.update(Message::Keyboard(keyboard::Event::KeyPressed {
-        key: key.clone(),
-        modified_key: key,
-        physical_key: Physical::Code(Code::KeyA),
-        location: Location::Standard,
-        modifiers,
-        text: text.map(Into::into),
-        repeat: false,
-    })));
-}
-
-fn keys(app: &mut App, chord: &str) {
-    let mut modifiers = Modifiers::empty();
-    let mut rest = chord;
-    loop {
-        if let Some(after) = rest.strip_prefix("C-") {
-            modifiers |= Modifiers::CTRL;
-            rest = after;
-        } else if let Some(after) = rest.strip_prefix("M-") {
-            modifiers |= Modifiers::ALT;
-            rest = after;
-        } else {
-            break;
-        }
-    }
-    let named = match rest {
-        "RET" => Some(Named::Enter),
-        "TAB" => Some(Named::Tab),
-        "SPC" => Some(Named::Space),
-        "DEL" => Some(Named::Backspace),
-        "ESC" => Some(Named::Escape),
-        _ => None,
-    };
-    match named {
-        Some(named) => key(app, Key::Named(named), None, modifiers),
-        None => key(app, Key::Character(rest.into()), Some(rest), modifiers),
-    }
+fn keys(app: &mut App, notation: &str) {
+    track(app.update(chord(notation)));
 }
 
 fn type_char(app: &mut App, c: char) {
-    if c == '\n' {
-        keys(app, "RET");
-        return;
-    }
-    let text = c.to_string();
-    key(
-        app,
-        Key::Character(text.as_str().into()),
-        Some(&text),
-        Modifiers::empty(),
-    );
+    track(app.update(typed(c)));
 }
 
 fn settle(app: &mut App) {

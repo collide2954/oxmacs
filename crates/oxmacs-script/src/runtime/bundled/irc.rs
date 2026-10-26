@@ -14,7 +14,7 @@ use oxmacs_core::input::KeySequence;
 use oxmacs_core::text::Buffer;
 
 use crate::Ox;
-use crate::testing::settle;
+use crate::testing::started;
 
 struct Fake {
     port: u16,
@@ -148,16 +148,6 @@ fn wait_for_text(editor: &mut Editor, ox: &mut Ox, buffer: &str, wanted: &str) {
         "{buffer} never showed {wanted:?}: {}",
         contents(editor, buffer)
     );
-}
-
-fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
-    let home = tempfile::tempdir().unwrap();
-    fs::write(home.path().join("init.ox"), init).unwrap();
-    let mut editor = Editor::new();
-    let mut ox = Ox::new();
-    ox.start(&mut editor, Some(home.path()));
-    settle(&mut editor, &mut ox);
-    (home, editor, ox)
 }
 
 fn network(port: u16, extra: &str) -> String {

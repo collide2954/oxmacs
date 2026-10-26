@@ -449,7 +449,7 @@ fn clip_label(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, labels, minibuffer_input, press, type_text};
+    use crate::testing::{editor_with, labels, minibuffer_input, press, type_text};
 
     #[test]
     fn m_x_opens_the_minibuffer_with_a_prompt() {

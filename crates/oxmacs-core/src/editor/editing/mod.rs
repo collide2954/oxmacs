@@ -77,7 +77,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{contents_after, press};
+    use crate::testing::{contents_after, press};
 
     #[test]
     fn printable_keys_insert_themselves() {
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn line_and_word_deletions_clear_the_selection_and_skip_the_clipboard() {
-        let mut editor = crate::editor::test_support::editor_with("hello world", 0);
+        let mut editor = crate::testing::editor_with("hello world", 0);
 
         press(&mut editor, "C-SPC C-f M-d");
 

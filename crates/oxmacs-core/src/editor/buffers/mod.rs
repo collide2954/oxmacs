@@ -402,7 +402,7 @@ mod tests {
     use std::fs;
 
     use crate::editor::Editor;
-    use crate::editor::test_support::{labels, press, type_text};
+    use crate::testing::{labels, press, type_text};
     use crate::text::Buffer;
 
     fn editor_with_buffers(names: &[&str]) -> Editor {

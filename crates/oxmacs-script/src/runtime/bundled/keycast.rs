@@ -1,18 +1,8 @@
 use oxmacs_core::editor::Editor;
 
 use crate::Ox;
-use crate::testing::{press, settle, typed};
+use crate::testing::{press, settle, started, typed};
 use crate::view::overlays::{self, Look, Place};
-
-fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
-    let home = tempfile::tempdir().unwrap();
-    std::fs::write(home.path().join("init.ox"), init).unwrap();
-    let mut editor = Editor::new();
-    let mut ox = Ox::new();
-    ox.start(&mut editor, Some(home.path()));
-    settle(&mut editor, &mut ox);
-    (home, editor, ox)
-}
 
 fn casting(config: &str) -> (tempfile::TempDir, Editor, Ox) {
     started(&format!("(use-plugin keycast{config})"))

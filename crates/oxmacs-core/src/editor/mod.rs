@@ -21,8 +21,6 @@ mod presentation;
 mod prompts;
 mod search;
 mod special;
-#[cfg(test)]
-mod test_support;
 mod watching;
 mod windows;
 
@@ -749,9 +747,9 @@ fn inserts_itself(key: Key) -> bool {
 mod tests {
     use serde_json::json;
 
-    use super::test_support::{editor_with, lines, press, type_text};
     use super::*;
     use crate::command::CommandSpec;
+    use crate::testing::{editor_with, lines, press, type_text};
 
     fn say_hello(editor: &mut Editor) {
         editor.show_message("hello");

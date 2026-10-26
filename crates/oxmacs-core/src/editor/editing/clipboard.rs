@@ -139,8 +139,8 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::test_support::{editor_with, labels, press};
     use crate::editor::{Editor, Effect};
+    use crate::testing::{editor_with, labels, press};
 
     fn clipboard_writes(editor: &mut Editor) -> Vec<String> {
         editor

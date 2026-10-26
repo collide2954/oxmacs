@@ -104,8 +104,8 @@ fn column_width(feature: Feature) -> usize {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{lines, press, type_text};
     use crate::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
+    use crate::testing::{lines, press, type_text};
 
     static NOTES: LanguageSpec = LanguageSpec {
         name: "Notes",

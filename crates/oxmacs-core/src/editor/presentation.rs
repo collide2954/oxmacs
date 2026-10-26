@@ -73,8 +73,8 @@ impl Pane<'_> {
 #[cfg(test)]
 mod tests {
     use super::Presentation;
-    use crate::editor::test_support::{editor_with, press};
     use crate::editor::{Editor, Effect};
+    use crate::testing::{editor_with, press};
 
     fn numbered(count: usize) -> Editor {
         let text: Vec<String> = (0..count).map(|line| line.to_string()).collect();

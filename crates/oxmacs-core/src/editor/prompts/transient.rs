@@ -242,7 +242,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::editor::test_support::press;
+    use crate::testing::press;
 
     #[derive(Debug, Default)]
     struct Ran(Vec<String>);

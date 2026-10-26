@@ -1,46 +1,15 @@
-use std::fmt::Write as _;
-use std::time::{Duration, Instant};
+mod support;
 
-use iced::keyboard::key::{Code, Named, Physical};
-use iced::keyboard::{self, Key, Location, Modifiers};
+use iced::keyboard::key::Named;
+use iced::keyboard::{Key, Modifiers};
 use oxmacs_core::editor::Visit;
-use oxmacs_gui::app::{App, Message};
+use oxmacs_gui::app::App;
+use oxmacs_script::testing::{rust_sample, timed};
+
+use support::pressed;
 
 fn key(app: &mut App, key: Key, text: Option<&str>) {
-    let _ = app.update(Message::Keyboard(keyboard::Event::KeyPressed {
-        key: key.clone(),
-        modified_key: key,
-        physical_key: Physical::Code(Code::KeyA),
-        location: Location::Standard,
-        modifiers: Modifiers::empty(),
-        text: text.map(Into::into),
-        repeat: false,
-    }));
-}
-
-fn timed(label: &str, runs: usize, mut work: impl FnMut()) -> Duration {
-    let mut times = Vec::with_capacity(runs);
-    for _ in 0..runs {
-        let started = Instant::now();
-        work();
-        times.push(started.elapsed());
-    }
-    times.sort_unstable();
-    let median = times[times.len() / 2];
-    let worst = times[times.len() - 1];
-    println!("{label:<40} median {median:>10.2?}   worst {worst:>10.2?}   ({runs} runs)");
-    median
-}
-
-fn big_rust(lines: usize) -> String {
-    let mut text = String::new();
-    for index in 0..lines / 4 {
-        let _ = writeln!(
-            text,
-            "fn item_{index}(value: u64) -> u64 {{\n    let doubled = value * 2; // {index}\n    doubled + {index}\n}}"
-        );
-    }
-    text
+    let _ = app.update(pressed(key, text, Modifiers::empty()));
 }
 
 #[test]
@@ -78,8 +47,8 @@ fn how_fast_the_editor_is() {
     let files = tempfile::tempdir().unwrap();
     let small = files.path().join("small.rs");
     let big = files.path().join("big.rs");
-    std::fs::write(&small, big_rust(400)).unwrap();
-    std::fs::write(&big, big_rust(20_000)).unwrap();
+    std::fs::write(&small, rust_sample(400)).unwrap();
+    std::fs::write(&big, rust_sample(20_000)).unwrap();
 
     timed("boot with the bundled plugins", 5, || {
         let _ = App::boot(&[], Some(home.path()));

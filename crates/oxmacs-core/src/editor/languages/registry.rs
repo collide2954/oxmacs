@@ -149,8 +149,8 @@ mod tests {
 
     use crate::command::CommandSpec;
     use crate::editor::Editor;
-    use crate::editor::test_support::{press, type_text};
     use crate::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
+    use crate::testing::{press, type_text};
     use crate::theme::Highlight;
 
     static NOTES: LanguageSpec = LanguageSpec {

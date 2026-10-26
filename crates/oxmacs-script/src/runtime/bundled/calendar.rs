@@ -9,26 +9,10 @@ use std::thread;
 use oxmacs_core::editor::Editor;
 
 use crate::Ox;
-use crate::testing::{press, settle, typed};
+use crate::testing::{press, run_command, settle, typed};
 
 fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
-    let home = tempfile::tempdir().unwrap();
-    fs::write(
-        home.path().join("init.ox"),
-        format!("(use-plugin calendar)\n{init}"),
-    )
-    .unwrap();
-    let mut editor = Editor::new();
-    let mut ox = Ox::new();
-    ox.start(&mut editor, Some(home.path()));
-    settle(&mut editor, &mut ox);
-    (home, editor, ox)
-}
-
-fn run(editor: &mut Editor, ox: &mut Ox, command: &str) {
-    let id = editor.command_named(command).unwrap();
-    editor.execute(id);
-    settle(editor, ox);
+    crate::testing::started(&format!("(use-plugin calendar)\n{init}"))
 }
 
 fn answer(editor: &mut Editor, ox: &mut Ox, text: &str) {
@@ -56,7 +40,7 @@ fn personal(home: &Path) -> PathBuf {
 }
 
 fn add_event(editor: &mut Editor, ox: &mut Ox, title: &str, start: &str, repeats: &str) {
-    run(editor, ox, "calendar-add");
+    run_command(editor, ox, "calendar-add");
     answer(editor, ox, title);
     answer(editor, ox, "");
     answer(editor, ox, start);
@@ -70,7 +54,7 @@ fn added_events_show_in_the_agenda_and_their_file() {
     let (home, mut editor, mut ox) = started("");
 
     add_event(&mut editor, &mut ox, "Standup", "9:30", "never");
-    run(&mut editor, &mut ox, "calendar");
+    run_command(&mut editor, &mut ox, "calendar");
 
     let agenda = contents(&editor, "*Calendar*");
     assert!(agenda.contains("today"), "{agenda}");
@@ -93,7 +77,7 @@ fn added_events_show_in_the_agenda_and_their_file() {
 fn one_repeat_of_an_event_can_be_deleted() {
     let (home, mut editor, mut ox) = started("");
     add_event(&mut editor, &mut ox, "Gym", "18:00", "daily");
-    run(&mut editor, &mut ox, "calendar");
+    run_command(&mut editor, &mut ox, "calendar");
     let before = contents(&editor, "*Calendar*").matches("Gym").count();
     assert_eq!(before, 14);
 
@@ -115,7 +99,7 @@ fn the_month_and_week_views_show_the_events() {
     let (_home, mut editor, mut ox) = started("");
     add_event(&mut editor, &mut ox, "Lunch", "12:00", "never");
 
-    run(&mut editor, &mut ox, "calendar-month");
+    run_command(&mut editor, &mut ox, "calendar-month");
     let month = contents(&editor, "*Calendar month*");
     let title = eval(
         &mut editor,
@@ -125,7 +109,7 @@ fn the_month_and_week_views_show_the_events() {
     assert!(month.starts_with(title.trim_matches('"')), "{month}");
     assert!(month.contains("12:00 Lu"), "{month}");
 
-    run(&mut editor, &mut ox, "calendar-week");
+    run_command(&mut editor, &mut ox, "calendar-week");
     assert_eq!(editor.buffer().name(), "*Calendar week*");
     let id = editor.buffer_named("*Calendar week*").unwrap();
     let (_, view) = editor
@@ -174,7 +158,7 @@ fn invitations_are_imported_and_answered_with_a_reply_file() {
     let invite = home.path().join("invite.ics");
     fs::write(&invite, INVITATION).unwrap();
 
-    run(&mut editor, &mut ox, "calendar-import");
+    run_command(&mut editor, &mut ox, "calendar-import");
     press(&mut editor, &mut ox, "C-a C-k");
     answer(&mut editor, &mut ox, &invite.display().to_string());
     assert!(contents(&editor, "*Calendar*").contains("Design review"));
@@ -315,7 +299,7 @@ fn caldav_calendars_bring_in_server_events_and_send_local_changes() {
         r#"(use-plugin calendar :config {{calendars: [{{name: "Work" url: "http://127.0.0.1:{port}/cal/work/"}}]}})"#
     ));
 
-    run(&mut editor, &mut ox, "calendar-sync");
+    run_command(&mut editor, &mut ox, "calendar-sync");
     assert_eq!(editor.message(), Some("Calendars synced"));
     let work = home.path().join("calendar").join("Work");
     assert!(
@@ -325,7 +309,7 @@ fn caldav_calendars_bring_in_server_events_and_send_local_changes() {
     );
 
     add_event(&mut editor, &mut ox, "Planning", "10:00", "never");
-    run(&mut editor, &mut ox, "calendar-sync");
+    run_command(&mut editor, &mut ox, "calendar-sync");
     let heard = dav.lock().unwrap().heard.clone();
     assert!(
         heard
@@ -344,7 +328,7 @@ fn caldav_calendars_bring_in_server_events_and_send_local_changes() {
            (store/delete-event! (find (fn [event] (= event.summary "Planning")) (store/events)))"#,
     );
     settle(&mut editor, &mut ox);
-    run(&mut editor, &mut ox, "calendar-sync");
+    run_command(&mut editor, &mut ox, "calendar-sync");
     let heard = dav.lock().unwrap().heard.clone();
     assert!(
         heard

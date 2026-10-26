@@ -177,7 +177,7 @@ mod tests {
     use crate::command::Command;
     use crate::config::Config;
     use crate::editor::Editor;
-    use crate::editor::test_support::{press, question, type_text};
+    use crate::testing::{press, question, type_text};
 
     fn opened(text: &str) -> (tempfile::TempDir, PathBuf, Editor) {
         let dir = tempfile::tempdir().unwrap();

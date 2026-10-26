@@ -27,7 +27,7 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::test_support::{editor_with, press, type_text};
+    use crate::testing::{editor_with, press, type_text};
 
     fn read_only_editor() -> crate::editor::Editor {
         let mut editor = editor_with("hello", 1);

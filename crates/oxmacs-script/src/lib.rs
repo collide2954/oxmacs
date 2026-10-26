@@ -1,8 +1,8 @@
 pub mod api;
 pub mod ide;
 mod runtime;
-#[cfg(test)]
-mod testing;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 pub mod view;
 
 use std::fs;
@@ -327,7 +327,7 @@ mod tests {
     use oxmacs_core::editor::Editor;
 
     use super::{Ox, Pace, ide};
-    use crate::testing::{home_with, press, settle};
+    use crate::testing::{home_with, press, run_command, settle};
 
     #[test]
     fn ox_code_shows_messages_in_the_echo_area() {
@@ -413,12 +413,6 @@ mod tests {
         assert_eq!(editor.message(), Some("opened"));
     }
 
-    fn run(editor: &mut Editor, ox: &mut Ox, command: &str) {
-        let id = editor.command_named(command).unwrap();
-        editor.execute(id);
-        settle(editor, ox);
-    }
-
     #[test]
     fn commands_defined_in_ox_run_from_the_editor() {
         let mut editor = Editor::new();
@@ -430,7 +424,7 @@ mod tests {
                 r#"(defcommand greet "Say hello" (message "Hello"))"#,
             )
             .unwrap();
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         assert_eq!(defined, "greet");
         assert_eq!(editor.message(), Some("Hello"));
@@ -448,7 +442,7 @@ mod tests {
         .unwrap();
         ox.eval(&mut editor, r#"(defcommand greet "Say hi" (message "Hi"))"#)
             .unwrap();
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         assert_eq!(editor.message(), Some("Hi"));
     }
@@ -460,7 +454,7 @@ mod tests {
 
         ox.eval(&mut editor, r#"(defcommand broken "Fail" (/ 1 0))"#)
             .unwrap();
-        run(&mut editor, &mut ox, "broken");
+        run_command(&mut editor, &mut ox, "broken");
 
         assert_eq!(editor.message(), Some("Ox: Division by zero"));
     }

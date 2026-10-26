@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 use oxmacs_core::editor::Editor;
 use oxmacs_core::plugin::PluginBuffer;
@@ -8,23 +7,7 @@ use oxmacs_core::theme::Highlight;
 
 use crate::Ox;
 use crate::api::buffers::LinesBuffer;
-use crate::testing::{at_point, press, question, settle};
-
-fn git(directory: &Path, args: &[&str]) -> String {
-    let mut command = Command::new("git");
-    for (name, _) in std::env::vars_os() {
-        if name.to_string_lossy().starts_with("GIT_") {
-            command.env_remove(name);
-        }
-    }
-    let output = command.args(args).current_dir(directory).output().unwrap();
-    assert!(
-        output.status.success(),
-        "git {args:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).into_owned()
-}
+use crate::testing::{at_point, git, press, question, settle};
 
 const CONFIG: &str =
     "[user]\n\tname = Ada Lovelace\n\temail = ada@example.com\n[commit]\n\tgpgsign = false\n";

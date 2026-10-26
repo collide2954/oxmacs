@@ -172,7 +172,7 @@ mod tests {
 
     use super::Place;
     use crate::editor::Editor;
-    use crate::editor::test_support::{lines, press};
+    use crate::testing::{lines, press};
 
     fn listed() -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();

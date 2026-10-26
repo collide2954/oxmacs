@@ -83,8 +83,8 @@ mod tests {
     use std::fs;
 
     use crate::editor::Editor;
-    use crate::editor::test_support::{press, type_text};
     use crate::syntax::{Indentation, Language, LanguageSpec, Outline};
+    use crate::testing::{press, type_text};
     use crate::theme::Highlight;
 
     fn run(editor: &mut Editor, command: &str) {
@@ -236,7 +236,7 @@ mod tests {
 
     #[test]
     fn statements_and_definitions_are_found_by_offset() {
-        let mut editor = crate::editor::test_support::editor_with(
+        let mut editor = crate::testing::editor_with(
             "x <- 1\n\ny <- df |>\n  head()\nf <- function() {\n  1\n}\n",
             0,
         );

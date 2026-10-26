@@ -58,8 +58,8 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, labels, press, type_text};
     use crate::syntax::Language;
+    use crate::testing::{editor_with, labels, press, type_text};
 
     fn rust(text: &str) -> Editor {
         let mut editor = editor_with(text, 0);

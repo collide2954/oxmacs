@@ -85,7 +85,7 @@ mod tests {
     use super::Gutter;
     use crate::config::{Config, LineNumbers};
     use crate::editor::Editor;
-    use crate::editor::test_support::{press, type_text};
+    use crate::testing::{press, type_text};
 
     fn visiting(lines: usize, config: &Value) -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();

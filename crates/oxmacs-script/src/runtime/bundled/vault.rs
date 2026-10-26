@@ -5,7 +5,7 @@ use ox_lang::value::print;
 use oxmacs_core::editor::{Editor, Effect};
 
 use crate::Ox;
-use crate::testing::{press, settle, typed};
+use crate::testing::{press, run_command, settle, typed};
 
 const PASSWORD: &str = "correct horse";
 
@@ -31,23 +31,7 @@ const ENTRIES: &str = r#"[{id: "1" title: "mail" username: "ana@example.com" pas
                           {id: "2" title: "bank" username: "ana" password: "s3cret" url: "" totp: "" notes: ""}]"#;
 
 fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
-    let home = tempfile::tempdir().unwrap();
-    fs::write(
-        home.path().join("init.ox"),
-        format!("(use-plugin vault)\n{init}"),
-    )
-    .unwrap();
-    let mut editor = Editor::new();
-    let mut ox = Ox::new();
-    ox.start(&mut editor, Some(home.path()));
-    settle(&mut editor, &mut ox);
-    (home, editor, ox)
-}
-
-fn run(editor: &mut Editor, ox: &mut Ox, command: &str) {
-    let id = editor.command_named(command).unwrap();
-    editor.execute(id);
-    settle(editor, ox);
+    crate::testing::started(&format!("(use-plugin vault)\n{init}"))
 }
 
 fn answer(editor: &mut Editor, ox: &mut Ox, text: &str) {
@@ -67,7 +51,7 @@ fn lines(editor: &Editor) -> Vec<String> {
 fn unlocked(init: &str) -> (tempfile::TempDir, Editor, Ox) {
     let (home, mut editor, mut ox) = started(init);
     cheap_vault(home.path(), ENTRIES);
-    run(&mut editor, &mut ox, "vault");
+    run_command(&mut editor, &mut ox, "vault");
     answer(&mut editor, &mut ox, PASSWORD);
     (home, editor, ox)
 }
@@ -87,7 +71,7 @@ fn clipboard(editor: &mut Editor) -> Vec<String> {
 fn the_first_use_makes_a_vault_sealed_with_the_password() {
     let (home, mut editor, mut ox) = started("");
 
-    run(&mut editor, &mut ox, "vault");
+    run_command(&mut editor, &mut ox, "vault");
     assert_eq!(
         editor.minibuffer().unwrap().prompt(),
         "New vault password: "
@@ -115,7 +99,7 @@ fn the_first_use_makes_a_vault_sealed_with_the_password() {
 fn different_passwords_make_no_vault() {
     let (home, mut editor, mut ox) = started("");
 
-    run(&mut editor, &mut ox, "vault");
+    run_command(&mut editor, &mut ox, "vault");
     answer(&mut editor, &mut ox, "one");
     answer(&mut editor, &mut ox, "two");
 
@@ -131,7 +115,7 @@ fn a_wrong_password_keeps_the_vault_locked() {
     let (home, mut editor, mut ox) = started("");
     cheap_vault(home.path(), ENTRIES);
 
-    run(&mut editor, &mut ox, "vault");
+    run_command(&mut editor, &mut ox, "vault");
     answer(&mut editor, &mut ox, "wrong");
 
     assert_eq!(editor.message(), Some("Wrong vault password"));
@@ -213,9 +197,9 @@ fn added_entries_are_saved_sealed_and_survive_locking() {
     assert!(lines(&editor).iter().any(|line| line.starts_with("forum ")));
     assert!(home.path().join("vault.json.bak").exists());
 
-    run(&mut editor, &mut ox, "vault-lock");
+    run_command(&mut editor, &mut ox, "vault-lock");
     assert_eq!(editor.buffer_named("*Vault*"), None);
-    run(&mut editor, &mut ox, "vault");
+    run_command(&mut editor, &mut ox, "vault");
     answer(&mut editor, &mut ox, PASSWORD);
     let shown = lines(&editor);
     assert!(shown[0].starts_with("Vault  3 entries"), "{shown:?}");
@@ -257,7 +241,7 @@ fn other_plugins_ask_the_vault_for_secrets() {
 #[test]
 fn passwords_and_passphrases_are_made_from_random_choices() {
     let (_home, mut editor, mut ox) = started("");
-    run(&mut editor, &mut ox, "vault-lock");
+    run_command(&mut editor, &mut ox, "vault-lock");
 
     let made = ox
         .eval(
@@ -285,7 +269,7 @@ fn bitwarden_and_one_password_exports_are_imported_once() {
     )
     .unwrap();
 
-    run(&mut editor, &mut ox, "vault-import");
+    run_command(&mut editor, &mut ox, "vault-import");
     answer(&mut editor, &mut ox, "bitwarden");
     answer(&mut editor, &mut ox, &bitwarden.display().to_string());
     assert_eq!(
@@ -293,7 +277,7 @@ fn bitwarden_and_one_password_exports_are_imported_once() {
         Some("Imported 1 of 2 entries; the others were already there")
     );
 
-    run(&mut editor, &mut ox, "vault-import");
+    run_command(&mut editor, &mut ox, "vault-import");
     answer(&mut editor, &mut ox, "1password");
     answer(&mut editor, &mut ox, &one.display().to_string());
     assert_eq!(

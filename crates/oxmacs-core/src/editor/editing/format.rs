@@ -225,8 +225,8 @@ mod tests {
     use super::{FormatRequest, Formatter};
     use crate::config::Config;
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, press, type_text};
     use crate::syntax::{Indentation, Language, LanguageSpec, Outline};
+    use crate::testing::{editor_with, press, type_text};
 
     const SQUEEZE: Formatter = Formatter {
         name: "rustfmt",

@@ -50,7 +50,7 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::test_support::{editor_with, press};
+    use crate::testing::{editor_with, press};
 
     #[test]
     fn set_mark_then_motion_selects() {

@@ -245,8 +245,8 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use crate::editor::test_support::{press, type_text};
     use crate::editor::{Editor, Effect, Job, JobId, Outcome};
+    use crate::testing::{press, type_text};
 
     fn spawned(editor: &mut Editor) -> Vec<Job> {
         editor

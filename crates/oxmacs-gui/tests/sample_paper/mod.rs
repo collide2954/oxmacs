@@ -1,6 +1,8 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
+use oxmacs_script::testing::pdf_file;
+
 const WIDTH: f32 = 612.0;
 const HEIGHT: f32 = 792.0;
 const LEFT: f32 = 72.0;
@@ -329,9 +331,8 @@ pub fn write(folder: &Path, name: &str) -> PathBuf {
         objects.push(format!("[{}]", links.join(" ")));
     }
     objects.push("<< /Title (Patient Furrows) /Author (Mira Hollis) >>".to_owned());
-    let out = serialized(&objects);
     let path = folder.join(name);
-    std::fs::write(&path, out.into_bytes()).unwrap();
+    std::fs::write(&path, pdf_file(&objects, Some(objects.len()))).unwrap();
     path
 }
 
@@ -371,25 +372,4 @@ fn outline(first: usize, first_page: usize) -> Vec<String> {
             format!("<< /Title ({title}) {links} {destination} >>")
         })
         .collect()
-}
-
-fn serialized(objects: &[String]) -> String {
-    let mut out = String::from("%PDF-1.7\n");
-    let mut offsets = Vec::new();
-    for (index, object) in objects.iter().enumerate() {
-        offsets.push(out.len());
-        let _ = write!(out, "{} 0 obj\n{object}\nendobj\n", index + 1);
-    }
-    let xref = out.len();
-    let _ = write!(out, "xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1);
-    for offset in offsets {
-        let _ = writeln!(out, "{offset:010} 00000 n ");
-    }
-    let _ = write!(
-        out,
-        "trailer\n<< /Size {} /Root 1 0 R /Info {} 0 R >>\nstartxref\n{xref}\n%%EOF\n",
-        objects.len() + 1,
-        objects.len()
-    );
-    out
 }

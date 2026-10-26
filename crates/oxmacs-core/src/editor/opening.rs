@@ -6,8 +6,8 @@ use strum::VariantArray;
 
 use crate::command::{Command, Scope};
 use crate::editor::Editor;
-use crate::editor::test_support::editor_with;
 use crate::syntax::Language;
+use crate::testing::editor_with;
 use crate::text::{Buffer, BufferId};
 
 const BUDGET: Duration = Duration::from_millis(50);

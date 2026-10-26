@@ -1,4 +1,3 @@
-use std::fs;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -6,19 +5,9 @@ use oxmacs_core::editor::Editor;
 use oxmacs_core::input::KeySequence;
 
 use crate::Ox;
-use crate::testing::{press, settle};
+use crate::testing::{press, settle, started};
 use crate::view::shapes::Shape;
 use crate::view::views::{Node, ViewBuffer};
-
-fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
-    let home = tempfile::tempdir().unwrap();
-    fs::write(home.path().join("init.ox"), init).unwrap();
-    let mut editor = Editor::new();
-    let mut ox = Ox::new();
-    ox.start(&mut editor, Some(home.path()));
-    settle(&mut editor, &mut ox);
-    (home, editor, ox)
-}
 
 fn until(editor: &mut Editor, ox: &mut Ox, done: impl Fn(&Editor) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(10);

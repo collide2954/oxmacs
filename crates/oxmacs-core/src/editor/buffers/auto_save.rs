@@ -151,7 +151,7 @@ mod tests {
     use crate::config::Config;
     use crate::editor::Editor;
     use crate::editor::build::lint::fixtures::{project, spawned};
-    use crate::editor::test_support::{press, question, type_text};
+    use crate::testing::{press, question, type_text};
 
     fn edited(editor: &mut Editor) {
         type_text(editor, "// ");

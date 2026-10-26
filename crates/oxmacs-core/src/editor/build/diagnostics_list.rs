@@ -229,9 +229,9 @@ mod tests {
     use crate::editor::build::lint::fixtures::{
         FINISHED, linting, project, report, reported, spawned,
     };
-    use crate::editor::test_support::{lines, press, type_text};
     use crate::editor::{Cell, Clicks, Editor, Effect, Outcome};
     use crate::external::diagnostics::sample;
+    use crate::testing::{lines, press, type_text};
 
     fn listed() -> (tempfile::TempDir, Editor) {
         let (dir, mut editor) = project();

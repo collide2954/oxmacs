@@ -178,8 +178,8 @@ pub(in crate::editor) fn scan_partner(buffer: &Buffer, position: usize) -> Optio
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, press, type_text};
     use crate::syntax::Language;
+    use crate::testing::{editor_with, press, type_text};
     use crate::theme::Highlight;
 
     fn shown(text: &str, point: usize, language: Option<Language>) -> Editor {

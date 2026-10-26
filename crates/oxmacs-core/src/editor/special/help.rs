@@ -210,7 +210,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{labels, lines, press, type_text};
+    use crate::testing::{labels, lines, press, type_text};
 
     fn describe(editor: &mut Editor, name: &str) {
         press(editor, "C-h f");

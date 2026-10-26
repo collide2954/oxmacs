@@ -357,7 +357,7 @@ mod tests {
     use super::*;
     use crate::command::Command;
     use crate::editor::Effect;
-    use crate::editor::test_support::{press, type_text};
+    use crate::testing::{press, type_text};
 
     #[derive(Debug, Default)]
     struct Heard(Vec<String>);

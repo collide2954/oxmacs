@@ -269,7 +269,7 @@ impl Editor {
 mod tests {
     use super::ScreenRow;
     use crate::display::ScreenLine;
-    use crate::editor::test_support::{editor_with, press};
+    use crate::testing::{editor_with, press};
 
     fn wrapped() -> crate::editor::Editor {
         let mut editor = editor_with("abcdefghij\nxy", 0);

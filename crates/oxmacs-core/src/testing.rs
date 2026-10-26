@@ -2,14 +2,14 @@ use crate::editor::Editor;
 use crate::input::KeySequence;
 use crate::text::Buffer;
 
-pub(super) fn press(editor: &mut Editor, notation: &str) {
+pub fn press(editor: &mut Editor, notation: &str) {
     let sequence: KeySequence = notation.parse().unwrap();
     for key in sequence.keys() {
         editor.handle_key(*key);
     }
 }
 
-pub(super) fn type_text(editor: &mut Editor, text: &str) {
+pub fn type_text(editor: &mut Editor, text: &str) {
     for c in text.chars() {
         let notation = if c == ' ' {
             "SPC".to_owned()
@@ -20,7 +20,7 @@ pub(super) fn type_text(editor: &mut Editor, text: &str) {
     }
 }
 
-pub(super) fn labels(editor: &Editor) -> Vec<String> {
+pub fn labels(editor: &Editor) -> Vec<String> {
     editor
         .completions()
         .into_iter()
@@ -28,17 +28,17 @@ pub(super) fn labels(editor: &Editor) -> Vec<String> {
         .collect()
 }
 
-pub(super) fn question(editor: &Editor) -> Option<String> {
+pub fn question(editor: &Editor) -> Option<String> {
     editor
         .question()
         .map(|question| question.prompt().to_owned())
 }
 
-pub(super) fn minibuffer_input(editor: &Editor) -> String {
+pub fn minibuffer_input(editor: &Editor) -> String {
     editor.minibuffer().unwrap().input().contents()
 }
 
-pub(super) fn lines(editor: &Editor) -> Vec<String> {
+pub fn lines(editor: &Editor) -> Vec<String> {
     editor
         .buffer()
         .contents()
@@ -47,25 +47,25 @@ pub(super) fn lines(editor: &Editor) -> Vec<String> {
         .collect()
 }
 
-pub(super) fn at_point(editor: &Editor) -> String {
+pub fn at_point(editor: &Editor) -> String {
     let buffer = editor.buffer();
     let line = buffer.line_of(buffer.point());
     buffer.text_in(buffer.point()..buffer.line_end(line))
 }
 
-pub(super) fn editor_with(text: &str, point: usize) -> Editor {
+pub fn editor_with(text: &str, point: usize) -> Editor {
     let mut buffer = Buffer::with_text("t", text);
     buffer.set_point(point);
     Editor::with_buffer(buffer)
 }
 
-pub(super) fn point_after(text: &str, point: usize, notation: &str) -> usize {
+pub fn point_after(text: &str, point: usize, notation: &str) -> usize {
     let mut editor = editor_with(text, point);
     press(&mut editor, notation);
     editor.buffer().point()
 }
 
-pub(super) fn contents_after(text: &str, point: usize, notation: &str) -> (String, usize) {
+pub fn contents_after(text: &str, point: usize, notation: &str) -> (String, usize) {
     let mut editor = editor_with(text, point);
     press(&mut editor, notation);
     (editor.buffer().contents(), editor.buffer().point())

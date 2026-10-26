@@ -128,8 +128,8 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::{Edge, Side};
-    use crate::editor::test_support::{press, type_text};
     use crate::editor::{Arrangement, Editor, WindowId};
+    use crate::testing::{press, type_text};
 
     fn with_tree() -> (Editor, WindowId) {
         let mut editor = Editor::new();

@@ -1,6 +1,4 @@
 mod engine;
-#[cfg(test)]
-mod sample;
 pub mod words;
 
 use ox_lang::native::{count, expected, field, text};
@@ -779,7 +777,7 @@ mod tests {
         let library = std::path::PathBuf::from(std::env::var_os("OXMACS_PDFIUM").unwrap());
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("sample.pdf");
-        std::fs::write(&path, super::sample::pdf()).unwrap();
+        std::fs::write(&path, crate::testing::sample_pdf()).unwrap();
         super::use_library(Some(library));
 
         let (revision, document) = super::open(&path).unwrap();

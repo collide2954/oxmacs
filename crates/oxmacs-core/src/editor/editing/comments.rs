@@ -118,8 +118,8 @@ fn leading(text: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, lines, press};
     use crate::syntax::Language;
+    use crate::testing::{editor_with, lines, press};
 
     fn rust(text: &str, point: usize) -> Editor {
         let mut editor = editor_with(text, point);

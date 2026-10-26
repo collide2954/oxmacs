@@ -211,8 +211,8 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::test_support::{editor_with, press, type_text};
     use crate::editor::{Cell, Clicks, Editor};
+    use crate::testing::{editor_with, press, type_text};
 
     fn cell(line: usize, column: usize) -> Cell {
         Cell { row: line, column }

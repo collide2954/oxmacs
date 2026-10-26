@@ -135,8 +135,8 @@ fn plain_enclosing_opener(buffer: &Buffer, point: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, press};
     use crate::syntax::Language;
+    use crate::testing::{editor_with, press};
 
     const SOURCE: &str = "fn a() {\n    x(1, \"b c\");\n}\n\nfn b() {}\n";
 

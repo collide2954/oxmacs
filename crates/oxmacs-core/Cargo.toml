@@ -9,6 +9,9 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+testing = []
+
 [dependencies]
 bitflags.workspace = true
 dirs.workspace = true

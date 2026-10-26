@@ -100,9 +100,9 @@ impl Editor {
 mod tests {
     use super::Heard;
     use crate::command::ScopeId;
-    use crate::editor::test_support::press;
     use crate::editor::{Cell, Clicks, Editor};
     use crate::plugin::PluginBuffer;
+    use crate::testing::press;
     use crate::text::BufferId;
 
     #[derive(Debug)]

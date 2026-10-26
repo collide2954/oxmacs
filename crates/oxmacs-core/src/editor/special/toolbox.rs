@@ -600,8 +600,8 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use crate::editor::test_support::{lines, press, question, type_text};
     use crate::editor::{Editor, Effect, FetchId};
+    use crate::testing::{lines, press, question, type_text};
     use std::env;
 
     use crate::external::managed::{AIR, Checksum, Expected, Form, Install, Managed};

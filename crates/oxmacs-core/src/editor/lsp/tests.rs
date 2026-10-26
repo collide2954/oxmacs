@@ -5,10 +5,10 @@ use serde_json::{Value, json};
 
 use super::{SERVERS, ServerId, ServerSpec};
 use crate::config::Config;
-use crate::editor::test_support::{press, type_text};
 use crate::editor::{Editor, Effect};
 use crate::external::diagnostics::Severity;
 use crate::external::lsp::{Event, Launch};
+use crate::testing::{press, type_text};
 
 fn project() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
@@ -841,7 +841,7 @@ fn list_tools_lists_only_the_servers_of_languages_oxmacs_knows() {
         press(editor, "M-x");
         type_text(editor, "list-tools");
         press(editor, "RET");
-        crate::editor::test_support::lines(editor)
+        crate::testing::lines(editor)
             .iter()
             .filter_map(|line| line.trim_start().split(' ').next().map(str::to_owned))
             .collect::<Vec<_>>()
@@ -867,7 +867,7 @@ fn list_tools_names_the_language_servers_and_offers_to_install_them() {
     press(&mut editor, "M-x");
     type_text(&mut editor, "list-tools");
     press(&mut editor, "RET");
-    let shown = crate::editor::test_support::lines(&editor);
+    let shown = crate::testing::lines(&editor);
     assert!(
         shown.iter().any(|line| line == "Language servers"),
         "{shown:#?}"

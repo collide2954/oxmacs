@@ -43,7 +43,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, press, type_text};
+    use crate::testing::{editor_with, press, type_text};
 
     #[test]
     fn undo_keys_revert_the_last_command() {

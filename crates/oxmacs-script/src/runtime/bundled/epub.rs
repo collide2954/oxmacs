@@ -1,79 +1,38 @@
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use oxmacs_core::editor::Editor;
-use zip::write::SimpleFileOptions;
-use zip::{CompressionMethod, ZipWriter};
 
 use crate::Ox;
-use crate::testing::{press, settle, typed};
+use crate::testing::{Chapter, Epub, PIXEL, press, settle, typed, write_epub};
 use crate::view::book::{At, Block, Kind, Pages};
 use crate::view::views::{Arg, Node, ViewBuffer};
 
-const PIXEL: &[u8] = &[
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
-    0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0,
-    0x1f, 0x00, 0x05, 0x00, 0x01, 0xff, 0x89, 0x99, 0x3d, 0x1d, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-    0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
-];
-
-fn chapter(title: &str, body: &str) -> String {
-    format!(
-        "<?xml version=\"1.0\" encoding=\"utf-8\"?><!DOCTYPE html><html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>{title}</title></head><body><h1>{title}</h1>{body}</body></html>"
-    )
-}
+const SAMPLE: Epub<'_> = Epub {
+    title: "A Sample Voyage",
+    author: "Ada Lovelace",
+    chapters: &[
+        Chapter {
+            title: "Chapter One",
+            body: "<p>Call me <em>Ishmael</em>. Some years ago I went to sea.</p><p>A <a href=\"3.xhtml#end\">whale</a> was seen.</p><p>Third.</p><p>Fourth.</p><p>Fifth.</p>",
+            anchor: None,
+        },
+        Chapter {
+            title: "Chapter Two",
+            body: "<p>The sea was calm.</p><p>No whale today.</p>",
+            anchor: None,
+        },
+        Chapter {
+            title: "The End",
+            body: "<p>Almost done.</p><p id=\"end\">Fin.</p>",
+            anchor: Some("end"),
+        },
+    ],
+    cover: PIXEL,
+};
 
 fn sample(folder: &Path) -> PathBuf {
     let path = folder.join("sample.epub");
-    let mut zip = ZipWriter::new(std::fs::File::create(&path).unwrap());
-    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
-    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
-    let mut add = |name: &str, bytes: &[u8], options| {
-        zip.start_file(name, options).unwrap();
-        zip.write_all(bytes).unwrap();
-    };
-    add("mimetype", b"application/epub+zip", stored);
-    add(
-        "META-INF/container.xml",
-        br#"<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>"#,
-        deflated,
-    );
-    add(
-        "OEBPS/content.opf",
-        br#"<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>A Sample Voyage</dc:title><dc:creator>Ada Lovelace</dc:creator></metadata><manifest><item id="nav" href="nav.xhtml" properties="nav" media-type="application/xhtml+xml"/><item id="c1" href="text/one.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="text/two.xhtml" media-type="application/xhtml+xml"/><item id="c3" href="text/three.xhtml" media-type="application/xhtml+xml"/><item id="cover" href="images/cover.png" properties="cover-image" media-type="image/png"/></manifest><spine><itemref idref="c1"/><itemref idref="c2"/><itemref idref="c3"/></spine></package>"#,
-        deflated,
-    );
-    add(
-        "OEBPS/nav.xhtml",
-        br#"<html xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="text/one.xhtml">Chapter One</a></li><li><a href="text/two.xhtml">Chapter Two</a></li><li><a href="text/three.xhtml#end">The End</a></li></ol></nav></body></html>"#,
-        deflated,
-    );
-    add(
-        "OEBPS/text/one.xhtml",
-        chapter(
-            "Chapter One",
-            "<p>Call me <em>Ishmael</em>. Some years ago I went to sea.</p><p>A <a href=\"three.xhtml#end\">whale</a> was seen.</p><p>Third.</p><p>Fourth.</p><p>Fifth.</p>",
-        )
-        .as_bytes(),
-        deflated,
-    );
-    add(
-        "OEBPS/text/two.xhtml",
-        chapter(
-            "Chapter Two",
-            "<p>The sea was calm.</p><p>No whale today.</p>",
-        )
-        .as_bytes(),
-        deflated,
-    );
-    add(
-        "OEBPS/text/three.xhtml",
-        chapter("The End", "<p>Almost done.</p><p id=\"end\">Fin.</p>").as_bytes(),
-        deflated,
-    );
-    add("OEBPS/images/cover.png", PIXEL, stored);
-    zip.finish().unwrap();
+    write_epub(&path, &SAMPLE);
     path
 }
 
@@ -227,7 +186,7 @@ fn contents_and_links_jump_to_their_place() {
     press(&mut reader.editor, &mut reader.ox, "RET");
     assert_eq!(reader.first_text(), "Chapter Two");
 
-    reader.call(3, &[Arg::Text("OEBPS/text/three.xhtml#end".to_owned())]);
+    reader.call(3, &[Arg::Text("OEBPS/text/3.xhtml#end".to_owned())]);
     assert_eq!(reader.first_text(), "The End");
     assert_eq!(reader.pages().at, At::Anchor(2, 0));
 }

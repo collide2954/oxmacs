@@ -24,14 +24,21 @@ rodeo.workspace = true
 rodio.workspace = true
 semver.workspace = true
 serde_json.workspace = true
+tempfile = { workspace = true, optional = true }
 thiserror.workspace = true
+zip = { workspace = true, optional = true }
+
+[features]
+testing = ["dep:tempfile", "dep:zip", "oxmacs-core/testing"]
 
 [dev-dependencies]
 image.workspace = true
 keepass = { workspace = true, features = ["save_kdbx4"] }
+oxmacs-core = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 zip.workspace = true
 
 [[test]]
 name = "integration"
 path = "tests/main.rs"
+required-features = ["testing"]

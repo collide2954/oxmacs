@@ -57,7 +57,7 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::test_support::{editor_with, point_after, press};
+    use crate::testing::{editor_with, point_after, press};
 
     #[test]
     fn page_keys_scroll_a_screen_less_two_lines() {

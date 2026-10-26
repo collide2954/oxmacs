@@ -86,8 +86,8 @@ mod tests {
 
     use crate::command::{Scope, ScopeId};
     use crate::editor::Editor;
-    use crate::editor::test_support::{editor_with, press};
     use crate::plugin::PluginBuffer;
+    use crate::testing::{editor_with, press};
     use crate::text::{BufferId, Splice};
 
     #[derive(Debug)]

@@ -208,8 +208,8 @@ impl Editor {
 mod tests {
     use crate::command::{CommandSpec, Scope};
     use crate::display::LineStyle;
-    use crate::editor::test_support::{at_point, lines, press, type_text};
     use crate::editor::{Cell, Clicks, Editor};
+    use crate::testing::{at_point, lines, press, type_text};
     use crate::theme::Highlight;
 
     fn shown() -> Editor {

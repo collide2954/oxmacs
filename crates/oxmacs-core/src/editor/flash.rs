@@ -226,7 +226,7 @@ mod tests {
 
     use super::fade;
     use crate::editor::Editor;
-    use crate::editor::test_support::editor_with;
+    use crate::testing::editor_with;
     use crate::theme::Highlight;
 
     const HALF: Duration = Duration::from_millis(500);
@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn flashes_show_in_every_window_of_their_buffer() {
         let (mut editor, now) = flashed("abc", 0..3);
-        crate::editor::test_support::press(&mut editor, "C-x 2");
+        crate::testing::press(&mut editor, "C-x 2");
         let windows = editor.tiling().windows();
 
         for window in windows {

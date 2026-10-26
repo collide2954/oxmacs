@@ -403,7 +403,7 @@ mod tests {
 
     use super::Visit;
     use crate::editor::Editor;
-    use crate::editor::test_support::{labels, minibuffer_input, press, type_text};
+    use crate::testing::{labels, minibuffer_input, press, type_text};
 
     fn workspace() -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();

@@ -1,10 +1,17 @@
+use std::path::Path;
+use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use oxmacs_core::editor::Editor;
 use oxmacs_core::input::KeySequence;
+pub use oxmacs_core::testing::{at_point, press as keys, question};
 
 use crate::{Ox, Pace, Wake};
+
+mod fixtures;
+
+pub use fixtures::{Chapter, Epub, PIXEL, pdf_file, rust_sample, sample_pdf, timed, write_epub};
 
 const LONG_SLEEP: Duration = Duration::from_millis(500);
 const SETTLE_LIMIT: Duration = Duration::from_secs(10);
@@ -35,13 +42,6 @@ pub fn settle(editor: &mut Editor, ox: &mut Ox) {
         );
         quiet = if sleeping_long(ox) { quiet + 1 } else { 0 };
         thread::sleep(Duration::from_millis(1));
-    }
-}
-
-pub fn keys(editor: &mut Editor, notation: &str) {
-    let keys: KeySequence = notation.parse().unwrap();
-    for key in keys.keys() {
-        editor.handle_key(*key);
     }
 }
 
@@ -77,14 +77,33 @@ pub fn home_with(files: &[(&str, &str)]) -> tempfile::TempDir {
     home
 }
 
-pub fn at_point(editor: &Editor) -> String {
-    let buffer = editor.buffer();
-    let line = buffer.line_of(buffer.point());
-    buffer.text_in(buffer.point()..buffer.line_end(line))
+pub fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
+    let home = home_with(&[("init.ox", init)]);
+    let mut editor = Editor::new();
+    let mut ox = Ox::new();
+    ox.start(&mut editor, Some(home.path()));
+    settle(&mut editor, &mut ox);
+    (home, editor, ox)
 }
 
-pub fn question(editor: &Editor) -> Option<String> {
-    editor
-        .question()
-        .map(|question| question.prompt().to_owned())
+pub fn run_command(editor: &mut Editor, ox: &mut Ox, command: &str) {
+    let id = editor.command_named(command).unwrap();
+    editor.execute(id);
+    settle(editor, ox);
+}
+
+pub fn git(directory: &Path, args: &[&str]) -> String {
+    let mut command = Command::new("git");
+    for (name, _) in std::env::vars_os() {
+        if name.to_string_lossy().starts_with("GIT_") {
+            command.env_remove(name);
+        }
+    }
+    let output = command.args(args).current_dir(directory).output().unwrap();
+    assert!(
+        output.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).into_owned()
 }

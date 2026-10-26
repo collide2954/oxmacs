@@ -1204,7 +1204,7 @@ mod tests {
     use oxmacs_core::text::Buffer;
 
     use super::Bundle;
-    use crate::testing::{home_with, settle};
+    use crate::testing::{home_with, run_command, settle};
     use crate::{Ox, ide::log};
 
     const MANIFEST: &str = r#"(plugin greeter
@@ -1230,12 +1230,6 @@ mod tests {
         let mut ox = Ox::with_bundled(bundled);
         ox.start(&mut editor, Some(home));
         (editor, ox)
-    }
-
-    fn run(editor: &mut Editor, ox: &mut Ox, command: &str) {
-        let id = editor.command_named(command).unwrap();
-        editor.execute(id);
-        settle(editor, ox);
     }
 
     fn logged(editor: &Editor) -> String {
@@ -1297,7 +1291,7 @@ mod tests {
     fn workers_load_plugin_modules_with_the_editor_api_but_no_editor() {
         let home = home_with(&[]);
         let (mut editor, mut ox) = started(&[SHELF], home.path());
-        run(&mut editor, &mut ox, "shelf-show");
+        run_command(&mut editor, &mut ox, "shelf-show");
 
         let found = ox
             .eval(
@@ -1322,7 +1316,7 @@ mod tests {
         assert!(editor.command_named("greet").is_some());
         assert_eq!(editor.message(), None);
 
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         assert_eq!(editor.message(), Some("Hello from greeter"));
         assert_eq!(logged(&editor), "");
@@ -1345,7 +1339,7 @@ mod tests {
         files.push(("init.ox", "(use-plugin greeter)"));
         let used = home_with(&files);
         let (mut editor, mut ox) = started(&[], used.path());
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         assert_eq!(editor.message(), Some("Hello from home"));
     }
@@ -1361,7 +1355,7 @@ mod tests {
         ]);
         let (mut editor, mut ox) = started(&[GREETER], home.path());
 
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         assert_eq!(editor.message(), Some("Hello from my copy"));
     }
@@ -1398,7 +1392,7 @@ mod tests {
         let home = home_with(&[]);
         let (mut editor, mut ox) = started(&[BROKEN], home.path());
 
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         assert!(
             logged(&editor).contains("greeter/greeter.ox:2:1: Division by zero"),
@@ -1416,7 +1410,7 @@ mod tests {
         let home = home_with(&[]);
         let (mut editor, mut ox) = started(&[FORGETFUL], home.path());
 
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         assert!(
             logged(&editor).contains("greeter didn't define the command greet"),
@@ -1468,7 +1462,7 @@ mod tests {
         let home = home_with(&[]);
         let (mut editor, mut ox) = started(&[CONFIGURED], home.path());
 
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         assert_eq!(editor.message(), Some("Hello world"));
     }
@@ -1481,7 +1475,7 @@ mod tests {
         )]);
         let (mut editor, mut ox) = started(&[CONFIGURED], home.path());
 
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         assert_eq!(editor.message(), Some("Hello Ana!"));
     }
@@ -1497,7 +1491,7 @@ mod tests {
         ]);
         let (mut editor, mut ox) = started(&[CONFIGURED], home.path());
 
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         assert_eq!(editor.message(), Some("Hello Ana"));
     }
@@ -1510,7 +1504,7 @@ mod tests {
         )]);
         let (mut editor, mut ox) = started(&[CONFIGURED], home.path());
 
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         assert_eq!(editor.message(), Some("Hello world"));
         assert_eq!(logged(&editor), "");
@@ -1546,7 +1540,7 @@ mod tests {
         )]);
         let (mut editor, mut ox) = started(&[CONFIGURED], home.path());
 
-        run(&mut editor, &mut ox, "greet");
+        run_command(&mut editor, &mut ox, "greet");
 
         let log = logged(&editor);
         assert!(
@@ -1640,7 +1634,7 @@ mod tests {
 
         let home = home_with(&[("init.ox", "(use-plugin toy)")]);
         let (mut editor, mut ox) = started(&[OPT_IN], home.path());
-        run(&mut editor, &mut ox, "play");
+        run_command(&mut editor, &mut ox, "play");
 
         assert_eq!(editor.message(), Some("Playing"));
         assert_eq!(logged(&editor), "");
@@ -1746,7 +1740,7 @@ mod tests {
         let home = home_with(&[]);
         let (mut editor, mut ox) = started(&[BASE, USER], home.path());
 
-        run(&mut editor, &mut ox, "use-it");
+        run_command(&mut editor, &mut ox, "use-it");
 
         assert_eq!(editor.message(), Some(r#"["base" "client"]"#));
         assert_eq!(logged(&editor), "");
@@ -1757,7 +1751,7 @@ mod tests {
         let home = home_with(&[]);
         let (mut editor, mut ox) = started(&[OPT_IN_BASE, USER], home.path());
 
-        run(&mut editor, &mut ox, "use-it");
+        run_command(&mut editor, &mut ox, "use-it");
 
         assert_eq!(editor.message(), Some(r#"["client"]"#));
         assert!(editor.command_named("base-hi").is_none());
@@ -1778,7 +1772,7 @@ mod tests {
         ]);
         let (mut editor, mut ox) = started(&[], home.path());
 
-        run(&mut editor, &mut ox, "use-it");
+        run_command(&mut editor, &mut ox, "use-it");
 
         assert_eq!(editor.message(), Some(r#"["client"]"#));
         assert_eq!(logged(&editor), "");
@@ -1799,7 +1793,7 @@ mod tests {
         let home = home_with(&[]);
         let (mut editor, mut ox) = started(&[BASE, UNDECLARED], home.path());
 
-        run(&mut editor, &mut ox, "use-it");
+        run_command(&mut editor, &mut ox, "use-it");
 
         let shown = logged(&editor);
         assert!(
@@ -1836,7 +1830,7 @@ mod tests {
             let bundles: &'static [Bundle] = Box::leak(Box::new([BASE, user]));
             let (mut editor, mut ox) = started(bundles, home.path());
 
-            run(&mut editor, &mut ox, "use-it");
+            run_command(&mut editor, &mut ox, "use-it");
 
             assert!(logged(&editor).contains(&problem), "{}", logged(&editor));
             assert_ne!(editor.message(), Some(r#"["base" "client"]"#));
@@ -1875,7 +1869,7 @@ mod tests {
         let home = home_with(&[]);
         let (mut editor, mut ox) = started(&[CONFIGURED], home.path());
 
-        run(&mut editor, &mut ox, "peek");
+        run_command(&mut editor, &mut ox, "peek");
 
         assert!(
             logged(&editor).contains("greeter has no setting named missing"),
