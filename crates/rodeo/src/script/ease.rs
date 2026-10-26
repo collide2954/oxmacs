@@ -31,19 +31,28 @@ fn between(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "apply", 2, Some(2), |heap, arguments| {
-        let curve = ease(heap, "ease/apply", arguments[0])?;
-        Ok(Value::Float(curve.apply(number(
-            heap,
-            "ease/apply",
-            arguments[1],
-        )?)))
-    });
-    isolate.define_native_in(MODULE, "between", 4, Some(4), between);
-    isolate.define_native_in(MODULE, "names", 0, Some(0), |heap, _| {
-        let names: Vec<Value> = Ease::all()
-            .map(|curve| Value::keyword(curve.name()))
-            .collect();
-        make_vector(heap, &names)
-    });
+    isolate
+        .native(MODULE, "apply")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let curve = ease(heap, "ease/apply", arguments[0])?;
+            Ok(Value::Float(curve.apply(number(
+                heap,
+                "ease/apply",
+                arguments[1],
+            )?)))
+        });
+    isolate
+        .native(MODULE, "between")
+        .arity(4, Some(4))
+        .function(between);
+    isolate
+        .native(MODULE, "names")
+        .arity(0, Some(0))
+        .function(|heap, _| {
+            let names: Vec<Value> = Ease::all()
+                .map(|curve| Value::keyword(curve.name()))
+                .collect();
+            make_vector(heap, &names)
+        });
 }

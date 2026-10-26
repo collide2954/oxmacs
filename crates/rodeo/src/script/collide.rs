@@ -252,68 +252,101 @@ fn ids(heap: &mut Heap, found: Vec<Key>) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "overlaps?", 2, Some(2), overlaps);
-    isolate.define_native_in(MODULE, "penetration", 2, Some(2), |heap, arguments| {
-        let moving = rect(heap, "collide/penetration", arguments[0])?;
-        let solid = rect(heap, "collide/penetration", arguments[1])?;
-        match penetration(moving, solid) {
-            Some(push) => point_value(heap, push),
-            None => Ok(Value::Nil),
-        }
-    });
-    isolate.define_native_in(MODULE, "sweep", 3, Some(3), |heap, arguments| {
-        let moving = rect(heap, "collide/sweep", arguments[0])?;
-        let delta = point(heap, "collide/sweep", arguments[1])?;
-        let solid = rect(heap, "collide/sweep", arguments[2])?;
-        let Some(hit) = sweep(moving, delta, solid) else {
-            return Ok(Value::Nil);
-        };
-        let normal = point_value(heap, hit.normal)?;
-        map_value(
-            heap,
-            &[("time", Value::Float(hit.time)), ("normal", normal)],
-        )
-    });
-    isolate.define_native_in(MODULE, "slide", 3, Some(3), sliding);
-    isolate.define_native_in(MODULE, "move-in-tiles", 3, None, through_tiles);
-    isolate.define_native_in(MODULE, "grid", 1, Some(1), |heap, arguments| {
-        let size = number(heap, "collide/grid", arguments[0])?;
-        heap.foreign(KIND, RefCell::new(Grid::<Key>::new(size)))
-            .map_err(full)
-    });
-    isolate.define_native_in(MODULE, "insert!", 3, Some(3), |heap, arguments| {
-        let id = Key::read(heap, "collide/insert!", arguments[1])?;
-        let area = rect(heap, "collide/insert!", arguments[2])?;
-        grid(heap, "collide/insert!", arguments[0])?
-            .borrow_mut()
-            .insert(id, area);
-        Ok(arguments[0])
-    });
-    isolate.define_native_in(MODULE, "remove!", 2, Some(2), |heap, arguments| {
-        let id = Key::read(heap, "collide/remove!", arguments[1])?;
-        grid(heap, "collide/remove!", arguments[0])?
-            .borrow_mut()
-            .remove(id);
-        Ok(arguments[0])
-    });
-    isolate.define_native_in(MODULE, "query", 2, Some(2), |heap, arguments| {
-        let area = rect(heap, "collide/query", arguments[1])?;
-        let found = grid(heap, "collide/query", arguments[0])?
-            .borrow()
-            .query(area);
-        ids(heap, found)
-    });
-    isolate.define_native_in(MODULE, "at", 2, Some(2), |heap, arguments| {
-        let spot = point(heap, "collide/at", arguments[1])?;
-        let found = grid(heap, "collide/at", arguments[0])?.borrow().at(spot);
-        ids(heap, found)
-    });
-    isolate.define_native_in(MODULE, "pairs", 1, Some(1), |heap, arguments| {
-        let found = grid(heap, "collide/pairs", arguments[0])?.borrow().pairs();
-        let mut pairs = Vec::with_capacity(found.len());
-        for (a, b) in found {
-            pairs.push(make_vector(heap, &[a.value(), b.value()])?);
-        }
-        make_vector(heap, &pairs)
-    });
+    isolate
+        .native(MODULE, "overlaps?")
+        .arity(2, Some(2))
+        .function(overlaps);
+    isolate
+        .native(MODULE, "penetration")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let moving = rect(heap, "collide/penetration", arguments[0])?;
+            let solid = rect(heap, "collide/penetration", arguments[1])?;
+            match penetration(moving, solid) {
+                Some(push) => point_value(heap, push),
+                None => Ok(Value::Nil),
+            }
+        });
+    isolate
+        .native(MODULE, "sweep")
+        .arity(3, Some(3))
+        .function(|heap, arguments| {
+            let moving = rect(heap, "collide/sweep", arguments[0])?;
+            let delta = point(heap, "collide/sweep", arguments[1])?;
+            let solid = rect(heap, "collide/sweep", arguments[2])?;
+            let Some(hit) = sweep(moving, delta, solid) else {
+                return Ok(Value::Nil);
+            };
+            let normal = point_value(heap, hit.normal)?;
+            map_value(
+                heap,
+                &[("time", Value::Float(hit.time)), ("normal", normal)],
+            )
+        });
+    isolate
+        .native(MODULE, "slide")
+        .arity(3, Some(3))
+        .function(sliding);
+    isolate
+        .native(MODULE, "move-in-tiles")
+        .arity(3, None)
+        .function(through_tiles);
+    isolate
+        .native(MODULE, "grid")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let size = number(heap, "collide/grid", arguments[0])?;
+            heap.foreign(KIND, RefCell::new(Grid::<Key>::new(size)))
+                .map_err(full)
+        });
+    isolate
+        .native(MODULE, "insert!")
+        .arity(3, Some(3))
+        .function(|heap, arguments| {
+            let id = Key::read(heap, "collide/insert!", arguments[1])?;
+            let area = rect(heap, "collide/insert!", arguments[2])?;
+            grid(heap, "collide/insert!", arguments[0])?
+                .borrow_mut()
+                .insert(id, area);
+            Ok(arguments[0])
+        });
+    isolate
+        .native(MODULE, "remove!")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let id = Key::read(heap, "collide/remove!", arguments[1])?;
+            grid(heap, "collide/remove!", arguments[0])?
+                .borrow_mut()
+                .remove(id);
+            Ok(arguments[0])
+        });
+    isolate
+        .native(MODULE, "query")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let area = rect(heap, "collide/query", arguments[1])?;
+            let found = grid(heap, "collide/query", arguments[0])?
+                .borrow()
+                .query(area);
+            ids(heap, found)
+        });
+    isolate
+        .native(MODULE, "at")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let spot = point(heap, "collide/at", arguments[1])?;
+            let found = grid(heap, "collide/at", arguments[0])?.borrow().at(spot);
+            ids(heap, found)
+        });
+    isolate
+        .native(MODULE, "pairs")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let found = grid(heap, "collide/pairs", arguments[0])?.borrow().pairs();
+            let mut pairs = Vec::with_capacity(found.len());
+            for (a, b) in found {
+                pairs.push(make_vector(heap, &[a.value(), b.value()])?);
+            }
+            make_vector(heap, &pairs)
+        });
 }

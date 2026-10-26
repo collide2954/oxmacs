@@ -88,27 +88,36 @@ fn changed(
     change: fn(&Heap, &str, &mut Camera, &[Value]) -> Result<(), Error>,
 ) {
     let shown = format!("camera/{name}");
-    isolate.define_native_in(MODULE, name, count, Some(count), move |heap, arguments| {
-        let mut made = camera(heap, &shown, arguments[0])?;
-        change(heap, &shown, &mut made, &arguments[1..])?;
-        stored(heap, &made)
-    });
+    isolate
+        .native(MODULE, name)
+        .arity(count, Some(count))
+        .function(move |heap, arguments| {
+            let mut made = camera(heap, &shown, arguments[0])?;
+            change(heap, &shown, &mut made, &arguments[1..])?;
+            stored(heap, &made)
+        });
 }
 
 fn placed(isolate: &mut Isolate, name: &'static str, place: fn(&Camera, Vec2) -> Vec2) {
     let shown = format!("camera/{name}");
-    isolate.define_native_in(MODULE, name, 2, Some(2), move |heap, arguments| {
-        let made = camera(heap, &shown, arguments[0])?;
-        let spot = point(heap, &shown, arguments[1])?;
-        point_value(heap, place(&made, spot))
-    });
+    isolate
+        .native(MODULE, name)
+        .arity(2, Some(2))
+        .function(move |heap, arguments| {
+            let made = camera(heap, &shown, arguments[0])?;
+            let spot = point(heap, &shown, arguments[1])?;
+            point_value(heap, place(&made, spot))
+        });
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "new", 1, Some(1), |heap, arguments| {
-        let view = point(heap, "camera/new", arguments[0])?;
-        stored(heap, &Camera::new(view))
-    });
+    isolate
+        .native(MODULE, "new")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let view = point(heap, "camera/new", arguments[0])?;
+            stored(heap, &Camera::new(view))
+        });
     changed(isolate, "follow", 3, |heap, name, made, rest| {
         let target = point(heap, name, rest[0])?;
         let amount = number(heap, name, rest[1])?;
@@ -129,12 +138,18 @@ pub fn install(isolate: &mut Isolate) {
     });
     placed(isolate, "to-screen", Camera::world_to_screen);
     placed(isolate, "to-world", Camera::screen_to_world);
-    isolate.define_native_in(MODULE, "view", 1, Some(1), |heap, arguments| {
-        let made = camera(heap, "camera/view", arguments[0])?;
-        rect_value(heap, made.view_rect())
-    });
-    isolate.define_native_in(MODULE, "offset", 1, Some(1), |heap, arguments| {
-        let made = camera(heap, "camera/offset", arguments[0])?;
-        point_value(heap, made.shake_offset())
-    });
+    isolate
+        .native(MODULE, "view")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let made = camera(heap, "camera/view", arguments[0])?;
+            rect_value(heap, made.view_rect())
+        });
+    isolate
+        .native(MODULE, "offset")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let made = camera(heap, "camera/offset", arguments[0])?;
+            point_value(heap, made.shake_offset())
+        });
 }

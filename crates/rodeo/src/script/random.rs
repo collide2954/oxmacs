@@ -94,46 +94,70 @@ fn shuffle(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "new", 1, Some(1), |heap, arguments| {
-        let seed = whole(heap, "random/new", arguments[0])?;
-        let random = Random::new(bits(seed));
-        let words = random.state().map(|word| Value::Int(signed(word)));
-        let held = make_vector(heap, &words)?;
-        heap.atom(held).map_err(full)
-    });
-    isolate.define_native_in(MODULE, "float", 1, Some(1), |heap, arguments| {
-        Ok(Value::Float(draw(
-            heap,
-            "random/float",
-            arguments[0],
-            Random::float,
-        )?))
-    });
-    isolate.define_native_in(MODULE, "range", 3, Some(3), |heap, arguments| {
-        let low = number(heap, "random/range", arguments[1])?;
-        let high = number(heap, "random/range", arguments[2])?;
-        Ok(Value::Float(draw(
-            heap,
-            "random/range",
-            arguments[0],
-            |random| random.range(low, high),
-        )?))
-    });
-    isolate.define_native_in(MODULE, "int", 2, Some(3), int);
-    isolate.define_native_in(MODULE, "chance?", 2, Some(2), |heap, arguments| {
-        let probability = number(heap, "random/chance?", arguments[1])?;
-        Ok(Value::Bool(draw(
-            heap,
-            "random/chance?",
-            arguments[0],
-            |random| random.chance(probability),
-        )?))
-    });
-    isolate.define_native_in(MODULE, "pick", 2, Some(2), pick);
-    isolate.define_native_in(MODULE, "shuffle", 2, Some(2), shuffle);
-    isolate.define_native_in(MODULE, "noise", 2, Some(2), |heap, arguments| {
-        let seed = whole(heap, "random/noise", arguments[0])?;
-        let index = whole(heap, "random/noise", arguments[1])?;
-        Ok(Value::Float(noise(bits(seed), bits(index))))
-    });
+    isolate
+        .native(MODULE, "new")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let seed = whole(heap, "random/new", arguments[0])?;
+            let random = Random::new(bits(seed));
+            let words = random.state().map(|word| Value::Int(signed(word)));
+            let held = make_vector(heap, &words)?;
+            heap.atom(held).map_err(full)
+        });
+    isolate
+        .native(MODULE, "float")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            Ok(Value::Float(draw(
+                heap,
+                "random/float",
+                arguments[0],
+                Random::float,
+            )?))
+        });
+    isolate
+        .native(MODULE, "range")
+        .arity(3, Some(3))
+        .function(|heap, arguments| {
+            let low = number(heap, "random/range", arguments[1])?;
+            let high = number(heap, "random/range", arguments[2])?;
+            Ok(Value::Float(draw(
+                heap,
+                "random/range",
+                arguments[0],
+                |random| random.range(low, high),
+            )?))
+        });
+    isolate
+        .native(MODULE, "int")
+        .arity(2, Some(3))
+        .function(int);
+    isolate
+        .native(MODULE, "chance?")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let probability = number(heap, "random/chance?", arguments[1])?;
+            Ok(Value::Bool(draw(
+                heap,
+                "random/chance?",
+                arguments[0],
+                |random| random.chance(probability),
+            )?))
+        });
+    isolate
+        .native(MODULE, "pick")
+        .arity(2, Some(2))
+        .function(pick);
+    isolate
+        .native(MODULE, "shuffle")
+        .arity(2, Some(2))
+        .function(shuffle);
+    isolate
+        .native(MODULE, "noise")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let seed = whole(heap, "random/noise", arguments[0])?;
+            let index = whole(heap, "random/noise", arguments[1])?;
+            Ok(Value::Float(noise(bits(seed), bits(index))))
+        });
 }

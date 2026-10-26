@@ -448,34 +448,52 @@ fn real(value: i64) -> f64 {
 }
 
 pub fn install(isolate: &mut Isolate) {
-    isolate.define_native_in(MODULE, "load", 1, Some(1), |heap, arguments| {
-        let wanted = heap
-            .text(arguments[0])
-            .map(str::to_owned)
-            .ok_or_else(|| wrong(heap, "tiled/load", "the path of a .tmx file", arguments[0]))?;
-        let loaded = Map::load(&wanted).map_err(|error| Error::new(error.to_string()))?;
-        map(heap, &loaded)
-    });
-    isolate.define_native_in(MODULE, "layer", 2, Some(2), |heap, arguments| {
-        let wanted = wanted_name(heap, "tiled/layer", arguments[1])?.to_owned();
-        let mut all = Vec::new();
-        every_layer(heap, arguments[0], &mut all);
-        Ok(all
-            .into_iter()
-            .find(|each| named(heap, *each, &wanted))
-            .unwrap_or(Value::Nil))
-    });
-    isolate.define_native_in(MODULE, "object", 2, Some(2), |heap, arguments| {
-        let wanted = wanted_name(heap, "tiled/object", arguments[1])?.to_owned();
-        Ok(every_object(heap, arguments[0])
-            .into_iter()
-            .find(|each| named(heap, *each, &wanted))
-            .unwrap_or(Value::Nil))
-    });
-    isolate.define_native_in(MODULE, "objects", 1, Some(1), |heap, arguments| {
-        let all = every_object(heap, arguments[0]);
-        make_vector(heap, &all)
-    });
-    isolate.define_native_in(MODULE, "tile", 3, Some(3), tile_at);
-    isolate.define_native_in(MODULE, "region", 2, Some(2), region);
+    isolate
+        .native(MODULE, "load")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            let wanted = heap.text(arguments[0]).map(str::to_owned).ok_or_else(|| {
+                wrong(heap, "tiled/load", "the path of a .tmx file", arguments[0])
+            })?;
+            let loaded = Map::load(&wanted).map_err(|error| Error::new(error.to_string()))?;
+            map(heap, &loaded)
+        });
+    isolate
+        .native(MODULE, "layer")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let wanted = wanted_name(heap, "tiled/layer", arguments[1])?.to_owned();
+            let mut all = Vec::new();
+            every_layer(heap, arguments[0], &mut all);
+            Ok(all
+                .into_iter()
+                .find(|each| named(heap, *each, &wanted))
+                .unwrap_or(Value::Nil))
+        });
+    isolate
+        .native(MODULE, "object")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let wanted = wanted_name(heap, "tiled/object", arguments[1])?.to_owned();
+            Ok(every_object(heap, arguments[0])
+                .into_iter()
+                .find(|each| named(heap, *each, &wanted))
+                .unwrap_or(Value::Nil))
+        });
+    isolate
+        .native(MODULE, "objects")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let all = every_object(heap, arguments[0]);
+            make_vector(heap, &all)
+        });
+    isolate
+        .native(MODULE, "tile")
+        .arity(3, Some(3))
+        .function(tile_at);
+    isolate
+        .native(MODULE, "region")
+        .arity(2, Some(2))
+        .function(region);
 }
