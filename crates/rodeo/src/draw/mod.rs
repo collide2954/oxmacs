@@ -1,7 +1,9 @@
 pub mod effects;
 mod quad;
+mod viewport;
 
 pub use quad::Instance;
+pub use viewport::Viewport;
 
 use std::ops::Range;
 
