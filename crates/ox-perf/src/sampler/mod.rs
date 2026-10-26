@@ -5,7 +5,7 @@ use crate::{benches, tables};
 
 const ROWS: usize = 40;
 
-pub fn profile(
+pub fn sample(
     path: &Path,
     name: &str,
     roots: &[PathBuf],
@@ -48,7 +48,7 @@ mod native;
 mod tests {
     use std::time::Duration;
 
-    use super::profile;
+    use super::sample;
 
     fn suite() -> (tempfile::TempDir, std::path::PathBuf) {
         let folder = tempfile::tempdir().unwrap();
@@ -66,7 +66,7 @@ mod tests {
     fn sampling_names_the_vm_functions_that_run() {
         let (_folder, file) = suite();
 
-        let report = profile(&file, "spin", &[], Duration::from_millis(500)).unwrap();
+        let report = sample(&file, "spin", &[], Duration::from_millis(500)).unwrap();
 
         assert!(report.starts_with("Self time by function ("), "{report}");
         assert!(report.contains("ox_lang::vm::Runtime::"), "{report}");
@@ -83,7 +83,7 @@ mod tests {
         )
         .unwrap();
 
-        let report = profile(&file, "grow", &[], Duration::from_secs(2)).unwrap();
+        let report = sample(&file, "grow", &[], Duration::from_secs(2)).unwrap();
 
         assert!(report.contains("ox_lang::vm::Runtime::"), "{report}");
     }
@@ -93,7 +93,7 @@ mod tests {
         let (_folder, file) = suite();
 
         assert_eq!(
-            profile(&file, "nope", &[], Duration::from_millis(10)).unwrap_err(),
+            sample(&file, "nope", &[], Duration::from_millis(10)).unwrap_err(),
             "There is no benchmark named nope; the file has spin"
         );
     }

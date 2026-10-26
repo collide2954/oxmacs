@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use ox_lang::span::Span;
 use ox_lang::task::TaskId;
+use ox_lang::testing;
 use ox_lang::value::Value;
 use ox_lang::{Error, read};
 use oxmacs_core::command::{Command, CommandId, DynamicSpec, Scope, ScopeId};
@@ -468,30 +469,9 @@ fn test_lines(editor: &Editor) -> Vec<String> {
         Some(path) => oxmacs_api::isolate_for(path),
         None => oxmacs_api::editor_isolate(),
     };
-    if let Err(error) = isolate.eval_named(&name, &source) {
-        return vec![format!("FAIL  {name}"), format!("      {}", error.message)];
-    }
-    let outcomes = ox_lang::testing::run_registered(&mut isolate, &name);
-    let failed = outcomes
-        .iter()
-        .filter(|outcome| outcome.error.is_some())
-        .count();
-    let mut lines = Vec::new();
-    for outcome in &outcomes {
-        match &outcome.error {
-            None => lines.push(format!("ok    {}", outcome.name)),
-            Some(error) => {
-                lines.push(format!("FAIL  {}", outcome.name));
-                lines.extend(error.message.lines().map(|line| format!("      {line}")));
-            }
-        }
-    }
-    lines.push(match (outcomes.len(), failed) {
-        (0, _) => format!("No tests in {name}"),
-        (1, 0) => "1 test passed".to_owned(),
-        (total, 0) => format!("{total} tests passed"),
-        (total, failed) => format!("{total} tests, {failed} failed"),
-    });
+    let outcomes = testing::run_file(&mut isolate, &name, &source);
+    let mut lines = testing::report(&outcomes, &name, &source);
+    lines.push(testing::summary(&outcomes));
     lines
 }
 

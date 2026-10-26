@@ -9,6 +9,7 @@ mod expand;
 pub mod format;
 pub mod forms;
 pub mod heap;
+pub mod ide;
 mod isolate;
 pub mod names;
 pub mod native;

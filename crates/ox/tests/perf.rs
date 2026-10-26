@@ -35,7 +35,7 @@ fn ox_perf_without_a_command_says_how_to_use_it() {
 
     assert!(!succeeded);
     assert!(
-        problem.starts_with("usage: ox perf bench FILE"),
+        problem.starts_with("ox perf: which one?\nusage: ox perf bench FILE"),
         "{problem}"
     );
 }

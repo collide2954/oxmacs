@@ -37,6 +37,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `ox` reads every subcommand's arguments the same way: an option it doesn't know is refused with the subcommand's usage, `--` makes what follows paths, and a path that doesn't exist is an error instead of passing. `ox test` and `C-c C-t` share one runner and report: a file that needs the editor counts as skipped, the summary says how many were skipped, and failures name their file, line and column.
 - `vault-read-kdbx` is now `keepass/read` in `(ox keepass)`, and like every native that reads files it doesn't run while code is only being checked.
 - `ox check`, `ox test`, `ox lsp`, `ox perf` and `C-c C-t` know rodeo's game modules and the editor's own modules, `(ox ui)`, `(ox pdf)` and `(rodeo)`, in every file, so a game checks clean outside oxmacs instead of failing with `No module named rodeo`. The rest of the editor API is known in editor code: `init.ox`, `custom.ox`, plugin folders and files in the oxmacs home.
 - Ox files open in oxmacs are checked the way `ox check` checks them, so a script outside the oxmacs home that calls an editor function such as `message` is flagged instead of passing in the editor and failing under `ox`.

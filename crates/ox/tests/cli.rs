@@ -254,7 +254,7 @@ fn ox_test_runs_a_plugin_folders_tests_and_skips_what_needs_the_editor() {
         )),
         "{shown}"
     );
-    assert!(shown.ends_with("2 tests passed\n"), "{shown}");
+    assert!(shown.ends_with("2 tests passed, 1 skipped\n"), "{shown}");
 }
 
 #[test]
@@ -332,4 +332,42 @@ fn ox_test_runs_each_test_and_explains_failures() {
     let passing = ox().arg("test").arg(dir.path()).output().unwrap();
     assert!(passing.status.success());
     assert!(text(&passing.stdout).ends_with("1 test passed\n"));
+}
+
+#[test]
+fn subcommands_refuse_unknown_options_and_missing_paths() {
+    let unknown = ox().args(["check", "--frob", "x.ox"]).output().unwrap();
+    assert_eq!(unknown.status.code(), Some(2));
+    assert!(
+        text(&unknown.stderr).starts_with("ox check: unknown option --frob\nusage: ox check "),
+        "{}",
+        text(&unknown.stderr)
+    );
+
+    let missing = ox().args(["test", "no-such-folder"]).output().unwrap();
+    assert_eq!(missing.status.code(), Some(2));
+    assert!(
+        text(&missing.stderr).starts_with("ox test: no-such-folder doesn't exist\n"),
+        "{}",
+        text(&missing.stderr)
+    );
+}
+
+#[test]
+fn a_double_dash_lets_a_path_start_with_a_dash() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("-odd.ox"), "(def x 1)\n").unwrap();
+
+    let output = ox()
+        .current_dir(dir.path())
+        .args(["check", "--", "-odd.ox"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    assert!(
+        text(&output.stdout).contains("Checked 1 file"),
+        "{}",
+        text(&output.stdout)
+    );
 }

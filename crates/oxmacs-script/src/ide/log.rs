@@ -1,7 +1,6 @@
 use std::fmt::Write as _;
 
 use ox_lang::Error;
-use ox_lang::span::line_column;
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::plugin::PluginBuffer;
@@ -31,18 +30,10 @@ pub fn reports(editor: &Editor) -> usize {
 }
 
 fn place(error: &Error, origin: Option<(&str, &str)>) -> String {
-    match (error.traceback.first(), error.span, origin) {
-        (Some(frame), _, _) => {
-            let (line, column) = frame.line_column();
-            format!("{}:{line}:{column}: ", frame.file())
-        }
-        (None, Some(span), Some((file, source))) => {
-            let (line, column) = line_column(source, span.start);
-            format!("{file}:{line}:{column}: ")
-        }
-        (None, None, Some((file, _))) => format!("{file}: "),
-        (None, _, None) => String::new(),
-    }
+    error
+        .place(origin)
+        .map(|place| format!("{place}: "))
+        .unwrap_or_default()
 }
 
 fn now() -> String {

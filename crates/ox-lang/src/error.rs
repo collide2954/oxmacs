@@ -112,6 +112,21 @@ impl Error {
         self.span.get_or_insert(span);
         self
     }
+
+    pub fn place(&self, origin: Option<(&str, &str)>) -> Option<String> {
+        match (self.traceback.first(), self.span, origin) {
+            (Some(frame), _, _) => {
+                let (line, column) = frame.line_column();
+                Some(format!("{}:{line}:{column}", frame.file()))
+            }
+            (None, Some(span), Some((file, source))) => {
+                let (line, column) = line_column(source, span.start);
+                Some(format!("{file}:{line}:{column}"))
+            }
+            (None, None, Some((file, _))) => Some(file.to_owned()),
+            (None, _, None) => None,
+        }
+    }
 }
 
 impl fmt::Display for Error {

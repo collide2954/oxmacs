@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use ox_lang::Isolate;
 use ox_lang::describe::Kind;
+use ox_lang::ide::ox_files;
 use ox_lang::names;
 use ox_lang::span::line_column;
 use oxmacs_core::editor::Editor;
@@ -52,30 +53,6 @@ fn usages_in(text: &str, wanted: &str) -> Vec<(usize, usize)> {
         .collect()
 }
 
-fn ox_files(root: &Path, found: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(root) else {
-        return;
-    };
-    let mut paths: Vec<PathBuf> = entries.flatten().map(|entry| entry.path()).collect();
-    paths.sort();
-    for path in paths {
-        if found.len() >= MOST_FILES {
-            return;
-        }
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default();
-        if path.is_dir() {
-            if !name.starts_with('.') && name != "target" {
-                ox_files(&path, found);
-            }
-        } else if path.extension().is_some_and(|extension| extension == "ox") {
-            found.push(path);
-        }
-    }
-}
-
 struct Source {
     file: String,
     path: Option<PathBuf>,
@@ -122,7 +99,7 @@ fn sources(editor: &Editor, roots: &[PathBuf]) -> Vec<Source> {
     }
     let mut files = Vec::new();
     for root in roots {
-        ox_files(root, &mut files);
+        files.extend(ox_files(root, MOST_FILES.saturating_sub(files.len())));
     }
     for path in files {
         let known = found

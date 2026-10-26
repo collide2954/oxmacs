@@ -1,154 +1,230 @@
+mod args;
+
 use std::ffi::OsString;
+use std::fmt::Write as _;
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::Duration;
 use std::{env, fs};
 
 use ox_lang::check::report::{self, Format};
 use ox_lang::check::{Diagnostic, Severity};
-use ox_lang::error::ErrorKind;
-use ox_lang::span::line_column;
-use ox_lang::{Error, Isolate, read};
+use ox_lang::ide::ox_files;
+use ox_lang::{Error, Isolate, read, testing};
 use oxmacs_api as checker;
+
+use args::Parsed;
 
 #[global_allocator]
 static ALLOCATOR: ox_perf::Counting = ox_perf::Counting;
 
-const USAGE: &str = "usage: ox [FILE]
-       ox SUBCOMMAND ...
+struct Subcommand {
+    name: &'static str,
+    usage: &'static str,
+    summary: &'static str,
+    flags: &'static [&'static str],
+    valued: &'static [&'static str],
+    run: fn(&Parsed) -> Result<ExitCode, String>,
+}
 
-  ox                     open a REPL
-  ox FILE                run a file
-  ox check PATH...       find mistakes without running anything
-  ox fmt [--check] PATH...
-                         format files, or list the ones that aren't
-  ox test PATH...        run the test blocks in files or folders
-  ox profile FILE        run a file and show where the time went
-  ox perf bench FILE     benchmark the functions a file returns
-  ox perf sample FILE NAME
-                         sample where one benchmark spends its time
-  ox lsp                 serve Ox to editors over the Language Server Protocol
-  ox --version           print the version
-";
+const SUBCOMMANDS: &[Subcommand] = &[
+    Subcommand {
+        name: "check",
+        usage: "[--format human|json|github] [--strict] [--root DIR]... PATH...",
+        summary: "find mistakes without running anything",
+        flags: &["--strict"],
+        valued: &["--format", "--root"],
+        run: check,
+    },
+    Subcommand {
+        name: "fmt",
+        usage: "[--check] PATH...",
+        summary: "format files, or list the ones that aren't",
+        flags: &["--check"],
+        valued: &[],
+        run: fmt,
+    },
+    Subcommand {
+        name: "test",
+        usage: "[PATH]...",
+        summary: "run the test blocks in files or folders",
+        flags: &[],
+        valued: &[],
+        run: test,
+    },
+    Subcommand {
+        name: "profile",
+        usage: "FILE",
+        summary: "run a file and show where the time went",
+        flags: &[],
+        valued: &[],
+        run: profile,
+    },
+    Subcommand {
+        name: "perf bench",
+        usage: "FILE [NAME]... [--root DIR]...",
+        summary: "benchmark the functions a file returns",
+        flags: &[],
+        valued: &["--root"],
+        run: bench,
+    },
+    Subcommand {
+        name: "perf sample",
+        usage: "FILE NAME [--seconds N] [--root DIR]...",
+        summary: "sample where one benchmark spends its time",
+        flags: &[],
+        valued: &["--seconds", "--root"],
+        run: sample,
+    },
+    Subcommand {
+        name: "lsp",
+        usage: "",
+        summary: "serve Ox to editors over the Language Server Protocol",
+        flags: &[],
+        valued: &[],
+        run: language_server,
+    },
+];
+
+fn line(shown: &str, summary: &str) -> String {
+    if shown.len() < 23 {
+        format!("  {shown:<23}{summary}\n")
+    } else {
+        format!("  {shown}\n  {:<23}{summary}\n", "")
+    }
+}
+
+fn written(subcommand: &Subcommand) -> String {
+    format!("ox {} {}", subcommand.name, subcommand.usage)
+        .trim_end()
+        .to_owned()
+}
+
+fn usage() -> String {
+    let mut shown = "usage: ox [FILE]\n       ox SUBCOMMAND ...\n\n".to_owned();
+    shown.push_str(&line("ox", "open a REPL"));
+    shown.push_str(&line("ox FILE", "run a file"));
+    for subcommand in SUBCOMMANDS {
+        shown.push_str(&line(&written(subcommand), subcommand.summary));
+    }
+    shown.push_str(&line("ox --version", "print the version"));
+    shown
+}
+
+fn chosen(arguments: &[OsString]) -> Option<(&'static Subcommand, usize)> {
+    SUBCOMMANDS.iter().find_map(|subcommand| {
+        let words: Vec<&str> = subcommand.name.split(' ').collect();
+        let matches = arguments.len() >= words.len()
+            && words
+                .iter()
+                .zip(arguments)
+                .all(|(word, given)| given == *word);
+        matches.then_some((subcommand, words.len()))
+    })
+}
+
+fn refused(problem: &str, usages: &[String]) -> ExitCode {
+    eprintln!("{problem}");
+    for (index, shown) in usages.iter().enumerate() {
+        let lead = if index == 0 { "usage:" } else { "      " };
+        eprintln!("{lead} {shown}");
+    }
+    ExitCode::from(2)
+}
 
 fn main() -> ExitCode {
-    let mut args = env::args_os().skip(1);
-    match args.next() {
-        Some(first) if first == "--help" || first == "-h" || first == "help" => {
-            print!("{USAGE}");
+    let arguments: Vec<OsString> = env::args_os().skip(1).collect();
+    let Some(first) = arguments.first() else {
+        let mut isolate = oxmacs_api::plain_isolate();
+        isolate.add_root(".");
+        return repl(&mut isolate);
+    };
+    if let Some((subcommand, words)) = chosen(&arguments) {
+        let parsed = args::parse(&arguments[words..], subcommand.flags, subcommand.valued);
+        return match parsed.and_then(|parsed| (subcommand.run)(&parsed)) {
+            Ok(code) => code,
+            Err(problem) => refused(
+                &format!("ox {}: {problem}", subcommand.name),
+                &[written(subcommand)],
+            ),
+        };
+    }
+    match first.to_str() {
+        Some("--help" | "-h" | "help") => {
+            print!("{}", usage());
             ExitCode::SUCCESS
         }
-        Some(first) if first == "--version" || first == "-V" => {
+        Some("--version" | "-V") => {
             println!("ox {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
-        Some(first) if first == "test" => run_tests(&args.map(PathBuf::from).collect::<Vec<_>>()),
-        Some(first) if first == "check" => check_command(args.collect()),
-        Some(first) if first == "fmt" => fmt_command(args.collect()),
-        Some(first) if first == "lsp" => language_server(),
-        Some(first) if first == "perf" => {
-            ox_perf::main(args.map(|argument| argument.to_string_lossy().into_owned()))
+        Some("--") if arguments.len() > 1 => run_path(Path::new(&arguments[1])),
+        Some(word)
+            if SUBCOMMANDS
+                .iter()
+                .any(|known| known.name.starts_with(&format!("{word} "))) =>
+        {
+            let usages: Vec<String> = SUBCOMMANDS
+                .iter()
+                .filter(|known| known.name.starts_with(&format!("{word} ")))
+                .map(written)
+                .collect();
+            refused(&format!("ox {word}: which one?"), &usages)
         }
-        Some(first) if first == "profile" => {
-            if let Some(path) = args.next() {
-                profile_file(&PathBuf::from(path))
-            } else {
-                eprintln!("usage: ox profile FILE");
-                ExitCode::FAILURE
-            }
-        }
-        Some(path) => {
-            let path = PathBuf::from(path);
-            let mut isolate = oxmacs_api::plain_isolate();
-            add_roots(&mut isolate, &path);
-            run_file(&mut isolate, &path)
-        }
-        None => {
-            let mut isolate = oxmacs_api::plain_isolate();
-            isolate.add_root(".");
-            repl(&mut isolate)
-        }
+        Some(option) if option.starts_with('-') => refused(
+            &format!("ox: unknown option {option}"),
+            &["ox --help".to_owned()],
+        ),
+        _ => run_path(Path::new(first)),
     }
 }
 
-fn place(error: &Error, path: &Path, source: &str) -> String {
-    match (error.traceback.first(), error.span) {
-        (Some(frame), _) => {
-            let (line, column) = frame.line_column();
-            format!("{}:{line}:{column}", frame.file())
-        }
-        (None, Some(span)) => {
-            let (line, column) = line_column(source, span.start);
-            format!("{}:{line}:{column}", path.display())
-        }
-        (None, None) => path.display().to_string(),
-    }
+fn run_path(path: &Path) -> ExitCode {
+    let mut isolate = oxmacs_api::plain_isolate();
+    add_roots(&mut isolate, path);
+    run_file(&mut isolate, path)
 }
 
-const CHECK_USAGE: &str =
-    "usage: ox check [--format human|json|github] [--strict] [--root DIR]... PATH...";
-
-fn ox_files(path: &Path, into: &mut Vec<PathBuf>) {
-    if !path.is_dir() {
-        into.push(path.to_path_buf());
-        return;
-    }
-    let mut entries: Vec<PathBuf> = fs::read_dir(path)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|entry| entry.path())
-        .collect();
-    entries.sort();
-    for entry in entries {
-        if entry.is_dir() {
-            ox_files(&entry, into);
-        } else if entry.extension().is_some_and(|extension| extension == "ox") {
-            into.push(entry);
+fn files(paths: &[OsString]) -> Result<Vec<PathBuf>, String> {
+    let mut found = Vec::new();
+    for path in paths {
+        let path = Path::new(path);
+        if !path.exists() {
+            return Err(format!("{} doesn't exist", path.display()));
         }
+        found.extend(ox_files(path, usize::MAX));
     }
+    Ok(found)
 }
 
-fn check_command(arguments: Vec<OsString>) -> ExitCode {
-    let mut format = Format::Human;
-    let mut strict = false;
-    let mut roots = Vec::new();
-    let mut files = Vec::new();
-    let mut given = arguments.into_iter();
-    while let Some(argument) = given.next() {
-        match argument.to_str() {
-            Some("--strict") => strict = true,
-            Some("--format") => {
-                let Some(named) = given.next().and_then(|name| Format::named(name.to_str()?))
-                else {
-                    eprintln!("{CHECK_USAGE}");
-                    return ExitCode::from(2);
-                };
-                format = named;
-            }
-            Some("--root") => {
-                let Some(root) = given.next() else {
-                    eprintln!("{CHECK_USAGE}");
-                    return ExitCode::from(2);
-                };
-                roots.push(PathBuf::from(root));
-            }
-            _ => ox_files(Path::new(&argument), &mut files),
-        }
+fn some_paths(parsed: &Parsed) -> Result<Vec<PathBuf>, String> {
+    if parsed.positional.is_empty() {
+        return Err("give at least one PATH".to_owned());
     }
-    if files.is_empty() {
-        eprintln!("{CHECK_USAGE}");
-        return ExitCode::from(2);
-    }
+    files(&parsed.positional)
+}
+
+fn source_of(file: &Path) -> Result<String, String> {
+    fs::read_to_string(file).map_err(|error| format!("{}: {error}", file.display()))
+}
+
+fn check(parsed: &Parsed) -> Result<ExitCode, String> {
+    let format = match parsed.value("--format") {
+        None => Format::Human,
+        Some(name) => name.to_str().and_then(Format::named).ok_or_else(|| {
+            format!(
+                "--format is human, json or github, not {}",
+                name.to_string_lossy()
+            )
+        })?,
+    };
+    let strict = parsed.flag("--strict");
+    let roots: Vec<PathBuf> = parsed.values("--root").map(PathBuf::from).collect();
+    let files = some_paths(parsed)?;
     let mut checked = Vec::new();
     for file in &files {
-        let source = match fs::read_to_string(file) {
-            Ok(source) => source,
-            Err(error) => {
-                eprintln!("{}: {error}", file.display());
-                return ExitCode::from(2);
-            }
-        };
+        let source = source_of(file)?;
         let mut isolate = isolate_for(file, &roots);
         let name = file.display().to_string();
         let found = isolate.check(&name, &source);
@@ -181,14 +257,17 @@ fn check_command(arguments: Vec<OsString>) -> ExitCode {
             }
         }
     }
-    if errors > 0 || (strict && warnings > 0) {
+    Ok(if errors > 0 || (strict && warnings > 0) {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
-    }
+    })
 }
 
-fn language_server() -> ExitCode {
+fn language_server(parsed: &Parsed) -> Result<ExitCode, String> {
+    if !parsed.positional.is_empty() {
+        return Err("takes no arguments".to_owned());
+    }
     let options = ox_lsp::Options {
         flavor: |path| {
             if checker::editor_code(path) {
@@ -202,37 +281,24 @@ fn language_server() -> ExitCode {
         roots: checker::check_roots,
     };
     match ox_lsp::serve(&options) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(()) => Ok(ExitCode::SUCCESS),
         Err(error) => {
             eprintln!("ox lsp: {error}");
-            ExitCode::FAILURE
+            Ok(ExitCode::FAILURE)
         }
     }
 }
 
-const FMT_USAGE: &str = "usage: ox fmt [--check] PATH...";
-
-fn fmt_command(arguments: Vec<OsString>) -> ExitCode {
-    let mut check = false;
-    let mut files = Vec::new();
-    for argument in arguments {
-        if argument == "--check" {
-            check = true;
-        } else {
-            ox_files(Path::new(&argument), &mut files);
-        }
-    }
-    if files.is_empty() {
-        eprintln!("{FMT_USAGE}");
-        return ExitCode::from(2);
-    }
+fn fmt(parsed: &Parsed) -> Result<ExitCode, String> {
+    let check = parsed.flag("--check");
+    let files = some_paths(parsed)?;
     let mut changed = 0;
     let mut failed = false;
     for file in &files {
-        let source = match fs::read_to_string(file) {
+        let source = match source_of(file) {
             Ok(source) => source,
-            Err(error) => {
-                eprintln!("{}: {error}", file.display());
+            Err(problem) => {
+                eprintln!("{problem}");
                 failed = true;
                 continue;
             }
@@ -258,29 +324,83 @@ fn fmt_command(arguments: Vec<OsString>) -> ExitCode {
         }
     }
     if failed {
-        return ExitCode::from(2);
+        return Ok(ExitCode::from(2));
     }
     if check {
-        return if changed > 0 {
+        return Ok(if changed > 0 {
             ExitCode::FAILURE
         } else {
             ExitCode::SUCCESS
-        };
+        });
     }
     let plural = if files.len() == 1 { "" } else { "s" };
     println!("Formatted {changed} of {} file{plural}", files.len());
-    ExitCode::SUCCESS
+    Ok(ExitCode::SUCCESS)
 }
 
-fn profile_file(path: &Path) -> ExitCode {
+fn one_file(parsed: &Parsed) -> Result<PathBuf, String> {
+    match parsed.positional.as_slice() {
+        [file] => Ok(PathBuf::from(file)),
+        _ => Err("give one FILE".to_owned()),
+    }
+}
+
+fn profile(parsed: &Parsed) -> Result<ExitCode, String> {
+    let path = one_file(parsed)?;
     let mut isolate = oxmacs_api::plain_isolate();
-    add_roots(&mut isolate, path);
+    add_roots(&mut isolate, &path);
     isolate.start_profiling();
-    let code = run_file(&mut isolate, path);
+    let code = run_file(&mut isolate, &path);
     if let Some(profile) = isolate.stop_profiling() {
         print!("{}", profile.report());
     }
-    code
+    Ok(code)
+}
+
+fn printed(report: Result<String, String>) -> ExitCode {
+    match report {
+        Ok(report) => {
+            print!("{report}");
+            ExitCode::SUCCESS
+        }
+        Err(problem) => {
+            eprintln!("{problem}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn bench(parsed: &Parsed) -> Result<ExitCode, String> {
+    let [file, names @ ..] = parsed.positional.as_slice() else {
+        return Err("give a FILE".to_owned());
+    };
+    let names: Vec<String> = names
+        .iter()
+        .map(|name| name.to_string_lossy().into_owned())
+        .collect();
+    let roots: Vec<PathBuf> = parsed.values("--root").map(PathBuf::from).collect();
+    Ok(printed(ox_perf::bench(Path::new(file), &names, &roots)))
+}
+
+fn sample(parsed: &Parsed) -> Result<ExitCode, String> {
+    let [file, name] = parsed.positional.as_slice() else {
+        return Err("give a FILE and a NAME".to_owned());
+    };
+    let seconds = match parsed.value("--seconds") {
+        None => 4.0,
+        Some(given) => given
+            .to_str()
+            .and_then(|text| text.parse::<f64>().ok())
+            .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
+            .ok_or_else(|| format!("--seconds needs a number, got {}", given.to_string_lossy()))?,
+    };
+    let roots: Vec<PathBuf> = parsed.values("--root").map(PathBuf::from).collect();
+    Ok(printed(ox_perf::sample(
+        Path::new(file),
+        &name.to_string_lossy(),
+        &roots,
+        Duration::from_secs_f64(seconds),
+    )))
 }
 
 fn isolate_for(file: &Path, roots: &[PathBuf]) -> Isolate {
@@ -297,6 +417,10 @@ fn add_roots(isolate: &mut Isolate, path: &Path) {
     }
 }
 
+fn place(error: &Error, file: &str, source: &str) -> String {
+    error.place(Some((file, source))).unwrap_or_default()
+}
+
 fn run_file(isolate: &mut Isolate, path: &Path) -> ExitCode {
     let source = match fs::read_to_string(path) {
         Ok(source) => source,
@@ -305,10 +429,11 @@ fn run_file(isolate: &mut Isolate, path: &Path) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let Err(error) = isolate.eval_named(&path.display().to_string(), &source) else {
+    let file = path.display().to_string();
+    let Err(error) = isolate.eval_named(&file, &source) else {
         let unhandled = isolate.finish_tasks(None);
         for error in &unhandled {
-            eprintln!("{}: {}", place(error, path, &source), error.message);
+            eprintln!("{}: {}", place(error, &file, &source), error.message);
         }
         return if unhandled.is_empty() {
             ExitCode::SUCCESS
@@ -316,71 +441,42 @@ fn run_file(isolate: &mut Isolate, path: &Path) -> ExitCode {
             ExitCode::FAILURE
         };
     };
-    eprintln!("{}: {}", place(&error, path, &source), error.message);
+    let mut shown = format!("{}: {}", place(&error, &file, &source), error.message);
     if error.traceback.len() > 1 {
         for frame in &error.traceback {
-            eprintln!("  in {frame}");
+            let _ = write!(shown, "\n  in {frame}");
         }
     }
+    eprintln!("{shown}");
     ExitCode::FAILURE
 }
 
-fn report(name: &str, error: &Error, path: &Path, source: &str) {
-    println!("FAIL  {name}");
-    println!("      {}", place(error, path, source));
-    for line in error.message.lines() {
-        println!("      {line}");
-    }
-}
-
-fn run_tests(paths: &[PathBuf]) -> ExitCode {
-    let mut files = Vec::new();
-    let wanted: Vec<PathBuf> = if paths.is_empty() {
-        vec![PathBuf::from(".")]
+fn test(parsed: &Parsed) -> Result<ExitCode, String> {
+    let paths = if parsed.positional.is_empty() {
+        vec![OsString::from(".")]
     } else {
-        paths.to_vec()
+        parsed.positional.clone()
     };
-    for path in &wanted {
-        ox_files(path, &mut files);
-    }
+    let mut files = files(&paths)?;
     files.retain(|file| file.file_name().is_none_or(|name| name != "plugin.ox"));
     files.sort();
-    let (mut total, mut failed) = (0_usize, 0_usize);
+    let mut outcomes = Vec::new();
     for path in files {
-        let source = fs::read_to_string(&path).unwrap_or_default();
+        let source = source_of(&path)?;
         let mut isolate = oxmacs_api::isolate_for(&path);
         let file = path.display().to_string();
-        if let Err(error) = isolate.eval_named(&file, &source) {
-            if error.kind == ErrorKind::Refused {
-                println!("skip  {}: it needs the editor", path.display());
-                continue;
-            }
-            total += 1;
-            failed += 1;
-            report(&path.display().to_string(), &error, &path, &source);
-            continue;
+        let ran = testing::run_file(&mut isolate, &file, &source);
+        for line in testing::report(&ran, &file, &source) {
+            println!("{line}");
         }
-        for outcome in ox_lang::testing::run_registered(&mut isolate, &file) {
-            total += 1;
-            match outcome.error {
-                None => println!("ok    {}", outcome.name),
-                Some(error) => {
-                    failed += 1;
-                    report(&outcome.name, &error, &path, &source);
-                }
-            }
-        }
+        outcomes.extend(ran);
     }
-    match (total, failed) {
-        (1, 0) => println!("1 test passed"),
-        (_, 0) => println!("{total} tests passed"),
-        _ => println!("{total} tests, {failed} failed"),
-    }
-    if failed == 0 {
+    println!("{}", testing::summary(&outcomes));
+    Ok(if testing::failed(&outcomes) == 0 {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
-    }
+    })
 }
 
 fn prompt(text: &str) {
