@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::hash::Hash;
 
+use super::cell;
 use crate::rect::Rect;
 use crate::vec::Vec2;
 
@@ -9,15 +10,6 @@ pub struct Grid<T> {
     size: f64,
     cells: HashMap<(i64, i64), Vec<T>>,
     rects: HashMap<T, Rect>,
-}
-
-fn cell(value: f64, size: f64) -> i64 {
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "positions beyond the i64 range saturate"
-    )]
-    let index = (value / size).floor() as i64;
-    index
 }
 
 impl<T: Copy + Eq + Hash + Ord> Grid<T> {

@@ -7,4 +7,5 @@ mod grid;
 mod random;
 mod rect;
 mod sweep;
+mod tiles;
 mod vec;

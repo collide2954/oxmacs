@@ -11,18 +11,18 @@ pub struct Hit {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Contact {
-    pub index: usize,
+pub struct Contact<I = usize> {
+    pub index: I,
     pub normal: Vec2,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Moved {
+pub struct Moved<I = usize> {
     pub rect: Rect,
-    pub contacts: Vec<Contact>,
+    pub contacts: Vec<Contact<I>>,
 }
 
-impl Moved {
+impl<I> Moved<I> {
     pub fn on_floor(&self) -> bool {
         self.contacts.iter().any(|contact| contact.normal.y < 0.0)
     }

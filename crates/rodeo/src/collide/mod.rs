@@ -1,11 +1,22 @@
 mod grid;
 mod sweep;
+mod tiles;
 
 pub use grid::Grid;
 pub use sweep::{Contact, Hit, Moved, slide, sweep};
+pub use tiles::move_in_tiles;
 
 use crate::rect::Rect;
 use crate::vec::Vec2;
+
+fn cell(value: f64, size: f64) -> i64 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "positions beyond the i64 range saturate"
+    )]
+    let index = (value / size).floor() as i64;
+    index
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Circle {
