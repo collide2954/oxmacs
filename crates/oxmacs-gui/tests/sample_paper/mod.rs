@@ -45,7 +45,7 @@ fn wrap(text: &str, size: f32, measure: f32) -> Vec<String> {
         let width: f32 = candidate.chars().map(advance).sum::<f32>() * size;
         if width > measure && !line.is_empty() {
             lines.push(std::mem::take(&mut line));
-            line = word.to_owned();
+            word.clone_into(&mut line);
         } else {
             line = candidate;
         }
