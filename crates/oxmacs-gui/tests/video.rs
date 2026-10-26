@@ -1,3 +1,6 @@
+mod sample_book;
+mod sample_paper;
+
 use std::cell::{Cell, RefCell};
 use std::fmt::Write as _;
 use std::fs;
@@ -125,6 +128,7 @@ struct Film {
     size: Size,
     uploads: usize,
     output: Option<(u32, u32)>,
+    pace: f64,
 }
 
 impl Film {
@@ -138,11 +142,16 @@ impl Film {
             size: SIZE,
             uploads: 0,
             output: None,
+            pace: 1.0,
         }
     }
 
     fn sized(self, size: Size) -> Self {
         Self { size, ..self }
+    }
+
+    fn paced(self, pace: f64) -> Self {
+        Self { pace, ..self }
     }
 
     fn warmed(self, uploads: usize) -> Self {
@@ -179,7 +188,7 @@ impl Film {
 
     fn hold(&mut self, seconds: f64) {
         if let Some(last) = self.frames.last_mut() {
-            last.1 += seconds;
+            last.1 += seconds * self.pace;
         }
     }
 
@@ -1578,6 +1587,330 @@ fn news_video() {
     fix_the_typo(&mut film, &mut app);
     build_the_view(&mut film, &mut app);
     read_the_news(&mut film, &mut app);
+    film.hold(2.5);
+    film.finish(&out);
+}
+
+const GARDEN_CARGO: &str =
+    "[package]\nname = \"garden\"\nversion = \"0.1.0\"\nedition = \"2024\"\n";
+
+const GARDEN_README: &str = "# Garden\n\nA small planner for a kitchen garden: what to sow, when, and in which bed.\n\nRun it with `cargo run -- spring`.\n";
+
+const GARDEN_MAIN: &str = "mod soil;\nmod weather;\n\nuse soil::Bed;\n\nfn main() {\n    let season = std::env::args().nth(1).unwrap_or_else(|| \"spring\".to_owned());\n    let beds = [Bed::new(\"north\", 6.5), Bed::new(\"south\", 7.0)];\n    for bed in &beds {\n        println!(\"{season}: the {} bed, pH {:.1}, sow {}\", bed.name, bed.ph, bed.crop());\n    }\n}\n";
+
+const GARDEN_SOIL: &str = "pub struct Bed {\n    pub name: &'static str,\n    pub ph: f32,\n}\n\nimpl Bed {\n    pub fn new(name: &'static str, ph: f32) -> Self {\n        Self { name, ph }\n    }\n\n    pub fn crop(&self) -> &'static str {\n        if self.ph < 6.8 { \"potatoes\" } else { \"beans\" }\n    }\n}\n";
+
+const GARDEN_WEATHER: &str =
+    "pub fn frost_likely(month: u32) -> bool {\n    matches!(month, 11 | 12 | 1 | 2 | 3)\n}\n";
+
+const GARDEN_PLAN: &str = "# Plan for the season\n\nThe north bed is sour and wet, so potatoes go there first, with a row of broad beans along the wall where the wind cannot reach them.\n\nThe south bed drains well. Beans in May, then lettuce under the beans once they are tall enough to give some shade.\n";
+
+fn showcase_home() -> PathBuf {
+    let user = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap();
+    let home = user.join("oxmacs-showcase");
+    if home.join(".oxmacs-demo").exists() {
+        fs::remove_dir_all(&home).unwrap();
+    }
+    assert!(
+        !home.exists(),
+        "{} exists and wasn't made by this demo",
+        home.display()
+    );
+    let garden = home.join("garden");
+    fs::create_dir_all(garden.join("src")).unwrap();
+    fs::create_dir_all(garden.join("notes")).unwrap();
+    fs::create_dir_all(home.join("books")).unwrap();
+    fs::create_dir_all(home.join("papers")).unwrap();
+    fs::write(home.join(".oxmacs-demo"), "").unwrap();
+    let books = home.join("books");
+    fs::write(
+        home.join("init.ox"),
+        format!(
+            "(settings {{theme: :adwaita-dark animations: false font-size: 12 language-servers: false rust-lint: :off}})\n(use-plugin keycast :config {{placement: :bottom-center}})\n(use-plugin tabs)\n(use-plugin zen :config {{fullscreen: false width: 72}})\n(use-plugin epub :config {{library: {:?} size: 16}})\n(use-plugin pdf)\n",
+            books.display().to_string()
+        ),
+    )
+    .unwrap();
+    fs::write(garden.join("Cargo.toml"), GARDEN_CARGO).unwrap();
+    fs::write(garden.join("README.md"), GARDEN_README).unwrap();
+    fs::write(garden.join("src").join("main.rs"), GARDEN_MAIN).unwrap();
+    fs::write(garden.join("src").join("soil.rs"), GARDEN_SOIL).unwrap();
+    fs::write(garden.join("notes").join("plan.md"), GARDEN_PLAN).unwrap();
+    git(&garden, &["init", "-q", "-b", "main"]);
+    git(&garden, &["config", "user.name", "Ada Lovelace"]);
+    git(&garden, &["config", "user.email", "ada@example.com"]);
+    git(&garden, &["config", "commit.gpgsign", "false"]);
+    git(&garden, &["add", "."]);
+    git(&garden, &["commit", "-q", "-m", "Plan the beds"]);
+    fs::write(
+        garden.join("src").join("soil.rs"),
+        GARDEN_SOIL.replace("6.8", "6.6"),
+    )
+    .unwrap();
+    fs::write(garden.join("src").join("weather.rs"), GARDEN_WEATHER).unwrap();
+    sample_book::write(&books, "patient-ox.epub");
+    sample_book::write_book(
+        &books,
+        "seventeen-furrows.epub",
+        &sample_book::Book {
+            title: "Seventeen Furrows",
+            author: "Mira Hollis",
+            sky: [96.0, 40.0, 52.0],
+        },
+    );
+    sample_book::write_book(
+        &books,
+        "stones-at-the-hedge.epub",
+        &sample_book::Book {
+            title: "Stones at the Hedge",
+            author: "Ruth Hollis",
+            sky: [24.0, 84.0, 64.0],
+        },
+    );
+    sample_paper::write(&home.join("papers"), "patient-furrows.pdf");
+    home
+}
+
+fn shown_node(app: &App, name: &str, wanted: fn(&Node) -> bool) -> bool {
+    let editor = app.editor();
+    editor
+        .buffer_named(name)
+        .and_then(|id| editor.plugin_buffer::<ViewBuffer>(id))
+        .is_some_and(|(_, view)| wanted(&view.node))
+}
+
+fn pages_drawn(app: &mut App, size: Size) {
+    for _ in 0..200 {
+        let mut ui = Simulator::with_size(settings(), size, app.view());
+        let _ = ui.snapshot(&app.theme());
+        for message in ui.into_messages() {
+            track(app.update(message));
+        }
+        settle(app);
+        if !oxmacs_gui::widgets::pdf::drawing() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(30));
+    }
+}
+
+fn read_paper(film: &mut Film, app: &mut App, notation: &str, hold: f64) {
+    for chord in notation.split(' ') {
+        keys(app, chord);
+        settle(app);
+        pages_drawn(app, film.size);
+        film.shot(app, 0.35);
+    }
+    film.hold(hold);
+}
+
+fn prompt_answer(film: &mut Film, app: &mut App, notation: &str, answer: &str) {
+    film.press(app, notation);
+    film.type_slowly(app, answer);
+    film.press(app, "RET");
+}
+
+fn rename_tab(film: &mut Film, app: &mut App, name: &str) {
+    film.press(app, "C-x t r C-a C-k");
+    film.type_slowly(app, name);
+    film.press(app, "RET");
+}
+
+fn explore(film: &mut Film, app: &mut App) {
+    film.mark("explorer");
+    film.press(app, "C-x C-d");
+    until(app, "the file tree", |app| {
+        text_of(app, "*explorer*").contains("soil.rs")
+    });
+    film.shot(app, 3.5);
+    film.press(app, "M-<");
+    film.hold(1.0);
+    film.press(app, "TAB");
+    film.hold(2.5);
+    film.press(app, "TAB");
+    film.hold(1.0);
+    film.type_slowly(app, "soil");
+    film.hold(2.5);
+    film.press(app, "RET");
+    film.hold(3.0);
+    film.press(app, "C-x C-d");
+    film.hold(1.0);
+    film.type_slowly(app, "wea");
+    film.hold(1.5);
+    film.press(app, "SPC");
+    film.hold(2.5);
+    film.press(app, "RET");
+    film.hold(2.0);
+    film.press(app, "C-x C-d C-x C-d");
+    film.hold(2.0);
+}
+
+fn tabs(film: &mut Film, app: &mut App) {
+    film.mark("tabs");
+    rename_tab(film, app, "Garden");
+    film.hold(1.5);
+    film.press(app, "C-x t 2");
+    film.hold(2.0);
+    rename_tab(film, app, "Reading");
+    film.hold(2.0);
+}
+
+fn read_book(film: &mut Film, app: &mut App) {
+    film.mark("epub");
+    prompt_answer(film, app, "C-x C-f", "../../books/patient-ox.epub");
+    until(app, "the book", |app| {
+        shown_node(app, "patient-ox.epub", |node| {
+            matches!(node, Node::Pages(_))
+        })
+    });
+    film.shot(app, 0.3);
+    film.shot(app, 4.0);
+    for (notation, hold) in [("SPC", 5.0), ("SPC", 4.0), ("SPC", 3.0), ("]", 3.5)] {
+        film.press(app, notation);
+        film.hold(hold);
+    }
+    prompt_answer(film, app, "o", "The Harvest");
+    film.hold(5.0);
+    prompt_answer(film, app, "s", "stone");
+    film.hold(4.0);
+    for (notation, hold) in [
+        ("C-s", 2.5),
+        ("C-s", 2.5),
+        ("+ +", 3.0),
+        ("- -", 1.5),
+        ("i", 3.0),
+    ] {
+        film.press(app, notation);
+        film.hold(hold);
+    }
+    command(film, app, "epub-library");
+    until(app, "the library", |app| {
+        view_texts(app, "*epub library*")
+            .iter()
+            .any(|text| text.starts_with("Stones at"))
+    });
+    film.shot(app, 0.5);
+    film.shot(app, 6.0);
+    film.press(app, "q");
+    film.hold(1.5);
+}
+
+fn read_pdf(film: &mut Film, app: &mut App) {
+    film.mark("pdf");
+    film.press(app, "C-x t 2");
+    rename_tab(film, app, "Papers");
+    prompt_answer(film, app, "C-x b", "main.rs");
+    prompt_answer(film, app, "C-x C-f", "../../papers/patient-furrows.pdf");
+    until(app, "the paper", |app| {
+        shown_node(app, "patient-furrows.pdf", |node| {
+            matches!(node, Node::Pdf(_))
+        })
+    });
+    for (notation, hold) in [("C-n", 4.0), ("SPC", 3.0), ("SPC", 3.0), ("n", 3.0)] {
+        read_paper(film, app, notation, hold);
+    }
+    film.press(app, "o");
+    film.type_slowly(app, "Results");
+    film.press(app, "TAB");
+    read_paper(film, app, "RET", 3.5);
+    for (notation, hold) in [
+        ("H", 3.5),
+        ("c", 2.0),
+        ("n", 2.0),
+        ("p", 2.0),
+        ("m", 4.0),
+        ("m", 1.0),
+        ("c", 1.5),
+        ("W", 2.0),
+    ] {
+        read_paper(film, app, notation, hold);
+    }
+    film.press(app, "s");
+    film.type_slowly(app, "furrow");
+    read_paper(film, app, "RET", 4.0);
+    for (notation, hold) in [
+        ("C-s", 2.5),
+        ("C-s", 2.5),
+        ("+", 2.5),
+        ("+", 2.0),
+        ("W", 1.5),
+    ] {
+        read_paper(film, app, notation, hold);
+    }
+    film.press(app, "M-g g");
+    film.type_slowly(app, "4");
+    read_paper(film, app, "RET", 3.5);
+    read_paper(film, app, "i", 3.5);
+}
+
+fn write_in_zen(film: &mut Film, app: &mut App) {
+    film.mark("zen");
+    film.press(app, "C-x t 2");
+    rename_tab(film, app, "Writing");
+    prompt_answer(film, app, "C-x b", "main.rs");
+    prompt_answer(film, app, "C-x C-f", "../notes/plan.md");
+    film.hold(2.0);
+    command(film, app, "zen");
+    film.hold(3.5);
+    film.press(app, "M-> RET");
+    film.type_slowly(
+        app,
+        "Stones go to the wall by the hedge. Every one of them is a lesson in patience, and the wall is longer every spring.",
+    );
+    film.hold(3.0);
+    film.press(app, "M-<");
+    film.hold(2.5);
+    film.press(app, "C-n C-n C-n C-n");
+    film.hold(2.5);
+    film.press(app, "C-x C-s");
+    film.hold(1.5);
+    command(film, app, "zen");
+    film.hold(3.0);
+}
+
+fn round_the_tabs(film: &mut Film, app: &mut App) {
+    film.mark("outro");
+    for _ in 0..4 {
+        film.press(app, "C-TAB");
+        pages_drawn(app, film.size);
+        film.shot(app, 2.5);
+    }
+}
+#[test]
+#[ignore = "renders a 16:9 tour of the tabs, explorer, epub, pdf and zen plugins into $OXMACS_SHOWCASE_VIDEO"]
+fn showcase_video() {
+    let Ok(out) = std::env::var("OXMACS_SHOWCASE_VIDEO") else {
+        return;
+    };
+    let out = PathBuf::from(out);
+    let home = showcase_home();
+    PUMPING.set(true);
+    let mut film = Film::new(out.with_extension("frames"))
+        .sized(Size::new(1280.0, 720.0))
+        .warmed(5)
+        .paced(1.4)
+        .scaled_to(1280, 720);
+    let (mut app, booted) = App::boot(
+        &[Visit {
+            path: home.join("garden").join("src").join("main.rs"),
+            line: None,
+            column: None,
+        }],
+        Some(&home),
+    );
+    track(booted);
+    track(app.update(Message::Focus(true)));
+    settle(&mut app);
+    film.shot(&mut app, 2.0);
+    explore(&mut film, &mut app);
+    tabs(&mut film, &mut app);
+    read_book(&mut film, &mut app);
+    read_pdf(&mut film, &mut app);
+    write_in_zen(&mut film, &mut app);
+    round_the_tabs(&mut film, &mut app);
     film.hold(2.5);
     film.finish(&out);
 }

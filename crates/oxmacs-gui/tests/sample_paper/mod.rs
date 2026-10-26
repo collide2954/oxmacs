@@ -287,14 +287,6 @@ pub fn write(folder: &Path, name: &str) -> PathBuf {
         ),
     ];
     let outline_first = 4 + fonts;
-    let headings = [
-        ("Introduction", 0, None),
-        ("Method", 1, Some(0)),
-        ("Figure 1", 1, None),
-        ("Results", 2, None),
-        ("Discussion", 2, None),
-        ("References", 3, None),
-    ];
     objects.push(format!(
         "<< /Type /Outlines /First {outline_first} 0 R /Last {} 0 R /Count 5 >>",
         outline_first + 5
@@ -304,35 +296,7 @@ pub fn write(folder: &Path, name: &str) -> PathBuf {
             "<< /Type /Font /Subtype /Type1 /BaseFont /{font} /Encoding /WinAnsiEncoding >>"
         ));
     }
-    let top_level = [0, 1, 3, 4, 5];
-    for (at, (title, page, _)) in headings.iter().enumerate() {
-        let id = outline_first + at;
-        let destination = format!("/Dest [{} 0 R /XYZ 0 {HEIGHT} 0]", page_object(*page));
-        let entry = if at == 2 {
-            format!(
-                "<< /Title ({title}) /Parent {} 0 R {destination} >>",
-                outline_first + 1
-            )
-        } else {
-            let position = top_level.iter().position(|known| *known == at).unwrap();
-            let mut links = String::from("/Parent 3 0 R");
-            if let Some(previous) = position.checked_sub(1).map(|before| top_level[before]) {
-                let _ = write!(links, " /Prev {} 0 R", outline_first + previous);
-            }
-            if let Some(next) = top_level.get(position + 1) {
-                let _ = write!(links, " /Next {} 0 R", outline_first + next);
-            }
-            if at == 1 {
-                let _ = write!(
-                    links,
-                    " /First {0} 0 R /Last {0} 0 R /Count 1",
-                    outline_first + 2
-                );
-            }
-            format!("<< /Title ({title}) {links} {destination} >>")
-        };
-        objects.push(entry);
-    }
+    objects.extend(outline(outline_first, first_page_object));
     let resources = format!(
         "<< /Font << {} >> >>",
         (1..=fonts)
@@ -365,6 +329,51 @@ pub fn write(folder: &Path, name: &str) -> PathBuf {
         objects.push(format!("[{}]", links.join(" ")));
     }
     objects.push("<< /Title (Patient Furrows) /Author (Mira Hollis) >>".to_owned());
+    let out = serialized(&objects);
+    let path = folder.join(name);
+    std::fs::write(&path, out.into_bytes()).unwrap();
+    path
+}
+
+fn outline(first: usize, first_page: usize) -> Vec<String> {
+    let page_object = |index: usize| first_page + 3 * index;
+    let headings = [
+        ("Introduction", 0),
+        ("Method", 1),
+        ("Figure 1", 1),
+        ("Results", 2),
+        ("Discussion", 2),
+        ("References", 3),
+    ];
+    let top_level = [0, 1, 3, 4, 5];
+    headings
+        .iter()
+        .enumerate()
+        .map(|(at, (title, page))| {
+            let destination = format!("/Dest [{} 0 R /XYZ 0 {HEIGHT} 0]", page_object(*page));
+            if at == 2 {
+                return format!(
+                    "<< /Title ({title}) /Parent {} 0 R {destination} >>",
+                    first + 1
+                );
+            }
+            let position = top_level.iter().position(|known| *known == at).unwrap();
+            let mut links = String::from("/Parent 3 0 R");
+            if let Some(previous) = position.checked_sub(1).map(|before| top_level[before]) {
+                let _ = write!(links, " /Prev {} 0 R", first + previous);
+            }
+            if let Some(next) = top_level.get(position + 1) {
+                let _ = write!(links, " /Next {} 0 R", first + next);
+            }
+            if at == 1 {
+                let _ = write!(links, " /First {0} 0 R /Last {0} 0 R /Count 1", first + 2);
+            }
+            format!("<< /Title ({title}) {links} {destination} >>")
+        })
+        .collect()
+}
+
+fn serialized(objects: &[String]) -> String {
     let mut out = String::from("%PDF-1.7\n");
     let mut offsets = Vec::new();
     for (index, object) in objects.iter().enumerate() {
@@ -382,7 +391,5 @@ pub fn write(folder: &Path, name: &str) -> PathBuf {
         objects.len() + 1,
         objects.len()
     );
-    let path = folder.join(name);
-    std::fs::write(&path, out.into_bytes()).unwrap();
-    path
+    out
 }

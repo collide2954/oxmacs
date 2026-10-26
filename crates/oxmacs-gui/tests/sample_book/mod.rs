@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -6,6 +7,18 @@ use zip::{CompressionMethod, ZipWriter};
 
 const TITLE: &str = "The Patient Ox";
 const AUTHOR: &str = "Mira Hollis";
+
+pub struct Book {
+    pub title: &'static str,
+    pub author: &'static str,
+    pub sky: [f64; 3],
+}
+
+const PATIENT_OX: Book = Book {
+    title: TITLE,
+    author: AUTHOR,
+    sky: [30.0, 52.0, 96.0],
+};
 
 const CHAPTERS: [(&str, &str); 3] = [
     (
@@ -51,7 +64,7 @@ fn chapter(title: &str, body: &str) -> String {
     clippy::cast_sign_loss,
     reason = "channel values stay between 0 and 255"
 )]
-fn cover() -> Vec<u8> {
+fn cover(sky: [f64; 3]) -> Vec<u8> {
     let (width, height) = (600, 900);
     let image = image::RgbaImage::from_fn(width, height, |x, y| {
         let fy = f64::from(y) / f64::from(height);
@@ -65,9 +78,9 @@ fn cover() -> Vec<u8> {
             [(92.0 + furrow) as u8, (64.0 + furrow * 0.6) as u8, 38]
         } else {
             [
-                (30.0 + 60.0 * fy) as u8,
-                (52.0 + 70.0 * fy) as u8,
-                (96.0 + 40.0 * fy) as u8,
+                (sky[0] + 60.0 * fy) as u8,
+                (sky[1] + 70.0 * fy) as u8,
+                (sky[2] + 40.0 * fy) as u8,
             ]
         };
         image::Rgba([r, g, b, 255])
@@ -83,6 +96,10 @@ fn cover() -> Vec<u8> {
 }
 
 pub fn write(folder: &Path, name: &str) -> PathBuf {
+    write_book(folder, name, &PATIENT_OX)
+}
+
+pub fn write_book(folder: &Path, name: &str, book: &Book) -> PathBuf {
     let path = folder.join(name);
     let mut zip = ZipWriter::new(std::fs::File::create(&path).unwrap());
     let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
@@ -97,29 +114,32 @@ pub fn write(folder: &Path, name: &str) -> PathBuf {
         br#"<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>"#,
         deflated,
     );
-    let items: String = (1..=CHAPTERS.len())
-        .map(|at| {
-            format!(
-                "<item id=\"c{at}\" href=\"text/{at}.xhtml\" media-type=\"application/xhtml+xml\"/>"
-            )
-        })
-        .collect();
-    let spine: String = (1..=CHAPTERS.len())
-        .map(|at| format!("<itemref idref=\"c{at}\"/>"))
-        .collect();
+    let mut items = String::new();
+    let mut spine = String::new();
+    for at in 1..=CHAPTERS.len() {
+        let _ = write!(
+            items,
+            "<item id=\"c{at}\" href=\"text/{at}.xhtml\" media-type=\"application/xhtml+xml\"/>"
+        );
+        let _ = write!(spine, "<itemref idref=\"c{at}\"/>");
+    }
     add(
         "OEBPS/content.opf",
         format!(
-            "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>{TITLE}</dc:title><dc:creator>{AUTHOR}</dc:creator><dc:language>en</dc:language></metadata><manifest><item id=\"nav\" href=\"nav.xhtml\" properties=\"nav\" media-type=\"application/xhtml+xml\"/>{items}<item id=\"cover\" href=\"images/cover.png\" properties=\"cover-image\" media-type=\"image/png\"/></manifest><spine>{spine}</spine></package>"
+            "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>{}</dc:title><dc:creator>{}</dc:creator><dc:language>en</dc:language></metadata><manifest><item id=\"nav\" href=\"nav.xhtml\" properties=\"nav\" media-type=\"application/xhtml+xml\"/>{items}<item id=\"cover\" href=\"images/cover.png\" properties=\"cover-image\" media-type=\"image/png\"/></manifest><spine>{spine}</spine></package>",
+            book.title, book.author
         )
         .as_bytes(),
         deflated,
     );
-    let toc: String = CHAPTERS
-        .iter()
-        .enumerate()
-        .map(|(at, (title, _))| format!("<li><a href=\"text/{}.xhtml\">{title}</a></li>", at + 1))
-        .collect();
+    let mut toc = String::new();
+    for (at, (title, _)) in CHAPTERS.iter().enumerate() {
+        let _ = write!(
+            toc,
+            "<li><a href=\"text/{}.xhtml\">{title}</a></li>",
+            at + 1
+        );
+    }
     add(
         "OEBPS/nav.xhtml",
         format!("<html xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol>{toc}</ol></nav></body></html>").as_bytes(),
@@ -132,7 +152,7 @@ pub fn write(folder: &Path, name: &str) -> PathBuf {
             deflated,
         );
     }
-    add("OEBPS/images/cover.png", &cover(), stored);
+    add("OEBPS/images/cover.png", &cover(book.sky), stored);
     zip.finish().unwrap();
     path
 }
