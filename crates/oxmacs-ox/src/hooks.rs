@@ -121,7 +121,9 @@ pub fn open_file_types(editor: &mut Editor, plugin: &str, extensions: &[String])
 }
 
 fn disk_changed(editor: &mut Editor) {
-    if let Some(hooks) = hooks(editor) {
+    if let Some(hooks) = hooks(editor)
+        && !hooks.waiting.contains(&Waiting::DiskChanged)
+    {
         hooks.waiting.push(Waiting::DiskChanged);
     }
 }

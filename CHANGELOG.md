@@ -66,6 +66,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `file/copy` refuses to copy a file onto itself or onto another of its hard links, which emptied it, and a folder into itself, which never finished, and it copies links as links instead of following them. `file/remove` removes a link to a folder on Windows instead of failing, and leaves the folder it points to alone.
 - Language server edits for text that changed after they were asked for, from formatting, renames, code actions or the server itself, are dropped with a message instead of landing in the wrong places. Formatting on save through a language server now formats first and writes once, and still saves when the server fails or stops.
 - The `C-h t` tutorial teaches the cut and paste keys oxmacs has (`C-w`, `M-w`, `C-y` and `M-y`, with `C-k` deleting the rest of the line), and its configuration step defines the command it binds, so the `init.ox` it leaves no longer fails at every start.
+- The explorer keeps up with every change on disk: changes that arrive while it reads the folders bring another read once they settle instead of being dropped, so a burst of new files all show, and changes made while it is hidden show when it comes back.
 
 ### Security
 

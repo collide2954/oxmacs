@@ -287,6 +287,46 @@ fn git_changes_and_ignored_files_show_in_the_tree() {
 }
 
 #[test]
+fn a_burst_of_changes_on_disk_all_reach_the_tree() {
+    let project = project();
+    let (_home, mut editor, mut ox) = opened(project.path(), "src/main.rs");
+
+    editor.check_disk_changes();
+    ox.tick(&mut editor);
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    for n in 0..40 {
+        fs::write(project.path().join(format!("new{n:02}.txt")), "").unwrap();
+        editor.check_disk_changes();
+    }
+    settle(&mut editor, &mut ox);
+
+    let shown = tree(&editor)
+        .iter()
+        .filter(|row| row.trim_start().starts_with("new"))
+        .count();
+    assert_eq!(shown, 40, "{:#?}", tree(&editor));
+}
+
+#[test]
+fn changes_made_while_the_tree_is_hidden_show_when_it_comes_back() {
+    let project = project();
+    let (_home, mut editor, mut ox) = opened(project.path(), "src/main.rs");
+    press(&mut editor, &mut ox, "C-x C-d");
+    assert!(editor.side_window().is_none());
+
+    fs::write(project.path().join("later.txt"), "").unwrap();
+    editor.check_disk_changes();
+    settle(&mut editor, &mut ox);
+    press(&mut editor, &mut ox, "C-x C-d");
+
+    assert!(
+        tree(&editor).iter().any(|row| row.trim() == "later.txt"),
+        "{:#?}",
+        tree(&editor)
+    );
+}
+
+#[test]
 fn reading_git_status_leaves_the_repository_untouched() {
     let project = project();
     git(project.path(), &["init", "-q"]);

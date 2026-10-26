@@ -11,6 +11,8 @@
 
 (defonce files (atom nil))
 (defonce refreshing (atom false))
+(defonce stale (atom false))
+(def settle-ms 150)
 
 (def (windows?)
   (= (process/os) :windows))
@@ -187,7 +189,8 @@
     (unless (buffer-exists? tree-buffer)
       (ensure-buffer (or (get @state :root) directory)))
     (show-side-window tree-buffer :edge (setting :edge) :width (setting :width) :select true)
-    (follow-to place directory)))
+    (follow-to place directory)
+    (when @stale (refresh))))
 
 (defcommand explorer "Show the file tree beside the windows, move to it, or hide it"
   (let [side (side-window)]
@@ -271,16 +274,24 @@
       (draw (get @state :current)))
     (select-main-window)))
 
+(def (reload)
+  (let [s @state]
+    (when s.root
+      (each [folder (keys s.entries)] (load folder))
+      (load-git)
+      (load-problems)
+      (reset! files nil)
+      (if (filtering? @state) (refilter) (draw)))))
+
 (def (refresh)
+  (reset! stale true)
   (when (and (shown?) (compare-and-set! refreshing false true))
     (try
-      (let [s @state]
-        (when s.root
-          (each [folder (keys s.entries)] (load folder))
-          (load-git)
-          (load-problems)
-          (reset! files nil)
-          (if (filtering? @state) (refilter) (draw))))
+      (loop []
+        (sleep settle-ms)
+        (reset! stale false)
+        (reload)
+        (when (and @stale (shown?)) (again)))
       (finally (reset! refreshing false)))))
 
 (defcommand explorer-refresh "Read the folders and git status again" (refresh))
