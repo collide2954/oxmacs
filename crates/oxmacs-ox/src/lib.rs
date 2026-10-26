@@ -103,10 +103,16 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     isolate
 }
 
-pub const EDITOR_MODULES: &[(&str, &str)] = &[(
-    "ox/ui",
-    "Widgets for plugin views: text, rows, columns, buttons, images, canvases and book pages; in oxmacs only",
-)];
+pub const EDITOR_MODULES: &[(&str, &str)] = &[
+    (
+        "ox/ui",
+        "Widgets for plugin views: text, rows, columns, buttons, images, canvases and book pages; in oxmacs only",
+    ),
+    (
+        "rodeo",
+        "Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only",
+    ),
+];
 
 pub fn checking_isolate() -> Isolate {
     editor_isolate(&prompts::Inbox::default())

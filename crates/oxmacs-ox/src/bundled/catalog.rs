@@ -10,6 +10,7 @@ fn modules() -> Vec<(&'static str, &'static str)> {
     ox_library::modules()
         .into_iter()
         .chain(EDITOR_MODULES.iter().copied())
+        .chain(rodeo::script::MODULES.iter().copied())
         .collect()
 }
 
@@ -143,7 +144,11 @@ fn every_built_in_module_is_described() {
     let installed: Vec<String> = isolate
         .module_names()
         .into_iter()
-        .filter(|name| name == "ox" || name.starts_with("ox/"))
+        .filter(|name| {
+            ["ox", "rodeo"]
+                .iter()
+                .any(|root| name == root || name.starts_with(&format!("{root}/")))
+        })
         .collect();
     let described: Vec<&str> = modules().into_iter().map(|(name, _)| name).collect();
 

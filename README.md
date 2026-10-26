@@ -54,7 +54,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `keycast` | 0.2.2 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `languages` | 0.1.0 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
 | `life` | 0.2.2 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.30 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.31 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.3 | opt-in | Markdown rendered as styled text |
 | `processes` | 0.1.1 | on | List the processes oxmacs runs, with their usage |
 | `profiler` | 0.1.1 | on | Find where the Ox code in oxmacs spends its time |
@@ -89,6 +89,14 @@ Ox code uses these built-in modules, importing them as in `(import (ox file))`; 
 | `ox/image` | Opening, editing, drawing on and saving images, with filters and color adjustments |
 | `ox/zip` | Reading the files inside zip archives, such as EPUB books |
 | `ox/ui` | Widgets for plugin views: text, rows, columns, buttons, images, canvases and book pages; in oxmacs only |
+| `rodeo` | Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only |
+| `rodeo/vec` | Plain [x y] vectors for games: adding, scaling, lengths, angles and turning |
+| `rodeo/rect` | Plain [x y w h] rectangles: edges, centers, overlaps, unions and clamping |
+| `rodeo/ease` | Easing curves for tweens, from linear to bounce |
+| `rodeo/random` | Seeded random numbers kept in atoms, so replays and rewinds repeat them |
+| `rodeo/camera` | Cameras as plain maps: following, bounds, zoom, shake and world to screen points |
+| `rodeo/collide` | Overlaps, swept boxes that slide along walls, tile collision and spatial grids |
+| `rodeo/tiled` | Tiled .tmx maps as plain data: layers, tiles, objects, properties and tilesets |
 
 ## Configuration
 
