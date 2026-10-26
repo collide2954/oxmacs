@@ -5,6 +5,7 @@ mod collide;
 mod color;
 mod ease;
 mod grid;
+mod particles;
 mod random;
 mod rect;
 mod sweep;

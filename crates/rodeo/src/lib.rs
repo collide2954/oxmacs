@@ -4,6 +4,7 @@ pub mod clock;
 pub mod collide;
 pub mod color;
 pub mod ease;
+pub mod particles;
 pub mod random;
 pub mod rect;
 pub mod vec;
