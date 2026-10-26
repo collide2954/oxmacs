@@ -13,7 +13,7 @@ use image::RgbaImage;
 pub use colors::set_faces;
 
 use ox_lang::Isolate;
-use ox_lang::build::{full, make_map, make_vector};
+use ox_lang::build::{make_map, make_vector};
 use ox_lang::error::{Error, ErrorKind};
 use ox_lang::heap::Heap;
 use ox_lang::portable::{Failure, Portable};
@@ -91,7 +91,7 @@ fn wanted(heap: &Heap, name: &str, value: Value) -> Result<Arc<Image>, Error> {
 }
 
 fn stored(heap: &mut Heap, image: Image) -> Result<Value, Error> {
-    heap.shared(KIND, Arc::new(image)).map_err(full)
+    heap.shared(KIND, Arc::new(image)).map_err(Error::from)
 }
 
 fn portable(image: Image) -> Portable {
@@ -192,7 +192,7 @@ fn int(number: u32) -> Value {
 
 fn info(heap: &mut Heap, image: &Image) -> Result<Value, Error> {
     let format = match &image.format {
-        Some(format) => heap.string(format).map_err(full)?,
+        Some(format) => heap.string(format)?,
         None => Value::Nil,
     };
     make_map(

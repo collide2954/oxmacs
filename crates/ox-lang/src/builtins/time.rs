@@ -8,7 +8,7 @@ use crate::isolate::Isolate;
 use crate::value::Value;
 use crate::value::number::to_float;
 use crate::value::print;
-use crate::vm::build::{full, make_map};
+use crate::vm::build::make_map;
 
 const MODULE: &str = "ox/time";
 
@@ -189,7 +189,7 @@ fn format(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let zone = zone_option(heap, arguments[2])?;
     let text = jiff::fmt::strtime::format(&pattern, &start.to_zoned(zone))
         .map_err(|error| Error::new(format!("time/format can't use {pattern:?}: {error}")))?;
-    heap.string(&text).map_err(full)
+    heap.string(&text).map_err(Error::from)
 }
 
 fn days_in_month(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
@@ -410,7 +410,8 @@ pub fn install(isolate: &mut Isolate) {
         .arity(0, Some(0))
         .function(|heap, _| {
             let zone = TimeZone::system();
-            heap.string(zone.iana_name().unwrap_or("UTC")).map_err(full)
+            heap.string(zone.iana_name().unwrap_or("UTC"))
+                .map_err(Error::from)
         });
     for (name, factor) in [
         ("millis", 1),

@@ -8,7 +8,6 @@ use crate::portable::Channel;
 use crate::value::Value;
 use crate::value::print;
 use crate::value::promise::Promise;
-use crate::vm::build::full;
 use crate::vm::machine::Generator;
 
 fn expected(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
@@ -58,7 +57,8 @@ pub fn install(isolate: &mut Isolate) {
                     return Err(expected(heap, "chan", "a size of at least 1", *other));
                 }
             };
-            heap.channel(Arc::new(Channel::new(size))).map_err(full)
+            heap.channel(Arc::new(Channel::new(size)))
+                .map_err(Error::from)
         });
     isolate
         .native("ox", "close")
@@ -79,7 +79,7 @@ pub fn install(isolate: &mut Isolate) {
         .arity(0, Some(0))
         .function(|heap, _| {
             heap.promise(Promise::Pending { awaited: false })
-                .map_err(full)
+                .map_err(Error::from)
         });
     isolate
         .native("ox", "deliver")

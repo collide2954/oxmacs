@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use ox_lang::Isolate;
-use ox_lang::build::{full, make_vector};
+use ox_lang::build::make_vector;
 use ox_lang::error::Error;
 use ox_lang::heap::Heap;
 use ox_lang::symbol::Sym;
@@ -287,7 +287,7 @@ pub fn install(isolate: &mut Isolate) {
         .function(|heap, arguments| {
             let size = number(heap, "collide/grid", arguments[0])?;
             heap.foreign(KIND, RefCell::new(Grid::<Key>::new(size)))
-                .map_err(full)
+                .map_err(Error::from)
         });
     isolate
         .native(MODULE, "insert!")

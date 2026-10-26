@@ -27,7 +27,6 @@ use crate::value::Value;
 use crate::value::print;
 use crate::value::promise::Promise;
 use crate::value::record::Family;
-use crate::vm::build::full;
 use crate::vm::modules::{Import, Module, ModuleId, PRELUDE, USER};
 use crate::vm::{Runtime, Sources};
 
@@ -347,7 +346,7 @@ impl Isolate {
     }
 
     pub fn foreign<T: Any>(&mut self, name: &str, value: T) -> Result<Value, Error> {
-        self.runtime.heap.foreign(name, value).map_err(full)
+        self.runtime.heap.foreign(name, value).map_err(Error::from)
     }
 
     pub fn shared<T: Any + Send + Sync>(
@@ -355,7 +354,7 @@ impl Isolate {
         name: &str,
         value: Arc<T>,
     ) -> Result<Value, Error> {
-        self.runtime.heap.shared(name, value).map_err(full)
+        self.runtime.heap.shared(name, value).map_err(Error::from)
     }
 
     fn job(&mut self, module: &str, function: Sym, arguments: &[Portable]) -> Result<Value, Error> {
@@ -930,14 +929,10 @@ impl Isolate {
         if codes.next().is_some() {
             return Err(Error::new("spawn_eval evaluates one form at a time"));
         }
-        let function = self
-            .runtime
-            .heap
-            .closure(Closure {
-                code: Rc::new(code),
-                captured: Box::new([]),
-            })
-            .map_err(full)?;
+        let function = self.runtime.heap.closure(Closure {
+            code: Rc::new(code),
+            captured: Box::new([]),
+        })?;
         self.runtime.spawn(function, &[]).map(Some)
     }
 

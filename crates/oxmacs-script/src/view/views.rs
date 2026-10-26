@@ -231,8 +231,7 @@ fn children(heap: &Heap, name: &str, values: &[Value], out: &mut Vec<Node>) -> R
 }
 
 fn widget(heap: &mut Heap, name: &str, node: Node) -> Result<Value, Error> {
-    heap.foreign(name, node)
-        .map_err(|full| Error::new(full.to_string()))
+    heap.foreign(name, node).map_err(Error::from)
 }
 
 fn stack(heap: &mut Heap, name: &str, arguments: &[Value], row: bool) -> Result<Value, Error> {
@@ -679,16 +678,13 @@ fn value(heap: &mut Heap, arg: &Arg) -> Result<Value, Error> {
     match arg {
         Arg::Nil => Ok(Value::Nil),
         Arg::Int(number) => Ok(Value::Int(*number)),
-        Arg::Text(text) => heap
-            .string(text)
-            .map_err(|full| Error::new(full.to_string())),
+        Arg::Text(text) => heap.string(text).map_err(Error::from),
         Arg::List(items) => {
             let mut values = Vec::with_capacity(items.len());
             for item in items {
                 values.push(value(heap, item)?);
             }
-            heap.vector_from(&values)
-                .map_err(|full| Error::new(full.to_string()))
+            heap.vector_from(&values).map_err(Error::from)
         }
     }
 }

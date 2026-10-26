@@ -9,7 +9,6 @@ use ox_lang::Isolate;
 use ox_lang::error::Error;
 use ox_lang::heap::Heap;
 use ox_lang::portable::{Failure, Portable};
-use ox_lang::symbol::Sym;
 use ox_lang::value::Value;
 
 const MODULE: &str = "ox/file";
@@ -19,10 +18,6 @@ fn failed(verb: &str, path: &Path, error: &dyn std::fmt::Display) -> Failure {
         value: None,
         message: format!("Couldn't {verb} {}: {error}", path.display()),
     }
-}
-
-fn keyword(name: &str) -> Portable {
-    Portable::Keyword(Sym::intern(name))
 }
 
 fn string(text: &str) -> Portable {
@@ -55,14 +50,20 @@ fn entry(path: &Path, metadata: &Metadata, link: bool) -> Portable {
         i64::try_from(metadata.len()).map_or(Portable::Nil, Portable::Int)
     };
     Portable::Map(vec![
-        (keyword("name"), string(&name)),
-        (keyword("path"), string(&path.display().to_string())),
-        (keyword("dir"), Portable::Bool(metadata.is_dir())),
-        (keyword("link"), Portable::Bool(link)),
-        (keyword("target"), target),
-        (keyword("hidden"), Portable::Bool(name.starts_with('.'))),
-        (keyword("size"), size),
-        (keyword("modified"), modified(metadata)),
+        (Portable::keyword("name"), string(&name)),
+        (
+            Portable::keyword("path"),
+            string(&path.display().to_string()),
+        ),
+        (Portable::keyword("dir"), Portable::Bool(metadata.is_dir())),
+        (Portable::keyword("link"), Portable::Bool(link)),
+        (Portable::keyword("target"), target),
+        (
+            Portable::keyword("hidden"),
+            Portable::Bool(name.starts_with('.')),
+        ),
+        (Portable::keyword("size"), size),
+        (Portable::keyword("modified"), modified(metadata)),
     ])
 }
 

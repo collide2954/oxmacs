@@ -37,10 +37,6 @@ trait Wire: Read + Write + Send {}
 
 impl<T: Read + Write + Send> Wire for T {}
 
-fn keyword(name: &str) -> Portable {
-    Portable::Keyword(Sym::intern(name))
-}
-
 fn tls_config() -> io::Result<Arc<ClientConfig>> {
     let roots = RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
@@ -157,13 +153,13 @@ fn connect(host: String, port: u16, tls: bool) -> Result<Portable, Failure> {
         commands: Mutex::new(sender),
     };
     Ok(Portable::Map(vec![
-        (keyword("lines"), Portable::Channel(lines)),
+        (Portable::keyword("lines"), Portable::Channel(lines)),
         (
-            keyword("socket"),
+            Portable::keyword("socket"),
             Portable::Foreign(Sym::intern("socket"), Arc::new(socket)),
         ),
-        (keyword("host"), Portable::String(host.into())),
-        (keyword("port"), Portable::Int(i64::from(port))),
+        (Portable::keyword("host"), Portable::String(host.into())),
+        (Portable::keyword("port"), Portable::Int(i64::from(port))),
     ]))
 }
 

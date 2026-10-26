@@ -8,7 +8,6 @@ use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::value::{Value, print};
-use crate::vm::build::full;
 
 const MODULE: &str = "ox/regex";
 
@@ -75,7 +74,7 @@ fn found(
     let mut groups = Vec::new();
     for group in captures.iter().skip(1) {
         groups.push(match group {
-            Some(matched) => heap.string(matched.as_str()).map_err(full)?,
+            Some(matched) => heap.string(matched.as_str())?,
             None => Value::Nil,
         });
     }
@@ -83,12 +82,12 @@ fn found(
     for name in regex.capture_names().flatten() {
         named.push(Value::keyword(name));
         named.push(match captures.name(name) {
-            Some(matched) => heap.string(matched.as_str()).map_err(full)?,
+            Some(matched) => heap.string(matched.as_str())?,
             None => Value::Nil,
         });
     }
-    let matched = heap.string(&whole[all.clone()]).map_err(full)?;
-    let groups = heap.vector_from(&groups).map_err(full)?;
+    let matched = heap.string(&whole[all.clone()])?;
+    let groups = heap.vector_from(&groups)?;
     let named = crate::vm::build::make_map(heap, &named)?;
     crate::vm::build::make_map(
         heap,
@@ -114,7 +113,7 @@ pub fn install(isolate: &mut Isolate) {
         .function(|heap, arguments| {
             let regex = regex_of(heap, "compile", arguments[0])?;
             heap.shared("regex", Arc::new((*regex).clone()))
-                .map_err(full)
+                .map_err(Error::from)
         });
     isolate
         .native(MODULE, "matches?")
@@ -148,7 +147,7 @@ pub fn install(isolate: &mut Isolate) {
             for captures in regex.captures_iter(&whole) {
                 all.push(found(heap, &regex, &whole, &captures)?);
             }
-            heap.vector_from(&all).map_err(full)
+            heap.vector_from(&all).map_err(Error::from)
         });
     isolate
         .native(MODULE, "replace")
@@ -158,7 +157,7 @@ pub fn install(isolate: &mut Isolate) {
             let whole = text(heap, "replace", arguments[1])?;
             let with = text(heap, "replace", arguments[2])?;
             let replaced = regex.replace_all(whole, with).into_owned();
-            heap.string(&replaced).map_err(full)
+            heap.string(&replaced).map_err(Error::from)
         });
     isolate
         .native(MODULE, "split")
@@ -168,8 +167,8 @@ pub fn install(isolate: &mut Isolate) {
             let whole = text(heap, "split", arguments[1])?.to_owned();
             let parts = regex
                 .split(&whole)
-                .map(|part| heap.string(part).map_err(full))
+                .map(|part| heap.string(part).map_err(Error::from))
                 .collect::<Result<Vec<_>, _>>()?;
-            heap.vector_from(&parts).map_err(full)
+            heap.vector_from(&parts).map_err(Error::from)
         });
 }

@@ -242,8 +242,7 @@ fn edits(heap: &mut Heap, splices: &[Splice]) -> Result<Value, Error> {
             count(splice.inserted),
         ])?);
     }
-    heap.vector_from(&items)
-        .map_err(|full| Error::new(full.to_string()))
+    heap.vector_from(&items).map_err(Error::from)
 }
 
 fn held(editor: &Editor, pick: fn(&Hooks) -> &Vec<(String, Hold)>) -> Vec<Hold> {
@@ -414,7 +413,7 @@ fn shown(heap: &mut Heap, path: Option<&Path>) -> Result<Value, Error> {
     match path {
         Some(path) => heap
             .string(&path.display().to_string())
-            .map_err(|full| Error::new(full.to_string())),
+            .map_err(Error::from),
         None => Ok(Value::Nil),
     }
 }
@@ -462,10 +461,7 @@ fn diagnostic_counts(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Resul
     let count = |number: usize| Value::Int(i64::try_from(number).unwrap_or(i64::MAX));
     let mut items = Vec::new();
     for (path, errors, warnings) in editor.diagnostic_counts() {
-        items.push(
-            heap.string(&path.display().to_string())
-                .map_err(|full| Error::new(full.to_string()))?,
-        );
+        items.push(heap.string(&path.display().to_string())?);
         items.push(heap.map_from(&[
             Value::keyword("errors"),
             count(errors),

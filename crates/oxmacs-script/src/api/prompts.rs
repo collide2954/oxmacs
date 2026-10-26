@@ -43,9 +43,7 @@ impl Drop for Reply {
 }
 
 fn reply(heap: &mut Heap, inbox: &Inbox) -> Result<(Value, Reply), Error> {
-    let promise = heap
-        .new_promise()
-        .map_err(|full| Error::new(full.to_string()))?;
+    let promise = heap.new_promise()?;
     let hold = heap.hold(promise);
     Ok((
         promise,

@@ -9,7 +9,6 @@ use ring::{digest, hmac};
 
 use crate::text;
 use ox_lang::Isolate;
-use ox_lang::build::full;
 use ox_lang::error::{Error, ErrorKind};
 use ox_lang::heap::Heap;
 use ox_lang::portable::{Failure, Portable};
@@ -205,7 +204,7 @@ fn totp(secret: &[u8], time: u64, step: u64, digits: u32) -> String {
 }
 
 fn string(heap: &mut Heap, text: &str) -> Result<Value, Error> {
-    heap.string(text).map_err(full)
+    heap.string(text).map_err(Error::from)
 }
 
 fn derive_key(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {

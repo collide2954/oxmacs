@@ -9,7 +9,7 @@ use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::value::Value;
 use crate::value::print;
-use crate::vm::build::{full, make_map, make_vector};
+use crate::vm::build::{make_map, make_vector};
 
 const MODULE: &str = "ox/json";
 
@@ -92,7 +92,7 @@ fn value_of(heap: &mut Heap, json: Json) -> Result<Value, Error> {
         Json::Bool(flag) => Value::Bool(flag),
         Json::Int(number) => Value::Int(number),
         Json::Float(number) => Value::Float(number),
-        Json::Text(text) => heap.string(&text).map_err(full)?,
+        Json::Text(text) => heap.string(&text)?,
         Json::List(items) => {
             let items = items
                 .into_iter()
@@ -223,6 +223,6 @@ pub fn install(isolate: &mut Isolate) {
         .function(|heap, arguments| {
             let mut out = String::new();
             write(heap, arguments[0], &mut out)?;
-            heap.string(&out).map_err(full)
+            heap.string(&out).map_err(Error::from)
         });
 }

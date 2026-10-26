@@ -3,7 +3,6 @@ use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::symbol::Sym;
 use crate::value::{Kind, Value, print};
-use crate::vm::build::full;
 
 fn named(heap: &Heap, function: &str, value: Value) -> Result<String, Error> {
     match value {
@@ -94,7 +93,7 @@ pub fn install(isolate: &mut Isolate) {
         .arity(1, Some(1))
         .function(|heap, arguments| {
             let found = named(heap, "name", arguments[0])?;
-            heap.string(&found).map_err(full)
+            heap.string(&found).map_err(Error::from)
         });
     isolate
         .native("ox", "type")

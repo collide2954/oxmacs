@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::error::Error;
-use crate::heap::{Heap, HeapFull};
+use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -22,10 +22,6 @@ type Bindings = HashMap<Sym, Bound>;
 enum Shape {
     List,
     Vector,
-}
-
-fn full(error: HeapFull) -> Error {
-    Error::new(error.to_string())
 }
 
 fn name_of(heap: &Heap, value: Value) -> Option<Sym> {
@@ -179,10 +175,10 @@ impl Rules {
             }
         }
         match shape {
-            Shape::List => heap.list(out.into_iter()).map_err(full),
+            Shape::List => heap.list(out.into_iter()).map_err(Error::from),
             Shape::Vector => {
-                let vector = Vector::from_items(heap, &out).map_err(full)?;
-                heap.vector(vector).map_err(full)
+                let vector = Vector::from_items(heap, &out)?;
+                heap.vector(vector).map_err(Error::from)
             }
         }
     }
@@ -197,9 +193,9 @@ impl Rules {
         for (key, value) in map.entries(heap) {
             let key = self.substitute(heap, key, bindings)?;
             let value = self.substitute(heap, value, bindings)?;
-            result = result.assoc(heap, key, value).map_err(full)?;
+            result = result.assoc(heap, key, value)?;
         }
-        heap.map(result).map_err(full)
+        heap.map(result).map_err(Error::from)
     }
 
     fn repeat(

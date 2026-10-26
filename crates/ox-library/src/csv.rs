@@ -1,6 +1,5 @@
 use crate::text;
 use ox_lang::Isolate;
-use ox_lang::build::full;
 use ox_lang::error::Error;
 use ox_lang::heap::Heap;
 use ox_lang::value::Value;
@@ -71,8 +70,8 @@ fn read(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
                 .iter()
                 .zip(row.iter().chain(std::iter::repeat(&String::new())))
             {
-                items.push(heap.string(name).map_err(full)?);
-                items.push(heap.string(value).map_err(full)?);
+                items.push(heap.string(name)?);
+                items.push(heap.string(value)?);
             }
             built.push(heap.map_from(&items)?);
         }
@@ -81,12 +80,11 @@ fn read(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
             let fields = row
                 .iter()
                 .map(|field| heap.string(field))
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(full)?;
-            built.push(heap.vector_from(&fields).map_err(full)?);
+                .collect::<Result<Vec<_>, _>>()?;
+            built.push(heap.vector_from(&fields)?);
         }
     }
-    heap.vector_from(&built).map_err(full)
+    heap.vector_from(&built).map_err(Error::from)
 }
 
 pub fn install(isolate: &mut Isolate) {

@@ -655,13 +655,11 @@ impl Profile {
 }
 
 fn vector(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
-    heap.vector_from(items)
-        .map_err(|full| Error::new(full.to_string()))
+    heap.vector_from(items).map_err(Error::from)
 }
 
 fn text(heap: &mut Heap, value: &str) -> Result<Value, Error> {
-    heap.string(value)
-        .map_err(|full| Error::new(full.to_string()))
+    heap.string(value).map_err(Error::from)
 }
 
 fn count(value: u64) -> Value {

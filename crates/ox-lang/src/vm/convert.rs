@@ -8,7 +8,7 @@ use crate::value::Value;
 use crate::value::foreign::Holder;
 use crate::value::print;
 use crate::value::record::{Family, Record, RecordType};
-use crate::vm::build::{full, make_map, make_set, make_vector};
+use crate::vm::build::{make_map, make_set, make_vector};
 
 pub(crate) const DEEPEST: usize = 256;
 
@@ -206,7 +206,7 @@ impl Runtime {
                     let mut list = done.pop().unwrap_or(Value::Nil);
                     let items = done.split_off(done.len().saturating_sub(count));
                     for head in items.into_iter().rev() {
-                        list = self.heap.pair(head, list).map_err(full)?;
+                        list = self.heap.pair(head, list)?;
                     }
                     done.push(list);
                 }
@@ -231,14 +231,10 @@ impl Runtime {
                 }) => {
                     let kind = self.record_type_for(*module, *name, *family, fields)?;
                     let values = done.split_off(done.len().saturating_sub(values.len()));
-                    done.push(
-                        self.heap
-                            .record(Record {
-                                kind,
-                                fields: values.into(),
-                            })
-                            .map_err(full)?,
-                    );
+                    done.push(self.heap.record(Record {
+                        kind,
+                        fields: values.into(),
+                    })?);
                 }
                 Spread::Record(_) => {}
             }
@@ -259,8 +255,8 @@ impl Runtime {
             Portable::Char(character) => Value::Char(*character),
             Portable::Symbol(name) => Value::Symbol(*name),
             Portable::Keyword(name) => Value::Keyword(*name),
-            Portable::String(text) => self.heap.string(text).map_err(full)?,
-            Portable::BigInt(number) => self.heap.bigint(number.clone()).map_err(full)?,
+            Portable::String(text) => self.heap.string(text)?,
+            Portable::BigInt(number) => self.heap.bigint(number.clone())?,
             Portable::List(items, tail) => {
                 tasks.push(Spread::List(items.len()));
                 tasks.push(Spread::Visit(tail));
@@ -291,10 +287,9 @@ impl Runtime {
                 return Ok(None);
             }
             Portable::Channel(channel) => self.intern_channel(channel)?,
-            Portable::Foreign(name, shared) => self
-                .heap
-                .shared_foreign(*name, Arc::clone(shared))
-                .map_err(full)?,
+            Portable::Foreign(name, shared) => {
+                self.heap.shared_foreign(*name, Arc::clone(shared))?
+            }
         }))
     }
     fn record_type_for(
@@ -321,16 +316,13 @@ impl Runtime {
         if let Some(kind) = self.stand_ins.get(&(module, name)) {
             return Ok(*kind);
         }
-        let kind = self
-            .heap
-            .record_type(RecordType {
-                name,
-                fields: fields.into(),
-                constructor: Value::Nil,
-                family,
-                module,
-            })
-            .map_err(full)?;
+        let kind = self.heap.record_type(RecordType {
+            name,
+            fields: fields.into(),
+            constructor: Value::Nil,
+            family,
+            module,
+        })?;
         self.stand_ins.insert((module, name), kind);
         Ok(kind)
     }
@@ -345,7 +337,7 @@ impl Runtime {
         {
             return Ok(value);
         }
-        let value = self.heap.channel(Arc::clone(channel)).map_err(full)?;
+        let value = self.heap.channel(Arc::clone(channel))?;
         self.channels.insert(address, value);
         Ok(value)
     }

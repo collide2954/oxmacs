@@ -4,7 +4,7 @@ use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::value::{Value, print};
-use crate::vm::build::{full, make_map, make_vector};
+use crate::vm::build::{make_map, make_vector};
 
 const MODULE: &str = "ox/xml";
 const DEEPEST: usize = 1000;
@@ -168,11 +168,11 @@ fn element(heap: &mut Heap, node: Node<'_, '_>, depth: usize, html: bool) -> Res
             "xml/parse can't read elements nested more than {DEEPEST} deep"
         )));
     }
-    let tag = heap.string(node.tag_name().name()).map_err(full)?;
+    let tag = heap.string(node.tag_name().name())?;
     let mut attrs = Vec::new();
     for attribute in node.attributes() {
         attrs.push(Value::keyword(attribute.name()));
-        attrs.push(heap.string(attribute.value()).map_err(full)?);
+        attrs.push(heap.string(attribute.value())?);
     }
     let attrs = make_map(heap, &attrs)?;
     let mut children = Vec::new();
@@ -183,7 +183,7 @@ fn element(heap: &mut Heap, node: Node<'_, '_>, depth: usize, html: bool) -> Res
             && let Some(text) = child.text()
             && (html || !text.trim().is_empty())
         {
-            children.push(heap.string(text).map_err(full)?);
+            children.push(heap.string(text)?);
         }
     }
     let children = make_vector(heap, &children)?;
@@ -313,7 +313,7 @@ fn text(heap: &mut Heap, value: Value) -> Result<Value, Error> {
     }
     let mut out = String::new();
     gathered(heap, value, &mut out);
-    heap.string(&out).map_err(full)
+    heap.string(&out).map_err(Error::from)
 }
 
 fn attr(heap: &Heap, element: Value, name: Value) -> Result<Value, Error> {
@@ -449,6 +449,6 @@ pub fn install(isolate: &mut Isolate) {
         .function(|heap, arguments| {
             let mut out = String::new();
             write(heap, arguments[0], &mut out)?;
-            heap.string(&out).map_err(full)
+            heap.string(&out).map_err(Error::from)
         });
 }

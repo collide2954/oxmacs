@@ -10,7 +10,7 @@ use crate::value::Value;
 use crate::value::equal::{equal, identical};
 use crate::value::map::Map;
 use crate::vm::Runtime;
-use crate::vm::build::{full, make_vector};
+use crate::vm::build::make_vector;
 use crate::vm::modules::PRELUDE;
 use crate::vm::routine::{Forward, Next, Resumable, Routine, Started, captured};
 
@@ -353,8 +353,8 @@ fn install_makers(isolate: &mut Isolate) {
         .native("ox", "memoize")
         .arity(1, Some(1))
         .routine(move |runtime, _, arguments| {
-            let empty = runtime.heap.map(Map::EMPTY).map_err(full)?;
-            let seen = runtime.heap.atom(empty).map_err(full)?;
+            let empty = runtime.heap.map(Map::EMPTY)?;
+            let seen = runtime.heap.atom(empty)?;
             runtime
                 .native_closure(&memo, &[arguments[0], seen])
                 .map(Started::Done)

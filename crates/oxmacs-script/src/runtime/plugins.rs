@@ -724,9 +724,6 @@ pub fn mark_custom(heap: &mut Heap, editor: &mut Editor) {
 }
 
 fn kind_value(heap: &mut Heap, kind: &Kind) -> Result<(Value, Value), Error> {
-    let made = |made: Result<Value, ox_lang::heap::HeapFull>| {
-        made.map_err(|full| Error::new(full.to_string()))
-    };
     Ok(match kind {
         Kind::Text => (Value::keyword("string"), Value::Nil),
         Kind::Int => (Value::keyword("int"), Value::Nil),
@@ -735,7 +732,7 @@ fn kind_value(heap: &mut Heap, kind: &Kind) -> Result<(Value, Value), Error> {
         Kind::List => (Value::keyword("list"), Value::Nil),
         Kind::Choice(options) => {
             let options: Vec<Value> = options.iter().map(|name| Value::Keyword(*name)).collect();
-            (Value::keyword("choice"), made(heap.vector_from(&options))?)
+            (Value::keyword("choice"), heap.vector_from(&options)?)
         }
     })
 }
@@ -749,17 +746,14 @@ fn configured(heap: &Heap, config: &[(String, Hold)], key: &str) -> Value {
 }
 
 fn plugin_settings(heap: &mut Heap, editor: &mut Editor) -> Result<Value, Error> {
-    let made = |made: Result<Value, ox_lang::heap::HeapFull>| {
-        made.map_err(|full| Error::new(full.to_string()))
-    };
     let plugins = editor.take_plugin_state::<Plugins>().unwrap_or_default();
     let mut found = Vec::new();
     for plugin in plugins.known.iter().filter(|plugin| plugin.active) {
         for setting in &plugin.manifest.settings {
             let (kind, choices) = kind_value(heap, &setting.kind)?;
-            let name = made(heap.string(&plugin.manifest.name))?;
+            let name = heap.string(&plugin.manifest.name)?;
             let doc = match &setting.doc {
-                Some(doc) => made(heap.string(doc))?,
+                Some(doc) => heap.string(doc)?,
                 None => Value::Nil,
             };
             let default = setting
@@ -792,7 +786,7 @@ fn plugin_settings(heap: &mut Heap, editor: &mut Editor) -> Result<Value, Error>
         }
     }
     editor.set_plugin_state(plugins);
-    made(heap.vector_from(&found))
+    heap.vector_from(&found).map_err(Error::from)
 }
 
 fn configure_plugin(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {

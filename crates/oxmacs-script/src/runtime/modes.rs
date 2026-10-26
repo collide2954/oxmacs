@@ -503,10 +503,7 @@ fn highlight_lines(
         states: Vec::with_capacity(lines.len() - from),
     };
     let outcome = (from..lines.len()).try_for_each(|number| {
-        let shown = isolate
-            .heap_mut()
-            .string(&lines[number])
-            .map_err(|full| Error::new(full.to_string()))?;
+        let shown = isolate.heap_mut().string(&lines[number])?;
         let line = Value::Int(i64::try_from(number).unwrap_or(i64::MAX));
         let arguments = if stateful {
             vec![line, shown, state]

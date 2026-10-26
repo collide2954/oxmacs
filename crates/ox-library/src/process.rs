@@ -7,11 +7,9 @@ use std::time::Duration;
 
 use crate::text;
 use ox_lang::Isolate;
-use ox_lang::build::full;
 use ox_lang::error::{Error, ErrorKind};
 use ox_lang::heap::Heap;
 use ox_lang::portable::{Channel, Failure, Portable, Sent};
-use ox_lang::symbol::Sym;
 use ox_lang::value::{Value, print};
 
 const MODULE: &str = "ox/process";
@@ -25,10 +23,6 @@ struct Run {
     directory: Option<PathBuf>,
     environment: Vec<(String, Option<String>)>,
     input: Option<String>,
-}
-
-fn keyword(name: &str) -> Portable {
-    Portable::Keyword(Sym::intern(name))
 }
 
 fn wrong(heap: &Heap, expected: &str, value: Value) -> Error {
@@ -143,9 +137,9 @@ fn execute(run: &Run) -> Result<Portable, Failure> {
         .map_or(Portable::Nil, |code| Portable::Int(i64::from(code)));
     let decoded = |bytes: &[u8]| Portable::String(String::from_utf8_lossy(bytes).into());
     Ok(Portable::Map(vec![
-        (keyword("status"), status),
-        (keyword("stdout"), decoded(&output.stdout)),
-        (keyword("stderr"), decoded(&output.stderr)),
+        (Portable::keyword("status"), status),
+        (Portable::keyword("stdout"), decoded(&output.stdout)),
+        (Portable::keyword("stderr"), decoded(&output.stderr)),
     ]))
 }
 
@@ -219,13 +213,13 @@ fn start(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     })?;
     let items = [
         Value::keyword("lines"),
-        heap.channel(lines).map_err(full)?,
+        heap.channel(lines)?,
         Value::keyword("errors"),
-        heap.channel(errors).map_err(full)?,
+        heap.channel(errors)?,
         Value::keyword("exit"),
         exit,
         Value::keyword("process"),
-        heap.shared("process", started).map_err(full)?,
+        heap.shared("process", started)?,
     ];
     heap.map_from(&items)
 }
@@ -308,7 +302,7 @@ pub fn install(isolate: &mut Isolate) {
         .function(|heap, arguments| {
             let name = text(heap, "process/env", arguments[0])?.to_owned();
             match std::env::var(&name) {
-                Ok(value) => heap.string(&value).map_err(full),
+                Ok(value) => heap.string(&value).map_err(Error::from),
                 Err(_) => Ok(Value::Nil),
             }
         });
@@ -319,7 +313,9 @@ pub fn install(isolate: &mut Isolate) {
         .function(|heap, arguments| {
             let program = text(heap, "process/which", arguments[0])?.to_owned();
             match which(&program) {
-                Some(path) => heap.string(&path.display().to_string()).map_err(full),
+                Some(path) => heap
+                    .string(&path.display().to_string())
+                    .map_err(Error::from),
                 None => Ok(Value::Nil),
             }
         });

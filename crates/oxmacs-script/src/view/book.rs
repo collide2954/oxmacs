@@ -245,7 +245,7 @@ fn document(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         .map(|item| block(heap, item))
         .collect::<Result<Vec<Block>, Error>>()?;
     heap.foreign("document", Handle(Arc::new(Document { blocks })))
-        .map_err(|full| Error::new(full.to_string()))
+        .map_err(Error::from)
 }
 
 fn anchor(heap: &Heap, name: &str, value: Value) -> Result<(usize, usize), Error> {
@@ -383,7 +383,7 @@ fn pages(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         }
     }
     heap.foreign("pages", Node::Pages(Box::new(shown)))
-        .map_err(|full| Error::new(full.to_string()))
+        .map_err(Error::from)
 }
 
 const PAGES: [&str; 10] = [

@@ -3,7 +3,7 @@ use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::value::Value;
 use crate::value::print;
-use crate::vm::build::{full, make_vector};
+use crate::vm::build::make_vector;
 
 const MODULE: &str = "ox/string";
 
@@ -36,7 +36,7 @@ fn count(heap: &Heap, name: &str, value: Value) -> Result<usize, Error> {
 fn strings(heap: &mut Heap, parts: &[String]) -> Result<Value, Error> {
     let values = parts
         .iter()
-        .map(|part| heap.string(part).map_err(full))
+        .map(|part| heap.string(part).map_err(Error::from))
         .collect::<Result<Vec<_>, _>>()?;
     make_vector(heap, &values)
 }
@@ -47,7 +47,7 @@ fn unary(isolate: &mut Isolate, name: &'static str, change: fn(&str) -> String) 
         .arity(1, Some(1))
         .function(move |heap, arguments| {
             let changed = change(text(heap, name, arguments[0])?);
-            heap.string(&changed).map_err(full)
+            heap.string(&changed).map_err(Error::from)
         });
 }
 
@@ -83,7 +83,7 @@ fn pad(heap: &mut Heap, name: &str, arguments: &[Value], start: bool) -> Result<
     } else {
         original + &padding
     };
-    heap.string(&padded).map_err(full)
+    heap.string(&padded).map_err(Error::from)
 }
 
 fn number(text: &str) -> Value {
@@ -113,7 +113,7 @@ fn slice(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         .of(ErrorKind::Range));
     }
     let part: String = whole.chars().skip(start).take(end - start).collect();
-    heap.string(&part).map_err(full)
+    heap.string(&part).map_err(Error::from)
 }
 
 fn install_shaping(isolate: &mut Isolate) {
@@ -140,7 +140,7 @@ fn install_shaping(isolate: &mut Isolate) {
                 let kept: String = whole.chars().take(width.saturating_sub(1)).collect();
                 format!("{kept}…")
             };
-            heap.string(&cut).map_err(full)
+            heap.string(&cut).map_err(Error::from)
         });
 }
 
@@ -232,7 +232,7 @@ fn install_pieces(isolate: &mut Isolate) {
                 .into_iter()
                 .map(|item| print::display(heap, item))
                 .collect();
-            heap.string(&parts.join(&separator)).map_err(full)
+            heap.string(&parts.join(&separator)).map_err(Error::from)
         });
     isolate
         .native(MODULE, "replace")
@@ -242,7 +242,7 @@ fn install_pieces(isolate: &mut Isolate) {
             let from = text(heap, "replace", arguments[1])?;
             let to = text(heap, "replace", arguments[2])?;
             let replaced = whole.replace(from, to);
-            heap.string(&replaced).map_err(full)
+            heap.string(&replaced).map_err(Error::from)
         });
     isolate
         .native(MODULE, "index-of")
@@ -261,7 +261,7 @@ fn install_pieces(isolate: &mut Isolate) {
             let part = text(heap, "repeat", arguments[0])?;
             let times = count(heap, "repeat", arguments[1])?;
             let repeated = part.repeat(times);
-            heap.string(&repeated).map_err(full)
+            heap.string(&repeated).map_err(Error::from)
         });
     isolate
         .native(MODULE, "slice")

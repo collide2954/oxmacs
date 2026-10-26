@@ -61,9 +61,7 @@ impl Heap {
         name: &str,
         work: impl FnOnce() -> Result<Portable, Failure> + Send + 'static,
     ) -> Result<Value, Error> {
-        let promise = self
-            .promise(Promise::Pending { awaited: false })
-            .map_err(|full| Error::new(full.to_string()))?;
+        let promise = self.promise(Promise::Pending { awaited: false })?;
         let outcome: Outcome = Arc::default();
         let slot = Arc::clone(&outcome);
         let signal = Arc::clone(&self.signal);

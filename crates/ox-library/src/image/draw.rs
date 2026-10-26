@@ -512,8 +512,7 @@ fn install_edits(isolate: &mut Isolate) {
             let canvas = Canvas {
                 painting: Mutex::new(Some((image.with(RgbaImage::new(0, 0)), pixmap))),
             };
-            heap.shared(CANVAS, Arc::new(canvas))
-                .map_err(ox_lang::build::full)
+            heap.shared(CANVAS, Arc::new(canvas)).map_err(Error::from)
         });
     isolate
         .native(MODULE, "end-edit")

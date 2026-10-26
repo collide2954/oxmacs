@@ -33,6 +33,22 @@ pub enum Portable {
     Channel(Arc<Channel>),
     Foreign(Sym, Arc<dyn Any + Send + Sync>),
 }
+
+impl Portable {
+    pub fn keyword(name: &str) -> Self {
+        Self::Keyword(Sym::intern(name))
+    }
+
+    pub fn keyed<'a>(entries: impl IntoIterator<Item = (&'a str, Self)>) -> Self {
+        Self::Map(
+            entries
+                .into_iter()
+                .map(|(name, value)| (Self::keyword(name), value))
+                .collect(),
+        )
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Signal {
     raised: Mutex<bool>,

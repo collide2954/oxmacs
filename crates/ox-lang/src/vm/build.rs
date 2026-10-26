@@ -9,10 +9,6 @@ use crate::value::print;
 use crate::value::record::Record;
 use crate::value::vector::Vector;
 
-pub fn full(error: crate::heap::HeapFull) -> Error {
-    Error::new(error.to_string())
-}
-
 pub fn no_field(owner: &str, name: Sym) -> Error {
     Error::new(format!("{owner} has no field {}", name.name()))
 }
@@ -113,7 +109,7 @@ pub fn record_literal(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> 
         kind: *kind,
         fields,
     })
-    .map_err(full)
+    .map_err(Error::from)
 }
 
 pub fn interrupt_marker() -> Value {
@@ -133,8 +129,8 @@ pub fn raised(heap: &Heap, value: Value) -> Error {
 }
 
 pub fn make_vector(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
-    let vector = Vector::from_items(heap, items).map_err(full)?;
-    heap.vector(vector).map_err(full)
+    let vector = Vector::from_items(heap, items)?;
+    heap.vector(vector).map_err(Error::from)
 }
 
 pub fn make_map(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
@@ -146,7 +142,7 @@ pub fn make_map(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
         let [key, value] = pair else {
             continue;
         };
-        let grown = map.assoc(heap, *key, *value).map_err(full)?;
+        let grown = map.assoc(heap, *key, *value)?;
         if grown.count == map.count {
             return Err(Error::new(format!(
                 "Duplicate key {} in a map literal",
@@ -155,13 +151,13 @@ pub fn make_map(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
         }
         map = grown;
     }
-    heap.map(map).map_err(full)
+    heap.map(map).map_err(Error::from)
 }
 
 pub fn make_set(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
     let mut set = Map::EMPTY;
     for item in items {
-        let grown = set.assoc(heap, *item, Value::Bool(true)).map_err(full)?;
+        let grown = set.assoc(heap, *item, Value::Bool(true))?;
         if grown.count == set.count {
             return Err(Error::new(format!(
                 "Duplicate item {} in a set literal",
@@ -170,5 +166,5 @@ pub fn make_set(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
         }
         set = grown;
     }
-    heap.set(set).map_err(full)
+    heap.set(set).map_err(Error::from)
 }

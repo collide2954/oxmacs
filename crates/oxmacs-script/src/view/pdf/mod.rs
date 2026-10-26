@@ -12,7 +12,6 @@ use std::time::SystemTime;
 use ox_lang::heap::Heap;
 use ox_lang::native::given;
 use ox_lang::portable::{Failure, Portable};
-use ox_lang::symbol::Sym;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
@@ -471,11 +470,7 @@ fn view(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         }
     }
     heap.foreign("pdf", Node::Pdf(Box::new(shown)))
-        .map_err(|full| Error::new(full.to_string()))
-}
-
-fn key(name: &str) -> Portable {
-    Portable::Keyword(Sym::intern(name))
+        .map_err(Error::from)
 }
 
 fn count(number: usize) -> Portable {
@@ -493,23 +488,29 @@ fn opened(revision: u64, document: &Document) -> Portable {
         .map(|heading| {
             Portable::Map(vec![
                 (
-                    key("title"),
+                    Portable::keyword("title"),
                     Portable::String(heading.title.as_str().into()),
                 ),
-                (key("page"), count(heading.page)),
-                (key("depth"), count(heading.depth)),
+                (Portable::keyword("page"), count(heading.page)),
+                (Portable::keyword("depth"), count(heading.depth)),
             ])
         })
         .collect();
     Portable::Map(vec![
-        (key("pages"), count(document.pages.len())),
+        (Portable::keyword("pages"), count(document.pages.len())),
         (
-            key("revision"),
+            Portable::keyword("revision"),
             i64::try_from(revision).map_or(Portable::Nil, Portable::Int),
         ),
-        (key("title"), words_of(document.title.as_ref())),
-        (key("author"), words_of(document.author.as_ref())),
-        (key("outline"), Portable::Vector(outline)),
+        (
+            Portable::keyword("title"),
+            words_of(document.title.as_ref()),
+        ),
+        (
+            Portable::keyword("author"),
+            words_of(document.author.as_ref()),
+        ),
+        (Portable::keyword("outline"), Portable::Vector(outline)),
     ])
 }
 
@@ -531,8 +532,8 @@ fn found(matches: Vec<words::Found>) -> Portable {
                     })
                     .collect();
                 Portable::Map(vec![
-                    (key("page"), count(found.page)),
-                    (key("rects"), Portable::Vector(rects)),
+                    (Portable::keyword("page"), count(found.page)),
+                    (Portable::keyword("rects"), Portable::Vector(rects)),
                 ])
             })
             .collect(),
@@ -563,7 +564,7 @@ pub fn install(isolate: &mut Isolate) {
             match library {
                 Some(path) => heap
                     .string(&path.display().to_string())
-                    .map_err(|full| Error::new(full.to_string())),
+                    .map_err(Error::from),
                 None => Ok(Value::Nil),
             }
         });

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use ox_lang::Isolate;
-use ox_lang::build::{full, make_map, make_vector};
+use ox_lang::build::{make_map, make_vector};
 use ox_lang::error::Error;
 use ox_lang::heap::Heap;
 use ox_lang::value::Value;
@@ -18,7 +18,7 @@ use crate::vec::Vec2;
 const MODULE: &str = "rodeo/tiled";
 
 fn text(heap: &mut Heap, value: &str) -> Result<Value, Error> {
-    heap.string(value).map_err(full)
+    heap.string(value).map_err(Error::from)
 }
 
 fn path(heap: &mut Heap, value: &Path) -> Result<Value, Error> {

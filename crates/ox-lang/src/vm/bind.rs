@@ -79,9 +79,7 @@ pub(crate) fn bind_to(
     }
     let extra = positional.get(optional..).unwrap_or_default();
     if arity.rest {
-        let rest = heap
-            .list(extra.iter().copied())
-            .map_err(|full| Error::new(full.to_string()))?;
+        let rest = heap.list(extra.iter().copied())?;
         values.push(rest);
     } else if let Some(first) = extra.first() {
         if !arity.keywords.is_empty() && matches!(first, Value::Keyword(_)) {

@@ -168,7 +168,7 @@ mod tests {
             .map(|diagnostic| diagnostic.message)
             .collect();
 
-        assert_eq!(found, ["open-buffer takes at least 2 arguments, got 0"]);
+        assert_eq!(found, ["open-buffer takes 2 arguments, got 0"]);
         assert_eq!(
             isolate.eval("(message \"hi\")").unwrap_err().message,
             "message isn't available here"

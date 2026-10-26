@@ -7,7 +7,6 @@ use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::map::Map;
 use crate::vm::Runtime;
-use crate::vm::build::full;
 use crate::vm::modules::PRELUDE;
 use crate::vm::routine::{Next, Routine, Started, is_generator};
 
@@ -37,7 +36,7 @@ pub(super) fn assoc_in(
         if collections::count(heap, more)? == Value::Int(0) {
             break;
         }
-        let empty = heap.map(Map::EMPTY).map_err(full)?;
+        let empty = heap.map(Map::EMPTY)?;
         inside = collections::get(heap, &[inside, key, empty]);
         path = more;
     }
@@ -57,11 +56,11 @@ fn merge(heap: &mut Heap, maps: &[Value]) -> Result<Value, Error> {
         let mut into = merged.unwrap_or(Map::EMPTY);
         for (key, _) in map_or_nil(heap, "keys", *map)?.entries(heap) {
             let value = collections::get(heap, &[*map, key]);
-            into = into.assoc(heap, key, value).map_err(full)?;
+            into = into.assoc(heap, key, value)?;
         }
         merged = Some(into);
     }
-    merged.map_or(Ok(Value::Nil), |map| heap.map(map).map_err(full))
+    merged.map_or(Ok(Value::Nil), |map| heap.map(map).map_err(Error::from))
 }
 
 fn select_keys(heap: &mut Heap, map: Value, wanted: Value) -> Result<Value, Error> {
@@ -69,10 +68,10 @@ fn select_keys(heap: &mut Heap, map: Value, wanted: Value) -> Result<Value, Erro
     for key in collections::sequence(heap, "select-keys", wanted)? {
         if collections::contains(heap, map, key)?.truthy() {
             let value = collections::get(heap, &[map, key]);
-            selected = selected.assoc(heap, key, value).map_err(full)?;
+            selected = selected.assoc(heap, key, value)?;
         }
     }
-    heap.map(selected).map_err(full)
+    heap.map(selected).map_err(Error::from)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,7 +160,7 @@ impl Routine for MergeWith {
         let heap = &mut runtime.heap;
         if let Some(key) = self.waiting.take() {
             let into = self.merged.unwrap_or(Map::EMPTY);
-            self.merged = Some(into.assoc(heap, key, value).map_err(full)?);
+            self.merged = Some(into.assoc(heap, key, value)?);
         }
         loop {
             if let Some(key) = self.keys.get(self.next_key).copied() {
@@ -173,12 +172,12 @@ impl Routine for MergeWith {
                     self.pair = [existing, incoming];
                     return Ok(Next::Call(self.function, &self.pair));
                 }
-                self.merged = Some(into.assoc(heap, key, incoming).map_err(full)?);
+                self.merged = Some(into.assoc(heap, key, incoming)?);
                 continue;
             }
             let Some(map) = self.maps.get(self.next_map).copied() else {
                 return match self.merged {
-                    Some(merged) => heap.map(merged).map(Next::Return).map_err(full),
+                    Some(merged) => heap.map(merged).map(Next::Return).map_err(Error::from),
                     None => Ok(Next::Return(Value::Nil)),
                 };
             };

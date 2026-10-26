@@ -3,10 +3,6 @@ use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::{Arrangement, Axis, Edge, Editor, Presentation};
 
-fn made(made: Result<Value, ox_lang::heap::HeapFull>) -> Result<Value, Error> {
-    made.map_err(|full| Error::new(full.to_string()))
-}
-
 fn shown(heap: &mut Heap, editor: &Editor, arrangement: &Arrangement) -> Result<Value, Error> {
     match arrangement {
         Arrangement::Buffer(id) => {
@@ -14,7 +10,7 @@ fn shown(heap: &mut Heap, editor: &Editor, arrangement: &Arrangement) -> Result<
                 .buffer_by_id(*id)
                 .map(|buffer| buffer.name().to_owned())
                 .unwrap_or_default();
-            made(heap.string(&name))
+            heap.string(&name).map_err(Error::from)
         }
         Arrangement::Split { axis, parts } => {
             let mut items = vec![Value::keyword(match axis {
@@ -24,9 +20,9 @@ fn shown(heap: &mut Heap, editor: &Editor, arrangement: &Arrangement) -> Result<
             for (weight, part) in parts {
                 let part = shown(heap, editor, part)?;
                 let weight = (f64::from(*weight) * 10_000.0).round() / 10_000.0;
-                items.push(made(heap.vector_from(&[Value::Float(weight), part]))?);
+                items.push(heap.vector_from(&[Value::Float(weight), part])?);
             }
-            made(heap.vector_from(&items))
+            heap.vector_from(&items).map_err(Error::from)
         }
     }
 }
@@ -143,7 +139,7 @@ fn side(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Erro
         .pane_of(side.window)
         .map(|pane| pane.buffer().name().to_owned())
         .unwrap_or_default();
-    let buffer = made(heap.string(&name))?;
+    let buffer = heap.string(&name)?;
     let edge = Value::keyword(match side.edge {
         Edge::Left => "left",
         Edge::Right => "right",

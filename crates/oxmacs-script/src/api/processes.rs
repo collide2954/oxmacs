@@ -3,10 +3,6 @@ use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::{Editor, ProcessInfo, ProcessStatus};
 
-fn made(made: Result<Value, ox_lang::heap::HeapFull>) -> Result<Value, Error> {
-    made.map_err(|full| Error::new(full.to_string()))
-}
-
 fn millis(time: jiff::Timestamp) -> Value {
     Value::Int(time.as_millisecond())
 }
@@ -21,7 +17,7 @@ fn info(heap: &mut Heap, editor: &Editor, process: &ProcessInfo) -> Result<Value
         ),
         ProcessStatus::Failed => ("failed", Value::Nil),
     };
-    let text = |heap: &mut Heap, text: &str| made(heap.string(text));
+    let text = |heap: &mut Heap, text: &str| heap.string(text).map_err(Error::from);
     let kind = text(heap, &process.kind)?;
     let name = text(heap, &process.name)?;
     let program = text(heap, &process.program)?;
@@ -30,7 +26,7 @@ fn info(heap: &mut Heap, editor: &Editor, process: &ProcessInfo) -> Result<Value
         .iter()
         .map(|arg| text(heap, arg))
         .collect::<Result<Vec<Value>, Error>>()?;
-    let args = made(heap.vector_from(&args))?;
+    let args = heap.vector_from(&args)?;
     let directory = match &process.directory {
         Some(directory) => text(heap, &directory.display().to_string())?,
         None => Value::Nil,
@@ -46,13 +42,13 @@ fn info(heap: &mut Heap, editor: &Editor, process: &ProcessInfo) -> Result<Value
         .iter()
         .map(|cpu| Value::Float(f64::from(*cpu)))
         .collect();
-    let cpu = made(heap.vector_from(&cpu))?;
+    let cpu = heap.vector_from(&cpu)?;
     let memory: Vec<Value> = process
         .memory
         .iter()
         .map(|bytes| Value::Int(i64::try_from(*bytes).unwrap_or(i64::MAX)))
         .collect();
-    let memory = made(heap.vector_from(&memory))?;
+    let memory = heap.vector_from(&memory)?;
     let buffer = match process.buffer.and_then(|id| editor.buffer_by_id(id)) {
         Some(buffer) => text(heap, buffer.name())?,
         None => Value::Nil,
@@ -116,7 +112,7 @@ pub fn install(isolate: &mut Isolate) {
                 .iter()
                 .map(|process| info(heap, editor, process))
                 .collect::<Result<Vec<Value>, Error>>()?;
-            made(heap.vector_from(&found))
+            heap.vector_from(&found).map_err(Error::from)
         });
     for (name, force) in [("stop-process", false), ("kill-process", true)] {
         isolate.native("ox", name).arity(1, Some(1)).host::<Editor>(

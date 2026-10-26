@@ -1,6 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
 
+use crate::heap::HeapFull;
 use crate::span::{Source, Span, line_column};
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -57,6 +58,12 @@ impl fmt::Display for Frame {
         let (line, column) = self.line_column();
         let name = self.function.map_or("top level", Sym::name);
         write!(formatter, "{name} at {}:{line}:{column}", self.file())
+    }
+}
+
+impl From<HeapFull> for Error {
+    fn from(full: HeapFull) -> Self {
+        Self::new(full.to_string())
     }
 }
 

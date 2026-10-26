@@ -1,15 +1,11 @@
 use crate::error::{Error, ErrorKind};
-use crate::heap::{Heap, HeapFull};
+use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::value::Value;
 use crate::value::map::Map;
 use crate::value::print;
 use crate::value::record::Record;
 use crate::value::vector::Vector;
-
-fn full(error: HeapFull) -> Error {
-    Error::new(error.to_string())
-}
 
 fn int(number: usize) -> Value {
     Value::Int(i64::try_from(number).unwrap_or(i64::MAX))
@@ -43,15 +39,15 @@ pub(crate) fn is_list(heap: &Heap, value: Value) -> bool {
 }
 
 fn store(heap: &mut Heap, vector: Vector) -> Result<Value, Error> {
-    heap.vector(vector).map_err(full)
+    heap.vector(vector).map_err(Error::from)
 }
 
 fn store_map(heap: &mut Heap, map: Map) -> Result<Value, Error> {
-    heap.map(map).map_err(full)
+    heap.map(map).map_err(Error::from)
 }
 
 fn vector_of(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
-    let vector = Vector::from_items(heap, items).map_err(full)?;
+    let vector = Vector::from_items(heap, items)?;
     store(heap, vector)
 }
 
@@ -103,14 +99,14 @@ pub fn sequence(heap: &mut Heap, name: &str, collection: Value) -> Result<Vec<Va
 }
 
 fn store_set(heap: &mut Heap, set: Map) -> Result<Value, Error> {
-    heap.set(set).map_err(full)
+    heap.set(set).map_err(Error::from)
 }
 
 fn add(heap: &mut Heap, set: Map, items: &[Value]) -> Result<Map, Error> {
     items
         .iter()
         .try_fold(set, |set, item| set.assoc(heap, *item, Value::Bool(true)))
-        .map_err(full)
+        .map_err(Error::from)
 }
 
 fn set(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
@@ -130,7 +126,7 @@ fn disj(heap: &mut Heap, collection: Value, items: &[Value]) -> Result<Value, Er
         return Err(expected(heap, "disj", "a set", collection));
     };
     for item in items {
-        set = set.dissoc(heap, *item).map_err(full)?;
+        set = set.dissoc(heap, *item)?;
     }
     store_set(heap, set)
 }
@@ -177,7 +173,7 @@ fn with(heap: &mut Heap, value: Value, pairs: &[Value]) -> Result<Value, Error> 
         kind: record.kind,
         fields: fields.into(),
     })
-    .map_err(full)
+    .map_err(Error::from)
 }
 
 fn dissoc(heap: &mut Heap, collection: Value, keys: &[Value]) -> Result<Value, Error> {
@@ -186,7 +182,7 @@ fn dissoc(heap: &mut Heap, collection: Value, keys: &[Value]) -> Result<Value, E
     }
     let mut map = map_or_nil(heap, "dissoc", collection)?;
     for key in keys {
-        map = map.dissoc(heap, *key).map_err(full)?;
+        map = map.dissoc(heap, *key)?;
     }
     store_map(heap, map)
 }
@@ -209,7 +205,7 @@ fn conj_entries(heap: &mut Heap, map: Map, items: &[Value]) -> Result<Value, Err
             ));
         };
         for (key, value) in pairs {
-            map = map.assoc(heap, key, value).map_err(full)?;
+            map = map.assoc(heap, key, value)?;
         }
     }
     store_map(heap, map)
@@ -333,8 +329,7 @@ pub(crate) fn conj(heap: &mut Heap, collection: Value, items: &[Value]) -> Resul
     if let Some(vector) = heap.vector_of(collection) {
         let grown = items
             .iter()
-            .try_fold(vector, |vector, item| vector.conj(heap, *item))
-            .map_err(full)?;
+            .try_fold(vector, |vector, item| vector.conj(heap, *item))?;
         return store(heap, grown);
     }
     if let Some(map) = heap.map_of(collection) {
@@ -348,7 +343,7 @@ pub(crate) fn conj(heap: &mut Heap, collection: Value, items: &[Value]) -> Resul
         return items
             .iter()
             .try_fold(collection, |list, item| heap.pair(*item, list))
-            .map_err(full);
+            .map_err(Error::from);
     }
     Err(expected(heap, "conj", "a collection", collection))
 }
@@ -368,7 +363,7 @@ pub(crate) fn assoc(heap: &mut Heap, collection: Value, pairs: &[Value]) -> Resu
     if let Some(mut map) = map {
         for pair in pairs.chunks(2) {
             if let [key, value] = pair {
-                map = map.assoc(heap, *key, *value).map_err(full)?;
+                map = map.assoc(heap, *key, *value)?;
             }
         }
         return store_map(heap, map);
@@ -382,7 +377,7 @@ pub(crate) fn assoc(heap: &mut Heap, collection: Value, pairs: &[Value]) -> Resu
         };
         let wanted = index(heap, "assoc", *key)?;
         let changed = match usize::try_from(wanted) {
-            Ok(position) => vector.assoc(heap, position, *value).map_err(full)?,
+            Ok(position) => vector.assoc(heap, position, *value)?,
             Err(_) => None,
         };
         vector = changed.ok_or_else(|| out_of_range(wanted, "vector", vector.count, "item"))?;
@@ -393,8 +388,7 @@ pub(crate) fn assoc(heap: &mut Heap, collection: Value, pairs: &[Value]) -> Resu
 fn pop(heap: &mut Heap, collection: Value) -> Result<Value, Error> {
     if let Some(vector) = heap.vector_of(collection) {
         let popped = vector
-            .pop(heap)
-            .map_err(full)?
+            .pop(heap)?
             .ok_or_else(|| Error::new("Cannot pop an empty vector"))?;
         return store(heap, popped);
     }
@@ -518,11 +512,11 @@ pub(crate) fn range(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error
 
 fn cons(heap: &mut Heap, item: Value, collection: Value) -> Result<Value, Error> {
     if is_list(heap, collection) {
-        return heap.pair(item, collection).map_err(full);
+        return heap.pair(item, collection).map_err(Error::from);
     }
     let mut items = vec![item];
     items.extend(sequence(heap, "cons", collection)?);
-    heap.list(items.into_iter()).map_err(full)
+    heap.list(items.into_iter()).map_err(Error::from)
 }
 
 fn install_sequences(isolate: &mut Isolate) {
@@ -626,7 +620,7 @@ fn install_structures(isolate: &mut Isolate) {
     isolate
         .native("ox", "#list")
         .arity(0, None)
-        .function(|heap, arguments| heap.list(arguments.iter().copied()).map_err(full));
+        .function(|heap, arguments| heap.list(arguments.iter().copied()).map_err(Error::from));
     isolate
         .native("ox", "#vec")
         .arity(1, Some(1))
@@ -639,7 +633,7 @@ fn install_structures(isolate: &mut Isolate) {
             for value in arguments {
                 items.extend(sequence(heap, "~@", *value)?);
             }
-            heap.list(items.into_iter()).map_err(full)
+            heap.list(items.into_iter()).map_err(Error::from)
         });
     isolate
         .native("ox", "with")
@@ -691,7 +685,7 @@ fn install_structures(isolate: &mut Isolate) {
     isolate
         .native("ox", "list")
         .arity(0, None)
-        .function(|heap, arguments| heap.list(arguments.iter().copied()).map_err(full));
+        .function(|heap, arguments| heap.list(arguments.iter().copied()).map_err(Error::from));
     isolate
         .native("ox", "conj")
         .arity(1, None)

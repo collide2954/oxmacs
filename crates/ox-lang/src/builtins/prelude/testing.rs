@@ -5,7 +5,7 @@ use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::native::Drains;
 use crate::value::{Value, print};
-use crate::vm::build::{full, make_set, make_vector};
+use crate::vm::build::{make_set, make_vector};
 
 use super::sequences::zipped;
 
@@ -37,17 +37,17 @@ fn explain(heap: &mut Heap, form: Value, values: Value) -> Result<Value, Error> 
             text.push_str(&print::write(heap, pair[1]));
         }
     }
-    heap.string(&text).map_err(full)
+    heap.string(&text).map_err(Error::from)
 }
 
 pub(super) fn install(isolate: &mut Isolate) {
     let heap = isolate.heap_mut();
     let tests = make_vector(heap, &[])
-        .and_then(|tests| heap.atom(tests).map_err(full))
+        .and_then(|tests| heap.atom(tests).map_err(Error::from))
         .unwrap_or(Value::Nil);
     let heads = PLAIN_HEADS
         .iter()
-        .map(|head| heap.string(head).map_err(full))
+        .map(|head| heap.string(head).map_err(Error::from))
         .collect::<Result<Vec<_>, Error>>()
         .and_then(|heads| make_set(heap, &heads))
         .unwrap_or(Value::Nil);

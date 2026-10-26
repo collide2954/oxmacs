@@ -6,7 +6,6 @@ use crate::symbol::Sym;
 use crate::value::record::{Family, Record, RecordType};
 use crate::value::{Value, print};
 use crate::vm::Runtime;
-use crate::vm::build::full;
 use crate::vm::modules::PRELUDE;
 use crate::vm::routine::{Resumable, Started, captured};
 
@@ -22,24 +21,21 @@ const ERRORS: [&str; 8] = [
 ];
 
 fn define(runtime: &mut Runtime, name: &'static str) -> Result<(), Error> {
-    let text = runtime.heap.string(name).map_err(full)?;
+    let text = runtime.heap.string(name)?;
     let shown = print::write(&runtime.heap, text);
-    let kind = runtime
-        .heap
-        .record_type(RecordType {
-            name: Sym::intern(name),
-            fields: Box::new([Sym::intern("message"), Sym::intern("traceback")]),
-            constructor: Value::Nil,
-            family: Family::Error,
-            module: Sym::intern("ox"),
-        })
-        .map_err(full)?;
+    let kind = runtime.heap.record_type(RecordType {
+        name: Sym::intern(name),
+        fields: Box::new([Sym::intern("message"), Sym::intern("traceback")]),
+        constructor: Value::Nil,
+        family: Family::Error,
+        module: Sym::intern("ox"),
+    })?;
     let build = Rc::new(Resumable::closure(
         &format!("(message {shown}) (traceback nil)"),
         move |runtime, callee, arguments| {
             let message = match arguments.first() {
                 Some(message) => *message,
-                None => runtime.heap.string(name).map_err(full)?,
+                None => runtime.heap.string(name)?,
             };
             let traceback = arguments.get(1).copied().unwrap_or(Value::Nil);
             runtime
@@ -49,7 +45,7 @@ fn define(runtime: &mut Runtime, name: &'static str) -> Result<(), Error> {
                     fields: Box::new([message, traceback]),
                 })
                 .map(Started::Done)
-                .map_err(full)
+                .map_err(Error::from)
         },
     ));
     let constructor = runtime.make_closure(&build, Sym::intern(name), 0, Some(2), &[kind])?;

@@ -6,7 +6,7 @@ use crate::isolate::Isolate;
 use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::equal::equal;
-use crate::vm::build::{full, make_map, make_vector};
+use crate::vm::build::{make_map, make_vector};
 use crate::vm::modules::PRELUDE;
 
 use super::testing::PLAIN_HEADS;
@@ -16,7 +16,7 @@ fn word(name: &str) -> Value {
 }
 
 fn list(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {
-    heap.list(items.iter().copied()).map_err(full)
+    heap.list(items.iter().copied()).map_err(Error::from)
 }
 
 fn call(heap: &mut Heap, operator: &str, items: &[Value]) -> Result<Value, Error> {

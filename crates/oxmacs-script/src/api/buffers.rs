@@ -386,8 +386,7 @@ fn take_input(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value
         .unwrap_or_else(|| buffer.len_chars());
     buffer.delete_unrecorded(start..buffer.len_chars());
     buffer.set_point(buffer.len_chars());
-    heap.string(&text)
-        .map_err(|full| Error::new(full.to_string()))
+    heap.string(&text).map_err(Error::from)
 }
 
 fn input_text(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
@@ -399,8 +398,7 @@ fn input_text(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resu
         return Ok(Value::Nil);
     };
     let text = chat.input.text(buffer).unwrap_or_default();
-    heap.string(&text)
-        .map_err(|full| Error::new(full.to_string()))
+    heap.string(&text).map_err(Error::from)
 }
 
 #[expect(
@@ -798,7 +796,7 @@ fn region_lines(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Val
         .max(first);
     let number = |line: usize| Value::Int(i64::try_from(line).unwrap_or(i64::MAX));
     heap.vector_from(&[number(first), number(last)])
-        .map_err(|full| Error::new(full.to_string()))
+        .map_err(Error::from)
 }
 
 pub fn install(isolate: &mut Isolate) {
@@ -855,8 +853,7 @@ pub fn install(isolate: &mut Isolate) {
             if line >= buffer.len_lines() {
                 return Ok(Value::Nil);
             }
-            heap.string(&buffer.line_text(line))
-                .map_err(|full| Error::new(full.to_string()))
+            heap.string(&buffer.line_text(line)).map_err(Error::from)
         });
     isolate
         .native("ox", "goto-line")
@@ -918,8 +915,7 @@ fn install_queries(isolate: &mut Isolate) {
         .arity(0, Some(0))
         .host::<Editor>(|heap, editor, _| {
             let text = crate::api::handles::current_buffer(heap, editor)?.contents();
-            heap.string(&text)
-                .map_err(|full| Error::new(full.to_string()))
+            heap.string(&text).map_err(Error::from)
         });
     isolate
         .native("ox", "set-buffer-text")
@@ -936,8 +932,7 @@ fn install_queries(isolate: &mut Isolate) {
             let name = crate::api::handles::current_buffer(heap, editor)?
                 .name()
                 .to_owned();
-            heap.string(&name)
-                .map_err(|full| Error::new(full.to_string()))
+            heap.string(&name).map_err(Error::from)
         });
 }
 

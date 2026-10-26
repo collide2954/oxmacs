@@ -12,7 +12,7 @@ use crate::span::Span;
 use crate::task::{Report, TaskId, Wake};
 use crate::value::Value;
 use crate::value::promise::Promise;
-use crate::vm::build::{full, raised};
+use crate::vm::build::raised;
 
 const WAITING_SLICE: Duration = Duration::from_millis(10);
 const OUTSIDE_WAIT: Duration = Duration::from_millis(50);
@@ -56,10 +56,7 @@ impl Runtime {
 
     pub(crate) fn spawn_promise(&mut self, function: Value) -> Result<Value, Error> {
         let fiber = Self::fiber_for(function)?;
-        let promise = self
-            .heap
-            .promise(Promise::Pending { awaited: false })
-            .map_err(full)?;
+        let promise = self.heap.promise(Promise::Pending { awaited: false })?;
         self.start(fiber, Some(promise));
         Ok(promise)
     }
@@ -68,13 +65,13 @@ impl Runtime {
         let fiber = Self::fiber_for(function)?;
         self.heap
             .generator(Generator::Ready(Box::new(fiber.machine), Landing::Nowhere))
-            .map_err(full)
+            .map_err(Error::from)
     }
 
     pub fn promise(&mut self) -> Result<Value, Error> {
         self.heap
             .promise(Promise::Pending { awaited: false })
-            .map_err(full)
+            .map_err(Error::from)
     }
 
     pub(crate) fn settle(&mut self, promise: Value, outcome: Promise) -> bool {

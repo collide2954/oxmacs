@@ -8,7 +8,7 @@ use crate::value::Value;
 use crate::value::equal::equal;
 use crate::value::map::Map;
 use crate::vm::Runtime;
-use crate::vm::build::{full, make_vector};
+use crate::vm::build::make_vector;
 use crate::vm::routine::{Forward, Next, Routine, Started, finished, is_generator};
 
 use super::{int, less, plus, smaller, stretch};
@@ -82,7 +82,7 @@ fn distinct(heap: &mut Heap, coll: Value) -> Result<Value, Error> {
     let mut out = Vec::new();
     for item in sequence(heap, "distinct", coll)? {
         if seen.get(heap, item).is_none() {
-            seen = seen.assoc(heap, item, Value::Bool(true)).map_err(full)?;
+            seen = seen.assoc(heap, item, Value::Bool(true))?;
             out.push(item);
         }
     }
@@ -94,9 +94,9 @@ fn frequencies(heap: &mut Heap, coll: Value) -> Result<Value, Error> {
     for item in sequence(heap, "frequencies", coll)? {
         let seen = counts.get(heap, item).unwrap_or(Value::Int(0));
         let count = plus(heap, Value::Int(1), seen)?;
-        counts = counts.assoc(heap, item, count).map_err(full)?;
+        counts = counts.assoc(heap, item, count)?;
     }
-    heap.map(counts).map_err(full)
+    heap.map(counts).map_err(Error::from)
 }
 
 pub(super) fn zipped(
@@ -244,7 +244,7 @@ impl Each {
                     None => make_vector(heap, &[])?,
                 };
                 let grown = collections::conj(heap, group, &[item])?;
-                self.groups = self.groups.assoc(heap, value, grown).map_err(full)?;
+                self.groups = self.groups.assoc(heap, value, grown)?;
             }
             Mode::Filter
             | Mode::Remove
@@ -272,7 +272,7 @@ impl Each {
             Mode::Some | Mode::Find => Ok(Value::Nil),
             Mode::Every => Ok(Value::Bool(true)),
             Mode::DropWhile => make_vector(heap, &[]),
-            Mode::GroupBy => heap.map(self.groups).map_err(full),
+            Mode::GroupBy => heap.map(self.groups).map_err(Error::from),
             Mode::SortBy => sorted(heap, &self.columns[0], &self.out),
         }
     }

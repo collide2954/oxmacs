@@ -9,7 +9,7 @@ mod tasks;
 mod workers;
 
 use build::{
-    call_data, field, full, interrupt_marker, make_map, make_set, make_vector, no_field, raised,
+    call_data, field, interrupt_marker, make_map, make_set, make_vector, no_field, raised,
     record_literal,
 };
 
@@ -597,7 +597,7 @@ impl Runtime {
                 machine.set(to, value);
             }
             Op::MakeCell { register } => {
-                let cell = self.heap.cell(machine.get(register)).map_err(full)?;
+                let cell = self.heap.cell(machine.get(register))?;
                 machine.set(register, cell);
             }
             Op::MakeVector { .. }
@@ -1092,7 +1092,9 @@ impl Runtime {
                 Capture::Itself => Ok(machine.closure),
             })
             .collect::<Result<Box<[Value]>, Error>>()?;
-        self.heap.closure(Closure { code, captured }).map_err(full)
+        self.heap
+            .closure(Closure { code, captured })
+            .map_err(Error::from)
     }
 
     #[inline(never)]
@@ -1176,11 +1178,11 @@ impl Runtime {
         for frame in frames {
             let (line, column) = frame.line_column();
             let function = match frame.function {
-                Some(name) => self.heap.string(name.name()).map_err(full)?,
+                Some(name) => self.heap.string(name.name())?,
                 None => Value::Nil,
             };
             let file = match &frame.source {
-                Some(source) => self.heap.string(&source.name).map_err(full)?,
+                Some(source) => self.heap.string(&source.name)?,
                 None => Value::Nil,
             };
             let fields = [
@@ -1197,9 +1199,9 @@ impl Runtime {
             ];
             let mut map = Map::EMPTY;
             for (key, value) in fields {
-                map = map.assoc(&mut self.heap, key, value).map_err(full)?;
+                map = map.assoc(&mut self.heap, key, value)?;
             }
-            items.push(self.heap.map(map).map_err(full)?);
+            items.push(self.heap.map(map)?);
         }
         make_vector(&mut self.heap, &items)
     }
@@ -1211,7 +1213,7 @@ impl Runtime {
         let value = if let Some(value) = error.raised {
             value
         } else {
-            let message = self.heap.string(&error.message).map_err(full)?;
+            let message = self.heap.string(&error.message)?;
             let kind = self
                 .error_types
                 .get(&error.kind)
@@ -1220,12 +1222,10 @@ impl Runtime {
             let Some(kind) = kind else {
                 return Ok(message);
             };
-            self.heap
-                .record(Record {
-                    kind,
-                    fields: Box::new([message, Value::Nil]),
-                })
-                .map_err(full)?
+            self.heap.record(Record {
+                kind,
+                fields: Box::new([message, Value::Nil]),
+            })?
         };
         let slot = self
             .heap
@@ -1336,7 +1336,9 @@ impl Runtime {
     ) -> Result<Value, Error> {
         let kind = machine.code.constants[record as usize];
         let fields = machine.items(base, count).into();
-        self.heap.record(Record { kind, fields }).map_err(full)
+        self.heap
+            .record(Record { kind, fields })
+            .map_err(Error::from)
     }
 
     fn define_record(&mut self, machine: &Machine, record: u32, constructor: u16) {

@@ -1,4 +1,4 @@
-use ox_lang::heap::{Heap, HeapFull, Hold};
+use ox_lang::heap::{Heap, Hold};
 use ox_lang::value::Value;
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::{Editor, Keystroke};
@@ -9,13 +9,12 @@ use crate::{api::hooks, ide::log};
 struct Listeners(Vec<(String, Hold)>);
 
 fn event(heap: &mut Heap, stroke: &Keystroke) -> Result<Value, Error> {
-    let full = |full: HeapFull| Error::new(full.to_string());
     let mut keys = Vec::with_capacity(stroke.keys.keys().len());
     for key in stroke.keys.keys() {
-        keys.push(heap.string(&key.to_string()).map_err(full)?);
+        keys.push(heap.string(&key.to_string())?);
     }
-    let keys = heap.vector_from(&keys).map_err(full)?;
-    let command = heap.string(stroke.command).map_err(full)?;
+    let keys = heap.vector_from(&keys)?;
+    let command = heap.string(stroke.command)?;
     heap.map_from(&[
         Value::keyword("keys"),
         keys,

@@ -10,10 +10,6 @@ use serde_json::Value as Json;
 
 use crate::ide::repl;
 
-fn made(made: Result<Value, impl ToString>) -> Result<Value, Error> {
-    made.map_err(|full| Error::new(full.to_string()))
-}
-
 fn name_of(heap: &Heap, value: Value) -> Option<String> {
     match value {
         Value::Keyword(name) | Value::Symbol(name) => Some(name.name().to_owned()),
@@ -71,8 +67,8 @@ fn to_ox(heap: &mut Heap, setting: &Setting, value: Option<Json>) -> Result<Valu
         Some(Json::String(text)) if matches!(setting.kind, Kind::Choice(_) | Kind::Theme) => {
             Value::keyword(&text)
         }
-        Some(Json::String(text)) => made(heap.string(&text))?,
-        Some(other) => made(heap.string(&other.to_string()))?,
+        Some(Json::String(text)) => heap.string(&text)?,
+        Some(other) => heap.string(&other.to_string())?,
     })
 }
 
@@ -117,7 +113,9 @@ fn custom(heap: &mut Heap, editor: &Editor) -> Result<Value, Error> {
 
 fn home(heap: &mut Heap, editor: &Editor) -> Result<Value, Error> {
     match editor.init_path().and_then(Path::parent) {
-        Some(home) => made(heap.string(&home.display().to_string())),
+        Some(home) => heap
+            .string(&home.display().to_string())
+            .map_err(Error::from),
         None => Ok(Value::Nil),
     }
 }
@@ -165,12 +163,12 @@ fn described(heap: &mut Heap, editor: &Editor, setting: &Setting) -> Result<Valu
     let choices = if choices.is_empty() {
         Value::Nil
     } else {
-        made(heap.vector_from(&choices))?
+        heap.vector_from(&choices)?
     };
-    let group = made(heap.string(setting.group))?;
-    let hint = made(heap.string(setting.hint))?;
+    let group = heap.string(setting.group)?;
+    let hint = heap.string(setting.hint)?;
     let unset = match setting.unset {
-        Some(unset) => made(heap.string(unset))?,
+        Some(unset) => heap.string(unset)?,
         None => Value::Nil,
     };
     let default = Config::default().get(setting.key);
@@ -198,7 +196,7 @@ fn schema_of(heap: &mut Heap, editor: &Editor) -> Result<Value, Error> {
     for setting in SETTINGS {
         entries.push(described(heap, editor, setting)?);
     }
-    made(heap.vector_from(&entries))
+    heap.vector_from(&entries).map_err(Error::from)
 }
 
 pub fn install(isolate: &mut Isolate) {

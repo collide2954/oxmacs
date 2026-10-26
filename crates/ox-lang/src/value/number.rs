@@ -49,9 +49,7 @@ impl Number {
         match self {
             Self::Int(number) => Ok(Value::Int(number)),
             Self::Float(number) => Ok(Value::Float(number)),
-            Self::Big(number) => heap
-                .bigint(number)
-                .map_err(|full| Error::new(full.to_string())),
+            Self::Big(number) => heap.bigint(number).map_err(Error::from),
         }
     }
 

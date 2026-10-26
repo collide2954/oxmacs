@@ -62,10 +62,6 @@ fn idle(editor: &mut Editor, id: BufferId) {
     }
 }
 
-fn made(made: Result<Value, ox_lang::heap::HeapFull>) -> Result<Value, Error> {
-    made.map_err(|full| Error::new(full.to_string()))
-}
-
 fn text(heap: &Heap, native: &str, what: &str, value: Value) -> Result<String, Error> {
     heap.text(value).map(str::to_owned).ok_or_else(|| {
         Error::new(format!(
@@ -298,7 +294,7 @@ fn start(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Va
             width: None,
         });
     }
-    made(heap.string(&name))
+    heap.string(&name).map_err(Error::from)
 }
 
 fn console(heap: &Heap, editor: &Editor, native: &str, value: Value) -> Result<BufferId, Error> {
@@ -372,7 +368,7 @@ fn install_states(isolate: &mut Isolate) {
                 .buffer_named(&name)
                 .and_then(|id| editor.console_prompt(id))
             {
-                Some(prompt) => made(heap.string(&prompt)),
+                Some(prompt) => heap.string(&prompt).map_err(Error::from),
                 None => Ok(Value::Nil),
             }
         });
@@ -392,9 +388,9 @@ fn install_states(isolate: &mut Isolate) {
                 .collect::<Vec<String>>();
             let mut values = Vec::with_capacity(names.len());
             for name in names {
-                values.push(made(heap.string(&name))?);
+                values.push(heap.string(&name)?);
             }
-            made(heap.vector_from(&values))
+            heap.vector_from(&values).map_err(Error::from)
         });
 }
 
@@ -406,9 +402,9 @@ fn install_history(isolate: &mut Isolate) {
             let id = console(heap, editor, "console-history", arguments[0])?;
             let mut items = Vec::new();
             for input in editor.console_history(id) {
-                items.push(made(heap.string(&input))?);
+                items.push(heap.string(&input)?);
             }
-            made(heap.vector_from(&items))
+            heap.vector_from(&items).map_err(Error::from)
         });
     isolate
         .native("ox", "set-console-history")

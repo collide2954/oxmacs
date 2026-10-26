@@ -8,7 +8,7 @@ use crate::native::{Control, Native, NativeFn};
 use crate::symbol::Sym;
 use crate::value::Value;
 use crate::vm::Runtime;
-use crate::vm::build::{full, make_vector, raised};
+use crate::vm::build::{make_vector, raised};
 use crate::vm::machine::Generator;
 
 pub(crate) const RAISED: u32 = 3;
@@ -159,7 +159,7 @@ impl Runtime {
                 drains: None,
                 captured: captured.into(),
             })
-            .map_err(full)
+            .map_err(Error::from)
     }
 
     pub(crate) fn native_closure(

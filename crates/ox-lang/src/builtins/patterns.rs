@@ -1,14 +1,10 @@
 use crate::error::{Error, ErrorKind};
-use crate::heap::{Heap, HeapFull};
+use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::value::Value;
 use crate::value::equal::equal;
 use crate::value::print;
 use crate::value::vector::Vector;
-
-fn full(error: HeapFull) -> Error {
-    Error::new(error.to_string())
-}
 
 fn items(heap: &Heap, value: Value) -> Option<Vec<Value>> {
     if let Some(vector) = heap.vector_of(value) {
@@ -77,8 +73,8 @@ pub fn install(isolate: &mut Isolate) {
         .function(|heap, arguments| {
             let found = items(heap, arguments[0]).unwrap_or_default();
             let rest = found.get(index(arguments[1])..).unwrap_or_default();
-            let vector = Vector::from_items(heap, rest).map_err(full)?;
-            heap.vector(vector).map_err(full)
+            let vector = Vector::from_items(heap, rest)?;
+            heap.vector(vector).map_err(Error::from)
         });
     isolate
         .native("ox", "#keyed?")

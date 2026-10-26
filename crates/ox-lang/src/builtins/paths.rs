@@ -5,7 +5,6 @@ use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::value::Value;
 use crate::value::print;
-use crate::vm::build::full;
 
 const MODULE: &str = "ox/path";
 
@@ -21,7 +20,9 @@ pub(crate) fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a s
 
 fn shown(heap: &mut Heap, path: Option<&Path>) -> Result<Value, Error> {
     match path {
-        Some(path) => heap.string(&path.display().to_string()).map_err(full),
+        Some(path) => heap
+            .string(&path.display().to_string())
+            .map_err(Error::from),
         None => Ok(Value::Nil),
     }
 }
@@ -34,7 +35,7 @@ fn part(
 ) -> Result<Value, Error> {
     let path = PathBuf::from(text(heap, name, value)?);
     match pick(&path).and_then(|part| part.to_str()) {
-        Some(part) => heap.string(part).map_err(full),
+        Some(part) => heap.string(part).map_err(Error::from),
         None => Ok(Value::Nil),
     }
 }
@@ -99,7 +100,10 @@ pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "separator")
         .arity(0, Some(0))
-        .function(|heap, _| heap.string(std::path::MAIN_SEPARATOR_STR).map_err(full));
+        .function(|heap, _| {
+            heap.string(std::path::MAIN_SEPARATOR_STR)
+                .map_err(Error::from)
+        });
     isolate
         .native(MODULE, "abbreviate")
         .arity(1, Some(1))
@@ -112,7 +116,7 @@ pub fn install(isolate: &mut Isolate) {
                 Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
                 None => path.display().to_string(),
             };
-            heap.string(&shown).map_err(full)
+            heap.string(&shown).map_err(Error::from)
         });
     isolate
         .native(MODULE, "absolute?")

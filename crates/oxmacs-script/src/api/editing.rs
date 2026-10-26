@@ -33,8 +33,7 @@ fn position(heap: &Heap, native: &str, value: Value) -> Result<usize, Error> {
 }
 
 fn text(heap: &mut Heap, text: &str) -> Result<Value, Error> {
-    heap.string(text)
-        .map_err(|full| Error::new(full.to_string()))
+    heap.string(text).map_err(Error::from)
 }
 
 fn writable<'a>(heap: &Heap, editor: &'a mut Editor) -> Result<&'a mut Buffer, Error> {
@@ -87,7 +86,7 @@ fn region(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Er
     match current_buffer(heap, editor)?.selection() {
         Some(range) => heap
             .vector_from(&[int(range.start), int(range.end)])
-            .map_err(|full| Error::new(full.to_string())),
+            .map_err(Error::from),
         None => Ok(Value::Nil),
     }
 }
@@ -109,8 +108,7 @@ fn marker(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
         buffer: buffer.id(),
         marker: buffer.add_marker(at),
     };
-    heap.shared("marker", Arc::new(placed))
-        .map_err(|full| Error::new(full.to_string()))
+    heap.shared("marker", Arc::new(placed)).map_err(Error::from)
 }
 
 pub fn install(isolate: &mut Isolate) {
@@ -200,7 +198,7 @@ fn range(heap: &mut Heap, found: Option<Range<usize>>) -> Result<Value, Error> {
     match found {
         Some(found) => heap
             .vector_from(&[int(found.start), int(found.end)])
-            .map_err(|full| Error::new(full.to_string())),
+            .map_err(Error::from),
         None => Ok(Value::Nil),
     }
 }
@@ -362,8 +360,7 @@ fn install_syntax(isolate: &mut Isolate) {
             for name in names {
                 values.push(text(heap, &name)?);
             }
-            heap.vector_from(&values)
-                .map_err(|full| Error::new(full.to_string()))
+            heap.vector_from(&values).map_err(Error::from)
         });
 }
 

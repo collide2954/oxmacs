@@ -1,5 +1,5 @@
 use ox_lang::Isolate;
-use ox_lang::build::{full, make_vector};
+use ox_lang::build::make_vector;
 use ox_lang::error::{Error, ErrorKind};
 use ox_lang::heap::Heap;
 use ox_lang::value::Value;
@@ -102,7 +102,7 @@ pub fn install(isolate: &mut Isolate) {
             let random = Random::new(bits(seed));
             let words = random.state().map(|word| Value::Int(signed(word)));
             let held = make_vector(heap, &words)?;
-            heap.atom(held).map_err(full)
+            heap.atom(held).map_err(Error::from)
         });
     isolate
         .native(MODULE, "float")

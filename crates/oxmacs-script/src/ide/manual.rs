@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use ox_lang::describe::ModuleDocs;
-use ox_lang::heap::{Heap, HeapFull, Hold};
+use ox_lang::heap::{Heap, Hold};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
@@ -10,10 +10,6 @@ use crate::{DOCS, PRELUDE, ide::ox_mode, ide::repl, view::views};
 
 #[derive(Debug, Default)]
 struct Asked(Vec<Hold>);
-
-fn full(error: HeapFull) -> Error {
-    Error::new(error.to_string())
-}
 
 fn segments(
     heap: &mut Heap,
@@ -26,21 +22,19 @@ fn segments(
     let mut at = 0;
     for (range, highlight) in spans {
         if range.start > at {
-            items.push(heap.string(&text(at..range.start)).map_err(full)?);
+            items.push(heap.string(&text(at..range.start))?);
         }
-        let shown = heap.string(&text(range.clone())).map_err(full)?;
+        let shown = heap.string(&text(range.clone()))?;
         items.push(match views::face_name(*highlight) {
-            Some(face) => heap
-                .vector_from(&[shown, Value::keyword(face)])
-                .map_err(full)?,
+            Some(face) => heap.vector_from(&[shown, Value::keyword(face)])?,
             None => shown,
         });
         at = range.end;
     }
     if at < chars.len() {
-        items.push(heap.string(&text(at..chars.len())).map_err(full)?);
+        items.push(heap.string(&text(at..chars.len()))?);
     }
-    heap.vector_from(&items).map_err(full)
+    heap.vector_from(&items).map_err(Error::from)
 }
 
 fn highlight(heap: &mut Heap, lines: Value) -> Result<Value, Error> {
@@ -62,7 +56,7 @@ fn highlight(heap: &mut Heap, lines: Value) -> Result<Value, Error> {
         .zip(&spans)
         .map(|(line, spans)| segments(heap, line, spans))
         .collect::<Result<Vec<_>, _>>()?;
-    heap.vector_from(&rows).map_err(full)
+    heap.vector_from(&rows).map_err(Error::from)
 }
 
 pub fn install(isolate: &mut Isolate) {
@@ -70,7 +64,7 @@ pub fn install(isolate: &mut Isolate) {
         .native("ox", "ox-reference")
         .arity(0, Some(0))
         .host::<Editor>(|heap, editor, _| {
-            let promise = heap.new_promise().map_err(full)?;
+            let promise = heap.new_promise()?;
             let hold = heap.hold(promise);
             if editor.plugin_state::<Asked>().is_none() {
                 editor.set_plugin_state(Asked::default());

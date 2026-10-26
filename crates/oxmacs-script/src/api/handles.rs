@@ -41,7 +41,7 @@ pub(crate) fn handle(heap: &mut Heap, editor: &mut Editor, id: BufferId) -> Resu
     state.made.retain(|known, _| live.contains(known));
     let shared = Arc::clone(state.made.entry(id).or_insert_with(|| Arc::new(Handle(id))));
     heap.shared(&format!("buffer {name}"), shared)
-        .map_err(|full| Error::new(full.to_string()))
+        .map_err(Error::from)
 }
 
 fn of(heap: &Heap, value: Value) -> Option<BufferId> {

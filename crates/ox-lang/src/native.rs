@@ -6,7 +6,7 @@ use std::rc::Rc;
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::symbol::Sym;
-use crate::value::Value;
+use crate::value::{Value, print, to_float};
 use crate::vm::routine::Resumable;
 
 pub type NativeFn = dyn Fn(&mut Heap, &mut dyn Any, &[Value]) -> Result<Value, Error>;
@@ -79,6 +79,53 @@ pub fn given<'a>(
         .zip(slots)
         .filter(|(_, value)| **value != Value::Nil)
         .map(|(name, value)| (*name, *value))
+}
+
+pub fn expected(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
+    Error::new(format!(
+        "{name} expects {wanted}, got {}",
+        print::brief(heap, value)
+    ))
+    .of(ErrorKind::Type)
+}
+
+pub fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> {
+    heap.text(value)
+        .ok_or_else(|| expected(heap, name, "a string", value))
+}
+
+pub fn number(heap: &Heap, name: &str, value: Value) -> Result<f64, Error> {
+    match value {
+        Value::Int(number) => Ok(to_float(number)),
+        Value::Float(number) => Ok(number),
+        _ => Err(expected(heap, name, "a number", value)),
+    }
+}
+
+pub fn whole(heap: &Heap, name: &str, value: Value) -> Result<i64, Error> {
+    match value {
+        Value::Int(number) => Ok(number),
+        _ => Err(expected(heap, name, "a whole number", value)),
+    }
+}
+
+pub fn count(heap: &Heap, name: &str, value: Value) -> Result<usize, Error> {
+    let number = whole(heap, name, value)?;
+    usize::try_from(number).map_err(|_| {
+        Error::new(format!("{name} expects a count of 0 or more, got {number}"))
+            .of(ErrorKind::Range)
+    })
+}
+
+pub fn name_of(heap: &Heap, value: Value) -> String {
+    match value {
+        Value::Keyword(name) | Value::Symbol(name) => name.name().to_owned(),
+        _ => print::display(heap, value),
+    }
+}
+
+pub fn field(heap: &Heap, map: Value, key: &str) -> Option<Value> {
+    heap.map_of(map)?.get(heap, Value::keyword(key))
 }
 
 pub fn arguments(count: usize) -> String {

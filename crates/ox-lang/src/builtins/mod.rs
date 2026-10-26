@@ -78,8 +78,7 @@ fn join(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         .filter(|value| **value != Value::Nil)
         .map(|value| print::display(heap, *value))
         .collect();
-    heap.string(&text)
-        .map_err(|full| Error::new(full.to_string()))
+    heap.string(&text).map_err(Error::from)
 }
 
 pub(crate) fn not_an_atom(heap: &Heap, name: &str, value: Value) -> Error {
@@ -129,10 +128,7 @@ pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "atom")
         .arity(1, Some(1))
-        .function(|heap, arguments| {
-            heap.atom(arguments[0])
-                .map_err(|full| Error::new(full.to_string()))
-        });
+        .function(|heap, arguments| heap.atom(arguments[0]).map_err(Error::from));
     isolate
         .native("ox", "atom?")
         .arity(1, Some(1))
@@ -180,8 +176,7 @@ pub fn install(isolate: &mut Isolate) {
         .arity(1, Some(1))
         .function(|heap, arguments| {
             let shown = print::write(heap, arguments[0]);
-            heap.string(&shown)
-                .map_err(|full| Error::new(full.to_string()))
+            heap.string(&shown).map_err(Error::from)
         });
     collections::install(isolate);
     prelude::install(isolate);

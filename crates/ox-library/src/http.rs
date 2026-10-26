@@ -2,11 +2,9 @@ use std::time::Duration;
 
 use crate::crypto::to_base64;
 use ox_lang::Isolate;
-use ox_lang::build::full;
 use ox_lang::error::{Error, ErrorKind};
 use ox_lang::heap::Heap;
 use ox_lang::portable::{Failure, Portable};
-use ox_lang::symbol::Sym;
 use ox_lang::value::Value;
 use ox_lang::value::print;
 
@@ -37,10 +35,6 @@ fn encode(text: &str) -> String {
         }
     }
     encoded
-}
-
-fn keyword(name: &str) -> Portable {
-    Portable::Keyword(Sym::intern(name))
 }
 
 #[derive(Debug, Default)]
@@ -102,7 +96,10 @@ fn send(asked: &Asked) -> Result<Portable, Failure> {
         .iter()
         .map(|(name, value)| {
             let value = String::from_utf8_lossy(value.as_bytes()).into_owned();
-            (keyword(name.as_str()), Portable::String(value.into()))
+            (
+                Portable::keyword(name.as_str()),
+                Portable::String(value.into()),
+            )
         })
         .collect();
     let status = Portable::Int(i64::from(response.status().as_u16()));
@@ -111,9 +108,9 @@ fn send(asked: &Asked) -> Result<Portable, Failure> {
         .read_to_string()
         .map_err(|error| unreachable(&error))?;
     Ok(Portable::Map(vec![
-        (keyword("status"), status),
-        (keyword("headers"), Portable::Map(headers)),
-        (keyword("body"), Portable::String(body.into())),
+        (Portable::keyword("status"), status),
+        (Portable::keyword("headers"), Portable::Map(headers)),
+        (Portable::keyword("body"), Portable::String(body.into())),
     ]))
 }
 
@@ -176,6 +173,6 @@ pub fn install(isolate: &mut Isolate) {
         .outside()
         .function(|heap, arguments| {
             let encoded = encode(text(heap, "http/encode", arguments[0])?);
-            heap.string(&encoded).map_err(full)
+            heap.string(&encoded).map_err(Error::from)
         });
 }
