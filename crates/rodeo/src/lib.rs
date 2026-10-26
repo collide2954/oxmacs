@@ -1,16 +1,5 @@
-pub mod animation;
 pub mod atlas;
-pub mod camera;
 pub mod clock;
-pub mod collide;
-pub mod color;
 pub mod draw;
-pub mod ease;
 pub mod particles;
-mod paths;
-pub mod random;
-pub mod rect;
-pub mod script;
 pub mod texture;
-pub mod tiled;
-pub mod vec;

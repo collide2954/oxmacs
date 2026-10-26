@@ -3,9 +3,7 @@ use std::cell::RefCell;
 use iced::widget::canvas::{self, Frame, Geometry, Image, Text};
 use iced::widget::image::{FilterMethod, Handle};
 use iced::{Color, Font, Pixels, Point, Rectangle, Renderer, Size, Theme, mouse};
-use oxmacs_script::api::games::Screen;
-use rodeo::draw::Viewport;
-use rodeo::vec::Vec2;
+use oxmacs_script::api::games::{self, Screen};
 
 const LETTERBOX: Color = Color::from_rgb(0.05, 0.05, 0.07);
 const STATUS: f32 = 0.06;
@@ -37,17 +35,13 @@ fn narrow(value: f64) -> f32 {
 }
 
 pub fn placement(screen: &Screen, bounds: Size) -> (Rectangle, f32) {
-    let fit = Viewport::fit(
-        Vec2::new(f64::from(screen.width), f64::from(screen.height)),
-        Vec2::new(f64::from(bounds.width), f64::from(bounds.height)),
-        screen.smooth,
-    );
+    let fit = games::placement(screen, f64::from(bounds.width), f64::from(bounds.height));
     (
         Rectangle {
-            x: narrow(fit.offset.x),
-            y: narrow(fit.offset.y),
-            width: narrow(fit.size.x),
-            height: narrow(fit.size.y),
+            x: narrow(fit.x),
+            y: narrow(fit.y),
+            width: narrow(fit.width),
+            height: narrow(fit.height),
         },
         narrow(fit.scale),
     )

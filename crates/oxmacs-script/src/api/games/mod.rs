@@ -11,17 +11,17 @@ use ox_lang::heap::{Heap, Hold};
 use ox_lang::native::given;
 use ox_lang::value::{Value, print, to_float};
 use ox_lang::{Error, Isolate};
+use ox_library::color::Color;
+use ox_library::geometry::Rect;
+use ox_library::geometry::Vec2;
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::plugin::PluginBuffer;
 use oxmacs_core::text::BufferId;
 use rodeo::atlas::Atlas;
 use rodeo::clock::Clock;
-use rodeo::color::Color;
-use rodeo::draw::{DrawList, Outline, Shape, Sprite, raster};
-use rodeo::rect::Rect;
+use rodeo::draw::{DrawList, Outline, Shape, Sprite, Viewport, raster};
 use rodeo::texture::{TextureId, Textures};
-use rodeo::vec::Vec2;
 
 use crate::ide::log;
 
@@ -135,6 +135,30 @@ fn game_mut(editor: &mut Editor) -> Option<&mut Game> {
 fn playing(editor: &mut Editor) -> Result<&mut Game, Error> {
     game_mut(editor)
         .ok_or_else(|| Error::new("No game is running; play-game or M-x rodeo-play starts one"))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Placement {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub scale: f64,
+}
+
+pub fn placement(screen: &Screen, width: f64, height: f64) -> Placement {
+    let fit = Viewport::fit(
+        Vec2::new(f64::from(screen.width), f64::from(screen.height)),
+        Vec2::new(width, height),
+        screen.smooth,
+    );
+    Placement {
+        x: fit.offset.x,
+        y: fit.offset.y,
+        width: fit.size.x,
+        height: fit.size.y,
+        scale: fit.scale,
+    }
 }
 
 pub fn screen(editor: &Editor, buffer: BufferId) -> Option<&Screen> {

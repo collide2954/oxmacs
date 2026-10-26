@@ -3864,7 +3864,6 @@ dependencies = [
 name = "ox-lang"
 version = "0.14.0"
 dependencies = [
- "getrandom 0.4.3",
  "jiff",
  "num-bigint 0.5.1",
  "num-traits",
@@ -3880,17 +3879,23 @@ name = "ox-library"
 version = "0.14.0"
 dependencies = [
  "argon2",
+ "base64 0.23.1",
  "chacha20poly1305",
+ "flate2",
+ "getrandom 0.4.3",
  "image",
  "imageproc",
  "ox-lang",
  "rayon",
  "resvg",
  "ring",
+ "roxmltree 0.21.2",
  "rustls",
  "same-file",
  "serde_json",
+ "strum",
  "tempfile",
+ "thiserror 2.0.21",
  "tiny-skia 0.12.0",
  "trash",
  "ureq",
@@ -3935,7 +3940,6 @@ dependencies = [
  "dirs",
  "ox-lang",
  "ox-library",
- "rodeo",
  "tempfile",
 ]
 
@@ -3983,7 +3987,6 @@ dependencies = [
  "oxmacs-core",
  "oxmacs-pdf",
  "oxmacs-script",
- "rodeo",
  "serde_json",
  "skrifa 0.49.0",
  "tempfile",
@@ -4722,14 +4725,10 @@ dependencies = [
 name = "rodeo"
 version = "0.14.0"
 dependencies = [
- "base64 0.23.1",
- "flate2",
  "image",
- "ox-lang",
- "roxmltree 0.21.2",
+ "ox-library",
  "serde",
  "serde_json",
- "strum",
  "tempfile",
  "thiserror 2.0.21",
 ]

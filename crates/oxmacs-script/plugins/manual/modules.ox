@@ -68,34 +68,33 @@ A plugin that imports another plugin's modules names that plugin in the `:requir
 Ox itself brings these modules, each a plug into the Rust bridge. Import them as in `(import (ox file))`; the prelude needs no import.
 
 ```table
-Module         What it gives
-prelude        Numbers, collections, text, records, errors, pattern matching, tasks, channels and promises, there without an import
-ox/string      Text: searching, splitting, joining, trimming, padding and changing case
-ox/regex       Regular expressions: matching, finding, replacing and splitting
-ox/json        Reading and writing JSON
-ox/xml         Reading XML into maps, finding elements along paths, and writing XML
-ox/math        Roots, powers, logarithms, angles, clamping and random numbers
-ox/time        Dates and times: the clock, parsing, formatting, time zones and durations
-ox/path        Taking paths apart and joining them, the home folder and ~ expansion
-ox/csv         Reading CSV into rows
-ox/file        Reading, writing, listing, copying, renaming and removing files and folders
-ox/process     Running programs, talking to them while they run, and the environment
-ox/net         TCP connections, with or without TLS
-ox/http        HTTP requests and URL encoding
-ox/crypto      Hashes, encryption with a password, random numbers, base64 and one-time codes
-ox/image       Opening, editing, drawing on and saving images, with filters and color adjustments
-ox/zip         Reading the files inside zip archives, such as EPUB books
-ox/pdf         PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only
-ox/keepass     KeePass databases: reading their entries; in oxmacs only
-ox/ui          Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only
-rodeo          Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only
-rodeo/vec      Plain [x y] vectors for games: adding, scaling, lengths, angles and turning
-rodeo/rect     Plain [x y w h] rectangles: edges, centers, overlaps, unions and clamping
-rodeo/ease     Easing curves for tweens, from linear to bounce
-rodeo/random   Seeded random numbers kept in atoms, so replays and rewinds repeat them
-rodeo/camera   Cameras as plain maps: following, bounds, zoom, shake and world to screen points
-rodeo/collide  Overlaps, swept boxes that slide along walls, tile collision and spatial grids
-rodeo/tiled    Tiled .tmx maps as plain data: layers, tiles, objects, properties and tilesets
+Module       What it gives
+prelude      Numbers, collections, text, records, errors, pattern matching, tasks, channels and promises, there without an import
+ox/string    Text: searching, splitting, joining, trimming, padding and changing case
+ox/regex     Regular expressions: matching, finding, replacing and splitting
+ox/json      Reading and writing JSON
+ox/xml       Reading XML into maps, finding elements along paths, and writing XML
+ox/math      Roots, powers, logarithms, trigonometry, angle conversion and clamping
+ox/time      Dates and times: the clock, parsing, formatting, time zones and durations
+ox/path      Taking paths apart and joining them, the home folder and ~ expansion
+ox/csv       Reading CSV into rows
+ox/file      Reading, writing, listing, copying, renaming and removing files and folders
+ox/process   Running programs, talking to them while they run, and the environment
+ox/net       TCP connections, with or without TLS
+ox/http      HTTP requests and URL encoding
+ox/crypto    Hashes, encryption with a password, random numbers, base64 and one-time codes
+ox/image     Opening, editing, drawing on and saving images, with filters and color adjustments
+ox/zip       Reading the files inside zip archives, such as EPUB books
+ox/random    Random numbers, from the system or from seeded generators kept in atoms so replays repeat them
+ox/geometry  Plain [x y] points and [x y w h] rectangles: adding, lengths, angles, edges, overlaps and clamping
+ox/ease      Easing curves for tweens, from linear to bounce
+ox/camera    Cameras as plain maps: following, bounds, zoom, shake and world to screen points
+ox/collide   Overlaps, swept boxes that slide along walls, tile collision and spatial grids
+ox/tiled     Tiled .tmx maps as plain data: layers, tiles, objects, properties and tilesets
+ox/pdf       PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only
+ox/keepass   KeePass databases: reading their entries; in oxmacs only
+ox/ui        Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only
+rodeo        Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only
 ```
 
 ## Workers

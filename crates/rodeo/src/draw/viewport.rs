@@ -1,5 +1,5 @@
-use crate::rect::Rect;
-use crate::vec::Vec2;
+use ox_library::geometry::Rect;
+use ox_library::geometry::Vec2;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Viewport {

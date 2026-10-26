@@ -1,6 +1,6 @@
 use super::Sprite;
-use crate::color::Color;
-use crate::vec::Vec2;
+use ox_library::color::Color;
+use ox_library::geometry::Vec2;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(C)]

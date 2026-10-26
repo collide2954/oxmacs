@@ -1,9 +1,9 @@
 use super::effects::{faded, outlined, shade};
 use super::{Command, DrawList, Shape, Sprite};
-use crate::color::Color;
-use crate::rect::Rect;
 use crate::texture::Textures;
-use crate::vec::Vec2;
+use ox_library::color::Color;
+use ox_library::geometry::Rect;
+use ox_library::geometry::Vec2;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {

@@ -54,8 +54,8 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `irc` | 0.9.7 | opt-in | An IRCv3 client in the style of ERC |
 | `keycast` | 0.2.2 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `languages` | 0.1.0 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
-| `life` | 0.2.2 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.43 | on | The oxmacs tutorial and the Ox manual |
+| `life` | 0.2.3 | opt-in | Conway's Game of Life on a canvas |
+| `manual` | 0.5.44 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.3 | opt-in | Markdown rendered as styled text |
 | `pdf` | 0.1.2 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
 | `processes` | 0.1.1 | on | List the processes oxmacs runs, with their usage |
@@ -79,7 +79,7 @@ Ox code uses these built-in modules, importing them as in `(import (ox file))`; 
 | `ox/regex` | Regular expressions: matching, finding, replacing and splitting |
 | `ox/json` | Reading and writing JSON |
 | `ox/xml` | Reading XML into maps, finding elements along paths, and writing XML |
-| `ox/math` | Roots, powers, logarithms, angles, clamping and random numbers |
+| `ox/math` | Roots, powers, logarithms, trigonometry, angle conversion and clamping |
 | `ox/time` | Dates and times: the clock, parsing, formatting, time zones and durations |
 | `ox/path` | Taking paths apart and joining them, the home folder and ~ expansion |
 | `ox/csv` | Reading CSV into rows |
@@ -90,17 +90,16 @@ Ox code uses these built-in modules, importing them as in `(import (ox file))`; 
 | `ox/crypto` | Hashes, encryption with a password, random numbers, base64 and one-time codes |
 | `ox/image` | Opening, editing, drawing on and saving images, with filters and color adjustments |
 | `ox/zip` | Reading the files inside zip archives, such as EPUB books |
+| `ox/random` | Random numbers, from the system or from seeded generators kept in atoms so replays repeat them |
+| `ox/geometry` | Plain [x y] points and [x y w h] rectangles: adding, lengths, angles, edges, overlaps and clamping |
+| `ox/ease` | Easing curves for tweens, from linear to bounce |
+| `ox/camera` | Cameras as plain maps: following, bounds, zoom, shake and world to screen points |
+| `ox/collide` | Overlaps, swept boxes that slide along walls, tile collision and spatial grids |
+| `ox/tiled` | Tiled .tmx maps as plain data: layers, tiles, objects, properties and tilesets |
 | `ox/pdf` | PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only |
 | `ox/keepass` | KeePass databases: reading their entries; in oxmacs only |
 | `ox/ui` | Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only |
 | `rodeo` | Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only |
-| `rodeo/vec` | Plain [x y] vectors for games: adding, scaling, lengths, angles and turning |
-| `rodeo/rect` | Plain [x y w h] rectangles: edges, centers, overlaps, unions and clamping |
-| `rodeo/ease` | Easing curves for tweens, from linear to bounce |
-| `rodeo/random` | Seeded random numbers kept in atoms, so replays and rewinds repeat them |
-| `rodeo/camera` | Cameras as plain maps: following, bounds, zoom, shake and world to screen points |
-| `rodeo/collide` | Overlaps, swept boxes that slide along walls, tile collision and spatial grids |
-| `rodeo/tiled` | Tiled .tmx maps as plain data: layers, tiles, objects, properties and tilesets |
 
 ## Configuration
 

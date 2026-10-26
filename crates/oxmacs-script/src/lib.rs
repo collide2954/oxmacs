@@ -46,7 +46,6 @@ fn install_editor_api(isolate: &mut Isolate, answers: &api::prompts::Inbox) {
     runtime::modes::install(isolate);
     view::takeover::install(isolate);
     api::games::install(isolate);
-    rodeo::script::install(isolate);
     view::tabbar::install(isolate);
     api::idle::install(isolate);
     api::prompts::install(isolate, answers);

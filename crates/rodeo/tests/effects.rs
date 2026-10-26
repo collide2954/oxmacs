@@ -1,7 +1,7 @@
-use rodeo::color::Color;
+use ox_library::color::Color;
+use ox_library::geometry::Rect;
 use rodeo::draw::effects::{faded, outlined, shade};
 use rodeo::draw::{Palette, Sprite};
-use rodeo::rect::Rect;
 use rodeo::texture::Textures;
 
 fn plain() -> Sprite {

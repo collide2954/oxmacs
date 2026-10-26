@@ -1,9 +1,9 @@
 use std::f64::consts::{FRAC_PI_2, TAU};
 
-use crate::color::Color;
-use crate::ease::Ease;
-use crate::random::Random;
-use crate::vec::Vec2;
+use ox_library::color::Color;
+use ox_library::ease::Ease;
+use ox_library::geometry::Vec2;
+use ox_library::random::Random;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Particle {

@@ -5,10 +5,10 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
 
-use crate::animation::{Animation, Direction, Frame};
-use crate::rect::Rect;
 use crate::texture::{self, TextureId, Textures};
-use crate::vec::Vec2;
+use ox_library::animation::{Animation, Direction, Frame};
+use ox_library::geometry::Rect;
+use ox_library::geometry::Vec2;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

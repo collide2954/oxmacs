@@ -1,8 +1,8 @@
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
-use rodeo::color::Color;
+use ox_library::color::Color;
+use ox_library::geometry::Vec2;
 use rodeo::particles::Emitter;
-use rodeo::vec::Vec2;
 
 fn still() -> Emitter {
     let mut emitter = Emitter::new(1);

@@ -44,7 +44,7 @@ const MODULES: &[(&str, &str)] = &[
     ),
     (
         "ox/math",
-        "Roots, powers, logarithms, angles, clamping and random numbers",
+        "Roots, powers, logarithms, trigonometry, angle conversion and clamping",
     ),
     (
         "ox/time",

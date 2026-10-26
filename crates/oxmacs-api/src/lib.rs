@@ -69,15 +69,8 @@ pub fn extend_with_prelude(isolate: &mut Isolate) {
     }
 }
 
-pub fn install_plain(isolate: &mut Isolate) {
-    ox_library::install(isolate);
-    rodeo::script::install(isolate);
-}
-
 pub fn plain_isolate() -> Isolate {
-    let mut isolate = Isolate::new();
-    install_plain(&mut isolate);
-    isolate.set_worker_setup(install_plain);
+    let mut isolate = ox_library::isolate();
     add_editor_modules(&mut isolate);
     isolate.define_stubs(DOCS, Stubs::Modules);
     isolate.define_stubs(GAME_DOCS, Stubs::Modules);
@@ -124,7 +117,7 @@ mod tests {
 
         let found = problems(
             &dir.path().join("game.ox"),
-            "(module (import (rodeo) (rodeo vec) (ox ui)))\n(def (draw) (rodeo/rect [0 0 1 1] \"#fff\") (vec/add [1 2] [3 4]) (ui/text \"x\"))\n(message \"hi\")",
+            "(module (import (rodeo) (ox geometry) (ox ui)))\n(def (draw) (rodeo/rect [0 0 1 1] \"#fff\") (geometry/add [1 2] [3 4]) (ui/text \"x\"))\n(message \"hi\")",
         );
 
         assert_eq!(found, ["message is not defined"]);

@@ -20,7 +20,6 @@ oxmacs-script.workspace = true
 native-theme.workspace = true
 notify.workspace = true
 open.workspace = true
-rodeo.workspace = true
 ureq.workspace = true
 
 [target.'cfg(windows)'.dependencies]

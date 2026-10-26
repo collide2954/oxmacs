@@ -8,10 +8,10 @@ pub use viewport::Viewport;
 
 use std::ops::Range;
 
-use crate::color::Color;
-use crate::rect::Rect;
 use crate::texture::TextureId;
-use crate::vec::Vec2;
+use ox_library::color::Color;
+use ox_library::geometry::Rect;
+use ox_library::geometry::Vec2;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Outline {

@@ -1,10 +1,10 @@
 use std::f64::consts::FRAC_PI_2;
 
-use rodeo::color::Color;
+use ox_library::color::Color;
+use ox_library::geometry::Rect;
+use ox_library::geometry::Vec2;
 use rodeo::draw::{Outline, Sprite};
-use rodeo::rect::Rect;
 use rodeo::texture::Textures;
-use rodeo::vec::Vec2;
 
 fn sprite() -> Sprite {
     let mut textures = Textures::new();

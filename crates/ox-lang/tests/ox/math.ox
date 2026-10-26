@@ -35,10 +35,5 @@
 (module (import (ox math))) (math/clamp 1 3 0) ;! math/clamp needs low at most high, got 3 and 0
 (module (import (ox math))) [(math/lerp 0 10 0.5) (math/lerp 10 20 0) (math/lerp 0 4 1.5)] ;=> [5.0 10.0 6.0]
 
-;; random numbers
-(module (import (ox math))) (every? (fn [_] (let [x (math/random)] (and (>= x 0) (< x 1)))) (range 200)) ;=> true
-(module (import (ox math))) (sort (set (map (fn [_] (math/random-int 3)) (range 300)))) ;=> [0 1 2]
-(module (import (ox math))) (sort (set (map (fn [_] (math/random-int -2 0)) (range 300)))) ;=> [-2 -1]
-(module (import (ox math))) [(math/random-pick [:only]) (math/random-pick []) (contains? #{1 2 3} (math/random-pick #{1 2 3}))] ;=> [:only nil true]
-(module (import (ox math))) (math/random-int 0) ;! math/random-int needs a bound above 0, got 0
-(module (import (ox math))) (math/random-int 5 5) ;! math/random-int needs high above low, got 5 and 5
+;; angles
+(module (import (ox math))) [(math/degrees math/pi) (math/radians 180)] ;=> [180.0 3.141592653589793]

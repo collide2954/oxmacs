@@ -95,8 +95,8 @@ git          0.3.1    opt-in   Git status and staging in the style of Magit
 irc          0.9.7    opt-in   An IRCv3 client in the style of ERC
 keycast      0.2.2    opt-in   Shows the keys you press and the commands they run, for demos
 languages    0.1.0    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
-life         0.2.2    opt-in   Conway's Game of Life on a canvas
-manual       0.5.43   on       The oxmacs tutorial and the Ox manual
+life         0.2.3    opt-in   Conway's Game of Life on a canvas
+manual       0.5.44   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.3    opt-in   Markdown rendered as styled text
 pdf          0.1.2    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
 processes    0.1.1    on       List the processes oxmacs runs, with their usage

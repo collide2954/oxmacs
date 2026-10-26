@@ -11,7 +11,6 @@ license.workspace = true
 dirs.workspace = true
 ox-lang.workspace = true
 ox-library.workspace = true
-rodeo.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

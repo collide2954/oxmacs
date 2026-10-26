@@ -1,5 +1,5 @@
 use super::{Palette, Sprite};
-use crate::color::Color;
+use ox_library::color::Color;
 
 fn keep_alpha(color: Color, alpha: f32) -> Color {
     Color { a: alpha, ..color }

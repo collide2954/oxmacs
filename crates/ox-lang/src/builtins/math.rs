@@ -3,30 +3,14 @@ use std::f64::consts;
 
 use num_bigint::BigInt;
 
-use crate::builtins::collections;
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
-use crate::native::whole;
 use crate::value::Value;
-use crate::value::number::{Number, shrink, to_float};
+use crate::value::number::{Number, shrink};
 use crate::value::print;
 
 const MODULE: &str = "ox/math";
-
-fn random_bits() -> Result<u64, Error> {
-    getrandom::u64().map_err(|_| Error::new("The system has no random numbers to give"))
-}
-
-fn below(bound: u64) -> Result<u64, Error> {
-    let limit = u64::MAX - u64::MAX % bound;
-    loop {
-        let drawn = random_bits()?;
-        if drawn < limit {
-            return Ok(drawn % bound);
-        }
-    }
-}
 
 fn float(heap: &Heap, name: &str, value: Value) -> Result<f64, Error> {
     Ok(Number::of(heap, name, value)?.float())
@@ -100,49 +84,6 @@ fn clamp(heap: &Heap, arguments: &[Value]) -> Result<Value, Error> {
     })
 }
 
-fn random_int(heap: &Heap, arguments: &[Value]) -> Result<Value, Error> {
-    let (low, high) = match arguments {
-        [bound] => {
-            let bound = whole(heap, "math/random-int", *bound)?;
-            if bound <= 0 {
-                return Err(Error::new(format!(
-                    "math/random-int needs a bound above 0, got {bound}"
-                ))
-                .of(ErrorKind::Range));
-            }
-            (0, bound)
-        }
-        _ => (
-            whole(heap, "math/random-int", arguments[0])?,
-            whole(heap, "math/random-int", arguments[1])?,
-        ),
-    };
-    if high <= low {
-        return Err(Error::new(format!(
-            "math/random-int needs high above low, got {low} and {high}"
-        ))
-        .of(ErrorKind::Range));
-    }
-    let span = u64::try_from(i128::from(high) - i128::from(low)).unwrap_or(u64::MAX);
-    let drawn = i128::from(low) + i128::from(below(span)?);
-    Ok(Value::Int(i64::try_from(drawn).unwrap_or(low)))
-}
-
-fn random_pick(heap: &mut Heap, value: Value) -> Result<Value, Error> {
-    let items = collections::sequence(heap, "math/random-pick", value)?;
-    if items.is_empty() {
-        return Ok(Value::Nil);
-    }
-    let count = u64::try_from(items.len()).unwrap_or(u64::MAX);
-    let index = usize::try_from(below(count)?).unwrap_or(0);
-    Ok(items[index])
-}
-
-fn fraction() -> Result<f64, Error> {
-    let bits = i64::try_from(random_bits()? >> 11).unwrap_or(0);
-    Ok(to_float(bits) / to_float(1 << 53))
-}
-
 pub fn install(isolate: &mut Isolate) {
     isolate.define_value_in(
         MODULE,
@@ -169,6 +110,8 @@ pub fn install(isolate: &mut Isolate) {
         ("sin", f64::sin),
         ("cos", f64::cos),
         ("tan", f64::tan),
+        ("degrees", f64::to_degrees),
+        ("radians", f64::to_radians),
     ] {
         let shown = format!("math/{name}");
         isolate
@@ -208,16 +151,4 @@ pub fn install(isolate: &mut Isolate) {
             let t = float(heap, "math/lerp", arguments[2])?;
             Ok(Value::Float((b - a).mul_add(t, a)))
         });
-    isolate
-        .native(MODULE, "random")
-        .arity(0, Some(0))
-        .function(|_, _| Ok(Value::Float(fraction()?)));
-    isolate
-        .native(MODULE, "random-int")
-        .arity(1, Some(2))
-        .function(|heap, arguments| random_int(heap, arguments));
-    isolate
-        .native(MODULE, "random-pick")
-        .arity(1, Some(1))
-        .function(|heap, arguments| random_pick(heap, arguments[0]));
 }
