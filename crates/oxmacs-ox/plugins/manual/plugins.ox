@@ -59,7 +59,7 @@ Saving a loaded plugin's file evaluates it again in place, so a change takes eff
 - `:modes` declares file modes that wake the plugin, as `[{name: "Notes" extensions: ["note"] comment: "#"}]`; the entry then defines them with `defmode`.
 - `:startup-when :name` starts the plugin with oxmacs when its setting `name` is true, as the weather plugin does for its mode line.
 - `:opens-directories true` makes the plugin the way directories open, as dired is.
-- `:opens-files ["epub"]` makes the plugin the way files with those extensions open, as epub does for books; its entry registers the opener with `(on-open-file "epub" f)`.
+- `:opens-files ["epub"]` makes the plugin the way files with those extensions open, as epub does for books and pdf for documents; its entry registers the opener with `(on-open-file "epub" f)`.
 - `:opt-in true` keeps a bundled plugin off until `use-plugin` turns it on.
 
 `(use-plugin hello :disabled true)` turns a plugin off, and a plugin in your folder with the name of a bundled one replaces it. `(plugin-setting 'weather :units)` reads another plugin's setting, and `(oxmacs-home)` gives the folder that holds `init.ox`, where a plugin can keep files of its own, as the tutorial keeps your place.
@@ -96,8 +96,9 @@ irc          0.9.7    opt-in   An IRCv3 client in the style of ERC
 keycast      0.2.2    opt-in   Shows the keys you press and the commands they run, for demos
 languages    0.1.0    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
 life         0.2.2    opt-in   Conway's Game of Life on a canvas
-manual       0.5.31   on       The oxmacs tutorial and the Ox manual
+manual       0.5.32   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.3    opt-in   Markdown rendered as styled text
+pdf          0.1.0    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
 processes    0.1.1    on       List the processes oxmacs runs, with their usage
 profiler     0.1.1    on       Find where the Ox code in oxmacs spends its time
 r            0.18.6   opt-in   R consoles, plots, data and help in the style of ESS and RStudio

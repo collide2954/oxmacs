@@ -23,7 +23,17 @@ pub const BUNDLED: &[Bundle] = &[
     EXPLORER,
     ZEN,
     EPUB,
+    PDF,
 ];
+
+const PDF: Bundle = Bundle {
+    name: "pdf",
+    files: &[
+        ("plugin.ox", include_str!("../plugins/pdf/plugin.ox")),
+        ("pdf.ox", include_str!("../plugins/pdf/pdf.ox")),
+        ("reading.ox", include_str!("../plugins/pdf/reading.ox")),
+    ],
+};
 
 const EPUB: Bundle = Bundle {
     name: "epub",
@@ -381,3 +391,6 @@ mod zen;
 
 #[cfg(test)]
 mod epub;
+
+#[cfg(test)]
+mod pdf;

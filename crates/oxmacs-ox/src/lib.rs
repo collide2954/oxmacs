@@ -19,6 +19,7 @@ mod modes;
 mod natives;
 pub mod overlays;
 mod ox_mode;
+pub mod pdf;
 mod plugins;
 mod processes;
 mod prompts;
@@ -66,6 +67,7 @@ fn install_editor_api(isolate: &mut Isolate, answers: &prompts::Inbox) {
     plugins::install(isolate);
     views::install(isolate);
     book::install(isolate);
+    pdf::install(isolate);
     buffers::install(isolate);
     handles::install(isolate);
     editing::install(isolate);
@@ -100,10 +102,16 @@ fn editor_isolate(answers: &prompts::Inbox) -> Isolate {
     isolate
 }
 
-pub const EDITOR_MODULES: &[(&str, &str)] = &[(
-    "ox/ui",
-    "Widgets for plugin views: text, rows, columns, buttons, images, canvases and book pages; in oxmacs only",
-)];
+pub const EDITOR_MODULES: &[(&str, &str)] = &[
+    (
+        "ox/pdf",
+        "PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only",
+    ),
+    (
+        "ox/ui",
+        "Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only",
+    ),
+];
 
 pub fn checking_isolate() -> Isolate {
     editor_isolate(&prompts::Inbox::default())

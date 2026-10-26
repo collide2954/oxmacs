@@ -41,7 +41,7 @@ oxmacs is moving its features into Ox, an extension language of its own: a moder
 cargo run -p ox-cli -- hello.ox
 ```
 
-Most of oxmacs is bundled Ox plugins. Those on by default load the first time you use them; opt-in plugins stay off until `(use-plugin name)` in `init.ox`. The rest of the former Cargo-feature applets (Atlas, the database browser, the PDF viewer, the extra themes and the animated start screen) return the same way.
+Most of oxmacs is bundled Ox plugins. Those on by default load the first time you use them; opt-in plugins stay off until `(use-plugin name)` in `init.ox`. The rest of the former Cargo-feature applets (Atlas, the database browser, the extra themes and the animated start screen) return the same way.
 
 | Plugin | Version | Default | What it does |
 | --- | --- | --- | --- |
@@ -55,8 +55,9 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `keycast` | 0.2.2 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `languages` | 0.1.0 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
 | `life` | 0.2.2 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.31 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.32 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.3 | opt-in | Markdown rendered as styled text |
+| `pdf` | 0.1.0 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
 | `processes` | 0.1.1 | on | List the processes oxmacs runs, with their usage |
 | `profiler` | 0.1.1 | on | Find where the Ox code in oxmacs spends its time |
 | `r` | 0.18.6 | opt-in | R consoles, plots, data and help in the style of ESS and RStudio |
@@ -88,7 +89,8 @@ Ox code uses these built-in modules, importing them as in `(import (ox file))`; 
 | `ox/crypto` | Hashes, encryption with a password, random numbers, base64 and one-time codes |
 | `ox/image` | Opening, editing, drawing on and saving images, with filters and color adjustments |
 | `ox/zip` | Reading the files inside zip archives, such as EPUB books |
-| `ox/ui` | Widgets for plugin views: text, rows, columns, buttons, images, canvases and book pages; in oxmacs only |
+| `ox/pdf` | PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only |
+| `ox/ui` | Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only |
 
 ## Configuration
 

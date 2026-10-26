@@ -10,6 +10,7 @@ use oxmacs_ox::views::{Arg, Node, Picture, Press};
 use crate::style;
 use crate::widgets::drawing::Drawing;
 use crate::widgets::pages::PagesView;
+use crate::widgets::pdf::PdfView;
 
 const FRAME: f32 = 2.0;
 const FRAME_RADIUS: f32 = 4.0;
@@ -127,6 +128,7 @@ pub fn view<'a, Message: Clone + 'a>(
             }
         }
         Node::Pages(pages) => PagesView::new(pages, look.faces, look.font, call).into(),
+        Node::Pdf(shown) => PdfView::new(shown, look.faces, call).into(),
         Node::Scrollable(child) => scrollable(view(child, look, press, call))
             .height(Length::Fill)
             .into(),

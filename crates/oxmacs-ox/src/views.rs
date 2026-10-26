@@ -83,6 +83,7 @@ pub enum Node {
         selected: bool,
     },
     Pages(Box<crate::book::Pages>),
+    Pdf(Box<crate::pdf::View>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -96,12 +97,17 @@ pub enum Arg {
 #[derive(Debug)]
 pub struct ViewBuffer {
     scope: ScopeId,
+    watched: Option<std::path::PathBuf>,
     pub node: Node,
 }
 
 impl PluginBuffer for ViewBuffer {
     fn scope(&self) -> ScopeId {
         self.scope
+    }
+
+    fn watched(&self) -> Option<&std::path::Path> {
+        self.watched.as_deref()
     }
 }
 
@@ -454,7 +460,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         heap,
         "open-view",
         &arguments[2..],
-        &["keys", "beside", "select", "show", "on-resize"],
+        &["keys", "beside", "select", "show", "on-resize", "watch"],
     )?;
     if let Some(extra) = rest.first() {
         return Err(wrong(
@@ -466,12 +472,17 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     }
     let mut bindings = Vec::new();
     let (mut beside, mut select, mut show, mut resized) = (false, false, true, None);
+    let mut watched = None;
     for (option, value) in found {
         match option {
             "beside" => beside = value.truthy(),
             "select" => select = value.truthy(),
             "show" => show = value.truthy(),
             "on-resize" => resized = Some(value),
+            "watch" => {
+                watched = (value != Value::Nil)
+                    .then(|| std::path::PathBuf::from(print::display(heap, value)));
+            }
             _ => bindings = keys(heap, value)?,
         }
     }
@@ -504,6 +515,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             buffer.set_read_only(true);
             ViewBuffer {
                 scope,
+                watched: None,
                 node: Node::Column {
                     spacing: 0.0,
                     children: Vec::new(),
@@ -525,6 +537,9 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     let (buffer, scope) = (views.open[index].buffer, views.open[index].scope);
     views.dirty = true;
     editor.set_plugin_state(views);
+    if let Some((_, view)) = editor.plugin_buffer_mut::<ViewBuffer>(buffer) {
+        view.watched = watched;
+    }
     for (keys, command) in bindings {
         let id = editor
             .command_named(&command)
@@ -610,6 +625,15 @@ fn number(node: Node, callbacks: &mut Vec<Hold>) -> Node {
                 }
             }
             Node::Pages(pages)
+        }
+        Node::Pdf(mut view) => {
+            for press in view.presses() {
+                if let Some(Press::Held(hold)) = press.take() {
+                    callbacks.push(hold);
+                    *press = Some(Press::Slot(callbacks.len() - 1));
+                }
+            }
+            Node::Pdf(view)
         }
         other => other,
     }

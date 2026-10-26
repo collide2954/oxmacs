@@ -7,6 +7,7 @@ pub mod mode_line;
 pub mod overlay;
 pub mod ox_view;
 pub mod pages;
+pub mod pdf;
 pub mod popup;
 pub mod powerline;
 pub mod tab_bar;
