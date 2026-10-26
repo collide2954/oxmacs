@@ -4477,6 +4477,8 @@ dependencies = [
 name = "rodeo"
 version = "0.14.0"
 dependencies = [
+ "base64 0.23.1",
+ "flate2",
  "roxmltree 0.21.2",
  "strum",
  "thiserror 2.0.21",

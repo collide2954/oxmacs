@@ -10,5 +10,6 @@ mod random;
 mod rect;
 mod sweep;
 mod tiled;
+mod tiled_data;
 mod tiles;
 mod vec;

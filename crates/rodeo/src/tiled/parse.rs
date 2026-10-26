@@ -52,6 +52,14 @@ fn flag(node: Node<'_, '_>, name: &str, default: bool) -> bool {
         .map_or(default, |value| value == "1" || value == "true")
 }
 
+fn whole(count: u64) -> usize {
+    usize::try_from(count).unwrap_or(usize::MAX)
+}
+
+fn area(width: u32, height: u32) -> usize {
+    whole(u64::from(width) * u64::from(height))
+}
+
 pub(super) fn tiled_color(text: &str) -> Option<Color> {
     let digits = text.strip_prefix('#').unwrap_or(text);
     let byte = |at: usize| u8::from_str_radix(digits.get(at..at + 2)?, 16).ok();
@@ -278,24 +286,71 @@ impl Context {
     fn tile_layer(&self, node: Node<'_, '_>, name: &str) -> Result<TileLayer, Error> {
         let width: u32 = self.required(node, "width")?;
         let height: u32 = self.required(node, "height")?;
-        let count = usize::try_from(u64::from(width) * u64::from(height)).unwrap_or(usize::MAX);
+        let failed = |message: String| self.invalid(format!("layer \"{name}\" {message}"));
         let Some(data) = child(node, "data") else {
             return Ok(TileLayer {
                 x: 0,
                 y: 0,
                 width,
                 height,
-                data: vec![0; count],
+                data: vec![0; area(width, height)],
             });
         };
-        let tiles = data::decode(data, count)
-            .map_err(|message| self.invalid(format!("layer \"{name}\" {message}")))?;
+        let encoding = data.attribute("encoding");
+        let compression = data.attribute("compression");
+        let chunks: Vec<_> = elements(data, "chunk").collect();
+        if chunks.is_empty() {
+            return Ok(TileLayer {
+                x: 0,
+                y: 0,
+                width,
+                height,
+                data: data::decode(data, encoding, compression, area(width, height))
+                    .map_err(failed)?,
+            });
+        }
+        let mut pieces = Vec::new();
+        for chunk in chunks {
+            let x: i64 = self.required(chunk, "x")?;
+            let y: i64 = self.required(chunk, "y")?;
+            let columns: u32 = self.required(chunk, "width")?;
+            let rows: u32 = self.required(chunk, "height")?;
+            let tiles =
+                data::decode(chunk, encoding, compression, area(columns, rows)).map_err(failed)?;
+            pieces.push((x, y, columns, rows, tiles));
+        }
+        let left = pieces.iter().map(|piece| piece.0).min().unwrap_or(0);
+        let top = pieces.iter().map(|piece| piece.1).min().unwrap_or(0);
+        let right = pieces
+            .iter()
+            .map(|piece| piece.0 + i64::from(piece.2))
+            .max()
+            .unwrap_or(0);
+        let bottom = pieces
+            .iter()
+            .map(|piece| piece.1 + i64::from(piece.3))
+            .max()
+            .unwrap_or(0);
+        let too_big = || failed("spreads its chunks too far apart".to_owned());
+        let width = u32::try_from(right - left).map_err(|_| too_big())?;
+        let height = u32::try_from(bottom - top).map_err(|_| too_big())?;
+        let mut joined = vec![0; area(width, height)];
+        for (x, y, columns, rows, tiles) in pieces {
+            let across = u64::try_from(x - left).unwrap_or(0);
+            let down = u64::try_from(y - top).unwrap_or(0);
+            let length = area(columns, 1);
+            for row in 0..rows {
+                let from = area(row, columns);
+                let to = whole((down + u64::from(row)) * u64::from(width) + across);
+                joined[to..to + length].copy_from_slice(&tiles[from..from + length]);
+            }
+        }
         Ok(TileLayer {
-            x: 0,
-            y: 0,
+            x: left,
+            y: top,
             width,
             height,
-            data: tiles,
+            data: joined,
         })
     }
 }
