@@ -235,9 +235,15 @@ fn commands_run_and_searches_find_lines_on_the_host() {
     answer(&mut editor, &mut ox, "needle");
     assert_eq!(editor.buffer().name(), "*remote search*");
     let found = editor.buffer().contents();
-    assert!(found.contains("src/main.txt:1: a needle here"), "{found}");
+    assert!(
+        found.contains(&format!(
+            "{}\n     1:1    a needle here",
+            Path::new("src").join("main.txt").display()
+        )),
+        "{found}"
+    );
 
-    go_to(&mut editor, "main.txt");
+    go_to(&mut editor, "a needle here");
     press(&mut editor, &mut ox, "RET");
     assert_eq!(editor.buffer().contents(), "a needle here\n");
 }

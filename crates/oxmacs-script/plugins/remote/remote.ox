@@ -204,21 +204,12 @@
              (let [found (browser)
                    pattern (await (prompt (str "Search " found.dir " for: ")))
                    results (ops/search found.host found.dir pattern)]
-               (swap! state assoc :results (vec (map (fn [result] (assoc result :host found.host)) results)))
-               (open-buffer search-buffer
-                            (vec (concat [{line: [[(str (count results) " lines with " (pr-str pattern) " below " (browser-name found.host found.dir)) :heading]]}
-                                          {line: [["RET visits  q quits" :comment]]}
-                                          {line: []}]
-                                         (map (fn [result] {line: [[(str (string/replace result.path (ops/join-path found.dir "") "") ":" result.line ":") :link] " " result.text]})
-                                              results)))
-                            :keys {"RET" 'remote-search-visit "q" 'quit-window}
-                            :line first-row)))))
-
-(defcommand remote-search-visit "Open the remote file at the line found here"
-  (quietly (fn []
-             (if-let [result (get (get @state :results) (- (current-line) first-row))]
-               (open-remote! result.host result.path :line result.line)
-               (message "No result on this line")))))
+               (show-places search-buffer
+                            (vec (map (fn [result] {file: result.path line: result.line text: result.text}) results))
+                            :title (str (count results) " lines with " (pr-str pattern) " below " (browser-name found.host found.dir))
+                            :root found.dir
+                            :empty "Nothing below here has that"
+                            :on-visit (fn [place] (open-remote! found.host place.file :line place.line)))))))
 
 (def (shell-buffer host)
   (str "*shell " host.name "*"))

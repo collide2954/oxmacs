@@ -9,7 +9,6 @@
 (def packages-help "RET attaches or detaches   h shows its help   g refreshes   q quits")
 
 (defonce known (atom {}))
-(defonce results (atom {root: nil rows: []}))
 (defonce listing (atom {session: nil rows: []}))
 
 (def (available session payload)
@@ -66,8 +65,6 @@
 (defcommand r-renv-restore "Install the packages renv.lock records into the project's library" (renv "restore"))
 (defcommand r-renv-init "Give the project a library of its own with renv" (renv "init"))
 
-(def test-keys {"RET" 'r-test-visit "n" 'next-line "p" 'previous-line "g" 'r-test "q" 'quit-window})
-
 (defcommand r-test "Run the tests of the R package and list what passed and failed"
   (if-let [root (package-root)]
     (when-let [running (session/ensure)]
@@ -89,33 +86,17 @@
                           message: (or (get fields 4) "")})))
                    (rest lines))
         tally (fn [status] (count (filter (fn [row] (= row.status status)) rows)))
-        files (distinct (map (fn [row] row.file) rows))
-        laid (reduce (fn [built file]
-                       (let [members (filter (fn [row] (= row.file file)) rows)
-                             heading (conj built.lines [[file :heading]])]
-                         (reduce (fn [done row]
-                                   (let [[mark face] (or (get marks row.status) ["?" :warning])]
-                                     {lines: (conj done.lines (if (string/blank? row.message)
-                                                                ["  " [mark face] " " row.test]
-                                                                ["  " [mark face] " " row.test "  " [row.message :comment]]))
-                                      places: (conj done.places [(count done.lines) row])}))
-                                 {lines: heading places: built.places}
-                                 members)))
-                     {lines: [[["{(tally "passed")} passed, {(tally "failed")} failed, {(tally "skipped")} skipped" :heading]] []]
-                      places: []}
-                     files)]
-    (reset! results {root: root places: laid.places})
-    (open-buffer tests-buffer laid.lines :keys test-keys :beside true :select true :line 0)))
-
-(defcommand r-test-visit "Visit the test on this line"
-  (let [found (find (fn [[line _]] (= line (current-line))) (get @results :places))]
-    (if found
-      (let [row (second found)
-            file (path/join (get @results :root) "tests" "testthat" row.file)]
-        (when (open-file file)
-          (goto-line (max 0 (- (or row.line 1) 1)))))
-      (message "No test on this line"))))
-
+        folder (path/join root "tests" "testthat")]
+    (show-places tests-buffer
+                 (vec (map (fn [row]
+                             (let [[mark face] (or (get marks row.status) ["?" :warning])]
+                               {file: (path/join folder row.file) line: (or row.line 1)
+                                label: mark face: face
+                                text: (if (string/blank? row.message) row.test (str row.test "  " row.message))}))
+                           rows))
+                 :title "{(tally "passed")} passed, {(tally "failed")} failed, {(tally "skipped")} skipped"
+                 :root folder
+                 :on-refresh (fn [] (run-command 'r-test)))))
 (def package-keys {"RET" 'r-package-toggle "h" 'r-package-help "g" 'r-packages "q" 'quit-window
                    "n" 'next-line "p" 'previous-line})
 

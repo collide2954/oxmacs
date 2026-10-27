@@ -148,13 +148,14 @@ fn test_results_are_listed_by_file_and_return_visits_a_failure() {
         r.lines(),
         [
             "1 passed, 1 failed, 0 skipped",
+            "RET visits   SPC shows   n p step   g refreshes   q quits",
             "",
             "test-tidy.R",
-            "  ✓ tidy works",
-            "  ✗ tidy fails  tidy(1) not equal to 2."
+            "     1:1    ✓  tidy works",
+            "     5:1    ✗  tidy fails  tidy(1) not equal to 2."
         ]
     );
-    r.press("M-> RET");
+    r.press("n RET");
     assert_eq!(r.editor.buffer().name(), "test-tidy.R");
     assert_eq!(r.editor.buffer().line_of(r.editor.buffer().point()), 4);
 }

@@ -44,6 +44,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 - `flash` is now `annotate` with `:lasts`, the milliseconds it takes to fade, in place of `:duration`; `zap` 0.2.1 uses it.
 - Every special buffer works one way: double-clicking a line in a list does what RET does there, as in plugin buffers, and `g` (or `M-x revert-buffer`) runs each buffer's own refresh, such as checking again in *Diagnostics*.
+- `irc` 0.10.0, `remote` 0.2.0 and `r` 0.19.0 show IRC log searches, remote searches and R test results as lists of places: `RET` or a click visits, `SPC` shows, and `g` runs the R tests again. `irc-search-visit`, `remote-search-visit` and `r-test-visit` are gone; `RET` does what they did.
 - *ox usages* and *ox stacktrace* are lists of places too, showing each place's line, and Ox docs (`C-c C-d`) open in *doc*.
 - *xref* and *Diagnostics* are one kind of list of places: a click or `RET` visits a place, `SPC` shows it while staying in the list, `n` and `p` step and `g` refreshes. `location-visit`, `location-next` and `location-previous` are now `place-visit`, `place-next` and `place-previous`, and `goto-diagnostic`, `show-diagnostic` and `recheck-diagnostics` are `place-visit`, `place-show` and `places-refresh`.
 - `math/random`, `math/random-int` and `math/random-pick` are now `random/float`, `random/int` and `random/pick` in `(ox random)`, and `(ox math)` gains `math/degrees` and `math/radians`.

@@ -14,7 +14,6 @@
                      "list" "away" "back" "invite" "kick" "quote" "clear" "noise" "help"])
 
 (defonce completing (atom nil))
-(defonce found (atom []))
 
 (def (quietly work)
   (try (work)
@@ -334,23 +333,18 @@
                     (message (str "An image, " kind ", " (// (count response.body) 1024) " KB: RET opens it")))
                    (else (message (or (title-of response.body) (str "A page of " kind))))))))))
 
-(def (search-lines query results)
-  (vec (concat [{line: [["IRC logs" :heading] [(str "  " (count results) " lines with " (pr-str query)) :comment]]}
-                {line: [["RET visits the log  q quits" :comment]]}
-                {line: []}]
-               (map (fn [result]
-                      {line: [[(str result.network " " result.target " " result.day) :comment] " " result.text]})
-                    results))))
+(def (search-places results)
+  (vec (map (fn [result]
+              {file: result.path line: (+ result.line 1)
+               label: (str result.network " " result.target " " result.day) face: :comment
+               text: result.text})
+            results)))
 
 (defcommand irc-search "Search the IRC logs"
   (quietly (fn []
              (let [query (await (prompt "Search IRC logs for: "))
                    results (logs/search query)]
-               (reset! found results)
-               (open-buffer search-buffer (search-lines query results) :keys {"RET" 'irc-search-visit "q" 'quit-window} :line 3)))))
-
-(defcommand irc-search-visit "Visit the log line on this line"
-  (if-let [result (get @found (- (current-line) 3))]
-    (do (open-file result.path)
-      (goto-line result.line))
-    (message "No log line here")))
+               (show-places search-buffer (search-places results)
+                            :title (str "IRC logs: " (count results) " lines with " (pr-str query))
+                            :ordered true
+                            :empty "No logged line has that")))))

@@ -1,5 +1,5 @@
 (plugin manual
-  :version "0.5.47"
+  :version "0.5.48"
   :requires {markdown: "^0.2"}
   :summary "The oxmacs tutorial and the Ox manual"
   :commands {ox-manual: "Read the Ox manual"
