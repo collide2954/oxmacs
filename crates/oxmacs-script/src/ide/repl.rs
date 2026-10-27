@@ -1063,10 +1063,11 @@ mod tests {
             [
                 "Division by zero",
                 "zero-division-error",
+                "RET visits   SPC shows   n p step   q quits",
                 "",
-                "  inner      scratch.ox:2:3",
-                "  outer      scratch.ox:3:19",
-                "  top level  scratch.ox:4:1",
+                "  inner      scratch.ox:2:3  (/ x 0))",
+                "  outer      scratch.ox:3:19  (def (outer) (+ 1 (inner 1)))",
+                "  top level  scratch.ox:4:1  (outer)",
             ]
         );
         press(&mut editor, &mut ox, "RET");
@@ -1093,7 +1094,10 @@ mod tests {
             .unwrap();
 
         press(&mut editor, &mut ox, "C-x C-e");
-        assert_eq!(trace(&editor)[3], "  helper     lib/helper.ox:2:3");
+        assert_eq!(
+            trace(&editor)[4],
+            "  helper     lib/helper.ox:2:3  (/ x 0))"
+        );
         press(&mut editor, &mut ox, "RET");
 
         assert_eq!(editor.buffer().name(), "lib/helper.ox");

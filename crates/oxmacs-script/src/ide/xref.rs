@@ -8,13 +8,11 @@ use ox_lang::ide::{self, ox_files};
 use ox_lang::names;
 use ox_lang::span::line_column;
 use oxmacs_api::{check_roots, editor_code_in};
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Editor, Place, Places};
 
 use crate::ide::help;
-use crate::ide::stacktrace::{self, Place};
 
 pub const USAGES: &str = "*ox usages*";
-const FIRST_USAGE: usize = 2;
 const MOST_FILES: usize = 2000;
 
 struct Source {
@@ -121,13 +119,12 @@ pub(crate) fn find_definition(isolate: &Isolate, editor: &mut Editor, home: Opti
         .find(|(_, occurrence)| occurrence.defines);
     if let Some((index, occurrence)) = defined {
         let source = &sources[index];
+        let (line, column) = line_column(&source.text, occurrence.span.start);
         let here = editor.current_location();
-        let opened = stacktrace::open_place(
-            editor,
-            &source.file,
-            line_column(&source.text, occurrence.span.start),
-            Some(&source.text),
-        );
+        let opened = editor.open_place(&Place {
+            source: Some(source.text.as_str().into()),
+            ..Place::at(&source.file, line, column)
+        });
         if opened {
             editor.remember_location(here);
         }
@@ -147,13 +144,12 @@ pub(crate) fn find_definition(isolate: &Isolate, editor: &mut Editor, home: Opti
         });
         return;
     };
+    let (line, column) = place.line_column();
     let here = editor.current_location();
-    let opened = stacktrace::open_place(
-        editor,
-        place.file(),
-        place.line_column(),
-        Some(&place.source.text),
-    );
+    let opened = editor.open_place(&Place {
+        source: Some(place.source.text.as_str().into()),
+        ..Place::at(place.file(), line, column)
+    });
     if opened {
         editor.remember_location(here);
     }
@@ -226,19 +222,6 @@ fn sources(editor: &Editor, roots: &[PathBuf], wanted: &str) -> Vec<Source> {
     found
 }
 
-fn shown(source: &Source, roots: &[PathBuf]) -> String {
-    let Some(path) = &source.path else {
-        return source.file.clone();
-    };
-    roots
-        .iter()
-        .find_map(|root| path.strip_prefix(root).ok())
-        .map_or_else(
-            || path.display().to_string(),
-            |rest| rest.display().to_string(),
-        )
-}
-
 pub(crate) fn show_usages(editor: &mut Editor, home: Option<&Path>) {
     let Some(name) = help::name_at_point(editor) else {
         editor.show_message("There is no Ox name at point");
@@ -247,21 +230,17 @@ pub(crate) fn show_usages(editor: &mut Editor, home: Option<&Path>) {
     let wanted = names::short(&name).to_owned();
     let roots = search_roots(editor, home);
     let sources = sources(editor, &roots, &wanted);
-    let mut lines = Vec::new();
-    let mut places = Vec::new();
-    for (index, occurrence) in same_binding(editor, home, &sources, &roots) {
-        let source = &sources[index];
-        let file = shown(source, &roots);
-        let (line, column) = line_column(&source.text, occurrence.span.start);
-        let text = source.text.lines().nth(line - 1).unwrap_or_default();
-        lines.push(format!("{file}:{line}:{column}: {}", text.trim_end()));
-        places.push(Place {
-            file: source.file.clone(),
-            line,
-            column,
-            text: None,
-        });
-    }
+    let places: Vec<Place> = same_binding(editor, home, &sources, &roots)
+        .into_iter()
+        .map(|(index, occurrence)| {
+            let source = &sources[index];
+            let (line, column) = line_column(&source.text, occurrence.span.start);
+            Place {
+                source: source.path.is_none().then(|| source.text.as_str().into()),
+                ..Place::at(&source.file, line, column)
+            }
+        })
+        .collect();
     if places.is_empty() {
         editor.show_message(format!("No usages of {wanted}"));
         return;
@@ -271,8 +250,15 @@ pub(crate) fn show_usages(editor: &mut Editor, home: Option<&Path>) {
     } else {
         format!("{} usages", places.len())
     };
-    let text = format!("{count} of {wanted}\n\n{}\n", lines.join("\n"));
-    stacktrace::show_places(editor, USAGES, &text, FIRST_USAGE, places);
+    editor.show_places(
+        USAGES,
+        Places {
+            title: format!("{count} of {wanted}"),
+            places,
+            root: roots.first().cloned(),
+            ..Places::default()
+        },
+    );
 }
 #[cfg(test)]
 mod tests {
@@ -358,11 +344,11 @@ mod tests {
         assert_eq!(
             editor.buffer().contents(),
             format!(
-                "3 usages of area\n\nshapes.ox:1:7: (def (area w h) (* w h))\nshapes.ox:2:2: (area 1 2)\n{}:2:2: (sh/area 3 4) ; area in a comment\n",
+                "3 usages of area\nRET visits   SPC shows   n p step   q quits\n\n{}\n     2:2    (sh/area 3 4) ; area in a comment\n\nshapes.ox\n     1:7    (def (area w h) (* w h))\n     2:2    (area 1 2)\n",
                 more.display()
             )
         );
-        press(&mut editor, &mut ox, "n n RET");
+        press(&mut editor, &mut ox, "n p RET");
         assert_eq!(editor.buffer().name(), "use.ox");
         let buffer = editor.buffer();
         assert_eq!(buffer.point(), buffer.line_start(1) + 1);

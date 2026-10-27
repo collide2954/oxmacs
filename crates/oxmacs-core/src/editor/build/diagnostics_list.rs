@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::editor::Editor;
 use crate::editor::special::places::{Place, Places};
 use crate::external::diagnostics::Severity;
+use crate::files::paths;
 use crate::theme::Highlight;
 
 const NAME: &str = "*Diagnostics*";
@@ -25,10 +26,20 @@ fn listed(editor: &Editor) -> Places {
             }
         })
         .collect();
+    let root = editor.builds.root().map(Path::to_path_buf);
+    let title = root.as_deref().map_or_else(
+        || "Diagnostics".to_owned(),
+        |root| {
+            format!(
+                "Diagnostics  {}",
+                paths::abbreviate(root, editor.home.as_deref())
+            )
+        },
+    );
     Places {
-        title: "Diagnostics".to_owned(),
+        title,
         places,
-        root: editor.builds.root().map(Path::to_path_buf),
+        root,
         empty: Some("No problems".to_owned()),
         on_visit: Some(Arc::new(Editor::visit_diagnostic)),
         on_refresh: Some(Arc::new(Editor::recheck)),

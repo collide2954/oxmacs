@@ -155,12 +155,7 @@ fn shown_path(path: &Path, root: Option<&Path>, home: Option<&Path>) -> String {
 
 fn page(editor: &Editor, list: &Places) -> (Page, Vec<(usize, usize)>) {
     let mut page = Page::default();
-    let root = list
-        .root
-        .as_deref()
-        .map(|root| format!("  {}", paths::abbreviate(root, editor.home.as_deref())))
-        .unwrap_or_default();
-    page.line(&[(&list.title, Some(Highlight::Heading)), (&root, None)]);
+    page.line(&[(&list.title, Some(Highlight::Heading))]);
     for line in &list.header {
         page.line(&[(line, None)]);
     }

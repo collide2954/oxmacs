@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use oxmacs_core::editor::Editor;
 use oxmacs_core::input::KeySequence;
-pub use oxmacs_core::testing::{at_point, press as keys, question};
+pub use oxmacs_core::testing::{at_point, lines, press as keys, question};
 
 use crate::{Ox, Pace, Wake};
 

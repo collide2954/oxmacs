@@ -37,6 +37,7 @@ fn install_editor_api(isolate: &mut Isolate, answers: &api::prompts::Inbox) {
     api::editing::install(isolate);
     api::hooks::install(isolate);
     api::annotations::install(isolate);
+    api::places::install(isolate);
     api::evaluations::install(isolate);
     api::keystrokes::install(isolate);
     api::processes::install(isolate);
@@ -288,6 +289,7 @@ impl Ox {
         api::consoles::run(&mut self.isolate, editor);
         api::buffers::watch(&mut self.isolate, editor);
         api::commands::run_waiting(&mut self.isolate, editor);
+        api::places::run_waiting(&mut self.isolate, editor);
         api::transients::run_waiting(&mut self.isolate, editor);
         view::takeover::run_endings(&mut self.isolate, editor);
         api::prompts::deliver(&mut self.isolate, &self.answers);

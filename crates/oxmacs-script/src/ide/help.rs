@@ -6,14 +6,11 @@ use ox_lang::Isolate;
 use ox_lang::describe::{Description, Kind};
 use ox_lang::ide;
 use ox_lang::names::{self, call_head, symbol_at};
-use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::editor::Editor;
-use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::BufferId;
 
 use crate::{ide::ox_mode, ide::repl, ide::stacktrace, runtime::plugins};
 
-pub const DOC: &str = "*ox doc*";
 pub(crate) const SIGNATURE_PAUSE: Duration = Duration::from_millis(400);
 const LOOK_BACK: usize = 400;
 const AUTO_PREFIX: usize = 3;
@@ -27,20 +24,6 @@ pub(crate) struct Help {
     shown: Option<String>,
     completed: Option<(BufferId, u64)>,
 }
-
-#[derive(Debug)]
-struct DocView {
-    scope: ScopeId,
-}
-
-impl SpecialBuffer for DocView {
-    fn scope(&self) -> ScopeId {
-        self.scope
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct DocScope(ScopeId);
 
 pub(crate) fn in_ox(editor: &Editor) -> bool {
     editor.language() == Some(ox_mode::language()) || repl::in_repl(editor)
@@ -255,16 +238,6 @@ pub(crate) fn render(description: &Description, examples: &[String]) -> String {
     text
 }
 
-fn doc_scope(editor: &mut Editor) -> ScopeId {
-    if let Some(DocScope(scope)) = editor.plugin_state::<DocScope>() {
-        return *scope;
-    }
-    let scope = editor.add_scope("ox doc");
-    editor.bind(scope, "q", Command::QuitWindow).ok();
-    editor.set_plugin_state(DocScope(scope));
-    scope
-}
-
 pub(crate) fn show_doc(isolate: &Isolate, editor: &mut Editor, home: Option<&Path>) {
     let Some(name) = name_at_point(editor) else {
         editor.show_message("There is no Ox name at point");
@@ -277,22 +250,7 @@ pub(crate) fn show_doc(isolate: &Isolate, editor: &mut Editor, home: Option<&Pat
         return;
     };
     let text = render(&description, &isolate.examples(&name));
-    let scope = doc_scope(editor);
-    let id = editor
-        .special_buffers::<DocView>()
-        .first()
-        .copied()
-        .unwrap_or_else(|| {
-            editor.add_special_buffer_with(DOC, |buffer| {
-                buffer.set_read_only(true);
-                DocView { scope }
-            })
-        });
-    editor.fill_buffer(id, &text);
-    if let Some((buffer, _)) = editor.special_buffer_mut::<DocView>(id) {
-        buffer.set_point(0);
-    }
-    editor.show_buffer_beside(id);
+    editor.show_doc(&text);
 }
 
 #[cfg(test)]
@@ -302,7 +260,7 @@ mod tests {
 
     use oxmacs_core::editor::Editor;
 
-    use super::{DOC, SIGNATURE_PAUSE};
+    use super::SIGNATURE_PAUSE;
     use crate::Ox;
     use crate::testing::{press, settle, typed};
 
@@ -415,7 +373,7 @@ mod tests {
         go(&mut editor, &mut ox, call + 2);
         press(&mut editor, &mut ox, "C-c C-d");
 
-        assert_eq!(editor.buffer().name(), DOC);
+        assert_eq!(editor.buffer().name(), "*doc*");
         assert_eq!(
             editor.buffer().contents(),
             "area\nA function, defined at shapes.ox:1\n\n(area w h)\n\nWidth times height. In cells.\n\nExamples\n\n(test \"area of a unit\" (expect (= (area 1 1) 1)))\n"

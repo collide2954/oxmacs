@@ -25,7 +25,12 @@ pub struct Candidate {
     pub doc: Option<String>,
 }
 
-pub fn describe(isolate: &Isolate, module: &str, file: File<'_>, name: &str) -> Option<Description> {
+pub fn describe(
+    isolate: &Isolate,
+    module: &str,
+    file: File<'_>,
+    name: &str,
+) -> Option<Description> {
     let Some(found) = names::definitions_with(file.text, file.forms)
         .into_iter()
         .find(|definition| definition.name == name)
@@ -48,7 +53,12 @@ pub fn describe(isolate: &Isolate, module: &str, file: File<'_>, name: &str) -> 
     })
 }
 
-pub fn completions(isolate: &Isolate, module: &str, file: File<'_>, prefix: &str) -> Vec<Candidate> {
+pub fn completions(
+    isolate: &Isolate,
+    module: &str,
+    file: File<'_>,
+    prefix: &str,
+) -> Vec<Candidate> {
     let mut found: Vec<Candidate> = names::definitions_with(file.text, file.forms)
         .into_iter()
         .filter(|definition| definition.name.starts_with(prefix))

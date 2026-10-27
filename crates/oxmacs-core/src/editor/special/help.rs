@@ -135,7 +135,7 @@ impl Editor {
         self.buffers.find_special::<Help>(|help| help.doc)
     }
 
-    pub(in crate::editor) fn show_doc(&mut self, text: &str) {
+    pub fn show_doc(&mut self, text: &str) {
         if self.doc_index().is_none() {
             self.beside(|editor| {
                 let mut buffer = Buffer::with_text(DOC, "");
