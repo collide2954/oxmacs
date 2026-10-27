@@ -286,16 +286,29 @@ impl<'a> Server<'a> {
         }
     }
 
-    fn lookup(&mut self, uri: &str, name: &str) -> Option<(String, Option<String>, Kind)> {
+    fn with_file<T>(
+        &mut self,
+        uri: &str,
+        use_it: impl FnOnce(&Isolate, &str, ide::File<'_>) -> T,
+    ) -> Option<T> {
+        let path = self.documents.get(uri)?.path.clone();
+        self.isolate(path.as_deref());
         let document = self.documents.get(uri)?;
-        if let Some(found) = names::definitions_with(&document.text, &document.forms)
-            .into_iter()
-            .find(|definition| definition.name == name)
-        {
-            return Some((found.signature, found.doc, found.kind));
-        }
-        let (module, path) = (document.module(), document.path.clone());
-        let described = self.isolate(path.as_deref()).describe(&module, name)?;
+        let isolate = match path.as_deref().map_or(Flavor::Plain, self.options.flavor) {
+            Flavor::Plain => self.plain.as_ref()?,
+            Flavor::Editor => self.editor.as_ref()?,
+        };
+        let file = ide::File {
+            name: &document.name,
+            text: &document.text,
+            forms: &document.forms,
+        };
+        Some(use_it(isolate, &document.module(), file))
+    }
+    fn lookup(&mut self, uri: &str, name: &str) -> Option<(String, Option<String>, Kind)> {
+        let described = self.with_file(uri, |isolate, module, file| {
+            ide::describe(isolate, module, file, name)
+        })??;
         Some((described.signature, described.doc, described.kind))
     }
 
@@ -317,52 +330,23 @@ impl<'a> Server<'a> {
         let (uri, text, at) = self.at(params)?;
         let form = text[..at].rfind("\n(").map_or(0, |found| found + 1);
         let prefix = names::typed_name(&text[form..at]).to_owned();
-        let document = self.documents.get(&uri)?;
-        let (module, path) = (document.module(), document.path.clone());
-        let mut found: Vec<(String, Option<String>, Kind, Option<String>)> =
-            names::definitions_with(&text, &document.forms)
-                .into_iter()
-                .filter(|definition| definition.name.starts_with(&prefix))
-                .map(|definition| {
-                    (
-                        definition.name,
-                        Some(definition.signature),
-                        definition.kind,
-                        definition.doc,
-                    )
-                })
-                .collect();
-        let isolate = self.isolate(path.as_deref());
-        for name in isolate.completions(&module, &prefix) {
-            if found.iter().any(|(known, ..)| *known == name) {
-                continue;
-            }
-            let described = isolate.describe(&module, &name);
-            found.push(match described {
-                Some(described) => (
-                    name,
-                    Some(described.signature),
-                    described.kind,
-                    described.doc,
-                ),
-                None => (name, None, Kind::Value, None),
-            });
-        }
+        let found = self.with_file(&uri, |isolate, module, file| {
+            ide::completions(isolate, module, file, &prefix)
+        })?;
         Some(Value::Array(
             found
                 .into_iter()
-                .map(|(label, signature, kind, doc)| {
+                .map(|candidate| {
                     json!({
-                        "label": label,
-                        "kind": completion_kind(kind),
-                        "detail": signature,
-                        "documentation": doc,
+                        "label": candidate.name,
+                        "kind": completion_kind(candidate.kind),
+                        "detail": candidate.signature,
+                        "documentation": candidate.doc,
                     })
                 })
                 .collect(),
         ))
     }
-
     fn hover(&mut self, params: &Value) -> Option<Value> {
         let (uri, text, at) = self.at(params)?;
         let name = Self::name_at(&text, at)?;

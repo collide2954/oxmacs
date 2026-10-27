@@ -1,8 +1,85 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use std::rc::Rc;
+
+use crate::Isolate;
 use crate::check::{Binding, Occurrence, binding_at};
-use crate::span::Span;
+use crate::describe::{Description, Kind, Place};
+use crate::forms::Forms;
+use crate::names;
+use crate::span::{self, Span};
+
+#[derive(Debug, Clone, Copy)]
+pub struct File<'a> {
+    pub name: &'a str,
+    pub text: &'a str,
+    pub forms: &'a Forms,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Candidate {
+    pub name: String,
+    pub signature: Option<String>,
+    pub kind: Kind,
+    pub doc: Option<String>,
+}
+
+pub fn describe(isolate: &Isolate, module: &str, file: File<'_>, name: &str) -> Option<Description> {
+    let Some(found) = names::definitions_with(file.text, file.forms)
+        .into_iter()
+        .find(|definition| definition.name == name)
+    else {
+        return isolate.describe(module, name);
+    };
+    let source = Rc::new(span::Source {
+        name: file.name.to_owned(),
+        text: file.text.to_owned(),
+    });
+    Some(Description {
+        name: found.name,
+        kind: found.kind,
+        signature: found.signature,
+        doc: found.doc,
+        place: Some(Place {
+            source,
+            span: found.span,
+        }),
+    })
+}
+
+pub fn completions(isolate: &Isolate, module: &str, file: File<'_>, prefix: &str) -> Vec<Candidate> {
+    let mut found: Vec<Candidate> = names::definitions_with(file.text, file.forms)
+        .into_iter()
+        .filter(|definition| definition.name.starts_with(prefix))
+        .map(|definition| Candidate {
+            name: definition.name,
+            signature: Some(definition.signature),
+            kind: definition.kind,
+            doc: definition.doc,
+        })
+        .collect();
+    for name in isolate.completions(module, prefix) {
+        if found.iter().any(|known| known.name == name) {
+            continue;
+        }
+        found.push(match isolate.describe(module, &name) {
+            Some(described) => Candidate {
+                name,
+                signature: Some(described.signature),
+                kind: described.kind,
+                doc: described.doc,
+            },
+            None => Candidate {
+                name,
+                signature: None,
+                kind: Kind::Value,
+                doc: None,
+            },
+        });
+    }
+    found
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Source<'a> {

@@ -392,7 +392,7 @@ fn forms_at<'e>(editor: &'e Editor, path: Option<&Path>) -> &'e Forms {
         .unwrap_or(&EDITOR_FORMS)
 }
 
-fn forms_of<'e>(editor: &'e Editor, buffer: &Buffer) -> &'e Forms {
+pub(crate) fn forms_of<'e>(editor: &'e Editor, buffer: &Buffer) -> &'e Forms {
     forms_at(editor, buffer.file().map(|file| file.path.as_path()))
 }
 

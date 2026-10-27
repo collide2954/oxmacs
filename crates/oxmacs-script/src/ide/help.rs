@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use ox_lang::Isolate;
 use ox_lang::describe::{Description, Kind};
+use ox_lang::ide;
 use ox_lang::names::{self, call_head, symbol_at};
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::editor::Editor;
@@ -66,6 +67,20 @@ fn before_point(editor: &Editor) -> String {
     buffer.text_in(buffer.line_start(first)..point)
 }
 
+fn with_file<T>(editor: &Editor, use_it: impl FnOnce(ide::File<'_>) -> T) -> T {
+    let buffer = editor.buffer();
+    let name = buffer.file().map_or_else(
+        || buffer.name().to_owned(),
+        |file| file.path.display().to_string(),
+    );
+    let text = buffer.contents();
+    use_it(ide::File {
+        name: &name,
+        text: &text,
+        forms: ox_mode::forms_of(editor, buffer),
+    })
+}
+
 fn first_sentence(doc: &str) -> &str {
     let line = doc.lines().next().unwrap_or_default();
     line.find(". ").map_or(line, |end| &line[..=end])
@@ -115,8 +130,11 @@ pub(crate) fn echo_signature(
     let text = match &help.seen {
         Some((seen, text)) if *seen == key => text.clone(),
         _ => {
+            let module = module(editor, home);
             let text = call_head(&before_point(editor))
-                .and_then(|head| isolate.describe(&module(editor, home), &head))
+                .and_then(|head| {
+                    with_file(editor, |file| ide::describe(isolate, &module, file, &head))
+                })
                 .filter(|description| description.kind != Kind::Value)
                 .map(|description| summary(&description));
             help.seen = Some((key, text.clone()));
@@ -150,7 +168,13 @@ pub(crate) fn complete(
         return;
     }
     let (start, typed) = typed_name(editor);
-    let candidates = isolate.completions(&module(editor, home), &typed);
+    let module = module(editor, home);
+    let candidates = with_file(editor, |file| {
+        ide::completions(isolate, &module, file, &typed)
+    })
+    .into_iter()
+    .map(|candidate| candidate.name)
+    .collect();
     editor.complete_at(start, candidates, explicit);
 }
 
@@ -246,7 +270,9 @@ pub(crate) fn show_doc(isolate: &Isolate, editor: &mut Editor, home: Option<&Pat
         editor.show_message("There is no Ox name at point");
         return;
     };
-    let Some(description) = isolate.describe(&module(editor, home), &name) else {
+    let module = module(editor, home);
+    let Some(description) = with_file(editor, |file| ide::describe(isolate, &module, file, &name))
+    else {
         editor.show_message(format!("{name} is not defined"));
         return;
     };
@@ -336,6 +362,30 @@ mod tests {
         go(&mut editor, &mut ox, SOURCE.len());
         rest(&mut editor, &mut ox);
         assert_eq!(editor.message(), None);
+    }
+
+    #[test]
+    fn definitions_typed_but_not_evaluated_yet_are_known() {
+        let home = tempfile::tempdir().unwrap();
+        let (mut editor, mut ox) = visiting(home.path());
+        let end = editor.buffer().len_chars();
+        editor.buffer_mut().set_point(end);
+        typed(
+            &mut editor,
+            &mut ox,
+            "(def (volume w h d) \"Width times height times depth.\" (* w h d))\n(volume 1 ",
+        );
+        rest(&mut editor, &mut ox);
+        assert_eq!(
+            editor.message(),
+            Some("(volume w h d)  Width times height times depth.")
+        );
+
+        typed(&mut editor, &mut ox, "2 3)\n(volu");
+        press(&mut editor, &mut ox, "C-M-i");
+        let buffer = editor.buffer();
+        let line = buffer.line_text(buffer.line_of(buffer.point()));
+        assert!(line.ends_with("(volume 1 2 3)(volume)"), "{line}");
     }
 
     #[test]

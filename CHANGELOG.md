@@ -56,6 +56,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- In Ox buffers, completion, `C-c C-d` and the signature hint know definitions typed in the buffer before it's evaluated, as `ox lsp` does; both use one shared way to describe and complete names.
 - `M-.` and `M-?` in Ox buffers follow what a name refers to, as `ox lsp` does: usages of a parameter stay inside its function, a global's usages leave out locals of the same name, and `M-.` on a local goes to where it's bound, without evaluating the buffer first.
 - `ox lsp` renames and finds references by what a name refers to: renaming a global no longer touches a parameter or a local with the same name, or another module's global, and `g/area` follows `area` into the module `g` names. Going to a definition lands on the defined name.
 - A new file in folders that don't exist yet belongs to its project as soon as it's opened, so its project's checks and language server count it even where the temporary or home folder is reached through a link or a short name.
