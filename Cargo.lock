@@ -3886,6 +3886,7 @@ dependencies = [
  "image",
  "imageproc",
  "ox-lang",
+ "oxmacs-process",
  "rayon",
  "resvg",
  "ring",

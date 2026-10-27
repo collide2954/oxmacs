@@ -39,6 +39,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Plugins decorate text with `annotate`: shaded in a face, underlined as an error or warning, or with a note after the line, kept until the next edit, until `clear-annotations` or fading over a time, and moving with the text around them.
 - `on-buffer-close` calls a handler with each buffer's handle after it closes, plugin buffers too, so a plugin can let go of what it kept for it.
 - The downloads and the Fedora package include `THIRD-PARTY-LICENSES.html`, the licenses of the crates oxmacs and ox are built from, beside the JetBrains Mono font's license and the highlight queries' notices.
+- `process/stop` asks a process started with `process/start` to end, and a few seconds later stops it and every program it started if it hasn't.
 
 ### Changed
 
@@ -64,6 +65,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Sending a lot of text to a busy process, such as an R session or a language server, no longer freezes the editor: input is written in the background.
 - Stopping or killing a build, a console or a language server stops the programs it started too, and on Windows they all end when oxmacs quits. Stopping waits a few seconds after asking, as before, and on Windows it now ends the whole tree instead of only the first program.
 - A language server's log keeps going past output that isn't valid UTF-8.
+- `process/start` writes its `:input` and then closes the program's input, as documented; it used to ignore it. Its `:lines` and `:errors` keep streaming past output that isn't valid UTF-8, so a remote shell or R output no longer stops there.
+- `process/which` and `process/run` find `.cmd` programs on Windows, trying the extensions in `PATHEXT`. `process/kill` stops the programs a process started too, and on Windows processes started from Ox end when oxmacs quits.
 - In Ox buffers, completion, `C-c C-d` and the signature hint know definitions typed in the buffer before it's evaluated, as `ox lsp` does; both use one shared way to describe and complete names.
 - `M-.` and `M-?` in Ox buffers follow what a name refers to, as `ox lsp` does: usages of a parameter stay inside its function, a global's usages leave out locals of the same name, and `M-.` on a local goes to where it's bound, without evaluating the buffer first.
 - `ox lsp` renames and finds references by what a name refers to: renaming a global no longer touches a parameter or a local with the same name, or another module's global, and `g/area` follows `area` into the module `g` names. Going to a definition lands on the defined name.

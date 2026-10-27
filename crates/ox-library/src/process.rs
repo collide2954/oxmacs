@@ -1,7 +1,7 @@
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
-use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::process::{Command, Stdio};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -12,6 +12,7 @@ use ox_lang::heap::Heap;
 use ox_lang::native::name_of;
 use ox_lang::portable::{Channel, Failure, Portable, Sent};
 use ox_lang::value::{Value, print};
+use oxmacs_process::{Process, Started};
 
 const MODULE: &str = "ox/process";
 const KEPT_LINES: usize = 4096;
@@ -76,24 +77,9 @@ fn parse(heap: &Heap, name: &str, arguments: &[Value]) -> Result<Run, Error> {
     Ok(run)
 }
 
-#[cfg(windows)]
-fn hide_console(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    command.creation_flags(CREATE_NO_WINDOW);
-}
-
-#[cfg(not(windows))]
-fn hide_console(_: &mut Command) {}
-
-fn command(run: &Run, input: bool) -> Command {
+fn command(run: &Run) -> Command {
     let mut command = Command::new(&run.program);
-    command
-        .args(&run.arguments)
-        .stdin(if input { Stdio::piped() } else { Stdio::null() })
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    command.args(&run.arguments);
     if let Some(directory) = &run.directory {
         command.current_dir(directory);
     }
@@ -103,7 +89,6 @@ fn command(run: &Run, input: bool) -> Command {
             None => command.env_remove(name),
         };
     }
-    hide_console(&mut command);
     command
 }
 
@@ -112,19 +97,8 @@ fn execute(run: &Run) -> Result<Portable, Failure> {
         value: None,
         message: format!("Couldn't run {}: {error}", run.program),
     };
-    let mut child = command(run, run.input.is_some())
-        .spawn()
+    let output = oxmacs_process::run(&mut command(run), run.input.as_deref().map(str::as_bytes))
         .map_err(|error| failed(&error))?;
-    let feeding = run.input.clone().and_then(|input| {
-        let mut stdin = child.stdin.take()?;
-        Some(thread::spawn(move || {
-            let _ = stdin.write_all(input.as_bytes());
-        }))
-    });
-    let output = child.wait_with_output().map_err(|error| failed(&error))?;
-    if let Some(feeding) = feeding {
-        let _ = feeding.join();
-    }
     let status = output
         .status
         .code()
@@ -137,71 +111,55 @@ fn execute(run: &Run) -> Result<Portable, Failure> {
     ]))
 }
 
-#[derive(Debug)]
-struct Started {
-    child: Mutex<Child>,
-    input: Mutex<Option<ChildStdin>>,
-}
-
-fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
 fn stream(reader: impl Read + Send + 'static, lines: Arc<Channel>) {
     thread::spawn(move || {
-        for line in BufReader::new(reader).lines() {
-            let Ok(line) = line else {
-                break;
-            };
+        oxmacs_process::read_lines(reader, |line| {
             let item = Portable::String(line.into());
-            loop {
-                match lines.send(item.clone()) {
-                    Sent::Done | Sent::Closed => break,
-                    Sent::Full => thread::sleep(POLL),
-                }
+            while matches!(lines.send(item.clone()), Sent::Full) {
+                thread::sleep(POLL);
             }
-        }
+            true
+        });
         lines.close();
     });
 }
 
-fn exited(started: &Started) -> Result<Portable, Failure> {
-    loop {
-        match locked(&started.child).try_wait() {
-            Ok(Some(status)) => {
-                return Ok(status
-                    .code()
-                    .map_or(Portable::Nil, |code| Portable::Int(i64::from(code))));
-            }
-            Ok(None) => thread::sleep(POLL),
-            Err(error) => {
-                return Err(Failure {
-                    value: None,
-                    message: error.to_string(),
-                });
-            }
-        }
-    }
+fn exited(process: &Process) -> Result<Portable, Failure> {
+    let status = process.wait().map_err(|error| Failure {
+        value: None,
+        message: error.to_string(),
+    })?;
+    Ok(status
+        .code()
+        .map_or(Portable::Nil, |code| Portable::Int(i64::from(code))))
 }
 
 fn start(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let run = parse(heap, "process/start", arguments)?;
-    let mut child = command(&run, true)
-        .spawn()
+    let mut command = command(&run);
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let Started {
+        process,
+        stdout,
+        stderr,
+    } = oxmacs_process::spawn(&mut command)
         .map_err(|error| Error::new(format!("Couldn't run {}: {error}", run.program)))?;
+    if let Some(input) = run.input {
+        let _ = process.send(input);
+        process.close_input();
+    }
     let lines = Arc::new(Channel::new(KEPT_LINES));
     let errors = Arc::new(Channel::new(KEPT_LINES));
-    if let Some(output) = child.stdout.take() {
+    if let Some(output) = stdout {
         stream(output, Arc::clone(&lines));
     }
-    if let Some(output) = child.stderr.take() {
+    if let Some(output) = stderr {
         stream(output, Arc::clone(&errors));
     }
-    let started = Arc::new(Started {
-        input: Mutex::new(child.stdin.take()),
-        child: Mutex::new(child),
-    });
-    let watched = Arc::clone(&started);
+    let watched = process.clone();
     let exit = heap.background(&format!("ox process/start {}", run.program), move || {
         exited(&watched)
     })?;
@@ -213,12 +171,12 @@ fn start(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         Value::keyword("exit"),
         exit,
         Value::keyword("process"),
-        heap.shared("process", started)?,
+        heap.shared("process", Arc::new(process))?,
     ];
     heap.map_from(&items)
 }
 
-fn started<'a>(heap: &'a Heap, name: &str, process: Value) -> Result<&'a Started, Error> {
+fn started<'a>(heap: &'a Heap, name: &str, process: Value) -> Result<&'a Process, Error> {
     heap.entries(process)
         .and_then(|entries| {
             entries.into_iter().find_map(|(key, value)| match key {
@@ -226,7 +184,7 @@ fn started<'a>(heap: &'a Heap, name: &str, process: Value) -> Result<&'a Started
                 _ => None,
             })
         })
-        .and_then(|value| heap.foreign_of::<Started>(value))
+        .and_then(|value| heap.foreign_of::<Process>(value))
         .ok_or_else(|| wrong_for(heap, name, process))
 }
 
@@ -251,23 +209,15 @@ pub fn install(isolate: &mut Isolate) {
         .outside()
         .function(|heap, arguments| {
             let text = print::display(heap, arguments[1]);
-            let started = started(heap, "process/write", arguments[0])?;
-            let mut input = locked(&started.input);
-            let written = input.as_mut().is_some_and(|stdin| {
-                stdin
-                    .write_all(text.as_bytes())
-                    .and_then(|()| stdin.flush())
-                    .is_ok()
-            });
-            Ok(Value::Bool(written))
+            let process = started(heap, "process/write", arguments[0])?;
+            Ok(Value::Bool(process.send(text).is_ok()))
         });
     isolate
         .native(MODULE, "close-input")
         .arity(1, Some(1))
         .outside()
         .function(|heap, arguments| {
-            let started = started(heap, "process/close-input", arguments[0])?;
-            locked(&started.input).take();
+            started(heap, "process/close-input", arguments[0])?.close_input();
             Ok(Value::Nil)
         });
     isolate
@@ -275,8 +225,15 @@ pub fn install(isolate: &mut Isolate) {
         .arity(1, Some(1))
         .outside()
         .function(|heap, arguments| {
-            let started = started(heap, "process/kill", arguments[0])?;
-            let _ = locked(&started.child).kill();
+            started(heap, "process/kill", arguments[0])?.kill();
+            Ok(Value::Nil)
+        });
+    isolate
+        .native(MODULE, "stop")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            started(heap, "process/stop", arguments[0])?.terminate();
             Ok(Value::Nil)
         });
     isolate
@@ -306,7 +263,7 @@ pub fn install(isolate: &mut Isolate) {
         .outside()
         .function(|heap, arguments| {
             let program = text(heap, "process/which", arguments[0])?.to_owned();
-            match which(&program) {
+            match oxmacs_process::which(&program) {
                 Some(path) => heap
                     .string(&path.display().to_string())
                     .map_err(Error::from),
@@ -318,17 +275,4 @@ pub fn install(isolate: &mut Isolate) {
         .arity(0, Some(0))
         .outside()
         .function(|_, _| Ok(Value::keyword(std::env::consts::OS)));
-}
-
-fn which(program: &str) -> Option<PathBuf> {
-    let names = |directory: &std::path::Path| {
-        let mut names = vec![directory.join(program)];
-        if cfg!(windows) {
-            names.insert(0, directory.join(format!("{program}.exe")));
-        }
-        names
-    };
-    std::env::split_paths(&std::env::var_os("PATH")?)
-        .flat_map(|directory| names(&directory))
-        .find(|candidate| candidate.is_file())
 }

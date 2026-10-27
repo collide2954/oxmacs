@@ -50,6 +50,51 @@ fn started_processes_take_input_and_stream_lines() {
 }
 
 #[test]
+fn started_processes_read_their_input_and_then_see_it_end() {
+    let mut isolate = ox_library::isolate();
+    let program = if cfg!(windows) {
+        r#""findstr" ["^"]"#
+    } else {
+        r#""cat" []"#
+    };
+
+    let reply = evaluated(
+        &mut isolate,
+        &format!(
+            "(module (import (ox process)))
+(def fed (process/start {program} :input \"b\\na\\n\"))
+[(receive fed.lines) (receive fed.lines) (receive fed.lines) (await fed.exit) (process/write fed \"late\")]"
+        ),
+    );
+
+    assert_eq!(reply, r#"["b" "a" nil 0 false]"#);
+}
+
+#[test]
+fn output_that_is_not_utf8_keeps_streaming() {
+    let mut isolate = ox_library::isolate();
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("bytes.txt");
+    std::fs::write(&file, b"\xffz\nok\n").unwrap();
+    let program = if cfg!(windows) {
+        format!("\"cmd\" [\"/C\" \"type\" {:?}]", file.display().to_string())
+    } else {
+        format!("\"cat\" [{:?}]", file.display().to_string())
+    };
+
+    let reply = evaluated(
+        &mut isolate,
+        &format!(
+            "(module (import (ox process)))
+(def shown (process/start {program}))
+[(receive shown.lines) (receive shown.lines) (receive shown.lines)]"
+        ),
+    );
+
+    assert_eq!(reply, "[\"\u{fffd}z\" \"ok\" nil]");
+}
+
+#[test]
 fn errors_arrive_on_their_own_channel() {
     let mut isolate = ox_library::isolate();
 
@@ -107,6 +152,29 @@ fn started_processes_can_be_killed() {
             "(module (import (ox process)))
 (def waiting {long})
 (process/kill waiting)
+(await waiting.exit)
+:stopped"
+        ),
+    );
+
+    assert_eq!(reply, ":stopped");
+}
+
+#[test]
+fn started_processes_can_be_asked_to_stop() {
+    let mut isolate = ox_library::isolate();
+    let long = if cfg!(windows) {
+        r#"(process/start "ping" ["-n" "60" "127.0.0.1"])"#
+    } else {
+        r#"(process/start "sleep" ["60"])"#
+    };
+
+    let reply = evaluated(
+        &mut isolate,
+        &format!(
+            "(module (import (ox process)))
+(def waiting {long})
+(process/stop waiting)
 (await waiting.exit)
 :stopped"
         ),
