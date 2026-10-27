@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::display::LineStyle;
 use crate::editor::Editor;
-use crate::editor::build::compile::{Compilation, FINISHED};
+use crate::editor::build::run::Run;
 use crate::editor::windows::tiling::Axis;
 use crate::text::BufferId;
 use crate::theme::Highlight;
@@ -201,14 +201,9 @@ fn style(text: &str, link: Option<Range<usize>>, current: bool) -> LineStyle {
     let span = if let Some(severity) = severity_of(text) {
         let label = text.find(':').map_or(width, columns);
         severity.highlight().map(|highlight| (0..label, highlight))
-    } else if let Some(link) = link.filter(|link| link.end <= text.len()) {
-        Some((columns(link.start)..columns(link.end), Highlight::Link))
-    } else if text == FINISHED {
-        Some((0..width, Highlight::Success))
-    } else if text.starts_with("Compilation ") {
-        Some((0..width, Highlight::Error))
     } else {
-        None
+        link.filter(|link| link.end <= text.len())
+            .map(|link| (columns(link.start)..columns(link.end), Highlight::Link))
     };
     LineStyle {
         background: current.then_some(Highlight::Region),
@@ -222,7 +217,9 @@ impl Editor {
     }
 
     fn in_compilation(&self) -> bool {
-        self.buffers.special::<Compilation>(0).is_some()
+        self.buffers
+            .special::<Run>(0)
+            .is_some_and(|run| run.spec.errors)
     }
 
     pub(in crate::editor) fn next_error(&mut self, forward: bool) {
@@ -405,10 +402,6 @@ mod tests {
         assert_eq!(
             style(panic, found_link(panic), false).spans,
             [(26..38, Highlight::Link)]
-        );
-        assert_eq!(
-            style("Compilation finished", None, false).spans,
-            [(0..20, Highlight::Success)]
         );
         assert_eq!(style("note: defined here", None, false).spans, []);
     }

@@ -17,6 +17,7 @@ pub(crate) mod outside;
 pub(crate) mod places;
 pub(crate) mod processes;
 pub(crate) mod prompts;
+pub(crate) mod runs;
 pub(crate) mod servers;
 pub(crate) mod settings;
 pub(crate) mod transients;

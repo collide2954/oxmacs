@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.19.0"
+  :version "0.20.0"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands {run-r: "Start an R console beside the script"
              r-new-session: "Start another R session beside the current one"
@@ -36,8 +36,6 @@
              r-markdown-preview: "Show the R Markdown document rendered beside it, as Markdown previews are"
              r-run-job: "Run the R script in a background job, apart from the session"
              r-run-app: "Run the Shiny app of this folder in a background job and open it"
-             r-job-stop: "Stop the job of this buffer"
-             r-job-again: "Run the job of this buffer again"
              r-debug-next: "Run the next line of the code R is debugging"
              r-debug-step: "Step into the function called on the line R is debugging"
              r-debug-finish: "Finish the function or loop R is debugging"

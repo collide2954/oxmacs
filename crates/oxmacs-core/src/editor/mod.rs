@@ -28,6 +28,7 @@ pub use crate::external::diagnostics::{Diagnostic, LintLine, Severity};
 pub use buffers::files::Visit;
 pub use build::errors::{ErrorAt, ErrorPattern};
 pub use build::lint::{LintRun, Linter};
+pub use build::run::{OnExit, OnLine, RunSpec};
 pub use console::{ConsoleHook, ConsoleSpec, MarkerHook};
 pub use decorations::{Lasts, LineDecorations, Look};
 pub use editing::format::{FormatRequest, Formatter};

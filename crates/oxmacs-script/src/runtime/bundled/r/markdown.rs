@@ -175,28 +175,23 @@ fn control_c_control_i_inserts_a_chunk() {
     assert_eq!(line(&r), 4);
 }
 
-fn echoing(line: &str) -> String {
-    let (program, args) = if cfg!(windows) {
-        ("cmd", vec!["/C".to_owned(), format!("echo {line}")])
-    } else {
-        ("sh", vec!["-c".to_owned(), format!("printf '{line}\\n'")])
-    };
-    let args: Vec<String> = args.iter().map(|arg| super::ox_text(arg)).collect();
-    format!("{program:?} [{}]", args.join(" "))
-}
-
-fn waited(r: &mut R, wanted: &str) {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    while r.editor.message() != Some(wanted) {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "{:?} {}",
-            r.editor.message(),
-            r.logged()
-        );
-        crate::testing::settle(&mut r.editor, &mut r.ox);
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+fn rendered(r: &mut R, file: &str, line: &str) {
+    r.eval(&format!(
+        "(module (import (r markdown :as markdown))) (markdown/render-with {file} \"Rscript\" [\"render.R\"])"
+    ));
+    let job = r
+        .editor
+        .take_effects()
+        .into_iter()
+        .find_map(|effect| match effect {
+            Effect::Spawn(job) => Some(job),
+            _ => None,
+        })
+        .unwrap();
+    r.editor.job_output(job.id, line);
+    r.editor
+        .job_finished(job.id, &oxmacs_core::editor::Outcome::Exited(Some(0)));
+    crate::testing::settle(&mut r.editor, &mut r.ox);
 }
 
 #[test]
@@ -204,23 +199,20 @@ fn rendering_runs_apart_from_the_session_and_opens_the_result() {
     let (folder, mut r) = report();
     let file = super::ox_text(&folder.path().join("report.Rmd").display().to_string());
 
-    r.eval(&format!(
-        "(module (import (r markdown :as markdown))) (markdown/render-with {file} {})",
-        echoing("oxmacs-rendered\tC:/out/report.html")
-    ));
-    waited(&mut r, "Rendered report.html");
-
+    rendered(&mut r, &file, "oxmacs-rendered\tC:/out/report.html");
+    assert_eq!(r.editor.message(), Some("Rendered report.html"));
     assert!(
         r.editor
             .take_effects()
             .contains(&Effect::OpenExternally(PathBuf::from("C:/out/report.html")))
     );
     assert_eq!(r.started(), Vec::new());
-    r.eval(&format!(
-        "(markdown/render-with {file} {})",
-        echoing("oxmacs-render-failed\tpandoc is missing")
-    ));
-    waited(&mut r, "Rendering failed: pandoc is missing");
+
+    rendered(&mut r, &file, "oxmacs-render-failed\tpandoc is missing");
+    assert_eq!(
+        r.editor.message(),
+        Some("Rendering failed: pandoc is missing")
+    );
 }
 
 #[test]

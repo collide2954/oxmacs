@@ -1,39 +1,23 @@
 use std::path::PathBuf;
 
-use crate::command::{Scope, ScopeId};
-use crate::display::LineStyle;
-use crate::editor::buffers::Mode;
-use crate::editor::build::errors::Errors;
+use crate::editor::build::run::{Run, RunSpec};
 use crate::editor::prompts::minibuffer::Purpose;
-use crate::editor::{Editor, JobEvent, JobId, JobSpec, Outcome};
+use crate::editor::{Editor, JobEvent, JobId, Outcome};
 use crate::external::tools;
-use crate::files::paths;
-use crate::special_buffer::SpecialBuffer;
-use crate::text::Buffer;
 
 pub(in crate::editor) const NAME: &str = "*compilation*";
-pub(in crate::editor) const FINISHED: &str = "Compilation finished";
 const DEFAULT_COMMAND: &str = "cargo build";
-
-#[derive(Debug)]
-pub(in crate::editor) struct Compilation {
-    command: String,
-    directory: PathBuf,
-    job: Option<JobId>,
-    killed: bool,
-    pub(in crate::editor) errors: Errors,
-}
 
 impl Editor {
     pub(in crate::editor) fn compilation_index(&self) -> Option<usize> {
-        self.buffers.find_special::<Compilation>(|_| true)
+        self.buffers.find_special::<Run>(|run| run.spec.errors)
     }
 
-    pub(in crate::editor) fn compilation(&self) -> Option<&Compilation> {
+    pub(in crate::editor) fn compilation(&self) -> Option<&Run> {
         self.buffers.special(self.compilation_index()?)
     }
 
-    pub(in crate::editor) fn compilation_mut(&mut self) -> Option<&mut Compilation> {
+    pub(in crate::editor) fn compilation_mut(&mut self) -> Option<&mut Run> {
         let index = self.compilation_index()?;
         self.buffers.special_mut(index)
     }
@@ -50,22 +34,25 @@ impl Editor {
     }
 
     pub(in crate::editor) fn recompile(&mut self) {
-        let (command, directory) = match self.compilation() {
-            Some(compilation) => (compilation.command.clone(), compilation.directory.clone()),
-            None => (
-                self.builds
-                    .last_command()
-                    .unwrap_or(DEFAULT_COMMAND)
-                    .to_owned(),
-                self.project_directory(),
-            ),
-        };
-        self.start_compile(command, directory);
+        if self.run_again() {
+            return;
+        }
+        if let Some(spec) = self.compilation().map(|run| run.spec.clone()) {
+            self.run_in_buffer(spec);
+            return;
+        }
+        let command = self
+            .builds
+            .last_command()
+            .unwrap_or(DEFAULT_COMMAND)
+            .to_owned();
+        let directory = self.project_directory();
+        self.start_compile(&command, directory);
     }
 
     pub(in crate::editor) fn cargo(&mut self, subcommand: &str) {
         let directory = self.project_directory();
-        self.start_compile(format!("cargo {subcommand}"), directory);
+        self.start_compile(&format!("cargo {subcommand}"), directory);
     }
 
     pub(in crate::editor) fn project_directory(&self) -> PathBuf {
@@ -74,8 +61,8 @@ impl Editor {
     }
 
     #[cfg(test)]
-    pub fn compile_in(&mut self, command: impl Into<String>, directory: PathBuf) {
-        self.start_compile(command.into(), directory);
+    pub fn compile_in(&mut self, command: &str, directory: PathBuf) {
+        self.start_compile(command, directory);
     }
 
     #[cfg(test)]
@@ -83,170 +70,41 @@ impl Editor {
         self.builds.add_pattern(pattern);
     }
 
-    pub(in crate::editor) fn start_compile(&mut self, command: String, directory: PathBuf) {
-        let words = tools::split_command(&command);
+    pub(in crate::editor) fn start_compile(&mut self, command: &str, directory: PathBuf) {
+        let words = tools::split_command(command);
         let Some((program, args)) = words.split_first() else {
             self.show_message("No command to run");
             return;
         };
-        if let Some(running) = self.compilation().and_then(|compilation| compilation.job) {
-            self.kill_job(running);
-        }
-        self.builds.compiling(&command);
-        let shown = paths::abbreviate(&directory, self.home.as_deref());
-        let header = format!("Directory: {shown}\n$ {command}\n\n");
-        let compilation = Compilation {
-            command,
-            directory: directory.clone(),
-            job: None,
-            killed: false,
-            errors: Errors::default(),
-        };
-        match self.compilation_index() {
-            Some(index) => {
-                if let Some(buffer) = self.buffers.get_mut(index) {
-                    buffer.set_text(&header);
-                    buffer.set_point(buffer.len_chars());
-                }
-                self.buffers.set_mode(index, Mode::special(compilation));
-                let shown = self.buffers.get(index).map(Buffer::id);
-                if shown.and_then(|id| self.window_showing(id)).is_none() {
-                    self.beside(|editor| {
-                        if let Some(index) = editor.compilation_index() {
-                            editor.select_buffer(index);
-                        }
-                    });
-                }
-            }
-            None => self.beside(|editor| {
-                let mut buffer = Buffer::with_text(NAME, &header);
-                buffer.set_read_only(true);
-                buffer.set_point(buffer.len_chars());
-                editor.add_buffer_with(buffer, Mode::special(compilation));
-            }),
-        }
-        let buffer = self
-            .compilation_index()
-            .and_then(|index| self.buffers.get(index))
-            .map(Buffer::id);
-        let name = std::iter::once(program.as_str())
-            .chain(args.iter().map(String::as_str))
-            .take(2)
-            .collect::<Vec<_>>()
-            .join(" ");
-        let spec = JobSpec {
-            program: program.clone(),
-            args: args.to_vec(),
+        self.builds.compiling(command);
+        self.run_in_buffer(RunSpec {
             directory,
-            env: Vec::new(),
-            label: "compile",
-            name,
-            buffer,
-            interactive: false,
-        };
-        let id = self.start_job(spec, Self::compilation_event);
-        if let Some(compilation) = self.compilation_mut() {
-            compilation.job = Some(id);
-        }
+            kind: "compile",
+            errors: true,
+            noun: Some("Compilation"),
+            ..RunSpec::new(NAME, program, args.to_vec())
+        });
     }
 
-    fn compilation_event(&mut self, job: JobId, event: JobEvent<'_>) {
-        match event {
-            JobEvent::Line(line) | JobEvent::Output(line) => self.compilation_line(job, line),
-            JobEvent::Finished(outcome) => self.compilation_finished(job, outcome),
-        }
-    }
     pub(in crate::editor) fn kill_compilation(&mut self) {
-        let Some(compilation) = self
-            .compilation_mut()
-            .filter(|compilation| compilation.job.is_some())
-        else {
-            self.show_message("No compilation process running");
-            return;
-        };
-        compilation.killed = true;
-        if let Some(job) = compilation.job {
-            self.kill_job(job);
+        let stopped = self.stop_run(0)
+            || self
+                .compilation_index()
+                .is_some_and(|index| self.stop_run(index));
+        if !stopped {
+            self.show_message("Nothing is running here");
         }
-    }
-
-    fn compilation_for(&self, job: JobId) -> Option<usize> {
-        self.compilation_index().filter(|_| {
-            self.compilation()
-                .is_some_and(|compilation| compilation.job == Some(job))
-        })
     }
 
     pub fn job_output(&mut self, job: JobId, line: &str) {
         self.notify_job(job, JobEvent::Line(line));
     }
 
-    fn compilation_line(&mut self, job: JobId, line: &str) {
-        let Some(index) = self.compilation_for(job) else {
-            return;
-        };
-        let at = self
-            .buffers
-            .get(index)
-            .map_or(0, |buffer| buffer.line_of(buffer.len_chars()));
-        let patterns = self.builds.patterns().to_vec();
-        if let Some(compilation) = self.compilation_mut() {
-            compilation
-                .errors
-                .scan(at, line, &compilation.directory, &patterns);
-        }
-        self.append_output(index, &format!("{line}\n"));
-    }
-
     pub fn job_finished(&mut self, job: JobId, outcome: &Outcome) {
         self.job_ended(job, outcome);
         self.notify_job(job, JobEvent::Finished(outcome));
     }
-
-    fn compilation_finished(&mut self, job: JobId, outcome: &Outcome) {
-        let Some(index) = self.compilation_for(job) else {
-            return;
-        };
-        let killed = self
-            .compilation()
-            .is_some_and(|compilation| compilation.killed);
-        let summary = match outcome {
-            _ if killed => "Compilation killed".to_owned(),
-            Outcome::Exited(Some(0)) => FINISHED.to_owned(),
-            Outcome::Exited(Some(code)) => {
-                format!("Compilation exited abnormally with code {code}")
-            }
-            Outcome::Exited(None) => "Compilation exited abnormally".to_owned(),
-            Outcome::Failed(error) => format!("Compilation failed to start: {error}"),
-        };
-        self.append_output(index, &format!("\n{summary}\n"));
-        if let Some(compilation) = self.compilation_mut() {
-            compilation.job = None;
-        }
-        self.show_message(summary);
-    }
-
-    fn append_output(&mut self, index: usize, text: &str) {
-        let Some(buffer) = self.buffers.get_mut(index) else {
-            return;
-        };
-        let end = buffer.len_chars();
-        buffer.insert_at(end, text);
-        let id = buffer.id();
-        self.follow_end(id, end);
-    }
 }
-
-impl SpecialBuffer for Compilation {
-    fn scope(&self) -> ScopeId {
-        Scope::Compilation.into()
-    }
-
-    fn line_style(&self, line: usize, text: &str) -> LineStyle {
-        self.errors.line_style(line, text)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;

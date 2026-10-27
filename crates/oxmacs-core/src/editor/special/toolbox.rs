@@ -247,7 +247,7 @@ impl Editor {
             move |editor, yes| {
                 if yes {
                     editor.retry_servers();
-                    editor.start_compile(spec.install.to_owned(), directory);
+                    editor.start_compile(spec.install, directory);
                 }
             },
         );

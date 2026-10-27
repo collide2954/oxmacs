@@ -364,7 +364,7 @@ impl Editor {
             let command = self.prompts.input();
             self.prompts.done_reading();
             let directory = self.project_directory();
-            self.start_compile(command, directory);
+            self.start_compile(&command, directory);
             return;
         }
         if purpose.takes_text() {

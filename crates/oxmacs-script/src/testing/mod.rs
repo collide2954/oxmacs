@@ -1,9 +1,11 @@
 use std::path::Path;
 use std::process::Command;
+use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use oxmacs_core::editor::Editor;
+use oxmacs_core::external::runner::{self, Delivery};
 use oxmacs_core::input::KeySequence;
 pub use oxmacs_core::testing::{at_point, lines, press as keys, question};
 
@@ -21,6 +23,39 @@ fn sleeping_long(ox: &Ox) -> bool {
         Wake::Soon => false,
         Wake::At(wake) => wake > Instant::now() + LONG_SLEEP,
         Wake::Never => true,
+    }
+}
+
+#[derive(Debug)]
+pub struct Runner {
+    runner: runner::Runner,
+    deliveries: Receiver<Delivery>,
+}
+
+impl Runner {
+    pub fn new() -> Self {
+        let (sender, deliveries) = mpsc::channel();
+        Self {
+            runner: runner::Runner::new(move |delivery| {
+                let _ = sender.send(delivery);
+            }),
+            deliveries,
+        }
+    }
+
+    pub fn step(&mut self, editor: &mut Editor) {
+        for effect in editor.take_effects() {
+            self.runner.perform(editor, effect);
+        }
+        while let Ok(delivery) = self.deliveries.try_recv() {
+            self.runner.deliver(editor, delivery);
+        }
+    }
+}
+
+impl Default for Runner {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

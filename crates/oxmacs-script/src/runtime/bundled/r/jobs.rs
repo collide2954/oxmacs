@@ -1,18 +1,9 @@
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
-use oxmacs_core::editor::{Editor, Effect};
+use oxmacs_core::editor::{Editor, Effect, Job, Outcome, ProcessStatus};
 
 use super::{PROMPT, R, ox_text, started, with_program};
 use crate::testing::settle;
-
-fn shell(script: &str) -> (&'static str, Vec<String>) {
-    if cfg!(windows) {
-        ("cmd", vec!["/C".to_owned(), script.to_owned()])
-    } else {
-        ("sh", vec!["-c".to_owned(), script.to_owned()])
-    }
-}
 
 fn contents(r: &R, name: &str) -> String {
     r.editor
@@ -22,81 +13,72 @@ fn contents(r: &R, name: &str) -> String {
         .unwrap_or_default()
 }
 
-fn until(r: &mut R, name: &str, wanted: &str) {
-    let deadline = Instant::now() + Duration::from_secs(30);
-    while !contents(r, name).contains(wanted) {
-        assert!(Instant::now() < deadline, "{}", contents(r, name));
-        settle(&mut r.editor, &mut r.ox);
-        std::thread::sleep(Duration::from_millis(10));
-    }
+fn spawned(r: &mut R) -> Job {
+    r.editor
+        .take_effects()
+        .into_iter()
+        .find_map(|effect| match effect {
+            Effect::Spawn(job) => Some(job),
+            _ => None,
+        })
+        .unwrap()
 }
 
-fn start(r: &mut R, name: &str, script: &str, options: &str) -> String {
-    let (program, args) = shell(script);
-    let args: Vec<String> = args.iter().map(|arg| ox_text(arg)).collect();
+fn start(r: &mut R, name: &str, options: &str) -> Job {
     let folder = ox_text(&std::env::temp_dir().display().to_string());
     r.eval(&format!(
-        "(module (import (r jobs :as jobs))) (jobs/start {} {program:?} [{}] {folder} {options})",
-        ox_text(name),
-        args.join(" ")
-    ))
+        "(module (import (r jobs :as jobs))) (jobs/start {} \"Rscript\" [\"job.R\"] {folder} {options})",
+        ox_text(name)
+    ));
+    spawned(r)
 }
 
 #[test]
-fn jobs_show_their_output_and_how_they_finished() {
+fn jobs_run_in_their_own_buffer_and_say_how_they_ended() {
     let mut r = started();
 
-    start(&mut r, "*R job: two*", "echo one&& echo two 1>&2", "");
-    until(&mut r, "*R job: two*", "Finished");
+    let job = start(&mut r, "*R job: two*", ":title \"Rscript job.R\"");
+    assert_eq!(
+        (job.program.as_str(), job.args.as_slice()),
+        ("Rscript", &["job.R".to_owned()][..])
+    );
+    r.editor.job_output(job.id, "one");
+    r.editor.job_finished(job.id, &Outcome::Exited(Some(3)));
+    settle(&mut r.editor, &mut r.ox);
 
     let shown = contents(&r, "*R job: two*");
-    let lines: Vec<&str> = shown.lines().map(str::trim_end).collect();
-    assert_eq!(lines[1], "k stops it   g runs it again   q quits");
-    assert!(lines.contains(&"one"), "{shown}");
-    assert!(lines.contains(&"two"), "{shown}");
-    assert_eq!(lines.last(), Some(&"Finished"));
-
-    start(&mut r, "*R job: fails*", "exit 3", "");
-    until(&mut r, "*R job: fails*", "Finished");
-    assert!(contents(&r, "*R job: fails*").ends_with("Finished with status 3"));
-}
-
-fn ticked(r: &mut R, keys: &str, done: impl Fn(&str) -> bool) {
-    crate::testing::keys(&mut r.editor, keys);
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !done(&contents(r, "*R job: long*")) {
-        assert!(
-            Instant::now() < deadline,
-            "{}",
-            contents(r, "*R job: long*")
-        );
-        r.ox.tick(&mut r.editor);
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    let lines: Vec<&str> = shown.lines().collect();
+    assert_eq!(
+        lines[1..],
+        [
+            "Rscript job.R",
+            "",
+            "one",
+            "",
+            "Exited abnormally with code 3"
+        ]
+    );
 }
 
 #[test]
-fn k_stops_a_job_and_g_runs_it_again() {
+fn c_c_c_k_stops_a_job_and_g_runs_it_again() {
     let mut r = started();
-    let (program, args) = if cfg!(windows) {
-        ("ping", r#"["-n" "30" "127.0.0.1"]"#)
-    } else {
-        ("sleep", r#"["30"]"#)
-    };
-    let folder = ox_text(&std::env::temp_dir().display().to_string());
-    r.eval(&format!(
-        "(module (import (r jobs :as jobs))) (jobs/start \"*R job: long*\" {program:?} {args} {folder})"
-    ));
+    let first = start(&mut r, "*R job: long*", "");
     let id = r.editor.buffer_named("*R job: long*").unwrap();
     r.editor.show_buffer(id);
 
-    ticked(&mut r, "k", |text| text.ends_with("Stopped"));
-    ticked(&mut r, "g", |text| !text.contains("Stopped"));
-    ticked(&mut r, "k", |text| text.ends_with("Stopped"));
-    r.press("k");
-    assert_eq!(r.editor.message(), Some("This job is not running"));
-}
+    r.press("C-c C-k");
+    assert_eq!(r.editor.job_status(first.id), Some(ProcessStatus::Stopping));
+    r.editor.job_finished(first.id, &Outcome::Exited(None));
+    assert!(contents(&r, "*R job: long*").ends_with("Killed\n"));
 
+    r.press("g");
+    let second = spawned(&mut r);
+    assert_eq!(second.args, first.args);
+    r.editor.job_finished(second.id, &Outcome::Exited(Some(0)));
+    r.press("C-c C-k");
+    assert_eq!(r.editor.message(), Some("Nothing is running here"));
+}
 #[test]
 fn shiny_apps_open_once_they_listen() {
     let mut r = started();

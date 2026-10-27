@@ -39,12 +39,14 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Plugins decorate text with `annotate`: shaded in a face, underlined as an error or warning, or with a note after the line, kept until the next edit, until `clear-annotations` or fading over a time, and moving with the text around them.
 - `on-buffer-close` calls a handler with each buffer's handle after it closes, plugin buffers too, so a plugin can let go of what it kept for it.
 - The downloads and the Fedora package include `THIRD-PARTY-LICENSES.html`, the licenses of the crates oxmacs and ox are built from, beside the JetBrains Mono font's license and the highlight queries' notices.
+- `run-job` runs a program in its own buffer, the kind `M-x compile` uses, with `:cwd`, `:env`, a `:title` and `:on-line` and `:on-exit` handlers.
 - `process/stop` asks a process started with `process/start` to end, and a few seconds later stops it and every program it started if it hasn't.
 - `M-x list-processes` lists language servers beside builds, lints and consoles, and a process you stop shows as stopping until it ends; `(processes)` gives its `:status` as `:stopping` then.
 - Programs started with `process/start` show in `M-x list-processes` as Ox processes, and end when oxmacs quits. The map `process/start` gives carries their `:id` there, for `stop-process` and `kill-process`.
 
 ### Changed
 
+- R jobs, Shiny apps and R Markdown rendering (`r` 0.20.0) run in the same kind of buffer as `M-x compile`: `g` runs them again and `C-c C-k` stops them, in place of the `r` plugin's own `k`, `r-job-stop` and `r-job-again`. They show in `M-x list-processes` linked to their buffer, and they end with Finished, Exited abnormally with code N, or Killed.
 - `flash` is now `annotate` with `:lasts`, the milliseconds it takes to fade, in place of `:duration`; `zap` 0.2.1 uses it.
 - Every special buffer works one way: double-clicking a line in a list does what RET does there, as in plugin buffers, and `g` (or `M-x revert-buffer`) runs each buffer's own refresh, such as checking again in *Diagnostics*.
 - `irc` 0.10.0, `remote` 0.2.0 and `r` 0.19.0 show IRC log searches, remote searches and R test results as lists of places: `RET` or a click visits, `SPC` shows, and `g` runs the R tests again. `irc-search-visit`, `remote-search-visit` and `r-test-visit` are gone; `RET` does what they did.

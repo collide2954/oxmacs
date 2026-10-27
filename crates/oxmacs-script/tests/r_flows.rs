@@ -213,7 +213,7 @@ fn scripts_run_as_background_jobs_apart_from_the_session() {
     live.typed("r-run-job");
     live.press("RET");
     live.until("the job", |editor| {
-        contents(editor, "*R job: job.R*").ends_with("Finished")
+        contents(editor, "*R job: job.R*").ends_with("Finished\n")
     });
 
     assert!(
