@@ -55,10 +55,10 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `keycast` | 0.2.2 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `languages` | 0.1.0 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
 | `life` | 0.2.3 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.55 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.56 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.3 | opt-in | Markdown rendered as styled text |
 | `pdf` | 0.1.2 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
-| `processes` | 0.1.3 | on | List the processes oxmacs runs, with their usage |
+| `processes` | 0.1.4 | on | List the processes oxmacs runs, with their usage |
 | `profiler` | 0.1.2 | on | Find where the Ox code in oxmacs spends its time |
 | `r` | 0.20.1 | opt-in | R consoles, plots, data and help in the style of ESS and RStudio |
 | `remote` | 0.3.2 | on | Browse and edit files on other machines over ssh, sftp and ftp |

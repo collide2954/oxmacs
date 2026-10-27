@@ -29,7 +29,6 @@
       ((> minutes 0) (str minutes "m " (two left) "s"))
       (else (str left "s")))))
 
-
 (def (tenths x) (str (/ (round (* x 10)) 10.0)))
 
 (def (recent samples n) (drop (max 0 (- (count samples) n)) samples))
