@@ -1,6 +1,7 @@
 use crate::forms::Forms;
 use crate::read::{self, Datum, Syntax};
 use crate::span::line_column;
+use crate::syntax::{self, Bracket, tokens};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Shape {
@@ -25,10 +26,10 @@ struct Piece {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Literal {
+struct Unit {
+    kind: Kind,
     start: usize,
     end: usize,
-    closed: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -48,251 +49,101 @@ struct State<'f> {
     forms: &'f Forms,
 }
 
-fn delimits(character: char) -> bool {
-    character.is_whitespace() || "()[]{}\";".contains(character)
-}
-
 fn data(head: &str) -> bool {
     head.starts_with(|character: char| character.is_ascii_digit() || character == '"')
 }
 
-fn interpolation_end(chars: &[char], mut at: usize) -> (usize, bool) {
-    let mut depth = 0_usize;
-    while at < chars.len() {
-        match chars[at] {
-            '(' | '[' | '{' => depth += 1,
-            ')' | ']' => depth = depth.saturating_sub(1),
-            '}' if depth == 0 => return (at + 1, true),
-            '}' => depth -= 1,
-            '"' => {
-                let (end, closed) = string_end(chars, at + 1);
-                if !closed {
-                    return (end, false);
-                }
-                at = end;
-                continue;
-            }
-            '\\' => at += 1,
-            _ => {}
-        }
-        at += 1;
-    }
-    (chars.len(), false)
-}
-
-fn string_end(chars: &[char], mut at: usize) -> (usize, bool) {
-    while at < chars.len() {
-        match chars[at] {
-            '"' => return (at + 1, true),
-            '\\' => at += 2,
-            '{' if chars.get(at + 1) == Some(&'{') => at += 2,
-            '}' if chars.get(at + 1) == Some(&'}') => at += 2,
-            '{' => {
-                let (end, closed) = interpolation_end(chars, at + 1);
-                if !closed {
-                    return (end, false);
-                }
-                at = end;
-            }
-            _ => at += 1,
-        }
-    }
-    (chars.len(), false)
-}
-
-fn regex_end(chars: &[char], mut at: usize) -> (usize, bool) {
-    while at < chars.len() {
-        match chars[at] {
-            '"' => return (at + 1, true),
-            '\\' => at += 2,
-            _ => at += 1,
-        }
-    }
-    (chars.len(), false)
-}
-
-fn raw_end(chars: &[char], at: usize, hashes: usize) -> (usize, bool) {
-    let mut at = at;
-    while at < chars.len() {
-        let closes = chars[at] == '"'
-            && chars[at + 1..]
-                .iter()
-                .take(hashes)
-                .filter(|found| **found == '#')
-                .count()
-                == hashes;
-        if closes {
-            return (at + 1 + hashes, true);
-        }
-        at += 1;
-    }
-    (chars.len(), false)
-}
-
-fn block_end(chars: &[char], mut at: usize) -> (usize, bool) {
-    let mut depth = 1_usize;
-    while at < chars.len() {
-        match (chars[at], chars.get(at + 1)) {
-            ('|', Some('#')) => {
-                at += 2;
-                depth -= 1;
-                if depth == 0 {
-                    return (at, true);
-                }
-            }
-            ('#', Some('|')) => {
-                at += 2;
-                depth += 1;
-            }
-            _ => at += 1,
-        }
-    }
-    (chars.len(), false)
-}
-
-fn literals(chars: &[char]) -> Vec<Literal> {
-    let mut found = Vec::new();
-    let mut at = 0;
-    while at < chars.len() {
-        let start = at;
-        let ended = match chars[at] {
-            ';' => {
-                while at < chars.len() && chars[at] != '\n' {
-                    at += 1;
+fn units(source: &str) -> (Vec<Unit>, syntax::State) {
+    let (found, after) = tokens(source, &syntax::State::default());
+    let mut units = Vec::new();
+    let mut prefix: Option<usize> = None;
+    let mut index = 0;
+    while let Some(token) = found.get(index).copied() {
+        index += 1;
+        let (kind, end) = match token.kind {
+            syntax::Kind::Space => {
+                if let Some(start) = prefix.take() {
+                    units.push(Unit {
+                        kind: Kind::Atom,
+                        start,
+                        end: token.starts(),
+                    });
                 }
                 continue;
             }
-            '\\' => {
-                at += 2;
+            syntax::Kind::Prefix(_) => {
+                prefix.get_or_insert(token.starts());
                 continue;
             }
-            '"' => Some(string_end(chars, at + 1)),
-            '#' if chars.get(at + 1) == Some(&'|') => Some(block_end(chars, at + 2)),
-            '#' if chars.get(at + 1) == Some(&'"') => Some(regex_end(chars, at + 2)),
-            '#' if chars.get(at + 1) == Some(&'r') => {
-                let hashes = chars[at + 2..]
-                    .iter()
-                    .take_while(|found| **found == '#')
-                    .count();
-                (chars.get(at + 2 + hashes) == Some(&'"'))
-                    .then(|| raw_end(chars, at + 3 + hashes, hashes))
+            syntax::Kind::Comment => (Kind::Comment, token.ends()),
+            syntax::Kind::Open(Bracket::List) => (Kind::Open(Shape::List), token.ends()),
+            syntax::Kind::Open(_) => (Kind::Open(Shape::Collection), token.ends()),
+            syntax::Kind::Close | syntax::Kind::HoleEnd => (Kind::Close, token.ends()),
+            syntax::Kind::StringStart => {
+                let mut depth = 1_usize;
+                let mut end = token.ends();
+                while depth > 0
+                    && let Some(inner) = found.get(index)
+                {
+                    index += 1;
+                    end = inner.ends();
+                    match inner.kind {
+                        syntax::Kind::StringStart => depth += 1,
+                        syntax::Kind::StringEnd => depth -= 1,
+                        _ => {}
+                    }
+                }
+                (Kind::Atom, end)
             }
-            _ => None,
+            _ => (Kind::Atom, token.ends()),
         };
-        match ended {
-            Some((end, closed)) => {
-                found.push(Literal { start, end, closed });
-                at = end;
-            }
-            None => at += 1,
-        }
+        let start = prefix.take().unwrap_or(token.starts());
+        units.push(Unit { kind, start, end });
     }
-    found
+    if let Some(start) = prefix {
+        units.push(Unit {
+            kind: Kind::Atom,
+            start,
+            end: source.len(),
+        });
+    }
+    (units, after)
 }
 
-fn literal_starting(literals: &[Literal], at: usize) -> Option<Literal> {
-    literals
-        .binary_search_by_key(&at, |literal| literal.start)
-        .ok()
-        .map(|index| literals[index])
-}
-
-fn literal_around(literals: &[Literal], at: usize) -> Option<Literal> {
-    let index = literals.partition_point(|literal| literal.start < at);
+fn continuing(units: &[Unit], at: usize) -> Option<Unit> {
+    let index = units.partition_point(|unit| unit.start < at);
     index
         .checked_sub(1)
-        .map(|index| literals[index])
-        .filter(|literal| at < literal.end)
+        .map(|index| units[index])
+        .filter(|unit| at < unit.end)
 }
 
-fn pieces(chars: &[char], start: usize, end: usize, literals: &[Literal]) -> Vec<Piece> {
+fn pieces(source: &str, start: usize, end: usize, units: &[Unit]) -> Vec<Piece> {
     let mut found = Vec::new();
     let mut at = start;
-    if let Some(literal) = literal_around(literals, start) {
-        at = literal.end.min(end);
+    if let Some(unit) = continuing(units, start) {
+        at = unit.end.min(end);
         found.push(Piece {
             kind: Kind::Continued,
-            text: chars[start..at].iter().collect(),
+            text: source[start..at].to_owned(),
             gap: String::new(),
         });
     }
-    while at < end {
-        let gap_start = at;
-        while at < end && chars[at].is_whitespace() {
-            at += 1;
-        }
-        if at >= end {
+    let first = units.partition_point(|unit| unit.start < at);
+    for unit in &units[first..] {
+        if unit.start >= end {
             break;
         }
-        let gap: String = chars[gap_start..at].iter().collect();
-        let token = at;
-        if chars[at] == ';' {
-            found.push(Piece {
-                kind: Kind::Comment,
-                text: chars[at..end].iter().collect(),
-                gap,
-            });
-            break;
-        }
-        while at < end
-            && literal_starting(literals, at).is_none()
-            && ("'`~@".contains(chars[at]) || (chars[at] == '#' && chars.get(at + 1) == Some(&';')))
-        {
-            at += if chars[at] == '#' { 2 } else { 1 };
-        }
-        let kind = if let Some(literal) = literal_starting(literals, at) {
-            at = literal.end.min(end);
-            Kind::Atom
-        } else {
-            match chars.get(at).filter(|_| at < end) {
-                Some('(') => {
-                    at += 1;
-                    Kind::Open(Shape::List)
-                }
-                Some('[' | '{') => {
-                    at += 1;
-                    Kind::Open(Shape::Collection)
-                }
-                Some('#' | '^') if chars.get(at + 1) == Some(&'{') => {
-                    at += 2;
-                    Kind::Open(Shape::Collection)
-                }
-                Some(')' | ']' | '}') => {
-                    at += 1;
-                    Kind::Close
-                }
-                Some('\\') => {
-                    at = (at + 2).min(end);
-                    if chars[at - 1] == 'u'
-                        && chars.get(at) == Some(&'{')
-                        && let Some(close) = chars[at..end].iter().position(|found| *found == '}')
-                    {
-                        at += close + 1;
-                    }
-                    while at < end && !delimits(chars[at]) {
-                        at += 1;
-                    }
-                    Kind::Atom
-                }
-                Some(_) => {
-                    at += 1;
-                    while at < end && !delimits(chars[at]) {
-                        at += 1;
-                    }
-                    Kind::Atom
-                }
-                None => Kind::Atom,
-            }
-        };
+        let stop = unit.end.min(end);
         found.push(Piece {
-            kind,
-            text: chars[token..at].iter().collect(),
-            gap,
+            kind: unit.kind,
+            text: source[unit.start..stop].to_owned(),
+            gap: source[at..unit.start].to_owned(),
         });
+        at = stop;
     }
     found
 }
-
 fn render(pieces: &[Piece], tidy: bool) -> (String, Vec<usize>) {
     let mut text = String::new();
     let mut columns = Vec::with_capacity(pieces.len());
@@ -383,26 +234,23 @@ impl<'f> State<'f> {
     }
 }
 
-fn lines(chars: &[char]) -> Vec<(usize, usize)> {
+fn lines(source: &str) -> Vec<(usize, usize)> {
     let mut found = Vec::new();
     let mut start = 0;
-    for (at, character) in chars.iter().enumerate() {
-        if *character == '\n' {
-            let end = if at > start && chars[at - 1] == '\r' {
-                at - 1
-            } else {
-                at
-            };
-            found.push((start, end));
-            start = at + 1;
-        }
+    for (at, _) in source.match_indices('\n') {
+        let end = if at > start && source[..at].ends_with('\r') {
+            at - 1
+        } else {
+            at
+        };
+        found.push((start, end));
+        start = at + 1;
     }
-    if start < chars.len() {
-        found.push((start, chars.len()));
+    if start < source.len() {
+        found.push((start, source.len()));
     }
     found
 }
-
 fn same(before: &Syntax, after: &Syntax) -> bool {
     let all = |left: &[Syntax], right: &[Syntax]| {
         left.len() == right.len() && left.iter().zip(right).all(|(one, other)| same(one, other))
@@ -425,14 +273,13 @@ pub fn indentation(before: &str) -> Option<usize> {
 }
 
 pub fn indentation_with(before: &str, forms: &Forms) -> Option<usize> {
-    let chars: Vec<char> = before.chars().collect();
-    let found = literals(&chars);
-    if found.last().is_some_and(|literal| !literal.closed) {
+    let (found, after) = units(before);
+    if after != syntax::State::default() {
         return None;
     }
     let mut state = State::new(forms);
-    for (line, (start, end)) in lines(&chars).into_iter().enumerate() {
-        let pieces = pieces(&chars, start, end, &found);
+    for (line, (start, end)) in lines(before).into_iter().enumerate() {
+        let pieces = pieces(before, start, end, &found);
         let columns = raw_columns(&pieces);
         state.feed(&pieces, &columns, line);
     }
@@ -464,37 +311,31 @@ pub fn format_with(source: &str, known: &Forms) -> Result<String, String> {
 }
 
 fn layout(source: &str, forms: &Forms) -> String {
-    let chars: Vec<char> = source.chars().collect();
-    let found = literals(&chars);
+    let (found, _) = units(source);
     let mut state = State::new(forms);
     let mut out: Vec<String> = Vec::new();
     let mut commented = false;
-    for (start, end) in lines(&chars) {
+    for (start, end) in lines(source) {
         let line = out.len();
-        if literal_around(&found, start).is_some_and(|literal| literal.start < start) {
-            let pieces = pieces(&chars, start, end, &found);
+        if continuing(&found, start).is_some() {
+            let pieces = pieces(source, start, end, &found);
             state.feed(&pieces, &raw_columns(&pieces), line);
-            out.push(chars[start..end].iter().collect());
+            out.push(source[start..end].to_owned());
             commented = pieces
                 .last()
                 .is_some_and(|piece| piece.kind == Kind::Comment);
             continue;
         }
-        let mut first = start;
-        while first < end && chars[first].is_whitespace() {
-            first += 1;
-        }
-        let mut last = end;
-        while last > first && chars[last - 1].is_whitespace() {
-            last -= 1;
-        }
+        let text = &source[start..end];
+        let first = start + (text.len() - text.trim_start().len());
+        let last = start + text.trim_end().len();
         if first == last {
             if out.last().is_some_and(|previous| !previous.is_empty()) {
                 out.push(String::new());
             }
             continue;
         }
-        let pieces = pieces(&chars, first, last, &found);
+        let pieces = pieces(source, first, last, &found);
         let closers = pieces.iter().all(|piece| piece.kind == Kind::Close);
         if closers && !state.stack.is_empty() && !commented {
             while out.last().is_some_and(String::is_empty) {
