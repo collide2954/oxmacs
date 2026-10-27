@@ -11,6 +11,7 @@ use ox_lang::error::{Error, ErrorKind};
 use ox_lang::heap::Heap;
 use ox_lang::native::name_of;
 use ox_lang::portable::{Channel, Failure, Portable, Sent};
+use ox_lang::sink::{Sink, Started as Reported};
 use ox_lang::value::{Value, print};
 use oxmacs_process::{Process, Started};
 
@@ -124,11 +125,14 @@ fn stream(reader: impl Read + Send + 'static, lines: Arc<Channel>) {
     });
 }
 
-fn exited(process: &Process) -> Result<Portable, Failure> {
+fn exited(process: &Process, told: Option<(Arc<dyn Sink>, u64)>) -> Result<Portable, Failure> {
     let status = process.wait().map_err(|error| Failure {
         value: None,
         message: error.to_string(),
     })?;
+    if let Some((sink, id)) = told {
+        sink.process_ended(id, status.code());
+    }
     Ok(status
         .code()
         .map_or(Portable::Nil, |code| Portable::Int(i64::from(code))))
@@ -159,11 +163,27 @@ fn start(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     if let Some(output) = stderr {
         stream(output, Arc::clone(&errors));
     }
+    let sink = heap.sink().cloned();
+    let id = sink.as_ref().and_then(|sink| {
+        sink.process_started(Reported {
+            program: run.program.clone(),
+            args: run.arguments.clone(),
+            directory: run.directory.clone(),
+            pid: process.pid(),
+            handle: Arc::new(process.clone()),
+        })
+    });
+    let told = sink.zip(id);
     let watched = process.clone();
     let exit = heap.background(&format!("ox process/start {}", run.program), move || {
-        exited(&watched)
+        exited(&watched, told)
     })?;
+    let id = id
+        .and_then(|id| i64::try_from(id).ok())
+        .map_or(Value::Nil, Value::Int);
     let items = [
+        Value::keyword("id"),
+        id,
         Value::keyword("lines"),
         heap.channel(lines)?,
         Value::keyword("errors"),

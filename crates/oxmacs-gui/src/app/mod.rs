@@ -2,6 +2,8 @@ mod update;
 mod view;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use iced::animation::Easing;
 use iced::futures::channel::mpsc;
@@ -44,6 +46,8 @@ pub struct App {
     usage: Usage,
     runner: Runner,
     deliveries: Option<mpsc::UnboundedReceiver<Delivery>>,
+    woken: Arc<AtomicBool>,
+    wakes: Option<mpsc::UnboundedReceiver<()>>,
     ox: Ox,
     takeover_size: Option<iced::Size>,
     focused_since: Option<Instant>,
@@ -102,6 +106,15 @@ impl App {
         let mut editor = Editor::new();
         editor.apply_config(config);
         let (sender, deliveries) = mpsc::unbounded();
+        let (waking, wakes) = mpsc::unbounded();
+        let woken = Arc::new(AtomicBool::new(false));
+        let mut ox = Ox::new();
+        let flag = Arc::clone(&woken);
+        ox.set_waker(move || {
+            if !flag.swap(true, Ordering::AcqRel) {
+                let _ = waking.unbounded_send(());
+            }
+        });
         let mut app = Self {
             editor,
             font: fonts::EDITOR,
@@ -121,7 +134,9 @@ impl App {
                 let _ = sender.unbounded_send(delivery);
             }),
             deliveries: Some(deliveries),
-            ox: Ox::new(),
+            woken,
+            wakes: Some(wakes),
+            ox,
             takeover_size: None,
             focused_since: Some(Instant::now()),
             tab_hover: None,
@@ -157,6 +172,10 @@ impl App {
         let delivered = app.deliveries.take().map_or_else(Task::none, |deliveries| {
             Task::run(deliveries, Message::Delivered)
         });
+        let woken = app
+            .wakes
+            .take()
+            .map_or_else(Task::none, |wakes| Task::run(wakes, |()| Message::OxTick));
         (
             app,
             Task::batch([
@@ -164,6 +183,7 @@ impl App {
                 started,
                 effects,
                 delivered,
+                woken,
                 Task::done(Message::OxTick),
             ]),
         )
@@ -345,7 +365,7 @@ const AUTO_SAVE_DELAY: Duration = Duration::from_millis(1500);
 const AUTO_COMPLETE_DELAY: Duration = Duration::from_millis(250);
 const SIGNATURE_DELAY: Duration = Duration::from_millis(400);
 const REPARSE_DELAY: Duration = Duration::from_millis(250);
-const OX_POLL: Duration = Duration::from_millis(100);
+const OX_POLL: Duration = Duration::from_secs(1);
 
 fn transition(state: bool, duration: Duration) -> Animation<bool> {
     Animation::new(state)
@@ -946,6 +966,24 @@ mod tests {
                 press(app, &c.to_string(), Modifiers::empty());
             }
         }
+    }
+
+    #[test]
+    fn finished_ox_work_wakes_the_editor_once_without_polling() {
+        let mut app = App::default();
+        let source = format!(
+            "(module (import (ox process))) (def ran (process/run {:?} [\"--version\"])) nil",
+            env!("CARGO")
+        );
+        app.ox.eval(&mut app.editor, &source).unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let wakes = app.wakes.as_mut().unwrap();
+        while wakes.try_recv().is_err() {
+            assert!(Instant::now() < deadline, "no wake");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(wakes.try_recv().is_err());
     }
 
     #[test]

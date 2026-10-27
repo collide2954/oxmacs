@@ -59,8 +59,8 @@
 
 (str & values) "Joins the values into one string, showing strings and characters as they are and leaving out nil: (str \"n = \" 3) is \"n = 3\"."
 (pr-str value) "value written the way it reads back, with strings in quotes, as the REPL shows it."
-(print & values) "Writes the values to standard output, separated by spaces."
-(println & values) "Writes the values to standard output, separated by spaces, then a newline."
+(print & values) "Writes the values, separated by spaces, to standard output; in oxmacs to *ox repl* when it is open and to *ox log* otherwise."
+(println & values) "Writes the values, separated by spaces, then a newline, where print writes."
 
 (atom value) "A mutable box holding value. Read it with @box or deref and change it with swap! or reset!."
 (atom? value) "True when value is an atom."

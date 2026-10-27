@@ -11,6 +11,7 @@ mod host;
 mod modules;
 mod natives;
 mod profile;
+mod sink;
 mod spawned;
 mod tasks;
 mod workers;

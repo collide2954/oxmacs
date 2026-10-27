@@ -62,7 +62,7 @@ These modules return promises, so their results need `await`. Paths are used as 
 
 `process/run` gives `{status stdout stderr}`, and `http/get` gives `{status headers body}`. A file that can't be read or a program that can't start raises an error where it is awaited.
 
-`process/start` runs a program alongside your code instead. Its `:lines` channel gives each line the program prints, as it comes, and `:exit` is a promise of its exit status.
+`process/start` runs a program alongside your code instead. Its `:lines` channel gives each line the program prints, as it comes, and `:exit` is a promise of its exit status. `process/stop` asks it to end and `process/kill` ends it at once, with any programs it started. In oxmacs it shows in `M-x list-processes`, where its `:id` names it for `stop-process` and `kill-process`.
 
 ```text
 (let [git (process/start "git" ["log" "--oneline"])]

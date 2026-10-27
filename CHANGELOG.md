@@ -41,6 +41,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - The downloads and the Fedora package include `THIRD-PARTY-LICENSES.html`, the licenses of the crates oxmacs and ox are built from, beside the JetBrains Mono font's license and the highlight queries' notices.
 - `process/stop` asks a process started with `process/start` to end, and a few seconds later stops it and every program it started if it hasn't.
 - `M-x list-processes` lists language servers beside builds, lints and consoles, and a process you stop shows as stopping until it ends; `(processes)` gives its `:status` as `:stopping` then.
+- Programs started with `process/start` show in `M-x list-processes` as Ox processes, and end when oxmacs quits. The map `process/start` gives carries their `:id` there, for `stop-process` and `kill-process`.
 
 ### Changed
 
@@ -66,6 +67,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Sending a lot of text to a busy process, such as an R session or a language server, no longer freezes the editor: input is written in the background.
 - Stopping or killing a build, a console or a language server stops the programs it started too, and on Windows they all end when oxmacs quits. Stopping waits a few seconds after asking, as before, and on Windows it now ends the whole tree instead of only the first program.
 - A language server's log keeps going past output that isn't valid UTF-8.
+- `print` and `println` show in *ox repl* when it is open and in *ox log* otherwise. They wrote to a standard output the Windows release doesn't have, so their text was lost.
+- Ox code waiting on a file, a program or the network goes on as soon as the work is done, instead of at the next poll up to a tenth of a second later, so chains of awaits, such as the explorer opening a project, no longer pay that delay at every step. Problems the background Ox checker finds also show as soon as it finishes.
 - `process/start` writes its `:input` and then closes the program's input, as documented; it used to ignore it. Its `:lines` and `:errors` keep streaming past output that isn't valid UTF-8, so a remote shell or R output no longer stops there.
 - `process/which` and `process/run` find `.cmd` programs on Windows, trying the extensions in `PATHEXT`. `process/kill` stops the programs a process started too, and on Windows processes started from Ox end when oxmacs quits.
 - In Ox buffers, completion, `C-c C-d` and the signature hint know definitions typed in the buffer before it's evaluated, as `ox lsp` does; both use one shared way to describe and complete names.

@@ -244,9 +244,8 @@ fn every_example_in_the_guide_runs() {
                 failures.push(format!("{page}: {source}\n  {}", error.message));
             }
             settle(&mut editor, &mut ox);
-            let log = logged(&editor);
-            if !log.is_empty() {
-                failures.push(format!("{page}: {source}\n  logged {log}"));
+            if crate::ide::log::reports(&editor) > 0 {
+                failures.push(format!("{page}: {source}\n  logged {}", logged(&editor)));
                 break;
             }
         }

@@ -163,6 +163,76 @@ mod tests {
         }
     }
 
+    fn soon(editor: &mut Editor, ox: &mut Ox, done: impl Fn(&mut Editor, &mut Ox) -> bool) -> bool {
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_secs(30) {
+            settle(editor, ox);
+            if done(editor, ox) {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        false
+    }
+
+    #[test]
+    fn processes_ox_starts_are_listed_and_stopped_by_their_id() {
+        let home = tempfile::tempdir().unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::with_bundled(&[]);
+        ox.start(&mut editor, Some(home.path()));
+        let (program, args) = if cfg!(windows) {
+            ("ping", r#"["-n" "60" "127.0.0.1"]"#)
+        } else {
+            ("sleep", r#"["60"]"#)
+        };
+        ox.eval(
+            &mut editor,
+            &format!(
+                "(module (import (ox process))) (def running (process/start {program:?} {args}))"
+            ),
+        )
+        .unwrap();
+        settle(&mut editor, &mut ox);
+
+        let listed =
+            "(some (fn [p] (when (= p.id running.id) [p.kind p.program p.status])) (processes))";
+        assert_eq!(
+            ox.eval(&mut editor, listed).unwrap(),
+            format!("[\"Ox\" {program:?} :running]")
+        );
+        ox.eval(&mut editor, "(kill-process running.id)").unwrap();
+        assert!(soon(&mut editor, &mut ox, |editor, ox| {
+            ox.eval(editor, listed).unwrap().contains(":exited")
+        }));
+    }
+
+    #[test]
+    fn finished_background_work_wakes_the_host() {
+        let home = tempfile::tempdir().unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::with_bundled(&[]);
+        let woken = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = std::sync::Arc::clone(&woken);
+        ox.set_waker(move || {
+            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        });
+        ox.start(&mut editor, Some(home.path()));
+
+        ox.eval(
+            &mut editor,
+            &format!(
+                "(module (import (ox process))) (def ran (process/run {:?} [\"--version\"])) nil",
+                env!("CARGO")
+            ),
+        )
+        .unwrap();
+
+        assert!(soon(&mut editor, &mut ox, |_, _| {
+            woken.load(std::sync::atomic::Ordering::Relaxed) > 0
+        }));
+    }
+
     #[test]
     fn plugins_read_stop_and_follow_processes() {
         let home = tempfile::tempdir().unwrap();

@@ -13,6 +13,7 @@ pub(crate) mod keepass;
 pub(crate) mod keystrokes;
 pub(crate) mod layout;
 pub(crate) mod natives;
+pub(crate) mod outside;
 pub(crate) mod places;
 pub(crate) mod processes;
 pub(crate) mod prompts;

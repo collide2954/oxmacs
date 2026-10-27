@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use num_bigint::BigInt;
 
+use crate::sink::Sink;
 use crate::symbol::Sym;
 use crate::value::record::Family;
 
@@ -53,12 +54,25 @@ impl Portable {
 pub struct Signal {
     raised: Mutex<bool>,
     condvar: Condvar,
+    waker: Mutex<Option<Arc<dyn Sink>>>,
 }
 
 impl Signal {
     pub(crate) fn notify(&self) {
         *self.raised.lock().unwrap_or_else(PoisonError::into_inner) = true;
         self.condvar.notify_all();
+        let waker = self
+            .waker
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if let Some(waker) = waker {
+            waker.work_ready();
+        }
+    }
+
+    pub(crate) fn wake_with(&self, sink: Arc<dyn Sink>) {
+        *self.waker.lock().unwrap_or_else(PoisonError::into_inner) = Some(sink);
     }
 
     pub(crate) fn wait(&self, timeout: Duration) {

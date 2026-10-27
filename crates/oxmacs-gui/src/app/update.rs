@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::atomic::Ordering;
 
 use iced::font::Family;
 use iced::theme::Mode;
@@ -195,6 +196,7 @@ impl App {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        self.woken.store(false, Ordering::Release);
         if !matches!(message, Message::Tick(_)) {
             self.now = Instant::now();
         }

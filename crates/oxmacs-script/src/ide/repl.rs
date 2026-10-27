@@ -448,6 +448,23 @@ fn repl(editor: &mut Editor) -> Option<BufferId> {
     }))
 }
 
+pub(crate) fn printed(editor: &mut Editor, text: &str) {
+    let text = if text.ends_with('\n') {
+        text.to_owned()
+    } else {
+        format!("{text}\n")
+    };
+    let Some(id) = editor.special_buffers::<ReplView>().first().copied() else {
+        log::printed(editor, &text);
+        return;
+    };
+    if let Some((buffer, view)) = editor.special_buffer_mut::<ReplView>(id)
+        && let Some(start) = view.input.start(buffer)
+    {
+        buffer.insert_at(buffer.line_start(buffer.line_of(start)), &text);
+    }
+}
+
 fn open_repl(editor: &mut Editor) {
     if let Some(id) = repl(editor) {
         editor.show_buffer(id);
@@ -804,10 +821,16 @@ impl Ox {
         if let Some((_, failed)) = shown {
             evaluations::evaluated(editor, id, typed, failed);
         }
+        let mut text = String::from("\n");
+        self.outside.deliver(editor, |_, printed| {
+            text.push_str(printed);
+            if !printed.ends_with('\n') {
+                text.push('\n');
+            }
+        });
         let Some((buffer, view)) = editor.special_buffer_mut::<ReplView>(id) else {
             return;
         };
-        let mut text = String::from("\n");
         if let Some((shown, _)) = shown {
             text.push_str(&shown);
             text.push('\n');
@@ -1174,6 +1197,49 @@ mod tests {
         assert!(editor.buffer().contents().ends_with("ox> (+ 1\n2)"));
         press(&mut editor, &mut ox, "M-p");
         assert!(editor.buffer().contents().ends_with("ox> (/ 1 0)"));
+    }
+
+    #[test]
+    fn printed_text_shows_in_the_repl_before_the_value_and_later_above_the_prompt() {
+        let home = home_with(&[]);
+        let (mut editor, mut ox) = started(home.path());
+        press(&mut editor, &mut ox, "M-x");
+        typed(&mut editor, &mut ox, "ox-repl");
+        press(&mut editor, &mut ox, "RET");
+
+        typed(&mut editor, &mut ox, "(println \"hi\" 2)");
+        press(&mut editor, &mut ox, "RET");
+        assert!(
+            editor
+                .buffer()
+                .contents()
+                .ends_with("ox> (println \"hi\" 2)\nhi 2\nnil\nox> "),
+            "{}",
+            editor.buffer().contents()
+        );
+
+        ox.eval(&mut editor, "(spawn (print \"later\"))").unwrap();
+        settle(&mut editor, &mut ox);
+        typed(&mut editor, &mut ox, "1");
+
+        assert!(
+            editor.buffer().contents().ends_with("nil\nlater\nox> 1"),
+            "{}",
+            editor.buffer().contents()
+        );
+    }
+
+    #[test]
+    fn printed_text_goes_to_the_log_while_no_repl_is_open() {
+        let home = home_with(&[]);
+        let (mut editor, mut ox) = started(home.path());
+
+        ox.eval(&mut editor, "(println \"to the log\")").unwrap();
+        settle(&mut editor, &mut ox);
+
+        let id = editor.buffer_named(log::LOG).unwrap();
+        let logged = editor.buffer_by_id(id).unwrap().contents();
+        assert!(logged.contains("to the log\n"), "{logged}");
     }
 
     const HEARD: &str = "(def heard (atom []))\n(on-evaluate :test (fn [b start end failed] (swap! heard conj [(with-buffer b (buffer-name)) start end failed])))\n";

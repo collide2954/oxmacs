@@ -82,6 +82,8 @@ A value no clause matches raises a `no-match-error`, so end with `[_ …]` when 
   (println "Hello, {name}"))
 ```
 
+In oxmacs, `print` and `println` write to *ox repl* when it is open and to *ox log* otherwise. The `ox` command writes them to the terminal.
+
 `loop` binds names like `let`, and `again`, as the last thing its body does, goes round once more with new values. It runs in constant space.
 
 ```

@@ -1,4 +1,6 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use jiff::Timestamp;
 
@@ -29,6 +31,7 @@ impl ProcessStatus {
 enum Source {
     Job(JobId),
     Server(ServerId),
+    Ox(u64),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -60,7 +63,7 @@ struct Tracked {
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Processes {
     tracked: Vec<Tracked>,
-    next_id: u64,
+    next_id: Arc<AtomicU64>,
     watching_usage: bool,
 }
 
@@ -112,6 +115,10 @@ impl Editor {
         self.processes_changed();
     }
 
+    pub fn process_ids(&self) -> Arc<AtomicU64> {
+        Arc::clone(&self.processes.next_id)
+    }
+
     fn untracked_info(
         &mut self,
         kind: &str,
@@ -120,8 +127,18 @@ impl Editor {
         args: Vec<String>,
         directory: PathBuf,
     ) -> ProcessInfo {
-        let id = self.processes.next_id;
-        self.processes.next_id += 1;
+        let id = self.processes.next_id.fetch_add(1, Ordering::Relaxed);
+        Self::info_for(id, kind, name, program, args, Some(directory))
+    }
+
+    fn info_for(
+        id: u64,
+        kind: &str,
+        name: String,
+        program: &str,
+        args: Vec<String>,
+        directory: Option<PathBuf>,
+    ) -> ProcessInfo {
         ProcessInfo {
             id,
             kind: kind.to_owned(),
@@ -131,7 +148,7 @@ impl Editor {
                 |stem| stem.to_string_lossy().into_owned(),
             ),
             args,
-            directory: Some(directory),
+            directory,
             env: Vec::new(),
             status: ProcessStatus::Starting,
             pid: None,
@@ -173,6 +190,31 @@ impl Editor {
             launch.directory.clone(),
         );
         self.track(Source::Server(id), info);
+    }
+
+    pub fn track_ox_process(
+        &mut self,
+        id: u64,
+        program: &str,
+        args: Vec<String>,
+        directory: Option<PathBuf>,
+        process: Process,
+    ) {
+        let stem = Path::new(program).file_stem().map_or_else(
+            || program.to_owned(),
+            |stem| stem.to_string_lossy().into_owned(),
+        );
+        let name = std::iter::once(stem)
+            .chain(args.iter().cloned())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let info = Self::info_for(id, "Ox", name, program, args, directory);
+        self.track(Source::Ox(id), info);
+        self.started(Source::Ox(id), process.pid(), Some(process));
+    }
+
+    pub fn ox_process_ended(&mut self, id: u64, code: Option<i32>) {
+        self.ended(Source::Ox(id), ProcessStatus::Exited(code));
     }
 
     fn tracked_mut(&mut self, source: Source) -> Option<&mut Tracked> {

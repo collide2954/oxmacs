@@ -104,6 +104,14 @@ impl Runtime {
         self.tasks.len() + self.blocked.len() + self.heap.job_count()
     }
 
+    pub(crate) fn wait_for_work(&self, timeout: Duration) -> bool {
+        let waiting = self.tasks.is_empty() && self.heap.awaited_jobs();
+        if waiting {
+            self.heap.signal().wait(timeout);
+        }
+        waiting
+    }
+
     pub fn next_wake(&self) -> Wake {
         if !self.tasks.is_empty() || !self.parked.is_empty() || self.heap.awaited_jobs() {
             return Wake::Soon;

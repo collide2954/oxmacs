@@ -1,4 +1,47 @@
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
 use ox_lang::Isolate;
+use ox_lang::sink::{Sink, Started};
+
+#[derive(Debug, Default)]
+struct Heard {
+    started: Mutex<Vec<(String, Vec<String>, u32)>>,
+    ended: Mutex<Vec<(u64, Option<i32>)>>,
+    ready: Mutex<usize>,
+}
+
+impl Sink for Heard {
+    fn process_started(&self, process: Started) -> Option<u64> {
+        assert!(process.handle.is::<oxmacs_process::Process>());
+        self.started
+            .lock()
+            .unwrap()
+            .push((process.program, process.args, process.pid));
+        Some(41)
+    }
+
+    fn process_ended(&self, id: u64, code: Option<i32>) {
+        self.ended.lock().unwrap().push((id, code));
+    }
+
+    fn work_ready(&self) {
+        *self.ready.lock().unwrap() += 1;
+    }
+
+    fn printed(&self, _: &str) {}
+}
+
+fn soon(done: impl Fn() -> bool) -> bool {
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(30) {
+        if done() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    false
+}
 
 fn evaluated(isolate: &mut Isolate, source: &str) -> String {
     match isolate.eval(source) {
@@ -129,7 +172,7 @@ fn processes_nobody_waits_for_let_the_isolate_rest() {
     assert_eq!(isolate.next_wake(), ox_lang::task::Wake::Never);
 
     isolate.eval("(spawn (await running.exit))").unwrap();
-    let _ = isolate.run(std::time::Duration::from_millis(10));
+    let _ = isolate.run(Duration::from_millis(10));
     assert_eq!(isolate.next_wake(), ox_lang::task::Wake::Soon);
 
     isolate
@@ -195,6 +238,59 @@ fn programs_are_found_on_the_path_and_the_system_is_named() {
     assert_eq!(reply, "[true nil true]");
     let os = evaluated(&mut isolate, "(module (import (ox process))) (process/os)");
     assert_eq!(os, format!(":{}", std::env::consts::OS));
+}
+
+#[test]
+fn started_processes_are_reported_to_the_sink_with_the_id_it_gives() {
+    let heard = Arc::new(Heard::default());
+    let mut isolate = ox_library::isolate();
+    isolate.set_sink(heard.clone());
+
+    let reply = evaluated(
+        &mut isolate,
+        &format!(
+            "(module (import (ox process))) (def shown (process/start {:?} [\"--version\"])) [shown.id (await shown.exit)]",
+            env!("CARGO")
+        ),
+    );
+
+    assert_eq!(reply, "[41 0]");
+    let started = heard.started.lock().unwrap().clone();
+    assert_eq!(started.len(), 1);
+    assert_eq!(started[0].0, env!("CARGO"));
+    assert_eq!(started[0].1, ["--version"]);
+    assert!(soon(|| *heard.ended.lock().unwrap() == [(41, Some(0))]));
+}
+
+#[test]
+fn finished_background_work_wakes_the_sink() {
+    let heard = Arc::new(Heard::default());
+    let mut isolate = ox_library::isolate();
+    isolate.set_sink(heard.clone());
+
+    isolate
+        .eval(&format!(
+            "(module (import (ox process))) (def running (process/run {:?} [\"--version\"])) nil",
+            env!("CARGO")
+        ))
+        .unwrap();
+
+    assert!(soon(|| *heard.ready.lock().unwrap() > 0));
+}
+
+#[test]
+fn without_a_sink_started_processes_have_no_id() {
+    let mut isolate = ox_library::isolate();
+
+    let reply = evaluated(
+        &mut isolate,
+        &format!(
+            "(module (import (ox process))) (def shown (process/start {:?} [\"--version\"])) [shown.id (await shown.exit)]",
+            env!("CARGO")
+        ),
+    );
+
+    assert_eq!(reply, "[nil 0]");
 }
 
 #[test]

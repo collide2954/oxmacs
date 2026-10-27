@@ -92,6 +92,10 @@ pub fn report(editor: &mut Editor, error: &Error, origin: Option<(&str, &str)>) 
     editor.show_message(format!("Ox: {}", error.message));
 }
 
+pub fn printed(editor: &mut Editor, text: &str) {
+    append(editor, text);
+}
+
 pub fn show(editor: &mut Editor) {
     if let Some(id) = editor.buffer_named(LOG) {
         editor.show_buffer_beside(id);

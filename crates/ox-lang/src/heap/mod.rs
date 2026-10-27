@@ -12,6 +12,7 @@ use crate::bytecode::Code;
 use crate::native::Native;
 use crate::portable::{Channel, Signal};
 use crate::read::Marks;
+use crate::sink::Sink;
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::task::TaskId;
@@ -171,6 +172,7 @@ pub struct Heap {
     atom_writes: u64,
     jobs: Vec<jobs::Job>,
     signal: Arc<Signal>,
+    sink: Option<Arc<dyn Sink>>,
     next_collection: usize,
     running: Option<TaskId>,
 }
@@ -185,6 +187,15 @@ fn reference(value: Value, kind: Kind) -> Option<u32> {
 impl Heap {
     pub fn running_task(&self) -> Option<TaskId> {
         self.running
+    }
+
+    pub fn sink(&self) -> Option<&Arc<dyn Sink>> {
+        self.sink.as_ref()
+    }
+
+    pub(crate) fn set_sink(&mut self, sink: Arc<dyn Sink>) {
+        self.signal.wake_with(Arc::clone(&sink));
+        self.sink = Some(sink);
     }
 
     pub(crate) fn set_running_task(&mut self, task: Option<TaskId>) {

@@ -10,6 +10,8 @@ use oxmacs_core::editor::Editor;
 use oxmacs_core::external::diagnostics::{Diagnostic as Found, Severity as Level};
 use oxmacs_core::text::BufferId;
 
+use crate::api::outside::Waker;
+
 pub const CHECK_PAUSE: Duration = Duration::from_millis(500);
 
 struct Job {
@@ -36,9 +38,10 @@ pub(crate) struct Checker {
     worker: Option<Worker>,
     busy: bool,
     checked: Vec<(BufferId, u64)>,
+    waker: Option<Waker>,
 }
 
-fn serve(jobs: &Receiver<Job>, done: &Sender<Done>) {
+fn serve(jobs: &Receiver<Job>, done: &Sender<Done>, waker: Option<&Waker>) {
     let (mut plain, mut editor) = (None, None);
     for job in jobs {
         let isolate = if job.editor_code {
@@ -61,16 +64,19 @@ fn serve(jobs: &Receiver<Job>, done: &Sender<Done>) {
         if done.send(finished).is_err() {
             return;
         }
+        if let Some(waker) = waker {
+            waker.wake();
+        }
     }
 }
 
 impl Worker {
-    fn start() -> Option<Self> {
+    fn start(waker: Option<Waker>) -> Option<Self> {
         let (jobs, waiting) = mpsc::channel();
         let (finished, done) = mpsc::channel();
         thread::Builder::new()
             .name("oxmacs ox checker".to_owned())
-            .spawn(move || serve(&waiting, &finished))
+            .spawn(move || serve(&waiting, &finished, waker.as_ref()))
             .ok()?;
         Some(Self { jobs, done })
     }
@@ -100,6 +106,10 @@ fn found(path: &Path, source: &str, diagnostic: Diagnostic) -> Found {
 }
 
 impl Checker {
+    pub(crate) fn wake_with(&mut self, waker: Waker) {
+        self.waker = Some(waker);
+    }
+
     pub(crate) fn wait(&self, editor: &Editor) -> Option<Duration> {
         if self.busy {
             return None;
@@ -130,7 +140,7 @@ impl Checker {
             source: editor.buffer().contents(),
         };
         if self.worker.is_none() {
-            self.worker = Worker::start();
+            self.worker = Worker::start(self.waker.clone());
         }
         self.busy = self
             .worker

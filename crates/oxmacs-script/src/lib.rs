@@ -7,6 +7,7 @@ pub mod view;
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub use ox_lang::task::Wake;
@@ -89,6 +90,7 @@ pub struct Ox {
     evaluation: ide::repl::Evaluation,
     checker: ide::checker::Checker,
     help: ide::help::Help,
+    outside: Arc<api::outside::Outside>,
 }
 
 impl Default for Ox {
@@ -104,15 +106,25 @@ impl Ox {
 
     pub fn with_bundled(bundled: &'static [Bundle]) -> Self {
         let answers = api::prompts::Inbox::default();
+        let outside = Arc::new(api::outside::Outside::default());
+        let mut isolate = editor_isolate(&answers);
+        isolate.set_sink(outside.clone());
         Self {
-            isolate: editor_isolate(&answers),
+            isolate,
             bundled,
             home: None,
             answers,
             evaluation: ide::repl::Evaluation::default(),
             checker: ide::checker::Checker::default(),
             help: ide::help::Help::default(),
+            outside,
         }
+    }
+
+    pub fn set_waker(&mut self, waker: impl Fn() + Send + Sync + 'static) {
+        let waker = api::outside::Waker::new(waker);
+        self.checker.wake_with(waker.clone());
+        self.outside.wake_with(waker);
     }
 
     pub fn start(&mut self, editor: &mut Editor, home: Option<&Path>) {
@@ -125,6 +137,7 @@ impl Ox {
 
     fn start_with(&mut self, editor: &mut Editor, home: Option<&Path>, init: bool) {
         self.home = home.map(Path::to_path_buf);
+        self.outside.number_processes(editor.process_ids());
         editor.let_host_play_macros();
         editor.set_init_path(home.map(|home| home.join("init.ox")));
         ide::repl::install(editor);
@@ -274,6 +287,7 @@ impl Ox {
 
     fn drain(&mut self, editor: &mut Editor) -> bool {
         let mut failed = false;
+        self.outside.deliver(editor, ide::repl::printed);
         api::hooks::release_saves(&mut self.isolate, editor);
         self.handle_requests(editor);
         for plugin in runtime::modes::wakes(editor)
@@ -311,6 +325,20 @@ impl Ox {
                 break;
             }
         }
+        while self.isolate.runnable() == 0 {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() || !self.isolate.wait_for_work(left) {
+                break;
+            }
+            let report = self.isolate.run_with(editor, left);
+            let evaluated = self.evaluated(editor, report.finished);
+            for error in report.unhandled.into_iter().chain(evaluated) {
+                failed = true;
+                ide::log::report(editor, &error, None);
+            }
+            self.advance(editor);
+        }
+        self.outside.deliver(editor, ide::repl::printed);
         api::evaluations::run(&mut self.isolate, editor);
         failed
     }

@@ -64,6 +64,10 @@ pub(crate) fn output(heap: &Heap, arguments: &[Value], newline: bool) -> Result<
     if newline {
         text.push('\n');
     }
+    if let Some(sink) = heap.sink() {
+        sink.printed(&text);
+        return Ok(Value::Nil);
+    }
     let mut stdout = io::stdout().lock();
     stdout
         .write_all(text.as_bytes())

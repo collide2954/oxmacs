@@ -20,6 +20,7 @@ use crate::native::{Control, Native, NativeFn};
 use crate::portable::{Failure, Portable};
 use crate::profile::Profile;
 use crate::read::{self, Datum, Syntax, split_meta};
+use crate::sink::Sink;
 use crate::span::{Source, Span};
 use crate::symbol::Sym;
 use crate::task::{Interrupter, Report, TaskId, Wake};
@@ -706,6 +707,14 @@ impl Isolate {
 
     pub fn next_wake(&self) -> Wake {
         self.runtime.next_wake()
+    }
+
+    pub fn set_sink(&mut self, sink: Arc<dyn Sink>) {
+        self.runtime.heap.set_sink(sink);
+    }
+
+    pub fn wait_for_work(&self, timeout: Duration) -> bool {
+        self.runtime.wait_for_work(timeout)
     }
 
     pub fn run_with(&mut self, host: &mut dyn Any, budget: Duration) -> Report {
