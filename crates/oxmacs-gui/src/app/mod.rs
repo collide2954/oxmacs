@@ -73,10 +73,6 @@ pub enum Message {
     Opened(Result<(), String>),
     Clock,
     Delivered(Delivery),
-    AutoSave,
-    AutoComplete,
-    Signature,
-    Reparse,
     ProcessTick,
     FocusWindow(WindowId),
     Fetched(FetchId, Result<String, String>),
@@ -262,31 +258,20 @@ impl App {
             .map(|wait| (wait, since))
     }
 
+    fn idle_deadline(&self) -> Option<Instant> {
+        let editor = self
+            .editor
+            .idle_wait(self.last_input)
+            .map(|wait| self.last_input + wait);
+        let ox = self.idle_wait().map(|(wait, since)| since + wait);
+        editor.into_iter().chain(ox).min()
+    }
+
     pub fn completion_opacity(&self) -> f32 {
         self.reveal.interpolate(0.0, 1.0, self.now)
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        let idle = if self.editor.wants_auto_save() {
-            ticker::once_after(AUTO_SAVE_DELAY, self.last_input).map(|()| Message::AutoSave)
-        } else {
-            Subscription::none()
-        };
-        let completing = if self.editor.wants_auto_complete() {
-            ticker::once_after(AUTO_COMPLETE_DELAY, self.last_input).map(|()| Message::AutoComplete)
-        } else {
-            Subscription::none()
-        };
-        let signature = if self.editor.wants_signature() {
-            ticker::once_after(SIGNATURE_DELAY, self.last_input).map(|()| Message::Signature)
-        } else {
-            Subscription::none()
-        };
-        let reparse = if self.editor.wants_reparse() {
-            ticker::once_after(REPARSE_DELAY, self.last_input).map(|()| Message::Reparse)
-        } else {
-            Subscription::none()
-        };
         let processes = if self.editor.wants_process_usage() {
             ticker::ticks(Some(ticker::SECOND)).map(|()| Message::ProcessTick)
         } else {
@@ -298,9 +283,9 @@ impl App {
             Subscription::none()
         };
         let resting = self
-            .idle_wait()
-            .map_or_else(Subscription::none, |(wait, since)| {
-                ticker::once_after(wait, since).map(|()| Message::Idle)
+            .idle_deadline()
+            .map_or_else(Subscription::none, |deadline| {
+                ticker::at(deadline).map(|()| Message::Idle)
             });
         let waiting = match (self.ox.pace(), self.ox.next_wake()) {
             (Pace::Waiting, Wake::Soon) => ticker::ticks(Some(OX_POLL)).map(|()| Message::OxTick),
@@ -325,10 +310,6 @@ impl App {
                 }
             }))
             .map(|()| Message::Clock),
-            idle,
-            completing,
-            signature,
-            reparse,
             processes,
             frames,
             waiting,
@@ -361,10 +342,6 @@ pub fn animations_enabled(configured: bool, reduced_motion: bool) -> bool {
     configured && !reduced_motion
 }
 
-const AUTO_SAVE_DELAY: Duration = Duration::from_millis(1500);
-const AUTO_COMPLETE_DELAY: Duration = Duration::from_millis(250);
-const SIGNATURE_DELAY: Duration = Duration::from_millis(400);
-const REPARSE_DELAY: Duration = Duration::from_millis(250);
 const OX_POLL: Duration = Duration::from_secs(1);
 
 fn transition(state: bool, duration: Duration) -> Animation<bool> {
@@ -1092,7 +1069,7 @@ mod tests {
     }
 
     #[test]
-    fn auto_save_messages_keep_recovery_copies_of_idle_buffers() {
+    fn a_rest_keeps_recovery_copies_of_idle_buffers() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("notes.txt");
         std::fs::write(&path, "hello\n").unwrap();
@@ -1102,8 +1079,9 @@ mod tests {
         app.start(&[visit(&path)], false);
         press(&mut app, "x", Modifiers::empty());
         assert!(app.editor().wants_auto_save());
+        app.last_input = Instant::now().checked_sub(Duration::from_secs(2)).unwrap();
 
-        let _ = app.update(Message::AutoSave);
+        let _ = app.update(Message::Idle);
 
         assert!(app.editor().buffer().is_modified());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello\n");

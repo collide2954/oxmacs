@@ -6,6 +6,7 @@ mod dispatch;
 mod editing;
 mod effect;
 mod events;
+mod idle;
 mod job;
 mod keystrokes;
 mod languages;
@@ -32,6 +33,7 @@ pub use decorations::{Lasts, LineDecorations, Look};
 pub use editing::format::{FormatRequest, Formatter};
 pub use effect::{Effect, FetchId};
 pub use events::{Event, EventKind};
+pub use idle::SIGNATURE_DELAY;
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
 pub use keystrokes::Keystroke;
 pub use languages::registry::{LineHighlighter, LineIndenter};
@@ -185,6 +187,7 @@ pub struct Editor {
     builds: build::Builds,
     decorations: Vec<decorations::Decoration>,
     lsp: lsp::Lsp,
+    rest: idle::Rest,
     focused: bool,
     config: Config,
 }
@@ -270,6 +273,7 @@ impl Editor {
             builds: build::Builds::default(),
             decorations: Vec::new(),
             lsp: lsp::Lsp::default(),
+            rest: idle::Rest::default(),
             focused: true,
             config: Config::default(),
         };

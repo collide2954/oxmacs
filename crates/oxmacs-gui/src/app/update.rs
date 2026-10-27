@@ -115,6 +115,7 @@ impl App {
     }
 
     fn idle(&mut self) {
+        self.editor.idle(self.last_input, self.now);
         if let Some(since) = self.rested_since() {
             self.ox.idle(&mut self.editor, since, self.now);
         }
@@ -225,10 +226,6 @@ impl App {
             Message::PastedPrimary(text) => self.editor.paste_primary(text),
             Message::DiskChanged => self.editor.check_disk_changes(),
             Message::Opened(Err(error)) => self.editor.show_message(error),
-            Message::AutoSave => self.editor.auto_save(),
-            Message::AutoComplete => self.editor.auto_complete(),
-            Message::Signature => self.editor.show_signature(),
-            Message::Reparse => self.editor.reparse(),
             Message::ProcessTick => self.sample_processes(),
             Message::FocusWindow(window) => {
                 if self.focus(window) {

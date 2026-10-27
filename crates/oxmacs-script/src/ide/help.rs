@@ -11,7 +11,7 @@ use oxmacs_core::text::BufferId;
 
 use crate::{ide::ox_mode, ide::repl, ide::stacktrace, runtime::plugins};
 
-pub(crate) const SIGNATURE_PAUSE: Duration = Duration::from_millis(400);
+pub(crate) use oxmacs_core::editor::SIGNATURE_DELAY as SIGNATURE_PAUSE;
 const LOOK_BACK: usize = 400;
 const AUTO_PREFIX: usize = 3;
 
