@@ -1,15 +1,14 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use crate::config::RustLint;
-use crate::editor::build::errors::ErrorSource;
+use crate::editor::build::Finished;
 use crate::editor::decorations::{Lasts, Look, Owner};
 use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::diagnostics::{self, Diagnostic, LintLine, Severity};
 use crate::external::tools;
-use crate::files;
 use crate::syntax::Language;
 use crate::text::Buffer;
 
@@ -35,53 +34,11 @@ pub struct LintRun {
     pub name: String,
 }
 
-#[derive(Debug, Default)]
-pub(in crate::editor) struct Lints {
-    pub(in crate::editor) due: Option<(Language, PathBuf)>,
-    runs: Vec<Run>,
-    pub(in crate::editor) last: Option<(Language, PathBuf)>,
-    pub(in crate::editor) diagnostics: Vec<Diagnostic>,
-    pub(in crate::editor) root: Option<PathBuf>,
-    pub(in crate::editor) current: Option<usize>,
-    revision: u64,
-    identities: HashMap<PathBuf, PathBuf>,
-}
-
-impl Lints {
-    fn identity_of<'a>(&'a self, path: &'a Path) -> &'a Path {
-        self.identities.get(path).map_or(path, PathBuf::as_path)
-    }
-
-    fn learn(&mut self) {
-        let present: HashSet<&PathBuf> = self.diagnostics.iter().map(|found| &found.path).collect();
-        self.identities.retain(|path, _| present.contains(path));
-        for path in present {
-            if !self.identities.contains_key(path) {
-                self.identities.insert(path.clone(), files::identity(path));
-            }
-        }
-    }
-}
-
 fn position(buffer: &Buffer, (row, column): (usize, usize)) -> usize {
     let line = row
         .saturating_sub(1)
         .min(buffer.line_of(buffer.len_chars()));
     (buffer.line_start(line) + column.saturating_sub(1)).min(buffer.line_end(line))
-}
-
-#[derive(Debug)]
-struct Run {
-    job: JobId,
-    language: Language,
-    linter: Linter,
-    root: PathBuf,
-    scope: PathBuf,
-    label: &'static str,
-    name: String,
-    found: Vec<Diagnostic>,
-    built: bool,
-    failure: Option<String>,
 }
 
 fn subcommand(tool: RustLint) -> Option<&'static str> {
@@ -128,89 +85,49 @@ pub(in crate::editor) const CARGO_LINT: Linter = Linter {
 impl Editor {
     #[cfg(test)]
     pub fn add_linter(&mut self, language: Language, linter: Linter) {
-        self.linters.retain(|(known, _)| *known != language);
-        self.linters.push((language, linter));
+        self.builds.add_linter(language, linter);
     }
 
     pub fn diagnostics_revision(&self) -> u64 {
-        self.lints.revision
+        self.builds.revision()
     }
 
     pub fn diagnostic_counts(&self) -> Vec<(PathBuf, usize, usize)> {
-        let mut counts: Vec<(PathBuf, usize, usize)> = Vec::new();
-        for diagnostic in &self.lints.diagnostics {
-            let known = counts
-                .iter()
-                .position(|(path, _, _)| *path == diagnostic.path);
-            let at = known.unwrap_or_else(|| {
-                counts.push((diagnostic.path.clone(), 0, 0));
-                counts.len() - 1
-            });
-            match diagnostic.severity {
-                Severity::Error => counts[at].1 += 1,
-                Severity::Warning => counts[at].2 += 1,
-            }
-        }
-        counts
+        self.builds.counts()
     }
 
     pub fn replace_diagnostics(&mut self, path: &Path, found: Vec<Diagnostic>) {
-        let wanted = files::identity(path);
-        let Lints {
-            diagnostics,
-            identities,
-            ..
-        } = &mut self.lints;
-        diagnostics.retain(|diagnostic| {
-            identities
-                .get(&diagnostic.path)
-                .map_or(diagnostic.path.as_path(), PathBuf::as_path)
-                != wanted
-        });
-        self.lints.diagnostics.extend(found);
-        self.lints.learn();
-        self.lints.diagnostics.sort();
-        self.lints.revision += 1;
-        self.lints.current = None;
-        self.mark_diagnostics();
+        self.builds.replace(path, found);
+        self.diagnostics_changed();
+    }
+
+    fn diagnostics_changed(&mut self) {
+        self.undecorate(|decoration, _| matches!(decoration.owner, Owner::Lint(_)));
+        for index in 0..self.buffers.len() {
+            self.mark_buffer(index);
+        }
         self.render_diagnostics_list();
     }
 
-    pub(in crate::editor) fn has_linter(&self, language: Language) -> bool {
-        self.linters.iter().any(|(known, _)| *known == language)
-    }
-
     pub(in crate::editor) fn request_lint(&mut self, language: Language, path: &Path) {
-        if self.has_linter(language) && !self.serves(language.name(), path) {
-            self.lints.due = Some((language, path.to_owned()));
+        if !self.serves(language.name(), path) {
+            self.builds.request(language, path);
         }
     }
 
     pub(in crate::editor) fn start_due_lint(&mut self) {
-        let Some((language, path)) = self.lints.due.take() else {
+        let Some(due) = self.builds.take_due() else {
             return;
         };
-        let Some(linter) = self
-            .linters
-            .iter()
-            .find(|(known, _)| *known == language)
-            .map(|(_, linter)| *linter)
-        else {
+        let Some(run) = (due.2.start)(self, &due.1) else {
             return;
         };
-        let Some(run) = (linter.start)(self, &path) else {
-            return;
-        };
-        for stale in self
-            .lints
-            .runs
-            .extract_if(.., |stale| stale.language == language)
-        {
-            self.effects.push(Effect::Kill(stale.job));
+        for stale in self.builds.stale(due.0) {
+            self.effects.push(Effect::Kill(stale));
         }
         let spec = JobSpec {
-            program: run.program,
-            args: run.args,
+            program: run.program.clone(),
+            args: run.args.clone(),
             directory: run.root.clone(),
             env: Vec::new(),
             label: "lint",
@@ -219,96 +136,28 @@ impl Editor {
             interactive: false,
         };
         let job = self.start_job(spec, Self::lint_event);
-        self.lints.last = Some((language, path));
-        self.lints.runs.push(Run {
-            job,
-            language,
-            linter,
-            scope: files::identity(&run.root),
-            root: run.root,
-            label: run.label,
-            name: run.name,
-            found: Vec::new(),
-            built: false,
-            failure: None,
-        });
+        self.builds.started(job, due, run);
     }
 
     fn lint_event(&mut self, job: JobId, event: JobEvent<'_>) {
         match event {
-            JobEvent::Line(line) | JobEvent::Output(line) => self.lint_output(job, line),
+            JobEvent::Line(line) | JobEvent::Output(line) => self.builds.output(job, line),
             JobEvent::Finished(outcome) => self.lint_finished(job, outcome),
         }
     }
 
-    fn lint_output(&mut self, job: JobId, line: &str) {
-        let Some(run) = self.lints.runs.iter_mut().find(|run| run.job == job) else {
-            return;
-        };
-        match (run.linter.read)(line, &run.root) {
-            LintLine::Diagnostic(diagnostic) => {
-                if !run.found.contains(&diagnostic) {
-                    run.found.push(diagnostic);
-                }
-            }
-            LintLine::Finished => run.built = true,
-            LintLine::Other => {
-                if run.failure.is_none() && line.starts_with("error") {
-                    run.failure = Some(line.to_owned());
-                }
-            }
-        }
-    }
-
     fn lint_finished(&mut self, job: JobId, outcome: &Outcome) {
-        let Some(at) = self.lints.runs.iter().position(|run| run.job == job) else {
-            return;
-        };
-        let run = self.lints.runs.remove(at);
-        let completed = run.built || (run.linter.complete)(outcome);
-        match outcome {
-            Outcome::Exited(_) if completed => {
-                let language = run.language;
-                let languages: Vec<Option<Language>> = self
-                    .lints
-                    .diagnostics
-                    .iter()
-                    .map(|diagnostic| self.language_for(&diagnostic.path))
-                    .collect();
-                let mut kept = languages.into_iter();
-                let Lints {
-                    diagnostics,
-                    identities,
-                    ..
-                } = &mut self.lints;
-                diagnostics.retain(|diagnostic| {
-                    let theirs = kept.next().flatten() == Some(language);
-                    let place = identities
-                        .get(&diagnostic.path)
-                        .map_or(diagnostic.path.as_path(), PathBuf::as_path);
-                    !(theirs && place.starts_with(&run.scope))
-                });
-                self.lints.diagnostics.extend(run.found);
-                self.lints.learn();
-                self.lints.diagnostics.sort();
-                self.lints.revision += 1;
-                self.lints.root = Some(run.root);
-                self.lints.current = None;
-                self.errors_from = ErrorSource::Lint;
-                self.mark_diagnostics();
-                self.render_diagnostics_list();
-            }
-            Outcome::Exited(_) => {
-                let reason = run.failure.unwrap_or_else(|| "failed".to_owned());
-                self.show_message(format!("{}: {reason}", run.name));
-            }
-            Outcome::Failed(error) => self.show_message(format!("{}: {error}", run.name)),
-        }
-    }
-    fn mark_diagnostics(&mut self) {
-        self.undecorate(|decoration, _| matches!(decoration.owner, Owner::Lint(_)));
-        for index in 0..self.buffers.len() {
-            self.mark_buffer(index);
+        let languages: HashMap<PathBuf, Option<Language>> = self
+            .builds
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| (diagnostic.path.clone(), self.language_for(&diagnostic.path)))
+            .collect();
+        let language_of = |path: &Path| languages.get(path).copied().flatten();
+        match self.builds.finished(job, outcome, language_of) {
+            Finished::Changed => self.diagnostics_changed(),
+            Finished::Failed(message) => self.show_message(message),
+            Finished::Unknown => {}
         }
     }
 
@@ -316,15 +165,12 @@ impl Editor {
         let Some(buffer) = self.buffers.get(index) else {
             return;
         };
-        let Some(path) = buffer.file().map(|file| file.identity().to_path_buf()) else {
+        let Some(identity) = buffer.file().map(|file| file.identity().to_path_buf()) else {
             return;
         };
         let marked: Vec<(usize, Range<usize>, Severity)> = self
-            .lints
-            .diagnostics
-            .iter()
-            .enumerate()
-            .filter(|(_, found)| self.lints.identity_of(&found.path) == path)
+            .builds
+            .on_file(&identity)
             .map(|(diagnostic, found)| {
                 let start = position(buffer, found.start);
                 let end = position(buffer, found.end).max(start);
@@ -349,7 +195,7 @@ impl Editor {
     ) -> impl Iterator<Item = (Range<usize>, &'a Diagnostic)> {
         self.decorations_of(buffer)
             .filter_map(|(decoration, span)| match decoration.owner {
-                Owner::Lint(diagnostic) => Some((span, self.lints.diagnostics.get(diagnostic)?)),
+                Owner::Lint(diagnostic) => Some((span, self.builds.diagnostic(diagnostic)?)),
                 _ => None,
             })
     }
@@ -375,38 +221,10 @@ impl Editor {
             .map(|diagnostic| diagnostic.message.as_str())
     }
 
-    pub(in crate::editor) fn lint_status(&self, path: &Path) -> Option<String> {
-        let language = self.language_for(path);
-        if let Some(run) = self
-            .lints
-            .runs
-            .iter()
-            .find(|run| path.starts_with(&run.scope) && Some(run.language) == language)
-        {
-            return Some(run.label.to_owned());
-        }
-        let count = |severity| {
-            self.lints
-                .diagnostics
-                .iter()
-                .filter(|diagnostic| {
-                    self.lints.identity_of(&diagnostic.path) == path
-                        && diagnostic.severity == severity
-                })
-                .count()
-        };
-        let counts: Vec<String> = [
-            ("E", count(Severity::Error)),
-            ("W", count(Severity::Warning)),
-        ]
-        .into_iter()
-        .filter(|(_, count)| *count > 0)
-        .map(|(label, count)| format!("{label}{count}"))
-        .collect();
-        (!counts.is_empty()).then(|| counts.join(" "))
+    pub(in crate::editor) fn lint_status(&self, identity: &Path) -> Option<String> {
+        self.builds.status(identity, self.language_for(identity))
     }
 }
-
 #[cfg(test)]
 pub(crate) mod fixtures {
     use std::fs;

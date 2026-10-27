@@ -4,7 +4,6 @@ use crate::command::{Scope, ScopeId};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
-use crate::editor::build::errors;
 use crate::editor::page::Page;
 use crate::external::diagnostics::{Diagnostic, Severity};
 use crate::files::paths;
@@ -133,8 +132,8 @@ impl Editor {
             return;
         };
         let (page, rows) = page(
-            &self.lints.diagnostics,
-            self.lints.root.as_deref(),
+            self.builds.diagnostics(),
+            self.builds.root(),
             self.home.as_deref(),
         );
         if let Some(buffer) = self.buffers.get_mut(index) {
@@ -165,9 +164,8 @@ impl Editor {
     }
 
     pub(in crate::editor) fn recheck(&mut self) {
-        match self.lints.last.clone() {
-            Some(last) => self.lints.due = Some(last),
-            None => self.show_message("Nothing has been checked yet"),
+        if !self.builds.recheck() {
+            self.show_message("Nothing has been checked yet");
         }
     }
 
@@ -175,7 +173,7 @@ impl Editor {
         let line = self.point_line();
         let target = match self.diagnostics_list() {
             Some(list) => list.beyond(line, forward),
-            None => errors::step(self.lints.current, forward, self.lints.diagnostics.len()),
+            None => self.builds.step(forward),
         };
         match target {
             Some(index) => self.visit_diagnostic(index),
@@ -184,10 +182,9 @@ impl Editor {
     }
 
     fn visit_diagnostic(&mut self, index: usize) {
-        let Some(diagnostic) = self.lints.diagnostics.get(index).cloned() else {
+        let Some(diagnostic) = self.builds.visit(index) else {
             return;
         };
-        self.lints.current = Some(index);
         if let Some(at) = self.diagnostics_index()
             && let Some(buffer) = self.buffers.get(at)
             && let Some(list) = self.buffers.special::<DiagnosticsList>(at)

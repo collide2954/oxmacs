@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use crate::command::{Scope, ScopeId};
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
-use crate::editor::build::errors::{ErrorSource, Errors};
+use crate::editor::build::errors::Errors;
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::tools;
@@ -41,9 +41,10 @@ impl Editor {
     pub(in crate::editor) fn compile(&mut self) {
         if self.open_minibuffer("Compile command: ", Purpose::Compile) {
             let command = self
-                .last_compile
-                .clone()
-                .unwrap_or_else(|| DEFAULT_COMMAND.to_owned());
+                .builds
+                .last_command()
+                .unwrap_or(DEFAULT_COMMAND)
+                .to_owned();
             self.set_minibuffer_input(&command);
         }
     }
@@ -52,9 +53,10 @@ impl Editor {
         let (command, directory) = match self.compilation() {
             Some(compilation) => (compilation.command.clone(), compilation.directory.clone()),
             None => (
-                self.last_compile
-                    .clone()
-                    .unwrap_or_else(|| DEFAULT_COMMAND.to_owned()),
+                self.builds
+                    .last_command()
+                    .unwrap_or(DEFAULT_COMMAND)
+                    .to_owned(),
                 self.project_directory(),
             ),
         };
@@ -78,7 +80,7 @@ impl Editor {
 
     #[cfg(test)]
     pub fn add_error_pattern(&mut self, pattern: super::errors::ErrorPattern) {
-        self.error_patterns.push(pattern);
+        self.builds.add_pattern(pattern);
     }
 
     pub(in crate::editor) fn start_compile(&mut self, command: String, directory: PathBuf) {
@@ -90,8 +92,7 @@ impl Editor {
         if let Some(running) = self.compilation().and_then(|compilation| compilation.job) {
             self.effects.push(Effect::Kill(running));
         }
-        self.errors_from = ErrorSource::Compilation;
-        self.last_compile = Some(command.clone());
+        self.builds.compiling(&command);
         let shown = paths::abbreviate(&directory, self.home.as_deref());
         let header = format!("Directory: {shown}\n$ {command}\n\n");
         let compilation = Compilation {
@@ -188,7 +189,7 @@ impl Editor {
             .buffers
             .get(index)
             .map_or(0, |buffer| buffer.line_of(buffer.len_chars()));
-        let patterns = self.error_patterns.clone();
+        let patterns = self.builds.patterns().to_vec();
         if let Some(compilation) = self.compilation_mut() {
             compilation
                 .errors
@@ -386,7 +387,7 @@ mod tests {
             );
             assert_eq!(job.directory, PathBuf::from(dir.path()));
         }
-        assert_eq!(editor.last_compile.as_deref(), Some("cargo clippy"));
+        assert_eq!(editor.builds.last_command(), Some("cargo clippy"));
     }
 
     #[test]

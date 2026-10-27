@@ -159,8 +159,8 @@ fn diagnostics_from_the_server_show_where_they_point() {
     );
 
     let found: Vec<_> = editor
-        .lints
-        .diagnostics
+        .builds
+        .diagnostics()
         .iter()
         .map(|diagnostic| {
             (

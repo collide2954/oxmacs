@@ -140,13 +140,6 @@ impl Errors {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(in crate::editor) enum ErrorSource {
-    #[default]
-    Compilation,
-    Lint,
-}
-
 pub(in crate::editor) fn step(
     current: Option<usize>,
     forward: bool,
@@ -233,7 +226,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn next_error(&mut self, forward: bool) {
-        if self.errors_from == ErrorSource::Lint && !self.in_compilation() {
+        if self.builds.walks_lints() && !self.in_compilation() {
             self.next_lint(forward);
             return;
         }
