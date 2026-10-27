@@ -18,7 +18,7 @@ use ox_rodeo::clock::Clock;
 use ox_rodeo::draw::{DrawList, Outline, Shape, Sprite, Viewport, raster};
 use ox_rodeo::spacetime::{Disk, Scene, Sky, Star};
 use ox_rodeo::texture::{TextureId, Textures};
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Editor, EventKind};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::view::game::{Caption, GameBuffer, Screen};
 
@@ -144,10 +144,10 @@ pub(crate) fn key(editor: &mut Editor, name: &str, down: bool) {
 }
 
 pub fn watch(editor: &mut Editor) {
-    editor.on_saved(saved);
+    editor.subscribe(EventKind::Saved);
 }
 
-fn saved(editor: &mut Editor, id: BufferId) {
+pub(crate) fn saved(editor: &mut Editor, id: BufferId) {
     let Some(path) = editor
         .buffer_by_id(id)
         .and_then(|buffer| buffer.file())

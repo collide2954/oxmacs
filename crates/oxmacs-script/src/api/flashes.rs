@@ -1,15 +1,16 @@
 use std::ops::Range;
 use std::time::{Duration, Instant};
 
-use ox_lang::heap::{Heap, Hold};
+use ox_lang::heap::Heap;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
+use crate::api::handlers::{self, Hook};
+use crate::api::handles;
 use crate::view::views::face_named;
-use crate::{api::handles, ide::log};
 
 const DURATION: Duration = Duration::from_millis(500);
 
@@ -29,15 +30,12 @@ struct Sent {
 
 #[derive(Debug, Default)]
 struct Evaluations {
-    handlers: Vec<(String, Hold)>,
     waiting: Vec<Ran>,
     sent: Vec<Sent>,
 }
 
 fn listening(editor: &Editor) -> bool {
-    editor
-        .plugin_state::<Evaluations>()
-        .is_some_and(|state| !state.handlers.is_empty())
+    handlers::listening(editor, Hook::Evaluate)
 }
 
 pub(crate) fn evaluated(editor: &mut Editor, buffer: BufferId, range: Range<usize>, failed: bool) {
@@ -173,18 +171,8 @@ fn on_evaluate(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
     if editor.plugin_state::<Evaluations>().is_none() {
         editor.set_plugin_state(Evaluations::default());
     }
-    let Some(state) = editor.plugin_state_mut::<Evaluations>() else {
-        return;
-    };
-    let key = print::display(heap, arguments[0]);
-    let hold = heap.hold(arguments[1]);
-    match state.handlers.iter_mut().find(|(known, _)| *known == key) {
-        Some((_, existing)) => {
-            let old = std::mem::replace(existing, hold);
-            heap.release(old);
-        }
-        None => state.handlers.push((key, hold)),
-    }
+    let key = handlers::key(heap, arguments[0]);
+    handlers::register(heap, editor, Hook::Evaluate, key, arguments[1]);
 }
 
 pub fn install(isolate: &mut Isolate) {
@@ -212,7 +200,7 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
         return;
     };
     let waiting = std::mem::take(&mut state.waiting);
-    let handlers: Vec<Hold> = state.handlers.iter().map(|(_, hold)| *hold).collect();
+    let holds = handlers::held(editor, Hook::Evaluate);
     for ran in waiting {
         let Ok(buffer) = handles::handle(isolate.heap_mut(), editor, ran.buffer) else {
             continue;
@@ -223,14 +211,7 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
             int(ran.range.end),
             Value::Bool(ran.failed),
         ];
-        for hold in &handlers {
-            let Some(handler) = isolate.held(*hold) else {
-                continue;
-            };
-            if let Err(error) = isolate.spawn(handler, &arguments) {
-                log::report(editor, &error, None);
-            }
-        }
+        handlers::spawn(isolate, editor, &holds, &arguments);
     }
 }
 

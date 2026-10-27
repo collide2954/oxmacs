@@ -1,17 +1,16 @@
 use std::time::{Duration, Instant};
 
-use ox_lang::heap::{Heap, Hold};
+use ox_lang::heap::Heap;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 
-use crate::ide::log;
+use crate::api::handlers::{self, Hook};
 
 #[derive(Debug)]
 struct Handler {
     key: String,
     after: Duration,
-    hold: Hold,
     fired: Option<Instant>,
 }
 
@@ -49,23 +48,21 @@ fn seconds(heap: &Heap, value: Value) -> Result<Duration, Error> {
 
 fn on_idle(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let after = seconds(heap, arguments[1])?;
-    let key = print::display(heap, arguments[0]);
-    let hold = heap.hold(arguments[2]);
+    let key = handlers::key(heap, arguments[0]);
     let mut resting = editor.take_plugin_state::<Resting>().unwrap_or_default();
     match resting.0.iter_mut().find(|handler| handler.key == key) {
         Some(handler) => {
-            heap.release(std::mem::replace(&mut handler.hold, hold));
             handler.after = after;
             handler.fired = None;
         }
         None => resting.0.push(Handler {
-            key,
+            key: key.clone(),
             after,
-            hold,
             fired: None,
         }),
     }
     editor.set_plugin_state(resting);
+    handlers::register(heap, editor, Hook::Idle, key, arguments[2]);
     Ok(Value::Nil)
 }
 
@@ -81,22 +78,20 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor, since: Instant, now: Inst
     let Some(resting) = editor.plugin_state_mut::<Resting>() else {
         return;
     };
-    let due: Vec<Hold> = resting
+    let due: Vec<String> = resting
         .0
         .iter_mut()
         .filter(|handler| handler.fired != Some(since) && handler.after <= rested)
         .map(|handler| {
             handler.fired = Some(since);
-            handler.hold
+            handler.key.clone()
         })
         .collect();
-    for hold in due {
-        if let Some(function) = isolate.held(hold)
-            && let Err(error) = isolate.spawn(function, &[])
-        {
-            log::report(editor, &error, None);
-        }
-    }
+    let holds: Vec<_> = due
+        .iter()
+        .filter_map(|key| handlers::held_for(editor, Hook::Idle, key))
+        .collect();
+    handlers::spawn(isolate, editor, &holds, &[]);
 }
 
 #[cfg(test)]

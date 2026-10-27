@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{self, Path, PathBuf};
 
 use crate::editor::prompts::minibuffer::{PathListing, Purpose};
-use crate::editor::{Choice, Editor};
+use crate::editor::{Choice, Editor, Event};
 use crate::files::{self, paths};
 use crate::text::{Buffer, FileInfo};
 
@@ -257,14 +257,11 @@ impl Editor {
 
     pub fn open_file(&mut self, path: &Path) -> bool {
         let path = self.absolute(path);
-        if path.is_dir() {
-            return match self.directory_handler {
-                Some(open) => open(self, &path),
-                None => self.open_path_prompt("Find file: ", Purpose::FindFile, &path),
-            };
+        if self.claimed(&path) {
+            return true;
         }
-        if let Some(open) = self.file_opener(&path) {
-            return open(self, &path);
+        if path.is_dir() {
+            return self.open_path_prompt("Find file: ", Purpose::FindFile, &path);
         }
         if let Some(index) = self.buffers.position(|buffer| {
             buffer
@@ -334,7 +331,6 @@ impl Editor {
         if self.held_save(id, format) {
             return true;
         }
-        self.tell_save(id);
         let Some(index) = self.buffers.position(|buffer| buffer.id() == id) else {
             return false;
         };
@@ -374,7 +370,7 @@ impl Editor {
                     self.request_lint(language, &path);
                 }
                 self.server_saved(id);
-                self.tell_saved(id);
+                self.record(Event::Saved(id));
                 true
             }
             Err(error) => {

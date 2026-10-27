@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use jiff::Timestamp;
 
-use crate::editor::{Editor, Effect, Job, JobId, Outcome};
+use crate::editor::{Editor, Effect, Event, Job, JobId, Outcome};
 use crate::text::BufferId;
 
 const KEPT: usize = 10;
@@ -56,7 +56,6 @@ pub(in crate::editor) struct Processes {
     tracked: Vec<Tracked>,
     next_id: u64,
     watching_usage: bool,
-    watchers: Vec<fn(&mut Editor)>,
 }
 
 fn kept<T: Copy>(history: &mut Vec<T>, value: T) {
@@ -68,15 +67,7 @@ fn kept<T: Copy>(history: &mut Vec<T>, value: T) {
 
 impl Editor {
     fn processes_changed(&mut self) {
-        for watcher in self.processes.watchers.clone() {
-            watcher(self);
-        }
-    }
-
-    pub fn on_processes_change(&mut self, watcher: fn(&mut Editor)) {
-        if !self.processes.watchers.contains(&watcher) {
-            self.processes.watchers.push(watcher);
-        }
+        self.record(Event::Processes);
     }
 
     pub fn processes(&self) -> Vec<ProcessInfo> {
@@ -249,7 +240,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::ProcessStatus;
-    use crate::editor::{Editor, Effect, Job, JobId, Outcome};
+    use crate::editor::{Editor, Effect, Event, EventKind, Job, JobId, Outcome};
 
     fn job(id: u64, program: &str, args: &[&str]) -> Job {
         Job {
@@ -362,20 +353,10 @@ mod tests {
         assert!(!editor.wants_process_usage());
     }
 
-    #[derive(Debug, Default)]
-    struct Changes(usize);
-
     #[test]
-    fn watchers_hear_about_every_change() {
+    fn process_changes_come_back_once_per_drain() {
         let mut editor = Editor::new();
-        editor.set_plugin_state(Changes::default());
-        let count = |editor: &mut Editor| {
-            if let Some(changes) = editor.plugin_state_mut::<Changes>() {
-                changes.0 += 1;
-            }
-        };
-        editor.on_processes_change(count);
-        editor.on_processes_change(count);
+        editor.subscribe(EventKind::Processes);
 
         editor.track_job(
             &job(1, "cargo", &["test"]),
@@ -384,12 +365,10 @@ mod tests {
             None,
         );
         editor.job_started(JobId(1), 5);
+        assert_eq!(editor.take_events(), [Event::Processes]);
         editor.processes_tick(&[]);
 
-        assert_eq!(
-            editor.plugin_state::<Changes>().map(|changes| changes.0),
-            Some(3)
-        );
+        assert_eq!(editor.take_events(), [Event::Processes]);
     }
 
     #[test]

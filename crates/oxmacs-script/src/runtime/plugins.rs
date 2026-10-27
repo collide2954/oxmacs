@@ -10,7 +10,7 @@ use oxmacs_core::command::{DynamicSpec, Scope};
 use oxmacs_core::editor::Editor;
 use semver::{Version, VersionReq};
 
-use crate::{api::commands, api::hooks, ide::log, runtime::modes, view::views};
+use crate::{api::commands, ide::log, runtime::modes, view::views};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Bundle {
@@ -495,9 +495,11 @@ fn stubs(editor: &mut Editor, plugin: &Plugin) {
         }
     }
     if plugin.manifest.opens_directories {
-        hooks::open_directories(editor, &plugin.manifest.name);
+        editor.claim_directories(&plugin.manifest.name);
     }
-    hooks::open_file_types(editor, &plugin.manifest.name, &plugin.manifest.opens_files);
+    for extension in &plugin.manifest.opens_files {
+        editor.claim_files(&plugin.manifest.name, extension);
+    }
     for declared in &plugin.manifest.modes {
         modes::declare(editor, &plugin.manifest.name, declared);
     }

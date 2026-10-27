@@ -1,44 +1,7 @@
 use crate::editor::Editor;
-use crate::editor::buffers::Mode;
-use crate::text::{BufferId, Splice};
+use crate::text::BufferId;
 
 impl Editor {
-    pub fn on_buffer_opened(&mut self, handler: fn(&mut Editor, BufferId)) {
-        self.opened_handlers.push(handler);
-    }
-
-    pub(super) fn tell_opened(&mut self, id: BufferId) {
-        for handler in self.opened_handlers.clone() {
-            handler(self, id);
-        }
-    }
-
-    pub fn track_edits(&mut self) {
-        self.tracking_edits = true;
-        for index in 0..self.buffers.len() {
-            if let Some((buffer, Mode::Text(_))) = self.buffers.entry_mut(index) {
-                buffer.track_splices();
-            }
-        }
-    }
-
-    pub(super) fn tracking_edits(&self) -> bool {
-        self.tracking_edits
-    }
-
-    pub fn take_edits(&mut self) -> Vec<(BufferId, Vec<Splice>)> {
-        let mut edits = Vec::new();
-        for index in 0..self.buffers.len() {
-            if let Some((buffer, Mode::Text(_))) = self.buffers.entry_mut(index) {
-                let splices = buffer.take_splices();
-                if !splices.is_empty() {
-                    edits.push((buffer.id(), splices));
-                }
-            }
-        }
-        edits
-    }
-
     pub fn hold_saves(&mut self) {
         self.holding_saves = true;
     }
@@ -85,10 +48,10 @@ mod tests {
     use std::fs;
 
     use crate::command::{Scope, ScopeId};
-    use crate::editor::Editor;
+    use crate::editor::{Editor, Event, EventKind};
     use crate::special_buffer::SpecialBuffer;
     use crate::testing::{editor_with, press};
-    use crate::text::{BufferId, Splice};
+    use crate::text::Splice;
 
     #[derive(Debug)]
     struct Listing;
@@ -99,26 +62,17 @@ mod tests {
         }
     }
 
-    fn note(editor: &mut Editor, id: BufferId) {
-        if editor.plugin_state::<Vec<BufferId>>().is_none() {
-            editor.set_plugin_state(Vec::<BufferId>::new());
-        }
-        if let Some(opened) = editor.plugin_state_mut::<Vec<BufferId>>() {
-            opened.push(id);
-        }
-    }
-
     #[test]
     fn edits_to_text_buffers_wait_until_they_are_taken() {
         let mut editor = editor_with("abc", 0);
-        editor.track_edits();
+        editor.subscribe(EventKind::Edited);
         let id = editor.buffer().id();
 
         press(&mut editor, "x C-d");
 
         assert_eq!(
-            editor.take_edits(),
-            [(
+            editor.take_events(),
+            [Event::Edited(
                 id,
                 vec![
                     Splice {
@@ -134,12 +88,12 @@ mod tests {
                 ]
             )]
         );
-        assert_eq!(editor.take_edits(), []);
+        assert_eq!(editor.take_events(), []);
         let listing = editor.open_special_buffer("*list*", Listing);
         if let Some(buffer) = editor.buffer_by_id_mut(listing) {
             buffer.insert_at(0, "plugin text");
         }
-        assert_eq!(editor.take_edits(), []);
+        assert_eq!(editor.take_events(), []);
     }
 
     #[test]
@@ -148,16 +102,18 @@ mod tests {
         let path = folder.path().join("notes.txt");
         fs::write(&path, "hello").unwrap();
         let mut editor = Editor::new();
-        editor.on_buffer_opened(note);
-        editor.track_edits();
+        editor.subscribe(EventKind::Opened);
+        editor.subscribe(EventKind::Edited);
 
         editor.open_file(&path);
         let file = editor.buffer().id();
         press(&mut editor, "x");
         editor.open_special_buffer("*list*", Listing);
 
-        assert_eq!(editor.plugin_state::<Vec<BufferId>>(), Some(&vec![file]));
-        assert_eq!(editor.take_edits().len(), 1);
+        let events = editor.take_events();
+        assert_eq!(events[0], Event::Opened(file));
+        assert!(matches!(events[1], Event::Edited(id, _) if id == file));
+        assert_eq!(events.len(), 2);
     }
 
     #[test]

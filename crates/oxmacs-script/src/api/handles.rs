@@ -5,7 +5,7 @@ use ox_lang::heap::Heap;
 use ox_lang::task::TaskId;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Editor, EventKind};
 use oxmacs_core::text::{Buffer, BufferId};
 
 #[derive(Debug)]
@@ -36,12 +36,23 @@ pub(crate) fn handle(heap: &mut Heap, editor: &mut Editor, id: BufferId) -> Resu
         .ok_or_else(killed)?
         .name()
         .to_owned();
-    let live = editor.buffer_ids();
+    editor.subscribe(EventKind::Killed);
     let state = handles(editor);
-    state.made.retain(|known, _| live.contains(known));
     let shared = Arc::clone(state.made.entry(id).or_insert_with(|| Arc::new(Handle(id))));
     heap.shared(&format!("buffer {name}"), shared)
         .map_err(Error::from)
+}
+
+pub(crate) fn closed(heap: &mut Heap, editor: &mut Editor, id: BufferId) -> Result<Value, Error> {
+    let shared = handles(editor)
+        .made
+        .remove(&id)
+        .unwrap_or_else(|| Arc::new(Handle(id)));
+    heap.shared("closed buffer", shared).map_err(Error::from)
+}
+
+pub(crate) fn forget(editor: &mut Editor, id: BufferId) {
+    handles(editor).made.remove(&id);
 }
 
 fn of(heap: &Heap, value: Value) -> Option<BufferId> {

@@ -7,7 +7,7 @@ use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::display::LineStyle;
-use oxmacs_core::editor::{Editor, Heard, InputLine};
+use oxmacs_core::editor::{Editor, Event, EventKind, InputLine};
 use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
@@ -638,6 +638,15 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         start_chat(editor, id, prompt);
     }
     fill(editor, id, rendered, given.line.take());
+    for (wanted, kind) in [
+        (given.clicked.is_some(), EventKind::Clicked),
+        (given.dropped.is_some(), EventKind::Dropped),
+        (given.typed.is_some(), EventKind::Typed),
+    ] {
+        if wanted {
+            editor.subscribe(kind);
+        }
+    }
     if let Some((buffer, view)) = editor.special_buffer_mut::<LinesBuffer>(id) {
         view.seen_line = Some(buffer.line_of(buffer.point()));
         if given.directory.is_some() {
@@ -671,43 +680,40 @@ fn count(number: usize) -> Value {
 
 type Pick = fn(&LinesBuffer) -> Option<Hold>;
 
-fn heard(isolate: &mut Isolate, editor: &mut Editor) {
-    for event in editor.take_heard() {
-        let (id, pick, arguments): (BufferId, Pick, Vec<Value>) = match event {
-            Heard::Clicked {
-                buffer,
-                line,
-                clicks,
-            } => (
-                buffer,
-                |view| view.clicked,
-                vec![count(line), count(clicks)],
-            ),
-            Heard::Dropped { buffer, from, to } => {
-                (buffer, |view| view.dropped, vec![count(from), count(to)])
-            }
-            Heard::Typed { buffer, text } => {
-                let Ok(text) = isolate.heap_mut().string(&text) else {
-                    continue;
-                };
-                (buffer, |view| view.typed, vec![text])
-            }
-        };
-        let Some(handler) = editor
-            .special_buffer::<LinesBuffer>(id)
-            .and_then(|(_, view)| pick(view))
-            .and_then(|hold| isolate.held(hold))
-        else {
-            continue;
-        };
-        if let Err(error) = isolate.spawn(handler, &arguments) {
-            crate::ide::log::report(editor, &error, None);
+pub(crate) fn hear(isolate: &mut Isolate, editor: &mut Editor, event: Event) {
+    let (id, pick, arguments): (BufferId, Pick, Vec<Value>) = match event {
+        Event::Clicked {
+            buffer,
+            line,
+            clicks,
+        } => (
+            buffer,
+            |view| view.clicked,
+            vec![count(line), count(clicks)],
+        ),
+        Event::Dropped { buffer, from, to } => {
+            (buffer, |view| view.dropped, vec![count(from), count(to)])
         }
+        Event::Typed { buffer, text } => {
+            let Ok(text) = isolate.heap_mut().string(&text) else {
+                return;
+            };
+            (buffer, |view| view.typed, vec![text])
+        }
+        _ => return,
+    };
+    let Some(handler) = editor
+        .special_buffer::<LinesBuffer>(id)
+        .and_then(|(_, view)| pick(view))
+        .and_then(|hold| isolate.held(hold))
+    else {
+        return;
+    };
+    if let Err(error) = isolate.spawn(handler, &arguments) {
+        crate::ide::log::report(editor, &error, None);
     }
 }
-
 pub fn watch(isolate: &mut Isolate, editor: &mut Editor) {
-    heard(isolate, editor);
     let mut calls: Vec<(Hold, usize)> = Vec::new();
     let current = editor.buffer().id();
     for id in editor.special_buffers::<LinesBuffer>() {

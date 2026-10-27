@@ -9,7 +9,7 @@ use std::path::Path;
 use crate::display::{ScreenLine, Viewport};
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::special::splash::Splash;
-use crate::editor::{Choice, Completion, Editor};
+use crate::editor::{Choice, Completion, Editor, Event, EventKind};
 use crate::files::paths;
 use crate::special_buffer::{self, SpecialBuffer};
 use crate::syntax::{Language, Syntax};
@@ -336,6 +336,9 @@ impl Editor {
     }
 
     pub(super) fn finish_kill(&mut self, index: usize) {
+        if let Some(id) = self.buffers.get(index).map(Buffer::id) {
+            self.record(Event::Killed(id));
+        }
         if let Some(path) = self
             .buffers
             .get(index)
@@ -399,7 +402,7 @@ impl Editor {
 
     pub(super) fn add_buffer_with(&mut self, mut buffer: Buffer, mode: Mode) {
         let text = matches!(mode, Mode::Text(_));
-        if text && self.tracking_edits() {
+        if text && self.subscribed(EventKind::Edited) {
             buffer.track_splices();
         }
         let id = buffer.id();
@@ -408,7 +411,7 @@ impl Editor {
         self.name_file_buffers();
         self.after_buffer_switch();
         if text {
-            self.tell_opened(id);
+            self.record(Event::Opened(id));
         }
     }
 

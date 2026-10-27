@@ -63,7 +63,7 @@ Hooks call a function, as a task, when something happens. Registering the same k
 (on-idle :rest 300 (fn [] (message "Time for a break")))
 ```
 
-Four hooks follow the buffers people type in, leaving plugin buffers out. `on-buffer-open` hears each one open, `on-mode-enter` hears it enter a mode, and `on-buffer-change` gets the buffer and its edits after each command, each edit a map of `start`, `removed` and `inserted`. `on-before-save` runs before a file is written, and the save waits for it, so a handler can tidy the text first; an error in it cancels the save.
+Three hooks follow the buffers people type in, leaving plugin buffers out. `on-buffer-open` hears each one open, `on-mode-enter` hears it enter a mode, and `on-buffer-change` gets the buffer and its edits after each command, each edit a map of `start`, `removed` and `inserted`. `on-buffer-close` hears every buffer close, plugin buffers too, with the handle it had while open, so a plugin can let go of what it kept for it. `on-before-save` runs before a file is written, and the save waits for it, so a handler can tidy the text first; an error in it cancels the save.
 
 ```text
 (module (import (ox string)))

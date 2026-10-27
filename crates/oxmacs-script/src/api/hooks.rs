@@ -1,232 +1,81 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use ox_lang::heap::{Heap, Hold};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::editor::{Arrangement, Editor, WindowId};
-use oxmacs_core::text::{BufferId, Splice};
+use oxmacs_core::editor::{Editor, Event, EventKind};
+use oxmacs_core::text::{Buffer, Splice};
 
-use crate::{PATIENT, api::handles, ide::log, runtime::plugins};
-
-#[derive(Debug, PartialEq)]
-enum Waiting {
-    OpenDirectory(PathBuf),
-    OpenFile(PathBuf, String),
-    DiskChanged,
-    Saved(PathBuf),
-    Configured,
-    Processes,
-    Opened(BufferId),
-    Changed(BufferId, Vec<Splice>),
-    Mode(BufferId, String),
-    Windows,
-    Diagnostics,
-}
-
-type Seen = (WindowId, BufferId, Arrangement);
-
-fn windows_seen(editor: &Editor) -> Seen {
-    (
-        editor.selected_window(),
-        editor.buffer().id(),
-        editor.window_arrangement(),
-    )
-}
+use crate::api::handlers::{self, Hook};
+use crate::api::{buffers, games, handles};
+use crate::ide::{log, repl};
+use crate::{PATIENT, runtime::plugins};
 
 #[derive(Debug, Default)]
-pub struct Hooks {
-    file_types: Vec<(String, Hold)>,
-    claimed_types: Vec<(String, String)>,
-    windows: Vec<(String, Hold)>,
-    seen_windows: Option<Seen>,
-    diagnostics: Vec<(String, Hold)>,
-    seen_diagnostics: u64,
-    directory: Option<Hold>,
-    opener: Option<String>,
-    disk: Vec<(String, Hold)>,
-    saved: Vec<(String, Hold)>,
-    configured: Vec<(String, Hold)>,
-    processes: Vec<(String, Hold)>,
-    opened: Vec<(String, Hold)>,
-    changed: Vec<(String, Hold)>,
-    modes: Vec<(String, Hold)>,
-    before_save: Vec<(String, Hold)>,
-    languages: HashMap<BufferId, String>,
-    waiting: Vec<Waiting>,
-}
+struct Waiting(Vec<Event>);
 
-fn hooks(editor: &mut Editor) -> Option<&mut Hooks> {
-    if editor.plugin_state::<Hooks>().is_none() {
-        editor.set_plugin_state(Hooks::default());
+const EVENTS: [(&str, Hook, EventKind); 10] = [
+    ("on-disk-change", Hook::DiskChange, EventKind::DiskChanged),
+    ("on-saved", Hook::Saved, EventKind::Saved),
+    (
+        "on-settings-change",
+        Hook::SettingsChange,
+        EventKind::Configured,
+    ),
+    (
+        "on-processes-change",
+        Hook::ProcessesChange,
+        EventKind::Processes,
+    ),
+    ("on-buffer-open", Hook::BufferOpen, EventKind::Opened),
+    ("on-buffer-close", Hook::BufferClose, EventKind::Killed),
+    ("on-buffer-change", Hook::BufferChange, EventKind::Edited),
+    ("on-mode-enter", Hook::ModeEnter, EventKind::ModeChanged),
+    ("on-window-change", Hook::WindowChange, EventKind::Windows),
+    (
+        "on-diagnostics-change",
+        Hook::DiagnosticsChange,
+        EventKind::Diagnostics,
+    ),
+];
+
+pub fn collect(editor: &mut Editor) {
+    let events = editor.take_events();
+    if events.is_empty() {
+        return;
     }
-    editor.plugin_state_mut::<Hooks>()
-}
-
-fn open_directory(editor: &mut Editor, path: &Path) -> bool {
-    let Some(opener) = editor
-        .plugin_state::<Hooks>()
-        .and_then(|hooks| hooks.opener.clone())
-    else {
-        return false;
-    };
-    plugins::request_wake(editor, &opener);
-    if let Some(hooks) = hooks(editor) {
-        hooks
-            .waiting
-            .push(Waiting::OpenDirectory(path.to_path_buf()));
+    for event in &events {
+        match event {
+            Event::Saved(id) => {
+                games::saved(editor, *id);
+                repl::saved(editor, *id);
+            }
+            Event::OpenFile { owner, .. } | Event::OpenDirectory { owner, .. } => {
+                plugins::request_wake(editor, owner);
+            }
+            _ => {}
+        }
     }
-    true
+    if editor.plugin_state::<Waiting>().is_none() {
+        editor.set_plugin_state(Waiting::default());
+    }
+    if let Some(waiting) = editor.plugin_state_mut::<Waiting>() {
+        waiting.0.extend(events);
+    }
 }
 
-fn extension_of(path: &Path) -> Option<String> {
+pub fn waiting(editor: &mut Editor) -> bool {
+    editor.events_waiting()
+        || editor
+            .plugin_state::<Waiting>()
+            .is_some_and(|waiting| !waiting.0.is_empty())
+}
+
+fn extension_of(path: &Path) -> String {
     path.extension()
         .and_then(|extension| extension.to_str())
         .map(str::to_lowercase)
-}
-
-fn open_typed_file(editor: &mut Editor, path: &Path) -> bool {
-    let Some(extension) = extension_of(path) else {
-        return false;
-    };
-    let Some(plugin) = editor.plugin_state::<Hooks>().and_then(|hooks| {
-        hooks
-            .claimed_types
-            .iter()
-            .find(|(known, _)| *known == extension)
-            .map(|(_, plugin)| plugin.clone())
-    }) else {
-        return false;
-    };
-    plugins::request_wake(editor, &plugin);
-    if let Some(hooks) = hooks(editor) {
-        hooks
-            .waiting
-            .push(Waiting::OpenFile(path.to_path_buf(), extension));
-    }
-    true
-}
-
-pub fn open_file_types(editor: &mut Editor, plugin: &str, extensions: &[String]) {
-    for extension in extensions {
-        let extension = extension.to_lowercase();
-        if let Some(hooks) = hooks(editor) {
-            hooks.claimed_types.retain(|(known, _)| *known != extension);
-            hooks
-                .claimed_types
-                .push((extension.clone(), plugin.to_owned()));
-        }
-        editor.on_open_file_type(&extension, open_typed_file);
-    }
-}
-
-fn disk_changed(editor: &mut Editor) {
-    if let Some(hooks) = hooks(editor)
-        && !hooks.waiting.contains(&Waiting::DiskChanged)
-    {
-        hooks.waiting.push(Waiting::DiskChanged);
-    }
-}
-
-fn saved(editor: &mut Editor, id: BufferId) {
-    let Some(path) = editor
-        .buffer_by_id(id)
-        .and_then(|buffer| buffer.file())
-        .map(|file| file.path.clone())
-    else {
-        return;
-    };
-    if let Some(hooks) = hooks(editor) {
-        hooks.waiting.push(Waiting::Saved(path));
-    }
-}
-
-pub fn settings_changed(editor: &mut Editor) {
-    if let Some(hooks) = hooks(editor)
-        && !hooks.waiting.contains(&Waiting::Configured)
-    {
-        hooks.waiting.push(Waiting::Configured);
-    }
-}
-
-fn processes_changed(editor: &mut Editor) {
-    if let Some(hooks) = hooks(editor)
-        && !hooks.processes.is_empty()
-        && !hooks.waiting.contains(&Waiting::Processes)
-    {
-        hooks.waiting.push(Waiting::Processes);
-    }
-}
-
-pub fn watch(editor: &mut Editor) {
-    hooks(editor);
-    editor.on_disk_change(disk_changed);
-    editor.on_saved(saved);
-    editor.on_configured(settings_changed);
-    editor.on_processes_change(processes_changed);
-    editor.on_buffer_opened(opened);
-}
-
-fn opened(editor: &mut Editor, id: BufferId) {
-    if let Some(hooks) = hooks(editor)
-        && !hooks.opened.is_empty()
-    {
-        hooks.waiting.push(Waiting::Opened(id));
-    }
-}
-
-fn languages(editor: &Editor) -> Vec<(BufferId, String)> {
-    editor
-        .buffer_ids()
-        .into_iter()
-        .filter_map(|id| {
-            editor
-                .buffer_language(id)
-                .map(|language| (id, language.name().to_owned()))
-        })
-        .collect()
-}
-
-fn notice(editor: &mut Editor) {
-    let Some(known) = editor.plugin_state::<Hooks>() else {
-        return;
-    };
-    let watching_modes = !known.modes.is_empty();
-    let windows = (!known.windows.is_empty())
-        .then(|| windows_seen(editor))
-        .filter(|now| known.seen_windows.as_ref() != Some(now));
-    let revision = editor.diagnostics_revision();
-    let diagnosed = !known.diagnostics.is_empty() && known.seen_diagnostics != revision;
-    let edits = if known.changed.is_empty() {
-        Vec::new()
-    } else {
-        editor.take_edits()
-    };
-    let modes = if watching_modes {
-        languages(editor)
-    } else {
-        Vec::new()
-    };
-    let Some(hooks) = hooks(editor) else {
-        return;
-    };
-    for (id, splices) in edits {
-        hooks.waiting.push(Waiting::Changed(id, splices));
-    }
-    if let Some(now) = windows {
-        hooks.seen_windows = Some(now);
-        hooks.waiting.push(Waiting::Windows);
-    }
-    if diagnosed {
-        hooks.seen_diagnostics = revision;
-        hooks.waiting.push(Waiting::Diagnostics);
-    }
-    for (id, mode) in modes {
-        if hooks.languages.get(&id) != Some(&mode) {
-            hooks.languages.insert(id, mode.clone());
-            hooks.waiting.push(Waiting::Mode(id, mode));
-        }
-    }
+        .unwrap_or_default()
 }
 
 fn edits(heap: &mut Heap, splices: &[Splice]) -> Result<Value, Error> {
@@ -245,11 +94,82 @@ fn edits(heap: &mut Heap, splices: &[Splice]) -> Result<Value, Error> {
     heap.vector_from(&items).map_err(Error::from)
 }
 
-fn held(editor: &Editor, pick: fn(&Hooks) -> &Vec<(String, Hold)>) -> Vec<Hold> {
-    editor
-        .plugin_state::<Hooks>()
-        .map(|hooks| pick(hooks).iter().map(|(_, hold)| *hold).collect())
-        .unwrap_or_default()
+fn holds(editor: &Editor, event: &Event) -> Vec<Hold> {
+    let hook = match event {
+        Event::OpenFile { path, .. } => {
+            return handlers::held_for(editor, Hook::OpenFile, &extension_of(path))
+                .into_iter()
+                .collect();
+        }
+        Event::OpenDirectory { .. } => Hook::OpenDirectory,
+        Event::DiskChanged => Hook::DiskChange,
+        Event::Saved(_) => Hook::Saved,
+        Event::Configured => Hook::SettingsChange,
+        Event::Processes => Hook::ProcessesChange,
+        Event::Opened(_) => Hook::BufferOpen,
+        Event::Killed(_) => Hook::BufferClose,
+        Event::Edited(..) => Hook::BufferChange,
+        Event::ModeChanged(..) => Hook::ModeEnter,
+        Event::Windows => Hook::WindowChange,
+        Event::Diagnostics => Hook::DiagnosticsChange,
+        Event::Clicked { .. } | Event::Dropped { .. } | Event::Typed { .. } => return Vec::new(),
+    };
+    handlers::held(editor, hook)
+}
+
+fn dispatch(isolate: &mut Isolate, editor: &mut Editor, event: Event) -> Result<(), Error> {
+    let holds = holds(editor, &event);
+    let heap = isolate.heap_mut();
+    let arguments = match event {
+        Event::Killed(id) if holds.is_empty() => {
+            handles::forget(editor, id);
+            return Ok(());
+        }
+        _ if holds.is_empty() => return Ok(()),
+        Event::Opened(id) | Event::Edited(id, _) | Event::ModeChanged(id, _)
+            if editor.buffer_by_id(id).is_none() =>
+        {
+            return Ok(());
+        }
+        Event::OpenFile { path, .. } | Event::OpenDirectory { path, .. } => {
+            vec![shown(heap, Some(&path))?]
+        }
+        Event::Saved(id) => {
+            let path = editor
+                .buffer_by_id(id)
+                .and_then(Buffer::file)
+                .map(|file| file.path.clone());
+            vec![shown(heap, path.as_deref())?]
+        }
+        Event::Opened(id) => vec![handles::handle(heap, editor, id)?],
+        Event::Killed(id) => vec![handles::closed(heap, editor, id)?],
+        Event::Edited(id, splices) => {
+            vec![handles::handle(heap, editor, id)?, edits(heap, &splices)?]
+        }
+        Event::ModeChanged(id, mode) => {
+            vec![handles::handle(heap, editor, id)?, heap.string(&mode)?]
+        }
+        _ => Vec::new(),
+    };
+    handlers::spawn(isolate, editor, &holds, &arguments);
+    Ok(())
+}
+
+pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
+    let waiting = editor
+        .plugin_state_mut::<Waiting>()
+        .map(|waiting| std::mem::take(&mut waiting.0))
+        .unwrap_or_default();
+    for event in waiting {
+        if matches!(
+            event,
+            Event::Clicked { .. } | Event::Dropped { .. } | Event::Typed { .. }
+        ) {
+            buffers::hear(isolate, editor, event);
+        } else if let Err(error) = dispatch(isolate, editor, event) {
+            log::report(editor, &error, None);
+        }
+    }
 }
 
 pub fn release_saves(isolate: &mut Isolate, editor: &mut Editor) {
@@ -257,7 +177,7 @@ pub fn release_saves(isolate: &mut Isolate, editor: &mut Editor) {
     if saves.is_empty() {
         return;
     }
-    let handlers = held(editor, |hooks| &hooks.before_save);
+    let handlers = handlers::held(editor, Hook::BeforeSave);
     for id in saves {
         let mut failed = None;
         for hold in &handlers {
@@ -286,120 +206,6 @@ pub fn release_saves(isolate: &mut Isolate, editor: &mut Editor) {
     }
 }
 
-pub fn open_directories(editor: &mut Editor, plugin: &str) {
-    if let Some(hooks) = hooks(editor) {
-        hooks.opener = Some(plugin.to_owned());
-    }
-    editor.on_open_directory(open_directory);
-}
-
-pub fn waiting(editor: &mut Editor) -> bool {
-    notice(editor);
-    editor
-        .plugin_state::<Hooks>()
-        .is_some_and(|hooks| !hooks.waiting.is_empty())
-}
-
-pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
-    notice(editor);
-    let waiting = hooks(editor)
-        .map(|hooks| std::mem::take(&mut hooks.waiting))
-        .unwrap_or_default();
-    for event in waiting {
-        let (handlers, arguments) = match event {
-            Waiting::OpenDirectory(path) => {
-                let handler = editor
-                    .plugin_state::<Hooks>()
-                    .and_then(|hooks| hooks.directory);
-                let Ok(path) = isolate.heap_mut().string(&path.display().to_string()) else {
-                    continue;
-                };
-                (handler.into_iter().collect::<Vec<_>>(), vec![path])
-            }
-            Waiting::DiskChanged => (
-                editor
-                    .plugin_state::<Hooks>()
-                    .map(|hooks| hooks.disk.iter().map(|(_, hold)| *hold).collect())
-                    .unwrap_or_default(),
-                Vec::new(),
-            ),
-            Waiting::Configured => (
-                editor
-                    .plugin_state::<Hooks>()
-                    .map(|hooks| hooks.configured.iter().map(|(_, hold)| *hold).collect())
-                    .unwrap_or_default(),
-                Vec::new(),
-            ),
-            Waiting::Processes => (
-                editor
-                    .plugin_state::<Hooks>()
-                    .map(|hooks| hooks.processes.iter().map(|(_, hold)| *hold).collect())
-                    .unwrap_or_default(),
-                Vec::new(),
-            ),
-            Waiting::Saved(path) => {
-                let Ok(path) = isolate.heap_mut().string(&path.display().to_string()) else {
-                    continue;
-                };
-                (
-                    editor
-                        .plugin_state::<Hooks>()
-                        .map(|hooks| hooks.saved.iter().map(|(_, hold)| *hold).collect())
-                        .unwrap_or_default(),
-                    vec![path],
-                )
-            }
-            Waiting::Opened(id) => {
-                let Ok(buffer) = handles::handle(isolate.heap_mut(), editor, id) else {
-                    continue;
-                };
-                (held(editor, |hooks| &hooks.opened), vec![buffer])
-            }
-            Waiting::Changed(id, splices) => {
-                let Ok(buffer) = handles::handle(isolate.heap_mut(), editor, id) else {
-                    continue;
-                };
-                let Ok(changes) = edits(isolate.heap_mut(), &splices) else {
-                    continue;
-                };
-                (held(editor, |hooks| &hooks.changed), vec![buffer, changes])
-            }
-            Waiting::OpenFile(path, extension) => {
-                let handler = editor.plugin_state::<Hooks>().and_then(|hooks| {
-                    hooks
-                        .file_types
-                        .iter()
-                        .find(|(known, _)| *known == extension)
-                        .map(|(_, hold)| *hold)
-                });
-                let Ok(path) = isolate.heap_mut().string(&path.display().to_string()) else {
-                    continue;
-                };
-                (handler.into_iter().collect(), vec![path])
-            }
-            Waiting::Windows => (held(editor, |hooks| &hooks.windows), Vec::new()),
-            Waiting::Diagnostics => (held(editor, |hooks| &hooks.diagnostics), Vec::new()),
-            Waiting::Mode(id, mode) => {
-                let Ok(buffer) = handles::handle(isolate.heap_mut(), editor, id) else {
-                    continue;
-                };
-                let Ok(mode) = isolate.heap_mut().string(&mode) else {
-                    continue;
-                };
-                (held(editor, |hooks| &hooks.modes), vec![buffer, mode])
-            }
-        };
-        for hold in handlers {
-            let Some(handler) = isolate.held(hold) else {
-                continue;
-            };
-            if let Err(error) = isolate.spawn(handler, &arguments) {
-                log::report(editor, &error, None);
-            }
-        }
-    }
-}
-
 fn path_of(heap: &Heap, name: &str, value: Value) -> Result<PathBuf, Error> {
     heap.text(value).map(PathBuf::from).ok_or_else(|| {
         Error::new(format!(
@@ -418,45 +224,6 @@ fn shown(heap: &mut Heap, path: Option<&Path>) -> Result<Value, Error> {
     }
 }
 
-fn on_open_file(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
-    let extension = print::display(heap, arguments[0]).to_lowercase();
-    let hold = heap.hold(arguments[1]);
-    let Some(hooks) = hooks(editor) else {
-        heap.release(hold);
-        return;
-    };
-    match hooks
-        .file_types
-        .iter_mut()
-        .find(|(known, _)| *known == extension)
-    {
-        Some((_, existing)) => {
-            let old = std::mem::replace(existing, hold);
-            heap.release(old);
-        }
-        None => hooks.file_types.push((extension, hold)),
-    }
-}
-
-fn on_open_directory(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
-    let hold = heap.hold(arguments[0]);
-    if let Some(old) = hooks(editor).and_then(|hooks| hooks.directory.replace(hold)) {
-        heap.release(old);
-    }
-}
-
-pub(crate) fn keyed(heap: &mut Heap, handlers: &mut Vec<(String, Hold)>, arguments: &[Value]) {
-    let key = print::display(heap, arguments[0]);
-    let hold = heap.hold(arguments[1]);
-    match handlers.iter_mut().find(|(known, _)| *known == key) {
-        Some((_, existing)) => {
-            let old = std::mem::replace(existing, hold);
-            heap.release(old);
-        }
-        None => handlers.push((key, hold)),
-    }
-}
-
 fn diagnostic_counts(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Error> {
     let count = |number: usize| Value::Int(i64::try_from(number).unwrap_or(i64::MAX));
     let mut items = Vec::new();
@@ -472,133 +239,55 @@ fn diagnostic_counts(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Resul
     heap.map_from(&items)
 }
 
-fn install_buffer_hooks(isolate: &mut Isolate) {
-    isolate
-        .native("ox", "on-buffer-open")
-        .arity(2, Some(2))
-        .host::<Editor>(|heap, editor, arguments| {
-            if let Some(hooks) = hooks(editor) {
-                keyed(heap, &mut hooks.opened, arguments);
-            }
-            Ok(Value::Nil)
-        });
-    isolate
-        .native("ox", "on-buffer-change")
-        .arity(2, Some(2))
-        .host::<Editor>(|heap, editor, arguments| {
-            editor.track_edits();
-            if let Some(hooks) = hooks(editor) {
-                keyed(heap, &mut hooks.changed, arguments);
-            }
-            Ok(Value::Nil)
-        });
-    isolate
-        .native("ox", "on-mode-enter")
-        .arity(2, Some(2))
-        .host::<Editor>(|heap, editor, arguments| {
-            let known = languages(editor);
-            if let Some(hooks) = hooks(editor) {
-                if hooks.modes.is_empty() {
-                    hooks.languages = known.into_iter().collect();
-                }
-                keyed(heap, &mut hooks.modes, arguments);
-            }
-            Ok(Value::Nil)
-        });
-    isolate
-        .native("ox", "on-window-change")
-        .arity(2, Some(2))
-        .host::<Editor>(|heap, editor, arguments| {
-            let now = windows_seen(editor);
-            if let Some(hooks) = hooks(editor) {
-                if hooks.windows.is_empty() {
-                    hooks.seen_windows = Some(now);
-                }
-                keyed(heap, &mut hooks.windows, arguments);
-            }
-            Ok(Value::Nil)
-        });
-    isolate
-        .native("ox", "on-diagnostics-change")
-        .arity(2, Some(2))
-        .host::<Editor>(|heap, editor, arguments| {
-            let revision = editor.diagnostics_revision();
-            if let Some(hooks) = hooks(editor) {
-                if hooks.diagnostics.is_empty() {
-                    hooks.seen_diagnostics = revision;
-                }
-                keyed(heap, &mut hooks.diagnostics, arguments);
-            }
-            Ok(Value::Nil)
-        });
-    isolate
-        .native("ox", "diagnostic-counts")
-        .arity(0, Some(0))
-        .host::<Editor>(diagnostic_counts);
-    isolate
-        .native("ox", "on-before-save")
-        .arity(2, Some(2))
-        .host::<Editor>(|heap, editor, arguments| {
-            editor.hold_saves();
-            if let Some(hooks) = hooks(editor) {
-                keyed(heap, &mut hooks.before_save, arguments);
-            }
-            Ok(Value::Nil)
-        });
-}
-
-pub fn install(isolate: &mut Isolate) {
+fn install_handlers(isolate: &mut Isolate) {
+    for (name, hook, kind) in EVENTS {
+        isolate.native("ox", name).arity(2, Some(2)).host::<Editor>(
+            move |heap, editor, arguments| {
+                editor.subscribe(kind);
+                let key = handlers::key(heap, arguments[0]);
+                handlers::register(heap, editor, hook, key, arguments[1]);
+                Ok(Value::Nil)
+            },
+        );
+    }
     isolate
         .native("ox", "on-open-directory")
         .arity(1, Some(1))
         .host::<Editor>(|heap, editor, arguments| {
-            on_open_directory(heap, editor, arguments);
+            handlers::register(
+                heap,
+                editor,
+                Hook::OpenDirectory,
+                String::new(),
+                arguments[0],
+            );
             Ok(Value::Nil)
         });
     isolate
         .native("ox", "on-open-file")
         .arity(2, Some(2))
         .host::<Editor>(|heap, editor, arguments| {
-            on_open_file(heap, editor, arguments);
+            let extension = handlers::key(heap, arguments[0]).to_lowercase();
+            handlers::register(heap, editor, Hook::OpenFile, extension, arguments[1]);
             Ok(Value::Nil)
         });
     isolate
-        .native("ox", "on-disk-change")
+        .native("ox", "on-before-save")
         .arity(2, Some(2))
         .host::<Editor>(|heap, editor, arguments| {
-            if let Some(hooks) = hooks(editor) {
-                keyed(heap, &mut hooks.disk, arguments);
-            }
+            editor.hold_saves();
+            let key = handlers::key(heap, arguments[0]);
+            handlers::register(heap, editor, Hook::BeforeSave, key, arguments[1]);
             Ok(Value::Nil)
         });
+}
+
+pub fn install(isolate: &mut Isolate) {
+    install_handlers(isolate);
     isolate
-        .native("ox", "on-saved")
-        .arity(2, Some(2))
-        .host::<Editor>(|heap, editor, arguments| {
-            if let Some(hooks) = hooks(editor) {
-                keyed(heap, &mut hooks.saved, arguments);
-            }
-            Ok(Value::Nil)
-        });
-    isolate
-        .native("ox", "on-settings-change")
-        .arity(2, Some(2))
-        .host::<Editor>(|heap, editor, arguments| {
-            if let Some(hooks) = hooks(editor) {
-                keyed(heap, &mut hooks.configured, arguments);
-            }
-            Ok(Value::Nil)
-        });
-    isolate
-        .native("ox", "on-processes-change")
-        .arity(2, Some(2))
-        .host::<Editor>(|heap, editor, arguments| {
-            if let Some(hooks) = hooks(editor) {
-                keyed(heap, &mut hooks.processes, arguments);
-            }
-            Ok(Value::Nil)
-        });
-    install_buffer_hooks(isolate);
+        .native("ox", "diagnostic-counts")
+        .arity(0, Some(0))
+        .host::<Editor>(diagnostic_counts);
     isolate
         .native("ox", "open-file")
         .arity(1, Some(1))
@@ -717,6 +406,38 @@ mod tests {
             ox.eval(&mut editor, "@heard").unwrap(),
             format!(r#"[[:open "notes.rs"] [:mode "{mode}"] [:change "notes.rs" 0 0 1 1]]"#)
         );
+    }
+
+    #[test]
+    fn closing_a_buffer_reaches_its_handlers_with_the_handle_it_opened_with() {
+        let (_home, mut editor, mut ox) = with_init(
+            r"(def opened (atom nil)) (def closed (atom nil))
+(on-buffer-open :test (fn [b] (reset! opened b)))
+(on-buffer-close :test (fn [b] (reset! closed (= b @opened))))",
+        );
+
+        ox.eval(&mut editor, r#"(show-text "*note*" "x")"#).unwrap();
+        settle(&mut editor, &mut ox);
+        ox.eval(&mut editor, r#"(close-buffer "*note*")"#).unwrap();
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(ox.eval(&mut editor, "@closed").unwrap(), "true");
+    }
+
+    #[test]
+    fn buffers_closed_before_their_opening_is_heard_are_skipped_quietly() {
+        let (_home, mut editor, mut ox) =
+            with_init(r"(def heard (atom 0)) (on-buffer-open :test (fn [b] (swap! heard inc)))");
+
+        ox.eval(
+            &mut editor,
+            r#"(show-text "*brief*" "x") (close-buffer "*brief*")"#,
+        )
+        .unwrap();
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(ox.eval(&mut editor, "@heard").unwrap(), "0");
+        assert_eq!(editor.message(), None);
     }
 
     #[test]

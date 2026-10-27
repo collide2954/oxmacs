@@ -4,6 +4,7 @@ pub(crate) mod consoles;
 pub(crate) mod editing;
 pub(crate) mod flashes;
 pub mod games;
+pub(crate) mod handlers;
 pub(crate) mod handles;
 pub(crate) mod hooks;
 pub mod idle;

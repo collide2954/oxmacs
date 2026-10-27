@@ -11,7 +11,7 @@ use ox_lang::testing;
 use ox_lang::value::Value;
 use ox_lang::{Error, read};
 use oxmacs_core::command::{Command, CommandId, DynamicSpec, Scope, ScopeId};
-use oxmacs_core::editor::{Editor, InputLine};
+use oxmacs_core::editor::{Editor, EventKind, InputLine};
 use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
@@ -243,7 +243,7 @@ fn command(
     })
 }
 
-fn saved(editor: &mut Editor, id: BufferId) {
+pub(crate) fn saved(editor: &mut Editor, id: BufferId) {
     let Some(path) = editor
         .buffer_by_id(id)
         .and_then(|buffer| buffer.file())
@@ -422,7 +422,7 @@ pub fn install(editor: &mut Editor) {
             editor.bind(scope(*place), keys, id).ok();
         }
     }
-    editor.on_saved(saved);
+    editor.subscribe(EventKind::Saved);
 }
 
 fn same_file(a: &Path, b: &Path) -> bool {

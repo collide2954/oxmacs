@@ -93,40 +93,6 @@ impl Editor {
         Ok(buffer.id())
     }
 
-    pub fn on_disk_change(&mut self, handler: fn(&mut Editor)) {
-        self.disk_handlers.push(handler);
-    }
-
-    pub(super) fn tell_disk_change(&mut self) {
-        for handler in self.disk_handlers.clone() {
-            handler(self);
-        }
-    }
-
-    pub fn on_open_directory(&mut self, handler: fn(&mut Editor, &Path) -> bool) {
-        self.directory_handler = Some(handler);
-    }
-
-    pub fn on_save(&mut self, handler: fn(&mut Editor, BufferId)) {
-        self.save_handlers.push(handler);
-    }
-
-    pub(super) fn tell_save(&mut self, id: BufferId) {
-        for handler in self.save_handlers.clone() {
-            handler(self, id);
-        }
-    }
-
-    pub fn on_saved(&mut self, handler: fn(&mut Editor, BufferId)) {
-        self.saved_handlers.push(handler);
-    }
-
-    pub(super) fn tell_saved(&mut self, id: BufferId) {
-        for handler in self.saved_handlers.clone() {
-            handler(self, id);
-        }
-    }
-
     pub fn buffer_by_id(&self, id: BufferId) -> Option<&Buffer> {
         let index = self.buffers.position(|buffer| buffer.id() == id)?;
         self.buffers.get(index)
@@ -176,16 +142,6 @@ impl Editor {
         self.buffers
             .position(|buffer| buffer.id() == id)
             .is_some_and(|index| self.save_buffer_at(index))
-    }
-
-    pub fn on_configured(&mut self, handler: fn(&mut Editor)) {
-        self.configured_handlers.push(handler);
-    }
-
-    pub(super) fn tell_configured(&mut self) {
-        for handler in self.configured_handlers.clone() {
-            handler(self);
-        }
     }
 
     pub fn add_mode_line_segment(&mut self, segment: Segment) {

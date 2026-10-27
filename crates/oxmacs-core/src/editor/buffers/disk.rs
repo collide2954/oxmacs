@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use crate::command::Command;
 use crate::config::OnDiskChange;
-use crate::editor::Editor;
 use crate::editor::buffers::Mode;
+use crate::editor::{Editor, Event};
 use crate::files::{self, DiskState, paths};
 use crate::text::{Buffer, FileInfo};
 
@@ -40,7 +40,7 @@ impl Editor {
     }
 
     pub fn check_disk_changes(&mut self) {
-        self.tell_disk_change();
+        self.record(Event::DiskChanged);
         if self.on_disk_change == OnDiskChange::Ignore {
             return;
         }

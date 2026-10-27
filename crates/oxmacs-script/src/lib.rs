@@ -126,7 +126,6 @@ impl Ox {
         editor.let_host_play_macros();
         editor.set_init_path(home.map(|home| home.join("init.ox")));
         ide::repl::install(editor);
-        api::hooks::watch(editor);
         api::games::watch(editor);
         runtime::plugins::discover(&mut self.isolate, editor, self.bundled, home);
         if init {
@@ -205,7 +204,7 @@ impl Ox {
         let init = self.run_file(editor, &home.join("init.ox"));
         api::settings::mark_saved(editor);
         runtime::plugins::mark_saved(self.isolate.heap_mut(), editor);
-        api::hooks::settings_changed(editor);
+        editor.settings_changed();
         custom && init
     }
 
@@ -281,6 +280,7 @@ impl Ox {
         {
             runtime::plugins::request_wake(editor, &plugin);
         }
+        api::hooks::collect(editor);
         runtime::plugins::wake_waiting(&mut self.isolate, editor);
         api::hooks::run(&mut self.isolate, editor);
         api::keystrokes::run(&mut self.isolate, editor);

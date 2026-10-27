@@ -4,9 +4,8 @@ mod console;
 mod dispatch;
 mod editing;
 mod effect;
-mod file_types;
+mod events;
 mod flash;
-mod heard;
 mod job;
 mod keystrokes;
 mod languages;
@@ -31,7 +30,7 @@ pub use build::lint::{LintRun, Linter};
 pub use console::{ConsoleHook, ConsoleSpec, MarkerHook};
 pub use editing::format::{FormatRequest, Formatter};
 pub use effect::{Effect, FetchId};
-pub use heard::Heard;
+pub use events::{Event, EventKind};
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
 pub use keystrokes::Keystroke;
 pub use languages::registry::{LineHighlighter, LineIndenter};
@@ -60,7 +59,7 @@ pub use windows::tiling::{Axis, Rect, Tiling, WindowId};
 
 use std::any::Any;
 use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::{env, mem};
 
 use buffers::{BufferList, Mode};
@@ -150,7 +149,7 @@ pub struct Editor {
     drag_anchor: Option<usize>,
     line_anchor: Option<usize>,
     line_drag: Option<(crate::text::BufferId, usize)>,
-    heard: Vec<Heard>,
+    events: events::Events,
     presentation: Presentation,
     primary: Option<Range<usize>>,
     effects: Vec<Effect>,
@@ -168,14 +167,6 @@ pub struct Editor {
     themes: Vec<&'static Theme>,
     splash_entries: Vec<(CommandId, String)>,
     mode_line_segments: Vec<plugins::Segment>,
-    configured_handlers: Vec<fn(&mut Editor)>,
-    disk_handlers: Vec<fn(&mut Editor)>,
-    directory_handler: Option<fn(&mut Editor, &Path) -> bool>,
-    file_openers: Vec<(String, file_types::FileOpener)>,
-    save_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
-    saved_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
-    opened_handlers: Vec<fn(&mut Editor, crate::text::BufferId)>,
-    tracking_edits: bool,
     holding_saves: bool,
     held_saves: Vec<(crate::text::BufferId, bool)>,
     releasing: Option<crate::text::BufferId>,
@@ -248,7 +239,7 @@ impl Editor {
             drag_anchor: None,
             line_anchor: None,
             line_drag: None,
-            heard: Vec::new(),
+            events: events::Events::default(),
             presentation: Presentation::default(),
             primary: None,
             effects: Vec::new(),
@@ -267,14 +258,6 @@ impl Editor {
             splash_entries: Vec::new(),
 
             mode_line_segments: Vec::new(),
-            configured_handlers: Vec::new(),
-            disk_handlers: Vec::new(),
-            directory_handler: None,
-            file_openers: Vec::new(),
-            save_handlers: Vec::new(),
-            saved_handlers: Vec::new(),
-            opened_handlers: Vec::new(),
-            tracking_edits: false,
             holding_saves: false,
             held_saves: Vec::new(),
             releasing: None,
@@ -319,7 +302,7 @@ impl Editor {
         self.settings = Settings::from(config);
         self.configured_theme = config.theme.as_deref().and_then(theme::find);
         self.config = config.clone();
-        self.tell_configured();
+        self.settings_changed();
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {

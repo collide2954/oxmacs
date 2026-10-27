@@ -16,6 +16,7 @@
 (on-disk-change key f) "Calls f when files the editor shows change on disk. Registering key again replaces its handler."
 (on-saved key f) "Calls f with the path of each file the editor saves. Registering key again replaces its handler."
 (on-buffer-open key f) "Calls f with each buffer people type in, such as a file, when it opens; plugin buffers don't count. Registering key again replaces its handler."
+(on-buffer-close key f) "Calls f with each buffer's handle after it closes, plugin buffers too, so a plugin can let go of what it kept for it. The handle is the one the buffer had while open, but it can no longer be entered. Registering key again replaces its handler."
 (on-buffer-change key f) "Calls f after each command or Ox change with a buffer people type in and the edits made to it, a vector of {{start removed inserted}} in character offsets, in order. Changes f makes are reported too. Registering key again replaces its handler."
 (on-mode-enter key f) "Calls f with a buffer and the name of the mode it enters, when it opens in one or changes to another. Registering key again replaces its handler."
 (on-window-change key f) "Calls f after a command or Ox change that selects another window, shows another buffer in the selected window or changes the layout of the windows, once however many changed together. Registering key again replaces its handler."

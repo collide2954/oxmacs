@@ -7,7 +7,7 @@ use serde_json::json;
 use crate::command::{CommandSpec, Scope, ScopeId};
 use crate::config::Config;
 use crate::display::LineStyle;
-use crate::editor::{Editor, InputLine, Offer, Page, Question};
+use crate::editor::{Editor, Event, EventKind, InputLine, Offer, Page, Question};
 use crate::plugin_state::States;
 use crate::special_buffer::SpecialBuffer;
 use crate::testing::press;
@@ -377,28 +377,18 @@ fn plugins_add_mode_line_segments_in_order() {
     assert_eq!(editor.mode_line_segments(), ["1 buffers", "1 buffers"]);
 }
 
-fn remember_tab_width(editor: &mut Editor) {
-    let width = editor.tab_width().to_string();
-    if let Some(answers) = editor.plugin_state_mut::<Answers>() {
-        answers.0.push(width);
-    }
-}
-
 #[test]
-fn plugins_hear_about_every_config_change() {
+fn config_changes_come_back_once_per_drain_when_subscribed() {
     let mut editor = Editor::new();
-    editor.set_plugin_state(Answers::default());
-    editor.on_configured(remember_tab_width);
+    editor.apply_config(&Config::default().with("tab-width", json!(2)).unwrap());
+    assert_eq!(editor.take_events(), []);
+    editor.subscribe(EventKind::Configured);
 
     editor.apply_config(&Config::default().with("tab-width", json!(2)).unwrap());
     editor.apply_config(&Config::default().with("tab-width", json!(3)).unwrap());
 
-    assert_eq!(
-        editor
-            .plugin_state::<Answers>()
-            .map(|answers| answers.0.clone()),
-        Some(vec!["2".to_owned(), "3".to_owned()])
-    );
+    assert_eq!(editor.take_events(), [Event::Configured]);
+    assert_eq!(editor.tab_width(), 3);
 }
 
 #[derive(Debug)]
@@ -566,25 +556,12 @@ fn plugins_see_where_their_buffers_show() {
 }
 
 #[test]
-fn plugins_hear_around_each_save() {
+fn saves_come_back_as_events() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("plan.txt");
     std::fs::write(&path, "one\n").unwrap();
     let mut editor = Editor::new();
-    editor.set_plugin_state(Answers::default());
-    editor.on_save(|editor, id| {
-        if let Some(buffer) = editor.buffer_by_id_mut(id) {
-            buffer.insert_at(0, "# ");
-        }
-        note(editor, "saving".to_owned());
-    });
-    editor.on_saved(|editor, id| {
-        let name = editor
-            .buffer_by_id(id)
-            .map(|buffer| buffer.name().to_owned())
-            .unwrap_or_default();
-        note(editor, format!("saved {name}"));
-    });
+    editor.subscribe(EventKind::Saved);
     let shout = editor.add_command(CommandSpec {
         name: "shout",
         summary: "Shout",
@@ -594,17 +571,12 @@ fn plugins_hear_around_each_save() {
     });
     editor.bind(Scope::Global, "C-c s", shout).unwrap();
     editor.open_file(&path);
-    editor.set_plugin_state(Answers::default());
+    let id = editor.buffer().id();
 
     press(&mut editor, "C-e x C-c s C-x C-s");
 
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "# onex\n");
-    assert_eq!(
-        editor
-            .plugin_state::<Answers>()
-            .map(|answers| answers.0.clone()),
-        Some(vec!["saving".to_owned(), "saved plan.txt".to_owned()])
-    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "onex\n");
+    assert_eq!(editor.take_events(), [Event::Saved(id)]);
 }
 
 #[test]
@@ -710,28 +682,49 @@ fn plugin_buffers_can_keep_their_name_and_watch_another_directory() {
 }
 
 #[test]
-fn plugins_hear_about_disk_changes_and_open_directories() {
+fn disk_changes_and_claimed_directories_come_back_as_events() {
     let dir = tempfile::tempdir().unwrap();
     let mut editor = Editor::new();
-    editor.set_plugin_state(Answers::default());
-    editor.on_disk_change(|editor| note(editor, "disk".to_owned()));
-    editor.on_open_directory(|editor, path| {
-        note(editor, format!("open {}", path.display()));
-        true
-    });
+    editor.subscribe(EventKind::DiskChanged);
+    editor.claim_directories("explorer");
 
+    editor.check_disk_changes();
     editor.check_disk_changes();
     assert!(editor.open_file(dir.path()));
 
     assert_eq!(
-        editor
-            .plugin_state::<Answers>()
-            .map(|answers| answers.0.clone()),
-        Some(vec![
-            "disk".to_owned(),
-            format!("open {}", dir.path().display())
-        ])
+        editor.take_events(),
+        [
+            Event::DiskChanged,
+            Event::OpenDirectory {
+                path: dir.path().to_owned(),
+                owner: "explorer".to_owned()
+            }
+        ]
     );
+}
+
+#[test]
+fn files_of_a_claimed_type_come_back_instead_of_opening() {
+    let dir = tempfile::tempdir().unwrap();
+    let book = dir.path().join("book.EPUB");
+    std::fs::write(&book, [0x50, 0x4b, 3, 4]).unwrap();
+    std::fs::write(dir.path().join("notes.txt"), "hello").unwrap();
+    let mut editor = Editor::new();
+    editor.claim_files("epub", "epub");
+
+    assert!(editor.open_file(&book));
+    assert_eq!(editor.buffer().name(), "*scratch*");
+    assert_eq!(
+        editor.take_events(),
+        [Event::OpenFile {
+            path: book,
+            owner: "epub".to_owned()
+        }]
+    );
+
+    assert!(editor.open_file(&dir.path().join("notes.txt")));
+    assert_eq!(editor.buffer().contents(), "hello");
 }
 
 #[test]

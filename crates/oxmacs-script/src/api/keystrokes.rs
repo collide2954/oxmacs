@@ -1,12 +1,9 @@
-use ox_lang::heap::{Heap, Hold};
+use ox_lang::heap::Heap;
 use ox_lang::value::Value;
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::{Editor, Keystroke};
 
-use crate::{api::hooks, ide::log};
-
-#[derive(Debug, Default)]
-struct Listeners(Vec<(String, Hold)>);
+use crate::api::handlers::{self, Hook};
 
 fn event(heap: &mut Heap, stroke: &Keystroke) -> Result<Value, Error> {
     let mut keys = Vec::with_capacity(stroke.keys.keys().len());
@@ -31,21 +28,17 @@ pub fn install(isolate: &mut Isolate) {
         .arity(2, Some(2))
         .host::<Editor>(|heap, editor, arguments| {
             editor.watch_keystrokes();
-            if editor.plugin_state::<Listeners>().is_none() {
-                editor.set_plugin_state(Listeners::default());
-            }
-            if let Some(listeners) = editor.plugin_state_mut::<Listeners>() {
-                hooks::keyed(heap, &mut listeners.0, arguments);
-            }
+            let key = handlers::key(heap, arguments[0]);
+            handlers::register(heap, editor, Hook::KeyCommand, key, arguments[1]);
             Ok(Value::Nil)
         });
 }
 
 pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
-    let Some(listeners) = editor.plugin_state::<Listeners>() else {
+    let holds = handlers::held(editor, Hook::KeyCommand);
+    if holds.is_empty() {
         return;
-    };
-    let handlers: Vec<Hold> = listeners.0.iter().map(|(_, hold)| *hold).collect();
+    }
     for stroke in editor.take_keystrokes() {
         if stroke.typed {
             continue;
@@ -53,14 +46,7 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
         let Ok(event) = event(isolate.heap_mut(), &stroke) else {
             continue;
         };
-        for hold in &handlers {
-            let Some(handler) = isolate.held(*hold) else {
-                continue;
-            };
-            if let Err(error) = isolate.spawn(handler, &[event]) {
-                log::report(editor, &error, None);
-            }
-        }
+        handlers::spawn(isolate, editor, &holds, &[event]);
     }
 }
 
