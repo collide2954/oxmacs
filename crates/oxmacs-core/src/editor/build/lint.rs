@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::mem;
 use std::ops::Range;
@@ -44,6 +45,23 @@ pub(in crate::editor) struct Lints {
     pub(in crate::editor) root: Option<PathBuf>,
     pub(in crate::editor) current: Option<usize>,
     revision: u64,
+    identities: HashMap<PathBuf, PathBuf>,
+}
+
+impl Lints {
+    fn identity_of<'a>(&'a self, path: &'a Path) -> &'a Path {
+        self.identities.get(path).map_or(path, PathBuf::as_path)
+    }
+
+    fn learn(&mut self) {
+        let present: HashSet<&PathBuf> = self.diagnostics.iter().map(|found| &found.path).collect();
+        self.identities.retain(|path, _| present.contains(path));
+        for path in present {
+            if !self.identities.contains_key(path) {
+                self.identities.insert(path.clone(), files::identity(path));
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -52,13 +70,6 @@ struct Mark {
     start: Marker,
     end: Marker,
     diagnostic: usize,
-}
-
-fn normalized(diagnostic: Diagnostic) -> Diagnostic {
-    Diagnostic {
-        path: files::identity(&diagnostic.path),
-        ..diagnostic
-    }
 }
 
 fn position(buffer: &Buffer, (row, column): (usize, usize)) -> usize {
@@ -74,6 +85,7 @@ struct Run {
     language: Language,
     linter: Linter,
     root: PathBuf,
+    scope: PathBuf,
     label: &'static str,
     name: String,
     found: Vec<Diagnostic>,
@@ -152,13 +164,20 @@ impl Editor {
     }
 
     pub fn replace_diagnostics(&mut self, path: &Path, found: Vec<Diagnostic>) {
-        let path = files::identity(path);
-        self.lints
-            .diagnostics
-            .retain(|diagnostic| diagnostic.path != path);
-        self.lints
-            .diagnostics
-            .extend(found.into_iter().map(normalized));
+        let wanted = files::identity(path);
+        let Lints {
+            diagnostics,
+            identities,
+            ..
+        } = &mut self.lints;
+        diagnostics.retain(|diagnostic| {
+            identities
+                .get(&diagnostic.path)
+                .map_or(diagnostic.path.as_path(), PathBuf::as_path)
+                != wanted
+        });
+        self.lints.diagnostics.extend(found);
+        self.lints.learn();
         self.lints.diagnostics.sort();
         self.lints.revision += 1;
         self.lints.current = None;
@@ -214,7 +233,8 @@ impl Editor {
             job,
             language,
             linter,
-            root: files::identity(&run.root),
+            scope: files::identity(&run.root),
+            root: run.root,
             label: run.label,
             name: run.name,
             found: Vec::new(),
@@ -265,14 +285,20 @@ impl Editor {
                     .map(|diagnostic| self.language_for(&diagnostic.path))
                     .collect();
                 let mut kept = languages.into_iter();
-                let root = files::identity(&run.root);
-                self.lints.diagnostics.retain(|diagnostic| {
+                let Lints {
+                    diagnostics,
+                    identities,
+                    ..
+                } = &mut self.lints;
+                diagnostics.retain(|diagnostic| {
                     let theirs = kept.next().flatten() == Some(language);
-                    !(theirs && diagnostic.path.starts_with(&root))
+                    let place = identities
+                        .get(&diagnostic.path)
+                        .map_or(diagnostic.path.as_path(), PathBuf::as_path);
+                    !(theirs && place.starts_with(&run.scope))
                 });
-                self.lints
-                    .diagnostics
-                    .extend(run.found.into_iter().map(normalized));
+                self.lints.diagnostics.extend(run.found);
+                self.lints.learn();
                 self.lints.diagnostics.sort();
                 self.lints.revision += 1;
                 self.lints.root = Some(run.root);
@@ -310,7 +336,12 @@ impl Editor {
             return;
         };
         for (diagnostic, found) in self.lints.diagnostics.iter().enumerate() {
-            if found.path != path {
+            let place = self
+                .lints
+                .identities
+                .get(&found.path)
+                .map_or(found.path.as_path(), PathBuf::as_path);
+            if place != path {
                 continue;
             }
             let start = position(buffer, found.start);
@@ -384,7 +415,7 @@ impl Editor {
             .lints
             .runs
             .iter()
-            .find(|run| path.starts_with(&run.root) && Some(run.language) == language)
+            .find(|run| path.starts_with(&run.scope) && Some(run.language) == language)
         {
             return Some(run.label.to_owned());
         }
@@ -392,7 +423,10 @@ impl Editor {
             self.lints
                 .diagnostics
                 .iter()
-                .filter(|diagnostic| diagnostic.path == path && diagnostic.severity == severity)
+                .filter(|diagnostic| {
+                    self.lints.identity_of(&diagnostic.path) == path
+                        && diagnostic.severity == severity
+                })
                 .count()
         };
         let counts: Vec<String> = [

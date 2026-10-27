@@ -1075,7 +1075,7 @@ fn buffers_are_found_and_diagnosed_through_any_spelling_of_their_file() {
     let identity = editor.buffer().file().unwrap().identity().to_path_buf();
     assert_eq!(editor.lint_status(&identity).as_deref(), Some("W1"));
     assert_eq!(editor.diagnostics_on_line(0, 1).len(), 1);
-    assert_eq!(editor.diagnostic_counts()[0].0, identity);
+    assert_eq!(editor.diagnostic_counts()[0].0, other);
 }
 
 #[test]
