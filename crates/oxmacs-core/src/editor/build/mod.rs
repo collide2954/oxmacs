@@ -339,8 +339,8 @@ impl Builds {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use super::lint::fixtures::FINISHED;
     use super::lint::LintRun;
+    use super::lint::fixtures::FINISHED;
     use super::{Builds, Finished};
     use crate::editor::{JobId, Outcome};
     use crate::external::diagnostics::sample;
