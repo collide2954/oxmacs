@@ -101,33 +101,6 @@ pub fn symbol_at(line: &str, column: usize) -> Option<String> {
     };
     (!word.is_empty() && !numeric(word) && !word.starts_with(':')).then(|| word.to_owned())
 }
-fn walk(syntax: &Syntax, wanted: &str, found: &mut Vec<Span>) {
-    match &syntax.datum {
-        Datum::Symbol(name) if short(name) == wanted => found.push(syntax.span),
-        Datum::List(items)
-        | Datum::Vector(items)
-        | Datum::Map(items)
-        | Datum::Set(items)
-        | Datum::Record(_, items) => {
-            for item in items {
-                walk(item, wanted, found);
-            }
-        }
-        _ => {}
-    }
-}
-
-pub fn occurrences(text: &str, name: &str) -> Vec<Span> {
-    let wanted = short(name);
-    let (forms, _) = read::read(text);
-    let mut found = Vec::new();
-    for form in &forms {
-        walk(form, wanted, &mut found);
-    }
-    found.sort_by_key(|span| span.start);
-    found
-}
-
 fn symbol(syntax: &Syntax) -> Option<&str> {
     match &syntax.datum {
         Datum::Symbol(name) => Some(name),
@@ -248,7 +221,7 @@ pub fn definitions_with(text: &str, known: &Forms) -> Vec<Definition> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Definition, call_head, occurrences, short, symbol_at, typed_name};
+    use super::{Definition, call_head, short, symbol_at, typed_name};
     use crate::describe::Kind;
 
     #[test]
@@ -308,18 +281,6 @@ mod tests {
         assert_eq!(symbol_at("(f :size)", 4), None);
         assert_eq!(short("s/upper"), "upper");
         assert_eq!(short("/"), "/");
-    }
-
-    #[test]
-    fn occurrences_count_code_but_not_strings_or_comments() {
-        let text = "(def (area w h) (* w h))\n(s/area 1 2) ; area\n\"area\"";
-
-        let found: Vec<u32> = occurrences(text, "area")
-            .iter()
-            .map(|span| span.start)
-            .collect();
-
-        assert_eq!(found, [6, 26]);
     }
 
     #[test]

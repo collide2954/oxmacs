@@ -62,6 +62,14 @@ fn names_from_an_imported_module_carry_that_module() {
 }
 
 #[test]
+fn names_nothing_defines_are_still_found_together_in_their_file() {
+    let source = "(frob 1)\n(frob 2)\n";
+    let found = Isolate::new().bindings("sample.ox", source);
+
+    assert_eq!(spans_like(source, &found, "frob", 1), ["1:frob", "10:frob"]);
+}
+
+#[test]
 fn macro_arguments_are_found_once_and_inner_lets_shadow_outer_ones() {
     let source =
         "(defmacro twice [x] `(do ~x ~x))\n(def n 1)\n(twice n)\n(let [y 1] (let [y 2] y) y)\n";

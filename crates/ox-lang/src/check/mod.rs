@@ -874,6 +874,11 @@ impl Walker<'_> {
             self.note(form, binding, false);
             return;
         }
+        let unresolved = Binding::Global {
+            module: None,
+            name: name.to_owned(),
+        };
+        self.note(form, unresolved, false);
         let shown = modules::display(sym);
         if self.unknown.covers(shown) {
             return;
