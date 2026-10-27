@@ -167,7 +167,14 @@
 (def kept-history 1000)
 
 (def (history-file)
-  (when-let [home (oxmacs-home)] (path/join home "r-history")))
+  (when-let [folder (plugin-folder 'r)]
+    (let [file (path/join folder "history")
+          older (path/join (oxmacs-home) "r-history")]
+      (unless (await (file/exists? file))
+        (await (file/make-dir folder))
+        (when (await (file/exists? older))
+          (await (file/rename older file))))
+      file)))
 
 (def (load-history session)
   (when-let [file (history-file)]

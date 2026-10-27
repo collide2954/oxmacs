@@ -7,9 +7,7 @@ pub const GAME_DOCS: &str = include_str!("games.ox");
 pub const PRELUDE: &str = include_str!("prelude.ox");
 
 pub fn home() -> Option<PathBuf> {
-    std::env::var_os("OXMACS_HOME")
-        .map(PathBuf::from)
-        .or_else(|| dirs::home_dir().map(|home| home.join(".oxmacs")))
+    oxmacs_files::oxmacs_home()
 }
 
 pub fn editor_code(path: &Path) -> bool {

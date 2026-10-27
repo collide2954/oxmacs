@@ -18,10 +18,14 @@ use app::App;
 use iced::{Size, window};
 use oxmacs_core::config::WindowMode;
 use oxmacs_core::editor::Visit;
+use oxmacs_core::folders::Folders;
 
 pub fn run(visits: Vec<Visit>, init: bool) -> Result {
-    crash::install(crash::folder());
     let home = oxmacs_api::home();
+    crash::install(
+        home.as_deref()
+            .map(|home| Folders::for_home(home).crashes()),
+    );
     let booted = App::boot_with(&visits, home.as_deref(), init);
     let mode = booted.0.editor().config().window_mode;
     let booted = Cell::new(Some(booted));

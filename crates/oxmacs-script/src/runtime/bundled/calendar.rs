@@ -36,7 +36,7 @@ fn contents(editor: &Editor, name: &str) -> String {
 }
 
 fn personal(home: &Path) -> PathBuf {
-    home.join("calendar").join("Personal")
+    home.join("data").join("calendar").join("Personal")
 }
 
 fn add_event(editor: &mut Editor, ox: &mut Ox, title: &str, start: &str, repeats: &str) {
@@ -301,7 +301,7 @@ fn caldav_calendars_bring_in_server_events_and_send_local_changes() {
 
     run_command(&mut editor, &mut ox, "calendar-sync");
     assert_eq!(editor.message(), Some("Calendars synced"));
-    let work = home.path().join("calendar").join("Work");
+    let work = home.path().join("data").join("calendar").join("Work");
     assert!(
         fs::read_to_string(work.join("review.ics"))
             .unwrap()

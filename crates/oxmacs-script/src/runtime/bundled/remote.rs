@@ -122,9 +122,9 @@ fn every_sftp_transfer_gets_a_file_of_its_own() {
     let found = eval(
         &mut editor,
         &mut ox,
-        r#"(module (import (remote ops :as ops) (ox path)))
+        r"(module (import (remote ops :as ops) (ox path)))
            (let [first (ops/transfer-file) second (ops/transfer-file)]
-             [(= first second) (= (path/parent first) (path/join (oxmacs-home) "remote"))])"#,
+             [(= first second) (= (path/parent first) (plugin-folder 'remote :cache true))])",
     );
 
     assert_eq!(found, "[false true]", "{}", home.path().display());
@@ -138,7 +138,7 @@ fn remote_files_are_edited_through_copies_inside_the_oxmacs_home() {
         &mut editor,
         &mut ox,
         r#"(module (import (remote ops :as ops) (ox path)))
-           (let [base (path/join (oxmacs-home) "remote")]
+           (let [base (plugin-folder 'remote :cache true)]
              [(= (ops/local-copy {name: "box:2"} "/home/ana/notes.txt")
                  (path/join base "box_2" "home" "ana" "notes.txt"))
               (= (ops/local-copy {name: "win"} "C:\\Users\\ana\\a.txt")

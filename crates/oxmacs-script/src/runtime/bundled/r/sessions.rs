@@ -399,7 +399,8 @@ fn input_history_carries_over_to_later_sessions() {
     r.typed("x <- 1");
     r.press("RET");
     r.output(job, PROMPT);
-    let saved = std::fs::read_to_string(r.home.path().join("r-history")).unwrap();
+    let saved =
+        std::fs::read_to_string(r.home.path().join("data").join("r").join("history")).unwrap();
     assert_eq!(saved, "\"x <- 1\"\n");
 
     let mut later = r.again();

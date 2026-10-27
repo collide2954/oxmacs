@@ -3957,6 +3957,7 @@ dependencies = [
  "dirs",
  "ox-lang",
  "ox-library",
+ "oxmacs-files",
  "tempfile",
 ]
 

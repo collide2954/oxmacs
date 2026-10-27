@@ -207,6 +207,7 @@
 (path/extension path) "The extension of path without the dot, such as txt, or nil."
 (path/home) "The user's home folder."
 (path/expand path) "path with a leading ~ or ~/ replaced by the home folder; ~name, another user's folder, stays as it is."
+(path/safe-name text) "text as one file name that works on every system, with / \\ : * ? \" < > | and control characters turned into _."
 (path/normalize path) "path with its . and .. parts worked out from the text alone, without looking at the disk."
 (path/relative path base) "path written from inside the folder base, climbing out with .. when it must, or nil when the two share no root, such as two drives."
 (path/inside? path folder) "True when path is folder or lies below it, comparing the normalized text; on Windows, letter case doesn't matter."

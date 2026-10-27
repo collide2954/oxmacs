@@ -18,6 +18,7 @@ use oxmacs_core::editor::{Editor, FetchId, SERVERS, WindowId};
 use oxmacs_core::external::managed::Managed;
 use oxmacs_core::external::runner::{Delivery, Runner};
 use oxmacs_core::external::usage::Usage;
+use oxmacs_core::folders::Folders;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
 use oxmacs_core::view::takeover;
@@ -150,10 +151,9 @@ impl App {
     pub fn boot_with(visits: &[Visit], home: Option<&Path>, init: bool) -> (Self, Task<Message>) {
         let mut app = Self::default();
         app.editor.add_language_servers(SERVERS);
-        app.editor.set_recovery_folder(
-            home.and(dirs::cache_dir())
-                .map(|cache| cache.join("oxmacs").join("recovery")),
-        );
+        if let Some(home) = home {
+            app.editor.set_folders(Folders::for_home(home));
+        }
         let started = if init {
             app.start_ox(home)
         } else {

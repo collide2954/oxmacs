@@ -237,8 +237,15 @@ fn highlights_and_places_are_remembered() {
     let notes = reader.editor.buffer().contents();
     assert!(notes.contains("Chapter One\n  Call me\n"), "{notes}");
 
-    let saved =
-        std::fs::read_to_string(reader.home.path().join("epub").join("books.json")).unwrap();
+    let saved = std::fs::read_to_string(
+        reader
+            .home
+            .path()
+            .join("data")
+            .join("epub")
+            .join("books.json"),
+    )
+    .unwrap();
     assert!(saved.contains("\"text\":\"Call me\""), "{saved}");
 
     let home = reader.home.path().to_owned();

@@ -77,19 +77,14 @@
     found))
 
 (def (transfer-file)
-  "A file of its own in the oxmacs home for one sftp transfer to pass through."
-  (path/join (oxmacs-home) "remote" (str ".transfer-" (crypto/random 8))))
-
-(def unsafe-characters [":" "<" ">" "\"" "|" "?" "*" "/" "\\"])
-
-(def (safe-name text)
-  (reduce (fn [out bad] (string/replace out bad "_")) text unsafe-characters))
+  "A file of its own in the remote plugin's cache for one sftp transfer to pass through."
+  (path/join (plugin-folder 'remote :cache true) (str ".transfer-" (crypto/random 8))))
 
 (def (local-copy host remote)
-  "The local file a remote file on host is edited through, inside the oxmacs home's remote folder."
+  "The local file a remote file on host is edited through, inside the remote plugin's cache."
   (let [parts (remove (fn [part] (contains? #{"" "." ".."} part))
                       (string/split (string/replace remote "\\" "/") "/"))]
-    (apply path/join (concat [(oxmacs-home) "remote" (safe-name host.name)] (map safe-name parts)))))
+    (apply path/join (concat [(plugin-folder 'remote :cache true) (path/safe-name host.name)] (map path/safe-name parts)))))
 
 (def (sftp-word text)
   (str "\"" (string/replace (string/replace text "\\" "\\\\") "\"" "\\\"") "\""))

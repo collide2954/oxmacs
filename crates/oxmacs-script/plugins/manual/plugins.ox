@@ -62,7 +62,7 @@ Saving a loaded plugin's file evaluates it again in place, so a change takes eff
 - `:opens-files ["epub"]` makes the plugin the way files with those extensions open, as epub does for books and pdf for documents; its entry registers the opener with `(on-open-file "epub" f)`.
 - `:opt-in true` keeps a bundled plugin off until `use-plugin` turns it on.
 
-`(use-plugin hello :disabled true)` turns a plugin off, and a plugin in your folder with the name of a bundled one replaces it. `(plugin-setting 'weather :units)` reads another plugin's setting, and `(oxmacs-home)` gives the folder that holds `init.ox`, where a plugin can keep files of its own, as the tutorial keeps your place.
+`(use-plugin hello :disabled true)` turns a plugin off, and a plugin in your folder with the name of a bundled one replaces it. `(plugin-setting 'weather :units)` reads another plugin's setting, `(oxmacs-home)` gives the folder that holds `init.ox`, and `(plugin-folder 'hello)` gives the plugin a folder of its own for its files, as the tutorial keeps your place in the manual's.
 
 ## Modules
 
@@ -86,27 +86,27 @@ oxmacs ships these plugins. Those on by default load the first time you use them
 
 ```table
 Plugin       Version  Default  What it does
-calendar     0.2.4    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
+calendar     0.2.5    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
 customize    0.1.3    on       Change the editor's and plugins' settings in a form
 dired        0.3.0    on       List directories and manage their files
-epub         0.1.4    opt-in   Read EPUB books in pages, with contents, search, highlights, notes and a library
+epub         0.1.5    opt-in   Read EPUB books in pages, with contents, search, highlights, notes and a library
 explorer     0.2.0    on       A file tree beside the windows that follows the file you're in
 git          0.4.0    opt-in   Git status and staging in the style of Magit
-irc          0.10.0   opt-in   An IRCv3 client in the style of ERC
+irc          0.10.1   opt-in   An IRCv3 client in the style of ERC
 keycast      0.2.2    opt-in   Shows the keys you press and the commands they run, for demos
 languages    0.1.0    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
 life         0.2.3    opt-in   Conway's Game of Life on a canvas
-manual       0.5.54   on       The oxmacs tutorial and the Ox manual
+manual       0.5.55   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.3    opt-in   Markdown rendered as styled text
 pdf          0.1.2    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
 processes    0.1.3    on       List the processes oxmacs runs, with their usage
 profiler     0.1.2    on       Find where the Ox code in oxmacs spends its time
-r            0.20.0   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
-remote       0.3.1    on       Browse and edit files on other machines over ssh, sftp and ftp
+r            0.20.1   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
+remote       0.3.2    on       Browse and edit files on other machines over ssh, sftp and ftp
 rodeo        0.1.1    opt-in   Play 2D games written in Ox beside their code, and change them while they run
 screensaver  0.2.2    opt-in   A starfield or matrix rain after a while without input
 tabs         0.1.1    opt-in   Workspace tabs across the top, each keeping its own windows
-vault        0.2.2    opt-in   An encrypted password vault with one-time codes and imports
+vault        0.2.3    opt-in   An encrypted password vault with one-time codes and imports
 weather      0.3.2    opt-in   Forecasts from Open-Meteo
 zap          0.2.1    opt-in   Flash the code you evaluate or send to a console, in the error color when it fails
 zen          0.1.0    opt-in   Distraction-free writing in one centered column

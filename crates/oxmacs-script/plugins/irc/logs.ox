@@ -5,12 +5,12 @@
 (defonce made (atom (set [])))
 
 (def (folder)
-  "Where IRC logs are kept: irc/logs in the oxmacs home folder."
-  (when-let [home (oxmacs-home)]
-    (path/join home "irc" "logs")))
+  "Where IRC logs are kept: logs in the irc plugin's folder."
+  (when-let [found (plugin-folder 'irc)]
+    (path/join found "logs")))
 
 (def (safe text)
-  (reduce (fn [out c] (string/replace out c "_")) text ["/" "\\" ":" "*" "?" "\"" "<" ">" "|"]))
+  (path/safe-name text))
 
 (def (entry-line message)
   "message as one line of a log."

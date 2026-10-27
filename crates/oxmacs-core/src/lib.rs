@@ -5,6 +5,7 @@ pub mod display;
 pub mod editor;
 pub mod external;
 pub mod files;
+pub mod folders;
 pub mod input;
 pub mod plugin_state;
 pub mod search;

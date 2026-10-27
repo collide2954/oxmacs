@@ -41,6 +41,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - The downloads and the Fedora package include `THIRD-PARTY-LICENSES.html`, the licenses of the crates oxmacs and ox are built from, beside the JetBrains Mono font's license and the highlight queries' notices.
 - `run-job` runs a program in its own buffer, the kind `M-x compile` uses, with `:cwd`, `:env`, a `:title`, `:input` for its standard input, and `:on-line` and `:on-exit` handlers.
 - `console-start` takes `:prompter`, a command sent at the start and after each input to a program such as a shell without a terminal, which prints no prompt of its own.
+- `(plugin-folder 'name)` gives a plugin its own folder for files, and with `:cache true` one in the system's cache; `path/safe-name` turns any text into a file name that works on every system.
 - `path/normalize`, `path/relative` and `path/inside?` work out `.` and `..`, write a path from inside a folder, and tell whether a path lies in a folder, from the text alone and ignoring letter case on Windows.
 - `file/list` takes `:sort` (`:name`, `:newest` or `:largest`), `file/sorted` puts other lists of files in the same order, and `file/size-text` writes a size the way `ls -h` does. `delete-path` and `move-path` delete and move files the way the editor does, following `delete-to-trash` and asking before replacing a file.
 - `process/stop` asks a process started with `process/start` to end, and a few seconds later stops it and every program it started if it hasn't.
@@ -49,6 +50,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- Plugins keep their own files in `~/.oxmacs/data`, one folder each: the vault, calendars, EPUB places, IRC logs, R history and your copy of the tutorial move there the first time each is used, and nothing is deleted. `remote`'s copies of remote files move to the system's cache. The manual's start page lists where oxmacs keeps everything.
+- With `OXMACS_HOME` set, installed tools, recovery copies and crash logs move under that folder too, in `tools` and `cache`, so two homes no longer share them; without it they stay in the system's data and cache folders.
 - One `delete-to-trash` editor setting, on by default, decides whether deleting moves files to the system's trash, for `dired` 0.3.0, `explorer` 0.2.0 and discarding in `git` 0.4.0; their own `delete-to-trash` and `discard-to-trash` settings are gone. Moving a file onto one that exists asks the same question everywhere and moves the buffers visiting it along.
 - Folders list one way in `dired`, the explorer and `remote`: folders first, then by name ignoring case with hidden files last, or newest or largest first in `dired`. Sizes read one way too, like `ls -h` (512B, 1.5K, 12M), in those and in `M-x list-processes`.
 - `remote` 0.3.0: `!` runs a command in a shell of its own and shows it in a run buffer, where `g` runs it again and `C-c C-k` stops it, and `/` searches in a shell of its own too, so neither can disturb the connection kept open for browsing and saving. `s` opens the shell as a console, with `M-p` and `M-n` history, and `M-x remote-disconnect` closes the kept connection to the host here.

@@ -8,9 +8,8 @@
 (defonce state (atom {events: []}))
 
 (def (folder)
-  "Where calendars are kept: calendar in the oxmacs home folder."
-  (when-let [home (oxmacs-home)]
-    (path/join home "calendar")))
+  "Where calendars are kept: the calendar plugin's folder."
+  (plugin-folder 'calendar))
 
 (def (calendars)
   "The calendars in use, each a map with at least a :name; Personal when none are set."

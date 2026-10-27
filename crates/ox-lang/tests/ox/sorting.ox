@@ -22,6 +22,7 @@
 (module (import (ox path))) (= (path/abbreviate (path/join (path/home) "x")) (str "~" (path/separator) "x")) ;=> true
 (module (import (ox path))) [(path/abbreviate (path/home)) (contains? #{"/" "\\"} (path/separator))] ;=> ["~" true]
 (module (import (ox path))) [(path/expand "~bob/x") (= (path/expand "~") (path/home))] ;=> ["~bob/x" true]
+(module (import (ox path))) (path/safe-name "web:8080/a?b") ;=> "web_8080_a_b"
 (module (import (ox path))) (= (path/normalize (path/join "a" "b" ".." "." "c")) (path/join "a" "c")) ;=> true
 (module (import (ox path))) (= (path/relative (path/join (path/home) "work" "a.ox") (path/home)) (path/join "work" "a.ox")) ;=> true
 (module (import (ox path))) (= (path/relative (path/join (path/home) "x") (path/join (path/home) "y")) (path/join ".." "x")) ;=> true

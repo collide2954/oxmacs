@@ -44,6 +44,13 @@ When code you evaluate fails, the error shows beside the form and in `*ox log*`.
 
 `M-x customize` changes the same settings in a form and saves them to `~/.oxmacs/custom.ox`, which runs before `init.ox`, so `init.ox` wins. When `init.ox` fails, oxmacs keeps what ran before the error and shows `*ox log*`, and `oxmacs -q` starts without running `custom.ox` or `init.ox` at all.
 
+## Where oxmacs keeps files
+
+- `~/.oxmacs`, or the folder `OXMACS_HOME` names, holds what is yours: `init.ox`, `custom.ox`, your plugins in `plugins`, and each plugin's own files in `data`, such as the vault, calendars, IRC logs, R history and your copy of the tutorial. A plugin finds its folder with `(plugin-folder 'name)`.
+- The system's cache folder holds `oxmacs`, with recovery copies of unsaved files, crash logs, and what plugins keep for a while, such as `remote`'s copies of remote files, which `(plugin-folder 'name :cache true)` gives.
+- The system's data folder holds `oxmacs/tools`, the programs `M-x list-tools` installs.
+- With `OXMACS_HOME` set, all of these move under that folder: the tools to `tools` and the cached files to `cache`.
+
 ## Next
 
 - [The language](language): values, names and functions.

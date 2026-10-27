@@ -41,6 +41,16 @@ impl Editor {
             })
     }
 
+    pub fn set_folders(&mut self, folders: crate::folders::Folders) {
+        self.tools_root = Some(folders.tools());
+        self.recovery = Some(folders.recovery());
+        self.folders = Some(folders);
+    }
+
+    pub fn folders(&self) -> Option<&crate::folders::Folders> {
+        self.folders.as_ref()
+    }
+
     pub fn deletes_to_trash(&self) -> bool {
         self.settings.delete_to_trash
     }

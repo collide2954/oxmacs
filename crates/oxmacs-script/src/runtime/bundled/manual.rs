@@ -337,7 +337,7 @@ fn c_h_t_opens_your_own_copy_of_the_tutorial_where_you_left_it() {
 
     press(&mut editor, &mut ox, "C-h t");
 
-    let copy = home.path().join("tutorial.txt");
+    let copy = home.path().join("data").join("manual").join("tutorial.txt");
     assert!(copy.is_file());
     assert_eq!(
         editor.buffer().file().map(|file| file.path.clone()),
@@ -346,7 +346,14 @@ fn c_h_t_opens_your_own_copy_of_the_tutorial_where_you_left_it() {
     assert!(lines(&editor)[0].starts_with("The oxmacs tutorial"));
     assert_eq!(editor.buffer().line_of(editor.buffer().point()), 0);
 
-    fs::write(home.path().join("tutorial.place"), "12").unwrap();
+    fs::write(
+        home.path()
+            .join("data")
+            .join("manual")
+            .join("tutorial.place"),
+        "12",
+    )
+    .unwrap();
     press(&mut editor, &mut ox, "C-x k RET");
     press(&mut editor, &mut ox, "C-h t");
     assert_eq!(editor.buffer().line_of(editor.buffer().point()), 12);
@@ -420,12 +427,35 @@ fn the_tutorials_configuration_works_in_a_fresh_init_ox() {
 }
 
 #[test]
+fn a_copy_of_the_tutorial_from_before_moves_into_the_manual_s_folder() {
+    let (home, mut editor, mut ox) = started();
+    fs::write(home.path().join("tutorial.txt"), "my notes\n").unwrap();
+
+    press(&mut editor, &mut ox, "C-h t");
+
+    let moved = home.path().join("data").join("manual").join("tutorial.txt");
+    assert_eq!(fs::read_to_string(&moved).unwrap(), "my notes\n");
+    assert!(!home.path().join("tutorial.txt").exists());
+    assert_eq!(
+        editor.buffer().file().map(|file| file.path.clone()),
+        Some(moved)
+    );
+}
+
+#[test]
 fn deleting_your_copy_of_the_tutorial_starts_it_over() {
     let (home, mut editor, mut ox) = started();
     press(&mut editor, &mut ox, "C-h t");
     press(&mut editor, &mut ox, "C-x k RET");
-    fs::write(home.path().join("tutorial.place"), "12").unwrap();
-    fs::remove_file(home.path().join("tutorial.txt")).unwrap();
+    fs::write(
+        home.path()
+            .join("data")
+            .join("manual")
+            .join("tutorial.place"),
+        "12",
+    )
+    .unwrap();
+    fs::remove_file(home.path().join("data").join("manual").join("tutorial.txt")).unwrap();
 
     press(&mut editor, &mut ox, "C-h t");
 

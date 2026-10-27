@@ -13,9 +13,21 @@
 (defonce state (atom {key: nil entries: nil header: nil used: 0 watching: false}))
 
 (def (vault-file)
-  "Where the vault lives: vault.json in the oxmacs home folder."
+  "Where the vault lives: vault.json in the vault plugin's folder."
+  (when-let [folder (plugin-folder 'vault)]
+    (path/join folder "vault.json")))
+
+(def (older-file)
+  "Where vaults lived before, in the oxmacs home folder; read when there is no newer one, and moved on the next save."
   (when-let [home (oxmacs-home)]
     (path/join home "vault.json")))
+
+(def (stored-file)
+  (let [file (vault-file)
+        older (older-file)]
+    (if (and older (not (await (file/exists? file))) (await (file/exists? older)))
+      older
+      file)))
 
 (def (minutes)
   (or (plugin-setting 'vault :lock-after) 10))
@@ -53,8 +65,11 @@
 
 (def (write! key header entries)
   (let [file (vault-file)
-        fresh (str file ".new")]
+        fresh (str file ".new")
+        older (stored-file)]
     (await (file/make-dir (path/parent file)))
+    (when (not= older file)
+      (await (file/rename older file)))
     (await (file/write fresh (sealed-file key header entries)))
     (when (await (file/exists? file))
       (await (file/copy file (str file ".bak"))))
@@ -94,7 +109,7 @@
 (def (unlock)
   "The vault's entries, asking for its password first when it is locked, or making a new vault."
   (if (locked?)
-    (let [file (or (vault-file) (raise (error "There is no oxmacs home folder for the vault")))]
+    (let [file (if (vault-file) (stored-file) (raise (error "There is no oxmacs home folder for the vault")))]
       (if (await (file/exists? file))
         (open-existing file)
         (create)))

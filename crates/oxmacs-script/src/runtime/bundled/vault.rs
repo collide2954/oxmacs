@@ -27,6 +27,10 @@ fn cheap_vault(home: &Path, entries: &str) {
     .unwrap();
 }
 
+fn stored(home: &Path) -> std::path::PathBuf {
+    home.join("data").join("vault").join("vault.json")
+}
+
 const ENTRIES: &str = r#"[{id: "1" title: "mail" username: "ana@example.com" password: "hunter2" url: "https://mail.example.com" totp: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" notes: "backup codes in the drawer"}
                           {id: "2" title: "bank" username: "ana" password: "s3cret" url: "" totp: "" notes: ""}]"#;
 
@@ -89,7 +93,7 @@ fn the_first_use_makes_a_vault_sealed_with_the_password() {
         "{:?}",
         lines(&editor)
     );
-    let stored = fs::read_to_string(home.path().join("vault.json")).unwrap();
+    let stored = fs::read_to_string(stored(home.path())).unwrap();
     assert!(stored.contains("\"sealed\""), "{stored}");
     assert!(stored.contains("\"memory\":65536"), "{stored}");
     assert!(!stored.contains("entries"), "{stored}");
@@ -107,7 +111,7 @@ fn different_passwords_make_no_vault() {
         editor.message(),
         Some("The passwords differ; nothing was made")
     );
-    assert!(!home.path().join("vault.json").exists());
+    assert!(!stored(home.path()).exists());
 }
 
 #[test]
@@ -195,7 +199,14 @@ fn added_entries_are_saved_sealed_and_survive_locking() {
     answer(&mut editor, &mut ox, "");
     assert_eq!(editor.message(), Some("Added forum"));
     assert!(lines(&editor).iter().any(|line| line.starts_with("forum ")));
-    assert!(home.path().join("vault.json.bak").exists());
+    assert!(
+        home.path()
+            .join("data")
+            .join("vault")
+            .join("vault.json.bak")
+            .exists()
+    );
+    assert!(!home.path().join("vault.json").exists());
 
     run_command(&mut editor, &mut ox, "vault-lock");
     assert_eq!(editor.buffer_named("*Vault*"), None);

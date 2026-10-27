@@ -49,6 +49,18 @@ pub fn normalize(path: &Path) -> PathBuf {
     normalized
 }
 
+pub fn safe_name(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            if c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
 pub fn absolute(path: &Path) -> PathBuf {
     normalize(&path::absolute(path).unwrap_or_else(|_| path.to_owned()))
 }

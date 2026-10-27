@@ -5,10 +5,6 @@ use std::path::{Path, PathBuf};
 
 use jiff::Timestamp;
 
-pub fn folder() -> Option<PathBuf> {
-    dirs::cache_dir().map(|cache| cache.join("oxmacs").join("crashes"))
-}
-
 pub fn report(panic: &str, backtrace: &str) -> String {
     format!(
         "oxmacs {} crashed\n\n{panic}\n\n{backtrace}\n",

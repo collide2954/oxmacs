@@ -92,30 +92,7 @@ pub fn install(isolate: &mut Isolate) {
                 paths::expand(text(heap, "path/expand", arguments[0])?, home().as_deref());
             shown(heap, Some(&expanded))
         });
-    isolate
-        .native(MODULE, "normalize")
-        .arity(1, Some(1))
-        .function(|heap, arguments| {
-            let normalized =
-                paths::normalize(Path::new(text(heap, "path/normalize", arguments[0])?));
-            shown(heap, Some(&normalized))
-        });
-    isolate
-        .native(MODULE, "relative")
-        .arity(2, Some(2))
-        .function(|heap, arguments| {
-            let path = PathBuf::from(text(heap, "path/relative", arguments[0])?);
-            let base = PathBuf::from(text(heap, "path/relative", arguments[1])?);
-            shown(heap, paths::relative(&path, &base).as_deref())
-        });
-    isolate
-        .native(MODULE, "inside?")
-        .arity(2, Some(2))
-        .function(|heap, arguments| {
-            let path = PathBuf::from(text(heap, "path/inside?", arguments[0])?);
-            let folder = PathBuf::from(text(heap, "path/inside?", arguments[1])?);
-            Ok(Value::Bool(paths::inside(&path, &folder)))
-        });
+    install_rules(isolate);
     isolate
         .native(MODULE, "temp")
         .arity(0, Some(0))
@@ -142,5 +119,39 @@ pub fn install(isolate: &mut Isolate) {
             Ok(Value::Bool(
                 Path::new(text(heap, "path/absolute?", arguments[0])?).is_absolute(),
             ))
+        });
+}
+
+fn install_rules(isolate: &mut Isolate) {
+    isolate
+        .native(MODULE, "safe-name")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let safe = paths::safe_name(text(heap, "path/safe-name", arguments[0])?);
+            heap.string(&safe).map_err(Error::from)
+        });
+    isolate
+        .native(MODULE, "normalize")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let normalized =
+                paths::normalize(Path::new(text(heap, "path/normalize", arguments[0])?));
+            shown(heap, Some(&normalized))
+        });
+    isolate
+        .native(MODULE, "relative")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text(heap, "path/relative", arguments[0])?);
+            let base = PathBuf::from(text(heap, "path/relative", arguments[1])?);
+            shown(heap, paths::relative(&path, &base).as_deref())
+        });
+    isolate
+        .native(MODULE, "inside?")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text(heap, "path/inside?", arguments[0])?);
+            let folder = PathBuf::from(text(heap, "path/inside?", arguments[1])?);
+            Ok(Value::Bool(paths::inside(&path, &folder)))
         });
 }

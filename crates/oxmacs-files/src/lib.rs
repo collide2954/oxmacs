@@ -55,6 +55,13 @@ pub fn identity(path: &Path) -> PathBuf {
     }
 }
 
+pub fn oxmacs_home() -> Option<PathBuf> {
+    std::env::var_os("OXMACS_HOME")
+        .filter(|home| !home.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::home_dir().map(|home| home.join(".oxmacs")))
+}
+
 pub fn same_file(first: &Path, second: &Path) -> bool {
     identity(first) == identity(second)
 }

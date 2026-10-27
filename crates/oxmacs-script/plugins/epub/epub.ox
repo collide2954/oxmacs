@@ -15,8 +15,8 @@
   (try (work) (catch error e (unless (= e.message "Quit") (message e.message)))))
 
 (def (places-file)
-  (when-let [home (oxmacs-home)]
-    (path/join home "epub" "books.json")))
+  (when-let [folder (plugin-folder 'epub)]
+    (path/join folder "books.json")))
 
 (def (remembered)
   (when (nil? @saved)

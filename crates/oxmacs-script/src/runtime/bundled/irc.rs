@@ -682,6 +682,7 @@ fn messages_are_logged_by_day_and_found_again() {
     fake.say("@time=2026-10-23T09:00:00.000Z :bo!b@host PRIVMSG #oxmacs :the build is green");
     let folder = home
         .path()
+        .join("data")
         .join("irc")
         .join("logs")
         .join("Test")

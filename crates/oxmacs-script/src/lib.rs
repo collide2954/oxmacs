@@ -139,6 +139,9 @@ impl Ox {
 
     fn start_with(&mut self, editor: &mut Editor, home: Option<&Path>, init: bool) {
         self.home = home.map(Path::to_path_buf);
+        if let (None, Some(home)) = (editor.folders(), home) {
+            editor.set_folders(oxmacs_core::folders::Folders::for_home(home));
+        }
         self.outside.number_processes(editor.process_ids());
         editor.let_host_play_macros();
         editor.set_init_path(home.map(|home| home.join("init.ox")));

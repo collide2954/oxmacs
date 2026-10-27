@@ -145,6 +145,7 @@
 (custom-settings) "The editor settings as custom.ox alone set them, before init.ox ran, as a map."
 (reload-init) "Runs custom.ox and init.ox again from fresh settings, as saving init.ox does, once the current command finishes."
 (plugin-settings) "The settings of every plugin in use, each a map of :plugin, :key, :type, :choices, :doc, :default, :value, :saved and :custom, the last three being what is in use, what the init files left and what custom.ox set; each is nil when the default applies."
+(plugin-folder name {cache false}) "The folder where the plugin called name keeps its own files, ~/.oxmacs/data/name, or with :cache true a folder in the system's cache that may be cleared; nil without an oxmacs home. A folder a plugin kept at ~/.oxmacs/name before moves there the first time it is asked for."
 (oxmacs-home) "The oxmacs home folder holding init.ox and custom.ox, or nil."
 (settings-schema) "Every editor setting as a map of :key, :group, :type, :hint, :unset, :default and :choices, which M-x customize lists."
 (ox-reference) "A promise of the reference of every Ox library module and the editor API, as maps of :module and :entries, each entry a map of :name, :kind, :signature and :doc."

@@ -127,10 +127,18 @@ You have finished the tutorial.
 "#)
 
 (def (folder)
-  (or (oxmacs-home) (path/home)))
+  (or (plugin-folder 'manual) (path/home)))
+
+(def (moved-in name)
+  (let [file (path/join (folder) name)
+        older (when-let [home (oxmacs-home)] (path/join home name))]
+    (when (and older (not= older file) (not (await (file/exists? file))) (await (file/exists? older)))
+      (await (file/make-dir (folder)))
+      (await (file/rename older file)))
+    file))
 
 (def (place-file)
-  (path/join (folder) "tutorial.place"))
+  (moved-in "tutorial.place"))
 
 (def (saved-line)
   (try
@@ -142,7 +150,7 @@ You have finished the tutorial.
 
 (def (open)
   "Opens the reader's own copy of the tutorial where they left it, making it the first time."
-  (let [copy (path/join (folder) "tutorial.txt")
+  (let [copy (moved-in "tutorial.txt")
         fresh (not (await (file/exists? copy)))]
     (when fresh
       (await (file/make-dir (folder)))

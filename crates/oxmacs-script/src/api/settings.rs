@@ -230,6 +230,30 @@ pub fn install(isolate: &mut Isolate) {
         .native("ox", "oxmacs-home")
         .arity(0, Some(0))
         .host::<Editor>(|heap, editor, _| home(heap, editor));
+    isolate
+        .native("ox", "plugin-folder")
+        .arity(1, Some(1))
+        .keywords(&["cache"])
+        .host::<Editor>(|heap, editor, arguments| {
+            let name = match arguments[0] {
+                Value::Symbol(name) | Value::Keyword(name) => name.name().to_owned(),
+                other => print::display(heap, other),
+            };
+            if name.is_empty() || name.contains(['/', '\\']) || name.starts_with('.') {
+                return Err(Error::new(format!(
+                    "plugin-folder expects a plugin's name, got {}",
+                    print::brief(heap, arguments[0])
+                )));
+            }
+            match editor.folders() {
+                Some(folders) => {
+                    let folder = folders.plugin(&name, arguments[1].truthy());
+                    heap.string(&folder.display().to_string())
+                        .map_err(Error::from)
+                }
+                None => Ok(Value::Nil),
+            }
+        });
 }
 
 #[cfg(test)]
