@@ -274,7 +274,7 @@ pub fn install(isolate: &mut Isolate) {
     single(isolate, "list", |path| list(&path));
     single(isolate, "read", |path| {
         fs::read_to_string(&path)
-            .map(|contents| string(&contents))
+            .map(|contents| string(contents.strip_prefix('\u{feff}').unwrap_or(&contents)))
             .map_err(|error| failed("read", &path, &error))
     });
     single(isolate, "exists?", |path| Ok(Portable::Bool(path.exists())));

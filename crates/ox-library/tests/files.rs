@@ -39,6 +39,21 @@ fn directories_are_listed_by_name_with_their_details() {
 }
 
 #[test]
+fn reading_leaves_out_a_leading_byte_order_mark() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("marked.txt");
+    fs::write(&path, "\u{feff}name,size\n").unwrap();
+    let mut isolate = ox_library::isolate();
+
+    let read = evaluated(
+        &mut isolate,
+        &format!("(await (file/read {}))", literal(&path)),
+    );
+
+    assert_eq!(read, "\"name,size\\n\"");
+}
+
+#[test]
 fn appending_adds_to_the_end_and_makes_missing_files() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("log.txt");

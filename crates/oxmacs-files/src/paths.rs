@@ -10,7 +10,12 @@ pub fn expand(input: &str, home: Option<&Path>) -> PathBuf {
     if let (Some(rest), Some(home)) = (input.strip_prefix('~'), home)
         && (rest.is_empty() || rest.starts_with(is_separator))
     {
-        return home.join(rest.trim_start_matches(is_separator));
+        let rest = rest.trim_start_matches(is_separator);
+        return if rest.is_empty() {
+            home.to_path_buf()
+        } else {
+            home.join(rest)
+        };
     }
     PathBuf::from(input)
 }
@@ -116,7 +121,7 @@ mod tests {
         let home = Path::new("/home/u");
 
         assert_eq!(expand("~/x/y", Some(home)), home.join("x/y"));
-        assert_eq!(expand("~", Some(home)), home);
+        assert_eq!(expand("~", Some(home)).as_os_str(), home.as_os_str());
         assert_eq!(expand("~other/x", Some(home)), Path::new("~other/x"));
         assert_eq!(expand("~/x", None), Path::new("~/x"));
         assert_eq!(expand("/abs/x", Some(home)), Path::new("/abs/x"));

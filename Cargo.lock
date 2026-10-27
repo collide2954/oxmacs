@@ -3868,6 +3868,7 @@ dependencies = [
  "jiff",
  "num-bigint 0.5.1",
  "num-traits",
+ "oxmacs-files",
  "regex",
  "roxmltree 0.21.2",
  "serde",

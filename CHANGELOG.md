@@ -41,6 +41,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - The downloads and the Fedora package include `THIRD-PARTY-LICENSES.html`, the licenses of the crates oxmacs and ox are built from, beside the JetBrains Mono font's license and the highlight queries' notices.
 - `run-job` runs a program in its own buffer, the kind `M-x compile` uses, with `:cwd`, `:env`, a `:title`, `:input` for its standard input, and `:on-line` and `:on-exit` handlers.
 - `console-start` takes `:prompter`, a command sent at the start and after each input to a program such as a shell without a terminal, which prints no prompt of its own.
+- `path/normalize`, `path/relative` and `path/inside?` work out `.` and `..`, write a path from inside a folder, and tell whether a path lies in a folder, from the text alone and ignoring letter case on Windows.
 - `process/stop` asks a process started with `process/start` to end, and a few seconds later stops it and every program it started if it hasn't.
 - `M-x list-processes` lists language servers beside builds, lints and consoles, and a process you stop shows as stopping until it ends; `(processes)` gives its `:status` as `:stopping` then.
 - Programs started with `process/start` show in `M-x list-processes` as Ox processes, and end when oxmacs quits. The map `process/start` gives carries their `:id` there, for `stop-process` and `kill-process`.
@@ -73,6 +74,9 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - A language server's log keeps going past output that isn't valid UTF-8.
 - Saving a file, `file/write`, `ox fmt` and `image/save` all write one way: a file that exists keeps its permissions, owner and links, and now also its access list, creation time and other streams on Windows, such as the mark that it came from the internet, and its extended attributes on Unix, such as ACLs, the SELinux label and macOS quarantine. A new file gets the usual permissions instead of being readable only by you.
 - Recovery copies of unsaved buffers are readable only by you.
+- `path/expand` leaves `~bob/notes` as it is instead of turning it into a bob folder in your own home, and `~` expands to the home folder without a trailing separator.
+- The explorer works when it is rooted at a drive, such as `C:\`, and compares folders the same way everywhere (`explorer` 0.1.4).
+- `file/read` leaves out a leading byte order mark.
 - `image/save` that can't encode an image, such as an ICO over 256 pixels, leaves the file already there as it was instead of emptying it, and `ox fmt` replaces each file whole.
 - A remote command with an unclosed quote, such as `echo 'oops`, no longer hangs the `remote` plugin's connection, and with it every later save of a remote file.
 - `print` and `println` show in *ox repl* when it is open and in *ox log* otherwise. They wrote to a standard output the Windows release doesn't have, so their text was lost.

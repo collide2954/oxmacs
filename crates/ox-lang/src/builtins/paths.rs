@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use oxmacs_files::paths;
+
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
@@ -86,12 +88,33 @@ pub fn install(isolate: &mut Isolate) {
         .native(MODULE, "expand")
         .arity(1, Some(1))
         .function(|heap, arguments| {
-            let given = text(heap, "path/expand", arguments[0])?.to_owned();
-            let expanded = match (given.strip_prefix('~'), home()) {
-                (Some(rest), Some(home)) => home.join(rest.trim_start_matches(['/', '\\'])),
-                _ => PathBuf::from(given),
-            };
+            let expanded =
+                paths::expand(text(heap, "path/expand", arguments[0])?, home().as_deref());
             shown(heap, Some(&expanded))
+        });
+    isolate
+        .native(MODULE, "normalize")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let normalized =
+                paths::normalize(Path::new(text(heap, "path/normalize", arguments[0])?));
+            shown(heap, Some(&normalized))
+        });
+    isolate
+        .native(MODULE, "relative")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text(heap, "path/relative", arguments[0])?);
+            let base = PathBuf::from(text(heap, "path/relative", arguments[1])?);
+            shown(heap, paths::relative(&path, &base).as_deref())
+        });
+    isolate
+        .native(MODULE, "inside?")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text(heap, "path/inside?", arguments[0])?);
+            let folder = PathBuf::from(text(heap, "path/inside?", arguments[1])?);
+            Ok(Value::Bool(paths::inside(&path, &folder)))
         });
     isolate
         .native(MODULE, "temp")
@@ -109,13 +132,7 @@ pub fn install(isolate: &mut Isolate) {
         .arity(1, Some(1))
         .function(|heap, arguments| {
             let path = PathBuf::from(text(heap, "path/abbreviate", arguments[0])?);
-            let shown = match home()
-                .and_then(|home| path.strip_prefix(&home).ok().map(Path::to_path_buf))
-            {
-                Some(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
-                Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
-                None => path.display().to_string(),
-            };
+            let shown = paths::abbreviate(&path, home().as_deref());
             heap.string(&shown).map_err(Error::from)
         });
     isolate

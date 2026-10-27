@@ -21,3 +21,8 @@
 (module (import (ox time))) (>= (get (time/local (time/now)) :year) 2026) ;=> true
 (module (import (ox path))) (= (path/abbreviate (path/join (path/home) "x")) (str "~" (path/separator) "x")) ;=> true
 (module (import (ox path))) [(path/abbreviate (path/home)) (contains? #{"/" "\\"} (path/separator))] ;=> ["~" true]
+(module (import (ox path))) [(path/expand "~bob/x") (= (path/expand "~") (path/home))] ;=> ["~bob/x" true]
+(module (import (ox path))) (= (path/normalize (path/join "a" "b" ".." "." "c")) (path/join "a" "c")) ;=> true
+(module (import (ox path))) (= (path/relative (path/join (path/home) "work" "a.ox") (path/home)) (path/join "work" "a.ox")) ;=> true
+(module (import (ox path))) (= (path/relative (path/join (path/home) "x") (path/join (path/home) "y")) (path/join ".." "x")) ;=> true
+(module (import (ox path))) [(path/inside? (path/join (path/home) "a" "b") (path/home)) (path/inside? (path/join (path/home) "ab") (path/join (path/home) "a"))] ;=> [true false]

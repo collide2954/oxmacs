@@ -20,8 +20,11 @@
 (def (key-of place)
   (if (windows?) (string/lower place) place))
 
+(def (same? place folder)
+  (and place folder (path/inside? place folder) (path/inside? folder place)))
+
 (def (inside? place folder)
-  (and place folder (string/starts-with? (key-of place) (key-of (str folder (path/separator))))))
+  (and place folder (path/inside? place folder) (not (path/inside? folder place))))
 
 (def (shown?)
   (when-let [side (side-window)]
@@ -304,7 +307,7 @@
 (def (relative place)
   (let [root (get @state :root)]
     (if (inside? place root)
-      (string/replace (string/slice place (inc (count root)) (count place)) (path/separator) "/")
+      (string/replace (path/relative place root) (path/separator) "/")
       place)))
 
 (def (folder-for row)
@@ -401,8 +404,8 @@
       (let [moving (nth rows from)
             into (folder-for (nth rows to))
             target (path/join into moving.name)]
-        (unless (or (= (key-of (path/parent moving.path)) (key-of into))
-                    (= (key-of moving.path) (key-of into))
+        (unless (or (same? (path/parent moving.path) into)
+                    (same? moving.path into)
                     (inside? into moving.path))
           (quietly
            (fn []
