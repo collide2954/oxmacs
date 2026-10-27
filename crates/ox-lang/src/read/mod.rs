@@ -1,6 +1,10 @@
 mod syntax;
 
+use std::collections::HashMap;
+use std::mem;
+
 use crate::span::Span;
+use crate::syntax::{Bracket, Kind, Prefix, State, Token, delimiter, tokens};
 pub use syntax::{Datum, Marks, Syntax, meta_flag, split_meta};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,24 +17,40 @@ pub struct ReadError {
 const MAX_DEPTH: usize = 1000;
 const MAX_INTERPOLATION: usize = 16;
 
-const BOM: char = '\u{feff}';
-
 pub fn read(source: &str) -> (Vec<Syntax>, Vec<ReadError>) {
+    let (found, _) = tokens(source, &State::default());
+    let holes = matching_holes(&found);
     let mut reader = Reader {
         source,
-        at: if source.starts_with(BOM) {
-            BOM.len_utf8()
-        } else {
-            0
-        },
-        end: source.len(),
+        tokens: &found,
+        next: 0,
+        at: 0,
+        stop: None,
+        holes,
         depth: 0,
         errors: Vec::new(),
         frames: Vec::new(),
         top: Vec::new(),
     };
-    reader.read_all();
+    reader.read_all(None);
     (reader.top, reader.errors)
+}
+
+fn matching_holes(found: &[Token]) -> HashMap<usize, usize> {
+    let mut open = Vec::new();
+    let mut matched = HashMap::new();
+    for (index, token) in found.iter().enumerate() {
+        match token.kind {
+            Kind::HoleStart => open.push(index),
+            Kind::HoleEnd => {
+                if let Some(start) = open.pop() {
+                    matched.insert(start, index);
+                }
+            }
+            _ => {}
+        }
+    }
+    matched
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,32 +101,47 @@ enum Frame {
 
 struct Reader<'a> {
     source: &'a str,
+    tokens: &'a [Token],
+    next: usize,
     at: usize,
-    end: usize,
+    stop: Option<usize>,
+    holes: HashMap<usize, usize>,
     depth: usize,
     errors: Vec<ReadError>,
     frames: Vec<Frame>,
     top: Vec<Syntax>,
 }
 
-fn separator(character: char) -> bool {
-    character.is_whitespace() || character == ','
-}
-
-fn delimiter(character: char) -> bool {
-    separator(character) || matches!(character, '(' | ')' | '[' | ']' | '{' | '}' | '"' | ';')
+fn marked(prefix: Prefix) -> (Option<&'static str>, &'static str) {
+    match prefix {
+        Prefix::Quote => (Some("quote"), "'"),
+        Prefix::Quasiquote => (Some("quasiquote"), "`"),
+        Prefix::Unquote => (Some("unquote"), "~"),
+        Prefix::Splice => (Some("unquote-splicing"), "~@"),
+        Prefix::Deref => (Some("deref"), "@"),
+        Prefix::Skip => (None, "#;"),
+    }
 }
 
 impl<'a> Reader<'a> {
-    fn rest(&self) -> &'a str {
-        &self.source[self.at..self.end]
+    fn peek(&self) -> Option<Token> {
+        (Some(self.next) != self.stop)
+            .then(|| self.tokens.get(self.next).copied())
+            .flatten()
     }
 
-    fn error(&mut self, start: usize, message: impl Into<String>) {
-        self.error_at(Span::new(start, self.at), message);
+    fn take(&mut self) -> Option<Token> {
+        let token = self.peek()?;
+        self.next += 1;
+        self.at = token.ends();
+        Some(token)
     }
 
-    fn error_at(&mut self, span: Span, message: impl Into<String>) {
+    fn text(&self, token: Token) -> &'a str {
+        token.text(self.source)
+    }
+
+    fn error(&mut self, span: Span, message: impl Into<String>) {
         self.errors.push(ReadError {
             message: message.into(),
             span,
@@ -118,126 +153,94 @@ impl<'a> Reader<'a> {
         self.errors.push(ReadError {
             message: message.into(),
             span,
-            incomplete: self.end == self.source.len(),
+            incomplete: true,
         });
     }
 
-    fn next_char(&mut self) -> Option<char> {
-        let character = self.rest().chars().next()?;
-        self.at += character.len_utf8();
-        Some(character)
+    fn read_all(&mut self, stop: Option<usize>) {
+        let outer = mem::replace(&mut self.stop, stop);
+        while let Some(token) = self.take() {
+            self.read_token(token);
+        }
+        while let Some(frame) = self.frames.pop() {
+            self.abandon(frame, stop.is_none());
+        }
+        self.stop = outer;
     }
 
-    fn skip_separators(&mut self) {
-        loop {
-            let rest = self.rest();
-            self.at += rest.len() - rest.trim_start_matches(separator).len();
-            let rest = self.rest();
-            if rest.starts_with(';') {
-                self.at += rest.find('\n').unwrap_or(rest.len());
-            } else if rest.starts_with("#|") {
-                self.block_comment();
-            } else {
-                return;
+    fn read_token(&mut self, token: Token) {
+        let start = token.starts();
+        let text = self.text(token);
+        match token.kind {
+            Kind::Space
+            | Kind::Comment
+            | Kind::BlockComment { closed: true }
+            | Kind::Text
+            | Kind::Escape
+            | Kind::HoleStart
+            | Kind::StringEnd => {}
+            Kind::BlockComment { closed: false } => {
+                self.unfinished(token.span, "This comment is never closed");
+            }
+            Kind::Open(bracket) => {
+                let opener = match bracket {
+                    Bracket::List => Opener::List,
+                    Bracket::Vector => Opener::Vector,
+                    Bracket::Map => Opener::Map,
+                    Bracket::Set => Opener::Set,
+                    Bracket::Record => Opener::Record(text[1..text.len() - 1].to_owned()),
+                    Bracket::Meta => Opener::Meta,
+                };
+                self.opening(opener, start);
+            }
+            Kind::Close | Kind::HoleEnd => {
+                self.closing(text.chars().next().unwrap_or(')'), token);
+            }
+            Kind::Prefix(prefix) => {
+                let (name, mark) = marked(prefix);
+                self.frames.push(Frame::Prefix { name, mark, start });
+            }
+            Kind::Flag => {
+                let after = start + 1;
+                let items = vec![
+                    Syntax::new(
+                        Datum::Keyword(text[2..].to_owned()),
+                        Span::new(after, self.at),
+                    ),
+                    Syntax::new(Datum::Bool(true), Span::new(after, self.at)),
+                ];
+                self.push(Datum::Meta(items), start);
+            }
+            Kind::Caret => self.error(token.span, META),
+            Kind::Dispatch => self.error(token.span, format!("Unknown form {text}")),
+            Kind::StringStart => {
+                let datum = self.string(start);
+                self.push(datum, start);
+            }
+            Kind::Raw { closed } => {
+                let datum = self.raw(token, closed);
+                self.push(datum, start);
+            }
+            Kind::Regex { closed } => {
+                let datum = self.regex(token, closed);
+                self.push(datum, start);
+            }
+            Kind::Char => {
+                let datum = self.character(token);
+                self.push(datum, start);
+            }
+            Kind::Number => {
+                let datum = self.number(text, token.span);
+                self.push(datum, start);
+            }
+            Kind::Keyword | Kind::Symbol => {
+                let datum = self.fields(text, token.span).unwrap_or_else(|| atom(text));
+                self.push(datum, start);
             }
         }
     }
 
-    fn block_comment(&mut self) {
-        let start = self.at;
-        self.at += 2;
-        let mut depth = 1_usize;
-        while depth > 0 {
-            let rest = self.rest();
-            if rest.starts_with("#|") {
-                depth += 1;
-                self.at += 2;
-            } else if rest.starts_with("|#") {
-                depth -= 1;
-                self.at += 2;
-            } else if self.next_char().is_none() {
-                self.unfinished(Span::new(start, self.at), "This comment is never closed");
-                return;
-            }
-        }
-    }
-
-    fn token(&mut self) -> &'a str {
-        let rest = self.rest();
-        let length = rest.find(delimiter).unwrap_or(rest.len());
-        self.at += length;
-        &rest[..length]
-    }
-
-    fn read_all(&mut self) {
-        loop {
-            self.skip_separators();
-            let start = self.at;
-            let Some(first) = self.rest().chars().next() else {
-                while let Some(frame) = self.frames.pop() {
-                    self.abandon(frame, true);
-                }
-                return;
-            };
-            match first {
-                '(' => self.opening(Opener::List, start),
-                '[' => self.opening(Opener::Vector, start),
-                '{' => self.opening(Opener::Map, start),
-                ')' | ']' | '}' => self.closing(first, start),
-                '"' => {
-                    let datum = self.string(start);
-                    self.push(datum, start);
-                }
-                '\\' => {
-                    let datum = self.character(start);
-                    self.push(datum, start);
-                }
-                '\'' => self.prefix(Some("quote"), "'", start),
-                '`' => self.prefix(Some("quasiquote"), "`", start),
-                '~' if self.rest().starts_with("~@") => {
-                    self.prefix(Some("unquote-splicing"), "~@", start);
-                }
-                '~' => self.prefix(Some("unquote"), "~", start),
-                '@' => self.prefix(Some("deref"), "@", start),
-                '#' if self.rest().starts_with("#r\"") || self.rest().starts_with("#r#") => {
-                    let datum = self.raw_string(start);
-                    self.push(datum, start);
-                }
-                '#' if self.rest().starts_with("#\"") => {
-                    let datum = self.regex(start);
-                    self.push(datum, start);
-                }
-                '^' if self.rest().starts_with("^{") => self.opening(Opener::Meta, start),
-                '^' => self.flag(start),
-                '#' if self.rest().starts_with("#;") => self.prefix(None, "#;", start),
-                '#' if self.rest().starts_with("#{") => self.opening(Opener::Set, start),
-                '#' => {
-                    let token = self.token();
-                    match token.get(1..) {
-                        Some(name) if !name.is_empty() && self.rest().starts_with('{') => {
-                            self.opening(Opener::Record(name.to_owned()), start);
-                        }
-                        _ => self.error(start, format!("Unknown form {token}")),
-                    }
-                }
-                _ if delimiter(first) => {
-                    self.at += first.len_utf8();
-                    self.error(start, format!("Unexpected {first}"));
-                }
-                _ => {
-                    let token = self.token();
-                    let datum = if numeric(token) {
-                        self.number(token, start)
-                    } else {
-                        self.fields(token, start).unwrap_or_else(|| atom(token))
-                    };
-                    self.push(datum, start);
-                }
-            }
-        }
-    }
-
-    fn number(&mut self, token: &str, start: usize) -> Datum {
+    fn number(&mut self, token: &str, span: Span) -> Datum {
         let digits = token.strip_prefix(['-', '+']).unwrap_or(token);
         if digits.bytes().all(|byte| byte.is_ascii_digit()) {
             return token.parse::<i64>().map_or_else(
@@ -248,19 +251,19 @@ impl<'a> Reader<'a> {
         if let Ok(value) = token.parse::<f64>() {
             return Datum::Float(value);
         }
-        self.error(start, format!("{token} is not a number"));
+        self.error(span, format!("{token} is not a number"));
         Datum::Symbol(token.to_owned())
     }
 
-    fn fields(&mut self, token: &str, start: usize) -> Option<Datum> {
+    fn fields(&mut self, token: &str, span: Span) -> Option<Datum> {
         if !token.contains('.') || token.starts_with([':', '.']) || token.ends_with('.') {
             return None;
         }
         if token.split('.').any(str::is_empty) {
-            self.error(start, format!("Empty field name in {token}"));
+            self.error(span, format!("Empty field name in {token}"));
             return Some(Datum::Symbol(token.to_owned()));
         }
-        let mut offset = start;
+        let mut offset = span.start as usize;
         let mut parts = Vec::new();
         for (index, part) in token.split('.').enumerate() {
             let span = Span::new(offset, offset + part.len());
@@ -285,22 +288,6 @@ impl<'a> Reader<'a> {
             offset += part.len() + 1;
         }
         Some(Datum::List(parts))
-    }
-
-    fn flag(&mut self, start: usize) {
-        self.at += 1;
-        let after = self.at;
-        let token = self.token();
-        let Some(name) = token.strip_prefix(':').filter(|name| !name.is_empty()) else {
-            self.at = after;
-            self.error(start, META);
-            return;
-        };
-        let items = vec![
-            Syntax::new(Datum::Keyword(name.to_owned()), Span::new(after, self.at)),
-            Syntax::new(Datum::Bool(true), Span::new(after, self.at)),
-        ];
-        self.push(Datum::Meta(items), start);
     }
 
     fn push(&mut self, datum: Datum, start: usize) {
@@ -347,21 +334,15 @@ impl<'a> Reader<'a> {
         }
     }
 
-    fn prefix(&mut self, name: Option<&'static str>, mark: &'static str, start: usize) {
-        self.at += mark.len();
-        self.frames.push(Frame::Prefix { name, mark, start });
-    }
-
     fn opening(&mut self, opener: Opener, start: usize) {
         if self.frames.len() >= MAX_DEPTH {
-            self.error_at(
+            self.error(
                 Span::new(start, start + 1),
                 format!("Nested deeper than {MAX_DEPTH}"),
             );
             self.skip_balanced();
             return;
         }
-        self.at = start + opener.text().len();
         self.frames.push(Frame::Collection {
             opener,
             start,
@@ -369,7 +350,7 @@ impl<'a> Reader<'a> {
         });
     }
 
-    fn closing(&mut self, bracket: char, start: usize) {
+    fn closing(&mut self, bracket: char, token: Token) {
         let Some(position) = self.frames.iter().rposition(
             |frame| matches!(frame, Frame::Collection { opener, .. } if opener.closer() == bracket),
         ) else {
@@ -378,16 +359,16 @@ impl<'a> Reader<'a> {
                     self.abandon(frame, false);
                 }
             }
-            self.at += 1;
-            self.error(start, format!("Unexpected {bracket}"));
+            self.error(token.span, format!("Unexpected {bracket}"));
             return;
         };
+        self.at = token.starts();
         while self.frames.len() > position + 1 {
             if let Some(frame) = self.frames.pop() {
                 self.abandon(frame, false);
             }
         }
-        self.at += 1;
+        self.at = token.ends();
         if let Some(Frame::Collection {
             opener,
             start,
@@ -412,7 +393,7 @@ impl<'a> Reader<'a> {
         if at_end {
             self.unfinished(span, message);
         } else {
-            self.error_at(span, message);
+            self.error(span, message);
         }
         if let Frame::Collection {
             opener,
@@ -442,54 +423,48 @@ impl<'a> Reader<'a> {
     }
 
     fn skip_balanced(&mut self) {
-        let mut depth = 0_usize;
-        while let Some(character) = self.next_char() {
-            match character {
-                '(' | '[' | '{' => depth += 1,
-                ')' | ']' | '}' => depth = depth.saturating_sub(1),
-                _ => {}
-            }
-            if depth == 0 {
-                return;
+        let mut depth = 1_usize;
+        while depth > 0 {
+            match self.take().map(|token| token.kind) {
+                None => return,
+                Some(Kind::Open(_)) => depth += 1,
+                Some(Kind::Close) => depth -= 1,
+                Some(_) => {}
             }
         }
     }
+
     fn string(&mut self, start: usize) -> Datum {
-        self.at += 1;
         let mut text = String::new();
         let mut pieces = Vec::new();
         let mut piece_start = self.at;
         let mut interpolated = false;
         let piece_end = loop {
-            let here = self.at;
-            match self.next_char() {
-                None => {
-                    self.unfinished(Span::new(start, self.at), "This string is never closed");
-                    break self.at;
-                }
-                Some('"') => break here,
-                Some('\\') => text.extend(self.escape(here)),
-                Some('{') if self.rest().starts_with('{') => {
-                    self.at += 1;
-                    text.push('{');
-                }
-                Some('}') if self.rest().starts_with('}') => {
-                    self.at += 1;
-                    text.push('}');
-                }
-                Some('{') => {
+            let index = self.next;
+            let Some(token) = self.take() else {
+                self.unfinished(
+                    Span::new(start, self.source.len()),
+                    "This string is never closed",
+                );
+                break self.source.len();
+            };
+            match token.kind {
+                Kind::StringEnd => break token.starts(),
+                Kind::Text => text.push_str(self.text(token)),
+                Kind::Escape => text.extend(self.escape(token)),
+                Kind::HoleStart => {
                     interpolated = true;
                     if !text.is_empty() {
                         pieces.push(Syntax {
-                            datum: Datum::Str(std::mem::take(&mut text)),
-                            span: Span::new(piece_start, here),
+                            datum: Datum::Str(mem::take(&mut text)),
+                            span: Span::new(piece_start, token.starts()),
                             marks: Marks::default(),
                         });
                     }
-                    pieces.extend(self.interpolation(here));
+                    pieces.extend(self.interpolation(token, index));
                     piece_start = self.at;
                 }
-                Some(other) => text.push(other),
+                _ => {}
             }
         };
         if !interpolated {
@@ -510,49 +485,58 @@ impl<'a> Reader<'a> {
         Datum::List(std::iter::once(head).chain(pieces).collect())
     }
 
-    fn raw_string(&mut self, start: usize) -> Datum {
-        self.at += 2;
-        let hashes = self
-            .rest()
-            .chars()
-            .take_while(|character| *character == '#')
-            .count();
-        self.at += hashes;
-        if !self.rest().starts_with('"') {
-            self.error(start, "Write a raw string as #r\"…\" or #r#\"…\"#");
-            return Datum::Str(String::new());
+    fn escape(&mut self, token: Token) -> Option<char> {
+        let text = self.text(token);
+        match text {
+            "{{" => return Some('{'),
+            "}}" => return Some('}'),
+            _ => {}
         }
-        self.at += 1;
-        let closing = format!("\"{}", "#".repeat(hashes));
-        if let Some(length) = self.rest().find(&closing) {
-            let text = self.rest()[..length].to_owned();
-            self.at += length + closing.len();
-            return Datum::Str(text);
-        }
-        self.unfinished(
-            Span::new(start, self.end),
-            "This raw string is never closed",
-        );
-        self.at = self.end;
-        Datum::Str(String::new())
+        let mut characters = text.chars().skip(1);
+        let escaped = match characters.next()? {
+            'n' => '\n',
+            't' => '\t',
+            'r' => '\r',
+            '0' => '\0',
+            '\\' => '\\',
+            '"' => '"',
+            'u' => {
+                let code = code_point(&text[2..]);
+                if code.is_none() {
+                    self.error(token.span, "Write \\u{…} with a hexadecimal code point");
+                }
+                return code;
+            }
+            other => {
+                self.error(token.span, format!("Unknown escape \\{other}"));
+                other
+            }
+        };
+        Some(escaped)
     }
 
-    fn regex(&mut self, start: usize) -> Datum {
-        self.at += 2;
-        let content = self.at;
-        let mut escaped = false;
-        let length = self.rest().char_indices().find_map(|(offset, character)| {
-            let closes = character == '"' && !escaped;
-            escaped = character == '\\' && !escaped;
-            closes.then_some(offset)
-        });
-        let Some(length) = length else {
-            self.unfinished(Span::new(start, self.end), "This regex is never closed");
-            self.at = self.end;
+    fn raw(&mut self, token: Token, closed: bool) -> Datum {
+        let text = self.text(token);
+        let hashes = text[2..].chars().take_while(|c| *c == '#').count();
+        let after = &text[2 + hashes..];
+        if !after.starts_with('"') {
+            self.error(token.span, "Write a raw string as #r\"…\" or #r#\"…\"#");
             return Datum::Str(String::new());
-        };
-        let pattern = self.rest()[..length].to_owned();
-        self.at += length + 1;
+        }
+        if !closed {
+            self.unfinished(token.span, "This raw string is never closed");
+            return Datum::Str(String::new());
+        }
+        Datum::Str(after[1..after.len() - 1 - hashes].to_owned())
+    }
+
+    fn regex(&mut self, token: Token, closed: bool) -> Datum {
+        if !closed {
+            self.unfinished(token.span, "This regex is never closed");
+            return Datum::Str(String::new());
+        }
+        let start = token.starts();
+        let pattern = &self.text(token)[2..token.ends() - start - 1];
         Datum::List(vec![
             Syntax {
                 datum: Datum::Symbol("regex".to_owned()),
@@ -560,136 +544,77 @@ impl<'a> Reader<'a> {
                 marks: Marks::default(),
             },
             Syntax {
-                datum: Datum::Str(pattern),
-                span: Span::new(content, content + length),
+                datum: Datum::Str(pattern.to_owned()),
+                span: Span::new(start + 2, start + 2 + pattern.len()),
                 marks: Marks::default(),
             },
         ])
     }
 
-    fn interpolation(&mut self, open: usize) -> Option<Syntax> {
-        let Some(close) = self.matching_brace() else {
-            self.unfinished(Span::new(open, open + 1), "This { is never closed");
-            self.at = self.end;
+    fn interpolation(&mut self, open: Token, index: usize) -> Option<Syntax> {
+        let Some(&close) = self.holes.get(&index) else {
+            self.unfinished(open.span, "This { is never closed");
+            self.next = self.tokens.len();
+            self.at = self.source.len();
             return None;
         };
-        let braces = Span::new(open, close + 1);
+        let closer = self.tokens[close];
+        let braces = Span::new(open.starts(), closer.ends());
         if self.depth >= MAX_INTERPOLATION {
-            self.error_at(braces, "Strings nested too deeply");
-            self.at = close + 1;
-            return None;
-        }
-        let mut inner = Reader {
-            source: self.source,
-            at: self.at,
-            end: close,
-            depth: self.depth + 1,
-            errors: Vec::new(),
-            frames: Vec::new(),
-            top: Vec::new(),
-        };
-        inner.read_all();
-        self.errors.append(&mut inner.errors);
-        self.at = close + 1;
-        let mut found = inner.top.into_iter();
-        match (found.next(), found.next()) {
-            (Some(only), None) => Some(only),
-            (None, _) => {
-                self.error_at(braces, "Put an expression inside the braces");
-                None
-            }
-            (Some(first), Some(_)) => {
-                self.error_at(braces, "Put one expression inside the braces");
-                Some(first)
-            }
-        }
-    }
-
-    fn matching_brace(&self) -> Option<usize> {
-        let mut depth = 0_usize;
-        let mut characters = self.rest().char_indices();
-        while let Some((offset, character)) = characters.next() {
-            match character {
-                '(' | '[' | '{' => depth += 1,
-                ')' | ']' => depth = depth.saturating_sub(1),
-                '}' if depth == 0 => return Some(self.at + offset),
-                '}' => depth -= 1,
-                '"' => loop {
-                    match characters.next()? {
-                        (_, '\\') => {
-                            characters.next();
-                        }
-                        (_, '"') => break,
-                        _ => {}
-                    }
-                },
-                '\\' => {
-                    characters.next();
+            self.error(braces, "Strings nested too deeply");
+        } else {
+            let frames = mem::take(&mut self.frames);
+            let top = mem::take(&mut self.top);
+            self.depth += 1;
+            self.read_all(Some(close));
+            self.depth -= 1;
+            self.frames = frames;
+            let inner = mem::replace(&mut self.top, top);
+            self.next = close + 1;
+            self.at = closer.ends();
+            let mut found = inner.into_iter();
+            return match (found.next(), found.next()) {
+                (Some(only), None) => Some(only),
+                (None, _) => {
+                    self.error(braces, "Put an expression inside the braces");
+                    None
                 }
-                _ => {}
-            }
+                (Some(first), Some(_)) => {
+                    self.error(braces, "Put one expression inside the braces");
+                    Some(first)
+                }
+            };
         }
+        self.next = close + 1;
+        self.at = closer.ends();
         None
     }
-    fn escape(&mut self, start: usize) -> Option<char> {
-        let character = self.next_char()?;
-        let escaped = match character {
-            'n' => '\n',
-            't' => '\t',
-            'r' => '\r',
-            '0' => '\0',
-            '\\' | '"' => character,
-            'u' => {
-                let code = self.code_point();
-                if code.is_none() {
-                    self.error(start, "Write \\u{…} with a hexadecimal code point");
-                }
-                return code;
-            }
-            other => {
-                self.error(start, format!("Unknown escape \\{other}"));
-                other
-            }
-        };
-        Some(escaped)
-    }
 
-    fn code_point(&mut self) -> Option<char> {
-        let inner = self.rest().strip_prefix('{')?;
-        let close = inner.find('}')?;
-        self.at += close + 2;
-        u32::from_str_radix(&inner[..close], 16)
-            .ok()
-            .and_then(char::from_u32)
-    }
-
-    fn character(&mut self, start: usize) -> Datum {
-        self.at += 1;
-        let Some(first) = self.rest().chars().next() else {
-            self.error(start, "Name a character after \\");
-            return Datum::Char(' ');
-        };
-        let found = if first == 'u' && self.rest()[1..].starts_with('{') {
-            self.at += 1;
-            self.code_point()
-        } else if delimiter(first) {
-            self.at += first.len_utf8();
-            Some(first)
-        } else {
-            named(self.token())
+    fn character(&mut self, token: Token) -> Datum {
+        let text = self.text(token);
+        let name = &text[1..];
+        let found = match name.chars().next() {
+            None => {
+                self.error(token.span, "Name a character after \\");
+                return Datum::Char(' ');
+            }
+            Some('u') if name.starts_with("u{") => code_point(&name[1..]),
+            Some('u') if name == "u" && self.source[token.ends()..].starts_with('{') => None,
+            Some(first) if delimiter(first) => Some(first),
+            Some(_) => named(name),
         };
         let Some(character) = found else {
-            let source = self.source;
-            self.error(
-                start,
-                format!("Unknown character {}", &source[start..self.at]),
-            );
+            self.error(token.span, format!("Unknown character {text}"));
             return Datum::Char(' ');
         };
         Datum::Char(character)
     }
 }
 
+fn code_point(braced: &str) -> Option<char> {
+    let inner = braced.strip_prefix('{')?.strip_suffix('}')?;
+    u32::from_str_radix(inner, 16).ok().and_then(char::from_u32)
+}
 fn span_end(span: Span) -> usize {
     span.end as usize
 }
@@ -707,13 +632,6 @@ fn named(name: &str) -> Option<char> {
         "nul" => Some('\0'),
         _ => None,
     }
-}
-
-fn numeric(token: &str) -> bool {
-    token
-        .strip_prefix(['-', '+'])
-        .unwrap_or(token)
-        .starts_with(|character: char| character.is_ascii_digit())
 }
 
 fn atom(token: &str) -> Datum {
@@ -1145,6 +1063,23 @@ mod tests {
         assert_eq!(data[0].to_string(), r#"(str "a" (f "}") "b")"#);
         assert_eq!(data[0].span, Span::new(0, 13));
         assert_eq!(pieces[2].span, Span::new(3, 10));
+    }
+
+    #[test]
+    fn holes_may_hold_raw_strings_regexes_and_comments_with_braces_and_quotes() {
+        let source = r##""<{(f #r#"a"}b"# #"\d{2}" #| } |# x)}>""##;
+
+        assert_eq!(errors(source), []);
+        let (data, _) = read(source);
+        let Datum::List(pieces) = &data[0].datum else {
+            panic!("expected an interpolation");
+        };
+        let Datum::List(call) = &pieces[2].datum else {
+            panic!("expected the call inside the braces");
+        };
+        assert_eq!(call[1].datum, string("a\"}b"));
+        assert_eq!(call[3].datum, symbol("x"));
+        assert_eq!(pieces[3].datum, string(">"));
     }
 
     #[test]
