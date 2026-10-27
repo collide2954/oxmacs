@@ -95,7 +95,7 @@ impl Editor {
 
     #[cfg(test)]
     pub fn stop_job(&mut self, job: JobId) {
-        self.effects.push(Effect::Kill(job));
+        self.kill_job(job);
     }
 
     pub(in crate::editor) fn notify_job(&mut self, job: JobId, event: JobEvent<'_>) -> bool {
@@ -119,7 +119,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::editor::{Editor, Effect};
+    use crate::editor::{Editor, Effect, ProcessStatus};
 
     #[derive(Debug, Default)]
     struct Heard(Vec<String>);
@@ -196,10 +196,8 @@ mod tests {
 
         let effects = editor.take_effects();
         assert!(matches!(&effects[0], Effect::StartSession(job) if job.id == id));
-        assert_eq!(
-            effects[1..],
-            [Effect::Send(id, "print(1)\n".to_owned()), Effect::Kill(id)]
-        );
+        assert_eq!(effects[1..], [Effect::Send(id, "print(1)\n".to_owned())]);
+        assert_eq!(editor.job_status(id), Some(ProcessStatus::Stopping));
         assert_eq!(heard(&editor), ["output 1\n>>> "]);
     }
 
@@ -208,7 +206,7 @@ mod tests {
         let mut editor = Editor::new();
 
         let id = editor.start_job(spec(false), |_, _, _| {});
-        editor.job_started(id, 4242);
+        editor.job_started_as(id, 4242);
 
         assert_eq!(editor.process_pids(), [4242]);
     }

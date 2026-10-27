@@ -24,25 +24,8 @@ pub enum Event {
     Exited(Option<String>),
 }
 
-#[derive(Debug, Clone)]
-pub struct Server(Process);
-
 fn lock<T: ?Sized>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-impl Server {
-    pub fn send(&self, body: &str) -> io::Result<()> {
-        self.0.send(frame(body))
-    }
-
-    pub fn kill(&self) {
-        self.0.kill();
-    }
-
-    pub fn pid(&self) -> u32 {
-        self.0.pid()
-    }
 }
 
 pub fn frame(body: &str) -> Vec<u8> {
@@ -106,7 +89,7 @@ fn ending(process: &Process) -> Option<String> {
     }
 }
 
-pub fn start(launch: &Launch, report: impl FnMut(Event) + Send + 'static) -> io::Result<Server> {
+pub fn start(launch: &Launch, report: impl FnMut(Event) + Send + 'static) -> io::Result<Process> {
     let Started {
         process,
         stdout,
@@ -136,7 +119,7 @@ pub fn start(launch: &Launch, report: impl FnMut(Event) + Send + 'static) -> io:
         let ended = ending(&watched).or(failure);
         (lock(&report))(Event::Exited(ended));
     });
-    Ok(Server(process))
+    Ok(process)
 }
 
 #[cfg(test)]

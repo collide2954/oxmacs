@@ -5,7 +5,7 @@ use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::build::errors::Errors;
 use crate::editor::prompts::minibuffer::Purpose;
-use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
+use crate::editor::{Editor, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::tools;
 use crate::files::paths;
 use crate::special_buffer::SpecialBuffer;
@@ -90,7 +90,7 @@ impl Editor {
             return;
         };
         if let Some(running) = self.compilation().and_then(|compilation| compilation.job) {
-            self.effects.push(Effect::Kill(running));
+            self.kill_job(running);
         }
         self.builds.compiling(&command);
         let shown = paths::abbreviate(&directory, self.home.as_deref());
@@ -166,7 +166,7 @@ impl Editor {
         };
         compilation.killed = true;
         if let Some(job) = compilation.job {
-            self.effects.push(Effect::Kill(job));
+            self.kill_job(job);
         }
     }
 
@@ -252,7 +252,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use crate::editor::{Editor, Effect, Job, JobId, Outcome};
+    use crate::editor::{Editor, Effect, Job, JobId, Outcome, ProcessStatus};
     use crate::testing::{press, type_text};
 
     fn spawned(editor: &mut Editor) -> Vec<Job> {
@@ -360,7 +360,8 @@ mod tests {
         assert_ne!(second.id, first.id);
 
         press(&mut editor, "C-c C-k");
-        assert_eq!(editor.take_effects(), [Effect::Kill(second.id)]);
+        assert_eq!(editor.take_effects(), []);
+        assert_eq!(editor.job_status(second.id), Some(ProcessStatus::Stopping));
         editor.job_finished(second.id, &Outcome::Exited(None));
         assert_eq!(editor.message(), Some("Compilation killed"));
     }

@@ -164,7 +164,11 @@ mod tests {
     #[test]
     fn plugins_define_language_servers_that_start_for_their_modes() {
         let folder = tempfile::tempdir().unwrap();
-        let program = folder.path().join("serve-r");
+        let program = folder.path().join(if cfg!(windows) {
+            "serve-r.exe"
+        } else {
+            "serve-r"
+        });
         std::fs::write(&program, "").unwrap();
         std::fs::write(folder.path().join("DESCRIPTION"), "Package: a\n").unwrap();
         std::fs::create_dir_all(folder.path().join("R")).unwrap();
@@ -224,7 +228,11 @@ mod tests {
     #[test]
     fn servers_try_their_programs_in_turn_and_say_when_list_tools_can_install_them() {
         let folder = tempfile::tempdir().unwrap();
-        let second = folder.path().join("second-server");
+        let second = folder.path().join(if cfg!(windows) {
+            "second-server.exe"
+        } else {
+            "second-server"
+        });
         std::fs::write(&second, "").unwrap();
         let script = folder.path().join("a.R");
         std::fs::write(&script, "x <- 1\n").unwrap();

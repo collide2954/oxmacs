@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::config::RustLint;
 use crate::editor::build::Finished;
 use crate::editor::decorations::{Lasts, Look, Owner};
-use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
+use crate::editor::{Editor, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::diagnostics::{self, Diagnostic, LintLine, Severity};
 use crate::external::tools;
 use crate::syntax::Language;
@@ -123,7 +123,7 @@ impl Editor {
             return;
         };
         for stale in self.builds.stale(due.0) {
-            self.effects.push(Effect::Kill(stale));
+            self.kill_job(stale);
         }
         let spec = JobSpec {
             program: run.program.clone(),
@@ -301,7 +301,7 @@ mod tests {
 
     use super::fixtures::{FINISHED, linting, project, report, reported, save, spawned};
     use crate::config::Config;
-    use crate::editor::{Editor, Effect, Job, LintLine, LintRun, Linter, Outcome};
+    use crate::editor::{Editor, Job, LintLine, LintRun, Linter, Outcome, ProcessStatus};
     use crate::external::diagnostics::{Diagnostic, Severity, sample};
     use crate::syntax::{Indentation, Language, LanguageSpec, Outline};
     use crate::testing::{press, type_text};
@@ -492,9 +492,9 @@ mod tests {
         let first = linting(&mut editor);
 
         save(&mut editor);
+        editor.take_effects();
 
-        let effects = editor.take_effects();
-        assert!(effects.contains(&Effect::Kill(first)), "{effects:?}");
+        assert_eq!(editor.job_status(first), Some(ProcessStatus::Stopping));
         report(
             &mut editor,
             first,

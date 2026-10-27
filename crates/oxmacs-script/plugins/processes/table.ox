@@ -48,7 +48,7 @@
 
 (def (status-face p)
   (cond ((= p.status :running) :success)
-    ((= p.status :starting) :warning)
+    ((contains? #{:starting :stopping} p.status) :warning)
     ((= (status-text p) "exited") :comment)
     (else :error)))
 

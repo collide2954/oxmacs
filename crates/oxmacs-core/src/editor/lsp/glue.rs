@@ -30,8 +30,12 @@ impl Editor {
         for out in self.lsp.take_out() {
             match out {
                 Out::Send(id, message) => self.effects.push(Effect::ToServer(id, message)),
-                Out::Start(id, launch) => self.effects.push(Effect::StartServer(id, launch)),
-                Out::Stop(id) => self.effects.push(Effect::StopServer(id)),
+                Out::Start(id, launch) => {
+                    let name = self.lsp.name_of(id).unwrap_or_default();
+                    self.track_server(id, name, &launch);
+                    self.effects.push(Effect::StartServer(id, launch));
+                }
+                Out::Stop(id) => self.kill_server(id),
                 Out::Log(line) => self.log_server(&line),
                 Out::Tell(text) => self.show_message(text),
             }
@@ -65,6 +69,9 @@ impl Editor {
     }
 
     pub fn server_event(&mut self, id: ServerId, event: Event) {
+        if let Event::Exited(failure) = &event {
+            self.server_ended(id, failure.as_deref());
+        }
         for outcome in self.lsp.receive(id, event) {
             self.follow(outcome);
         }

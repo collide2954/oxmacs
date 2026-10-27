@@ -1,15 +1,12 @@
 use std::path::Path;
 
 use iced::font::Family;
-use iced::futures::channel::mpsc;
 use iced::theme::Mode;
 use iced::time::Instant;
 use iced::{Task, clipboard, keyboard, window};
 use oxmacs_core::command::Command;
-use oxmacs_core::editor::{Edge, Effect, Job, Outcome, ServerId, WindowId};
-use oxmacs_core::external::lsp;
+use oxmacs_core::editor::{Edge, Effect, WindowId};
 use oxmacs_core::external::notify;
-use oxmacs_core::external::process;
 use oxmacs_core::theme::{Appearance, Theme as Faces};
 use oxmacs_core::view::UiEvent;
 
@@ -236,22 +233,9 @@ impl App {
                     self.last_input = self.now;
                 }
             }
-            Message::Job(job, process::Event::Line(line)) => self.editor.job_output(job, &line),
-            Message::Job(job, process::Event::Output(text)) => {
-                self.editor.session_output(job, &text);
-            }
-            Message::Job(job, process::Event::Finished(outcome)) => {
-                self.jobs.retain(|(id, _)| *id != job);
-                self.editor.job_finished(job, &outcome);
-            }
+            Message::Delivered(delivery) => self.runner.deliver(&mut self.editor, delivery),
             Message::Fetched(id, result) => self.editor.fetched(id, result),
             Message::ToolInstalled(tool, result) => self.editor.tool_installed(tool, result),
-            Message::Server(id, event) => {
-                if matches!(event, lsp::Event::Exited(_)) {
-                    self.servers.retain(|(known, _)| *known != id);
-                }
-                self.editor.server_event(id, event);
-            }
             Message::OxPress(buffer, slot) => {
                 self.ox
                     .event(&mut self.editor, UiEvent::Press { buffer, slot });
@@ -331,13 +315,7 @@ impl App {
 
     fn quit(&mut self) {
         let _ = self.pending_effects();
-        for (_, killer) in self.jobs.drain(..) {
-            killer.kill();
-        }
-        for (_, server) in self.servers.drain(..) {
-            let _ = server.send(EXIT);
-            server.kill();
-        }
+        self.runner.shutdown(&mut self.editor);
     }
 
     fn settle(&mut self) {
@@ -355,6 +333,9 @@ impl App {
     }
 
     fn perform(&mut self, effect: Effect) -> Task<Message> {
+        let Some(effect) = self.runner.perform(&mut self.editor, effect) else {
+            return Task::none();
+        };
         match effect {
             Effect::WriteClipboard(text) => clipboard::write(text),
             Effect::ReadClipboard => clipboard::read().map(Message::Pasted),
@@ -362,33 +343,14 @@ impl App {
             Effect::ReadPrimary if HAS_PRIMARY_SELECTION => {
                 clipboard::read_primary().map(Message::PastedPrimary)
             }
-            Effect::WritePrimary(_) | Effect::ReadPrimary => Task::none(),
+            Effect::WritePrimary(_)
+            | Effect::ReadPrimary
+            | Effect::Spawn(_)
+            | Effect::StartSession(_)
+            | Effect::Send(..)
+            | Effect::StartServer(..)
+            | Effect::ToServer(..) => Task::none(),
             Effect::OpenExternally(path) => Task::done(Message::Opened(open_externally(&path))),
-            Effect::Spawn(job) => self.spawn(&job, false),
-            Effect::StartSession(job) => self.spawn(&job, true),
-            Effect::Send(job, text) => {
-                let sent = self
-                    .jobs
-                    .iter()
-                    .find(|(id, _)| *id == job)
-                    .is_some_and(|(_, process)| process.send(text.as_str()).is_ok());
-                if !sent {
-                    self.editor.show_message("The process is not running");
-                }
-                Task::none()
-            }
-            Effect::Terminate(job) => {
-                if let Some((_, killer)) = self.jobs.iter().find(|(id, _)| *id == job) {
-                    killer.terminate();
-                }
-                Task::none()
-            }
-            Effect::Kill(job) => {
-                if let Some((_, killer)) = self.jobs.iter().find(|(id, _)| *id == job) {
-                    killer.kill();
-                }
-                Task::none()
-            }
             Effect::Reconfigure => {
                 let config = self.editor.config().clone();
                 self.configure(&config);
@@ -402,20 +364,6 @@ impl App {
                 Task::perform(fetch::install(*install), move |result| {
                     Message::ToolInstalled(tool, result)
                 })
-            }
-            Effect::StartServer(id, launch) => self.start_server(id, &launch),
-            Effect::ToServer(id, body) => {
-                if let Some((_, server)) = self.servers.iter().find(|(known, _)| *known == id) {
-                    let _ = server.send(&body);
-                }
-                Task::none()
-            }
-            Effect::StopServer(id) => {
-                if let Some(at) = self.servers.iter().position(|(known, _)| *known == id) {
-                    let (_, server) = self.servers.remove(at);
-                    server.kill();
-                }
-                Task::none()
             }
             Effect::Notify { title, body } => {
                 notify::send(&title, &body);
@@ -433,52 +381,10 @@ impl App {
             }
         }
     }
-
-    fn start_server(&mut self, id: ServerId, launch: &lsp::Launch) -> Task<Message> {
-        let (sender, events) = mpsc::unbounded();
-        let started = lsp::start(launch, move |event| {
-            let _ = sender.unbounded_send(event);
-        });
-        match started {
-            Ok(server) => {
-                self.servers.push((id, server));
-                Task::run(events, move |event| Message::Server(id, event))
-            }
-            Err(error) => Task::done(Message::Server(
-                id,
-                lsp::Event::Exited(Some(error.to_string())),
-            )),
-        }
-    }
-
-    fn spawn(&mut self, job: &Job, session: bool) -> Task<Message> {
-        let id = job.id;
-        let (sender, events) = mpsc::unbounded();
-        let report = move |event| {
-            let _ = sender.unbounded_send(event);
-        };
-        let started = if session {
-            process::start_session(job, report)
-        } else {
-            process::spawn(job, report)
-        };
-        match started {
-            Ok(killer) => {
-                self.editor.job_started(id, killer.pid());
-                self.jobs.push((id, killer));
-                Task::run(events, move |event| Message::Job(id, event))
-            }
-            Err(error) => Task::done(Message::Job(
-                id,
-                process::Event::Finished(Outcome::Failed(error.to_string())),
-            )),
-        }
-    }
 }
 
 const HAS_PRIMARY_SELECTION: bool = cfg!(target_os = "linux");
 const SIDE_COLUMNS: usize = 10;
-const EXIT: &str = r#"{"jsonrpc":"2.0","method":"exit"}"#;
 
 fn open_externally(path: &Path) -> Result<(), String> {
     open::that_detached(path).map_err(|error| format!("{}: {error}", path.display()))

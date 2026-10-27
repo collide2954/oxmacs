@@ -40,6 +40,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `on-buffer-close` calls a handler with each buffer's handle after it closes, plugin buffers too, so a plugin can let go of what it kept for it.
 - The downloads and the Fedora package include `THIRD-PARTY-LICENSES.html`, the licenses of the crates oxmacs and ox are built from, beside the JetBrains Mono font's license and the highlight queries' notices.
 - `process/stop` asks a process started with `process/start` to end, and a few seconds later stops it and every program it started if it hasn't.
+- `M-x list-processes` lists language servers beside builds, lints and consoles, and a process you stop shows as stopping until it ends; `(processes)` gives its `:status` as `:stopping` then.
 
 ### Changed
 

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use oxmacs_core::editor::{Editor, Effect, JobId, JobSpec, Outcome};
+use oxmacs_core::editor::{Editor, JobId, JobSpec, Outcome, ProcessStatus};
 
 use crate::Ox;
 use crate::testing::{press, question, settle, typed};
@@ -72,8 +72,8 @@ fn two_jobs(editor: &mut Editor) -> (JobId, JobId) {
         "*R:analysis*",
     );
     let lint = job(editor, "cargo", &["check"], "lint", "cargo check");
-    editor.job_started(r, 4242);
-    editor.job_started(lint, 4343);
+    editor.job_started_as(r, 4242);
+    editor.job_started_as(lint, 4343);
     editor.job_finished(lint, &Outcome::Exited(Some(101)));
     (r, lint)
 }
@@ -145,7 +145,7 @@ fn narrow_windows_keep_the_most_useful_columns() {
 fn k_asks_then_stops_and_capital_k_kills() {
     let (_home, mut editor, mut ox) = started(400);
     let build = job(&mut editor, "cargo", &["build"], "compile", "cargo build");
-    editor.job_started(build, 99);
+    editor.job_started_as(build, 99);
     listed(&mut editor, &mut ox);
     editor.take_effects();
     let row = lines(&editor)
@@ -159,11 +159,13 @@ fn k_asks_then_stops_and_capital_k_kills() {
         question(&editor),
         Some("Stop cargo build? (y or n) ".to_owned())
     );
-    press(&mut editor, &mut ox, "y K y");
-
+    press(&mut editor, &mut ox, "y");
+    assert_eq!(editor.job_status(build), Some(ProcessStatus::Stopping));
+    assert!(line_with(&editor, "cargo build").contains("stopping"));
+    press(&mut editor, &mut ox, "K");
     assert_eq!(
-        editor.take_effects(),
-        [Effect::Terminate(build), Effect::Kill(build)]
+        question(&editor),
+        Some("Kill cargo build? (y or n) ".to_owned())
     );
 }
 

@@ -265,6 +265,10 @@ impl Lsp {
         self.running.iter().find(|client| client.id == id)
     }
 
+    fn name_of(&self, id: ServerId) -> Option<String> {
+        self.client(id).map(|client| client.spec.name.to_owned())
+    }
+
     fn client_mut(&mut self, id: ServerId) -> Option<&mut Client> {
         self.running.iter_mut().find(|client| client.id == id)
     }

@@ -1,8 +1,8 @@
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
-use oxmacs_core::editor::{Editor, Effect, ServerId, ServerSpec};
-use oxmacs_core::external::lsp::{self, Event, Server};
+use oxmacs_core::editor::{Editor, ServerSpec};
+use oxmacs_core::external::runner::{Delivery, Runner};
 use oxmacs_script::Ox;
 
 const OX_LSP: ServerSpec = ServerSpec {
@@ -15,44 +15,24 @@ const OX_LSP: ServerSpec = ServerSpec {
 };
 
 struct Host {
-    servers: Vec<(ServerId, Server)>,
-    sender: mpsc::Sender<(ServerId, Event)>,
-    events: Receiver<(ServerId, Event)>,
+    runner: Runner,
+    deliveries: Receiver<Delivery>,
 }
 
 impl Host {
     fn new() -> Self {
-        let (sender, events) = mpsc::channel();
+        let (sender, deliveries) = mpsc::channel();
         Self {
-            servers: Vec::new(),
-            sender,
-            events,
+            runner: Runner::new(move |delivery| {
+                let _ = sender.send(delivery);
+            }),
+            deliveries,
         }
     }
 
     fn perform(&mut self, editor: &mut Editor) {
         for effect in editor.take_effects() {
-            match effect {
-                Effect::StartServer(id, launch) => {
-                    let sender = self.sender.clone();
-                    let server = lsp::start(&launch, move |event| {
-                        let _ = sender.send((id, event));
-                    })
-                    .unwrap();
-                    self.servers.push((id, server));
-                }
-                Effect::ToServer(id, body) => {
-                    if let Some((_, server)) = self.servers.iter().find(|(known, _)| *known == id) {
-                        server.send(&body).unwrap();
-                    }
-                }
-                Effect::StopServer(id) => {
-                    if let Some((_, server)) = self.servers.iter().find(|(known, _)| *known == id) {
-                        server.kill();
-                    }
-                }
-                _ => {}
-            }
+            self.runner.perform(editor, effect);
         }
     }
 
@@ -62,8 +42,8 @@ impl Host {
         while !done(editor) {
             let left = deadline.saturating_duration_since(Instant::now());
             assert!(!left.is_zero(), "gave up: {}", editor.mode_line());
-            if let Ok((id, event)) = self.events.recv_timeout(left) {
-                editor.server_event(id, event);
+            if let Ok(delivery) = self.deliveries.recv_timeout(left) {
+                self.runner.deliver(editor, delivery);
             }
             self.perform(editor);
         }

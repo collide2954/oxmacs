@@ -1,10 +1,9 @@
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use oxmacs_core::editor::{Editor, Effect, JobId, ServerId};
-use oxmacs_core::external::lsp::{self, Server};
-use oxmacs_core::external::process::{self, Event, Process};
+use oxmacs_core::editor::Editor;
+use oxmacs_core::external::runner::{Delivery, Runner};
 use oxmacs_core::input::KeySequence;
 use oxmacs_core::view::{Node, ViewBuffer};
 use oxmacs_script::{Ox, Pace};
@@ -14,12 +13,8 @@ struct Live {
     folder: tempfile::TempDir,
     editor: Editor,
     ox: Ox,
-    jobs: Vec<(JobId, Process)>,
-    sender: Sender<(JobId, Event)>,
-    events: Receiver<(JobId, Event)>,
-    servers: Vec<(ServerId, Server)>,
-    server_sender: Sender<(ServerId, lsp::Event)>,
-    server_events: Receiver<(ServerId, lsp::Event)>,
+    runner: Runner,
+    deliveries: Receiver<Delivery>,
 }
 
 impl Live {
@@ -31,76 +26,25 @@ impl Live {
         editor.set_working_directory(folder.path().to_path_buf());
         let mut ox = Ox::new();
         ox.start(&mut editor, Some(home.path()));
-        let (sender, events) = mpsc::channel();
-        let (server_sender, server_events) = mpsc::channel();
+        let (sender, deliveries) = mpsc::channel();
         Self {
             _home: home,
             folder,
             editor,
             ox,
-            jobs: Vec::new(),
-            sender,
-            events,
-            servers: Vec::new(),
-            server_sender,
-            server_events,
+            runner: Runner::new(move |delivery| {
+                let _ = sender.send(delivery);
+            }),
+            deliveries,
         }
-    }
-
-    fn server(&self, id: ServerId) -> Option<&Server> {
-        self.servers
-            .iter()
-            .find(|(known, _)| *known == id)
-            .map(|(_, server)| server)
     }
 
     fn step(&mut self) {
         for effect in self.editor.take_effects() {
-            match effect {
-                Effect::StartSession(job) => {
-                    let sender = self.sender.clone();
-                    let id = job.id;
-                    let handle = process::start_session(&job, move |event| {
-                        let _ = sender.send((id, event));
-                    })
-                    .unwrap();
-                    self.jobs.push((id, handle));
-                }
-                Effect::Send(job, text) => {
-                    if let Some((_, handle)) = self.jobs.iter().find(|(known, _)| *known == job) {
-                        handle.send(text.as_str()).unwrap();
-                    }
-                }
-                Effect::StartServer(id, launch) => {
-                    let sender = self.server_sender.clone();
-                    let server = lsp::start(&launch, move |event| {
-                        let _ = sender.send((id, event));
-                    })
-                    .unwrap();
-                    self.servers.push((id, server));
-                }
-                Effect::ToServer(id, body) => {
-                    if let Some(server) = self.server(id) {
-                        server.send(&body).unwrap();
-                    }
-                }
-                Effect::StopServer(id) => {
-                    if let Some(server) = self.server(id) {
-                        server.kill();
-                    }
-                }
-                _ => {}
-            }
+            self.runner.perform(&mut self.editor, effect);
         }
-        while let Ok((id, event)) = self.server_events.try_recv() {
-            self.editor.server_event(id, event);
-        }
-        while let Ok((job, event)) = self.events.try_recv() {
-            match event {
-                Event::Output(text) => self.editor.session_output(job, &text),
-                Event::Line(line) => self.editor.job_output(job, &line),
-                Event::Finished(outcome) => self.editor.job_finished(job, &outcome),
-            }
+        while let Ok(delivery) = self.deliveries.try_recv() {
+            self.runner.deliver(&mut self.editor, delivery);
         }
         while self.ox.tick(&mut self.editor) == Pace::Running {}
     }
@@ -146,12 +90,7 @@ impl Live {
 
 impl Drop for Live {
     fn drop(&mut self) {
-        for (_, handle) in &self.jobs {
-            handle.kill();
-        }
-        for (_, server) in &self.servers {
-            server.kill();
-        }
+        self.runner.shutdown(&mut self.editor);
     }
 }
 
@@ -254,7 +193,12 @@ fn the_languageserver_finds_problems_in_r_scripts_without_a_session() {
         "{}",
         live.editor.mode_line()
     );
-    assert!(live.jobs.is_empty());
+    assert!(
+        live.editor
+            .processes()
+            .iter()
+            .all(|process| process.kind == "language server")
+    );
 }
 
 #[test]
@@ -277,7 +221,12 @@ fn scripts_run_as_background_jobs_apart_from_the_session() {
         "{}",
         contents(&live.editor, "*R job: job.R*")
     );
-    assert!(live.jobs.is_empty());
+    assert!(
+        live.editor
+            .processes()
+            .iter()
+            .all(|process| process.status.finished())
+    );
 }
 
 #[test]

@@ -4,6 +4,7 @@ mod view;
 use std::path::{Path, PathBuf};
 
 use iced::animation::Easing;
+use iced::futures::channel::mpsc;
 use iced::theme::Mode;
 use iced::time::{Duration, Instant};
 use iced::{Animation, Event, Font, Subscription, Task, Theme, event, keyboard, system, window};
@@ -11,10 +12,9 @@ use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::clock;
 use oxmacs_core::config::{Config, ModeLineStyle};
 use oxmacs_core::editor::Visit;
-use oxmacs_core::editor::{Editor, FetchId, JobId, SERVERS, ServerId, WindowId};
-use oxmacs_core::external::lsp;
+use oxmacs_core::editor::{Editor, FetchId, SERVERS, WindowId};
 use oxmacs_core::external::managed::Managed;
-use oxmacs_core::external::process::{self, Process};
+use oxmacs_core::external::runner::{Delivery, Runner};
 use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
@@ -42,8 +42,8 @@ pub struct App {
     clock: Option<String>,
     mode_line_style: ModeLineStyle,
     usage: Usage,
-    jobs: Vec<(JobId, Process)>,
-    servers: Vec<(ServerId, lsp::Server)>,
+    runner: Runner,
+    deliveries: Option<mpsc::UnboundedReceiver<Delivery>>,
     ox: Ox,
     takeover_size: Option<iced::Size>,
     focused_since: Option<Instant>,
@@ -68,7 +68,7 @@ pub enum Message {
     DiskChanged,
     Opened(Result<(), String>),
     Clock,
-    Job(JobId, process::Event),
+    Delivered(Delivery),
     AutoSave,
     AutoComplete,
     Signature,
@@ -76,7 +76,6 @@ pub enum Message {
     ProcessTick,
     FocusWindow(WindowId),
     Fetched(FetchId, Result<String, String>),
-    Server(ServerId, lsp::Event),
     ToolInstalled(Managed, Result<PathBuf, String>),
     OxTick,
     OxPress(BufferId, usize),
@@ -102,6 +101,7 @@ impl App {
     pub fn new(config: &Config) -> Self {
         let mut editor = Editor::new();
         editor.apply_config(config);
+        let (sender, deliveries) = mpsc::unbounded();
         let mut app = Self {
             editor,
             font: fonts::EDITOR,
@@ -117,8 +117,10 @@ impl App {
             clock: None,
             mode_line_style: config.mode_line_style,
             usage: Usage::new(),
-            jobs: Vec::new(),
-            servers: Vec::new(),
+            runner: Runner::new(move |delivery| {
+                let _ = sender.unbounded_send(delivery);
+            }),
+            deliveries: Some(deliveries),
             ox: Ox::new(),
             takeover_size: None,
             focused_since: Some(Instant::now()),
@@ -152,12 +154,16 @@ impl App {
         app.reduced_motion = prefers_reduced_motion();
         app.configure(&app.editor.config().clone());
         let effects = app.pending_effects();
+        let delivered = app.deliveries.take().map_or_else(Task::none, |deliveries| {
+            Task::run(deliveries, Message::Delivered)
+        });
         (
             app,
             Task::batch([
                 system::theme().map(Message::AppearanceChanged),
                 started,
                 effects,
+                delivered,
                 Task::done(Message::OxTick),
             ]),
         )
@@ -366,7 +372,7 @@ mod tests {
     use super::*;
     use iced::keyboard::key::{Code, Named, Physical};
     use iced::keyboard::{Key, Location, Modifiers};
-    use oxmacs_core::editor::{Cell, Clicks, JobId, Outcome};
+    use oxmacs_core::editor::{Cell, Clicks};
     use oxmacs_core::theme::{ADWAITA, ADWAITA_DARK};
     use serde_json::{Value, json};
 
@@ -943,7 +949,7 @@ mod tests {
     }
 
     #[test]
-    fn job_events_reach_the_compilation_buffer() {
+    fn job_output_reaches_the_compilation_buffer_through_the_runner() {
         let mut app = App::default();
         press(&mut app, "x", Modifiers::ALT);
         type_text(&mut app, "compile");
@@ -953,20 +959,22 @@ mod tests {
         type_text(&mut app, "cargo --version");
         enter(&mut app);
 
-        let _ = app.update(Message::Job(
-            JobId(0),
-            process::Event::Line("hello".to_owned()),
-        ));
-        let _ = app.update(Message::Job(
-            JobId(0),
-            process::Event::Finished(Outcome::Exited(Some(0))),
-        ));
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while app.editor().message() != Some("Compilation finished") {
+            assert!(Instant::now() < deadline, "{:?}", app.editor().message());
+            match app.deliveries.as_mut().unwrap().try_recv() {
+                Ok(delivery) => {
+                    let _ = app.update(Message::Delivered(delivery));
+                }
+                Err(_) => std::thread::sleep(Duration::from_millis(20)),
+            }
+        }
 
         let window = app.editor().tiling().windows()[1];
         let output = app.editor().pane_of(window).unwrap().buffer().contents();
-        assert!(output.contains("$ cargo --version\n\nhello\n"), "{output}");
+        assert!(output.contains("$ cargo --version\n\ncargo "), "{output}");
         assert_eq!(app.editor().message(), Some("Compilation finished"));
-        assert!(app.jobs.is_empty());
+        assert!(app.editor().processes()[0].status.finished());
     }
 
     #[test]

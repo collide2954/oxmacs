@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 use jiff::Timestamp;
 
-use crate::editor::{Editor, Effect, Event, Job, JobId, Outcome};
+use crate::editor::{Editor, Event, Job, JobId, Outcome, ServerId};
+use crate::external::lsp::Launch;
+use crate::external::process::Process;
 use crate::text::BufferId;
 
 const KEPT: usize = 10;
@@ -12,6 +14,7 @@ const HISTORY: usize = 60;
 pub enum ProcessStatus {
     Starting,
     Running,
+    Stopping,
     Exited(Option<i32>),
     Failed,
 }
@@ -25,6 +28,7 @@ impl ProcessStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Source {
     Job(JobId),
+    Server(ServerId),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +53,8 @@ pub struct ProcessInfo {
 struct Tracked {
     source: Source,
     info: ProcessInfo,
+    handle: Option<Process>,
+    doomed: Option<bool>,
 }
 
 #[derive(Debug, Default)]
@@ -92,6 +98,51 @@ impl Editor {
         });
     }
 
+    fn track(&mut self, source: Source, info: ProcessInfo) {
+        self.processes
+            .tracked
+            .retain(|known| known.source != source);
+        self.processes.tracked.push(Tracked {
+            source,
+            info,
+            handle: None,
+            doomed: None,
+        });
+        self.prune_processes();
+        self.processes_changed();
+    }
+
+    fn untracked_info(
+        &mut self,
+        kind: &str,
+        name: String,
+        program: &str,
+        args: Vec<String>,
+        directory: PathBuf,
+    ) -> ProcessInfo {
+        let id = self.processes.next_id;
+        self.processes.next_id += 1;
+        ProcessInfo {
+            id,
+            kind: kind.to_owned(),
+            name,
+            program: Path::new(program).file_stem().map_or_else(
+                || program.to_owned(),
+                |stem| stem.to_string_lossy().into_owned(),
+            ),
+            args,
+            directory: Some(directory),
+            env: Vec::new(),
+            status: ProcessStatus::Starting,
+            pid: None,
+            started: Timestamp::now(),
+            ended: None,
+            cpu: Vec::new(),
+            memory: Vec::new(),
+            buffer: None,
+        }
+    }
+
     pub(in crate::editor) fn track_job(
         &mut self,
         job: &Job,
@@ -99,57 +150,79 @@ impl Editor {
         name: String,
         buffer: Option<BufferId>,
     ) {
-        let program = Path::new(&job.program).file_stem().map_or_else(
-            || job.program.clone(),
-            |stem| stem.to_string_lossy().into_owned(),
-        );
-        let source = Source::Job(job.id);
-        let id = self.processes.next_id;
-        self.processes.next_id += 1;
-        self.processes
-            .tracked
-            .retain(|known| known.source != source);
-        self.processes.tracked.push(Tracked {
-            source,
-            info: ProcessInfo {
-                id,
-                kind: kind.to_owned(),
+        let info = ProcessInfo {
+            env: job.env.clone(),
+            buffer,
+            ..self.untracked_info(
+                kind,
                 name,
-                program,
-                args: job.args.clone(),
-                directory: Some(job.directory.clone()),
-                env: job.env.clone(),
-                status: ProcessStatus::Starting,
-                pid: None,
-                started: Timestamp::now(),
-                ended: None,
-                cpu: Vec::new(),
-                memory: Vec::new(),
-                buffer,
-            },
-        });
-        self.prune_processes();
-        self.processes_changed();
+                &job.program,
+                job.args.clone(),
+                job.directory.clone(),
+            )
+        };
+        self.track(Source::Job(job.id), info);
     }
 
-    fn update_tracked(&mut self, source: Source, change: impl FnOnce(&mut ProcessInfo)) {
-        if let Some(entry) = self
-            .processes
+    pub(in crate::editor) fn track_server(&mut self, id: ServerId, name: String, launch: &Launch) {
+        let info = self.untracked_info(
+            "language server",
+            name,
+            &launch.program.to_string_lossy(),
+            launch.args.clone(),
+            launch.directory.clone(),
+        );
+        self.track(Source::Server(id), info);
+    }
+
+    fn tracked_mut(&mut self, source: Source) -> Option<&mut Tracked> {
+        self.processes
             .tracked
             .iter_mut()
             .rev()
             .find(|entry| entry.source == source)
-        {
-            change(&mut entry.info);
-            self.processes_changed();
-        }
     }
 
-    pub fn job_started(&mut self, job: JobId, pid: u32) {
-        self.update_tracked(Source::Job(job), |info| {
-            info.pid = Some(pid);
-            info.status = ProcessStatus::Running;
-        });
+    fn started(&mut self, source: Source, pid: u32, handle: Option<Process>) {
+        let Some(entry) = self.tracked_mut(source) else {
+            return;
+        };
+        entry.info.pid = Some(pid);
+        if entry.info.status == ProcessStatus::Starting {
+            entry.info.status = ProcessStatus::Running;
+        }
+        entry.handle = handle;
+        if let Some(force) = entry.doomed.take() {
+            Self::end(entry, force);
+        }
+        self.processes_changed();
+    }
+
+    pub fn job_started(&mut self, job: JobId, process: Process) {
+        self.started(Source::Job(job), process.pid(), Some(process));
+    }
+
+    pub(crate) fn server_started(&mut self, id: ServerId, process: Process) {
+        self.started(Source::Server(id), process.pid(), Some(process));
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn job_started_as(&mut self, job: JobId, pid: u32) {
+        self.started(Source::Job(job), pid, None);
+    }
+
+    fn ended(&mut self, source: Source, status: ProcessStatus) {
+        let now = Timestamp::now();
+        if let Some(entry) = self.tracked_mut(source) {
+            entry.handle = None;
+            entry.doomed = None;
+            if !entry.info.status.finished() {
+                entry.info.status = status;
+                entry.info.ended = Some(now);
+            }
+            self.processes_changed();
+        }
+        self.prune_processes();
     }
 
     pub(in crate::editor) fn job_ended(&mut self, job: JobId, outcome: &Outcome) {
@@ -157,14 +230,88 @@ impl Editor {
             Outcome::Exited(code) => ProcessStatus::Exited(*code),
             Outcome::Failed(_) => ProcessStatus::Failed,
         };
-        let now = Timestamp::now();
-        self.update_tracked(Source::Job(job), |info| {
-            if !info.status.finished() {
-                info.status = status;
-                info.ended = Some(now);
+        self.ended(Source::Job(job), status);
+    }
+
+    pub(in crate::editor) fn server_ended(&mut self, id: ServerId, failure: Option<&str>) {
+        let status = if failure.is_some() {
+            ProcessStatus::Failed
+        } else {
+            ProcessStatus::Exited(None)
+        };
+        self.ended(Source::Server(id), status);
+    }
+
+    fn end(entry: &mut Tracked, force: bool) {
+        match &entry.handle {
+            Some(handle) if force => handle.kill(),
+            Some(handle) => handle.terminate(),
+            None => entry.doomed = Some(force || entry.doomed == Some(true)),
+        }
+    }
+
+    fn stop(&mut self, source: Source, force: bool) {
+        if let Some(entry) = self.tracked_mut(source)
+            && !entry.info.status.finished()
+        {
+            entry.info.status = ProcessStatus::Stopping;
+            Self::end(entry, force);
+            self.processes_changed();
+        }
+    }
+
+    pub(in crate::editor) fn kill_job(&mut self, job: JobId) {
+        self.stop(Source::Job(job), true);
+    }
+
+    pub(in crate::editor) fn kill_server(&mut self, id: ServerId) {
+        self.stop(Source::Server(id), true);
+    }
+
+    pub(crate) fn job_process(&self, job: JobId) -> Option<&Process> {
+        self.handle_of(Source::Job(job))
+    }
+
+    pub(crate) fn server_process(&self, id: ServerId) -> Option<&Process> {
+        self.handle_of(Source::Server(id))
+    }
+
+    fn handle_of(&self, source: Source) -> Option<&Process> {
+        self.processes
+            .tracked
+            .iter()
+            .rev()
+            .find(|entry| entry.source == source)?
+            .handle
+            .as_ref()
+    }
+
+    pub fn kill_every_process(&mut self) {
+        for entry in &mut self.processes.tracked {
+            if let Some(handle) = entry.handle.take() {
+                handle.kill();
             }
-        });
-        self.prune_processes();
+        }
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn job_status(&self, job: JobId) -> Option<ProcessStatus> {
+        self.status_of(Source::Job(job))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn server_status(&self, id: ServerId) -> Option<ProcessStatus> {
+        self.status_of(Source::Server(id))
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    fn status_of(&self, source: Source) -> Option<ProcessStatus> {
+        self.processes
+            .tracked
+            .iter()
+            .rev()
+            .find(|entry| entry.source == source)
+            .map(|entry| entry.info.status)
     }
 
     pub fn process_pids(&self) -> Vec<u32> {
@@ -211,12 +358,8 @@ impl Editor {
         if entry.info.status.finished() {
             return Err(format!("{} is not running", entry.info.name));
         }
-        let Source::Job(job) = entry.source;
-        self.effects.push(if force {
-            Effect::Kill(job)
-        } else {
-            Effect::Terminate(job)
-        });
+        let source = entry.source;
+        self.stop(source, force);
         Ok(())
     }
 
@@ -239,8 +382,13 @@ impl Editor {
 mod tests {
     use std::path::PathBuf;
 
+    use std::process::{Command, Stdio};
+    use std::thread;
+    use std::time::{Duration, Instant};
+
     use super::ProcessStatus;
-    use crate::editor::{Editor, Effect, Event, EventKind, Job, JobId, Outcome};
+    use crate::editor::{Editor, Event, EventKind, Job, JobId, Outcome};
+    use crate::external::process::Process;
 
     fn job(id: u64, program: &str, args: &[&str]) -> Job {
         Job {
@@ -267,8 +415,8 @@ mod tests {
             "cargo check".to_owned(),
             None,
         );
-        editor.job_started(JobId(0), 4242);
-        editor.job_started(JobId(1), 4343);
+        editor.job_started_as(JobId(0), 4242);
+        editor.job_started_as(JobId(1), 4343);
         editor.job_ended(JobId(1), &Outcome::Exited(Some(101)));
         editor.processes_tick(&[(4242, 1.5, 85), (4343, 9.0, 9)]);
         editor.processes_tick(&[(4242, 2.5, 90)]);
@@ -311,34 +459,58 @@ mod tests {
         assert_eq!(listed[0].name, "check 5");
     }
 
+    fn long() -> Process {
+        let mut command = Command::new(if cfg!(windows) { "ping" } else { "sleep" });
+        if cfg!(windows) {
+            command.args(["-n", "60", "127.0.0.1"]);
+        } else {
+            command.arg("60");
+        }
+        command.stdout(Stdio::null());
+        oxmacs_process::spawn(&mut command).unwrap().process
+    }
+
+    fn ends(process: &Process) -> bool {
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_secs(30) {
+            if matches!(process.try_wait(), Ok(Some(_))) {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        false
+    }
+
     #[test]
-    fn stopping_asks_politely_and_killing_does_not() {
+    fn stopping_ends_the_process_even_when_asked_before_it_started() {
         let mut editor = Editor::new();
-        editor.track_job(
-            &job(7, "cargo", &["build"]),
-            "compile",
-            "cargo build".to_owned(),
-            None,
-        );
-        editor.job_started(JobId(7), 99);
-        let id = editor.processes()[0].id;
-        editor.take_effects();
+        for (number, name) in [(7, "cargo build"), (8, "cargo test")] {
+            editor.track_job(
+                &job(number, "cargo", &["build"]),
+                "compile",
+                name.to_owned(),
+                None,
+            );
+        }
+        let ids: Vec<u64> = editor.processes().iter().map(|info| info.id).collect();
+        let (built, tested) = (long(), long());
 
-        editor.stop_process(id, false).unwrap();
-        editor.stop_process(id, true).unwrap();
+        editor.stop_process(ids[1], true).unwrap();
+        editor.job_started(JobId(7), built.clone());
+        editor.stop_process(ids[0], false).unwrap();
+        editor.job_started(JobId(8), tested.clone());
 
-        assert_eq!(
-            editor.take_effects(),
-            [Effect::Terminate(JobId(7)), Effect::Kill(JobId(7))]
-        );
+        assert_eq!(editor.job_status(JobId(7)), Some(ProcessStatus::Stopping));
+        assert!(ends(&built) && ends(&tested));
+        assert_eq!(editor.take_effects(), []);
         editor.job_ended(JobId(7), &Outcome::Exited(None));
         assert_eq!(
-            editor.stop_process(id, false),
+            editor.stop_process(ids[0], false),
             Err("cargo build is not running".to_owned())
         );
         assert_eq!(
-            editor.stop_process(id + 50, false),
-            Err(format!("No process {}", id + 50))
+            editor.stop_process(ids[0] + 50, false),
+            Err(format!("No process {}", ids[0] + 50))
         );
     }
 
@@ -364,7 +536,7 @@ mod tests {
             "cargo test".to_owned(),
             None,
         );
-        editor.job_started(JobId(1), 5);
+        editor.job_started_as(JobId(1), 5);
         assert_eq!(editor.take_events(), [Event::Processes]);
         editor.processes_tick(&[]);
 

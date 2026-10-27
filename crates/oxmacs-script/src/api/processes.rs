@@ -11,6 +11,7 @@ fn info(heap: &mut Heap, editor: &Editor, process: &ProcessInfo) -> Result<Value
     let (status, exit) = match process.status {
         ProcessStatus::Starting => ("starting", Value::Nil),
         ProcessStatus::Running => ("running", Value::Nil),
+        ProcessStatus::Stopping => ("stopping", Value::Nil),
         ProcessStatus::Exited(code) => (
             "exited",
             code.map_or(Value::Nil, |code| Value::Int(i64::from(code))),
@@ -144,7 +145,7 @@ pub fn install(isolate: &mut Isolate) {
 mod tests {
     use std::path::PathBuf;
 
-    use oxmacs_core::editor::{Editor, Effect, JobSpec};
+    use oxmacs_core::editor::{Editor, JobSpec, ProcessStatus};
 
     use crate::Ox;
     use crate::testing::settle;
@@ -169,7 +170,7 @@ mod tests {
         let mut ox = Ox::with_bundled(&[]);
         ox.start(&mut editor, Some(home.path()));
         let job = editor.start_job(build(), |_, _, _| {});
-        editor.job_started(job, 77);
+        editor.job_started_as(job, 77);
         ox.eval(
             &mut editor,
             "(def seen (atom 0)) (on-processes-change :count (fn [] (swap! seen inc)))",
@@ -194,10 +195,7 @@ mod tests {
             "(let [id (get (first (processes)) :id)] (stop-process id) (kill-process id))",
         )
         .unwrap();
-        assert_eq!(
-            editor.take_effects(),
-            [Effect::Terminate(job), Effect::Kill(job)]
-        );
+        assert_eq!(editor.job_status(job), Some(ProcessStatus::Stopping));
         ox.eval(&mut editor, "(watch-process-usage true)").unwrap();
         assert!(editor.wants_process_usage());
         assert!(

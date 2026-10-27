@@ -4,5 +4,6 @@ pub mod lsp;
 pub mod managed;
 pub mod notify;
 pub mod process;
+pub mod runner;
 pub mod tools;
 pub mod usage;

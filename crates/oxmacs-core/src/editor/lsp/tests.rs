@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 use super::{SERVERS, ServerId, ServerSpec};
 use crate::config::Config;
-use crate::editor::{Editor, Effect};
+use crate::editor::{Editor, Effect, ProcessStatus};
 use crate::external::diagnostics::Severity;
 use crate::external::lsp::{Event, Launch};
 use crate::testing::{press, type_text};
@@ -313,7 +313,10 @@ fn shutting_down_asks_first_then_tells_the_server_to_exit() {
 
     let effects = editor.take_effects();
     assert_eq!(methods(&effects), ["exit"]);
-    assert!(effects.contains(&Effect::StopServer(ServerId(0))));
+    assert_eq!(
+        editor.server_status(ServerId(0)),
+        Some(ProcessStatus::Stopping)
+    );
     editor.server_event(ServerId(0), Event::Exited(None));
     assert_eq!(editor.message(), None);
 }
@@ -346,7 +349,10 @@ fn restarting_stops_the_server_and_starts_a_fresh_one() {
     press(&mut editor, "RET");
 
     let effects = editor.take_effects();
-    assert!(effects.contains(&Effect::StopServer(ServerId(0))));
+    assert_eq!(
+        editor.server_status(ServerId(0)),
+        Some(ProcessStatus::Stopping)
+    );
     assert!(
         effects
             .iter()
