@@ -34,6 +34,7 @@ ox-rodeo = { path = "crates/ox-rodeo" }
 oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
 oxmacs-api = { path = "crates/oxmacs-api" }
+oxmacs-files = { path = "crates/oxmacs-files" }
 oxmacs-pdf = { path = "crates/oxmacs-pdf" }
 oxmacs-process = { path = "crates/oxmacs-process" }
 oxmacs-script = { path = "crates/oxmacs-script" }
