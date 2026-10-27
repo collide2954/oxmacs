@@ -3855,6 +3855,7 @@ dependencies = [
  "ox-perf",
  "oxmacs-api",
  "oxmacs-core",
+ "oxmacs-files",
  "oxmacs-script",
  "serde_json",
  "tempfile",
@@ -3886,6 +3887,7 @@ dependencies = [
  "image",
  "imageproc",
  "ox-lang",
+ "oxmacs-files",
  "oxmacs-process",
  "rayon",
  "resvg",
@@ -3901,7 +3903,6 @@ dependencies = [
  "trash",
  "ureq",
  "webpki-roots",
- "winapi-util",
  "zip",
 ]
 
@@ -3931,6 +3932,7 @@ version = "0.14.0"
 dependencies = [
  "image",
  "ox-library",
+ "oxmacs-files",
  "rayon",
  "serde",
  "serde_json",
@@ -3965,6 +3967,7 @@ dependencies = [
  "dirs",
  "indexmap 2.14.2",
  "jiff",
+ "oxmacs-files",
  "oxmacs-pdf",
  "oxmacs-process",
  "regex",

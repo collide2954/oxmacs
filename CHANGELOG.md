@@ -71,6 +71,9 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Sending a lot of text to a busy process, such as an R session or a language server, no longer freezes the editor: input is written in the background.
 - Stopping or killing a build, a console or a language server stops the programs it started too, and on Windows they all end when oxmacs quits. Stopping waits a few seconds after asking, as before, and on Windows it now ends the whole tree instead of only the first program.
 - A language server's log keeps going past output that isn't valid UTF-8.
+- Saving a file, `file/write`, `ox fmt` and `image/save` all write one way: a file that exists keeps its permissions, owner and links, and now also its access list, creation time and other streams on Windows, such as the mark that it came from the internet, and its extended attributes on Unix, such as ACLs, the SELinux label and macOS quarantine. A new file gets the usual permissions instead of being readable only by you.
+- Recovery copies of unsaved buffers are readable only by you.
+- `image/save` that can't encode an image, such as an ICO over 256 pixels, leaves the file already there as it was instead of emptying it, and `ox fmt` replaces each file whole.
 - A remote command with an unclosed quote, such as `echo 'oops`, no longer hangs the `remote` plugin's connection, and with it every later save of a remote file.
 - `print` and `println` show in *ox repl* when it is open and in *ox log* otherwise. They wrote to a standard output the Windows release doesn't have, so their text was lost.
 - Ox code waiting on a file, a program or the network goes on as soon as the work is done, instead of at the next poll up to a tenth of a second later, so chains of awaits, such as the explorer opening a project, no longer pay that delay at every step. Problems the background Ox checker finds also show as soon as it finishes.

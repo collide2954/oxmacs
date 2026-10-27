@@ -318,7 +318,9 @@ fn fmt(parsed: &Parsed) -> Result<ExitCode, String> {
         changed += 1;
         if check {
             println!("{}", file.display());
-        } else if let Err(error) = fs::write(file, formatted) {
+        } else if let Err(error) =
+            oxmacs_files::write(file, formatted.as_bytes(), oxmacs_files::NewFile::Shared)
+        {
             eprintln!("{}: {error}", file.display());
             failed = true;
         }

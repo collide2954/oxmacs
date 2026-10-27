@@ -1,10 +1,6 @@
-use std::path::{self, Component, Path, PathBuf};
+use std::path::{Component, PathBuf};
 
-pub const SEPARATOR: char = path::MAIN_SEPARATOR;
-
-pub fn is_separator(c: char) -> bool {
-    path::is_separator(c)
-}
+pub use oxmacs_files::paths::{SEPARATOR, abbreviate, expand, is_separator, normalize};
 
 pub fn split(input: &str) -> (&str, &str) {
     match input.rfind(is_separator) {
@@ -31,44 +27,6 @@ pub fn restart(input: &str) -> Option<&str> {
         .map(|(index, c)| index + c.len_utf8())
         .find(|&start| starts_anew(&input[start..]))
         .map(|start| &input[start..])
-}
-
-pub fn expand(input: &str, home: Option<&Path>) -> PathBuf {
-    if let (Some(rest), Some(home)) = (input.strip_prefix('~'), home)
-        && (rest.is_empty() || rest.starts_with(is_separator))
-    {
-        return home.join(rest.trim_start_matches(is_separator));
-    }
-    PathBuf::from(input)
-}
-
-pub fn abbreviate(path: &Path, home: Option<&Path>) -> String {
-    match home.and_then(|home| path.strip_prefix(home).ok()) {
-        Some(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
-        Some(rest) => format!("~{SEPARATOR}{}", rest.display()),
-        None => path.display().to_string(),
-    }
-}
-
-pub fn normalize(path: &Path) -> PathBuf {
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if matches!(
-                    normalized.components().next_back(),
-                    Some(Component::Normal(_))
-                ) {
-                    normalized.pop();
-                } else if !normalized.has_root() {
-                    normalized.push(component);
-                }
-            }
-            _ => normalized.push(component),
-        }
-    }
-    normalized
 }
 
 pub fn unique_names(paths: &[PathBuf]) -> Vec<String> {
@@ -118,8 +76,6 @@ pub fn unique_names(paths: &[PathBuf]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use super::*;
 
     #[test]
@@ -148,49 +104,6 @@ mod tests {
             assert_eq!(restart(r"C:\Users\ana\D:"), Some("D:"));
             assert_eq!(restart(r"C:\Users\ana\D:\x"), Some(r"D:\x"));
         }
-    }
-
-    #[test]
-    fn a_leading_tilde_expands_to_home() {
-        let home = Path::new("/home/u");
-
-        assert_eq!(expand("~/x/y", Some(home)), home.join("x/y"));
-        assert_eq!(expand("~", Some(home)), home);
-        assert_eq!(expand("~other/x", Some(home)), Path::new("~other/x"));
-        assert_eq!(expand("~/x", None), Path::new("~/x"));
-        assert_eq!(expand("/abs/x", Some(home)), Path::new("/abs/x"));
-    }
-
-    #[test]
-    fn paths_under_home_abbreviate_to_a_tilde() {
-        let home = Path::new("/home/u");
-
-        assert_eq!(
-            abbreviate(&home.join("oxmacs"), Some(home)),
-            format!("~{SEPARATOR}oxmacs")
-        );
-        assert_eq!(abbreviate(home, Some(home)), "~");
-        assert_eq!(
-            abbreviate(Path::new("/srv/x"), Some(home)),
-            Path::new("/srv/x").display().to_string()
-        );
-    }
-
-    #[test]
-    fn normalizing_resolves_dots_lexically() {
-        let root = Path::new(path::MAIN_SEPARATOR_STR);
-        let path = root.join("a").join("b").join("..").join(".").join("c");
-
-        assert_eq!(normalize(&path), root.join("a").join("c"));
-        assert_eq!(normalize(&root.join("..").join("x")), root.join("x"));
-        assert_eq!(
-            normalize(Path::new(&format!(
-                "{}{SEPARATOR}",
-                root.join("d").display()
-            )))
-            .as_os_str(),
-            root.join("d").as_os_str()
-        );
     }
 
     fn names(paths: &[&str]) -> Vec<String> {

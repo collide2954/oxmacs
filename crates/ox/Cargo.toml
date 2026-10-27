@@ -13,6 +13,7 @@ ox-lang.workspace = true
 ox-lsp.workspace = true
 ox-perf.workspace = true
 oxmacs-api.workspace = true
+oxmacs-files.workspace = true
 
 [dev-dependencies]
 ox-library.workspace = true

@@ -17,6 +17,7 @@ getrandom.workspace = true
 image.workspace = true
 imageproc.workspace = true
 ox-lang.workspace = true
+oxmacs-files.workspace = true
 oxmacs-process.workspace = true
 rayon.workspace = true
 resvg.workspace = true
@@ -26,7 +27,6 @@ rustls.workspace = true
 same-file.workspace = true
 serde_json.workspace = true
 strum.workspace = true
-tempfile.workspace = true
 thiserror.workspace = true
 tiny-skia.workspace = true
 trash.workspace = true
@@ -34,8 +34,8 @@ ureq.workspace = true
 webpki-roots.workspace = true
 zip.workspace = true
 
-[target.'cfg(windows)'.dependencies]
-winapi-util.workspace = true
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

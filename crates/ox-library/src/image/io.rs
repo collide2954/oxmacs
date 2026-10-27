@@ -1,5 +1,5 @@
-use std::fs::{self, File};
-use std::io::{BufRead, BufWriter, Cursor, Seek};
+use std::fs;
+use std::io::{BufRead, Cursor, Seek};
 use std::path::{Path, PathBuf};
 
 use image::codecs::jpeg::JpegEncoder;
@@ -140,20 +140,21 @@ pub(super) fn save(
 ) -> Result<(), String> {
     let failed =
         |error: &dyn std::fmt::Display| format!("Couldn't save {}: {error}", path.display());
-    let file = File::create(path).map_err(|error| failed(&error))?;
-    let mut writer = BufWriter::new(file);
+    let mut bytes = Cursor::new(Vec::new());
     let dynamic = DynamicImage::ImageRgba8(image.pixels.clone());
     match format {
         ImageFormat::Jpeg => {
-            let encoder = JpegEncoder::new_with_quality(&mut writer, quality);
+            let encoder = JpegEncoder::new_with_quality(&mut bytes, quality);
             dynamic.to_rgb8().write_with_encoder(encoder)
         }
         ImageFormat::Bmp | ImageFormat::Ico if !image.alpha => {
-            dynamic.to_rgb8().write_to(&mut writer, format)
+            dynamic.to_rgb8().write_to(&mut bytes, format)
         }
-        _ => dynamic.write_to(&mut writer, format),
+        _ => dynamic.write_to(&mut bytes, format),
     }
-    .map_err(|error| failed(&error))
+    .map_err(|error| failed(&error))?;
+    oxmacs_files::write(path, bytes.get_ref(), oxmacs_files::NewFile::Shared)
+        .map_err(|error| failed(&error))
 }
 
 fn probe(path: &Path) -> Result<Portable, String> {

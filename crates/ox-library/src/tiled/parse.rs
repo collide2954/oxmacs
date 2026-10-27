@@ -12,7 +12,7 @@ use super::{
 use crate::animation::{Animation, Frame};
 use crate::color::Color;
 use crate::geometry::Vec2;
-use crate::paths::normalized;
+use oxmacs_files::paths::normalize;
 
 pub(super) fn read(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|source| Error::Read {
@@ -133,7 +133,7 @@ impl Context {
     }
 
     fn resolve(&self, relative: &str) -> PathBuf {
-        normalized(&self.folder.join(relative))
+        normalize(&self.folder.join(relative))
     }
 
     fn parsed<T: FromStr>(&self, node: Node<'_, '_>, name: &str, text: &str) -> Result<T, Error> {

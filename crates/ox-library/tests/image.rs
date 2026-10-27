@@ -231,6 +231,26 @@ fn mistakes_are_reported() {
     );
 }
 
+#[test]
+fn an_image_that_cannot_be_encoded_leaves_the_old_file_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let icon = dir.path().join("big.ico");
+    fs::write(&icon, "the old icon").unwrap();
+    let mut isolate = ox_library::isolate();
+
+    let error = failure(
+        &mut isolate,
+        &format!(
+            "(await (image/save (image/new 300 300) \"{}\"))",
+            slashed(&icon)
+        ),
+    );
+
+    assert!(error.starts_with("Couldn't save"), "{error}");
+    assert_eq!(fs::read_to_string(&icon).unwrap(), "the old icon");
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+}
+
 const HALVES: &str = "(def halves (image/canvas (image/new 2 2 :color :red) 4 2 :anchor :left))";
 
 #[test]

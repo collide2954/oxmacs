@@ -17,6 +17,7 @@ bitflags.workspace = true
 dirs.workspace = true
 indexmap.workspace = true
 jiff.workspace = true
+oxmacs-files.workspace = true
 oxmacs-pdf.workspace = true
 oxmacs-process.workspace = true
 regex.workspace = true

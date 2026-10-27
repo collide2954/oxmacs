@@ -89,7 +89,9 @@ impl Editor {
         let written = copy
             .parent()
             .map_or(Ok(()), fs::create_dir_all)
-            .and_then(|()| fs::write(&copy, text));
+            .and_then(|()| {
+                oxmacs_files::write(&copy, text.as_bytes(), oxmacs_files::NewFile::Private)
+            });
         if written.is_ok() {
             self.recovered.retain(|(id, _)| *id != key.0);
             self.recovered.push(key);
@@ -210,6 +212,24 @@ mod tests {
         press(&mut editor, "C-x C-s");
 
         assert_eq!(copies(&recovery), Vec::<String>::new());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_copies_are_only_for_their_owner() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (_dir, cache, mut editor) = recovering();
+        edited(&mut editor);
+
+        editor.auto_save();
+
+        let copy = fs::read_dir(cache.path().join("recovery"))
+            .unwrap()
+            .flatten()
+            .next()
+            .unwrap();
+        assert_eq!(copy.metadata().unwrap().permissions().mode() & 0o777, 0o600);
     }
 
     #[test]

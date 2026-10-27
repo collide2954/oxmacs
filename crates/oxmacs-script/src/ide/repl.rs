@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -13,6 +12,7 @@ use ox_lang::value::Value;
 use ox_lang::{Error, read};
 use oxmacs_core::command::{Command, CommandId, DynamicSpec, Scope, ScopeId};
 use oxmacs_core::editor::{Editor, EventKind, InputLine};
+use oxmacs_core::files;
 use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
@@ -416,13 +416,6 @@ pub fn install(editor: &mut Editor) {
         }
     }
     editor.subscribe(EventKind::Saved);
-}
-
-fn same_file(a: &Path, b: &Path) -> bool {
-    match (fs::canonicalize(a), fs::canonicalize(b)) {
-        (Ok(a), Ok(b)) => a == b,
-        _ => a == b,
-    }
 }
 
 fn source_name(editor: &Editor) -> String {
@@ -870,13 +863,13 @@ impl Ox {
 fn init_file(home: &Path, path: &Path) -> Option<&'static str> {
     ["init.ox", "custom.ox"]
         .into_iter()
-        .find(|name| same_file(path, &home.join(name)))
+        .find(|name| files::same_file(path, &home.join(name)))
 }
 
 pub(crate) fn plugin_file(home: &Path, path: &Path) -> Option<(String, String)> {
     let folder = path.parent()?;
     let plugins = folder.parent()?;
-    if !same_file(plugins, &home.join("plugins")) {
+    if !files::same_file(plugins, &home.join("plugins")) {
         return None;
     }
     let plugin = folder.file_name()?.to_str()?.to_owned();

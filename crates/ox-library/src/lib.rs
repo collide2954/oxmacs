@@ -10,7 +10,6 @@ pub mod geometry;
 mod http;
 pub mod image;
 mod net;
-pub mod paths;
 mod process;
 pub mod random;
 pub mod tiled;
