@@ -2078,3 +2078,175 @@ fn rodeo_video() {
     film.hold(1.5);
     film.finish(&out);
 }
+
+const ACID_BASE: &str = include_str!("demos/acid-base.ox");
+
+fn acid_home() -> PathBuf {
+    let user = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap();
+    let home = user.join("oxmacs-acid-demo");
+    if home.join(".oxmacs-demo").exists() {
+        fs::remove_dir_all(&home).unwrap();
+    }
+    assert!(
+        !home.exists(),
+        "{} exists and wasn't made by this demo",
+        home.display()
+    );
+    fs::create_dir_all(&home).unwrap();
+    fs::write(home.join(".oxmacs-demo"), "").unwrap();
+    fs::write(
+        home.join("init.ox"),
+        "(settings {theme: :adwaita-dark animations: false font-size: 12})\n(use-plugin rodeo)\n(use-plugin keycast :config {placement: :bottom-center})\n",
+    )
+    .unwrap();
+    fs::write(home.join("acid-base.ox"), ACID_BASE).unwrap();
+    home
+}
+
+fn game_letter(app: &mut App, letter: &str, down: bool) {
+    let key = Key::Character(letter.into());
+    let event = if down {
+        keyboard::Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: Physical::Code(Code::KeyA),
+            location: Location::Standard,
+            modifiers: Modifiers::empty(),
+            text: Some(letter.into()),
+            repeat: false,
+        }
+    } else {
+        keyboard::Event::KeyReleased {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: Physical::Code(Code::KeyA),
+            location: Location::Standard,
+            modifiers: Modifiers::empty(),
+        }
+    };
+    track(app.update(Message::Keyboard(event)));
+}
+
+fn tap_letter(film: &mut Film, app: &mut App, letter: &str) {
+    game_letter(app, letter, true);
+    film.play(app, 0.1);
+    game_letter(app, letter, false);
+}
+
+fn drops(film: &mut Film, app: &mut App, count: usize, between: f64) {
+    for _ in 0..count {
+        tap(film, app, Named::Space);
+        film.play(app, between);
+    }
+}
+
+fn pour(film: &mut Film, app: &mut App, count: usize) {
+    drops(film, app, count, 0.15);
+}
+
+fn acid_open(film: &mut Film, app: &mut App) {
+    film.mark("open");
+    film.shot(app, 2.5);
+    command(film, app, "rodeo-play");
+    settle(app);
+    film.play(app, 5.0);
+}
+
+fn acid_strong(film: &mut Film, app: &mut App) {
+    film.mark("strong");
+    pour(film, app, 13);
+    film.play(app, 1.5);
+    drops(film, app, 6, 1.1);
+    drops(film, app, 1, 2.8);
+    drops(film, app, 1, 2.0);
+    pour(film, app, 11);
+    film.play(app, 2.0);
+}
+
+fn acid_weak(film: &mut Film, app: &mut App) {
+    film.mark("weak");
+    tap_letter(film, app, "w");
+    film.play(app, 6.0);
+    pour(film, app, 10);
+    film.play(app, 3.0);
+    pour(film, app, 8);
+    film.play(app, 1.0);
+    drops(film, app, 2, 1.4);
+    film.play(app, 1.5);
+    pour(film, app, 12);
+    film.play(app, 2.0);
+}
+
+fn edit_value(film: &mut Film, app: &mut App, find_text: &str, remove: usize, value: &str) {
+    film.press(app, "C-x o");
+    find(film, app, find_text);
+    film.press(app, &vec!["DEL"; remove].join(" "));
+    film.type_slowly(app, value);
+    film.press(app, "C-M-x");
+    film.play(app, 0.6);
+    film.press(app, "C-x o");
+}
+
+fn acid_stronger(film: &mut Film, app: &mut App) {
+    film.mark("ka");
+    edit_value(film, app, "1.8e-5", 6, "6.8e-4");
+    tap_letter(film, app, "w");
+    film.play(app, 6.0);
+    pour(film, app, 16);
+    film.play(app, 1.0);
+    pour(film, app, 16);
+    film.play(app, 2.0);
+}
+
+fn acid_indicator(film: &mut Film, app: &mut App) {
+    film.mark("indicator");
+    edit_value(film, app, ":universal", 9, "phenolphthalein");
+    film.play(app, 1.5);
+    tap_letter(film, app, "w");
+    film.play(app, 2.5);
+    pour(film, app, 18);
+    drops(film, app, 2, 1.4);
+    drops(film, app, 1, 3.0);
+}
+
+fn acid_warmer(film: &mut Film, app: &mut App) {
+    film.mark("warmer");
+    edit_value(film, app, "temperature 300", 3, "900");
+    film.play(app, 5.0);
+}
+#[test]
+#[ignore = "renders a 16:9 video of an acid-base titration simulated in rodeo into $OXMACS_ACID_VIDEO"]
+fn acid_base_video() {
+    let Ok(out) = std::env::var("OXMACS_ACID_VIDEO") else {
+        return;
+    };
+    let out = PathBuf::from(out);
+    let home = acid_home();
+    PUMPING.set(true);
+    let mut film = Film::new(out.with_extension("frames"))
+        .sized(Size::new(1280.0, 720.0))
+        .scaled_to(1280, 720)
+        .ticking(Instant::now());
+    let visit = Visit {
+        path: home.join("acid-base.ox"),
+        line: None,
+        column: None,
+    };
+    let (mut app, booted) = App::boot(&[visit], Some(&home));
+    track(booted);
+    track(app.update(Message::Focus(true)));
+    settle(&mut app);
+    acid_open(&mut film, &mut app);
+    if std::env::var_os("OXMACS_ACID_SHORT").is_none() {
+        acid_strong(&mut film, &mut app);
+        acid_weak(&mut film, &mut app);
+        acid_stronger(&mut film, &mut app);
+        acid_indicator(&mut film, &mut app);
+        acid_warmer(&mut film, &mut app);
+    }
+    film.hold(2.0);
+    film.finish(&out);
+}
