@@ -1,5 +1,5 @@
 use crate::editor::Editor;
-use crate::editor::editing::pairs::scan_partner;
+use crate::editor::editing::pairs::{Inert, scan_partner};
 use crate::syntax::motion::PREMATURE;
 use crate::text::{Buffer, motion};
 
@@ -48,7 +48,7 @@ impl Editor {
         let buffer = self.buffers.current();
         let point = buffer.point();
         let target = self.buffers.syntax(0).map_or_else(
-            || plain_sexp_end(buffer, point),
+            || plain_sexp_end(buffer, point, &mut self.inert(0)),
             |syntax| syntax.sexp_end(buffer, point),
         );
         self.go_to(target);
@@ -59,7 +59,7 @@ impl Editor {
         let buffer = self.buffers.current();
         let point = buffer.point();
         let target = self.buffers.syntax(0).map_or_else(
-            || plain_sexp_start(buffer, point),
+            || plain_sexp_start(buffer, point, &mut self.inert(0)),
             |syntax| syntax.sexp_start(buffer, point),
         );
         self.go_to(target);
@@ -70,7 +70,7 @@ impl Editor {
         let buffer = self.buffers.current();
         let point = buffer.point();
         let target = self.buffers.syntax(0).map_or_else(
-            || plain_enclosing_opener(buffer, point),
+            || plain_enclosing_opener(buffer, point, &mut self.inert(0)),
             |syntax| syntax.enclosing_opener(buffer, point),
         );
         self.go_to(target.ok_or("At top level"));
@@ -80,25 +80,32 @@ impl Editor {
         self.sync_syntax();
         let buffer = self.buffers.current();
         let point = buffer.point();
-        let target = match self.buffers.syntax(0) {
-            Some(syntax) => syntax.next_opener(buffer, point),
-            None => buffer
+        let target = if let Some(syntax) = self.buffers.syntax(0) {
+            syntax.next_opener(buffer, point)
+        } else {
+            let mut inert = self.inert(0);
+            buffer
                 .chars_after(point)
-                .position(|c| matches!(c, '(' | '[' | '{'))
-                .map(|offset| point + offset),
+                .enumerate()
+                .find(|(offset, c)| matches!(c, '(' | '[' | '{') && !inert.covers(point + offset))
+                .map(|(offset, _)| point + offset)
         };
         self.go_to(target.map(|opener| opener + 1).ok_or(PREMATURE));
     }
 }
 
-fn plain_sexp_end(buffer: &Buffer, point: usize) -> Result<usize, &'static str> {
+fn plain_sexp_end(
+    buffer: &Buffer,
+    point: usize,
+    inert: &mut Inert<'_>,
+) -> Result<usize, &'static str> {
     let from = point
         + buffer
             .chars_after(point)
             .take_while(|c| c.is_whitespace())
             .count();
     match buffer.chars_after(from).next() {
-        Some('(' | '[' | '{') => scan_partner(buffer, from)
+        Some('(' | '[' | '{') => scan_partner(buffer, from, inert)
             .map(|end| end + 1)
             .ok_or(PREMATURE),
         Some(')' | ']' | '}') | None => Err(PREMATURE),
@@ -106,22 +113,29 @@ fn plain_sexp_end(buffer: &Buffer, point: usize) -> Result<usize, &'static str> 
     }
 }
 
-fn plain_sexp_start(buffer: &Buffer, point: usize) -> Result<usize, &'static str> {
+fn plain_sexp_start(
+    buffer: &Buffer,
+    point: usize,
+    inert: &mut Inert<'_>,
+) -> Result<usize, &'static str> {
     let from = point
         - buffer
             .chars_before(point)
             .take_while(|c| c.is_whitespace())
             .count();
     match buffer.chars_before(from).next() {
-        Some(')' | ']' | '}') => scan_partner(buffer, from - 1).ok_or(PREMATURE),
+        Some(')' | ']' | '}') => scan_partner(buffer, from - 1, inert).ok_or(PREMATURE),
         Some('(' | '[' | '{') | None => Err(PREMATURE),
         Some(_) => Ok(motion::backward_word(buffer, point)),
     }
 }
 
-fn plain_enclosing_opener(buffer: &Buffer, point: usize) -> Option<usize> {
+fn plain_enclosing_opener(buffer: &Buffer, point: usize, inert: &mut Inert<'_>) -> Option<usize> {
     let mut depth = 0_usize;
     for (position, c) in (0..point).rev().zip(buffer.chars_before(point)) {
+        if matches!(c, '(' | ')' | '[' | ']' | '{' | '}') && inert.covers(position) {
+            continue;
+        }
         match c {
             ')' | ']' | '}' => depth += 1,
             '(' | '[' | '{' if depth == 0 => return Some(position),

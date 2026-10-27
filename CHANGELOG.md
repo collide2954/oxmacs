@@ -56,6 +56,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- `C-M-f`, `C-M-b`, `C-M-u`, `C-M-d` and bracket matching skip brackets inside strings, comments and character literals in languages without a tree-sitter grammar, such as Ox and the modes plugins define, using the language's own highlighting.
 - Ox highlighting, the signature hint, `C-x C-e`, completion, names at point and `ox fmt` read Ox with the reader's own tokens, so raw strings with quotes inside, regexes with braces, block comments, commas and strings inside `{…}` holes no longer confuse them, and code inside a hole is colored as code.
 - A prompt opened by a click or by Ox, such as clicking describe-command on the start screen, shows its completions as the same command's keys do, instead of only counting them.
 - After C-x C-w, or renaming or moving a file from the explorer or dired, its language server is told the file closed at its old place and opened at the new one, so edits, diagnostics and M-. follow it; the buffer also takes the language and editorconfig style of its new name.

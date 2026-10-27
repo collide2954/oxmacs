@@ -115,7 +115,15 @@ impl Editor {
         let buffer = self.buffers.current();
         match self.buffers.syntax(0) {
             Some(syntax) => syntax.bracket_partner(buffer, position),
-            None => scan_partner(buffer, position),
+            None => scan_partner(buffer, position, &mut self.inert(0)),
+        }
+    }
+
+    pub(in crate::editor) fn inert(&self, index: usize) -> Inert<'_> {
+        Inert {
+            editor: self,
+            index,
+            line: None,
         }
     }
 
@@ -135,7 +143,53 @@ impl Editor {
     }
 }
 
-pub(in crate::editor) fn scan_partner(buffer: &Buffer, position: usize) -> Option<usize> {
+pub(in crate::editor) struct Inert<'a> {
+    editor: &'a Editor,
+    index: usize,
+    line: Option<(Range<usize>, Vec<Range<usize>>)>,
+}
+
+impl Inert<'_> {
+    pub(in crate::editor) fn covers(&mut self, position: usize) -> bool {
+        let Some(buffer) = self.editor.buffers.get(self.index) else {
+            return false;
+        };
+        let known = self
+            .line
+            .as_ref()
+            .is_some_and(|(span, _)| span.contains(&position));
+        if !known {
+            let line = buffer.line_of(position);
+            let quiet = self
+                .editor
+                .line_style_at(self.index, line)
+                .spans
+                .into_iter()
+                .filter(|(_, face)| {
+                    matches!(
+                        face,
+                        Highlight::String
+                            | Highlight::DocComment
+                            | Highlight::Comment
+                            | Highlight::Constant
+                    )
+                })
+                .map(|(range, _)| range)
+                .collect();
+            self.line = Some((buffer.line_start(line)..buffer.line_end(line) + 1, quiet));
+        }
+        self.line.as_ref().is_some_and(|(span, quiet)| {
+            let column = position - span.start;
+            quiet.iter().any(|range| range.contains(&column))
+        })
+    }
+}
+
+pub(in crate::editor) fn scan_partner(
+    buffer: &Buffer,
+    position: usize,
+    inert: &mut Inert<'_>,
+) -> Option<usize> {
     let bracket = buffer.chars_after(position).next()?;
     let (partner, forward) = match bracket {
         '(' => (')', true),
@@ -147,12 +201,16 @@ pub(in crate::editor) fn scan_partner(buffer: &Buffer, position: usize) -> Optio
         _ => return None,
     };
     let mut depth = 0_usize;
-    let mut scan = |offset: usize, c: char| {
+    let skips = !inert.covers(position);
+    let mut scan = |at: usize, c: char| {
+        if !matches!(c, '(' | ')' | '[' | ']' | '{' | '}') || (skips && inert.covers(at)) {
+            return None;
+        }
         if c == bracket {
             depth += 1;
         } else if c == partner {
             if depth == 0 {
-                return Some(offset);
+                return Some(at);
             }
             depth -= 1;
         }
@@ -163,15 +221,13 @@ pub(in crate::editor) fn scan_partner(buffer: &Buffer, position: usize) -> Optio
             .chars_after(position + 1)
             .take(SCAN_LIMIT)
             .enumerate()
-            .find_map(|(offset, c)| scan(offset, c))
-            .map(|offset| position + 1 + offset)
+            .find_map(|(offset, c)| scan(position + 1 + offset, c))
     } else {
         buffer
             .chars_before(position)
             .take(SCAN_LIMIT)
             .enumerate()
-            .find_map(|(offset, c)| scan(offset, c))
-            .map(|offset| position - 1 - offset)
+            .find_map(|(offset, c)| scan(position - 1 - offset, c))
     }
 }
 

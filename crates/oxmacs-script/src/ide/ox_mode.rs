@@ -733,6 +733,26 @@ mod tests {
     }
 
     #[test]
+    fn structural_motion_skips_brackets_in_strings_comments_and_characters() {
+        let (_home, mut editor) = opened("(f \")\" \\( ; (\n x) (g)\n");
+
+        keys(&mut editor, "C-M-f");
+        assert_eq!(editor.buffer().point(), 17);
+        keys(&mut editor, "C-M-b");
+        assert_eq!(editor.buffer().point(), 0);
+        editor.prepare_display();
+        assert_eq!(
+            editor.line_marks(0),
+            [(0..1, Highlight::ParenMatch)],
+            "the closer sits on the next line"
+        );
+        assert_eq!(editor.line_marks(1), [(2..3, Highlight::ParenMatch)]);
+        editor.buffer_mut().set_point(5);
+        keys(&mut editor, "C-M-u");
+        assert_eq!(editor.buffer().point(), 0);
+    }
+
+    #[test]
     fn columns_count_characters_not_bytes() {
         assert_eq!(
             highlight_line("(f \"λé\" :k)"),
