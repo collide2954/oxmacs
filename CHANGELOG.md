@@ -54,6 +54,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- After C-x C-w, or renaming or moving a file from the explorer or dired, its language server is told the file closed at its old place and opened at the new one, so edits, diagnostics and M-. follow it; the buffer also takes the language and editorconfig style of its new name.
 - Language server edits that insert several pieces of text at the same place keep the server's order, instead of coming out reversed.
 - Language server edits, renames, references and diagnostics reach a file's buffer when the server spells its path differently, such as a lowercase drive letter on Windows, instead of being dropped or opening it again; recovered changes, saves after a prompt and renames from the explorer or dired match the same way.
 - Opening a file from a filtered explorer tree clears the filter, so the next search starts afresh instead of adding to the old one.
@@ -198,6 +199,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- After C-x C-w, or renaming or moving a file from the explorer or dired, its language server is told the file closed at its old place and opened at the new one, so edits, diagnostics and M-. follow it; the buffer also takes the language and editorconfig style of its new name.
 - Language server edits that insert several pieces of text at the same place keep the server's order, instead of coming out reversed.
 - Language server edits, renames, references and diagnostics reach a file's buffer when the server spells its path differently, such as a lowercase drive letter on Windows, instead of being dropped or opening it again; recovered changes, saves after a prompt and renames from the explorer or dired match the same way.
 - Typing in very large files no longer waits for the whole file to be parsed again after each key, down from 655 ms to 6 ms a key in a 20,000-line Rust file. Syntax highlighting catches up a quarter of a second after you stop typing.
@@ -245,6 +247,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- After C-x C-w, or renaming or moving a file from the explorer or dired, its language server is told the file closed at its old place and opened at the new one, so edits, diagnostics and M-. follow it; the buffer also takes the language and editorconfig style of its new name.
 - Language server edits that insert several pieces of text at the same place keep the server's order, instead of coming out reversed.
 - Language server edits, renames, references and diagnostics reach a file's buffer when the server spells its path differently, such as a lowercase drive letter on Windows, instead of being dropped or opening it again; recovered changes, saves after a prompt and renames from the explorer or dired match the same way.
 - Markdown previews scroll with the keyboard and can be selected with a click.
@@ -274,6 +277,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- After C-x C-w, or renaming or moving a file from the explorer or dired, its language server is told the file closed at its old place and opened at the new one, so edits, diagnostics and M-. follow it; the buffer also takes the language and editorconfig style of its new name.
 - Language server edits that insert several pieces of text at the same place keep the server's order, instead of coming out reversed.
 - Language server edits, renames, references and diagnostics reach a file's buffer when the server spells its path differently, such as a lowercase drive letter on Windows, instead of being dropped or opening it again; recovered changes, saves after a prompt and renames from the explorer or dired match the same way.
 - Long mode lines are cut off instead of running into the clock.
@@ -323,6 +327,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- After C-x C-w, or renaming or moving a file from the explorer or dired, its language server is told the file closed at its old place and opened at the new one, so edits, diagnostics and M-. follow it; the buffer also takes the language and editorconfig style of its new name.
 - Language server edits that insert several pieces of text at the same place keep the server's order, instead of coming out reversed.
 - Language server edits, renames, references and diagnostics reach a file's buffer when the server spells its path differently, such as a lowercase drive letter on Windows, instead of being dropped or opening it again; recovered changes, saves after a prompt and renames from the explorer or dired match the same way.
 - Scrolling with the mouse wheel no longer drags point to the ends of short lines; it keeps its column across scrolls and into the next `C-n`/`C-p`.

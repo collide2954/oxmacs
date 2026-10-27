@@ -38,6 +38,7 @@ impl FileInfo {
 
     pub fn moved_to(&mut self, path: PathBuf) {
         self.identity = files::identity(&path);
+        self.style = editorconfig::style_for(&path);
         self.path = path;
     }
 

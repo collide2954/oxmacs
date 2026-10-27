@@ -192,7 +192,7 @@ pub struct Editor {
     notes: Vec<notes::Note>,
     flashes: Vec<flash::Flash>,
     errors_from: build::errors::ErrorSource,
-    lsp: lsp::Clients,
+    lsp: lsp::Lsp,
     focused: bool,
     config: Config,
 }
@@ -286,7 +286,7 @@ impl Editor {
             notes: Vec::new(),
             flashes: Vec::new(),
             errors_from: build::errors::ErrorSource::default(),
-            lsp: lsp::Clients::default(),
+            lsp: lsp::Lsp::default(),
             focused: true,
             config: Config::default(),
         };

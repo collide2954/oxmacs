@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 
 use super::edits::{files, position};
-use super::{Client, Encoding, Pending, ServerId, State, number, protocol};
+use super::{Encoding, ServerId, number, protocol};
 use crate::command::Command;
 use crate::editor::{Editor, Offer, Picked, Place};
 use crate::text::BufferId;
@@ -48,11 +48,16 @@ pub(in crate::editor) enum Asked {
 pub(super) const STALE: &str =
     "The text changed while the server worked on it, so its edits were dropped";
 
-fn capable(client: &Client, capability: &str) -> bool {
-    client
-        .capabilities
-        .get(capability)
-        .is_some_and(|value| !value.is_null() && *value != Value::Bool(false))
+type Hints = (BufferId, u64, Vec<(usize, String)>);
+
+#[derive(Debug, Default)]
+pub(super) struct Assist {
+    auto_mark: Option<(BufferId, u64)>,
+    signature: Option<(BufferId, u64, usize)>,
+    signature_shown: Option<String>,
+    hints: Vec<Hints>,
+    hints_asked: Option<(BufferId, u64)>,
+    formatting_saves: Vec<BufferId>,
 }
 
 fn word_char(character: char) -> bool {
@@ -123,51 +128,38 @@ impl Editor {
         let line = buffer.line_of(point);
         let text = buffer.line_text(line).into_owned();
         let column = point - buffer.line_start(line);
-        let Some(client) = self
-            .lsp
-            .running
-            .iter()
-            .find(|client| client.state == State::Ready && client.document(id).is_some())
-        else {
+        let Some(server) = self.lsp.serving(id) else {
             if !quiet {
                 self.show_message("No language server works on this buffer");
             }
             return None;
         };
-        if !capable(client, capability) {
+        if !self.lsp.capable(server, capability) {
             if !quiet {
-                let name = client.spec.name;
+                let name = self.lsp.name(server);
                 self.show_message(format!("{name} can't do that"));
             }
             return None;
         }
-        let uri = client.document(id).map(|document| document.uri.clone())?;
-        let character = client.encoding.to_units(&text, column);
+        let uri = self.lsp.uri(server, id)?;
+        let character = self.lsp.encoding(server).to_units(&text, column);
         Some((
-            client.id,
+            server,
             json!({"textDocument": {"uri": uri}, "position": {"line": line, "character": character}}),
         ))
     }
 
     fn ask_server(&mut self, id: ServerId, method: &str, params: &Value, asked: Asked) {
-        let Some(client) = self.client_mut(id) else {
-            return;
-        };
-        let message = client.request(method, params, Pending::Feature(asked));
-        self.send_to(id, message);
+        self.lsp.ask(id, method, params, asked);
+        self.flush_lsp();
     }
 
-    fn encoding_of(&mut self, id: ServerId) -> Encoding {
-        self.client_mut(id)
-            .map_or(Encoding::Utf16, |client| client.encoding)
+    fn encoding_of(&self, id: ServerId) -> Encoding {
+        self.lsp.encoding(id)
     }
 
     pub fn lsp_serves_here(&self) -> bool {
-        let buffer = self.buffers.current().id();
-        self.lsp
-            .running
-            .iter()
-            .any(|client| client.state == State::Ready && client.document(buffer).is_some())
+        self.lsp.serving(self.buffers.current().id()).is_some()
     }
 
     fn word_start(&self) -> usize {
@@ -197,17 +189,7 @@ impl Editor {
         let Some(typed) = buffer.chars_before(buffer.point()).next() else {
             return false;
         };
-        let id = buffer.id();
-        self.lsp.running.iter().any(|client| {
-            client.document(id).is_some()
-                && client.capabilities["completionProvider"]["triggerCharacters"]
-                    .as_array()
-                    .is_some_and(|triggers| {
-                        triggers
-                            .iter()
-                            .any(|trigger| trigger.as_str() == Some(&typed.to_string()))
-                    })
-        })
+        self.lsp.triggered_by(buffer.id(), typed)
     }
 
     pub(in crate::editor) fn lsp_wants_auto_complete(&self) -> bool {
@@ -221,19 +203,19 @@ impl Editor {
             && self.popup.is_none()
             && self.lsp_serves_here()
             && (typed >= AUTO_PREFIX || self.trigger_typed())
-            && self.lsp.auto_mark != Some((buffer.id(), buffer.revision()))
+            && self.lsp.assist.auto_mark != Some((buffer.id(), buffer.revision()))
     }
 
     pub(in crate::editor) fn lsp_auto_complete(&mut self) {
         let buffer = self.buffers.current();
-        self.lsp.auto_mark = Some((buffer.id(), buffer.revision()));
+        self.lsp.assist.auto_mark = Some((buffer.id(), buffer.revision()));
         self.lsp_complete(false);
     }
 
     pub(in crate::editor) fn lsp_wants_signature(&self) -> bool {
         let buffer = self.buffers.current();
         self.lsp_serves_here()
-            && self.lsp.signature != Some((buffer.id(), buffer.revision(), buffer.point()))
+            && self.lsp.assist.signature != Some((buffer.id(), buffer.revision(), buffer.point()))
     }
 
     pub(in crate::editor) fn completion_at_point(&mut self) {
@@ -274,13 +256,13 @@ impl Editor {
     fn lsp_hints(&mut self) {
         let buffer = self.buffers.current();
         let (id, revision, lines) = (buffer.id(), buffer.revision(), buffer.len_lines());
-        if !self.settings.inlay_hints || self.lsp.hints_asked == Some((id, revision)) {
+        if !self.settings.inlay_hints || self.lsp.assist.hints_asked == Some((id, revision)) {
             return;
         }
         let Some((server, params)) = self.serving_here("inlayHintProvider", true) else {
             return;
         };
-        self.lsp.hints_asked = Some((id, revision));
+        self.lsp.assist.hints_asked = Some((id, revision));
         let range = json!({
             "textDocument": params["textDocument"],
             "range": {"start": {"line": 0, "character": 0}, "end": {"line": lines, "character": 0}}
@@ -303,6 +285,7 @@ impl Editor {
         line: usize,
     ) -> Option<String> {
         self.lsp
+            .assist
             .hints
             .iter()
             .find(|(known, at, _)| *known == buffer && *at == revision)?
@@ -336,14 +319,17 @@ impl Editor {
                 None => lines.push((line, label)),
             }
         }
-        self.lsp.hints.retain(|(known, _, _)| *known != buffer);
-        self.lsp.hints.push((buffer, revision, lines));
+        self.lsp
+            .assist
+            .hints
+            .retain(|(known, _, _)| *known != buffer);
+        self.lsp.assist.hints.push((buffer, revision, lines));
     }
 
     pub(in crate::editor) fn lsp_signature(&mut self) {
         self.lsp_hints();
         let buffer = self.buffers.current();
-        self.lsp.signature = Some((buffer.id(), buffer.revision(), buffer.point()));
+        self.lsp.assist.signature = Some((buffer.id(), buffer.revision(), buffer.point()));
         let buffer = buffer.id();
         if let Some((id, params)) = self.serving_here("signatureHelpProvider", true) {
             self.ask_server(
@@ -441,11 +427,7 @@ impl Editor {
         let Some(buffer) = self.buffers.get(index).map(crate::text::Buffer::id) else {
             return false;
         };
-        self.lsp.running.iter().any(|client| {
-            client.state == State::Ready
-                && client.document(buffer).is_some()
-                && capable(client, "documentFormattingProvider")
-        })
+        self.lsp.formatter(buffer).is_some()
     }
 
     pub(in crate::editor) fn lsp_format(&mut self, index: usize, save: bool) -> bool {
@@ -457,11 +439,7 @@ impl Editor {
         else {
             return false;
         };
-        let Some((id, uri)) = self.lsp.running.iter().find_map(|client| {
-            let document = client.document(buffer)?;
-            (client.state == State::Ready && capable(client, "documentFormattingProvider"))
-                .then(|| (client.id, document.uri.clone()))
-        }) else {
+        let Some((id, uri)) = self.lsp.formatter(buffer) else {
             return false;
         };
         let params = json!({
@@ -485,21 +463,24 @@ impl Editor {
         let Some(buffer) = self.buffers.get(index).map(crate::text::Buffer::id) else {
             return false;
         };
-        if self.lsp.formatting_saves.contains(&buffer) {
+        if self.lsp.assist.formatting_saves.contains(&buffer) {
             return true;
         }
         if !self.lsp_format(index, true) {
             return false;
         }
-        self.lsp.formatting_saves.push(buffer);
+        self.lsp.assist.formatting_saves.push(buffer);
         true
     }
 
     pub(in crate::editor) fn finish_formatting_save(&mut self, buffer: BufferId) -> bool {
-        if !self.lsp.formatting_saves.contains(&buffer) {
+        if !self.lsp.assist.formatting_saves.contains(&buffer) {
             return true;
         }
-        self.lsp.formatting_saves.retain(|known| *known != buffer);
+        self.lsp
+            .assist
+            .formatting_saves
+            .retain(|known| *known != buffer);
         self.buffers
             .position(|known| known.id() == buffer)
             .is_none_or(|index| self.write_buffer_at(index, false))
@@ -507,7 +488,7 @@ impl Editor {
 
     pub(in crate::editor) fn finish_formatting_saves(&mut self) -> bool {
         let mut written = true;
-        for buffer in self.lsp.formatting_saves.clone() {
+        for buffer in self.lsp.assist.formatting_saves.clone() {
             written &= self.finish_formatting_save(buffer);
         }
         written
@@ -523,24 +504,16 @@ impl Editor {
             .as_str()
             .unwrap_or("")
             .to_owned();
-        let around = self
+        let around: Vec<Value> = self
             .lsp
-            .running
-            .iter()
-            .find(|client| client.id == id)
-            .and_then(|client| client.diagnostics.iter().find(|(known, _)| *known == uri))
-            .map(|(_, found)| {
-                found
-                    .iter()
-                    .filter(|diagnostic| {
-                        let first = number(&diagnostic["range"]["start"]["line"]);
-                        let last = number(&diagnostic["range"]["end"]["line"]);
-                        (first..=last).contains(&line)
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>()
+            .published_at(id, &uri)
+            .into_iter()
+            .filter(|diagnostic| {
+                let first = number(&diagnostic["range"]["start"]["line"]);
+                let last = number(&diagnostic["range"]["end"]["line"]);
+                (first..=last).contains(&line)
             })
-            .unwrap_or_default();
+            .collect();
         let position = params["position"].clone();
         let asked = json!({
             "textDocument": {"uri": uri},
@@ -663,15 +636,15 @@ impl Editor {
             .or_else(|| result["signatures"].get(0))
             .and_then(|signature| signature["label"].as_str())
             .map(str::to_owned);
-        let ours = self.message.is_none() || self.message == self.lsp.signature_shown;
+        let ours = self.message.is_none() || self.message == self.lsp.assist.signature_shown;
         match label {
             Some(label) if ours => {
                 self.show_message(label.clone());
-                self.lsp.signature_shown = Some(label);
+                self.lsp.assist.signature_shown = Some(label);
             }
-            None if ours && self.lsp.signature_shown.is_some() => {
+            None if ours && self.lsp.assist.signature_shown.is_some() => {
                 self.message = None;
-                self.lsp.signature_shown = None;
+                self.lsp.assist.signature_shown = None;
             }
             _ => {}
         }
@@ -747,7 +720,7 @@ impl Editor {
 
     fn formatted(&mut self, id: ServerId, at: (BufferId, u64), save: bool, result: &Value) {
         let buffer = at.0;
-        if save && !self.lsp.formatting_saves.contains(&buffer) {
+        if save && !self.lsp.assist.formatting_saves.contains(&buffer) {
             return;
         }
         let stale = self.changed_since(at);

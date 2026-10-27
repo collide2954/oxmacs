@@ -1,9 +1,11 @@
 mod edits;
 mod features;
+mod glue;
 mod protocol;
 mod servers;
 
 use std::env;
+use std::mem;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -12,19 +14,14 @@ use serde_json::{Value, json};
 pub use protocol::Encoding;
 pub use servers::{SERVERS, ServerSpec};
 
-use crate::editor::{Editor, Effect};
-use crate::external::diagnostics::{Diagnostic, Severity};
 use crate::external::lsp::{self, Event, Launch};
-use crate::text::{Buffer, BufferId};
+use crate::text::BufferId;
+use features::{Asked, Assist};
 
-const LOG: &str = "*language servers*";
-const LOG_LINES: usize = 2000;
 const RETRY: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ServerId(pub u64);
-
-type Hints = (BufferId, u64, Vec<(usize, String)>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum State {
@@ -34,10 +31,10 @@ enum State {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(in crate::editor) enum Pending {
+enum Pending {
     Initialize,
     Shutdown,
-    Feature(features::Asked),
+    Feature(Asked),
 }
 
 #[derive(Debug, Clone)]
@@ -64,19 +61,53 @@ struct Client {
 }
 
 #[derive(Debug)]
-pub(in crate::editor) struct Clients {
+enum Out {
+    Send(ServerId, String),
+    Start(ServerId, Launch),
+    Stop(ServerId),
+    Log(String),
+    Tell(String),
+}
+
+#[derive(Debug)]
+enum Outcome {
+    Ready,
+    Diagnostics {
+        server: ServerId,
+        path: PathBuf,
+        items: Vec<Value>,
+    },
+    Answered {
+        server: ServerId,
+        asked: Asked,
+        result: Value,
+    },
+    Unanswered(Asked),
+    EditRequested {
+        server: ServerId,
+        request: Value,
+        params: Value,
+    },
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Visited<'a> {
+    buffer: BufferId,
+    language: &'a str,
+    path: &'a Path,
+    revision: u64,
+}
+
+#[derive(Debug)]
+pub(in crate::editor) struct Lsp {
     specs: Vec<ServerSpec>,
     running: Vec<Client>,
     next: u64,
     told: Vec<&'static str>,
     missing: Vec<(&'static str, Instant)>,
     roots: Vec<(PathBuf, &'static str, PathBuf)>,
-    auto_mark: Option<(BufferId, u64)>,
-    signature: Option<(BufferId, u64, usize)>,
-    signature_shown: Option<String>,
-    hints: Vec<Hints>,
-    hints_asked: Option<(BufferId, u64)>,
-    formatting_saves: Vec<BufferId>,
+    out: Vec<Out>,
+    assist: Assist,
     pub(in crate::editor) find: fn(&str) -> Option<PathBuf>,
 }
 
@@ -84,7 +115,7 @@ fn on_path(program: &str) -> Option<PathBuf> {
     lsp::locate(program, env::var_os("PATH").as_deref())
 }
 
-impl Default for Clients {
+impl Default for Lsp {
     fn default() -> Self {
         Self {
             specs: Vec::new(),
@@ -93,12 +124,8 @@ impl Default for Clients {
             told: Vec::new(),
             missing: Vec::new(),
             roots: Vec::new(),
-            auto_mark: None,
-            signature: None,
-            signature_shown: None,
-            hints: Vec::new(),
-            hints_asked: None,
-            formatting_saves: Vec::new(),
+            out: Vec::new(),
+            assist: Assist::default(),
             find: on_path,
         }
     }
@@ -115,14 +142,6 @@ fn root_of(spec: &ServerSpec, file: &Path) -> PathBuf {
     marked(spec.roots)
         .or_else(|| marked(&[".git"]))
         .unwrap_or_else(|| folder.to_path_buf())
-}
-
-fn severity(code: Option<u64>) -> Option<Severity> {
-    match code {
-        Some(1) | None => Some(Severity::Error),
-        Some(2 | 3) => Some(Severity::Warning),
-        _ => None,
-    }
 }
 
 fn number(value: &Value) -> usize {
@@ -156,6 +175,12 @@ impl Client {
             .iter()
             .find(|document| document.buffer == buffer)
     }
+
+    fn capable(&self, capability: &str) -> bool {
+        self.capabilities
+            .get(capability)
+            .is_some_and(|value| !value.is_null() && *value != Value::Bool(false))
+    }
 }
 
 fn notification(method: &str, params: &Value) -> String {
@@ -164,6 +189,13 @@ fn notification(method: &str, params: &Value) -> String {
 
 fn response(id: &Value, result: &Value) -> String {
     json!({"jsonrpc": "2.0", "id": id, "result": result}).to_string()
+}
+
+fn closing(uri: &str) -> String {
+    notification(
+        "textDocument/didClose",
+        &json!({"textDocument": {"uri": uri}}),
+    )
 }
 
 fn initialize(root: &Path) -> Value {
@@ -214,51 +246,55 @@ fn initialize(root: &Path) -> Value {
     })
 }
 
-impl Editor {
-    pub fn add_language_servers(&mut self, specs: &[ServerSpec]) {
+impl Lsp {
+    fn add_specs(&mut self, specs: &[ServerSpec]) {
         for spec in specs {
-            self.lsp.specs.retain(|known| known.name != spec.name);
-            self.lsp.specs.push(*spec);
+            self.specs.retain(|known| known.name != spec.name);
+            self.specs.push(*spec);
         }
     }
 
     fn spec_for(&self, language: &str) -> Option<ServerSpec> {
-        self.lsp
-            .specs
+        self.specs
             .iter()
             .find(|spec| spec.language_id(language).is_some())
             .copied()
     }
 
+    fn client(&self, id: ServerId) -> Option<&Client> {
+        self.running.iter().find(|client| client.id == id)
+    }
+
     fn client_mut(&mut self, id: ServerId) -> Option<&mut Client> {
-        self.lsp.running.iter_mut().find(|client| client.id == id)
+        self.running.iter_mut().find(|client| client.id == id)
     }
 
-    fn send_to(&mut self, id: ServerId, message: String) {
-        self.effects.push(Effect::ToServer(id, message));
+    fn send(&mut self, id: ServerId, message: String) {
+        self.out.push(Out::Send(id, message));
     }
 
-    pub(in crate::editor) fn sync_servers(&mut self) {
-        if self.lsp.specs.is_empty() {
+    fn log(&mut self, id: ServerId, text: &str) {
+        let name = self.client(id).map_or("server", |client| client.spec.name);
+        self.out
+            .push(Out::Log(format!("[{name}] {}\n", text.trim_end())));
+    }
+
+    fn take_out(&mut self) -> Vec<Out> {
+        mem::take(&mut self.out)
+    }
+
+    fn sync(&mut self, visited: &[Visited<'_>], enabled: bool, text: &dyn Fn(BufferId) -> String) {
+        if self.specs.is_empty() {
             return;
         }
         let mut seen = Vec::new();
-        for index in 0..self.buffers.len() {
-            let Some(language) = self.buffers.language(index) else {
+        for file in visited {
+            let Some(spec) = self.spec_for(file.language) else {
                 continue;
             };
-            let Some(buffer) = self.buffers.get(index) else {
-                continue;
-            };
-            let Some(path) = buffer.file().map(|file| file.path.clone()) else {
-                continue;
-            };
-            let Some(spec) = self.spec_for(language.name()) else {
-                continue;
-            };
-            seen.push(buffer.id());
-            if self.settings.language_servers {
-                self.sync_buffer(spec, language.name(), index, &path);
+            seen.push(file.buffer);
+            if enabled {
+                self.sync_buffer(spec, file, text);
             }
         }
         self.close_documents(&seen);
@@ -266,7 +302,6 @@ impl Editor {
 
     fn root_for(&mut self, spec: &ServerSpec, path: &Path) -> PathBuf {
         if let Some((_, _, root)) = self
-            .lsp
             .roots
             .iter()
             .find(|(file, name, _)| file == path && *name == spec.name)
@@ -274,16 +309,36 @@ impl Editor {
             return root.clone();
         }
         let root = root_of(spec, path);
-        self.lsp
-            .roots
+        self.roots
             .push((path.to_path_buf(), spec.name, root.clone()));
         root
     }
 
-    fn sync_buffer(&mut self, spec: ServerSpec, language: &str, index: usize, path: &Path) {
-        let root = self.root_for(&spec, path);
+    fn reconcile(&mut self, buffer: BufferId, owner: ServerId, uri: &str) {
+        let mut closed = Vec::new();
+        for client in &mut self.running {
+            let (id, ready) = (client.id, client.state == State::Ready);
+            for document in client.documents.extract_if(.., |document| {
+                document.buffer == buffer && (id != owner || document.uri != uri)
+            }) {
+                if ready {
+                    closed.push((id, closing(&document.uri)));
+                }
+            }
+        }
+        for (id, message) in closed {
+            self.send(id, message);
+        }
+    }
+
+    fn sync_buffer(
+        &mut self,
+        spec: ServerSpec,
+        file: &Visited<'_>,
+        text: &dyn Fn(BufferId) -> String,
+    ) {
+        let root = self.root_for(&spec, file.path);
         let id = match self
-            .lsp
             .running
             .iter()
             .find(|client| client.spec.name == spec.name && client.root == root)
@@ -294,95 +349,88 @@ impl Editor {
                 None => return,
             },
         };
-        let Some(buffer) = self.buffers.get(index) else {
+        let uri = protocol::uri(file.path);
+        self.reconcile(file.buffer, id, &uri);
+        let Some(client) = self.client(id) else {
             return;
         };
-        let (buffer_id, revision) = (buffer.id(), buffer.revision());
-        let Some(client) = self.lsp.running.iter().find(|client| client.id == id) else {
-            return;
-        };
-        let known = client.document(buffer_id).map(|document| document.revision);
-        if client.state != State::Ready || known == Some(revision) {
+        let known = client
+            .document(file.buffer)
+            .map(|document| document.revision);
+        if client.state != State::Ready || known == Some(file.revision) {
             return;
         }
-        let text = buffer.contents();
+        let contents = text(file.buffer);
         let Some(client) = self.client_mut(id) else {
             return;
         };
         let message = if let Some(document) = client
             .documents
             .iter_mut()
-            .find(|document| document.buffer == buffer_id)
+            .find(|document| document.buffer == file.buffer)
         {
             document.version += 1;
-            document.revision = revision;
+            document.revision = file.revision;
             notification(
                 "textDocument/didChange",
                 &json!({
                     "textDocument": {"uri": document.uri, "version": document.version},
-                    "contentChanges": [{"text": text}]
+                    "contentChanges": [{"text": contents}]
                 }),
             )
         } else {
-            let uri = protocol::uri(path);
             client.documents.push(Document {
-                buffer: buffer_id,
+                buffer: file.buffer,
                 uri: uri.clone(),
                 version: 1,
-                revision,
+                revision: file.revision,
             });
-            let language_id = spec.language_id(language).unwrap_or_default();
+            let language_id = spec.language_id(file.language).unwrap_or_default();
             notification(
                 "textDocument/didOpen",
                 &json!({
-                    "textDocument": {"uri": uri, "languageId": language_id, "version": 1, "text": text}
+                    "textDocument": {"uri": uri, "languageId": language_id, "version": 1, "text": contents}
                 }),
             )
         };
-        self.send_to(id, message);
+        self.send(id, message);
     }
 
     fn close_documents(&mut self, seen: &[BufferId]) {
-        let mut closing = Vec::new();
-        for client in &mut self.lsp.running {
+        let mut closed = Vec::new();
+        for client in &mut self.running {
+            let (id, ready) = (client.id, client.state == State::Ready);
             for document in client
                 .documents
                 .extract_if(.., |document| !seen.contains(&document.buffer))
             {
-                if client.state == State::Ready {
-                    closing.push((
-                        client.id,
-                        notification(
-                            "textDocument/didClose",
-                            &json!({"textDocument": {"uri": document.uri}}),
-                        ),
-                    ));
+                if ready {
+                    closed.push((id, closing(&document.uri)));
                 }
             }
         }
-        for (id, message) in closing {
-            self.send_to(id, message);
+        for (id, message) in closed {
+            self.send(id, message);
         }
     }
 
     fn start_server(&mut self, spec: ServerSpec, root: &Path) -> Option<ServerId> {
         let now = Instant::now();
-        self.lsp
-            .missing
+        self.missing
             .retain(|(_, since)| now.duration_since(*since) < RETRY);
-        if self.lsp.missing.iter().any(|(name, _)| *name == spec.name) {
+        if self.missing.iter().any(|(name, _)| *name == spec.name) {
             return None;
         }
-        let find = self.lsp.find;
+        let find = self.find;
         let Some((program, args)) = spec
             .programs
             .iter()
             .find_map(|(program, args)| find(program).map(|found| (found, *args)))
         else {
-            self.lsp.missing.push((spec.name, now));
-            if !self.lsp.told.contains(&spec.name) {
-                self.lsp.told.push(spec.name);
-                self.show_message(if spec.runs {
+            self.missing.push((spec.name, now));
+            if !self.told.contains(&spec.name) {
+                self.told.push(spec.name);
+                self.out.push(Out::Tell(if spec.runs {
                     format!(
                         "{} would add completion, docs and more here; M-x list-tools can install it",
                         spec.name
@@ -392,12 +440,12 @@ impl Editor {
                         "{} would add completion, docs and more here; {}",
                         spec.name, spec.install
                     )
-                });
+                }));
             }
             return None;
         };
-        let id = ServerId(self.lsp.next);
-        self.lsp.next += 1;
+        let id = ServerId(self.next);
+        self.next += 1;
         let mut client = Client {
             id,
             spec,
@@ -412,8 +460,8 @@ impl Editor {
             diagnostics: Vec::new(),
         };
         let initialize = client.request("initialize", &initialize(root), Pending::Initialize);
-        self.lsp.running.push(client);
-        self.effects.push(Effect::StartServer(
+        self.running.push(client);
+        self.out.push(Out::Start(
             id,
             Launch {
                 program,
@@ -421,75 +469,76 @@ impl Editor {
                 directory: root.to_path_buf(),
             },
         ));
-        self.send_to(id, initialize);
-        self.server_log(id, &format!("starting in {}", root.display()));
+        self.send(id, initialize);
+        self.log(id, &format!("starting in {}", root.display()));
         Some(id)
     }
 
-    pub fn server_event(&mut self, id: ServerId, event: Event) {
+    fn receive(&mut self, id: ServerId, event: Event) -> Vec<Outcome> {
         match event {
-            Event::Message(body) => self.server_message(id, &body),
-            Event::Log(line) => self.server_log(id, &line),
-            Event::Exited(reason) => self.server_exited(id, reason),
+            Event::Message(body) => self.message(id, &body),
+            Event::Log(line) => {
+                self.log(id, &line);
+                Vec::new()
+            }
+            Event::Exited(reason) => self.exited(id, reason),
         }
     }
 
-    fn server_exited(&mut self, id: ServerId, reason: Option<String>) {
+    fn exited(&mut self, id: ServerId, reason: Option<String>) -> Vec<Outcome> {
         let Some(client) = self.client_mut(id) else {
-            return;
+            return Vec::new();
         };
         let expected = client
             .pending
             .iter()
             .any(|(_, pending)| *pending == Pending::Shutdown);
-        let saving: Vec<BufferId> = client
+        let unanswered = client
             .pending
-            .iter()
+            .drain(..)
             .filter_map(|(_, pending)| match pending {
-                Pending::Feature(features::Asked::Format {
-                    buffer, save: true, ..
-                }) => Some(*buffer),
-                _ => None,
+                Pending::Feature(asked) => Some(Outcome::Unanswered(asked)),
+                Pending::Initialize | Pending::Shutdown => None,
             })
             .collect();
         client.state = State::Stopped(reason.clone());
-        client.pending.clear();
         client.progress.clear();
         let name = client.spec.name;
         let note = reason.clone().unwrap_or_else(|| "exited".to_owned());
-        self.server_log(id, &format!("stopped: {note}"));
-        for buffer in saving {
-            self.finish_formatting_save(buffer);
-        }
+        self.log(id, &format!("stopped: {note}"));
         if !expected && let Some(reason) = reason {
-            self.show_message(format!("{name} stopped: {reason}; M-x lsp-log shows why"));
+            self.out.push(Out::Tell(format!(
+                "{name} stopped: {reason}; M-x lsp-log shows why"
+            )));
         }
+        unanswered
     }
 
-    fn server_message(&mut self, id: ServerId, body: &str) {
+    fn message(&mut self, id: ServerId, body: &str) -> Vec<Outcome> {
         let Ok(message) = serde_json::from_str::<Value>(body) else {
-            self.server_log(id, &format!("unreadable message: {body}"));
-            return;
+            self.log(id, &format!("unreadable message: {body}"));
+            return Vec::new();
         };
         let method = message.get("method").and_then(Value::as_str);
         let params = message.get("params").cloned().unwrap_or(Value::Null);
         match (method, message.get("id")) {
-            (Some(method), Some(request)) => {
-                let request = request.clone();
-                self.server_request(id, method, &request, &params);
-            }
-            (Some(method), None) => self.server_notification(id, method, &params),
-            (None, Some(answered)) => {
-                let Some(answered) = answered.as_i64() else {
-                    return;
-                };
-                self.server_response(id, answered, &message);
-            }
-            (None, None) => {}
+            (Some(method), Some(request)) => self.asked_of(id, method, request.clone(), params),
+            (Some(method), None) => self.told_by(id, method, &params),
+            (None, Some(answered)) => answered
+                .as_i64()
+                .map(|answered| self.answered_by(id, answered, &message))
+                .unwrap_or_default(),
+            (None, None) => Vec::new(),
         }
     }
 
-    fn server_request(&mut self, id: ServerId, method: &str, request: &Value, params: &Value) {
+    fn asked_of(
+        &mut self,
+        id: ServerId,
+        method: &str,
+        request: Value,
+        params: Value,
+    ) -> Vec<Outcome> {
         let result = match method {
             "workspace/configuration" => {
                 let count = params
@@ -499,34 +548,41 @@ impl Editor {
                 Value::Array(vec![Value::Null; count])
             }
             "workspace/workspaceFolders" => {
-                let Some(root) = self.client_mut(id).map(|client| client.root.clone()) else {
-                    return;
+                let Some(root) = self.client(id).map(|client| client.root.clone()) else {
+                    return Vec::new();
                 };
                 json!([{"uri": protocol::uri(&root), "name": root.display().to_string()}])
             }
-            "workspace/applyEdit" => self.applied_edit(id, params),
+            "workspace/applyEdit" => {
+                return vec![Outcome::EditRequested {
+                    server: id,
+                    request,
+                    params,
+                }];
+            }
             "window/workDoneProgress/create"
             | "client/registerCapability"
             | "client/unregisterCapability"
             | "window/showMessageRequest" => Value::Null,
             _ => {
-                self.send_to(
+                self.send(
                     id,
                     json!({"jsonrpc": "2.0", "id": request, "error": {"code": -32601, "message": format!("oxmacs doesn't handle {method}")}})
                         .to_string(),
                 );
-                return;
+                return Vec::new();
             }
         };
-        self.send_to(id, response(request, &result));
+        self.reply(id, &request, &result);
+        Vec::new()
     }
 
-    fn server_notification(&mut self, id: ServerId, method: &str, params: &Value) {
+    fn told_by(&mut self, id: ServerId, method: &str, params: &Value) -> Vec<Outcome> {
         match method {
-            "textDocument/publishDiagnostics" => self.published(id, params),
+            "textDocument/publishDiagnostics" => return self.published(id, params),
             "window/logMessage" => {
                 let text = params.get("message").and_then(Value::as_str).unwrap_or("");
-                self.server_log(id, text);
+                self.log(id, text);
             }
             "window/showMessage" => {
                 let text = params
@@ -534,19 +590,20 @@ impl Editor {
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .to_owned();
-                self.server_log(id, &text);
+                self.log(id, &text);
                 let urgent = params
                     .get("type")
                     .and_then(Value::as_u64)
                     .is_some_and(|kind| kind <= 2);
-                if urgent && let Some(client) = self.client_mut(id) {
+                if urgent && let Some(client) = self.client(id) {
                     let name = client.spec.name;
-                    self.show_message(format!("{name}: {text}"));
+                    self.out.push(Out::Tell(format!("{name}: {text}")));
                 }
             }
             "$/progress" => self.progressed(id, params),
             _ => {}
         }
+        Vec::new()
     }
 
     fn progressed(&mut self, id: ServerId, params: &Value) {
@@ -589,75 +646,41 @@ impl Editor {
         }
     }
 
-    fn published(&mut self, id: ServerId, params: &Value) {
-        let Some(path) = params
-            .get("uri")
-            .and_then(Value::as_str)
-            .and_then(protocol::path)
-        else {
-            return;
+    fn published(&mut self, id: ServerId, params: &Value) -> Vec<Outcome> {
+        let Some(uri) = params.get("uri").and_then(Value::as_str) else {
+            return Vec::new();
         };
-        let raw = params
+        let Some(path) = protocol::path(uri) else {
+            return Vec::new();
+        };
+        let items = params
             .get("diagnostics")
             .and_then(Value::as_array)
             .cloned()
             .unwrap_or_default();
-        let uri = params["uri"].as_str().unwrap_or_default().to_owned();
+        let uri = uri.to_owned();
         let Some(client) = self.client_mut(id) else {
-            return;
+            return Vec::new();
         };
         client.diagnostics.retain(|(known, _)| *known != uri);
-        client.diagnostics.push((uri, raw));
-        let encoding = client.encoding;
-        let buffer = self.index_visiting(&path);
-        let line_text = |line: usize| -> String {
-            buffer
-                .and_then(|index| self.buffers.get(index))
-                .filter(|buffer| line < buffer.len_lines())
-                .map(|buffer| buffer.line_text(line).into_owned())
-                .unwrap_or_default()
-        };
-        let place = |position: &Value| {
-            let line = number(&position["line"]);
-            let units = number(&position["character"]);
-            let text = line_text(line);
-            let column = if text.is_empty() {
-                units
-            } else {
-                encoding.to_column(&text, units)
-            };
-            (line + 1, column + 1)
-        };
-        let found: Vec<Diagnostic> = params
-            .get("diagnostics")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|item| {
-                let severity = severity(item.get("severity").and_then(Value::as_u64))?;
-                let message = item.get("message").and_then(Value::as_str)?.to_owned();
-                Some(Diagnostic {
-                    path: path.clone(),
-                    start: place(&item["range"]["start"]),
-                    end: place(&item["range"]["end"]),
-                    severity,
-                    message,
-                })
-            })
-            .collect();
-        self.replace_diagnostics(&path, found);
+        client.diagnostics.push((uri, items.clone()));
+        vec![Outcome::Diagnostics {
+            server: id,
+            path,
+            items,
+        }]
     }
 
-    fn server_response(&mut self, id: ServerId, answered: i64, message: &Value) {
+    fn answered_by(&mut self, id: ServerId, answered: i64, message: &Value) -> Vec<Outcome> {
         let Some(client) = self.client_mut(id) else {
-            return;
+            return Vec::new();
         };
         let Some(at) = client
             .pending
             .iter()
             .position(|(known, _)| *known == answered)
         else {
-            return;
+            return Vec::new();
         };
         let (_, pending) = client.pending.remove(at);
         if let Some(error) = message.get("error") {
@@ -666,29 +689,31 @@ impl Editor {
                 .and_then(Value::as_str)
                 .unwrap_or("failed")
                 .to_owned();
-            self.server_log(id, &format!("request failed: {text}"));
-            if let Pending::Feature(features::Asked::Format {
-                buffer, save: true, ..
-            }) = pending
-            {
-                self.finish_formatting_save(buffer);
-            }
-            return;
+            self.log(id, &format!("request failed: {text}"));
+            return match pending {
+                Pending::Feature(asked) => vec![Outcome::Unanswered(asked)],
+                Pending::Initialize | Pending::Shutdown => Vec::new(),
+            };
         }
         let result = message.get("result").cloned().unwrap_or(Value::Null);
         match pending {
             Pending::Initialize => self.initialized(id, &result),
             Pending::Shutdown => {
-                self.send_to(id, notification("exit", &Value::Null));
-                self.effects.push(Effect::StopServer(id));
+                self.send(id, notification("exit", &Value::Null));
+                self.out.push(Out::Stop(id));
+                Vec::new()
             }
-            Pending::Feature(asked) => self.answered(id, asked, &result),
+            Pending::Feature(asked) => vec![Outcome::Answered {
+                server: id,
+                asked,
+                result,
+            }],
         }
     }
 
-    fn initialized(&mut self, id: ServerId, result: &Value) {
+    fn initialized(&mut self, id: ServerId, result: &Value) -> Vec<Outcome> {
         let Some(client) = self.client_mut(id) else {
-            return;
+            return Vec::new();
         };
         client.capabilities = result.get("capabilities").cloned().unwrap_or(Value::Null);
         client.encoding = Encoding::named(
@@ -698,14 +723,26 @@ impl Editor {
                 .and_then(Value::as_str),
         );
         client.state = State::Ready;
-        self.send_to(id, notification("initialized", &json!({})));
-        self.server_log(id, "ready");
-        self.sync_servers();
+        self.send(id, notification("initialized", &json!({})));
+        self.log(id, "ready");
+        vec![Outcome::Ready]
     }
 
-    pub(in crate::editor) fn server_saved(&mut self, buffer: BufferId) {
+    fn ask(&mut self, id: ServerId, method: &str, params: &Value, asked: Asked) {
+        let Some(client) = self.client_mut(id) else {
+            return;
+        };
+        let message = client.request(method, params, Pending::Feature(asked));
+        self.send(id, message);
+    }
+
+    fn reply(&mut self, id: ServerId, request: &Value, result: &Value) {
+        self.send(id, response(request, result));
+    }
+
+    fn saved(&mut self, buffer: BufferId) {
         let mut saved = Vec::new();
-        for client in &self.lsp.running {
+        for client in &self.running {
             if client.state == State::Ready
                 && let Some(document) = client.document(buffer)
             {
@@ -719,38 +756,94 @@ impl Editor {
             }
         }
         for (id, message) in saved {
-            self.send_to(id, message);
+            self.send(id, message);
         }
     }
 
-    pub(in crate::editor) fn serves(&self, language: &str, path: &Path) -> bool {
-        self.lsp.running.iter().any(|client| {
+    fn serving(&self, buffer: BufferId) -> Option<ServerId> {
+        self.running
+            .iter()
+            .find(|client| client.state == State::Ready && client.document(buffer).is_some())
+            .map(|client| client.id)
+    }
+
+    fn name(&self, id: ServerId) -> &'static str {
+        self.client(id).map_or("server", |client| client.spec.name)
+    }
+
+    fn capable(&self, id: ServerId, capability: &str) -> bool {
+        self.client(id)
+            .is_some_and(|client| client.capable(capability))
+    }
+
+    fn encoding(&self, id: ServerId) -> Encoding {
+        self.client(id)
+            .map_or(Encoding::Utf16, |client| client.encoding)
+    }
+
+    fn uri(&self, id: ServerId, buffer: BufferId) -> Option<String> {
+        self.client(id)?
+            .document(buffer)
+            .map(|document| document.uri.clone())
+    }
+
+    fn version(&self, id: ServerId, buffer: BufferId) -> Option<(u64, i64)> {
+        self.client(id)?
+            .document(buffer)
+            .map(|document| (document.revision, document.version))
+    }
+
+    fn formatter(&self, buffer: BufferId) -> Option<(ServerId, String)> {
+        self.running.iter().find_map(|client| {
+            let document = client.document(buffer)?;
+            (client.state == State::Ready && client.capable("documentFormattingProvider"))
+                .then(|| (client.id, document.uri.clone()))
+        })
+    }
+
+    fn triggered_by(&self, buffer: BufferId, typed: char) -> bool {
+        let typed = typed.to_string();
+        self.running.iter().any(|client| {
+            client.document(buffer).is_some()
+                && client.capabilities["completionProvider"]["triggerCharacters"]
+                    .as_array()
+                    .is_some_and(|triggers| {
+                        triggers
+                            .iter()
+                            .any(|trigger| trigger.as_str() == Some(typed.as_str()))
+                    })
+        })
+    }
+
+    fn published_at(&self, id: ServerId, uri: &str) -> Vec<Value> {
+        self.client(id)
+            .and_then(|client| client.diagnostics.iter().find(|(known, _)| *known == uri))
+            .map(|(_, found)| found.clone())
+            .unwrap_or_default()
+    }
+
+    fn serves(&self, language: &str, path: &Path) -> bool {
+        self.running.iter().any(|client| {
             !matches!(client.state, State::Stopped(_))
                 && client.spec.language_id(language).is_some()
                 && path.starts_with(&client.root)
         })
     }
 
-    pub(in crate::editor) fn server_specs(&self) -> Vec<ServerSpec> {
-        self.lsp.specs.clone()
-    }
-
-    pub(in crate::editor) fn server_found(&self, spec: &ServerSpec) -> Option<PathBuf> {
+    fn found(&self, spec: &ServerSpec) -> Option<PathBuf> {
         spec.programs
             .iter()
-            .find_map(|(program, _)| (self.lsp.find)(program))
+            .find_map(|(program, _)| (self.find)(program))
     }
 
-    pub(in crate::editor) fn server_running(&self, spec: &ServerSpec) -> bool {
-        self.lsp
-            .running
+    fn runs(&self, spec: &ServerSpec) -> bool {
+        self.running
             .iter()
             .any(|client| client.spec.name == spec.name && client.state == State::Ready)
     }
 
-    pub(in crate::editor) fn server_label(&self, language: &str, path: &Path) -> Option<String> {
-        self.lsp
-            .running
+    fn label(&self, language: &str, path: &Path) -> Option<String> {
+        self.running
             .iter()
             .rev()
             .find(|client| {
@@ -759,9 +852,9 @@ impl Editor {
             .map(Client::label)
     }
 
-    pub fn shutdown_servers(&mut self) {
+    fn shutdown(&mut self) {
         let mut asked = Vec::new();
-        for client in &mut self.lsp.running {
+        for client in &mut self.running {
             if client.state == State::Ready {
                 asked.push((
                     client.id,
@@ -770,65 +863,23 @@ impl Editor {
             }
         }
         for (id, message) in asked {
-            self.send_to(id, message);
+            self.send(id, message);
         }
     }
 
-    pub(in crate::editor) fn retry_servers(&mut self) {
-        self.lsp.missing.clear();
+    fn retry(&mut self) {
+        self.missing.clear();
     }
 
-    pub(in crate::editor) fn restart_server(&mut self) {
-        self.retry_servers();
-        let buffer = self.buffers.current().id();
-        let Some(at) = self
-            .lsp
+    fn restart(&mut self, buffer: BufferId) -> Option<&'static str> {
+        self.retry();
+        let at = self
             .running
             .iter()
-            .position(|client| client.document(buffer).is_some())
-        else {
-            self.show_message("No language server works on this buffer");
-            return;
-        };
-        let client = self.lsp.running.remove(at);
-        self.effects.push(Effect::StopServer(client.id));
-        self.show_message(format!("Restarting {}", client.spec.name));
-        self.sync_servers();
-    }
-
-    pub(in crate::editor) fn show_server_log(&mut self) {
-        match self.buffer_named(LOG) {
-            Some(id) => self.show_buffer(id),
-            None => self.show_message("No language server has started"),
-        }
-    }
-
-    fn server_log(&mut self, id: ServerId, text: &str) {
-        let name = self
-            .lsp
-            .running
-            .iter()
-            .find(|client| client.id == id)
-            .map_or("server", |client| client.spec.name);
-        let line = format!("[{name}] {}\n", text.trim_end());
-        let index = self
-            .buffers
-            .position(|buffer| buffer.name() == LOG)
-            .unwrap_or_else(|| {
-                let mut buffer = Buffer::new(LOG);
-                buffer.set_read_only(true);
-                self.buffers
-                    .push_back_with(buffer, crate::editor::buffers::Mode::Text(None))
-            });
-        if let Some(buffer) = self.buffers.get_mut(index) {
-            let end = buffer.len_chars();
-            buffer.insert_at(end, &line);
-            let excess = buffer.len_lines().saturating_sub(LOG_LINES);
-            if excess > 0 {
-                let cut = buffer.line_start(excess);
-                buffer.delete_range(0..cut);
-            }
-        }
+            .position(|client| client.document(buffer).is_some())?;
+        let client = self.running.remove(at);
+        self.out.push(Out::Stop(client.id));
+        Some(client.spec.name)
     }
 }
 

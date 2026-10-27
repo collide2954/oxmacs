@@ -106,17 +106,20 @@ impl Editor {
 
     pub fn file_moved(&mut self, from: &Path, to: &Path) {
         let from = files::identity(from);
-        for index in 0..self.buffers.len() {
-            if let Some(file) = self.buffers.get_mut(index).and_then(Buffer::file_mut)
-                && let Ok(rest) = file.identity().strip_prefix(&from)
-            {
+        let moves: Vec<(usize, PathBuf)> = (0..self.buffers.len())
+            .filter_map(|index| {
+                let file = self.buffers.get(index)?.file()?;
+                let rest = file.identity().strip_prefix(&from).ok()?;
                 let moved = if rest.as_os_str().is_empty() {
                     to.to_owned()
                 } else {
                     to.join(rest)
                 };
-                file.moved_to(moved);
-            }
+                Some((index, moved))
+            })
+            .collect();
+        for (index, moved) in moves {
+            self.visit_path(index, moved);
         }
         self.name_file_buffers();
     }

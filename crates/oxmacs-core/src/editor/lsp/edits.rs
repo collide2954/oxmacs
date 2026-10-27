@@ -76,9 +76,9 @@ impl Editor {
     }
 
     fn outdated(&self, id: ServerId, edit: &Value) -> bool {
-        let Some(client) = self.lsp.running.iter().find(|client| client.id == id) else {
+        if self.lsp.client(id).is_none() {
             return false;
-        };
+        }
         let versions: Vec<(PathBuf, Option<i64>)> = edit
             .get("documentChanges")
             .and_then(Value::as_array)
@@ -94,10 +94,12 @@ impl Editor {
             self.index_visiting(path)
                 .and_then(|index| self.buffers.get(index))
                 .is_some_and(|buffer| {
-                    client.document(buffer.id()).is_some_and(|document| {
-                        document.revision != buffer.revision()
-                            || version.is_some_and(|version| version != document.version)
-                    })
+                    self.lsp
+                        .version(id, buffer.id())
+                        .is_some_and(|(revision, known)| {
+                            revision != buffer.revision()
+                                || version.is_some_and(|version| version != known)
+                        })
                 })
         })
     }
@@ -112,12 +114,7 @@ impl Editor {
             self.show_message(STALE);
             return None;
         }
-        let encoding = self
-            .lsp
-            .running
-            .iter()
-            .find(|client| client.id == id)
-            .map_or(Encoding::Utf16, |client| client.encoding);
+        let encoding = self.lsp.encoding(id);
         let origin = self.buffers.current().id();
         let mut places = 0;
         let mut changed = 0;

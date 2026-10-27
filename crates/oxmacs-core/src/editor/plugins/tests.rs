@@ -1077,3 +1077,25 @@ fn buffers_are_found_and_diagnosed_through_any_spelling_of_their_file() {
     assert_eq!(editor.diagnostics_on_line(0, 1).len(), 1);
     assert_eq!(editor.diagnostic_counts()[0].0, identity);
 }
+
+#[test]
+fn moving_a_visited_file_follows_it_into_its_new_language() {
+    let dir = tempfile::tempdir().unwrap();
+    let from = dir.path().join("notes.txt");
+    std::fs::write(&from, "fn main() {}\n").unwrap();
+    let to = dir.path().join("notes.rs");
+    let mut editor = Editor::new();
+    editor.open_file(&from);
+    std::fs::rename(&from, &to).unwrap();
+
+    editor.file_moved(&from, &to);
+
+    let id = editor.buffer().id();
+    assert_eq!(editor.buffer().file().unwrap().path, to);
+    assert_eq!(
+        editor
+            .buffer_language(id)
+            .map(crate::syntax::Language::name),
+        Some(crate::syntax::Language::RUST.name())
+    );
+}

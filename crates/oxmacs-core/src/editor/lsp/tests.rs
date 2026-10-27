@@ -992,3 +992,45 @@ fn missing_servers_are_not_searched_for_on_every_keystroke() {
     editor.take_effects();
     assert!(SEARCHES.load(Ordering::Relaxed) > after_open);
 }
+
+fn reopened(editor: &mut Editor, old: &str, new: &str) -> bool {
+    let sent = sent(&editor.take_effects());
+    let at = |method: &str, uri: &str| {
+        sent.iter().position(|message| {
+            message["method"] == method && message["params"]["textDocument"]["uri"] == uri
+        })
+    };
+    matches!(
+        (at("textDocument/didClose", old), at("textDocument/didOpen", new)),
+        (Some(closed), Some(opened)) if closed < opened
+    )
+}
+
+#[test]
+fn writing_a_buffer_to_another_file_reopens_its_document_there() {
+    let (dir, mut editor) = started();
+    editor.take_effects();
+    let old = super::protocol::uri(&dir.path().join("src/main.rs"));
+    let new = dir.path().join("src/start.rs");
+
+    editor.finish_write(new.clone());
+
+    assert!(reopened(&mut editor, &old, &super::protocol::uri(&new)));
+}
+
+#[test]
+fn moving_a_visited_file_reopens_its_document_at_the_new_place() {
+    let (dir, mut editor) = started();
+    editor.take_effects();
+    let from = dir.path().join("src/main.rs");
+    let to = dir.path().join("src/app.rs");
+    fs::rename(&from, &to).unwrap();
+
+    editor.file_moved(&from, &to);
+
+    assert!(reopened(
+        &mut editor,
+        &super::protocol::uri(&from),
+        &super::protocol::uri(&to)
+    ));
+}

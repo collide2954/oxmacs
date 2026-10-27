@@ -145,14 +145,26 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn finish_write(&mut self, path: PathBuf) {
+    pub(in crate::editor) fn visit_path(&mut self, index: usize, path: PathBuf) {
         let language = self.language_for(&path);
         let known = self.languages();
-        let buffer = self.buffers.current_mut();
-        let format = buffer.file().map(|file| file.format).unwrap_or_default();
-        buffer.set_file(FileInfo::new(path, format, None).styled());
+        let Some(buffer) = self.buffers.get_mut(index) else {
+            return;
+        };
+        match buffer.file_mut() {
+            Some(file) => file.moved_to(path),
+            None => buffer.set_file(FileInfo::new(path, files::Format::default(), None).styled()),
+        }
         if language.is_some() {
-            self.buffers.set_language(0, language, &known);
+            self.buffers.set_language(index, language, &known);
+        }
+    }
+
+    pub(in crate::editor) fn finish_write(&mut self, path: PathBuf) {
+        self.visit_path(0, path);
+        if let Some(file) = self.buffers.current_mut().file_mut() {
+            file.disk = None;
+            file.changed_on_disk = false;
         }
         self.name_file_buffers();
         self.save_buffer_at(0);
