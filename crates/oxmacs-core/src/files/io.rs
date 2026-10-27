@@ -111,14 +111,22 @@ fn plain(path: PathBuf) -> PathBuf {
 }
 
 pub fn identity(path: &Path) -> PathBuf {
-    if let Ok(found) = fs::canonicalize(path) {
-        return plain(found);
-    }
     let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
-    match (absolute.parent(), absolute.file_name()) {
-        (Some(parent), Some(name)) => fs::canonicalize(parent)
-            .map_or_else(|_| absolute.clone(), |parent| plain(parent).join(name)),
-        _ => absolute,
+    let mut missing = Vec::new();
+    let mut existing = absolute.as_path();
+    loop {
+        if let Ok(found) = fs::canonicalize(existing) {
+            let mut identity = plain(found);
+            identity.extend(missing.iter().rev());
+            return identity;
+        }
+        match (existing.parent(), existing.file_name()) {
+            (Some(parent), Some(name)) => {
+                missing.push(name);
+                existing = parent;
+            }
+            _ => return absolute,
+        }
     }
 }
 
@@ -431,6 +439,21 @@ mod tests {
         );
         assert!(!identity(&path).to_string_lossy().starts_with(r"\\?\"));
         assert!(identity(&path).is_absolute());
+    }
+
+    #[test]
+    fn files_in_folders_that_do_not_exist_yet_sit_under_their_folder_s_identity() {
+        let dir = temp();
+        let deep = dir.path().join("new").join("deeper").join("file.ox");
+
+        assert!(identity(&deep).starts_with(identity(dir.path())));
+        assert_eq!(
+            identity(&deep),
+            identity(dir.path())
+                .join("new")
+                .join("deeper")
+                .join("file.ox")
+        );
     }
 
     #[cfg(unix)]
