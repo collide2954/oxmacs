@@ -1,11 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
 
+use crate::command::{Scope, ScopeId};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::files::paths;
+use crate::special_buffer::SpecialBuffer;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -25,7 +27,7 @@ pub(in crate::editor) struct Locations {
 }
 
 impl Locations {
-    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
+    fn style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
 }
@@ -88,14 +90,14 @@ impl Editor {
             let mut buffer = Buffer::with_text(NAME, "");
             buffer.set_read_only(true);
             self.beside(|editor| {
-                editor.add_buffer_with(buffer, Mode::Locations(Locations::default()));
+                editor.add_buffer_with(buffer, Mode::special(Locations::default()));
             });
         }
         let Some(index) = self.locations_index() else {
             return;
         };
         let first = rows.first().map(|(line, _)| *line);
-        if let Some((buffer, Mode::Locations(list))) = self.buffers.entry_mut(index) {
+        if let Some((buffer, list)) = self.buffers.entry_special_mut::<Locations>(index) {
             page.fill(buffer);
             list.rows = rows;
             list.styles = page.styles;
@@ -107,14 +109,11 @@ impl Editor {
     }
 
     fn locations_index(&self) -> Option<usize> {
-        self.buffers
-            .find_mode(|mode| matches!(mode, Mode::Locations(_)))
+        self.buffers.find_special::<Locations>(|_| true)
     }
 
     fn location_here(&self) -> Option<Place> {
-        let Some(Mode::Locations(list)) = self.buffers.mode(0) else {
-            return None;
-        };
+        let list = self.buffers.special::<Locations>(0)?;
         let line = self.point_line();
         list.rows
             .iter()
@@ -135,7 +134,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn step_location(&mut self, forward: bool) {
-        let Some(Mode::Locations(list)) = self.buffers.mode(0) else {
+        let Some(list) = self.buffers.special::<Locations>(0) else {
             return;
         };
         let line = self.point_line();
@@ -163,6 +162,16 @@ impl Editor {
                 "No earlier locations"
             }),
         }
+    }
+}
+
+impl SpecialBuffer for Locations {
+    fn scope(&self) -> ScopeId {
+        Scope::Locations.into()
+    }
+
+    fn line_style(&self, line: usize, _: &str) -> LineStyle {
+        self.style(line)
     }
 }
 

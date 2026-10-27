@@ -549,26 +549,12 @@ impl Editor {
 
     fn buffer_scope(&self) -> ScopeId {
         match self.buffers.mode(0) {
-            Some(Mode::Plugin(view)) => view.scope(),
-            Some(Mode::Console(console)) => console.scope.unwrap_or_else(|| Scope::Console.into()),
+            Some(Mode::Special(view)) => view.scope(),
             Some(Mode::Text(Some(syntax))) => self
                 .registered(syntax.language())
                 .and_then(|known| known.scope)
                 .unwrap_or_else(|| Scope::Global.into()),
-            _ => self.core_scope().into(),
-        }
-    }
-
-    fn core_scope(&self) -> Scope {
-        match self.buffers.mode(0) {
-            Some(Mode::Splash(_)) => Scope::Splash,
-            Some(Mode::Compilation(_)) => Scope::Compilation,
-            Some(Mode::Diagnostics(_)) => Scope::Diagnostics,
-            Some(Mode::Help(_)) => Scope::Help,
-            Some(Mode::Locations(_)) => Scope::Locations,
-            Some(Mode::Tools(_)) => Scope::Tools,
-            Some(Mode::Console(_)) => Scope::Console,
-            Some(Mode::Text(_) | Mode::Plugin(_)) | None => Scope::Global,
+            Some(Mode::Text(None)) | None => Scope::Global.into(),
         }
     }
 
@@ -578,18 +564,12 @@ impl Editor {
 
     fn line_style_at(&self, index: usize, line: usize) -> LineStyle {
         match self.buffers.mode(index) {
-            Some(Mode::Splash(splash)) => splash.line_style(line),
-            Some(Mode::Compilation(compilation)) => self
+            Some(Mode::Special(view)) => self
                 .buffers
                 .get(index)
                 .map_or_else(LineStyle::default, |buffer| {
-                    compilation.errors.line_style(line, &buffer.line_text(line))
+                    view.line_style(line, &buffer.line_text(line))
                 }),
-            Some(Mode::Diagnostics(list)) => list.line_style(line),
-            Some(Mode::Help(help)) => help.line_style(line),
-            Some(Mode::Locations(list)) => list.line_style(line),
-            Some(Mode::Tools(list)) => list.line_style(line),
-            Some(Mode::Plugin(view)) => view.line_style(line),
             Some(Mode::Text(Some(syntax))) => LineStyle {
                 background: None,
                 spans: match self
@@ -603,7 +583,7 @@ impl Editor {
                     None => self.syntax_highlights_at(index, line),
                 },
             },
-            Some(Mode::Console(_) | Mode::Text(None)) | None => LineStyle::default(),
+            Some(Mode::Text(None)) | None => LineStyle::default(),
         }
     }
 

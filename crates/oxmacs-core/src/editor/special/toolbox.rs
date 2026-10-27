@@ -2,12 +2,14 @@ use std::env;
 use std::ops::Range;
 use std::path::PathBuf;
 
+use crate::command::{Scope, ScopeId};
 use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::editor::{Editor, Effect, FetchId, ServerSpec};
 use crate::external::managed::{self, Checksum, Expected, Install, Managed, Origin, Release};
 use crate::files::paths;
+use crate::special_buffer::SpecialBuffer;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -77,7 +79,7 @@ pub(in crate::editor) struct ToolList {
 }
 
 impl ToolList {
-    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
+    fn style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
 
@@ -116,8 +118,7 @@ fn megabytes(bytes: u64) -> String {
 
 impl Editor {
     fn tools_index(&self) -> Option<usize> {
-        self.buffers
-            .find_mode(|mode| matches!(mode, Mode::Tools(_)))
+        self.buffers.find_special::<ToolList>(|_| true)
     }
 
     fn tool_setting(&self, tool: Managed) -> Option<&str> {
@@ -148,13 +149,13 @@ impl Editor {
             self.beside(|editor| {
                 let mut buffer = Buffer::with_text(NAME, "");
                 buffer.set_read_only(true);
-                editor.add_buffer_with(buffer, Mode::Tools(ToolList::default()));
+                editor.add_buffer_with(buffer, Mode::special(ToolList::default()));
             });
         }
         self.check_tool_releases();
         self.show_beside(Self::tools_index);
         if created
-            && let Some(Mode::Tools(list)) = self.buffers.mode(0)
+            && let Some(list) = self.buffers.special::<ToolList>(0)
             && let Some((lines, _)) = list.rows.first()
         {
             let line = lines.start;
@@ -208,10 +209,10 @@ impl Editor {
 
     fn tool_at_point(&mut self) -> Option<Managed> {
         let line = self.point_line();
-        let tool = match self.buffers.mode(0) {
-            Some(Mode::Tools(list)) => list.row(line),
-            _ => None,
-        };
+        let tool = self
+            .buffers
+            .special::<ToolList>(0)
+            .and_then(|list| list.row(line));
         if tool.is_none() {
             self.show_message("No tool on this line");
         }
@@ -220,14 +221,12 @@ impl Editor {
 
     fn server_at_point(&self) -> Option<ServerSpec> {
         let line = self.point_line();
-        match self.buffers.mode(0) {
-            Some(Mode::Tools(list)) => list
-                .servers
-                .iter()
-                .find(|(row, _)| *row == line)
-                .map(|(_, spec)| *spec),
-            _ => None,
-        }
+        self.buffers
+            .special::<ToolList>(0)?
+            .servers
+            .iter()
+            .find(|(row, _)| *row == line)
+            .map(|(_, spec)| *spec)
     }
 
     fn install_server(&mut self, spec: ServerSpec) {
@@ -471,7 +470,7 @@ impl Editor {
         let Some(tool) = self.tool_at_point() else {
             return;
         };
-        if let Some(Mode::Tools(list)) = self.buffers.mode_mut(0) {
+        if let Some(list) = self.buffers.special_mut::<ToolList>(0) {
             if list.open.contains(&tool) {
                 list.open.retain(|open| *open != tool);
             } else {
@@ -565,13 +564,14 @@ impl Editor {
         let Some(index) = self.tools_index() else {
             return;
         };
-        let open = match self.buffers.mode(index) {
-            Some(Mode::Tools(list)) => list.open.clone(),
-            _ => Vec::new(),
-        };
+        let open = self
+            .buffers
+            .special::<ToolList>(index)
+            .map(|list| list.open.clone())
+            .unwrap_or_default();
         let (page, rows, servers) = self.tools_page(&open);
 
-        if let Some((buffer, Mode::Tools(list))) = self.buffers.entry_mut(index) {
+        if let Some((buffer, list)) = self.buffers.entry_special_mut::<ToolList>(index) {
             let point = buffer.point();
             let line = buffer.line_of(point);
             let column = point - buffer.line_start(line);
@@ -592,6 +592,16 @@ impl Editor {
             list.servers = servers;
             list.styles = page.styles;
         }
+    }
+}
+
+impl SpecialBuffer for ToolList {
+    fn scope(&self) -> ScopeId {
+        Scope::Tools.into()
+    }
+
+    fn line_style(&self, line: usize, _: &str) -> LineStyle {
+        self.style(line)
     }
 }
 

@@ -11,7 +11,7 @@ impl Editor {
     pub fn visited_files(&self) -> Vec<PathBuf> {
         let mut files: Vec<PathBuf> = (0..self.buffers.len())
             .filter_map(|index| match self.buffers.mode(index) {
-                Some(Mode::Plugin(view)) => view.file().map(Path::to_path_buf),
+                Some(Mode::Special(view)) => view.file().map(Path::to_path_buf),
                 _ => self
                     .buffers
                     .get(index)?
@@ -102,15 +102,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn revert_buffer(&mut self) {
-        if self.in_diagnostics_list() {
-            self.recheck();
-            return;
-        }
-        if matches!(self.buffers.mode(0), Some(Mode::Tools(_))) {
-            self.check_tool_releases();
-            return;
-        }
-        if matches!(self.buffers.mode(0), Some(Mode::Plugin(_))) {
+        if self.buffers.is_special(0) {
             if let Some(command) = self.bound_command("g")
                 && command.core() != Some(Command::RevertBuffer)
             {

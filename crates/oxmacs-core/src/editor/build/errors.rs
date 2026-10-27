@@ -3,8 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::display::LineStyle;
 use crate::editor::Editor;
-use crate::editor::buffers::Mode;
-use crate::editor::build::compile::FINISHED;
+use crate::editor::build::compile::{Compilation, FINISHED};
 use crate::editor::windows::tiling::Axis;
 use crate::text::BufferId;
 use crate::theme::Highlight;
@@ -230,7 +229,7 @@ impl Editor {
     }
 
     fn in_compilation(&self) -> bool {
-        matches!(self.buffers.mode(0), Some(Mode::Compilation(_)))
+        self.buffers.special::<Compilation>(0).is_some()
     }
 
     pub(in crate::editor) fn next_error(&mut self, forward: bool) {

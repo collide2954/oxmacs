@@ -21,7 +21,7 @@ impl SpecialBuffer for LanguageList {
         Scope::Help.into()
     }
 
-    fn line_style(&self, line: usize) -> LineStyle {
+    fn line_style(&self, line: usize, _: &str) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
 

@@ -5,6 +5,7 @@ use std::time::Instant;
 use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
 use crate::editor::buffers::Mode;
 use crate::editor::motion::movement::display_column;
+use crate::editor::special::splash::Splash;
 use crate::editor::tab_width_in;
 use crate::editor::windows::status::{BufferState, Status};
 use crate::editor::{Editor, Gutter, PopupView};
@@ -144,11 +145,11 @@ impl<'a> Pane<'a> {
     }
 
     pub fn is_splash(&self) -> bool {
-        matches!(self.editor.buffers.mode(self.index), Some(Mode::Splash(_)))
+        self.editor.buffers.special::<Splash>(self.index).is_some()
     }
 
     pub fn special_buffer<T: SpecialBuffer>(&self) -> Option<&'a T> {
-        let Some(Mode::Plugin(view)) = self.editor.buffers.mode(self.index) else {
+        let Some(Mode::Special(view)) = self.editor.buffers.mode(self.index) else {
             return None;
         };
         let any: &dyn Any = view.as_ref();
@@ -156,7 +157,7 @@ impl<'a> Pane<'a> {
     }
 
     pub fn line_cursor(&self) -> bool {
-        matches!(self.editor.buffers.mode(self.index), Some(Mode::Plugin(view)) if view.line_cursor())
+        matches!(self.editor.buffers.mode(self.index), Some(Mode::Special(view)) if view.line_cursor())
     }
 
     pub fn header_lines(&self) -> Vec<(String, LineStyle)> {
@@ -195,7 +196,7 @@ impl<'a> Pane<'a> {
 
     pub fn line_pills(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
         match self.editor.buffers.mode(self.index) {
-            Some(Mode::Plugin(view)) => view.pills(line),
+            Some(Mode::Special(view)) => view.pills(line),
             _ => Vec::new(),
         }
     }
@@ -224,7 +225,7 @@ impl<'a> Pane<'a> {
         let buffer = self.buffer();
         let unsaved = matches!(
             self.editor.buffers.mode(self.index),
-            Some(Mode::Plugin(view)) if view.unsaved()
+            Some(Mode::Special(view)) if view.unsaved()
         );
         let state = if unsaved {
             BufferState::Unsaved
@@ -242,7 +243,7 @@ impl<'a> Pane<'a> {
             line: buffer.line_of(self.point) + 1,
             column: display_column(buffer, self.point, self.tab_width()),
             position: match self.editor.buffers.mode(self.index) {
-                Some(Mode::Plugin(view)) => view.position(),
+                Some(Mode::Special(view)) => view.position(),
                 _ => None,
             },
             crlf: buffer

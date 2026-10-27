@@ -28,7 +28,7 @@ impl Editor {
     }
 
     fn hears(&self, wants: fn(&dyn SpecialBuffer) -> bool) -> bool {
-        matches!(self.buffers.mode(0), Some(Mode::Plugin(view)) if wants(view.as_ref()))
+        matches!(self.buffers.mode(0), Some(Mode::Special(view)) if wants(view.as_ref()))
     }
 
     pub(super) fn hear_click(&mut self, position: usize, clicks: Clicks, extend: bool) -> bool {

@@ -56,7 +56,7 @@ impl SpecialBuffer for Greeter {
         self.scope
     }
 
-    fn line_style(&self, line: usize) -> LineStyle {
+    fn line_style(&self, line: usize, _: &str) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
 }

@@ -11,7 +11,7 @@ use crate::theme::Highlight;
 pub trait SpecialBuffer: Any + Send + fmt::Debug {
     fn scope(&self) -> ScopeId;
 
-    fn line_style(&self, _line: usize) -> LineStyle {
+    fn line_style(&self, _line: usize, _text: &str) -> LineStyle {
         LineStyle::default()
     }
 
@@ -58,4 +58,14 @@ pub trait SpecialBuffer: Any + Send + fmt::Debug {
     fn unsaved(&self) -> bool {
         false
     }
+}
+
+pub(crate) fn downcast<T: SpecialBuffer>(view: &dyn SpecialBuffer) -> Option<&T> {
+    let any: &dyn Any = view;
+    any.downcast_ref()
+}
+
+pub(crate) fn downcast_mut<T: SpecialBuffer>(view: &mut dyn SpecialBuffer) -> Option<&mut T> {
+    let any: &mut dyn Any = view;
+    any.downcast_mut()
 }

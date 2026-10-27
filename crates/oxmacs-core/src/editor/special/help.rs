@@ -1,9 +1,10 @@
-use crate::command::CommandId;
+use crate::command::{CommandId, Scope, ScopeId};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::editor::prompts::minibuffer::Purpose;
+use crate::special_buffer::SpecialBuffer;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -30,7 +31,7 @@ impl Help {
         }
     }
 
-    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
+    fn style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
 }
@@ -107,8 +108,7 @@ impl Editor {
     }
 
     fn help_index(&self) -> Option<usize> {
-        self.buffers
-            .find_mode(|mode| matches!(mode, Mode::Help(help) if !help.doc))
+        self.buffers.find_special::<Help>(|help| !help.doc)
     }
 
     pub(in crate::editor) fn describe(&mut self, command: CommandId) {
@@ -116,11 +116,11 @@ impl Editor {
             self.beside(|editor| {
                 let mut buffer = Buffer::with_text(NAME, "");
                 buffer.set_read_only(true);
-                editor.add_buffer_with(buffer, Mode::Help(Help::default()));
+                editor.add_buffer_with(buffer, Mode::special(Help::default()));
             });
         }
         if let Some(index) = self.help_index()
-            && let Some(Mode::Help(help)) = self.buffers.mode_mut(index)
+            && let Some(help) = self.buffers.special_mut::<Help>(index)
         {
             help.command = Some(command);
             help.width = 0;
@@ -132,8 +132,7 @@ impl Editor {
     }
 
     fn doc_index(&self) -> Option<usize> {
-        self.buffers
-            .find_mode(|mode| matches!(mode, Mode::Help(help) if help.doc))
+        self.buffers.find_special::<Help>(|help| help.doc)
     }
 
     pub(in crate::editor) fn show_doc(&mut self, text: &str) {
@@ -141,7 +140,7 @@ impl Editor {
             self.beside(|editor| {
                 let mut buffer = Buffer::with_text(DOC, "");
                 buffer.set_read_only(true);
-                editor.add_buffer_with(buffer, Mode::Help(Help::doc()));
+                editor.add_buffer_with(buffer, Mode::special(Help::doc()));
             });
         }
         let Some(index) = self.doc_index() else {
@@ -163,7 +162,7 @@ impl Editor {
         let Some(index) = self.help_index() else {
             return;
         };
-        let Some(Mode::Help(help)) = self.buffers.mode(index) else {
+        let Some(help) = self.buffers.special::<Help>(index) else {
             return;
         };
         let Some(command) = help.command else {
@@ -201,12 +200,22 @@ impl Editor {
         if let Some(buffer) = self.buffers.get_mut(index) {
             page.fill(buffer);
         }
-        if let Some(Mode::Help(help)) = self.buffers.mode_mut(index) {
+        if let Some(help) = self.buffers.special_mut::<Help>(index) {
             help.width = width;
             help.styles = page.styles;
         }
     }
 }
+impl SpecialBuffer for Help {
+    fn scope(&self) -> ScopeId {
+        Scope::Help.into()
+    }
+
+    fn line_style(&self, line: usize, _: &str) -> LineStyle {
+        self.style(line)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;

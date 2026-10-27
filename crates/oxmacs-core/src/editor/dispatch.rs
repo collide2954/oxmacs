@@ -160,6 +160,7 @@ impl Editor {
             Command::ListDiagnostics => self.list_diagnostics(),
             Command::GotoDiagnostic => self.goto_diagnostic(),
             Command::ShowDiagnostic => self.show_diagnostic(),
+            Command::RecheckDiagnostics => self.recheck(),
             Command::DisplayLineNumbersMode => self.display_line_numbers_mode(),
             Command::ForwardButton => self.forward_button(true),
             Command::BackwardButton => self.forward_button(false),

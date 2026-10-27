@@ -2,11 +2,12 @@ use std::collections::VecDeque;
 
 use regex::Regex;
 
-use crate::command::ScopeId;
+use crate::command::{Scope, ScopeId};
 use crate::editor::buffers::Mode;
 use crate::editor::prompts::input_line::InputLine;
 use crate::editor::{Editor, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::console::{Piece, Stream};
+use crate::special_buffer::SpecialBuffer;
 use crate::text::{Buffer, BufferId};
 
 pub type ConsoleHook = fn(&mut Editor, BufferId);
@@ -77,7 +78,7 @@ impl Editor {
                     on_idle: spec.on_idle,
                     scope: spec.scope,
                 };
-                self.beside(|editor| editor.add_buffer_with(buffer, Mode::Console(console)));
+                self.beside(|editor| editor.add_buffer_with(buffer, Mode::special(console)));
             }
             None => {
                 if let Some(console) = self.console_at_mut(id) {
@@ -94,7 +95,9 @@ impl Editor {
     pub fn consoles(&self, label: &str) -> Vec<BufferId> {
         (0..self.buffers.len())
             .filter(|index| {
-                matches!(self.buffers.mode(*index), Some(Mode::Console(console)) if console.label == label)
+                self.buffers
+                    .special::<Console>(*index)
+                    .is_some_and(|console| console.label == label)
             })
             .filter_map(|index| self.buffers.get(index).map(Buffer::id))
             .collect()
@@ -102,18 +105,12 @@ impl Editor {
 
     pub(in crate::editor) fn console_at(&self, id: BufferId) -> Option<&Console> {
         let index = self.buffers.position(|buffer| buffer.id() == id)?;
-        match self.buffers.mode(index)? {
-            Mode::Console(console) => Some(console),
-            _ => None,
-        }
+        self.buffers.special(index)
     }
 
     pub(in crate::editor) fn console_at_mut(&mut self, id: BufferId) -> Option<&mut Console> {
         let index = self.buffers.position(|buffer| buffer.id() == id)?;
-        match self.buffers.mode_mut(index)? {
-            Mode::Console(console) => Some(console),
-            _ => None,
-        }
+        self.buffers.special_mut(index)
     }
 
     pub fn console_running(&self, id: BufferId) -> bool {
@@ -144,12 +141,10 @@ impl Editor {
     }
 
     fn console_of_job(&self, job: JobId) -> Option<BufferId> {
-        (0..self.buffers.len()).find_map(|index| match self.buffers.mode(index) {
-            Some(Mode::Console(console)) if console.job == Some(job) => {
-                self.buffers.get(index).map(Buffer::id)
-            }
-            _ => None,
-        })
+        let index = self
+            .buffers
+            .find_special::<Console>(|console| console.job == Some(job))?;
+        self.buffers.get(index).map(Buffer::id)
     }
 
     fn console_event(&mut self, job: JobId, event: JobEvent<'_>) {
@@ -282,14 +277,12 @@ impl Editor {
     }
 
     pub fn console_input_start(&self) -> Option<usize> {
-        let Some(Mode::Console(console)) = self.buffers.mode(0) else {
-            return None;
-        };
+        let console = self.buffers.special::<Console>(0)?;
         console.input.start(self.buffers.current())
     }
 
     pub(in crate::editor) fn console_send_input(&mut self) {
-        let Some(Mode::Console(console)) = self.buffers.mode(0) else {
+        let Some(console) = self.buffers.special::<Console>(0) else {
             return;
         };
         let buffer = self.buffers.current();
@@ -301,7 +294,7 @@ impl Editor {
         if buffer.point() < start {
             let line = buffer.line_text(buffer.line_of(buffer.point()));
             let old = without_prompt(&line).to_owned();
-            if let Some((buffer, Mode::Console(console))) = self.buffers.entry_mut(0) {
+            if let Some((buffer, console)) = self.buffers.entry_special_mut::<Console>(0) {
                 console.input.replace(buffer, &old);
             }
             return;
@@ -309,7 +302,7 @@ impl Editor {
         let end = buffer.len_chars();
         self.buffers.current_mut().insert_at(end, "\n");
         self.buffers.current_mut().set_point(end + 1);
-        if let Some((buffer, Mode::Console(console))) = self.buffers.entry_mut(0) {
+        if let Some((buffer, console)) = self.buffers.entry_special_mut::<Console>(0) {
             console.input.remember(&input);
             buffer.set_marker(console.input.mark(), end + 1);
         }
@@ -319,9 +312,8 @@ impl Editor {
     fn input_start_here(&mut self) -> Option<usize> {
         let (buffer, mode) = self.buffers.entry_mut(0)?;
         let start = match mode {
-            Mode::Console(console) => console.input.start(buffer),
-            Mode::Plugin(view) => view.input_line().and_then(|input| input.start(buffer)),
-            _ => None,
+            Mode::Special(view) => view.input_line().and_then(|input| input.start(buffer)),
+            Mode::Text(_) => None,
         }?;
         let point = buffer.point();
         (point > start && buffer.line_of(point) == buffer.line_of(start)).then_some(start)
@@ -336,8 +328,7 @@ impl Editor {
 
     pub(in crate::editor) fn recall_input(&mut self, older: bool) {
         let input = match self.buffers.entry_mut(0) {
-            Some((buffer, Mode::Console(console))) => Some((buffer, &mut console.input)),
-            Some((buffer, Mode::Plugin(view))) => view.input_line().map(|input| (buffer, input)),
+            Some((buffer, Mode::Special(view))) => view.input_line().map(|input| (buffer, input)),
             _ => None,
         };
         let Some((buffer, input)) = input else {
@@ -347,6 +338,16 @@ impl Editor {
             Some(text) => input.replace(buffer, &text),
             None => self.show_message("No history"),
         }
+    }
+}
+
+impl SpecialBuffer for Console {
+    fn scope(&self) -> ScopeId {
+        self.scope.unwrap_or_else(|| Scope::Console.into())
+    }
+
+    fn input_line(&mut self) -> Option<&mut InputLine> {
+        Some(&mut self.input)
     }
 }
 

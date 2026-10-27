@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::path::{Path, PathBuf};
 
 use crate::command::{Command, CommandId};
@@ -11,11 +10,6 @@ use crate::special_buffer::SpecialBuffer;
 use crate::text::{Buffer, BufferId};
 
 pub(super) type Segment = fn(&Editor) -> Option<String>;
-
-fn downcast<T: SpecialBuffer>(view: &dyn SpecialBuffer) -> Option<&T> {
-    let any: &dyn Any = view;
-    any.downcast_ref()
-}
 
 impl Editor {
     pub fn repeated(&self) -> bool {
@@ -216,7 +210,7 @@ impl Editor {
         let mut buffer = Buffer::with_text(name, "");
         buffer.set_read_only(true);
         let id = buffer.id();
-        self.add_buffer_with(buffer, Mode::Plugin(Box::new(view)));
+        self.add_buffer_with(buffer, Mode::Special(Box::new(view)));
         id
     }
 
@@ -229,7 +223,7 @@ impl Editor {
         let view = make(&mut buffer);
         let id = buffer.id();
         self.buffers
-            .push_back_with(buffer, Mode::Plugin(Box::new(view)));
+            .push_back_with(buffer, Mode::Special(Box::new(view)));
         self.name_file_buffers();
         id
     }
@@ -238,7 +232,7 @@ impl Editor {
         if !command.modifies_text() {
             return false;
         }
-        let Some((buffer, Mode::Plugin(view))) = self.buffers.entry_mut(0) else {
+        let Some((buffer, Mode::Special(view))) = self.buffers.entry_mut(0) else {
             return false;
         };
         let Some(start) = view.input_line().and_then(|input| input.start(buffer)) else {
@@ -256,9 +250,7 @@ impl Editor {
 
     pub fn special_buffers<T: SpecialBuffer>(&self) -> Vec<BufferId> {
         (0..self.buffers.len())
-            .filter(|index| {
-                matches!(self.buffers.mode(*index), Some(Mode::Plugin(view)) if downcast::<T>(view.as_ref()).is_some())
-            })
+            .filter(|index| self.buffers.special::<T>(*index).is_some())
             .filter_map(|index| self.buffers.get(index).map(Buffer::id))
             .collect()
     }
@@ -282,19 +274,13 @@ impl Editor {
         &self,
         matches: impl Fn(&T) -> bool,
     ) -> Option<BufferId> {
-        let index = self.buffers.find_mode(|mode| match mode {
-            Mode::Plugin(view) => downcast::<T>(view.as_ref()).is_some_and(&matches),
-            _ => false,
-        })?;
+        let index = self.buffers.find_special(matches)?;
         self.buffers.get(index).map(Buffer::id)
     }
 
     pub fn special_buffer<T: SpecialBuffer>(&self, id: BufferId) -> Option<(&Buffer, &T)> {
         let index = self.buffers.position(|buffer| buffer.id() == id)?;
-        let Some(Mode::Plugin(view)) = self.buffers.mode(index) else {
-            return None;
-        };
-        Some((self.buffers.get(index)?, downcast(view.as_ref())?))
+        Some((self.buffers.get(index)?, self.buffers.special(index)?))
     }
 
     pub fn special_buffer_mut<T: SpecialBuffer>(
@@ -302,11 +288,7 @@ impl Editor {
         id: BufferId,
     ) -> Option<(&mut Buffer, &mut T)> {
         let index = self.buffers.position(|buffer| buffer.id() == id)?;
-        let (buffer, Mode::Plugin(view)) = self.buffers.entry_mut(index)? else {
-            return None;
-        };
-        let any: &mut dyn Any = view.as_mut();
-        Some((buffer, any.downcast_mut()?))
+        self.buffers.entry_special_mut(index)
     }
 
     pub fn show_buffer(&mut self, id: BufferId) {

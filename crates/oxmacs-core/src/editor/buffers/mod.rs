@@ -7,17 +7,11 @@ pub(super) mod read_only;
 use std::path::Path;
 
 use crate::display::{ScreenLine, Viewport};
-use crate::editor::build::compile::Compilation;
-use crate::editor::build::diagnostics_list::DiagnosticsList;
-use crate::editor::console::Console;
 use crate::editor::prompts::minibuffer::Purpose;
-use crate::editor::special::help::Help;
-use crate::editor::special::locations::Locations;
 use crate::editor::special::splash::Splash;
-use crate::editor::special::toolbox::ToolList;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
-use crate::special_buffer::SpecialBuffer;
+use crate::special_buffer::{self, SpecialBuffer};
 use crate::syntax::{Language, Syntax};
 use crate::text::Buffer;
 
@@ -26,14 +20,27 @@ pub(super) const SCRATCH: &str = "*scratch*";
 #[derive(Debug)]
 pub(super) enum Mode {
     Text(Option<Syntax>),
-    Splash(Splash),
-    Compilation(Compilation),
-    Diagnostics(DiagnosticsList),
-    Console(Console),
-    Help(Help),
-    Locations(Locations),
-    Tools(ToolList),
-    Plugin(Box<dyn SpecialBuffer>),
+    Special(Box<dyn SpecialBuffer>),
+}
+
+impl Mode {
+    pub(super) fn special(view: impl SpecialBuffer) -> Self {
+        Self::Special(Box::new(view))
+    }
+
+    pub(super) fn view<T: SpecialBuffer>(&self) -> Option<&T> {
+        match self {
+            Self::Special(view) => special_buffer::downcast(view.as_ref()),
+            Self::Text(_) => None,
+        }
+    }
+
+    pub(super) fn view_mut<T: SpecialBuffer>(&mut self) -> Option<&mut T> {
+        match self {
+            Self::Special(view) => special_buffer::downcast_mut(view.as_mut()),
+            Self::Text(_) => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -85,6 +92,29 @@ impl BufferList {
             .map(|entry| (&mut entry.buffer, &mut entry.mode))
     }
 
+    pub(super) fn special<T: SpecialBuffer>(&self, index: usize) -> Option<&T> {
+        self.mode(index)?.view()
+    }
+
+    pub(super) fn special_mut<T: SpecialBuffer>(&mut self, index: usize) -> Option<&mut T> {
+        self.mode_mut(index)?.view_mut()
+    }
+
+    pub(super) fn entry_special_mut<T: SpecialBuffer>(
+        &mut self,
+        index: usize,
+    ) -> Option<(&mut Buffer, &mut T)> {
+        let (buffer, mode) = self.entry_mut(index)?;
+        Some((buffer, mode.view_mut()?))
+    }
+
+    pub(super) fn find_special<T: SpecialBuffer>(
+        &self,
+        matches: impl Fn(&T) -> bool,
+    ) -> Option<usize> {
+        self.find_mode(|mode| mode.view::<T>().is_some_and(&matches))
+    }
+
     pub(super) fn mode_mut(&mut self, index: usize) -> Option<&mut Mode> {
         self.entries.get_mut(index).map(|entry| &mut entry.mode)
     }
@@ -105,43 +135,39 @@ impl BufferList {
     }
 
     pub(super) fn splash(&self, index: usize) -> Option<&Splash> {
-        match self.mode(index)? {
-            Mode::Splash(splash) => Some(splash),
-            _ => None,
-        }
+        self.special(index)
     }
 
     pub(super) fn location(&self, index: usize) -> Option<(&Path, bool)> {
         let entry = self.entries.get(index)?;
         match &entry.mode {
-            Mode::Plugin(view) => view.directory().map(|directory| (directory, true)),
+            Mode::Special(view) => view.directory().map(|directory| (directory, true)),
             Mode::Text(_) => entry.buffer.file().map(|file| (file.path.as_path(), false)),
-            _ => None,
         }
     }
 
     pub(super) fn fixed_name(&self, index: usize) -> bool {
-        matches!(self.mode(index), Some(Mode::Plugin(view)) if view.fixed_name())
+        matches!(self.mode(index), Some(Mode::Special(view)) if view.fixed_name())
     }
 
     pub(super) fn watched(&self, index: usize) -> Option<&Path> {
         match self.mode(index)? {
-            Mode::Plugin(view) => view.watched(),
-            _ => None,
+            Mode::Special(view) => view.watched(),
+            Mode::Text(_) => None,
         }
     }
 
     pub(super) fn language(&self, index: usize) -> Option<Language> {
         match self.mode(index)? {
             Mode::Text(syntax) => syntax.as_ref().map(Syntax::language),
-            _ => None,
+            Mode::Special(_) => None,
         }
     }
 
     pub(super) fn syntax(&self, index: usize) -> Option<&Syntax> {
         match self.mode(index)? {
             Mode::Text(syntax) => syntax.as_ref().filter(|syntax| syntax.parses()),
-            _ => None,
+            Mode::Special(_) => None,
         }
     }
 

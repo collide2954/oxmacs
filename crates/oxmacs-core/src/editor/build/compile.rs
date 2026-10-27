@@ -1,11 +1,14 @@
 use std::path::PathBuf;
 
+use crate::command::{Scope, ScopeId};
+use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::build::errors::{ErrorSource, Errors};
 use crate::editor::prompts::minibuffer::Purpose;
 use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::tools;
 use crate::files::paths;
+use crate::special_buffer::SpecialBuffer;
 use crate::text::Buffer;
 
 pub(in crate::editor) const NAME: &str = "*compilation*";
@@ -23,23 +26,16 @@ pub(in crate::editor) struct Compilation {
 
 impl Editor {
     pub(in crate::editor) fn compilation_index(&self) -> Option<usize> {
-        self.buffers
-            .find_mode(|mode| matches!(mode, Mode::Compilation(_)))
+        self.buffers.find_special::<Compilation>(|_| true)
     }
 
     pub(in crate::editor) fn compilation(&self) -> Option<&Compilation> {
-        match self.buffers.mode(self.compilation_index()?)? {
-            Mode::Compilation(compilation) => Some(compilation),
-            _ => None,
-        }
+        self.buffers.special(self.compilation_index()?)
     }
 
     pub(in crate::editor) fn compilation_mut(&mut self) -> Option<&mut Compilation> {
         let index = self.compilation_index()?;
-        match self.buffers.mode_mut(index)? {
-            Mode::Compilation(compilation) => Some(compilation),
-            _ => None,
-        }
+        self.buffers.special_mut(index)
     }
 
     pub(in crate::editor) fn compile(&mut self) {
@@ -111,7 +107,7 @@ impl Editor {
                     buffer.set_text(&header);
                     buffer.set_point(buffer.len_chars());
                 }
-                self.buffers.set_mode(index, Mode::Compilation(compilation));
+                self.buffers.set_mode(index, Mode::special(compilation));
                 let shown = self.buffers.get(index).map(Buffer::id);
                 if shown.and_then(|id| self.window_showing(id)).is_none() {
                     self.beside(|editor| {
@@ -125,7 +121,7 @@ impl Editor {
                 let mut buffer = Buffer::with_text(NAME, &header);
                 buffer.set_read_only(true);
                 buffer.set_point(buffer.len_chars());
-                editor.add_buffer_with(buffer, Mode::Compilation(compilation));
+                editor.add_buffer_with(buffer, Mode::special(compilation));
             }),
         }
         let buffer = self
@@ -237,6 +233,16 @@ impl Editor {
         buffer.insert_at(end, text);
         let id = buffer.id();
         self.follow_end(id, end);
+    }
+}
+
+impl SpecialBuffer for Compilation {
+    fn scope(&self) -> ScopeId {
+        Scope::Compilation.into()
+    }
+
+    fn line_style(&self, line: usize, text: &str) -> LineStyle {
+        self.errors.line_style(line, text)
     }
 }
 

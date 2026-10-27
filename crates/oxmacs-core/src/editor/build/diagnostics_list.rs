@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use crate::command::{Scope, ScopeId};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
@@ -7,6 +8,7 @@ use crate::editor::build::errors;
 use crate::editor::page::Page;
 use crate::external::diagnostics::{Diagnostic, Severity};
 use crate::files::paths;
+use crate::special_buffer::SpecialBuffer;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -20,7 +22,7 @@ pub(in crate::editor) struct DiagnosticsList {
 }
 
 impl DiagnosticsList {
-    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
+    fn style(&self, line: usize) -> LineStyle {
         self.styles.get(line).cloned().unwrap_or_default()
     }
 
@@ -107,19 +109,11 @@ fn page(
 
 impl Editor {
     fn diagnostics_index(&self) -> Option<usize> {
-        self.buffers
-            .find_mode(|mode| matches!(mode, Mode::Diagnostics(_)))
+        self.buffers.find_special::<DiagnosticsList>(|_| true)
     }
 
     fn diagnostics_list(&self) -> Option<&DiagnosticsList> {
-        match self.buffers.mode(0)? {
-            Mode::Diagnostics(list) => Some(list),
-            _ => None,
-        }
-    }
-
-    pub(in crate::editor) fn in_diagnostics_list(&self) -> bool {
-        self.diagnostics_list().is_some()
+        self.buffers.special(0)
     }
 
     pub(in crate::editor) fn list_diagnostics(&mut self) {
@@ -127,7 +121,7 @@ impl Editor {
             self.beside(|editor| {
                 let mut buffer = Buffer::with_text(NAME, "");
                 buffer.set_read_only(true);
-                editor.add_buffer_with(buffer, Mode::Diagnostics(DiagnosticsList::default()));
+                editor.add_buffer_with(buffer, Mode::special(DiagnosticsList::default()));
             });
         }
         self.render_diagnostics_list();
@@ -146,7 +140,7 @@ impl Editor {
         if let Some(buffer) = self.buffers.get_mut(index) {
             page.fill(buffer);
         }
-        if let Some(Mode::Diagnostics(list)) = self.buffers.mode_mut(index) {
+        if let Some(list) = self.buffers.special_mut::<DiagnosticsList>(index) {
             list.rows = rows;
             list.styles = page.styles;
         }
@@ -196,7 +190,7 @@ impl Editor {
         self.lints.current = Some(index);
         if let Some(at) = self.diagnostics_index()
             && let Some(buffer) = self.buffers.get(at)
-            && let Some(Mode::Diagnostics(list)) = self.buffers.mode(at)
+            && let Some(list) = self.buffers.special::<DiagnosticsList>(at)
         {
             let id = buffer.id();
             let start = list
@@ -219,6 +213,16 @@ impl Editor {
             }
             self.show_message(diagnostic.message);
         }
+    }
+}
+
+impl SpecialBuffer for DiagnosticsList {
+    fn scope(&self) -> ScopeId {
+        Scope::Diagnostics.into()
+    }
+
+    fn line_style(&self, line: usize, _: &str) -> LineStyle {
+        self.style(line)
     }
 }
 

@@ -1,10 +1,11 @@
 use std::fmt::Write;
 
-use crate::command::{Command, CommandId, Scope};
+use crate::command::{Command, CommandId, Scope, ScopeId};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
+use crate::special_buffer::SpecialBuffer;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -45,7 +46,7 @@ impl Splash {
         self.button(line).is_some()
     }
 
-    pub(in crate::editor) fn line_style(&self, line: usize) -> LineStyle {
+    fn style(&self, line: usize) -> LineStyle {
         let spans = if line == TITLE_LINE {
             vec![(INDENT..usize::MAX, Highlight::Heading)]
         } else if let Some(button) = self.button(line) {
@@ -62,10 +63,7 @@ impl Splash {
 
 impl Editor {
     pub fn about(&mut self) {
-        if let Some(index) = self
-            .buffers
-            .find_mode(|mode| matches!(mode, Mode::Splash(_)))
-        {
+        if let Some(index) = self.buffers.find_special::<Splash>(|_| true) {
             self.select_buffer(index);
             return;
         }
@@ -74,7 +72,7 @@ impl Editor {
         buffer.set_read_only(true);
         buffer.set_point(buffer.line_start(FIRST_BUTTON_LINE) + INDENT);
         let splash = Splash { buttons };
-        self.add_buffer_with(buffer, Mode::Splash(splash));
+        self.add_buffer_with(buffer, Mode::special(splash));
     }
 
     #[cfg(test)]
@@ -100,14 +98,11 @@ impl Editor {
     }
 
     pub(super) fn refill_splash(&mut self) {
-        let Some(index) = self
-            .buffers
-            .find_mode(|mode| matches!(mode, Mode::Splash(_)))
-        else {
+        let Some(index) = self.buffers.find_special::<Splash>(|_| true) else {
             return;
         };
         let (text, buttons) = self.splash_text();
-        if let Some((buffer, Mode::Splash(splash))) = self.buffers.entry_mut(index) {
+        if let Some((buffer, splash)) = self.buffers.entry_special_mut::<Splash>(index) {
             Page {
                 text,
                 styles: Vec::new(),
@@ -201,6 +196,16 @@ impl Editor {
             Some(command) => self.execute(command),
             None => self.show_message("No button here"),
         }
+    }
+}
+
+impl SpecialBuffer for Splash {
+    fn scope(&self) -> ScopeId {
+        Scope::Splash.into()
+    }
+
+    fn line_style(&self, line: usize, _: &str) -> LineStyle {
+        self.style(line)
     }
 }
 

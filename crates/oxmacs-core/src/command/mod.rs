@@ -371,6 +371,8 @@ pub enum Command {
     GotoDiagnostic,
     #[strum(message = "Show this diagnostic but stay in the list")]
     ShowDiagnostic,
+    #[strum(message = "Check again with the last checker and refresh *Diagnostics*")]
+    RecheckDiagnostics,
     #[strum(
         message = "Show or hide line numbers in this buffer",
         detailed_message = "Affects only the current buffer. The line-numbers setting chooses the default for every file buffer."
@@ -528,6 +530,7 @@ impl Command {
             | Self::CompletionAccept
             | Self::CompletionQuit => Scope::Popup,
             Self::LocationVisit | Self::LocationNext | Self::LocationPrevious => Scope::Locations,
+            Self::RecheckDiagnostics => Scope::Diagnostics,
             Self::ToolDetails | Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => {
                 Scope::Tools
             }

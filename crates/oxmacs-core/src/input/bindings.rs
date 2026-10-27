@@ -197,7 +197,7 @@ const DIAGNOSTICS: &[(&str, Command)] = &[
     ("SPC", Command::ShowDiagnostic),
     ("n", Command::NextLine),
     ("p", Command::PreviousLine),
-    ("g", Command::RevertBuffer),
+    ("g", Command::RecheckDiagnostics),
     ("q", Command::QuitWindow),
 ];
 
@@ -232,7 +232,7 @@ const TOOLS: &[(&str, Command)] = &[
     ("d", Command::ToolRemove),
     ("n", Command::NextLine),
     ("p", Command::PreviousLine),
-    ("g", Command::RevertBuffer),
+    ("g", Command::ListTools),
     ("q", Command::QuitWindow),
 ];
 
