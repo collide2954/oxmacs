@@ -1,166 +1,50 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::sync::Arc;
 
-use crate::command::{Scope, ScopeId};
-use crate::display::LineStyle;
 use crate::editor::Editor;
-use crate::editor::buffers::Mode;
-use crate::editor::page::Page;
-use crate::external::diagnostics::{Diagnostic, Severity};
-use crate::files::paths;
-use crate::special_buffer::SpecialBuffer;
-use crate::text::Buffer;
+use crate::editor::special::places::{Place, Places};
+use crate::external::diagnostics::Severity;
 use crate::theme::Highlight;
 
 const NAME: &str = "*Diagnostics*";
-const HELP: &str = "RET visits   SPC shows   g checks again   q quits";
 
-#[derive(Debug, Default)]
-pub(in crate::editor) struct DiagnosticsList {
-    rows: Vec<(usize, usize)>,
-    styles: Vec<LineStyle>,
-}
-
-impl DiagnosticsList {
-    fn style(&self, line: usize) -> LineStyle {
-        self.styles.get(line).cloned().unwrap_or_default()
-    }
-
-    fn row(&self, line: usize) -> Option<usize> {
-        self.rows
-            .iter()
-            .find(|(row, _)| *row == line)
-            .map(|(_, diagnostic)| *diagnostic)
-    }
-
-    fn line_of(&self, diagnostic: usize) -> Option<usize> {
-        self.rows
-            .iter()
-            .find(|(_, shown)| *shown == diagnostic)
-            .map(|(line, _)| *line)
-    }
-
-    fn beyond(&self, line: usize, forward: bool) -> Option<usize> {
-        let found = if forward {
-            self.rows.iter().find(|(row, _)| *row > line)
-        } else {
-            self.rows.iter().rev().find(|(row, _)| *row < line)
-        };
-        found.map(|(_, diagnostic)| *diagnostic)
-    }
-}
-
-fn shown_path(path: &Path, root: Option<&Path>, home: Option<&Path>) -> String {
-    match root.and_then(|root| path.strip_prefix(root).ok()) {
-        Some(relative) => relative
-            .components()
-            .collect::<PathBuf>()
-            .display()
-            .to_string(),
-        None => paths::abbreviate(path, home),
-    }
-}
-
-fn page(
-    diagnostics: &[Diagnostic],
-    root: Option<&Path>,
-    home: Option<&Path>,
-) -> (Page, Vec<(usize, usize)>) {
-    let mut page = Page::default();
-    let location = root
-        .map(|root| format!("  {}", paths::abbreviate(root, home)))
-        .unwrap_or_default();
-    page.line(&[("Diagnostics", Some(Highlight::Heading)), (&location, None)]);
-    page.line(&[(HELP, Some(Highlight::Comment))]);
-    let mut rows = Vec::new();
-    if diagnostics.is_empty() {
-        page.line(&[]);
-        page.line(&[("No problems", Some(Highlight::Success))]);
-        return (page, rows);
-    }
-    let places: Vec<String> = diagnostics
+fn listed(editor: &Editor) -> Places {
+    let places = editor
+        .builds
+        .diagnostics()
         .iter()
-        .map(|diagnostic| format!("{}:{}", diagnostic.start.0, diagnostic.start.1))
+        .map(|diagnostic| {
+            let label = match diagnostic.severity {
+                Severity::Error => ("error".to_owned(), Highlight::Error),
+                Severity::Warning => ("warning".to_owned(), Highlight::Warning),
+            };
+            Place {
+                label: Some(label),
+                text: Some(diagnostic.message.clone()),
+                ..Place::at(&diagnostic.path, diagnostic.start.0, diagnostic.start.1)
+            }
+        })
         .collect();
-    let width = places.iter().map(String::len).max().unwrap_or(0);
-    let mut file: Option<&Path> = None;
-    for (index, (diagnostic, place)) in diagnostics.iter().zip(&places).enumerate() {
-        if file != Some(diagnostic.path.as_path()) {
-            file = Some(&diagnostic.path);
-            page.line(&[]);
-            page.heading(&shown_path(&diagnostic.path, root, home));
-        }
-        let (label, highlight) = match diagnostic.severity {
-            Severity::Error => ("error  ", Highlight::Error),
-            Severity::Warning => ("warning", Highlight::Warning),
-        };
-        rows.push((page.styles.len(), index));
-        page.line(&[
-            ("  ", None),
-            (&format!("{place:<width$}"), Some(Highlight::Link)),
-            ("  ", None),
-            (label, Some(highlight)),
-            ("  ", None),
-            (&diagnostic.message, None),
-        ]);
+    Places {
+        title: "Diagnostics".to_owned(),
+        places,
+        root: editor.builds.root().map(Path::to_path_buf),
+        empty: Some("No problems".to_owned()),
+        on_visit: Some(Arc::new(Editor::visit_diagnostic)),
+        on_refresh: Some(Arc::new(Editor::recheck)),
+        ..Places::default()
     }
-    (page, rows)
 }
 
 impl Editor {
-    fn diagnostics_index(&self) -> Option<usize> {
-        self.buffers.find_special::<DiagnosticsList>(|_| true)
-    }
-
-    fn diagnostics_list(&self) -> Option<&DiagnosticsList> {
-        self.buffers.special(0)
-    }
-
     pub(in crate::editor) fn list_diagnostics(&mut self) {
-        if self.diagnostics_index().is_none() {
-            self.beside(|editor| {
-                let mut buffer = Buffer::with_text(NAME, "");
-                buffer.set_read_only(true);
-                editor.add_buffer_with(buffer, Mode::special(DiagnosticsList::default()));
-            });
-        }
-        self.render_diagnostics_list();
-        self.show_beside(Self::diagnostics_index);
+        let list = listed(self);
+        self.show_places(NAME, list);
     }
 
     pub(in crate::editor) fn render_diagnostics_list(&mut self) {
-        let Some(index) = self.diagnostics_index() else {
-            return;
-        };
-        let (page, rows) = page(
-            self.builds.diagnostics(),
-            self.builds.root(),
-            self.home.as_deref(),
-        );
-        if let Some(buffer) = self.buffers.get_mut(index) {
-            page.fill(buffer);
-        }
-        if let Some(list) = self.buffers.special_mut::<DiagnosticsList>(index) {
-            list.rows = rows;
-            list.styles = page.styles;
-        }
-    }
-
-    pub(in crate::editor) fn goto_diagnostic(&mut self) {
-        let line = self.point_line();
-        match self.diagnostics_list().and_then(|list| list.row(line)) {
-            Some(index) => self.visit_diagnostic(index),
-            None => self.show_message("No diagnostic here"),
-        }
-    }
-
-    pub(in crate::editor) fn show_diagnostic(&mut self) {
-        let origin = self.selected_window();
-        self.goto_diagnostic();
-        self.select_window(origin);
-    }
-
-    pub(in crate::editor) fn diagnostic_on_line(&self, line: usize) -> Option<usize> {
-        self.diagnostics_list()?.row(line)
+        let list = listed(self);
+        self.refresh_places(NAME, list);
     }
 
     pub(in crate::editor) fn recheck(&mut self) {
@@ -171,9 +55,9 @@ impl Editor {
 
     pub(in crate::editor) fn next_lint(&mut self, forward: bool) {
         let line = self.point_line();
-        let target = match self.diagnostics_list() {
-            Some(list) => list.beyond(line, forward),
-            None => self.builds.step(forward),
+        let target = match self.places_view(NAME) {
+            Some((0, view)) => view.beyond(line, forward),
+            _ => self.builds.step(forward),
         };
         match target {
             Some(index) => self.visit_diagnostic(index),
@@ -185,12 +69,11 @@ impl Editor {
         let Some(diagnostic) = self.builds.visit(index) else {
             return;
         };
-        if let Some(at) = self.diagnostics_index()
+        if let Some((at, view)) = self.places_view(NAME)
             && let Some(buffer) = self.buffers.get(at)
-            && let Some(list) = self.buffers.special::<DiagnosticsList>(at)
         {
             let id = buffer.id();
-            let start = list
+            let start = view
                 .line_of(index)
                 .map_or(0, |line| buffer.line_start(line));
             self.point_windows_at(id, start);
@@ -212,17 +95,6 @@ impl Editor {
         }
     }
 }
-
-impl SpecialBuffer for DiagnosticsList {
-    fn scope(&self) -> ScopeId {
-        Scope::Diagnostics.into()
-    }
-
-    fn line_style(&self, line: usize, _: &str) -> LineStyle {
-        self.style(line)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -265,12 +137,12 @@ mod tests {
             lines[3..],
             [
                 file("main.rs"),
-                "  1:1   error    bad".to_owned(),
-                "  1:4   warning  meh".to_owned(),
-                "  1:14  warning  at the end".to_owned(),
+                "     1:1    error    bad".to_owned(),
+                "     1:4    warning  meh".to_owned(),
+                "     1:14   warning  at the end".to_owned(),
                 String::new(),
                 file("other.rs"),
-                "  2:1   warning  elsewhere".to_owned(),
+                "     2:1    warning  elsewhere".to_owned(),
             ]
         );
     }
@@ -278,7 +150,7 @@ mod tests {
     #[test]
     fn return_visits_the_problem_at_point() {
         let (_dir, mut editor) = listed();
-        on(&mut editor, "  1:4");
+        on(&mut editor, "     1:4 ");
 
         press(&mut editor, "RET");
 
@@ -289,7 +161,7 @@ mod tests {
     #[test]
     fn space_shows_a_problem_without_leaving_the_list() {
         let (_dir, mut editor) = listed();
-        on(&mut editor, "  2:1");
+        on(&mut editor, "     2:1 ");
         let list = editor.selected_window();
 
         press(&mut editor, "SPC");
@@ -310,7 +182,7 @@ mod tests {
         let (_dir, mut editor) = listed();
         let row = lines(&editor)
             .iter()
-            .position(|line| line.starts_with("  1:14"))
+            .position(|line| line.starts_with("     1:14"))
             .unwrap();
 
         editor.click(Cell { row, column: 3 }, Clicks::Single, false);
@@ -372,7 +244,7 @@ mod tests {
                 FINISHED.to_owned(),
             ],
         );
-        assert_eq!(lines(&editor)[4], "  1:2  warning  again");
+        assert_eq!(lines(&editor)[4], "     1:2    warning  again");
     }
 
     fn linting_from_list(editor: &mut Editor) -> crate::editor::JobId {

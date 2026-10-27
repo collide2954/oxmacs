@@ -192,25 +192,18 @@ const COMPILATION: &[(&str, Command)] = &[
     ("RET", Command::CompileGotoError),
 ];
 
-const DIAGNOSTICS: &[(&str, Command)] = &[
-    ("RET", Command::GotoDiagnostic),
-    ("SPC", Command::ShowDiagnostic),
-    ("n", Command::NextLine),
-    ("p", Command::PreviousLine),
-    ("g", Command::RecheckDiagnostics),
-    ("q", Command::QuitWindow),
-];
-
 const HELP: &[(&str, Command)] = &[
     ("SPC", Command::ScrollUpCommand),
     ("DEL", Command::ScrollDownCommand),
     ("q", Command::QuitWindow),
 ];
 
-const LOCATIONS: &[(&str, Command)] = &[
-    ("RET", Command::LocationVisit),
-    ("n", Command::LocationNext),
-    ("p", Command::LocationPrevious),
+const PLACES: &[(&str, Command)] = &[
+    ("RET", Command::PlaceVisit),
+    ("SPC", Command::PlaceShow),
+    ("n", Command::PlaceNext),
+    ("p", Command::PlacePrevious),
+    ("g", Command::PlacesRefresh),
     ("q", Command::QuitWindow),
 ];
 
@@ -291,9 +284,8 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::R => R,
         Scope::Console => CONSOLE,
         Scope::Compilation => COMPILATION,
-        Scope::Diagnostics => DIAGNOSTICS,
         Scope::Help => HELP,
-        Scope::Locations => LOCATIONS,
+        Scope::Places => PLACES,
         Scope::Popup => POPUP,
         Scope::Tools => TOOLS,
     }

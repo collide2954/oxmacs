@@ -1,6 +1,6 @@
 pub(super) mod help;
 pub(super) mod languages;
-pub(super) mod locations;
+pub(super) mod places;
 pub(super) mod processes;
 pub(super) mod settings;
 pub(super) mod splash;

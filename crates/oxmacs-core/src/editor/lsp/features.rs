@@ -674,11 +674,7 @@ impl Editor {
                     .map_or(units, |buffer| {
                         encoding.to_column(&buffer.line_text(line), units)
                     });
-                Some(Place {
-                    path,
-                    line: line + 1,
-                    column: column + 1,
-                })
+                Some(Place::at(path, line + 1, column + 1))
             })
             .collect()
     }
@@ -697,7 +693,7 @@ impl Editor {
             _ => {
                 self.remember_location(origin);
                 let count = places.len();
-                self.show_locations(&format!("{count} definitions"), places);
+                self.show_xref(format!("{count} definitions"), places);
             }
         }
     }
@@ -715,7 +711,7 @@ impl Editor {
         } else {
             "references"
         };
-        self.show_locations(&format!("{count} {noun} to {name}"), places);
+        self.show_xref(format!("{count} {noun} to {name}"), places);
     }
 
     fn formatted(&mut self, id: ServerId, at: (BufferId, u64), save: bool, result: &Value) {

@@ -367,23 +367,22 @@ pub enum Command {
         detailed_message = "Opens *Diagnostics* with every error and warning from the last lint, grouped by file. RET visits one, SPC shows it while staying in the list and g refreshes."
     )]
     ListDiagnostics,
-    #[strum(message = "Visit the diagnostic on this line")]
-    GotoDiagnostic,
-    #[strum(message = "Show this diagnostic but stay in the list")]
-    ShowDiagnostic,
-    #[strum(message = "Check again with the last checker and refresh *Diagnostics*")]
-    RecheckDiagnostics,
+
     #[strum(
         message = "Show or hide line numbers in this buffer",
         detailed_message = "Affects only the current buffer. The line-numbers setting chooses the default for every file buffer."
     )]
     DisplayLineNumbersMode,
-    #[strum(message = "Visit the location on this line")]
-    LocationVisit,
-    #[strum(message = "Move to the next location")]
-    LocationNext,
-    #[strum(message = "Move to the previous location")]
-    LocationPrevious,
+    #[strum(message = "Visit the place on this line")]
+    PlaceVisit,
+    #[strum(message = "Show the place on this line but stay in the list")]
+    PlaceShow,
+    #[strum(message = "Move to the next place")]
+    PlaceNext,
+    #[strum(message = "Move to the previous place")]
+    PlacePrevious,
+    #[strum(message = "Refresh this list, such as checking again in *Diagnostics*")]
+    PlacesRefresh,
     #[strum(message = "Move to the next key line")]
     ForwardButton,
     #[strum(message = "Move to the previous key line")]
@@ -529,8 +528,11 @@ impl Command {
             | Self::CompletionPrevious
             | Self::CompletionAccept
             | Self::CompletionQuit => Scope::Popup,
-            Self::LocationVisit | Self::LocationNext | Self::LocationPrevious => Scope::Locations,
-            Self::RecheckDiagnostics => Scope::Diagnostics,
+            Self::PlaceVisit
+            | Self::PlaceShow
+            | Self::PlaceNext
+            | Self::PlacePrevious
+            | Self::PlacesRefresh => Scope::Places,
             Self::ToolDetails | Self::ToolInstall | Self::ToolUpdate | Self::ToolRemove => {
                 Scope::Tools
             }
@@ -549,9 +551,8 @@ pub enum Scope {
     R,
     Console,
     Compilation,
-    Diagnostics,
     Help,
-    Locations,
+    Places,
     Popup,
     Tools,
 }
@@ -567,9 +568,8 @@ impl Scope {
             Self::R => Some("R buffers"),
             Self::Console => Some("consoles"),
             Self::Compilation => Some("*compilation*"),
-            Self::Diagnostics => Some("*Diagnostics*"),
             Self::Help => Some("*Help*"),
-            Self::Locations => Some("*xref*"),
+            Self::Places => Some("lists of places"),
             Self::Popup => Some("the completion popup"),
             Self::Tools => Some("*Tools*"),
         }

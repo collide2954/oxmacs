@@ -39,12 +39,12 @@ impl Editor {
             return;
         }
         let line = self.buffers.current().line_of(position);
-        if clicks == Clicks::Single && !extend && self.diagnostic_on_line(line).is_some() {
+        if clicks == Clicks::Single && !extend && self.place_on_line(line).is_some() {
             let buffer = self.buffers.current_mut();
             buffer.deactivate_mark();
             buffer.set_point(position);
             self.drag_anchor = None;
-            self.goto_diagnostic();
+            self.visit_place();
             return;
         }
         if clicks == Clicks::Single

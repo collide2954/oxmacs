@@ -49,7 +49,7 @@ pub use prompts::transient::{
 };
 pub use search::isearch::Search;
 pub use search::replace::Replace;
-pub use special::locations::Place;
+pub use special::places::{OnRefresh, OnVisit, Place, Places};
 pub use special::processes::{ProcessInfo, ProcessStatus};
 pub use windows::Arrangement;
 pub use windows::numbers::Gutter;
