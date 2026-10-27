@@ -1049,3 +1049,31 @@ fn state_is_kept_per_type() {
     assert_eq!(states.get::<String>().map(String::as_str), Some("text"));
     assert!(states.get::<u8>().is_none());
 }
+
+#[test]
+fn buffers_are_found_and_diagnosed_through_any_spelling_of_their_file() {
+    use crate::external::diagnostics::{Diagnostic, Severity};
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("notes.txt");
+    std::fs::write(&path, "one\ntwo\n").unwrap();
+    let mut editor = Editor::new();
+    editor.open_file(&path);
+    let other = dir.path().join(".").join("notes.txt");
+
+    assert_eq!(editor.buffer_visiting(&other), Some(editor.buffer().id()));
+    editor.replace_diagnostics(
+        &other,
+        vec![Diagnostic {
+            path: other.clone(),
+            start: (2, 1),
+            end: (2, 4),
+            severity: Severity::Warning,
+            message: "two".to_owned(),
+        }],
+    );
+    let identity = editor.buffer().file().unwrap().identity().to_path_buf();
+    assert_eq!(editor.lint_status(&identity).as_deref(), Some("W1"));
+    assert_eq!(editor.diagnostics_on_line(0, 1).len(), 1);
+    assert_eq!(editor.diagnostic_counts()[0].0, identity);
+}

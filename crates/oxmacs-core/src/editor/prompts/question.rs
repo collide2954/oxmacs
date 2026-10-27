@@ -306,10 +306,7 @@ impl Editor {
     }
 
     fn save_file(&mut self, path: &Path) -> bool {
-        match self
-            .buffers
-            .position(|buffer| buffer.file().is_some_and(|file| file.path == path))
-        {
+        match self.index_visiting(path) {
             Some(index) => self.save_buffer_at(index),
             None => true,
         }

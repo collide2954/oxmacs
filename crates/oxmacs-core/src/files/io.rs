@@ -84,11 +84,46 @@ pub fn load(path: &Path) -> Result<Loaded, FileError> {
     })
 }
 
-pub fn same_file(first: &Path, second: &Path) -> bool {
-    match (fs::canonicalize(first), fs::canonicalize(second)) {
-        (Ok(first), Ok(second)) => first == second,
-        _ => first == second,
+#[cfg(windows)]
+fn plain(path: PathBuf) -> PathBuf {
+    use std::path::{Component, Prefix};
+    let mut parts = path.components();
+    let letter = match parts.next() {
+        Some(Component::Prefix(prefix)) => match prefix.kind() {
+            Prefix::VerbatimDisk(letter) => Some(letter),
+            _ => None,
+        },
+        _ => None,
+    };
+    match letter {
+        Some(letter) => {
+            let mut plain = PathBuf::from(format!("{}:\\", char::from(letter)));
+            plain.extend(parts.filter(|part| !matches!(part, Component::RootDir)));
+            plain
+        }
+        None => path,
     }
+}
+
+#[cfg(not(windows))]
+fn plain(path: PathBuf) -> PathBuf {
+    path
+}
+
+pub fn identity(path: &Path) -> PathBuf {
+    if let Ok(found) = fs::canonicalize(path) {
+        return plain(found);
+    }
+    let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    match (absolute.parent(), absolute.file_name()) {
+        (Some(parent), Some(name)) => fs::canonicalize(parent)
+            .map_or_else(|_| absolute.clone(), |parent| plain(parent).join(name)),
+        _ => absolute,
+    }
+}
+
+pub fn same_file(first: &Path, second: &Path) -> bool {
+    identity(first) == identity(second)
 }
 
 fn resolved(path: &Path) -> PathBuf {
@@ -377,6 +412,25 @@ mod tests {
         if cfg!(windows) {
             assert!(same_file(&path, &dir.path().join("A.TXT")));
         }
+    }
+
+    #[test]
+    fn identities_match_through_other_spellings_even_before_a_file_exists() {
+        let dir = temp();
+        let path = dir.path().join("a.txt");
+        fs::write(&path, "").unwrap();
+        let fresh = dir.path().join("new.txt");
+
+        assert_eq!(
+            identity(&path),
+            identity(&dir.path().join(".").join("a.txt"))
+        );
+        assert_eq!(
+            identity(&fresh),
+            identity(&dir.path().join(".").join("new.txt"))
+        );
+        assert!(!identity(&path).to_string_lossy().starts_with(r"\\?\"));
+        assert!(identity(&path).is_absolute());
     }
 
     #[cfg(unix)]

@@ -8,6 +8,7 @@ use crate::editor::build::errors::ErrorSource;
 use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::diagnostics::{self, Diagnostic, LintLine, Severity};
 use crate::external::tools;
+use crate::files;
 use crate::syntax::Language;
 use crate::text::{Buffer, BufferId, Marker};
 
@@ -51,6 +52,13 @@ struct Mark {
     start: Marker,
     end: Marker,
     diagnostic: usize,
+}
+
+fn normalized(diagnostic: Diagnostic) -> Diagnostic {
+    Diagnostic {
+        path: files::identity(&diagnostic.path),
+        ..diagnostic
+    }
 }
 
 fn position(buffer: &Buffer, (row, column): (usize, usize)) -> usize {
@@ -144,10 +152,13 @@ impl Editor {
     }
 
     pub fn replace_diagnostics(&mut self, path: &Path, found: Vec<Diagnostic>) {
+        let path = files::identity(path);
         self.lints
             .diagnostics
             .retain(|diagnostic| diagnostic.path != path);
-        self.lints.diagnostics.extend(found);
+        self.lints
+            .diagnostics
+            .extend(found.into_iter().map(normalized));
         self.lints.diagnostics.sort();
         self.lints.revision += 1;
         self.lints.current = None;
@@ -203,7 +214,7 @@ impl Editor {
             job,
             language,
             linter,
-            root: run.root,
+            root: files::identity(&run.root),
             label: run.label,
             name: run.name,
             found: Vec::new(),
@@ -254,12 +265,14 @@ impl Editor {
                     .map(|diagnostic| self.language_for(&diagnostic.path))
                     .collect();
                 let mut kept = languages.into_iter();
-                let root = run.root.clone();
+                let root = files::identity(&run.root);
                 self.lints.diagnostics.retain(|diagnostic| {
                     let theirs = kept.next().flatten() == Some(language);
                     !(theirs && diagnostic.path.starts_with(&root))
                 });
-                self.lints.diagnostics.extend(run.found);
+                self.lints
+                    .diagnostics
+                    .extend(run.found.into_iter().map(normalized));
                 self.lints.diagnostics.sort();
                 self.lints.revision += 1;
                 self.lints.root = Some(run.root);
@@ -293,7 +306,7 @@ impl Editor {
         let Some(buffer) = self.buffers.get_mut(index) else {
             return;
         };
-        let Some(path) = buffer.file().map(|file| file.path.clone()) else {
+        let Some(path) = buffer.file().map(|file| file.identity().to_path_buf()) else {
             return;
         };
         for (diagnostic, found) in self.lints.diagnostics.iter().enumerate() {

@@ -591,6 +591,38 @@ fn f2_renames_through_the_server_and_leaves_files_unsaved() {
 }
 
 #[test]
+fn edits_and_diagnostics_reach_a_buffer_through_another_spelling_of_its_file() {
+    let (dir, mut editor) = capable();
+    let other = super::protocol::uri(&dir.path().join("src").join(".").join("main.rs"));
+    let buffers = editor.buffer_ids().len();
+    press(&mut editor, "C-f C-f C-f C-f");
+
+    press(&mut editor, "<f2>");
+    press(&mut editor, "C-a C-k");
+    type_text(&mut editor, "start");
+    press(&mut editor, "RET");
+    let request = asked(&mut editor, "textDocument/rename");
+    answer(
+        &mut editor,
+        &request,
+        &json!({"changes": {other.clone(): [
+            {"range": {"start": {"line": 0, "character": 3}, "end": {"line": 0, "character": 7}}, "newText": "start"}
+        ]}}),
+    );
+    reply(
+        &mut editor,
+        &json!({"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics",
+                "params": {"uri": other, "diagnostics": [
+                    {"range": {"start": {"line": 1, "character": 8}, "end": {"line": 1, "character": 10}},
+                     "severity": 2, "message": "unused variable"}]}}),
+    );
+
+    assert!(editor.buffer().contents().starts_with("fn start() {"));
+    assert_eq!(editor.buffer_ids().len(), buffers);
+    assert_eq!(editor.diagnostics_on_line(0, 1).len(), 1);
+}
+
+#[test]
 fn c_c_dot_offers_the_server_s_fixes_with_the_diagnostics_here() {
     let (dir, mut editor) = capable();
     let main = super::protocol::uri(&dir.path().join("src/main.rs"));

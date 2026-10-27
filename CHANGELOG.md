@@ -54,6 +54,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Language server edits, renames, references and diagnostics reach a file's buffer when the server spells its path differently, such as a lowercase drive letter on Windows, instead of being dropped or opening it again; recovered changes, saves after a prompt and renames from the explorer or dired match the same way.
 - Opening a file from a filtered explorer tree clears the filter, so the next search starts afresh instead of adding to the old one.
 - A new tab opened while the explorer or another side window is selected shows the main window's buffer, not the side window's.
 - The epub library shows how far you have read each book even when its folder is written with other separators than the books' own paths, as `C:/Books` on Windows.
@@ -196,6 +197,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Language server edits, renames, references and diagnostics reach a file's buffer when the server spells its path differently, such as a lowercase drive letter on Windows, instead of being dropped or opening it again; recovered changes, saves after a prompt and renames from the explorer or dired match the same way.
 - Typing in very large files no longer waits for the whole file to be parsed again after each key, down from 655 ms to 6 ms a key in a 20,000-line Rust file. Syntax highlighting catches up a quarter of a second after you stop typing.
 - Saving through a symlink writes the file it points to and keeps the link; a file with hard links, one another program holds open, or one in a folder that can't take new files is written in place; and on Unix saving keeps the owner. A file opened again through a symlink or in other letter case reuses its buffer.
 - Answering a revert, reread, save-over or kill question acts on the buffer it asked about, even if another window was chosen meanwhile, instead of whichever buffer had moved into its place.
@@ -241,6 +243,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Language server edits, renames, references and diagnostics reach a file's buffer when the server spells its path differently, such as a lowercase drive letter on Windows, instead of being dropped or opening it again; recovered changes, saves after a prompt and renames from the explorer or dired match the same way.
 - Markdown previews scroll with the keyboard and can be selected with a click.
 - Private IRC notices show in the server buffer instead of opening chats, and IRC formatting codes no longer show as text.
 - Wide characters such as CJK and emoji wrap inside their column.
@@ -268,6 +271,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Language server edits, renames, references and diagnostics reach a file's buffer when the server spells its path differently, such as a lowercase drive letter on Windows, instead of being dropped or opening it again; recovered changes, saves after a prompt and renames from the explorer or dired match the same way.
 - Long mode lines are cut off instead of running into the clock.
 
 ## [0.11.0] - 2026-10-18
@@ -315,6 +319,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Language server edits, renames, references and diagnostics reach a file's buffer when the server spells its path differently, such as a lowercase drive letter on Windows, instead of being dropped or opening it again; recovered changes, saves after a prompt and renames from the explorer or dired match the same way.
 - Scrolling with the mouse wheel no longer drags point to the ends of short lines; it keeps its column across scrolls and into the next `C-n`/`C-p`.
 - Vertical motion keeps the screen column across lines with tabs and wide characters.
 

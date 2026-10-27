@@ -6,4 +6,4 @@ pub mod paths;
 
 pub use entry::{Entry, Kind, read_entries, sort_by_name};
 pub use format::{DecodeError, Decoded, Format, LineEnding, decode, encode};
-pub use io::{DiskState, FileError, Loaded, load, same_file, save};
+pub use io::{DiskState, FileError, Loaded, identity, load, same_file, save};

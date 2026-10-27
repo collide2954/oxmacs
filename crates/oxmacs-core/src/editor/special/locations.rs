@@ -34,9 +34,8 @@ impl Locations {
 
 fn preview(cache: &mut Vec<(PathBuf, Vec<String>)>, editor: &Editor, place: &Place) -> String {
     let open = editor
-        .buffers
-        .iter()
-        .find(|buffer| buffer.file().is_some_and(|file| file.path == place.path));
+        .index_visiting(&place.path)
+        .and_then(|index| editor.buffers.get(index));
     if let Some(buffer) = open {
         let line = place.line.saturating_sub(1);
         return if line < buffer.len_lines() {

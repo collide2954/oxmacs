@@ -129,9 +129,7 @@ impl Editor {
         self.ask(
             &format!("Recover unsaved changes to {name}?"),
             move |editor, yes| {
-                let found = editor
-                    .buffers
-                    .position(|buffer| buffer.file().is_some_and(|file| file.path == path));
+                let found = editor.index_visiting(&path);
                 if let (true, Some(index)) = (yes, found)
                     && let Some(buffer) = editor.buffers.get_mut(index)
                 {

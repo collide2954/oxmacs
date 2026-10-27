@@ -5,6 +5,7 @@ use crate::display::LineStyle;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::editor::{Axis, Editor, Effect};
+use crate::files;
 use crate::input::{KeySequence, Lookup};
 use crate::special_buffer::SpecialBuffer;
 use crate::text::{Buffer, BufferId};
@@ -104,15 +105,17 @@ impl Editor {
     }
 
     pub fn file_moved(&mut self, from: &Path, to: &Path) {
+        let from = files::identity(from);
         for index in 0..self.buffers.len() {
             if let Some(file) = self.buffers.get_mut(index).and_then(Buffer::file_mut)
-                && let Ok(rest) = file.path.strip_prefix(from)
+                && let Ok(rest) = file.identity().strip_prefix(&from)
             {
-                file.path = if rest.as_os_str().is_empty() {
+                let moved = if rest.as_os_str().is_empty() {
                     to.to_owned()
                 } else {
                     to.join(rest)
                 };
+                file.moved_to(moved);
             }
         }
         self.name_file_buffers();
@@ -130,11 +133,8 @@ impl Editor {
         self.buffers.iter().map(Buffer::id).collect()
     }
 
-    #[cfg(test)]
     pub fn buffer_visiting(&self, path: &Path) -> Option<BufferId> {
-        let index = self
-            .buffers
-            .position(|buffer| buffer.file().is_some_and(|file| file.path == path))?;
+        let index = self.index_visiting(path)?;
         self.buffers.get(index).map(Buffer::id)
     }
 

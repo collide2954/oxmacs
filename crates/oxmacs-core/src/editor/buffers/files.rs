@@ -126,12 +126,18 @@ impl Editor {
         }
     }
 
+    pub(in crate::editor) fn index_visiting(&self, path: &Path) -> Option<usize> {
+        let wanted = files::identity(path);
+        self.buffers
+            .position(|buffer| buffer.file().is_some_and(|file| file.identity() == wanted))
+    }
+
     fn write_file_to(&mut self, path: PathBuf) {
         let visiting = self
             .buffers
             .current()
             .file()
-            .is_some_and(|file| file.path == path);
+            .is_some_and(|file| file.identity() == files::identity(&path));
         if path.exists() && !visiting {
             self.ask_to_overwrite(path);
         } else {
@@ -263,11 +269,7 @@ impl Editor {
         if path.is_dir() {
             return self.open_path_prompt("Find file: ", Purpose::FindFile, &path);
         }
-        if let Some(index) = self.buffers.position(|buffer| {
-            buffer
-                .file()
-                .is_some_and(|file| files::same_file(&file.path, &path))
-        }) {
+        if let Some(index) = self.index_visiting(&path) {
             self.select_buffer(index);
             return true;
         }

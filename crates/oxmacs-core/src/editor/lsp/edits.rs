@@ -90,10 +90,9 @@ impl Editor {
             .chain(files(edit).into_iter().map(|(path, _)| (path, None)))
             .collect();
         versions.iter().any(|(path, version)| {
-            self.buffers
-                .iter()
-                .filter(|buffer| buffer.file().is_some_and(|file| file.path == *path))
-                .any(|buffer| {
+            self.index_visiting(path)
+                .and_then(|index| self.buffers.get(index))
+                .is_some_and(|buffer| {
                     client.document(buffer.id()).is_some_and(|document| {
                         document.revision != buffer.revision()
                             || version.is_some_and(|version| version != document.version)
@@ -122,10 +121,9 @@ impl Editor {
         let mut places = 0;
         let mut changed = 0;
         for (path, edits) in files(edit) {
-            let visiting = |buffer: &Buffer| buffer.file().is_some_and(|file| file.path == path);
-            let index = self.buffers.position(visiting).or_else(|| {
+            let index = self.index_visiting(&path).or_else(|| {
                 self.open_file(&path);
-                self.buffers.position(visiting)
+                self.index_visiting(&path)
             });
             let Some(index) = index else {
                 continue;

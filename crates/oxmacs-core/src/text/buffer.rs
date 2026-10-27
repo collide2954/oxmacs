@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 use std::mem;
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use ropey::Rope;
 
 use crate::files::editorconfig::{self, Style};
-use crate::files::{DiskState, Format};
+use crate::files::{self, DiskState, Format};
 use crate::text::history::{Edit, History};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,17 +17,28 @@ pub struct FileInfo {
     pub disk: Option<DiskState>,
     pub changed_on_disk: bool,
     pub style: Style,
+    identity: PathBuf,
 }
 
 impl FileInfo {
     pub fn new(path: PathBuf, format: Format, disk: Option<DiskState>) -> Self {
         Self {
+            identity: files::identity(&path),
             path,
             format,
             disk,
             changed_on_disk: false,
             style: Style::default(),
         }
+    }
+
+    pub fn identity(&self) -> &Path {
+        &self.identity
+    }
+
+    pub fn moved_to(&mut self, path: PathBuf) {
+        self.identity = files::identity(&path);
+        self.path = path;
     }
 
     #[must_use]

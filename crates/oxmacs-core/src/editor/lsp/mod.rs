@@ -609,9 +609,7 @@ impl Editor {
         client.diagnostics.retain(|(known, _)| *known != uri);
         client.diagnostics.push((uri, raw));
         let encoding = client.encoding;
-        let buffer = self
-            .buffers
-            .position(|buffer| buffer.file().is_some_and(|file| file.path == path));
+        let buffer = self.index_visiting(&path);
         let line_text = |line: usize| -> String {
             buffer
                 .and_then(|index| self.buffers.get(index))

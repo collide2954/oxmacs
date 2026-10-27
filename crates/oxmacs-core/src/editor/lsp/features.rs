@@ -695,9 +695,8 @@ impl Editor {
                 let line = number(&range["start"]["line"]);
                 let units = number(&range["start"]["character"]);
                 let column = self
-                    .buffers
-                    .iter()
-                    .find(|buffer| buffer.file().is_some_and(|file| file.path == path))
+                    .index_visiting(&path)
+                    .and_then(|index| self.buffers.get(index))
                     .filter(|buffer| line < buffer.len_lines())
                     .map_or(units, |buffer| {
                         encoding.to_column(&buffer.line_text(line), units)
