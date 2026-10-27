@@ -14,7 +14,7 @@ use oxmacs_core::editor::Visit;
 use oxmacs_core::editor::{Editor, FetchId, JobId, SERVERS, ServerId, WindowId};
 use oxmacs_core::external::lsp;
 use oxmacs_core::external::managed::Managed;
-use oxmacs_core::external::process::{self, Handle};
+use oxmacs_core::external::process::{self, Process};
 use oxmacs_core::external::usage::Usage;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
@@ -42,7 +42,7 @@ pub struct App {
     clock: Option<String>,
     mode_line_style: ModeLineStyle,
     usage: Usage,
-    jobs: Vec<(JobId, Handle)>,
+    jobs: Vec<(JobId, Process)>,
     servers: Vec<(ServerId, lsp::Server)>,
     ox: Ox,
     takeover_size: Option<iced::Size>,

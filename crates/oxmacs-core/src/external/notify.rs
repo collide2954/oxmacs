@@ -1,7 +1,5 @@
 use std::process::{Command, Stdio};
 
-use crate::external::tools;
-
 const TOAST: &str = "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; \
 $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); \
 $lines = $template.GetElementsByTagName('text'); \
@@ -37,16 +35,15 @@ pub fn command(os: &str, title: &str, body: &str) -> Option<Command> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    tools::hide_console(&mut command);
     Some(command)
 }
 
 pub fn send(title: &str, body: &str) {
     if let Some(mut command) = command(std::env::consts::OS, title, body)
-        && let Ok(mut child) = command.spawn()
+        && let Ok(started) = oxmacs_process::spawn(&mut command)
     {
         std::thread::spawn(move || {
-            let _ = child.wait();
+            let _ = started.process.wait();
         });
     }
 }

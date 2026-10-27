@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 pub use protocol::Encoding;
 pub use servers::{SERVERS, ServerSpec};
 
-use crate::external::lsp::{self, Event, Launch};
+use crate::external::lsp::{Event, Launch};
 use crate::text::BufferId;
 use features::{Asked, Assist};
 
@@ -112,7 +112,7 @@ pub(in crate::editor) struct Lsp {
 }
 
 fn on_path(program: &str) -> Option<PathBuf> {
-    lsp::locate(program, env::var_os("PATH").as_deref())
+    oxmacs_process::which(program)
 }
 
 impl Default for Lsp {

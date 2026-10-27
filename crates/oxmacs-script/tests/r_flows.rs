@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use oxmacs_core::editor::{Editor, Effect, JobId, ServerId};
 use oxmacs_core::external::lsp::{self, Server};
-use oxmacs_core::external::process::{self, Event, Handle};
+use oxmacs_core::external::process::{self, Event, Process};
 use oxmacs_core::input::KeySequence;
 use oxmacs_core::view::{Node, ViewBuffer};
 use oxmacs_script::{Ox, Pace};
@@ -14,7 +14,7 @@ struct Live {
     folder: tempfile::TempDir,
     editor: Editor,
     ox: Ox,
-    jobs: Vec<(JobId, Handle)>,
+    jobs: Vec<(JobId, Process)>,
     sender: Sender<(JobId, Event)>,
     events: Receiver<(JobId, Event)>,
     servers: Vec<(ServerId, Server)>,
@@ -68,7 +68,7 @@ impl Live {
                 }
                 Effect::Send(job, text) => {
                     if let Some((_, handle)) = self.jobs.iter().find(|(known, _)| *known == job) {
-                        handle.send(&text).unwrap();
+                        handle.send(text.as_str()).unwrap();
                     }
                 }
                 Effect::StartServer(id, launch) => {

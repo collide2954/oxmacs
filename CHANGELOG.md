@@ -60,6 +60,10 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- On Windows, language servers installed with npm start: oxmacs runs their `.cmd` script directly and never picks npm's extensionless shell script, and every program lookup tries the extensions in `PATHEXT`.
+- Sending a lot of text to a busy process, such as an R session or a language server, no longer freezes the editor: input is written in the background.
+- Stopping or killing a build, a console or a language server stops the programs it started too, and on Windows they all end when oxmacs quits. Stopping waits a few seconds after asking, as before, and on Windows it now ends the whole tree instead of only the first program.
+- A language server's log keeps going past output that isn't valid UTF-8.
 - In Ox buffers, completion, `C-c C-d` and the signature hint know definitions typed in the buffer before it's evaluated, as `ox lsp` does; both use one shared way to describe and complete names.
 - `M-.` and `M-?` in Ox buffers follow what a name refers to, as `ox lsp` does: usages of a parameter stay inside its function, a global's usages leave out locals of the same name, and `M-.` on a local goes to where it's bound, without evaluating the buffer first.
 - `ox lsp` renames and finds references by what a name refers to: renaming a global no longer touches a parameter or a local with the same name, or another module's global, and `g/area` follows `area` into the module `g` names. Going to a definition lands on the defined name.

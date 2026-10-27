@@ -1,12 +1,11 @@
-use std::ffi::OsStr;
-use std::io::{self, BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::io::{self, BufRead, BufReader};
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::external::tools;
+use oxmacs_process::{Process, Started};
 
 const SETTLE: Duration = Duration::from_secs(2);
 const POLL: Duration = Duration::from_millis(20);
@@ -26,10 +25,7 @@ pub enum Event {
 }
 
 #[derive(Debug, Clone)]
-pub struct Server {
-    child: Arc<Mutex<Child>>,
-    input: Arc<Mutex<ChildStdin>>,
-}
+pub struct Server(Process);
 
 fn lock<T: ?Sized>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
@@ -37,17 +33,15 @@ fn lock<T: ?Sized>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Server {
     pub fn send(&self, body: &str) -> io::Result<()> {
-        let mut input = lock(&self.input);
-        input.write_all(&frame(body))?;
-        input.flush()
+        self.0.send(frame(body))
     }
 
     pub fn kill(&self) {
-        let _ = lock(&self.child).kill();
+        self.0.kill();
     }
 
     pub fn pid(&self) -> u32 {
-        lock(&self.child).id()
+        self.0.pid()
     }
 }
 
@@ -83,51 +77,21 @@ pub fn read_message(reader: &mut impl BufRead) -> io::Result<Option<String>> {
     Ok(Some(String::from_utf8_lossy(&body).into_owned()))
 }
 
-pub fn locate(program: &str, search_path: Option<&OsStr>) -> Option<PathBuf> {
-    let given = Path::new(program);
-    if given.components().count() > 1 {
-        return given.is_file().then(|| given.to_owned());
-    }
-    let script = cfg!(windows)
-        .then(|| {
-            env_paths(search_path)
-                .map(|directory| directory.join(format!("{program}.cmd")))
-                .find(|candidate| candidate.is_file())
-        })
-        .flatten();
-    tools::find(program, search_path).or(script)
-}
-
-fn env_paths(search_path: Option<&OsStr>) -> impl Iterator<Item = PathBuf> {
-    search_path.map(std::env::split_paths).into_iter().flatten()
-}
-
 fn command(launch: &Launch) -> Command {
-    let script = launch
-        .program
-        .extension()
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("cmd"));
-    let mut command = if script {
-        let mut command = Command::new("cmd");
-        command.arg("/C").arg(&launch.program);
-        command
-    } else {
-        Command::new(&launch.program)
-    };
+    let mut command = Command::new(&launch.program);
     command
         .args(&launch.args)
         .current_dir(&launch.directory)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    tools::hide_console(&mut command);
     command
 }
 
-fn ending(child: &Mutex<Child>) -> Option<String> {
+fn ending(process: &Process) -> Option<String> {
     let deadline = Instant::now() + SETTLE;
     loop {
-        match lock(child).try_wait() {
+        match process.try_wait() {
             Ok(Some(status)) if status.success() => return None,
             Ok(Some(status)) => {
                 return Some(status.code().map_or_else(
@@ -143,23 +107,23 @@ fn ending(child: &Mutex<Child>) -> Option<String> {
 }
 
 pub fn start(launch: &Launch, report: impl FnMut(Event) + Send + 'static) -> io::Result<Server> {
-    let mut child = command(launch).spawn()?;
+    let Started {
+        process,
+        stdout,
+        stderr,
+    } = oxmacs_process::spawn(&mut command(launch))?;
     let missing = || io::Error::other("the server's pipes are missing");
-    let input = child.stdin.take().ok_or_else(missing)?;
-    let output = child.stdout.take().ok_or_else(missing)?;
-    let errors = child.stderr.take().ok_or_else(missing)?;
+    let output = stdout.ok_or_else(missing)?;
+    let errors = stderr.ok_or_else(missing)?;
     let report = Arc::new(Mutex::new(report));
     let logged = Arc::clone(&report);
     thread::spawn(move || {
-        for line in BufReader::new(errors).lines() {
-            let Ok(line) = line else {
-                break;
-            };
+        oxmacs_process::read_lines(errors, |line| {
             (lock(&logged))(Event::Log(line));
-        }
+            true
+        });
     });
-    let child = Arc::new(Mutex::new(child));
-    let watched = Arc::clone(&child);
+    let watched = process.clone();
     thread::spawn(move || {
         let mut reader = BufReader::new(output);
         let failure = loop {
@@ -172,10 +136,7 @@ pub fn start(launch: &Launch, report: impl FnMut(Event) + Send + 'static) -> io:
         let ended = ending(&watched).or(failure);
         (lock(&report))(Event::Exited(ended));
     });
-    Ok(Server {
-        child,
-        input: Arc::new(Mutex::new(input)),
-    })
+    Ok(Server(process))
 }
 
 #[cfg(test)]
@@ -211,35 +172,6 @@ mod tests {
         let mut reader = Cursor::new(b"Content-Length: 10\r\n\r\n{}".to_vec());
 
         assert!(read_message(&mut reader).is_err());
-    }
-
-    #[test]
-    fn programs_are_found_on_the_path_or_given_by_path() {
-        let dir = tempfile::tempdir().unwrap();
-        let name = if cfg!(windows) {
-            "fake-ls.exe"
-        } else {
-            "fake-ls"
-        };
-        std::fs::write(dir.path().join(name), "").unwrap();
-        let search = dir.path().as_os_str();
-
-        assert_eq!(locate("fake-ls", Some(search)), Some(dir.path().join(name)));
-        assert_eq!(locate("absent-ls", Some(search)), None);
-        let full = dir.path().join(name);
-        assert_eq!(locate(full.to_str().unwrap(), None), Some(full.clone()));
-    }
-
-    #[test]
-    #[cfg(windows)]
-    fn npm_scripts_are_found_on_windows() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("pyright-langserver.cmd"), "").unwrap();
-
-        assert_eq!(
-            locate("pyright-langserver", Some(dir.path().as_os_str())),
-            Some(dir.path().join("pyright-langserver.cmd"))
-        );
     }
 
     #[test]

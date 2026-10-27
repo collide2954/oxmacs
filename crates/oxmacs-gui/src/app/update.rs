@@ -371,7 +371,7 @@ impl App {
                     .jobs
                     .iter()
                     .find(|(id, _)| *id == job)
-                    .is_some_and(|(_, handle)| handle.send(&text).is_ok());
+                    .is_some_and(|(_, process)| process.send(text.as_str()).is_ok());
                 if !sent {
                     self.editor.show_message("The process is not running");
                 }

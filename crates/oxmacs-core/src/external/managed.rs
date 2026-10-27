@@ -7,8 +7,6 @@ use std::{env, fs};
 use ring::digest::{SHA256, digest};
 use serde::Deserialize;
 
-use crate::external::tools;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Form {
     Program,
@@ -195,14 +193,14 @@ impl Managed {
             let found = if path.is_file() {
                 Some(path.to_owned())
             } else {
-                tools::find(configured, search_path)
+                oxmacs_process::find(configured, search_path)
             };
             return found.map(|path| (path, Origin::Setting));
         }
         let path = search_path.filter(|_| self.form == Form::Program);
         root.and_then(|root| self.installed(root))
             .map(|(_, path)| (path, Origin::Managed))
-            .or_else(|| tools::find(self.name, path).map(|path| (path, Origin::Path)))
+            .or_else(|| oxmacs_process::find(self.name, path).map(|path| (path, Origin::Path)))
     }
 
     pub fn archive_here(self) -> Option<String> {
@@ -337,8 +335,8 @@ fn tar() -> PathBuf {
 fn unpack(archive: &Path, into: &Path) -> Result<(), String> {
     let mut command = Command::new(tar());
     command.arg("-xf").arg(archive).arg("-C").arg(into);
-    tools::hide_console(&mut command);
-    let output = command.output().map_err(|error| format!("tar: {error}"))?;
+    let output =
+        oxmacs_process::run(&mut command, None).map_err(|error| format!("tar: {error}"))?;
     if output.status.success() {
         return Ok(());
     }

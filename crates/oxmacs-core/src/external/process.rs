@@ -1,17 +1,16 @@
-use std::io::{self, BufRead, BufReader, PipeReader, PipeWriter, Read, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::io::{self, PipeReader, PipeWriter, Read};
+use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+pub use oxmacs_process::Process;
+
 use crate::editor::{Job, Outcome};
-use crate::external::tools;
 
 const POLL: Duration = Duration::from_millis(50);
 const LINGER: Duration = Duration::from_millis(250);
 const CHUNK: usize = 8192;
-const GRACE: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
@@ -20,54 +19,11 @@ pub enum Event {
     Finished(Outcome),
 }
 
-#[derive(Debug, Clone)]
-pub struct Handle {
-    child: Arc<Mutex<Child>>,
-    input: Arc<Mutex<Option<ChildStdin>>>,
-}
-
-impl Handle {
-    pub fn kill(&self) {
-        let _ = lock(&self.child).kill();
-    }
-
-    pub fn send(&self, text: &str) -> io::Result<()> {
-        let mut input = lock(&self.input);
-        let stdin = input
-            .as_mut()
-            .ok_or_else(|| io::Error::from(io::ErrorKind::BrokenPipe))?;
-        stdin.write_all(text.as_bytes())?;
-        stdin.flush()
-    }
-
-    pub fn terminate(&self) {
-        self.close_input();
-        let pid = self.pid();
-        let child = Arc::clone(&self.child);
-        thread::spawn(move || {
-            ask_to_end(pid);
-            thread::sleep(GRACE);
-            let mut child = lock(&child);
-            if matches!(child.try_wait(), Ok(None)) {
-                let _ = child.kill();
-            }
-        });
-    }
-
-    pub fn pid(&self) -> u32 {
-        lock(&self.child).id()
-    }
-
-    pub fn close_input(&self) {
-        lock(&self.input).take();
-    }
-}
-
-pub fn spawn(job: &Job, report: impl FnMut(Event) + Send + 'static) -> io::Result<Handle> {
+pub fn spawn(job: &Job, report: impl FnMut(Event) + Send + 'static) -> io::Result<Process> {
     launch(job, false, report)
 }
 
-pub fn start_session(job: &Job, report: impl FnMut(Event) + Send + 'static) -> io::Result<Handle> {
+pub fn start_session(job: &Job, report: impl FnMut(Event) + Send + 'static) -> io::Result<Process> {
     launch(job, true, report)
 }
 
@@ -75,22 +31,20 @@ fn launch(
     job: &Job,
     interactive: bool,
     report: impl FnMut(Event) + Send + 'static,
-) -> io::Result<Handle> {
+) -> io::Result<Process> {
     let (reader, writer) = io::pipe()?;
-    let mut child = command(job, writer, interactive)?.spawn()?;
-    let input = Arc::new(Mutex::new(child.stdin.take()));
-    let child = Arc::new(Mutex::new(child));
+    let process = oxmacs_process::spawn(&mut command(job, writer, interactive)?)?.process;
     let (sender, events) = mpsc::channel();
     thread::spawn(move || {
         if interactive {
             read_chunks(reader, &sender);
         } else {
-            read_lines(reader, &sender);
+            oxmacs_process::read_lines(reader, |line| sender.send(Event::Line(line)).is_ok());
         }
     });
-    let watched = Arc::clone(&child);
+    let watched = process.clone();
     thread::spawn(move || supervise(&watched, &events, report));
-    Ok(Handle { child, input })
+    Ok(process)
 }
 
 fn command(job: &Job, output: PipeWriter, interactive: bool) -> io::Result<Command> {
@@ -106,41 +60,7 @@ fn command(job: &Job, output: PipeWriter, interactive: bool) -> io::Result<Comma
         })
         .stdout(output.try_clone()?)
         .stderr(output);
-    tools::hide_console(&mut command);
     Ok(command)
-}
-
-fn ask_to_end(pid: u32) {
-    let (program, args) = if cfg!(windows) {
-        ("taskkill", ["/PID".to_owned(), pid.to_string()])
-    } else {
-        ("kill", ["-TERM".to_owned(), pid.to_string()])
-    };
-    let mut command = Command::new(program);
-    command
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    tools::hide_console(&mut command);
-    let _ = command.status();
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-fn read_lines(reader: PipeReader, events: &Sender<Event>) {
-    let mut reader = BufReader::new(reader);
-    let mut bytes = Vec::new();
-    while matches!(reader.read_until(b'\n', &mut bytes), Ok(read) if read > 0) {
-        let line = String::from_utf8_lossy(&bytes);
-        let line = line.trim_end_matches(['\n', '\r']).to_owned();
-        if events.send(Event::Line(line)).is_err() {
-            return;
-        }
-        bytes.clear();
-    }
 }
 
 fn read_chunks(mut reader: PipeReader, events: &Sender<Event>) {
@@ -163,9 +83,9 @@ fn read_chunks(mut reader: PipeReader, events: &Sender<Event>) {
     }
 }
 
-fn supervise(child: &Mutex<Child>, events: &Receiver<Event>, mut report: impl FnMut(Event)) {
+fn supervise(process: &Process, events: &Receiver<Event>, mut report: impl FnMut(Event)) {
     let code = loop {
-        match lock(child).try_wait() {
+        match process.try_wait() {
             Ok(Some(status)) => break status.code(),
             Ok(None) => {}
             Err(_) => break None,
@@ -204,7 +124,7 @@ mod tests {
         }
     }
 
-    fn started(job: &Job) -> (Handle, Receiver<Event>) {
+    fn started(job: &Job) -> (Process, Receiver<Event>) {
         let (sender, events) = mpsc::channel();
         let killer = spawn(job, move |event| {
             let _ = sender.send(event);
@@ -285,7 +205,7 @@ mod tests {
         assert!(start.elapsed() < PATIENCE);
     }
 
-    fn session(job: &Job) -> (Handle, Receiver<Event>) {
+    fn session(job: &Job) -> (Process, Receiver<Event>) {
         let (sender, events) = mpsc::channel();
         let handle = start_session(job, move |event| {
             let _ = sender.send(event);

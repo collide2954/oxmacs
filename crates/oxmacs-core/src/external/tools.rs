@@ -1,8 +1,6 @@
-use std::ffi::OsStr;
-use std::io::Write;
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::{env, fs, thread};
+use std::process::Command;
 
 const EDITIONS: &[&str] = &["2015", "2018", "2021", "2024"];
 
@@ -13,25 +11,9 @@ pub enum Probe {
     Missing,
 }
 
-pub fn find(program: &str, search_path: Option<&OsStr>) -> Option<PathBuf> {
-    env::split_paths(search_path?)
-        .flat_map(|directory| candidates(&directory, program))
-        .find(|candidate| candidate.is_file())
-}
-
-fn candidates(directory: &Path, program: &str) -> Vec<PathBuf> {
-    let mut names = vec![directory.join(program)];
-    if cfg!(windows) {
-        names.insert(0, directory.join(format!("{program}.exe")));
-    }
-    names
-}
-
 pub fn version(path: &Path) -> Result<String, String> {
-    let mut command = Command::new(path);
-    command.arg("--version");
-    hide_console(&mut command);
-    let output = command.output().map_err(|error| error.to_string())?;
+    let output = oxmacs_process::run(Command::new(path).arg("--version"), None)
+        .map_err(|error| error.to_string())?;
     let first_line = |bytes: &[u8]| {
         String::from_utf8_lossy(bytes)
             .lines()
@@ -53,7 +35,7 @@ pub fn version(path: &Path) -> Result<String, String> {
 }
 
 pub fn rustfmt(text: &str, directory: &Path, edition: &str) -> Result<String, String> {
-    let program = find("rustfmt", env::var_os("PATH").as_deref())
+    let program = oxmacs_process::which("rustfmt")
         .ok_or_else(|| "not found; rustup component add rustfmt".to_owned())?;
     let mut command = Command::new(program);
     command
@@ -72,24 +54,9 @@ pub fn air_format(program: &Path, text: &str, file: &Path) -> Result<String, Str
 }
 
 fn pipe(mut command: Command, text: &str) -> Result<String, String> {
-    command
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    hide_console(&mut command);
     let program = command.get_program().to_string_lossy().into_owned();
-    let mut child = command
-        .spawn()
+    let output = oxmacs_process::run(&mut command, Some(text.as_bytes()))
         .map_err(|error| format!("cannot run {program}: {error}"))?;
-    let mut input = child
-        .stdin
-        .take()
-        .ok_or_else(|| format!("cannot write to {program}"))?;
-    let output = thread::scope(|scope| {
-        scope.spawn(move || input.write_all(text.as_bytes()));
-        child.wait_with_output()
-    })
-    .map_err(|error| error.to_string())?;
     if output.status.success() {
         return String::from_utf8(output.stdout).map_err(|error| error.to_string());
     }
@@ -159,35 +126,11 @@ pub fn cargo_edition(directory: &Path) -> &'static str {
         .unwrap_or("2024")
 }
 
-#[cfg(windows)]
-pub(crate) fn hide_console(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    command.creation_flags(CREATE_NO_WINDOW);
-}
-
-#[cfg(not(windows))]
-pub(crate) fn hide_console(_: &mut Command) {}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
 
     use super::*;
-
-    #[test]
-    fn programs_are_found_on_the_search_path() {
-        let first = tempfile::tempdir().unwrap();
-        let second = tempfile::tempdir().unwrap();
-        let name = if cfg!(windows) { "tool.exe" } else { "tool" };
-        fs::write(second.path().join(name), "").unwrap();
-        let search = env::join_paths([first.path(), second.path()]).unwrap();
-
-        assert_eq!(find("tool", Some(&search)), Some(second.path().join(name)));
-        assert_eq!(find("other", Some(&search)), None);
-        assert_eq!(find("tool", None), None);
-    }
 
     #[test]
     fn versions_come_from_the_first_line() {
@@ -256,7 +199,7 @@ mod tests {
 
     #[test]
     fn air_formats_text_when_installed() {
-        let Some(air) = find("air", env::var_os("PATH").as_deref()) else {
+        let Some(air) = oxmacs_process::which("air") else {
             return;
         };
         let dir = tempfile::tempdir().unwrap();
@@ -270,7 +213,7 @@ mod tests {
 
     #[test]
     fn rustfmt_formats_text_when_installed() {
-        if find("rustfmt", env::var_os("PATH").as_deref()).is_none() {
+        if oxmacs_process::which("rustfmt").is_none() {
             return;
         }
         let dir = tempfile::tempdir().unwrap();
