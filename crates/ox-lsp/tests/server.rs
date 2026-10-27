@@ -192,7 +192,7 @@ fn definitions_references_and_renames_follow_names() {
 
     let found = client.at("textDocument/definition", &file, 2, 2);
     assert_eq!(found["uri"], json!(file));
-    assert_eq!(found["range"]["start"], json!({"line": 0, "character": 0}));
+    assert_eq!(found["range"]["start"], json!({"line": 0, "character": 6}));
 
     let found = client.at("textDocument/references", &file, 2, 2);
     let lines: Vec<u64> = found
@@ -211,6 +211,43 @@ fn definitions_references_and_renames_follow_names() {
         edits[1]["range"],
         json!({"start": {"line": 2, "character": 1}, "end": {"line": 2, "character": 5}})
     );
+}
+
+#[test]
+fn renames_and_references_follow_the_binding_not_the_spelling() {
+    let (dir, file, mut client) = shapes();
+    let geometry = uri(&dir.path().join("geometry.ox"));
+    let source = "(def (area w h) (* w h))\n(def (scaled area k) (* area k))\n(area 1 2)\n";
+    std::fs::write(dir.path().join("geometry.ox"), source).unwrap();
+    client.open(&geometry, source);
+    client.open(
+        &file,
+        "(module (import (geometry :as g)))\n(g/area 1 2)\n(def (own area) area)\n",
+    );
+
+    let edit = client.at("textDocument/rename", &file, 1, 4);
+    let lines = |uri: &str| -> Vec<(u64, u64)> {
+        edit["changes"][uri]
+            .as_array()
+            .map(|edits| {
+                edits
+                    .iter()
+                    .map(|edit| {
+                        let start = &edit["range"]["start"];
+                        (
+                            start["line"].as_u64().unwrap(),
+                            start["character"].as_u64().unwrap(),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    assert_eq!(lines(&geometry), [(0, 6), (2, 1)]);
+    assert_eq!(lines(&file), [(1, 3)]);
+
+    let found = client.at("textDocument/references", &geometry, 1, 25);
+    assert_eq!(found.as_array().unwrap().len(), 2);
 }
 
 #[test]

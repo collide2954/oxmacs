@@ -5,10 +5,11 @@ use std::path::{Path, PathBuf};
 
 use lsp_server::{Connection, ErrorCode, Message, Notification, Request, Response};
 use ox_lang::Isolate;
-use ox_lang::check::Severity;
+use ox_lang::check::{Occurrence, Severity};
 use ox_lang::describe::Kind;
 use ox_lang::forms::Forms;
-use ox_lang::names::{self, Definition};
+use ox_lang::ide::{self, Source};
+use ox_lang::names;
 use ox_lang::span::Span;
 use serde_json::{Value, json};
 
@@ -45,6 +46,8 @@ struct Document {
     path: Option<PathBuf>,
     name: String,
     forms: Forms,
+    module: Option<String>,
+    occurrences: Vec<Occurrence>,
 }
 
 impl Document {
@@ -214,10 +217,11 @@ impl<'a> Server<'a> {
             document.path.clone(),
         );
         let isolate = self.isolate(path.as_deref());
-        let found = isolate.check(&name, &text);
+        let (found, occurrences) = isolate.check_with_bindings(&name, &text);
         let forms = isolate.checked_forms(&name, &text);
         if let Some(document) = self.documents.get_mut(uri) {
             document.forms = forms;
+            document.occurrences = occurrences;
         }
         let shown: Vec<Value> = found
             .iter()
@@ -248,6 +252,9 @@ impl<'a> Server<'a> {
                     .map_or_else(|| uri.clone(), |path| path.display().to_string());
                 let text = params["textDocument"]["text"].as_str()?.to_owned();
                 let forms = Forms::built_in();
+                let module = path
+                    .as_deref()
+                    .and_then(|path| ide::module_name(&(self.options.roots)(path), path));
                 self.documents.insert(
                     uri.clone(),
                     Document {
@@ -255,6 +262,8 @@ impl<'a> Server<'a> {
                         path,
                         name,
                         forms,
+                        module,
+                        occurrences: Vec::new(),
                     },
                 );
                 self.diagnostics(&uri)
@@ -375,21 +384,51 @@ impl<'a> Server<'a> {
         })
     }
 
+    fn sources(&self) -> (Vec<&String>, Vec<Source<'_>>) {
+        let mut uris: Vec<&String> = self.documents.keys().collect();
+        uris.sort();
+        let sources = uris
+            .iter()
+            .map(|uri| {
+                let document = &self.documents[*uri];
+                Source {
+                    module: document.module.as_deref(),
+                    occurrences: &document.occurrences,
+                }
+            })
+            .collect();
+        (uris, sources)
+    }
+
+    fn same_binding(&self, uri: &str, at: usize) -> Vec<(String, Occurrence)> {
+        let (uris, sources) = self.sources();
+        let Some(index) = uris.iter().position(|known| *known == uri) else {
+            return Vec::new();
+        };
+        ide::same_binding(&sources, index, at)
+            .into_iter()
+            .map(|(found, occurrence)| (uris[found].clone(), occurrence))
+            .collect()
+    }
+
+    fn located(&self, uri: &str, span: Span) -> Value {
+        let text = self
+            .documents
+            .get(uri)
+            .map_or("", |document| document.text.as_str());
+        json!({"uri": uri, "range": range(text, span)})
+    }
+
     fn definition(&mut self, params: &Value) -> Option<Value> {
         let (uri, text, at) = self.at(params)?;
-        let name = Self::name_at(&text, at)?;
-        let wanted = names::short(&name);
-        let mut ordered: Vec<&String> = vec![&uri];
-        ordered.extend(self.documents.keys().filter(|other| **other != uri));
-        for candidate in ordered {
-            let document = &self.documents[candidate];
-            if let Some(found) = names::definitions_with(&document.text, &document.forms)
-                .into_iter()
-                .find(|definition: &Definition| definition.name == wanted)
-            {
-                return Some(json!({"uri": candidate, "range": range(&document.text, found.span)}));
-            }
+        if let Some((found, occurrence)) = self
+            .same_binding(&uri, at)
+            .into_iter()
+            .find(|(_, occurrence)| occurrence.defines)
+        {
+            return Some(self.located(&found, occurrence.span));
         }
+        let name = Self::name_at(&text, at)?;
         let document = self.documents.get(&uri)?;
         let (module, path) = (document.module(), document.path.clone());
         let place = self
@@ -401,47 +440,28 @@ impl<'a> Server<'a> {
             .then(|| json!({"uri": uri_of(file), "range": range(&place.source.text, place.span)}))
     }
 
-    fn occurrences(&self, name: &str) -> Vec<(String, Span, String)> {
-        let mut uris: Vec<&String> = self.documents.keys().collect();
-        uris.sort();
-        uris.into_iter()
-            .flat_map(|uri| {
-                let text = &self.documents[uri].text;
-                names::occurrences(text, name)
-                    .into_iter()
-                    .map(move |span| (uri.clone(), span, text.clone()))
-            })
-            .collect()
-    }
-
     fn references(&self, params: &Value) -> Option<Value> {
-        let (_, text, at) = self.at(params)?;
-        let name = Self::name_at(&text, at)?;
+        let (uri, _, at) = self.at(params)?;
         Some(Value::Array(
-            self.occurrences(&name)
+            self.same_binding(&uri, at)
                 .into_iter()
-                .map(|(uri, span, text)| json!({"uri": uri, "range": range(&text, span)}))
+                .map(|(found, occurrence)| self.located(&found, occurrence.span))
                 .collect(),
         ))
     }
 
     fn rename(&self, params: &Value) -> Option<Value> {
-        let (_, text, at) = self.at(params)?;
-        let name = Self::name_at(&text, at)?;
-        let wanted = names::short(&name).to_owned();
+        let (uri, _, at) = self.at(params)?;
         let replacement = params["newName"].as_str()?;
         let mut changes: HashMap<String, Vec<Value>> = HashMap::new();
-        for (uri, span, text) in self.occurrences(&name) {
-            let end = span.end as usize;
-            let edited = Span::new(end.saturating_sub(wanted.len()), end);
-            changes
-                .entry(uri)
-                .or_default()
-                .push(json!({"range": range(&text, edited), "newText": replacement}));
+        for (found, occurrence) in self.same_binding(&uri, at) {
+            let text = &self.documents.get(&found)?.text;
+            changes.entry(found).or_default().push(
+                json!({"range": range(text, ide::name_span(&occurrence)), "newText": replacement}),
+            );
         }
         Some(json!({"changes": changes}))
     }
-
     fn format(&self, params: &Value) -> Option<Value> {
         let uri = params["textDocument"]["uri"].as_str()?;
         let document = self.documents.get(uri)?;

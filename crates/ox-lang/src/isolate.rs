@@ -776,6 +776,14 @@ impl Isolate {
         self.examine_within(check::BUDGET, name, source).1
     }
 
+    pub fn check_with_bindings(
+        &mut self,
+        name: &str,
+        source: &str,
+    ) -> (Vec<Diagnostic>, Vec<Occurrence>) {
+        self.examine_within(check::BUDGET, name, source)
+    }
+
     fn examine_within(
         &mut self,
         budget: Duration,

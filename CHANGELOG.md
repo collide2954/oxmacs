@@ -56,6 +56,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- `ox lsp` renames and finds references by what a name refers to: renaming a global no longer touches a parameter or a local with the same name, or another module's global, and `g/area` follows `area` into the module `g` names. Going to a definition lands on the defined name.
 - A new file in folders that don't exist yet belongs to its project as soon as it's opened, so its project's checks and language server count it even where the temporary or home folder is reached through a link or a short name.
 - `C-M-f`, `C-M-b`, `C-M-u`, `C-M-d` and bracket matching skip brackets inside strings, comments and character literals in languages without a tree-sitter grammar, such as Ox and the modes plugins define, using the language's own highlighting.
 - Ox highlighting, the signature hint, `C-x C-e`, completion, names at point and `ox fmt` read Ox with the reader's own tokens, so raw strings with quotes inside, regexes with braces, block comments, commas and strings inside `{…}` holes no longer confuse them, and code inside a hole is colored as code.
