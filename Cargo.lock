@@ -4014,6 +4014,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxmacs-process"
+version = "0.14.0"
+dependencies = [
+ "rustix 1.1.5",
+ "tempfile",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "oxmacs-script"
 version = "0.14.0"
 dependencies = [

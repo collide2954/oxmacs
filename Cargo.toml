@@ -35,6 +35,7 @@ oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
 oxmacs-api = { path = "crates/oxmacs-api" }
 oxmacs-pdf = { path = "crates/oxmacs-pdf" }
+oxmacs-process = { path = "crates/oxmacs-process" }
 oxmacs-script = { path = "crates/oxmacs-script" }
 native-theme = { version = "0.6.1", default-features = false }
 notify = "8.2.0"
@@ -49,6 +50,7 @@ resvg = { version = "0.49.0", default-features = false, features = ["text", "sys
 ring = "0.17.14"
 ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
 roxmltree = "0.21.1"
+rustix = { version = "1.1.5", default-features = false, features = ["std"] }
 zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 same-file = "1.0.6"
