@@ -190,10 +190,12 @@
       (else (checked (shell/run! host (str "mkdir -p -- " (shell/quoted remote))) (str "Couldn't make " remote))))))
 
 (def (run host dir command)
-  "Runs command in dir on host, returning its :status and :lines."
+  "Runs command in dir on host in a shell of its own, returning its :status and :lines."
   (unless (can-run? host)
     (raise (error (str host.name " has no shell to run commands in"))))
-  (shell/run! host (str "cd -- " (shell/quoted dir) " && {{ " command "\n} </dev/null")))
+  (let [[program & arguments] (shell/command-of host)
+        found (await (process/run program (vec arguments) :input (shell/one-shot dir command)))]
+    {status: found.status lines: (string/lines found.stdout)}))
 
 (def (search host dir pattern)
   "The lines below dir on host that hold pattern, each a map of :path, :line and :text."

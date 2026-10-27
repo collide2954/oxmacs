@@ -23,6 +23,7 @@ pub struct RunSpec {
     pub directory: PathBuf,
     pub env: Vec<(String, String)>,
     pub title: Option<String>,
+    pub input: Option<String>,
     pub kind: &'static str,
     pub errors: bool,
     pub noun: Option<&'static str>,
@@ -39,6 +40,7 @@ impl RunSpec {
             directory: PathBuf::new(),
             env: Vec::new(),
             title: None,
+            input: None,
             kind: "job",
             errors: false,
             noun: None,
@@ -167,6 +169,7 @@ impl Editor {
             name: label,
             buffer,
             interactive: false,
+            input: spec.input,
         };
         let id = self.start_job(job, Self::run_event);
         if let Some(run) = self

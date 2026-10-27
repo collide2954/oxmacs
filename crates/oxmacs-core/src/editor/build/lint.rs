@@ -134,6 +134,7 @@ impl Editor {
             name: run.name.clone(),
             buffer: None,
             interactive: false,
+            input: None,
         };
         let job = self.start_job(spec, Self::lint_event);
         self.builds.started(job, due, run);

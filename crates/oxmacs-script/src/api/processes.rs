@@ -160,6 +160,7 @@ mod tests {
             name: "cargo build".to_owned(),
             buffer: None,
             interactive: false,
+            input: None,
         }
     }
 

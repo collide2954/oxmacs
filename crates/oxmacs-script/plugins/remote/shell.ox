@@ -1,6 +1,6 @@
 (module
   (import (ox process) (ox string) (ox crypto))
-  (export run! quoted command-of close! interactive-command))
+  (export run! quoted command-of close! one-shot prompter))
 
 (defonce sessions (atom {}))
 (defonce locks (atom {}))
@@ -24,11 +24,13 @@
     (vec host.shell)
     (conj (ssh-words host) "sh")))
 
-(def (interactive-command host)
-  "The program and arguments for a shell you type into on host."
-  (if host.shell
-    (vec host.shell)
-    (ssh-words host)))
+(def (one-shot dir command)
+  "The script a shell of its own reads to run command in dir and end, with its errors in its output and nothing to read."
+  (str "cd -- " (quoted dir) " && {{ " command "\n} 2>&1 </dev/null\n"))
+
+(def prompter
+  "What a console sends a shell without a terminal so it prints the prompt the console knows."
+  "printf '\\001>\\002%s\\003' '$ '")
 
 (def (live host)
   (when-let [session (get @sessions host.name)]

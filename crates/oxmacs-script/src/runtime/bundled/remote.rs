@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use oxmacs_core::editor::Editor;
 
 use crate::Ox;
-use crate::testing::{press, run_command, started, typed};
+use crate::testing::{Runner, press, run_command, started, typed};
 
 fn answer(editor: &mut Editor, ox: &mut Ox, text: &str) {
     typed(editor, ox, text);
@@ -20,9 +20,15 @@ fn eval(editor: &mut Editor, ox: &mut Ox, source: &str) -> String {
     }
 }
 
-fn pump(editor: &mut Editor, ox: &mut Ox, done: impl Fn(&Editor) -> bool) -> bool {
+fn pump(
+    runner: &mut Runner,
+    editor: &mut Editor,
+    ox: &mut Ox,
+    done: impl Fn(&Editor) -> bool,
+) -> bool {
     let deadline = Instant::now() + Duration::from_secs(20);
     while Instant::now() < deadline {
+        runner.step(editor);
         ox.tick(editor);
         if done(editor) {
             return true;
@@ -159,7 +165,7 @@ fn remote_files_open_locally_and_go_back_when_saved() {
     press(&mut editor, &mut ox, "M->");
     typed(&mut editor, &mut ox, "third line");
     press(&mut editor, &mut ox, "C-x C-s");
-    let sent = pump(&mut editor, &mut ox, |_| {
+    let sent = pump(&mut Runner::new(), &mut editor, &mut ox, |_| {
         fs::read_to_string(far.path().join("notes.txt"))
             .is_ok_and(|text| text.ends_with("third line"))
     });
@@ -222,15 +228,18 @@ fn folders_are_managed_from_the_browser() {
 #[test]
 fn commands_run_and_searches_find_lines_on_the_host() {
     let (_far, _home, mut editor, mut ox) = browsing();
+    let mut runner = Runner::new();
 
     press(&mut editor, &mut ox, "!");
     answer(&mut editor, &mut ox, "echo hello from the box");
-    assert_eq!(editor.buffer().name(), "*remote output*");
-    let output = editor.buffer().contents();
-    assert!(output.contains("hello from the box"), "{output}");
-    assert!(output.contains("Finished"), "{output}");
+    assert!(pump(&mut runner, &mut editor, &mut ox, |editor| {
+        output(editor).contains("Finished")
+    }));
+    let shown = output(&editor);
+    assert!(shown.contains("box:"), "{shown}");
+    assert!(shown.contains("$ echo hello from the box"), "{shown}");
+    assert!(shown.contains("\nhello from the box\n"), "{shown}");
 
-    press(&mut editor, &mut ox, "q");
     press(&mut editor, &mut ox, "/");
     answer(&mut editor, &mut ox, "needle");
     assert_eq!(editor.buffer().name(), "*remote search*");
@@ -248,21 +257,57 @@ fn commands_run_and_searches_find_lines_on_the_host() {
     assert_eq!(editor.buffer().contents(), "a needle here\n");
 }
 
+fn output(editor: &Editor) -> String {
+    editor
+        .buffer_named("*remote output*")
+        .and_then(|id| editor.buffer_by_id(id))
+        .map(oxmacs_core::text::Buffer::contents)
+        .unwrap_or_default()
+}
+
 #[test]
-fn a_command_that_reads_input_gets_none_instead_of_the_shells_next_commands() {
+fn a_command_with_an_open_quote_or_reading_input_leaves_the_next_commands_alone() {
     let (_far, _home, mut editor, mut ox) = browsing();
+    let mut runner = Runner::new();
 
     press(&mut editor, &mut ox, "!");
     answer(&mut editor, &mut ox, "cat; echo after cat");
-    let output = editor.buffer().contents();
-    assert!(output.contains("after cat"), "{output}");
-    assert!(output.contains("Finished"), "{output}");
+    assert!(pump(&mut runner, &mut editor, &mut ox, |editor| {
+        output(editor).contains("Finished")
+    }));
+    assert!(output(&editor).contains("after cat"), "{}", output(&editor));
 
-    press(&mut editor, &mut ox, "q");
+    go_back_to_the_folder(&mut editor);
+    press(&mut editor, &mut ox, "!");
+    answer(&mut editor, &mut ox, "echo 'oops");
+    assert!(pump(&mut runner, &mut editor, &mut ox, |editor| {
+        output(editor).contains("Exited abnormally")
+    }));
+
+    go_back_to_the_folder(&mut editor);
     press(&mut editor, &mut ox, "!");
     answer(&mut editor, &mut ox, "echo still here");
-    let output = editor.buffer().contents();
-    assert!(output.contains("still here"), "{output}");
+    assert!(pump(&mut runner, &mut editor, &mut ox, |editor| {
+        output(editor).contains("Finished")
+    }));
+    assert!(
+        output(&editor).contains("still here"),
+        "{}",
+        output(&editor)
+    );
+}
+
+fn go_back_to_the_folder(editor: &mut Editor) {
+    let folder = editor
+        .buffer_ids()
+        .into_iter()
+        .find(|id| {
+            editor
+                .buffer_by_id(*id)
+                .is_some_and(|buffer| buffer.name().starts_with("box:"))
+        })
+        .unwrap();
+    editor.show_buffer(folder);
 }
 
 #[test]
@@ -276,21 +321,27 @@ fn a_remote_shell_runs_what_is_typed() {
         }
     };
 
+    let mut runner = Runner::new();
     keys(&mut editor, &mut ox, "s");
-    assert!(pump(&mut editor, &mut ox, |editor| editor.buffer().name()
-        == "*shell box*"));
+    assert!(pump(&mut runner, &mut editor, &mut ox, |editor| {
+        editor.buffer().name() == "*shell box*" && editor.buffer().contents() == "$ "
+    }));
     keys(
         &mut editor,
         &mut ox,
         "e c h o SPC s h e l l SPC s a y s SPC h i RET",
     );
 
-    let answered = pump(&mut editor, &mut ox, |editor| {
-        editor
-            .buffer()
-            .contents()
-            .lines()
-            .any(|line| line == "shell says hi")
+    let answered = pump(&mut runner, &mut editor, &mut ox, |editor| {
+        editor.buffer().contents().ends_with("shell says hi\n$ ")
     });
-    assert!(answered, "{}", editor.buffer().contents());
+    assert!(answered, "{:?}", editor.buffer().contents());
+    assert_eq!(
+        editor.buffer().contents(),
+        "$ echo shell says hi\nshell says hi\n$ "
+    );
+
+    go_back_to_the_folder(&mut editor);
+    run_command(&mut editor, &mut ox, "remote-disconnect");
+    assert_eq!(editor.message(), Some("Disconnected from box"));
 }

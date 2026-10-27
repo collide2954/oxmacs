@@ -34,6 +34,7 @@ fn job(
             name: name.to_owned(),
             buffer: None,
             interactive: false,
+            input: None,
         },
         |_, _, _| {},
     )

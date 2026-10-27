@@ -25,6 +25,7 @@ pub struct ConsoleSpec {
     pub scope: Option<ScopeId>,
     pub prompts: Vec<Regex>,
     pub watches: Vec<(String, Regex)>,
+    pub prompter: Option<String>,
 }
 
 #[derive(Debug)]
@@ -39,6 +40,7 @@ pub(in crate::editor) struct Console {
     on_marker: MarkerHook,
     on_idle: ConsoleHook,
     pub(in crate::editor) scope: Option<ScopeId>,
+    prompter: Option<String>,
 }
 
 fn without_prompt(line: &str) -> &str {
@@ -62,6 +64,9 @@ impl Editor {
             ..spec.job
         };
         let job = self.start_job(job, Self::console_event);
+        if let Some(prompter) = &spec.prompter {
+            self.send_job(job, format!("{prompter}\n"));
+        }
         let stream = Stream::with_patterns(spec.prompts, spec.watches);
         match buffer {
             Some(mut buffer) => {
@@ -77,6 +82,7 @@ impl Editor {
                     on_marker: spec.on_marker,
                     on_idle: spec.on_idle,
                     scope: spec.scope,
+                    prompter: spec.prompter,
                 };
                 self.beside(|editor| editor.add_buffer_with(buffer, Mode::special(console)));
             }
@@ -86,6 +92,7 @@ impl Editor {
                     console.stream = stream;
                     console.expected.clear();
                     console.waiting = false;
+                    console.prompter = spec.prompter;
                 }
             }
         }
@@ -234,6 +241,12 @@ impl Editor {
             self.show_message(format!("{label} is not running"));
             return;
         };
+        if let Some(prompter) = &console.prompter {
+            let code = format!("{code}{prompter}\n");
+            console.waiting = false;
+            self.send_job(job, code);
+            return;
+        }
         let lines = code.lines().count().max(1);
         let unseen = lines - usize::from(console.waiting);
         console.expected.extend(std::iter::repeat_n(None, unseen));
@@ -252,6 +265,15 @@ impl Editor {
         let Some(job) = console.job else {
             return;
         };
+        if let Some(prompter) = console.prompter.clone() {
+            let shown = if console.waiting { code } else { "" };
+            console.waiting = false;
+            if !shown.is_empty() {
+                self.console_insert(id, &format!("{shown}\n"));
+            }
+            self.send_job(job, format!("{code}\n{prompter}\n"));
+            return;
+        }
         let mut lines = code.lines();
         let first = if console.waiting { lines.next() } else { None };
         console
@@ -272,7 +294,11 @@ impl Editor {
             return false;
         };
         console.expected.push_back(None);
-        self.send_job(job, format!("{call}\n"));
+        let prompter = console
+            .prompter
+            .as_ref()
+            .map_or_else(String::new, |prompter| format!("{prompter}\n"));
+        self.send_job(job, format!("{call}\n{prompter}"));
         true
     }
 
@@ -392,12 +418,14 @@ mod tests {
                 name: "*Shell*".to_owned(),
                 buffer: None,
                 interactive: false,
+                input: None,
             },
             on_marker: heard,
             on_idle: idle,
             scope: None,
             prompts: Vec::new(),
             watches: Vec::new(),
+            prompter: None,
         }
     }
 
@@ -599,6 +627,39 @@ mod tests {
             heard_so_far(&editor),
             ["idle", "*Shell* debug debug at a.R#2: x", "idle"]
         );
+    }
+
+    #[test]
+    fn a_prompter_asks_a_quiet_shell_for_a_prompt_after_each_input() {
+        let mut editor = Editor::new();
+        editor.set_plugin_state(Heard::default());
+        let id = editor.start_console(
+            ConsoleSpec {
+                prompter: Some("show-prompt".to_owned()),
+                ..spec()
+            },
+            None,
+        );
+        let effects = editor.take_effects();
+        let Some(Effect::StartSession(job)) = effects.first() else {
+            panic!("{effects:?}");
+        };
+        let job = job.id;
+        assert_eq!(
+            effects[1..],
+            [Effect::Send(job, "show-prompt\n".to_owned())]
+        );
+        editor.session_output(job, PROMPT);
+        let window = editor.tiling().windows()[1];
+        editor.select_window(window);
+
+        type_text(&mut editor, "echo a; echo b");
+        press(&mut editor, "RET");
+        assert_eq!(sent(&mut editor), ["echo a; echo b\nshow-prompt\n"]);
+        editor.session_output(job, &format!("a\nb\n{PROMPT}"));
+
+        assert_eq!(contents(&editor, id), "$ echo a; echo b\na\nb\n$ ");
+        assert!(editor.console_waiting(id));
     }
 
     #[test]

@@ -39,13 +39,15 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Plugins decorate text with `annotate`: shaded in a face, underlined as an error or warning, or with a note after the line, kept until the next edit, until `clear-annotations` or fading over a time, and moving with the text around them.
 - `on-buffer-close` calls a handler with each buffer's handle after it closes, plugin buffers too, so a plugin can let go of what it kept for it.
 - The downloads and the Fedora package include `THIRD-PARTY-LICENSES.html`, the licenses of the crates oxmacs and ox are built from, beside the JetBrains Mono font's license and the highlight queries' notices.
-- `run-job` runs a program in its own buffer, the kind `M-x compile` uses, with `:cwd`, `:env`, a `:title` and `:on-line` and `:on-exit` handlers.
+- `run-job` runs a program in its own buffer, the kind `M-x compile` uses, with `:cwd`, `:env`, a `:title`, `:input` for its standard input, and `:on-line` and `:on-exit` handlers.
+- `console-start` takes `:prompter`, a command sent at the start and after each input to a program such as a shell without a terminal, which prints no prompt of its own.
 - `process/stop` asks a process started with `process/start` to end, and a few seconds later stops it and every program it started if it hasn't.
 - `M-x list-processes` lists language servers beside builds, lints and consoles, and a process you stop shows as stopping until it ends; `(processes)` gives its `:status` as `:stopping` then.
 - Programs started with `process/start` show in `M-x list-processes` as Ox processes, and end when oxmacs quits. The map `process/start` gives carries their `:id` there, for `stop-process` and `kill-process`.
 
 ### Changed
 
+- `remote` 0.3.0: `!` runs a command in a shell of its own and shows it in a run buffer, where `g` runs it again and `C-c C-k` stops it, and `/` searches in a shell of its own too, so neither can disturb the connection kept open for browsing and saving. `s` opens the shell as a console, with `M-p` and `M-n` history, and `M-x remote-disconnect` closes the kept connection to the host here.
 - R jobs, Shiny apps and R Markdown rendering (`r` 0.20.0) run in the same kind of buffer as `M-x compile`: `g` runs them again and `C-c C-k` stops them, in place of the `r` plugin's own `k`, `r-job-stop` and `r-job-again`. They show in `M-x list-processes` linked to their buffer, and they end with Finished, Exited abnormally with code N, or Killed.
 - `flash` is now `annotate` with `:lasts`, the milliseconds it takes to fade, in place of `:duration`; `zap` 0.2.1 uses it.
 - Every special buffer works one way: double-clicking a line in a list does what RET does there, as in plugin buffers, and `g` (or `M-x revert-buffer`) runs each buffer's own refresh, such as checking again in *Diagnostics*.
@@ -69,6 +71,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Sending a lot of text to a busy process, such as an R session or a language server, no longer freezes the editor: input is written in the background.
 - Stopping or killing a build, a console or a language server stops the programs it started too, and on Windows they all end when oxmacs quits. Stopping waits a few seconds after asking, as before, and on Windows it now ends the whole tree instead of only the first program.
 - A language server's log keeps going past output that isn't valid UTF-8.
+- A remote command with an unclosed quote, such as `echo 'oops`, no longer hangs the `remote` plugin's connection, and with it every later save of a remote file.
 - `print` and `println` show in *ox repl* when it is open and in *ox log* otherwise. They wrote to a standard output the Windows release doesn't have, so their text was lost.
 - Ox code waiting on a file, a program or the network goes on as soon as the work is done, instead of at the next poll up to a tenth of a second later, so chains of awaits, such as the explorer opening a project, no longer pay that delay at every step. Problems the background Ox checker finds also show as soon as it finishes.
 - `process/start` writes its `:input` and then closes the program's input, as documented; it used to ignore it. Its `:lines` and `:errors` keep streaming past output that isn't valid UTF-8, so a remote shell or R output no longer stops there.

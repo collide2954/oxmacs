@@ -11,7 +11,7 @@ use oxmacs_core::editor::{Editor, RunSpec};
 use crate::ide::log;
 
 const NAME: &str = "run-job";
-const OPTIONS: [&str; 5] = ["cwd", "env", "title", "on-line", "on-exit"];
+const OPTIONS: [&str; 6] = ["cwd", "env", "title", "input", "on-line", "on-exit"];
 
 #[derive(Debug, Default)]
 struct Held {
@@ -83,6 +83,7 @@ fn run(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Valu
             "cwd" => spec.directory = PathBuf::from(text(heap, NAME, value)?),
             "env" => spec.env = environment(heap, value)?,
             "title" => spec.title = Some(text(heap, NAME, value)?.to_owned()),
+            "input" => spec.input = Some(text(heap, NAME, value)?.to_owned()),
             "on-line" => {
                 held.line = Some(heap.hold(value));
                 let named = name.clone();

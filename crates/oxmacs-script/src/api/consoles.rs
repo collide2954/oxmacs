@@ -118,9 +118,10 @@ struct Options {
     prompts: Vec<String>,
     errors: Vec<String>,
     watches: Vec<(String, String)>,
+    prompter: Option<String>,
 }
 
-const START: [&str; 12] = [
+const START: [&str; 13] = [
     "program",
     "args",
     "directory",
@@ -133,6 +134,7 @@ const START: [&str; 12] = [
     "prompts",
     "errors",
     "watch",
+    "prompter",
 ];
 
 fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
@@ -158,6 +160,14 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
             "prompts" => found.prompts = texts(heap, value, "a vector of patterns for :prompts")?,
             "errors" => found.errors = texts(heap, value, "a vector of patterns for :errors")?,
             "watch" => found.watches = pairs(heap, value, "watch")?,
+            "prompter" => {
+                found.prompter = Some(text(
+                    heap,
+                    "console-start",
+                    "a command for :prompter",
+                    value,
+                )?);
+            }
             _ => {}
         }
     }
@@ -259,10 +269,12 @@ fn start(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Va
             name: name.clone(),
             buffer: None,
             interactive: true,
+            input: None,
         },
         on_marker: heard,
         on_idle: idle,
         scope,
+        prompter: given.prompter,
     };
     let buffer = editor.start_console(spec, existing);
     let output = given.output.map(|function| heap.hold(function));

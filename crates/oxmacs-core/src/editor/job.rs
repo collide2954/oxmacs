@@ -14,6 +14,7 @@ pub struct Job {
     pub args: Vec<String>,
     pub directory: PathBuf,
     pub env: Vec<(String, String)>,
+    pub input: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,6 +33,7 @@ pub struct JobSpec {
     pub name: String,
     pub buffer: Option<BufferId>,
     pub interactive: bool,
+    pub input: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,6 +71,7 @@ impl Editor {
             args: spec.args,
             directory: spec.directory,
             env: spec.env,
+            input: spec.input,
         };
         self.track_job(&job, spec.label, spec.name, spec.buffer);
         self.job_handlers.0.push((id, Box::new(handler)));
@@ -134,6 +137,7 @@ mod tests {
             name: "ruff check".to_owned(),
             buffer: None,
             interactive,
+            input: None,
         }
     }
 
@@ -170,6 +174,7 @@ mod tests {
                 args: vec!["check".to_owned()],
                 directory: PathBuf::from("project"),
                 env: vec![("NO_COLOR".to_owned(), "1".to_owned())],
+                input: None,
             })]
         );
         assert!(editor.job_running(id));

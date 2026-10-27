@@ -1,5 +1,5 @@
 (module
-  (import (ox string) (ox file) (ox path) (ox process)
+  (import (ox string) (ox file) (ox path)
           (remote hosts :as hosts)
           (remote shell :as shell)
           (remote ops :as ops)
@@ -10,7 +10,7 @@
 (def search-buffer "*remote search*")
 (def first-row 3)
 
-(defonce state (atom {hosts: [] browsers: {} opened: {} results: [] shells: {}}))
+(defonce state (atom {hosts: [] browsers: {} opened: {}}))
 
 (def (quietly work)
   (try (work)
@@ -189,15 +189,13 @@
 (defcommand remote-run "Run a command in this remote folder"
   (quietly (fn []
              (let [found (browser)
-                   command (await (prompt (str "Run on " found.host.name ": ")))]
-               (message (str "Running " command "…"))
-               (let [result (ops/run found.host found.dir command)]
-                 (open-buffer output-buffer
-                              (vec (concat [{line: [[(str found.host.name ":" found.dir "$ " command) :heading]]}]
-                                           (map (fn [line] {line: line}) result.lines)
-                                           [{line: [[(if (= result.status 0) "Finished" (str "Exited with " result.status)) (if (= result.status 0) :success :error)]]}]))
-                              :keys {"q" 'quit-window})
-                 (message ""))))))
+                   command (await (prompt (str "Run on " found.host.name ": ")))
+                   [program & arguments] (shell/command-of found.host)]
+               (unless (ops/can-run? found.host)
+                 (raise (error (str found.host.name " has no shell to run commands in"))))
+               (run-job output-buffer program (vec arguments)
+                        :input (shell/one-shot found.dir command)
+                        :title (str found.host.name ":" found.dir "$ " command))))))
 
 (defcommand remote-search "Search the files below this remote folder"
   (quietly (fn []
@@ -214,35 +212,20 @@
 (def (shell-buffer host)
   (str "*shell " host.name "*"))
 
-(def (pump-shell! buffer channel)
-  (when-let [line (receive channel)]
-    (append-lines buffer [line])
-    (pump-shell! buffer channel)))
-
-(defcommand remote-shell "Open a shell on the host here"
+(defcommand remote-shell "Open a shell on the host here, without a terminal: line by line commands work, full-screen programs don't"
   (quietly (fn []
              (let [host (or (host-here) (raise (error "Put point on a host or in a remote folder first")))
-                   buffer (shell-buffer host)
-                   running (get-in @state [:shells buffer])]
-               (if (and running (not (done? running.exit)))
-                 (switch-to-buffer buffer)
-                 (let [[program & arguments] (shell/interactive-command host)
-                       process (process/start program (vec arguments))]
-                   (swap! state assoc-in [:shells buffer] process)
-                   (open-buffer buffer [{line: [[(str "Shell on " host.name ", without a terminal: line by line commands work, full-screen programs don't") :comment]]}]
-                                :input (str host.name "$ ") :keys {"RET" 'remote-shell-send})
-                   (spawn (pump-shell! buffer process.lines))
-                   (spawn (pump-shell! buffer process.errors))
-                   (spawn (let [status (await process.exit)]
-                            (append-lines buffer [[[(str "Shell ended with " status) :comment]]])))))))))
+                   name (shell-buffer host)
+                   [program & arguments] (shell/command-of host)]
+               (unless (console-running? name)
+                 (console-start name :program program :args (vec arguments) :label "Shell" :prompter shell/prompter))
+               (display-buffer name :select true)))))
 
-(defcommand remote-shell-send "Send the line typed to the shell"
-  (let [process (get-in @state [:shells (buffer-name)])
-        line (take-input)]
-    (if (and process (not (done? process.exit)))
-      (do (append-lines (buffer-name) [[[(str "$ " line) :keyword]]])
-        (process/write process (str line "\n")))
-      (message "The shell has ended; M-x remote-shell starts another"))))
+(defcommand remote-disconnect "Close the connection kept open to the host here"
+  (quietly (fn []
+             (let [host (or (host-here) (raise (error "Put point on a host or in a remote folder first")))]
+               (shell/close! host)
+               (message (str "Disconnected from " host.name))))))
 
 (defcommand remote-add-host "Save a host to browse"
   (quietly (fn []

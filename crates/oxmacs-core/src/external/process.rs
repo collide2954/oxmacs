@@ -34,6 +34,12 @@ fn launch(
 ) -> io::Result<Process> {
     let (reader, writer) = io::pipe()?;
     let process = oxmacs_process::spawn(&mut command(job, writer, interactive)?)?.process;
+    if let Some(input) = &job.input {
+        process.send(input.as_str())?;
+        if !interactive {
+            process.close_input();
+        }
+    }
     let (sender, events) = mpsc::channel();
     thread::spawn(move || {
         if interactive {
@@ -53,7 +59,7 @@ fn command(job: &Job, output: PipeWriter, interactive: bool) -> io::Result<Comma
         .args(&job.args)
         .envs(job.env.iter().map(|(key, value)| (key, value)))
         .current_dir(&job.directory)
-        .stdin(if interactive {
+        .stdin(if interactive || job.input.is_some() {
             Stdio::piped()
         } else {
             Stdio::null()
@@ -121,6 +127,7 @@ mod tests {
             args: args.iter().map(|arg| (*arg).to_owned()).collect(),
             directory: env::temp_dir(),
             env: Vec::new(),
+            input: None,
         }
     }
 
@@ -239,6 +246,26 @@ mod tests {
             events.last(),
             Some(Event::Finished(Outcome::Exited(Some(0))))
         ));
+    }
+
+    #[test]
+    fn jobs_given_input_read_it_and_see_it_end() {
+        let mut echo = if cfg!(windows) {
+            job("findstr", &["^"])
+        } else {
+            job("cat", &[])
+        };
+        echo.input = Some("b\na\n".to_owned());
+        let (_, events) = started(&echo);
+
+        assert_eq!(
+            collect(&events),
+            [
+                Event::Line("b".to_owned()),
+                Event::Line("a".to_owned()),
+                Event::Finished(Outcome::Exited(Some(0)))
+            ]
+        );
     }
 
     #[test]

@@ -439,6 +439,7 @@ mod tests {
             args: args.iter().map(|arg| (*arg).to_owned()).collect(),
             directory: PathBuf::from("work"),
             env: Vec::new(),
+            input: None,
         }
     }
 
