@@ -47,6 +47,28 @@ impl Diagnostic {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Binding {
+    Local(Span),
+    Global {
+        module: Option<String>,
+        name: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Occurrence {
+    pub span: Span,
+    pub binding: Binding,
+    pub defines: bool,
+}
+
+pub fn binding_at(occurrences: &[Occurrence], offset: usize) -> Option<&Occurrence> {
+    occurrences.iter().find(|occurrence| {
+        (occurrence.span.start as usize..=occurrence.span.end as usize).contains(&offset)
+    })
+}
+
 fn symbol(syntax: &Syntax) -> Option<&str> {
     match &syntax.datum {
         Datum::Symbol(name) => Some(name),
@@ -392,17 +414,20 @@ pub(crate) fn defines_macro(form: &Syntax) -> bool {
 pub(crate) fn names(
     runtime: &Runtime,
     module: ModuleId,
+    source: &str,
     forms: &[Syntax],
     unknown: &Unknown,
-) -> Vec<Diagnostic> {
+) -> (Vec<Diagnostic>, Vec<Occurrence>) {
     let mut walker = Walker {
         runtime,
         module,
+        source,
         unknown,
         defined: HashSet::new(),
         shapes: HashMap::new(),
         locals: Vec::new(),
         found: Vec::new(),
+        occurrences: Vec::new(),
     };
     for form in forms {
         walker.collect(form);
@@ -410,7 +435,10 @@ pub(crate) fn names(
     for form in forms {
         walker.form(form);
     }
-    walker.found
+    let mut occurrences = walker.occurrences;
+    occurrences.sort_by_key(|occurrence| (occurrence.span.start, occurrence.span.end));
+    occurrences.dedup();
+    (walker.found, occurrences)
 }
 
 fn lambda_shape(value: &[Syntax]) -> Option<Shape> {
@@ -435,14 +463,57 @@ struct Local {
 struct Walker<'a> {
     runtime: &'a Runtime,
     module: ModuleId,
+    source: &'a str,
     unknown: &'a Unknown,
     defined: HashSet<Sym>,
     shapes: HashMap<Sym, Shape>,
     locals: Vec<Local>,
     found: Vec<Diagnostic>,
+    occurrences: Vec<Occurrence>,
 }
 
 impl Walker<'_> {
+    fn note(&mut self, syntax: &Syntax, binding: Binding, defines: bool) {
+        let Datum::Symbol(name) = &syntax.datum else {
+            return;
+        };
+        let written = self
+            .source
+            .get(syntax.span.start as usize..syntax.span.end as usize);
+        if syntax.marks == Marks::default() && written == Some(name.as_str()) {
+            self.occurrences.push(Occurrence {
+                span: syntax.span,
+                binding,
+                defines,
+            });
+        }
+    }
+
+    fn global(&self, sym: Sym) -> Option<Binding> {
+        if self.defined.contains(&sym) {
+            return Some(Binding::Global {
+                module: None,
+                name: sym.name().to_owned(),
+            });
+        }
+        let (_, target, short) = self
+            .runtime
+            .resolve(self.module, sym, false)
+            .or_else(|| self.runtime.resolve(self.module, sym, true))?;
+        let module = (target != self.module)
+            .then(|| {
+                self.runtime
+                    .modules
+                    .get(target)
+                    .map(|found| found.name.clone())
+            })
+            .flatten();
+        Some(Binding::Global {
+            module,
+            name: short.name().to_owned(),
+        })
+    }
+
     fn collect(&mut self, form: &Syntax) {
         let Datum::List(items) = &form.datum else {
             return;
@@ -487,6 +558,11 @@ impl Walker<'_> {
                 };
                 let name = Sym::intern(name);
                 self.defined.insert(name);
+                let binding = Binding::Global {
+                    module: None,
+                    name: name.name().to_owned(),
+                };
+                self.note(target, binding, true);
                 match shape.filter(|_| head != "defmacro") {
                     Some(shape) => self.shapes.insert(name, shape),
                     None => self.shapes.remove(&name),
@@ -525,6 +601,7 @@ impl Walker<'_> {
     }
 
     fn bind_as(&mut self, name: &Syntax, quiet: bool) {
+        self.note(name, Binding::Local(name.span), true);
         if let Some(text) = symbol(name) {
             self.locals.push(Local {
                 name: Sym::intern(text),
@@ -774,19 +851,14 @@ impl Walker<'_> {
             .any(|local| local.name == name && local.marks == *marks)
     }
 
-    fn use_local(&mut self, name: Sym, marks: &Marks) -> bool {
-        match self
+    fn use_local(&mut self, name: Sym, marks: &Marks) -> Option<Span> {
+        let local = self
             .locals
             .iter_mut()
             .rev()
-            .find(|local| local.name == name && local.marks == *marks)
-        {
-            Some(local) => {
-                local.used = true;
-                true
-            }
-            None => false,
-        }
+            .find(|local| local.name == name && local.marks == *marks)?;
+        local.used = true;
+        Some(local.span)
     }
 
     fn reference(&mut self, form: &Syntax, name: &str) {
@@ -794,11 +866,12 @@ impl Walker<'_> {
             return;
         }
         let sym = Sym::intern(name);
-        if self.use_local(sym, &form.marks)
-            || self.defined.contains(&sym)
-            || self.runtime.lookup(self.module, sym).is_some()
-            || self.runtime.lookup_macro(self.module, sym).is_some()
-        {
+        if let Some(binder) = self.use_local(sym, &form.marks) {
+            self.note(form, Binding::Local(binder), false);
+            return;
+        }
+        if let Some(binding) = self.global(sym) {
+            self.note(form, binding, false);
             return;
         }
         let shown = modules::display(sym);

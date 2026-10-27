@@ -1,4 +1,5 @@
 mod awaiting;
+mod bindings;
 mod check;
 mod compiled;
 mod corpus;

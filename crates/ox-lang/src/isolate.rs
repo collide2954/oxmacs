@@ -9,7 +9,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use crate::builtins;
 use crate::bytecode::Prim;
-use crate::check::{self, Diagnostic};
+use crate::check::{self, Diagnostic, Occurrence};
 use crate::compile::compile;
 use crate::describe::{self, Description, Docs, Kind, ModuleDocs};
 use crate::error::{Error, ErrorKind};
@@ -769,8 +769,21 @@ impl Isolate {
     }
 
     pub fn check_within(&mut self, budget: Duration, name: &str, source: &str) -> Vec<Diagnostic> {
+        self.examine_within(budget, name, source).0
+    }
+
+    pub fn bindings(&mut self, name: &str, source: &str) -> Vec<Occurrence> {
+        self.examine_within(check::BUDGET, name, source).1
+    }
+
+    fn examine_within(
+        &mut self,
+        budget: Duration,
+        name: &str,
+        source: &str,
+    ) -> (Vec<Diagnostic>, Vec<Occurrence>) {
         let sandboxed = std::mem::replace(&mut self.runtime.sandboxed, true);
-        let found = self.within(budget, |isolate| Ok(isolate.check_source(name, source)));
+        let found = self.within(budget, |isolate| Ok(isolate.examine(name, source)));
         self.runtime.sandboxed = sandboxed;
         found.unwrap_or_default()
     }
@@ -789,7 +802,7 @@ impl Isolate {
         found
     }
 
-    fn check_source(&mut self, name: &str, source: &str) -> Vec<Diagnostic> {
+    fn examine(&mut self, name: &str, source: &str) -> (Vec<Diagnostic>, Vec<Occurrence>) {
         let module_name = format!("#check:{name}");
         let module = self.runtime.module_named(&module_name);
         self.runtime.reset_module(module);
@@ -817,14 +830,14 @@ impl Isolate {
                 if let Err(span) =
                     self.check_header(module, clauses, &mut found, &mut unknown, &mut imports)
                 {
-                    return self.stopped(found, span);
+                    return (self.stopped(found, span), Vec::new());
                 }
                 continue;
             }
             let syntax = match expand(&mut self.runtime, form, module) {
                 Ok(syntax) => syntax,
                 Err(error) if error.kind == ErrorKind::Interrupt => {
-                    return self.stopped(found, form.span);
+                    return (self.stopped(found, form.span), Vec::new());
                 }
                 Err(error) => {
                     if error.kind != ErrorKind::Refused {
@@ -858,7 +871,7 @@ impl Isolate {
                 && let Err(error) = self.runtime.run(&Rc::new(code), &mut ())
             {
                 if error.kind == ErrorKind::Interrupt {
-                    return self.stopped(found, form.span);
+                    return (self.stopped(found, form.span), Vec::new());
                 }
                 found.push(Diagnostic::error(
                     "macro",
@@ -868,13 +881,14 @@ impl Isolate {
             }
             expanded.push(syntax);
         }
-        found.extend(check::names(&self.runtime, module, &expanded, &unknown));
+        let (named, occurrences) = check::names(&self.runtime, module, source, &expanded, &unknown);
+        found.extend(named);
         let body: Vec<&Syntax> = forms.iter().filter(|form| header(form).is_none()).collect();
         found.extend(check::unused_imports(&imports, &body));
         found.extend(check::strings(source, &imports, &body));
         found.sort_by_key(|diagnostic| (diagnostic.span.start, diagnostic.span.end));
         found.dedup();
-        found
+        (found, occurrences)
     }
 
     pub fn spawn_eval(&mut self, name: &str, source: &str) -> Result<Option<TaskId>, Error> {
