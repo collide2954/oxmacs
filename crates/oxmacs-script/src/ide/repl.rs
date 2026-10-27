@@ -17,7 +17,7 @@ use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
 use crate::{
-    Ox, api::flashes, ide::help, ide::log, ide::ox_mode, ide::stacktrace, ide::xref,
+    Ox, api::evaluations, ide::help, ide::log, ide::ox_mode, ide::stacktrace, ide::xref,
     runtime::plugins,
 };
 
@@ -99,7 +99,7 @@ impl Form {
             .buffer_by_id(self.buffer)
             .is_some_and(|buffer| buffer.revision() == self.revision)
         {
-            flashes::evaluated(editor, self.buffer, self.start..self.end, failed);
+            evaluations::evaluated(editor, self.buffer, self.start..self.end, failed);
         }
     }
 }
@@ -740,7 +740,7 @@ impl Ox {
         self.reload(editor, path);
         let failed = log::reports(editor) > before;
         let end = editor.buffer_by_id(id).map_or(0, Buffer::len_chars);
-        flashes::evaluated(editor, id, 0..end, failed);
+        evaluations::evaluated(editor, id, 0..end, failed);
     }
 
     fn load_file(&mut self, editor: &mut Editor) {
@@ -810,7 +810,7 @@ impl Ox {
             }
         });
         if let Some((_, failed)) = shown {
-            flashes::evaluated(editor, id, typed, failed);
+            evaluations::evaluated(editor, id, typed, failed);
         }
         let Some((buffer, view)) = editor.special_buffer_mut::<ReplView>(id) else {
             return;
@@ -935,7 +935,10 @@ mod tests {
     }
 
     fn note(editor: &Editor, line: usize) -> Option<(String, Highlight)> {
-        editor.pane().line_note(line)
+        editor
+            .pane()
+            .line_decorations(line, std::time::Instant::now())
+            .note
     }
 
     fn noted(text: &str) -> (String, Highlight) {

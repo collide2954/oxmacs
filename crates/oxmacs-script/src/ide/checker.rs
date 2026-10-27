@@ -176,6 +176,10 @@ mod tests {
     use crate::ide::help::SIGNATURE_PAUSE;
     use crate::{Ox, Pace};
 
+    fn waves(editor: &Editor, line: usize) -> Vec<(std::ops::Range<usize>, Severity)> {
+        editor.pane().line_decorations(line, Instant::now()).waves
+    }
+
     const UNUSED: &str = "h is never used; call it _h if that's on purpose";
 
     fn settle(editor: &mut Editor, ox: &mut Ox) {
@@ -252,9 +256,9 @@ mod tests {
         rest(&mut editor, &mut ox, Instant::now(), 600);
         settle(&mut editor, &mut ox);
 
-        assert_eq!(editor.pane().line_diagnostics(0), []);
-        assert_eq!(editor.pane().line_diagnostics(1), []);
-        assert_eq!(editor.pane().line_diagnostics(2), []);
+        assert_eq!(waves(&editor, 0), []);
+        assert_eq!(waves(&editor, 1), []);
+        assert_eq!(waves(&editor, 2), []);
     }
 
     #[test]
@@ -272,11 +276,9 @@ mod tests {
         rest(&mut editor, &mut ox, Instant::now(), 600);
         settle(&mut editor, &mut ox);
 
-        assert_eq!(editor.pane().line_diagnostics(1), []);
+        assert_eq!(waves(&editor, 1), []);
         assert_eq!(
-            editor
-                .pane()
-                .line_diagnostics(2)
+            waves(&editor, 2)
                 .into_iter()
                 .map(|(_, severity)| severity)
                 .collect::<Vec<_>>(),
@@ -294,17 +296,14 @@ mod tests {
 
         assert_eq!(ox.idle_wait(&editor, since), Some(SIGNATURE_PAUSE));
         rest(&mut editor, &mut ox, since, 100);
-        assert_eq!(editor.pane().line_diagnostics(1), []);
+        assert_eq!(waves(&editor, 1), []);
         rest(&mut editor, &mut ox, since, 400);
         assert_eq!(ox.idle_wait(&editor, since), Some(CHECK_PAUSE));
-        assert_eq!(editor.pane().line_diagnostics(1), []);
+        assert_eq!(waves(&editor, 1), []);
         rest(&mut editor, &mut ox, since, 600);
         settle(&mut editor, &mut ox);
-        assert_eq!(
-            editor.pane().line_diagnostics(0),
-            [(13..14, Severity::Warning)]
-        );
-        assert_eq!(editor.pane().line_diagnostics(1), [(1..5, Severity::Error)]);
+        assert_eq!(waves(&editor, 0), [(13..14, Severity::Warning)]);
+        assert_eq!(waves(&editor, 1), [(1..5, Severity::Error)]);
         assert_eq!(editor.pane().status().lint.as_deref(), Some("E1 W1"));
         assert_eq!(ox.idle_wait(&editor, since), None);
         editor.buffer_mut().set_point(13);
@@ -318,7 +317,7 @@ mod tests {
         assert_eq!(ox.idle_wait(&editor, later), Some(CHECK_PAUSE));
         rest(&mut editor, &mut ox, later, 600);
         settle(&mut editor, &mut ox);
-        assert_eq!(editor.pane().line_diagnostics(1), []);
+        assert_eq!(waves(&editor, 1), []);
         assert_eq!(editor.pane().status().lint.as_deref(), Some("W1"));
     }
 
@@ -342,8 +341,8 @@ mod tests {
         rest(&mut editor, &mut ox, Instant::now(), 600);
         settle(&mut editor, &mut ox);
 
-        assert_eq!(editor.pane().line_diagnostics(1), []);
-        assert_eq!(editor.pane().line_diagnostics(2), [(1..7, Severity::Error)]);
+        assert_eq!(waves(&editor, 1), []);
+        assert_eq!(waves(&editor, 2), [(1..7, Severity::Error)]);
     }
 
     #[test]
@@ -360,11 +359,8 @@ mod tests {
         rest(&mut editor, &mut ox, started, 600);
 
         assert_eq!(ox.pace(), Pace::Waiting);
-        assert_eq!(editor.pane().line_diagnostics(1), []);
+        assert_eq!(waves(&editor, 1), []);
         settle(&mut editor, &mut ox);
-        assert_eq!(
-            editor.pane().line_diagnostics(1),
-            [(0..6, Severity::Warning)]
-        );
+        assert_eq!(waves(&editor, 1), [(0..6, Severity::Warning)]);
     }
 }

@@ -34,7 +34,8 @@ fn visiting(init: &str, name: &str, text: &str) -> (tempfile::TempDir, Editor, O
 fn lit(editor: &Editor, line: usize, at: Instant) -> Vec<(Range<usize>, Highlight)> {
     editor
         .pane()
-        .line_flashes(line, at)
+        .line_decorations(line, at)
+        .shades
         .into_iter()
         .map(|(range, face, _)| (range, face))
         .collect()

@@ -35,11 +35,13 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `C-c C-t` (`M-x ox-test`) in Ox buffers runs the buffer's tests, unsaved edits included, as `ox test` would, and lists how each went in `*ox tests*` beside it.
 - `oxmacs --help` and `oxmacs --version` print to the terminal they ran from, Windows included, and `oxmacs -q` or `--no-init` starts without running `custom.ox` and `init.ox`. Other options are refused instead of opening a buffer named after them, and `--` still makes what follows file names.
 - Plugins move the buffers visiting a file or folder they renamed with `(move-visited-files from to)`.
+- Plugins decorate text with `annotate`: shaded in a face, underlined as an error or warning, or with a note after the line, kept until the next edit, until `clear-annotations` or fading over a time, and moving with the text around them.
 - `on-buffer-close` calls a handler with each buffer's handle after it closes, plugin buffers too, so a plugin can let go of what it kept for it.
 - The downloads and the Fedora package include `THIRD-PARTY-LICENSES.html`, the licenses of the crates oxmacs and ox are built from, beside the JetBrains Mono font's license and the highlight queries' notices.
 
 ### Changed
 
+- `flash` is now `annotate` with `:lasts`, the milliseconds it takes to fade, in place of `:duration`; `zap` 0.2.1 uses it.
 - Every special buffer works one way: double-clicking a line in *Diagnostics* or *Locations* does what RET does there, as in plugin buffers, and `g` (or `M-x revert-buffer`) runs each buffer's own refresh, such as `recheck-diagnostics` in *Diagnostics*.
 - `math/random`, `math/random-int` and `math/random-pick` are now `random/float`, `random/int` and `random/pick` in `(ox random)`, and `(ox math)` gains `math/degrees` and `math/radians`.
 - `ox profile` and the `profiler` plugin show the same rows: calls above 0.5% of the busy time, the 40 functions with the most self time and the 10 slowest ticks. The map `profile` and `profiler-stop` return holds those rows, each with its `:total-share` and `:self-share` of the busy time.

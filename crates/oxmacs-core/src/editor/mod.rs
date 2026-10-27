@@ -1,17 +1,16 @@
 mod buffers;
 mod build;
 mod console;
+mod decorations;
 mod dispatch;
 mod editing;
 mod effect;
 mod events;
-mod flash;
 mod job;
 mod keystrokes;
 mod languages;
 mod lsp;
 mod motion;
-mod notes;
 #[cfg(test)]
 mod opening;
 mod page;
@@ -19,6 +18,7 @@ mod plugins;
 mod presentation;
 mod prompts;
 mod search;
+mod sent;
 mod special;
 mod watching;
 mod windows;
@@ -28,6 +28,7 @@ pub use buffers::files::Visit;
 pub use build::errors::{ErrorAt, ErrorPattern};
 pub use build::lint::{LintRun, Linter};
 pub use console::{ConsoleHook, ConsoleSpec, MarkerHook};
+pub use decorations::{Lasts, LineDecorations, Look};
 pub use editing::format::{FormatRequest, Formatter};
 pub use effect::{Effect, FetchId};
 pub use events::{Event, EventKind};
@@ -189,8 +190,7 @@ pub struct Editor {
     next_job: u64,
     last_compile: Option<String>,
     lints: build::lint::Lints,
-    notes: Vec<notes::Note>,
-    flashes: Vec<flash::Flash>,
+    decorations: Vec<decorations::Decoration>,
     errors_from: build::errors::ErrorSource,
     lsp: lsp::Lsp,
     focused: bool,
@@ -283,8 +283,7 @@ impl Editor {
             next_job: 0,
             last_compile: None,
             lints: build::lint::Lints::default(),
-            notes: Vec::new(),
-            flashes: Vec::new(),
+            decorations: Vec::new(),
             errors_from: build::errors::ErrorSource::default(),
             lsp: lsp::Lsp::default(),
             focused: true,

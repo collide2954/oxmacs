@@ -45,7 +45,7 @@ const ERRORS: &str = "\u{1}errors";
 
 fn heard(editor: &mut Editor, id: BufferId, kind: &str, payload: &str) {
     if kind == ERRORS {
-        crate::api::flashes::send_failed(editor, id);
+        crate::api::evaluations::send_failed(editor, id);
         return;
     }
     if let Some(consoles) = consoles(editor) {
@@ -56,7 +56,7 @@ fn heard(editor: &mut Editor, id: BufferId, kind: &str, payload: &str) {
 }
 
 fn idle(editor: &mut Editor, id: BufferId) {
-    crate::api::flashes::send_settled(editor, id);
+    crate::api::evaluations::send_settled(editor, id);
     if let Some(consoles) = consoles(editor) {
         consoles.heard.push(Heard::Idle(id));
     }
@@ -312,7 +312,7 @@ pub fn install(isolate: &mut Isolate) {
             if let Ok(source) = crate::api::handles::current(heap, editor)
                 && source != id
             {
-                crate::api::flashes::sent(editor, id, source, &code);
+                crate::api::evaluations::sent(editor, id, source, &code);
             }
             editor.console_evaluate(id, &code);
             Ok(Value::Nil)

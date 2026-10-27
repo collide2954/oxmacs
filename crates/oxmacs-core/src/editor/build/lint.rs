@@ -1,17 +1,17 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::mem;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use crate::config::RustLint;
 use crate::editor::build::errors::ErrorSource;
+use crate::editor::decorations::{Lasts, Look, Owner};
 use crate::editor::{Editor, Effect, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::diagnostics::{self, Diagnostic, LintLine, Severity};
 use crate::external::tools;
 use crate::files;
 use crate::syntax::Language;
-use crate::text::{Buffer, BufferId, Marker};
+use crate::text::Buffer;
 
 #[derive(Clone, Copy)]
 pub struct Linter {
@@ -41,7 +41,6 @@ pub(in crate::editor) struct Lints {
     runs: Vec<Run>,
     pub(in crate::editor) last: Option<(Language, PathBuf)>,
     pub(in crate::editor) diagnostics: Vec<Diagnostic>,
-    marks: Vec<Mark>,
     pub(in crate::editor) root: Option<PathBuf>,
     pub(in crate::editor) current: Option<usize>,
     revision: u64,
@@ -62,14 +61,6 @@ impl Lints {
             }
         }
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Mark {
-    buffer: BufferId,
-    start: Marker,
-    end: Marker,
-    diagnostic: usize,
 }
 
 fn position(buffer: &Buffer, (row, column): (usize, usize)) -> usize {
@@ -315,84 +306,59 @@ impl Editor {
         }
     }
     fn mark_diagnostics(&mut self) {
-        for mark in mem::take(&mut self.lints.marks) {
-            if let Some(index) = self.buffers.position(|buffer| buffer.id() == mark.buffer)
-                && let Some(buffer) = self.buffers.get_mut(index)
-            {
-                buffer.remove_marker(mark.start);
-                buffer.remove_marker(mark.end);
-            }
-        }
+        self.undecorate(|decoration, _| matches!(decoration.owner, Owner::Lint(_)));
         for index in 0..self.buffers.len() {
             self.mark_buffer(index);
         }
     }
 
     pub(in crate::editor) fn mark_buffer(&mut self, index: usize) {
-        let Some(buffer) = self.buffers.get_mut(index) else {
+        let Some(buffer) = self.buffers.get(index) else {
             return;
         };
         let Some(path) = buffer.file().map(|file| file.identity().to_path_buf()) else {
             return;
         };
-        for (diagnostic, found) in self.lints.diagnostics.iter().enumerate() {
-            let place = self
-                .lints
-                .identities
-                .get(&found.path)
-                .map_or(found.path.as_path(), PathBuf::as_path);
-            if place != path {
-                continue;
-            }
-            let start = position(buffer, found.start);
-            let end = position(buffer, found.end).max(start);
-            self.lints.marks.push(Mark {
-                buffer: buffer.id(),
-                start: buffer.add_marker(start),
-                end: buffer.add_marker(end),
-                diagnostic,
-            });
+        let marked: Vec<(usize, Range<usize>, Severity)> = self
+            .lints
+            .diagnostics
+            .iter()
+            .enumerate()
+            .filter(|(_, found)| self.lints.identity_of(&found.path) == path)
+            .map(|(diagnostic, found)| {
+                let start = position(buffer, found.start);
+                let end = position(buffer, found.end).max(start);
+                (diagnostic, start..end, found.severity)
+            })
+            .collect();
+        let id = buffer.id();
+        for (diagnostic, range, severity) in marked {
+            self.decorate(
+                id,
+                range,
+                Look::Wave(severity),
+                Lasts::Cleared,
+                Owner::Lint(diagnostic),
+            );
         }
     }
 
-    fn marks_in(&self, buffer: &Buffer) -> impl Iterator<Item = (usize, usize, &Diagnostic)> {
-        self.lints
-            .marks
-            .iter()
-            .filter(move |mark| mark.buffer == buffer.id())
-            .filter_map(move |mark| {
-                let start = buffer.marker(mark.start)?;
-                let end = buffer.marker(mark.end)?.max(start);
-                Some((start, end, self.lints.diagnostics.get(mark.diagnostic)?))
+    fn marks_in<'a>(
+        &'a self,
+        buffer: &'a Buffer,
+    ) -> impl Iterator<Item = (Range<usize>, &'a Diagnostic)> {
+        self.decorations_of(buffer)
+            .filter_map(|(decoration, span)| match decoration.owner {
+                Owner::Lint(diagnostic) => Some((span, self.lints.diagnostics.get(diagnostic)?)),
+                _ => None,
             })
-    }
-
-    pub(in crate::editor) fn diagnostics_on_line(
-        &self,
-        index: usize,
-        line: usize,
-    ) -> Vec<(Range<usize>, Severity)> {
-        let Some(buffer) = self.buffers.get(index) else {
-            return Vec::new();
-        };
-        let (first, last) = (buffer.line_start(line), buffer.line_end(line));
-        self.marks_in(buffer)
-            .filter(|(start, end, _)| *start <= last && end.saturating_sub(1).max(*start) >= first)
-            .map(|(start, end, diagnostic)| {
-                let from = start.max(first) - first;
-                let to = end.min(last) - first;
-                (from..to.max(from + 1), diagnostic.severity)
-            })
-            .collect()
     }
 
     pub(in crate::editor) fn diagnostic_start(&self, diagnostic: usize) -> Option<usize> {
         let buffer = self.buffers.current();
-        self.lints
-            .marks
-            .iter()
-            .find(|mark| mark.buffer == buffer.id() && mark.diagnostic == diagnostic)
-            .and_then(|mark| buffer.marker(mark.start))
+        self.decorations_of(buffer)
+            .find(|(decoration, _)| decoration.owner == Owner::Lint(diagnostic))
+            .map(|(_, span)| span.start)
     }
 
     pub fn echo(&self) -> Option<&str> {
@@ -403,8 +369,8 @@ impl Editor {
         let buffer = self.buffers.current();
         let point = buffer.point();
         self.marks_in(buffer)
-            .filter(|(start, end, _)| (*start..=*end).contains(&point))
-            .map(|(_, _, diagnostic)| diagnostic)
+            .filter(|(span, _)| (span.start..=span.end).contains(&point))
+            .map(|(_, diagnostic)| diagnostic)
             .min_by_key(|diagnostic| diagnostic.severity)
             .map(|diagnostic| diagnostic.message.as_str())
     }
@@ -521,6 +487,13 @@ mod tests {
     use crate::external::diagnostics::{Diagnostic, Severity, sample};
     use crate::syntax::{Indentation, Language, LanguageSpec, Outline};
     use crate::testing::{press, type_text};
+
+    fn waves(editor: &Editor, line: usize) -> Vec<(std::ops::Range<usize>, Severity)> {
+        editor
+            .pane()
+            .line_decorations(line, std::time::Instant::now())
+            .waves
+    }
 
     static SHOUTY: LanguageSpec = LanguageSpec {
         name: "Shouty",
@@ -762,14 +735,14 @@ mod tests {
         reported(&mut editor);
 
         assert_eq!(
-            editor.pane().line_diagnostics(0),
+            waves(&editor, 0),
             [
                 (0..2, Severity::Error),
                 (3..7, Severity::Warning),
                 (13..14, Severity::Warning)
             ]
         );
-        assert_eq!(editor.pane().line_diagnostics(1), []);
+        assert_eq!(waves(&editor, 1), []);
     }
 
     #[test]
@@ -794,21 +767,18 @@ mod tests {
         );
 
         assert_eq!(
-            editor.pane().line_diagnostics(0),
+            waves(&editor, 0),
             [(3..7, Severity::Error), (9..10, Severity::Warning)]
         );
         assert_eq!(editor.pane().status().lint.as_deref(), Some("E1 W1"));
         press(&mut editor, "C-a C-f C-f C-f C-f");
         assert_eq!(editor.diagnostic_at_point(), Some("from a plugin"));
         editor.open_file(&dir.path().join("src").join("other.rs"));
-        assert_eq!(
-            editor.pane().line_diagnostics(1),
-            [(0..2, Severity::Warning)]
-        );
+        assert_eq!(waves(&editor, 1), [(0..2, Severity::Warning)]);
 
         editor.replace_diagnostics(&main, Vec::new());
         editor.open_file(&main);
-        assert_eq!(editor.pane().line_diagnostics(0), []);
+        assert_eq!(waves(&editor, 0), []);
         assert_eq!(editor.pane().status().lint, None);
     }
 
@@ -851,10 +821,7 @@ mod tests {
         press(&mut editor, "C-a");
         type_text(&mut editor, "//");
 
-        assert_eq!(
-            editor.pane().line_diagnostics(0)[1],
-            (5..9, Severity::Warning)
-        );
+        assert_eq!(waves(&editor, 0)[1], (5..9, Severity::Warning));
     }
 
     #[test]
@@ -865,10 +832,7 @@ mod tests {
 
         editor.open_file(&dir.path().join("src").join("other.rs"));
 
-        assert_eq!(
-            editor.pane().line_diagnostics(1),
-            [(0..2, Severity::Warning)]
-        );
+        assert_eq!(waves(&editor, 1), [(0..2, Severity::Warning)]);
     }
 
     #[test]

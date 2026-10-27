@@ -3,8 +3,10 @@ use serde_json::{Value, json};
 use super::edits::{files, position};
 use super::{Encoding, ServerId, number, protocol};
 use crate::command::Command;
-use crate::editor::{Editor, Offer, Picked, Place};
+use crate::editor::decorations::Owner;
+use crate::editor::{Editor, Lasts, Look, Offer, Picked, Place};
 use crate::text::BufferId;
+use crate::theme::Highlight;
 
 const AUTO_PREFIX: usize = 3;
 const MOST_ITEMS: usize = 200;
@@ -48,14 +50,11 @@ pub(in crate::editor) enum Asked {
 pub(super) const STALE: &str =
     "The text changed while the server worked on it, so its edits were dropped";
 
-type Hints = (BufferId, u64, Vec<(usize, String)>);
-
 #[derive(Debug, Default)]
 pub(super) struct Assist {
     auto_mark: Option<(BufferId, u64)>,
     signature: Option<(BufferId, u64, usize)>,
     signature_shown: Option<String>,
-    hints: Vec<Hints>,
     hints_asked: Option<(BufferId, u64)>,
     formatting_saves: Vec<BufferId>,
 }
@@ -278,23 +277,6 @@ impl Editor {
         );
     }
 
-    pub(in crate::editor) fn hint_on_line(
-        &self,
-        buffer: BufferId,
-        revision: u64,
-        line: usize,
-    ) -> Option<String> {
-        self.lsp
-            .assist
-            .hints
-            .iter()
-            .find(|(known, at, _)| *known == buffer && *at == revision)?
-            .2
-            .iter()
-            .find(|(number, _)| *number == line)
-            .map(|(_, text)| text.clone())
-    }
-
     fn hinted(&mut self, buffer: BufferId, revision: u64, result: &Value) {
         let mut lines: Vec<(usize, String)> = Vec::new();
         for hint in result.as_array().into_iter().flatten() {
@@ -319,11 +301,29 @@ impl Editor {
                 None => lines.push((line, label)),
             }
         }
-        self.lsp
-            .assist
-            .hints
-            .retain(|(known, _, _)| *known != buffer);
-        self.lsp.assist.hints.push((buffer, revision, lines));
+        self.undecorate(|decoration, _| {
+            decoration.owner == Owner::Hint && decoration.buffer == buffer
+        });
+        let Some(target) = self
+            .buffer_by_id(buffer)
+            .filter(|target| target.revision() == revision)
+        else {
+            return;
+        };
+        let starts: Vec<(usize, String)> = lines
+            .into_iter()
+            .filter(|(line, _)| *line < target.len_lines())
+            .map(|(line, text)| (target.line_start(line), text))
+            .collect();
+        for (start, text) in starts {
+            self.decorate(
+                buffer,
+                start..start,
+                Look::Note(text, Highlight::Comment),
+                Lasts::Edit,
+                Owner::Hint,
+            );
+        }
     }
 
     pub(in crate::editor) fn lsp_signature(&mut self) {

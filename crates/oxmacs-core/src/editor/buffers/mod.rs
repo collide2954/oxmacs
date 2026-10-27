@@ -338,6 +338,7 @@ impl Editor {
     pub(super) fn finish_kill(&mut self, index: usize) {
         if let Some(id) = self.buffers.get(index).map(Buffer::id) {
             self.record(Event::Killed(id));
+            self.undecorate(|decoration, _| decoration.buffer == id);
         }
         if let Some(path) = self
             .buffers

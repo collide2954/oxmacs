@@ -1,8 +1,9 @@
+pub(crate) mod annotations;
 pub(crate) mod buffers;
 pub(crate) mod commands;
 pub(crate) mod consoles;
 pub(crate) mod editing;
-pub(crate) mod flashes;
+pub(crate) mod evaluations;
 pub mod games;
 pub(crate) mod handlers;
 pub(crate) mod handles;

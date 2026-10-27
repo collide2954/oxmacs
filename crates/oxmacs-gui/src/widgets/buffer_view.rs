@@ -791,9 +791,9 @@ impl<'a, Message> BufferView<'a, Message> {
                         Some((columns, pill))
                     })
                     .collect();
-                let flashes = self
-                    .pane
-                    .line_flashes(row.line, now)
+                let decorations = self.pane.line_decorations(row.line, now);
+                let flashes = decorations
+                    .shades
                     .into_iter()
                     .filter_map(|(range, face, strength)| {
                         let columns =
@@ -801,9 +801,8 @@ impl<'a, Message> BufferView<'a, Message> {
                         Some((columns, face, strength))
                     })
                     .collect();
-                let diagnostics = self
-                    .pane
-                    .line_diagnostics(row.line)
+                let diagnostics = decorations
+                    .waves
                     .into_iter()
                     .map(|(range, severity)| {
                         let from = display::display_column(&text, range.start, tab_width);
@@ -814,7 +813,7 @@ impl<'a, Message> BufferView<'a, Message> {
                 lines.push(DrawnLine {
                     number: row.line,
                     diagnostics,
-                    note: self.pane.line_note(row.line),
+                    note: decorations.note,
                     highlight: selection.as_ref().and_then(|selection| {
                         display::highlight_columns(&text, span, selection, tab_width)
                     }),
@@ -1047,6 +1046,7 @@ pub fn rows_in(height: f32, line_height: f32) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use oxmacs_core::editor::{Lasts, Look};
     use oxmacs_core::text::Buffer;
 
     use super::*;
@@ -1160,12 +1160,12 @@ mod tests {
         let mut editor = oxmacs_core::editor::Editor::with_buffer(buffer);
         let now = Instant::now();
         let id = editor.buffer().id();
-        editor.flash(
+        editor.annotate(
             id,
             1..5,
-            Highlight::Removed,
-            Duration::from_millis(500),
-            now,
+            Look::Shade(Highlight::Removed),
+            Lasts::Fade(now, Duration::from_millis(500)),
+            "zap",
         );
         let view = BufferView::new(
             editor.pane(),

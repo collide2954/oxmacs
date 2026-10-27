@@ -242,7 +242,11 @@ fn the_languageserver_finds_problems_in_r_scripts_without_a_session() {
     live.editor.open_file(&script);
 
     live.until("the languageserver's findings", |editor| {
-        !editor.pane().line_diagnostics(0).is_empty()
+        !editor
+            .pane()
+            .line_decorations(0, Instant::now())
+            .waves
+            .is_empty()
     });
 
     assert!(

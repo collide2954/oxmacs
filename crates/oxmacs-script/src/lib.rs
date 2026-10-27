@@ -36,7 +36,8 @@ fn install_editor_api(isolate: &mut Isolate, answers: &api::prompts::Inbox) {
     api::handles::install(isolate);
     api::editing::install(isolate);
     api::hooks::install(isolate);
-    api::flashes::install(isolate);
+    api::annotations::install(isolate);
+    api::evaluations::install(isolate);
     api::keystrokes::install(isolate);
     api::processes::install(isolate);
     api::consoles::install(isolate);
@@ -308,7 +309,7 @@ impl Ox {
                 break;
             }
         }
-        api::flashes::run(&mut self.isolate, editor);
+        api::evaluations::run(&mut self.isolate, editor);
         failed
     }
 }

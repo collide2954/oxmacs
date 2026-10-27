@@ -8,8 +8,7 @@ use crate::editor::motion::movement::display_column;
 use crate::editor::special::splash::Splash;
 use crate::editor::tab_width_in;
 use crate::editor::windows::status::{BufferState, Status};
-use crate::editor::{Editor, Gutter, PopupView};
-use crate::external::diagnostics::Severity;
+use crate::editor::{Editor, Gutter, LineDecorations, PopupView};
 use crate::files::LineEnding;
 use crate::special_buffer::SpecialBuffer;
 use crate::syntax::Language;
@@ -186,12 +185,8 @@ impl<'a> Pane<'a> {
         self.editor.line_style_at(self.index, line)
     }
 
-    pub fn line_diagnostics(&self, line: usize) -> Vec<(Range<usize>, Severity)> {
-        self.editor.diagnostics_on_line(self.index, line)
-    }
-
-    pub fn line_note(&self, line: usize) -> Option<(String, Highlight)> {
-        self.editor.note_on_line(self.index, line)
+    pub fn line_decorations(&self, line: usize, now: Instant) -> LineDecorations {
+        self.editor.decorations_on_line(self.index, line, now)
     }
 
     pub fn line_pills(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
@@ -199,10 +194,6 @@ impl<'a> Pane<'a> {
             Some(Mode::Special(view)) => view.pills(line),
             _ => Vec::new(),
         }
-    }
-
-    pub fn line_flashes(&self, line: usize, now: Instant) -> Vec<(Range<usize>, Highlight, f32)> {
-        self.editor.flashes_on_line(self.index, line, now)
     }
 
     pub fn flashing(&self, now: Instant) -> bool {

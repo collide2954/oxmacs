@@ -1,5 +1,5 @@
 (plugin zap
-  :version "0.2.0"
+  :version "0.2.1"
   :opt-in true
   :summary "Flash the code you evaluate or send to a console, in the error color when it fails"
   :settings {flash: {type: :bool default: true doc: "Flash code as it runs; false leaves zap off"}

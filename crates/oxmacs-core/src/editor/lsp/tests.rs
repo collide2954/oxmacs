@@ -619,7 +619,14 @@ fn edits_and_diagnostics_reach_a_buffer_through_another_spelling_of_its_file() {
 
     assert!(editor.buffer().contents().starts_with("fn start() {"));
     assert_eq!(editor.buffer_ids().len(), buffers);
-    assert_eq!(editor.diagnostics_on_line(0, 1).len(), 1);
+    assert_eq!(
+        editor
+            .pane()
+            .line_decorations(1, std::time::Instant::now())
+            .waves
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -862,11 +869,20 @@ fn inlay_hints_show_faintly_at_the_end_of_their_lines_until_an_edit() {
     );
 
     assert_eq!(
-        editor.pane().line_note(1),
+        editor
+            .pane()
+            .line_decorations(1, std::time::Instant::now())
+            .note,
         Some((": i32  extra:".to_owned(), crate::theme::Highlight::Comment))
     );
     type_text(&mut editor, "x");
-    assert_eq!(editor.pane().line_note(1), None);
+    assert_eq!(
+        editor
+            .pane()
+            .line_decorations(1, std::time::Instant::now())
+            .note,
+        None
+    );
 }
 
 static MARKDOWN: crate::syntax::LanguageSpec = crate::syntax::LanguageSpec {
