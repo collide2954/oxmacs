@@ -623,6 +623,35 @@ fn edits_and_diagnostics_reach_a_buffer_through_another_spelling_of_its_file() {
 }
 
 #[test]
+fn edits_inserted_at_the_same_place_keep_the_server_s_order() {
+    let (dir, mut editor) = capable();
+    let main = super::protocol::uri(&dir.path().join("src/main.rs"));
+    press(&mut editor, "C-f C-f C-f C-f");
+
+    press(&mut editor, "<f2>");
+    press(&mut editor, "C-a C-k");
+    type_text(&mut editor, "start");
+    press(&mut editor, "RET");
+    let request = asked(&mut editor, "textDocument/rename");
+    let at = json!({"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}});
+    answer(
+        &mut editor,
+        &request,
+        &json!({"changes": {main: [
+            {"range": at, "newText": "a"},
+            {"range": at, "newText": "b"},
+            {"range": at, "newText": "c"}
+        ]}}),
+    );
+
+    assert!(
+        editor.buffer().contents().starts_with("abcfn main() {"),
+        "{}",
+        editor.buffer().contents()
+    );
+}
+
+#[test]
 fn c_c_dot_offers_the_server_s_fixes_with_the_diagnostics_here() {
     let (dir, mut editor) = capable();
     let main = super::protocol::uri(&dir.path().join("src/main.rs"));

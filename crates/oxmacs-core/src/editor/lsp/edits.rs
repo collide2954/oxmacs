@@ -48,23 +48,24 @@ impl Editor {
         let Some(buffer) = self.buffers.get(index) else {
             return 0;
         };
-        let mut ranges: Vec<(usize, usize, String)> = edits
+        let mut ranges: Vec<(usize, usize, usize, String)> = edits
             .iter()
-            .filter_map(|edit| {
+            .enumerate()
+            .filter_map(|(order, edit)| {
                 let range = edit.get("range")?;
                 let text = edit.get("newText")?.as_str()?.to_owned();
                 let start = position(buffer, encoding, &range["start"]);
                 let end = position(buffer, encoding, &range["end"]).max(start);
-                Some((start, end, text))
+                Some((start, end, order, text))
             })
             .collect();
-        ranges.sort_by_key(|range| Reverse((range.0, range.1)));
+        ranges.sort_by_key(|range| Reverse((range.0, range.1, range.2)));
         let Some(buffer) = self.buffers.get_mut(index) else {
             return 0;
         };
         let point = buffer.point();
         let kept = buffer.add_marker(point);
-        for (start, end, text) in &ranges {
+        for (start, end, _, text) in &ranges {
             buffer.delete_range(*start..*end);
             buffer.insert_at(*start, text);
         }
