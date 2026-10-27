@@ -13,17 +13,17 @@ use ox_lang::{Error, Isolate};
 use ox_library::color::Color;
 use ox_library::geometry::Rect;
 use ox_library::geometry::Vec2;
+use ox_rodeo::atlas::Atlas;
+use ox_rodeo::clock::Clock;
+use ox_rodeo::draw::{DrawList, Outline, Shape, Sprite, Viewport, raster};
+use ox_rodeo::texture::{TextureId, Textures};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::view::game::{Caption, GameBuffer, Screen};
-use rodeo::atlas::Atlas;
-use rodeo::clock::Clock;
-use rodeo::draw::{DrawList, Outline, Shape, Sprite, Viewport, raster};
-use rodeo::texture::{TextureId, Textures};
 
 use crate::ide::log;
 
-const MODULE: &str = "rodeo";
+const MODULE: &str = "ox/rodeo";
 const NAME: &str = "*game*";
 const SIZE: (u32, u32) = (320, 180);
 
@@ -1129,7 +1129,7 @@ mod tests {
         screen.pixels[at..at + 4].try_into().unwrap()
     }
 
-    const COUNTER: &str = r##"(module (import (rodeo)))
+    const COUNTER: &str = r##"(module (import (ox rodeo)))
 (defonce ticks (atom 0))
 (def (tick) (swap! ticks inc))
 (def (draw)
@@ -1143,7 +1143,7 @@ mod tests {
         let (folder, path) = game_file(source);
         ox.eval(
             &mut editor,
-            &format!("(module (import (rodeo))) (play-game \"{path}\" :size [4 4])"),
+            &format!("(module (import (ox rodeo))) (play-game \"{path}\" :size [4 4])"),
         )
         .unwrap();
         let start = Instant::now();
@@ -1180,7 +1180,7 @@ mod tests {
     #[test]
     fn keys_reach_the_game_as_held_pressed_and_released() {
         let (mut editor, mut ox, start, _folder) = playing(
-            r"(module (import (rodeo)))
+            r"(module (import (ox rodeo)))
 (defonce seen (atom []))
 (rodeo/actions {jump: [:space :up]})
 (def (tick)
@@ -1202,7 +1202,7 @@ mod tests {
     #[test]
     fn errors_pause_the_game_until_it_is_fixed_and_resumed() {
         let (mut editor, mut ox, start, _folder) = playing(
-            r"(module (import (rodeo)))
+            r"(module (import (ox rodeo)))
 (def (tick) (/ 1 0))
 ",
         );
@@ -1254,7 +1254,7 @@ mod tests {
         let path = folder.path().join("game.ox");
         std::fs::write(
             &path,
-            r#"(module (import (rodeo)))
+            r#"(module (import (ox rodeo)))
 (def hero (rodeo/image "hero.png"))
 (def (draw)
   (rodeo/sprite hero [1 1])
@@ -1268,7 +1268,7 @@ mod tests {
         let shown = path.display().to_string().replace('\\', "/");
         ox.eval(
             &mut editor,
-            &format!("(module (import (rodeo))) (play-game \"{shown}\" :size [4 5])"),
+            &format!("(module (import (ox rodeo))) (play-game \"{shown}\" :size [4 5])"),
         )
         .unwrap();
         ox.games_frame(&mut editor, Instant::now());

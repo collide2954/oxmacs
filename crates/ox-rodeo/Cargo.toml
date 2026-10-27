@@ -1,5 +1,5 @@
 [package]
-name = "rodeo"
+name = "ox-rodeo"
 version.workspace = true
 description = "The native core of rodeo, Ox's 2D game engine: draw lists, textures, atlases, a fixed-step clock and particles"
 edition.workspace = true

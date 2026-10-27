@@ -757,7 +757,7 @@ mod tests {
         let path = folder.path().join("game.ox");
         std::fs::write(
             &path,
-            r##"(module (import (rodeo)))
+            r##"(module (import (ox rodeo)))
 (defonce heard (atom []))
 (def (tick) (when (rodeo/pressed? :a) (swap! heard conj :a)))
 (def (draw) (rodeo/clear "#ff0000") (rodeo/text "SCORE 3" [2 2]))
@@ -769,7 +769,7 @@ mod tests {
         app.ox
             .eval(
                 &mut app.editor,
-                &format!("(module (import (rodeo))) (play-game \"{shown}\")"),
+                &format!("(module (import (ox rodeo))) (play-game \"{shown}\")"),
             )
             .unwrap();
         (app, folder)

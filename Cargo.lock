@@ -3925,6 +3925,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ox-rodeo"
+version = "0.14.0"
+dependencies = [
+ "image",
+ "ox-library",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "oxmacs"
 version = "0.14.0"
 dependencies = [
@@ -4010,11 +4022,11 @@ dependencies = [
  "keepass",
  "ox-lang",
  "ox-library",
+ "ox-rodeo",
  "oxmacs-api",
  "oxmacs-core",
  "oxmacs-pdf",
  "regex",
- "rodeo",
  "rodio",
  "semver",
  "serde_json",
@@ -4719,18 +4731,6 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "rodeo"
-version = "0.14.0"
-dependencies = [
- "image",
- "ox-library",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
 ]
 
 [[package]]

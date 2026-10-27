@@ -1,5 +1,5 @@
 (plugin rodeo
-  :version "0.1.0"
+  :version "0.1.1"
   :summary "Play 2D games written in Ox beside their code, and change them while they run"
   :commands {rodeo-play: "Play the game in this Ox file in a window beside it"
              rodeo-pause: "Pause the running game, or carry on"

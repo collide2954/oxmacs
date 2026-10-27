@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use rodeo::clock::Clock;
+use ox_rodeo::clock::Clock;
 
 fn sixtieths(count: f64) -> Duration {
     Duration::from_secs_f64(count / 60.0)

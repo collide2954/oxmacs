@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use image::{Rgba, RgbaImage};
-use rodeo::texture::Textures;
+use ox_rodeo::texture::Textures;
 
 fn save(path: &Path, pixels: &[[u8; 4]]) {
     let width = u32::try_from(pixels.len()).unwrap();

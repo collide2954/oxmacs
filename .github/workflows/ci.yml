@@ -99,7 +99,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Ox format, check and test
         run: |
-          cargo run -q -p ox --locked -- fmt --check crates/oxmacs-script/plugins crates/oxmacs-script/src crates/oxmacs-api/src crates/ox-lang/src/builtins crates/ox-library/src crates/ox-perf/benchmarks crates/rodeo/src
+          cargo run -q -p ox --locked -- fmt --check crates/oxmacs-script/plugins crates/oxmacs-script/src crates/oxmacs-api/src crates/ox-lang/src/builtins crates/ox-library/src crates/ox-perf/benchmarks crates/ox-rodeo/src
           cargo run -q -p ox --locked -- check crates/oxmacs-script/plugins
           cargo run -q -p ox --locked -- test crates/oxmacs-script/plugins
 

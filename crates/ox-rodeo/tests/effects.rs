@@ -1,8 +1,8 @@
 use ox_library::color::Color;
 use ox_library::geometry::Rect;
-use rodeo::draw::effects::{faded, outlined, shade};
-use rodeo::draw::{Palette, Sprite};
-use rodeo::texture::Textures;
+use ox_rodeo::draw::effects::{faded, outlined, shade};
+use ox_rodeo::draw::{Palette, Sprite};
+use ox_rodeo::texture::Textures;
 
 fn plain() -> Sprite {
     let mut textures = Textures::new();

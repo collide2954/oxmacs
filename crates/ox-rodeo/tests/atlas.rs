@@ -2,8 +2,8 @@ use image::RgbaImage;
 use ox_library::animation::{Animation, Direction, Frame};
 use ox_library::geometry::Rect;
 use ox_library::geometry::Vec2;
-use rodeo::atlas::{Atlas, Region};
-use rodeo::texture::Textures;
+use ox_rodeo::atlas::{Atlas, Region};
+use ox_rodeo::texture::Textures;
 
 const HASH: &str = r##"{
  "frames": {

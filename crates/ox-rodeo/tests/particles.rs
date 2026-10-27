@@ -2,7 +2,7 @@ use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
 use ox_library::color::Color;
 use ox_library::geometry::Vec2;
-use rodeo::particles::Emitter;
+use ox_rodeo::particles::Emitter;
 
 fn still() -> Emitter {
     let mut emitter = Emitter::new(1);

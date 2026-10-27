@@ -52,7 +52,7 @@ const EDITOR_MODULES: &[(&str, &str)] = &[
         "Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only",
     ),
     (
-        "rodeo",
+        "ox/rodeo",
         "Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only",
     ),
 ];
@@ -117,7 +117,7 @@ mod tests {
 
         let found = problems(
             &dir.path().join("game.ox"),
-            "(module (import (rodeo) (ox geometry) (ox ui)))\n(def (draw) (rodeo/rect [0 0 1 1] \"#fff\") (geometry/add [1 2] [3 4]) (ui/text \"x\"))\n(message \"hi\")",
+            "(module (import (ox rodeo) (ox geometry) (ox ui)))\n(def (draw) (rodeo/rect [0 0 1 1] \"#fff\") (geometry/add [1 2] [3 4]) (ui/text \"x\"))\n(message \"hi\")",
         );
 
         assert_eq!(found, ["message is not defined"]);
@@ -129,7 +129,7 @@ mod tests {
 
         let found = problems(
             &dir.path().join("init.ox"),
-            "(module (import (rodeo)))\n(message (str (rodeo/held? :left)))",
+            "(module (import (ox rodeo)))\n(message (str (rodeo/held? :left)))",
         );
 
         assert_eq!(found, Vec::<String>::new());

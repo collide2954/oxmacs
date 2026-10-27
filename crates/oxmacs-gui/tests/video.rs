@@ -1885,7 +1885,7 @@ fn showcase_video() {
     film.finish(&out);
 }
 
-const JUMP: &str = r##"(module (import (rodeo)))
+const JUMP: &str = r##"(module (import (ox rodeo)))
 
 (rodeo/screen 256 144)
 (rodeo/actions {left: [:left] right: [:right] jump: [:space :up]})

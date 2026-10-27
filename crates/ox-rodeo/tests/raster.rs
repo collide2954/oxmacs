@@ -1,9 +1,9 @@
 use ox_library::color::Color;
 use ox_library::geometry::Rect;
 use ox_library::geometry::Vec2;
-use rodeo::draw::raster::{Frame, render};
-use rodeo::draw::{DrawList, Outline, Shape, Sprite, Text};
-use rodeo::texture::{TextureId, Textures};
+use ox_rodeo::draw::raster::{Frame, render};
+use ox_rodeo::draw::{DrawList, Outline, Shape, Sprite, Text};
+use ox_rodeo::texture::{TextureId, Textures};
 
 const RED: [u8; 4] = [255, 0, 0, 255];
 const GREEN: [u8; 4] = [0, 255, 0, 255];

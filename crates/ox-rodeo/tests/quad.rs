@@ -3,8 +3,8 @@ use std::f64::consts::FRAC_PI_2;
 use ox_library::color::Color;
 use ox_library::geometry::Rect;
 use ox_library::geometry::Vec2;
-use rodeo::draw::{Outline, Sprite};
-use rodeo::texture::Textures;
+use ox_rodeo::draw::{Outline, Sprite};
+use ox_rodeo::texture::Textures;
 
 fn sprite() -> Sprite {
     let mut textures = Textures::new();

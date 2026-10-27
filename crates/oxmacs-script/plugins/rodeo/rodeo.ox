@@ -3,7 +3,7 @@
           (ox string)))
 
 (def starter
-  #r##"(module (import (rodeo)))
+  #r##"(module (import (ox rodeo)))
 
 (rodeo/screen 320 180)
 (rodeo/actions {left: [:left :a] right: [:right :d] jump: [:space :up :w]})

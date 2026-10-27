@@ -1,5 +1,5 @@
 use ox_library::geometry::Vec2;
-use rodeo::draw::Viewport;
+use ox_rodeo::draw::Viewport;
 
 const GAME: Vec2 = Vec2::new(320.0, 180.0);
 

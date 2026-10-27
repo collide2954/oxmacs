@@ -140,11 +140,7 @@ fn every_built_in_module_is_described() {
     let installed: Vec<String> = isolate
         .module_names()
         .into_iter()
-        .filter(|name| {
-            ["ox", "rodeo"]
-                .iter()
-                .any(|root| name == root || name.starts_with(&format!("{root}/")))
-        })
+        .filter(|name| name == "ox" || name.starts_with("ox/"))
         .collect();
     let described: Vec<String> = modules().into_iter().map(|(name, _)| name).collect();
 

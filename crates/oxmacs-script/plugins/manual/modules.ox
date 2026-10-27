@@ -94,7 +94,7 @@ ox/tiled     Tiled .tmx maps as plain data: layers, tiles, objects, properties a
 ox/pdf       PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only
 ox/keepass   KeePass databases: reading their entries; in oxmacs only
 ox/ui        Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only
-rodeo        Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only
+ox/rodeo     Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only
 ```
 
 ## Workers

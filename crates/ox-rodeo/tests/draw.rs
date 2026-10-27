@@ -1,8 +1,8 @@
 use ox_library::color::Color;
 use ox_library::geometry::Rect;
 use ox_library::geometry::Vec2;
-use rodeo::draw::{Batch, BatchKind, Command, DrawList, Shape, Sprite, Text};
-use rodeo::texture::{TextureId, Textures};
+use ox_rodeo::draw::{Batch, BatchKind, Command, DrawList, Shape, Sprite, Text};
+use ox_rodeo::texture::{TextureId, Textures};
 
 fn two_textures() -> (TextureId, TextureId) {
     let mut textures = Textures::new();
