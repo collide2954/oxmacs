@@ -8,6 +8,7 @@ pub use viewport::Viewport;
 
 use std::ops::Range;
 
+use crate::spacetime::Scene;
 use crate::texture::TextureId;
 use ox_library::color::Color;
 use ox_library::geometry::Rect;
@@ -111,13 +112,20 @@ pub enum Command {
         text: Text,
         layer: i32,
     },
+    BlackHole {
+        rect: Rect,
+        scene: Box<Scene>,
+        layer: i32,
+    },
 }
 
 impl Command {
     pub fn layer(&self) -> i32 {
         match self {
             Self::Sprite(sprite) => sprite.layer,
-            Self::Shape { layer, .. } | Self::Text { layer, .. } => *layer,
+            Self::Shape { layer, .. }
+            | Self::Text { layer, .. }
+            | Self::BlackHole { layer, .. } => *layer,
         }
     }
 
@@ -126,6 +134,7 @@ impl Command {
             Self::Sprite(sprite) => BatchKind::Sprites(sprite.texture),
             Self::Shape { .. } => BatchKind::Shapes,
             Self::Text { .. } => BatchKind::Text,
+            Self::BlackHole { .. } => BatchKind::BlackHole,
         }
     }
 }
@@ -135,6 +144,7 @@ pub enum BatchKind {
     Sprites(TextureId),
     Shapes,
     Text,
+    BlackHole,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -204,6 +214,14 @@ impl DrawList {
 
     pub fn text(&mut self, text: Text, layer: i32) {
         self.commands.push(Command::Text { text, layer });
+    }
+
+    pub fn black_hole(&mut self, rect: Rect, scene: Scene, layer: i32) {
+        self.commands.push(Command::BlackHole {
+            rect,
+            scene: Box::new(scene),
+            layer,
+        });
     }
 
     pub fn palette(&mut self, from: Vec<Color>, to: Vec<Color>) -> usize {

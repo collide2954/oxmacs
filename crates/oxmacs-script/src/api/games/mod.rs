@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use ox_lang::build::{make_map, make_vector};
 use ox_lang::heap::{Heap, Hold};
-use ox_lang::native::given;
+use ox_lang::native::{field, given};
 use ox_lang::value::{Value, print, to_float};
 use ox_lang::{Error, Isolate};
 use ox_library::color::Color;
@@ -16,6 +16,7 @@ use ox_library::geometry::Vec2;
 use ox_rodeo::atlas::Atlas;
 use ox_rodeo::clock::Clock;
 use ox_rodeo::draw::{DrawList, Outline, Shape, Sprite, Viewport, raster};
+use ox_rodeo::spacetime::{Disk, Scene, Sky, Star};
 use ox_rodeo::texture::{TextureId, Textures};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::text::BufferId;
@@ -683,6 +684,127 @@ fn text(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     Ok(Value::Nil)
 }
 
+const HOLE: [&str; 14] = [
+    "lensing", "tilt", "turn", "distance", "fov", "time", "disk", "star", "sky", "doppler",
+    "redshift", "exposure", "samples", "layer",
+];
+
+fn part(heap: &Heap, value: Value, key: &str, default: f64) -> Result<f64, Error> {
+    match field(heap, value, key) {
+        None | Some(Value::Nil) => Ok(default),
+        Some(found) => number(heap, "black-hole", found),
+    }
+}
+
+enum Part {
+    Unsaid,
+    Off,
+    On(Value),
+}
+
+fn piece(heap: &Heap, value: Option<Value>, what: &str) -> Result<Part, Error> {
+    match value {
+        None => Ok(Part::Unsaid),
+        Some(Value::Bool(false)) => Ok(Part::Off),
+        Some(Value::Bool(true)) => Ok(Part::On(Value::Nil)),
+        Some(found) if heap.map_of(found).is_some() => Ok(Part::On(found)),
+        Some(found) => Err(wrong(
+            heap,
+            "black-hole",
+            &format!("{what} as true, false or a map such as {}", example(what)),
+            found,
+        )),
+    }
+}
+
+fn example(what: &str) -> &'static str {
+    match what {
+        ":disk" => "{inner: 3 outer: 12}",
+        ":star" => "{radius: 5}",
+        _ => "{seed: 7 stars: 1}",
+    }
+}
+
+fn disk_of(heap: &Heap, value: Value) -> Result<Disk, Error> {
+    let base = Disk::default();
+    Ok(Disk {
+        inner: part(heap, value, "inner", base.inner)?,
+        outer: part(heap, value, "outer", base.outer)?,
+        brightness: part(heap, value, "brightness", base.brightness)?,
+        temperature: part(heap, value, "temperature", base.temperature)?,
+        turbulence: part(heap, value, "turbulence", base.turbulence)?,
+    })
+}
+
+fn star_of(heap: &Heap, value: Value) -> Result<Star, Error> {
+    let base = Star::default();
+    Ok(Star {
+        radius: part(heap, value, "radius", base.radius)?,
+        temperature: part(heap, value, "temperature", base.temperature)?,
+        brightness: part(heap, value, "brightness", base.brightness)?,
+    })
+}
+
+fn sky_of(heap: &Heap, value: Value) -> Result<Sky, Error> {
+    let base = Sky::default();
+    let seed = match field(heap, value, "seed") {
+        None | Some(Value::Nil) => base.seed,
+        Some(Value::Int(seed)) => seed.cast_unsigned(),
+        Some(other) => return Err(wrong(heap, "black-hole", ":seed as a whole number", other)),
+    };
+    Ok(Sky {
+        seed,
+        stars: part(heap, value, "stars", base.stars)?,
+        band: part(heap, value, "band", base.band)?,
+        nebulae: part(heap, value, "nebulae", base.nebulae)?,
+        glow: part(heap, value, "glow", base.glow)?,
+    })
+}
+
+fn black_hole(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let name = "black-hole";
+    let area = rect(heap, name, arguments[0])?;
+    let options = Options::slots(&HOLE, &arguments[1..]);
+    let base = Scene::default();
+    let flag = |key: &str, default: bool| options.get(key).map_or(default, Value::truthy);
+    let disk = match piece(heap, options.get("disk"), ":disk")? {
+        Part::On(value) => Some(disk_of(heap, value)?),
+        Part::Unsaid | Part::Off => None,
+    };
+    let star = match piece(heap, options.get("star"), ":star")? {
+        Part::On(value) => Some(star_of(heap, value)?),
+        Part::Unsaid | Part::Off => None,
+    };
+    let sky = match piece(heap, options.get("sky"), ":sky")? {
+        Part::Unsaid => base.sky,
+        Part::Off => None,
+        Part::On(value) => Some(sky_of(heap, value)?),
+    };
+    let samples = match options.get("samples") {
+        None => 1,
+        Some(Value::Int(count @ 1..=4)) => u32::try_from(count).unwrap_or(1),
+        Some(other) => return Err(wrong(heap, name, ":samples from 1 to 4", other)),
+    };
+    let scene = Scene {
+        lensing: flag("lensing", base.lensing),
+        tilt: options.number(heap, name, "tilt", base.tilt)?,
+        turn: options.number(heap, name, "turn", base.turn)?,
+        distance: options.number(heap, name, "distance", base.distance)?,
+        fov: options.number(heap, name, "fov", base.fov)?,
+        time: options.number(heap, name, "time", base.time)?,
+        disk,
+        star,
+        sky,
+        doppler: flag("doppler", base.doppler),
+        redshift: flag("redshift", base.redshift),
+        exposure: options.number(heap, name, "exposure", base.exposure)?,
+        samples,
+    };
+    let layer = options.layer(heap, name)?;
+    playing(editor)?.list.black_hole(area, scene, layer);
+    Ok(Value::Nil)
+}
+
 fn control(isolate: &mut Isolate, name: &'static str, act: fn(&mut Game)) {
     isolate
         .native("ox", name)
@@ -853,6 +975,11 @@ fn install_drawing(isolate: &mut Isolate) {
             "outline", "layer",
         ])
         .host::<Editor>(sprite);
+    isolate
+        .native(MODULE, "black-hole")
+        .arity(1, Some(1))
+        .keywords(&HOLE)
+        .host::<Editor>(black_hole);
 }
 
 fn stop(editor: &mut Editor) {
@@ -1277,6 +1404,41 @@ mod tests {
         assert_eq!(pixel(&editor, 1, 4), [0, 0, 255, 255]);
         let id = editor.buffer_named("*game*").unwrap();
         assert_eq!(screen(&editor, id).unwrap().captions[0].text, "2x1");
+    }
+
+    #[test]
+    fn black_holes_are_ray_traced_from_their_options() {
+        let (_folder, shown) = game_file(
+            r"(module (import (ox rodeo)))
+(def (draw)
+  (rodeo/black-hole [0 0 24 24] :distance 60 :fov 0.3 :disk false
+                    :sky {glow: 1 stars: 0 band: 0 nebulae: 0}))",
+        );
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        ox.eval(
+            &mut editor,
+            &format!("(module (import (ox rodeo))) (play-game \"{shown}\" :size [24 24])"),
+        )
+        .unwrap();
+        ox.games_frame(&mut editor, Instant::now());
+
+        assert!(
+            pixel(&editor, 12, 12)[..3]
+                .iter()
+                .all(|channel| *channel < 10)
+        );
+        assert!(
+            pixel(&editor, 1, 1)[..3]
+                .iter()
+                .all(|channel| *channel > 100)
+        );
+        assert_eq!(
+            ox.eval(&mut editor, "(rodeo/black-hole [0 0 1 1] :disk 3)")
+                .unwrap_err()
+                .message,
+            "rodeo/black-hole expects :disk as true, false or a map such as {inner: 3 outer: 12}, got 3"
+        );
     }
 
     #[test]

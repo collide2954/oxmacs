@@ -93,6 +93,9 @@ debug = "line-tables-only"
 opt-level = 3
 debug = false
 
+[profile.dev.package.ox-rodeo]
+opt-level = 3
+
 [profile.release]
 codegen-units = 1
 lto = "fat"

@@ -5,5 +5,6 @@ mod effects;
 mod particles;
 mod quad;
 mod raster;
+mod spacetime;
 mod texture;
 mod viewport;

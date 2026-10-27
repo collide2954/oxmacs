@@ -1,5 +1,6 @@
 use super::effects::{faded, outlined, shade};
 use super::{Command, DrawList, Shape, Sprite};
+use crate::spacetime::{self, Scene};
 use crate::texture::Textures;
 use ox_library::color::Color;
 use ox_library::geometry::Rect;
@@ -286,6 +287,22 @@ fn draw_shape(canvas: &mut Canvas, shape: &Shape, color: Color) {
     }
 }
 
+fn draw_black_hole(canvas: &mut Canvas, rect: Rect, scene: &Scene) {
+    let (left, top) = (whole(rect.x.round()), whole(rect.y.round()));
+    let (width, height) = (whole(rect.w.round()), whole(rect.h.round()));
+    let (Ok(columns), Ok(rows)) = (u32::try_from(width), u32::try_from(height)) else {
+        return;
+    };
+    if columns == 0 || rows == 0 {
+        return;
+    }
+    let pixels = spacetime::render(scene, columns, rows);
+    for (index, color) in pixels.into_iter().enumerate() {
+        let index = i64::try_from(index).unwrap_or(i64::MAX);
+        canvas.blend(left + index % width, top + index / width, color);
+    }
+}
+
 pub fn render(list: &mut DrawList, textures: &Textures, width: u32, height: u32) -> Frame {
     let batches = list.finish();
     let mut canvas = Canvas::new(width, height, list.background);
@@ -295,6 +312,9 @@ pub fn render(list: &mut DrawList, textures: &Textures, width: u32, height: u32)
                 Command::Sprite(sprite) => draw_sprite(&mut canvas, list, textures, sprite),
                 Command::Shape { shape, color, .. } => draw_shape(&mut canvas, shape, *color),
                 Command::Text { .. } => {}
+                Command::BlackHole { rect, scene, .. } => {
+                    draw_black_hole(&mut canvas, *rect, scene);
+                }
             }
         }
     }
