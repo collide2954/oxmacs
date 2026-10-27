@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use ox_lang::Isolate;
 use ox_lang::describe::{Description, Kind};
-use ox_lang::names::{call_head, symbol_at};
+use ox_lang::names::{self, call_head, symbol_at};
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::special_buffer::SpecialBuffer;
@@ -131,31 +131,13 @@ pub(crate) fn echo_signature(
     }
 }
 
-fn plain_code(line: &str) -> bool {
-    let mut quoted = false;
-    let mut chars = line.chars();
-    while let Some(character) = chars.next() {
-        match character {
-            '\\' => {
-                chars.next();
-            }
-            '"' => quoted = !quoted,
-            ';' if !quoted => return false,
-            _ => {}
-        }
-    }
-    !quoted
-}
-
 fn typed_name(editor: &Editor) -> (usize, String) {
-    let buffer = editor.buffer();
-    let point = buffer.point();
-    let typed: String = buffer
-        .chars_before(point)
-        .take_while(|character| !ox_mode::delimits(*character) && !"'`~@#".contains(*character))
-        .collect();
-    let typed: String = typed.chars().rev().collect();
-    (point - typed.chars().count(), typed)
+    let before = before_point(editor);
+    let typed = names::typed_name(&before);
+    (
+        editor.buffer().point() - typed.chars().count(),
+        typed.to_owned(),
+    )
 }
 
 pub(crate) fn complete(
@@ -191,10 +173,8 @@ pub(crate) fn auto_complete(
         return;
     }
     help.completed = Some(key);
-    let point = buffer.point();
-    let line = buffer.text_in(buffer.line_start(buffer.line_of(point))..point);
     let (_, typed) = typed_name(editor);
-    if typed.chars().count() >= AUTO_PREFIX && plain_code(&line) {
+    if typed.chars().count() >= AUTO_PREFIX {
         complete(isolate, editor, home, false);
     }
 }

@@ -2,6 +2,7 @@ use crate::describe::Kind;
 use crate::forms::Forms;
 use crate::read::{self, Datum, Syntax, split_meta};
 use crate::span::Span;
+use crate::syntax::{self, Bracket, State, delimiter, numeric, tokens};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Definition {
@@ -13,14 +14,6 @@ pub struct Definition {
     pub name_span: Span,
 }
 
-fn delimits(character: char) -> bool {
-    character.is_whitespace() || "()[]{}\";".contains(character)
-}
-
-fn starts_symbol(character: char) -> bool {
-    !delimits(character) && !"'`~@#,\\".contains(character)
-}
-
 pub fn short(name: &str) -> &str {
     match name.split_once('/') {
         Some((alias, rest)) if !alias.is_empty() && !rest.is_empty() => rest,
@@ -29,73 +22,85 @@ pub fn short(name: &str) -> &str {
 }
 
 pub fn call_head(before: &str) -> Option<String> {
-    let chars: Vec<char> = before.chars().collect();
-    let mut open: Vec<(char, usize)> = Vec::new();
-    let mut quoted = false;
-    let mut at = 0;
-    while at < chars.len() {
-        let character = chars[at];
-        if quoted {
-            match character {
-                '\\' => at += 1,
-                '"' => quoted = false,
-                _ => {}
+    let (found, state) = tokens(before, &State::default());
+    if !state.in_code() {
+        return None;
+    }
+    let mut open: Vec<usize> = Vec::new();
+    for (index, token) in found.iter().enumerate() {
+        match token.kind {
+            syntax::Kind::Open(_) => open.push(index),
+            syntax::Kind::Close => {
+                open.pop();
             }
-        } else {
-            match character {
-                '"' => quoted = true,
-                ';' => {
-                    while at < chars.len() && chars[at] != '\n' {
-                        at += 1;
-                    }
-                }
-                '\\' => at += 1,
-                '(' | '[' | '{' => open.push((character, at)),
-                ')' | ']' | '}' => {
-                    open.pop();
-                }
-                _ => {}
-            }
+            _ => {}
         }
-        at += 1;
     }
-    if quoted {
+    let at = *open.last()?;
+    if found[at].kind != syntax::Kind::Open(Bracket::List) {
         return None;
     }
-    let &(bracket, at) = open.last()?;
-    if bracket != '(' {
-        return None;
-    }
-    let head: String = chars[at + 1..]
-        .iter()
-        .take_while(|character| !delimits(**character))
-        .collect();
-    head.chars()
-        .next()
-        .is_some_and(starts_symbol)
-        .then_some(head)
+    found
+        .get(at + 1)
+        .filter(|head| head.kind == syntax::Kind::Symbol)
+        .map(|head| head.text(before).to_owned())
+}
+
+pub fn typed_name(before: &str) -> &str {
+    let (found, _) = tokens(before, &State::default());
+    found
+        .last()
+        .filter(|token| token.kind == syntax::Kind::Symbol)
+        .map_or("", |token| token.text(before))
+}
+
+fn word_in(text: &str, at: usize) -> &str {
+    let inside = |character: char| !delimiter(character) && !"'`".contains(character);
+    let start = text[..at]
+        .char_indices()
+        .rev()
+        .take_while(|(_, character)| inside(*character))
+        .last()
+        .map_or(at, |(offset, _)| offset);
+    let end = text[at..]
+        .char_indices()
+        .find(|(_, character)| !inside(*character))
+        .map_or(text.len(), |(offset, _)| at + offset);
+    text[start..end]
+        .trim_start_matches(['~', '@', '#'])
+        .trim_end_matches(['.', '!', '?', ':', ','].as_slice())
 }
 
 pub fn symbol_at(line: &str, column: usize) -> Option<String> {
-    let chars: Vec<char> = line.chars().collect();
-    let symbolic = |at: usize| chars.get(at).is_some_and(|character| !delimits(*character));
-    let mut start = column.min(chars.len());
-    while start > 0 && symbolic(start - 1) {
-        start -= 1;
-    }
-    let mut end = column.min(chars.len());
-    while symbolic(end) {
-        end += 1;
-    }
-    let word: String = chars[start..end].iter().collect();
-    let word = word.trim_start_matches(['\'', '`', '~', '@', '#']);
-    let number = word
-        .trim_start_matches(['-', '+'])
-        .starts_with(|character: char| character.is_ascii_digit());
-    let keyword = word.starts_with(':') || (word.len() > 1 && word.ends_with(':'));
-    (!word.is_empty() && !number && !keyword).then(|| word.to_owned())
+    let at = line
+        .char_indices()
+        .nth(column)
+        .map_or(line.len(), |(offset, _)| offset);
+    let (found, _) = tokens(line, &State::default());
+    let index = found
+        .iter()
+        .position(|token| token.starts() <= at && at < token.ends())
+        .filter(|index| {
+            !matches!(
+                found[*index].kind,
+                syntax::Kind::Space | syntax::Kind::Close
+            )
+        })
+        .or_else(|| found.iter().position(|token| token.ends() == at))?;
+    let token = match found[index].kind {
+        syntax::Kind::Prefix(_) => found.get(index + 1)?,
+        _ => &found[index],
+    };
+    let word = match token.kind {
+        syntax::Kind::Symbol => token.text(line),
+        syntax::Kind::Text | syntax::Kind::Comment | syntax::Kind::BlockComment { .. } => {
+            let offset = at.clamp(token.starts(), token.ends());
+            word_in(line, offset)
+        }
+        _ => return None,
+    };
+    (!word.is_empty() && !numeric(word) && !word.starts_with(':')).then(|| word.to_owned())
 }
-
 fn walk(syntax: &Syntax, wanted: &str, found: &mut Vec<Span>) {
     match &syntax.datum {
         Datum::Symbol(name) if short(name) == wanted => found.push(syntax.span),
@@ -243,7 +248,7 @@ pub fn definitions_with(text: &str, known: &Forms) -> Vec<Definition> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Definition, call_head, occurrences, short, symbol_at};
+    use super::{Definition, call_head, occurrences, short, symbol_at, typed_name};
     use crate::describe::Kind;
 
     #[test]
@@ -256,6 +261,42 @@ mod tests {
         assert_eq!(call_head("(f [1 2 "), None);
         assert_eq!(call_head("(f \"open"), None);
         assert_eq!(call_head("('quoted"), None);
+    }
+
+    #[test]
+    fn call_heads_see_through_holes_raw_strings_and_comments() {
+        assert_eq!(
+            call_head("(msg \"{(if moving \"Moved\" ").as_deref(),
+            Some("if")
+        );
+        assert_eq!(call_head("(f #r#\"(\"# ").as_deref(), Some("f"));
+        assert_eq!(call_head("(f #| ( |# ").as_deref(), Some("f"));
+        assert_eq!(call_head("(f #\"(\" ").as_deref(), Some("f"));
+        assert_eq!(call_head("(f \"{x} open"), None);
+    }
+
+    #[test]
+    fn the_name_being_typed_is_a_symbol_in_code() {
+        assert_eq!(typed_name("(li"), "li");
+        assert_eq!(typed_name("(f 'ali"), "ali");
+        assert_eq!(typed_name("#{s/up"), "s/up");
+        assert_eq!(typed_name("(f "), "");
+        assert_eq!(typed_name("(f ; lim"), "");
+        assert_eq!(typed_name("(f \"lim"), "");
+        assert_eq!(typed_name("(f :ke"), "");
+        assert_eq!(typed_name("\"{(str/jo"), "str/jo");
+    }
+
+    #[test]
+    fn symbols_end_at_commas_and_are_found_in_comments_and_strings() {
+        assert_eq!(symbol_at("[a,b]", 1).as_deref(), Some("a"));
+        assert_eq!(symbol_at("[a,b]", 3).as_deref(), Some("b"));
+        assert_eq!(symbol_at("; see area.", 7).as_deref(), Some("area"));
+        assert_eq!(
+            symbol_at("\"call `area` first\"", 8).as_deref(),
+            Some("area")
+        );
+        assert_eq!(symbol_at("(area 2)", 5).as_deref(), Some("area"));
     }
 
     #[test]

@@ -178,18 +178,6 @@ fn markdown(signature: &str, doc: Option<&str>) -> String {
     }
 }
 
-fn typed(before: &str) -> &str {
-    let start = before
-        .char_indices()
-        .rev()
-        .take_while(|(_, character)| {
-            !character.is_whitespace() && !"()[]{}\";'`~@#".contains(*character)
-        })
-        .last()
-        .map_or(before.len(), |(at, _)| at);
-    &before[start..]
-}
-
 impl<'a> Server<'a> {
     fn new(options: &'a Options) -> Self {
         Self {
@@ -318,7 +306,8 @@ impl<'a> Server<'a> {
 
     fn complete(&mut self, params: &Value) -> Option<Value> {
         let (uri, text, at) = self.at(params)?;
-        let prefix = typed(&text[..at]).to_owned();
+        let form = text[..at].rfind("\n(").map_or(0, |found| found + 1);
+        let prefix = names::typed_name(&text[form..at]).to_owned();
         let document = self.documents.get(&uri)?;
         let (module, path) = (document.module(), document.path.clone());
         let mut found: Vec<(String, Option<String>, Kind, Option<String>)> =

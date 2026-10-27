@@ -6,6 +6,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use ox_lang::span::Span;
+use ox_lang::syntax::{Kind, State, tokens};
 use ox_lang::task::TaskId;
 use ox_lang::testing;
 use ox_lang::value::Value;
@@ -121,54 +122,46 @@ fn prefixed(text: &str, at: usize) -> usize {
 }
 
 fn last_expression(text: &str) -> Option<Range<usize>> {
+    let (found, state) = tokens(text, &State::default());
     let mut opens: Vec<usize> = Vec::new();
+    let mut strings: Vec<usize> = Vec::new();
     let mut last = None;
-    let mut chars = text.char_indices().peekable();
-    while let Some((at, character)) = chars.next() {
-        match character {
-            ';' => while chars.next_if(|(_, next)| *next != '\n').is_some() {},
-            '"' => {
-                let mut end = text.len();
-                while let Some((inside, next)) = chars.next() {
-                    if next == '\\' {
-                        chars.next();
-                    } else if next == '"' {
-                        end = inside + 1;
-                        break;
-                    }
-                }
-                last = Some(prefixed(text, at)..end);
-            }
-            '(' | '[' | '{' => opens.push(at),
-            ')' | ']' | '}' => {
+    for token in &found {
+        let whole = || prefixed(text, token.starts())..token.ends();
+        match token.kind {
+            Kind::Open(_) => opens.push(token.starts()),
+            Kind::Close => {
                 if let Some(open) = opens.pop() {
-                    last = Some(prefixed(text, open)..at + 1);
+                    last = Some(prefixed(text, open)..token.ends());
                 }
             }
-            _ if ox_mode::delimits(character) => {}
-            _ => {
-                let mut end = at + character.len_utf8();
-                if character == '\\'
-                    && let Some((next_at, next)) = chars.next()
-                {
-                    end = next_at + next.len_utf8();
-                }
-                while let Some((next_at, next)) = chars.peek().copied() {
-                    if ox_mode::delimits(next) {
-                        break;
-                    }
-                    end = next_at + next.len_utf8();
-                    chars.next();
-                }
-                if !text[at..end].chars().all(|found| "'`~@#".contains(found)) {
-                    last = Some(at..end);
+            Kind::StringStart => strings.push(token.starts()),
+            Kind::StringEnd => {
+                if let Some(open) = strings.pop() {
+                    last = Some(prefixed(text, open)..token.ends());
                 }
             }
+            Kind::Symbol
+            | Kind::Keyword
+            | Kind::Number
+            | Kind::Char
+            | Kind::Flag
+            | Kind::Dispatch
+            | Kind::Raw { closed: true }
+            | Kind::Regex { closed: true } => last = Some(whole()),
+            Kind::Raw { closed: false } | Kind::Regex { closed: false } => {
+                last = Some(prefixed(text, token.starts())..text.len());
+            }
+            _ => {}
         }
+    }
+    if state.in_string()
+        && let Some(open) = strings.last()
+    {
+        last = Some(prefixed(text, *open)..text.len());
     }
     last
 }
-
 fn bytes(span: Span, text: &str) -> Range<usize> {
     let end = usize::try_from(span.end).unwrap_or(0).min(text.len());
     let start = usize::try_from(span.start).unwrap_or(0).min(end);
@@ -985,6 +978,24 @@ mod tests {
         assert_eq!(last("(f x) ; (g y)\n").as_deref(), Some("(f x)"));
         assert_eq!(last("#{1 2}").as_deref(), Some("#{1 2}"));
         assert_eq!(last("  "), None);
+    }
+
+    #[test]
+    fn the_expression_before_point_understands_raw_strings_comments_and_holes() {
+        let last = |text: &str| last_expression(text).map(|span| text[span].to_owned());
+
+        assert_eq!(
+            last("(def p #r\"C:\\dir\\\")").as_deref(),
+            Some("(def p #r\"C:\\dir\\\")")
+        );
+        assert_eq!(
+            last("(f #r\"C:\\dir\\\"").as_deref(),
+            Some("#r\"C:\\dir\\\"")
+        );
+        assert_eq!(last("(f x #| (g |# ").as_deref(), Some("x"));
+        assert_eq!(last("(msg \"a {(f 1)").as_deref(), Some("(f 1)"));
+        assert_eq!(last("(f \"open").as_deref(), Some("\"open"));
+        assert_eq!(last("(f #\"\\d{4}\"").as_deref(), Some("#\"\\d{4}\""));
     }
 
     #[test]
