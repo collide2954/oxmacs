@@ -82,6 +82,10 @@ enum Context {
 pub struct State(Vec<Context>);
 
 impl State {
+    pub fn is_plain(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn in_code(&self) -> bool {
         matches!(self.0.last(), None | Some(Context::Hole(_)))
     }

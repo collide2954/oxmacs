@@ -488,10 +488,9 @@ fn indent_or_complete(editor: &mut Editor) {
     editor.execute(Command::IndentForTabCommand);
     let buffer = editor.buffer();
     let unchanged = before == (buffer.revision(), buffer.point());
-    let after_name = buffer
-        .chars_before(buffer.point())
-        .next()
-        .is_some_and(|character| !ox_mode::delimits(character) && !"'`~@#".contains(character));
+    let point = buffer.point();
+    let line = buffer.text_in(buffer.line_start(buffer.line_of(point))..point);
+    let after_name = !ox_lang::names::typed_name(&line).is_empty();
     if unchanged && after_name && !selecting {
         queue(editor, Request::Complete(true));
     }

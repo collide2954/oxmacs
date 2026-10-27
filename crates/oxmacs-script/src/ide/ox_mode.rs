@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex, PoisonError};
 
 use ox_lang::forms::{self, Forms};
+use ox_lang::syntax::{self, Bracket, Kind, Prefix, tokens};
 
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::{Editor, Formatter};
@@ -44,24 +45,14 @@ pub fn language() -> Language {
     Language::new(&OX)
 }
 
-pub(crate) fn delimits(character: char) -> bool {
-    character.is_whitespace() || "()[]{}\";".contains(character)
-}
-
-pub(crate) fn starts_symbol(character: char) -> bool {
-    !delimits(character) && !"'`~@#,\\".contains(character)
-}
-
 type Spans = Vec<(Range<usize>, Highlight)>;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct State {
-    in_string: bool,
+    lexer: syntax::State,
     after_def: bool,
-    block: usize,
     skipped: Option<usize>,
 }
-
 fn number(word: &str) -> bool {
     word.trim_start_matches(['-', '+'])
         .starts_with(|character: char| character.is_ascii_digit())
@@ -98,302 +89,196 @@ fn word_spans(word: &str, start: usize, after_paren: bool, defining: bool, known
     }
 }
 
-fn string_end(chars: &[char], from: usize) -> (usize, bool) {
-    let mut at = from;
-    while at < chars.len() {
-        match chars[at] {
-            '\\' => at += 2,
-            '"' => return (at + 1, true),
-            _ => at += 1,
-        }
+fn columns(text: &str) -> Option<Vec<usize>> {
+    if text.is_ascii() {
+        return None;
     }
-    (chars.len(), false)
+    let mut found = vec![0; text.len() + 1];
+    let mut count = 0;
+    for (offset, character) in text.char_indices() {
+        found[offset..offset + character.len_utf8()].fill(count);
+        count += 1;
+    }
+    found[text.len()] = count;
+    Some(found)
 }
 
-fn string_spans(chars: &[char], start: usize, end: usize, face: Highlight, spans: &mut Spans) {
-    let mut piece = start;
-    let mut at = start;
-    while at < end {
-        match chars[at] {
-            '\\' => at += 2,
-            '{' if chars.get(at + 1) == Some(&'{') => at += 2,
-            '{' => match (at + 1..end).find(|index| chars[*index] == '}') {
-                Some(close) => {
-                    if piece < at {
-                        spans.push((piece..at, face));
-                    }
-                    spans.push((at..close + 1, Highlight::Attribute));
-                    at = close + 1;
-                    piece = at;
-                }
-                None => at += 1,
-            },
-            _ => at += 1,
-        }
+fn paint(spans: &mut Spans, range: Range<usize>, face: Highlight) {
+    if range.is_empty() {
+        return;
     }
-    if piece < end {
-        spans.push((piece..end, face));
+    match spans.last_mut() {
+        Some((last, known)) if *known == face && last.end == range.start => last.end = range.end,
+        _ => spans.push((range, face)),
     }
 }
 
-fn block_end(chars: &[char], mut at: usize, mut depth: usize) -> (usize, usize) {
-    while at < chars.len() && depth > 0 {
-        match (chars[at], chars.get(at + 1)) {
-            ('|', Some('#')) => {
-                depth -= 1;
-                at += 2;
+struct Skip {
+    start: usize,
+    depth: usize,
+}
+
+impl Skip {
+    fn takes(&mut self, kind: Kind) -> Option<bool> {
+        match kind {
+            Kind::Space
+            | Kind::Comment
+            | Kind::BlockComment { .. }
+            | Kind::Prefix(_)
+            | Kind::Text
+            | Kind::Escape
+            | Kind::HoleStart
+            | Kind::HoleEnd
+            | Kind::Raw { closed: false }
+            | Kind::Regex { closed: false } => Some(false),
+            Kind::Open(_) | Kind::StringStart => {
+                self.depth += 1;
+                Some(false)
             }
-            ('#', Some('|')) => {
-                depth += 1;
-                at += 2;
+            Kind::Close | Kind::StringEnd if self.depth == 0 => None,
+            Kind::Close | Kind::StringEnd => {
+                self.depth -= 1;
+                Some(self.depth == 0)
             }
-            _ => at += 1,
+            _ => Some(self.depth == 0),
         }
-    }
-    (at, depth)
-}
-
-fn skipped_end(chars: &[char], mut at: usize, mut depth: usize) -> (usize, Option<State>) {
-    while at < chars.len() {
-        let skipped = Some(depth);
-        match (chars[at], chars.get(at + 1)) {
-            ('\\', _) | ('#', Some(';')) => at += 2,
-            (';', _) => at = chars.len(),
-            ('#', Some('|')) => {
-                let (end, block) = block_end(chars, at + 2, 1);
-                if block > 0 {
-                    let open = State {
-                        block,
-                        skipped,
-                        ..State::default()
-                    };
-                    return (end, Some(open));
-                }
-                at = end;
-            }
-            ('"', _) => {
-                let (end, closed) = string_end(chars, at + 1);
-                if !closed {
-                    let open = State {
-                        in_string: true,
-                        skipped,
-                        ..State::default()
-                    };
-                    return (end, Some(open));
-                }
-                at = end;
-            }
-            ('(' | '[' | '{', _) => {
-                depth += 1;
-                at += 1;
-            }
-            (')' | ']' | '}', _) => {
-                depth -= 1;
-                at += 1;
-                if depth == 0 {
-                    return (at, None);
-                }
-            }
-            _ => at += 1,
-        }
-    }
-    let open = State {
-        skipped: Some(depth),
-        ..State::default()
-    };
-    (chars.len(), Some(open))
-}
-
-fn datum_end(chars: &[char], from: usize) -> (usize, Option<State>) {
-    let Some(at) = (from..chars.len())
-        .find(|at| !(chars[*at].is_whitespace() || ",'`~@#".contains(chars[*at])))
-    else {
-        return (chars.len(), None);
-    };
-    match chars[at] {
-        '(' | '[' | '{' => skipped_end(chars, at + 1, 1),
-        '"' => {
-            let (end, closed) = string_end(chars, at + 1);
-            let open = State {
-                in_string: true,
-                skipped: Some(0),
-                ..State::default()
-            };
-            (end, (!closed).then_some(open))
-        }
-        '\\' => (word_end(chars, at + 2), None),
-        _ => (word_end(chars, at), None),
     }
 }
 
-fn resume(chars: &[char], state: State, spans: &mut Spans) -> Result<usize, State> {
-    let mut at = 0;
-    let mut open = None;
-    if state.block > 0 {
-        let (end, block) = block_end(chars, 0, state.block);
-        at = end;
-        if block > 0 {
-            open = Some(State {
-                block,
-                skipped: state.skipped,
-                ..State::default()
-            });
-        }
-    } else if state.in_string {
-        let (end, closed) = string_end(chars, 0);
-        if state.skipped.is_none() {
-            string_spans(chars, 0, end, Highlight::String, spans);
-        }
-        at = end;
-        if !closed {
-            open = Some(State {
-                in_string: true,
-                skipped: state.skipped,
-                ..State::default()
-            });
-        }
-    }
-    if let (None, Some(depth @ 1..)) = (open, state.skipped) {
-        (at, open) = skipped_end(chars, at, depth);
-    }
-    if (state.block > 0 || state.skipped.is_some()) && at > 0 {
-        spans.push((0..at, Highlight::Comment));
-    }
-    open.map_or(Ok(at), Err)
-}
-
-fn word_end(chars: &[char], from: usize) -> usize {
-    (from..chars.len())
-        .find(|index| delimits(chars[*index]))
-        .unwrap_or(chars.len())
-}
-
-fn closing_brace(chars: &[char], open: usize) -> usize {
-    let mut depth = 0_usize;
-    for (index, character) in chars.iter().enumerate().skip(open) {
-        match character {
-            '{' => depth += 1,
-            '}' if depth <= 1 => return index + 1,
-            '}' => depth -= 1,
-            _ => {}
-        }
-    }
-    chars.len()
-}
-
-fn reader_token(chars: &[char], at: usize) -> Option<(usize, Highlight)> {
-    let next = chars.get(at + 1).copied();
-    match chars[at] {
-        '^' if next == Some('{') => Some((closing_brace(chars, at + 1), Highlight::Attribute)),
-        '^' if next == Some(':') => Some((word_end(chars, at + 1), Highlight::Attribute)),
-        '\\' if next.is_some() => Some((word_end(chars, at + 2), Highlight::Constant)),
-        '\'' if next.is_some_and(starts_symbol) => {
-            Some((word_end(chars, at + 1), Highlight::Constant))
-        }
-        '~' if next == Some('@') => Some((at + 2, Highlight::Macro)),
-        '\'' | '`' | '~' | '@' => Some((at + 1, Highlight::Macro)),
-        _ => None,
-    }
-}
-
-fn highlight_with(text: &str, state: State) -> (Spans, State) {
+fn highlight_with(text: &str, state: &State) -> (Spans, State) {
     highlight_in(text, state, &EDITOR_FORMS)
 }
 
-fn highlight_in(text: &str, state: State, known: &Forms) -> (Spans, State) {
-    let chars: Vec<char> = text.chars().collect();
+#[allow(clippy::too_many_lines)]
+fn highlight_in(text: &str, state: &State, known: &Forms) -> (Spans, State) {
+    let map = columns(text);
+    let column = |byte: usize| map.as_ref().map_or(byte, |found| found[byte]);
+    let (found, lexer) = tokens(text, &state.lexer);
     let mut spans = Vec::new();
-    let mut at = match resume(&chars, state, &mut spans) {
-        Ok(end) => end,
-        Err(open) => return (spans, open),
-    };
+    let mut skip = state.skipped.map(|depth| Skip { start: 0, depth });
+    let mut faces: Vec<Highlight> = Vec::new();
+    let mut meta: Option<(usize, usize)> = None;
+    let mut quoted: Option<usize> = None;
     let mut defining = false;
     let mut summary = false;
-    let mut head: Option<String> = None;
-    let mut after_paren = false;
-    let mut first = at == 0;
-    let next = State {
-        after_def: text.trim_start().starts_with("(def"),
-        ..State::default()
-    };
-    while at < chars.len() {
-        let character = chars[at];
-        let start = at;
-        let comment = match (character, chars.get(at + 1)) {
-            ('#', Some('|')) => {
-                let (end, block) = block_end(&chars, at + 2, 1);
-                let open = State {
-                    block,
-                    ..State::default()
+    let mut head: Option<&str> = None;
+    let mut first = state.lexer.is_plain() && state.skipped.is_none();
+    let mut previous: Option<Kind> = None;
+    for (index, token) in found.iter().enumerate() {
+        let (start, end) = (column(token.starts()), column(token.ends()));
+        let after_paren = previous == Some(Kind::Open(Bracket::List));
+        previous = Some(token.kind);
+        if let Some(skipping) = skip.as_mut() {
+            match skipping.takes(token.kind) {
+                Some(false) => continue,
+                Some(true) => {
+                    paint(&mut spans, skipping.start..end, Highlight::Comment);
+                    skip = None;
+                    continue;
+                }
+                None => {
+                    paint(&mut spans, skipping.start..start, Highlight::Comment);
+                    skip = None;
+                }
+            }
+        }
+        if let Some((from, depth)) = meta.as_mut() {
+            match token.kind {
+                Kind::Open(_) => *depth += 1,
+                Kind::Close => {
+                    *depth -= 1;
+                    if *depth == 0 {
+                        paint(&mut spans, *from..end, Highlight::Attribute);
+                        meta = None;
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+        if token.kind != Kind::Space {
+            first &= matches!(token.kind, Kind::StringStart);
+        }
+        match token.kind {
+            Kind::Prefix(Prefix::Skip) => {
+                skip = Some(Skip { start, depth: 0 });
+            }
+            Kind::Prefix(Prefix::Quote)
+                if found.get(index + 1).is_some_and(|next| {
+                    next.starts() == token.ends()
+                        && matches!(next.kind, Kind::Symbol | Kind::Keyword | Kind::Number)
+                }) =>
+            {
+                quoted = Some(start);
+            }
+            Kind::Prefix(_) => paint(&mut spans, start..end, Highlight::Macro),
+            Kind::Comment | Kind::BlockComment { .. } => {
+                paint(&mut spans, start..end, Highlight::Comment);
+            }
+            Kind::Open(Bracket::Meta) => meta = Some((start, 1)),
+            Kind::Flag => paint(&mut spans, start..end, Highlight::Attribute),
+            Kind::Char => paint(&mut spans, start..end, Highlight::Constant),
+            Kind::Raw { .. } | Kind::Regex { .. } => {
+                paint(&mut spans, start..end, Highlight::String);
+            }
+            Kind::StringStart => {
+                let face = if summary || (first && state.after_def) {
+                    Highlight::DocComment
+                } else {
+                    Highlight::String
                 };
-                Some((end, (block > 0).then_some(open)))
+                (summary, defining, first) = (false, false, false);
+                faces.push(face);
+                paint(&mut spans, start..end, face);
             }
-            ('#', Some(';')) => Some(datum_end(&chars, at + 2)),
-            _ => None,
-        };
-        if let Some((end, open)) = comment {
-            spans.push((start..end, Highlight::Comment));
-            if let Some(open) = open {
-                return (spans, open);
+            Kind::Text | Kind::Escape => {
+                let face = faces.last().copied().unwrap_or(Highlight::String);
+                paint(&mut spans, start..end, face);
             }
-            at = end;
-            continue;
-        }
-        if character == ';' {
-            spans.push((start..chars.len(), Highlight::Comment));
-            break;
-        }
-        if character == '"' {
-            let (end, closed) = string_end(&chars, at + 1);
-            let face = if summary || (first && state.after_def) {
-                Highlight::DocComment
-            } else {
-                Highlight::String
-            };
-            string_spans(&chars, start, end, face, &mut spans);
-            if !closed {
-                let open = State {
-                    in_string: true,
-                    ..State::default()
-                };
-                return (spans, open);
+            Kind::StringEnd => {
+                let face = faces.pop().unwrap_or(Highlight::String);
+                paint(&mut spans, start..end, face);
             }
-            at = end;
-            (after_paren, summary, defining, first) = (false, false, false, false);
-            continue;
-        }
-        if let Some((end, face)) = reader_token(&chars, at) {
-            spans.push((start..end, face));
-            at = end;
-            (after_paren, first) = (false, false);
-            continue;
-        }
-        if starts_symbol(character) {
-            while at < chars.len() && !delimits(chars[at]) {
-                at += 1;
+            Kind::HoleStart | Kind::HoleEnd => {
+                paint(&mut spans, start..end, Highlight::Attribute);
             }
-            let word: String = chars[start..at].iter().collect();
-            spans.extend(word_spans(&word, start, after_paren, defining, known));
-            summary = defining && head.as_deref().is_some_and(|head| !forms::special(head));
-            defining = after_paren && known.defines(&word) == Some(0);
-            if defining {
-                head = Some(word);
+            Kind::Symbol | Kind::Keyword | Kind::Number => {
+                let word = token.text(text);
+                match quoted.take() {
+                    Some(from) => paint(&mut spans, from..end, Highlight::Constant),
+                    None => {
+                        for (range, face) in word_spans(word, start, after_paren, defining, known) {
+                            paint(&mut spans, range, face);
+                        }
+                    }
+                }
+                summary = defining && head.is_some_and(|head| !forms::special(head));
+                defining = after_paren && known.defines(word) == Some(0);
+                if defining {
+                    head = Some(word);
+                }
             }
-            (after_paren, first) = (false, false);
-            continue;
+            _ => {}
         }
-        after_paren = character == '(';
-        if !character.is_whitespace() {
-            first = false;
-        }
-        at += 1;
     }
+    let line_end = column(text.len());
+    if let Some((from, _)) = meta {
+        paint(&mut spans, from..line_end, Highlight::Attribute);
+    }
+    let skipped = skip.and_then(|skipping| {
+        paint(&mut spans, skipping.start..line_end, Highlight::Comment);
+        (skipping.depth > 0 || !lexer.in_code()).then_some(skipping.depth)
+    });
+    let next = State {
+        lexer,
+        after_def: text.trim_start().starts_with("(def"),
+        skipped,
+    };
     (spans, next)
 }
-
 #[cfg(test)]
 pub(crate) fn highlight_line(text: &str) -> Spans {
-    highlight_with(text, State::default()).0
+    highlight_with(text, &State::default()).0
 }
 
 pub(crate) fn highlight_lines(lines: &[&str]) -> Vec<Spans> {
@@ -401,7 +286,7 @@ pub(crate) fn highlight_lines(lines: &[&str]) -> Vec<Spans> {
     lines
         .iter()
         .map(|line| {
-            let (spans, next) = highlight_with(line, state);
+            let (spans, next) = highlight_with(line, &state);
             state = next;
             spans
         })
@@ -417,12 +302,10 @@ fn top_level(line: &str) -> bool {
         .any(|head| line.starts_with(head))
 }
 
-fn after(text: &str, state: State) -> State {
-    let state = if top_level(text) {
-        State::default()
-    } else {
-        state
-    };
+fn after(text: &str, state: &State) -> State {
+    if top_level(text) {
+        return highlight_with(text, &State::default()).1;
+    }
     highlight_with(text, state).1
 }
 
@@ -435,7 +318,7 @@ fn starting(buffer: &Buffer, line: usize) -> (usize, State) {
     if first == line {
         return (line, State::default());
     }
-    let state = highlight_with(&buffer.line_text(first), State::default()).1;
+    let state = highlight_with(&buffer.line_text(first), &State::default()).1;
     (first + 1, state)
 }
 
@@ -465,10 +348,10 @@ impl Starts {
         }
         while self.first + self.states.len() <= line {
             let last = self.first + self.states.len() - 1;
-            let state = self.states[self.states.len() - 1];
-            self.states.push(after(&buffer.line_text(last), state));
+            let next = after(&buffer.line_text(last), &self.states[self.states.len() - 1]);
+            self.states.push(next);
         }
-        self.states[line - self.first]
+        self.states[line - self.first].clone()
     }
 }
 
@@ -521,7 +404,7 @@ fn highlight(editor: &Editor, id: BufferId, line: usize) -> Spans {
         || Starts::new(buffer, line).state(buffer, line),
         |lexed| lexed.state(buffer, line),
     );
-    highlight_in(&buffer.line_text(line), state, forms_of(editor, buffer)).0
+    highlight_in(&buffer.line_text(line), &state, forms_of(editor, buffer)).0
 }
 const LOOK_BACK: usize = 2000;
 
@@ -658,7 +541,8 @@ mod tests {
                 (6..11, Highlight::Function),
                 (19..22, Highlight::Function),
                 (23..27, Highlight::String),
-                (27..33, Highlight::Attribute),
+                (27..28, Highlight::Attribute),
+                (32..33, Highlight::Attribute),
                 (33..34, Highlight::String),
                 (35..40, Highlight::Constant),
                 (41..43, Highlight::Constant),
@@ -789,9 +673,9 @@ mod tests {
             .find(|candidate| super::top_level(&buffer.line_text(*candidate)))
             .unwrap_or(floor);
         let state = (first..line).fold(super::State::default(), |state, earlier| {
-            super::highlight_with(&buffer.line_text(earlier), state).1
+            super::highlight_with(&buffer.line_text(earlier), &state).1
         });
-        super::highlight_with(&buffer.line_text(line), state).0
+        super::highlight_with(&buffer.line_text(line), &state).0
     }
 
     fn all_lines_match(editor: &Editor, order: &[usize]) {
@@ -822,6 +706,42 @@ mod tests {
         all_lines_match(&editor, &forward);
         editor.buffer_mut().delete_range(start..start + 1);
         all_lines_match(&editor, &backward);
+    }
+
+    #[test]
+    fn raw_strings_regexes_and_strings_inside_holes_are_colored_whole() {
+        assert_eq!(
+            highlight_line("(f #r#\"say \"hi\"\"# x)"),
+            [(1..2, Highlight::Function), (3..17, Highlight::String)]
+        );
+        assert_eq!(
+            highlight_line("(re #\"\\d{4}\")"),
+            [(1..3, Highlight::Function), (4..12, Highlight::String)]
+        );
+        assert_eq!(
+            highlight_line("\"{(if on \"Moved\" \"Copied\")} it\""),
+            [
+                (0..1, Highlight::String),
+                (1..2, Highlight::Attribute),
+                (3..5, Highlight::Keyword),
+                (9..16, Highlight::String),
+                (17..25, Highlight::String),
+                (26..27, Highlight::Attribute),
+                (27..31, Highlight::String),
+            ]
+        );
+    }
+
+    #[test]
+    fn columns_count_characters_not_bytes() {
+        assert_eq!(
+            highlight_line("(f \"λé\" :k)"),
+            [
+                (1..2, Highlight::Function),
+                (3..7, Highlight::String),
+                (8..10, Highlight::Constant),
+            ]
+        );
     }
 
     #[test]
