@@ -1,5 +1,5 @@
 (module
-  (import (ox string) (ox time))
+  (import (ox string) (ox time) (ox file))
   (export rows runtime spark sorts next-sort))
 
 (def columns [:name :kind :status :pid :time :cpu :memory :history :details])
@@ -29,7 +29,6 @@
       ((> minutes 0) (str minutes "m " (two left) "s"))
       (else (str left "s")))))
 
-(def (megabytes bytes) (str (// (+ bytes 1048575) 1048576) " MB"))
 
 (def (tenths x) (str (/ (round (* x 10)) 10.0)))
 
@@ -62,7 +61,7 @@
      pid: (if p.pid (str p.pid) "-")
      time: (runtime (- (or p.ended now) p.started))
      cpu: (if cpu (str (tenths cpu) "%") "-")
-     memory: (if memory (megabytes memory) "-")
+     memory: (if memory (file/size-text memory) "-")
      history: (if (live? p) (spark p.cpu) "")
      details: (command-line p)}))
 

@@ -99,6 +99,7 @@ struct Settings {
     line_number_separator: bool,
     auto_save: bool,
     auto_save_visited: bool,
+    delete_to_trash: bool,
     language_servers: bool,
     inlay_hints: bool,
 }
@@ -112,6 +113,7 @@ impl From<&Config> for Settings {
             line_number_separator: config.line_number_separator,
             auto_save: config.auto_save,
             auto_save_visited: config.auto_save_visited,
+            delete_to_trash: config.delete_to_trash,
             language_servers: config.language_servers,
             inlay_hints: config.inlay_hints,
         }

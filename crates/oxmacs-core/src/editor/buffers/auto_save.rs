@@ -41,6 +41,10 @@ impl Editor {
             })
     }
 
+    pub fn deletes_to_trash(&self) -> bool {
+        self.settings.delete_to_trash
+    }
+
     pub fn wants_auto_save(&self) -> bool {
         (self.settings.auto_save_visited && self.modified_files().next().is_some())
             || self.unrecovered().next().is_some()

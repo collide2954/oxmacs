@@ -1,10 +1,10 @@
 (module
-  (import (ox string) (ox path))
+  (import (ox string) (ox path) (ox file))
   (export sorted shown? rows filtered parse-status roll-up roll-up-problems line))
 
 (def (sorted entries)
-  "entries with folders first, then by name ignoring case."
-  (sort-by (fn [entry] [(if entry.dir 0 1) (string/lower entry.name)]) entries))
+  "entries in the order file/list gives: folders first, then by name ignoring case, hidden ones last."
+  (file/sorted entries))
 
 (def (shown? entry hidden ignored)
   "Whether entry shows: never .git, and hidden or ignored files only when hidden is true."

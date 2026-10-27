@@ -8,8 +8,9 @@ use crate::text;
 use ox_lang::Isolate;
 use ox_lang::error::Error;
 use ox_lang::heap::Heap;
+use ox_lang::native::{expected, field};
 use ox_lang::portable::{Failure, Portable};
-use ox_lang::value::Value;
+use ox_lang::value::{Value, print};
 
 const MODULE: &str = "ox/file";
 
@@ -73,19 +74,143 @@ fn describe(path: &Path) -> io::Result<Portable> {
     Ok(entry(path, &metadata, link))
 }
 
-fn list(directory: &Path) -> Result<Portable, Failure> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Order {
+    Name,
+    Newest,
+    Largest,
+}
+
+impl Order {
+    fn named(name: &str) -> Option<Self> {
+        match name {
+            "name" => Some(Self::Name),
+            "newest" => Some(Self::Newest),
+            "largest" => Some(Self::Largest),
+            _ => None,
+        }
+    }
+
+    fn of(heap: &Heap, native: &str, option: &str, value: Value) -> Result<Self, Error> {
+        match value {
+            Value::Nil => Some(Self::Name),
+            Value::Keyword(name) => Self::named(name.name()),
+            _ => None,
+        }
+        .ok_or_else(|| {
+            Error::new(format!(
+                "{native} expects :{option} to be :name, :newest or :largest, got {}",
+                print::brief(heap, value)
+            ))
+        })
+    }
+}
+
+pub fn sort_key(
+    order: Order,
+    dir: bool,
+    name: &str,
+    modified: i64,
+    size: i64,
+) -> (bool, i64, bool, String) {
+    let lower = name.to_lowercase();
+    match order {
+        Order::Name => (!dir, 0, name.starts_with('.'), lower),
+        Order::Newest => (!dir, modified.saturating_neg(), false, lower),
+        Order::Largest => (!dir, size.saturating_neg(), false, lower),
+    }
+}
+
+fn listed(found: &fs::DirEntry) -> io::Result<(Portable, (bool, String, i64, i64))> {
+    let path = found.path();
+    let link = found.file_type()?.is_symlink();
+    let metadata = if link {
+        fs::metadata(&path).or_else(|_| found.metadata())?
+    } else {
+        found.metadata()?
+    };
+    let name = found.file_name().to_string_lossy().into_owned();
+    let modified = match modified(&metadata) {
+        Portable::Int(millis) => millis,
+        _ => 0,
+    };
+    let size = i64::try_from(metadata.len()).unwrap_or(i64::MAX);
+    let facts = (
+        metadata.is_dir(),
+        name,
+        modified,
+        if metadata.is_dir() { 0 } else { size },
+    );
+    Ok((entry(&path, &metadata, link), facts))
+}
+
+fn list(directory: &Path, order: Order) -> Result<Portable, Failure> {
     let reading = |error: &dyn std::fmt::Display| failed("list", directory, error);
-    let mut paths: Vec<PathBuf> = fs::read_dir(directory)
+    let mut entries: Vec<(Portable, (bool, String, i64, i64))> = fs::read_dir(directory)
         .map_err(|error| reading(&error))?
         .filter_map(Result::ok)
-        .map(|found| found.path())
+        .filter_map(|found| listed(&found).ok())
         .collect();
-    paths.sort();
-    let entries = paths
+    entries.sort_by_cached_key(|(_, (dir, name, modified, size))| {
+        sort_key(order, *dir, name, *modified, *size)
+    });
+    Ok(Portable::Vector(
+        entries.into_iter().map(|(entry, _)| entry).collect(),
+    ))
+}
+
+pub fn size_text(bytes: u64) -> String {
+    const UNITS: [&str; 6] = ["K", "M", "G", "T", "P", "E"];
+    if bytes < 1024 {
+        return format!("{bytes}B");
+    }
+    let mut unit: u128 = 1;
+    let mut shown = String::new();
+    for suffix in UNITS {
+        unit *= 1024;
+        let bytes = u128::from(bytes);
+        let tenths = (bytes * 10).div_ceil(unit);
+        let whole = bytes.div_ceil(unit);
+        if tenths < 100 {
+            return format!("{}.{}{suffix}", tenths / 10, tenths % 10);
+        }
+        shown = format!("{whole}{suffix}");
+        if whole < 1024 {
+            return shown;
+        }
+    }
+    shown
+}
+
+fn sorted(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let items = heap
+        .elements(arguments[0])
+        .ok_or_else(|| expected(heap, "file/sorted", "a vector of entries", arguments[0]))?;
+    let order = Order::of(heap, "file/sorted", "by", arguments[1])?;
+    let number = |heap: &Heap, item: Value, key: &str| match field(heap, item, key) {
+        Some(Value::Int(number)) => number,
+        _ => 0,
+    };
+    let mut keyed: Vec<_> = items
         .iter()
-        .filter_map(|path| describe(path).ok())
+        .map(|item| {
+            let dir = field(heap, *item, "dir").is_some_and(Value::truthy);
+            let name = field(heap, *item, "name")
+                .and_then(|name| heap.text(name).map(str::to_owned))
+                .unwrap_or_default();
+            let key = sort_key(
+                order,
+                dir,
+                &name,
+                number(heap, *item, "modified"),
+                number(heap, *item, "size"),
+            );
+            (key, *item)
+        })
         .collect();
-    Ok(Portable::Vector(entries))
+    keyed.sort_by(|(a, _), (b, _)| a.cmp(b));
+    let values: Vec<Value> = keyed.into_iter().map(|(_, item)| item).collect();
+    heap.vector_from(&values).map_err(Error::from)
 }
 
 fn refused(reason: String) -> io::Error {
@@ -172,7 +297,11 @@ fn folder_link(_: fs::FileType) -> bool {
     false
 }
 
-fn remove(path: &Path) -> io::Result<()> {
+pub fn to_trash(path: &Path) -> io::Result<()> {
+    trash::delete(path).map_err(io::Error::other)
+}
+
+pub fn remove(path: &Path) -> io::Result<()> {
     let kind = fs::symlink_metadata(path)?.file_type();
     if kind.is_dir() {
         fs::remove_dir_all(path)
@@ -271,7 +400,32 @@ pub fn install(isolate: &mut Isolate) {
             .map(|bytes| string(&to_base64(&bytes)))
             .map_err(|error| failed("read", &path, &error))
     });
-    single(isolate, "list", |path| list(&path));
+    isolate
+        .native(MODULE, "list")
+        .arity(1, Some(1))
+        .keywords(&["sort"])
+        .outside()
+        .function(|heap, arguments| {
+            let path = PathBuf::from(text(heap, "file/list", arguments[0])?);
+            let order = Order::of(heap, "file/list", "sort", arguments[1])?;
+            heap.background("ox file/list", move || list(&path, order))
+        });
+    isolate
+        .native(MODULE, "sorted")
+        .arity(1, Some(1))
+        .keywords(&["by"])
+        .function(sorted);
+    isolate
+        .native(MODULE, "size-text")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let bytes = match arguments[0] {
+                Value::Int(bytes) => u64::try_from(bytes).ok(),
+                _ => None,
+            }
+            .ok_or_else(|| expected(heap, "file/size-text", "a number of bytes", arguments[0]))?;
+            heap.string(&size_text(bytes)).map_err(Error::from)
+        });
     single(isolate, "read", |path| {
         fs::read_to_string(&path)
             .map(|contents| string(contents.strip_prefix('\u{feff}').unwrap_or(&contents)))
@@ -288,9 +442,7 @@ pub fn install(isolate: &mut Isolate) {
         done(remove(&path), "remove", &path)
     });
     single(isolate, "trash", |path| {
-        trash::delete(&path)
-            .map(|()| Portable::Nil)
-            .map_err(|error| failed("move to the trash", &path, &error))
+        done(to_trash(&path), "move to the trash", &path)
     });
     pair(isolate, "rename", |from, to| {
         done(fs::rename(&from, &to), "rename", &from)

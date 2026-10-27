@@ -567,7 +567,7 @@ fn k_on_the_unstaged_section_discards_all_of_it() {
 
 #[test]
 fn k_on_untracked_files_deletes_or_trashes_them_after_asking() {
-    let (dir, mut session) = edited("(use-plugin git :config {discard-to-trash: false})");
+    let (dir, mut session) = edited("(use-plugin git) (settings {delete-to-trash: false})");
     session.press("C-x g k");
     assert_eq!(
         question(&session.editor),

@@ -9,12 +9,13 @@ use oxmacs_core::editor::{Editor, Offer};
 pub(crate) enum Answer {
     Text(String),
     Choice(bool),
+    Failed(String),
     Quit,
 }
 
 pub(crate) type Inbox = Arc<Mutex<Vec<(Hold, Answer)>>>;
 
-struct Reply {
+pub(crate) struct Reply {
     hold: Hold,
     inbox: Inbox,
     sent: bool,
@@ -28,7 +29,7 @@ impl Reply {
             .push((self.hold, answer));
     }
 
-    fn send(mut self, answer: Answer) {
+    pub(crate) fn send(mut self, answer: Answer) {
         self.post(answer);
         self.sent = true;
     }
@@ -42,7 +43,7 @@ impl Drop for Reply {
     }
 }
 
-fn reply(heap: &mut Heap, inbox: &Inbox) -> Result<(Value, Reply), Error> {
+pub(crate) fn reply(heap: &mut Heap, inbox: &Inbox) -> Result<(Value, Reply), Error> {
     let promise = heap.new_promise()?;
     let hold = heap.hold(promise);
     Ok((
@@ -158,6 +159,9 @@ pub fn deliver(isolate: &mut Isolate, inbox: &Inbox) {
             }
             Answer::Choice(yes) => {
                 isolate.resolve(promise, Value::Bool(yes));
+            }
+            Answer::Failed(message) => {
+                isolate.reject(promise, &message);
             }
             Answer::Quit => {
                 isolate.reject(promise, "Quit");

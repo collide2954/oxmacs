@@ -20,7 +20,7 @@ fn listed(dir: &Path) -> (tempfile::TempDir, Editor, Ox) {
     let home = tempfile::tempdir().unwrap();
     fs::write(
         home.path().join("init.ox"),
-        "(use-plugin dired :config {delete-to-trash: false})",
+        "(use-plugin dired) (settings {delete-to-trash: false})",
     )
     .unwrap();
     let mut editor = Editor::new();

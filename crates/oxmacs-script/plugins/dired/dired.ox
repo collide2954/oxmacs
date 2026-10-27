@@ -36,12 +36,11 @@
             {} (keys marks))))
 
 (def (refresh directory)
-  (let [entries (await (file/list directory))
-        shown (get @listings directory)]
+  (let [shown (get @listings directory)
+        entries (await (file/list directory :sort (if shown shown.order :name)))]
     (change directory
             (fn [listing]
-              (let [sorted (l/sorted entries listing.order)]
-                (assoc listing :entries sorted :marks (keep-marks listing.marks sorted))))
+              (assoc listing :entries entries :marks (keep-marks listing.marks entries)))
             (when (and shown (= (buffer-name) directory)) (focused shown)))))
 
 (def (refresh-all)
@@ -67,7 +66,7 @@
   (place listing focus))
 
 (def (visit directory focus order details)
-  (let [entries (l/sorted (await (file/list directory)) order)]
+  (let [entries (await (file/list directory :sort order))]
     (show {directory: directory entries: entries order: order details: details marks: {}}
           (or focus (when-let [entry (first entries)] entry.name)))))
 
@@ -123,7 +122,7 @@
 (defcommand dired-cycle-sort "Sort by name, newest or largest"
   (update-here (fn [listing]
                  (let [order (l/next-order listing.order)]
-                   (assoc listing :order order :entries (l/sorted listing.entries order))))))
+                   (assoc listing :order order :entries (file/sorted listing.entries :by order))))))
 
 (defcommand dired-hide-details-mode "Show or hide sizes and dates"
   (update-here (fn [listing] (assoc listing :details (not listing.details)))))
@@ -179,15 +178,12 @@
     (let [found (targets listing (if flagged :flagged :marked) (not flagged))]
       (if (empty? found)
         (message (if flagged "(No deletions requested)" "No file on this line"))
-        (let [trash (setting :delete-to-trash)
+        (let [trash (get (settings) :delete-to-trash)
               names (map :name found)]
           (quietly
            (fn []
              (when (await (yes-or-no "{(if trash "Trash" "Delete")} {(describe names)}?"))
-               (map (fn [entry]
-                      (let [target (path/join listing.directory entry.name)]
-                        (await (if trash (file/trash target) (file/remove target)))))
-                    found)
+               (map (fn [entry] (await (delete-path (path/join listing.directory entry.name)))) found)
                (refresh-all)
                (message "{(if trash "Trashed" "Deleted")} {(files (count found))}")))))))))
 
@@ -215,11 +211,10 @@
                  (map (fn [entry]
                         (let [from (path/join listing.directory entry.name)
                               to (if into (path/join target entry.name) target)]
-                          (when (or (not (await (file/exists? to)))
-                                    (await (yes-or-no "Overwrite {(path/abbreviate to)}?")))
-                            (if moving
-                              (do (await (file/rename from to))
-                                (move-visited-files from to))
+                          (if moving
+                            (await (move-path from to))
+                            (when (or (not (await (file/exists? to)))
+                                      (await (yes-or-no "{(path/abbreviate to)} exists; replace it? ")))
                               (await (file/copy from to))))))
                       found)
                  (refresh-all)

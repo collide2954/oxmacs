@@ -28,6 +28,7 @@
           shown (last (string/split shown "/"))]
       (when (and (not= shown ".") (not= shown ".."))
         {name: shown
+         dir: (= kind "d")
          kind: (cond ((= kind "d") :dir) (link :link) (else :file))
          mode: (str kind mode)
          size: (string/to-number size)
@@ -35,9 +36,8 @@
          target: target}))))
 
 (def (parse-listing lines)
-  "The entries of ls -l output, each a map of :name, :kind, :mode, :size, :date and :target, folders first and then by name."
-  (vec (sort-by (fn [entry] [(if (= entry.kind :dir) 0 1) (string/lower entry.name)])
-                (keep entry-of lines))))
+  "The entries of ls -l output, each a map of :name, :dir, :kind, :mode, :size, :date and :target, in the order file/list gives."
+  (file/sorted (vec (keep entry-of lines))))
 
 (def (can-run? host)
   "True when host has a shell to run commands in."

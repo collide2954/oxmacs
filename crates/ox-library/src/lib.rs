@@ -6,6 +6,7 @@ pub mod crypto;
 mod csv;
 pub mod ease;
 mod files;
+pub use files::{remove, to_trash};
 pub mod geometry;
 mod http;
 pub mod image;

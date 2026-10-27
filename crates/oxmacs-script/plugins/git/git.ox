@@ -370,14 +370,14 @@
   (acting "Nothing staged here" unstage))
 
 (def (throw-away state paths)
-  (let [trash (setting :discard-to-trash)]
+  (let [trash (get (settings) :delete-to-trash)]
     (when (await (yes-or-no (if trash
                               "Move {(describe paths)} to the trash?"
                               "Delete {(describe paths)}?")))
       (deactivate-mark)
       (map (fn [path]
              (let [full (path/join state.root path)]
-               (await (if trash (file/trash full) (file/remove full)))))
+               (await (delete-path full))))
            paths)
       (refresh state.name))))
 

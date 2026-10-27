@@ -19,10 +19,7 @@
         (message e.message)))))
 
 (def (size-text size)
-  (cond ((nil? size) "")
-    ((< size 1024) (str size))
-    ((< size 1048576) (str (// size 1024) "K"))
-    (else (str (// size 1048576) "M"))))
+  (if (nil? size) "" (file/size-text size)))
 
 (def (host-line host)
   {line: [(string/pad-end (str "  " host.name) 24)

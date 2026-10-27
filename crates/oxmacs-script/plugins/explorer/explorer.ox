@@ -358,13 +358,13 @@
        (let [root (get @state :root)
              answer (await (prompt (if moving "Rename or move to: " "Copy to: ") :initial (relative row.path)))
              target (absolute root answer)]
-         (when (or (not (await (file/exists? target)))
-                   (await (yes-or-no "Replace {answer}?")))
-           (await (file/make-dir (path/parent target)))
-           (if moving
-             (do (await (file/rename row.path target))
-               (move-visited-files row.path target))
-             (await (file/copy row.path target)))
+         (await (file/make-dir (path/parent target)))
+         (when (if moving
+                 (await (move-path row.path target))
+                 (when (or (not (await (file/exists? target)))
+                           (await (yes-or-no "{answer} exists; replace it? ")))
+                   (await (file/copy row.path target))
+                   true))
            (reload-around row.path target)
            (reveal target)
            (message "{(if moving "Moved" "Copied")} {(relative row.path)} to {answer}")))))))
@@ -376,9 +376,9 @@
   (when-let [row (here)]
     (quietly
      (fn []
-       (let [trash (setting :delete-to-trash)]
+       (let [trash (get (settings) :delete-to-trash)]
          (when (await (yes-or-no "{(if trash "Trash" "Delete")} {(relative row.path)}?"))
-           (await (if trash (file/trash row.path) (file/remove row.path)))
+           (await (delete-path row.path))
            (reload-around row.path)
            (draw (path/parent row.path))
            (message "{(if trash "Trashed" "Deleted")} {(relative row.path)}")))))))
@@ -412,8 +412,7 @@
              (when (await (yes-or-no "Move {(relative moving.path)} into {(relative into)}/?"))
                (if (await (file/exists? target))
                  (message "{(relative target)} already exists")
-                 (do (await (file/rename moving.path target))
-                   (move-visited-files moving.path target)
+                 (do (await (move-path moving.path target))
                    (swap! state update :open conj into)
                    (reload-around moving.path target)
                    (reveal target)))))))))))

@@ -102,7 +102,7 @@ fn the_list_shows_running_and_finished_processes_with_their_usage() {
         "running",
         "4242",
         "1.5%",
-        "85 MB",
+        "85M",
         "█",
         "Rterm --ess",
     ] {

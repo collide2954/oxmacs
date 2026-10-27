@@ -78,6 +78,8 @@
 (remember-location (buffer) (position)) "Remembers the current place, or position in buffer, a handle or a name, so M-, comes back to it after a jump."
 (just-typed?) "True when the last command typed a character into the buffer."
 (open-file path) "Visits the file at path, returning whether it opened."
+(delete-path path) "Deletes the file or folder at path, moving it to the system's trash unless the delete-to-trash setting is off; returns a promise."
+(move-path from to) "Moves or renames the file or folder from to to, asking first when to is already there, and points the buffers visiting it at its new place; returns a promise of true once moved, or false when you chose not to replace to."
 (move-visited-files from to) "Points the buffers visiting the file from, or files in the folder from, at to, after it was renamed or moved there."
 (open-externally path) "Opens a path or URL in the system's own application."
 (buffer-file) "The path of the file the current buffer visits, or nil."

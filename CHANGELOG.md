@@ -42,12 +42,15 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `run-job` runs a program in its own buffer, the kind `M-x compile` uses, with `:cwd`, `:env`, a `:title`, `:input` for its standard input, and `:on-line` and `:on-exit` handlers.
 - `console-start` takes `:prompter`, a command sent at the start and after each input to a program such as a shell without a terminal, which prints no prompt of its own.
 - `path/normalize`, `path/relative` and `path/inside?` work out `.` and `..`, write a path from inside a folder, and tell whether a path lies in a folder, from the text alone and ignoring letter case on Windows.
+- `file/list` takes `:sort` (`:name`, `:newest` or `:largest`), `file/sorted` puts other lists of files in the same order, and `file/size-text` writes a size the way `ls -h` does. `delete-path` and `move-path` delete and move files the way the editor does, following `delete-to-trash` and asking before replacing a file.
 - `process/stop` asks a process started with `process/start` to end, and a few seconds later stops it and every program it started if it hasn't.
 - `M-x list-processes` lists language servers beside builds, lints and consoles, and a process you stop shows as stopping until it ends; `(processes)` gives its `:status` as `:stopping` then.
 - Programs started with `process/start` show in `M-x list-processes` as Ox processes, and end when oxmacs quits. The map `process/start` gives carries their `:id` there, for `stop-process` and `kill-process`.
 
 ### Changed
 
+- One `delete-to-trash` editor setting, on by default, decides whether deleting moves files to the system's trash, for `dired` 0.3.0, `explorer` 0.2.0 and discarding in `git` 0.4.0; their own `delete-to-trash` and `discard-to-trash` settings are gone. Moving a file onto one that exists asks the same question everywhere and moves the buffers visiting it along.
+- Folders list one way in `dired`, the explorer and `remote`: folders first, then by name ignoring case with hidden files last, or newest or largest first in `dired`. Sizes read one way too, like `ls -h` (512B, 1.5K, 12M), in those and in `M-x list-processes`.
 - `remote` 0.3.0: `!` runs a command in a shell of its own and shows it in a run buffer, where `g` runs it again and `C-c C-k` stops it, and `/` searches in a shell of its own too, so neither can disturb the connection kept open for browsing and saving. `s` opens the shell as a console, with `M-p` and `M-n` history, and `M-x remote-disconnect` closes the kept connection to the host here.
 - R jobs, Shiny apps and R Markdown rendering (`r` 0.20.0) run in the same kind of buffer as `M-x compile`: `g` runs them again and `C-c C-k` stops them, in place of the `r` plugin's own `k`, `r-job-stop` and `r-job-again`. They show in `M-x list-processes` linked to their buffer, and they end with Finished, Exited abnormally with code N, or Killed.
 - `flash` is now `annotate` with `:lasts`, the milliseconds it takes to fade, in place of `:duration`; `zap` 0.2.1 uses it.
@@ -77,6 +80,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `path/expand` leaves `~bob/notes` as it is instead of turning it into a bob folder in your own home, and `~` expands to the home folder without a trailing separator.
 - The explorer works when it is rooted at a drive, such as `C:\`, and compares folders the same way everywhere (`explorer` 0.1.4).
 - `file/read` leaves out a leading byte order mark.
+- `file/list` reads each entry's details once instead of twice, which is much faster on Windows in large folders.
 - `image/save` that can't encode an image, such as an ICO over 256 pixels, leaves the file already there as it was instead of emptying it, and `ox fmt` replaces each file whole.
 - A remote command with an unclosed quote, such as `echo 'oops`, no longer hangs the `remote` plugin's connection, and with it every later save of a remote file.
 - `print` and `println` show in *ox repl* when it is open and in *ox log* otherwise. They wrote to a standard output the Windows release doesn't have, so their text was lost.

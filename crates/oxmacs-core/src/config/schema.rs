@@ -173,6 +173,12 @@ pub const SETTINGS: &[Setting] = &[
         Kind::Toggle,
         "Save modified files in place when idle",
     ),
+    setting(
+        FILES,
+        "delete-to-trash",
+        Kind::Toggle,
+        "Move files and folders you delete to the system's trash instead of deleting them for good",
+    ),
     optional(
         setting(
             R,

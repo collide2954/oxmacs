@@ -53,6 +53,7 @@ fn install_editor_api(isolate: &mut Isolate, answers: &api::prompts::Inbox) {
     view::tabbar::install(isolate);
     api::idle::install(isolate);
     api::prompts::install(isolate, answers);
+    api::files::install(isolate, answers);
     api::keepass::install(isolate);
     ide::manual::install(isolate);
     isolate.add_native_docs(DOCS);

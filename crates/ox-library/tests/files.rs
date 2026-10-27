@@ -34,7 +34,67 @@ fn directories_are_listed_by_name_with_their_details() {
 
     assert_eq!(
         listed,
-        r#"[[".hidden" false 0 true true true] ["a" true nil false true true] ["b.txt" false 5 false true true]]"#
+        r#"[["a" true nil false true true] ["b.txt" false 5 false true true] [".hidden" false 0 true true true]]"#
+    );
+}
+
+#[test]
+fn listings_and_other_entries_sort_folders_first_by_name_age_or_size() {
+    let dir = tempfile::tempdir().unwrap();
+    let older = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    for (name, size) in [("small.txt", 1), ("big.txt", 300), ("Mid.txt", 20)] {
+        fs::write(dir.path().join(name), "x".repeat(size)).unwrap();
+    }
+    fs::File::options()
+        .write(true)
+        .open(dir.path().join("big.txt"))
+        .unwrap()
+        .set_modified(older)
+        .unwrap();
+    fs::create_dir(dir.path().join("zdir")).unwrap();
+    let mut isolate = ox_library::isolate();
+    let names = |isolate: &mut Isolate, order: &str| {
+        evaluated(
+            isolate,
+            &format!(
+                "(map (fn [entry] entry.name) (await (file/list {} :sort {order})))",
+                literal(dir.path())
+            ),
+        )
+    };
+
+    assert_eq!(
+        names(&mut isolate, ":name"),
+        r#"["zdir" "big.txt" "Mid.txt" "small.txt"]"#
+    );
+    assert_eq!(
+        names(&mut isolate, ":largest"),
+        r#"["zdir" "big.txt" "Mid.txt" "small.txt"]"#
+    );
+    assert!(names(&mut isolate, ":newest").ends_with(r#""big.txt"]"#));
+    assert_eq!(
+        evaluated(
+            &mut isolate,
+            r#"(map :name (file/sorted [{name: "b"} {name: ".a"} {name: "C" dir: true} {name: "a" size: 9}] :by :largest))"#
+        ),
+        r#"["C" "a" ".a" "b"]"#
+    );
+    assert_eq!(
+        evaluated(&mut isolate, "(file/list \".\" :sort :oldest)"),
+        "error: file/list expects :sort to be :name, :newest or :largest, got :oldest"
+    );
+}
+
+#[test]
+fn sizes_read_like_ls_h() {
+    let mut isolate = ox_library::isolate();
+
+    assert_eq!(
+        evaluated(
+            &mut isolate,
+            "(map file/size-text [0 1023 1024 1536 10240 1048576 5000000000])"
+        ),
+        r#"["0B" "1023B" "1.0K" "1.5K" "10K" "1.0M" "4.7G"]"#
     );
 }
 
