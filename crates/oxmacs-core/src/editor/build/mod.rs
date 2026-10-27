@@ -344,6 +344,7 @@ mod tests {
     use super::{Builds, Finished};
     use crate::editor::{JobId, Outcome};
     use crate::external::diagnostics::sample;
+    use crate::files;
     use crate::syntax::Language;
 
     fn run(root: &Path) -> LintRun {
@@ -381,11 +382,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut builds = Builds::default();
         let job = checking(&mut builds, dir.path(), 1);
+        let main = dir.path().join("src").join("main.rs");
+        let identity = files::identity(&main);
         assert_eq!(
-            builds.status(
-                &dir.path().join("src").join("main.rs"),
-                Some(Language::RUST)
-            ),
+            builds.status(&identity, Some(Language::RUST)),
             Some("Checking".to_owned())
         );
 
@@ -397,10 +397,9 @@ mod tests {
         assert_eq!(finished, Finished::Changed);
         assert_eq!(builds.revision(), before + 1);
         assert!(builds.walks_lints());
-        let main = dir.path().join("src").join("main.rs");
         assert_eq!(builds.counts(), [(main.clone(), 1, 0)]);
         assert_eq!(
-            builds.status(&main, Some(Language::RUST)),
+            builds.status(&identity, Some(Language::RUST)),
             Some("E1".to_owned())
         );
         assert!(builds.recheck());
