@@ -4,7 +4,7 @@ use crate::command::{Scope, ScopeId};
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::page::Page;
-use crate::plugin::PluginBuffer;
+use crate::special_buffer::SpecialBuffer;
 use crate::syntax::{Feature, Language};
 use crate::theme::Highlight;
 
@@ -16,7 +16,7 @@ struct LanguageList {
     styles: Vec<LineStyle>,
 }
 
-impl PluginBuffer for LanguageList {
+impl SpecialBuffer for LanguageList {
     fn scope(&self) -> ScopeId {
         Scope::Help.into()
     }
@@ -34,14 +34,14 @@ impl Editor {
     pub(in crate::editor) fn list_languages(&mut self) {
         let mut page = Page::default();
         table(&mut page, &self.languages());
-        let id = match self.find_plugin_buffer::<LanguageList>(|_| true) {
+        let id = match self.find_special_buffer::<LanguageList>(|_| true) {
             Some(id) => id,
-            None => self.add_plugin_buffer_with(NAME, |buffer| {
+            None => self.add_special_buffer_with(NAME, |buffer| {
                 buffer.set_read_only(true);
                 LanguageList { styles: Vec::new() }
             }),
         };
-        if let Some((buffer, list)) = self.plugin_buffer_mut::<LanguageList>(id) {
+        if let Some((buffer, list)) = self.special_buffer_mut::<LanguageList>(id) {
             page.fill(buffer);
             buffer.set_point(0);
             list.styles = page.into_parts().1;

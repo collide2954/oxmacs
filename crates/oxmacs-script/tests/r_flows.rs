@@ -177,7 +177,7 @@ fn has_image(node: &Node<usize>) -> bool {
 fn plotted(editor: &Editor, name: &str) -> bool {
     editor
         .buffer_named(name)
-        .and_then(|id| editor.plugin_buffer::<ViewBuffer>(id))
+        .and_then(|id| editor.special_buffer::<ViewBuffer>(id))
         .is_some_and(|(_, view)| has_image(&view.node))
 }
 

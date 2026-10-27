@@ -346,7 +346,7 @@ mod tests {
         settle(&mut editor, &mut ox);
 
         let id = editor.buffer_named("*art*").unwrap();
-        let (_, view) = editor.plugin_buffer::<ViewBuffer>(id).unwrap();
+        let (_, view) = editor.special_buffer::<ViewBuffer>(id).unwrap();
         assert_eq!(
             view.node,
             Node::Canvas {
@@ -369,7 +369,7 @@ mod tests {
         .unwrap();
         settle(&mut editor, &mut ox);
         let id = editor.buffer_named("*grid*").unwrap();
-        let (_, view) = editor.plugin_buffer::<ViewBuffer>(id).unwrap();
+        let (_, view) = editor.special_buffer::<ViewBuffer>(id).unwrap();
         assert!(matches!(view.node, Node::Canvas { relative: true, .. }));
     }
 }

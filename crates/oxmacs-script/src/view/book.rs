@@ -326,7 +326,7 @@ mod tests {
 
     fn shown(editor: &Editor) -> Pages<usize> {
         let id = editor.buffer_named("*book*").unwrap();
-        match &editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node {
+        match &editor.special_buffer::<ViewBuffer>(id).unwrap().1.node {
             Node::Pages(pages) => (**pages).clone(),
             other => panic!("not pages: {other:?}"),
         }

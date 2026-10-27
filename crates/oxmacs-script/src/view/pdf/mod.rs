@@ -430,7 +430,7 @@ mod tests {
         settle(&mut editor, &mut ox);
 
         let id = editor.buffer_named("*pdf*").unwrap();
-        let Node::Pdf(view) = &editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node else {
+        let Node::Pdf(view) = &editor.special_buffer::<ViewBuffer>(id).unwrap().1.node else {
             panic!("not a pdf view");
         };
         assert_eq!(view.path.to_str(), Some("paper.pdf"));

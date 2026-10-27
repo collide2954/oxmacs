@@ -1,7 +1,7 @@
 use crate::editor::buffers::Mode;
 use crate::editor::{Cell, Clicks, Editor};
 use crate::input::{Key, KeyCode};
-use crate::plugin::PluginBuffer;
+use crate::special_buffer::SpecialBuffer;
 use crate::text::BufferId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,12 +27,12 @@ impl Editor {
         std::mem::take(&mut self.heard)
     }
 
-    fn hears(&self, wants: fn(&dyn PluginBuffer) -> bool) -> bool {
+    fn hears(&self, wants: fn(&dyn SpecialBuffer) -> bool) -> bool {
         matches!(self.buffers.mode(0), Some(Mode::Plugin(view)) if wants(view.as_ref()))
     }
 
     pub(super) fn hear_click(&mut self, position: usize, clicks: Clicks, extend: bool) -> bool {
-        if extend || !self.hears(PluginBuffer::hears_clicks) {
+        if extend || !self.hears(SpecialBuffer::hears_clicks) {
             return false;
         }
         let buffer = self.buffers.current_mut();
@@ -84,7 +84,7 @@ impl Editor {
         let Some(KeyCode::Char(typed)) = self.last_key.map(Key::code) else {
             return false;
         };
-        if self.minibuffer.is_some() || !self.hears(PluginBuffer::hears_typing) {
+        if self.minibuffer.is_some() || !self.hears(SpecialBuffer::hears_typing) {
             return false;
         }
         let buffer = self.buffers.current().id();
@@ -101,14 +101,14 @@ mod tests {
     use super::Heard;
     use crate::command::ScopeId;
     use crate::editor::{Cell, Clicks, Editor};
-    use crate::plugin::PluginBuffer;
+    use crate::special_buffer::SpecialBuffer;
     use crate::testing::press;
     use crate::text::BufferId;
 
     #[derive(Debug)]
     struct Listening(ScopeId);
 
-    impl PluginBuffer for Listening {
+    impl SpecialBuffer for Listening {
         fn scope(&self) -> ScopeId {
             self.0
         }
@@ -125,7 +125,7 @@ mod tests {
     fn listening() -> (Editor, BufferId) {
         let mut editor = Editor::new();
         let scope = editor.add_scope("listening");
-        let id = editor.add_plugin_buffer_with("*list*", |buffer| {
+        let id = editor.add_special_buffer_with("*list*", |buffer| {
             buffer.set_read_only(true);
             Listening(scope)
         });

@@ -8,7 +8,7 @@ use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::display::LineStyle;
 use oxmacs_core::editor::{Editor, Heard, InputLine};
-use oxmacs_core::plugin::PluginBuffer;
+use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
@@ -41,7 +41,7 @@ pub struct LinesBuffer {
     chat: Option<Chat>,
 }
 
-impl PluginBuffer for LinesBuffer {
+impl SpecialBuffer for LinesBuffer {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -206,9 +206,9 @@ fn render(heap: &Heap, name: &str, lines: Value) -> Result<Rendered, Error> {
     })
 }
 
-fn plugin_buffer(editor: &Editor, name: &str) -> Option<BufferId> {
+fn special_buffer(editor: &Editor, name: &str) -> Option<BufferId> {
     editor
-        .plugin_buffers::<LinesBuffer>()
+        .special_buffers::<LinesBuffer>()
         .into_iter()
         .find(|id| {
             editor
@@ -267,7 +267,7 @@ fn replace_unrecorded(buffer: &mut Buffer, end: usize, text: &str) {
 }
 
 fn start_chat(editor: &mut Editor, id: BufferId, prompt: String) {
-    let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) else {
+    let Some((buffer, view)) = editor.special_buffer_mut::<LinesBuffer>(id) else {
         return;
     };
     if let Some(chat) = &mut view.chat {
@@ -306,7 +306,7 @@ fn start_chat(editor: &mut Editor, id: BufferId, prompt: String) {
 }
 
 fn fill_chat(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<usize>) {
-    let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) else {
+    let Some((buffer, view)) = editor.special_buffer_mut::<LinesBuffer>(id) else {
         return;
     };
     let Some(chat) = &view.chat else {
@@ -336,13 +336,13 @@ fn fill_chat(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Opti
 
 fn append(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = crate::view::views::buffer_name(heap, editor, "append-lines", arguments[0])?;
-    let id = plugin_buffer(editor, &name)
+    let id = special_buffer(editor, &name)
         .ok_or_else(|| Error::new(format!("There is no plugin buffer named {name}")))?;
     let rendered = render(heap, "append-lines", arguments[1])?;
     if rendered.styles.is_empty() {
         return Ok(Value::Nil);
     }
-    let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) else {
+    let Some((buffer, view)) = editor.special_buffer_mut::<LinesBuffer>(id) else {
         return Ok(Value::Nil);
     };
     let (at, text, index) = match &view.chat {
@@ -369,7 +369,7 @@ fn append(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
 }
 
 fn chat_of(editor: &mut Editor, id: BufferId) -> Option<(&mut Buffer, &mut Chat)> {
-    let (buffer, view) = editor.plugin_buffer_mut::<LinesBuffer>(id)?;
+    let (buffer, view) = editor.special_buffer_mut::<LinesBuffer>(id)?;
     Some((buffer, view.chat.as_mut()?))
 }
 
@@ -444,7 +444,7 @@ fn set_input(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
 
 fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<usize>) {
     if editor
-        .plugin_buffer::<LinesBuffer>(id)
+        .special_buffer::<LinesBuffer>(id)
         .is_some_and(|(_, view)| view.chat.is_some())
     {
         fill_chat(editor, id, rendered, placed);
@@ -460,7 +460,7 @@ fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<us
         editor.fill_buffer(id, &rendered.text);
     }
     let mut moved = None;
-    if let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) {
+    if let Some((buffer, view)) = editor.special_buffer_mut::<LinesBuffer>(id) {
         view.styles = rendered.styles;
         view.pills = rendered.pills;
         let line = line.min(buffer.len_lines().saturating_sub(1));
@@ -579,7 +579,7 @@ fn hold(heap: &mut Heap, old: Option<Hold>, value: Option<Value>) -> Option<Hold
 
 fn bind(editor: &mut Editor, id: BufferId, bindings: Vec<(String, String)>) -> Result<(), Error> {
     let Some(scope) = editor
-        .plugin_buffer::<LinesBuffer>(id)
+        .special_buffer::<LinesBuffer>(id)
         .map(|(_, view)| view.scope)
     else {
         return Ok(());
@@ -611,9 +611,9 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     let name = crate::view::views::buffer_name(heap, editor, "open-buffer", arguments[0])?;
     let rendered = render(heap, "open-buffer", arguments[1])?;
     let mut given = options(heap, &arguments[2..])?;
-    let id = plugin_buffer(editor, &name).unwrap_or_else(|| {
+    let id = special_buffer(editor, &name).unwrap_or_else(|| {
         let scope = editor.add_scope(Box::leak(name.clone().into_boxed_str()));
-        editor.add_plugin_buffer_with(&name, |buffer| {
+        editor.add_special_buffer_with(&name, |buffer| {
             buffer.set_read_only(true);
             LinesBuffer {
                 scope,
@@ -638,7 +638,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         start_chat(editor, id, prompt);
     }
     fill(editor, id, rendered, given.line.take());
-    if let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) {
+    if let Some((buffer, view)) = editor.special_buffer_mut::<LinesBuffer>(id) {
         view.seen_line = Some(buffer.line_of(buffer.point()));
         if given.directory.is_some() {
             view.directory = given.directory;
@@ -694,7 +694,7 @@ fn heard(isolate: &mut Isolate, editor: &mut Editor) {
             }
         };
         let Some(handler) = editor
-            .plugin_buffer::<LinesBuffer>(id)
+            .special_buffer::<LinesBuffer>(id)
             .and_then(|(_, view)| pick(view))
             .and_then(|hold| isolate.held(hold))
         else {
@@ -710,9 +710,9 @@ pub fn watch(isolate: &mut Isolate, editor: &mut Editor) {
     heard(isolate, editor);
     let mut calls: Vec<(Hold, usize)> = Vec::new();
     let current = editor.buffer().id();
-    for id in editor.plugin_buffers::<LinesBuffer>() {
+    for id in editor.special_buffers::<LinesBuffer>() {
         let width = editor.buffer_width(id);
-        let Some((buffer, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id) else {
+        let Some((buffer, view)) = editor.special_buffer_mut::<LinesBuffer>(id) else {
             continue;
         };
         let line = buffer.line_of(buffer.point());
@@ -739,7 +739,7 @@ pub fn watch(isolate: &mut Isolate, editor: &mut Editor) {
 }
 fn set_lines(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = crate::view::views::buffer_name(heap, editor, "set-lines", arguments[0])?;
-    let id = plugin_buffer(editor, &name)
+    let id = special_buffer(editor, &name)
         .ok_or_else(|| Error::new(format!("There is no plugin buffer named {name}")))?;
     let rendered = render(heap, "set-lines", arguments[1])?;
     let line = match arguments[2] {
@@ -749,7 +749,7 @@ fn set_lines(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
     let unsaved = (arguments[3] != Value::Nil).then(|| arguments[3].truthy());
     fill(editor, id, rendered, line);
     if let Some(unsaved) = unsaved
-        && let Some((_, view)) = editor.plugin_buffer_mut::<LinesBuffer>(id)
+        && let Some((_, view)) = editor.special_buffer_mut::<LinesBuffer>(id)
     {
         view.unsaved = unsaved;
     }
@@ -940,7 +940,7 @@ fn install_queries(isolate: &mut Isolate) {
 mod tests {
     use oxmacs_core::display::LineStyle;
     use oxmacs_core::editor::Editor;
-    use oxmacs_core::plugin::PluginBuffer;
+    use oxmacs_core::special_buffer::SpecialBuffer;
     use oxmacs_core::theme::Highlight;
 
     use crate::Ox;
@@ -1057,7 +1057,7 @@ mod tests {
             [(6..10, Highlight::Link), (11..14, Highlight::Nick(3))]
         );
         let id = editor.buffer().id();
-        let (_, view) = editor.plugin_buffer::<super::LinesBuffer>(id).unwrap();
+        let (_, view) = editor.special_buffer::<super::LinesBuffer>(id).unwrap();
         assert_eq!(view.pills(0), [(6..10, Highlight::Link)]);
         assert_eq!(editor.default_directory(), folder.path());
         assert!(editor.watched_directories().contains(&metadata));

@@ -247,7 +247,7 @@ impl App {
                 .on_press(Message::FocusWindow(window))
                 .into();
         }
-        if let Some((_, shown)) = self.editor.plugin_buffer::<ViewBuffer>(buffer) {
+        if let Some((_, shown)) = self.editor.special_buffer::<ViewBuffer>(buffer) {
             let look = ox_view::Look {
                 faces,
                 font: self.font,

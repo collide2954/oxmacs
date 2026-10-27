@@ -571,7 +571,7 @@ fn picture_key(app: &App) -> Option<usize> {
     }
     let editor = app.editor();
     let id = editor.buffer_named("*Studio*")?;
-    let (_, view) = editor.plugin_buffer::<ViewBuffer>(id)?;
+    let (_, view) = editor.special_buffer::<ViewBuffer>(id)?;
     found(&view.node)
 }
 
@@ -1087,7 +1087,7 @@ fn plot_images(app: &App) -> usize {
         .iter()
         .filter(|name| name.contains("plots"))
         .filter_map(|name| editor.buffer_named(name))
-        .filter_map(|id| editor.plugin_buffer::<ViewBuffer>(id))
+        .filter_map(|id| editor.special_buffer::<ViewBuffer>(id))
         .map(|(_, view)| images(&view.node))
         .sum()
 }
@@ -1406,7 +1406,7 @@ fn view_texts(app: &App, name: &str) -> Vec<String> {
     let mut out = Vec::new();
     if let Some((_, view)) = editor
         .buffer_named(name)
-        .and_then(|id| editor.plugin_buffer::<ViewBuffer>(id))
+        .and_then(|id| editor.special_buffer::<ViewBuffer>(id))
     {
         gathered(&view.node, &mut out);
     }
@@ -1648,7 +1648,7 @@ fn shown_node(app: &App, name: &str, wanted: fn(&Node<usize>) -> bool) -> bool {
     let editor = app.editor();
     editor
         .buffer_named(name)
-        .and_then(|id| editor.plugin_buffer::<ViewBuffer>(id))
+        .and_then(|id| editor.special_buffer::<ViewBuffer>(id))
         .is_some_and(|(_, view)| wanted(&view.node))
 }
 

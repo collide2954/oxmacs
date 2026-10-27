@@ -7,8 +7,9 @@ use serde_json::json;
 use crate::command::{CommandSpec, Scope, ScopeId};
 use crate::config::Config;
 use crate::display::LineStyle;
-use crate::editor::{Editor, InputLine, Page, Question};
-use crate::plugin::*;
+use crate::editor::{Editor, InputLine, Offer, Page, Question};
+use crate::plugin_state::States;
+use crate::special_buffer::SpecialBuffer;
 use crate::testing::press;
 use crate::theme::Highlight;
 
@@ -50,7 +51,7 @@ struct Greeter {
     styles: Vec<LineStyle>,
 }
 
-impl PluginBuffer for Greeter {
+impl SpecialBuffer for Greeter {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -64,7 +65,7 @@ fn greet_open(editor: &mut Editor) {
     let Some(scope) = editor.plugin_state::<GreeterScope>().map(|known| known.0) else {
         return;
     };
-    let id = editor.open_plugin_buffer(
+    let id = editor.open_special_buffer(
         "*Greeter*",
         Greeter {
             scope,
@@ -76,17 +77,17 @@ fn greet_open(editor: &mut Editor) {
 }
 
 fn greet_more(editor: &mut Editor) {
-    let Some(id) = editor.find_plugin_buffer::<Greeter>(|_| true) else {
+    let Some(id) = editor.find_special_buffer::<Greeter>(|_| true) else {
         return;
     };
-    if let Some((_, greeter)) = editor.plugin_buffer_mut::<Greeter>(id) {
+    if let Some((_, greeter)) = editor.special_buffer_mut::<Greeter>(id) {
         greeter.count += 1;
     }
     render_greeter(editor, id);
 }
 
 fn render_greeter(editor: &mut Editor, id: crate::text::BufferId) {
-    let Some((_, greeter)) = editor.plugin_buffer_mut::<Greeter>(id) else {
+    let Some((_, greeter)) = editor.special_buffer_mut::<Greeter>(id) else {
         return;
     };
     let mut page = Page::default();
@@ -232,7 +233,7 @@ fn offers_carry_notes_and_secret_prompts_hide_what_is_typed() {
 #[test]
 fn buffers_can_keep_header_lines_above_their_text() {
     let mut editor = Editor::new();
-    let id = editor.open_plugin_buffer("*table*", blank());
+    let id = editor.open_special_buffer("*table*", blank());
     let style = LineStyle {
         background: None,
         spans: vec![(0..4, Highlight::Heading)],
@@ -250,9 +251,9 @@ fn windows_are_arranged_in_nested_splits_and_read_back() {
     use crate::editor::{Arrangement, Axis};
 
     let mut editor = Editor::new();
-    let a = editor.open_plugin_buffer("*a*", blank());
-    let b = editor.open_plugin_buffer("*b*", blank());
-    let c = editor.open_plugin_buffer("*c*", blank());
+    let a = editor.open_special_buffer("*a*", blank());
+    let b = editor.open_special_buffer("*b*", blank());
+    let c = editor.open_special_buffer("*c*", blank());
     let layout = Arrangement::Split {
         axis: Axis::Columns,
         parts: vec![
@@ -301,13 +302,13 @@ fn buffers_are_displayed_beside_or_under_another_one() {
     use crate::editor::Axis;
 
     let mut editor = Editor::new();
-    let console = editor.open_plugin_buffer("*console*", blank());
+    let console = editor.open_special_buffer("*console*", blank());
     editor.show_buffer(editor.buffer_named("*scratch*").unwrap());
     editor.display_buffer(console, None, false);
     assert_eq!(shown_in(&editor), ["*scratch*", "*console*"]);
     assert_eq!(editor.buffer().name(), "*scratch*");
 
-    let plots = editor.open_plugin_buffer("*plots*", blank());
+    let plots = editor.open_special_buffer("*plots*", blank());
     editor.show_buffer(editor.buffer_named("*scratch*").unwrap());
     editor.display_buffer(plots, Some((console, Axis::Rows)), false);
     assert_eq!(shown_in(&editor), ["*scratch*", "*console*", "*plots*"]);
@@ -406,7 +407,7 @@ struct Shell {
     input: InputLine,
 }
 
-impl PluginBuffer for Shell {
+impl SpecialBuffer for Shell {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -418,7 +419,7 @@ impl PluginBuffer for Shell {
 
 fn send(editor: &mut Editor) {
     let id = editor.buffer().id();
-    let Some((buffer, shell)) = editor.plugin_buffer_mut::<Shell>(id) else {
+    let Some((buffer, shell)) = editor.special_buffer_mut::<Shell>(id) else {
         return;
     };
     let text = shell.input.text(buffer).unwrap_or_default();
@@ -443,7 +444,7 @@ fn plugin_buffers_can_take_input_after_a_prompt_with_history() {
     editor
         .bind(scope, "M-p", crate::command::Command::ComintPreviousInput)
         .unwrap();
-    let id = editor.add_plugin_buffer_with("*Shell*", |buffer| {
+    let id = editor.add_special_buffer_with("*Shell*", |buffer| {
         buffer.insert_at(0, "> ");
         Shell {
             scope,
@@ -535,7 +536,7 @@ fn plugin_commands_know_when_they_run_again_right_away() {
 #[derive(Debug)]
 struct Board(ScopeId);
 
-impl PluginBuffer for Board {
+impl SpecialBuffer for Board {
     fn scope(&self) -> ScopeId {
         self.0
     }
@@ -545,7 +546,7 @@ impl PluginBuffer for Board {
 fn plugins_see_where_their_buffers_show() {
     let mut editor = Editor::new();
     let scope = editor.add_scope("*Board*");
-    let id = editor.add_plugin_buffer_with("*Board*", |buffer| {
+    let id = editor.add_special_buffer_with("*Board*", |buffer| {
         buffer.insert_at(0, "one\ntwo\nthree");
         Board(scope)
     });
@@ -637,7 +638,7 @@ fn plugins_reach_files_by_path_and_save_them() {
 #[derive(Debug)]
 struct Folder(ScopeId, std::path::PathBuf);
 
-impl PluginBuffer for Folder {
+impl SpecialBuffer for Folder {
     fn scope(&self) -> ScopeId {
         self.0
     }
@@ -655,7 +656,7 @@ fn plugin_buffers_can_show_a_directory() {
     let mut editor = Editor::new();
     let scope = editor.add_scope("*Folder*");
 
-    let id = editor.add_plugin_buffer_with("*Folder*", |_| Folder(scope, docs.clone()));
+    let id = editor.add_special_buffer_with("*Folder*", |_| Folder(scope, docs.clone()));
     editor.show_buffer(id);
 
     assert_eq!(editor.default_directory(), docs);
@@ -669,7 +670,7 @@ fn plugin_buffers_can_show_a_directory() {
 #[derive(Debug)]
 struct Repository(ScopeId, std::path::PathBuf, std::path::PathBuf);
 
-impl PluginBuffer for Repository {
+impl SpecialBuffer for Repository {
     fn scope(&self) -> ScopeId {
         self.0
     }
@@ -695,7 +696,7 @@ fn plugin_buffers_can_keep_their_name_and_watch_another_directory() {
     let mut editor = Editor::new();
     let scope = editor.add_scope("*Repository*");
 
-    let id = editor.add_plugin_buffer_with("git: project", |_| {
+    let id = editor.add_special_buffer_with("git: project", |_| {
         Repository(scope, dir.path().to_owned(), metadata.clone())
     });
     editor.show_buffer(id);
@@ -794,7 +795,7 @@ struct Viewer {
     file: std::path::PathBuf,
 }
 
-impl PluginBuffer for Viewer {
+impl SpecialBuffer for Viewer {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -822,7 +823,7 @@ fn plugin_buffers_show_their_own_position_and_watch_their_file() {
     let file = dir.path().join("paper.pdf");
     let mut editor = Editor::new();
     let scope = editor.add_scope("viewer");
-    let id = editor.add_plugin_buffer_with("paper.pdf", |_| Viewer {
+    let id = editor.add_special_buffer_with("paper.pdf", |_| Viewer {
         scope,
         file: file.clone(),
     });
@@ -861,7 +862,7 @@ fn g_bound_to_revert_buffer_in_a_plugin_buffer_does_not_loop() {
     editor
         .bind(scope, "g", crate::command::Command::RevertBuffer)
         .unwrap();
-    let id = editor.add_plugin_buffer_with("*Board*", |_| Board(scope));
+    let id = editor.add_special_buffer_with("*Board*", |_| Board(scope));
     editor.show_buffer(id);
 
     editor.execute(crate::command::Command::RevertBuffer);
@@ -881,7 +882,7 @@ fn reverting_a_plugin_buffer_runs_what_g_runs() {
         run: |editor| note(editor, "refreshed".to_owned()),
     });
     editor.bind(scope, "g", refresh).unwrap();
-    let id = editor.add_plugin_buffer_with("*Board*", |_| Board(scope));
+    let id = editor.add_special_buffer_with("*Board*", |_| Board(scope));
     editor.show_buffer(id);
 
     editor.execute(crate::command::Command::RevertBuffer);
@@ -910,7 +911,7 @@ fn double_clicks_in_plugin_buffers_run_what_return_runs() {
         },
     });
     editor.bind(scope, "RET", pick).unwrap();
-    let id = editor.add_plugin_buffer_with("*Board*", |buffer| {
+    let id = editor.add_special_buffer_with("*Board*", |buffer| {
         buffer.insert_at(0, "one\ntwo\nthree");
         Board(scope)
     });
@@ -1029,10 +1030,10 @@ fn plugins_take_their_state_out_until_they_set_it_again() {
 fn plugins_find_list_and_close_their_buffers() {
     let mut editor = Editor::new();
     let scope = editor.add_scope("*Board*");
-    let first = editor.add_plugin_buffer_with("*Board one*", |_| Board(scope));
-    let second = editor.add_plugin_buffer_with("*Board two*", |_| Board(scope));
+    let first = editor.add_special_buffer_with("*Board one*", |_| Board(scope));
+    let second = editor.add_special_buffer_with("*Board two*", |_| Board(scope));
 
-    assert_eq!(editor.plugin_buffers::<Board>(), [first, second]);
+    assert_eq!(editor.special_buffers::<Board>(), [first, second]);
     assert_eq!(editor.buffer_named("*Board two*"), Some(second));
     assert_eq!(editor.buffer_named("*Board three*"), None);
 
@@ -1041,7 +1042,7 @@ fn plugins_find_list_and_close_their_buffers() {
     assert_eq!(editor.buffer().contents(), "hello");
     editor.close_buffer(first);
 
-    assert_eq!(editor.plugin_buffers::<Board>(), [second]);
+    assert_eq!(editor.special_buffers::<Board>(), [second]);
     assert_ne!(editor.buffer().id(), first);
 }
 

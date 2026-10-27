@@ -86,14 +86,14 @@ mod tests {
 
     use crate::command::{Scope, ScopeId};
     use crate::editor::Editor;
-    use crate::plugin::PluginBuffer;
+    use crate::special_buffer::SpecialBuffer;
     use crate::testing::{editor_with, press};
     use crate::text::{BufferId, Splice};
 
     #[derive(Debug)]
     struct Listing;
 
-    impl PluginBuffer for Listing {
+    impl SpecialBuffer for Listing {
         fn scope(&self) -> ScopeId {
             Scope::Global.into()
         }
@@ -135,7 +135,7 @@ mod tests {
             )]
         );
         assert_eq!(editor.take_edits(), []);
-        let listing = editor.open_plugin_buffer("*list*", Listing);
+        let listing = editor.open_special_buffer("*list*", Listing);
         if let Some(buffer) = editor.buffer_by_id_mut(listing) {
             buffer.insert_at(0, "plugin text");
         }
@@ -154,7 +154,7 @@ mod tests {
         editor.open_file(&path);
         let file = editor.buffer().id();
         press(&mut editor, "x");
-        editor.open_plugin_buffer("*list*", Listing);
+        editor.open_special_buffer("*list*", Listing);
 
         assert_eq!(editor.plugin_state::<Vec<BufferId>>(), Some(&vec![file]));
         assert_eq!(editor.take_edits().len(), 1);

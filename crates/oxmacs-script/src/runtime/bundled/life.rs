@@ -42,7 +42,7 @@ fn walk(node: &Node<usize>, texts: &mut Vec<String>, cells: &mut usize) {
 
 fn shown(editor: &Editor) -> (String, usize) {
     let id = editor.buffer_named("*Life*").unwrap();
-    let (_, view) = editor.plugin_buffer::<ViewBuffer>(id).unwrap();
+    let (_, view) = editor.special_buffer::<ViewBuffer>(id).unwrap();
     let mut texts = Vec::new();
     let mut cells = 0;
     walk(&view.node, &mut texts, &mut cells);

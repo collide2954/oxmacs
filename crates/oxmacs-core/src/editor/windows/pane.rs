@@ -10,7 +10,7 @@ use crate::editor::windows::status::{BufferState, Status};
 use crate::editor::{Editor, Gutter, PopupView};
 use crate::external::diagnostics::Severity;
 use crate::files::LineEnding;
-use crate::plugin::PluginBuffer;
+use crate::special_buffer::SpecialBuffer;
 use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::Highlight;
@@ -147,7 +147,7 @@ impl<'a> Pane<'a> {
         matches!(self.editor.buffers.mode(self.index), Some(Mode::Splash(_)))
     }
 
-    pub fn plugin_buffer<T: PluginBuffer>(&self) -> Option<&'a T> {
+    pub fn special_buffer<T: SpecialBuffer>(&self) -> Option<&'a T> {
         let Some(Mode::Plugin(view)) = self.editor.buffers.mode(self.index) else {
             return None;
         };

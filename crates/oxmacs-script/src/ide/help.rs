@@ -7,7 +7,7 @@ use ox_lang::describe::{Description, Kind};
 use ox_lang::names::{call_head, symbol_at};
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::editor::Editor;
-use oxmacs_core::plugin::PluginBuffer;
+use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::BufferId;
 
 use crate::{ide::ox_mode, ide::repl, ide::stacktrace, runtime::plugins};
@@ -32,7 +32,7 @@ struct DocView {
     scope: ScopeId,
 }
 
-impl PluginBuffer for DocView {
+impl SpecialBuffer for DocView {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -273,17 +273,17 @@ pub(crate) fn show_doc(isolate: &Isolate, editor: &mut Editor, home: Option<&Pat
     let text = render(&description, &isolate.examples(&name));
     let scope = doc_scope(editor);
     let id = editor
-        .plugin_buffers::<DocView>()
+        .special_buffers::<DocView>()
         .first()
         .copied()
         .unwrap_or_else(|| {
-            editor.add_plugin_buffer_with(DOC, |buffer| {
+            editor.add_special_buffer_with(DOC, |buffer| {
                 buffer.set_read_only(true);
                 DocView { scope }
             })
         });
     editor.fill_buffer(id, &text);
-    if let Some((buffer, _)) = editor.plugin_buffer_mut::<DocView>(id) {
+    if let Some((buffer, _)) = editor.special_buffer_mut::<DocView>(id) {
         buffer.set_point(0);
     }
     editor.show_buffer_beside(id);

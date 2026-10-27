@@ -7,12 +7,12 @@ use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
 use crate::editor::{Axis, Editor, Effect};
 use crate::input::{KeySequence, Lookup};
-use crate::plugin::PluginBuffer;
+use crate::special_buffer::SpecialBuffer;
 use crate::text::{Buffer, BufferId};
 
 pub(super) type Segment = fn(&Editor) -> Option<String>;
 
-fn downcast<T: PluginBuffer>(view: &dyn PluginBuffer) -> Option<&T> {
+fn downcast<T: SpecialBuffer>(view: &dyn SpecialBuffer) -> Option<&T> {
     let any: &dyn Any = view;
     any.downcast_ref()
 }
@@ -212,7 +212,7 @@ impl Editor {
     }
 
     #[cfg(test)]
-    pub fn open_plugin_buffer(&mut self, name: &str, view: impl PluginBuffer) -> BufferId {
+    pub fn open_special_buffer(&mut self, name: &str, view: impl SpecialBuffer) -> BufferId {
         let mut buffer = Buffer::with_text(name, "");
         buffer.set_read_only(true);
         let id = buffer.id();
@@ -220,7 +220,7 @@ impl Editor {
         id
     }
 
-    pub fn add_plugin_buffer_with<T: PluginBuffer>(
+    pub fn add_special_buffer_with<T: SpecialBuffer>(
         &mut self,
         name: &str,
         make: impl FnOnce(&mut Buffer) -> T,
@@ -254,7 +254,7 @@ impl Editor {
             )
     }
 
-    pub fn plugin_buffers<T: PluginBuffer>(&self) -> Vec<BufferId> {
+    pub fn special_buffers<T: SpecialBuffer>(&self) -> Vec<BufferId> {
         (0..self.buffers.len())
             .filter(|index| {
                 matches!(self.buffers.mode(*index), Some(Mode::Plugin(view)) if downcast::<T>(view.as_ref()).is_some())
@@ -278,7 +278,7 @@ impl Editor {
         }
     }
 
-    pub fn find_plugin_buffer<T: PluginBuffer>(
+    pub fn find_special_buffer<T: SpecialBuffer>(
         &self,
         matches: impl Fn(&T) -> bool,
     ) -> Option<BufferId> {
@@ -289,7 +289,7 @@ impl Editor {
         self.buffers.get(index).map(Buffer::id)
     }
 
-    pub fn plugin_buffer<T: PluginBuffer>(&self, id: BufferId) -> Option<(&Buffer, &T)> {
+    pub fn special_buffer<T: SpecialBuffer>(&self, id: BufferId) -> Option<(&Buffer, &T)> {
         let index = self.buffers.position(|buffer| buffer.id() == id)?;
         let Some(Mode::Plugin(view)) = self.buffers.mode(index) else {
             return None;
@@ -297,7 +297,7 @@ impl Editor {
         Some((self.buffers.get(index)?, downcast(view.as_ref())?))
     }
 
-    pub fn plugin_buffer_mut<T: PluginBuffer>(
+    pub fn special_buffer_mut<T: SpecialBuffer>(
         &mut self,
         id: BufferId,
     ) -> Option<(&mut Buffer, &mut T)> {

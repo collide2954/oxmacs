@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::command::ScopeId;
-use crate::plugin::PluginBuffer;
+use crate::special_buffer::SpecialBuffer;
 use crate::text::BufferId;
 use crate::theme::Highlight;
 use shapes::Shape;
@@ -174,7 +174,7 @@ pub struct ViewBuffer {
     pub node: Node<usize>,
 }
 
-impl PluginBuffer for ViewBuffer {
+impl SpecialBuffer for ViewBuffer {
     fn scope(&self) -> ScopeId {
         self.scope
     }

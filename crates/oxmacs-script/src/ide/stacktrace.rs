@@ -8,7 +8,7 @@ use ox_lang::symbol::Sym;
 use oxmacs_core::command::{Command, DynamicSpec, ScopeId};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::editor::Visit;
-use oxmacs_core::plugin::PluginBuffer;
+use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::BufferId;
 
 pub const STACKTRACE: &str = "*ox stacktrace*";
@@ -58,7 +58,7 @@ fn places(frames: &[Frame]) -> Vec<Place> {
         .collect()
 }
 
-impl PluginBuffer for PlacesView {
+impl SpecialBuffer for PlacesView {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -69,7 +69,7 @@ struct SourceView {
     scope: ScopeId,
 }
 
-impl PluginBuffer for SourceView {
+impl SpecialBuffer for SourceView {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -160,15 +160,15 @@ pub(crate) fn show_places(
     let scope = scopes(editor).trace;
     let existing = editor
         .buffer_named(name)
-        .filter(|id| editor.plugin_buffer::<PlacesView>(*id).is_some());
+        .filter(|id| editor.special_buffer::<PlacesView>(*id).is_some());
     let id = if let Some(id) = existing {
-        if let Some((_, view)) = editor.plugin_buffer_mut::<PlacesView>(id) {
+        if let Some((_, view)) = editor.special_buffer_mut::<PlacesView>(id) {
             view.places = places;
             view.first = first;
         }
         id
     } else {
-        editor.add_plugin_buffer_with(name, |buffer| {
+        editor.add_special_buffer_with(name, |buffer| {
             buffer.set_read_only(true);
             PlacesView {
                 scope,
@@ -178,7 +178,7 @@ pub(crate) fn show_places(
         })
     };
     editor.fill_buffer(id, text);
-    if let Some((buffer, _)) = editor.plugin_buffer_mut::<PlacesView>(id) {
+    if let Some((buffer, _)) = editor.special_buffer_mut::<PlacesView>(id) {
         let start = buffer.line_start(first);
         buffer.set_point(start);
     }
@@ -187,7 +187,7 @@ pub(crate) fn show_places(
 
 fn source_buffer(editor: &mut Editor, name: &str, text: &str) -> BufferId {
     let scope = scopes(editor).source;
-    editor.add_plugin_buffer_with(name, |buffer| {
+    editor.add_special_buffer_with(name, |buffer| {
         buffer.insert_at(0, text);
         buffer.set_read_only(true);
         SourceView { scope }
@@ -198,7 +198,7 @@ fn visit(editor: &mut Editor) {
     let buffer = editor.buffer();
     let line = buffer.line_of(buffer.point());
     let Some(place) = editor
-        .plugin_buffer::<PlacesView>(buffer.id())
+        .special_buffer::<PlacesView>(buffer.id())
         .and_then(|(_, view)| {
             let index = line.checked_sub(view.first)?;
             view.places.get(index).cloned()

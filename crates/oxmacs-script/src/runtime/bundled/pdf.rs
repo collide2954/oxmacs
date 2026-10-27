@@ -110,7 +110,7 @@ impl Viewer {
 
     fn view(&self) -> View<usize> {
         let id = self.editor.buffer_named("paper.pdf").unwrap();
-        match &self.editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node {
+        match &self.editor.special_buffer::<ViewBuffer>(id).unwrap().1.node {
             Node::Pdf(view) => (**view).clone(),
             other => panic!("not a pdf: {other:?}"),
         }
@@ -162,7 +162,7 @@ fn pdfs_open_as_pages_with_their_place_in_the_mode_line() {
 
 fn shown_path(editor: &Editor, name: &str) -> Option<PathBuf> {
     let id = editor.buffer_named(name)?;
-    match &editor.plugin_buffer::<ViewBuffer>(id)?.1.node {
+    match &editor.special_buffer::<ViewBuffer>(id)?.1.node {
         Node::Pdf(view) => Some(view.path.clone()),
         _ => None,
     }
@@ -326,7 +326,7 @@ fn documents_pdfium_cannot_read_say_so_in_the_view() {
         "{:?}",
         viewer
             .editor
-            .plugin_buffer::<ViewBuffer>(id)
+            .special_buffer::<ViewBuffer>(id)
             .unwrap()
             .1
             .node

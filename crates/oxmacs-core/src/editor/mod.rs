@@ -70,7 +70,7 @@ use crate::config::{Config, LineNumbers, OnDiskChange, RustLint};
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::input::bindings::Keymaps;
 use crate::input::{Key, KeyCode, KeyParseError, KeySequence, Keymap, Lookup, Modifiers};
-use crate::plugin::States;
+use crate::plugin_state::States;
 use crate::syntax::Language;
 use crate::text::Buffer;
 

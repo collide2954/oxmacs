@@ -91,7 +91,7 @@ fn shown(editor: &Editor, name: &str) -> Vec<String> {
     let id = editor.buffer_named(name).unwrap();
     let mut out = Vec::new();
     lines(
-        &editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node,
+        &editor.special_buffer::<ViewBuffer>(id).unwrap().1.node,
         &mut out,
     );
     out

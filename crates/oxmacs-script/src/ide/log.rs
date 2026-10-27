@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 use ox_lang::Error;
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::editor::Editor;
-use oxmacs_core::plugin::PluginBuffer;
+use oxmacs_core::special_buffer::SpecialBuffer;
 
 pub const LOG: &str = "*ox log*";
 
@@ -12,7 +12,7 @@ struct LogView {
     scope: ScopeId,
 }
 
-impl PluginBuffer for LogView {
+impl SpecialBuffer for LogView {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -66,11 +66,11 @@ fn append(editor: &mut Editor, entry: &str) {
         })
         .unwrap_or_default();
     let id = editor
-        .plugin_buffers::<LogView>()
+        .special_buffers::<LogView>()
         .first()
         .copied()
         .unwrap_or_else(|| {
-            editor.add_plugin_buffer_with(LOG, |buffer| {
+            editor.add_special_buffer_with(LOG, |buffer| {
                 buffer.set_read_only(true);
                 LogView { scope }
             })

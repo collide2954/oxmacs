@@ -41,7 +41,7 @@ fn written(r: &R, name: &str) -> Vec<String> {
     let id = r.editor.buffer_named(name).unwrap();
     let mut out = Vec::new();
     texts(
-        &r.editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node,
+        &r.editor.special_buffer::<ViewBuffer>(id).unwrap().1.node,
         &mut out,
     );
     out
@@ -422,7 +422,7 @@ fn plots_show_their_image_once_it_is_read() {
     crate::testing::settle(&mut r.editor, &mut r.ox);
 
     let id = r.editor.buffer_named(PLOTS).unwrap();
-    let node = &r.editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node;
+    let node = &r.editor.special_buffer::<ViewBuffer>(id).unwrap().1.node;
     let mut found = Vec::new();
     images(node, &mut found);
     assert_eq!(found, [(8, 6, Some(4.0), Some(3.0))]);

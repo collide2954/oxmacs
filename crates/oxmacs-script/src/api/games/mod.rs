@@ -361,7 +361,7 @@ fn play(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         .filter(|buffer| editor.buffer_by_id(*buffer).is_some())
         .unwrap_or_else(|| {
             let scope = editor.add_scope(NAME);
-            editor.add_plugin_buffer_with(NAME, |buffer| {
+            editor.add_special_buffer_with(NAME, |buffer| {
                 buffer.set_read_only(true);
                 GameBuffer {
                     scope,
@@ -906,7 +906,7 @@ fn present(editor: &mut Editor, render: bool) {
     } else {
         None
     };
-    let Some((_, view)) = editor.plugin_buffer_mut::<GameBuffer>(buffer) else {
+    let Some((_, view)) = editor.special_buffer_mut::<GameBuffer>(buffer) else {
         return;
     };
     if let Some(frame) = frame {
@@ -1159,7 +1159,7 @@ mod tests {
     fn playing_a_game_shows_its_frames_beside_the_code() {
         let (mut editor, mut ox, start, _folder) = playing(COUNTER);
         let id = editor.buffer_named("*game*").unwrap();
-        assert!(editor.plugin_buffer::<GameBuffer>(id).is_some());
+        assert!(editor.special_buffer::<GameBuffer>(id).is_some());
         assert_eq!(editor.buffer().id(), id);
         assert_eq!(pixel(&editor, 0, 0), [255, 0, 0, 255]);
         assert_eq!(pixel(&editor, 3, 3), [16, 32, 48, 255]);

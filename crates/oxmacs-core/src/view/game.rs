@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::command::ScopeId;
 use crate::editor::Editor;
-use crate::plugin::PluginBuffer;
+use crate::special_buffer::SpecialBuffer;
 use crate::text::BufferId;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,7 +45,7 @@ pub struct GameBuffer {
     pub screen: Screen,
 }
 
-impl PluginBuffer for GameBuffer {
+impl SpecialBuffer for GameBuffer {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -53,6 +53,6 @@ impl PluginBuffer for GameBuffer {
 
 pub fn screen(editor: &Editor, buffer: BufferId) -> Option<&Screen> {
     editor
-        .plugin_buffer::<GameBuffer>(buffer)
+        .special_buffer::<GameBuffer>(buffer)
         .map(|(_, view)| &view.screen)
 }

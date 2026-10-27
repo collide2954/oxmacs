@@ -17,7 +17,7 @@ use crate::editor::special::splash::Splash;
 use crate::editor::special::toolbox::ToolList;
 use crate::editor::{Choice, Completion, Editor};
 use crate::files::paths;
-use crate::plugin::PluginBuffer;
+use crate::special_buffer::SpecialBuffer;
 use crate::syntax::{Language, Syntax};
 use crate::text::Buffer;
 
@@ -33,7 +33,7 @@ pub(super) enum Mode {
     Help(Help),
     Locations(Locations),
     Tools(ToolList),
-    Plugin(Box<dyn PluginBuffer>),
+    Plugin(Box<dyn SpecialBuffer>),
 }
 
 #[derive(Debug)]

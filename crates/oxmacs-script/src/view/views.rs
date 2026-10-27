@@ -379,7 +379,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         index
     } else {
         let scope = editor.add_scope(Box::leak(name.clone().into_boxed_str()));
-        let buffer = editor.add_plugin_buffer_with(&name, |buffer| {
+        let buffer = editor.add_special_buffer_with(&name, |buffer| {
             buffer.set_read_only(true);
             ViewBuffer {
                 scope,
@@ -405,7 +405,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     let (buffer, scope) = (views.open[index].buffer, views.open[index].scope);
     views.dirty = true;
     editor.set_plugin_state(views);
-    if let Some((_, view)) = editor.plugin_buffer_mut::<ViewBuffer>(buffer) {
+    if let Some((_, view)) = editor.special_buffer_mut::<ViewBuffer>(buffer) {
         view.watched = watched;
     }
     for (keys, command) in bindings {
@@ -531,7 +531,7 @@ pub fn refresh(isolate: &mut Isolate, editor: &mut Editor) {
                 isolate.release(old);
             }
         }
-        if let Some((_, shown)) = editor.plugin_buffer_mut::<ViewBuffer>(buffer)
+        if let Some((_, shown)) = editor.special_buffer_mut::<ViewBuffer>(buffer)
             && shown.node != node
         {
             shown.node = node;
@@ -617,7 +617,7 @@ mod tests {
     fn shown(editor: &Editor, name: &str) -> Node<usize> {
         let id = editor.buffer_named(name).unwrap();
         editor
-            .plugin_buffer::<ViewBuffer>(id)
+            .special_buffer::<ViewBuffer>(id)
             .unwrap()
             .1
             .node

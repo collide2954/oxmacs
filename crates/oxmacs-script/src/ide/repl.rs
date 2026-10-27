@@ -12,7 +12,7 @@ use ox_lang::value::Value;
 use ox_lang::{Error, read};
 use oxmacs_core::command::{Command, CommandId, DynamicSpec, Scope, ScopeId};
 use oxmacs_core::editor::{Editor, InputLine};
-use oxmacs_core::plugin::PluginBuffer;
+use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
@@ -202,7 +202,7 @@ struct ReplView {
     input: InputLine,
 }
 
-impl PluginBuffer for ReplView {
+impl SpecialBuffer for ReplView {
     fn scope(&self) -> ScopeId {
         self.scope
     }
@@ -441,13 +441,13 @@ fn source_name(editor: &Editor) -> String {
 }
 
 fn repl(editor: &mut Editor) -> Option<BufferId> {
-    if let Some(id) = editor.plugin_buffers::<ReplView>().first().copied() {
+    if let Some(id) = editor.special_buffers::<ReplView>().first().copied() {
         return Some(id);
     }
     let scope = editor
         .plugin_state::<Requests>()
         .and_then(|requests| requests.repl)?;
-    Some(editor.add_plugin_buffer_with(REPL, |buffer| {
+    Some(editor.add_special_buffer_with(REPL, |buffer| {
         buffer.insert_at(0, &format!("{GREETING}{PROMPT}"));
         let input = InputLine::new(buffer);
         buffer.set_point(buffer.len_chars());
@@ -505,14 +505,14 @@ fn indent_or_complete(editor: &mut Editor) {
 }
 
 pub(crate) fn in_repl(editor: &Editor) -> bool {
-    editor.pane().plugin_buffer::<ReplView>().is_some()
+    editor.pane().special_buffer::<ReplView>().is_some()
 }
 
 fn recall(editor: &mut Editor, older: bool) {
-    let Some(id) = editor.plugin_buffers::<ReplView>().first().copied() else {
+    let Some(id) = editor.special_buffers::<ReplView>().first().copied() else {
         return;
     };
-    if let Some((buffer, view)) = editor.plugin_buffer_mut::<ReplView>(id)
+    if let Some((buffer, view)) = editor.special_buffer_mut::<ReplView>(id)
         && let Some(text) = view.input.recall(older)
     {
         view.input.replace(buffer, &text);
@@ -776,17 +776,17 @@ impl Ox {
             editor.show_buffer_beside(id);
             editor.select_window(origin);
         }
-        if let Some((buffer, view)) = editor.plugin_buffer_mut::<ReplView>(id) {
+        if let Some((buffer, view)) = editor.special_buffer_mut::<ReplView>(id) {
             view.input.replace(buffer, code);
         }
         self.send(editor);
     }
 
     fn send(&mut self, editor: &mut Editor) {
-        let Some(id) = editor.plugin_buffers::<ReplView>().first().copied() else {
+        let Some(id) = editor.special_buffers::<ReplView>().first().copied() else {
             return;
         };
-        let Some((buffer, view)) = editor.plugin_buffer_mut::<ReplView>(id) else {
+        let Some((buffer, view)) = editor.special_buffer_mut::<ReplView>(id) else {
             return;
         };
         let input = view.input.text(buffer).unwrap_or_default();
@@ -812,7 +812,7 @@ impl Ox {
         if let Some((_, failed)) = shown {
             flashes::evaluated(editor, id, typed, failed);
         }
-        let Some((buffer, view)) = editor.plugin_buffer_mut::<ReplView>(id) else {
+        let Some((buffer, view)) = editor.special_buffer_mut::<ReplView>(id) else {
             return;
         };
         let mut text = String::from("\n");

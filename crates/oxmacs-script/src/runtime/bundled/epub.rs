@@ -76,7 +76,7 @@ impl Reader {
 
     fn pages(&self) -> Pages<usize> {
         let id = self.editor.buffer_named("sample.epub").unwrap();
-        match &self.editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node {
+        match &self.editor.special_buffer::<ViewBuffer>(id).unwrap().1.node {
             Node::Pages(pages) => (**pages).clone(),
             other => panic!("not pages: {other:?}"),
         }
@@ -248,7 +248,7 @@ fn highlights_and_places_are_remembered() {
     editor.open_file(&reader.book);
     settle(&mut editor, &mut ox);
     let id = editor.buffer_named("sample.epub").unwrap();
-    let Node::Pages(pages) = &editor.plugin_buffer::<ViewBuffer>(id).unwrap().1.node else {
+    let Node::Pages(pages) = &editor.special_buffer::<ViewBuffer>(id).unwrap().1.node else {
         panic!("not pages");
     };
     assert_eq!(pages.header.1, "Chapter One");
@@ -277,7 +277,7 @@ fn the_library_shows_the_books_in_a_folder() {
         "{:?}",
         reader
             .editor
-            .plugin_buffer::<ViewBuffer>(id)
+            .special_buffer::<ViewBuffer>(id)
             .unwrap()
             .1
             .node
@@ -310,7 +310,7 @@ fn the_library_shows_how_far_each_book_was_read_however_its_folder_is_spelled() 
         "{:?}",
         reader
             .editor
-            .plugin_buffer::<ViewBuffer>(id)
+            .special_buffer::<ViewBuffer>(id)
             .unwrap()
             .1
             .node
