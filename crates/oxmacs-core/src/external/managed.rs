@@ -342,7 +342,10 @@ fn from_tar(archive: &[u8], name: &str) -> io::Result<Option<Vec<u8>>> {
 }
 
 fn extract(archive_name: &str, archive: &[u8], name: &str) -> Result<Vec<u8>, String> {
-    let found = if archive_name.ends_with(".zip") {
+    let zip = Path::new(archive_name)
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"));
+    let found = if zip {
         from_zip(archive, name)
     } else {
         from_tar(archive, name)
