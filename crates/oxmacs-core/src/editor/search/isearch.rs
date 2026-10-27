@@ -161,7 +161,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn isearch(&mut self, direction: Direction, regex: bool) {
-        if self.minibuffer.is_some() {
+        if self.prompts.reading() {
             self.show_message("Command attempted to use minibuffer while in minibuffer");
             return;
         }

@@ -15,7 +15,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn move_vertically(&mut self, lines: isize, goal_column: Option<usize>) {
-        let width = if self.minibuffer.is_some() {
+        let width = if self.prompts.reading() {
             0
         } else {
             self.viewport.wrap_width()

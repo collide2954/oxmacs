@@ -33,7 +33,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn previewed_theme(&self) -> Option<&'static Theme> {
-        if self.minibuffer.as_ref()?.purpose != Purpose::LoadTheme {
+        if self.prompts.minibuffer()?.purpose != Purpose::LoadTheme {
             return None;
         }
         match self.selected_completion()?.choice {

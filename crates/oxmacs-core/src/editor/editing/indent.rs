@@ -5,7 +5,7 @@ const ELECTRIC: &[char] = &['}', ')', ']'];
 
 impl Editor {
     fn indents(&self) -> bool {
-        self.minibuffer.is_none() && (self.buffers.syntax(0).is_some() || self.indenter().is_some())
+        !self.prompts.reading() && (self.buffers.syntax(0).is_some() || self.indenter().is_some())
     }
 
     fn indentation_rules(&self) -> Option<Indentation> {

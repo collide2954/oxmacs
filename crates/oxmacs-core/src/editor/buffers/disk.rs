@@ -73,7 +73,7 @@ impl Editor {
                 }
                 Some(_) if self.on_disk_change == OnDiskChange::Revert => self.revert_at(index),
                 Some(_) => {
-                    if self.question.is_none() {
+                    if self.prompts.question().is_none() {
                         self.ask_to_reread(index, &name, now);
                     }
                 }

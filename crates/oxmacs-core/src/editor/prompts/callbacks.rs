@@ -123,11 +123,11 @@ impl Editor {
     ) {
         self.prompt(prompt, done);
         if self
-            .minibuffer
-            .as_ref()
+            .prompts
+            .minibuffer()
             .is_some_and(|minibuffer| minibuffer.callback.is_some())
         {
-            self.set_minibuffer_input(text);
+            self.prompts.set_input(text);
         }
     }
 
@@ -188,7 +188,7 @@ impl Editor {
         done: impl FnOnce(&mut Editor, PathBuf) + Send + 'static,
     ) {
         if self.open_file_prompt(prompt, Purpose::CallbackPath { directories })
-            && let Some(minibuffer) = &mut self.minibuffer
+            && let Some(minibuffer) = self.prompts.minibuffer_mut()
         {
             minibuffer.callback = Some(CallbackPrompt {
                 offer: None,
@@ -206,9 +206,9 @@ impl Editor {
         done: impl FnOnce(&mut Editor, PathBuf) + Send + 'static,
     ) {
         self.prompt_path(prompt, directories, done);
-        if self.minibuffer.is_some() && !name.is_empty() {
-            let start = self.minibuffer_input();
-            self.set_minibuffer_input(&format!("{start}{name}"));
+        if self.prompts.reading() && !name.is_empty() {
+            let start = self.prompts.input();
+            self.prompts.set_input(&format!("{start}{name}"));
             self.refresh_minibuffer();
         }
     }
@@ -232,7 +232,7 @@ impl Editor {
     }
 
     pub fn minibuffer_highlights(&self) -> Vec<(Range<usize>, Highlight)> {
-        let Some(minibuffer) = &self.minibuffer else {
+        let Some(minibuffer) = self.prompts.minibuffer() else {
             return Vec::new();
         };
         minibuffer
@@ -272,7 +272,7 @@ impl Editor {
     fn open_callback_prompt(&mut self, prompt: &str, secret: bool, callback: CallbackPrompt) {
         let completes = callback.offer.is_some();
         if self.open_minibuffer(prompt, Purpose::Callback { completes, secret })
-            && let Some(minibuffer) = &mut self.minibuffer
+            && let Some(minibuffer) = self.prompts.minibuffer_mut()
         {
             minibuffer.callback = Some(callback);
         }
@@ -283,8 +283,8 @@ impl Editor {
         matches: impl Fn(&str) -> bool,
     ) -> Vec<Completion> {
         let Some(offer) = self
-            .minibuffer
-            .as_ref()
+            .prompts
+            .minibuffer()
             .and_then(|minibuffer| minibuffer.callback.as_ref())
             .and_then(|callback| callback.offer.as_ref())
         else {
@@ -304,15 +304,15 @@ impl Editor {
     }
 
     pub(in crate::editor) fn exit_callback_prompt(&mut self, typed: bool) {
-        let input = self.minibuffer_input();
+        let input = self.prompts.input();
         let selected = if typed {
             None
         } else {
             self.selected_completion()
         };
         let callback = self
-            .minibuffer
-            .take()
+            .prompts
+            .done_reading()
             .and_then(|minibuffer| minibuffer.callback);
         let Some(callback) = callback else {
             return;

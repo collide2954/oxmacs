@@ -123,14 +123,12 @@ impl From<&Config> for Settings {
 pub struct Editor {
     buffers: BufferList,
     windows: windows::Windows,
-    minibuffer: Option<Minibuffer>,
+    prompts: prompts::Prompts,
     search: Option<Search>,
     replace: Option<Replace>,
     last_searches: [Option<String>; 2],
     last_replacements: [Option<(String, String)>; 2],
     keymaps: Keymaps,
-    popup: Option<prompts::popup::Popup>,
-    transients: prompts::transient::Transients,
     xref: Vec<(crate::text::BufferId, usize)>,
     headers: Vec<(crate::text::BufferId, Vec<(String, LineStyle)>)>,
     processes: special::processes::Processes,
@@ -142,7 +140,6 @@ pub struct Editor {
     command_history: Vec<CommandId>,
     commands: Commands,
     plugin_states: States,
-    pending_answer: Option<prompts::callbacks::Answer>,
     goal_column: Option<usize>,
     shift_selection: bool,
     typed_in_step: usize,
@@ -158,7 +155,6 @@ pub struct Editor {
     line_copy: Option<String>,
     message: Option<String>,
     quit_requested: bool,
-    question: Option<Question>,
     viewport: Viewport,
     tab_width: usize,
     on_disk_change: OnDiskChange,
@@ -208,14 +204,12 @@ impl Editor {
         let mut editor = Self {
             buffers: BufferList::new(buffer),
             windows: windows::Windows::new(),
-            minibuffer: None,
+            prompts: prompts::Prompts::default(),
             search: None,
             replace: None,
             last_searches: [None, None],
             last_replacements: [None, None],
             keymaps: Keymaps::default(),
-            popup: None,
-            transients: prompts::transient::Transients::default(),
             xref: Vec::new(),
             headers: Vec::new(),
             processes: special::processes::Processes::default(),
@@ -227,7 +221,6 @@ impl Editor {
             command_history: Vec::new(),
             commands: Commands::default(),
             plugin_states: States::default(),
-            pending_answer: None,
             goal_column: None,
             shift_selection: false,
             typed_in_step: 0,
@@ -243,7 +236,6 @@ impl Editor {
             line_copy: None,
             message: None,
             quit_requested: false,
-            question: None,
             viewport: Viewport::new(DEFAULT_ROWS, 0),
             tab_width: Config::default().tab_width,
             on_disk_change: OnDiskChange::default(),
@@ -360,7 +352,7 @@ impl Editor {
     }
 
     fn current_mut(&mut self) -> &mut Buffer {
-        match &mut self.minibuffer {
+        match self.prompts.minibuffer_mut() {
             Some(minibuffer) => &mut minibuffer.input,
             None => self.buffers.current_mut(),
         }
@@ -422,9 +414,7 @@ impl Editor {
         {
             return;
         }
-        if let Some(minibuffer) = &mut self.minibuffer {
-            minibuffer.note = None;
-        }
+        self.prompts.clear_note();
         if self.quits_pending_sequence(key) {
             self.pending.push(key);
             self.dispatch(key, Command::KeyboardQuit.into(), false);
@@ -496,13 +486,13 @@ impl Editor {
     }
 
     fn lookup(&self, keys: &[Key]) -> Lookup {
-        if self.popup.is_some()
+        if self.prompts.showing_popup()
             && keys.len() == 1
             && let found @ Lookup::Command(_) = self.keymaps.get(Scope::Popup).lookup(keys)
         {
             return found;
         }
-        let local = if self.minibuffer.is_some() {
+        let local = if self.prompts.reading() {
             Some(self.keymaps.get(Scope::Minibuffer))
         } else {
             self.mode_keymap()

@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use crate::editor::prompts::Prompts;
 use crate::editor::prompts::callbacks::Answer;
 use crate::editor::{Editor, is_keyboard_quit};
 use crate::external::managed::Managed;
@@ -11,7 +12,7 @@ const SAVE_CHOICES: &[char] = &['y', 'n', '!', 'q'];
 const YES_NO: &[char] = &['y', 'n'];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Pending {
+pub(in crate::editor) enum Pending {
     SaveSome {
         remaining: Vec<PathBuf>,
         then_quit: bool,
@@ -54,21 +55,34 @@ impl Question {
     }
 }
 
-impl Editor {
-    pub fn question(&self) -> Option<&Question> {
+#[derive(Debug)]
+pub(in crate::editor) enum Answering {
+    NotAsked,
+    Quit,
+    Kept,
+    Told(String),
+    Resolved(Pending, char),
+}
+
+impl Prompts {
+    pub(in crate::editor) fn question(&self) -> Option<&Question> {
         self.question.as_ref()
     }
 
-    pub(in crate::editor) fn answer_question(&mut self, key: Key) -> bool {
+    fn ask(&mut self, question: Question) {
+        self.question = Some(question);
+    }
+
+    pub(in crate::editor) fn answer(&mut self, key: Key) -> Answering {
         let Some(mut question) = self.question.take() else {
-            return false;
+            return Answering::NotAsked;
         };
         if is_keyboard_quit(key) {
-            self.pending_answer = None;
-            self.show_message("Quit");
-            return true;
+            self.answer = None;
+            return Answering::Quit;
         }
         if let Some(answer) = &mut question.typed {
+            let mut told = None;
             match key.code() {
                 KeyCode::Char(c) if key.modifiers().is_empty() => answer.push(c),
                 KeyCode::Backspace => {
@@ -76,26 +90,42 @@ impl Editor {
                 }
                 KeyCode::Return if matches!(answer.as_str(), "yes" | "no") => {
                     let choice = if answer == "yes" { 'y' } else { 'n' };
-                    self.resolve(question.pending, choice);
-                    return true;
+                    return Answering::Resolved(question.pending, choice);
                 }
                 KeyCode::Return => {
-                    self.show_message("Please answer yes or no");
+                    told = Some("Please answer yes or no".to_owned());
                     answer.clear();
                 }
                 _ => {}
             }
             self.question = Some(question);
-            return true;
+            return told.map_or(Answering::Kept, Answering::Told);
         }
         match key.code() {
             KeyCode::Char(c) if key.modifiers().is_empty() && question.choices.contains(&c) => {
-                self.resolve(question.pending, c);
+                Answering::Resolved(question.pending, c)
             }
             _ => {
-                self.show_message(format!("Please answer {}", choice_list(question.choices)));
+                let told = format!("Please answer {}", choice_list(question.choices));
                 self.question = Some(question);
+                Answering::Told(told)
             }
+        }
+    }
+}
+
+impl Editor {
+    pub fn question(&self) -> Option<&Question> {
+        self.prompts.question()
+    }
+
+    pub(in crate::editor) fn answer_question(&mut self, key: Key) -> bool {
+        match self.prompts.answer(key) {
+            Answering::NotAsked => return false,
+            Answering::Quit => self.show_message("Quit"),
+            Answering::Kept => {}
+            Answering::Told(told) => self.show_message(told),
+            Answering::Resolved(pending, choice) => self.resolve(pending, choice),
         }
         true
     }
@@ -126,7 +156,7 @@ impl Editor {
             return;
         };
         let shown = paths::abbreviate(path, self.home.as_deref());
-        self.question = Some(Question {
+        self.prompts.ask(Question {
             prompt: format!("Save file {shown}? (y, n, !, q) "),
             choices: SAVE_CHOICES,
             typed: None,
@@ -200,7 +230,7 @@ impl Editor {
                 }
             }
             Pending::Callback => {
-                if let Some(then) = self.pending_answer.take() {
+                if let Some(then) = self.prompts.answer.take() {
                     then.give(self, answer);
                 }
             }
@@ -219,7 +249,7 @@ impl Editor {
         let Some(buffer) = self.id_at(0) else {
             return;
         };
-        self.question = Some(Question {
+        self.prompts.ask(Question {
             prompt: format!("{name} changed on disk; save anyway? (y or n) "),
             choices: YES_NO,
             typed: None,
@@ -236,7 +266,7 @@ impl Editor {
         let Some(buffer) = self.id_at(index) else {
             return;
         };
-        self.question = Some(Question {
+        self.prompts.ask(Question {
             prompt: format!("{name} changed on disk; reread it? (y or n) "),
             choices: YES_NO,
             typed: None,
@@ -249,7 +279,7 @@ impl Editor {
             return;
         };
         let shown = paths::abbreviate(path, self.home.as_deref());
-        self.question = Some(Question {
+        self.prompts.ask(Question {
             prompt: format!("Revert buffer from file {shown}? (y or n) "),
             choices: YES_NO,
             typed: None,
@@ -265,8 +295,8 @@ impl Editor {
         typed: bool,
         then: Answer,
     ) {
-        self.pending_answer = Some(then);
-        self.question = Some(Question {
+        self.prompts.answer = Some(then);
+        self.prompts.ask(Question {
             prompt: format!("{prompt} ({shown}) "),
             choices,
             typed: typed.then(String::new),
@@ -275,7 +305,7 @@ impl Editor {
     }
 
     pub(in crate::editor) fn ask_to_remove_tool(&mut self, tool: Managed, version: &str) {
-        self.question = Some(Question {
+        self.prompts.ask(Question {
             prompt: format!("Remove {} {version}? (y or n) ", tool.name),
             choices: YES_NO,
             typed: None,
@@ -287,7 +317,7 @@ impl Editor {
         let Some(buffer) = self.id_at(index) else {
             return;
         };
-        self.question = Some(Question {
+        self.prompts.ask(Question {
             prompt: format!("Buffer {name} modified; kill anyway? (y or n) "),
             choices: YES_NO,
             typed: None,
@@ -297,7 +327,7 @@ impl Editor {
 
     pub(in crate::editor) fn ask_to_overwrite(&mut self, path: PathBuf) {
         let shown = paths::abbreviate(&path, self.home.as_deref());
-        self.question = Some(Question {
+        self.prompts.ask(Question {
             prompt: format!("File {shown} exists; overwrite? (y or n) "),
             choices: YES_NO,
             typed: None,
@@ -326,8 +356,56 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
+    use super::{Answering, Pending, Question, YES_NO};
     use crate::editor::Editor;
+    use crate::editor::prompts::Prompts;
+    use crate::input::{Key, KeyCode, Modifiers};
     use crate::testing::{press, question, type_text};
+
+    fn key(character: char) -> Key {
+        Key::new(KeyCode::Char(character), Modifiers::empty())
+    }
+
+    #[test]
+    fn prompts_answer_questions_and_hand_back_the_choice() {
+        let mut prompts = Prompts::default();
+        prompts.ask(Question {
+            prompt: "Go? (y or n) ".to_owned(),
+            choices: YES_NO,
+            typed: None,
+            pending: Pending::Callback,
+        });
+
+        assert!(
+            matches!(prompts.answer(key('x')), Answering::Told(told) if told.starts_with("Please answer y"))
+        );
+        assert!(prompts.question().is_some());
+        assert!(matches!(
+            prompts.answer(key('n')),
+            Answering::Resolved(Pending::Callback, 'n')
+        ));
+        assert!(prompts.question().is_none());
+        assert!(matches!(prompts.answer(key('y')), Answering::NotAsked));
+    }
+
+    #[test]
+    fn typed_answers_wait_for_yes_or_no_and_quit_forgets_the_question() {
+        let mut prompts = Prompts::default();
+        prompts.ask(Question {
+            prompt: "Go? (yes or no) ".to_owned(),
+            choices: YES_NO,
+            typed: Some(String::new()),
+            pending: Pending::Callback,
+        });
+
+        assert!(matches!(prompts.answer(key('y')), Answering::Kept));
+        assert_eq!(prompts.question().map(Question::answer), Some("y"));
+        assert!(matches!(
+            prompts.answer(Key::new(KeyCode::Char('g'), Modifiers::CONTROL)),
+            Answering::Quit
+        ));
+        assert!(prompts.question().is_none());
+    }
 
     fn two_modified_files() -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();

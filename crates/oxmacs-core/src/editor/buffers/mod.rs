@@ -307,15 +307,15 @@ impl Editor {
         match self.buffers.position(|buffer| buffer.name() == name) {
             Some(index) => self.choose_buffer(purpose, index),
             None if purpose == Purpose::SwitchBuffer => {
-                self.minibuffer = None;
+                self.prompts.done_reading();
                 self.add_buffer(Buffer::new(name));
             }
-            None => self.note_no_match(),
+            None => self.prompts.note_no_match(),
         }
     }
 
     pub(super) fn choose_buffer(&mut self, purpose: Purpose, index: usize) {
-        self.minibuffer = None;
+        self.prompts.done_reading();
         if purpose == Purpose::KillBuffer {
             self.kill_buffer_at(index);
         } else {

@@ -17,7 +17,7 @@ impl Editor {
 
     fn pairs(&self) -> &'static [(char, char)] {
         match self.language() {
-            Some(language) if self.minibuffer.is_none() => language.pairs(),
+            Some(language) if !self.prompts.reading() => language.pairs(),
             _ => &[],
         }
     }
@@ -85,7 +85,7 @@ impl Editor {
     }
 
     fn find_paren_pair(&self) -> Option<(usize, usize)> {
-        if self.minibuffer.is_some() || self.buffers.is_special(0) {
+        if self.prompts.reading() || self.buffers.is_special(0) {
             return None;
         }
         let buffer = self.buffers.current();

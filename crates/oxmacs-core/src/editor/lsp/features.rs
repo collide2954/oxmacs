@@ -198,8 +198,8 @@ impl Editor {
             .take_while(|c| word_char(*c))
             .count();
         self.last_command == Some(Command::SelfInsertCommand)
-            && self.minibuffer.is_none()
-            && self.popup.is_none()
+            && !self.prompts.reading()
+            && !self.prompts.showing_popup()
             && self.lsp_serves_here()
             && (typed >= AUTO_PREFIX || self.trigger_typed())
             && self.lsp.assist.auto_mark != Some((buffer.id(), buffer.revision()))
@@ -242,7 +242,7 @@ impl Editor {
     }
 
     pub fn wants_signature(&self) -> bool {
-        let quiet = self.minibuffer.is_none() && self.popup.is_none() && self.question.is_none();
+        let quiet = self.prompts.quiet();
         quiet && self.lsp_wants_signature()
     }
 
@@ -573,7 +573,7 @@ impl Editor {
         let current = self.buffers.current();
         let point = current.point();
         if current.id() != buffer
-            || self.minibuffer.is_some()
+            || self.prompts.reading()
             || start > point
             || current.line_of(start) != current.line_of(point)
         {

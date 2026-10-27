@@ -88,7 +88,7 @@ impl<'a> Pane<'a> {
     }
 
     pub fn minibuffer_active(&self) -> bool {
-        self.editor.minibuffer.is_some()
+        self.editor.prompts.reading()
     }
 
     pub fn tab_width(&self) -> usize {
@@ -167,7 +167,7 @@ impl<'a> Pane<'a> {
         if !self.selected {
             return None;
         }
-        self.editor.popup_view(
+        self.editor.prompts.popup_view(
             self.buffer().id(),
             &self.layout(),
             self.viewport.top(),

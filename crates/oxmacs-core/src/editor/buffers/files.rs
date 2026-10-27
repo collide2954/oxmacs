@@ -47,13 +47,13 @@ impl Editor {
         if !start.ends_with(paths::is_separator) {
             start.push(paths::SEPARATOR);
         }
-        self.set_minibuffer_input(&start);
+        self.prompts.set_input(&start);
         self.refresh_minibuffer();
         true
     }
 
     pub(in crate::editor) fn refresh_minibuffer(&mut self) {
-        let Some(minibuffer) = &self.minibuffer else {
+        let Some(minibuffer) = self.prompts.minibuffer() else {
             return;
         };
         if !minibuffer.purpose.takes_path() {
@@ -62,12 +62,12 @@ impl Editor {
         let mut input = minibuffer.input.contents();
         if let Some(rest) = paths::restart(&input) {
             input = rest.to_owned();
-            self.set_minibuffer_input(&input);
+            self.prompts.set_input(&input);
         }
         let directory = self.resolve_path(paths::split(&input).0);
         if self
-            .minibuffer
-            .as_ref()
+            .prompts
+            .minibuffer()
             .and_then(|minibuffer| minibuffer.listing.as_ref())
             .is_some_and(|listing| listing.directory == directory)
         {
@@ -75,24 +75,24 @@ impl Editor {
         }
         let mut entries = files::read_entries(&directory).unwrap_or_default();
         files::sort_by_name(&mut entries);
-        if let Some(minibuffer) = &mut self.minibuffer {
+        if let Some(minibuffer) = self.prompts.minibuffer_mut() {
             minibuffer.listing = Some(PathListing { directory, entries });
         }
     }
 
     pub(in crate::editor) fn exit_file_prompt(&mut self, exact: bool) {
         let Some(purpose) = self
-            .minibuffer
-            .as_ref()
+            .prompts
+            .minibuffer()
             .map(|minibuffer| minibuffer.purpose)
         else {
             return;
         };
-        let input = self.minibuffer_input();
+        let input = self.prompts.input();
         let (directory, name) = paths::split(&input);
         let path = if name.is_empty() {
             if matches!(purpose, Purpose::WriteFile) {
-                if let Some(minibuffer) = &mut self.minibuffer {
+                if let Some(minibuffer) = self.prompts.minibuffer_mut() {
                     minibuffer.note = Some("[Directory]".to_owned());
                 }
                 return;
@@ -101,7 +101,7 @@ impl Editor {
         } else {
             match self.selected_entry().filter(|_| !exact) {
                 Some((label, _, true)) => {
-                    self.set_minibuffer_input(&format!("{directory}{label}"));
+                    self.prompts.set_input(&format!("{directory}{label}"));
                     return;
                 }
                 Some((_, entry_path, false)) => entry_path,
@@ -109,8 +109,8 @@ impl Editor {
             }
         };
         let callback = self
-            .minibuffer
-            .take()
+            .prompts
+            .done_reading()
             .and_then(|minibuffer| minibuffer.callback);
         match purpose {
             Purpose::WriteFile => self.write_file_to(path),
@@ -194,23 +194,23 @@ impl Editor {
 
     pub(in crate::editor) fn complete_file_name(&mut self) {
         if let Some((label, _, _)) = self.selected_entry() {
-            let input = self.minibuffer_input();
+            let input = self.prompts.input();
             let (directory, _) = paths::split(&input);
-            self.set_minibuffer_input(&format!("{directory}{label}"));
+            self.prompts.set_input(&format!("{directory}{label}"));
         }
     }
 
     pub(in crate::editor) fn minibuffer_delete_backward(&mut self) {
         match self.parent_input() {
-            Some(parent) => self.set_minibuffer_input(&parent),
+            Some(parent) => self.prompts.set_input(&parent),
             None => self.delete_char(false),
         }
     }
 
     fn parent_input(&self) -> Option<String> {
         let minibuffer = self
-            .minibuffer
-            .as_ref()
+            .prompts
+            .minibuffer()
             .filter(|minibuffer| minibuffer.purpose.takes_path())?;
         if minibuffer.input.point() != minibuffer.input.len_chars() {
             return None;
@@ -226,7 +226,7 @@ impl Editor {
         let Choice::Entry(index) = completion.choice else {
             return None;
         };
-        let listing = self.minibuffer.as_ref()?.listing.as_ref()?;
+        let listing = self.prompts.minibuffer()?.listing.as_ref()?;
         let entry = listing.entries.get(index)?;
         Some((
             completion.label,

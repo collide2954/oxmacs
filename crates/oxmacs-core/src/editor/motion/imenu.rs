@@ -14,7 +14,7 @@ impl Editor {
             return;
         }
         if self.open_minibuffer("Index item: ", Purpose::Item)
-            && let Some(minibuffer) = &mut self.minibuffer
+            && let Some(minibuffer) = self.prompts.minibuffer_mut()
         {
             minibuffer.items = items;
         }
@@ -24,7 +24,7 @@ impl Editor {
         &self,
         matches: impl Fn(&str) -> bool,
     ) -> Vec<Completion> {
-        let Some(minibuffer) = &self.minibuffer else {
+        let Some(minibuffer) = self.prompts.minibuffer() else {
             return Vec::new();
         };
         let buffer = self.buffers.current();

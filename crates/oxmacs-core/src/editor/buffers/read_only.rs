@@ -15,7 +15,7 @@ impl Editor {
 
     pub(in crate::editor) fn refuse_read_only(&mut self) -> bool {
         let buffer = self.buffers.current();
-        if self.minibuffer.is_some() || !buffer.is_read_only() {
+        if self.prompts.reading() || !buffer.is_read_only() {
             return false;
         }
         let message = format!("Buffer is read-only: {}", buffer.name());

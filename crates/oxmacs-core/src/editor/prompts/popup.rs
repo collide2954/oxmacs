@@ -1,6 +1,7 @@
 use crate::command::Command;
 use crate::display::Layout;
 use crate::editor::Editor;
+use crate::editor::prompts::Prompts;
 use crate::text::BufferId;
 
 const VISIBLE: usize = 10;
@@ -46,45 +47,21 @@ impl Popup {
     }
 }
 
-impl Editor {
-    pub(in crate::editor) fn open_popup(&mut self, start: usize, candidates: Vec<String>) {
-        let buffer = self.buffers.current();
+impl Prompts {
+    pub(in crate::editor) fn showing_popup(&self) -> bool {
+        self.popup.is_some()
+    }
+
+    fn open_popup(&mut self, buffer: BufferId, start: usize, candidates: Vec<String>, typed: &str) {
         let mut popup = Popup {
-            buffer: buffer.id(),
+            buffer,
             start,
             candidates,
             matching: Vec::new(),
             selected: 0,
         };
-        popup.filter(&buffer.text_in(start..buffer.point()));
+        popup.filter(typed);
         self.popup = (!popup.matching.is_empty()).then_some(popup);
-    }
-
-    pub fn complete_at(&mut self, start: usize, candidates: Vec<String>, explicit: bool) {
-        let buffer = self.buffers.current();
-        let point = buffer.point();
-        let typed = buffer.text_in(start.min(point)..point);
-        let candidates: Vec<String> = candidates
-            .into_iter()
-            .filter(|candidate| !candidate.is_empty())
-            .filter(|candidate| explicit || *candidate != typed)
-            .collect();
-        match candidates.as_slice() {
-            [] if explicit => self.show_message("No completions"),
-            [] => {}
-            [sole] if explicit => {
-                let sole = sole.clone();
-                let buffer = self.buffers.current_mut();
-                buffer.delete_range(start..point);
-                buffer.set_point(start);
-                buffer.insert(&sole);
-            }
-            _ => self.open_popup(start, candidates),
-        }
-    }
-
-    pub fn just_typed(&self) -> bool {
-        self.last_command == Some(Command::SelfInsertCommand)
     }
 
     pub(in crate::editor) fn popup_step(&mut self, forward: bool) {
@@ -99,39 +76,23 @@ impl Editor {
         };
     }
 
-    pub(in crate::editor) fn popup_accept(&mut self) {
-        let Some(popup) = self.popup.take() else {
-            return;
-        };
-        let Some(chosen) = popup.chosen() else {
-            return;
-        };
-        let buffer = self.buffers.current_mut();
-        let point = buffer.point();
-        buffer.delete_range(popup.start..point);
-        buffer.set_point(popup.start);
-        buffer.insert(chosen);
+    fn accept_popup(&mut self) -> Option<(usize, String)> {
+        let popup = self.popup.take()?;
+        let chosen = popup.chosen()?.to_owned();
+        Some((popup.start, chosen))
     }
 
-    pub(in crate::editor) fn popup_quit(&mut self) {
+    pub(in crate::editor) fn quit_popup(&mut self) {
         self.popup = None;
     }
 
-    pub(in crate::editor) fn refresh_popup(&mut self, command: Command) {
-        if matches!(
-            command,
-            Command::CompletionNext | Command::CompletionPrevious
-        ) {
-            return;
-        }
+    fn refresh_popup(&mut self, buffer: BufferId, typed: impl FnOnce(usize) -> Option<String>) {
         let Some(popup) = &mut self.popup else {
             return;
         };
-        let buffer = self.buffers.current();
-        let point = buffer.point();
-        let typed = (point >= popup.start).then(|| buffer.text_in(popup.start..point));
+        let typed = typed(popup.start);
         let still = self.minibuffer.is_none()
-            && buffer.id() == popup.buffer
+            && buffer == popup.buffer
             && typed
                 .as_ref()
                 .is_some_and(|typed| !typed.contains(char::is_whitespace));
@@ -163,6 +124,66 @@ impl Editor {
     }
 }
 
+impl Editor {
+    pub(in crate::editor) fn open_popup(&mut self, start: usize, candidates: Vec<String>) {
+        let buffer = self.buffers.current();
+        let typed = buffer.text_in(start..buffer.point());
+        self.prompts
+            .open_popup(buffer.id(), start, candidates, &typed);
+    }
+
+    pub fn complete_at(&mut self, start: usize, candidates: Vec<String>, explicit: bool) {
+        let buffer = self.buffers.current();
+        let point = buffer.point();
+        let typed = buffer.text_in(start.min(point)..point);
+        let candidates: Vec<String> = candidates
+            .into_iter()
+            .filter(|candidate| !candidate.is_empty())
+            .filter(|candidate| explicit || *candidate != typed)
+            .collect();
+        match candidates.as_slice() {
+            [] if explicit => self.show_message("No completions"),
+            [] => {}
+            [sole] if explicit => {
+                let sole = sole.clone();
+                let buffer = self.buffers.current_mut();
+                buffer.delete_range(start..point);
+                buffer.set_point(start);
+                buffer.insert(&sole);
+            }
+            _ => self.open_popup(start, candidates),
+        }
+    }
+
+    pub fn just_typed(&self) -> bool {
+        self.last_command == Some(Command::SelfInsertCommand)
+    }
+
+    pub(in crate::editor) fn popup_accept(&mut self) {
+        let Some((start, chosen)) = self.prompts.accept_popup() else {
+            return;
+        };
+        let buffer = self.buffers.current_mut();
+        let point = buffer.point();
+        buffer.delete_range(start..point);
+        buffer.set_point(start);
+        buffer.insert(&chosen);
+    }
+
+    pub(in crate::editor) fn refresh_popup(&mut self, command: Command) {
+        if matches!(
+            command,
+            Command::CompletionNext | Command::CompletionPrevious
+        ) {
+            return;
+        }
+        let buffer = self.buffers.current();
+        let point = buffer.point();
+        self.prompts.refresh_popup(buffer.id(), |start| {
+            (point >= start).then(|| buffer.text_in(start..point))
+        });
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::editor::Editor;

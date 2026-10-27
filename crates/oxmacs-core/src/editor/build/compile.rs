@@ -45,7 +45,7 @@ impl Editor {
                 .last_command()
                 .unwrap_or(DEFAULT_COMMAND)
                 .to_owned();
-            self.set_minibuffer_input(&command);
+            self.prompts.set_input(&command);
         }
     }
 

@@ -131,23 +131,29 @@ fn plain(key: Key) -> Option<char> {
     }
 }
 
-impl Editor {
-    pub fn open_transient(&mut self, transient: Transient) {
+pub(in crate::editor) enum TransientKey {
+    Closed,
+    Done,
+    Undefined(String),
+    Run(Run, Vec<String>),
+}
+
+impl Transients {
+    fn open(&mut self, transient: Transient) {
         let on = self
-            .transients
             .remembered
             .get(&transient.title)
             .cloned()
             .unwrap_or_default();
-        self.transients.open = Some(Open {
+        self.open = Some(Open {
             transient,
             on,
             switching: false,
         });
     }
 
-    pub fn transient(&self) -> Option<TransientView> {
-        let open = self.transients.open.as_ref()?;
+    fn view(&self) -> Option<TransientView> {
+        let open = self.open.as_ref()?;
         let groups = open
             .transient
             .groups
@@ -179,19 +185,18 @@ impl Editor {
         })
     }
 
-    pub(in crate::editor) fn transient_key(&mut self, key: Key) -> bool {
-        let Some(open) = self.transients.open.as_mut() else {
-            return false;
+    fn key(&mut self, key: Key) -> TransientKey {
+        let Some(open) = self.open.as_mut() else {
+            return TransientKey::Closed;
         };
         let quits = key == Key::new(KeyCode::Char('g'), Modifiers::CONTROL)
             || (plain(key) == Some('q') && !open.switching);
         if quits {
-            self.transients.open = None;
-            return true;
+            self.open = None;
+            return TransientKey::Done;
         }
         let Some(character) = plain(key) else {
-            self.show_message(format!("{key} is undefined here"));
-            return true;
+            return TransientKey::Undefined(format!("{key} is undefined here"));
         };
         if open.switching {
             open.switching = false;
@@ -202,21 +207,19 @@ impl Editor {
                 .flat_map(|group| &group.switches)
                 .find(|switch| switch.key == character)
                 .map(|switch| switch.flag.clone());
-            match found {
-                Some(flag) => {
-                    if let Some(at) = open.on.iter().position(|on| *on == flag) {
-                        open.on.remove(at);
-                    } else {
-                        open.on.push(flag);
-                    }
-                }
-                None => self.show_message(format!("-{character} is undefined here")),
+            let Some(flag) = found else {
+                return TransientKey::Undefined(format!("-{character} is undefined here"));
+            };
+            if let Some(at) = open.on.iter().position(|on| *on == flag) {
+                open.on.remove(at);
+            } else {
+                open.on.push(flag);
             }
-            return true;
+            return TransientKey::Done;
         }
         if character == '-' {
             open.switching = true;
-            return true;
+            return TransientKey::Done;
         }
         let found = open
             .transient
@@ -226,16 +229,33 @@ impl Editor {
             .find(|action| action.key == character)
             .map(|action| action.run.clone());
         let Some(run) = found else {
-            self.show_message(format!("{character} is undefined here"));
-            return true;
+            return TransientKey::Undefined(format!("{character} is undefined here"));
         };
-        let Some(open) = self.transients.open.take() else {
-            return true;
+        let Some(open) = self.open.take() else {
+            return TransientKey::Done;
         };
-        self.transients
-            .remembered
+        self.remembered
             .insert(open.transient.title, open.on.clone());
-        run(self, &open.on);
+        TransientKey::Run(run, open.on)
+    }
+}
+
+impl Editor {
+    pub fn open_transient(&mut self, transient: Transient) {
+        self.prompts.transients.open(transient);
+    }
+
+    pub fn transient(&self) -> Option<TransientView> {
+        self.prompts.transients.view()
+    }
+
+    pub(in crate::editor) fn transient_key(&mut self, key: Key) -> bool {
+        match self.prompts.transients.key(key) {
+            TransientKey::Closed => return false,
+            TransientKey::Done => {}
+            TransientKey::Undefined(told) => self.show_message(told),
+            TransientKey::Run(run, on) => run(self, &on),
+        }
         true
     }
 }
@@ -243,6 +263,31 @@ impl Editor {
 mod tests {
     use super::*;
     use crate::testing::press;
+
+    #[test]
+    fn transients_hand_back_the_chosen_action_with_its_switches() {
+        let mut transients = Transients::default();
+        transients.open(Transient::new(
+            "Push",
+            vec![
+                Group::new("Arguments")
+                    .switch('f', "--force", "Force")
+                    .action('p', "Push", |_, _| {}),
+            ],
+        ));
+        let key = |character| Key::new(KeyCode::Char(character), Modifiers::empty());
+
+        assert!(matches!(transients.key(key('-')), TransientKey::Done));
+        assert!(matches!(transients.key(key('f')), TransientKey::Done));
+        assert!(
+            matches!(transients.key(key('x')), TransientKey::Undefined(told) if told == "x is undefined here")
+        );
+        let TransientKey::Run(_, on) = transients.key(key('p')) else {
+            panic!("p should run the push");
+        };
+        assert_eq!(on, ["--force"]);
+        assert!(matches!(transients.key(key('p')), TransientKey::Closed));
+    }
 
     #[derive(Debug, Default)]
     struct Ran(Vec<String>);

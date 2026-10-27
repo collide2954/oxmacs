@@ -75,27 +75,27 @@ impl Editor {
     }
 
     pub(in crate::editor) fn exit_replace_prompt(&mut self, purpose: Purpose) {
-        let input = self.minibuffer_input();
+        let input = self.prompts.input();
         match purpose {
             Purpose::ReplaceFrom(regex) if input.is_empty() => {
-                self.minibuffer = None;
+                self.prompts.done_reading();
                 if let Some((from, to)) = self.last_replacements[usize::from(regex)].clone() {
                     self.start_replace(from, to, regex);
                 }
             }
             Purpose::ReplaceFrom(regex) if Pattern::new(&input, regex).is_err() => {
-                if let Some(minibuffer) = &mut self.minibuffer {
+                if let Some(minibuffer) = self.prompts.minibuffer_mut() {
                     minibuffer.note = Some("[Invalid regexp]".to_owned());
                 }
             }
             Purpose::ReplaceFrom(regex) => {
-                self.minibuffer = None;
+                self.prompts.done_reading();
                 self.ask_replacement(input, regex);
             }
             Purpose::ReplaceTo(regex) => {
                 let from = self
-                    .minibuffer
-                    .take()
+                    .prompts
+                    .done_reading()
                     .map(|minibuffer| minibuffer.from)
                     .unwrap_or_default();
                 self.start_replace(from, input, regex);
@@ -107,7 +107,7 @@ impl Editor {
     pub(in crate::editor) fn ask_replacement(&mut self, from: String, regex: bool) {
         let prompt = format!("Query replace {}{from} with: ", regexp_word(regex));
         if self.open_minibuffer(&prompt, Purpose::ReplaceTo(regex))
-            && let Some(minibuffer) = &mut self.minibuffer
+            && let Some(minibuffer) = self.prompts.minibuffer_mut()
         {
             minibuffer.from = from;
         }

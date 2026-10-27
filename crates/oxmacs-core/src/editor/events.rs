@@ -262,7 +262,7 @@ impl Editor {
         let Some(KeyCode::Char(typed)) = self.last_key.map(Key::code) else {
             return false;
         };
-        if self.minibuffer.is_some() || !self.hears(SpecialBuffer::hears_typing) {
+        if self.prompts.reading() || !self.hears(SpecialBuffer::hears_typing) {
             return false;
         }
         let buffer = self.buffers.current().id();
