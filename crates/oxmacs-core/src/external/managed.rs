@@ -1,9 +1,10 @@
 use std::ffi::OsStr;
 use std::fmt::Write;
+use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::{env, fs};
 
+use flate2::read::GzDecoder;
 use ring::digest::{SHA256, digest};
 use serde::Deserialize;
 
@@ -264,26 +265,16 @@ pub fn install(
             "{archive_name} does not match its published checksum"
         ));
     }
+    let binary = extract(archive_name, archive, &tool.binary())?;
     let folder = root.join(tool.name);
-    fs::create_dir_all(&folder).map_err(|error| error.to_string())?;
-    let unpacking = tempfile::Builder::new()
-        .prefix(".unpacking")
-        .tempdir_in(&folder)
-        .map_err(|error| error.to_string())?;
-    let saved = unpacking.path().join(archive_name);
-    fs::write(&saved, archive).map_err(|error| error.to_string())?;
-    let contents = unpacking.path().join("contents");
-    fs::create_dir_all(&contents).map_err(|error| error.to_string())?;
-    unpack(&saved, &contents)?;
-    let binary = find_file(&contents, &tool.binary())
-        .ok_or_else(|| format!("{archive_name} has no {}", tool.binary()))?;
     let target = folder.join(version);
     if target.exists() {
         fs::remove_dir_all(&target).map_err(|error| error.to_string())?;
     }
     fs::create_dir_all(&target).map_err(|error| error.to_string())?;
     let installed = target.join(tool.binary());
-    fs::rename(&binary, &installed).map_err(|error| error.to_string())?;
+    oxmacs_files::write(&installed, &binary, oxmacs_files::NewFile::Shared)
+        .map_err(|error| error.to_string())?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -320,50 +311,54 @@ fn hex(bytes: &[u8]) -> String {
         })
 }
 
-fn tar() -> PathBuf {
-    if cfg!(windows)
-        && let Some(system) = env::var_os("SystemRoot")
-    {
-        let bundled = PathBuf::from(system).join("System32").join("tar.exe");
-        if bundled.is_file() {
-            return bundled;
+fn named(path: &Path, name: &str) -> bool {
+    path.file_name().is_some_and(|found| found == name)
+}
+
+fn from_zip(archive: &[u8], name: &str) -> io::Result<Option<Vec<u8>>> {
+    let mut zip = zip::ZipArchive::new(Cursor::new(archive)).map_err(io::Error::other)?;
+    for index in 0..zip.len() {
+        let mut file = zip.by_index(index).map_err(io::Error::other)?;
+        if file.is_file() && file.enclosed_name().is_some_and(|path| named(&path, name)) {
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes)?;
+            return Ok(Some(bytes));
         }
     }
-    PathBuf::from("tar")
+    Ok(None)
 }
 
-fn unpack(archive: &Path, into: &Path) -> Result<(), String> {
-    let mut command = Command::new(tar());
-    command.arg("-xf").arg(archive).arg("-C").arg(into);
-    let output =
-        oxmacs_process::run(&mut command, None).map_err(|error| format!("tar: {error}"))?;
-    if output.status.success() {
-        return Ok(());
+fn from_tar(archive: &[u8], name: &str) -> io::Result<Option<Vec<u8>>> {
+    let mut tar = tar::Archive::new(GzDecoder::new(archive));
+    for entry in tar.entries()? {
+        let mut entry = entry?;
+        if entry.header().entry_type().is_file() && named(&entry.path()?, name) {
+            let mut bytes = Vec::new();
+            entry.read_to_end(&mut bytes)?;
+            return Ok(Some(bytes));
+        }
     }
-    let error = String::from_utf8_lossy(&output.stderr);
-    Err(format!("tar: {}", error.lines().next().unwrap_or("failed")))
+    Ok(None)
 }
 
-fn find_file(directory: &Path, name: &str) -> Option<PathBuf> {
-    let entries: Vec<PathBuf> = fs::read_dir(directory)
-        .ok()?
-        .flatten()
-        .map(|entry| entry.path())
-        .collect();
-    entries
-        .iter()
-        .find(|path| path.is_file() && path.file_name().is_some_and(|file| file == name))
-        .cloned()
-        .or_else(|| {
-            entries
-                .iter()
-                .filter(|path| path.is_dir())
-                .find_map(|path| find_file(path, name))
-        })
+fn extract(archive_name: &str, archive: &[u8], name: &str) -> Result<Vec<u8>, String> {
+    let found = if archive_name.ends_with(".zip") {
+        from_zip(archive, name)
+    } else {
+        from_tar(archive, name)
+    };
+    found
+        .map_err(|error| format!("{archive_name} can't be unpacked: {error}"))?
+        .ok_or_else(|| format!("{archive_name} has no {name}"))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write as _;
+
+    use flate2::Compression;
+    use flate2::write::GzEncoder;
+
     use super::*;
 
     const LATEST: &str = r#"{
@@ -464,23 +459,59 @@ mod tests {
     }
 
     fn packed(tool: Managed, folder: &str, contents: &str) -> (tempfile::TempDir, Vec<u8>) {
-        let dir = tempfile::tempdir().unwrap();
-        let top = folder.split('/').next().unwrap_or(folder);
-        let inside = dir.path().join(folder);
-        fs::create_dir_all(&inside).unwrap();
-        fs::write(inside.join(tool.binary()), contents).unwrap();
-        let archive = dir.path().join("packed.tar.gz");
-        let status = Command::new(tar())
-            .arg("-czf")
-            .arg(&archive)
-            .arg("-C")
-            .arg(dir.path())
-            .arg(top)
-            .status()
+        let mut builder = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::fast()));
+        let mut readme = tar::Header::new_gnu();
+        readme.set_size(5);
+        readme.set_cksum();
+        builder
+            .append_data(&mut readme, format!("{folder}/README"), &b"read\n"[..])
             .unwrap();
-        assert!(status.success());
-        let bytes = fs::read(&archive).unwrap();
-        (dir, bytes)
+        let mut header = tar::Header::new_gnu();
+        header.set_size(contents.len() as u64);
+        header.set_mode(0o755);
+        header.set_cksum();
+        builder
+            .append_data(
+                &mut header,
+                format!("{folder}/{}", tool.binary()),
+                contents.as_bytes(),
+            )
+            .unwrap();
+        let bytes = builder.into_inner().unwrap().finish().unwrap();
+        (tempfile::tempdir().unwrap(), bytes)
+    }
+
+    fn zipped(tool: Managed, folder: &str, contents: &str) -> Vec<u8> {
+        let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        zip.start_file(format!("{folder}/{}", tool.binary()), options)
+            .unwrap();
+        zip.write_all(contents.as_bytes()).unwrap();
+        zip.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn zip_archives_give_up_their_binary_and_nothing_else() {
+        let root = tempfile::tempdir().unwrap();
+        let bytes = zipped(AIR, "air-x86_64-pc-windows-msvc", "zipped binary");
+
+        let installed = install(
+            AIR,
+            "0.12.0",
+            "air-x86_64-pc-windows-msvc.zip",
+            &bytes,
+            &format!("{} *air.zip\n", hex(&bytes)),
+            root.path(),
+        )
+        .unwrap();
+
+        assert_eq!(fs::read_to_string(&installed).unwrap(), "zipped binary");
+        assert_eq!(
+            fs::read_dir(installed.parent().unwrap()).unwrap().count(),
+            1
+        );
+        assert_eq!(fs::read_dir(root.path().join("air")).unwrap().count(), 1);
     }
 
     fn checksum_of(bytes: &[u8]) -> String {

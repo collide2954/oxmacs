@@ -50,6 +50,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- Tools installed from `M-x list-tools` are unpacked inside oxmacs instead of by the system's `tar`, taking out only the tool's own file.
 - Plugins keep their own files in `~/.oxmacs/data`, one folder each: the vault, calendars, EPUB places, IRC logs, R history and your copy of the tutorial move there the first time each is used, and nothing is deleted. `remote`'s copies of remote files move to the system's cache. The manual's start page lists where oxmacs keeps everything.
 - With `OXMACS_HOME` set, installed tools, recovery copies and crash logs move under that folder too, in `tools` and `cache`, so two homes no longer share them; without it they stay in the system's data and cache folders.
 - One `delete-to-trash` editor setting, on by default, decides whether deleting moves files to the system's trash, for `dired` 0.3.0, `explorer` 0.2.0 and discarding in `git` 0.4.0; their own `delete-to-trash` and `discard-to-trash` settings are gone. Moving a file onto one that exists asks the same question everywhere and moves the buffers visiting it along.
