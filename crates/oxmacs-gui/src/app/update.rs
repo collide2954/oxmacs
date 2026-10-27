@@ -271,6 +271,7 @@ impl App {
         }
         self.ox.tick(&mut self.editor);
         self.settle();
+        self.sync_reveal();
         self.fade_theme_from(shown);
         if self.editor.should_quit() {
             self.quit();
@@ -310,7 +311,6 @@ impl App {
                 {
                     self.last_input = self.now;
                     self.editor.handle_key(key);
-                    self.sync_reveal();
                 }
             }
             _ => {}

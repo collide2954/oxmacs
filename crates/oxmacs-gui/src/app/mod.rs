@@ -1008,6 +1008,18 @@ mod tests {
     }
 
     #[test]
+    fn completions_fade_in_when_the_minibuffer_opens_without_a_key() {
+        let mut app = App::default();
+
+        app.editor
+            .execute(oxmacs_core::command::Command::DescribeCommand);
+        let _ = app.update(Message::Clock);
+        let _ = app.update(Message::Tick(later()));
+
+        assert!((app.completion_opacity() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
     fn completions_appear_at_once_without_animations() {
         let config = configured(&json!({"animations": false}));
         let mut app = App::new(&config);
