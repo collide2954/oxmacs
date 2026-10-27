@@ -41,7 +41,7 @@ oxmacs is moving its features into Ox, an extension language of its own: a moder
 cargo run -p ox -- hello.ox
 ```
 
-Most of oxmacs is bundled Ox plugins. Those on by default load the first time you use them; opt-in plugins stay off until `(use-plugin name)` in `init.ox`. The rest of the former Cargo-feature applets (Atlas, the database browser, the extra themes and the animated start screen) return the same way.
+Most of oxmacs is bundled Ox plugins. Those on by default load the first time you use them; opt-in plugins stay off until `(use-plugin name)` in `init.ox`.
 
 | Plugin | Version | Default | What it does |
 | --- | --- | --- | --- |
