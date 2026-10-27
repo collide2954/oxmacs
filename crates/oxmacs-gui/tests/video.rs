@@ -2250,3 +2250,193 @@ fn acid_base_video() {
     film.hold(2.0);
     film.finish(&out);
 }
+
+fn hole_home() -> PathBuf {
+    let user = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap();
+    let home = user.join("oxmacs-hole-demo");
+    if home.join(".oxmacs-demo").exists() {
+        fs::remove_dir_all(&home).unwrap();
+    }
+    assert!(
+        !home.exists(),
+        "{} exists and wasn't made by this demo",
+        home.display()
+    );
+    fs::create_dir_all(&home).unwrap();
+    fs::write(home.join(".oxmacs-demo"), "").unwrap();
+    fs::write(
+        home.join("init.ox"),
+        "(settings {theme: :adwaita-dark animations: false font-size: 11})\n(use-plugin rodeo)\n(use-plugin keycast :config {placement: :bottom-center})\n",
+    )
+    .unwrap();
+    fs::write(home.join("black-hole.ox"), "").unwrap();
+    home
+}
+
+const FRAME: f64 = 1.0 / 30.0;
+
+fn lapse(film: &mut Film, app: &mut App, text: &str) {
+    let mut pending = 0;
+    for c in text.chars() {
+        if c == '\n' {
+            settle(app);
+            if app.editor().pane().popup().is_some() {
+                keys(app, "C-g");
+            }
+            keys(app, "RET");
+        } else {
+            type_char(app, c);
+        }
+        pending += 1;
+        if pending == 4 {
+            settle(app);
+            film.shot(app, FRAME);
+            pending = 0;
+        }
+    }
+    settle(app);
+    if app.editor().pane().popup().is_some() {
+        keys(app, "C-g");
+    }
+    film.shot(app, FRAME);
+}
+
+fn quick(film: &mut Film, app: &mut App, notation: &str) {
+    for chord in notation.split(' ') {
+        keys(app, chord);
+        settle(app);
+        film.shot(app, FRAME * 2.0);
+    }
+}
+
+fn erase(film: &mut Film, app: &mut App, count: usize) {
+    for _ in 0..count {
+        keys(app, "DEL");
+    }
+    settle(app);
+    film.shot(app, FRAME * 3.0);
+}
+
+fn jump(film: &mut Film, app: &mut App, text: &str) {
+    quick(film, app, "M-< C-s");
+    lapse(film, app, text);
+    quick(film, app, "RET");
+}
+
+fn run(film: &mut Film, app: &mut App, name: &str) {
+    quick(film, app, "M-x");
+    lapse(film, app, name);
+    quick(film, app, "RET");
+}
+
+const HOLE_SKY: &str = "(module (import (ox rodeo) (ox math)))
+
+(rodeo/screen 600 640 :smooth true)
+
+(def (draw)
+(let [t (rodeo/time)]
+(rodeo/black-hole [0 0 600 640] :lensing false
+:turn (* 0.02 t))))";
+
+fn hole_sky(film: &mut Film, app: &mut App) {
+    film.mark("sky");
+    film.shot(app, 1.5);
+    lapse(film, app, HOLE_SKY);
+    quick(film, app, "C-x C-s");
+    run(film, app, "rodeo-play");
+    settle(app);
+    film.play(app, 6.0);
+}
+
+fn hole_gravity(film: &mut Film, app: &mut App) {
+    film.mark("gravity");
+    quick(film, app, "C-x o");
+    jump(film, app, ":lensing false");
+    erase(film, app, 15);
+    quick(film, app, "C-M-x");
+    film.play(app, 8.0);
+}
+
+fn hole_disk(film: &mut Film, app: &mut App) {
+    film.mark("disk");
+    jump(film, app, "(* 0.02 t)");
+    lapse(
+        film,
+        app,
+        "\n:disk {outer: 12}\n:time (* 8 t) :doppler false :redshift false",
+    );
+    quick(film, app, "C-M-x");
+    film.play(app, 8.0);
+}
+
+fn hole_shifts(film: &mut Film, app: &mut App) {
+    film.mark("shifts");
+    jump(film, app, ":doppler false :redshift false");
+    erase(film, app, 31);
+    quick(film, app, "C-M-x");
+    film.play(app, 8.0);
+}
+
+fn hole_tilt(film: &mut Film, app: &mut App) {
+    film.mark("tilt");
+    jump(film, app, ":time (* 8 t)");
+    lapse(film, app, "\n:tilt (- 0.7 (* 0.6 (math/sin (/ t 4))))");
+    quick(film, app, "C-M-x");
+    film.play(app, 12.0);
+}
+
+fn hole_collapse(film: &mut Film, app: &mut App) {
+    film.mark("collapse");
+    jump(film, app, "(def (draw)");
+    quick(film, app, "C-a");
+    lapse(
+        film,
+        app,
+        "(def (radius t)\n(+ 1 (* 7 (math/exp (/ t -2.5)))))\n\n(def (glow t)\n(math/clamp (/ (- t 10) 3) 0 1))\n\n",
+    );
+    jump(film, app, "outer: 12");
+    lapse(film, app, " brightness: (glow t)");
+    jump(film, app, "(* 0.02 t)");
+    lapse(film, app, "\n:star {radius: (radius t)}");
+    quick(film, app, "C-x C-s");
+    run(film, app, "rodeo-restart");
+    film.mark("formation");
+    film.play(app, 32.0);
+}
+
+#[test]
+#[ignore = "renders a 16:9 video of a black hole simulation built in rodeo, its building sped up, into $OXMACS_HOLE_VIDEO"]
+fn black_hole_video() {
+    let Ok(out) = std::env::var("OXMACS_HOLE_VIDEO") else {
+        return;
+    };
+    let out = PathBuf::from(out);
+    let home = hole_home();
+    PUMPING.set(true);
+    let mut film = Film::new(out.with_extension("frames"))
+        .sized(Size::new(1280.0, 720.0))
+        .scaled_to(1280, 720)
+        .ticking(Instant::now());
+    let visit = Visit {
+        path: home.join("black-hole.ox"),
+        line: None,
+        column: None,
+    };
+    let (mut app, booted) = App::boot(&[visit], Some(&home));
+    track(booted);
+    track(app.update(Message::Focus(true)));
+    settle(&mut app);
+    hole_sky(&mut film, &mut app);
+    hole_gravity(&mut film, &mut app);
+    if std::env::var_os("OXMACS_HOLE_SHORT").is_none() {
+        hole_disk(&mut film, &mut app);
+        hole_shifts(&mut film, &mut app);
+        hole_tilt(&mut film, &mut app);
+        hole_collapse(&mut film, &mut app);
+    }
+    film.hold(2.0);
+    film.finish(&out);
+}
