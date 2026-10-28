@@ -4,7 +4,6 @@ use ox_lang::heap::{Heap, Hold};
 use ox_lang::native::expected;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::Editor;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Highlight, NICK_COLORS};
@@ -45,7 +44,6 @@ struct Open {
     function: Hold,
     callbacks: Vec<Hold>,
     buffer: BufferId,
-    scope: ScopeId,
     resized: Option<Hold>,
     size: Option<(u32, u32)>,
     failed: Option<String>,
@@ -301,28 +299,6 @@ pub fn install(isolate: &mut Isolate) {
         .host::<Editor>(open);
 }
 
-fn keys(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, Error> {
-    let name = |value: Value| match value {
-        Value::Keyword(name) | Value::Symbol(name) => name.name().to_owned(),
-        _ => print::display(heap, value),
-    };
-    heap.entries(value)
-        .ok_or_else(|| {
-            expected(
-                heap,
-                "open-view",
-                "a map of keys to commands for :keys",
-                value,
-            )
-        })
-        .map(|entries| {
-            entries
-                .into_iter()
-                .map(|(key, command)| (name(key), name(command)))
-                .collect()
-        })
-}
-
 pub(crate) fn buffer_name(
     heap: &Heap,
     editor: &Editor,
@@ -332,8 +308,9 @@ pub(crate) fn buffer_name(
     crate::api::handles::name(heap, editor, native, value)
 }
 
-const OPEN_VIEW: [&str; 7] = [
+const OPEN_VIEW: [&str; 8] = [
     "keys",
+    "label",
     "beside",
     "select",
     "show",
@@ -352,7 +329,7 @@ fn existing(editor: &Editor, name: &str, file: Option<&std::path::Path>) -> Opti
 
 fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = buffer_name(heap, editor, "open-view", arguments[0])?;
-    let [keyed, beside, select, show, resized, watched, file] = [
+    let [keyed, label, beside, select, show, resized, watched, file] = [
         arguments[2],
         arguments[3],
         arguments[4],
@@ -360,12 +337,17 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         arguments[6],
         arguments[7],
         arguments[8],
+        arguments[9],
     ];
     let file = (file != Value::Nil)
         .then(|| editor.absolute(std::path::Path::new(&print::display(heap, file))));
     let bindings = match keyed {
         Value::Nil => Vec::new(),
-        keyed => keys(heap, keyed)?,
+        keyed => crate::api::commands::key_bindings(heap, "open-view", keyed)?,
+    };
+    let scope = match label {
+        Value::Nil => editor.scope_named(&name),
+        label => editor.scope_named(&print::display(heap, label)),
     };
     let (beside, select) = (beside.truthy(), select.truthy());
     let show = show == Value::Nil || show.truthy();
@@ -398,7 +380,6 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         }
         index
     } else {
-        let scope = editor.add_scope(Box::leak(name.clone().into_boxed_str()));
         let buffer = editor.add_special_buffer_with(&name, |buffer| {
             buffer.set_read_only(true);
             ViewBuffer {
@@ -415,27 +396,20 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             function,
             callbacks: Vec::new(),
             buffer,
-            scope,
             resized,
             size: None,
             failed: None,
         });
         views.open.len() - 1
     };
-    let (buffer, scope) = (views.open[index].buffer, views.open[index].scope);
+    let buffer = views.open[index].buffer;
     views.dirty = true;
     editor.set_plugin_state(views);
     if let Some((_, view)) = editor.special_buffer_mut::<ViewBuffer>(buffer) {
         view.watched = watched;
+        view.scope = scope;
     }
-    for (keys, command) in bindings {
-        let id = editor
-            .command_named(&command)
-            .ok_or_else(|| Error::new(format!("There is no command named {command}")))?;
-        editor
-            .bind(scope, &keys, id)
-            .map_err(|error| Error::new(format!("{keys}: {error}")))?;
-    }
+    crate::api::commands::bind_keys(editor, scope, &bindings)?;
     if show {
         crate::api::buffers::reveal(editor, buffer, beside, select);
     }

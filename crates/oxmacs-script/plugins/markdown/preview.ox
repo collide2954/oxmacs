@@ -40,7 +40,7 @@
   (let [file (buffer-file)
         name "*Markdown: {(if file (path/name file) (buffer-name))}*"
         state (atom {text: (buffer-text) folder: (if file (path/parent file) (default-directory)) source: file})
-        buffer (open-buffer name [] :beside true
+        buffer (open-buffer name [] :beside true :label "Markdown previews"
                             :keys {"RET" 'follow-link "TAB" 'next-link "S-TAB" 'previous-link
                                    "g" 'markdown-preview-refresh "q" 'quit-window}
                             :on-resize (fn [_] (draw name))

@@ -12,6 +12,7 @@ use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
+use crate::api::commands::{bind_keys, key_bindings};
 use crate::api::lines::{self, Line};
 
 type Pills = Vec<(Range<usize>, Highlight)>;
@@ -405,26 +406,6 @@ fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<us
     }
 }
 
-fn keys(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, Error> {
-    let name = |value: Value| match value {
-        Value::Keyword(name) | Value::Symbol(name) => name.name().to_owned(),
-        _ => print::display(heap, value),
-    };
-    heap.entries(value)
-        .map(|entries| {
-            entries
-                .into_iter()
-                .map(|(key, command)| (name(key), name(command)))
-                .collect()
-        })
-        .ok_or_else(|| {
-            Error::new(format!(
-                "open-buffer expects a map of keys to commands for :keys, got {}",
-                print::brief(heap, value)
-            ))
-        })
-}
-
 #[derive(Default)]
 struct Options {
     bindings: Vec<(String, String)>,
@@ -439,6 +420,7 @@ struct Options {
     dropped: Option<Value>,
     typed: Option<Value>,
     linked: Option<Value>,
+    label: Option<String>,
     line_cursor: Option<bool>,
     line: Option<usize>,
     unsaved: Option<bool>,
@@ -446,8 +428,9 @@ struct Options {
     hidden: bool,
 }
 
-const OPEN_BUFFER: [&str; 17] = [
+const OPEN_BUFFER: [&str; 18] = [
     "keys",
+    "label",
     "directory",
     "file",
     "watch",
@@ -470,7 +453,8 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
     let mut found = Options::default();
     for (option, value) in given(&OPEN_BUFFER, slots) {
         match option {
-            "keys" => found.bindings = keys(heap, value)?,
+            "keys" => found.bindings = key_bindings(heap, "open-buffer", value)?,
+            "label" => found.label = Some(print::display(heap, value)),
             "directory" => found.directory = Some(PathBuf::from(print::display(heap, value))),
             "file" => found.file = Some(PathBuf::from(print::display(heap, value))),
             "watch" => found.watched = Some(PathBuf::from(print::display(heap, value))),
@@ -514,24 +498,6 @@ fn hold(heap: &mut Heap, old: Option<Hold>, value: Option<Value>) -> Option<Hold
     Some(heap.hold(value))
 }
 
-fn bind(editor: &mut Editor, id: BufferId, bindings: Vec<(String, String)>) -> Result<(), Error> {
-    let Some(scope) = editor
-        .special_buffer::<LinesBuffer>(id)
-        .map(|(_, view)| view.scope)
-    else {
-        return Ok(());
-    };
-    for (keys, command) in bindings {
-        let command_id = editor
-            .command_named(&command)
-            .ok_or_else(|| Error::new(format!("There is no command named {command}")))?;
-        editor
-            .bind(scope, &keys, command_id)
-            .map_err(|error| Error::new(format!("{keys}: {error}")))?;
-    }
-    Ok(())
-}
-
 pub(crate) fn reveal(editor: &mut Editor, id: BufferId, beside: bool, select: bool) {
     if !beside {
         editor.show_buffer(id);
@@ -555,8 +521,8 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             .filter(|id| editor.special_buffer::<LinesBuffer>(*id).is_some()),
         None => special_buffer(editor, &name),
     };
+    let scope = editor.scope_named(given.label.as_deref().unwrap_or(&name));
     let id = found.unwrap_or_else(|| {
-        let scope = editor.add_scope(Box::leak(name.clone().into_boxed_str()));
         editor.add_special_buffer_with(&name, |buffer| {
             buffer.set_read_only(true);
             LinesBuffer {
@@ -617,7 +583,10 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             view.line_cursor = line_cursor;
         }
     }
-    bind(editor, id, given.bindings)?;
+    if let Some((_, view)) = editor.special_buffer_mut::<LinesBuffer>(id) {
+        view.scope = scope;
+    }
+    bind_keys(editor, scope, &given.bindings)?;
     if !given.hidden {
         reveal(editor, id, given.beside, given.select);
     }
@@ -973,6 +942,33 @@ mod tests {
         press(&mut editor, &mut ox, "n");
 
         assert_eq!(ox.eval(&mut editor, "(current-line)").unwrap(), "2");
+    }
+
+    #[test]
+    fn buffers_with_one_label_share_its_keys_and_reopening_reuses_them() {
+        let (mut editor, mut ox) = opened(
+            r#"(defcommand next-one "Next" (goto-line (+ (current-line) 1))) (open-buffer "a.d" ["a" "b"] :label "listings" :keys {n: 'next-one}) (open-buffer "b.d" ["c" "d"] :label "listings") (open-buffer "*solo*" ["e"])"#,
+        );
+        let scope = |editor: &Editor, name: &str| {
+            let id = editor.buffer_named(name).unwrap();
+            editor
+                .special_buffer::<super::LinesBuffer>(id)
+                .unwrap()
+                .1
+                .scope
+        };
+        assert_eq!(scope(&editor, "a.d"), scope(&editor, "b.d"));
+        let solo = scope(&editor, "*solo*");
+
+        ox.eval(
+            &mut editor,
+            r#"(close-buffer "*solo*") (open-buffer "*solo*" ["e"]) (switch-to-buffer "b.d")"#,
+        )
+        .unwrap();
+        press(&mut editor, &mut ox, "n");
+
+        assert_eq!(scope(&editor, "*solo*"), solo);
+        assert_eq!(ox.eval(&mut editor, "(current-line)").unwrap(), "1");
     }
 
     #[test]

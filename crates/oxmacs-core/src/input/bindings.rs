@@ -233,6 +233,7 @@ const TOOLS: &[(&str, Command)] = &[
 pub struct Keymaps {
     maps: Vec<Keymap>,
     labels: Vec<Option<&'static str>>,
+    named: Vec<ScopeId>,
 }
 
 impl Default for Keymaps {
@@ -243,6 +244,7 @@ impl Default for Keymaps {
                 .map(|scope| build(table(*scope)))
                 .collect(),
             labels: Scope::VARIANTS.iter().map(|scope| scope.label()).collect(),
+            named: Vec::new(),
         }
     }
 }
@@ -264,6 +266,19 @@ impl Keymaps {
         self.maps.push(Keymap::default());
         self.labels.push(Some(label));
         ScopeId::at(self.maps.len() - 1)
+    }
+
+    pub fn named(&mut self, label: &str) -> ScopeId {
+        if let Some(scope) = self
+            .named
+            .iter()
+            .find(|scope| self.label(**scope) == Some(label))
+        {
+            return *scope;
+        }
+        let scope = self.add(crate::command::intern(label));
+        self.named.push(scope);
+        scope
     }
 
     pub fn all(&self) -> impl Iterator<Item = (ScopeId, &Keymap)> {

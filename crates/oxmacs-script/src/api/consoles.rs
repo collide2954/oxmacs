@@ -4,7 +4,7 @@ use ox_lang::heap::{Heap, Hold};
 use ox_lang::native::{given, name_of};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::command::ScopeId;
+use oxmacs_core::command::{ScopeId, intern};
 use oxmacs_core::editor::{ConsoleSpec, Editor, JobSpec};
 use oxmacs_core::text::BufferId;
 use regex::Regex;
@@ -30,8 +30,6 @@ enum Heard {
 pub struct Consoles {
     known: Vec<Known>,
     heard: Vec<Heard>,
-    labels: Vec<&'static str>,
-    scopes: Vec<(&'static str, ScopeId)>,
 }
 
 fn consoles(editor: &mut Editor) -> Option<&mut Consoles> {
@@ -153,7 +151,9 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
             }
             "env" => found.env = pairs(heap, value, "env")?,
             "label" => found.label = Some(print::display(heap, value)),
-            "keys" => found.keys = pairs(heap, value, "keys")?,
+            "keys" => {
+                found.keys = crate::api::commands::key_bindings(heap, "console-start", value)?;
+            }
             "on-output" => found.output = Some(value),
             "on-idle" => found.idle = Some(value),
             "on-resize" => found.resized = Some(value),
@@ -174,31 +174,8 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
     Ok(found)
 }
 
-fn leaked(editor: &mut Editor, label: &str) -> &'static str {
-    let Some(consoles) = consoles(editor) else {
-        return "console";
-    };
-    if let Some(known) = consoles.labels.iter().find(|known| **known == label) {
-        return known;
-    }
-    let label: &'static str = Box::leak(label.to_owned().into_boxed_str());
-    consoles.labels.push(label);
-    label
-}
-
-fn scope(editor: &mut Editor, label: &'static str) -> ScopeId {
-    if let Some((_, scope)) = editor
-        .plugin_state::<Consoles>()
-        .and_then(|consoles| consoles.scopes.iter().find(|(known, _)| *known == label))
-    {
-        return *scope;
-    }
-    let title = leaked(editor, &format!("{label} console"));
-    let scope = editor.add_scope(title);
-    if let Some(consoles) = consoles(editor) {
-        consoles.scopes.push((label, scope));
-    }
-    scope
+fn scope(editor: &mut Editor, label: &str) -> ScopeId {
+    editor.scope_named(&format!("{label} console"))
 }
 
 fn pattern_of(pattern: &str) -> Result<Regex, Error> {
@@ -225,19 +202,12 @@ fn start(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Va
     let program = given
         .program
         .ok_or_else(|| Error::new("console-start needs a :program"))?;
-    let label = leaked(editor, given.label.as_deref().unwrap_or(&name));
+    let label = intern(given.label.as_deref().unwrap_or(&name));
     let scope = if given.keys.is_empty() {
         None
     } else {
         let scope = scope(editor, label);
-        for (keys, command) in &given.keys {
-            let id = editor
-                .command_named(command)
-                .ok_or_else(|| Error::new(format!("There is no command named {command}")))?;
-            editor
-                .bind(scope, keys, id)
-                .map_err(|error| Error::new(format!("{keys}: {error}")))?;
-        }
+        crate::api::commands::bind_keys(editor, scope, &given.keys)?;
         Some(scope)
     };
     let existing = editor

@@ -161,7 +161,7 @@
 
 (def (open-book place)
   (let [state (atom {path: place title: (path/stem place) docs: {}})
-        buffer (open-view (path/name place) (render state) :keys book-keys :file place)]
+        buffer (open-view (path/name place) (render state) :keys book-keys :file place :label "EPUB books")]
     (with-buffer buffer (set-buffer-value! :epub state))
     (try
       (let [rootfile (package/rootfile (await (zip/read place "META-INF/container.xml")))

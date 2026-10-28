@@ -476,18 +476,9 @@ fn stubs(editor: &mut Editor, plugin: &Plugin) {
             stub(editor, &plugin.manifest.name, command, summary);
         }
     }
-    for (keys, command) in &plugin.manifest.keys {
-        let Some(id) = editor.command_named(command) else {
-            let missing = format!(
-                "{}'s key {keys} names no command {command}",
-                plugin.manifest.name
-            );
-            log::report(editor, &Error::new(missing), None);
-            continue;
-        };
-        if let Err(error) = editor.bind(Scope::Global, keys, id) {
-            log::report(editor, &Error::new(format!("{keys}: {error}")), None);
-        }
+    for problem in editor.bind_named(Scope::Global.into(), &plugin.manifest.keys) {
+        let problem = format!("{}'s keys: {problem}", plugin.manifest.name);
+        log::report(editor, &Error::new(problem), None);
     }
     for (command, description) in &plugin.manifest.start_screen {
         if let Some(id) = editor.command_named(command) {
@@ -514,15 +505,9 @@ fn bind_mode_keys(editor: &mut Editor, plugin: &str, mode: &str, keys: &[(String
         log::report(editor, &Error::new(missing), None);
         return;
     };
-    for (keys, command) in keys {
-        let Some(id) = editor.command_named(command) else {
-            let missing = format!("{plugin}'s key {keys} in {mode} names no command {command}");
-            log::report(editor, &Error::new(missing), None);
-            continue;
-        };
-        if let Err(error) = editor.bind(scope, keys, id) {
-            log::report(editor, &Error::new(format!("{keys}: {error}")), None);
-        }
+    for problem in editor.bind_named(scope, keys) {
+        let problem = format!("{plugin}'s keys in {mode}: {problem}");
+        log::report(editor, &Error::new(problem), None);
     }
 }
 

@@ -111,7 +111,7 @@
   (refresh name))
 
 (def (make name plots)
-  (with-buffer (open-view name (fn [] (render name)) :keys plot-keys :show false
+  (with-buffer (open-view name (fn [] (render name)) :keys plot-keys :show false :label "R plots"
                           :on-resize (fn [width height] (resized name width height)))
     (set-buffer-value! :r-plots (atom plots)))
   (session/own! name plots.session)

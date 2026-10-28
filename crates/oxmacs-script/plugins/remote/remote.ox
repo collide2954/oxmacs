@@ -69,7 +69,7 @@
 (def (browse! host dir)
   (message (str "Listing " (browser-name host dir) "…"))
   (let [entries (ops/list-dir host dir)
-        buffer (open-buffer (browser-name host dir) (browser-lines entries) :keys browser-keys :line 0)]
+        buffer (open-buffer (browser-name host dir) (browser-lines entries) :keys browser-keys :line 0 :label "remote folders")]
     (set-header buffer [[[(browser-name host dir) :heading]]
                         [["RET visits  ^ up  C copies here  U uploads  R renames  D deletes  + folder  ! runs  s shell  / searches  g refreshes" :comment]]])
     (with-buffer buffer (set-buffer-value! :remote {host: host dir: dir}))

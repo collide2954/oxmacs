@@ -106,7 +106,7 @@
       (when show (switch-to-buffer buffer))
       (let [[lines rows context] (rendered (buffer-entry buffer))]
         (swap! state update-in [:buffers buffer] merge {context: context rows: rows})
-        (open-buffer buffer lines :input (prompt-of (buffer-entry buffer)) :keys chat-keys :show show
+        (open-buffer buffer lines :input (prompt-of (buffer-entry buffer)) :keys chat-keys :show show :label "IRC chats"
                      :on-resize (fn [_] (render! buffer)))))
     buffer))
 
@@ -378,7 +378,7 @@
     (when-let [buffer (buffer-of name old)]
       (when (= (get (buffer-entry buffer) :kind) :query)
         (swap! state assoc-in [:buffers buffer :target] fresh)
-        (open-buffer buffer [] :input (prompt-of (buffer-entry buffer)) :show false)
+        (open-buffer buffer [] :input (prompt-of (buffer-entry buffer)) :show false :label "IRC chats")
         (render! buffer)
         (event! buffer line :nick (str old " is now " fresh))))))
 
@@ -627,7 +627,7 @@
         chosen (vec (filter (fn [channel] (or (has channel.name) (has channel.topic))) listed.channels))
         page (format/channel-lines listed.network chosen (count listed.channels) listed.filter)]
     (if (or show (not (buffer-exists? buffer)))
-      (open-buffer buffer page.lines :keys list-keys :line 0)
+      (open-buffer buffer page.lines :keys list-keys :line 0 :label "IRC channel lists")
       (set-lines buffer page.lines :line 0))
     (set-header buffer page.header)))
 
@@ -839,7 +839,7 @@
 (def (reply-to buffer message)
   "Makes the next message sent from buffer a reply to message, or stops replying with nil."
   (swap! state assoc-in [:buffers buffer :replying] (when message {id: message.id nick: message.nick text: message.text}))
-  (open-buffer buffer [] :input (prompt-of (buffer-entry buffer)) :show false)
+  (open-buffer buffer [] :input (prompt-of (buffer-entry buffer)) :show false :label "IRC chats")
   (render! buffer))
 
 (def (local! buffer kind text tags)

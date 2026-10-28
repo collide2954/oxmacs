@@ -82,7 +82,7 @@
             placed (if (some? line) [:line line] [])]
         (if reveal
           (with-buffer (apply open-buffer pane-name out.lines
-                              (concat [:keys pane-keys :directory state.root :beside true
+                              (concat [:keys pane-keys :directory state.root :beside true :label "git diffs"
                                        :on-resize (fn [_width] (resized git))]
                                       placed))
             (set-buffer-value! :git-pane git))
@@ -142,7 +142,7 @@
     (let [state (ensure-diffs git)
           shown (status/render state.snapshot state.folds state.diffs (now))]
       (with-buffer (open-buffer name shown.lines
-                                :keys status-keys :directory state.root :watch state.metadata
+                                :keys status-keys :directory state.root :watch state.metadata :label "git status"
                                 :on-move (fn [line] (follow git line)))
         (set-buffer-value! :git git))
       (unless known

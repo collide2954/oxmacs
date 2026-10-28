@@ -76,7 +76,7 @@ impl fmt::Debug for DynamicSpec {
 
 const DYNAMIC: usize = 0x4000;
 
-fn intern(text: &str) -> &'static str {
+pub fn intern(text: &str) -> &'static str {
     static KNOWN: LazyLock<Mutex<HashSet<&'static str>>> = LazyLock::new(Mutex::default);
     let mut known = KNOWN.lock().unwrap_or_else(PoisonError::into_inner);
     if let Some(found) = known.get(text) {

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use ox_lang::heap::{Heap, Hold};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::command::{DynamicSpec, Scope};
+use oxmacs_core::command::{DynamicSpec, Scope, ScopeId};
 use oxmacs_core::editor::Editor;
 
 use crate::ide::log;
@@ -54,15 +54,45 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     Ok(Value::symbol(&name))
 }
 
+pub(crate) fn key_bindings(
+    heap: &Heap,
+    native: &str,
+    value: Value,
+) -> Result<Vec<(String, String)>, Error> {
+    let name = |value: Value| match value {
+        Value::Keyword(name) | Value::Symbol(name) => name.name().to_owned(),
+        _ => print::display(heap, value),
+    };
+    heap.entries(value)
+        .map(|entries| {
+            entries
+                .into_iter()
+                .map(|(key, command)| (name(key), name(command)))
+                .collect()
+        })
+        .ok_or_else(|| {
+            Error::new(format!(
+                "{native} expects a map of keys to commands for :keys, got {}",
+                print::brief(heap, value)
+            ))
+        })
+}
+
+pub(crate) fn bind_keys(
+    editor: &mut Editor,
+    scope: ScopeId,
+    bindings: &[(String, String)],
+) -> Result<(), Error> {
+    match editor.bind_named(scope, bindings).into_iter().next() {
+        Some(problem) => Err(Error::new(problem)),
+        None => Ok(()),
+    }
+}
+
 fn bind(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let keys = print::display(heap, arguments[0]);
     let name = name_of(heap, arguments[1])?;
-    let command = editor
-        .command_named(&name)
-        .ok_or_else(|| Error::new(format!("There is no command named {name}")))?;
-    editor
-        .bind(Scope::Global, &keys, command)
-        .map_err(|error| Error::new(format!("{keys}: {error}")))?;
+    bind_keys(editor, Scope::Global.into(), &[(keys, name)])?;
     Ok(Value::Nil)
 }
 

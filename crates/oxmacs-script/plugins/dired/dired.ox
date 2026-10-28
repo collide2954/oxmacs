@@ -62,7 +62,7 @@
 
 (def (show listing focus)
   (let [buffer (open-buffer listing.directory (l/render listing (time/now))
-                            :keys listing-keys :directory listing.directory)
+                            :keys listing-keys :directory listing.directory :label "dired")
         listing (assoc listing :buffer buffer)]
     (set-header buffer (l/header listing))
     (with-buffer buffer

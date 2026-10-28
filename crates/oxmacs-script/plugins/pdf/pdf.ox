@@ -91,7 +91,7 @@
 (def (open-document place)
   (let [state (atom {path: place zoom: (start-zoom) continuous: (setting :continuous)
                      dark: (setting :theme-colors)})]
-    (with-buffer (open-view (path/name place) (render state) :keys doc-keys :file place)
+    (with-buffer (open-view (path/name place) (render state) :keys doc-keys :file place :label "PDF documents")
       (set-buffer-value! :pdf state))
     (load state)
     (let [doc @state]

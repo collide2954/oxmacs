@@ -625,6 +625,24 @@ impl Editor {
         self.keymaps.add(label)
     }
 
+    pub fn scope_named(&mut self, label: &str) -> ScopeId {
+        self.keymaps.named(label)
+    }
+
+    pub fn bind_named(&mut self, scope: ScopeId, bindings: &[(String, String)]) -> Vec<String> {
+        let mut problems = Vec::new();
+        for (keys, command) in bindings {
+            let Some(id) = self.command_named(command) else {
+                problems.push(format!("There is no command named {command}"));
+                continue;
+            };
+            if let Err(error) = self.bind(scope, keys, id) {
+                problems.push(format!("{keys}: {error}"));
+            }
+        }
+        problems
+    }
+
     pub fn bind(
         &mut self,
         scope: impl Into<ScopeId>,
@@ -743,6 +761,34 @@ mod tests {
             help.iter()
                 .any(|line| line.ends_with("greeting buffers") && line.starts_with("Works in")),
             "{help:?}"
+        );
+    }
+
+    #[test]
+    fn named_scopes_are_made_once_per_label_apart_from_mode_scopes() {
+        let mut editor = Editor::new();
+        let mode = editor.add_scope("Notes");
+
+        let first = editor.scope_named("Notes");
+        let again = editor.scope_named(&String::from("Notes"));
+        let other = editor.scope_named("PDF documents");
+
+        assert_eq!(first, again);
+        assert_ne!(first, mode);
+        assert_ne!(first, other);
+        assert_eq!(
+            editor.bind_named(
+                first,
+                &[
+                    ("q".to_owned(), "quit-window".to_owned()),
+                    ("x".to_owned(), "no-such-command".to_owned()),
+                    ("Z-a".to_owned(), "quit-window".to_owned()),
+                ]
+            ),
+            [
+                "There is no command named no-such-command".to_owned(),
+                "Z-a: unknown modifier `Z-`".to_owned()
+            ]
         );
     }
 

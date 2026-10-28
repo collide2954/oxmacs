@@ -7,7 +7,7 @@ use ox_lang::heap::{Heap, Hold};
 use ox_lang::native::{field, given, name_of};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::command::ScopeId;
+use oxmacs_core::command::{ScopeId, intern};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
 use oxmacs_core::text::{Buffer, BufferId};
@@ -134,11 +134,11 @@ pub fn declared(heap: &Heap, value: Value) -> Result<Vec<Declared>, String> {
 
 fn spec(title: &str, alias: String, declared: Declared) -> Language {
     Language::new(Box::leak(Box::new(LanguageSpec {
-        name: leak(title.to_owned()),
+        name: intern(title),
         extensions: leak_all(declared.extensions),
         file_names: leak_all(declared.file_names),
         aliases: leak_all(vec![alias]),
-        line_comment: declared.comment.map(leak),
+        line_comment: declared.comment.as_deref().map(intern),
         pairs: &[],
         indentation: Indentation::KEEP,
         grammar: None,
@@ -160,7 +160,7 @@ pub fn declare(editor: &mut Editor, plugin: &str, declared: &Declared) {
     }
     let alias = declared.title.to_lowercase().replace(' ', "-");
     let language = spec(&declared.title, alias, declared.clone());
-    let scope = editor.add_scope(leak(declared.title.clone()));
+    let scope = editor.add_scope(intern(&declared.title));
     editor.add_language(language, Some(scope));
     editor.set_indenter(language, indent_by_rules);
     if let Some(modes) = modes(editor) {
@@ -227,15 +227,11 @@ fn modes(editor: &mut Editor) -> Option<&mut Modes> {
     editor.plugin_state_mut::<Modes>()
 }
 
-fn leak(text: String) -> &'static str {
-    Box::leak(text.into_boxed_str())
-}
-
 fn leak_all(items: Vec<String>) -> &'static [&'static str] {
     Box::leak(
         items
             .into_iter()
-            .map(leak)
+            .map(|item| intern(&item))
             .collect::<Vec<_>>()
             .into_boxed_slice(),
     )
@@ -368,7 +364,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
         };
         (
             spec(&title, alias, declared),
-            editor.add_scope(leak(title.clone())),
+            editor.add_scope(intern(&title)),
         )
     });
     editor.add_language(language, Some(scope));
@@ -376,14 +372,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     if let Some(tabs) = given.indent.tabs {
         editor.set_indent_tabs(language, tabs);
     }
-    for (keys, command) in given.keys {
-        let id = editor
-            .command_named(&command)
-            .ok_or_else(|| Error::new(format!("There is no command named {command}")))?;
-        editor
-            .bind(scope, &keys, id)
-            .map_err(|error| Error::new(format!("{keys}: {error}")))?;
-    }
+    crate::api::commands::bind_keys(editor, scope, &given.keys)?;
     let highlight = given.highlight.map(|function| heap.hold(function));
     if highlight.is_some() {
         editor.set_highlighter(language, cached);

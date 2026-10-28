@@ -50,6 +50,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `open-view` and `open-buffer` take `:file`, the file the buffer shows: it is named after the file as file buffers are, opening the file again comes back to it instead of asking the plugin, and its changes on disk reach `on-disk-change`. Both return the buffer.
 - Plugins keep state with each of their buffers with `(set-buffer-value! key value)` and read it with `(buffer-value key)`; it goes away when the buffer closes, and views are built again when it changes.
 - Lines in plugin buffers can hold links: a piece `[text face :link target]` is followed by a click or by the new `follow-link` command, which calls the buffer's `:on-link` with target, and `next-link` and `previous-link` move between links, wrapping around.
+- `open-buffer` and `open-view` take `:label`, the kind of buffer, such as `"remote folders"`; buffers of one kind share their keys, and `C-h f` names the kind where a command is bound.
 - A line given to `open-buffer`, `set-lines` or `append-lines` as a map with fields of the plugin's own is an item: `line-item` gives the map of the line at point or of any line, `goto-item` moves to the first line whose item has the fields it is given, and `next-item` steps between items.
 
 ### Changed
@@ -82,6 +83,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Opening plugin buffers no longer adds a set of keys for each one that lasts until oxmacs quits, so `C-h f remote-visit` no longer lists every remote folder ever browsed, and reopening a buffer reuses its keys.
 - On Windows, language servers installed with npm start: oxmacs runs their `.cmd` script directly and never picks npm's extensionless shell script, and every program lookup tries the extensions in `PATHEXT`.
 - Sending a lot of text to a busy process, such as an R session or a language server, no longer freezes the editor: input is written in the background.
 - Stopping or killing a build, a console or a language server stops the programs it started too, and on Windows they all end when oxmacs quits. Stopping waits a few seconds after asking, as before, and on Windows it now ends the whole tree instead of only the first program.

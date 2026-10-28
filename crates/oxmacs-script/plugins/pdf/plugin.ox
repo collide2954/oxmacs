@@ -1,5 +1,5 @@
 (plugin pdf
-  :version "0.2.0"
+  :version "0.2.1"
   :opt-in true
   :summary "Read PDF documents drawn by PDFium, with search, an outline, links and copying"
   :opens-files ["pdf"]
