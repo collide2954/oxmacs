@@ -17,8 +17,9 @@
 (def short-types {"numeric" "dbl" "integer" "int" "character" "chr" "factor" "fct" "logical" "lgl"
                   "Date" "date" "POSIXct" "dttm" "complex" "cpl"})
 
-(defonce environments (atom {}))
-(defonce tables (atom {}))
+(def (value-of name key)
+  (when (buffer-live? name)
+    (with-buffer name (buffer-value key))))
 
 (def (stem session)
   (if (string/ends-with? session "*") (string/slice session 0 (- (count session) 1)) session))
@@ -62,9 +63,9 @@
               groups))))
 
 (def (draw-environment name width)
-  (when-let [listing (get @environments name)]
-    (let [drawn (page listing.entries (if (and width (> width 0)) width room))]
-      (swap! environments assoc-in [name :rows] drawn.rows)
+  (when-let [listing (value-of name :r-environment)]
+    (let [drawn (page (get @listing :entries) (if (and width (> width 0)) width room))]
+      (swap! listing assoc :rows drawn.rows)
       (set-lines name drawn.lines))))
 
 (def environment-keys
@@ -74,9 +75,9 @@
 (def (environment-buffer session)
   (let [name (environment-name session)]
     (unless (buffer-exists? name)
-      (swap! environments assoc name {session: session entries: [] rows: []})
-      (open-buffer name [help] :keys environment-keys :show false
-                   :on-resize (fn [width] (draw-environment name width)))
+      (with-buffer (open-buffer name [help] :keys environment-keys :show false
+                                :on-resize (fn [width] (draw-environment name width)))
+        (set-buffer-value! :r-environment (atom {session: session entries: [] rows: []})))
       (session/own! name session))
     name))
 
@@ -93,8 +94,8 @@
 
 (def (listed session payload)
   (let [name (environment-name session)]
-    (when (get @environments name)
-      (swap! environments assoc-in [name :entries] (entries payload))
+    (when-let [listing (value-of name :r-environment)]
+      (swap! listing assoc :entries (entries payload))
       (draw-environment name (buffer-width name)))))
 
 (def (environment-due session)
@@ -121,11 +122,11 @@
       (display-buffer name :select true))))
 
 (defcommand r-environment-refresh "List the objects in the R session again"
-  (when-let [listing (get @environments (buffer-name))]
-    (ask-environment listing.session)))
+  (when-let [listing (buffer-value :r-environment)]
+    (ask-environment (get @listing :session))))
 
 (defcommand r-environment-visit "Open the object on this line"
-  (let [listing (get @environments (buffer-name))
+  (let [listing (when-let [held (buffer-value :r-environment)] @held)
         line (current-line)
         found (when listing (find (fn [[row _]] (= row line)) listing.rows))]
     (if found
@@ -200,12 +201,13 @@
                  table.cells)}))
 
 (def (draw-table name width)
-  (when-let [view (get @tables name)]
-    (when view.table
-      (let [drawn (lay-out view.table view.first (if (and width (> width 0)) width table-room))]
-        (swap! tables assoc-in [name :spans] drawn.spans)
-        (set-header name drawn.header)
-        (set-lines name drawn.lines)))))
+  (when-let [held (value-of name :r-table)]
+    (let [view @held]
+      (when view.table
+        (let [drawn (lay-out view.table view.first (if (and width (> width 0)) width table-room))]
+          (swap! held assoc :spans drawn.spans)
+          (set-header name drawn.header)
+          (set-lines name drawn.lines))))))
 
 (def table-keys
   {"<right>" 'r-table-next-column "f" 'r-table-next-column
@@ -217,10 +219,10 @@
 (def (open-table session object)
   (let [name "{(stem session)} {object}*"]
     (unless (buffer-exists? name)
-      (open-buffer name [] :keys table-keys :show false
-                   :on-resize (fn [width] (draw-table name width)))
+      (with-buffer (open-buffer name [] :keys table-keys :show false
+                                :on-resize (fn [width] (draw-table name width)))
+        (set-buffer-value! :r-table (atom {session: session object: object first: 0})))
       (session/own! name session))
-    (swap! tables update name (fn [view] (merge {session: session object: object first: 0} view)))
     (display-buffer name :select true)
     name))
 
@@ -229,7 +231,8 @@
     (let [name (open-table session table.object)
           kept (if (= table.filter "") "" " where {table.filter}")]
       (message "{table.object}: {table.rows} rows{kept}, {table.columns} columns")
-      (swap! tables update name (fn [view] (assoc view :table table :first (if (= (get-in view [:table :object]) table.object) (or view.first 0) 0))))
+      (swap! (value-of name :r-table)
+             (fn [view] (assoc view :table table :first (if (= (get-in view [:table :object]) table.object) (or view.first 0) 0))))
       (draw-table name (buffer-width name))
       (goto-line 0))))
 
@@ -237,24 +240,26 @@
   (let [parts (string/split payload "\n" 2)
         object (first parts)
         name (open-table session object)]
-    (swap! tables update name (fn [view] (assoc view :table nil)))
+    (swap! (value-of name :r-table) assoc :table nil)
     (set-header name [[["str({object})" :comment]]])
     (set-lines name (string/lines (or (second parts) "")))
     (goto-line 0)))
 
 (def (shift forward)
-  (when-let [view (get @tables (buffer-name))]
-    (when view.table
-      (let [last-column (max 0 (- (count view.table.names) 1))
-            next (if forward (min (+ view.first 1) last-column) (max (- view.first 1) 0))]
-        (if (= next view.first)
-          (message "Already at the {(if forward "last" "first")} column")
-          (do (swap! tables assoc-in [(buffer-name) :first] next)
-            (draw-table (buffer-name) (buffer-width (buffer-name)))))))))
+  (when-let [held (buffer-value :r-table)]
+    (let [view @held]
+      (when view.table
+        (let [last-column (max 0 (- (count view.table.names) 1))
+              next (if forward (min (+ view.first 1) last-column) (max (- view.first 1) 0))]
+          (if (= next view.first)
+            (message "Already at the {(if forward "last" "first")} column")
+            (do (swap! held assoc :first next)
+              (draw-table (current-buffer) (buffer-width (current-buffer))))))))))
 
 (def (table-here)
-  (when-let [view (get @tables (buffer-name))]
-    (when view.table view)))
+  (when-let [held (buffer-value :r-table)]
+    (let [view @held]
+      (when view.table view))))
 
 (def (column-here view)
   (let [at (current-column)]
@@ -308,7 +313,7 @@
     (message "{column} {(short-type (or kind ""))}: {text}")))
 
 (defcommand r-table-reload "Ask R for the table again"
-  (when-let [view (get @tables (buffer-name))]
+  (when-let [view (when-let [held (buffer-value :r-table)] @held)]
     (if view.table
       (ask-table view.session view.object (current-view view))
       (ask-object view.session view.object false))))

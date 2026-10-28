@@ -1,14 +1,14 @@
 (module
   (import (ox file) (ox path) (ox process) (ox string) (ox crypto) (ox json)
           (r helper :as helper))
-  (export label sessions known? current-session running? link! linked own! owner project-of project-here
+  (export label sessions known? current-session running? link! linked own! project-of project-here
           windows? arguments locate find-r launch ensure show-console evaluate request send script?
           r-string helper-of on-marker on-ready use-keys! use-patterns! directory-of))
 
 (def label "R")
 (def missing "R not found; install it from https://cran.r-project.org or set the r plugin's program")
 
-(defonce state (atom {links: {} helpers: {} widths: {} owners: {} launched: 0}))
+(defonce state (atom {helpers: {} widths: {} launched: 0}))
 (defonce handlers (atom {}))
 (defonce ready-hooks (atom {}))
 (defonce ^:shadow keys (atom {}))
@@ -28,11 +28,11 @@
 
 (def (known? name) (some (fn [known] (= known name)) (sessions)))
 
-(def (own! buffer session) (swap! state assoc-in [:owners buffer] session))
+(def (own! buffer session) (with-buffer buffer (set-buffer-value! :r-session session)))
 
-(def (owner buffer) (get-in @state [:owners buffer]))
-
-(def (linked script) (get-in @state [:links script]))
+(def (linked buffer)
+  (when (buffer-live? buffer)
+    (with-buffer buffer (buffer-value :r-session))))
 
 (def project-markers ["DESCRIPTION" "renv.lock" ".git"])
 
@@ -64,7 +64,7 @@
 
 (def (current-session)
   (let [here (buffer-name)
-        own (if (known? here) here (or (owner here) (linked here)))]
+        own (if (known? here) here (buffer-value :r-session))]
     (if (and own (known? own))
       own
       (let [project (project-here)
@@ -79,7 +79,7 @@
 
 (def (link! console)
   (when (script? (buffer-name))
-    (swap! state assoc-in [:links (buffer-name)] console)))
+    (set-buffer-value! :r-session console)))
 
 (def (helper-of session) (get-in @state [:helpers session]))
 
