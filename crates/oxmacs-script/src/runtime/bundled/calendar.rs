@@ -106,7 +106,7 @@ fn the_month_and_week_views_show_the_events() {
         &mut ox,
         r#"(module (import (ox time))) (time/format (time/now) "%B %Y")"#,
     );
-    assert!(month.starts_with(title.trim_matches('"')), "{month}");
+    assert_eq!(editor.pane().header_lines()[0].0, title.trim_matches('"'));
     assert!(month.contains("12:00 Lu"), "{month}");
 
     run_command(&mut editor, &mut ox, "calendar-week");

@@ -52,6 +52,15 @@ fn lines(editor: &Editor) -> Vec<String> {
         .collect()
 }
 
+fn title(editor: &Editor) -> String {
+    editor
+        .pane()
+        .header_lines()
+        .first()
+        .map(|(text, _)| text.clone())
+        .unwrap_or_default()
+}
+
 fn unlocked(init: &str) -> (tempfile::TempDir, Editor, Ox) {
     let (home, mut editor, mut ox) = started(init);
     cheap_vault(home.path(), ENTRIES);
@@ -89,7 +98,7 @@ fn the_first_use_makes_a_vault_sealed_with_the_password() {
 
     assert_eq!(editor.buffer().name(), "*Vault*");
     assert!(
-        lines(&editor)[3].starts_with("No entries yet"),
+        lines(&editor)[0].starts_with("No entries yet"),
         "{:?}",
         lines(&editor)
     );
@@ -132,11 +141,11 @@ fn the_list_shows_entries_by_title_without_passwords() {
 
     let shown = lines(&editor);
     assert_eq!(editor.buffer().name(), "*Vault*");
-    assert!(shown[0].starts_with("Vault  2 entries"), "{shown:?}");
-    assert!(shown[3].starts_with("bank "), "{shown:?}");
-    assert!(shown[4].starts_with("mail ") && shown[4].contains("ana@example.com"));
+    assert!(title(&editor).starts_with("Vault  2 entries"));
+    assert!(shown[0].starts_with("bank "), "{shown:?}");
+    assert!(shown[1].starts_with("mail ") && shown[1].contains("ana@example.com"));
     assert!(!editor.buffer().contents().contains("hunter2"));
-    assert_eq!(editor.buffer().line_of(editor.buffer().point()), 3);
+    assert_eq!(editor.buffer().line_of(editor.buffer().point()), 0);
 }
 
 #[test]
@@ -212,8 +221,7 @@ fn added_entries_are_saved_sealed_and_survive_locking() {
     assert_eq!(editor.buffer_named("*Vault*"), None);
     run_command(&mut editor, &mut ox, "vault");
     answer(&mut editor, &mut ox, PASSWORD);
-    let shown = lines(&editor);
-    assert!(shown[0].starts_with("Vault  3 entries"), "{shown:?}");
+    assert!(title(&editor).starts_with("Vault  3 entries"));
     let generated = ox
         .eval(
             &mut editor,
@@ -232,7 +240,7 @@ fn deleting_asks_first() {
     press(&mut editor, &mut ox, "y");
 
     assert_eq!(editor.message(), Some("Deleted bank"));
-    assert!(lines(&editor)[0].starts_with("Vault  1 entries"));
+    assert!(title(&editor).starts_with("Vault  1 entries"));
 }
 
 #[test]
@@ -295,9 +303,5 @@ fn bitwarden_and_one_password_exports_are_imported_once() {
         editor.message(),
         Some("Imported 1 of 1 entries; the others were already there")
     );
-    assert!(
-        lines(&editor)[0].starts_with("Vault  4 entries"),
-        "{:?}",
-        lines(&editor)
-    );
+    assert!(title(&editor).starts_with("Vault  4 entries"));
 }

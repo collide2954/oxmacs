@@ -177,10 +177,10 @@ pub(crate) fn line(heap: &Heap, native: &str, value: Value) -> Result<Line, Erro
     };
     let mut shown = value;
     if let Some(fields) = heap.entries(value) {
-        line.item = Some(value);
         shown = Value::Nil;
         for (key, given) in fields {
             let Value::Keyword(key) = key else {
+                line.item = Some(value);
                 continue;
             };
             match key.name() {
@@ -196,13 +196,14 @@ pub(crate) fn line(heap: &Heap, native: &str, value: Value) -> Result<Line, Erro
                         })?
                         .clamp(0.0, 1.0);
                 }
-                _ => {}
+                "opacity" => {}
+                _ => line.item = Some(value),
             }
         }
     }
     match parts(heap, shown) {
         Some(given) => {
-            for part in given {
+            for part in given.into_iter().filter(|part| *part != Value::Nil) {
                 line.pieces.push(piece(heap, native, part)?);
             }
         }

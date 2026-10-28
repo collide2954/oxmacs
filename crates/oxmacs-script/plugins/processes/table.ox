@@ -141,23 +141,25 @@
           (map (fn [key] (field (if (= key (first env)) "Environment" "") (str key "=" (get p.env key)))) env)))))
 
 (def (rows processes now width options)
+  "The :header and :lines that list processes at now in width columns, sorted and filtered as options say; each process line carries its :id."
   (let [shown-processes (arranged processes now options)
-        header [{line: [["Processes" :heading]]}
-                {line: [[(string/truncate help width) :comment]]}
-                {line: (if (string/blank? options.filter) [] [["Filter: " :comment] options.filter])}]]
+        header (vec (concat [[["Processes" :heading]]
+                             [[(string/truncate help width) :comment]]]
+                            (if (string/blank? options.filter) [] [[["Filter: " :comment] options.filter]])))]
     (if (empty? shown-processes)
-      (conj header {line: [[(if (string/blank? options.filter) "Nothing running" "Nothing matches the filter") :comment]]})
+      {header: header
+       lines: [[[(if (string/blank? options.filter) "Nothing running" "Nothing matches the filter") :comment]]]}
       (let [table (map (fn [p] (cells p now)) shown-processes)
             heading (into {} (map (fn [column] [column (title-text column options)]) columns))
             widths (into {} (map (fn [column]
                                    [column (apply max (map (fn [texts] (count (get texts column))) (conj (vec table) heading)))])
                                  columns))
             [shown details] (fit widths width)
-            title {line: [[(string/trim-end (apply str (map (fn [part] (if (vector? part) (first part) part))
-                                                            (laid-out shown widths details heading {}))))
-                           :comment]]}]
-        (vec (concat header [title]
-                     (mapcat (fn [pair]
+            title [[(string/trim-end (apply str (map (fn [part] (if (vector? part) (first part) part))
+                                                     (laid-out shown widths details heading {}))))
+                    :comment]]]
+        {header: (conj header title)
+         lines: (vec (mapcat (fn [pair]
                                (let [p (first pair)
                                      texts (second pair)
                                      faces (into {} (map (fn [column] [column (face-of column p)]) columns))
@@ -165,4 +167,4 @@
                                  (if (contains? options.open p.id)
                                    (concat [row] (details-rows p now))
                                    [row])))
-                             (zip shown-processes table))))))))
+                             (zip shown-processes table)))}))))

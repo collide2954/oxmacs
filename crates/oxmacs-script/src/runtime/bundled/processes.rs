@@ -46,12 +46,22 @@ fn listed(editor: &mut Editor, ox: &mut Ox) {
     settle(editor, ox);
 }
 
-fn lines(editor: &Editor) -> Vec<String> {
+fn body(editor: &Editor) -> Vec<String> {
     editor
         .buffer()
         .contents()
         .lines()
         .map(str::to_owned)
+        .collect()
+}
+
+fn lines(editor: &Editor) -> Vec<String> {
+    editor
+        .pane()
+        .header_lines()
+        .into_iter()
+        .map(|(text, _)| text)
+        .chain(body(editor))
         .collect()
 }
 
@@ -149,7 +159,7 @@ fn k_asks_then_stops_and_capital_k_kills() {
     editor.job_started_as(build, 99);
     listed(&mut editor, &mut ox);
     editor.take_effects();
-    let row = lines(&editor)
+    let row = body(&editor)
         .iter()
         .position(|line| line.contains("cargo build"))
         .unwrap();
@@ -175,7 +185,7 @@ fn tab_shows_the_command_folder_status_and_environment() {
     let (_home, mut editor, mut ox) = started(400);
     two_jobs(&mut editor);
     listed(&mut editor, &mut ox);
-    let row = lines(&editor)
+    let row = body(&editor)
         .iter()
         .position(|line| line.contains("cargo check"))
         .unwrap();

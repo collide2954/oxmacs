@@ -9,12 +9,11 @@
 (def month-buffer "*Calendar month*")
 (def week-buffer "*Calendar week*")
 (def event-buffer "*Calendar event*")
-(def first-row 3)
 (def repeats {"never" nil "daily" "FREQ=DAILY" "weekdays" "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
               "weekly" "FREQ=WEEKLY" "monthly" "FREQ=MONTHLY" "yearly" "FREQ=YEARLY"})
 (def day-names ["Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"])
 
-(defonce view (atom {from: nil day: nil rows: [] shown: nil}))
+(defonce view (atom {from: nil day: nil shown: nil}))
 
 (def (quietly work)
   (try (work)
@@ -51,63 +50,62 @@
       (else (str (clock occurrence.start) "–" (clock occurrence.end))))))
 
 (def (event-line occurrence day)
-  {line: (vec (filter some?
-                      ["  " [(span-text occurrence day) :comment] "  "
-                       [occurrence.summary (calendar-face occurrence.calendar)]
-                       (when occurrence.location [(str "  @ " occurrence.location) :comment])
-                       (when occurrence.rrule ["  ↻" :comment])
-                       (when (some (fn [person] (= person.status "NEEDS-ACTION")) (or occurrence.attendees [])) ["  invitation" :warning])
-                       [(str "  " occurrence.calendar) :comment]]))})
+  {line: ["  " [(span-text occurrence day) :comment] "  "
+          [occurrence.summary (calendar-face occurrence.calendar)]
+          (when occurrence.location [(str "  @ " occurrence.location) :comment])
+          (when occurrence.rrule ["  ↻" :comment])
+          (when (some (fn [person] (= person.status "NEEDS-ACTION")) (or occurrence.attendees [])) ["  invitation" :warning])
+          [(str "  " occurrence.calendar) :comment]]
+   occurrence: occurrence})
 
 (def (agenda from days)
-  "The lines and rows of the agenda from the day numbered from, for days days."
+  "The :header and :lines of the agenda from the day numbered from, for days days; the line of each event carries its :occurrence."
   (let [found (store/occurrences (day-start from) (day-start (+ from days)))
         now (today)
         title (str (time/format (day-start from) "%a %-d %b") " – " (time/format (day-start (+ from days -1)) "%a %-d %b %Y"))
-        top [{line: [["Calendar" :heading] (str "  " title)]}
-             {line: [["RET shows  a adds  e edits  d deletes  f/b weeks  t today  m month  w week  i imports  s syncs  q quits" :comment]]}
-             {line: []}]
-        step (fn [[lines rows] day]
+        step (fn [lines day]
                (let [here (filter (fn [found] (and (< found.start (day-start (inc day)))
                                                    (> (max found.end (inc found.start)) (day-start day))))
                                   found)
                      here (vec (concat (filter :all-day here) (remove :all-day here)))]
                  (if (and (empty? here) (not= day now))
-                   [lines rows]
-                   (let [heading {line: [[(time/format (day-start day) "%A %-d %B") (if (= day now) :keyword :heading)]
-                                         (when (= day now) ["  today" :comment])]}
+                   lines
+                   (let [heading [[(time/format (day-start day) "%A %-d %B") (if (= day now) :keyword :heading)]
+                                  (when (= day now) ["  today" :comment])]
                          body (if (empty? here)
-                                [{line: [["  Nothing planned" :comment]]}]
+                                [[["  Nothing planned" :comment]]]
                                 (map (fn [found] (event-line found day)) here))]
-                     [(vec (concat lines [heading] body [{line: []}]))
-                      (vec (concat rows [nil] (if (empty? here) [nil] here) [nil]))]))))
-        [lines rows] (reduce step [[] []] (range from (+ from days)))]
-    {lines: (vec (concat top lines)) rows: (vec (concat [nil nil nil] rows))}))
+                     (vec (concat lines [heading] body [""]))))))]
+    {header: [[["Calendar" :heading] (str "  " title)]
+              [["RET shows  a adds  e edits  d deletes  f/b weeks  t today  m month  w week  i imports  s syncs  q quits" :comment]]]
+     lines: (reduce step [] (range from (+ from days)))}))
 
 (def (agenda-days)
   (or (plugin-setting 'calendar :days) 14))
 
-(def (show-agenda! {line nil})
+(def (show-agenda!)
   (let [from (or (get @view :from) (today))
         made (agenda from (agenda-days))]
-    (swap! view assoc :from from :rows made.rows)
-    (open-buffer agenda-buffer (vec (map (fn [given] (update given :line (fn [parts] (vec (filter some? parts))))) made.lines))
+    (swap! view assoc :from from)
+    (open-buffer agenda-buffer made.lines
                  :keys {"RET" 'calendar-show "a" 'calendar-add "e" 'calendar-edit "d" 'calendar-delete
                         "f" 'calendar-forward "b" 'calendar-backward "t" 'calendar-today "n" 'calendar-next
                         "p" 'calendar-previous "m" 'calendar-month "w" 'calendar-week "i" 'calendar-import
                         "s" 'calendar-sync "g" 'calendar-refresh "q" 'quit-window}
-                 :line (or line (first (keep (fn [[index row]] (when row index)) (zip (range (count made.rows)) made.rows))) first-row))))
+                 :line 0)
+    (set-header agenda-buffer made.header)
+    (goto-item {})))
 
 (def (redraw!)
   (when (buffer-exists? agenda-buffer)
     (let [made (agenda (or (get @view :from) (today)) (agenda-days))]
-      (swap! view assoc :rows made.rows)
-      (set-lines agenda-buffer (vec (map (fn [given] (update given :line (fn [parts] (vec (filter some? parts))))) made.lines)))))
+      (set-lines agenda-buffer made.lines)
+      (set-header agenda-buffer made.header)))
   (when (buffer-exists? month-buffer) (draw-month!))
   (when (buffer-exists? week-buffer) (draw-week!)))
 
 (def (occurrence-here)
-  (cond ((= (buffer-name) agenda-buffer) (get (get @view :rows) (current-line)))
+  (cond ((= (buffer-name) agenda-buffer) (get (line-item) :occurrence))
     ((= (buffer-name) event-buffer) (get @view :shown))
     (else nil)))
 
@@ -132,24 +130,14 @@
   (swap! view assoc :from (today))
   (show-agenda!))
 
-(def (step-row! delta)
-  (let [rows (get @view :rows)
-        line (current-line)
-        targets (vec (keep (fn [[index row]] (when row index)) (zip (range (count rows)) rows)))
-        next-one (if (> delta 0)
-                   (find (fn [index] (> index line)) targets)
-                   (last (filter (fn [index] (< index line)) targets)))]
-    (when next-one
-      (goto-line next-one))))
-
-(defcommand calendar-next "Move to the next event" (step-row! 1))
-(defcommand calendar-previous "Move to the previous event" (step-row! -1))
+(defcommand calendar-next "Move to the next event" (next-item))
+(defcommand calendar-previous "Move to the previous event" (next-item -1))
 
 (def (attendee-line person)
-  {line: [[(string/pad-end "" 11) :comment] (str (or person.name person.email) " ") [(string/lower (or person.status "")) :comment]]})
+  [[(string/pad-end "" 11) :comment] (str (or person.name person.email) " ") [(string/lower (or person.status "")) :comment]])
 
 (def (field label value)
-  {line: [[(string/pad-end label 11) :comment] value]})
+  [[(string/pad-end label 11) :comment] value])
 
 (def (when-text occurrence)
   (if occurrence.all-day
@@ -163,12 +151,13 @@
   (let [named (some (fn [[name value]] (when (= value rule) name)) (entries repeats))]
     (or named rule)))
 
+(def (event-header occurrence)
+  [[[occurrence.summary :heading]]
+   [["e edits  d deletes  a accepts  x declines  ? maybe  q quits" :comment]]])
+
 (def (event-lines occurrence)
   (vec (filter some?
-               (concat [{line: [[occurrence.summary :heading]]}
-                        {line: [["e edits  d deletes  a accepts  x declines  ? maybe  q quits" :comment]]}
-                        {line: []}
-                        (field "When" (when-text occurrence))
+               (concat [(field "When" (when-text occurrence))
                         (when occurrence.location (field "Where" occurrence.location))
                         (field "Calendar" [occurrence.calendar (calendar-face occurrence.calendar)])
                         (when occurrence.rrule (field "Repeats" (repeat-text occurrence.rrule)))
@@ -180,14 +169,15 @@
                         (when (not (empty? (or occurrence.attendees []))) (field "Guests" ""))]
                        (map attendee-line (or occurrence.attendees []))
                        (if occurrence.description
-                         (concat [{line: []}] (map (fn [line] {line: line}) (string/lines occurrence.description)))
+                         (concat [""] (string/lines occurrence.description))
                          [])))))
 
 (def (show-event! occurrence)
   (swap! view assoc :shown occurrence)
   (open-buffer event-buffer (event-lines occurrence)
                :keys {"e" 'calendar-edit "d" 'calendar-delete "a" 'calendar-accept "x" 'calendar-decline
-                      "?" 'calendar-maybe "q" 'quit-window}))
+                      "?" 'calendar-maybe "q" 'quit-window})
+  (set-header event-buffer (event-header occurrence)))
 
 (defcommand calendar-show "Show the event on this line"
   (if-let [occurrence (occurrence-here)]
@@ -359,32 +349,32 @@
                  (if face [shown face] shown)))
         week-lines (fn [week]
                      (let [days (range (+ start (* week 7)) (+ start (* week 7) 7))
-                           numbers {line: (vec (map (fn [day]
-                                                      (let [date (time/date-of day)
-                                                            face (cond ((= day selected) :keyword)
-                                                                   ((= day (today)) :success)
-                                                                   ((not= date.month shown.month) :comment)
-                                                                   (else :heading))]
-                                                        (if (= day selected)
-                                                          [(string/pad-end (str "[" date.day "]") width) face :pill]
-                                                          (cell (str " " date.day) face))))
-                                                    days))}
+                           numbers (vec (map (fn [day]
+                                               (let [date (time/date-of day)
+                                                     face (cond ((= day selected) :keyword)
+                                                            ((= day (today)) :success)
+                                                            ((not= date.month shown.month) :comment)
+                                                            (else :heading))]
+                                                 (if (= day selected)
+                                                   [(string/pad-end (str "[" date.day "]") width) face :pill]
+                                                   (cell (str " " date.day) face))))
+                                             days))
                            entry (fn [row]
-                                   {line: (vec (map (fn [day]
-                                                      (let [here (vec (on-day day))]
-                                                        (cond ((and (= row 2) (> (count here) 3)) (cell (str " +" (- (count here) 2) " more") :comment))
-                                                          ((< row (count here))
-                                                           (let [found (nth here row)]
-                                                             (cell (str " " (if found.all-day "" (str (clock (max found.start (day-start day))) " ")) found.summary)
-                                                                   (calendar-face found.calendar))))
-                                                          (else (cell "" nil)))))
-                                                    days))})]
-                       (vec (concat [numbers] (map entry (range 3)) [{line: []}]))))]
-    (set-lines month-buffer
-               (vec (concat [{line: [[(time/format (day-start first-day) "%B %Y") :heading]]}
-                             {line: [["f/b days  n/p weeks  </> months  t today  RET agenda  w week  q quits" :comment]]}
-                             {line: (vec (map (fn [name] [(string/pad-end (str " " name) width) :comment]) day-names))}]
-                            (mapcat week-lines (range 6)))))))
+                                   (vec (map (fn [day]
+                                               (let [here (vec (on-day day))]
+                                                 (cond ((and (= row 2) (> (count here) 3)) (cell (str " +" (- (count here) 2) " more") :comment))
+                                                   ((< row (count here))
+                                                    (let [found (nth here row)]
+                                                      (cell (str " " (if found.all-day "" (str (clock (max found.start (day-start day))) " ")) found.summary)
+                                                            (calendar-face found.calendar))))
+                                                   (else (cell "" nil)))))
+                                             days)))]
+                       (vec (concat [numbers] (map entry (range 3)) [""]))))]
+    (set-lines month-buffer (vec (mapcat week-lines (range 6))))
+    (set-header month-buffer
+                [[[(time/format (day-start first-day) "%B %Y") :heading]]
+                 [["f/b days  n/p weeks  </> months  t today  RET agenda  w week  q quits" :comment]]
+                 (vec (map (fn [name] [(string/pad-end (str " " name) width) :comment]) day-names))])))
 
 (def month-keys
   {"f" 'calendar-month-forward "b" 'calendar-month-backward "n" 'calendar-month-down "p" 'calendar-month-up

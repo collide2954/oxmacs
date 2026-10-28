@@ -617,7 +617,7 @@
   (str "*irc channels " name "*"))
 
 (def (listing buffer)
-  "The channel list shown in buffer, as a map of :network, :channels, :filter and the :shown channels, or nil."
+  "The channel list shown in buffer, as a map of :network, :channels and :filter, or nil."
   (get-in @state [:lists buffer]))
 
 (def (draw-list! buffer {show false})
@@ -625,11 +625,11 @@
         wanted (string/lower (or listed.filter ""))
         has (fn [text] (string/includes? (string/lower (protocol/plain-text (or text ""))) wanted))
         chosen (vec (filter (fn [channel] (or (has channel.name) (has channel.topic))) listed.channels))
-        lines (format/channel-lines listed.network chosen (count listed.channels) listed.filter)]
-    (swap! state assoc-in [:lists buffer :shown] chosen)
+        page (format/channel-lines listed.network chosen (count listed.channels) listed.filter)]
     (if (or show (not (buffer-exists? buffer)))
-      (open-buffer buffer lines :keys list-keys :line 3)
-      (set-lines buffer lines :line 3))))
+      (open-buffer buffer page.lines :keys list-keys :line 0)
+      (set-lines buffer page.lines :line 0))
+    (set-header buffer page.header)))
 
 (def (filter-list! buffer wanted)
   "Shows only the channels in the list in buffer whose name or topic has wanted in it."
@@ -653,7 +653,7 @@
         found (or (get (network name) :listing) [])]
     (change-network! name dissoc :listing)
     (swap! state assoc-in [:lists buffer]
-           {network: name filter: "" shown: []
+           {network: name filter: ""
             channels: (vec (sort-by (fn [channel] [(- channel.users) (fold channel.name)]) found))})
     (draw-list! buffer :show true)))
 

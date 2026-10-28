@@ -1,6 +1,6 @@
 (module
   (import (ox path) (ox string))
-  (export rows first-row))
+  (export rows))
 
 (def (fixed number places)
   (let [scale (if (= places 1) 10 100)
@@ -34,24 +34,23 @@
    [(placed row) :comment]])
 
 (def (titles title first second)
-  {line: [[(string/pad-end title 44) :heading]
-          (string/pad-start first 8)
-          (string/pad-start second 8)
-          (string/pad-start "calls" 10)]})
+  [[(string/pad-end title 44) :heading]
+   (string/pad-start first 8)
+   (string/pad-start second 8)
+   (string/pad-start "calls" 10)])
 
 (def (header found flat)
-  [{line: [[(str "Ox profile  " (shown found.busy) " of Ox in " (shown found.wall) ", " found.samples " samples") :heading]]}
-   {line: [[(str "TAB folds   f shows " (if flat "the call tree" "functions by self time") "   RET visits   g refreshes   q quits") :comment]]}
-   {line: []}])
+  [[[(str "Ox profile  " (shown found.busy) " of Ox in " (shown found.wall) ", " found.samples " samples") :heading]]
+   [[(str "TAB folds   f shows " (if flat "the call tree" "functions by self time") "   RET visits   g refreshes   q quits") :comment]]])
 
 (def (ticks found)
   (if (empty? found.ticks)
     []
     (concat
-     [{line: [["Slowest ticks" :heading]]}]
-     (map (fn [tick] {line: [(str "  " (string/pad-start (shown tick.took) 10) "  " tick.kind " at " (shown tick.at))]})
+     [[["Slowest ticks" :heading]]]
+     (map (fn [tick] (str "  " (string/pad-start (shown tick.took) 10) "  " tick.kind " at " (shown tick.at)))
           found.ticks)
-     [{line: []}])))
+     [""])))
 
 (def (branch-rows branches depth path folded)
   (mapcat
@@ -75,13 +74,9 @@
        found.functions))
 
 (def (rows found folded flat)
-  (vec (concat (header found flat)
-               (ticks found)
-               (if flat
-                 (concat [(titles "Functions by self time" "self" "total")] (function-rows found))
-                 (concat [(titles "Call tree" "total" "self")] (branch-rows found.tree 0 [] folded))))))
-
-(def (first-row rows)
-  (or (some (fn [i] (when (or (get (nth rows i) :path) (get (nth rows i) :file)) i))
-            (range (count rows)))
-      0))
+  "The :header and :lines of the report on found, with the branches in folded closed, or the functions by self time when flat; each function's line carries its :file and :line-number, and each branch's its :path too."
+  {header: (header found flat)
+   lines: (vec (concat (ticks found)
+                       (if flat
+                         (concat [(titles "Functions by self time" "self" "total")] (function-rows found))
+                         (concat [(titles "Call tree" "total" "self")] (branch-rows found.tree 0 [] folded)))))})

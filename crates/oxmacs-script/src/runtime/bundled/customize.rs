@@ -72,8 +72,9 @@ fn customize_lists_every_setting_by_group_with_plugins_after() {
     assert_eq!(editor.buffer().name(), "*Settings*");
     assert!(editor.buffer().is_read_only());
     let shown = lines(&editor);
-    assert!(shown[0].starts_with("Settings  "), "{}", shown[0]);
-    assert!(shown[0].ends_with("custom.ox"), "{}", shown[0]);
+    let title = &editor.pane().header_lines()[0].0;
+    assert!(title.starts_with("Settings  "), "{title}");
+    assert!(title.ends_with("custom.ox"), "{title}");
     for group in ["Appearance", "Editing", "Files", "Rust", "weather plugin"] {
         assert!(shown.iter().any(|line| line == group), "{group}");
     }

@@ -176,14 +176,10 @@ fn the_packages_pane_lists_what_is_installed_and_attaches_with_return() {
     );
 
     assert_eq!(r.editor.buffer().name(), "*R packages*");
+    assert_eq!(r.lines(), ["  MASS   7.3-61", "* stats  4.6.1"]);
     assert_eq!(
-        r.lines(),
-        [
-            "RET attaches or detaches   h shows its help   g refreshes   q quits",
-            "",
-            "  MASS   7.3-61",
-            "* stats  4.6.1"
-        ]
+        r.editor.pane().header_lines()[0].0,
+        "RET attaches or detaches   h shows its help   g refreshes   q quits"
     );
     r.press("M-> C-p RET");
     assert_eq!(r.sent(), ["library(MASS)\n"]);

@@ -285,7 +285,7 @@
 (defcommand irc-list-join "Join the channel on this line of the channel list"
   (quietly (fn []
              (let [listed (listed-or-complain)]
-               (if-let [channel (get listed.shown (- (current-line) 3))]
+               (if-let [channel (get (line-item) :channel)]
                  (client/join! listed.network channel.name)
                  (message "No channel on this line"))))))
 

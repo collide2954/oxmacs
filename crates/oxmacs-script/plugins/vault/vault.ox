@@ -5,9 +5,8 @@
 
 (def list-buffer "*Vault*")
 (def entry-buffer "*Vault entry*")
-(def first-row 3)
 
-(defonce view (atom {rows: [] shown: nil reveal: false copies: 0 ticks: 0}))
+(defonce view (atom {shown: nil reveal: false copies: 0 ticks: 0}))
 
 (def list-keys
   {"RET" 'vault-show "c" 'vault-copy-password "u" 'vault-copy-username "t" 'vault-copy-code
@@ -43,22 +42,24 @@
    " "
    [(text entry.url) :comment]])
 
-(def (list-lines)
+(def (list-page)
   (let [found (sorted (store/entries))]
-    (swap! view assoc :rows (vec (map :id found)))
-    (vec (concat [{line: [["Vault" :heading] "  " [(str (count found) " entries") :comment]]}
-                  {line: [["RET shows  c copies the password  u the user  t the code  a adds  e edits  d deletes  L locks  q quits" :comment]]}
-                  {line: []}]
-                 (if (empty? found)
-                   [{line: [["No entries yet: a adds one and M-x vault-import brings in others" :comment]]}]
-                   (map (fn [entry] {line: (row entry)}) found))))))
+    {header: [[["Vault" :heading] "  " [(str (count found) " entries") :comment]]
+              [["RET shows  c copies the password  u the user  t the code  a adds  e edits  d deletes  L locks  q quits" :comment]]]
+     lines: (if (empty? found)
+              [[["No entries yet: a adds one and M-x vault-import brings in others" :comment]]]
+              (vec (map (fn [entry] {line: (row entry) id: entry.id}) found)))}))
 
 (def (show-list)
-  (open-buffer list-buffer (list-lines) :keys list-keys :line first-row))
+  (let [page (list-page)]
+    (open-buffer list-buffer page.lines :keys list-keys :line 0)
+    (set-header list-buffer page.header)))
 
 (def (redraw-list)
   (when (and (buffer-exists? list-buffer) (not (store/locked?)))
-    (set-lines list-buffer (list-lines))))
+    (let [page (list-page)]
+      (set-lines list-buffer page.lines)
+      (set-header list-buffer page.header))))
 
 (def (otp entry)
   (let [given (string/trim (text entry.totp))]
@@ -82,16 +83,17 @@
     (- step (mod (// (time/now) 1000) step))))
 
 (def (field label value)
-  {line: [[(string/pad-end label 11) :comment] value]})
+  [[(string/pad-end label 11) :comment] value])
+
+(def (entry-header entry)
+  [[[(text entry.title) :heading]]
+   [["c copies the password  u the user  t the code  s shows the password  e edits  q quits" :comment]]])
 
 (def (entry-lines entry)
   (let [reveal (get @view :reveal)
         password (text entry.password)]
     (vec (filter some?
-                 (concat [{line: [[(text entry.title) :heading]]}
-                          {line: [["c copies the password  u the user  t the code  s shows the password  e edits  q quits" :comment]]}
-                          {line: []}
-                          (field "User" [(text entry.username) :string])
+                 (concat [(field "User" [(text entry.username) :string])
                           (field "Password" (if reveal password (string/repeat "•" (min 16 (count password)))))
                           (when (not (blank? entry.url))
                             (field "URL" [entry.url :link]))
@@ -99,19 +101,20 @@
                             (field "Code" [(str (code entry) "   " (seconds-left entry) " s left") :keyword]))]
                          (if (blank? entry.notes)
                            []
-                           (concat [{line: []}]
-                                   (map (fn [line] {line: line}) (string/lines entry.notes)))))))))
+                           (concat [""] (string/lines entry.notes))))))))
 
 (def (redraw-entry)
   (when-let [entry (by-id (get @view :shown))]
     (when (buffer-exists? entry-buffer)
-      (set-lines entry-buffer (entry-lines entry)))))
+      (set-lines entry-buffer (entry-lines entry))
+      (set-header entry-buffer (entry-header entry)))))
 
 (def (show-entry entry)
   (let [ticks (inc (get @view :ticks))]
     (swap! view assoc :shown entry.id :reveal false :ticks ticks)
     (store/touch!)
     (open-buffer entry-buffer (entry-lines entry) :keys entry-keys)
+    (set-header entry-buffer (entry-header entry))
     (when (not (blank? entry.totp))
       (every 1000
              (fn []
@@ -122,10 +125,8 @@
 (def (entry-here)
   (cond ((store/locked?) nil)
     ((= (buffer-name) list-buffer)
-     (let [index (- (current-line) first-row)
-           rows (get @view :rows)]
-       (when (and (>= index 0) (< index (count rows)))
-         (by-id (nth rows index)))))
+     (when-let [id (get (line-item) :id)]
+       (by-id id)))
     ((= (buffer-name) entry-buffer) (by-id (get @view :shown)))
     (else nil)))
 
@@ -198,14 +199,8 @@
 
 (defcommand vault-refresh "Draw the vault list again" (redraw-list))
 
-(def (step delta)
-  (let [rows (count (get @view :rows))
-        line (+ (current-line) delta)]
-    (when (> rows 0)
-      (goto-line (max first-row (min (+ first-row rows -1) line))))))
-
-(defcommand vault-next "Move to the next entry" (step 1))
-(defcommand vault-previous "Move to the previous entry" (step -1))
+(defcommand vault-next "Move to the next entry" (next-item))
+(defcommand vault-previous "Move to the previous entry" (next-item -1))
 
 (defcommand vault-add "Add an entry to the password vault"
   (quietly (fn []

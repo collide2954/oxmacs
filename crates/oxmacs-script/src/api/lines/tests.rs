@@ -88,7 +88,7 @@ fn mistakes_in_pieces_are_explained_the_same_everywhere() {
 #[test]
 fn map_lines_are_items_found_by_their_fields() {
     let (mut editor, mut ox) = opened(
-        r#"(open-buffer "*items*" ["Files" {line: "a.txt" name: "a.txt" size: 3} "" {line: "b.txt" name: "b.txt" size: 5}])"#,
+        r#"(open-buffer "*items*" [{line: "Files" background: :region} {line: "a.txt" name: "a.txt" size: 3} "" {line: "b.txt" name: "b.txt" size: 5}])"#,
     );
     let eval = |ox: &mut Ox, editor: &mut Editor, source: &str| ox.eval(editor, source).unwrap();
 

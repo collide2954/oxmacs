@@ -113,19 +113,19 @@
                             (sort-by first (entries message.reactions)))))})
 
 (def (channel-lines network channels total wanted)
-  "The lines of the channel list of network: a heading, then each of the channels with its users and topic."
+  "The :header and :lines of the channel list of network: each of the channels with its users and topic, its line carrying the :channel."
   (let [width (+ 2 (reduce max 0 (map (fn [channel] (count channel.name)) channels)))
         shown (if (= (count channels) total) "" (str (count channels) " of "))
         having (if (string/blank? (or wanted "")) "" (str " with " (pr-str wanted)))]
-    (vec (concat [{line: [[(str "Channels on " network) :heading] [(str "  " shown total " channels" having) :comment]]}
-                  {line: [["RET joins  / filters  g lists again  q quits" :comment]]}
-                  {line: []}]
-                 (map (fn [channel]
+    {header: [[[(str "Channels on " network) :heading] [(str "  " shown total " channels" having) :comment]]
+              [["RET joins  / filters  g lists again  q quits" :comment]]]
+     lines: (vec (map (fn [channel]
                         {line: (vec (concat [[(string/pad-end channel.name width) :keyword]
                                              [(string/pad-start (str channel.users) 5) :comment]
                                              "  "]
-                                            (segments-of channel.topic nil)))})
-                      channels)))))
+                                            (segments-of channel.topic nil)))
+                         channel: channel})
+                      channels))}))
 
 (def (marker-line)
   "The line that marks where unread messages start."

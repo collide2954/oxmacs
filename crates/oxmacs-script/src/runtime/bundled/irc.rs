@@ -413,9 +413,12 @@ fn the_channel_list_is_filtered_and_joined_from() {
         .lines()
         .map(str::to_owned)
         .collect();
-    assert_eq!(lines[0], "Channels on Test  2 channels");
-    assert_eq!(lines[3], "#rust     120  Rust talk");
-    assert_eq!(lines[4], "#small      3  a quiet place");
+    assert_eq!(
+        editor.pane().header_lines()[0].0,
+        "Channels on Test  2 channels"
+    );
+    assert_eq!(lines[0], "#rust     120  Rust talk");
+    assert_eq!(lines[1], "#small      3  a quiet place");
 
     keys(&mut editor, &mut ox, "/");
     assert!(pump(&mut editor, &mut ox, |editor, _| editor
@@ -423,20 +426,19 @@ fn the_channel_list_is_filtered_and_joined_from() {
         .is_some()));
     type_in(&mut editor, &mut ox, "QUIET");
     keys(&mut editor, &mut ox, "RET");
-    wait_for_text(
-        &mut editor,
-        &mut ox,
-        "*irc channels Test*",
-        "1 of 2 channels with \"QUIET\"",
-    );
+    assert!(pump(&mut editor, &mut ox, |editor, _| editor
+        .pane()
+        .header_lines()[0]
+        .0
+        .ends_with("1 of 2 channels with \"QUIET\"")));
     let lines: Vec<String> = editor
         .buffer()
         .contents()
         .lines()
         .map(str::to_owned)
         .collect();
-    assert_eq!(lines.len(), 4);
-    assert!(lines[3].starts_with("#small "), "{lines:?}");
+    assert_eq!(lines.len(), 1);
+    assert!(lines[0].starts_with("#small "), "{lines:?}");
 
     keys(&mut editor, &mut ox, "RET");
     fake.expect(&mut editor, &mut ox, "JOIN #small");

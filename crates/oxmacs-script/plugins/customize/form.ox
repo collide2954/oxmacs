@@ -63,26 +63,26 @@
 (def (set-in-init? entry)
   (and (not entry.changed) (not= entry.custom entry.saved)))
 
-(def (setting-lines entry width)
+(def (setting-lines entry index width)
   (let [marker (if entry.changed ["* " :warning] "  ")
         note (when (set-in-init? entry) ["  set in init.ox" :comment])]
-    [{line: (vec (filter some? [marker (string/pad-end (name entry.key) width) [(shown entry) :link] note]))}
-     {line: [[(str "    " (hint-of entry)) :comment]]}]))
+    [{line: (vec (filter some? [marker (string/pad-end (name entry.key) width) [(shown entry) :link] note]))
+      index: index
+      column: (+ 2 width)}
+     [[(str "    " (hint-of entry)) :comment]]]))
 
 (def (page all location)
-  "The lines of *Settings* for all the entries, and a row for each setting: its :line, the :column of its value and its :index in all."
+  "The :header and :lines of *Settings* for all the entries; the line of each setting carries its :index in all and the :column of its value."
   (let [width (+ 2 (reduce max 0 (map (fn [entry] (count (name entry.key))) all)))
-        top {group: nil
-             rows: []
-             lines: [{line: [["Settings" :heading] (str "  " (or location "no oxmacs home folder"))]}
-                     {line: [[help :comment]]}]}
         step (fn [built index]
                (let [entry (nth all index)
-                     lines (if (= entry.group built.group)
-                             built.lines
-                             (into built.lines [{line: []} {line: [[entry.group :heading]]}]))]
+                     lines (cond
+                             [(= entry.group built.group) built.lines]
+                             [(empty? built.lines) [[[entry.group :heading]]]]
+                             [else (into built.lines [[] [[entry.group :heading]]])])]
                  {group: entry.group
-                  rows: (conj built.rows {line: (count lines) column: (+ 2 width) index: index})
-                  lines: (into lines (setting-lines entry width))}))
-        built (reduce step top (range (count all)))]
-    {lines: built.lines rows: built.rows}))
+                  lines: (into lines (setting-lines entry index width))}))
+        built (reduce step {group: nil lines: []} (range (count all)))]
+    {header: [[["Settings" :heading] (str "  " (or location "no oxmacs home folder"))]
+              [[help :comment]]]
+     lines: built.lines}))

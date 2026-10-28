@@ -105,27 +105,26 @@
     (swap! listing assoc :session running)
     (session/request running "getOption(\"oxmacs\")$packages()")))
 
+(def (package-lines rows)
+  (let [width (apply max 0 (map (fn [row] (count row.name)) rows))]
+    (vec (map (fn [row] {line: [(if row.attached "* " "  ")
+                                [(string/pad-end row.name width) (if row.attached :keyword :link)]
+                                "  " [row.version :comment]]
+                         package: row})
+              rows))))
+
 (def (installed session payload)
-  (let [rows (keep (fn [line]
-                     (let [fields (string/split line "\t")]
-                       (when (>= (count fields) 3)
-                         {name: (nth fields 0) version: (nth fields 1) attached: (= (nth fields 2) "TRUE")})))
-                   (string/lines payload))
-        width (apply max 0 (map (fn [row] (count row.name)) rows))]
+  (let [rows (vec (keep (fn [line]
+                          (let [fields (string/split line "\t")]
+                            (when (>= (count fields) 3)
+                              {name: (nth fields 0) version: (nth fields 1) attached: (= (nth fields 2) "TRUE")})))
+                        (string/lines payload)))]
     (reset! listing {session: session rows: rows})
-    (open-buffer packages-buffer
-                 (concat [[[packages-help :comment]] []]
-                         (map (fn [row] [(if row.attached "* " "  ")
-                                         [(string/pad-end row.name width) (if row.attached :keyword :link)]
-                                         "  " [row.version :comment]])
-                              rows))
-                 :keys package-keys :beside true :select true)))
+    (open-buffer packages-buffer (package-lines rows) :keys package-keys :beside true :select true)
+    (set-header packages-buffer [[[packages-help :comment]]])))
 
 (def (package-here)
-  (let [at (- (current-line) 2)
-        rows (get @listing :rows)]
-    (when (and (>= at 0) (< at (count rows)))
-      (nth rows at))))
+  (get (line-item) :package))
 
 (defcommand r-package-toggle "Attach or detach the package on this line"
   (if-let [row (package-here)]
@@ -134,7 +133,8 @@
       (session/evaluate running (if row.attached
                                   "detach({(session/r-string (str "package:" row.name))})"
                                   "library({row.name})"))
-      (swap! listing update :rows (fn [rows] (map (fn [other] (if (= other.name row.name) (assoc other :attached (not row.attached)) other)) rows))))
+      (swap! listing update :rows (fn [rows] (vec (map (fn [other] (if (= other.name row.name) (assoc other :attached (not row.attached)) other)) rows))))
+      (set-lines packages-buffer (package-lines (get @listing :rows))))
     (message "No package on this line")))
 
 (defcommand r-package-help "Show the help index of the package on this line"

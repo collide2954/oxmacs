@@ -3,7 +3,7 @@
 
 (def buffer "*Processes*")
 
-(defonce state (atom {sort: :started descending: false filter: "" open: #{} rows: []}))
+(defonce state (atom {sort: :started descending: false filter: "" open: #{}}))
 
 (def process-keys
   {"RET" 'process-visit "TAB" 'process-details "k" 'process-stop "K" 'process-kill
@@ -11,12 +11,11 @@
    "g" 'process-refresh "n" 'next-line "p" 'previous-line "q" 'process-quit})
 
 (def (draw opening)
-  (let [rows (table/rows (processes) (time/now) (or (buffer-width buffer) 120) @state)
-        lines (vec (map :line rows))]
-    (swap! state assoc :rows rows)
+  (let [shown (table/rows (processes) (time/now) (or (buffer-width buffer) 120) @state)]
     (if opening
-      (open-buffer buffer lines :keys process-keys :beside true :select true :on-resize (fn [_] (draw false)))
-      (set-lines buffer lines))))
+      (open-buffer buffer shown.lines :keys process-keys :beside true :select true :on-resize (fn [_] (draw false)))
+      (set-lines buffer shown.lines))
+    (set-header buffer shown.header)))
 
 (def (refresh)
   (if (buffer-exists? buffer)
@@ -27,10 +26,7 @@
 (on-processes-change :processes refresh)
 
 (def (process-here)
-  (let [rows (get @state :rows)
-        at (current-line)]
-    (when (and (>= at 0) (< at (count rows)))
-      (get (nth rows at) :id))))
+  (get (line-item) :id))
 
 (def (on-process act)
   (if-let [id (process-here)]

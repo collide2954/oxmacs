@@ -3,7 +3,7 @@
 
 (def buffer "*ox profile*")
 
-(defonce state (atom {found: nil folded: #{} flat: false rows: []}))
+(defonce state (atom {found: nil folded: #{} flat: false}))
 
 (def report-keys
   {"TAB" 'ox-profiler-toggle "f" 'ox-profiler-flat "RET" 'ox-profiler-visit
@@ -11,23 +11,19 @@
 
 (def (draw opening)
   (let [now @state
-        rows (report/rows now.found now.folded now.flat)
-        lines (vec (map :line rows))]
-    (swap! state assoc :rows rows)
+        report (report/rows now.found now.folded now.flat)]
     (if opening
-      (open-buffer buffer lines :keys report-keys)
-      (set-lines buffer lines))
-    rows))
+      (open-buffer buffer report.lines :keys report-keys)
+      (set-lines buffer report.lines))
+    (set-header buffer report.header)))
 
 (def (show found)
   (swap! state assoc :found found :folded #{})
-  (goto-line (report/first-row (draw true))))
+  (draw true)
+  (goto-item {}))
 
 (def (row-here)
-  (let [rows (get @state :rows)
-        at (current-line)]
-    (when (and (>= at 0) (< at (count rows)))
-      (nth rows at))))
+  (line-item))
 
 (defcommand ox-profiler-start "Start profiling the Ox code oxmacs runs"
   (if (profiler-start)
@@ -59,7 +55,8 @@
 
 (defcommand ox-profiler-flat "Switch between the call tree and the functions by self time"
   (swap! state update :flat not)
-  (goto-line (report/first-row (draw false))))
+  (draw false)
+  (goto-item {}))
 
 (defcommand ox-profiler-visit "Visit the source of the function at point"
   (when-let [row (row-here)]

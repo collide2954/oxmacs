@@ -53,7 +53,8 @@ fn profiling_from_the_editor_reports_by_plugin_with_editor_ticks() {
 
     assert_eq!(editor.buffer().name(), "*ox profile*");
     let shown = lines(&editor);
-    assert!(shown[0].starts_with("Ox profile  "), "{shown:#?}");
+    let title = &editor.pane().header_lines()[0].0;
+    assert!(title.starts_with("Ox profile  "), "{title}");
     assert!(
         shown.iter().any(|line| line.starts_with("Slowest ticks")),
         "{shown:#?}"
