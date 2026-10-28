@@ -1,6 +1,6 @@
 (module
   (import (ox string) (ox regex))
-  (export page symbol-in symbol-at-point topic-of link-at next-link example-at examples))
+  (export page symbol-in symbol-at-point topic-of example-at examples))
 
 (def backspace \u{8})
 
@@ -31,13 +31,13 @@
                         {at: link.end
                          pieces: (-> built.pieces
                                      (conj before)
-                                     (conj [(string/slice shown link.start link.end) :link]))}))
+                                     (conj [(string/slice shown link.start link.end) :link :link link.topic]))}))
                     {at: 0 pieces: []}
                     links)]
     (conj cut.pieces (string/slice shown cut.at))))
 
 (def (page text)
-  "R's help text laid out for open-buffer: its lines with headings and links styled, the links found in See Also, and the lines of its examples."
+  "R's help text laid out for open-buffer: its lines with headings styled and the topics named in See Also as links to them, and the lines of its examples."
   (let [built (reduce
                (fn [built line]
                  (let [parts (runs line)
@@ -48,34 +48,21 @@
                             :section (string/trim (string/replace (string/trim-end shown) ":" ""))
                             :lines (conj built.lines (map (fn [[piece struck]] (if struck [piece :heading] piece)) parts)))
                      (let [links (if (= built.section "See Also")
-                                   (map (fn [found] {line: number start: (+ found.start 1) end: (- found.end 1)
+                                   (map (fn [found] {start: (+ found.start 1) end: (- found.end 1)
                                                      topic: (first found.groups)})
                                         (regex/find-all #"['‘]([\p{L}\p{N}._:]+)['’]" shown))
                                    [])]
                        (assoc built
                               :lines (conj built.lines (if (empty? links) shown (linked shown links)))
-                              :links (concat built.links links)
                               :examples (if (= built.section "Examples")
                                           (conj built.examples number)
                                           built.examples))))))
-               {lines: [] links: [] examples: [] section: nil}
+               {lines: [] examples: [] section: nil}
                (string/lines text))]
-    {lines: built.lines links: (vec built.links) examples: built.examples texts: (map plain (map runs (string/lines text)))}))
+    {lines: built.lines examples: built.examples texts: (map plain (map runs (string/lines text)))}))
 
 (def (topic-of text)
   (first (string/words (or (first (string/lines text)) ""))))
-
-(def (link-at page line column)
-  (let [here (filter (fn [link] (= link.line line)) page.links)]
-    (or (find (fn [link] (and (<= link.start column) (<= column link.end))) here)
-        (first here))))
-
-(def (next-link page line column forward)
-  (let [after? (fn [link] (or (> link.line line) (and (= link.line line) (> link.start column))))
-        before? (fn [link] (or (< link.line line) (and (= link.line line) (< link.start column))))]
-    (if forward
-      (find after? page.links)
-      (last (filter before? page.links)))))
 
 (def (dedented lines)
   (let [indents (keep (fn [line] (when (not (string/blank? line))

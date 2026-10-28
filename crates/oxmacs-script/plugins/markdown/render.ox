@@ -54,26 +54,27 @@
 (def (width-of word)
   (reduce + 0 (map (fn [chunk] (string/length chunk.text)) word)))
 
-(def (linked links start end target)
-  (let [previous (peek links)]
-    (if (and previous (= previous.target target) (<= (- start previous.end) 1))
-      (conj (pop links) (assoc previous :end end))
-      (conj links {start: start end: end target: target}))))
+(def (piece-of chunk)
+  (cond
+    [chunk.target [chunk.text :link :link chunk.target]]
+    [chunk.face [chunk.text chunk.face]]
+    [else chunk.text]))
+
+(def (joins? previous chunk)
+  (and chunk.target (vector? previous) (= (count previous) 4) (= (nth previous 3) chunk.target)))
 
 (def (lay prefix line)
-  (reduce (fn [acc chunk]
-            (let [gap (if (and chunk.space (> (count acc.pieces) 1)) 1 0)
-                  start (+ acc.column gap)
-                  end (+ start (string/length chunk.text))
-                  pieces (if (= gap 1) (conj acc.pieces " ") acc.pieces)]
-              {column: end
-               pieces: (conj pieces (if chunk.face [chunk.text chunk.face] chunk.text))
-               links: (if chunk.target (linked acc.links start end chunk.target) acc.links)}))
-          {column: (string/length prefix) pieces: [prefix] links: []}
+  (reduce (fn [pieces chunk]
+            (let [gap (and chunk.space (> (count pieces) 1))
+                  previous (peek pieces)]
+              (if (joins? previous chunk)
+                (conj (pop pieces) [(str (first previous) (if gap " " "") chunk.text) :link :link chunk.target])
+                (conj (if gap (conj pieces " ") pieces) (piece-of chunk)))))
+          [prefix]
           line))
 
 (def (wrap runs width {lead "" indent ""})
-  "Lays runs out in lines no wider than width, the first starting with lead and the others with indent: a vector of maps of :pieces, ready for open-buffer, and :links with the :start, :end and :target of each link."
+  "Lays runs out in lines no wider than width, the first starting with lead and the others with indent: a vector of lines of pieces, ready for open-buffer, with each link one [text :link :link target] piece."
   (let [filled (reduce (fn [acc word]
                          (let [size (width-of word)
                                prefix (if (empty? acc.done) lead indent)
@@ -90,12 +91,7 @@
          (map vector (range (count lines)) (if (empty? lines) [[]] lines)))))
 
 (def (add-lines page laid)
-  (reduce (fn [page line]
-            (let [at (count page.lines)]
-              (assoc page
-                     :lines (conj page.lines line.pieces)
-                     :links (into page.links (map (fn [link] (assoc link :line at)) line.links)))))
-          page laid))
+  (update page :lines into laid))
 
 (def (blank page)
   (if (or (empty? page.lines) (= (peek page.lines) [""]))
@@ -146,9 +142,9 @@
     [else (assoc page :para {kind: :text text: (string/trim line)})]))
 
 (def (render text width)
-  "Renders a page of Markdown at width: a map of :lines for open-buffer, :links with their :line, :start, :end and :target, :headings with their :line and :title, and :blocks of Ox code with their :first and :last line and :source. Fences marked text, or any language but ox, show as plain text."
+  "Renders a page of Markdown at width: a map of :lines for open-buffer, whose links are [text :link :link target] pieces, :headings with their :line and :title, and :blocks of Ox code with their :first and :last line and :source. Fences marked text, or any language but ox, show as plain text."
   (let [page (reduce (fn [page line] (step page line width))
-                     {lines: [] links: [] headings: [] blocks: [] para: nil code: nil fence: nil}
+                     {lines: [] headings: [] blocks: [] para: nil code: nil fence: nil}
                      (string/lines text))
         page (if (some? page.code) (code-block page) (flush page width))]
     (dissoc page :para :code :fence)))
@@ -158,9 +154,9 @@
              [{text: "Use "} {text: "x" face: :constant} {text: " with "} {text: "care" face: :keyword}
               {text: ", see "} {text: "the start" face: :link target: "start"} {text: "."}])))
 
-(test "a link of several words is one link"
-  (expect (= (get (render "See [the start page](start), then [more](next)." 80) :links)
-             [{start: 4 end: 18 target: "start" line: 0} {start: 25 end: 29 target: "next" line: 0}])))
+(test "a link of several words is one link piece"
+  (expect (= (first (get (render "See [the start page](start), then [more](next)." 80) :lines))
+             ["" "See" " " ["the start page" :link :link "start"] "," " " "then" " " ["more" :link :link "next"] "."])))
 
 (test "front matter is left out of the page"
   (expect (= (body "---\ntitle: x\n...\n# A\n") "# A"))

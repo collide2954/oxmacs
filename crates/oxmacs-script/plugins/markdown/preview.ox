@@ -13,24 +13,13 @@
 (def (draw buffer)
   (when-let [state (preview-of buffer)]
     (let [page (render/render (render/body (get @state :text)) (width-for buffer))]
-      (swap! state assoc :page page)
       (set-lines buffer page.lines))))
 
-(def (link-here)
-  (when-let [state (buffer-value :markdown-preview)]
-    (let [line (current-line)
-          column (current-column)
-          links (get-in @state [:page :links])]
-      (or (first (filter (fn [link] (and (= link.line line) (<= link.start column) (< column link.end))) links))
-          (first (filter (fn [link] (= link.line line)) links))))))
-
-(defcommand markdown-follow-link "Open the link on this line"
-  (if-let [link (link-here)]
-    (let [target link.target]
-      (if (or (string/starts-with? target "http://") (string/starts-with? target "https://"))
-        (open-externally target)
-        (open-file (path/join (get @(buffer-value :markdown-preview) :folder) target))))
-    (message "No link on this line")))
+(def (follow name target)
+  (if (or (string/starts-with? target "http://") (string/starts-with? target "https://"))
+    (open-externally target)
+    (when-let [state (preview-of name)]
+      (open-file (path/join (get @state :folder) target)))))
 
 (defcommand markdown-preview-refresh "Read the Markdown file again"
   (when-let [state (buffer-value :markdown-preview)]
@@ -52,7 +41,9 @@
         name "*Markdown: {(if file (path/name file) (buffer-name))}*"
         state (atom {text: (buffer-text) folder: (if file (path/parent file) (default-directory)) source: file})
         buffer (open-buffer name [] :beside true
-                            :keys {"RET" 'markdown-follow-link "g" 'markdown-preview-refresh "q" 'quit-window}
-                            :on-resize (fn [_] (draw name)))]
+                            :keys {"RET" 'follow-link "TAB" 'next-link "S-TAB" 'previous-link
+                                   "g" 'markdown-preview-refresh "q" 'quit-window}
+                            :on-resize (fn [_] (draw name))
+                            :on-link (fn [target] (follow name target)))]
     (with-buffer buffer (set-buffer-value! :markdown-preview state))
     (draw buffer)))

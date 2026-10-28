@@ -36,8 +36,8 @@ fn pages_wrap_to_their_width_and_keep_their_links_and_code() {
     assert_eq!(
         page,
         concat!(
-            r#"{lines: [[["Title" :heading]] [""] ["" "One" " " "two" " " "three" " " "four"] ["" "five" " " "six" " " ["seven" :link]] ["" "eight."] [""] ["  • " "a" " " "bullet" " " "that"] ["    " "wraps" " " "around"] [""] ["    " "(" ["def" :keyword] " " ["x" :function] " " ["1" :constant] ")"]] "#,
-            r#"links: [{start: 9 end: 14 target: "next" line: 3}] headings: [{line: 0 title: "Title"}] blocks: [{first: 9 last: 9 source: "(def x 1)"}]}"#
+            r#"{lines: [[["Title" :heading]] [""] ["" "One" " " "two" " " "three" " " "four"] ["" "five" " " "six" " " ["seven" :link :link "next"]] ["" "eight."] [""] ["  • " "a" " " "bullet" " " "that"] ["    " "wraps" " " "around"] [""] ["    " "(" ["def" :keyword] " " ["x" :function] " " ["1" :constant] ")"]] "#,
+            r#"headings: [{line: 0 title: "Title"}] blocks: [{first: 9 last: 9 source: "(def x 1)"}]}"#
         )
     );
 }

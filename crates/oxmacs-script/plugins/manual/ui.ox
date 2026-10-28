@@ -21,12 +21,25 @@ A plugin shows its work in buffers of text lines, in views of widgets, or in men
              :keys {"n" 'fruit-next "q" 'quit-window})
 ```
 
-The faces are `:heading`, `:link`, `:comment`, `:doc-comment`, `:keyword`, `:string`, `:function`, `:type`, `:constant`, `:attribute`, `:macro`, `:success`, `:warning`, `:error`, `:added`, `:removed`, `:marked`, `:flagged`, `:region` and `:symlink`, and `:nick-0` to `:nick-7` for names in a chat. `[text face :pill]` draws a piece as a rounded label, and a line written as `{line: pieces background: :region}` gets a background.
+The faces are `:heading`, `:link`, `:comment`, `:doc-comment`, `:keyword`, `:string`, `:function`, `:type`, `:constant`, `:attribute`, `:macro`, `:success`, `:warning`, `:error`, `:added`, `:removed`, `:marked`, `:flagged`, `:region` and `:symlink`, and `:nick-0` to `:nick-7` for names in a chat. `[text face :pill]` draws a piece as a rounded label, and `[text face :link target]` makes it a link.
 
-`set-lines` fills the buffer again and keeps point where it was, and `append-lines` adds lines at the end, as a log does. `open-buffer` also takes:
+A line written as a map, such as `{line: pieces background: :region}`, gets a background, and fields of your own in it make the line an item. `line-item` gives the map of the line at point, `goto-item` moves to the line whose item has the fields it is given, and `next-item` steps from item to item, so commands find their rows without counting lines:
+
+```
+(defcommand fruit-show "Say which fruit this is"
+  (message (or (get (line-item) :name) "No fruit here")))
+(let [buffer (open-buffer "*fruit*"
+                          [{line: "  apple" name: "apple"} {line: "  quince" name: "quince"}]
+                          :keys {"RET" 'fruit-show "q" 'quit-window})]
+  (set-header buffer [[["Fruit" :heading]]])
+  (goto-item {name: "quince"}))
+```
+
+`set-header` keeps headings above the lines, where they stay while the lines scroll and never shift them. `set-lines` fills the buffer again and keeps point where it was, and `append-lines` adds lines at the end, as a log does. `open-buffer` also takes:
 
 - `:keys`, a map of keys to commands. The commands run with this buffer current, so `current-line` tells them where point is.
 - `:on-move`, called with the line when point moves to another line, and `:on-resize`, called with the width when the window changes width.
+- `:on-link`, called with the target of a link when it is clicked or `follow-link` runs on it; bind `follow-link`, `next-link` and `previous-link` in `:keys`, usually to `RET`, `TAB` and `S-TAB`.
 - `:line` to move point, `:beside true` to show the buffer in another window, and `:select true` to move there too.
 - `:input "> "` for an input line below the lines, as in a chat. `take-input` reads and empties it, and `M-p` and `M-n` recall earlier input.
 - `:directory`, the folder that file prompts start in, and `:show false` to make or fill the buffer without showing it.

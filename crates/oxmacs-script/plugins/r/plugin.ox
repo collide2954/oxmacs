@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.20.4"
+  :version "0.20.5"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands {run-r: "Start an R console beside the script"
              r-new-session: "Start another R session beside the current one"

@@ -123,7 +123,7 @@
     :comment]])
 
 (def reader-keys
-  {"RET" 'ox-manual-follow "TAB" 'ox-manual-next-link "S-TAB" 'ox-manual-previous-link
+  {"RET" 'follow-link "TAB" 'next-link "S-TAB" 'previous-link
    "n" 'ox-manual-next "p" 'ox-manual-previous "u" 'ox-manual-contents "t" 'ox-manual-contents
    "l" 'ox-manual-back "r" 'ox-manual-forward "s" 'ox-manual-search "i" 'ox-manual-lookup
    "x" 'ox-manual-run "q" 'quit-window})
@@ -153,7 +153,8 @@
         (when from
           (swap! state (fn [now] (assoc now :back (conj now.back from) :ahead []))))
         (swap! state assoc :page spot.id :shown (assoc shown :entries page.entries))
-        (open-buffer buffer (lines-of shown) :keys reader-keys :line line :on-resize (fn [_] (redraw)))
+        (open-buffer buffer (lines-of shown) :keys reader-keys :line line :on-resize (fn [_] (redraw))
+                     :on-link (fn [target] (go! target)))
         (goto-line line 0)))))
 
 (def (go! target)
@@ -169,33 +170,6 @@
   (if (buffer-exists? buffer)
     (switch-to-buffer buffer)
     (show! {id: (get @state :page)})))
-
-(def (link-at)
-  (let [shown (get @state :shown)
-        line (current-line)
-        column (current-column)
-        here (filter (fn [link] (= link.line line)) (or shown.links []))]
-    (or (first (filter (fn [link] (and (<= link.start column) (< column link.end))) here))
-        (first here))))
-
-(defcommand ox-manual-follow "Follow the link at point"
-  (if-let [link (link-at)]
-    (go! link.target)
-    (message "No link on this line")))
-
-(def (jump-link forward)
-  (let [links (or (get-in @state [:shown :links]) [])
-        line (current-line)
-        column (current-column)
-        after (filter (fn [link] (or (> link.line line) (and (= link.line line) (> link.start column)))) links)
-        before (filter (fn [link] (or (< link.line line) (and (= link.line line) (< link.start column)))) links)
-        target (if forward (or (first after) (first links)) (or (last before) (last links)))]
-    (if target
-      (goto-line target.line target.start)
-      (message "This page has no links"))))
-
-(defcommand ox-manual-next-link "Move to the next link" (jump-link true))
-(defcommand ox-manual-previous-link "Move to the previous link" (jump-link false))
 
 (def (turn delta)
   (let [ids (order (reference))
