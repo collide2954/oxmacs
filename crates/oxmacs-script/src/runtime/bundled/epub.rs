@@ -159,8 +159,14 @@ fn a_closed_book_opens_again_and_one_of_the_same_name_gets_its_own_buffer() {
     assert!(reader.editor.open_file(&second));
     settle(&mut reader.editor, &mut reader.ox);
 
-    assert_eq!(reader.editor.buffer().name(), "sample.epub<2>");
-    assert!(reader.editor.buffer_named("sample.epub").is_some());
+    let first = format!(
+        "sample.epub<{}>",
+        reader.books.path().file_name().unwrap().to_string_lossy()
+    );
+    assert_eq!(reader.editor.buffer().name(), "sample.epub<more>");
+    assert!(reader.editor.buffer_named(&first).is_some());
+    assert!(reader.editor.open_file(&reader.books.path().join("sample.epub")));
+    assert_eq!(reader.editor.buffer().name(), first);
 }
 
 #[test]
