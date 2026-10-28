@@ -14,7 +14,6 @@ use crate::units::to_f32;
 const INSET: f32 = 8.0;
 const EDGE: f32 = 4.0;
 const RADIUS: f32 = 6.0;
-const RAISE: f32 = 0.06;
 const SHADE: f32 = 0.25;
 const STANDS_OUT: f64 = 1.4;
 
@@ -63,10 +62,7 @@ impl Popup {
 }
 
 pub fn surface(faces: &Faces) -> Color {
-    faces
-        .default
-        .background
-        .mix(faces.default.foreground, RAISE)
+    faces.surface()
 }
 
 pub fn selected(faces: &Faces) -> Face {

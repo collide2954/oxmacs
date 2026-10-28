@@ -29,7 +29,6 @@ const WIDE_SAMPLE: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
 const NARROW_SAMPLE: &str = "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii";
 const WHEEL_ROWS: f32 = 3.0;
 const CONTINUATION: &str = "\\";
-const HEADER_RAISE: f32 = 0.06;
 const PILL_ALPHA: f32 = 0.22;
 const PILL_INSET: f32 = 0.08;
 const PILL_PADDING: f32 = 0.35;
@@ -195,11 +194,7 @@ impl<'a, Message> BufferView<'a, Message> {
             bounds.position(),
             Size::new(bounds.width, to_f32(lines.len()) * cell.height),
         );
-        let surface = self
-            .faces
-            .default
-            .background
-            .mix(self.faces.default.foreground, HEADER_RAISE);
+        let surface = self.faces.surface();
         renderer.fill_quad(
             Quad {
                 bounds: strip,
@@ -992,10 +987,8 @@ pub fn cell_at(position: Point, cell: Size, top: f32) -> Cell {
 }
 
 pub fn wheel_rows(delta: ScrollDelta, cell_height: f32, carry: f32) -> (isize, f32) {
-    let rows = match delta {
-        ScrollDelta::Lines { y, .. } => -y * WHEEL_ROWS,
-        ScrollDelta::Pixels { y, .. } => -y / cell_height,
-    };
+    let (_, down) = style::wheel(delta, WHEEL_ROWS * cell_height);
+    let rows = -down / cell_height;
     let total = carry + rows;
     let whole = total.trunc();
     (trunc_to_isize(whole), total - whole)

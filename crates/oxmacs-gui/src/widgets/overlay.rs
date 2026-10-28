@@ -1,5 +1,4 @@
 use iced::alignment::{Horizontal, Vertical};
-use iced::font::Family;
 use iced::widget::{Column, Row, Stack, container, text};
 use iced::{Border, Element, Font, Length, Padding, Shadow, Vector};
 use oxmacs_core::theme::{Color, Theme as Faces};
@@ -7,10 +6,6 @@ use oxmacs_core::view::overlays::{Look, Overlay, Piece, Place, Row as Line};
 
 use crate::style;
 
-const UI_FONT: Font = Font {
-    family: Family::SansSerif,
-    ..Font::DEFAULT
-};
 const BASE: f32 = 16.0;
 const MARGIN: f32 = 12.0;
 const ROW_GAP: f32 = 6.0;
@@ -19,7 +14,6 @@ const PILL_PADDING: [f32; 2] = [5.0, 12.0];
 const CAP_PADDING: [f32; 2] = [0.0, 6.0];
 const CAP_RADIUS: f32 = 5.0;
 const CAP_DEPTH: f32 = 2.0;
-const PILL_TINT: f32 = 0.08;
 const CAP_TINT: f32 = 0.2;
 const CAP_EDGE: f32 = 0.38;
 const SHADE: f32 = 0.35;
@@ -38,7 +32,7 @@ impl Colors {
         let background = faces.default.background;
         let foreground = faces.default.foreground;
         Self {
-            pill: background.mix(foreground, PILL_TINT),
+            pill: faces.surface(),
             edge: faces.mode_line_border,
             cap: background.mix(foreground, CAP_TINT),
             cap_edge: background.mix(foreground, CAP_EDGE),
@@ -169,8 +163,8 @@ fn piece<'a, Message: 'a>(shown: &'a Piece, paint: Paint) -> Element<'a, Message
     };
     match shown.look {
         Look::Keycap => keycap(label(paint.font, paint.colors.text).into(), paint),
-        Look::Plain => label(UI_FONT, paint.colors.text).into(),
-        Look::Face(highlight) => label(UI_FONT, paint.faces.highlight(highlight)).into(),
+        Look::Plain => label(crate::fonts::UI, paint.colors.text).into(),
+        Look::Face(highlight) => label(crate::fonts::UI, paint.faces.highlight(highlight)).into(),
     }
 }
 

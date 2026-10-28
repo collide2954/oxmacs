@@ -7,6 +7,10 @@ use iced::font::Family;
 pub const JETBRAINS_MONO_REGULAR: &[u8] = include_bytes!("../fonts/JetBrainsMono-Regular.ttf");
 pub const EDITOR_FAMILY: &str = "JetBrains Mono";
 pub const EDITOR: Font = Font::with_name(EDITOR_FAMILY);
+pub const UI: Font = Font {
+    family: Family::SansSerif,
+    ..Font::DEFAULT
+};
 
 const SERIFS: &[&str] = &[
     "Literata",

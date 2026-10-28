@@ -29,6 +29,7 @@ const SMALL: f32 = 0.72;
 const MARK_ALPHA: f32 = 0.45;
 const SELECTION_ALPHA: f32 = 0.6;
 const TALLEST_IMAGE: f32 = 0.92;
+const TURN_PIXELS: f32 = 40.0;
 const INDENT: &str = "\u{2003}";
 
 pub type Anchor = (usize, usize);
@@ -848,10 +849,7 @@ where
                 }
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) if cursor.is_over(bounds) => {
-                let lines = match delta {
-                    mouse::ScrollDelta::Lines { y, .. } => *y,
-                    mouse::ScrollDelta::Pixels { y, .. } => *y / 40.0,
-                };
+                let lines = style::wheel(*delta, TURN_PIXELS).1 / TURN_PIXELS;
                 state.wheel += lines;
                 if state.wheel.abs() >= 1.0 {
                     let by = if state.wheel > 0.0 { -1 } else { 1 };

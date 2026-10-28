@@ -518,10 +518,7 @@ impl<'a, Message> PdfView<'a, Message> {
     }
 
     fn wheel(&self, state: &mut State, document: &Document, delta: mouse::ScrollDelta) {
-        let (across, down) = match delta {
-            mouse::ScrollDelta::Lines { x, y } => (x * LINE, y * LINE),
-            mouse::ScrollDelta::Pixels { x, y } => (x, y),
-        };
+        let (across, down) = style::wheel(delta, LINE);
         if down != 0.0 {
             self.scroll(state, document, -down);
         }

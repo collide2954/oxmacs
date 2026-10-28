@@ -121,7 +121,18 @@ impl SyntaxColors {
     }
 }
 
+const RAISED: f32 = 0.06;
+const TINTED: f32 = 0.03;
+
 impl Theme {
+    pub fn surface(&self) -> Color {
+        self.default.background.mix(self.default.foreground, RAISED)
+    }
+
+    pub fn tint(&self) -> Color {
+        self.default.background.mix(self.default.foreground, TINTED)
+    }
+
     pub fn mix(&self, other: &Self, amount: f32) -> Self {
         Self {
             name: other.name,
@@ -440,6 +451,23 @@ mod tests {
         assert_ne!(added, dim.default.background.mix(dim.success, DIFF_TINT));
         assert_ne!(added, dim.default.background);
         assert!(dim.default.foreground.contrast_ratio(added) >= READABLE);
+    }
+
+    #[test]
+    fn chrome_colors_sit_between_the_background_and_the_text() {
+        for theme in builtin() {
+            let background = theme.default.background;
+            let raised = theme.surface().contrast_ratio(background);
+            let tinted = theme.tint().contrast_ratio(background);
+            let dimmed = theme.default.foreground.dimmed(background);
+
+            assert!(tinted > 1.0 && raised > tinted, "{}", theme.name);
+            assert!(dimmed.contrast_ratio(background) >= 4.5, "{}", theme.name);
+            assert!(
+                dimmed.contrast_ratio(background)
+                    < theme.default.foreground.contrast_ratio(background)
+            );
+        }
     }
 
     #[test]

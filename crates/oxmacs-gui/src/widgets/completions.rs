@@ -11,7 +11,6 @@ const ROWS: usize = 10;
 const LABEL_SHARE: u16 = 1;
 const SUMMARY_SHARE: u16 = 1;
 const SUMMARY_GAP: f32 = 24.0;
-const DETAIL_FADE: f32 = 0.4;
 
 pub fn view<'a, Message: 'a>(
     editor: &'a Editor,
@@ -85,10 +84,7 @@ fn detail_color(faces: &Faces, current: bool) -> Color {
     if current {
         faces.completion_current.foreground
     } else {
-        faces
-            .default
-            .foreground
-            .mix(faces.default.background, DETAIL_FADE)
+        faces.default.foreground.dimmed(faces.default.background)
     }
 }
 

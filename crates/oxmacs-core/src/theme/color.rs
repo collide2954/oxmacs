@@ -6,6 +6,8 @@ pub struct Color {
     pub b: u8,
 }
 
+const DIMMED: f32 = 0.3;
+
 impl Color {
     pub const fn hex(rgb: u32) -> Self {
         let [_, r, g, b] = rgb.to_be_bytes();
@@ -22,6 +24,10 @@ impl Color {
             }
         };
         0.2126 * linear(self.r) + 0.7152 * linear(self.g) + 0.0722 * linear(self.b)
+    }
+
+    pub fn dimmed(self, background: Self) -> Self {
+        self.mix(background, DIMMED)
     }
 
     pub fn mix(self, other: Self, amount: f32) -> Self {

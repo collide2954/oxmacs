@@ -18,7 +18,6 @@ use crate::widgets::mode_line::{self, Look};
 use crate::widgets::{completions, echo_area, overlay, ox_view, tab_bar, transient};
 use crate::{style, units};
 
-const SIDE_TINT: f32 = 0.03;
 const SIDE_PADDING: f32 = 8.0;
 const COLUMN_PADDING: f32 = 8.0;
 const COLUMN_MARGIN: f32 = 1.5;
@@ -128,12 +127,7 @@ impl App {
         let Some(pane) = self.editor.pane_of(side.window) else {
             return main;
         };
-        let tint = style::color(
-            faces
-                .default
-                .background
-                .mix(faces.default.foreground, SIDE_TINT),
-        );
+        let tint = style::color(faces.tint());
         let width = units::to_f32(side.columns) * units::cell_width(self.text_size) + SIDE_PADDING;
         let panel = container(self.body(pane, side.window, faces))
             .width(Length::Fixed(width))

@@ -7,7 +7,6 @@ use crate::style;
 
 const ACCENT: f32 = 2.0;
 const HOVER: f32 = 0.5;
-const DIM: f32 = 0.3;
 const CLOSE: &str = "×";
 const NEW: &str = "+";
 
@@ -48,7 +47,7 @@ fn colors(faces: &Faces) -> Colors {
         hovered: strip.mix(faces.default.background, HOVER),
         selected: faces.default.background,
         accent: faces.cursor,
-        text: faces.default.foreground.mix(strip, DIM),
+        text: faces.default.foreground.dimmed(strip),
         current: faces.default.foreground,
         rule: faces.mode_line_border,
     }

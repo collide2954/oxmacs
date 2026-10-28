@@ -6,8 +6,6 @@ use oxmacs_core::theme::{Color, Theme as Faces};
 
 use crate::style;
 
-const FADE: f32 = 0.35;
-const SURFACE: f32 = 0.05;
 const GROUP_GAP: f32 = 40.0;
 const ROW_GAP: f32 = 0.4;
 
@@ -24,16 +22,13 @@ struct Colors {
 
 fn colors(faces: &Faces) -> Colors {
     Colors {
-        surface: faces
-            .default
-            .background
-            .mix(faces.default.foreground, SURFACE),
+        surface: faces.surface(),
         title: faces.minibuffer_prompt,
         heading: faces.heading,
         key: faces.syntax.keyword,
         text: faces.default.foreground,
         on: faces.success,
-        off: faces.default.foreground.mix(faces.default.background, FADE),
+        off: faces.default.foreground.dimmed(faces.default.background),
     }
 }
 

@@ -1,5 +1,5 @@
 use iced::alignment::Vertical;
-use iced::font::{Family, Weight};
+use iced::font::Weight;
 use iced::widget::{Row, Text, column, container, row, space, text};
 use iced::{Border, Element, Font, Length, Padding};
 use oxmacs_core::config::ModeLineStyle;
@@ -9,10 +9,6 @@ use oxmacs_core::theme::{Color, Theme as Faces};
 use crate::style;
 use crate::widgets::powerline::{Direction, Powerline};
 
-const UI_FONT: Font = Font {
-    family: Family::SansSerif,
-    ..Font::DEFAULT
-};
 const LINE_HEIGHT: f32 = 1.3;
 const BREATH: f32 = 4.0;
 const EDGE: f32 = 1.0;
@@ -24,7 +20,6 @@ const BLOCK_SIDE: f32 = 10.0;
 const SECONDARY: f32 = 0.9;
 const TINT: f32 = 0.12;
 const BLOCK_TINT: f32 = 0.25;
-const DIM: f32 = 0.35;
 const FADE: f32 = 0.55;
 
 #[derive(Debug, Clone, Copy)]
@@ -52,7 +47,7 @@ impl Colors {
         let face = faces.mode_line;
         let colors = Self {
             text: face.foreground,
-            dim: face.foreground.mix(face.background, DIM),
+            dim: face.foreground.dimmed(face.background),
             background: face.background,
             accent: faces.link,
             on_accent: faces.default.background,
@@ -90,7 +85,7 @@ struct Paint {
 impl Paint {
     fn label<'a>(&self, content: String, color: Color) -> Text<'a> {
         text(content)
-            .font(UI_FONT)
+            .font(crate::fonts::UI)
             .size(self.look.size)
             .color(style::color(color))
             .wrapping(text::Wrapping::None)
@@ -99,7 +94,7 @@ impl Paint {
     fn bold<'a>(&self, content: String, color: Color) -> Text<'a> {
         self.label(content, color).font(Font {
             weight: Weight::Bold,
-            ..UI_FONT
+            ..crate::fonts::UI
         })
     }
 
