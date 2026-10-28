@@ -56,7 +56,7 @@ Saving a loaded plugin's file evaluates it again in place, so a change takes eff
 - `:wakes-for` names modes, such as `["R"]`, whose buffers load the plugin as soon as one is open.
 - `:settings` declares settings with a `:type` (`:text`, `:integer`, `:number`, `:toggle`, `:list`, `:data` for any value, or a vector of keywords to choose from), a `:default` and a `:doc`. `M-x customize` shows them, `use-plugin :config` and `(settings 'name {...})` set them, and `(setting :name)` reads them anywhere in the plugin.
 - `:start-screen` adds commands to the start screen, as `{hello: "Say hello"}`.
-- `:modes` declares file modes that wake the plugin, as `[{title: "Notes" extensions: ["note"] comment: "#" roots: ["notebook.toml"]}]`, where `roots` names the files that mark a project of the mode for `language-root` and its language server; the entry then defines them with `defmode`, giving their highlighting and indentation, while their extensions, file names, comment, roots and keys stay in the manifest.
+- `:modes` declares file modes that wake the plugin, as `[{title: "Notes" extensions: ["note"] comment: "#" roots: ["notebook.toml"]}]`, where `roots` names the files that mark a project of the mode for `language-root` and its language server, and `locate`, a command such as `["cargo" "locate-project" "--workspace" "--message-format" "plain"]`, prints a file in the project when markers alone can't tell. `grammar: "rust"` lends a mode the highlighting, indentation, outline and brackets of a built-in grammar, `rust`, `toml`, `r` or `ox`, so it needs no `defmode`; otherwise the entry defines it with `defmode`, giving their highlighting and indentation, while their extensions, file names, comment, roots and keys stay in the manifest.
 - `:startup-when :name` starts the plugin with oxmacs when its setting `name` is true, as the weather plugin does for its mode line, and `:startup-when true` starts it whenever it is on, as tabs does.
 - `:opens-directories true` makes the plugin the way directories open, as dired is.
 - `:opens-files ["epub"]` makes the plugin the way files with those extensions open, as epub does for books and pdf for documents; its entry registers the opener with `(on-open-file "epub" f)`.
@@ -100,7 +100,7 @@ javascript   0.1.0    opt-in   JavaScript with highlighting, indentation and typ
 json         0.1.0    opt-in   JSON and JSON with comments, with highlighting and indentation
 keycast      0.2.4    opt-in   Shows the keys you press and the commands they run, for demos
 life         0.2.5    opt-in   Conway's Game of Life on a canvas
-manual       0.5.79   on       The oxmacs tutorial and the Ox manual
+manual       0.5.80   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.8    on       Markdown with highlighting, a rendered preview and the marksman language server
 pdf          0.2.3    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
 processes    0.1.6    on       List the processes oxmacs runs, with their usage

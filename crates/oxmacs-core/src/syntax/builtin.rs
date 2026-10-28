@@ -194,6 +194,17 @@ impl Language {
     }
 }
 
+pub const KITS: [&str; 3] = ["rust", "toml", "r"];
+
+pub fn kit(grammar: &str) -> Option<LanguageSpec> {
+    match grammar {
+        "rust" => Some(rust()),
+        "toml" => Some(toml()),
+        "r" => Some(r()),
+        _ => None,
+    }
+}
+
 fn field(node: Node<'_>, buffer: &Buffer, name: &str) -> Option<String> {
     node.child_by_field_name(name)
         .map(|child| buffer.text_in_bytes(child.byte_range()))

@@ -12,7 +12,7 @@ use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline,
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
-fn ox() -> LanguageSpec {
+pub(crate) fn spec() -> LanguageSpec {
     LanguageSpec {
         extensions: owned(&["ox"]),
         aliases: owned(&["ox"]),
@@ -36,7 +36,7 @@ fn ox() -> LanguageSpec {
     }
 }
 
-static OX: LazyLock<Language> = LazyLock::new(|| Language::new(ox()));
+static OX: LazyLock<Language> = LazyLock::new(|| Language::new(spec()));
 
 const CONTROL: &[&str] = &["raise", "await", "yield", "import", "export", "else"];
 

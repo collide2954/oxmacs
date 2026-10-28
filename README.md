@@ -59,7 +59,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `json` | 0.1.0 | opt-in | JSON and JSON with comments, with highlighting and indentation |
 | `keycast` | 0.2.4 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `life` | 0.2.5 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.79 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.80 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.8 | on | Markdown with highlighting, a rendered preview and the marksman language server |
 | `pdf` | 0.2.3 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
 | `processes` | 0.1.6 | on | List the processes oxmacs runs, with their usage |

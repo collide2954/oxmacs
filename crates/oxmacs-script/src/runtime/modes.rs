@@ -96,6 +96,21 @@ pub struct Declared {
     file_names: Vec<String>,
     comment: Option<String>,
     roots: Vec<String>,
+    locate: Option<Vec<String>>,
+    grammar: Option<String>,
+}
+
+fn kit(grammar: &str) -> Option<LanguageSpec> {
+    match grammar {
+        "ox" => Some(crate::ide::ox_mode::spec()),
+        _ => oxmacs_core::syntax::kit(grammar),
+    }
+}
+
+fn grammars() -> String {
+    let mut known: Vec<&str> = oxmacs_core::syntax::KITS.to_vec();
+    known.push("ox");
+    known.join(", ")
 }
 
 impl Declared {
@@ -136,12 +151,25 @@ pub fn declared(heap: &Heap, value: Value) -> Result<Vec<Declared>, String> {
                     Value::Keyword(key) if key.name() == "roots" => {
                         found.roots = names(value)?;
                     }
+                    Value::Keyword(key) if key.name() == "locate" => {
+                        found.locate = Some(names(value)?);
+                    }
+                    Value::Keyword(key) if key.name() == "grammar" => {
+                        let grammar = print::display(heap, value);
+                        if kit(&grammar).is_none() {
+                            return Err(format!(
+                                ":modes names no built-in grammar {grammar}; there are {}",
+                                grammars()
+                            ));
+                        }
+                        found.grammar = Some(grammar);
+                    }
                     Value::Keyword(key) if key.name() == "name" => {
                         return Err(":modes names a mode with title:, not name:".to_owned());
                     }
                     key => {
                         return Err(format!(
-                            ":modes takes title, extensions, file-names, comment and roots, not {}",
+                            ":modes takes title, grammar, extensions, file-names, comment, roots and locate, not {}",
                             print::brief(heap, key)
                         ));
                     }
@@ -156,17 +184,31 @@ pub fn declared(heap: &Heap, value: Value) -> Result<Vec<Declared>, String> {
 }
 
 fn spec(title: &str, alias: String, declared: Declared) -> Language {
+    let base = declared
+        .grammar
+        .as_deref()
+        .and_then(kit)
+        .unwrap_or_else(|| LanguageSpec {
+            features: FEATURES,
+            ..LanguageSpec::named(title)
+        });
+    let mut aliases = vec![alias];
+    for alias in &base.aliases {
+        if !aliases.contains(alias) {
+            aliases.push(alias.clone());
+        }
+    }
     Language::new(LanguageSpec {
+        name: title.to_owned(),
         extensions: declared.extensions,
         file_names: declared.file_names,
-        aliases: vec![alias],
+        aliases,
         line_comment: declared.comment,
-        features: FEATURES,
         roots: Roots {
             markers: declared.roots,
-            locate: None,
+            locate: declared.locate,
         },
-        ..LanguageSpec::named(title)
+        ..base
     })
 }
 
@@ -182,9 +224,11 @@ pub fn declare(editor: &mut Editor, plugin: &str, declared: &Declared) {
     }
     let alias = declared.title.to_lowercase().replace(' ', "-");
     let language = spec(&declared.title, alias, declared.clone());
-    let scope = editor.add_scope(intern(&declared.title));
+    let scope = editor.scope_named(&declared.title);
     editor.add_language(language.clone(), Some(scope));
-    editor.set_indenter(&language, indent_by_rules);
+    if declared.grammar.is_none() {
+        editor.set_indenter(&language, indent_by_rules);
+    }
     if let Some(modes) = modes(editor) {
         modes.defined.push(Mode {
             language,
@@ -401,6 +445,8 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
             file_names: given.file_names,
             comment: given.comment,
             roots: given.roots,
+            locate: None,
+            grammar: None,
         };
         (
             spec(&title, alias, declared),
@@ -847,6 +893,40 @@ mod tests {
             Some("Notes")
         );
         assert_eq!(editor.line_style(0).spans, [(0..9, Highlight::Comment)]);
+    }
+
+    const CRAB_PLUGIN: crate::Bundle = crate::Bundle {
+        name: "crab",
+        files: &[
+            (
+                "plugin.ox",
+                r#"(plugin crab
+  :modes [{title: "Crab" grammar: "rust" extensions: ["crab"] comment: "//"}])"#,
+            ),
+            ("crab.ox", ""),
+        ],
+    };
+
+    #[test]
+    fn a_manifest_mode_can_borrow_a_built_in_grammar() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("shell.crab");
+        std::fs::write(&path, "fn main() {\nlet x = 1;\n}\n").unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::with_bundled(&[CRAB_PLUGIN]);
+        ox.start(&mut editor, Some(dir.path()));
+
+        editor.open_file(&path);
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(editor.language().as_ref().map(Language::name), Some("Crab"));
+        press(&mut editor, &mut ox, "C-e");
+        crate::testing::typed(&mut editor, &mut ox, " ");
+        assert_eq!(editor.line_style(0).spans[0], (0..2, Highlight::Keyword));
+        press(&mut editor, &mut ox, "C-n TAB");
+        assert_eq!(editor.buffer().line_text(1), "    let x = 1;");
+        press(&mut editor, &mut ox, "M-;");
+        assert!(editor.buffer().line_text(1).ends_with("// "));
     }
 
     #[test]

@@ -1557,6 +1557,22 @@ mod tests {
     }
 
     #[test]
+    fn manifests_name_only_built_in_grammars() {
+        let home = home_with(&[(
+            "plugins/odd/plugin.ox",
+            r#"(plugin odd :modes [{title: "Odd" grammar: "cobol"}])"#,
+        )]);
+        let (editor, _) = started(&[], home.path());
+
+        assert!(
+            logged(&editor)
+                .contains(":modes names no built-in grammar cobol; there are rust, toml, r, ox"),
+            "{}",
+            logged(&editor)
+        );
+    }
+
+    #[test]
     fn broken_manifests_are_logged_and_skipped() {
         let home = home_with(&[
             (
