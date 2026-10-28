@@ -56,7 +56,7 @@ Saving a loaded plugin's file evaluates it again in place, so a change takes eff
 - `:wakes-for` names modes, such as `["R"]`, whose buffers load the plugin as soon as one is open.
 - `:settings` declares settings with a `:type` (`:text`, `:integer`, `:number`, `:toggle`, `:list`, `:data` for any value, or a vector of keywords to choose from), a `:default` and a `:doc`. `M-x customize` shows them, `use-plugin :config` and `(settings 'name {...})` set them, and `(setting :name)` reads them anywhere in the plugin.
 - `:start-screen` adds commands to the start screen, as `{hello: "Say hello"}`.
-- `:modes` declares file modes that wake the plugin, as `[{name: "Notes" extensions: ["note"] comment: "#"}]`; the entry then defines them with `defmode`.
+- `:modes` declares file modes that wake the plugin, as `[{title: "Notes" extensions: ["note"] comment: "#"}]`; the entry then defines them with `defmode`, giving their highlighting and indentation, while their extensions, file names, comment and keys stay in the manifest.
 - `:startup-when :name` starts the plugin with oxmacs when its setting `name` is true, as the weather plugin does for its mode line, and `:startup-when true` starts it whenever it is on, as tabs does.
 - `:opens-directories true` makes the plugin the way directories open, as dired is.
 - `:opens-files ["epub"]` makes the plugin the way files with those extensions open, as epub does for books and pdf for documents; its entry registers the opener with `(on-open-file "epub" f)`.
@@ -91,17 +91,17 @@ customize    0.1.5    on       Change the editor's and plugins' settings in a fo
 dired        0.3.3    on       List directories and manage their files
 epub         0.2.4    opt-in   Read EPUB books in pages, with contents, search, highlights, notes and a library
 explorer     0.2.2    on       A file tree beside the windows that follows the file you're in
-git          0.4.3    opt-in   Git status and staging in the style of Magit
+git          0.4.4    opt-in   Git status and staging in the style of Magit
 irc          0.10.6   opt-in   An IRCv3 client in the style of ERC
 keycast      0.2.4    opt-in   Shows the keys you press and the commands they run, for demos
-languages    0.1.0    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
+languages    0.1.1    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
 life         0.2.4    opt-in   Conway's Game of Life on a canvas
-manual       0.5.74   on       The oxmacs tutorial and the Ox manual
+manual       0.5.75   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.6    opt-in   Markdown rendered as styled text
 pdf          0.2.3    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
 processes    0.1.5    on       List the processes oxmacs runs, with their usage
 profiler     0.1.3    on       Find where the Ox code in oxmacs spends its time
-r            0.20.8   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
+r            0.20.9   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
 remote       0.3.7    on       Browse and edit files on other machines over ssh, sftp and ftp
 rodeo        0.1.1    opt-in   Play 2D games written in Ox beside their code, and change them while they run
 screensaver  0.2.3    opt-in   A starfield or matrix rain after a while without input

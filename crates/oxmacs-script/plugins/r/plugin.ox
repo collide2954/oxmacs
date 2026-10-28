@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.20.8"
+  :version "0.20.9"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands {run-r: "Start an R console beside the script"
              r-new-session: "Start another R session beside the current one"
@@ -47,7 +47,7 @@
              r-renv-snapshot: "Record the project's library in renv.lock"
              r-renv-restore: "Install the packages renv.lock records into the project's library"
              r-renv-init: "Give the project a library of its own with renv"}
-  :modes [{name: "R Markdown" extensions: ["Rmd" "rmd" "qmd"]}]
+  :modes [{title: "R Markdown" extensions: ["Rmd" "rmd" "qmd"]}]
   :mode-keys {"R" {"M--" r-insert-assignment
                    "C-S-m" r-insert-pipe
                    "C-RET" r-send-statement

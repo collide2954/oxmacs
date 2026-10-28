@@ -99,7 +99,7 @@ pub struct Declared {
 
 pub fn declared(heap: &Heap, value: Value) -> Result<Vec<Declared>, String> {
     let wrong =
-        || ":modes must be a vector of maps with a name, extensions and file-names".to_owned();
+        || ":modes must be a vector of maps with a title, extensions and file-names".to_owned();
     let names = |value: Value| texts(heap, value).map_err(|error| error.message);
     heap.elements(value)
         .ok_or_else(wrong)?
@@ -109,7 +109,7 @@ pub fn declared(heap: &Heap, value: Value) -> Result<Vec<Declared>, String> {
             let mut found = Declared::default();
             for (key, value) in entries {
                 match key {
-                    Value::Keyword(key) if key.name() == "name" => {
+                    Value::Keyword(key) if key.name() == "title" => {
                         found.title = print::display(heap, value);
                     }
                     Value::Keyword(key) if key.name() == "extensions" => {
@@ -121,7 +121,15 @@ pub fn declared(heap: &Heap, value: Value) -> Result<Vec<Declared>, String> {
                     Value::Keyword(key) if key.name() == "comment" => {
                         found.comment = Some(print::display(heap, value));
                     }
-                    _ => {}
+                    Value::Keyword(key) if key.name() == "name" => {
+                        return Err(":modes names a mode with title:, not name:".to_owned());
+                    }
+                    key => {
+                        return Err(format!(
+                            ":modes takes title, extensions, file-names and comment, not {}",
+                            print::brief(heap, key)
+                        ));
+                    }
                 }
             }
             if found.title.is_empty() {
@@ -344,6 +352,25 @@ fn cached(editor: &Editor, id: BufferId, line: usize) -> Spans {
         .unwrap_or_default()
 }
 
+fn repeated(title: &str, plugin: &str, given: &Options) -> Result<(), Error> {
+    let repeated: Vec<&str> = [
+        (":extensions", !given.extensions.is_empty()),
+        (":file-names", !given.file_names.is_empty()),
+        (":comment", given.comment.is_some()),
+        (":mode-keys", !given.keys.is_empty()),
+    ]
+    .into_iter()
+    .filter_map(|(option, set)| set.then_some(option))
+    .collect();
+    match repeated.as_slice() {
+        [] => Ok(()),
+        options => Err(Error::new(format!(
+            "{plugin}'s plugin.ox declares {title}, so its {} belong there",
+            options.join(" and ")
+        ))),
+    }
+}
+
 fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let alias = name_of(heap, arguments[0]);
     let title = print::display(heap, arguments[1]);
@@ -353,8 +380,12 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
             .defined
             .iter()
             .find(|mode| mode.language.name() == title)
-            .map(|mode| (mode.language, mode.scope))
+            .map(|mode| (mode.language, mode.scope, mode.plugin.clone()))
     });
+    if let Some((_, _, Some(plugin))) = &known {
+        repeated(&title, plugin, &given)?;
+    }
+    let known = known.map(|(language, scope, _)| (language, scope));
     let (language, scope) = known.unwrap_or_else(|| {
         let declared = Declared {
             title: title.clone(),
@@ -775,13 +806,13 @@ mod tests {
                 "plugin.ox",
                 r#"(plugin notes
   :commands {note-shout: "Shout"}
-  :modes [{name: "Notes" extensions: ["note"]}])"#,
+  :modes [{title: "Notes" extensions: ["note"]}])"#,
             ),
             (
                 "notes.ox",
                 r##"(module (import (ox string)))
 (defcommand note-shout "Shout" (message "shout"))
-(defmode notes "Notes" :extensions ["note"]
+(defmode notes "Notes"
   :highlight (fn [line text] (if (string/starts-with? text "#") [[0 (string/length text) :comment]] [])))"##,
             ),
         ],
@@ -801,6 +832,26 @@ mod tests {
 
         assert_eq!(editor.language().map(Language::name), Some("Notes"));
         assert_eq!(editor.line_style(0).spans, [(0..9, Highlight::Comment)]);
+    }
+
+    #[test]
+    fn a_mode_a_manifest_declares_keeps_its_file_data_there() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::with_bundled(&[NOTES_PLUGIN]);
+        ox.start(&mut editor, Some(dir.path()));
+
+        let error = ox
+            .eval(
+                &mut editor,
+                r#"(defmode notes "Notes" :extensions ["note"] :keys {"C-c n" 'note-shout})"#,
+            )
+            .unwrap_err();
+
+        assert_eq!(
+            error.message,
+            "notes's plugin.ox declares Notes, so its :extensions and :mode-keys belong there"
+        );
     }
 
     #[test]

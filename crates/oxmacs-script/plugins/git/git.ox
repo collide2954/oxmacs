@@ -498,10 +498,6 @@
 (defcommand git-commit-next "Show the next commit message" (recall false))
 
 (defmode git-commit "Git commit"
-  :file-names ["COMMIT_EDITMSG"]
-  :comment "#"
-  :keys {"C-c C-c" 'git-commit-finish "C-c C-k" 'git-commit-cancel
-         "M-p" 'git-commit-previous "M-n" 'git-commit-next}
   :highlight commit/highlight)
 
 (on-disk-change :git (fn [] (refresh-all)))

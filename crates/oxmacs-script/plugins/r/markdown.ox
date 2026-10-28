@@ -355,5 +355,4 @@ cat("oxmacs-rendered\t", normalizePath(out, winslash = "/"), "\n", sep = "")
     (render file)))
 
 (defmode r-markdown "R Markdown"
-  :extensions ["Rmd" "rmd" "qmd"]
   :highlight highlight)

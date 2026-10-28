@@ -9,55 +9,38 @@
 (def braces {after: #"[{(\[]\s*(//.*)?$" dedent: #"^\s*[}\])]"})
 
 (defmode python "Python"
-  :extensions ["py" "pyi" "pyw"]
-  :comment "#"
   :highlight (highlighter specs/python)
   :indent {width: 4 after: #":\s*(#.*)?$" dedent: #"^\s*(else|elif|except|finally)\b"})
 
 (defmode go "Go"
-  :extensions ["go"]
-  :comment "//"
   :highlight (highlighter specs/go)
   :indent (assoc braces :width 4 :tabs true))
 
 (defmode c "C"
-  :extensions ["c" "h"]
-  :comment "//"
   :highlight (highlighter specs/c)
   :indent (assoc braces :width 4))
 
 (defmode c++ "C++"
-  :extensions ["cc" "cpp" "cxx" "hh" "hpp" "hxx"]
-  :comment "//"
   :highlight (highlighter specs/cpp)
   :indent (assoc braces :width 4))
 
 (defmode typescript "TypeScript"
-  :extensions ["ts" "mts" "cts"]
-  :comment "//"
   :highlight (highlighter specs/typescript)
   :indent (assoc braces :width 2))
 
 (defmode tsx "TSX"
-  :extensions ["tsx"]
-  :comment "//"
   :highlight (highlighter specs/typescript)
   :indent (assoc braces :width 2))
 
 (defmode javascript "JavaScript"
-  :extensions ["js" "mjs" "cjs" "jsx"]
-  :comment "//"
   :highlight (highlighter specs/javascript)
   :indent (assoc braces :width 2))
 
 (defmode json "JSON"
-  :extensions ["json" "jsonc"]
-  :comment "//"
   :highlight (highlighter specs/json)
   :indent (assoc braces :width 2))
 
 (defmode markdown "Markdown"
-  :extensions ["md" "markdown"]
   :highlight style/highlight)
 
 (define-language-server "pyright"
