@@ -55,12 +55,12 @@ A line written as a map, such as `{line: pieces background: :region}`, gets a ba
            (fn []
              (ui/column
               (ui/text "Clicked {@clicks} times" :face :heading)
-              (ui/button "Click" :on-press (fn [] (swap! clicks inc))))))
+              (ui/button "Click" :on-click (fn [] (swap! clicks inc))))))
 ```
 
 - `ui/column` and `ui/row` stack their children `:spacing` apart. Strings among them become text, `nil` is left out and vectors are spread out.
 - `ui/text` shows a value in a `:face`, at an optional `:size`.
-- `ui/button` calls `:on-press` as a task when it is pressed.
+- `ui/button` calls `:on-click` as a task when it is clicked.
 - `ui/space` adds room, `ui/scrollable` lets its child scroll and `ui/image` shows an `ox/image` image.
 
 `open-view` takes `:keys`, `:beside` and `:select` like `open-buffer`. The function must return quickly, since it is stopped after 250 ms: fetch data in a task and keep it in an atom instead.

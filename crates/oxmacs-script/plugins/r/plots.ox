@@ -77,7 +77,7 @@
         picture (get (or plots.thumbs {}) path)]
     (if picture
       (ui/image picture :width width :height height :selected (= index plots.gallery.selected)
-                :on-press (fn [] (pick name index)))
+                :on-click (fn [] (pick name index)))
       (ui/text "…" :face :comment))))
 
 (def (grid name plots)

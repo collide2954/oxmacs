@@ -201,7 +201,7 @@ pub fn install(isolate: &mut Isolate) {
     isolate
         .native(UI, "button")
         .arity(1, Some(1))
-        .keywords(&["on-press"])
+        .keywords(&["on-click"])
         .function(button);
     isolate
         .native(UI, "space")
@@ -246,7 +246,7 @@ pub fn install(isolate: &mut Isolate) {
     isolate
         .native(UI, "image")
         .arity(1, Some(1))
-        .keywords(&["width", "height", "on-press", "selected"])
+        .keywords(&["width", "height", "on-click", "selected"])
         .function(image);
     isolate
         .native("ox", "open-view")
@@ -729,7 +729,7 @@ mod tests {
         let mut ox = Ox::new();
         ox.eval(
             &mut editor,
-            r#"(module (import (ox ui) (ox image))) (def pressed (atom 0)) (def dot (image/new 2 2)) (open-view "*thumbs*" (fn [] (ui/row (ui/image dot :selected true :on-press (fn [] (swap! pressed inc))) (ui/image dot))))"#,
+            r#"(module (import (ox ui) (ox image))) (def pressed (atom 0)) (def dot (image/new 2 2)) (open-view "*thumbs*" (fn [] (ui/row (ui/image dot :selected true :on-click (fn [] (swap! pressed inc))) (ui/image dot))))"#,
         )
         .unwrap();
         settle(&mut editor, &mut ox);
@@ -832,7 +832,7 @@ mod tests {
     #[test]
     fn buttons_call_their_functions() {
         let (mut editor, mut ox) = opened(
-            r#"(def count (atom 0)) (open-view "*count*" (fn [] (row (text @count) (button "More" :on-press (fn [] (swap! count inc))))))"#,
+            r#"(def count (atom 0)) (open-view "*count*" (fn [] (row (text @count) (button "More" :on-click (fn [] (swap! count inc))))))"#,
         );
         let Node::Row { children, .. } = shown(&editor, "*count*") else {
             panic!("not a row");

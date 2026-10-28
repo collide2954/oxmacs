@@ -20,10 +20,10 @@
     (if (or (> (count s.tabs) 1) (= (setting :show) :always))
       (set-tab-bar (labels)
                    :selected s.current
-                   :on-select select
+                   :on-click select
                    :on-close close-at
                    :on-new new-tab
-                   :on-move move-tab)
+                   :on-drop move-tab)
       (set-tab-bar nil))))
 
 (def (leave s)

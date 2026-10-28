@@ -1,5 +1,5 @@
 (plugin tabs
-  :version "0.1.2"
+  :version "0.1.3"
   :opt-in true
   :summary "Workspace tabs across the top, each keeping its own windows"
   :commands {tab-new: "Open a new tab"

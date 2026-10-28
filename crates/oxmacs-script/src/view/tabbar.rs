@@ -117,7 +117,7 @@ pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", NAME)
         .arity(1, Some(1))
-        .keywords(&["selected", "on-select", "on-close", "on-new", "on-move"])
+        .keywords(&["selected", "on-click", "on-close", "on-new", "on-drop"])
         .host::<Editor>(set_tab_bar);
 }
 
@@ -138,10 +138,10 @@ mod tests {
             &mut editor,
             r#"(def heard (atom []))
 (set-tab-bar ["main" :notes] :selected 1
-  :on-select (fn [i] (swap! heard conj [:select i]))
+  :on-click (fn [i] (swap! heard conj [:select i]))
   :on-close (fn [i] (swap! heard conj [:close i]))
   :on-new (fn [] (swap! heard conj :new))
-  :on-move (fn [from to] (swap! heard conj [:move from to])))"#,
+  :on-drop (fn [from to] (swap! heard conj [:move from to])))"#,
         )
         .unwrap();
 

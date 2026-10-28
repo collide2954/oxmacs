@@ -40,7 +40,7 @@
          (ui/column (ui/space 40)
                     (ui/text doc.error :face :warning)
                     (when doc.missing
-                      (ui/button "Open the tool list" :on-press (fn [] (run-command 'list-tools))))
+                      (ui/button "Open the tool list" :on-click (fn [] (run-command 'list-tools))))
                     :spacing 14)]
         [(nil? doc.pages) (ui/column (ui/space 40) (ui/text "Opening {(path/name doc.path)}…" :face :comment))]
         [else

@@ -52,7 +52,7 @@
 
 (def (cell book open)
   (ui/column (ui/image (or book.cover (blank)) :width cover-width :height cover-height
-                       :on-press (fn [] (open book.path)))
+                       :on-click (fn [] (open book.path)))
              (ui/text (string/truncate book.title 20))
              (ui/text (string/truncate (or book.creator "") 22) :face :comment)
              (ui/text (if book.progress "{book.progress}% read" "New") :face (if book.progress :success :comment))

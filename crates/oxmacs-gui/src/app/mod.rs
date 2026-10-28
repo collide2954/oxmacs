@@ -450,7 +450,7 @@ mod tests {
             home.path().join("init.ox"),
             r#"(module (import (ox ui :only [column text button])))
 (def count (atom 0))
-(open-view "*counter*" (fn [] (column (text "Forecast" :face :heading) (text "Count {@count}") (button "More" :on-press (fn [] (swap! count inc))))))"#,
+(open-view "*counter*" (fn [] (column (text "Forecast" :face :heading) (text "Count {@count}") (button "More" :on-click (fn [] (swap! count inc))))))"#,
         )
         .unwrap();
         let mut app = App::default();
@@ -503,10 +503,10 @@ mod tests {
         std::fs::write(
             home.path().join("init.ox"),
             r#"(set-tab-bar ["main" "notes"] :selected 0
-  :on-select (fn [i] (message "picked {i}"))
+  :on-click (fn [i] (message "picked {i}"))
   :on-close (fn [i] (message "closed {i}"))
   :on-new (fn [] (message "new tab"))
-  :on-move (fn [from to] (message "moved {from} to {to}")))"#,
+  :on-drop (fn [from to] (message "moved {from} to {to}")))"#,
         )
         .unwrap();
         let mut app = App::default();
