@@ -1338,7 +1338,7 @@ mod tests {
         let home = home_with(&[
             (
                 "plugins/greeter/plugin.ox",
-                "(plugin greeter :commands {greet: \"Say hello\"} :entry \"greeter.ox\")",
+                "(plugin greeter :commands [greet] :entry \"greeter.ox\")",
             ),
             (
                 "plugins/greeter/greeter.ox",
@@ -1372,7 +1372,7 @@ mod tests {
         editor.open_file(&folder.join("plugin.ox"));
         editor.buffer_mut().insert_at(
             0,
-            "(plugin greeter :commands {greet: \"Say hello\"} :entry \"greeter.ox\")",
+            "(plugin greeter :commands [greet] :entry \"greeter.ox\")",
         );
         press(&mut editor, &mut ox, "C-x C-s");
         assert_eq!(

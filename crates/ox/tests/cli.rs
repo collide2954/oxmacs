@@ -222,7 +222,7 @@ fn ox_test_runs_a_plugin_folders_tests_and_skips_what_needs_the_editor() {
     fs::create_dir_all(&plugin).unwrap();
     fs::write(
         plugin.join("plugin.ox"),
-        "(plugin hello :version \"0.1.0\" :commands {hello: \"Say hello\"})",
+        "(plugin hello :version \"0.1.0\" :commands [hello])",
     )
     .unwrap();
     fs::write(

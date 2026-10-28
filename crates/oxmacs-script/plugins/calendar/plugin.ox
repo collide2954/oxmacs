@@ -1,14 +1,9 @@
 (plugin calendar
-  :version "0.2.8"
+  :version "0.2.9"
   :requires {vault: "^0.3"}
   :opt-in true
   :summary "Calendars in .ics files, with CalDAV sync, reminders and invitations"
-  :commands {calendar: "Show the calendar's agenda"
-             calendar-month: "Show a month of the calendar"
-             calendar-week: "Show a week of the calendar as a grid of hours"
-             calendar-add: "Add an event"
-             calendar-import: "Add the events of an .ics file, such as an invitation"
-             calendar-sync: "Sync the calendars that have a CalDAV address"}
+  :commands [calendar calendar-month calendar-week calendar-add calendar-import calendar-sync]
   :settings {calendars: {type: :list default: [] doc: "Calendars, each a map of :name and, to sync with CalDAV, its :url and :login (a vault entry); one called Personal when empty"}
              days: {type: :integer default: 14 doc: "Days the agenda shows"}
              reminder: {type: :integer default: 10 doc: "Minutes before an event to remind you when it sets no reminder of its own"}

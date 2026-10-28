@@ -5,7 +5,7 @@
    title: "Writing a plugin"
    text: #r##"# Writing a plugin
 
-A plugin is a folder under `~/.oxmacs/plugins` with a manifest and Ox modules. It costs nothing until it is used: at startup oxmacs reads only the manifest, and the code loads the first time one of its commands, keys or modes is used.
+A plugin is a folder under `~/.oxmacs/plugins` with a manifest and Ox modules. It costs nothing until it is used: at startup oxmacs reads its files but runs none of them, and the code loads the first time one of its commands, keys or modes is used.
 
 ## Plugins are the standard library
 
@@ -23,7 +23,7 @@ So plugins do two jobs. They extend the editor, and they are where shared Ox cod
 (plugin hello
   :version "0.1.0"
   :summary "Greetings"
-  :commands {hello: "Say hello"}
+  :commands [hello]
   :settings {name: {type: :text default: "world" doc: "Who to greet"}}
   :entry "hello.ox")
 ```
@@ -50,7 +50,7 @@ Saving a loaded plugin's file evaluates it again in place, so a change takes eff
 - `:version` follows semantic versioning, and `:summary` says what the plugin does.
 - `:requires` names the plugins it uses with the versions it works with, as `{markdown: "^0.2" vault: ">=0.2, <1"}` (`"*"` takes any version), and `ox:` the oxmacs version, as `{ox: ">=0.14"}`. If one is missing or the wrong version, the plugin stays off and `*ox log*` says why.
 - `:entry` names the entry file, the plugin's name with `.ox` unless given.
-- `:commands` maps each command to its summary. They exist from startup and load the plugin when first run.
+- `:commands` names the plugin's commands, as `[hello]`. They exist from startup with the summaries their `defcommand`s give, and load the plugin when first run.
 - `:keys` binds global keys, such as `{"C-c h" hello}`; your `init.ox` can rebind them.
 - `:mode-keys` binds keys in the buffers of a mode, such as `{"R" {"C-c h" hello}}`, and the first press loads the plugin.
 - `:wakes-for` names modes, such as `["R"]`, whose buffers load the plugin as soon as one is open.
@@ -66,7 +66,7 @@ Saving a loaded plugin's file evaluates it again in place, so a change takes eff
 
 ## Modules
 
-The entry file is the module named after the plugin. Other files are `hello/name` modules, imported as `(import (hello name))`. `setting` works only in the entry, so pass settings to the other modules as arguments. Keep pure logic, such as parsing and drawing, in those modules and the commands in the entry, so the logic can be tested without the editor.
+The entry file is the module named after the plugin. Other files are `hello/name` modules, imported as `(import (hello name))`. `setting` works in all of them. Keep pure logic, such as parsing and drawing, in those modules and the commands in the entry, so the logic can be tested without the editor.
 
 Another plugin imports `(hello name)` by requiring hello in its manifest, as `:requires {hello: "^0.1"}`. Plugins it requires start before it does, and one that is off, such as an opt-in plugin nobody turned on, lends its modules without starting, so its commands stay off. A library with no commands of its own needs only a manifest, and its entry file can be empty:
 
@@ -86,30 +86,30 @@ oxmacs ships these plugins. Those on by default load the first time you use them
 
 ```table
 Plugin       Version  Default  What it does
-calendar     0.2.8    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
-customize    0.1.5    on       Change the editor's and plugins' settings in a form
-dired        0.3.3    on       List directories and manage their files
-epub         0.2.4    opt-in   Read EPUB books in pages, with contents, search, highlights, notes and a library
-explorer     0.2.2    on       A file tree beside the windows that follows the file you're in
-git          0.4.4    opt-in   Git status and staging in the style of Magit
-irc          0.10.6   opt-in   An IRCv3 client in the style of ERC
+calendar     0.2.9    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
+customize    0.1.6    on       Change the editor's and plugins' settings in a form
+dired        0.3.4    on       List directories and manage their files
+epub         0.2.5    opt-in   Read EPUB books in pages, with contents, search, highlights, notes and a library
+explorer     0.2.3    on       A file tree beside the windows that follows the file you're in
+git          0.4.5    opt-in   Git status and staging in the style of Magit
+irc          0.10.7   opt-in   An IRCv3 client in the style of ERC
 keycast      0.2.4    opt-in   Shows the keys you press and the commands they run, for demos
 languages    0.1.1    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
-life         0.2.4    opt-in   Conway's Game of Life on a canvas
-manual       0.5.75   on       The oxmacs tutorial and the Ox manual
-markdown     0.2.6    opt-in   Markdown rendered as styled text
+life         0.2.5    opt-in   Conway's Game of Life on a canvas
+manual       0.5.76   on       The oxmacs tutorial and the Ox manual
+markdown     0.2.7    opt-in   Markdown rendered as styled text
 pdf          0.2.3    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
-processes    0.1.5    on       List the processes oxmacs runs, with their usage
-profiler     0.1.3    on       Find where the Ox code in oxmacs spends its time
-r            0.20.9   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
-remote       0.3.7    on       Browse and edit files on other machines over ssh, sftp and ftp
-rodeo        0.1.1    opt-in   Play 2D games written in Ox beside their code, and change them while they run
-screensaver  0.2.3    opt-in   A starfield or matrix rain after a while without input
-tabs         0.1.3    opt-in   Workspace tabs across the top, each keeping its own windows
-vault        0.3.0    opt-in   An encrypted password vault with one-time codes and imports
-weather      0.3.3    opt-in   Forecasts from Open-Meteo
+processes    0.1.6    on       List the processes oxmacs runs, with their usage
+profiler     0.1.4    on       Find where the Ox code in oxmacs spends its time
+r            0.20.10  opt-in   R consoles, plots, data and help in the style of ESS and RStudio
+remote       0.3.8    on       Browse and edit files on other machines over ssh, sftp and ftp
+rodeo        0.1.2    opt-in   Play 2D games written in Ox beside their code, and change them while they run
+screensaver  0.2.4    opt-in   A starfield or matrix rain after a while without input
+tabs         0.1.4    opt-in   Workspace tabs across the top, each keeping its own windows
+vault        0.3.1    opt-in   An encrypted password vault with one-time codes and imports
+weather      0.3.4    opt-in   Forecasts from Open-Meteo
 zap          0.2.2    opt-in   Flash the code you evaluate or send to a console, in the error color when it fails
-zen          0.1.1    opt-in   Distraction-free writing in one centered column
+zen          0.1.2    opt-in   Distraction-free writing in one centered column
 ```
 
 ## Learn from the bundled plugins

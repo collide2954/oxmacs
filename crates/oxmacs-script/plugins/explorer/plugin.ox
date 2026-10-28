@@ -1,7 +1,7 @@
 (plugin explorer
-  :version "0.2.2"
+  :version "0.2.3"
   :summary "A file tree beside the windows that follows the file you're in"
-  :commands {explorer: "Show the file tree beside the windows, move to it, or hide it"}
+  :commands [explorer]
   :keys {"C-x C-d" explorer}
   :settings {width: {type: :integer default: 32 doc: "How many columns the tree takes"}
              edge: {type: [:left :right] default: :left doc: "Which side of the frame the tree sits on"}

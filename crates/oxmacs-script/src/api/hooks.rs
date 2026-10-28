@@ -361,7 +361,7 @@ mod tests {
             (
                 "plugin.ox",
                 r#"(plugin lister
-  :commands {list-dir: "List a directory"}
+  :commands [list-dir]
   :keys {"C-x l" list-dir}
   :start-screen {list-dir: "List a directory"}
   :opens-directories true)"#,

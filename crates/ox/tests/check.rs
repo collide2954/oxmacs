@@ -114,7 +114,7 @@ fn plugin_files_and_init_ox_are_checked_with_the_editor_known() {
     fs::create_dir(&plugin).unwrap();
     fs::write(
         plugin.join("plugin.ox"),
-        "(plugin greeter\n  :commands {greet: \"Say hello\"}\n  :entry \"greeter.ox\")\n",
+        "(plugin greeter\n  :commands [greet]\n  :entry \"greeter.ox\")\n",
     )
     .unwrap();
     fs::write(

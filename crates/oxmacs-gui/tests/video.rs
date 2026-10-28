@@ -74,7 +74,7 @@ const SIZE: Size = Size::new(640.0, 640.0);
 const MANIFEST: &str = "(plugin conway
 :version \"0.1.0\"
 :summary \"Conway's Game of Life on a canvas\"
-:commands {conway: \"Watch Conway's Game of Life\"}
+:commands [conway]
 :entry \"conway.ox\")";
 
 const LIFE_START: &str = "(module

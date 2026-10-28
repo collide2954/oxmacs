@@ -87,6 +87,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `(setting :key)` reads a plugin's own setting in any of its files, not only its entry file, and `:startup-when true` starts a plugin with oxmacs whenever it is on, as `tabs` and `keycast` now do.
 - Events have one set of names: `set-tab-bar` calls `:on-click` with the tab clicked and `:on-drop` with the tab dragged and where it landed, as `open-buffer` does for lines, and `ui/button` and `ui/image` call `:on-click` instead of `:on-press`. `:on-move` is only for point moving and `:on-select` only for selected text.
 - A plugin's `:modes` entries name their mode with `title:`, as `defmode` does, instead of `name:`. The manifest is the one place for the extensions, file names, comment and keys of a mode it declares: `defmode` in the plugin gives only its highlighting and indentation and refuses the rest, and `git` keeps its commit keys in `:mode-keys`.
+- A plugin's `:commands` names its commands, as `[hello]`, and each summary comes from the command's `defcommand`, read at startup without running the plugin; a listed command no `defcommand` defines is reported in `*ox log*`.
 - `vault` 0.3.0: other plugins log in with `vault/login`, which gives an entry's `:user` and `:password` and is an error when there is no such entry, as `calendar`, `remote` and `irc` now do; `vault/secret` is gone.
 
 ### Fixed

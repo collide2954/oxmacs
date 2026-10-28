@@ -805,7 +805,7 @@ mod tests {
             (
                 "plugin.ox",
                 r#"(plugin notes
-  :commands {note-shout: "Shout"}
+  :commands [note-shout]
   :modes [{title: "Notes" extensions: ["note"]}])"#,
             ),
             (

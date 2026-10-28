@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ox_lang::heap::{Heap, Hold};
+use ox_lang::read::{Datum, Syntax, read};
 use ox_lang::symbol::Sym;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
@@ -94,16 +95,63 @@ fn keyword(value: Value) -> Option<&'static str> {
 }
 
 fn commands_of(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, String> {
-    let wrong = || ":commands must be a map of names to summaries".to_owned();
-    heap.entries(value)
+    let wrong = || {
+        ":commands must be a vector of command names, such as [hello]; each defcommand gives its summary"
+            .to_owned()
+    };
+    heap.elements(value)
         .ok_or_else(wrong)?
         .into_iter()
-        .map(|(name, summary)| {
-            let name = keyword(name).ok_or_else(wrong)?;
-            let summary = heap.text(summary).ok_or_else(wrong)?;
-            Ok((name.to_owned(), summary.to_owned()))
+        .map(|name| match name {
+            Value::Symbol(name) => Ok((name.name().to_owned(), String::new())),
+            _ => Err(wrong()),
         })
         .collect()
+}
+
+fn collect_commands(forms: &[Syntax], found: &mut Vec<(String, String)>) {
+    for form in forms {
+        let (Datum::List(items) | Datum::Vector(items) | Datum::Map(items)) = &form.datum else {
+            continue;
+        };
+        match items.as_slice() {
+            [
+                Syntax {
+                    datum: Datum::Symbol(head),
+                    ..
+                },
+                Syntax {
+                    datum: Datum::Symbol(name),
+                    ..
+                },
+                Syntax {
+                    datum: Datum::Str(summary),
+                    ..
+                },
+                ..,
+            ] if head == "defcommand" => found.push((name.clone(), summary.clone())),
+            _ => collect_commands(items, found),
+        }
+    }
+}
+
+fn summarize(editor: &mut Editor, manifest: &mut Manifest, files: &[(String, String, String)]) {
+    let mut defined = Vec::new();
+    for (_, _, text) in files.iter().filter(|(name, _, _)| name != "plugin.ox") {
+        collect_commands(&read(text).0, &mut defined);
+    }
+    let plugin = manifest.name.clone();
+    manifest.commands.retain_mut(|(command, summary)| {
+        if let Some((_, found)) = defined.iter().find(|(known, _)| known == command) {
+            summary.clone_from(found);
+            return true;
+        }
+        let missing = format!(
+            "{plugin} lists the command {command}, which no defcommand in its files defines"
+        );
+        log::report(editor, &Error::new(missing), None);
+        false
+    });
 }
 
 fn pairs_of(heap: &Heap, value: Value, wrong: &str) -> Result<Vec<(String, String)>, String> {
@@ -422,9 +470,9 @@ pub(crate) fn catalog(isolate: &mut Isolate, bundles: &[Bundle]) -> Vec<Listed> 
 fn read_manifest(
     isolate: &mut Isolate,
     editor: &mut Editor,
-    file: &str,
-    text: &str,
+    files: &[(String, String, String)],
 ) -> Option<Manifest> {
+    let (_, file, text) = files.iter().find(|(name, _, _)| name == "plugin.ox")?;
     let parsed = isolate
         .eval_named(file, text)
         .and_then(|value| manifest_of(isolate.heap_mut(), value).map_err(Error::new));
@@ -592,10 +640,8 @@ pub fn discover(
     let mut known: Vec<Plugin> = Vec::new();
     for bundle in bundled {
         let files = bundled_files(bundle.name, bundle.files);
-        let Some((_, file, text)) = files.iter().find(|(name, _, _)| name == "plugin.ox") else {
-            continue;
-        };
-        if let Some(manifest) = read_manifest(isolate, editor, file, text) {
+        if let Some(mut manifest) = read_manifest(isolate, editor, &files) {
+            summarize(editor, &mut manifest, &files);
             add_sources(isolate, bundle.name, &manifest.entry, &files);
             let active = !manifest.opt_in;
             known.push(Plugin {
@@ -623,20 +669,16 @@ pub fn discover(
         .collect();
     folders.sort();
     for folder in folders {
-        let path = folder.join("plugin.ox");
-        let Ok(text) = fs::read_to_string(&path) else {
+        let files = folder_files(&folder);
+        let Some(mut manifest) = read_manifest(isolate, editor, &files) else {
             continue;
         };
-        let Some(manifest) = read_manifest(isolate, editor, &path.display().to_string(), &text)
-        else {
-            continue;
-        };
+        summarize(editor, &mut manifest, &files);
         match known
             .iter_mut()
             .find(|plugin| plugin.manifest.name == manifest.name)
         {
             Some(bundled) => {
-                let files = folder_files(&folder);
                 add_sources(isolate, &manifest.name, &manifest.entry, &files);
                 bundled.manifest = manifest;
                 bundled.origin = Origin::Folder(folder);
@@ -1173,14 +1215,12 @@ fn start_now(isolate: &mut Isolate, editor: &mut Editor, path: &Path) {
     let Some(folder) = path.parent() else {
         return;
     };
-    let manifest_path = folder.join("plugin.ox");
-    let Ok(text) = fs::read_to_string(&manifest_path) else {
+    if !folder.join("plugin.ox").is_file() {
         editor.show_message("A plugin starts once its folder has a plugin.ox");
         return;
-    };
-    let Some(manifest) =
-        read_manifest(isolate, editor, &manifest_path.display().to_string(), &text)
-    else {
+    }
+    let files = folder_files(folder);
+    let Some(mut manifest) = read_manifest(isolate, editor, &files) else {
         return;
     };
     let name = manifest.name.clone();
@@ -1191,6 +1231,7 @@ fn start_now(isolate: &mut Isolate, editor: &mut Editor, path: &Path) {
         ));
         return;
     }
+    summarize(editor, &mut manifest, &files);
     let origin = Origin::Folder(folder.to_path_buf());
     let Some(plugins) = editor.plugin_state_mut::<Plugins>() else {
         return;
@@ -1246,7 +1287,7 @@ mod tests {
     const MANIFEST: &str = r#"(plugin greeter
   :version "1.0.0"
   :summary "Says hello"
-  :commands {greet: "Say hello"}
+  :commands [greet]
   :entry "greeter.ox")"#;
 
     const GREETER: Bundle = Bundle {
@@ -1281,7 +1322,7 @@ mod tests {
         files: &[
             (
                 "plugin.ox",
-                "(plugin shelf :version \"0.1.0\" :commands {shelf-show: \"Show\"} :entry \"shelf.ox\")",
+                "(plugin shelf :version \"0.1.0\" :commands [shelf-show] :entry \"shelf.ox\")",
             ),
             (
                 "shelf.ox",
@@ -1449,7 +1490,10 @@ mod tests {
             name: "greeter",
             files: &[
                 ("plugin.ox", MANIFEST),
-                ("greeter.ox", "(message \"starting\")\n(/ 1 0)"),
+                (
+                    "greeter.ox",
+                    "(message \"starting\")\n(/ 1 0)\n(defcommand greet \"Say hello\" nil)",
+                ),
             ],
         };
         let home = home_with(&[]);
@@ -1465,21 +1509,34 @@ mod tests {
     }
 
     #[test]
-    fn a_plugin_that_forgets_a_command_is_logged() {
+    fn a_plugin_that_lists_a_command_it_never_defines_is_logged() {
         const FORGETFUL: Bundle = Bundle {
             name: "greeter",
             files: &[("plugin.ox", MANIFEST), ("greeter.ox", "(def nothing nil)")],
         };
         let home = home_with(&[]);
-        let (mut editor, mut ox) = started(&[FORGETFUL], home.path());
+        let (editor, _) = started(&[FORGETFUL], home.path());
 
-        run_command(&mut editor, &mut ox, "greet");
-
+        assert!(editor.command_named("greet").is_none());
         assert!(
-            logged(&editor).contains("greeter didn't define the command greet"),
+            logged(&editor).contains(
+                "greeter lists the command greet, which no defcommand in its files defines"
+            ),
             "{}",
             logged(&editor)
         );
+    }
+
+    #[test]
+    fn command_summaries_come_from_defcommand() {
+        let home = home_with(&[]);
+        let (mut editor, mut ox) = started(&[GREETER], home.path());
+
+        crate::testing::press(&mut editor, &mut ox, "C-h f");
+        crate::testing::typed(&mut editor, &mut ox, "greet");
+        crate::testing::press(&mut editor, &mut ox, "RET");
+
+        assert!(editor.buffer().contents().contains("Say hello"));
     }
 
     #[test]
@@ -1487,21 +1544,23 @@ mod tests {
         let home = home_with(&[
             (
                 "plugins/odd/plugin.ox",
-                "(plugin odd :commands [not a map])",
+                "(plugin odd :commands {odd: \"Odd\"})",
             ),
             ("init.ox", "(use-plugin odd)"),
         ]);
         let (editor, _) = started(&[], home.path());
 
         assert!(
-            logged(&editor).contains("plugin.ox: :commands must be a map of names to summaries"),
+            logged(&editor).contains(
+                "plugin.ox: :commands must be a vector of command names, such as [hello]; each defcommand gives its summary"
+            ),
             "{}",
             logged(&editor)
         );
     }
 
     const SETTINGS: &str = r#"(plugin greeter
-  :commands {greet: "Say hello" peek: "Read a missing setting"}
+  :commands [greet peek]
   :settings {name: {type: :text default: "world"}
              shout: {type: :toggle default: false}
              style: {type: [:plain :fancy] default: :plain}
@@ -1620,7 +1679,7 @@ mod tests {
         files: &[
             (
                 "plugin.ox",
-                "(plugin toy :commands {play: \"Play\"} :opt-in true :entry \"toy.ox\")",
+                "(plugin toy :commands [play] :opt-in true :entry \"toy.ox\")",
             ),
             ("toy.ox", "(defcommand play \"Play\" (message \"Playing\"))"),
         ],
@@ -1631,7 +1690,7 @@ mod tests {
         files: &[
             (
                 "plugin.ox",
-                r#"(plugin shouter :commands {shout: "Shout"} :mode-keys {"R" {"C-c s" shout} "Cobol" {"C-c s" shout}})"#,
+                r#"(plugin shouter :commands [shout] :mode-keys {"R" {"C-c s" shout} "Cobol" {"C-c s" shout}})"#,
             ),
             (
                 "shouter.ox",
@@ -1663,7 +1722,7 @@ mod tests {
         files: &[
             (
                 "plugin.ox",
-                r#"(plugin watcher :commands {watch: "Watch"} :wakes-for ["R"])"#,
+                r#"(plugin watcher :commands [watch] :wakes-for ["R"])"#,
             ),
             (
                 "watcher.ox",
@@ -1705,7 +1764,7 @@ mod tests {
         files: &[
             (
                 "plugin.ox",
-                "(plugin loose :version \"1.0\" :commands {lax: \"Lax\"})",
+                "(plugin loose :version \"1.0\" :commands [lax])",
             ),
             ("loose.ox", "(defcommand lax \"Lax\" (message \"lax\"))"),
         ],
@@ -1716,7 +1775,7 @@ mod tests {
         files: &[
             (
                 "plugin.ox",
-                "(plugin typo :version \"1.0.0\" :descripton \"Oops\" :commands {oops: \"Oops\"})",
+                "(plugin typo :version \"1.0.0\" :descripton \"Oops\" :commands [oops])",
             ),
             ("typo.ox", "(defcommand oops \"Oops\" (message \"oops\"))"),
         ],
@@ -1753,7 +1812,7 @@ mod tests {
         files: &[
             (
                 "plugin.ox",
-                "(plugin base :version \"1.2.0\" :commands {base-hi: \"Hi\"})",
+                "(plugin base :version \"1.2.0\" :commands [base-hi])",
             ),
             BASE_FILES[0],
             BASE_FILES[1],
@@ -1765,7 +1824,7 @@ mod tests {
         files: &[
             (
                 "plugin.ox",
-                "(plugin base :version \"1.2.0\" :opt-in true :commands {base-hi: \"Hi\"})",
+                "(plugin base :version \"1.2.0\" :opt-in true :commands [base-hi])",
             ),
             BASE_FILES[0],
             BASE_FILES[1],
@@ -1784,7 +1843,7 @@ mod tests {
                         concat!(
                             "(plugin client :version \"1.0.0\" :requires ",
                             $requires,
-                            " :commands {use-it: \"Use it\"})"
+                            " :commands [use-it])"
                         ),
                     ),
                     ("client.ox", USER_ENTRY),
@@ -1825,7 +1884,7 @@ mod tests {
             ("plugins/base/words.ox", "(def order (atom []))"),
             (
                 "plugins/client/plugin.ox",
-                "(plugin client :version \"1.0.0\" :requires {base: \"^1\"} :commands {use-it: \"Use it\"})",
+                "(plugin client :version \"1.0.0\" :requires {base: \"^1\"} :commands [use-it])",
             ),
             ("plugins/client/client.ox", USER_ENTRY),
             ("init.ox", "(use-plugin client)"),
@@ -1845,7 +1904,7 @@ mod tests {
             files: &[
                 (
                     "plugin.ox",
-                    "(plugin client :version \"1.0.0\" :commands {use-it: \"Use it\"})",
+                    "(plugin client :version \"1.0.0\" :commands [use-it])",
                 ),
                 ("client.ox", USER_ENTRY),
             ],

@@ -1,6 +1,6 @@
 (plugin markdown
-  :version "0.2.6"
+  :version "0.2.7"
   :opt-in true
   :summary "Markdown rendered as styled text"
-  :commands {markdown-preview: "Show this Markdown buffer rendered beside it"}
+  :commands [markdown-preview]
   :entry "markdown.ox")
