@@ -56,6 +56,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 ### Changed
 
 - `open-buffer`, `set-lines`, `append-lines`, `set-header` and `set-overlay` read lines and pieces the same way, and `set-lines` and `append-lines` take a buffer handle as well as a name. Overlay rows are written like other lines, `{line: pieces opacity: 0.5}` instead of `{pieces: ...}`, and a key is drawn with `[text face :keycap]` instead of the face `:keycap`. A `nil` piece is left out instead of showing as `nil`.
+- Popups, transient menus, the headers kept above plugin buffers and the key overlay share one raised background, and dimmed text in the mode line, tab bar, completions and menus is one shade, a little easier to read than before.
 - The headings of `M-x remote`, `list-processes`, `customize`, `vault`, `calendar`, the Ox profiler, R's package and environment lists, IRC channel lists and dired stay above their lines while they scroll.
 - `RET`, `TAB` and `S-TAB` in the Ox manual, Markdown previews and R help are the shared `follow-link`, `next-link` and `previous-link`, and clicking a link follows it; `ox-manual-follow`, `ox-manual-next-link`, `ox-manual-previous-link`, `markdown-follow-link`, `r-help-follow`, `r-help-next-link` and `r-help-previous-link` are gone.
 - Tools installed from `M-x list-tools` are unpacked inside oxmacs instead of by the system's `tar`, taking out only the tool's own file.
