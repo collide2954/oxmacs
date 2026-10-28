@@ -45,27 +45,27 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 
 | Plugin | Version | Default | What it does |
 | --- | --- | --- | --- |
-| `calendar` | 0.2.7 | opt-in | Calendars in .ics files, with CalDAV sync, reminders and invitations |
+| `calendar` | 0.2.8 | opt-in | Calendars in .ics files, with CalDAV sync, reminders and invitations |
 | `customize` | 0.1.5 | on | Change the editor's and plugins' settings in a form |
 | `dired` | 0.3.3 | on | List directories and manage their files |
 | `epub` | 0.2.3 | opt-in | Read EPUB books in pages, with contents, search, highlights, notes and a library |
 | `explorer` | 0.2.2 | on | A file tree beside the windows that follows the file you're in |
 | `git` | 0.4.3 | opt-in | Git status and staging in the style of Magit |
-| `irc` | 0.10.5 | opt-in | An IRCv3 client in the style of ERC |
+| `irc` | 0.10.6 | opt-in | An IRCv3 client in the style of ERC |
 | `keycast` | 0.2.4 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `languages` | 0.1.0 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
 | `life` | 0.2.4 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.72 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.73 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.6 | opt-in | Markdown rendered as styled text |
 | `pdf` | 0.2.2 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
 | `processes` | 0.1.5 | on | List the processes oxmacs runs, with their usage |
 | `profiler` | 0.1.3 | on | Find where the Ox code in oxmacs spends its time |
 | `r` | 0.20.7 | opt-in | R consoles, plots, data and help in the style of ESS and RStudio |
-| `remote` | 0.3.6 | on | Browse and edit files on other machines over ssh, sftp and ftp |
+| `remote` | 0.3.7 | on | Browse and edit files on other machines over ssh, sftp and ftp |
 | `rodeo` | 0.1.1 | opt-in | Play 2D games written in Ox beside their code, and change them while they run |
 | `screensaver` | 0.2.3 | opt-in | A starfield or matrix rain after a while without input |
 | `tabs` | 0.1.2 | opt-in | Workspace tabs across the top, each keeping its own windows |
-| `vault` | 0.2.5 | opt-in | An encrypted password vault with one-time codes and imports |
+| `vault` | 0.3.0 | opt-in | An encrypted password vault with one-time codes and imports |
 | `weather` | 0.3.3 | opt-in | Forecasts from Open-Meteo |
 | `zap` | 0.2.2 | opt-in | Flash the code you evaluate or send to a console, in the error color when it fails |
 | `zen` | 0.1.1 | opt-in | Distraction-free writing in one centered column |

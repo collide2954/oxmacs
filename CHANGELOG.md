@@ -85,6 +85,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `(settings 'weather {units: :imperial})` changes a plugin's settings, as `(settings {...})` changes the editor's, and `M-x customize` writes `custom.ox` that way; `configure-plugin` is gone. `settings-schema` lists the plugins' settings after the editor's, each with its `:owner`, `:kind`, `:doc`, `:value`, `:saved` and `:custom`, and `plugin-settings`, `saved-settings` and `custom-settings` are gone.
 - A plugin's settings take the kinds the editor's settings use: `:text`, `:integer`, `:number`, `:toggle`, `:list`, `:data` for any value, or a vector of choices. `:string`, `:int` and `:bool` are refused with the name to use instead.
 - `(setting :key)` reads a plugin's own setting in any of its files, not only its entry file, and `:startup-when true` starts a plugin with oxmacs whenever it is on, as `tabs` and `keycast` now do.
+- `vault` 0.3.0: other plugins log in with `vault/login`, which gives an entry's `:user` and `:password` and is an error when there is no such entry, as `calendar`, `remote` and `irc` now do; `vault/secret` is gone.
 
 ### Fixed
 

@@ -2,7 +2,7 @@
   (import (ox crypto) (ox json) (ox file) (ox path) (ox string) (ox time)
           (vault words :as words))
   (export vault-file locked? unlock lock entries find-entry save! add! add-all! change! remove!
-          secret touch! generate passphrase))
+          login touch! generate passphrase))
 
 (def file-version 1)
 (def default-cost {memory: 65536 iterations: 3 parallelism: 1})
@@ -121,6 +121,7 @@
   (get @state :entries))
 
 (def (find-entry title)
+  "The entry titled title in the unlocked vault, or nil."
   (find (fn [entry] (= entry.title title)) (entries)))
 
 (def (save! changed)
@@ -136,6 +137,7 @@
   (assoc entry :id (crypto/random 8) :created (time/now) :modified (time/now)))
 
 (def (add! entry)
+  "Adds entry, a map of :title, :username, :password, :url, :totp and :notes, and writes the vault."
   (let [made (stamped entry)]
     (save! (conj (vec (entries)) made))
     made))
@@ -148,18 +150,21 @@
     (count fresh)))
 
 (def (change! id edit)
+  "Replaces the entry with id by what edit returns for it and writes the vault."
   (save! (vec (map (fn [entry] (if (= entry.id id) (assoc (edit entry) :modified (time/now)) entry))
                    (entries)))))
 
 (def (remove! id)
+  "Removes the entry with id and writes the vault."
   (save! (vec (remove (fn [entry] (= entry.id id)) (entries)))))
 
-(def (secret title)
-  "The password of the entry titled title, asking for the vault's password first when it is locked; nil when there is no such entry. Other plugins use it for their logins."
+(def (login title)
+  "The :user and :password of the entry titled title, asking for the vault's password first when it is locked, and an error when there is no such entry. Other plugins log in with it."
   (unlock)
-  (when-let [entry (find-entry title)]
-    (touch!)
-    entry.password))
+  (if-let [entry (find-entry title)]
+    (do (touch!)
+      {user: entry.username password: entry.password})
+    (raise (error "The vault has no entry called {title}"))))
 
 (def (pick choices wanted)
   (let [size (count choices)]

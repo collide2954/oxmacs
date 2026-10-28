@@ -741,10 +741,8 @@
 
 (def (credentials config)
   (when config.login
-    (vault/unlock)
-    (if-let [entry (vault/find-entry config.login)]
-      {user: (if (string/blank? (or entry.username "")) config.nick entry.username) password: entry.password}
-      (raise (error (str "The vault has no entry called " config.login))))))
+    (let [found (vault/login config.login)]
+      {user: (if (string/blank? (or found.user "")) config.nick found.user) password: found.password})))
 
 (def (read-loop! name conn)
   (if-let [line (receive conn.lines)]

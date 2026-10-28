@@ -55,10 +55,7 @@
 
 (def (login calendar)
   (if-let [title calendar.login]
-    (do (vault/unlock)
-      (if-let [entry (vault/find-entry title)]
-        {user: entry.username password: entry.password}
-        (raise (error (str "The vault has no entry called " title)))))
+    (vault/login title)
     {user: nil password: nil}))
 
 (def (request credentials method url {headers {} body nil})

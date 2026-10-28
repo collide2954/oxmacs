@@ -1,5 +1,5 @@
 (plugin vault
-  :version "0.2.5"
+  :version "0.3.0"
   :opt-in true
   :summary "An encrypted password vault with one-time codes and imports"
   :commands {vault: "List the entries of the password vault"

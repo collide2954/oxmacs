@@ -244,17 +244,24 @@ fn deleting_asks_first() {
 }
 
 #[test]
-fn other_plugins_ask_the_vault_for_secrets() {
+fn other_plugins_log_in_from_the_vault() {
     let (_home, mut editor, mut ox) = unlocked("");
 
-    let secret = ox
+    let login = ox
         .eval(
             &mut editor,
-            "(module (import (vault store :as vault))) [(vault/secret \"bank\") (vault/secret \"nothing\")]",
+            "(module (import (vault store :as vault))) (vault/login \"bank\")",
         )
         .unwrap();
+    let missing = ox
+        .eval(
+            &mut editor,
+            "(module (import (vault store :as vault))) (vault/login \"nothing\")",
+        )
+        .unwrap_err();
 
-    assert_eq!(secret, r#"["s3cret" nil]"#);
+    assert_eq!(login, r#"{user: "ana" password: "s3cret"}"#);
+    assert_eq!(missing.message, "The vault has no entry called nothing");
 }
 
 #[test]

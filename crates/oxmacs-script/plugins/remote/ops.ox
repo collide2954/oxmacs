@@ -50,10 +50,8 @@
 
 (def (credentials host)
   (if host.login
-    (do (vault/unlock)
-      (if-let [entry (vault/find-entry host.login)]
-        {user: (or entry.username host.user "anonymous") password: entry.password}
-        (raise (error (str "The vault has no entry called " host.login)))))
+    (let [found (vault/login host.login)]
+      {user: (or found.user host.user "anonymous") password: found.password})
     {user: (or host.user "anonymous") password: (if host.user "" "anonymous")}))
 
 (def (ftp-url host remote)

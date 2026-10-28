@@ -1,6 +1,6 @@
 (plugin calendar
-  :version "0.2.7"
-  :requires {vault: "^0.2"}
+  :version "0.2.8"
+  :requires {vault: "^0.3"}
   :opt-in true
   :summary "Calendars in .ics files, with CalDAV sync, reminders and invitations"
   :commands {calendar: "Show the calendar's agenda"
