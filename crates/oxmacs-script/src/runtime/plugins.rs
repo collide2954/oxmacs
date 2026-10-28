@@ -553,7 +553,18 @@ fn stub(editor: &mut Editor, plugin: &str, command: &str, summary: &str) {
     });
 }
 
+fn dormant(editor: &mut Editor, plugin: &Plugin) {
+    for declared in &plugin.manifest.modes {
+        editor.add_dormant_mode(
+            &plugin.manifest.name,
+            declared.extensions(),
+            declared.file_names(),
+        );
+    }
+}
+
 fn stubs(editor: &mut Editor, plugin: &Plugin) {
+    editor.wake_dormant_modes(&plugin.manifest.name);
     if !plugin.loaded {
         for (command, summary) in &plugin.manifest.commands {
             stub(editor, &plugin.manifest.name, command, summary);
@@ -697,8 +708,12 @@ pub fn discover(
     for plugin in &known {
         limit_imports(isolate, &plugin.manifest);
     }
-    for plugin in known.iter().filter(|plugin| plugin.active) {
-        stubs(editor, plugin);
+    for plugin in &known {
+        if plugin.active {
+            stubs(editor, plugin);
+        } else {
+            dormant(editor, plugin);
+        }
     }
     editor.set_plugin_state(Plugins {
         known,
@@ -917,6 +932,8 @@ fn configure(
         for (command, _) in &plugin.manifest.commands {
             editor.remove_dynamic_command(command);
         }
+        editor.wake_dormant_modes(&plugin.manifest.name);
+        dormant(editor, plugin);
     } else {
         stubs(editor, plugin);
     }

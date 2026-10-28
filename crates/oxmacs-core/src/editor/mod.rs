@@ -163,6 +163,7 @@ pub struct Editor {
     focused: bool,
     config: Config,
     roots: roots::Found,
+    dormant: languages::dormant::Dormant,
 }
 
 impl Default for Editor {
@@ -249,6 +250,7 @@ impl Editor {
             focused: true,
             config: Config::default(),
             roots: roots::Found::default(),
+            dormant: languages::dormant::Dormant::default(),
         };
         for language in editor.languages() {
             editor.add_mode_command(language);

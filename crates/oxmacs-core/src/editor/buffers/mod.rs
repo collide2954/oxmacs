@@ -398,6 +398,12 @@ impl Editor {
 
     pub(super) fn add_buffer(&mut self, buffer: Buffer) {
         let language = buffer.file().and_then(|file| self.language_for(&file.path));
+        if language.is_none()
+            && let Some(file) = buffer.file()
+        {
+            let path = file.path.clone();
+            self.tell_dormant(&path);
+        }
         let known = self.languages();
         self.add_buffer_with(
             buffer,

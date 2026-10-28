@@ -98,6 +98,16 @@ pub struct Declared {
     roots: Vec<String>,
 }
 
+impl Declared {
+    pub fn extensions(&self) -> &[String] {
+        &self.extensions
+    }
+
+    pub fn file_names(&self) -> &[String] {
+        &self.file_names
+    }
+}
+
 pub fn declared(heap: &Heap, value: Value) -> Result<Vec<Declared>, String> {
     let wrong = || {
         ":modes must be a vector of maps with a title, extensions, file-names and roots".to_owned()

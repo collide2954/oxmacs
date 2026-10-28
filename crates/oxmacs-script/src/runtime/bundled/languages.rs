@@ -7,8 +7,14 @@ use oxmacs_core::theme::Highlight;
 use crate::Ox;
 use crate::testing::{home_with, press, settle, typed};
 
+const ON: &str = "(use-plugin python) (use-plugin go) (use-plugin c) (use-plugin cpp) (use-plugin typescript) (use-plugin javascript) (use-plugin json)";
+
 fn visiting(name: &str, text: &str) -> (tempfile::TempDir, Editor, Ox) {
-    let home = home_with(&[]);
+    visiting_with(ON, name, text)
+}
+
+fn visiting_with(init: &str, name: &str, text: &str) -> (tempfile::TempDir, Editor, Ox) {
+    let home = home_with(&[("init.ox", init)]);
     let path = home.path().join(name);
     fs::write(&path, text).unwrap();
     let mut editor = Editor::new();
@@ -46,15 +52,42 @@ fn python_files_are_highlighted_indented_and_served_by_pyright() {
     editor.execute(listed);
     settle(&mut editor, &mut ox);
     let shown = editor.buffer().contents();
-    for server in [
-        "pyright",
-        "gopls",
-        "clangd",
-        "typescript-language-server",
-        "marksman",
-    ] {
-        assert!(shown.contains(server), "{server} in {shown}");
-    }
+    assert!(shown.contains("pyright"), "{shown}");
+    assert!(!shown.contains("gopls"), "{shown}");
+}
+
+#[test]
+fn a_language_whose_plugin_is_off_opens_as_plain_text_and_says_so() {
+    let (_home, editor, _ox) = visiting_with("", "a.py", "def f():\n");
+
+    assert_eq!(editor.language(), None);
+    assert_eq!(
+        editor.message(),
+        Some(
+            "a.py opens as plain text while the python plugin is off; (use-plugin python) in init.ox turns it on"
+        )
+    );
+}
+
+#[test]
+fn typescript_and_javascript_share_one_server_definition() {
+    let (home, mut editor, mut ox) = visiting("a.ts", "const x = 1\n");
+    fs::write(home.path().join("b.js"), "let y = 2\n").unwrap();
+    editor.open_file(&home.path().join("b.js"));
+    settle(&mut editor, &mut ox);
+    assert_eq!(editor.language().map(Language::name), Some("JavaScript"));
+
+    let listed = editor.command_named("list-tools").unwrap();
+    editor.execute(listed);
+    settle(&mut editor, &mut ox);
+    assert_eq!(
+        editor
+            .buffer()
+            .contents()
+            .matches("npm install -g typescript typescript-language-server")
+            .count(),
+        1
+    );
 }
 
 #[test]

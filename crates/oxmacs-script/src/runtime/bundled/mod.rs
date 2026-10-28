@@ -18,7 +18,13 @@ pub const BUNDLED: &[Bundle] = &[
     R,
     ZAP,
     KEYCAST,
-    LANGUAGES,
+    PYTHON,
+    GO,
+    C,
+    CPP,
+    TYPESCRIPT,
+    JAVASCRIPT,
+    JSON,
     TABS,
     EXPLORER,
     ZEN,
@@ -104,21 +110,90 @@ const TABS: Bundle = Bundle {
     ],
 };
 
-const LANGUAGES: Bundle = Bundle {
-    name: "languages",
+const PYTHON: Bundle = Bundle {
+    name: "python",
     files: &[
         (
             "plugin.ox",
-            include_str!("../../../plugins/languages/plugin.ox"),
+            include_str!("../../../plugins/python/plugin.ox"),
         ),
         (
-            "languages.ox",
-            include_str!("../../../plugins/languages/languages.ox"),
+            "python.ox",
+            include_str!("../../../plugins/python/python.ox"),
+        ),
+        ("spec.ox", include_str!("../../../plugins/python/spec.ox")),
+    ],
+};
+
+const GO: Bundle = Bundle {
+    name: "go",
+    files: &[
+        ("plugin.ox", include_str!("../../../plugins/go/plugin.ox")),
+        ("go.ox", include_str!("../../../plugins/go/go.ox")),
+        ("spec.ox", include_str!("../../../plugins/go/spec.ox")),
+    ],
+};
+
+const C: Bundle = Bundle {
+    name: "c",
+    files: &[
+        ("plugin.ox", include_str!("../../../plugins/c/plugin.ox")),
+        ("c.ox", include_str!("../../../plugins/c/c.ox")),
+        ("spec.ox", include_str!("../../../plugins/c/spec.ox")),
+    ],
+};
+
+const CPP: Bundle = Bundle {
+    name: "cpp",
+    files: &[
+        ("plugin.ox", include_str!("../../../plugins/cpp/plugin.ox")),
+        ("cpp.ox", include_str!("../../../plugins/cpp/cpp.ox")),
+        ("spec.ox", include_str!("../../../plugins/cpp/spec.ox")),
+    ],
+};
+
+const TYPESCRIPT: Bundle = Bundle {
+    name: "typescript",
+    files: &[
+        (
+            "plugin.ox",
+            include_str!("../../../plugins/typescript/plugin.ox"),
         ),
         (
-            "specs.ox",
-            include_str!("../../../plugins/languages/specs.ox"),
+            "typescript.ox",
+            include_str!("../../../plugins/typescript/typescript.ox"),
         ),
+        (
+            "spec.ox",
+            include_str!("../../../plugins/typescript/spec.ox"),
+        ),
+    ],
+};
+
+const JAVASCRIPT: Bundle = Bundle {
+    name: "javascript",
+    files: &[
+        (
+            "plugin.ox",
+            include_str!("../../../plugins/javascript/plugin.ox"),
+        ),
+        (
+            "javascript.ox",
+            include_str!("../../../plugins/javascript/javascript.ox"),
+        ),
+        (
+            "spec.ox",
+            include_str!("../../../plugins/javascript/spec.ox"),
+        ),
+    ],
+};
+
+const JSON: Bundle = Bundle {
+    name: "json",
+    files: &[
+        ("plugin.ox", include_str!("../../../plugins/json/plugin.ox")),
+        ("json.ox", include_str!("../../../plugins/json/json.ox")),
+        ("spec.ox", include_str!("../../../plugins/json/spec.ox")),
     ],
 };
 
