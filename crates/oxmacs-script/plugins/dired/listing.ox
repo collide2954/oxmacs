@@ -1,7 +1,6 @@
 (module
   (import (ox file) (ox path) (ox string) (ox time))
-  (export ls-time next-order render name-column
-          entry-at line-of first-entry-line last-entry-line has-parent))
+  (export ls-time next-order render header name-column))
 
 (def months ["Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"])
 (def six-months 15778476000)
@@ -40,29 +39,11 @@
 (def (has-parent listing)
   (some? (path/parent listing.directory)))
 
-(def (first-entry-line listing)
-  (if (has-parent listing) 2 1))
-
-(def (last-entry-line listing)
-  (let [entries (count listing.entries)]
-    (if (= entries 0)
-      (if (has-parent listing) 1 0)
-      (+ (first-entry-line listing) entries -1))))
-
-(def (entry-at listing line)
-  (let [index (- line (first-entry-line listing))]
-    (when (and (>= index 0) (< index (count listing.entries)))
-      (nth listing.entries index))))
-
-(def ^:shadow (line-of listing name)
-  (let [found (first (filter (fn [i] (= (get (nth listing.entries i) :name) name))
-                             (range (count listing.entries))))]
-    (when (some? found) (+ (first-entry-line listing) found))))
-
 (def (header listing)
+  "The heading kept above the listing: its folder and order."
   (let [shown (path/abbreviate listing.directory)
         label (order-label listing.order)]
-    (if label "  {shown} ({label}):" "  {shown}:")))
+    [[[(if label "  {shown} ({label}):" "  {shown}:") :heading]]]))
 
 (def (entry-name entry)
   (cond
@@ -79,13 +60,15 @@
                  "{symbol} {(string/pad-start (size-text entry) width)}  {(string/pad-end (ls-time entry.modified now) time-width)}  "
                  "{symbol} ")]
     {line: [prefix (if face [name face] name)]
-     background: (cond [(= mark :marked) :marked] [(= mark :flagged) :flagged] [else nil])}))
+     background: (cond [(= mark :marked) :marked] [(= mark :flagged) :flagged] [else nil])
+     name: entry.name
+     entry: entry}))
 
 (def (render listing now)
+  "The lines of the listing at now: the parent folder's line, carrying :parent, then each entry's, carrying its :name and :entry."
   (let [width (size-width listing)]
     (vec (concat
-          [[[(header listing) :heading]]]
           (if (has-parent listing)
-            [[(string/repeat " " (name-column listing)) [".." :link]]]
+            [{line: [(string/repeat " " (name-column listing)) [".." :link]] parent: true}]
             [])
           (map (fn [entry] (entry-line listing entry width now)) listing.entries)))))

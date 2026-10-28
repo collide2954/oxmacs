@@ -8,28 +8,28 @@
 (def (current)
   (when-let [state (state-here)] @state))
 
-(def (focused listing)
-  (when-let [entry (l/entry-at listing (current-line))]
-    entry.name))
+(def (entry-here)
+  (get (line-item) :entry))
+
+(def (focused)
+  (get (line-item) :name))
 
 (def (place listing focus)
-  (let [line (current-line)
-        target (or (and focus (l/line-of listing focus))
-                   (if (and (l/has-parent listing) (= line 1))
-                     line
-                     (max (l/first-entry-line listing) (min line (l/last-entry-line listing)))))]
-    (goto-line target (l/name-column listing))))
+  (when focus
+    (goto-item {name: focus}))
+  (goto-line (current-line) (l/name-column listing)))
 
 (def (change state edit focus)
   (let [listing (swap! state edit)]
     (when (buffer-live? listing.buffer)
       (set-lines listing.buffer (l/render listing (time/now)))
+      (set-header listing.buffer (l/header listing))
       (when (= (current-buffer) listing.buffer)
         (place listing focus)))))
 
 (def (update-here edit)
   (when-let [state (state-here)]
-    (change state edit (focused @state))))
+    (change state edit (focused))))
 
 (def (keep-marks marks entries)
   (let [names (set (map :name entries))]
@@ -42,7 +42,7 @@
     (change state
             (fn [listing]
               (assoc listing :entries entries :marks (keep-marks listing.marks entries)))
-            (when (= (current-buffer) shown.buffer) (focused shown)))))
+            (when (= (current-buffer) shown.buffer) (focused)))))
 
 (def (refresh-all)
   (each [name (buffer-list)]
@@ -64,6 +64,7 @@
   (let [buffer (open-buffer listing.directory (l/render listing (time/now))
                             :keys listing-keys :directory listing.directory)
         listing (assoc listing :buffer buffer)]
+    (set-header buffer (l/header listing))
     (with-buffer buffer
       (if-let [state (buffer-value :dired)]
         (reset! state listing)
@@ -101,22 +102,21 @@
 
 (def (step delta)
   (when-let [listing (current)]
-    (let [line (+ (current-line) delta)
-          line (max 1 (min line (l/last-entry-line listing)))]
-      (goto-line line (l/name-column listing)))))
+    (next-item delta)
+    (goto-line (current-line) (l/name-column listing))))
 
 (defcommand dired-next-line "Move to the next file" (step 1))
 (defcommand dired-previous-line "Move to the previous file" (step -1))
 
 (defcommand dired-find-file "Open the file or directory on this line"
   (when-let [listing (current)]
-    (let [line (current-line)]
-      (if (and (l/has-parent listing) (= line 1))
-        (up-directory)
-        (if-let [entry (l/entry-at listing line)]
-          (let [target (path/join listing.directory entry.name)]
-            (if entry.dir (quietly (fn [] (move-to target nil))) (open-file target)))
-          (message "No file on this line"))))))
+    (cond
+      [(get (line-item) :parent) (up-directory)]
+      [(entry-here)
+       (let [entry (entry-here)
+             target (path/join listing.directory entry.name)]
+         (if entry.dir (quietly (fn [] (move-to target nil))) (open-file target)))]
+      [else (message "No file on this line")])))
 
 (defcommand dired-up-directory "Go up to the parent directory" (up-directory))
 
@@ -133,7 +133,7 @@
 
 (def (mark-here mark)
   (when-let [state (state-here)]
-    (when-let [entry (l/entry-at @state (current-line))]
+    (when-let [entry (entry-here)]
       (change state
               (fn [listing]
                 (assoc listing :marks (if mark
@@ -163,7 +163,7 @@
 (def (targets listing mark at-point)
   (let [marked (filter (fn [entry] (= (get listing.marks entry.name) mark)) listing.entries)]
     (if (and (empty? marked) at-point)
-      (if-let [entry (l/entry-at listing (current-line))] [entry] [])
+      (if-let [entry (entry-here)] [entry] [])
       marked)))
 
 (def (describe names)

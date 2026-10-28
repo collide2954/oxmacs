@@ -36,7 +36,6 @@ fn lines(editor: &Editor) -> Vec<String> {
         .buffer()
         .contents()
         .lines()
-        .skip(1)
         .map(str::to_owned)
         .collect()
 }
@@ -65,7 +64,7 @@ fn directories_open_in_a_listing_with_details() {
     );
     assert_eq!(at_point(&editor), format!("sub{MAIN_SEPARATOR}"));
     assert_eq!(
-        editor.line_style(2).spans.last().map(|span| span.1),
+        editor.line_style(1).spans.last().map(|span| span.1),
         Some(Highlight::Link)
     );
 }
@@ -91,12 +90,8 @@ fn listings_move_sort_and_hide_details() {
     assert_eq!(at_point(&editor), "a.txt");
     press(&mut editor, &mut ox, "s");
     assert!(
-        editor
-            .buffer()
-            .contents()
-            .lines()
-            .next()
-            .unwrap()
+        editor.pane().header_lines()[0]
+            .0
             .ends_with("(newest first):")
     );
     assert_eq!(at_point(&editor), "a.txt");
@@ -147,7 +142,7 @@ fn marks_and_flags_show_and_x_deletes_after_asking() {
 
     press(&mut editor, &mut ox, "n m");
     assert!(lines(&editor)[2].starts_with('*'));
-    assert_eq!(editor.line_style(3).background, Some(Highlight::Marked));
+    assert_eq!(editor.line_style(2).background, Some(Highlight::Marked));
     assert_eq!(at_point(&editor), "b.txt");
     press(&mut editor, &mut ox, "d");
     assert!(lines(&editor)[3].starts_with('D'));
@@ -188,7 +183,7 @@ fn files_are_renamed_copied_and_directories_made() {
         .iter()
         .position(|line| line.ends_with("b.txt"))
         .unwrap();
-    let start = editor.buffer().line_start(line + 1);
+    let start = editor.buffer().line_start(line);
     editor.buffer_mut().set_point(start);
     press(&mut editor, &mut ox, "C");
     typed(&mut editor, &mut ox, "sub");
@@ -230,7 +225,7 @@ fn renaming_moves_the_buffers_visiting_what_moved() {
         .iter()
         .position(|line| line.ends_with("a.txt"))
         .unwrap();
-    let start = editor.buffer().line_start(line + 1);
+    let start = editor.buffer().line_start(line);
     editor.buffer_mut().set_point(start);
     press(&mut editor, &mut ox, "R");
     typed(&mut editor, &mut ox, "moved.txt");
