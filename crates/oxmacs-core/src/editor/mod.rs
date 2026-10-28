@@ -229,8 +229,8 @@ impl Editor {
             working_directory: env::current_dir().unwrap_or_default(),
             home: dirs::home_dir(),
             formatters: vec![
-                (Language::RUST, editing::format::RUSTFMT),
-                (Language::R, editing::format::AIR_FORMAT),
+                (Language::rust(), editing::format::RUSTFMT),
+                (Language::r(), editing::format::AIR_FORMAT),
             ],
             tools_root: None,
             folders: None,
@@ -355,7 +355,7 @@ impl Editor {
             .and_then(|file| file.style.tabs)
             .or_else(|| {
                 self.buffer_language(id)
-                    .and_then(|language| self.registered(language))
+                    .and_then(|language| self.registered(&language))
                     .and_then(|known| known.tabs)
             })
             .unwrap_or(self.config.indent_tabs)
@@ -492,7 +492,7 @@ impl Editor {
         match self.buffers.mode(0) {
             Some(Mode::Special(view)) => view.scope(),
             Some(Mode::Text(Some(syntax))) => self
-                .registered(syntax.language())
+                .registered(&syntax.language())
                 .and_then(|known| known.scope)
                 .unwrap_or_else(|| Scope::Global.into()),
             Some(Mode::Text(None)) | None => Scope::Global.into(),
@@ -514,7 +514,7 @@ impl Editor {
             Some(Mode::Text(Some(syntax))) => LineStyle {
                 background: None,
                 spans: match self
-                    .registered(syntax.language())
+                    .registered(&syntax.language())
                     .and_then(|known| known.highlight)
                 {
                     Some(highlight) => self

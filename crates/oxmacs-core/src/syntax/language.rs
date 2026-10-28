@@ -1,6 +1,6 @@
 use std::fmt;
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use tree_sitter::{Node, Query};
 
@@ -170,30 +170,32 @@ impl fmt::Debug for Outline {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Roots {
-    pub markers: &'static [&'static str],
-    pub locate: Option<&'static [&'static str]>,
+    pub markers: Vec<String>,
+    pub locate: Option<Vec<String>>,
 }
 
 impl Roots {
-    pub const NONE: Self = Self::marked(&[]);
-
-    pub const fn marked(markers: &'static [&'static str]) -> Self {
+    pub fn marked(markers: &[&str]) -> Self {
         Self {
-            markers,
+            markers: owned(markers),
             locate: None,
         }
     }
 }
 
-#[derive(Debug)]
+pub fn owned(items: &[&str]) -> Vec<String> {
+    items.iter().map(|item| (*item).to_owned()).collect()
+}
+
+#[derive(Debug, Clone)]
 pub struct LanguageSpec {
-    pub name: &'static str,
-    pub extensions: &'static [&'static str],
-    pub file_names: &'static [&'static str],
-    pub aliases: &'static [&'static str],
-    pub line_comment: Option<&'static str>,
+    pub name: String,
+    pub extensions: Vec<String>,
+    pub file_names: Vec<String>,
+    pub aliases: Vec<String>,
+    pub line_comment: Option<String>,
     pub pairs: &'static [(char, char)],
     pub indentation: Indentation,
     pub grammar: Option<&'static Grammar>,
@@ -203,55 +205,78 @@ pub struct LanguageSpec {
     pub roots: Roots,
 }
 
-#[derive(Clone, Copy)]
-pub struct Language(&'static LanguageSpec);
+impl LanguageSpec {
+    pub fn named(name: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            extensions: Vec::new(),
+            file_names: Vec::new(),
+            aliases: Vec::new(),
+            line_comment: None,
+            pairs: &[],
+            indentation: Indentation::KEEP,
+            grammar: None,
+            grammars: &[],
+            outline: Outline::NONE,
+            features: &[],
+            roots: Roots::default(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Language(Arc<LanguageSpec>);
 
 impl Language {
-    pub const fn new(spec: &'static LanguageSpec) -> Self {
-        Self(spec)
+    pub fn new(spec: LanguageSpec) -> Self {
+        Self(Arc::new(spec))
     }
 
-    pub fn name(self) -> &'static str {
-        self.0.name
+    pub fn spec(&self) -> &LanguageSpec {
+        &self.0
     }
 
-    pub fn extensions(self) -> &'static [&'static str] {
-        self.0.extensions
+    pub fn name(&self) -> &str {
+        &self.0.name
     }
 
-    pub fn aliases(self) -> &'static [&'static str] {
-        self.0.aliases
+    pub fn extensions(&self) -> &[String] {
+        &self.0.extensions
     }
 
-    pub fn line_comment(self) -> Option<&'static str> {
-        self.0.line_comment
+    pub fn aliases(&self) -> &[String] {
+        &self.0.aliases
     }
 
-    pub fn pairs(self) -> &'static [(char, char)] {
+    pub fn line_comment(&self) -> Option<&str> {
+        self.0.line_comment.as_deref()
+    }
+
+    pub fn pairs(&self) -> &'static [(char, char)] {
         self.0.pairs
     }
 
-    pub fn supports(self, feature: Feature) -> bool {
+    pub fn supports(&self, feature: Feature) -> bool {
         self.0.features.contains(&feature)
     }
 
-    pub fn indentation(self) -> Indentation {
+    pub fn indentation(&self) -> Indentation {
         self.0.indentation
     }
 
-    pub fn grammar(self) -> Option<&'static Grammar> {
+    pub fn grammar(&self) -> Option<&'static Grammar> {
         self.0.grammar
     }
 
-    pub fn outline(self) -> Outline {
+    pub fn outline(&self) -> Outline {
         self.0.outline
     }
 
-    pub fn roots(self) -> Roots {
-        self.0.roots
+    pub fn roots(&self) -> &Roots {
+        &self.0.roots
     }
 
-    fn named_file(self, path: &Path) -> bool {
+    fn named_file(&self, path: &Path) -> bool {
         path.file_name()
             .and_then(|name| name.to_str())
             .is_some_and(|name| {
@@ -262,7 +287,7 @@ impl Language {
             })
     }
 
-    fn has_extension(self, path: &Path) -> bool {
+    fn has_extension(&self, path: &Path) -> bool {
         path.extension()
             .and_then(|extension| extension.to_str())
             .is_some_and(|extension| {
@@ -273,7 +298,7 @@ impl Language {
             })
     }
 
-    pub(super) fn injected(self, name: &str, known: &[Self]) -> Option<&'static Grammar> {
+    pub(super) fn injected(&self, name: &str, known: &[Self]) -> Option<&'static Grammar> {
         self.0
             .grammars
             .iter()
@@ -304,23 +329,21 @@ impl Eq for Language {}
 
 impl fmt::Debug for Language {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.0.name)
+        formatter.write_str(&self.0.name)
     }
 }
 
 pub fn language_for(languages: &[Language], path: &Path) -> Option<Language> {
     languages
         .iter()
-        .copied()
         .find(|language| language.named_file(path))
         .or_else(|| {
             languages
                 .iter()
-                .copied()
                 .find(|language| language.has_extension(path))
         })
+        .cloned()
 }
-
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -336,35 +359,25 @@ mod tests {
         "",
     );
 
-    static CONF: LanguageSpec = LanguageSpec {
-        name: "Conf",
-        extensions: &["conf"],
-        file_names: &["Procfile"],
-        aliases: &["conf"],
-        line_comment: Some("#"),
-        pairs: &[],
-        indentation: Indentation::KEEP,
-        grammar: Some(&CONF_GRAMMAR),
-        grammars: &[],
-        outline: Outline::NONE,
-        features: &[Feature::Highlighting],
-        roots: Roots::NONE,
-    };
+    fn conf() -> Language {
+        Language::new(LanguageSpec {
+            extensions: owned(&["conf"]),
+            file_names: owned(&["Procfile"]),
+            aliases: owned(&["conf"]),
+            line_comment: Some("#".to_owned()),
+            grammar: Some(&CONF_GRAMMAR),
+            features: &[Feature::Highlighting],
+            ..LanguageSpec::named("Conf")
+        })
+    }
 
-    static NOTES: LanguageSpec = LanguageSpec {
-        name: "Notes",
-        extensions: &["notes"],
-        file_names: &[],
-        aliases: &[],
-        line_comment: None,
-        pairs: &[],
-        indentation: Indentation::KEEP,
-        grammar: None,
-        grammars: &[],
-        outline: Outline::NONE,
-        features: &[Feature::Highlighting],
-        roots: Roots::NONE,
-    };
+    fn notes() -> Language {
+        Language::new(LanguageSpec {
+            extensions: owned(&["notes"]),
+            features: &[Feature::Highlighting],
+            ..LanguageSpec::named("Notes")
+        })
+    }
 
     fn synced(language: Language, known: &[Language], text: &str) -> (Buffer, Syntax) {
         let mut buffer = Buffer::with_text("t", text);
@@ -375,13 +388,12 @@ mod tests {
 
     #[test]
     fn languages_beyond_the_built_ins_are_found_and_highlighted() {
-        let conf = Language::new(&CONF);
-        let known = [Language::RUST, conf];
+        let known = [Language::rust(), conf()];
 
-        assert_eq!(language_for(&known, Path::new("app.CONF")), Some(conf));
-        assert_eq!(language_for(&known, Path::new("Procfile")), Some(conf));
+        assert_eq!(language_for(&known, Path::new("app.CONF")), Some(conf()));
+        assert_eq!(language_for(&known, Path::new("Procfile")), Some(conf()));
         assert_eq!(language_for(&known, Path::new("Cargo.toml")), None);
-        let (buffer, syntax) = synced(conf, &known, "name = 1\n");
+        let (buffer, syntax) = synced(conf(), &known, "name = 1\n");
         assert_eq!(
             syntax.highlights(&buffer, 0),
             [(0..4, Highlight::Function), (7..8, Highlight::Constant)]
@@ -390,9 +402,7 @@ mod tests {
 
     #[test]
     fn languages_without_a_grammar_parse_nothing() {
-        let notes = Language::new(&NOTES);
-
-        let (buffer, syntax) = synced(notes, &[notes], "{\nx\n");
+        let (buffer, syntax) = synced(notes(), &[notes()], "{\nx\n");
 
         assert!(!syntax.parses());
         assert!(syntax.tree().is_none());
@@ -403,8 +413,8 @@ mod tests {
 
     #[test]
     fn languages_are_the_same_when_their_names_are() {
-        assert_eq!(Language::new(&CONF), Language::new(&CONF));
-        assert_ne!(Language::new(&CONF), Language::TOML);
-        assert_eq!(format!("{:?}", Language::new(&NOTES)), "Notes");
+        assert_eq!(conf(), conf());
+        assert_ne!(conf(), Language::toml());
+        assert_eq!(format!("{:?}", notes()), "Notes");
     }
 }

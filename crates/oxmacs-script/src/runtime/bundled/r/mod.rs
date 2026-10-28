@@ -199,7 +199,7 @@ pub(super) fn script(text: &str, point: usize) -> R {
     let mut buffer = Buffer::with_text("t", text);
     buffer.set_point(point);
     let mut editor = Editor::with_buffer(buffer);
-    editor.set_major_mode(Some(Language::R));
+    editor.set_major_mode(Some(Language::r()));
     with_program(None, editor)
 }
 
@@ -207,6 +207,6 @@ pub(super) fn configured_script(extra: &str, text: &str, point: usize) -> R {
     let mut buffer = Buffer::with_text("t", text);
     buffer.set_point(point);
     let mut editor = Editor::with_buffer(buffer);
-    editor.set_major_mode(Some(Language::R));
+    editor.set_major_mode(Some(Language::r()));
     launch(None, extra, editor)
 }

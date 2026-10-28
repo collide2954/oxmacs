@@ -107,20 +107,22 @@ mod tests {
     use crate::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
     use crate::testing::{lines, press, type_text};
 
-    static NOTES: LanguageSpec = LanguageSpec {
-        name: "Notes",
-        extensions: &["notes"],
-        file_names: &[],
-        aliases: &[],
-        line_comment: None,
-        pairs: &[],
-        indentation: Indentation::KEEP,
-        grammar: None,
-        grammars: &[],
-        outline: Outline::NONE,
-        features: &[Feature::Highlighting],
-        roots: crate::syntax::Roots::NONE,
-    };
+    fn notes_spec() -> LanguageSpec {
+        LanguageSpec {
+            name: "Notes".to_owned(),
+            extensions: crate::syntax::owned(&["notes"]),
+            file_names: Vec::new(),
+            aliases: Vec::new(),
+            line_comment: None,
+            pairs: &[],
+            indentation: Indentation::KEEP,
+            grammar: None,
+            grammars: &[],
+            outline: Outline::NONE,
+            features: &[Feature::Highlighting],
+            roots: crate::syntax::Roots::default(),
+        }
+    }
 
     fn listed(editor: &mut Editor) {
         press(editor, "M-x");
@@ -164,7 +166,7 @@ mod tests {
     #[test]
     fn languages_that_plugins_add_are_listed() {
         let mut editor = Editor::new();
-        editor.add_language(Language::new(&NOTES), None);
+        editor.add_language(Language::new(notes_spec()), None);
 
         listed(&mut editor);
 

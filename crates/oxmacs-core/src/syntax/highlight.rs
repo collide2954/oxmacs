@@ -111,7 +111,7 @@ mod tests {
     use crate::syntax::Language;
 
     fn faces(text: &str, line: usize) -> Vec<(Range<usize>, Highlight)> {
-        faces_in(Language::RUST, text, line)
+        faces_in(Language::rust(), text, line)
     }
 
     fn faces_in(language: Language, text: &str, line: usize) -> Vec<(Range<usize>, Highlight)> {
@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn toml_tables_keys_and_values_are_highlighted() {
         let text = "[package]\nname = \"oxmacs\" # c\nversion = 1\n[[bin]]\n";
-        let toml = |line| faces_in(Language::TOML, text, line);
+        let toml = |line| faces_in(Language::toml(), text, line);
 
         assert_eq!(toml(0), [(0..9, Highlight::Type)]);
         assert_eq!(
@@ -223,7 +223,7 @@ mod tests {
     #[test]
     fn r_definitions_calls_and_literals_are_highlighted() {
         let text = "#' Adds one\nadd <- function(x = 1L) {\n  if (is.na(x)) return(NULL)\n  stats::median(x) + 2 # two\n}\n";
-        let r = |line| faces_in(Language::R, text, line);
+        let r = |line| faces_in(Language::r(), text, line);
 
         assert_eq!(r(0), [(0..11, Highlight::DocComment)]);
         assert_eq!(
@@ -259,7 +259,7 @@ mod tests {
         let text = "x <- \"a # b\" # c\n";
 
         assert_eq!(
-            faces_in(Language::R, text, 0),
+            faces_in(Language::r(), text, 0),
             [(5..12, Highlight::String), (13..16, Highlight::Comment)]
         );
     }
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn stale_trees_give_no_highlights() {
         let mut buffer = Buffer::with_text("t", "fn a() {}");
-        let mut syntax = Syntax::new(Language::RUST);
+        let mut syntax = Syntax::new(Language::rust());
         syntax.sync(&mut buffer);
 
         buffer.insert("x");

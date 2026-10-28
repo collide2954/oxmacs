@@ -339,7 +339,7 @@ mod tests {
                 .unwrap(),
         );
         editor.add_formatter(
-            crate::syntax::Language::RUST,
+            crate::syntax::Language::rust(),
             crate::editor::Formatter {
                 name: "upper",
                 format: |_, request| Ok(request.text.to_uppercase()),

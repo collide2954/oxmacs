@@ -14,7 +14,7 @@ use tree_sitter::{InputEdit, Node, Parser, Point, Tree};
 
 pub use items::Item;
 pub use language::{
-    Feature, Grammar, Indentation, Language, LanguageSpec, Outline, Roots, language_for,
+    Feature, Grammar, Indentation, Language, LanguageSpec, Outline, Roots, language_for, owned,
 };
 
 use layers::Layer;
@@ -47,7 +47,7 @@ impl fmt::Debug for Syntax {
 
 impl Syntax {
     pub fn new(language: Language) -> Self {
-        Self::knowing(language, &Language::BUILT_IN)
+        Self::knowing(language, &Language::built_in())
     }
 
     pub fn knowing(language: Language, known: &[Language]) -> Self {
@@ -70,7 +70,7 @@ impl Syntax {
     }
 
     pub fn language(&self) -> Language {
-        self.language
+        self.language.clone()
     }
 
     pub fn parses(&self) -> bool {
@@ -255,7 +255,7 @@ mod tests {
 
     fn parsed(text: &str) -> (Buffer, Syntax) {
         let mut buffer = Buffer::with_text("t", text);
-        let mut syntax = Syntax::new(Language::RUST);
+        let mut syntax = Syntax::new(Language::rust());
         syntax.sync(&mut buffer);
         (buffer, syntax)
     }
@@ -271,43 +271,43 @@ mod tests {
     #[test]
     fn languages_follow_file_extensions() {
         assert_eq!(
-            language_for(&Language::BUILT_IN, Path::new("src/main.rs")),
-            Some(Language::RUST)
+            language_for(&Language::built_in(), Path::new("src/main.rs")),
+            Some(Language::rust())
         );
         assert_eq!(
-            language_for(&Language::BUILT_IN, Path::new("LIB.RS")),
-            Some(Language::RUST)
+            language_for(&Language::built_in(), Path::new("LIB.RS")),
+            Some(Language::rust())
         );
         assert_eq!(
-            language_for(&Language::BUILT_IN, Path::new("Cargo.toml")),
-            Some(Language::TOML)
+            language_for(&Language::built_in(), Path::new("Cargo.toml")),
+            Some(Language::toml())
         );
         assert_eq!(
-            language_for(&Language::BUILT_IN, Path::new("Cargo.lock")),
-            Some(Language::TOML)
+            language_for(&Language::built_in(), Path::new("Cargo.lock")),
+            Some(Language::toml())
         );
         assert_eq!(
-            language_for(&Language::BUILT_IN, Path::new("README.md")),
+            language_for(&Language::built_in(), Path::new("README.md")),
             None
         );
         assert_eq!(
-            language_for(&Language::BUILT_IN, Path::new("analysis.R")),
-            Some(Language::R)
+            language_for(&Language::built_in(), Path::new("analysis.R")),
+            Some(Language::r())
         );
         assert_eq!(
-            language_for(&Language::BUILT_IN, Path::new("plot.r")),
-            Some(Language::R)
+            language_for(&Language::built_in(), Path::new("plot.r")),
+            Some(Language::r())
         );
         assert_eq!(
-            language_for(&Language::BUILT_IN, Path::new(".Rprofile")),
-            Some(Language::R)
+            language_for(&Language::built_in(), Path::new(".Rprofile")),
+            Some(Language::r())
         );
         assert_eq!(
-            language_for(&Language::BUILT_IN, Path::new("notes.txt")),
+            language_for(&Language::built_in(), Path::new("notes.txt")),
             None
         );
         assert_eq!(
-            language_for(&Language::BUILT_IN, Path::new("Makefile")),
+            language_for(&Language::built_in(), Path::new("Makefile")),
             None
         );
     }

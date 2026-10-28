@@ -59,7 +59,8 @@ impl Editor {
 
     pub fn set_scratch_language(&mut self, language: Option<Language>) {
         let known = self.languages();
-        self.buffers.set_scratch_language(language, known.clone());
+        self.buffers
+            .set_scratch_language(language.clone(), known.clone());
         if let Some(index) = self
             .buffers
             .position(|buffer| buffer.name() == super::SCRATCH && buffer.file().is_none())
@@ -101,7 +102,7 @@ mod tests {
         let mut editor = Editor::new();
 
         editor.open_file(&dir.path().join("main.rs"));
-        assert_eq!(editor.language(), Some(Language::RUST));
+        assert_eq!(editor.language(), Some(Language::rust()));
         assert_eq!(editor.mode_line(), "-- main.rs   L1 C0   (Rust)");
 
         editor.open_file(&dir.path().join("notes.txt"));
@@ -117,7 +118,7 @@ mod tests {
 
         editor.open_file(&dir.path().join("Cargo.toml"));
 
-        assert_eq!(editor.language(), Some(Language::TOML));
+        assert_eq!(editor.language(), Some(Language::toml()));
         assert_eq!(editor.mode_line(), "-- Cargo.toml   L1 C0   (TOML)");
     }
 
@@ -132,7 +133,7 @@ mod tests {
 
         let mut scratch = Editor::new();
         run(&mut scratch, "r-mode");
-        assert_eq!(scratch.language(), Some(Language::R));
+        assert_eq!(scratch.language(), Some(Language::r()));
     }
 
     #[test]
@@ -151,33 +152,35 @@ mod tests {
         let mut editor = Editor::new();
 
         run(&mut editor, "rust-mode");
-        assert_eq!(editor.language(), Some(Language::RUST));
+        assert_eq!(editor.language(), Some(Language::rust()));
 
         run(&mut editor, "text-mode");
         assert_eq!(editor.language(), None);
     }
 
-    static FIELD_NOTES: LanguageSpec = LanguageSpec {
-        name: "Field notes",
-        extensions: &["field"],
-        file_names: &[],
-        aliases: &[],
-        line_comment: None,
-        pairs: &[],
-        indentation: Indentation::KEEP,
-        grammar: None,
-        grammars: &[],
-        outline: Outline::NONE,
-        features: &[],
-        roots: crate::syntax::Roots::NONE,
-    };
+    fn field_notes_spec() -> LanguageSpec {
+        LanguageSpec {
+            name: "Field notes".to_owned(),
+            extensions: crate::syntax::owned(&["field"]),
+            file_names: Vec::new(),
+            aliases: Vec::new(),
+            line_comment: None,
+            pairs: &[],
+            indentation: Indentation::KEEP,
+            grammar: None,
+            grammars: &[],
+            outline: Outline::NONE,
+            features: &[],
+            roots: crate::syntax::Roots::default(),
+        }
+    }
 
     #[test]
     fn every_language_added_gets_a_mode_command() {
         let mut editor = Editor::new();
-        let field_notes = Language::new(&FIELD_NOTES);
-        editor.add_language(field_notes, None);
-        editor.add_language(field_notes, None);
+        let field_notes = Language::new(field_notes_spec());
+        editor.add_language(field_notes.clone(), None);
+        editor.add_language(field_notes.clone(), None);
 
         let id = editor.command_named("field-notes-mode").unwrap();
         assert_eq!(
@@ -193,22 +196,22 @@ mod tests {
             1
         );
         run(&mut editor, "field-notes-mode");
-        assert_eq!(editor.language(), Some(field_notes));
+        assert_eq!(editor.language(), Some(field_notes.clone()));
     }
 
     #[test]
     fn scratch_can_start_in_a_language_and_comes_back_in_it() {
         let mut editor = Editor::new();
-        let field_notes = Language::new(&FIELD_NOTES);
-        editor.add_language(field_notes, None);
+        let field_notes = Language::new(field_notes_spec());
+        editor.add_language(field_notes.clone(), None);
 
-        editor.set_scratch_language(Some(field_notes));
+        editor.set_scratch_language(Some(field_notes.clone()));
         assert_eq!(editor.buffer().name(), "*scratch*");
-        assert_eq!(editor.language(), Some(field_notes));
+        assert_eq!(editor.language(), Some(field_notes.clone()));
 
         press(&mut editor, "C-x k RET");
         assert_eq!(editor.buffer_names(), ["*scratch*"]);
-        assert_eq!(editor.language(), Some(field_notes));
+        assert_eq!(editor.language(), Some(field_notes.clone()));
     }
 
     #[test]
@@ -219,7 +222,7 @@ mod tests {
 
         editor.finish_write(dir.path().join("x.rs"));
 
-        assert_eq!(editor.language(), Some(Language::RUST));
+        assert_eq!(editor.language(), Some(Language::rust()));
     }
 
     #[test]
@@ -241,7 +244,7 @@ mod tests {
             "x <- 1\n\ny <- df |>\n  head()\nf <- function() {\n  1\n}\n",
             0,
         );
-        editor.set_major_mode(Some(Language::R));
+        editor.set_major_mode(Some(Language::r()));
 
         assert_eq!(editor.statement_at(2), Some(0..6));
         assert_eq!(editor.statement_after(6), Some(8));

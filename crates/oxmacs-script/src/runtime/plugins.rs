@@ -623,11 +623,11 @@ pub fn woken_by_modes(editor: &Editor) -> Vec<String> {
     if waiting.is_empty() {
         return Vec::new();
     }
-    let open: Vec<&str> = editor
+    let open: Vec<String> = editor
         .buffer_ids()
         .into_iter()
         .filter_map(|id| editor.buffer_language(id))
-        .map(oxmacs_core::syntax::Language::name)
+        .map(|language| language.name().to_owned())
         .collect();
     waiting
         .into_iter()
@@ -636,7 +636,7 @@ pub fn woken_by_modes(editor: &Editor) -> Vec<String> {
                 .manifest
                 .wakes_for
                 .iter()
-                .any(|mode| open.contains(&mode.as_str()))
+                .any(|mode| open.contains(mode))
         })
         .map(|plugin| plugin.manifest.name.clone())
         .collect()
@@ -1723,7 +1723,7 @@ mod tests {
 
         crate::testing::press(&mut editor, &mut ox, "C-c s");
         assert_eq!(editor.message(), Some("C-c s is undefined"));
-        editor.set_major_mode(Some(oxmacs_core::syntax::Language::R));
+        editor.set_major_mode(Some(oxmacs_core::syntax::Language::r()));
         crate::testing::press(&mut editor, &mut ox, "C-c s");
 
         assert_eq!(editor.message(), Some("Shouting in R"));
@@ -1755,7 +1755,7 @@ mod tests {
         settle(&mut editor, &mut ox);
         assert_ne!(editor.message(), Some("Watching R"));
 
-        editor.set_major_mode(Some(oxmacs_core::syntax::Language::R));
+        editor.set_major_mode(Some(oxmacs_core::syntax::Language::r()));
         settle(&mut editor, &mut ox);
 
         assert_eq!(editor.message(), Some("Watching R"));

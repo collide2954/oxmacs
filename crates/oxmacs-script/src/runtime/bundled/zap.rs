@@ -177,7 +177,7 @@ fn r_script(name: &str, text: &str) -> (tempfile::TempDir, Editor, Ox) {
 #[test]
 fn r_statements_flash_as_they_are_sent() {
     let (_home, mut editor, mut ox) = r_script("cars.R", "x <- 1\ny <- 2\n");
-    assert_eq!(editor.language(), Some(Language::R));
+    assert_eq!(editor.language(), Some(Language::r()));
     let before = Instant::now();
 
     press(&mut editor, &mut ox, "C-RET");

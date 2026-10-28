@@ -12,10 +12,12 @@ use crate::text::{Buffer, BufferId};
 
 const BUDGET: Duration = Duration::from_millis(50);
 const TRIES: usize = 3;
-const STARTS: [(Scope, Option<Language>, &str); 2] = [
-    (Scope::Global, None, ""),
-    (Scope::Rust, Some(Language::RUST), "fn main() {}\n"),
-];
+fn starts() -> [(Scope, Option<Language>, &'static str); 2] {
+    [
+        (Scope::Global, None, ""),
+        (Scope::Rust, Some(Language::rust()), "fn main() {}\n"),
+    ]
+}
 
 fn start(folder: &Path, language: Option<Language>, text: &str) -> Editor {
     let mut editor = editor_with(text, 0);
@@ -34,13 +36,13 @@ fn buffer_ids(editor: &Editor) -> Vec<BufferId> {
 
 fn opening(
     folder: &Path,
-    language: Option<Language>,
+    language: Option<&Language>,
     text: &str,
     command: Command,
 ) -> Option<(String, Duration)> {
     let mut fastest: Option<(String, Duration)> = None;
     for _ in 0..TRIES {
-        let mut editor = start(folder, language, text);
+        let mut editor = start(folder, language.cloned(), text);
         let before = buffer_ids(&editor);
         let begun = Instant::now();
         editor.execute(command);
@@ -64,13 +66,13 @@ fn every_opening() -> Vec<(String, String, Duration)> {
     let folder = tempfile::tempdir().unwrap();
     fs::write(folder.path().join("notes.md"), "# Notes\n").unwrap();
     let mut opened = Vec::new();
-    for (scope, language, text) in STARTS {
+    for (scope, language, text) in starts() {
         for command in Command::VARIANTS
             .iter()
             .copied()
             .filter(|command| command.scope() == scope)
         {
-            if let Some((buffer, took)) = opening(folder.path(), language, text, command) {
+            if let Some((buffer, took)) = opening(folder.path(), language.as_ref(), text, command) {
                 opened.push((command.name().to_owned(), buffer, took));
             }
         }

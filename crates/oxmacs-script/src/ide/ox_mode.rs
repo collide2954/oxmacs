@@ -8,32 +8,35 @@ use ox_lang::syntax::{self, Bracket, Kind, Prefix, tokens};
 
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::{Editor, Formatter};
-use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline, Roots};
+use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline, Roots, owned};
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
-static OX: LanguageSpec = LanguageSpec {
-    name: "Ox",
-    extensions: &["ox"],
-    file_names: &[],
-    aliases: &["ox"],
-    line_comment: Some(";"),
-    pairs: &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"')],
-    indentation: Indentation {
-        continues: true,
-        ..Indentation::KEEP
-    },
-    grammar: None,
-    grammars: &[],
-    outline: Outline::NONE,
-    features: &[
-        Feature::Highlighting,
-        Feature::Comments,
-        Feature::Pairs,
-        Feature::Repl,
-    ],
-    roots: Roots::marked(&["plugin.ox", "init.ox"]),
-};
+fn ox() -> LanguageSpec {
+    LanguageSpec {
+        extensions: owned(&["ox"]),
+        aliases: owned(&["ox"]),
+        line_comment: Some(";".to_owned()),
+        pairs: &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"')],
+        indentation: Indentation {
+            continues: true,
+            ..Indentation::KEEP
+        },
+        grammar: None,
+        grammars: &[],
+        outline: Outline::NONE,
+        features: &[
+            Feature::Highlighting,
+            Feature::Comments,
+            Feature::Pairs,
+            Feature::Repl,
+        ],
+        roots: Roots::marked(&["plugin.ox", "init.ox"]),
+        ..LanguageSpec::named("Ox")
+    }
+}
+
+static OX: LazyLock<Language> = LazyLock::new(|| Language::new(ox()));
 
 const CONTROL: &[&str] = &["raise", "await", "yield", "import", "export", "else"];
 
@@ -43,7 +46,7 @@ pub(crate) static EDITOR_FORMS: LazyLock<Forms> =
 const CONSTANTS: &[&str] = &["nil", "true", "false"];
 
 pub fn language() -> Language {
-    Language::new(&OX)
+    OX.clone()
 }
 
 type Spans = Vec<(Range<usize>, Highlight)>;
@@ -437,8 +440,8 @@ pub fn install(editor: &mut Editor, scope: ScopeId) {
     editor.add_language(language(), Some(scope));
     editor.set_scratch_language(Some(language()));
     editor.set_plugin_state(Lexed::default());
-    editor.set_highlighter(language(), highlight);
-    editor.set_indenter(language(), indent);
+    editor.set_highlighter(&language(), highlight);
+    editor.set_indenter(&language(), indent);
     editor.add_formatter(language(), OX_FMT);
 }
 
@@ -464,7 +467,7 @@ mod tests {
 
         editor.open_file(&path);
 
-        assert_eq!(editor.language().map(Language::name), Some("Ox"));
+        assert_eq!(editor.language().as_ref().map(Language::name), Some("Ox"));
         assert_eq!(
             editor.line_style(0).spans,
             [

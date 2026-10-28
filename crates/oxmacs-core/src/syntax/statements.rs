@@ -67,7 +67,7 @@ mod tests {
 
     fn parsed() -> (Buffer, Syntax) {
         let mut buffer = Buffer::with_text("t", SCRIPT);
-        let mut syntax = Syntax::new(Language::R);
+        let mut syntax = Syntax::new(Language::r());
         syntax.sync(&mut buffer);
         (buffer, syntax)
     }

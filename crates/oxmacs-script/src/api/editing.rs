@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn syntax_finds_statements_and_definitions() {
         let (mut editor, mut ox) = editing("x <- 1\n\nf <- function() {\n  1\n}\n", 0);
-        editor.set_major_mode(Some(Language::R));
+        editor.set_major_mode(Some(Language::r()));
 
         assert_eq!(
             eval(

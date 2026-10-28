@@ -874,20 +874,22 @@ fn inlay_hints_show_faintly_at_the_end_of_their_lines_until_an_edit() {
     );
 }
 
-static MARKDOWN: crate::syntax::LanguageSpec = crate::syntax::LanguageSpec {
-    name: "Markdown",
-    extensions: &["md"],
-    file_names: &[],
-    aliases: &["markdown"],
-    line_comment: None,
-    pairs: &[],
-    indentation: crate::syntax::Indentation::KEEP,
-    grammar: None,
-    grammars: &[],
-    outline: crate::syntax::Outline::NONE,
-    features: &[],
-    roots: crate::syntax::Roots::NONE,
-};
+fn markdown_spec() -> crate::syntax::LanguageSpec {
+    crate::syntax::LanguageSpec {
+        name: "Markdown".to_owned(),
+        extensions: crate::syntax::owned(&["md"]),
+        file_names: Vec::new(),
+        aliases: crate::syntax::owned(&["markdown"]),
+        line_comment: None,
+        pairs: &[],
+        indentation: crate::syntax::Indentation::KEEP,
+        grammar: None,
+        grammars: &[],
+        outline: crate::syntax::Outline::NONE,
+        features: &[],
+        roots: crate::syntax::Roots::default(),
+    }
+}
 
 const MARKSMAN: ServerSpec = ServerSpec {
     name: "marksman",
@@ -919,7 +921,7 @@ fn list_tools_lists_only_the_servers_of_languages_oxmacs_knows() {
     }
     assert!(!names.iter().any(|name| name == "marksman"), "{names:?}");
 
-    editor.add_language(crate::syntax::Language::new(&MARKDOWN), None);
+    editor.add_language(crate::syntax::Language::new(markdown_spec()), None);
     let names = listed(&mut editor);
     assert!(names.iter().any(|name| name == "marksman"), "{names:?}");
 }

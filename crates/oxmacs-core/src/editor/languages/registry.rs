@@ -11,7 +11,7 @@ use crate::theme::Highlight;
 pub type LineHighlighter = fn(&Editor, BufferId, usize) -> Vec<(Range<usize>, Highlight)>;
 pub type LineIndenter = fn(&Editor, BufferId, usize) -> Option<usize>;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(in crate::editor) struct Registered {
     pub(in crate::editor) language: Language,
     pub(in crate::editor) scope: Option<ScopeId>,
@@ -22,9 +22,9 @@ pub(in crate::editor) struct Registered {
 
 pub(in crate::editor) fn built_in() -> Vec<Registered> {
     [
-        (Language::RUST, Some(Scope::Rust)),
-        (Language::TOML, None),
-        (Language::R, Some(Scope::R)),
+        (Language::rust(), Some(Scope::Rust)),
+        (Language::toml(), None),
+        (Language::r(), Some(Scope::R)),
     ]
     .into_iter()
     .map(|(language, scope)| Registered {
@@ -48,7 +48,7 @@ impl Editor {
             return;
         }
         self.languages.push(Registered {
-            language,
+            language: language.clone(),
             scope,
             highlight: None,
             indent: None,
@@ -60,7 +60,7 @@ impl Editor {
     pub(in crate::editor) fn add_mode_command(&mut self, language: Language) {
         let short = language.aliases().first().map_or_else(
             || language.name().to_lowercase().replace(' ', "-"),
-            |alias| (*alias).to_owned(),
+            Clone::clone,
         );
         let name = format!("{short}-mode");
         if self.commands.find(&name).is_some() {
@@ -70,35 +70,35 @@ impl Editor {
             name,
             summary: format!("Edit the buffer as {}", language.name()),
             scope: Scope::Global.into(),
-            run: Arc::new(move |editor: &mut Editor| editor.set_major_mode(Some(language))),
+            run: Arc::new(move |editor: &mut Editor| editor.set_major_mode(Some(language.clone()))),
         });
     }
 
-    pub fn set_highlighter(&mut self, language: Language, highlight: LineHighlighter) {
+    pub fn set_highlighter(&mut self, language: &Language, highlight: LineHighlighter) {
         if let Some(known) = self
             .languages
             .iter_mut()
-            .find(|known| known.language == language)
+            .find(|known| known.language == *language)
         {
             known.highlight = Some(highlight);
         }
     }
 
-    pub fn set_indenter(&mut self, language: Language, indent: LineIndenter) {
+    pub fn set_indenter(&mut self, language: &Language, indent: LineIndenter) {
         if let Some(known) = self
             .languages
             .iter_mut()
-            .find(|known| known.language == language)
+            .find(|known| known.language == *language)
         {
             known.indent = Some(indent);
         }
     }
 
-    pub fn set_indent_tabs(&mut self, language: Language, tabs: bool) {
+    pub fn set_indent_tabs(&mut self, language: &Language, tabs: bool) {
         if let Some(known) = self
             .languages
             .iter_mut()
-            .find(|known| known.language == language)
+            .find(|known| known.language == *language)
         {
             known.tabs = Some(tabs);
         }
@@ -106,24 +106,30 @@ impl Editor {
 
     pub(in crate::editor) fn indenter(&self) -> Option<LineIndenter> {
         let language = self.buffers.language(0)?;
-        self.registered(language)?.indent
+        self.registered(&language)?.indent
     }
 
     pub fn languages(&self) -> Vec<Language> {
-        self.languages.iter().map(|known| known.language).collect()
+        self.languages
+            .iter()
+            .map(|known| known.language.clone())
+            .collect()
     }
 
     pub fn language_scope(&self, name: &str) -> Option<ScopeId> {
         self.language_named(name)
-            .and_then(|language| self.registered(language))
+            .and_then(|language| self.registered(&language))
             .and_then(|known| known.scope)
     }
 
     pub fn language_named(&self, name: &str) -> Option<Language> {
         self.languages
             .iter()
-            .map(|known| known.language)
-            .find(|language| language.name() == name || language.aliases().contains(&name))
+            .map(|known| &known.language)
+            .find(|language| {
+                language.name() == name || language.aliases().iter().any(|alias| alias == name)
+            })
+            .cloned()
     }
 
     pub fn language_for(&self, path: &Path) -> Option<Language> {
@@ -135,10 +141,10 @@ impl Editor {
         self.buffers.language(index)
     }
 
-    pub(in crate::editor) fn registered(&self, language: Language) -> Option<&Registered> {
+    pub(in crate::editor) fn registered(&self, language: &Language) -> Option<&Registered> {
         self.languages
             .iter()
-            .find(|known| known.language == language)
+            .find(|known| known.language == *language)
     }
 }
 
@@ -153,23 +159,25 @@ mod tests {
     use crate::testing::{press, type_text};
     use crate::theme::Highlight;
 
-    static NOTES: LanguageSpec = LanguageSpec {
-        name: "Notes",
-        extensions: &["notes"],
-        file_names: &[],
-        aliases: &[],
-        line_comment: None,
-        pairs: &[],
-        indentation: Indentation::KEEP,
-        grammar: None,
-        grammars: &[],
-        outline: Outline::NONE,
-        features: &[Feature::Highlighting],
-        roots: crate::syntax::Roots::NONE,
-    };
+    fn notes_spec() -> LanguageSpec {
+        LanguageSpec {
+            name: "Notes".to_owned(),
+            extensions: crate::syntax::owned(&["notes"]),
+            file_names: Vec::new(),
+            aliases: Vec::new(),
+            line_comment: None,
+            pairs: &[],
+            indentation: Indentation::KEEP,
+            grammar: None,
+            grammars: &[],
+            outline: Outline::NONE,
+            features: &[Feature::Highlighting],
+            roots: crate::syntax::Roots::default(),
+        }
+    }
 
     fn notes() -> Language {
-        Language::new(&NOTES)
+        Language::new(notes_spec())
     }
 
     fn opened(editor: &mut Editor, name: &str, text: &str) -> tempfile::TempDir {
@@ -238,7 +246,7 @@ mod tests {
     fn highlighters_style_the_lines_of_their_language() {
         let mut editor = Editor::new();
         editor.add_language(notes(), None);
-        editor.set_highlighter(notes(), |_, _, line| {
+        editor.set_highlighter(&notes(), |_, _, line| {
             vec![(0..line + 1, Highlight::Keyword)]
         });
 
@@ -252,7 +260,7 @@ mod tests {
     fn indenters_indent_the_lines_of_their_language() {
         let mut editor = Editor::new();
         editor.add_language(notes(), None);
-        editor.set_indenter(notes(), |_, _, line| Some(line * 2));
+        editor.set_indenter(&notes(), |_, _, line| Some(line * 2));
         let _dir = opened(&mut editor, "plan.notes", "a\nb");
 
         press(&mut editor, "C-n TAB");

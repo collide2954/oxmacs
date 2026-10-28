@@ -61,7 +61,7 @@ pub(in crate::editor) struct Builds {
 impl Default for Builds {
     fn default() -> Self {
         Self {
-            linters: vec![(Language::RUST, lint::CARGO_LINT)],
+            linters: vec![(Language::rust(), lint::CARGO_LINT)],
             patterns: errors::BUILT_IN.to_vec(),
             last_command: None,
             walks: Walks::default(),
@@ -93,8 +93,8 @@ impl Builds {
         &self.patterns
     }
 
-    pub(in crate::editor) fn has_linter(&self, language: Language) -> bool {
-        self.linters.iter().any(|(known, _)| *known == language)
+    pub(in crate::editor) fn has_linter(&self, language: &Language) -> bool {
+        self.linters.iter().any(|(known, _)| known == language)
     }
 
     pub(in crate::editor) fn last_command(&self) -> Option<&str> {
@@ -111,7 +111,7 @@ impl Builds {
     }
 
     pub(in crate::editor) fn request(&mut self, language: Language, path: &Path) {
-        if self.has_linter(language) {
+        if self.has_linter(&language) {
             self.due = Some((language, path.to_owned()));
         }
     }
@@ -134,9 +134,9 @@ impl Builds {
         Some((language, path, linter))
     }
 
-    pub(in crate::editor) fn stale(&mut self, language: Language) -> Vec<JobId> {
+    pub(in crate::editor) fn stale(&mut self, language: &Language) -> Vec<JobId> {
         self.runs
-            .extract_if(.., |stale| stale.language == language)
+            .extract_if(.., |stale| stale.language == *language)
             .map(|stale| stale.job)
             .collect()
     }
@@ -147,7 +147,7 @@ impl Builds {
         (language, path, linter): (Language, PathBuf, Linter),
         run: LintRun,
     ) {
-        self.last = Some((language, path));
+        self.last = Some((language.clone(), path));
         self.runs.push(Run {
             job,
             language,
@@ -204,7 +204,7 @@ impl Builds {
                         .get(&diagnostic.path)
                         .map_or(diagnostic.path.as_path(), PathBuf::as_path);
                     !(place.starts_with(&run.scope)
-                        && language_of(&diagnostic.path) == Some(run.language))
+                        && language_of(&diagnostic.path).as_ref() == Some(&run.language))
                 });
                 self.settle(run.found);
                 self.root = Some(run.root);
@@ -300,12 +300,12 @@ impl Builds {
     pub(in crate::editor) fn status(
         &self,
         identity: &Path,
-        language: Option<Language>,
+        language: Option<&Language>,
     ) -> Option<String> {
         if let Some(run) = self
             .runs
             .iter()
-            .find(|run| identity.starts_with(&run.scope) && Some(run.language) == language)
+            .find(|run| identity.starts_with(&run.scope) && Some(&run.language) == language)
         {
             return Some(run.label.to_owned());
         }
@@ -359,7 +359,7 @@ mod tests {
     }
 
     fn checking(builds: &mut Builds, root: &Path, job: u64) -> JobId {
-        builds.request(Language::RUST, &root.join("src").join("main.rs"));
+        builds.request(Language::rust(), &root.join("src").join("main.rs"));
         let due = builds.take_due().unwrap();
         builds.started(JobId(job), due, run(root));
         JobId(job)
@@ -368,7 +368,7 @@ mod tests {
     #[test]
     fn rechecking_before_anything_ran_leaves_what_is_due() {
         let mut builds = Builds::default();
-        builds.request(Language::RUST, Path::new("main.rs"));
+        builds.request(Language::rust(), Path::new("main.rs"));
 
         assert!(!builds.recheck());
         assert_eq!(
@@ -386,21 +386,22 @@ mod tests {
         let main = dir.path().join("src").join("main.rs");
         let identity = files::identity(&main);
         assert_eq!(
-            builds.status(&identity, Some(Language::RUST)),
+            builds.status(&identity, Some(&Language::rust())),
             Some("Checking".to_owned())
         );
 
         builds.output(job, &sample("error", "src/main.rs", (1, 1), (1, 2), "bad"));
         builds.output(job, FINISHED);
         let before = builds.revision();
-        let finished = builds.finished(job, &Outcome::Exited(Some(101)), |_| Some(Language::RUST));
+        let finished =
+            builds.finished(job, &Outcome::Exited(Some(101)), |_| Some(Language::rust()));
 
         assert_eq!(finished, Finished::Changed);
         assert_eq!(builds.revision(), before + 1);
         assert!(builds.walks_lints());
         assert_eq!(builds.counts(), [(main.clone(), 1, 0)]);
         assert_eq!(
-            builds.status(&identity, Some(Language::RUST)),
+            builds.status(&identity, Some(&Language::rust())),
             Some("E1".to_owned())
         );
         assert!(builds.recheck());
@@ -427,7 +428,7 @@ mod tests {
             Finished::Unknown
         );
         assert_eq!(builds.revision(), 0);
-        assert_eq!(builds.stale(Language::RUST), []);
+        assert_eq!(builds.stale(&Language::rust()), []);
     }
 
     #[test]

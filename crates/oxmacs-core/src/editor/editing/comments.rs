@@ -1,11 +1,12 @@
 use std::ops::RangeInclusive;
 
 use crate::editor::Editor;
-use crate::syntax::Language;
 
 impl Editor {
-    fn comment_prefix(&mut self) -> Option<&'static str> {
-        let prefix = self.language().and_then(Language::line_comment);
+    fn comment_prefix(&mut self) -> Option<String> {
+        let prefix = self
+            .language()
+            .and_then(|language| language.line_comment().map(str::to_owned));
         if prefix.is_none() {
             self.show_message("No comment syntax is defined");
         }
@@ -28,11 +29,11 @@ impl Editor {
             return;
         };
         if let Some(lines) = self.selected_lines() {
-            self.toggle_comments(lines, prefix);
+            self.toggle_comments(lines, &prefix);
             return;
         }
         let line = self.point_line();
-        self.toggle_comments(line..=line, prefix);
+        self.toggle_comments(line..=line, &prefix);
         let buffer = self.buffers.current_mut();
         buffer.set_point(buffer.line_start(line + 1));
     }
@@ -42,7 +43,7 @@ impl Editor {
             return;
         };
         if let Some(lines) = self.selected_lines() {
-            self.toggle_comments(lines, prefix);
+            self.toggle_comments(lines, &prefix);
             return;
         }
         let line = self.point_line();
@@ -123,7 +124,7 @@ mod tests {
 
     fn rust(text: &str, point: usize) -> Editor {
         let mut editor = editor_with(text, point);
-        editor.set_major_mode(Some(Language::RUST));
+        editor.set_major_mode(Some(Language::rust()));
         editor
     }
 
@@ -183,9 +184,9 @@ mod tests {
 
     #[test]
     fn meta_semicolon_finds_hash_comments_in_r_and_toml() {
-        for language in [Language::R, Language::TOML] {
+        for language in [Language::r(), Language::toml()] {
             let mut editor = editor_with("x = 1 # one", 0);
-            editor.set_major_mode(Some(language));
+            editor.set_major_mode(Some(language.clone()));
 
             press(&mut editor, "M-;");
 
@@ -197,7 +198,7 @@ mod tests {
     #[test]
     fn r_comments_toggle_with_hashes() {
         let mut editor = editor_with("f <- function() {\n  x\n}\n", 20);
-        editor.set_major_mode(Some(Language::R));
+        editor.set_major_mode(Some(Language::r()));
 
         press(&mut editor, "C-x C-;");
 

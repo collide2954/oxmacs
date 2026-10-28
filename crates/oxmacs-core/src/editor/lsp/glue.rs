@@ -65,7 +65,7 @@ impl Editor {
                 let buffer = self.buffers.get(index)?;
                 Some(Visited {
                     buffer: buffer.id(),
-                    language: language.name(),
+                    language: language.name().to_owned(),
                     path: &buffer.file()?.path,
                     root: roots[index].clone()?,
                     revision: buffer.revision(),

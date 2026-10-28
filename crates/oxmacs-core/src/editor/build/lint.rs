@@ -58,7 +58,7 @@ fn running(tool: RustLint) -> &'static str {
 fn cargo_lint(editor: &Editor, path: &Path) -> Option<LintRun> {
     let tool = editor.config.rust_lint;
     let subcommand = subcommand(tool)?;
-    let root = editor.language_root(path.parent()?, Some(Language::RUST))?;
+    let root = editor.language_root(path.parent()?, Some(Language::rust()))?;
     Some(LintRun {
         root,
         program: "cargo".to_owned(),
@@ -121,7 +121,7 @@ impl Editor {
         let Some(run) = (due.2.start)(self, &due.1) else {
             return;
         };
-        for stale in self.builds.stale(due.0) {
+        for stale in self.builds.stale(&due.0) {
             self.kill_job(stale);
         }
         let spec = JobSpec {
@@ -153,7 +153,7 @@ impl Editor {
             .iter()
             .map(|diagnostic| (diagnostic.path.clone(), self.language_for(&diagnostic.path)))
             .collect();
-        let language_of = |path: &Path| languages.get(path).copied().flatten();
+        let language_of = |path: &Path| languages.get(path).cloned().flatten();
         match self.builds.finished(job, outcome, language_of) {
             Finished::Changed => self.diagnostics_changed(),
             Finished::Failed(message) => self.show_message(message),
@@ -222,7 +222,8 @@ impl Editor {
     }
 
     pub(in crate::editor) fn lint_status(&self, identity: &Path) -> Option<String> {
-        self.builds.status(identity, self.language_for(identity))
+        self.builds
+            .status(identity, self.language_for(identity).as_ref())
     }
 }
 #[cfg(test)]
@@ -313,20 +314,22 @@ mod tests {
             .waves
     }
 
-    static SHOUTY: LanguageSpec = LanguageSpec {
-        name: "Shouty",
-        extensions: &["shout"],
-        file_names: &[],
-        aliases: &[],
-        line_comment: None,
-        pairs: &[],
-        indentation: Indentation::KEEP,
-        grammar: None,
-        grammars: &[],
-        outline: Outline::NONE,
-        features: &[],
-        roots: crate::syntax::Roots::NONE,
-    };
+    fn shouty_spec() -> LanguageSpec {
+        LanguageSpec {
+            name: "Shouty".to_owned(),
+            extensions: crate::syntax::owned(&["shout"]),
+            file_names: Vec::new(),
+            aliases: Vec::new(),
+            line_comment: None,
+            pairs: &[],
+            indentation: Indentation::KEEP,
+            grammar: None,
+            grammars: &[],
+            outline: Outline::NONE,
+            features: &[],
+            roots: crate::syntax::Roots::default(),
+        }
+    }
 
     fn shout_line(line: &str, root: &Path) -> LintLine {
         let mut parts = line.splitn(4, ':');
@@ -362,8 +365,8 @@ mod tests {
     };
 
     fn shouting(editor: &mut Editor, dir: &Path) -> PathBuf {
-        let shouty = Language::new(&SHOUTY);
-        editor.add_language(shouty, None);
+        let shouty = Language::new(shouty_spec());
+        editor.add_language(shouty.clone(), None);
         editor.add_linter(shouty, SHOUT_LINT);
         let path = dir.join("a.shout");
         fs::write(&path, "hello there\n").unwrap();

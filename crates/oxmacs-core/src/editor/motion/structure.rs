@@ -156,7 +156,7 @@ mod tests {
 
     fn rust(point: usize) -> Editor {
         let mut editor = editor_with(SOURCE, point);
-        editor.set_major_mode(Some(Language::RUST));
+        editor.set_major_mode(Some(Language::rust()));
         editor
     }
 
@@ -193,7 +193,7 @@ mod tests {
         assert_eq!(after(&mut editor, "C-M-f"), 23);
 
         let mut comment = editor_with("// note\nfoo", 0);
-        comment.set_major_mode(Some(Language::RUST));
+        comment.set_major_mode(Some(Language::rust()));
         assert_eq!(after(&mut comment, "C-M-f"), 11);
     }
 
@@ -227,7 +227,7 @@ mod tests {
 
     fn r(point: usize) -> Editor {
         let mut editor = editor_with(R_SOURCE, point);
-        editor.set_major_mode(Some(Language::R));
+        editor.set_major_mode(Some(Language::r()));
         editor
     }
 
@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn r_sexp_motions_skip_hash_comments() {
         let mut editor = editor_with("# note\nfoo", 0);
-        editor.set_major_mode(Some(Language::R));
+        editor.set_major_mode(Some(Language::r()));
 
         assert_eq!(after(&mut editor, "C-M-f"), 10);
     }

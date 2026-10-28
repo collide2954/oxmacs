@@ -11,7 +11,6 @@ use crate::editor::windows::status::{BufferState, Status};
 use crate::editor::{Editor, Gutter, LineDecorations, PopupView};
 use crate::files::LineEnding;
 use crate::special_buffer::SpecialBuffer;
-use crate::syntax::Language;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
@@ -240,7 +239,7 @@ impl<'a> Pane<'a> {
             crlf: buffer
                 .file()
                 .is_some_and(|file| file.format.line_ending == LineEnding::CrLf),
-            mode: language.map(Language::name),
+            mode: language.as_ref().map(|language| language.name().to_owned()),
             server: language
                 .zip(buffer.file())
                 .and_then(|(language, file)| self.editor.server_label(language.name(), &file.path)),

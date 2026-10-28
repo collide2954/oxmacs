@@ -220,7 +220,7 @@ impl Point {
 "#;
 
     fn indentations(text: &str) -> (Buffer, Syntax) {
-        parsed(Language::RUST, text)
+        parsed(Language::rust(), text)
     }
 
     fn parsed(language: Language, text: &str) -> (Buffer, Syntax) {
@@ -272,7 +272,7 @@ impl Point {
 
     #[test]
     fn toml_indents_arrays_and_keeps_other_lines_level() {
-        let (buffer, syntax) = parsed(Language::TOML, "[a]\n  x = 1\n  y = [\n\"b\",\n]\n");
+        let (buffer, syntax) = parsed(Language::toml(), "[a]\n  x = 1\n  y = [\n\"b\",\n]\n");
         let indent = |line| syntax.indentation(&buffer, line, 8);
 
         assert_eq!(indent(2), Some(2));
@@ -323,7 +323,7 @@ x[[
 
     #[test]
     fn tidyverse_r_keeps_its_indentation() {
-        let (buffer, syntax) = parsed(Language::R, TIDY_R);
+        let (buffer, syntax) = parsed(Language::r(), TIDY_R);
 
         for (line, text) in TIDY_R.lines().enumerate() {
             if text.trim().is_empty() {
@@ -341,7 +341,7 @@ x[[
 
     #[test]
     fn r_indents_new_lines_two_spaces_into_blocks_and_pipes() {
-        let (buffer, syntax) = parsed(Language::R, "f <- function(x) {\nx |>\nsum()\n}\n");
+        let (buffer, syntax) = parsed(Language::r(), "f <- function(x) {\nx |>\nsum()\n}\n");
         let indent = |line| syntax.indentation(&buffer, line, 8);
 
         assert_eq!(indent(1), Some(2));
@@ -351,7 +351,7 @@ x[[
 
     #[test]
     fn r_multiline_strings_are_left_alone() {
-        let (buffer, syntax) = parsed(Language::R, "x <- \"a\n   b\"\n");
+        let (buffer, syntax) = parsed(Language::r(), "x <- \"a\n   b\"\n");
 
         assert_eq!(syntax.indentation(&buffer, 1, 8), None);
     }

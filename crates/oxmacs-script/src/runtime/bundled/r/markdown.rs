@@ -33,7 +33,10 @@ fn r_markdown_files_open_in_their_mode_with_headings_and_chunks_marked() {
         "---\ntitle: \"# Not a heading\"\n---\n# Report\n```{r}\n# a comment\n#| echo: false\nx\n```\nSee `x` and [docs](d.md).\n",
     );
 
-    assert_eq!(r.editor.language().map(Language::name), Some("R Markdown"));
+    assert_eq!(
+        r.editor.language().as_ref().map(Language::name),
+        Some("R Markdown")
+    );
     assert_eq!(r.editor.line_style(1).spans, [(0..24, Highlight::String)]);
     assert_eq!(r.editor.line_style(3).spans, [(0..8, Highlight::Heading)]);
     assert_eq!(r.editor.line_style(4).spans, [(0..6, Highlight::Keyword)]);
@@ -75,7 +78,10 @@ fn r_markdown_documents_preview_beside_as_markdown_does() {
 fn quarto_files_open_in_the_same_mode() {
     let (_folder, r) = opened("slides.qmd", REPORT);
 
-    assert_eq!(r.editor.language().map(Language::name), Some("R Markdown"));
+    assert_eq!(
+        r.editor.language().as_ref().map(Language::name),
+        Some("R Markdown")
+    );
 }
 
 #[test]

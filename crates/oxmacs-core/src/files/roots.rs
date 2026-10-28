@@ -20,21 +20,25 @@ fn marked(folder: &Path, marker: &str) -> bool {
     }
 }
 
-pub fn upward(folder: &Path, markers: &[&str], home: Option<&Path>) -> Option<PathBuf> {
+pub fn upward<S: AsRef<str>>(folder: &Path, markers: &[S], home: Option<&Path>) -> Option<PathBuf> {
     if markers.is_empty() {
         return None;
     }
     folder
         .ancestors()
         .take_while(|ancestor| Some(*ancestor) != home)
-        .find(|ancestor| markers.iter().any(|marker| marked(ancestor, marker)))
+        .find(|ancestor| {
+            markers
+                .iter()
+                .any(|marker| marked(ancestor, marker.as_ref()))
+        })
         .map(Path::to_path_buf)
 }
 
-pub fn located(folder: &Path, command: &[&str]) -> Option<PathBuf> {
+pub fn located<S: AsRef<str>>(folder: &Path, command: &[S]) -> Option<PathBuf> {
     let (program, args) = command.split_first()?;
-    let mut run = Command::new(program);
-    run.args(args).current_dir(folder);
+    let mut run = Command::new(program.as_ref());
+    run.args(args.iter().map(AsRef::as_ref)).current_dir(folder);
     let output = oxmacs_process::run(&mut run, None).ok()?;
     if !output.status.success() {
         return None;
@@ -67,6 +71,6 @@ mod tests {
         );
         assert_eq!(upward(&inner, PROJECT, Some(home.path())), None);
         assert_eq!(upward(&inner, PROJECT, None), Some(home.path().to_owned()));
-        assert_eq!(upward(&inner, &[], None), None);
+        assert_eq!(upward::<&str>(&inner, &[], None), None);
     }
 }

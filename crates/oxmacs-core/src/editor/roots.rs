@@ -6,7 +6,7 @@ use crate::editor::Editor;
 use crate::files::roots::{PROJECT, located, upward};
 use crate::syntax::{Language, Roots};
 
-type Key = (PathBuf, &'static str);
+type Key = (PathBuf, String);
 
 #[derive(Debug, Default)]
 pub(in crate::editor) struct Found(Mutex<HashMap<Key, Option<PathBuf>>>);
@@ -15,10 +15,10 @@ impl Editor {
     fn remembered(
         &self,
         folder: &Path,
-        question: &'static str,
+        question: &str,
         find: impl FnOnce() -> Option<PathBuf>,
     ) -> Option<PathBuf> {
-        let key = (folder.to_path_buf(), question);
+        let key = (folder.to_path_buf(), question.to_owned());
         if let Some(known) = self
             .roots
             .0
@@ -46,6 +46,7 @@ impl Editor {
             self.remembered(folder, language.name(), || {
                 let Roots { markers, locate } = language.roots();
                 locate
+                    .as_ref()
                     .and_then(|command| located(folder, command))
                     .or_else(|| upward(folder, markers, home))
             })
@@ -71,11 +72,11 @@ mod tests {
         editor.set_home_directory(Some(dir.path().to_owned()));
 
         assert_eq!(
-            editor.language_root(&code, Some(Language::R)),
+            editor.language_root(&code, Some(Language::r())),
             Some(dir.path().join("repo/pkg"))
         );
         assert_eq!(
-            editor.language_root(&code, Some(Language::TOML)),
+            editor.language_root(&code, Some(Language::toml())),
             Some(dir.path().join("repo"))
         );
         assert_eq!(editor.project_root(&code), Some(dir.path().join("repo")));
@@ -99,14 +100,14 @@ mod tests {
         fs::write(member.join("Cargo.toml"), "[package]\nname = \"a\"\n").unwrap();
         let editor = Editor::new();
         assert_eq!(
-            editor.language_root(&member.join("src"), Some(Language::RUST)),
+            editor.language_root(&member.join("src"), Some(Language::rust())),
             Some(member.clone())
         );
 
         fs::write(member.join("src/lib.rs"), "").unwrap();
         let editor = Editor::new();
         assert_eq!(
-            editor.language_root(&member.join("src"), Some(Language::RUST)),
+            editor.language_root(&member.join("src"), Some(Language::rust())),
             Some(dir.path().to_owned())
         );
     }

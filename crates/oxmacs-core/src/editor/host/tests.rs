@@ -1140,7 +1140,8 @@ fn moving_a_visited_file_follows_it_into_its_new_language() {
     assert_eq!(
         editor
             .buffer_language(id)
+            .as_ref()
             .map(crate::syntax::Language::name),
-        Some(crate::syntax::Language::RUST.name())
+        Some("Rust")
     );
 }

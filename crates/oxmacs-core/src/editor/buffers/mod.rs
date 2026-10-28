@@ -292,7 +292,7 @@ impl BufferList {
             let syntax = self
                 .scratch
                 .as_ref()
-                .map(|(language, known)| Syntax::knowing(*language, known));
+                .map(|(language, known)| Syntax::knowing(language.clone(), known));
             self.push_front_with(Buffer::new(SCRATCH), Mode::Text(syntax));
         }
     }

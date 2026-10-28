@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn subscribing_starts_from_the_current_windows_and_modes() {
         let mut editor = Editor::new();
-        editor.set_major_mode(Some(Language::RUST));
+        editor.set_major_mode(Some(Language::rust()));
         for kind in [
             EventKind::Windows,
             EventKind::Diagnostics,
@@ -415,14 +415,14 @@ mod tests {
 
         assert_eq!(editor.take_events(), []);
         press(&mut editor, "C-x 2");
-        editor.set_major_mode(Some(Language::TOML));
+        editor.set_major_mode(Some(Language::toml()));
 
         let id = editor.buffer().id();
         assert_eq!(
             editor.take_events(),
             [
                 Event::Windows,
-                Event::ModeChanged(id, Language::TOML.name().to_owned())
+                Event::ModeChanged(id, Language::toml().name().to_owned())
             ]
         );
     }

@@ -57,7 +57,7 @@ mod tests {
     fn toml_tables_are_items() {
         let text = "[package]\nname = \"oxmacs\"\n\n[[bin]]\nname = \"oxmacs\"\n";
         let mut buffer = Buffer::with_text("t", text);
-        let mut syntax = Syntax::new(Language::TOML);
+        let mut syntax = Syntax::new(Language::toml());
         syntax.sync(&mut buffer);
 
         let labels: Vec<String> = syntax
@@ -73,7 +73,7 @@ mod tests {
     fn r_functions_and_rstudio_sections_are_items() {
         let text = "# Load data ----\nread <- function(path) readRDS(path)\n\n## Model ====\nfit <- function(data) {\n  inner <- function() 1\n}\nx <- 1\n# just a comment\n";
         let mut buffer = Buffer::with_text("t", text);
-        let mut syntax = Syntax::new(Language::R);
+        let mut syntax = Syntax::new(Language::r());
         syntax.sync(&mut buffer);
 
         let items: Vec<(String, Option<String>)> = syntax
@@ -98,7 +98,7 @@ mod tests {
     fn items_are_listed_in_order_with_their_context() {
         let text = "struct Point;\nimpl Point {\n    fn new() {}\n}\nimpl Display for Point {}\nmod tests {\n    fn works() {}\n}\nmacro_rules! m { () => {} }\n";
         let mut buffer = Buffer::with_text("t", text);
-        let mut syntax = Syntax::new(Language::RUST);
+        let mut syntax = Syntax::new(Language::rust());
         syntax.sync(&mut buffer);
 
         let items: Vec<(String, Option<String>, usize)> = syntax

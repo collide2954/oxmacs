@@ -1,5 +1,8 @@
 use tree_sitter::Node;
 
+use std::sync::LazyLock;
+
+use crate::syntax::language::owned;
 use crate::syntax::{Feature, Grammar, Indentation, Language, LanguageSpec, Outline, Roots};
 use crate::text::Buffer;
 
@@ -35,139 +38,160 @@ const EDITING: &[Feature] = &[
     Feature::Items,
 ];
 
-static RUST: LanguageSpec = LanguageSpec {
-    name: "Rust",
-    extensions: &["rs"],
-    file_names: &[],
-    aliases: &["rust", "rs"],
-    line_comment: Some("//"),
-    pairs: BRACKETS,
-    indentation: Indentation {
-        unit: 4,
-        continues: true,
-        fresh_words: &["where"],
-        from_owner: false,
-        hanging: false,
-        guess: None,
-    },
-    grammar: Some(&RUST_GRAMMAR),
-    grammars: &[],
-    outline: Outline {
-        item: rust_item,
-        context: |node| matches!(node.kind(), "impl_item" | "trait_item" | "mod_item"),
-        defun: |node| {
-            matches!(
-                node.kind(),
-                "function_item"
-                    | "function_signature_item"
-                    | "impl_item"
-                    | "struct_item"
-                    | "enum_item"
-                    | "union_item"
-                    | "trait_item"
-                    | "mod_item"
-                    | "macro_definition"
-                    | "const_item"
-                    | "static_item"
-                    | "type_item"
-            )
+fn rust() -> LanguageSpec {
+    LanguageSpec {
+        name: "Rust".to_owned(),
+        extensions: owned(&["rs"]),
+        file_names: Vec::new(),
+        aliases: owned(&["rust", "rs"]),
+        line_comment: Some("//".to_owned()),
+        pairs: BRACKETS,
+        indentation: Indentation {
+            unit: 4,
+            continues: true,
+            fresh_words: &["where"],
+            from_owner: false,
+            hanging: false,
+            guess: None,
         },
-        sections: false,
-        statements: &[],
-    },
-    features: &[
-        Feature::Highlighting,
-        Feature::Indentation,
-        Feature::Comments,
-        Feature::Pairs,
-        Feature::Formatting,
-        Feature::Lint,
-        Feature::Motion,
-        Feature::Items,
-    ],
-    roots: Roots {
-        markers: &["Cargo.toml"],
-        locate: Some(&[
-            "cargo",
-            "locate-project",
-            "--workspace",
-            "--message-format",
-            "plain",
-        ]),
-    },
-};
+        grammar: Some(&RUST_GRAMMAR),
+        grammars: &[],
+        outline: Outline {
+            item: rust_item,
+            context: |node| matches!(node.kind(), "impl_item" | "trait_item" | "mod_item"),
+            defun: |node| {
+                matches!(
+                    node.kind(),
+                    "function_item"
+                        | "function_signature_item"
+                        | "impl_item"
+                        | "struct_item"
+                        | "enum_item"
+                        | "union_item"
+                        | "trait_item"
+                        | "mod_item"
+                        | "macro_definition"
+                        | "const_item"
+                        | "static_item"
+                        | "type_item"
+                )
+            },
+            sections: false,
+            statements: &[],
+        },
+        features: &[
+            Feature::Highlighting,
+            Feature::Indentation,
+            Feature::Comments,
+            Feature::Pairs,
+            Feature::Formatting,
+            Feature::Lint,
+            Feature::Motion,
+            Feature::Items,
+        ],
+        roots: Roots {
+            markers: owned(&["Cargo.toml"]),
+            locate: Some(owned(&[
+                "cargo",
+                "locate-project",
+                "--workspace",
+                "--message-format",
+                "plain",
+            ])),
+        },
+    }
+}
 
-static TOML: LanguageSpec = LanguageSpec {
-    name: "TOML",
-    extensions: &["toml"],
-    file_names: &["Cargo.lock"],
-    aliases: &["toml"],
-    line_comment: Some("#"),
-    pairs: BRACKETS,
-    indentation: Indentation::KEEP,
-    grammar: Some(&TOML_GRAMMAR),
-    grammars: &[],
-    outline: Outline {
-        item: toml_item,
-        context: |_| false,
-        defun: |node| matches!(node.kind(), "table" | "table_array_element"),
-        sections: false,
-        statements: &[],
-    },
-    features: EDITING,
-    roots: Roots::NONE,
-};
+fn toml() -> LanguageSpec {
+    LanguageSpec {
+        name: "TOML".to_owned(),
+        extensions: owned(&["toml"]),
+        file_names: owned(&["Cargo.lock"]),
+        aliases: owned(&["toml"]),
+        line_comment: Some("#".to_owned()),
+        pairs: BRACKETS,
+        indentation: Indentation::KEEP,
+        grammar: Some(&TOML_GRAMMAR),
+        grammars: &[],
+        outline: Outline {
+            item: toml_item,
+            context: |_| false,
+            defun: |node| matches!(node.kind(), "table" | "table_array_element"),
+            sections: false,
+            statements: &[],
+        },
+        features: EDITING,
+        roots: Roots::default(),
+    }
+}
 
-static R: LanguageSpec = LanguageSpec {
-    name: "R",
-    extensions: &["R", "r"],
-    file_names: &[".Rprofile"],
-    aliases: &["r"],
-    line_comment: Some("#"),
-    pairs: &[
-        ('(', ')'),
-        ('[', ']'),
-        ('{', '}'),
-        ('"', '"'),
-        ('\'', '\''),
-        ('`', '`'),
-    ],
-    indentation: Indentation {
-        unit: 2,
-        continues: true,
-        fresh_words: &[],
-        from_owner: true,
-        hanging: true,
-        guess: None,
-    },
-    grammar: Some(&R_GRAMMAR),
-    grammars: &[],
-    outline: Outline {
-        item: r_item,
-        context: is_function_assignment,
-        defun: is_function_assignment,
-        sections: true,
-        statements: &["program", "braced_expression"],
-    },
-    features: &[
-        Feature::Highlighting,
-        Feature::Indentation,
-        Feature::Comments,
-        Feature::Pairs,
-        Feature::Formatting,
-        Feature::Motion,
-        Feature::Items,
-        Feature::Completion,
-        Feature::Repl,
-    ],
-    roots: Roots::marked(&["DESCRIPTION", "renv.lock", "*.Rproj"]),
-};
+fn r() -> LanguageSpec {
+    LanguageSpec {
+        name: "R".to_owned(),
+        extensions: owned(&["R", "r"]),
+        file_names: owned(&[".Rprofile"]),
+        aliases: owned(&["r"]),
+        line_comment: Some("#".to_owned()),
+        pairs: &[
+            ('(', ')'),
+            ('[', ']'),
+            ('{', '}'),
+            ('"', '"'),
+            ('\'', '\''),
+            ('`', '`'),
+        ],
+        indentation: Indentation {
+            unit: 2,
+            continues: true,
+            fresh_words: &[],
+            from_owner: true,
+            hanging: true,
+            guess: None,
+        },
+        grammar: Some(&R_GRAMMAR),
+        grammars: &[],
+        outline: Outline {
+            item: r_item,
+            context: is_function_assignment,
+            defun: is_function_assignment,
+            sections: true,
+            statements: &["program", "braced_expression"],
+        },
+        features: &[
+            Feature::Highlighting,
+            Feature::Indentation,
+            Feature::Comments,
+            Feature::Pairs,
+            Feature::Formatting,
+            Feature::Motion,
+            Feature::Items,
+            Feature::Completion,
+            Feature::Repl,
+        ],
+        roots: Roots::marked(&["DESCRIPTION", "renv.lock", "*.Rproj"]),
+    }
+}
+
+static RUST: LazyLock<Language> = LazyLock::new(|| Language::new(rust()));
+static TOML: LazyLock<Language> = LazyLock::new(|| Language::new(toml()));
+static R: LazyLock<Language> = LazyLock::new(|| Language::new(r()));
 
 impl Language {
-    pub const RUST: Self = Self::new(&RUST);
-    pub const TOML: Self = Self::new(&TOML);
-    pub const R: Self = Self::new(&R);
-    pub const BUILT_IN: [Self; 3] = [Self::RUST, Self::TOML, Self::R];
+    pub fn rust() -> Self {
+        RUST.clone()
+    }
+
+    pub fn toml() -> Self {
+        TOML.clone()
+    }
+
+    pub fn r() -> Self {
+        R.clone()
+    }
+
+    pub fn built_in() -> [Self; 3] {
+        [Self::rust(), Self::toml(), Self::r()]
+    }
 }
 
 fn field(node: Node<'_>, buffer: &Buffer, name: &str) -> Option<String> {

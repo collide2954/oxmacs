@@ -93,7 +93,7 @@ enum Outcome {
 #[derive(Debug, Clone)]
 struct Visited<'a> {
     buffer: BufferId,
-    language: &'a str,
+    language: String,
     path: &'a Path,
     root: PathBuf,
     revision: u64,
@@ -279,7 +279,7 @@ impl Lsp {
         }
         let mut seen = Vec::new();
         for file in visited {
-            let Some(spec) = self.spec_for(file.language) else {
+            let Some(spec) = self.spec_for(&file.language) else {
                 continue;
             };
             seen.push(file.buffer);
@@ -361,7 +361,7 @@ impl Lsp {
                 version: 1,
                 revision: file.revision,
             });
-            let language_id = spec.language_id(file.language).unwrap_or_default();
+            let language_id = spec.language_id(&file.language).unwrap_or_default();
             notification(
                 "textDocument/didOpen",
                 &json!({

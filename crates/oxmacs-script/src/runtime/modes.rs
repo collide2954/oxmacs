@@ -9,7 +9,7 @@ use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{ScopeId, intern};
 use oxmacs_core::editor::Editor;
-use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline, Roots};
+use oxmacs_core::syntax::{Feature, Language, LanguageSpec, Roots};
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
@@ -156,20 +156,18 @@ pub fn declared(heap: &Heap, value: Value) -> Result<Vec<Declared>, String> {
 }
 
 fn spec(title: &str, alias: String, declared: Declared) -> Language {
-    Language::new(Box::leak(Box::new(LanguageSpec {
-        name: intern(title),
-        extensions: leak_all(declared.extensions),
-        file_names: leak_all(declared.file_names),
-        aliases: leak_all(vec![alias]),
-        line_comment: declared.comment.as_deref().map(intern),
-        pairs: &[],
-        indentation: Indentation::KEEP,
-        grammar: None,
-        grammars: &[],
-        outline: Outline::NONE,
+    Language::new(LanguageSpec {
+        extensions: declared.extensions,
+        file_names: declared.file_names,
+        aliases: vec![alias],
+        line_comment: declared.comment,
         features: FEATURES,
-        roots: Roots::marked(leak_all(declared.roots)),
-    })))
+        roots: Roots {
+            markers: declared.roots,
+            locate: None,
+        },
+        ..LanguageSpec::named(title)
+    })
 }
 
 pub fn declare(editor: &mut Editor, plugin: &str, declared: &Declared) {
@@ -185,8 +183,8 @@ pub fn declare(editor: &mut Editor, plugin: &str, declared: &Declared) {
     let alias = declared.title.to_lowercase().replace(' ', "-");
     let language = spec(&declared.title, alias, declared.clone());
     let scope = editor.add_scope(intern(&declared.title));
-    editor.add_language(language, Some(scope));
-    editor.set_indenter(language, indent_by_rules);
+    editor.add_language(language.clone(), Some(scope));
+    editor.set_indenter(&language, indent_by_rules);
     if let Some(modes) = modes(editor) {
         modes.defined.push(Mode {
             language,
@@ -249,16 +247,6 @@ fn modes(editor: &mut Editor) -> Option<&mut Modes> {
         editor.set_plugin_state(Modes::default());
     }
     editor.plugin_state_mut::<Modes>()
-}
-
-fn leak_all(items: Vec<String>) -> &'static [&'static str] {
-    Box::leak(
-        items
-            .into_iter()
-            .map(|item| intern(&item))
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-    )
 }
 
 fn texts(heap: &Heap, value: Value) -> Result<Vec<String>, Error> {
@@ -400,7 +388,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
             .defined
             .iter()
             .find(|mode| mode.language.name() == title)
-            .map(|mode| (mode.language, mode.scope, mode.plugin.clone()))
+            .map(|mode| (mode.language.clone(), mode.scope, mode.plugin.clone()))
     });
     if let Some((_, _, Some(plugin))) = &known {
         repeated(&title, plugin, &given)?;
@@ -419,15 +407,15 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
             editor.add_scope(intern(&title)),
         )
     });
-    editor.add_language(language, Some(scope));
-    editor.set_indenter(language, indent_by_rules);
+    editor.add_language(language.clone(), Some(scope));
+    editor.set_indenter(&language, indent_by_rules);
     if let Some(tabs) = given.indent.tabs {
-        editor.set_indent_tabs(language, tabs);
+        editor.set_indent_tabs(&language, tabs);
     }
     crate::api::commands::bind_keys(editor, scope, &given.keys)?;
     let highlight = given.highlight.map(|function| heap.hold(function));
     if highlight.is_some() {
-        editor.set_highlighter(language, cached);
+        editor.set_highlighter(&language, cached);
     }
     let Some(modes) = modes(editor) else {
         return Ok(Value::Nil);
@@ -600,7 +588,7 @@ pub fn highlight(isolate: &mut Isolate, editor: &mut Editor) {
         modes
             .defined
             .iter()
-            .filter_map(|mode| Some((mode.language, mode.highlight?)))
+            .filter_map(|mode| Some((mode.language.clone(), mode.highlight?)))
             .collect::<Vec<_>>()
     }) else {
         return;
@@ -635,7 +623,7 @@ pub fn highlight(isolate: &mut Isolate, editor: &mut Editor) {
                     .collect()
             })
             .unwrap_or_default();
-        work.push((*id, *language, *hold, revision, lines, old));
+        work.push((*id, language.clone(), *hold, revision, lines, old));
     }
     for (id, language, hold, revision, lines, old) in work {
         let Some(function) = isolate.held(hold) else {
@@ -713,7 +701,10 @@ mod tests {
         editor.open_file(&path);
         settle(&mut editor, &mut ox);
 
-        assert_eq!(editor.language().map(Language::name), Some("Notes"));
+        assert_eq!(
+            editor.language().as_ref().map(Language::name),
+            Some("Notes")
+        );
         assert_eq!(editor.line_style(0).spans, [(0..9, Highlight::Comment)]);
         assert_eq!(editor.line_style(1).spans, []);
 
@@ -851,7 +842,10 @@ mod tests {
         editor.open_file(&path);
         settle(&mut editor, &mut ox);
 
-        assert_eq!(editor.language().map(Language::name), Some("Notes"));
+        assert_eq!(
+            editor.language().as_ref().map(Language::name),
+            Some("Notes")
+        );
         assert_eq!(editor.line_style(0).spans, [(0..9, Highlight::Comment)]);
     }
 

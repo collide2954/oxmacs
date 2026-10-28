@@ -38,7 +38,7 @@ fn the_shortcuts_belong_to_r_buffers() {
     let mut buffer = Buffer::with_text("t", "x");
     buffer.set_point(1);
     let mut editor = Editor::with_buffer(buffer);
-    editor.set_major_mode(Some(Language::RUST));
+    editor.set_major_mode(Some(Language::rust()));
     let mut r = with_program(None, editor);
 
     r.press("M--");

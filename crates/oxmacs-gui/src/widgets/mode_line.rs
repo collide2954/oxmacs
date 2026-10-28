@@ -283,7 +283,7 @@ fn modern<'a, Message: 'a>(
         .cloned()
         .chain(status.server.clone())
         .chain(status.crlf.then(|| "CRLF".to_owned()))
-        .chain(status.mode.map(str::to_owned));
+        .chain(status.mode.clone());
     let mut details: Vec<Element<'a, Message>> = Vec::new();
     for word in words {
         details.push(paint.small(word, colors.dim).into());
@@ -332,7 +332,7 @@ fn boxed<'a, Message: 'a>(
     ];
     let words = status
         .mode
-        .map(str::to_owned)
+        .clone()
         .into_iter()
         .chain(status.server.clone())
         .chain(status.lint.clone())
@@ -361,9 +361,9 @@ fn powerline<'a, Message: 'a>(
         titled(status, paint, colors.on_accent, colors.on_accent),
         style::color(colors.accent),
     );
-    if let Some(mode) = status.mode {
+    if let Some(mode) = &status.mode {
         blocks = blocks.push(
-            paint.small(mode.to_owned(), colors.text),
+            paint.small(mode.clone(), colors.text),
             style::color(colors.block),
         );
     }
@@ -419,7 +419,7 @@ mod tests {
             column: 4,
             position: None,
             crlf: false,
-            mode: Some("Rust"),
+            mode: Some("Rust".to_owned()),
             server: Some("rust-analyzer".to_owned()),
             lint: Some("E1 W2".to_owned()),
         }

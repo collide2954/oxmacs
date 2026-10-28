@@ -27,7 +27,7 @@ pub struct Status {
     pub column: usize,
     pub position: Option<String>,
     pub crlf: bool,
-    pub mode: Option<&'static str>,
+    pub mode: Option<String>,
     pub server: Option<String>,
     pub lint: Option<String>,
 }
@@ -42,7 +42,7 @@ impl fmt::Display for Status {
         if self.crlf {
             write!(f, "   CRLF")?;
         }
-        if let Some(mode) = self.mode {
+        if let Some(mode) = &self.mode {
             write!(f, "   ({mode})")?;
         }
         if let Some(server) = &self.server {
@@ -79,7 +79,7 @@ mod tests {
                 column: 13,
                 position: None,
                 crlf: true,
-                mode: Some("Rust"),
+                mode: Some("Rust".to_owned()),
                 server: None,
                 lint: None,
             }

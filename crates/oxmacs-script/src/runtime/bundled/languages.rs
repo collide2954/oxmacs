@@ -33,7 +33,10 @@ fn python_files_are_highlighted_indented_and_served_by_pyright() {
         "def f(x):\n    \"\"\"Doc\n    more\"\"\"\n    return None\n",
     );
 
-    assert_eq!(editor.language().map(Language::name), Some("Python"));
+    assert_eq!(
+        editor.language().as_ref().map(Language::name),
+        Some("Python")
+    );
     assert_eq!(
         editor.line_style(0).spans,
         [(0..3, Highlight::Keyword), (4..5, Highlight::Function)]
@@ -75,7 +78,10 @@ fn typescript_and_javascript_share_one_server_definition() {
     fs::write(home.path().join("b.js"), "let y = 2\n").unwrap();
     editor.open_file(&home.path().join("b.js"));
     settle(&mut editor, &mut ox);
-    assert_eq!(editor.language().map(Language::name), Some("JavaScript"));
+    assert_eq!(
+        editor.language().as_ref().map(Language::name),
+        Some("JavaScript")
+    );
 
     let listed = editor.command_named("list-tools").unwrap();
     editor.execute(listed);
@@ -94,7 +100,10 @@ fn typescript_and_javascript_share_one_server_definition() {
 fn markdown_files_are_in_markdown_mode_again() {
     let (_home, editor, _ox) = visiting("README.md", "# Title\n\n```sh\nls\n```\n- [x](y)\n");
 
-    assert_eq!(editor.language().map(Language::name), Some("Markdown"));
+    assert_eq!(
+        editor.language().as_ref().map(Language::name),
+        Some("Markdown")
+    );
     assert_eq!(editor.line_style(0).spans, [(0..7, Highlight::Heading)]);
     assert_eq!(editor.line_style(3).spans, [(0..2, Highlight::String)]);
     assert_eq!(

@@ -58,10 +58,10 @@ pub(in crate::editor) const AIR_FORMAT: Formatter = Formatter {
 impl Editor {
     pub fn add_formatter(&mut self, language: crate::syntax::Language, formatter: Formatter) {
         self.formatters.retain(|(known, _)| *known != language);
-        self.formatters.push((language, formatter));
-        if let Some(scope) = self.registered(language).and_then(|known| known.scope) {
+        if let Some(scope) = self.registered(&language).and_then(|known| known.scope) {
             self.bind(scope, "C-c C-f", Command::FormatBuffer).ok();
         }
+        self.formatters.push((language, formatter));
     }
 
     pub(in crate::editor) fn formatter_for(&self, index: usize) -> Option<Formatter> {
@@ -127,8 +127,8 @@ impl Editor {
         let extension = self
             .buffers
             .language(index)
-            .and_then(|language| language.extensions().first().copied())
-            .unwrap_or("txt");
+            .and_then(|language| language.extensions().first().cloned())
+            .unwrap_or_else(|| "txt".to_owned());
         self.working_directory.join(format!("untitled.{extension}"))
     }
 
@@ -237,8 +237,8 @@ mod tests {
 
     fn rust(text: &str, point: usize) -> Editor {
         let mut editor = editor_with(text, point);
-        editor.set_major_mode(Some(Language::RUST));
-        editor.add_formatter(Language::RUST, SQUEEZE);
+        editor.set_major_mode(Some(Language::rust()));
+        editor.add_formatter(Language::rust(), SQUEEZE);
         editor
     }
 
@@ -267,7 +267,7 @@ mod tests {
     fn formatter_errors_leave_the_buffer_alone() {
         let mut editor = rust("fn  a(", 0);
         editor.add_formatter(
-            Language::RUST,
+            Language::rust(),
             Formatter {
                 name: "rustfmt",
                 format: |_, _| Err("rustfmt: error: expected `{`".to_owned()),
@@ -294,28 +294,30 @@ mod tests {
         assert_eq!(editor.message(), Some("No formatter for this buffer"));
     }
 
-    static SHOUTY: LanguageSpec = LanguageSpec {
-        name: "Shouty",
-        extensions: &["shout"],
-        file_names: &[],
-        aliases: &[],
-        line_comment: None,
-        pairs: &[],
-        indentation: Indentation::KEEP,
-        grammar: None,
-        grammars: &[],
-        outline: Outline::NONE,
-        features: &[],
-        roots: crate::syntax::Roots::NONE,
-    };
+    fn shouty_spec() -> LanguageSpec {
+        LanguageSpec {
+            name: "Shouty".to_owned(),
+            extensions: crate::syntax::owned(&["shout"]),
+            file_names: Vec::new(),
+            aliases: Vec::new(),
+            line_comment: None,
+            pairs: &[],
+            indentation: Indentation::KEEP,
+            grammar: None,
+            grammars: &[],
+            outline: Outline::NONE,
+            features: &[],
+            roots: crate::syntax::Roots::default(),
+        }
+    }
 
     #[test]
     fn languages_from_plugins_format_through_their_formatter() {
-        let shouty = Language::new(&SHOUTY);
+        let shouty = Language::new(shouty_spec());
         let mut editor = editor_with("hello", 0);
-        editor.add_language(shouty, None);
+        editor.add_language(shouty.clone(), None);
         editor.add_formatter(
-            shouty,
+            shouty.clone(),
             Formatter {
                 name: "shout",
                 format: |_, request: &FormatRequest<'_>| {
@@ -342,12 +344,12 @@ mod tests {
 
     #[test]
     fn languages_from_plugins_format_on_c_c_c_f_in_their_scope() {
-        let shouty = Language::new(&SHOUTY);
+        let shouty = Language::new(shouty_spec());
         let mut editor = editor_with("hello", 0);
         let scope = editor.add_scope("Shouty buffers");
-        editor.add_language(shouty, Some(scope));
+        editor.add_language(shouty.clone(), Some(scope));
         editor.add_formatter(
-            shouty,
+            shouty.clone(),
             Formatter {
                 name: "shout",
                 format: |_, request: &FormatRequest<'_>| Ok(request.text.to_uppercase()),
@@ -371,7 +373,7 @@ mod tests {
             format_on_save,
             ..Config::default()
         });
-        editor.add_formatter(Language::RUST, formatter);
+        editor.add_formatter(Language::rust(), formatter);
         editor.open_file(&path);
         type_text(&mut editor, "  ");
 
@@ -412,8 +414,8 @@ mod tests {
 
     fn r(text: &str, point: usize) -> Editor {
         let mut editor = editor_with(text, point);
-        editor.set_major_mode(Some(Language::R));
-        editor.add_formatter(Language::R, SPACE_ARROWS);
+        editor.set_major_mode(Some(Language::r()));
+        editor.add_formatter(Language::r(), SPACE_ARROWS);
         editor
     }
 
@@ -453,7 +455,7 @@ mod tests {
     #[test]
     fn a_missing_air_program_is_named() {
         let mut editor = editor_with("x<-1", 0);
-        editor.set_major_mode(Some(Language::R));
+        editor.set_major_mode(Some(Language::r()));
         editor.apply_config(&with_air("oxmacs-no-such-air"));
 
         press(&mut editor, "C-c C-f");
@@ -475,7 +477,7 @@ mod tests {
             format_on_save: true,
             ..Config::default()
         });
-        editor.add_formatter(Language::R, SPACE_ARROWS);
+        editor.add_formatter(Language::r(), SPACE_ARROWS);
         editor.open_file(&path);
         type_text(&mut editor, "y<-2");
         press(&mut editor, "RET");

@@ -1186,6 +1186,7 @@ fn commit_messages_opened_elsewhere_get_their_mode() {
         session
             .editor
             .language()
+            .as_ref()
             .map(oxmacs_core::syntax::Language::name),
         Some("Git commit")
     );
