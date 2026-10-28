@@ -57,7 +57,8 @@ impl Editor {
 
     pub(in crate::editor) fn project_directory(&self) -> PathBuf {
         let directory = self.default_directory();
-        tools::cargo_root(&directory).unwrap_or(directory)
+        self.language_root(&directory, self.buffers.language(0))
+            .unwrap_or(directory)
     }
 
     #[cfg(test)]

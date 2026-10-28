@@ -8,7 +8,7 @@ use ox_lang::syntax::{self, Bracket, Kind, Prefix, tokens};
 
 use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::{Editor, Formatter};
-use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
+use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline, Roots};
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
@@ -32,6 +32,7 @@ static OX: LanguageSpec = LanguageSpec {
         Feature::Pairs,
         Feature::Repl,
     ],
+    roots: Roots::marked(&["plugin.ox", "init.ox"]),
 };
 
 const CONTROL: &[&str] = &["raise", "await", "yield", "import", "export", "else"];

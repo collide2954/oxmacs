@@ -3994,6 +3994,7 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror 2.0.21",
+ "toml",
  "tree-sitter",
  "tree-sitter-r",
  "tree-sitter-rust",

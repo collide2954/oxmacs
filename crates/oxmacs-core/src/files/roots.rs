@@ -1,0 +1,72 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+pub const PROJECT: &[&str] = &[".git", ".hg", ".svn", ".projectile"];
+
+fn marked(folder: &Path, marker: &str) -> bool {
+    match marker.strip_prefix("*.") {
+        Some(extension) => fs::read_dir(folder)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .any(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .is_some_and(|found| found == extension)
+            }),
+        None => folder.join(marker).exists(),
+    }
+}
+
+pub fn upward(folder: &Path, markers: &[&str], home: Option<&Path>) -> Option<PathBuf> {
+    if markers.is_empty() {
+        return None;
+    }
+    folder
+        .ancestors()
+        .take_while(|ancestor| Some(*ancestor) != home)
+        .find(|ancestor| markers.iter().any(|marker| marked(ancestor, marker)))
+        .map(Path::to_path_buf)
+}
+
+pub fn located(folder: &Path, command: &[&str]) -> Option<PathBuf> {
+    let (program, args) = command.split_first()?;
+    let mut run = Command::new(program);
+    run.args(args).current_dir(folder);
+    let output = oxmacs_process::run(&mut run, None).ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let file = String::from_utf8(output.stdout).ok()?;
+    let root = Path::new(file.trim()).parent()?;
+    let canonical = fs::canonicalize(root).ok();
+    let spelled = folder
+        .ancestors()
+        .find(|ancestor| canonical.is_some() && fs::canonicalize(ancestor).ok() == canonical);
+    Some(spelled.unwrap_or(root).to_path_buf())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_nearest_marked_folder_below_home_is_the_root() {
+        let home = tempfile::tempdir().unwrap();
+        let project = home.path().join("work").join("app");
+        let inner = project.join("src").join("deep");
+        fs::create_dir_all(&inner).unwrap();
+        fs::write(project.join("app.Rproj"), "").unwrap();
+        fs::create_dir(home.path().join(".git")).unwrap();
+
+        assert_eq!(
+            upward(&inner, &["*.Rproj"], Some(home.path())),
+            Some(project.clone())
+        );
+        assert_eq!(upward(&inner, PROJECT, Some(home.path())), None);
+        assert_eq!(upward(&inner, PROJECT, None), Some(home.path().to_owned()));
+        assert_eq!(upward(&inner, &[], None), None);
+    }
+}

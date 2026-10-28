@@ -170,6 +170,23 @@ impl fmt::Debug for Outline {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Roots {
+    pub markers: &'static [&'static str],
+    pub locate: Option<&'static [&'static str]>,
+}
+
+impl Roots {
+    pub const NONE: Self = Self::marked(&[]);
+
+    pub const fn marked(markers: &'static [&'static str]) -> Self {
+        Self {
+            markers,
+            locate: None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct LanguageSpec {
     pub name: &'static str,
@@ -183,6 +200,7 @@ pub struct LanguageSpec {
     pub grammars: &'static [&'static Grammar],
     pub outline: Outline,
     pub features: &'static [Feature],
+    pub roots: Roots,
 }
 
 #[derive(Clone, Copy)]
@@ -227,6 +245,10 @@ impl Language {
 
     pub fn outline(self) -> Outline {
         self.0.outline
+    }
+
+    pub fn roots(self) -> Roots {
+        self.0.roots
     }
 
     fn named_file(self, path: &Path) -> bool {
@@ -326,6 +348,7 @@ mod tests {
         grammars: &[],
         outline: Outline::NONE,
         features: &[Feature::Highlighting],
+        roots: Roots::NONE,
     };
 
     static NOTES: LanguageSpec = LanguageSpec {
@@ -340,6 +363,7 @@ mod tests {
         grammars: &[],
         outline: Outline::NONE,
         features: &[Feature::Highlighting],
+        roots: Roots::NONE,
     };
 
     fn synced(language: Language, known: &[Language], text: &str) -> (Buffer, Syntax) {

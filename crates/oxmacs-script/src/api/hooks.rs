@@ -225,6 +225,45 @@ fn path_of(heap: &Heap, name: &str, value: Value) -> Result<PathBuf, Error> {
     })
 }
 
+fn folder_given(
+    heap: &Heap,
+    editor: &Editor,
+    native: &str,
+    value: Option<Value>,
+) -> Result<PathBuf, Error> {
+    match value {
+        None | Some(Value::Nil) => Ok(editor.default_directory()),
+        Some(value) => heap.text(value).map(PathBuf::from).ok_or_else(|| {
+            Error::new(format!(
+                "{native} expects a folder, got {}",
+                print::brief(heap, value)
+            ))
+        }),
+    }
+}
+
+fn project_root(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let folder = folder_given(heap, editor, "project-root", arguments.first().copied())?;
+    shown(heap, editor.project_root(&folder).as_deref())
+}
+
+fn language_root(
+    heap: &mut Heap,
+    editor: &mut Editor,
+    arguments: &[Value],
+) -> Result<Value, Error> {
+    let folder = folder_given(heap, editor, "language-root", arguments.first().copied())?;
+    let language = match arguments.get(1) {
+        None | Some(Value::Nil) => editor.language(),
+        Some(mode) => {
+            let name = print::display(heap, *mode);
+            let known = editor.language_named(&name);
+            Some(known.ok_or_else(|| Error::new(format!("language-root knows no mode {name}")))?)
+        }
+    };
+    shown(heap, editor.language_root(&folder, language).as_deref())
+}
+
 fn shown(heap: &mut Heap, path: Option<&Path>) -> Result<Value, Error> {
     match path {
         Some(path) => heap
@@ -336,6 +375,14 @@ pub fn install(isolate: &mut Isolate) {
             let directory = editor.default_directory();
             shown(heap, Some(&directory))
         });
+    isolate
+        .native("ox", "project-root")
+        .arity(0, Some(1))
+        .host::<Editor>(project_root);
+    isolate
+        .native("ox", "language-root")
+        .arity(0, Some(2))
+        .host::<Editor>(language_root);
     isolate
         .native("ox", "close-buffer")
         .arity(1, Some(1))
@@ -688,5 +735,34 @@ mod tests {
         )
         .unwrap();
         assert_eq!(editor.buffer_named("*gone*"), None);
+    }
+    #[test]
+    fn projects_and_languages_have_their_own_roots() {
+        let dir = tempfile::tempdir().unwrap();
+        let code = dir.path().join("repo").join("pkg").join("R");
+        std::fs::create_dir_all(dir.path().join("repo").join(".git")).unwrap();
+        std::fs::create_dir_all(&code).unwrap();
+        std::fs::write(dir.path().join("repo").join("pkg").join("DESCRIPTION"), "").unwrap();
+        let mut editor = Editor::new();
+        editor.set_home_directory(Some(dir.path().to_owned()));
+        let mut ox = Ox::new();
+        let quoted = |path: &Path| format!("{:?}", path.display().to_string());
+        let (folder, repo, package) = (
+            quoted(&code),
+            quoted(&dir.path().join("repo")),
+            quoted(&dir.path().join("repo").join("pkg")),
+        );
+
+        let found = ox
+            .eval(
+                &mut editor,
+                &format!(
+                    "[(= (project-root {folder}) {repo}) (= (language-root {folder} \"R\") {package}) (= (language-root {folder} \"TOML\") {repo}) (project-root {:?})]",
+                    dir.path().display().to_string()
+                ),
+            )
+            .unwrap();
+
+        assert_eq!(found, "[true true true nil]");
     }
 }

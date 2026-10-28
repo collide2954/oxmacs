@@ -9,7 +9,7 @@ use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{ScopeId, intern};
 use oxmacs_core::editor::Editor;
-use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
+use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline, Roots};
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
@@ -95,11 +95,13 @@ pub struct Declared {
     extensions: Vec<String>,
     file_names: Vec<String>,
     comment: Option<String>,
+    roots: Vec<String>,
 }
 
 pub fn declared(heap: &Heap, value: Value) -> Result<Vec<Declared>, String> {
-    let wrong =
-        || ":modes must be a vector of maps with a title, extensions and file-names".to_owned();
+    let wrong = || {
+        ":modes must be a vector of maps with a title, extensions, file-names and roots".to_owned()
+    };
     let names = |value: Value| texts(heap, value).map_err(|error| error.message);
     heap.elements(value)
         .ok_or_else(wrong)?
@@ -121,12 +123,15 @@ pub fn declared(heap: &Heap, value: Value) -> Result<Vec<Declared>, String> {
                     Value::Keyword(key) if key.name() == "comment" => {
                         found.comment = Some(print::display(heap, value));
                     }
+                    Value::Keyword(key) if key.name() == "roots" => {
+                        found.roots = names(value)?;
+                    }
                     Value::Keyword(key) if key.name() == "name" => {
                         return Err(":modes names a mode with title:, not name:".to_owned());
                     }
                     key => {
                         return Err(format!(
-                            ":modes takes title, extensions, file-names and comment, not {}",
+                            ":modes takes title, extensions, file-names, comment and roots, not {}",
                             print::brief(heap, key)
                         ));
                     }
@@ -153,6 +158,7 @@ fn spec(title: &str, alias: String, declared: Declared) -> Language {
         grammars: &[],
         outline: Outline::NONE,
         features: FEATURES,
+        roots: Roots::marked(leak_all(declared.roots)),
     })))
 }
 
@@ -266,6 +272,7 @@ struct Options {
     extensions: Vec<String>,
     file_names: Vec<String>,
     comment: Option<String>,
+    roots: Vec<String>,
     keys: Vec<(String, String)>,
     highlight: Option<Value>,
     indent: Rules,
@@ -312,10 +319,11 @@ fn rules(heap: &Heap, value: Value) -> Result<Rules, Error> {
     Ok(found)
 }
 
-const DEFINE_MODE: [&str; 6] = [
+const DEFINE_MODE: [&str; 7] = [
     "extensions",
     "file-names",
     "comment",
+    "roots",
     "keys",
     "highlight",
     "indent",
@@ -328,6 +336,7 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
             "extensions" => found.extensions = texts(heap, value)?,
             "file-names" => found.file_names = texts(heap, value)?,
             "comment" => found.comment = Some(print::display(heap, value)),
+            "roots" => found.roots = texts(heap, value)?,
             "keys" => {
                 found.keys = heap
                     .entries(value)
@@ -357,6 +366,7 @@ fn repeated(title: &str, plugin: &str, given: &Options) -> Result<(), Error> {
         (":extensions", !given.extensions.is_empty()),
         (":file-names", !given.file_names.is_empty()),
         (":comment", given.comment.is_some()),
+        (":roots", !given.roots.is_empty()),
         (":mode-keys", !given.keys.is_empty()),
     ]
     .into_iter()
@@ -392,6 +402,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
             extensions: given.extensions,
             file_names: given.file_names,
             comment: given.comment,
+            roots: given.roots,
         };
         (
             spec(&title, alias, declared),
@@ -806,7 +817,7 @@ mod tests {
                 "plugin.ox",
                 r#"(plugin notes
   :commands [note-shout]
-  :modes [{title: "Notes" extensions: ["note"]}])"#,
+  :modes [{title: "Notes" extensions: ["note"] roots: ["notebook.toml"]}])"#,
             ),
             (
                 "notes.ox",
@@ -832,6 +843,30 @@ mod tests {
 
         assert_eq!(editor.language().map(Language::name), Some("Notes"));
         assert_eq!(editor.line_style(0).spans, [(0..9, Highlight::Comment)]);
+    }
+
+    #[test]
+    fn a_manifest_mode_s_roots_mark_its_projects() {
+        let dir = tempfile::tempdir().unwrap();
+        let inner = dir.path().join("book").join("chapters");
+        std::fs::create_dir_all(&inner).unwrap();
+        std::fs::write(dir.path().join("book").join("notebook.toml"), "").unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::with_bundled(&[NOTES_PLUGIN]);
+        ox.start(&mut editor, Some(dir.path()));
+
+        let found = ox
+            .eval(
+                &mut editor,
+                &format!(
+                    "(= (language-root {:?} \"Notes\") {:?})",
+                    inner.display().to_string(),
+                    dir.path().join("book").display().to_string()
+                ),
+            )
+            .unwrap();
+
+        assert_eq!(found, "true");
     }
 
     #[test]

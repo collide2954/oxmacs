@@ -361,23 +361,6 @@ fn restarting_stops_the_server_and_starts_a_fresh_one() {
     assert_eq!(editor.message(), Some("Restarting rust-analyzer"));
 }
 
-#[test]
-fn roots_fall_back_to_git_and_then_the_file_s_folder() {
-    let dir = tempfile::tempdir().unwrap();
-    fs::create_dir_all(dir.path().join("repo/.git")).unwrap();
-    fs::create_dir_all(dir.path().join("repo/scripts")).unwrap();
-    let spec = SERVERS[0];
-
-    assert_eq!(
-        super::root_of(&spec, &dir.path().join("repo/scripts/a.rs")),
-        dir.path().join("repo")
-    );
-    assert_eq!(
-        super::root_of(&spec, &dir.path().join("loose.rs")),
-        dir.path().to_path_buf()
-    );
-}
-
 fn asked(editor: &mut Editor, method: &str) -> Value {
     sent(&editor.take_effects())
         .into_iter()
@@ -903,13 +886,13 @@ static MARKDOWN: crate::syntax::LanguageSpec = crate::syntax::LanguageSpec {
     grammars: &[],
     outline: crate::syntax::Outline::NONE,
     features: &[],
+    roots: crate::syntax::Roots::NONE,
 };
 
 const MARKSMAN: ServerSpec = ServerSpec {
     name: "marksman",
     languages: &[("Markdown", "markdown")],
     programs: &[("marksman", &["server"])],
-    roots: &[],
     install: "",
     runs: false,
 };

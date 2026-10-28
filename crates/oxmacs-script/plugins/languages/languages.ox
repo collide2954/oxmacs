@@ -46,28 +46,24 @@
 (define-language-server "pyright"
   :languages {"Python" "python"}
   :programs [["basedpyright-langserver" "--stdio"] ["pyright-langserver" "--stdio"] ["pylsp"]]
-  :roots ["pyproject.toml" "setup.py" "setup.cfg" "requirements.txt"]
   :install "npm install -g pyright"
   :runs true)
 
 (define-language-server "gopls"
   :languages {"Go" "go"}
   :program "gopls"
-  :roots ["go.mod"]
   :install "go install golang.org/x/tools/gopls@latest"
   :runs true)
 
 (define-language-server "clangd"
   :languages {"C" "c" "C++" "cpp"}
   :program "clangd"
-  :roots ["compile_commands.json" "CMakeLists.txt" ".clangd"]
   :install "install clangd from your system's packages or https://clangd.llvm.org")
 
 (define-language-server "typescript-language-server"
   :languages {"TypeScript" "typescript" "JavaScript" "javascript" "TSX" "typescriptreact"}
   :program "typescript-language-server"
   :args ["--stdio"]
-  :roots ["package.json" "tsconfig.json"]
   :install "npm install -g typescript typescript-language-server"
   :runs true)
 
@@ -75,5 +71,4 @@
   :languages {"Markdown" "markdown"}
   :program "marksman"
   :args ["server"]
-  :roots [".marksman.toml"]
   :install "download marksman from https://github.com/artempyanykh/marksman/releases")

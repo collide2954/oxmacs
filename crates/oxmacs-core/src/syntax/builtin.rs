@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use crate::syntax::{Feature, Grammar, Indentation, Language, LanguageSpec, Outline};
+use crate::syntax::{Feature, Grammar, Indentation, Language, LanguageSpec, Outline, Roots};
 use crate::text::Buffer;
 
 static RUST_GRAMMAR: Grammar = Grammar::new(
@@ -85,6 +85,16 @@ static RUST: LanguageSpec = LanguageSpec {
         Feature::Motion,
         Feature::Items,
     ],
+    roots: Roots {
+        markers: &["Cargo.toml"],
+        locate: Some(&[
+            "cargo",
+            "locate-project",
+            "--workspace",
+            "--message-format",
+            "plain",
+        ]),
+    },
 };
 
 static TOML: LanguageSpec = LanguageSpec {
@@ -105,6 +115,7 @@ static TOML: LanguageSpec = LanguageSpec {
         statements: &[],
     },
     features: EDITING,
+    roots: Roots::NONE,
 };
 
 static R: LanguageSpec = LanguageSpec {
@@ -149,6 +160,7 @@ static R: LanguageSpec = LanguageSpec {
         Feature::Completion,
         Feature::Repl,
     ],
+    roots: Roots::marked(&["DESCRIPTION", "renv.lock", "*.Rproj"]),
 };
 
 impl Language {

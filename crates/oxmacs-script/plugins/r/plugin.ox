@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.20.10"
+  :version "0.20.11"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands [run-r r-new-session r-send-statement r-send-function r-switch-to-console r-help
              r-environment r-peek r-layout r-layout-restore r-load-all r-document r-check
@@ -11,7 +11,7 @@
              r-debug-next r-debug-step r-debug-finish r-debug-continue r-debug-stop
              r-debug-function r-undebug-function r-renv-status r-renv-snapshot r-renv-restore
              r-renv-init]
-  :modes [{title: "R Markdown" extensions: ["Rmd" "rmd" "qmd"]}]
+  :modes [{title: "R Markdown" extensions: ["Rmd" "rmd" "qmd"] roots: ["DESCRIPTION" "renv.lock" "*.Rproj"]}]
   :mode-keys {"R" {"M--" r-insert-assignment
                    "C-S-m" r-insert-pipe
                    "C-RET" r-send-statement

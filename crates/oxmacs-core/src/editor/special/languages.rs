@@ -119,6 +119,7 @@ mod tests {
         grammars: &[],
         outline: Outline::NONE,
         features: &[Feature::Highlighting],
+        roots: crate::syntax::Roots::NONE,
     };
 
     fn listed(editor: &mut Editor) {

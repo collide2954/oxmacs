@@ -20,6 +20,7 @@ mod page;
 mod presentation;
 mod processes;
 mod prompts;
+mod roots;
 mod search;
 mod sent;
 mod special;
@@ -161,6 +162,7 @@ pub struct Editor {
     rest: idle::Rest,
     focused: bool,
     config: Config,
+    roots: roots::Found,
 }
 
 impl Default for Editor {
@@ -246,6 +248,7 @@ impl Editor {
             rest: idle::Rest::default(),
             focused: true,
             config: Config::default(),
+            roots: roots::Found::default(),
         };
         for language in editor.languages() {
             editor.add_mode_command(language);

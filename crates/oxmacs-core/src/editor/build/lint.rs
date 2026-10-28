@@ -8,7 +8,6 @@ use crate::editor::build::Finished;
 use crate::editor::decorations::{Lasts, Look, Owner};
 use crate::editor::{Editor, JobEvent, JobId, JobSpec, Outcome};
 use crate::external::diagnostics::{self, Diagnostic, LintLine, Severity};
-use crate::external::tools;
 use crate::syntax::Language;
 use crate::text::Buffer;
 
@@ -59,7 +58,7 @@ fn running(tool: RustLint) -> &'static str {
 fn cargo_lint(editor: &Editor, path: &Path) -> Option<LintRun> {
     let tool = editor.config.rust_lint;
     let subcommand = subcommand(tool)?;
-    let root = path.parent().and_then(tools::cargo_root)?;
+    let root = editor.language_root(path.parent()?, Some(Language::RUST))?;
     Some(LintRun {
         root,
         program: "cargo".to_owned(),
@@ -326,6 +325,7 @@ mod tests {
         grammars: &[],
         outline: Outline::NONE,
         features: &[],
+        roots: crate::syntax::Roots::NONE,
     };
 
     fn shout_line(line: &str, root: &Path) -> LintLine {

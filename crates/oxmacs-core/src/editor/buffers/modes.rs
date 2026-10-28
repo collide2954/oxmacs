@@ -169,6 +169,7 @@ mod tests {
         grammars: &[],
         outline: Outline::NONE,
         features: &[],
+        roots: crate::syntax::Roots::NONE,
     };
 
     #[test]

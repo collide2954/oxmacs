@@ -21,6 +21,7 @@ impl Editor {
 
     pub fn set_home_directory(&mut self, home: Option<PathBuf>) {
         self.home = home;
+        self.roots = super::super::roots::Found::default();
     }
 
     pub(in crate::editor) fn find_file(&mut self) {

@@ -90,11 +90,12 @@ enum Outcome {
     },
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Visited<'a> {
     buffer: BufferId,
     language: &'a str,
     path: &'a Path,
+    root: PathBuf,
     revision: u64,
 }
 
@@ -105,7 +106,6 @@ pub(in crate::editor) struct Lsp {
     next: u64,
     told: Vec<&'static str>,
     missing: Vec<(&'static str, Instant)>,
-    roots: Vec<(PathBuf, &'static str, PathBuf)>,
     out: Vec<Out>,
     assist: Assist,
     pub(in crate::editor) find: fn(&str) -> Option<PathBuf>,
@@ -123,25 +123,11 @@ impl Default for Lsp {
             next: 0,
             told: Vec::new(),
             missing: Vec::new(),
-            roots: Vec::new(),
             out: Vec::new(),
             assist: Assist::default(),
             find: on_path,
         }
     }
-}
-
-fn root_of(spec: &ServerSpec, file: &Path) -> PathBuf {
-    let folder = file.parent().unwrap_or(file);
-    let marked = |markers: &[&str]| {
-        folder
-            .ancestors()
-            .find(|ancestor| markers.iter().any(|marker| ancestor.join(marker).exists()))
-            .map(Path::to_path_buf)
-    };
-    marked(spec.roots)
-        .or_else(|| marked(&[".git"]))
-        .unwrap_or_else(|| folder.to_path_buf())
 }
 
 fn number(value: &Value) -> usize {
@@ -304,20 +290,6 @@ impl Lsp {
         self.close_documents(&seen);
     }
 
-    fn root_for(&mut self, spec: &ServerSpec, path: &Path) -> PathBuf {
-        if let Some((_, _, root)) = self
-            .roots
-            .iter()
-            .find(|(file, name, _)| file == path && *name == spec.name)
-        {
-            return root.clone();
-        }
-        let root = root_of(spec, path);
-        self.roots
-            .push((path.to_path_buf(), spec.name, root.clone()));
-        root
-    }
-
     fn reconcile(&mut self, buffer: BufferId, owner: ServerId, uri: &str) {
         let mut closed = Vec::new();
         for client in &mut self.running {
@@ -341,7 +313,7 @@ impl Lsp {
         file: &Visited<'_>,
         text: &dyn Fn(BufferId) -> String,
     ) {
-        let root = self.root_for(&spec, file.path);
+        let root = file.root.clone();
         let id = match self
             .running
             .iter()

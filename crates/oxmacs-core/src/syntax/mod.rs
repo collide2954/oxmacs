@@ -13,7 +13,9 @@ use std::time::{Duration, Instant};
 use tree_sitter::{InputEdit, Node, Parser, Point, Tree};
 
 pub use items::Item;
-pub use language::{Feature, Grammar, Indentation, Language, LanguageSpec, Outline, language_for};
+pub use language::{
+    Feature, Grammar, Indentation, Language, LanguageSpec, Outline, Roots, language_for,
+};
 
 use layers::Layer;
 

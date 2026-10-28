@@ -43,6 +43,22 @@ impl Editor {
     }
 
     pub(in crate::editor) fn sync_servers(&mut self) {
+        let roots: Vec<Option<PathBuf>> = (0..self.buffers.len())
+            .map(|index| {
+                let language = self.buffers.language(index)?;
+                let folder = self
+                    .buffers
+                    .get(index)?
+                    .file()?
+                    .path
+                    .parent()?
+                    .to_path_buf();
+                Some(
+                    self.language_root(&folder, Some(language))
+                        .unwrap_or(folder),
+                )
+            })
+            .collect();
         let visited: Vec<Visited<'_>> = (0..self.buffers.len())
             .filter_map(|index| {
                 let language = self.buffers.language(index)?;
@@ -51,6 +67,7 @@ impl Editor {
                     buffer: buffer.id(),
                     language: language.name(),
                     path: &buffer.file()?.path,
+                    root: roots[index].clone()?,
                     revision: buffer.revision(),
                 })
             })

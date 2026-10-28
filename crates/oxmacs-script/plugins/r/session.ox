@@ -34,33 +34,14 @@
   (when (buffer-live? buffer)
     (with-buffer buffer (buffer-value :r-session))))
 
-(def project-markers ["DESCRIPTION" "renv.lock" ".git"])
-
-(defonce projects (atom {}))
-
-(def (marked? folder at)
-  (cond ((>= at (count project-markers)) false)
-    ((await (file/exists? (path/join folder (nth project-markers at)))) true)
-    (else (marked? folder (+ at 1)))))
-
-(def (r-project? folder)
-  (some (fn [entry] (= (path/extension entry.name) "Rproj"))
-        (try (await (file/list folder)) (catch error _e []))))
-
 (def (project-of folder)
-  "The folder of the R project holding folder: the nearest with a DESCRIPTION, renv.lock, .git or .Rproj file below the home folder, or nil."
-  (when (and folder (not= folder (path/home)))
-    (if (or (marked? folder 0) (r-project? folder))
-      folder
-      (project-of (path/parent folder)))))
+  "The folder of the R project holding folder: the nearest with a DESCRIPTION, renv.lock or .Rproj file, or else its project-root, or nil."
+  (when folder
+    (language-root folder "R")))
 
 (def (project-here)
-  (let [folder (default-directory)]
-    (if (contains? @projects folder)
-      (get @projects folder)
-      (let [found (project-of folder)]
-        (swap! projects assoc folder found)
-        found))))
+  "The R project holding the current buffer's folder, or nil."
+  (project-of (default-directory)))
 
 (def (current-session)
   (let [here (buffer-name)

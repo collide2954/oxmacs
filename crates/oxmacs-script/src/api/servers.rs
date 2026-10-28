@@ -29,7 +29,6 @@ struct Options {
     program: Option<String>,
     args: Vec<String>,
     programs: Vec<(String, Vec<String>)>,
-    roots: Vec<String>,
     install: String,
     runs: bool,
 }
@@ -52,12 +51,11 @@ fn programs(heap: &Heap, value: Value) -> Result<Vec<(String, Vec<String>)>, Err
         .collect()
 }
 
-const DEFINE: [&str; 7] = [
+const DEFINE: [&str; 6] = [
     "languages",
     "program",
     "args",
     "programs",
-    "roots",
     "install",
     "runs",
 ];
@@ -85,7 +83,6 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
             "program" => found.program = Some(print::display(heap, value)),
             "args" => found.args = texts(heap, "args", value)?,
             "programs" => found.programs = programs(heap, value)?,
-            "roots" => found.roots = texts(heap, "roots", value)?,
             "install" => found.install = print::display(heap, value),
             _ => found.runs = value.truthy(),
         }
@@ -124,7 +121,6 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
                 .collect(),
         ),
         programs: leak_all(programs),
-        roots: leak_all(given.roots.iter().map(|root| intern(root)).collect()),
         install: intern(&given.install),
         runs: given.runs,
     };
@@ -179,7 +175,7 @@ mod tests {
                 &mut editor,
                 &mut ox,
                 &format!(
-                    r#"(define-language-server "serve-r" :languages {{"R" "r"}} :program {:?} :args ["-e" "run()"] :roots ["DESCRIPTION"] :install "Install it in R")"#,
+                    r#"(define-language-server "serve-r" :languages {{"R" "r"}} :program {:?} :args ["-e" "run()"] :install "Install it in R")"#,
                     program.display().to_string()
                 )
             ),

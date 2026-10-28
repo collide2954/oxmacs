@@ -18,7 +18,6 @@
         :languages {"R" "r" "R Markdown" "rmd"}
         :program script
         :args ["-e" "languageserver::run()"]
-        :roots ["DESCRIPTION" "renv.lock"]
         :install "Run install.packages(\"languageserver\") in R"))))
 
 (def (installed? script)

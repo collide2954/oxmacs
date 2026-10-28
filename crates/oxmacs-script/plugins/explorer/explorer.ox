@@ -30,21 +30,8 @@
   (when-let [side (side-window)]
     (= side.buffer tree-buffer)))
 
-(def version-control [".git" ".hg" ".svn"])
-(def markers [".projectile" "Cargo.toml" "package.json" "pyproject.toml" "go.mod" "plugin.ox"])
-
-(def (marked? folder names)
-  (some (fn [name] (await (file/exists? (path/join folder name)))) names))
-
-(def (upward start names)
-  (loop [folder start]
-    (cond
-      [(nil? folder) nil]
-      [(marked? folder names) folder]
-      [else (again (path/parent folder))])))
-
 (def (root-of start)
-  (or (upward start version-control) (upward start markers) start))
+  (or (project-root start) (language-root start) start))
 
 (def (load folder)
   (let [found (try (await (file/list folder)) (catch error _e []))]

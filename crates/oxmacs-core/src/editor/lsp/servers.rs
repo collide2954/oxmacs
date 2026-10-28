@@ -3,7 +3,6 @@ pub struct ServerSpec {
     pub name: &'static str,
     pub languages: &'static [(&'static str, &'static str)],
     pub programs: &'static [(&'static str, &'static [&'static str])],
-    pub roots: &'static [&'static str],
     pub install: &'static str,
     pub runs: bool,
 }
@@ -13,7 +12,6 @@ pub const SERVERS: &[ServerSpec] = &[
         name: "rust-analyzer",
         languages: &[("Rust", "rust")],
         programs: &[("rust-analyzer", &[])],
-        roots: &["Cargo.toml"],
         install: "rustup component add rust-analyzer",
         runs: true,
     },
@@ -21,7 +19,6 @@ pub const SERVERS: &[ServerSpec] = &[
         name: "taplo",
         languages: &[("TOML", "toml")],
         programs: &[("taplo", &["lsp", "stdio"])],
-        roots: &[],
         install: "cargo install taplo-cli --locked --features lsp",
         runs: true,
     },

@@ -67,22 +67,6 @@ fn pipe(mut command: Command, text: &str) -> Result<String, String> {
         .map_or_else(|| output.status.to_string(), |line| line.trim().to_owned()))
 }
 
-pub fn cargo_root(directory: &Path) -> Option<PathBuf> {
-    let manifests: Vec<(PathBuf, String)> = directory
-        .ancestors()
-        .filter_map(|ancestor| {
-            let manifest = fs::read_to_string(ancestor.join("Cargo.toml")).ok()?;
-            Some((ancestor.to_owned(), manifest))
-        })
-        .collect();
-    manifests
-        .iter()
-        .rev()
-        .find(|(_, manifest)| manifest.lines().any(|line| line.trim() == "[workspace]"))
-        .or_else(|| manifests.first())
-        .map(|(root, _)| root.clone())
-}
-
 pub fn split_command(line: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut word = String::new();
@@ -112,16 +96,23 @@ pub fn split_command(line: &str) -> Vec<String> {
     words
 }
 
+fn edition_in(table: Option<&toml::Value>) -> Option<&str> {
+    table?.get("edition")?.as_str()
+}
+
 pub fn cargo_edition(directory: &Path) -> &'static str {
     directory
         .ancestors()
-        .filter_map(|ancestor| fs::read_to_string(ancestor.join("Cargo.toml")).ok())
+        .filter_map(|ancestor| {
+            let text = fs::read_to_string(ancestor.join("Cargo.toml")).ok()?;
+            text.parse::<toml::Table>().ok()
+        })
         .find_map(|manifest| {
-            manifest.lines().find_map(|line| {
-                let value = line.trim().strip_prefix("edition")?.trim_start();
-                let value = value.strip_prefix('=')?.trim().trim_matches('"');
-                EDITIONS.iter().copied().find(|edition| *edition == value)
-            })
+            let workspace = manifest
+                .get("workspace")
+                .and_then(|workspace| workspace.get("package"));
+            let named = edition_in(manifest.get("package")).or_else(|| edition_in(workspace))?;
+            EDITIONS.iter().copied().find(|edition| *edition == named)
         })
         .unwrap_or("2024")
 }
@@ -159,21 +150,13 @@ mod tests {
 
         fs::write(member.join("Cargo.toml"), "[package]\nedition = \"2021\"\n").unwrap();
         assert_eq!(cargo_edition(&member.join("src")), "2021");
-    }
 
-    #[test]
-    fn cargo_roots_prefer_the_workspace() {
-        let root = tempfile::tempdir().unwrap();
-        let member = root.path().join("crates").join("a");
-        fs::create_dir_all(member.join("src")).unwrap();
-        fs::write(member.join("Cargo.toml"), "[package]\n").unwrap();
-        assert_eq!(cargo_root(&member.join("src")), Some(member.clone()));
-
-        fs::write(root.path().join("Cargo.toml"), "[workspace]\n").unwrap();
-        assert_eq!(
-            cargo_root(&member.join("src")),
-            Some(root.path().to_owned())
-        );
+        fs::write(
+            member.join("Cargo.toml"),
+            "# edition = \"2015\"\n[package]\nedition = \"2018\" # the old one\n",
+        )
+        .unwrap();
+        assert_eq!(cargo_edition(&member.join("src")), "2018");
     }
 
     #[test]
