@@ -2,23 +2,19 @@
   (import (ox path) (ox string) (ox ui) (ox pdf)
           (pdf reading :as reading)))
 
-(defonce docs (atom {}))
-
 (def (quietly work)
   (try (work) (catch error e (unless (= e.message "Quit") (message e.message)))))
 
 (def (current)
-  (get @docs (buffer-name)))
-
-(def (update-doc name change)
-  (swap! docs update name (fn [doc] (when doc (change doc)))))
+  (buffer-value :pdf))
 
 (def (show-place)
-  (let [doc (current)]
+  (let [state (current)
+        doc (when state @state)]
     (set-mode-line :pdf (when (and doc doc.pages) (reading/label doc)))))
 
-(def (move name to)
-  (update-doc name (fn [doc] (assoc doc :go (assoc to :id (inc (or (get doc.go :id) 0)))))))
+(def (move state to)
+  (swap! state (fn [doc] (assoc doc :go (assoc to :id (inc (or (get doc.go :id) 0)))))))
 
 (def (start-zoom)
   (cond
@@ -26,28 +22,27 @@
     [(= (setting :zoom) :fit-page) :fit-page]
     [else :fit-width]))
 
-(def (viewed name page percent)
-  (update-doc name (fn [doc] (assoc doc :page page :percent percent)))
+(def (viewed state page percent)
+  (swap! state assoc :page page :percent percent)
   (show-place))
 
-(def (follow name target)
+(def (follow state target)
   (cond
-    [(number? target) (move name {page: target})]
+    [(number? target) (move state {page: target})]
     [(reading/safe-link? target) (open-externally target)]
     [else (message "Link: {target}")]))
 
-(def (render name)
+(def (render state)
   (fn []
-    (let [doc (get @docs name)]
+    (let [doc @state]
       (cond
-        [(nil? doc) (ui/text "")]
         [doc.error
          (ui/column (ui/space 40)
                     (ui/text doc.error :face :warning)
                     (when doc.missing
                       (ui/button "Open the tool list" :on-press (fn [] (run-command 'list-tools))))
                     :spacing 14)]
-        [(nil? doc.pages) (ui/column (ui/space 40) (ui/text "Opening {name}…" :face :comment))]
+        [(nil? doc.pages) (ui/column (ui/space 40) (ui/text "Opening {(path/name doc.path)}…" :face :comment))]
         [else
          (ui/pdf doc.path
                  :revision doc.revision
@@ -56,9 +51,9 @@
                  :dark doc.dark
                  :marks (reading/marks (or doc.matches []) doc.match (or doc.page 0))
                  :go doc.go
-                 :on-view (fn [page percent] (viewed name page percent))
-                 :on-select (fn [text] (update-doc name (fn [doc] (assoc doc :selection text))))
-                 :on-link (fn [target] (follow name target)))]))))
+                 :on-view (fn [page percent] (viewed state page percent))
+                 :on-select (fn [text] (swap! state assoc :selection text))
+                 :on-link (fn [target] (follow state target)))]))))
 
 (def doc-keys
   {"n" 'pdf-next-page "<right>" 'pdf-next-page "p" 'pdf-previous-page "<left>" 'pdf-previous-page
@@ -75,137 +70,124 @@
 (def (library)
   (pdf/library (setting :library)))
 
-(def (load name)
-  (let [doc (get @docs name)]
+(def (load state)
+  (let [doc @state]
     (try
       (library)
       (let [read (await (pdf/open doc.path))
             changed (and doc.revision (not (= doc.revision read.revision)))]
-        (update-doc name (fn [doc]
-                           (assoc doc :pages read.pages :revision read.revision :title read.title
-                                  :author read.author :outline read.outline :error nil :missing false
-                                  :page (min (or doc.page 0) (max 0 (dec read.pages)))
-                                  :matches (when (not changed) doc.matches)
-                                  :match (when (not changed) doc.match))))
+        (swap! state (fn [doc]
+                       (assoc doc :pages read.pages :revision read.revision :title read.title
+                              :author read.author :outline read.outline :error nil :missing false
+                              :page (min (or doc.page 0) (max 0 (dec read.pages)))
+                              :matches (when (not changed) doc.matches)
+                              :match (when (not changed) doc.match))))
         (show-place)
         changed)
       (catch error e
-        (update-doc name (fn [doc] (assoc doc :error e.message :missing (nil? (library)))))
+        (swap! state assoc :error e.message :missing (nil? (library)))
         false))))
 
-(def (living all)
-  (reduce (fn [out [name doc]] (if (buffer-exists? name) (assoc out name doc) out)) {} (entries all)))
-
-(def (showing place)
-  (first (keep (fn [[name doc]] (when (= doc.path place) name)) (entries @docs))))
-
-(def (free-name base)
-  (loop [n 1]
-    (let [name (if (= n 1) base "{base}<{n}>")]
-      (if (buffer-exists? name) (again (inc n)) name))))
-
 (def (open-document place)
-  (swap! docs living)
-  (if-let [name (showing place)]
-    (switch-to-buffer name)
-    (let [name (free-name (path/name place))]
-      (swap! docs assoc name {path: place zoom: (start-zoom) continuous: (setting :continuous)
-                              dark: (setting :theme-colors)})
-      (open-view name (render name) :keys doc-keys :watch (path/parent place))
-      (load name)
-      (when-let [doc (get @docs name)]
-        (when doc.pages
-          (message "{(or doc.title (path/stem place))}{(if doc.author " by {doc.author}" "")} · {doc.pages} pages"))))))
+  (let [state (atom {path: place zoom: (start-zoom) continuous: (setting :continuous)
+                     dark: (setting :theme-colors)})]
+    (with-buffer (open-view (path/name place) (render state) :keys doc-keys :file place)
+      (set-buffer-value! :pdf state))
+    (load state)
+    (let [doc @state]
+      (when doc.pages
+        (message "{(or doc.title (path/stem place))}{(if doc.author " by {doc.author}" "")} · {doc.pages} pages")))))
 
 (on-open-file "pdf" (fn [place] (open-document place)))
 
 (on-disk-change :pdf
                 (fn []
-                  (each [name (keys @docs)]
-                    (when (buffer-exists? name)
-                      (when (load name) (message "Reloaded {name}"))))))
+                  (each [name (buffer-list)]
+                    (when-let [state (with-buffer name (buffer-value :pdf))]
+                      (when (load state) (message "Reloaded {name}"))))))
 
 (on-window-change :pdf (fn [] (show-place)))
 
 (def (with-doc work)
-  (if-let [doc (current)]
-    (if doc.pages
-      (work (buffer-name) doc)
-      (message (or doc.error "The document isn't open yet")))
+  (if-let [state (current)]
+    (let [doc @state]
+      (if doc.pages
+        (work state doc)
+        (message (or doc.error "The document isn't open yet"))))
     (message "This isn't a PDF")))
 
-(def (to-page name doc page)
-  (move name {page: (max 0 (min page (dec doc.pages)))}))
+(def (to-page state doc page)
+  (move state {page: (max 0 (min page (dec doc.pages)))}))
 
 (defcommand pdf-next-page "Go to the next page"
-  (with-doc (fn [name doc]
+  (with-doc (fn [state doc]
               (if (< (inc (or doc.page 0)) doc.pages)
-                (to-page name doc (inc (or doc.page 0)))
+                (to-page state doc (inc (or doc.page 0)))
                 (message "This is the last page")))))
 
 (defcommand pdf-previous-page "Go to the previous page"
-  (with-doc (fn [name doc]
+  (with-doc (fn [state doc]
               (if (> (or doc.page 0) 0)
-                (to-page name doc (dec doc.page))
+                (to-page state doc (dec doc.page))
                 (message "This is the first page")))))
 
 (defcommand pdf-scroll-down "Scroll the document down a little"
-  (with-doc (fn [name _] (move name {lines: 1}))))
+  (with-doc (fn [state _] (move state {lines: 1}))))
 
 (defcommand pdf-scroll-up "Scroll the document up a little"
-  (with-doc (fn [name _] (move name {lines: -1}))))
+  (with-doc (fn [state _] (move state {lines: -1}))))
 
 (defcommand pdf-scroll-page-down "Scroll down by a windowful"
-  (with-doc (fn [name _] (move name {screens: 1}))))
+  (with-doc (fn [state _] (move state {screens: 1}))))
 
 (defcommand pdf-scroll-page-up "Scroll up by a windowful"
-  (with-doc (fn [name _] (move name {screens: -1}))))
+  (with-doc (fn [state _] (move state {screens: -1}))))
 
 (defcommand pdf-first-page "Go to the first page"
-  (with-doc (fn [name doc] (to-page name doc 0))))
+  (with-doc (fn [state doc] (to-page state doc 0))))
 
 (defcommand pdf-last-page "Go to the last page"
-  (with-doc (fn [name doc] (to-page name doc (dec doc.pages)))))
+  (with-doc (fn [state doc] (to-page state doc (dec doc.pages)))))
 
 (defcommand pdf-goto-page "Go to a page by its number"
   (with-doc
-    (fn [name doc]
+    (fn [state doc]
       (quietly
        (fn []
          (let [answer (await (prompt "Go to page (1-{doc.pages}): "))]
            (if-let [page (reading/page-number answer doc.pages)]
-             (to-page name doc page)
+             (to-page state doc page)
              (message "There is no page {answer}"))))))))
 
-(def (zoom-to name zoom)
-  (update-doc name (fn [doc] (assoc doc :zoom zoom))))
+(def (zoom-to state zoom)
+  (swap! state assoc :zoom zoom))
 
 (defcommand pdf-zoom-in "Make the pages larger"
-  (with-doc (fn [name doc] (zoom-to name (reading/zoomed (or doc.percent 100) 1.25)))))
+  (with-doc (fn [state doc] (zoom-to state (reading/zoomed (or doc.percent 100) 1.25)))))
 
 (defcommand pdf-zoom-out "Make the pages smaller"
-  (with-doc (fn [name doc] (zoom-to name (reading/zoomed (or doc.percent 100) 0.8)))))
+  (with-doc (fn [state doc] (zoom-to state (reading/zoomed (or doc.percent 100) 0.8)))))
 
 (defcommand pdf-actual-size "Show the pages at their actual size"
-  (with-doc (fn [name _] (zoom-to name 1))))
+  (with-doc (fn [state _] (zoom-to state 1))))
 
 (defcommand pdf-fit-width "Fit the pages to the window's width"
-  (with-doc (fn [name _] (zoom-to name :fit-width))))
+  (with-doc (fn [state _] (zoom-to state :fit-width))))
 
 (defcommand pdf-fit-page "Fit whole pages in the window"
-  (with-doc (fn [name _] (zoom-to name :fit-page))))
+  (with-doc (fn [state _] (zoom-to state :fit-page))))
 
 (defcommand pdf-toggle-continuous "Switch between scrolling through the pages and one page at a time"
-  (with-doc (fn [name doc]
-              (update-doc name (fn [doc] (assoc doc :continuous (not doc.continuous))))
+  (with-doc (fn [state doc]
+              (swap! state assoc :continuous (not doc.continuous))
               (message (if doc.continuous "One page at a time" "Scrolling through the pages")))))
 
 (defcommand pdf-theme-colors "Switch between the theme's colors and black on white"
-  (with-doc (fn [name _] (update-doc name (fn [doc] (assoc doc :dark (not doc.dark)))))))
+  (with-doc (fn [state doc] (swap! state assoc :dark (not doc.dark)))))
 
 (defcommand pdf-outline "Jump to a heading in the document's outline"
   (with-doc
-    (fn [name doc]
+    (fn [state doc]
       (if (empty? doc.outline)
         (message "This document has no outline")
         (quietly
@@ -213,36 +195,36 @@
            (let [labels (reading/outline-labels doc.outline)
                  picked (await (prompt "Go to heading: " :choices labels))
                  at (find (fn [at] (= (nth labels at) picked)) (range (count labels)))]
-             (when at (to-page name doc (get (nth doc.outline at) :page))))))))))
+             (when at (to-page state doc (get (nth doc.outline at) :page))))))))))
 
-(def (show-match name by)
-  (let [doc (get @docs name)
+(def (show-match state by)
+  (let [doc @state
         at (reading/step doc.matches doc.match (or doc.page 0) by)]
     (if (nil? at)
       (message "No match for {doc.query}")
       (let [found (nth doc.matches at)
             rect (first found.rects)]
-        (update-doc name (fn [doc] (assoc doc :match at)))
-        (move name {page: found.page y: (if rect (nth rect 1) 0)})
+        (swap! state assoc :match at)
+        (move state {page: found.page y: (if rect (nth rect 1) 0)})
         (message "{(inc at)} of {(count doc.matches)} for {doc.query}")))))
 
 (defcommand pdf-search "Search the document, marking every match"
   (with-doc
-    (fn [name doc]
+    (fn [state doc]
       (quietly
        (fn []
          (let [query (await (prompt "Search: " :initial (or doc.query "")))]
            (if (string/blank? query)
-             (update-doc name (fn [doc] (assoc doc :query nil :matches nil :match nil)))
+             (swap! state assoc :query nil :matches nil :match nil)
              (let [matches (await (pdf/search doc.path query))]
-               (update-doc name (fn [doc] (assoc doc :query query :matches matches :match nil)))
-               (show-match name 1)))))))))
+               (swap! state assoc :query query :matches matches :match nil)
+               (show-match state 1)))))))))
 
 (defcommand pdf-search-next "Go to the next match of the search, or search"
-  (with-doc (fn [name doc] (if doc.query (show-match name 1) (run-command 'pdf-search)))))
+  (with-doc (fn [state doc] (if doc.query (show-match state 1) (run-command 'pdf-search)))))
 
 (defcommand pdf-search-previous "Go to the match of the search before this one, or search"
-  (with-doc (fn [name doc] (if doc.query (show-match name -1) (run-command 'pdf-search)))))
+  (with-doc (fn [state doc] (if doc.query (show-match state -1) (run-command 'pdf-search)))))
 
 (defcommand pdf-copy "Copy the text dragged over"
   (with-doc (fn [_ doc]
@@ -255,4 +237,4 @@
               (message "{(or doc.title (path/name doc.path))}{(if doc.author " by {doc.author}" "")} · page {(inc (or doc.page 0))} of {doc.pages}"))))
 
 (defcommand pdf-reload "Read the document again"
-  (with-doc (fn [name _] (quietly (fn [] (load name) (message "Read {name} again"))))))
+  (with-doc (fn [state _] (quietly (fn [] (load state) (message "Read {(buffer-name)} again"))))))

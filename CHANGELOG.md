@@ -47,6 +47,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `process/stop` asks a process started with `process/start` to end, and a few seconds later stops it and every program it started if it hasn't.
 - `M-x list-processes` lists language servers beside builds, lints and consoles, and a process you stop shows as stopping until it ends; `(processes)` gives its `:status` as `:stopping` then.
 - Programs started with `process/start` show in `M-x list-processes` as Ox processes, and end when oxmacs quits. The map `process/start` gives carries their `:id` there, for `stop-process` and `kill-process`.
+- `open-view` and `open-buffer` take `:file`, the file the buffer shows: it is named after the file as file buffers are, opening the file again comes back to it instead of asking the plugin, and its changes on disk reach `on-disk-change`. Both return the buffer.
+- Plugins keep state with each of their buffers with `(set-buffer-value! key value)` and read it with `(buffer-value key)`; it goes away when the buffer closes, and views are built again when it changes.
 
 ### Changed
 
@@ -125,7 +127,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Language server edits for text that changed after they were asked for, from formatting, renames, code actions or the server itself, are dropped with a message instead of landing in the wrong places. Formatting on save through a language server now formats first and writes once, and still saves when the server fails or stops.
 - The `C-h t` tutorial teaches the cut and paste keys oxmacs has (`C-w`, `M-w`, `C-y` and `M-y`, with `C-k` deleting the rest of the line), and its configuration step defines the command it binds, so the `init.ox` it leaves no longer fails at every start.
 - The explorer keeps up with every change on disk: changes that arrive while it reads the folders bring another read once they settle instead of being dropped, so a burst of new files all show, and changes made while it is hidden show when it comes back.
-- A PDF or EPUB closed with `C-x k` opens again instead of switching to a buffer that no longer exists, and two documents with the same file name each get a buffer of their own, the second as `paper.pdf<2>`, instead of the second showing the first.
+- A PDF or EPUB closed with `C-x k` opens again instead of switching to a buffer that no longer exists, and two documents with the same file name each get a buffer of their own, named after their folders as files are, such as `paper.pdf<drafts>`, instead of the second showing the first. Opening a document that is already open goes back to its buffer.
 - `rest` on a vector and `first`, `second`, `last` and `empty?` no longer copy the whole collection, and `count` and `nth` walk lists without copying them, so a loop that takes a vector or list apart item by item runs in linear time instead of quadratic. Errors from `map`, `filter`, `reduce`, `take` and the other sequence functions name the function called instead of `vec`.
 
 ### Security

@@ -96,9 +96,9 @@ irc          0.10.1   opt-in   An IRCv3 client in the style of ERC
 keycast      0.2.2    opt-in   Shows the keys you press and the commands they run, for demos
 languages    0.1.0    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
 life         0.2.3    opt-in   Conway's Game of Life on a canvas
-manual       0.5.56   on       The oxmacs tutorial and the Ox manual
+manual       0.5.57   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.3    opt-in   Markdown rendered as styled text
-pdf          0.1.2    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
+pdf          0.2.0    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
 processes    0.1.4    on       List the processes oxmacs runs, with their usage
 profiler     0.1.2    on       Find where the Ox code in oxmacs spends its time
 r            0.20.1   opt-in   R consoles, plots, data and help in the style of ESS and RStudio

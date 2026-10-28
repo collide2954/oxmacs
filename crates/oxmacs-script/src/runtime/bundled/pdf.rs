@@ -198,12 +198,18 @@ fn a_closed_pdf_opens_again_and_one_of_the_same_name_gets_its_own_buffer() {
     assert!(viewer.editor.open_file(&other));
     settle(&mut viewer.editor, &mut viewer.ox);
 
-    assert_eq!(viewer.editor.buffer().name(), "paper.pdf<2>");
-    assert_eq!(shown_path(&viewer.editor, "paper.pdf<2>"), Some(other));
+    let first = format!(
+        "paper.pdf<{}>",
+        viewer.papers.path().file_name().unwrap().to_string_lossy()
+    );
+    assert_eq!(viewer.editor.buffer().name(), "paper.pdf<drafts>");
+    assert_eq!(shown_path(&viewer.editor, "paper.pdf<drafts>"), Some(other));
     assert_eq!(
-        shown_path(&viewer.editor, "paper.pdf"),
+        shown_path(&viewer.editor, &first),
         Some(viewer.paper.clone())
     );
+    assert!(viewer.editor.open_file(&viewer.paper));
+    assert_eq!(viewer.editor.buffer().name(), first);
 }
 
 #[test]
