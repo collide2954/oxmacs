@@ -6,8 +6,6 @@
           (git diff :as diff)
           (git commit :as commit)))
 
-(defonce statuses (atom {}))
-
 (def status-keys
   {"n" 'git-next-section "p" 'git-previous-section "TAB" 'git-toggle "RET" 'git-visit
    "g" 'git-refresh "s" 'git-stage "u" 'git-unstage "k" 'git-discard "c" 'git-commit-popup
@@ -18,8 +16,6 @@
    "g" 'git-refresh "s" 'git-stage "u" 'git-unstage "k" 'git-discard "c" 'git-commit-popup
    "q" 'quit-window})
 
-(defonce pending (atom {}))
-
 (def (quietly work)
   (try (work) (catch error e (unless (= e.message "Quit") (message e.message)))))
 
@@ -27,20 +23,11 @@
   (when (and (>= line 0) (< line (count rows)))
     (nth rows line)))
 
-(def (state-of name)
-  (get @statuses name))
-
-(def (change-state name change)
-  (swap! statuses update name (fn [state] (when state (change state))))
-  (state-of name))
-
 (def (here)
-  (let [name (buffer-name)]
-    (if-let [state (state-of name)]
-      {state: state rows: state.rows pane: false}
-      (when-let [state (first (filter (fn [state] (and state (= state.pane.name name))) (vals @statuses)))]
-        {state: state rows: state.pane.rows pane: true}))))
-
+  (if-let [git (buffer-value :git)]
+    (let [state @git] {git: git state: state rows: state.rows pane: false})
+    (when-let [git (buffer-value :git-pane)]
+      (let [state @git] {git: git state: state rows: state.pane.rows pane: true}))))
 (def (spot row)
   (when (and row (not (= row.kind :info)) (not (= row.kind :blank)))
     row))
@@ -70,28 +57,27 @@
             hunks: (or (get state.diffs key) [])}))
        state.snapshot.staged))
 
-(def (ensure-diffs name)
-  (let [state (state-of name)
+(def (ensure-diffs git)
+  (let [state @git
         missing (filter (fn [key] (nil? (get state.diffs key))) (keys (wanted state)))]
     (if (empty? missing)
       state
       (let [found (repo/diffs state.root state.snapshot
                               (reduce (fn [keys key] (assoc keys key true)) {} missing))]
-        (change-state name (fn [state]
-                             (assoc state :diffs (reduce (fn [diffs key] (assoc diffs key (get found key)))
-                                                         state.diffs (keys found)))))))))
+        (swap! git (fn [state]
+                     (assoc state :diffs (reduce (fn [diffs key] (assoc diffs key (get found key)))
+                                                 state.diffs (keys found)))))))))
 
-(def (resized name)
-  (when-let [state (state-of name)]
-    (when (= state.pane.layout :split)
-      (draw-pane name false nil))))
+(def (resized git)
+  (when (= (get-in @git [:pane :layout]) :split)
+    (draw-pane git false nil)))
 
-(def (draw-pane name reveal line)
-  (let [state (state-of name)
+(def (draw-pane git reveal line)
+  (let [state @git
         key state.pane.file
         pane-name state.pane.name]
     (when (and (or key state.pane.staged) (or reveal (buffer-exists? pane-name)))
-      (let [state (ensure-diffs name)
+      (let [state (ensure-diffs git)
             columns (or (buffer-width pane-name) 100)
             change (when key (repo/find-change state.snapshot (nth key 0) (nth key 1)))
             out (cond
@@ -103,84 +89,81 @@
                                        columns)]
                   [else (pane/nothing (nth key 1))])
             placed (if (some? line) [:line line] [])]
-        (change-state name (fn [state] (assoc state :pane (assoc state.pane :rows out.rows))))
+        (swap! git (fn [state] (assoc state :pane (assoc state.pane :rows out.rows))))
         (if reveal
-          (apply open-buffer pane-name out.lines
-                 (concat [:keys pane-keys :directory state.root :beside true
-                          :on-resize (fn [_width] (resized name))]
-                         placed))
+          (with-buffer (apply open-buffer pane-name out.lines
+                              (concat [:keys pane-keys :directory state.root :beside true
+                                       :on-resize (fn [_width] (resized git))]
+                                      placed))
+            (set-buffer-value! :git-pane git))
           (apply set-lines pane-name out.lines placed))))))
 
-(def (follow name line)
-  (when-let [state (state-of name)]
+(def (follow git line)
+  (let [state @git]
     (when-let [row (row-at state.rows line)]
       (when (and (some? row.path) (some? row.section))
         (let [key [row.section row.path]]
           (unless (and (= key state.pane.file) (not state.pane.staged))
-            (change-state name (fn [state] (assoc state :pane (assoc state.pane :file key :staged false))))
+            (swap! git (fn [state] (assoc state :pane (assoc state.pane :file key :staged false))))
             (when (buffer-shown? state.pane.name)
-              (draw-pane name false 0))))))))
+              (draw-pane git false 0))))))))
 
-(def (redraw name focus)
-  (let [state (ensure-diffs name)
+(def (redraw git focus)
+  (let [state (ensure-diffs git)
+        name state.name
         shown (status/render state.snapshot state.folds state.diffs (now))
         here (= (buffer-name) name)
         line (if here (current-line) 0)
         wanted (or focus (and here (spot (row-at state.rows line))))]
-    (change-state name (fn [state] (assoc state :rows shown.rows)))
+    (swap! git assoc :rows shown.rows)
     (set-lines name shown.lines)
     (when here
       (goto-line (or (line-of shown.rows wanted)
                      (min line (max 0 (- (count shown.rows) 1))))))
-    (draw-pane name false nil)))
+    (draw-pane git false nil)))
 
-(def (reread name)
-  (let [state (state-of name)
-        snapshot (repo/read-status state.root)]
-    (change-state name
-                  (fn [state]
-                    (assoc state
-                           :snapshot snapshot
-                           :diffs {}
-                           :pane (assoc state.pane :file
-                                        (when state.pane.file
-                                          (or (repo/located snapshot state.pane.file) state.pane.file))))))))
+(def (reread git)
+  (let [snapshot (repo/read-status (get @git :root))]
+    (swap! git
+           (fn [state]
+             (assoc state
+                    :snapshot snapshot
+                    :diffs {}
+                    :pane (assoc state.pane :file
+                                 (when state.pane.file
+                                   (or (repo/located snapshot state.pane.file) state.pane.file))))))))
 
-(def (refresh name)
-  (when (state-of name)
-    (reread name)
-    (redraw name nil)))
+(def (refresh git)
+  (reread git)
+  (redraw git nil))
 
 (def (refresh-all)
-  (map (fn [name]
-         (if (buffer-exists? name)
-           (try (refresh name) (catch error e (message e.message)))
-           (swap! statuses dissoc name)))
-       (keys @statuses))
+  (each [name (buffer-list)]
+    (when-let [git (with-buffer name (buffer-value :git))]
+      (try (refresh git) (catch error e (message e.message)))))
   nil)
 
 (def (show found)
   (let [name "git: {(path/name found.root)}"
-        known (state-of name)]
-    (unless known
-      (swap! statuses assoc name
-             {name: name root: found.root metadata: found.metadata
-              folds: {closed: {} open: {} hidden: {}} diffs: {} rows: [] snapshot: nil
-              pane: {name: "git diff: {(path/name found.root)}" file: nil layout: :unified rows: [] staged: false}}))
-    (reread name)
-    (let [state (ensure-diffs name)
+        known (when (buffer-exists? name) (with-buffer name (buffer-value :git)))
+        git (or known
+                (atom {name: name root: found.root metadata: found.metadata
+                       folds: {closed: {} open: {} hidden: {}} diffs: {} rows: [] snapshot: nil
+                       pane: {name: "git diff: {(path/name found.root)}" file: nil layout: :unified rows: [] staged: false}}))]
+    (reread git)
+    (let [state (ensure-diffs git)
           shown (status/render state.snapshot state.folds state.diffs (now))
           placed (if known [] [:line (first-line shown.rows)])]
-      (change-state name (fn [state] (assoc state :rows shown.rows)))
-      (apply open-buffer name shown.lines
-             (concat [:keys status-keys :directory state.root :watch state.metadata
-                      :on-move (fn [line] (follow name line))]
-                     placed))
+      (swap! git assoc :rows shown.rows)
+      (with-buffer (apply open-buffer name shown.lines
+                          (concat [:keys status-keys :directory state.root :watch state.metadata
+                                   :on-move (fn [line] (follow git line))]
+                                  placed))
+        (set-buffer-value! :git git))
       (let [row (row-at shown.rows (current-line))]
         (when (and row (some? row.path))
-          (change-state name (fn [state] (assoc state :pane (assoc state.pane :file [row.section row.path]))))
-          (draw-pane name true 0))))))
-
+          (swap! git (fn [state] (assoc state :pane (assoc state.pane :file [row.section row.path]))))
+          (draw-pane git true 0))))))
 (defcommand git-status "Show the Git status of the current repository"
   (quietly
    (fn []
@@ -206,38 +189,36 @@
 
 (defcommand git-toggle-layout "Switch the diff between unified and side by side"
   (when-let [found (here)]
-    (let [name found.state.name]
-      (change-state name (fn [state]
-                           (assoc state :pane (assoc state.pane :layout
-                                                     (if (= state.pane.layout :split) :unified :split)))))
-      (quietly (fn [] (draw-pane name false nil))))))
+    (swap! found.git (fn [state]
+                       (assoc state :pane (assoc state.pane :layout
+                                                 (if (= state.pane.layout :split) :unified :split)))))
+    (quietly (fn [] (draw-pane found.git false nil)))))
 
 (def (flip folds key)
   (if (get folds key) (dissoc folds key) (assoc folds key true)))
 
-(def (fold name kind change)
-  (change-state name (fn [state] (assoc state :folds (assoc state.folds kind (change (get state.folds kind)))))))
+(def (fold git kind change)
+  (swap! git (fn [state] (assoc state :folds (assoc state.folds kind (change (get state.folds kind)))))))
 
 (defcommand git-toggle "Fold or unfold the section, file or hunk at point"
-  (when-let [state (state-of (buffer-name))]
-    (when-let [row (row-at state.rows (current-line))]
-      (let [name state.name
-            hunk {kind: :hunk section: row.section path: row.path hunk: row.hunk}]
+  (when-let [git (buffer-value :git)]
+    (when-let [row (row-at (get @git :rows) (current-line))]
+      (let [hunk {kind: :hunk section: row.section path: row.path hunk: row.hunk}]
         (quietly
          (fn []
            (cond
              [(= row.kind :section)
-              (fold name :closed (fn [closed] (flip closed row.section)))
-              (redraw name nil)]
+              (fold git :closed (fn [closed] (flip closed row.section)))
+              (redraw git nil)]
              [(= row.kind :file)
-              (fold name :open (fn [open] (flip open [row.section row.path])))
-              (redraw name nil)]
+              (fold git :open (fn [open] (flip open [row.section row.path])))
+              (redraw git nil)]
              [(= row.kind :hunk)
-              (fold name :hidden (fn [hidden] (flip hidden [row.section row.path row.hunk])))
-              (redraw name hunk)]
+              (fold git :hidden (fn [hidden] (flip hidden [row.section row.path row.hunk])))
+              (redraw git hunk)]
              [(= row.kind :line)
-              (fold name :hidden (fn [hidden] (assoc hidden [row.section row.path row.hunk] true)))
-              (redraw name hunk)]
+              (fold git :hidden (fn [hidden] (assoc hidden [row.section row.path row.hunk] true)))
+              (redraw git hunk)]
              [else nil])))))))
 
 (def (row-line row)
@@ -271,7 +252,7 @@
 
 (defcommand git-refresh "Read the repository again"
   (when-let [found (here)]
-    (quietly (fn [] (refresh found.state.name)))))
+    (quietly (fn [] (refresh found.git)))))
 
 (def (line-indexes row)
   (cond
@@ -315,37 +296,39 @@
       (cond
         [(nil? chosen) (message nothing)]
         [(= chosen.kind :invalid) (message "Select lines of one hunk or files of one section")]
-        [else (quietly (fn [] (act found.state chosen)))]))))
+        [else (quietly (fn [] (act found.git chosen)))]))))
 
 (def (describe paths)
   (if (= (count paths) 1) (first paths) "{(count paths)} files"))
 
-(def (change state args)
+(def (change git args)
   (deactivate-mark)
-  (repo/git state.root args)
-  (refresh state.name))
+  (repo/git (get @git :root) args)
+  (refresh git))
 
-(def (apply-hunk state chosen reverse args)
-  (let [hunk (nth (get state.diffs [chosen.section chosen.path]) chosen.hunk)]
+(def (apply-hunk git chosen reverse args)
+  (let [state @git
+        hunk (nth (get state.diffs [chosen.section chosen.path]) chosen.hunk)]
     (deactivate-mark)
     (repo/git-with state.root args (diff/patch chosen.path hunk chosen.lines reverse))
-    (refresh state.name)))
+    (refresh git)))
 
-(def (stage state chosen)
-  (let [section chosen.section]
+(def (stage git chosen)
+  (let [state @git
+        section chosen.section]
     (cond
       [(= section :staged) (message "Already staged")]
       [(= chosen.kind :hunk)
        (do
          (when (= section :untracked)
            (repo/git state.root ["add" "--intent-to-add" "--" chosen.path]))
-         (apply-hunk state chosen false ["apply" "--cached" "-"]))]
+         (apply-hunk git chosen false ["apply" "--cached" "-"]))]
       [(and (= chosen.kind :section) (= section :untracked))
-       (change state (vec (concat ["add" "--"] state.snapshot.untracked)))]
+       (change git (vec (concat ["add" "--"] state.snapshot.untracked)))]
       [(and (= chosen.kind :section) (= section :unstaged))
-       (change state ["add" "--update" "--" "."])]
+       (change git ["add" "--update" "--" "."])]
       [(and (= chosen.kind :files) (or (= section :untracked) (= section :unstaged)))
-       (change state (vec (concat ["add" "--"] chosen.paths)))]
+       (change git (vec (concat ["add" "--"] chosen.paths)))]
       [else (message "Nothing to stage here")])))
 
 (defcommand git-stage "Stage the file, section, hunk or lines at point"
@@ -355,48 +338,49 @@
   (keep (fn [change] (when (some (fn [path] (= path change.path)) paths) change.from))
         state.snapshot.staged))
 
-(def (forget state paths)
-  (change state (vec (concat (if state.snapshot.born ["reset" "-q" "--"] ["rm" "--cached" "-r" "-q" "--"])
-                             paths))))
+(def (forget git paths)
+  (change git (vec (concat (if (get-in @git [:snapshot :born]) ["reset" "-q" "--"] ["rm" "--cached" "-r" "-q" "--"])
+                           paths))))
 
-(def (unstage state chosen)
+(def (unstage git chosen)
   (cond
     [(not (= chosen.section :staged)) (message "Nothing staged here")]
-    [(= chosen.kind :hunk) (apply-hunk state chosen true ["apply" "--cached" "--reverse" "-"])]
-    [(= chosen.kind :section) (forget state ["."])]
-    [else (forget state (vec (concat chosen.paths (renamed-from state chosen.paths))))]))
+    [(= chosen.kind :hunk) (apply-hunk git chosen true ["apply" "--cached" "--reverse" "-"])]
+    [(= chosen.kind :section) (forget git ["."])]
+    [else (forget git (vec (concat chosen.paths (renamed-from @git chosen.paths))))]))
 
 (defcommand git-unstage "Unstage the file, section, hunk or lines at point"
   (acting "Nothing staged here" unstage))
 
-(def (throw-away state paths)
+(def (throw-away git paths)
   (let [trash (get (settings) :delete-to-trash)]
     (when (await (yes-or-no (if trash
                               "Move {(describe paths)} to the trash?"
                               "Delete {(describe paths)}?")))
       (deactivate-mark)
       (map (fn [path]
-             (let [full (path/join state.root path)]
+             (let [full (path/join (get @git :root) path)]
                (await (delete-path full))))
            paths)
-      (refresh state.name))))
+      (refresh git))))
 
-(def (discard state chosen)
-  (let [section chosen.section]
+(def (discard git chosen)
+  (let [state @git
+        section chosen.section]
     (cond
       [(= section :staged) (message "Unstage it first with u")]
       [(and (= section :untracked) (= chosen.kind :hunk)) (message "Discard the whole file, or edit it")]
       [(= section :untracked)
-       (throw-away state (if (= chosen.kind :section) state.snapshot.untracked chosen.paths))]
+       (throw-away git (if (= chosen.kind :section) state.snapshot.untracked chosen.paths))]
       [(= chosen.kind :hunk)
        (when (await (yes-or-no (if chosen.lines "Discard the selected lines?" "Discard this hunk?")))
-         (apply-hunk state chosen true ["apply" "--reverse" "-"]))]
+         (apply-hunk git chosen true ["apply" "--reverse" "-"]))]
       [(= chosen.kind :section)
        (when (await (yes-or-no "Discard all unstaged changes?"))
-         (change state ["restore" "--" "."]))]
+         (change git ["restore" "--" "."]))]
       [else
        (when (await (yes-or-no "Discard changes to {(describe chosen.paths)}?"))
-         (change state (vec (concat ["restore" "--"] chosen.paths))))])))
+         (change git (vec (concat ["restore" "--"] chosen.paths))))])))
 
 (defcommand git-discard "Discard the changes in the file, section, hunk or lines at point"
   (acting "Nothing to discard here" discard))
@@ -412,24 +396,25 @@
   (let [parts (string/split (string/trim (repo/git root ["log" "-1" "--format=%h%x1f%s"])) "\u{1f}" 2)]
     (message "Committed {(nth parts 0)} {(nth parts 1)}")))
 
-(def (show-staged name)
-  (change-state name (fn [state] (assoc state :pane (assoc state.pane :staged true))))
-  (draw-pane name true 0))
+(def (show-staged git)
+  (swap! git (fn [state] (assoc state :pane (assoc state.pane :staged true))))
+  (draw-pane git true 0))
 
-(def (unstaged-pane name)
-  (when-let [state (state-of name)]
-    (let [row (row-at state.rows (current-line))
-          key (if (and row (some? row.path)) [row.section row.path] state.pane.file)]
-      (change-state name (fn [state] (assoc state :pane (assoc state.pane :staged false :file key))))
-      (draw-pane name false 0))))
+(def (unstaged-pane git)
+  (let [state @git
+        row (row-at state.rows (current-line))
+        key (if (and row (some? row.path)) [row.section row.path] state.pane.file)]
+    (swap! git (fn [state] (assoc state :pane (assoc state.pane :staged false :file key))))
+    (draw-pane git false 0)))
 
-(def (back-to-status name)
-  (when (buffer-exists? name)
-    (switch-to-buffer name)
-    (unstaged-pane name)))
+(def (back-to-status git)
+  (let [name (get @git :name)]
+    (when (buffer-exists? name)
+      (switch-to-buffer name)
+      (unstaged-pane git))))
 
-(def (write-message name kind flags)
-  (let [state (state-of name)
+(def (write-message git kind flags)
+  (let [state @git
         snapshot state.snapshot
         nothing (and (empty? snapshot.staged)
                      (not (some (fn [flag] (or (= flag "--all") (= flag "--allow-empty"))) flags)))]
@@ -449,23 +434,23 @@
              history (messages state.root)]
          (when (buffer-exists? "COMMIT_EDITMSG") (close-buffer "COMMIT_EDITMSG"))
          (await (file/write file (commit/template text snapshot)))
-         (swap! pending assoc file {root: state.root name: name args: args history: history recalled: nil})
          (open-file file)
+         (set-buffer-value! :git-commit {root: state.root git: git args: args history: history recalled: nil})
          (goto-line 0)
-         (show-staged name))])))
+         (show-staged git))])))
 
-(def (extend name flags)
-  (let [state (state-of name)]
+(def (extend git flags)
+  (let [state @git]
     (if (not state.snapshot.born)
       (message "There is no commit to change yet")
       (do
         (repo/git state.root (vec (concat ["commit" "--amend" "--no-edit"] flags)))
-        (refresh name)
+        (refresh git)
         (report-commit state.root)))))
 
 (defcommand git-commit-popup "Commit, amend, extend or reword"
   (when-let [found (here)]
-    (let [name found.state.name
+    (let [git found.git
           act (fn [run] (fn [flags] (quietly (fn [] (run flags)))))]
       (transient "Commit"
                  [{title: "Arguments"
@@ -474,50 +459,39 @@
                               ["n" "--no-verify" "Skip the commit hooks"]
                               ["s" "--signoff" "Add a Signed-off-by line"]]}
                   {title: "Create"
-                   actions: [["c" "Commit" (act (fn [flags] (write-message name :create flags)))]]}
+                   actions: [["c" "Commit" (act (fn [flags] (write-message git :create flags)))]]}
                   {title: "Edit HEAD"
-                   actions: [["a" "Amend" (act (fn [flags] (write-message name :amend flags)))]
-                             ["e" "Extend" (act (fn [flags] (extend name flags)))]
-                             ["w" "Reword" (act (fn [flags] (write-message name :reword flags)))]]}]))))
-
-(def (pending-here)
-  (when-let [file (buffer-file)]
-    (when-let [found (get @pending file)]
-      [file found])))
+                   actions: [["a" "Amend" (act (fn [flags] (write-message git :amend flags)))]
+                             ["e" "Extend" (act (fn [flags] (extend git flags)))]
+                             ["w" "Reword" (act (fn [flags] (write-message git :reword flags)))]]}]))))
 
 (defcommand git-commit-finish "Commit with this message"
-  (if-let [here (pending-here)]
-    (let [file (nth here 0)
-          found (nth here 1)
-          text (buffer-text)
-          buffer (buffer-name)]
+  (if-let [found (buffer-value :git-commit)]
+    (let [text (buffer-text)
+          buffer (current-buffer)]
       (if (= (commit/message-text text) "")
         (message "Write a commit message first")
         (quietly
          (fn []
            (message "Committing…")
            (repo/git-with found.root found.args text)
-           (swap! pending dissoc file)
            (close-buffer buffer)
-           (back-to-status found.name)
-           (refresh found.name)
+           (back-to-status found.git)
+           (refresh found.git)
            (report-commit found.root)))))
     (message "This buffer is not a commit message")))
 
 (defcommand git-commit-cancel "Cancel this commit"
-  (if-let [here (pending-here)]
-    (let [found (nth here 1)]
-      (swap! pending dissoc (nth here 0))
-      (close-buffer (buffer-name))
-      (quietly (fn [] (back-to-status found.name)))
+  (if-let [found (buffer-value :git-commit)]
+    (do
+      (close-buffer (current-buffer))
+      (quietly (fn [] (back-to-status found.git)))
       (message "Commit canceled"))
     (message "This buffer is not a commit message")))
 
 (def (recall older)
-  (when-let [here (pending-here)]
-    (let [file (nth here 0)
-          found (nth here 1)
-          total (count found.history)
+  (when-let [found (buffer-value :git-commit)]
+    (let [total (count found.history)
           at found.recalled
           next (cond
                  [(= total 0) :none]
@@ -533,8 +507,7 @@
          (set-buffer-text (commit/replace-message (buffer-text)
                                                   (if (= next :empty) "" (nth found.history next))))
          (goto-line 0)
-         (swap! pending update file (fn [found] (assoc found :recalled (if (= next :empty) nil next))))]))))
-
+         (set-buffer-value! :git-commit (assoc found :recalled (if (= next :empty) nil next)))]))))
 (defcommand git-commit-previous "Show the previous commit message" (recall true))
 (defcommand git-commit-next "Show the next commit message" (recall false))
 

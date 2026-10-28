@@ -91,12 +91,12 @@ customize    0.1.3    on       Change the editor's and plugins' settings in a fo
 dired        0.3.1    on       List directories and manage their files
 epub         0.2.0    opt-in   Read EPUB books in pages, with contents, search, highlights, notes and a library
 explorer     0.2.0    on       A file tree beside the windows that follows the file you're in
-git          0.4.0    opt-in   Git status and staging in the style of Magit
+git          0.4.1    opt-in   Git status and staging in the style of Magit
 irc          0.10.1   opt-in   An IRCv3 client in the style of ERC
 keycast      0.2.2    opt-in   Shows the keys you press and the commands they run, for demos
 languages    0.1.0    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
 life         0.2.3    opt-in   Conway's Game of Life on a canvas
-manual       0.5.60   on       The oxmacs tutorial and the Ox manual
+manual       0.5.61   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.4    opt-in   Markdown rendered as styled text
 pdf          0.2.0    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
 processes    0.1.4    on       List the processes oxmacs runs, with their usage
