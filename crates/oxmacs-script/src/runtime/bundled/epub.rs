@@ -165,7 +165,11 @@ fn a_closed_book_opens_again_and_one_of_the_same_name_gets_its_own_buffer() {
     );
     assert_eq!(reader.editor.buffer().name(), "sample.epub<more>");
     assert!(reader.editor.buffer_named(&first).is_some());
-    assert!(reader.editor.open_file(&reader.books.path().join("sample.epub")));
+    assert!(
+        reader
+            .editor
+            .open_file(&reader.books.path().join("sample.epub"))
+    );
     assert_eq!(reader.editor.buffer().name(), first);
 }
 

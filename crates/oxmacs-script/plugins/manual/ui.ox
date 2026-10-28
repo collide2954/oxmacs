@@ -52,6 +52,22 @@ The faces are `:heading`, `:link`, `:comment`, `:doc-comment`, `:keyword`, `:str
 
 `open-view` takes `:keys`, `:beside` and `:select` like `open-buffer`. The function must return quickly, since it is stopped after 250 ms: fetch data in a task and keep it in an atom instead.
 
+## State for each buffer
+
+`set-buffer-value!` keeps a value with the current buffer under a keyword, `buffer-value` reads it back, and it goes away when the buffer closes. `open-view` and `open-buffer` return the buffer, so a plugin that opens many keeps each one's state in an atom stored this way, and its commands find the state of the buffer they run in:
+
+```
+(module (import (ox ui)))
+(defcommand counter-bump "Count once more"
+  (swap! (buffer-value :counter) inc))
+(let [counted (atom 0)]
+  (with-buffer (open-view "*counter*" (fn [] (ui/text "Counted {@counted}"))
+                          :keys {"SPC" 'counter-bump})
+    (set-buffer-value! :counter counted)))
+```
+
+A buffer that shows a file of its own, as the PDF reader's do, takes `:file`: it is named after the file as file buffers are, opening the file again comes back to it, and the file's changes on disk reach `on-disk-change`.
+
 ## Drawing
 
 `ui/canvas` draws a vector of shapes, `:height` tall. A color is a face, `:foreground`, `:background`, a `"#rrggbb"` string, or `[color alpha]`.
