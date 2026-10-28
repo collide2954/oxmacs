@@ -2,10 +2,11 @@
   (import (ox file) (ox path) (ox time)
           (dired listing :as l)))
 
-(defonce listings (atom {}))
+(def (state-here)
+  (buffer-value :dired))
 
 (def (current)
-  (get @listings (buffer-name)))
+  (when-let [state (state-here)] @state))
 
 (def (focused listing)
   (when-let [entry (l/entry-at listing (current-line))]
@@ -19,34 +20,34 @@
                      (max (l/first-entry-line listing) (min line (l/last-entry-line listing)))))]
     (goto-line target (l/name-column listing))))
 
-(def (change directory edit focus)
-  (swap! listings update directory (fn [listing] (when listing (edit listing))))
-  (when-let [listing (get @listings directory)]
-    (set-lines directory (l/render listing (time/now)))
-    (when (= (buffer-name) directory)
-      (place listing focus))))
+(def (change state edit focus)
+  (let [listing (swap! state edit)]
+    (when (buffer-live? listing.buffer)
+      (set-lines listing.buffer (l/render listing (time/now)))
+      (when (= (current-buffer) listing.buffer)
+        (place listing focus)))))
 
 (def (update-here edit)
-  (when-let [listing (current)]
-    (change listing.directory edit (focused listing))))
+  (when-let [state (state-here)]
+    (change state edit (focused @state))))
 
 (def (keep-marks marks entries)
   (let [names (set (map :name entries))]
     (reduce (fn [kept name] (if (contains? names name) (assoc kept name (get marks name)) kept))
             {} (keys marks))))
 
-(def (refresh directory)
-  (let [shown (get @listings directory)
-        entries (await (file/list directory :sort (if shown shown.order :name)))]
-    (change directory
+(def (refresh state)
+  (let [shown @state
+        entries (await (file/list shown.directory :sort shown.order))]
+    (change state
             (fn [listing]
               (assoc listing :entries entries :marks (keep-marks listing.marks entries)))
-            (when (and shown (= (buffer-name) directory)) (focused shown)))))
+            (when (= (current-buffer) shown.buffer) (focused shown)))))
 
 (def (refresh-all)
-  (map (fn [directory]
-         (try (refresh directory) (catch error _e (swap! listings dissoc directory))))
-       (keys @listings))
+  (each [name (buffer-list)]
+    (when-let [state (with-buffer name (buffer-value :dired))]
+      (try (refresh state) (catch error _e nil))))
   nil)
 
 (def listing-keys
@@ -60,10 +61,14 @@
    "W" 'dired-do-open "q" 'quit-window})
 
 (def (show listing focus)
-  (swap! listings assoc listing.directory listing)
-  (open-buffer listing.directory (l/render listing (time/now))
-               :keys listing-keys :directory listing.directory)
-  (place listing focus))
+  (let [buffer (open-buffer listing.directory (l/render listing (time/now))
+                            :keys listing-keys :directory listing.directory)
+        listing (assoc listing :buffer buffer)]
+    (with-buffer buffer
+      (if-let [state (buffer-value :dired)]
+        (reset! state listing)
+        (set-buffer-value! :dired (atom listing))))
+    (place listing focus)))
 
 (def (visit directory focus order details)
   (let [entries (await (file/list directory :sort order))]
@@ -74,8 +79,7 @@
   (let [old (current)]
     (visit directory focus old.order old.details)
     (unless (= old.directory directory)
-      (swap! listings dissoc old.directory)
-      (close-buffer old.directory))))
+      (close-buffer old.buffer))))
 
 (def (quietly work)
   (try (work) (catch error e (unless (= e.message "Quit") (message e.message)))))
@@ -117,7 +121,7 @@
 (defcommand dired-up-directory "Go up to the parent directory" (up-directory))
 
 (defcommand dired-revert "Read the directory again"
-  (when-let [listing (current)] (quietly (fn [] (refresh listing.directory)))))
+  (when-let [state (state-here)] (quietly (fn [] (refresh state)))))
 
 (defcommand dired-cycle-sort "Sort by name, newest or largest"
   (update-here (fn [listing]
@@ -128,9 +132,9 @@
   (update-here (fn [listing] (assoc listing :details (not listing.details)))))
 
 (def (mark-here mark)
-  (when-let [listing (current)]
-    (when-let [entry (l/entry-at listing (current-line))]
-      (change listing.directory
+  (when-let [state (state-here)]
+    (when-let [entry (l/entry-at @state (current-line))]
+      (change state
               (fn [listing]
                 (assoc listing :marks (if mark
                                         (assoc listing.marks entry.name mark)
@@ -224,7 +228,7 @@
 (defcommand dired-do-copy "Copy the marked files, or this one" (transfer false))
 
 (defcommand dired-create-directory "Create a directory"
-  (when-let [listing (current)]
+  (when-let [state (state-here)]
     (quietly
      (fn []
        (let [target (await (prompt-path "Create directory: " :directories true))]
@@ -232,9 +236,9 @@
            (message "{(path/abbreviate target)} already exists")
            (do
              (await (file/make-dir target))
-             (refresh listing.directory)
-             (when (= (path/parent target) listing.directory)
-               (place (current) (path/name target))))))))))
+             (refresh state)
+             (when (= (path/parent target) (get @state :directory))
+               (place @state (path/name target))))))))))
 
 (defcommand dired-do-open "Open the marked files, or this one, with their usual apps"
   (when-let [listing (current)]

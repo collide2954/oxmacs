@@ -47,7 +47,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | --- | --- | --- | --- |
 | `calendar` | 0.2.5 | opt-in | Calendars in .ics files, with CalDAV sync, reminders and invitations |
 | `customize` | 0.1.3 | on | Change the editor's and plugins' settings in a form |
-| `dired` | 0.3.0 | on | List directories and manage their files |
+| `dired` | 0.3.1 | on | List directories and manage their files |
 | `epub` | 0.2.0 | opt-in | Read EPUB books in pages, with contents, search, highlights, notes and a library |
 | `explorer` | 0.2.0 | on | A file tree beside the windows that follows the file you're in |
 | `git` | 0.4.0 | opt-in | Git status and staging in the style of Magit |
@@ -55,7 +55,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `keycast` | 0.2.2 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `languages` | 0.1.0 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
 | `life` | 0.2.3 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.58 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.59 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.3 | opt-in | Markdown rendered as styled text |
 | `pdf` | 0.2.0 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
 | `processes` | 0.1.4 | on | List the processes oxmacs runs, with their usage |
