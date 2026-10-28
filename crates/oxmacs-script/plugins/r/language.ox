@@ -5,7 +5,7 @@
 
 (defonce state (atom {defined: nil checked: false}))
 
-(def (wanted?) (plugin-setting 'r :language-server))
+(def (wanted?) (setting :language-server))
 
 (def (rscript program)
   (path/join (path/parent program) (if (session/windows?) "Rscript.exe" "Rscript")))

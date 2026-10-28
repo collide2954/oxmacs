@@ -27,10 +27,11 @@ enum Origin {
 #[derive(Debug, Clone, PartialEq)]
 enum Kind {
     Text,
-    Int,
+    Integer,
     Number,
-    Flag,
+    Toggle,
     List,
+    Data,
     Choice(Vec<Sym>),
 }
 
@@ -43,13 +44,19 @@ struct Setting {
 }
 
 #[derive(Debug, Clone)]
+enum Startup {
+    Always,
+    When(String),
+}
+
+#[derive(Debug, Clone)]
 struct Manifest {
     name: String,
     version: Version,
     summary: String,
     commands: Vec<(String, String)>,
     settings: Vec<Setting>,
-    startup_when: Option<String>,
+    startup_when: Option<Startup>,
     entry: String,
     keys: Vec<(String, String)>,
     mode_keys: ModeKeys,
@@ -135,11 +142,20 @@ fn mode_keys_of(heap: &Heap, value: Value) -> Result<ModeKeys, String> {
 
 fn kind_of(heap: &Heap, value: Value) -> Result<Kind, String> {
     match keyword(value) {
-        Some("string") => Ok(Kind::Text),
-        Some("int") => Ok(Kind::Int),
+        Some("text") => Ok(Kind::Text),
+        Some("integer") => Ok(Kind::Integer),
         Some("number") => Ok(Kind::Number),
-        Some("bool") => Ok(Kind::Flag),
+        Some("toggle") => Ok(Kind::Toggle),
         Some("list") => Ok(Kind::List),
+        Some("data") => Ok(Kind::Data),
+        Some(old @ ("string" | "int" | "bool")) => {
+            let now = match old {
+                "string" => "text",
+                "int" => "integer",
+                _ => "toggle",
+            };
+            Err(format!(":type :{old} is now :{now}"))
+        }
         _ => heap
             .elements(value)
             .and_then(|items| {
@@ -153,7 +169,7 @@ fn kind_of(heap: &Heap, value: Value) -> Result<Kind, String> {
             })
             .map(Kind::Choice)
             .ok_or_else(|| {
-                ":type must be :string, :int, :number, :bool, :list or a vector of keywords"
+                ":type must be :text, :integer, :number, :toggle, :list, :data or a vector of keywords"
                     .to_owned()
             }),
     }
@@ -162,10 +178,11 @@ fn kind_of(heap: &Heap, value: Value) -> Result<Kind, String> {
 fn fits(heap: &Heap, kind: &Kind, value: Value) -> bool {
     match kind {
         Kind::Text => heap.text(value).is_some(),
-        Kind::Int => matches!(value, Value::Int(_)),
+        Kind::Integer => matches!(value, Value::Int(_)),
         Kind::Number => matches!(value, Value::Int(_) | Value::Float(_)),
-        Kind::Flag => matches!(value, Value::Bool(_)),
+        Kind::Toggle => matches!(value, Value::Bool(_)),
         Kind::List => heap.text(value).is_none() && heap.elements(value).is_some(),
+        Kind::Data => value != Value::Nil,
         Kind::Choice(options) => matches!(value, Value::Keyword(name) if options.contains(&name)),
     }
 }
@@ -173,10 +190,11 @@ fn fits(heap: &Heap, kind: &Kind, value: Value) -> bool {
 fn describe(kind: &Kind) -> String {
     match kind {
         Kind::Text => "a string".to_owned(),
-        Kind::Int => "a whole number".to_owned(),
+        Kind::Integer => "a whole number".to_owned(),
         Kind::Number => "a number".to_owned(),
-        Kind::Flag => "true or false".to_owned(),
+        Kind::Toggle => "true or false".to_owned(),
         Kind::List => "a vector".to_owned(),
+        Kind::Data => "a value".to_owned(),
         Kind::Choice(options) => {
             let names: Vec<String> = options
                 .iter()
@@ -254,6 +272,43 @@ fn requires_of(heap: &Heap, name: &str, value: Value) -> Result<Vec<(String, Ver
         .collect()
 }
 
+fn startup_of(value: Value) -> Result<Startup, String> {
+    match value {
+        Value::Bool(true) => Ok(Startup::Always),
+        value => keyword(value)
+            .map(|setting| Startup::When(setting.to_owned()))
+            .ok_or_else(|| {
+                ":startup-when must be true or name a setting, such as :mode-line".to_owned()
+            }),
+    }
+}
+
+fn texts_of(heap: &Heap, value: Value) -> Option<Vec<String>> {
+    heap.elements(value)
+        .filter(|_| heap.text(value).is_none())?
+        .into_iter()
+        .map(|item| heap.text(item).map(str::to_owned))
+        .collect()
+}
+
+pub(crate) const MANIFEST_KEYS: &[&str] = &[
+    "version",
+    "summary",
+    "requires",
+    "entry",
+    "commands",
+    "keys",
+    "mode-keys",
+    "wakes-for",
+    "settings",
+    "start-screen",
+    "modes",
+    "startup-when",
+    "opens-directories",
+    "opens-files",
+    "opt-in",
+];
+
 fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
     let items = heap
         .elements(value)
@@ -293,12 +348,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
             }
             Some("commands") => manifest.commands = commands_of(heap, *value)?,
             Some("settings") => manifest.settings = settings_of(heap, *value)?,
-            Some("startup-when") => {
-                let setting = keyword(*value).ok_or_else(|| {
-                    ":startup-when must name a setting, such as :mode-line".to_owned()
-                })?;
-                manifest.startup_when = Some(setting.to_owned());
-            }
+            Some("startup-when") => manifest.startup_when = Some(startup_of(*value)?),
             Some("entry") => {
                 let entry = heap
                     .text(*value)
@@ -318,37 +368,22 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
             }
             Some("opens-directories") => manifest.opens_directories = value.truthy(),
             Some("opens-files") => {
-                manifest.opens_files = heap
-                    .elements(*value)
-                    .filter(|_| heap.text(*value).is_none())
-                    .and_then(|items| {
-                        items
-                            .into_iter()
-                            .map(|item| heap.text(item).map(str::to_owned))
-                            .collect()
-                    })
+                manifest.opens_files = texts_of(heap, *value)
                     .ok_or_else(|| ":opens-files must be a vector of file extensions".to_owned())?;
             }
             Some("opt-in") => manifest.opt_in = value.truthy(),
             Some("modes") => manifest.modes = modes::declared(heap, *value)?,
             Some("requires") => manifest.requires = requires_of(heap, &manifest.name, *value)?,
             Some("wakes-for") => {
-                manifest.wakes_for = heap
-                    .elements(*value)
-                    .filter(|_| heap.text(*value).is_none())
-                    .and_then(|items| {
-                        items
-                            .into_iter()
-                            .map(|item| heap.text(item).map(str::to_owned))
-                            .collect()
-                    })
+                manifest.wakes_for = texts_of(heap, *value)
                     .ok_or_else(|| ":wakes-for must be a vector of mode names".to_owned())?;
             }
             _ => {
                 return Err(format!(
-                    "{}'s plugin.ox has no key {}",
+                    "{}'s plugin.ox has no key {}; it takes :{}",
                     manifest.name,
-                    print::brief(heap, *key)
+                    print::brief(heap, *key),
+                    MANIFEST_KEYS.join(" :")
                 ));
             }
         }
@@ -436,8 +471,8 @@ fn preamble(plugin: &str) -> String {
     format!("(def (setting key) (plugin-setting '{plugin} key))")
 }
 
-fn add_entry_source(isolate: &mut Isolate, plugin: &str, file: &str, text: &str) {
-    isolate.add_source(plugin, file, &format!("{} {text}", preamble(plugin)));
+fn add_source(isolate: &mut Isolate, plugin: &str, module: &str, file: &str, text: &str) {
+    isolate.add_source(module, file, &format!("{} {text}", preamble(plugin)));
 }
 
 fn add_sources(
@@ -451,7 +486,7 @@ fn add_sources(
             continue;
         }
         let stem = file_name.trim_end_matches(".ox");
-        isolate.add_source(&format!("{plugin}/{stem}"), file, text);
+        add_source(isolate, plugin, &format!("{plugin}/{stem}"), file, text);
     }
 }
 
@@ -631,7 +666,7 @@ pub fn discover(
 
 fn name_of(heap: &Heap, value: Value) -> String {
     match value {
-        Value::Symbol(name) => name.name().to_owned(),
+        Value::Symbol(name) | Value::Keyword(name) => name.name().to_owned(),
         _ => print::display(heap, value),
     }
 }
@@ -712,11 +747,12 @@ pub fn mark_custom(heap: &mut Heap, editor: &mut Editor) {
 
 fn kind_value(heap: &mut Heap, kind: &Kind) -> Result<(Value, Value), Error> {
     Ok(match kind {
-        Kind::Text => (Value::keyword("string"), Value::Nil),
-        Kind::Int => (Value::keyword("int"), Value::Nil),
+        Kind::Text => (Value::keyword("text"), Value::Nil),
+        Kind::Integer => (Value::keyword("integer"), Value::Nil),
         Kind::Number => (Value::keyword("number"), Value::Nil),
-        Kind::Flag => (Value::keyword("bool"), Value::Nil),
+        Kind::Toggle => (Value::keyword("toggle"), Value::Nil),
         Kind::List => (Value::keyword("list"), Value::Nil),
+        Kind::Data => (Value::keyword("data"), Value::Nil),
         Kind::Choice(options) => {
             let options: Vec<Value> = options.iter().map(|name| Value::Keyword(*name)).collect();
             (Value::keyword("choice"), heap.vector_from(&options)?)
@@ -732,65 +768,85 @@ fn configured(heap: &Heap, config: &[(String, Hold)], key: &str) -> Value {
         .unwrap_or(Value::Nil)
 }
 
-fn plugin_settings(heap: &mut Heap, editor: &mut Editor) -> Result<Value, Error> {
+fn description(heap: &mut Heap, plugin: &Plugin, setting: &Setting) -> Result<Value, Error> {
+    let (kind, choices) = kind_value(heap, &setting.kind)?;
+    let owner = heap.string(&plugin.manifest.name)?;
+    let group = heap.string(&format!("{} plugin", plugin.manifest.name))?;
+    let doc = heap.string(setting.doc.as_deref().unwrap_or_default())?;
+    let default = setting
+        .default
+        .and_then(|hold| heap.held(hold))
+        .unwrap_or(Value::Nil);
+    let value = configured(heap, &plugin.config, &setting.key);
+    let saved = configured(heap, &plugin.saved, &setting.key);
+    let custom = configured(heap, &plugin.custom, &setting.key);
+    heap.map_from(&[
+        Value::keyword("key"),
+        Value::keyword(&setting.key),
+        Value::keyword("owner"),
+        owner,
+        Value::keyword("group"),
+        group,
+        Value::keyword("kind"),
+        kind,
+        Value::keyword("doc"),
+        doc,
+        Value::keyword("unset"),
+        Value::Nil,
+        Value::keyword("default"),
+        default,
+        Value::keyword("choices"),
+        choices,
+        Value::keyword("value"),
+        value,
+        Value::keyword("saved"),
+        saved,
+        Value::keyword("custom"),
+        custom,
+    ])
+}
+
+pub(crate) fn described(heap: &mut Heap, editor: &mut Editor) -> Result<Vec<Value>, Error> {
     let plugins = editor.take_plugin_state::<Plugins>().unwrap_or_default();
     let mut found = Vec::new();
+    let mut failed = None;
     for plugin in plugins.known.iter().filter(|plugin| plugin.active) {
         for setting in &plugin.manifest.settings {
-            let (kind, choices) = kind_value(heap, &setting.kind)?;
-            let name = heap.string(&plugin.manifest.name)?;
-            let doc = match &setting.doc {
-                Some(doc) => heap.string(doc)?,
-                None => Value::Nil,
-            };
-            let default = setting
-                .default
-                .and_then(|hold| heap.held(hold))
-                .unwrap_or(Value::Nil);
-            let value = configured(heap, &plugin.config, &setting.key);
-            let saved = configured(heap, &plugin.saved, &setting.key);
-            let custom = configured(heap, &plugin.custom, &setting.key);
-            found.push(heap.map_from(&[
-                Value::keyword("plugin"),
-                name,
-                Value::keyword("key"),
-                Value::keyword(&setting.key),
-                Value::keyword("type"),
-                kind,
-                Value::keyword("choices"),
-                choices,
-                Value::keyword("doc"),
-                doc,
-                Value::keyword("default"),
-                default,
-                Value::keyword("value"),
-                value,
-                Value::keyword("saved"),
-                saved,
-                Value::keyword("custom"),
-                custom,
-            ])?);
+            match description(heap, plugin, setting) {
+                Ok(described) => found.push(described),
+                Err(error) => failed = failed.or(Some(error)),
+            }
         }
     }
     editor.set_plugin_state(plugins);
-    heap.vector_from(&found).map_err(Error::from)
+    match failed {
+        Some(error) => Err(error),
+        None => Ok(found),
+    }
 }
 
-fn configure_plugin(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
-    let name = name_of(heap, arguments[0]);
+pub(crate) fn configure_named(
+    heap: &mut Heap,
+    editor: &mut Editor,
+    plugin: Value,
+    changes: Value,
+) -> Result<Value, Error> {
+    let name = name_of(heap, plugin);
     let mut plugins = editor.take_plugin_state::<Plugins>().unwrap_or_default();
     let problems = match plugins
         .known
         .iter_mut()
         .find(|plugin| plugin.manifest.name == name)
     {
-        Some(plugin) => merge(heap, plugin, arguments[1]),
+        Some(plugin) => merge(heap, plugin, changes),
         None => vec![format!("There is no plugin named {name}")],
     };
     start_if_due(heap, &mut plugins, &name);
     editor.set_plugin_state(plugins);
-    for problem in problems {
-        log::report(editor, &Error::new(problem), None);
+    editor.settings_changed();
+    match problems.into_iter().next() {
+        Some(problem) => Err(Error::new(problem)),
+        None => Ok(Value::Nil),
     }
 }
 
@@ -876,39 +932,32 @@ pub fn install(isolate: &mut Isolate) {
         .native("ox", "plugin-setting")
         .arity(2, Some(2))
         .host::<Editor>(setting);
-    isolate
-        .native("ox", "configure-plugin")
-        .arity(2, Some(2))
-        .host::<Editor>(|heap, editor, arguments| {
-            configure_plugin(heap, editor, arguments);
-            Ok(Value::Nil)
-        });
-    isolate
-        .native("ox", "plugin-settings")
-        .arity(0, Some(0))
-        .host::<Editor>(|heap, editor, _| plugin_settings(heap, editor));
 }
 
 fn starts_by_itself(heap: &Heap, plugin: &Plugin) -> bool {
     plugin.active
         && !plugin.loaded
-        && plugin.manifest.startup_when.as_ref().is_some_and(|key| {
-            let configured = plugin
-                .config
-                .iter()
-                .find(|(name, _)| name == key)
-                .map(|(_, hold)| *hold);
-            let default = plugin
-                .manifest
-                .settings
-                .iter()
-                .find(|setting| setting.key == *key)
-                .and_then(|setting| setting.default);
-            configured
-                .or(default)
-                .and_then(|hold| heap.held(hold))
-                .is_some_and(Value::truthy)
-        })
+        && match &plugin.manifest.startup_when {
+            None => false,
+            Some(Startup::Always) => true,
+            Some(Startup::When(key)) => {
+                let configured = plugin
+                    .config
+                    .iter()
+                    .find(|(name, _)| name == key)
+                    .map(|(_, hold)| *hold);
+                let default = plugin
+                    .manifest
+                    .settings
+                    .iter()
+                    .find(|setting| setting.key == *key)
+                    .and_then(|setting| setting.default);
+                configured
+                    .or(default)
+                    .and_then(|hold| heap.held(hold))
+                    .is_some_and(Value::truthy)
+            }
+        }
 }
 
 fn start_if_due(heap: &Heap, plugins: &mut Plugins, name: &str) {
@@ -969,7 +1018,7 @@ pub fn reload_file(
         name.to_owned()
     } else {
         let module = format!("{name}/{}", file_name.trim_end_matches(".ox"));
-        isolate.add_source(&module, &file, &text);
+        add_source(isolate, name, &module, &file, &text);
         module
     };
     match isolate.within(crate::PATIENT, |isolate| {
@@ -977,7 +1026,7 @@ pub fn reload_file(
     }) {
         Ok(()) => {
             if module == name {
-                add_entry_source(isolate, name, &file, &text);
+                add_source(isolate, name, name, &file, &text);
             }
             views::redraw(editor);
             editor.show_message(format!("Reloaded {module}"));
@@ -1108,7 +1157,7 @@ fn wake(isolate: &mut Isolate, editor: &mut Editor, name: &str) -> bool {
         log::report(editor, &error, Some((file, text)));
         return false;
     }
-    add_entry_source(isolate, name, file, text);
+    add_source(isolate, name, name, file, text);
     let mut complete = true;
     for (command, _) in &plugin.manifest.commands {
         if !commands::defined(editor, command) {
@@ -1250,7 +1299,7 @@ mod tests {
         files: &[
             (
                 "plugin.ox",
-                "(plugin pulse :version \"0.1.0\" :opt-in true :settings {beat: {type: :bool default: true doc: \"Beat\"}} :startup-when :beat :entry \"pulse.ox\")",
+                "(plugin pulse :version \"0.1.0\" :opt-in true :settings {beat: {type: :toggle default: true doc: \"Beat\"}} :startup-when :beat :entry \"pulse.ox\")",
             ),
             ("pulse.ox", "(message \"pulse started\")"),
         ],
@@ -1272,6 +1321,33 @@ mod tests {
             .unwrap();
         settle(&mut editor, &mut ox);
         assert_eq!(editor.message(), Some("pulse started"));
+    }
+
+    const DRUM: Bundle = Bundle {
+        name: "drum",
+        files: &[
+            (
+                "plugin.ox",
+                "(plugin drum :version \"0.1.0\" :opt-in true :settings {tempo: {type: :integer default: 90}} :startup-when true)",
+            ),
+            (
+                "drum.ox",
+                "(module (import (drum beat :as beat)))\n(message (str \"drum started at \" (beat/tempo)))",
+            ),
+            (
+                "beat.ox",
+                "(module (export tempo))\n(def (tempo) (setting :tempo))",
+            ),
+        ],
+    };
+
+    #[test]
+    fn startup_when_true_starts_a_plugin_that_is_on_and_every_module_reads_its_settings() {
+        let home = home_with(&[("init.ox", "(use-plugin drum)")]);
+        let (mut editor, mut ox) = started(&[DRUM], home.path());
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(editor.message(), Some("drum started at 90"));
     }
 
     #[test]
@@ -1426,10 +1502,10 @@ mod tests {
 
     const SETTINGS: &str = r#"(plugin greeter
   :commands {greet: "Say hello" peek: "Read a missing setting"}
-  :settings {name: {type: :string default: "world"}
-             shout: {type: :bool default: false}
+  :settings {name: {type: :text default: "world"}
+             shout: {type: :toggle default: false}
              style: {type: [:plain :fancy] default: :plain}
-             chatty: {type: :bool default: false}
+             chatty: {type: :toggle default: false}
              friends: {type: :list default: []}}
   :startup-when :chatty)"#;
 
@@ -1472,7 +1548,7 @@ mod tests {
         let home = home_with(&[
             (
                 "custom.ox",
-                "(configure-plugin 'greeter {name: \"Ana\" shout: true})",
+                "(settings 'greeter {name: \"Ana\" shout: true})",
             ),
             ("init.ox", "(use-plugin greeter :config {shout: false})"),
         ]);
@@ -1487,7 +1563,7 @@ mod tests {
     fn nil_puts_a_plugin_setting_back_to_its_default() {
         let home = home_with(&[(
             "init.ox",
-            "(use-plugin greeter :config {name: \"Ana\"})\n(configure-plugin 'greeter {name: nil})",
+            "(use-plugin greeter :config {name: \"Ana\"})\n(settings 'greeter {name: nil})",
         )]);
         let (mut editor, mut ox) = started(&[CONFIGURED], home.path());
 
@@ -1510,13 +1586,10 @@ mod tests {
                 .unwrap(),
             r#"["Bo" {name: "Cy" port: 6697}]"#
         );
-        ox.eval(&mut editor, "(configure-plugin 'greeter {friends: 5})")
-            .unwrap();
-        let log = logged(&editor);
-        assert!(
-            log.contains("greeter's friends must be a vector, got 5"),
-            "{log}"
-        );
+        let error = ox
+            .eval(&mut editor, "(settings 'greeter {friends: 5})")
+            .unwrap_err();
+        assert_eq!(error.message, "greeter's friends must be a vector, got 5");
     }
 
     #[test]

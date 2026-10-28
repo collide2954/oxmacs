@@ -740,7 +740,7 @@ fn setup_saves_the_network_in_custom_ox_once() {
     );
     assert_eq!(
         fs::read_to_string(home.path().join("custom.ox")).unwrap(),
-        ";; Written by M-x customize. Your own settings belong in init.ox,\n;; which runs after this file and wins.\n\n(configure-plugin 'irc {networks: [{name: \"Libera\" host: \"irc.libera.chat\" port: 6697 tls: true nick: \"ana\" channels: [\"#oxmacs\"]}]})\n"
+        ";; Written by M-x customize. Your own settings belong in init.ox,\n;; which runs after this file and wins.\n\n(settings 'irc {networks: [{name: \"Libera\" host: \"irc.libera.chat\" port: 6697 tls: true nick: \"ana\" channels: [\"#oxmacs\"]}]})\n"
     );
     assert_eq!(
         eval(

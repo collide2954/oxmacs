@@ -97,18 +97,16 @@ fn as_map(heap: &mut Heap, config: &Config) -> Result<Value, Error> {
     heap.map_from(&items)
 }
 
-fn saved(heap: &mut Heap, editor: &Editor) -> Result<Value, Error> {
-    match editor.plugin_state::<Saved>() {
-        Some(Saved(config)) => as_map(heap, config),
-        None => as_map(heap, &Config::default()),
-    }
+fn saved_config(editor: &Editor) -> Config {
+    editor
+        .plugin_state::<Saved>()
+        .map_or_else(Config::default, |Saved(config)| config.clone())
 }
 
-fn custom(heap: &mut Heap, editor: &Editor) -> Result<Value, Error> {
-    match editor.plugin_state::<Custom>() {
-        Some(Custom(config)) => as_map(heap, config),
-        None => as_map(heap, &Config::default()),
-    }
+fn custom_config(editor: &Editor) -> Config {
+    editor
+        .plugin_state::<Custom>()
+        .map_or_else(Config::default, |Custom(config)| config.clone())
 }
 
 fn home(heap: &mut Heap, editor: &Editor) -> Result<Value, Error> {
@@ -150,7 +148,12 @@ fn kind_name(kind: Kind) -> &'static str {
     }
 }
 
-fn described(heap: &mut Heap, editor: &Editor, setting: &Setting) -> Result<Value, Error> {
+fn described(
+    heap: &mut Heap,
+    editor: &Editor,
+    setting: &Setting,
+    configs: [&Config; 3],
+) -> Result<Value, Error> {
     let choices: Vec<Value> = match setting.kind {
         Kind::Choice(options) => options.iter().map(|name| Value::keyword(name)).collect(),
         Kind::Theme => editor
@@ -166,59 +169,71 @@ fn described(heap: &mut Heap, editor: &Editor, setting: &Setting) -> Result<Valu
         heap.vector_from(&choices)?
     };
     let group = heap.string(setting.group)?;
-    let hint = heap.string(setting.hint)?;
+    let doc = heap.string(setting.doc)?;
     let unset = match setting.unset {
         Some(unset) => heap.string(unset)?,
         None => Value::Nil,
     };
     let default = Config::default().get(setting.key);
     let default = to_ox(heap, setting, default)?;
+    let [value, saved, custom] = configs;
+    let value = to_ox(heap, setting, value.get(setting.key))?;
+    let saved = to_ox(heap, setting, saved.get(setting.key))?;
+    let custom = to_ox(heap, setting, custom.get(setting.key))?;
     heap.map_from(&[
         Value::keyword("key"),
         Value::keyword(setting.key),
+        Value::keyword("owner"),
+        Value::Nil,
         Value::keyword("group"),
         group,
-        Value::keyword("type"),
+        Value::keyword("kind"),
         Value::keyword(kind_name(setting.kind)),
-        Value::keyword("hint"),
-        hint,
+        Value::keyword("doc"),
+        doc,
         Value::keyword("unset"),
         unset,
         Value::keyword("default"),
         default,
         Value::keyword("choices"),
         choices,
+        Value::keyword("value"),
+        value,
+        Value::keyword("saved"),
+        saved,
+        Value::keyword("custom"),
+        custom,
     ])
 }
 
-fn schema_of(heap: &mut Heap, editor: &Editor) -> Result<Value, Error> {
+fn schema_of(heap: &mut Heap, editor: &mut Editor) -> Result<Value, Error> {
+    let (saved, custom) = (saved_config(editor), custom_config(editor));
+    let now = editor.config().clone();
     let mut entries = Vec::new();
     for setting in SETTINGS {
-        entries.push(described(heap, editor, setting)?);
+        entries.push(described(heap, editor, setting, [&now, &saved, &custom])?);
     }
+    entries.extend(crate::runtime::plugins::described(heap, editor)?);
     heap.vector_from(&entries).map_err(Error::from)
 }
 
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "settings")
-        .arity(0, Some(1))
-        .host::<Editor>(|heap, editor, arguments| match arguments.first() {
-            Some(changes) => change(heap, editor, *changes),
-            None => as_map(heap, editor.config()),
+        .arity(0, Some(2))
+        .host::<Editor>(|heap, editor, arguments| match arguments {
+            [] => as_map(heap, editor.config()),
+            [changes] => change(heap, editor, *changes),
+            [plugin, changes] => {
+                crate::runtime::plugins::configure_named(heap, editor, *plugin, *changes)
+            }
+            _ => unreachable!("settings takes at most two arguments"),
         });
     isolate
         .native("ox", "settings-schema")
         .arity(0, Some(0))
         .host::<Editor>(|heap, editor, _| schema_of(heap, editor));
-    isolate
-        .native("ox", "saved-settings")
-        .arity(0, Some(0))
-        .host::<Editor>(|heap, editor, _| saved(heap, editor));
-    isolate
-        .native("ox", "custom-settings")
-        .arity(0, Some(0))
-        .host::<Editor>(|heap, editor, _| custom(heap, editor));
+
     isolate
         .native("ox", "reload-init")
         .arity(0, Some(0))
@@ -348,7 +363,7 @@ mod tests {
     #[test]
     fn the_schema_describes_every_setting() {
         let (_, result) = evaluated(
-            "(let [all (settings-schema) theme (first all) tabs (find (fn [setting] (= setting.key :tab-width)) all)] [(count all) theme.type theme.unset (first theme.choices) tabs.type tabs.default tabs.group])",
+            "(let [all (settings-schema) theme (first all) tabs (find (fn [setting] (= setting.key :tab-width)) all)] [(count all) theme.kind theme.unset (first theme.choices) tabs.kind tabs.default tabs.group])",
         );
 
         assert_eq!(

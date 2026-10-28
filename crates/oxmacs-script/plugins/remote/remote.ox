@@ -230,7 +230,7 @@
                    user (string/trim (await (prompt "User (optional): ")))
                    host (merge {name: name protocol: (keyword protocol) address: address}
                                (if (= user "") {} {user: user}))
-                   others (vec (remove (fn [known] (= known.name name)) (or (plugin-setting 'remote :hosts) [])))]
+                   others (vec (remove (fn [known] (= known.name name)) (setting :hosts)))]
                (when (string/blank? name)
                  (raise (error "A host needs a name")))
                (message (if (save/plugin-setting! 'remote :hosts (conj others host))

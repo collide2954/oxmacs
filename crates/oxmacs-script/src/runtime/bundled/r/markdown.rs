@@ -230,7 +230,7 @@ fn control_c_control_k_and_saving_render_without_the_session() {
         Some(true)
     );
 
-    r.eval("(configure-plugin 'r {render-on-save: true})");
+    r.eval("(settings 'r {render-on-save: true})");
     r.press("x C-x C-s");
     assert_eq!(r.editor.message(), Some(missing.as_str()));
     assert_eq!(r.sent(), Vec::<String>::new());

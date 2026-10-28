@@ -16,14 +16,14 @@
   (str "(settings {{" (string/join "\n           " (map pair found)) "}})\n"))
 
 (def (plugin-form plugin found)
-  (str "(configure-plugin '" plugin " {{" (string/join " " (map pair found)) "}})\n"))
+  (str "(settings '" plugin " {{" (string/join " " (map pair found)) "}})\n"))
 
 (def (text all)
   "custom.ox for all the entries: the settings changed since it was read, the ones it set before, and none that are at their defaults."
   (let [found (keep kept all)
-        core (filter (fn [[entry _]] (nil? entry.plugin)) found)
-        plugins (distinct (keep (fn [[entry _]] entry.plugin) found))
+        core (filter (fn [[entry _]] (nil? entry.owner)) found)
+        plugins (distinct (keep (fn [[entry _]] entry.owner) found))
         forms (concat (if (empty? core) [] [(core-form core)])
-                      (map (fn [plugin] (plugin-form plugin (filter (fn [[entry _]] (= entry.plugin plugin)) found)))
+                      (map (fn [plugin] (plugin-form plugin (filter (fn [[entry _]] (= entry.owner plugin)) found)))
                            plugins))]
     (string/join "\n" (concat [header] forms))))

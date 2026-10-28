@@ -13,7 +13,7 @@
 
 (def (calendars)
   "The calendars in use, each a map with at least a :name; Personal when none are set."
-  (let [given (or (plugin-setting 'calendar :calendars) [])]
+  (let [given (setting :calendars)]
     (if (empty? given) [{name: "Personal"}] given)))
 
 (def (calendar-of name)

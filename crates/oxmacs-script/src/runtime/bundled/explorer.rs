@@ -30,7 +30,7 @@ fn started(config: &str) -> (tempfile::TempDir, Editor, Ox) {
     let home = tempfile::tempdir().unwrap();
     fs::write(
         home.path().join("init.ox"),
-        format!("(settings {{delete-to-trash: false}}) (configure-plugin 'explorer {{{config}}})"),
+        format!("(settings {{delete-to-trash: false}}) (settings 'explorer {{{config}}})"),
     )
     .unwrap();
     let mut editor = Editor::new();

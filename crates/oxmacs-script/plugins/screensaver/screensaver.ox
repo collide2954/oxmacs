@@ -23,5 +23,9 @@
       (start kind)
       (message "There is no screensaver named \"{answer}\""))))
 
-(when-let [seconds (setting :idle)]
-  (on-idle :screensaver seconds (fn [] (start (chosen)))))
+(def (wait-for-idle)
+  (when-let [seconds (setting :idle)]
+    (on-idle :screensaver seconds (fn [] (when (setting :idle) (start (chosen)))))))
+
+(wait-for-idle)
+(on-settings-change :screensaver wait-for-idle)

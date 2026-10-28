@@ -96,11 +96,7 @@ fn saved_hosts_go_to_custom_ox_once_and_leave_init_ox_alone() {
         ";; mine\n"
     );
     let custom = fs::read_to_string(home.path().join("custom.ox")).unwrap();
-    assert_eq!(
-        custom.matches("(configure-plugin 'remote").count(),
-        1,
-        "{custom}"
-    );
+    assert_eq!(custom.matches("(settings 'remote").count(), 1, "{custom}");
     assert!(
         custom.contains(r#""web""#) && custom.contains(r#""db""#),
         "{custom}"

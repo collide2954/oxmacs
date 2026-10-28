@@ -139,7 +139,7 @@
               (newest ((get sources :installs)))))))
 
 (def (find-r)
-  (locate (plugin-setting 'r :program)
+  (locate (setting :program)
           {which: process/which
            home: (fn [] (process/env "R_HOME"))
            installs: installs}))

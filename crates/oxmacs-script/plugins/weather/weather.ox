@@ -53,7 +53,7 @@
   (when (and (setting :mode-line) (not @ticking))
     (reset! ticking true)
     (refresh)
-    (every (time/minutes 1) (fn [] (when (stale?) (refresh)) nil))))
+    (every (time/minutes 1) (fn [] (when (and (setting :mode-line) (stale?)) (refresh)) nil))))
 
 (def (view)
   (p/page @state (setting :location)))
@@ -66,3 +66,7 @@
   (refresh))
 
 (keep-fresh)
+(on-settings-change :weather
+                    (fn []
+                      (keep-fresh)
+                      (show-mode-line)))

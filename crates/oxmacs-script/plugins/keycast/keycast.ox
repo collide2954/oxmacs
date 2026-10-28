@@ -8,7 +8,7 @@
 (defonce drawing (atom false))
 
 (def (draw shown now)
-  (let [placement (or (setting :placement) :bottom-right)]
+  (let [placement (setting :placement)]
     (if (= placement :mode-line)
       (do (set-overlay :keycast nil)
         (set-mode-line :keycast (stack/caption (last shown))))

@@ -1,5 +1,5 @@
 (plugin tabs
-  :version "0.1.1"
+  :version "0.1.2"
   :opt-in true
   :summary "Workspace tabs across the top, each keeping its own windows"
   :commands {tab-new: "Open a new tab"
@@ -21,5 +21,5 @@
          "C-x t f" find-file-other-tab "C-x t b" switch-to-buffer-other-tab}
   :settings {show: {type: [:several :always] default: :several doc: "Show the tab bar once there are two tabs, or always"}
              new-tab: {type: [:current :scratch] default: :current doc: "What a new tab shows: the current buffer or *scratch*"}}
-  :startup-when :show
+  :startup-when true
   :entry "tabs.ox")

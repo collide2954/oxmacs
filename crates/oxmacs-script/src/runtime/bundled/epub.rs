@@ -280,7 +280,7 @@ fn the_library_shows_the_books_in_a_folder() {
         .ox
         .eval(
             &mut reader.editor,
-            &format!("(configure-plugin 'epub {{library: {folder:?}}})"),
+            &format!("(settings 'epub {{library: {folder:?}}})"),
         )
         .unwrap();
 
@@ -314,7 +314,7 @@ fn the_library_shows_how_far_each_book_was_read_however_its_folder_is_spelled() 
         .ox
         .eval(
             &mut reader.editor,
-            &format!("(configure-plugin 'epub {{library: {folder:?}}})"),
+            &format!("(settings 'epub {{library: {folder:?}}})"),
         )
         .unwrap();
 

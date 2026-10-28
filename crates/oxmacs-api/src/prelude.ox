@@ -12,7 +12,7 @@
   `(define-mode '~name ~title ~@options))
 
 (defmacro ^{indent: 1} plugin [name & options]
-  "The manifest in a plugin's plugin.ox: its :version, :summary, :requires, :entry file, :commands, :keys, :mode-keys, :modes, :settings, :start-screen, :startup-when, :wakes-for, :opens-directories and :opt-in."
+  "The manifest in a plugin's plugin.ox, a name and keys the manual's Plugins page describes."
   (list 'quote (cons name options)))
 
 (defmacro ^{indent: 1} use-plugin [name & options]
@@ -20,5 +20,5 @@
   `(enable-plugin '~name ~@options))
 
 (def (setting _key)
-  "Reads one of the plugin's own settings; only in a plugin's entry file."
-  (raise (error "setting reads a plugin's own settings, so it only works in a plugin's entry file")))
+  "Reads one of the plugin's own settings, in any of the plugin's files."
+  (raise (error "setting reads a plugin's own settings, so it only works in a plugin's files")))

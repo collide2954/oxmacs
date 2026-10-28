@@ -292,7 +292,7 @@ fn settings_changed_elsewhere_show_as_unsaved() {
 }
 
 #[test]
-fn plugin_settings_change_and_save_as_configure_plugin() {
+fn plugin_settings_change_and_save_as_settings() {
     let (home, mut editor, mut ox) = customizing(&[]);
     on(&mut editor, "units");
     press(&mut editor, &mut ox, "RET");
@@ -306,8 +306,7 @@ fn plugin_settings_change_and_save_as_configure_plugin() {
     press(&mut editor, &mut ox, "C-x C-s");
 
     assert!(
-        custom_ox(&home)
-            .ends_with("\n(configure-plugin 'weather {location: \"Oslo\" units: :imperial})\n"),
+        custom_ox(&home).ends_with("\n(settings 'weather {location: \"Oslo\" units: :imperial})\n"),
         "{}",
         custom_ox(&home)
     );

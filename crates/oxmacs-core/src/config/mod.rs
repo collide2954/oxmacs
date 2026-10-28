@@ -2,6 +2,7 @@ pub mod schema;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use strum::VariantNames;
 use thiserror::Error;
 
 use crate::{clock, theme};
@@ -41,8 +42,9 @@ pub struct Config {
     pub air_program: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, VariantNames)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum OnDiskChange {
     #[default]
     Revert,
@@ -50,8 +52,9 @@ pub enum OnDiskChange {
     Ignore,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, VariantNames)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum LineNumbers {
     #[default]
     Absolute,
@@ -59,8 +62,9 @@ pub enum LineNumbers {
     Off,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, VariantNames)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum WindowMode {
     #[default]
     Windowed,
@@ -68,8 +72,9 @@ pub enum WindowMode {
     Fullscreen,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, VariantNames)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum ModeLineStyle {
     #[default]
     Classic,
@@ -79,8 +84,9 @@ pub enum ModeLineStyle {
     Boxed,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, VariantNames)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum RustLint {
     #[default]
     Check,
@@ -204,6 +210,24 @@ mod tests {
 
     fn read(settings: &Value) -> Result<Config, ConfigError> {
         Config::from_settings(settings)
+    }
+
+    #[test]
+    fn every_choice_a_setting_lists_is_one_it_accepts() {
+        for setting in schema::SETTINGS {
+            if let schema::Kind::Choice(options) = setting.kind {
+                assert!(!options.is_empty(), "{}", setting.key);
+                for option in options {
+                    assert!(
+                        Config::default()
+                            .with(setting.key, serde_json::json!(option))
+                            .is_ok(),
+                        "{} {option}",
+                        setting.key
+                    );
+                }
+            }
+        }
     }
 
     #[test]

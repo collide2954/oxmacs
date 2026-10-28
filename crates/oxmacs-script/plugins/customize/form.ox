@@ -1,46 +1,22 @@
 (module
   (import (ox string))
-  (export entries effective page hint-of))
+  (export entries effective structured? page hint-of))
 
 (def help "RET change  C-x C-s save  g revert  q quit")
 
-(def plugin-types {string: :text int: :integer number: :number bool: :toggle choice: :choice list: :data})
-
-(def (core-entry setting now saved custom)
-  (let [value (get now setting.key)
-        kept (get saved setting.key)]
-    (merge setting
-           {plugin: nil
-            value: value
-            saved: kept
-            custom: (get custom setting.key)
-            changed: (not= value kept)})))
-
-(def (plugin-entry setting)
-  {key: setting.key
-   plugin: setting.plugin
-   group: (str setting.plugin " plugin")
-   type: (get plugin-types setting.type)
-   hint: (or setting.doc "")
-   unset: nil
-   default: setting.default
-   choices: setting.choices
-   value: setting.value
-   saved: setting.saved
-   custom: setting.custom
-   changed: (not= setting.value setting.saved)})
-
-(def ^:shadow (entries schema now saved custom plugins)
-  "Every setting to list, the editor's and then each plugin's, with its :value, :saved, :custom and whether it :changed."
-  (vec (concat (map (fn [setting] (core-entry setting now saved custom)) schema)
-               (map plugin-entry plugins))))
+(def ^:shadow (entries schema)
+  "Every setting of schema to list, the editor's and then each plugin's, marking whether it :changed since the init files ran."
+  (vec (map (fn [setting] (assoc setting :changed (not= setting.value setting.saved))) schema)))
 
 (def (effective entry)
   "The value in use for entry, its default when nothing is set."
   (if (nil? entry.value) entry.default entry.value))
 
 (def (chosen? entry)
-  (or (= entry.type :choice) (= entry.type :theme)))
+  (or (= entry.kind :choice) (= entry.kind :theme)))
+
+(def (structured? entry)
+  (or (= entry.kind :list) (= entry.kind :data)))
 
 (def (shown entry)
   (let [value (effective entry)
@@ -49,16 +25,16 @@
       ((nil? value) (str "(" unset ")"))
       ((= value true) "[x]")
       ((= value false) "[ ]")
-      ((= entry.type :data) (str "(" (count value) " in init.ox)"))
+      ((structured? entry) (str "(" (count value) " in init.ox)"))
       ((chosen? entry) (str "[" (name value) "]"))
       (else (str value)))))
 
 (def (hint-of entry)
   "The line under entry: its choices, or what it does."
-  (cond ((= entry.type :choice)
+  (cond ((= entry.kind :choice)
          (string/join " | " (concat (if entry.unset [entry.unset] []) (map name entry.choices))))
-    ((= entry.type :theme) (str (or entry.unset "") " | RET picks a theme with a live preview"))
-    (else entry.hint)))
+    ((= entry.kind :theme) (str (or entry.unset "") " | RET picks a theme with a live preview"))
+    (else entry.doc)))
 
 (def (set-in-init? entry)
   (and (not entry.changed) (not= entry.custom entry.saved)))

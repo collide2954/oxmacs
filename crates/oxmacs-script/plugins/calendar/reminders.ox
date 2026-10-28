@@ -1,13 +1,13 @@
 (module
   (import (ox time)
           (calendar store :as store))
-  (export default-minutes alarm-times remind! watch!))
+  (export default-minutes alarm-times remind! watching? watch!))
 
 (defonce state (atom {reminded: (set []) checked: nil watching: false}))
 
 (def (default-minutes)
   "Minutes before an event to remind you when it sets no reminder of its own."
-  (or (plugin-setting 'calendar :reminder) 10))
+  (setting :reminder))
 
 (def (alarm-times occurrence)
   "When to remind you of occurrence, in milliseconds."
@@ -31,8 +31,17 @@
         (message text)
         (notify "Calendar" text)))))
 
+(def (watching?)
+  "Whether reminders are being checked."
+  (get @state :watching))
+
 (def (watch!)
-  "Checks for reminders every half minute from now on."
-  (unless (get @state :watching)
+  "Checks for reminders every half minute from now on, while the reminders setting is on."
+  (unless (watching?)
     (swap! state assoc :watching true)
-    (every (time/seconds 30) (fn [] (remind!) nil))))
+    (every (time/seconds 30)
+           (fn []
+             (if (setting :reminders)
+               (remind!)
+               (swap! state assoc :checked (time/now)))
+             nil))))

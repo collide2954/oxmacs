@@ -36,7 +36,7 @@
 
 (def (all-hosts)
   "The saved hosts, then those of ~/.ssh/config that aren't saved too."
-  (let [saved (vec (map (fn [host] (assoc host :protocol (protocol-of host))) (or (plugin-setting 'remote :hosts) [])))
+  (let [saved (vec (map (fn [host] (assoc host :protocol (protocol-of host))) (setting :hosts)))
         known (set (map :name saved))]
     (vec (concat saved (remove (fn [host] (contains? known host.name)) (ssh-hosts))))))
 

@@ -71,7 +71,7 @@ fn the_languageserver_starts_for_r_files_once_r_says_it_is_installed() {
 fn the_languageserver_setting_turns_it_off() {
     let (_root, mut r) = in_project();
     let job = r.running();
-    r.eval("(configure-plugin 'r {language-server: false})");
+    r.eval("(settings 'r {language-server: false})");
 
     r.output(
         job,

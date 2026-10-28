@@ -30,7 +30,7 @@
       file)))
 
 (def (minutes)
-  (or (plugin-setting 'vault :lock-after) 10))
+  (setting :lock-after))
 
 (def (locked?)
   "True until the vault's password is given in this session."

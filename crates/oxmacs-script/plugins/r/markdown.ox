@@ -351,7 +351,7 @@ cat("oxmacs-rendered\t", normalizePath(out, winslash = "/"), "\n", sep = "")
   (preview/show))
 
 (def (saved file)
-  (when (and (plugin-setting 'r :render-on-save) (renderable? file) (not (contains? @rendering file)))
+  (when (and (setting :render-on-save) (renderable? file) (not (contains? @rendering file)))
     (render file)))
 
 (defmode r-markdown "R Markdown"

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use super::BUNDLED;
 use crate::isolate;
-use crate::runtime::plugins::{Listed, catalog};
+use crate::runtime::plugins::{Listed, MANIFEST_KEYS, catalog};
 
 fn modules() -> Vec<(String, String)> {
     isolate().modules()
@@ -15,6 +15,15 @@ fn workspace() -> &'static Path {
         .parent()
         .and_then(Path::parent)
         .unwrap()
+}
+
+fn bundled(plugin: &str, file: &str) -> &'static str {
+    BUNDLED
+        .iter()
+        .filter(|bundle| bundle.name == plugin)
+        .flat_map(|bundle| bundle.files)
+        .find(|(name, _)| *name == file)
+        .map_or_else(|| panic!("{plugin} bundles no {file}"), |(_, text)| *text)
 }
 
 fn plugins() -> Vec<Listed> {
@@ -173,9 +182,8 @@ fn the_readme_lists_every_plugin_and_module() {
 
 #[test]
 fn the_manual_lists_every_plugin_and_module() {
-    let manual = workspace().join("crates/oxmacs-script/plugins/manual");
-    let plugins_page = fs::read_to_string(manual.join("plugins.ox")).unwrap();
-    let modules_page = fs::read_to_string(manual.join("modules.ox")).unwrap();
+    let plugins_page = bundled("manual", "plugins.ox");
+    let modules_page = bundled("manual", "modules.ox");
     let (plugins, modules) = (text_plugins(), text_modules());
 
     assert!(
@@ -186,4 +194,15 @@ fn the_manual_lists_every_plugin_and_module() {
         modules_page.contains(&modules),
         "modules.ox should hold:\n\n{modules}"
     );
+}
+
+#[test]
+fn the_manual_describes_every_manifest_key() {
+    let page = bundled("manual", "plugins.ox");
+    let missing: Vec<&&str> = MANIFEST_KEYS
+        .iter()
+        .filter(|key| !page.contains(&format!("`:{key}")))
+        .collect();
+
+    assert!(missing.is_empty(), "plugins.ox should describe {missing:?}");
 }

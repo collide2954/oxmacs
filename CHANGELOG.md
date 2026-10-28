@@ -56,7 +56,6 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 ### Changed
 
 - Plugins and init.ox name faces one way everywhere, the same names tree-sitter queries use, and can now also use `:lifetime`, `:search-match`, `:search-current` and `:paren-match`.
-
 - `open-buffer`, `set-lines`, `append-lines`, `set-header` and `set-overlay` read lines and pieces the same way, and `set-lines` and `append-lines` take a buffer handle as well as a name. Overlay rows are written like other lines, `{line: pieces opacity: 0.5}` instead of `{pieces: ...}`, and a key is drawn with `[text face :keycap]` instead of the face `:keycap`. A `nil` piece is left out instead of showing as `nil`.
 - Popups, transient menus, the headers kept above plugin buffers and the key overlay share one raised background, and dimmed text in the mode line, tab bar, completions and menus is one shade, a little easier to read than before.
 - The headings of `M-x remote`, `list-processes`, `customize`, `vault`, `calendar`, the Ox profiler, R's package and environment lists, IRC channel lists and dired stay above their lines while they scroll.
@@ -83,9 +82,13 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - R Markdown prose is styled as Markdown's is, with quotes, list markers, `code`, **strong** text and links as well as headings.
 - Markdown previews leave out the YAML front matter between `---` lines at the top of a document.
 - oxmacs no longer builds image codecs it never uses, such as the AVIF encoder and OpenEXR, which iced's image support pulled in; it builds faster and its executables are smaller.
+- `(settings 'weather {units: :imperial})` changes a plugin's settings, as `(settings {...})` changes the editor's, and `M-x customize` writes `custom.ox` that way; `configure-plugin` is gone. `settings-schema` lists the plugins' settings after the editor's, each with its `:owner`, `:kind`, `:doc`, `:value`, `:saved` and `:custom`, and `plugin-settings`, `saved-settings` and `custom-settings` are gone.
+- A plugin's settings take the kinds the editor's settings use: `:text`, `:integer`, `:number`, `:toggle`, `:list`, `:data` for any value, or a vector of choices. `:string`, `:int` and `:bool` are refused with the name to use instead.
+- `(setting :key)` reads a plugin's own setting in any of its files, not only its entry file, and `:startup-when true` starts a plugin with oxmacs whenever it is on, as `tabs` and `keycast` now do.
 
 ### Fixed
 
+- Changing zap's `flash`, screensaver's `idle`, calendar's `reminders` or weather's `mode-line` takes effect at once instead of at the next start, and a plugin setting changed in `M-x customize` reaches `tabs` and `zen` at once.
 - Opening plugin buffers no longer adds a set of keys for each one that lasts until oxmacs quits, so `C-h f remote-visit` no longer lists every remote folder ever browsed, and reopening a buffer reuses its keys.
 - On Windows, language servers installed with npm start: oxmacs runs their `.cmd` script directly and never picks npm's extensionless shell script, and every program lookup tries the extensions in `PATHEXT`.
 - Sending a lot of text to a busy process, such as an R session or a language server, no longer freezes the editor: input is written in the background.

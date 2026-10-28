@@ -43,7 +43,7 @@
   (some? (get (network name) :conn)))
 
 (def (nick-width)
-  (or (plugin-setting 'irc :nick-width) 12))
+  (setting :nick-width))
 
 (def (server-buffer name)
   (str "*irc " name "*"))
@@ -186,7 +186,7 @@
   (add! buffer {kind: kind time: (stamp line) nick: line.nick text: text}))
 
 (def (log! name target message)
-  (when (plugin-setting 'irc :logs)
+  (when (setting :logs)
     (spawn (logs/append! name target message))))
 
 (def (send! name line)
@@ -230,13 +230,13 @@
 
 (def (mentions? name text)
   (let [words (map (fn [match] (fold match.text)) (regex/find-all #"[^\s,.:;!?()<>\"']+" text))
-        wanted (set (map fold (cons (my-nick name) (or (plugin-setting 'irc :highlights) []))))]
+        wanted (set (map fold (cons (my-nick name) (setting :highlights))))]
     (some (fn [word] (contains? wanted word)) words)))
 
 (def (alert! name buffer message private)
   (when (and (not message.self)
              (or message.mention private)
-             (plugin-setting 'irc :notify)
+             (setting :notify)
              (or (not (window-focused?)) (not (buffer-shown? buffer))))
     (notify (if private (str message.nick " on " name) (str message.nick " in " buffer))
             (protocol/plain-text (or message.text "")))))
@@ -552,7 +552,7 @@
     (if (protocol/same-nick? invited (my-nick name))
       (do (change-network! name assoc :invited channel)
         (info! (here-on name) (str line.nick " invites you to " channel "; C-c C-j joins"))
-        (when (and (plugin-setting 'irc :notify) (not (window-focused?)))
+        (when (and (setting :notify) (not (window-focused?)))
           (notify (str line.nick " on " name) (str "Invites you to " channel))))
       (when-let [buffer (buffer-of name channel)]
         (event! buffer line :info (str line.nick " invited " invited))))))
@@ -570,7 +570,7 @@
     (info! (server-buffer name) said)
     (when-let [buffer (buffer-of name nick)]
       (info! buffer said))
-    (when (and online (plugin-setting 'irc :notify) (not (window-focused?)))
+    (when (and online (setting :notify) (not (window-focused?)))
       (notify name said))))
 
 (def whois-replies (set ["301" "311" "312" "313" "317" "318" "319" "330" "338" "378" "379" "671" "276" "307" "320" "335"]))

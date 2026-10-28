@@ -28,7 +28,7 @@
   (or (here) (raise (error "This isn't an IRC buffer"))))
 
 (def (networks)
-  (or (plugin-setting 'irc :networks) []))
+  (setting :networks))
 
 (def (connect-all!)
   (let [known (networks)]

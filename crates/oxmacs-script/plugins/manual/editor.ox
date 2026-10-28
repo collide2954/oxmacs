@@ -92,7 +92,7 @@ Three hooks follow the buffers people type in, leaving plugin buffers out. `on-b
 
 ## Settings
 
-`(settings {theme: :adwaita-dark})` changes editor settings at once, `nil` putting one back to its default, and `(settings)` reads them all as a map. `settings-schema` describes each one, as `M-x customize` lists them.
+`(settings {theme: :adwaita-dark})` changes editor settings at once, `nil` putting one back to its default, `(settings 'weather {units: :imperial})` changes a plugin's, and `(settings)` reads the editor's as a map. `settings-schema` describes every setting, the editor's and each plugin's, as `M-x customize` lists them.
 
 ```
 (get (settings) :tab-width)

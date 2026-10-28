@@ -1,3 +1,7 @@
+use strum::VariantNames;
+
+use crate::config::{LineNumbers, ModeLineStyle, OnDiskChange, RustLint, WindowMode};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Toggle,
@@ -14,21 +18,16 @@ pub struct Setting {
     pub group: &'static str,
     pub kind: Kind,
     pub unset: Option<&'static str>,
-    pub hint: &'static str,
+    pub doc: &'static str,
 }
 
-const fn setting(
-    group: &'static str,
-    key: &'static str,
-    kind: Kind,
-    hint: &'static str,
-) -> Setting {
+const fn setting(group: &'static str, key: &'static str, kind: Kind, doc: &'static str) -> Setting {
     Setting {
         key,
         group,
         kind,
         unset: None,
-        hint,
+        doc,
     }
 }
 
@@ -68,7 +67,7 @@ pub const SETTINGS: &[Setting] = &[
     setting(
         APPEARANCE,
         "line-numbers",
-        Kind::Choice(&["absolute", "relative", "off"]),
+        Kind::Choice(LineNumbers::VARIANTS),
         "Line numbers beside buffers that visit files",
     ),
     setting(
@@ -80,7 +79,7 @@ pub const SETTINGS: &[Setting] = &[
     setting(
         APPEARANCE,
         "window-mode",
-        Kind::Choice(&["windowed", "maximized", "fullscreen"]),
+        Kind::Choice(WindowMode::VARIANTS),
         "How the window opens at startup",
     ),
     setting(
@@ -98,7 +97,7 @@ pub const SETTINGS: &[Setting] = &[
     setting(
         APPEARANCE,
         "mode-line-style",
-        Kind::Choice(&["classic", "modern", "minimal", "powerline", "boxed"]),
+        Kind::Choice(ModeLineStyle::VARIANTS),
         "How the mode line under each window looks",
     ),
     setting(
@@ -152,13 +151,13 @@ pub const SETTINGS: &[Setting] = &[
     setting(
         FILES,
         "on-disk-change",
-        Kind::Choice(&["revert", "ask", "ignore"]),
+        Kind::Choice(OnDiskChange::VARIANTS),
         "What to do when a visited file changes on disk",
     ),
     setting(
         RUST,
         "rust-lint",
-        Kind::Choice(&["check", "clippy", "off"]),
+        Kind::Choice(RustLint::VARIANTS),
         "Cargo command that lints Rust projects on save",
     ),
     setting(

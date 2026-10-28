@@ -26,11 +26,11 @@
   (swap! world (fn [now] (merge now {cells: (rules/step now.cells) generation: (inc now.generation)}))))
 
 (def (restart!)
-  (swap! world merge {cells: (rules/seeded (or (setting :pattern) :acorn)) generation: 0 running: true}))
+  (swap! world merge {cells: (rules/seeded (setting :pattern)) generation: 0 running: true}))
 
 (def (run!)
   (let [run (get (swap! world update :run inc) :run)]
-    (every (or (setting :speed) 100)
+    (every (setting :speed)
            (fn []
              (let [now @world]
                (cond ((not= now.run run) :stop)

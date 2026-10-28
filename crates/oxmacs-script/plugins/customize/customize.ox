@@ -16,7 +16,7 @@
     (path/join home "custom.ox")))
 
 (def (current-entries)
-  (form/entries (settings-schema) (settings) (saved-settings) (custom-settings) (plugin-settings)))
+  (form/entries (settings-schema)))
 
 (def (draw opening)
   (let [all (current-entries)
@@ -45,14 +45,14 @@
 (def (go row)
   (when row
     (goto-line (current-line) row.column)
-    (let [hint (get (entry-of row) :hint)]
+    (let [hint (get (entry-of row) :doc)]
       (when (and hint (not= hint ""))
         (message hint)))))
 
 (def (change entry value)
   (try
-    (if entry.plugin
-      (configure-plugin entry.plugin (assoc {} entry.key value))
+    (if entry.owner
+      (settings entry.owner (assoc {} entry.key value))
       (settings (assoc {} entry.key value)))
     (draw false)
     (catch error e
@@ -69,9 +69,9 @@
         key (name entry.key)
         answer (await (prompt "{key}: " :initial (if (nil? now) "" (str now))))
         trimmed (string/trim answer)
-        whole (= entry.type :integer)]
-    (cond ((and (= trimmed "") (or entry.unset entry.plugin)) (change entry nil))
-      ((= entry.type :text) (change entry answer))
+        whole (= entry.kind :integer)]
+    (cond ((and (= trimmed "") (or entry.unset entry.owner)) (change entry nil))
+      ((= entry.kind :text) (change entry answer))
       (else
        (if-let [number (string/to-number trimmed)]
          (change entry number)
@@ -93,10 +93,10 @@
 (defcommand customize-change "Change the setting on this line"
   (if-let [row (row-here)]
     (let [entry (entry-of row)]
-      (cond ((= entry.type :toggle) (change entry (not (form/effective entry))))
-        ((= entry.type :choice) (change entry (next-choice entry)))
-        ((= entry.type :theme) (run-command 'load-theme))
-        ((= entry.type :data) (message "{(name entry.key)} is a list; change it in init.ox with use-plugin"))
+      (cond ((= entry.kind :toggle) (change entry (not (form/effective entry))))
+        ((= entry.kind :choice) (change entry (next-choice entry)))
+        ((= entry.kind :theme) (run-command 'load-theme))
+        ((form/structured? entry) (message "Change {(name entry.key)} in init.ox with settings"))
         (else (ask entry))))
     (message "No setting here")))
 

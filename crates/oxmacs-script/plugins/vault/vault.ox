@@ -142,7 +142,7 @@
   (or (entry-here) (choose question)))
 
 (def (clear-after)
-  (or (setting :clear-clipboard) 30))
+  (setting :clear-clipboard))
 
 (def (copy! value what secret?)
   (when (blank? value)

@@ -81,7 +81,7 @@
      lines: (reduce step [] (range from (+ from days)))}))
 
 (def (agenda-days)
-  (or (plugin-setting 'calendar :days) 14))
+  (setting :days))
 
 (def (show-agenda!)
   (let [from (or (get @view :from) (today))
@@ -280,7 +280,7 @@
                (message (str "Deleted " occurrence.summary))))))
 
 (def (me)
-  (string/lower (or (plugin-setting 'calendar :email) "")))
+  (string/lower (or (setting :email) "")))
 
 (def (answer! status)
   (let [occurrence (target)
@@ -506,7 +506,7 @@
   (draw-week!))
 
 (def (start-reminders!)
-  (when (plugin-setting 'calendar :reminders)
+  (when (and (setting :reminders) (not (reminders/watching?)))
     (when-let [place (store/folder)]
       (when (await (file/exists? place))
         (store/load!)
@@ -514,3 +514,4 @@
           (reminders/watch!))))))
 
 (spawn (start-reminders!))
+(on-settings-change :calendar start-reminders!)

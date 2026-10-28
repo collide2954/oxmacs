@@ -1,5 +1,5 @@
 (def (zapped buffer start end failed)
-  (when (buffer-live? buffer)
+  (when (and (setting :flash) (buffer-live? buffer))
     (with-buffer buffer
       (annotate start end
                 :face (setting (if failed :error-face :face))

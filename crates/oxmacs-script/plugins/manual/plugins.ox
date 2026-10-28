@@ -24,7 +24,7 @@ So plugins do two jobs. They extend the editor, and they are where shared Ox cod
   :version "0.1.0"
   :summary "Greetings"
   :commands {hello: "Say hello"}
-  :settings {name: {type: :string default: "world" doc: "Who to greet"}}
+  :settings {name: {type: :text default: "world" doc: "Who to greet"}}
   :entry "hello.ox")
 ```
 
@@ -54,10 +54,10 @@ Saving a loaded plugin's file evaluates it again in place, so a change takes eff
 - `:keys` binds global keys, such as `{"C-c h" hello}`; your `init.ox` can rebind them.
 - `:mode-keys` binds keys in the buffers of a mode, such as `{"R" {"C-c h" hello}}`, and the first press loads the plugin.
 - `:wakes-for` names modes, such as `["R"]`, whose buffers load the plugin as soon as one is open.
-- `:settings` declares settings with a `:type` (`:string`, `:int`, `:number`, `:bool`, `:list` or a vector of keywords to choose from), a `:default` and a `:doc`. `M-x customize` shows them, `use-plugin :config` sets them and `(setting :name)` reads them in the entry file.
+- `:settings` declares settings with a `:type` (`:text`, `:integer`, `:number`, `:toggle`, `:list`, `:data` for any value, or a vector of keywords to choose from), a `:default` and a `:doc`. `M-x customize` shows them, `use-plugin :config` and `(settings 'name {...})` set them, and `(setting :name)` reads them anywhere in the plugin.
 - `:start-screen` adds commands to the start screen, as `{hello: "Say hello"}`.
 - `:modes` declares file modes that wake the plugin, as `[{name: "Notes" extensions: ["note"] comment: "#"}]`; the entry then defines them with `defmode`.
-- `:startup-when :name` starts the plugin with oxmacs when its setting `name` is true, as the weather plugin does for its mode line.
+- `:startup-when :name` starts the plugin with oxmacs when its setting `name` is true, as the weather plugin does for its mode line, and `:startup-when true` starts it whenever it is on, as tabs does.
 - `:opens-directories true` makes the plugin the way directories open, as dired is.
 - `:opens-files ["epub"]` makes the plugin the way files with those extensions open, as epub does for books and pdf for documents; its entry registers the opener with `(on-open-file "epub" f)`.
 - `:opt-in true` keeps a bundled plugin off until `use-plugin` turns it on.
@@ -86,30 +86,30 @@ oxmacs ships these plugins. Those on by default load the first time you use them
 
 ```table
 Plugin       Version  Default  What it does
-calendar     0.2.6    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
-customize    0.1.4    on       Change the editor's and plugins' settings in a form
+calendar     0.2.7    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
+customize    0.1.5    on       Change the editor's and plugins' settings in a form
 dired        0.3.3    on       List directories and manage their files
-epub         0.2.2    opt-in   Read EPUB books in pages, with contents, search, highlights, notes and a library
-explorer     0.2.1    on       A file tree beside the windows that follows the file you're in
+epub         0.2.3    opt-in   Read EPUB books in pages, with contents, search, highlights, notes and a library
+explorer     0.2.2    on       A file tree beside the windows that follows the file you're in
 git          0.4.3    opt-in   Git status and staging in the style of Magit
-irc          0.10.4   opt-in   An IRCv3 client in the style of ERC
-keycast      0.2.3    opt-in   Shows the keys you press and the commands they run, for demos
+irc          0.10.5   opt-in   An IRCv3 client in the style of ERC
+keycast      0.2.4    opt-in   Shows the keys you press and the commands they run, for demos
 languages    0.1.0    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
-life         0.2.3    opt-in   Conway's Game of Life on a canvas
-manual       0.5.71   on       The oxmacs tutorial and the Ox manual
+life         0.2.4    opt-in   Conway's Game of Life on a canvas
+manual       0.5.72   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.6    opt-in   Markdown rendered as styled text
-pdf          0.2.1    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
+pdf          0.2.2    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
 processes    0.1.5    on       List the processes oxmacs runs, with their usage
 profiler     0.1.3    on       Find where the Ox code in oxmacs spends its time
-r            0.20.6   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
-remote       0.3.5    on       Browse and edit files on other machines over ssh, sftp and ftp
+r            0.20.7   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
+remote       0.3.6    on       Browse and edit files on other machines over ssh, sftp and ftp
 rodeo        0.1.1    opt-in   Play 2D games written in Ox beside their code, and change them while they run
-screensaver  0.2.2    opt-in   A starfield or matrix rain after a while without input
-tabs         0.1.1    opt-in   Workspace tabs across the top, each keeping its own windows
-vault        0.2.4    opt-in   An encrypted password vault with one-time codes and imports
-weather      0.3.2    opt-in   Forecasts from Open-Meteo
-zap          0.2.1    opt-in   Flash the code you evaluate or send to a console, in the error color when it fails
-zen          0.1.0    opt-in   Distraction-free writing in one centered column
+screensaver  0.2.3    opt-in   A starfield or matrix rain after a while without input
+tabs         0.1.2    opt-in   Workspace tabs across the top, each keeping its own windows
+vault        0.2.5    opt-in   An encrypted password vault with one-time codes and imports
+weather      0.3.3    opt-in   Forecasts from Open-Meteo
+zap          0.2.2    opt-in   Flash the code you evaluate or send to a console, in the error color when it fails
+zen          0.1.1    opt-in   Distraction-free writing in one centered column
 ```
 
 ## Learn from the bundled plugins
