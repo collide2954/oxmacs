@@ -7,7 +7,7 @@
 
 (defonce state
   (atom {root: nil open: #{} entries: {} hidden: nil ignored: #{} changes: {} problems: {}
-         filter: "" rows: [] current: nil width: 32 repo: false}))
+         filter: "" current: nil width: 32 repo: false}))
 
 (defonce files (atom nil))
 (defonce refreshing (atom false))
@@ -125,11 +125,11 @@
         rows (compute s)
         width (max 12 (or s.width 32))
         lines (vec (map (fn [row]
-                          (tree/line row (get s.changes (key-of row.path)) (get s.problems (key-of row.path))
-                                     width (and s.current (= (key-of row.path) (key-of s.current)))))
+                          (merge (tree/line row (get s.changes (key-of row.path)) (get s.problems (key-of row.path))
+                                            width (and s.current (= (key-of row.path) (key-of s.current))))
+                                 row))
                         rows))
         at (row-index rows focus)]
-    (swap! state assoc :rows rows)
     (set-header tree-buffer (header s rows))
     (if at
       (set-lines tree-buffer (if (empty? lines) [""] lines) :line at)
@@ -203,9 +203,7 @@
       [else (select-side-window)])))
 
 (def (here)
-  (let [rows (get @state :rows)
-        line (current-line)]
-    (when (< line (count rows)) (nth rows line))))
+  (line-item))
 
 (def (toggle row)
   (unless (filtering? @state)
@@ -246,18 +244,13 @@
   (when-let [row (here)]
     (if (and row.dir row.open)
       (toggle row)
-      (when-let [at (row-index (get @state :rows) (path/parent row.path))]
-        (goto-line at)))))
-
-(def (first-match rows)
-  (first (keep (fn [at] (when (get (nth rows at) :match) at)) (range (count rows)))))
+      (goto-item {path: (path/parent row.path)}))))
 
 (def (refilter)
   (let [found (known-files)]
     (swap! state assoc :found found)
     (draw)
-    (when-let [at (first-match (get @state :rows))]
-      (goto-line at))))
+    (with-buffer tree-buffer (goto-item {match: true}))))
 
 (def (typed text)
   (swap! state update :filter str text)
@@ -393,16 +386,13 @@
 
 (def (clicked line clicks)
   (when (= clicks 1)
-    (let [rows (get @state :rows)]
-      (when (< line (count rows))
-        (let [row (nth rows line)]
-          (if row.dir (toggle row) (visit row.path false)))))))
+    (when-let [row (with-buffer tree-buffer (line-item line))]
+      (if row.dir (toggle row) (visit row.path false)))))
 
 (def (dropped from to)
-  (let [rows (get @state :rows)]
-    (when (and (< from (count rows)) (< to (count rows)))
-      (let [moving (nth rows from)
-            into (folder-for (nth rows to))
+  (let [[moving onto] (with-buffer tree-buffer [(line-item from) (line-item to)])]
+    (when (and moving onto)
+      (let [into (folder-for onto)
             target (path/join into moving.name)]
         (unless (or (same? (path/parent moving.path) into)
                     (same? moving.path into)
