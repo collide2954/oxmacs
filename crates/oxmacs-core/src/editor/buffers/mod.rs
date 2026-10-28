@@ -141,7 +141,10 @@ impl BufferList {
     pub(super) fn location(&self, index: usize) -> Option<(&Path, bool)> {
         let entry = self.entries.get(index)?;
         match &entry.mode {
-            Mode::Special(view) => view.directory().map(|directory| (directory, true)),
+            Mode::Special(view) => view
+                .directory()
+                .map(|directory| (directory, true))
+                .or_else(|| view.file().map(|file| (file, false))),
             Mode::Text(_) => entry.buffer.file().map(|file| (file.path.as_path(), false)),
         }
     }

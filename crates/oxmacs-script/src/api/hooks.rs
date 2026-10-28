@@ -120,6 +120,9 @@ fn holds(editor: &Editor, event: &Event) -> Vec<Hold> {
 fn dispatch(isolate: &mut Isolate, editor: &mut Editor, event: Event) -> Result<(), Error> {
     let holds = holds(editor, &event);
     let heap = isolate.heap_mut();
+    if let Event::Killed(id) = event {
+        handles::release_values(heap, editor, id);
+    }
     let arguments = match event {
         Event::Killed(id) if holds.is_empty() => {
             handles::forget(editor, id);

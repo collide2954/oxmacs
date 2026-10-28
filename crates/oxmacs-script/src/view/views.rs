@@ -42,7 +42,6 @@ pub(crate) fn picture(image: Arc<ox_library::image::Image>) -> Picture {
 
 #[derive(Debug)]
 struct Open {
-    name: String,
     function: Hold,
     callbacks: Vec<Hold>,
     buffer: BufferId,
@@ -333,18 +332,37 @@ pub(crate) fn buffer_name(
     crate::api::handles::name(heap, editor, native, value)
 }
 
-const OPEN_VIEW: [&str; 6] = ["keys", "beside", "select", "show", "on-resize", "watch"];
+const OPEN_VIEW: [&str; 7] = [
+    "keys",
+    "beside",
+    "select",
+    "show",
+    "on-resize",
+    "watch",
+    "file",
+];
+
+fn existing(editor: &Editor, name: &str, file: Option<&std::path::Path>) -> Option<BufferId> {
+    let found = match file {
+        Some(file) => editor.buffer_showing(file),
+        None => editor.buffer_named(name),
+    }?;
+    editor.special_buffer::<ViewBuffer>(found).map(|_| found)
+}
 
 fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = buffer_name(heap, editor, "open-view", arguments[0])?;
-    let [keyed, beside, select, show, resized, watched] = [
+    let [keyed, beside, select, show, resized, watched, file] = [
         arguments[2],
         arguments[3],
         arguments[4],
         arguments[5],
         arguments[6],
         arguments[7],
+        arguments[8],
     ];
+    let file = (file != Value::Nil)
+        .then(|| editor.absolute(std::path::Path::new(&print::display(heap, file))));
     let bindings = match keyed {
         Value::Nil => Vec::new(),
         keyed => keys(heap, keyed)?,
@@ -367,7 +385,9 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     views.open = alive;
     let function = heap.hold(arguments[1]);
     let resized = resized.map(|handler| heap.hold(handler));
-    let index = if let Some(index) = views.open.iter().position(|view| view.name == name) {
+    let found = existing(editor, &name, file.as_deref())
+        .and_then(|buffer| views.open.iter().position(|view| view.buffer == buffer));
+    let index = if let Some(index) = found {
         heap.release(views.open[index].function);
         views.open[index].function = function;
         views.open[index].failed = None;
@@ -383,6 +403,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             buffer.set_read_only(true);
             ViewBuffer {
                 scope,
+                file,
                 watched: None,
                 node: Node::Column {
                     spacing: 0.0,
@@ -391,7 +412,6 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             }
         });
         views.open.push(Open {
-            name,
             function,
             callbacks: Vec::new(),
             buffer,
@@ -419,7 +439,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     if show {
         crate::api::buffers::reveal(editor, buffer, beside, select);
     }
-    Ok(Value::Nil)
+    crate::api::handles::handle(heap, editor, buffer)
 }
 
 pub fn sized(isolate: &mut Isolate, editor: &mut Editor, buffer: BufferId, size: (u32, u32)) {
@@ -958,6 +978,50 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn views_of_files_are_named_after_them_and_found_again_by_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut papers = Vec::new();
+        for sub in ["x", "y"] {
+            std::fs::create_dir(dir.path().join(sub)).unwrap();
+            let paper = dir.path().join(sub).join("paper.pdf");
+            std::fs::write(&paper, "%PDF").unwrap();
+            papers.push(paper);
+        }
+        let quoted: Vec<String> = papers
+            .iter()
+            .map(|paper| format!("{:?}", paper.display().to_string()))
+            .collect();
+        let (mut editor, mut ox) = opened(&format!(
+            r#"(def x (open-view "paper.pdf" (fn [] (text "x")) :file {})) (def y (open-view "paper.pdf" (fn [] (text "y")) :file {}))"#,
+            quoted[0], quoted[1]
+        ));
+        assert_eq!(
+            editor.buffer_names(),
+            ["paper.pdf<y>", "paper.pdf<x>", "*scratch*"]
+        );
+        assert_eq!(
+            ox.eval(&mut editor, "[(buffer? x) (= x y)]").unwrap(),
+            "[true false]"
+        );
+
+        ox.eval(
+            &mut editor,
+            &format!(
+                r#"(open-view "paper.pdf" (fn [] (text "x again")) :file {})"#,
+                quoted[0]
+            ),
+        )
+        .unwrap();
+        settle(&mut editor, &mut ox);
+        assert_eq!(shown(&editor, "paper.pdf<x>"), text("x again"));
+        assert_eq!(editor.buffer_names().len(), 3);
+
+        editor.open_file(&papers[1]);
+        assert_eq!(editor.buffer().name(), "paper.pdf<y>");
+        assert_eq!(editor.visited_files().len(), 2);
     }
 
     #[test]

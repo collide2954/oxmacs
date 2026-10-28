@@ -170,6 +170,7 @@ pub enum Arg {
 #[derive(Debug)]
 pub struct ViewBuffer {
     pub scope: ScopeId,
+    pub file: Option<PathBuf>,
     pub watched: Option<PathBuf>,
     pub node: Node<usize>,
 }
@@ -177,6 +178,10 @@ pub struct ViewBuffer {
 impl SpecialBuffer for ViewBuffer {
     fn scope(&self) -> ScopeId {
         self.scope
+    }
+
+    fn file(&self) -> Option<&Path> {
+        self.file.as_deref()
     }
 
     fn watched(&self) -> Option<&Path> {

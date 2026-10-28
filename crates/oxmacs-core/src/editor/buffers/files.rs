@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{self, Path, PathBuf};
 
+use crate::editor::buffers::Mode;
 use crate::editor::prompts::minibuffer::{PathListing, Purpose};
 use crate::editor::{Choice, Editor, Event};
 use crate::files::{self, paths};
@@ -130,6 +131,16 @@ impl Editor {
         let wanted = files::identity(path);
         self.buffers
             .position(|buffer| buffer.file().is_some_and(|file| file.identity() == wanted))
+    }
+
+    pub(in crate::editor) fn index_showing(&self, path: &Path) -> Option<usize> {
+        let wanted = files::identity(path);
+        (0..self.buffers.len()).find(|index| match self.buffers.mode(*index) {
+            Some(Mode::Special(view)) => view
+                .file()
+                .is_some_and(|file| files::identity(file) == wanted),
+            _ => false,
+        })
     }
 
     fn write_file_to(&mut self, path: PathBuf) {
@@ -275,6 +286,10 @@ impl Editor {
 
     pub fn open_file(&mut self, path: &Path) -> bool {
         let path = self.absolute(path);
+        if let Some(index) = self.index_showing(&path) {
+            self.select_buffer(index);
+            return true;
+        }
         if self.claimed(&path) {
             return true;
         }

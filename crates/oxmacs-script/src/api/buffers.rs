@@ -28,6 +28,7 @@ pub struct LinesBuffer {
     styles: Vec<LineStyle>,
     pills: Vec<Pills>,
     directory: Option<PathBuf>,
+    file: Option<PathBuf>,
     watched: Option<PathBuf>,
     moved: Option<Hold>,
     resized: Option<Hold>,
@@ -66,12 +67,16 @@ impl SpecialBuffer for LinesBuffer {
         self.directory.as_deref()
     }
 
+    fn file(&self) -> Option<&Path> {
+        self.file.as_deref()
+    }
+
     fn watched(&self) -> Option<&Path> {
         self.watched.as_deref().or(self.directory.as_deref())
     }
 
     fn fixed_name(&self) -> bool {
-        true
+        self.file.is_none()
     }
 
     fn line_style(&self, line: usize, _: &str) -> LineStyle {
@@ -498,6 +503,7 @@ fn keys(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, Error> {
 struct Options {
     bindings: Vec<(String, String)>,
     directory: Option<PathBuf>,
+    file: Option<PathBuf>,
     watched: Option<PathBuf>,
     beside: bool,
     select: bool,
@@ -513,9 +519,10 @@ struct Options {
     hidden: bool,
 }
 
-const OPEN_BUFFER: [&str; 15] = [
+const OPEN_BUFFER: [&str; 16] = [
     "keys",
     "directory",
+    "file",
     "watch",
     "beside",
     "select",
@@ -537,6 +544,7 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
         match option {
             "keys" => found.bindings = keys(heap, value)?,
             "directory" => found.directory = Some(PathBuf::from(print::display(heap, value))),
+            "file" => found.file = Some(PathBuf::from(print::display(heap, value))),
             "watch" => found.watched = Some(PathBuf::from(print::display(heap, value))),
             "beside" => found.beside = value.truthy(),
             "select" => found.select = value.truthy(),
@@ -611,7 +619,14 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     let name = crate::view::views::buffer_name(heap, editor, "open-buffer", arguments[0])?;
     let rendered = render(heap, "open-buffer", arguments[1])?;
     let mut given = options(heap, &arguments[2..])?;
-    let id = special_buffer(editor, &name).unwrap_or_else(|| {
+    let file = given.file.take().map(|file| editor.absolute(&file));
+    let found = match &file {
+        Some(file) => editor
+            .buffer_showing(file)
+            .filter(|id| editor.special_buffer::<LinesBuffer>(*id).is_some()),
+        None => special_buffer(editor, &name),
+    };
+    let id = found.unwrap_or_else(|| {
         let scope = editor.add_scope(Box::leak(name.clone().into_boxed_str()));
         editor.add_special_buffer_with(&name, |buffer| {
             buffer.set_read_only(true);
@@ -620,6 +635,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
                 styles: Vec::new(),
                 pills: Vec::new(),
                 directory: None,
+                file,
                 watched: None,
                 moved: None,
                 resized: None,
@@ -671,7 +687,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     if !given.hidden {
         reveal(editor, id, given.beside, given.select);
     }
-    Ok(Value::Nil)
+    crate::api::handles::handle(heap, editor, id)
 }
 
 fn count(number: usize) -> Value {
@@ -1087,6 +1103,36 @@ mod tests {
             "{:?}",
             editor.buffer_names()
         );
+    }
+
+    #[test]
+    fn plugin_buffers_showing_a_file_are_named_and_found_by_it() {
+        let folder = tempfile::tempdir().unwrap();
+        let file = folder.path().join("data.csv");
+        std::fs::write(&file, "a,b").unwrap();
+        let quoted = format!("{:?}", file.display().to_string());
+        let (mut editor, mut ox) = opened(&format!(
+            r#"(def grid (open-buffer "*grid*" ["a b"] :file {quoted}))"#
+        ));
+        assert_eq!(editor.buffer().name(), "data.csv");
+        assert_eq!(editor.visited_files(), std::slice::from_ref(&file));
+
+        assert_eq!(
+            ox.eval(
+                &mut editor,
+                &format!(
+                    r#"[(= grid (open-buffer "*grid*" ["c d"] :file {quoted})) (buffer-name)]"#
+                ),
+            )
+            .unwrap(),
+            r#"[true "data.csv"]"#
+        );
+        press(&mut editor, &mut ox, "C-x b RET");
+        editor.open_file(&file);
+
+        assert_eq!(editor.buffer().name(), "data.csv");
+        assert_eq!(editor.buffer().contents(), "c d");
+        assert_eq!(editor.buffer_names().len(), 2);
     }
 
     #[test]

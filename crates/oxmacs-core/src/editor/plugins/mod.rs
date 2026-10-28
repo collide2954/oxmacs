@@ -141,6 +141,11 @@ impl Editor {
         self.buffers.get(index).map(Buffer::id)
     }
 
+    pub fn buffer_showing(&self, path: &Path) -> Option<BufferId> {
+        let index = self.index_showing(path)?;
+        self.buffers.get(index).map(Buffer::id)
+    }
+
     pub fn save_buffer(&mut self, id: BufferId) -> bool {
         self.buffers
             .position(|buffer| buffer.id() == id)

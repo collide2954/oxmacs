@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use ox_lang::heap::Heap;
+use ox_lang::heap::{Heap, Hold};
+use ox_lang::native::expected;
 use ox_lang::task::TaskId;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
@@ -15,6 +16,7 @@ struct Handle(BufferId);
 struct Handles {
     made: HashMap<BufferId, Arc<Handle>>,
     entered: HashMap<Option<TaskId>, Vec<BufferId>>,
+    values: HashMap<BufferId, HashMap<String, Hold>>,
 }
 
 fn killed() -> Error {
@@ -53,6 +55,53 @@ pub(crate) fn closed(heap: &mut Heap, editor: &mut Editor, id: BufferId) -> Resu
 
 pub(crate) fn forget(editor: &mut Editor, id: BufferId) {
     handles(editor).made.remove(&id);
+}
+
+pub(crate) fn release_values(heap: &mut Heap, editor: &mut Editor, id: BufferId) {
+    let released = editor
+        .plugin_state_mut::<Handles>()
+        .and_then(|state| state.values.remove(&id));
+    for hold in released.into_iter().flat_map(HashMap::into_values) {
+        heap.release(hold);
+    }
+}
+
+fn key(heap: &Heap, native: &str, value: Value) -> Result<String, Error> {
+    match value {
+        Value::Keyword(name) => Ok(name.name().to_owned()),
+        _ => Err(expected(heap, native, "a keyword", value)),
+    }
+}
+
+fn value(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let key = key(heap, "buffer-value", arguments[0])?;
+    let id = current(heap, editor)?;
+    Ok(editor
+        .plugin_state::<Handles>()
+        .and_then(|state| state.values.get(&id)?.get(&key).copied())
+        .and_then(|hold| heap.held(hold))
+        .unwrap_or(Value::Nil))
+}
+
+fn set_value(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let key = key(heap, "set-buffer-value!", arguments[0])?;
+    let id = current(heap, editor)?;
+    editor.subscribe(EventKind::Killed);
+    let held = (arguments[1] != Value::Nil).then(|| heap.hold(arguments[1]));
+    let values = &mut handles(editor).values;
+    let kept = values.entry(id).or_default();
+    let old = match held {
+        Some(held) => kept.insert(key, held),
+        None => kept.remove(&key),
+    };
+    if kept.is_empty() {
+        values.remove(&id);
+    }
+    if let Some(old) = old {
+        heap.release(old);
+    }
+    crate::view::views::redraw(editor);
+    Ok(arguments[1])
 }
 
 fn of(heap: &Heap, value: Value) -> Option<BufferId> {
@@ -189,6 +238,14 @@ pub fn install(isolate: &mut Isolate) {
         .native("ox", "leave-buffer")
         .arity(0, Some(0))
         .host::<Editor>(leave);
+    isolate
+        .native("ox", "buffer-value")
+        .arity(1, Some(1))
+        .host::<Editor>(value);
+    isolate
+        .native("ox", "set-buffer-value!")
+        .arity(2, Some(2))
+        .host::<Editor>(set_value);
 }
 
 #[cfg(test)]
@@ -292,6 +349,47 @@ mod tests {
                 .unwrap_err()
                 .message,
             "That buffer was killed"
+        );
+    }
+
+    #[test]
+    fn buffers_keep_values_until_they_close() {
+        let (mut editor, mut ox, _) = two_buffers();
+
+        ox.eval(
+            &mut editor,
+            "(set-buffer-value! :count 1) (with-buffer other (set-buffer-value! :count (atom 2)) (set-buffer-value! :name \"b\"))",
+        )
+        .unwrap();
+        assert_eq!(
+            ox.eval(
+                &mut editor,
+                "[(buffer-value :count) @(with-buffer other (buffer-value :count)) (buffer-value :name)]"
+            )
+            .unwrap(),
+            "[1 2 nil]"
+        );
+        ox.eval(
+            &mut editor,
+            "(set-buffer-value! :count nil) (close-buffer other)",
+        )
+        .unwrap();
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(
+            ox.eval(&mut editor, "(buffer-value :count)").unwrap(),
+            "nil"
+        );
+        assert!(
+            editor
+                .plugin_state::<super::Handles>()
+                .is_some_and(|state| state.values.is_empty())
+        );
+        assert_eq!(
+            ox.eval(&mut editor, r#"(buffer-value "count")"#)
+                .unwrap_err()
+                .message,
+            r#"buffer-value expects a keyword, got "count""#
         );
     }
 

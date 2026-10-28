@@ -829,6 +829,44 @@ fn plugin_buffers_show_their_own_position_and_watch_their_file() {
 }
 
 #[test]
+fn visiting_a_file_a_plugin_buffer_shows_goes_back_to_that_buffer() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("paper.pdf");
+    std::fs::write(&file, "%PDF").unwrap();
+    let mut editor = Editor::new();
+    editor.claim_files("pdf", "pdf");
+    let scope = editor.add_scope("viewer");
+    let id = editor.add_special_buffer_with("paper.pdf", |_| Viewer {
+        scope,
+        file: file.clone(),
+    });
+
+    assert!(editor.open_file(&dir.path().join(".").join("paper.pdf")));
+
+    assert_eq!(editor.buffer().id(), id);
+    assert_eq!(editor.take_events(), []);
+    assert_eq!(editor.buffer_showing(&file), Some(id));
+}
+
+#[test]
+fn plugin_buffers_showing_files_of_the_same_name_are_told_apart() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut editor = Editor::new();
+    let scope = editor.add_scope("viewer");
+    for sub in ["x", "y"] {
+        std::fs::create_dir(dir.path().join(sub)).unwrap();
+        let file = dir.path().join(sub).join("paper.pdf");
+        let id = editor.add_special_buffer_with("paper.pdf", |_| Viewer { scope, file });
+        editor.show_buffer(id);
+    }
+
+    assert_eq!(
+        editor.buffer_names(),
+        ["paper.pdf<y>", "paper.pdf<x>", "*scratch*"]
+    );
+}
+
+#[test]
 fn moved_files_keep_their_buffers() {
     let dir = tempfile::tempdir().unwrap();
     let from = dir.path().join("a.txt");
