@@ -55,13 +55,13 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `keycast` | 0.2.2 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `languages` | 0.1.0 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
 | `life` | 0.2.3 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.62 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.63 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.4 | opt-in | Markdown rendered as styled text |
 | `pdf` | 0.2.0 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
 | `processes` | 0.1.4 | on | List the processes oxmacs runs, with their usage |
 | `profiler` | 0.1.2 | on | Find where the Ox code in oxmacs spends its time |
 | `r` | 0.20.2 | opt-in | R consoles, plots, data and help in the style of ESS and RStudio |
-| `remote` | 0.3.2 | on | Browse and edit files on other machines over ssh, sftp and ftp |
+| `remote` | 0.3.3 | on | Browse and edit files on other machines over ssh, sftp and ftp |
 | `rodeo` | 0.1.1 | opt-in | Play 2D games written in Ox beside their code, and change them while they run |
 | `screensaver` | 0.2.2 | opt-in | A starfield or matrix rain after a while without input |
 | `tabs` | 0.1.1 | opt-in | Workspace tabs across the top, each keeping its own windows |

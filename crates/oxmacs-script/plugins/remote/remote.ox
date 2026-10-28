@@ -10,7 +10,7 @@
 (def search-buffer "*remote search*")
 (def first-row 3)
 
-(defonce state (atom {hosts: [] browsers: {} opened: {}}))
+(defonce opened (atom {}))
 
 (def (quietly work)
   (try (work)
@@ -30,21 +30,22 @@
 (defcommand remote "Browse the files of a host over ssh, sftp or ftp"
   (quietly (fn []
              (let [found (hosts/all-hosts)]
-               (swap! state assoc :hosts found)
-               (open-buffer hosts-buffer
-                            (vec (concat [{line: [["Remote hosts" :heading]]}
-                                          {line: [["RET browses  s opens a shell  a adds a host  g refreshes  q quits" :comment]]}
-                                          {line: []}]
-                                         (if (empty? found)
-                                           [{line: [["  No hosts yet: a adds one, or name them in ~/.ssh/config" :comment]]}]
-                                           (map host-line found))))
-                            :keys {"RET" 'remote-browse "s" 'remote-shell "a" 'remote-add-host "g" 'remote "q" 'quit-window}
-                            :line first-row)))))
+               (with-buffer (open-buffer hosts-buffer
+                                         (vec (concat [{line: [["Remote hosts" :heading]]}
+                                                       {line: [["RET browses  s opens a shell  a adds a host  g refreshes  q quits" :comment]]}
+                                                       {line: []}]
+                                                      (if (empty? found)
+                                                        [{line: [["  No hosts yet: a adds one, or name them in ~/.ssh/config" :comment]]}]
+                                                        (map host-line found))))
+                                         :keys {"RET" 'remote-browse "s" 'remote-shell "a" 'remote-add-host "g" 'remote "q" 'quit-window}
+                                         :line first-row)
+                 (set-buffer-value! :remote-hosts found))))))
 
 (def (host-here)
-  (cond ((= (buffer-name) hosts-buffer) (get (get @state :hosts) (- (current-line) first-row)))
-    ((get-in @state [:browsers (buffer-name)]) (get-in @state [:browsers (buffer-name) :host]))
-    (else nil)))
+  (if-let [found (buffer-value :remote-hosts)]
+    (get found (- (current-line) first-row))
+    (when-let [browsing (buffer-value :remote)]
+      browsing.host)))
 
 (def (browser-name host dir)
   (str host.name ":" dir))
@@ -72,10 +73,9 @@
 
 (def (browse! host dir)
   (message (str "Listing " (browser-name host dir) "…"))
-  (let [entries (ops/list-dir host dir)
-        buffer (browser-name host dir)]
-    (swap! state assoc-in [:browsers buffer] {host: host dir: dir entries: entries})
-    (open-buffer buffer (browser-lines host dir entries) :keys browser-keys :line first-row)
+  (let [entries (ops/list-dir host dir)]
+    (with-buffer (open-buffer (browser-name host dir) (browser-lines host dir entries) :keys browser-keys :line first-row)
+      (set-buffer-value! :remote {host: host dir: dir entries: entries}))
     (message "")))
 
 (defcommand remote-browse "Browse the host on this line"
@@ -84,7 +84,7 @@
                (browse! host (ops/home host))))))
 
 (def (browser)
-  (or (get-in @state [:browsers (buffer-name)]) (raise (error "This isn't a remote folder"))))
+  (or (buffer-value :remote) (raise (error "This isn't a remote folder"))))
 
 (def (entry-here)
   (let [found (browser)]
@@ -92,11 +92,13 @@
 
 (defcommand remote-refresh "List this remote folder again"
   (quietly (fn []
-             (let [found (browser)
+             (let [here (current-buffer)
+                   found (browser)
                    line (current-line)
                    entries (ops/list-dir found.host found.dir)]
-               (swap! state assoc-in [:browsers (buffer-name) :entries] entries)
-               (set-lines (buffer-name) (browser-lines found.host found.dir entries) :line line)))))
+               (when (buffer-live? here)
+                 (with-buffer here (set-buffer-value! :remote (assoc found :entries entries)))
+                 (set-lines here (browser-lines found.host found.dir entries) :line line))))))
 
 (defcommand remote-up "Browse the folder above this one"
   (quietly (fn []
@@ -108,7 +110,7 @@
     (message (str "Fetching " remote "…"))
     (await (file/make-dir (path/parent local)))
     (await (file/write local (ops/read-text host remote)))
-    (swap! state assoc-in [:opened local] {host: host remote: remote})
+    (swap! opened assoc local {host: host remote: remote})
     (open-file local)
     (when line
       (goto-line (dec line)))
@@ -125,7 +127,7 @@
 
 (on-saved :remote
           (fn [saved]
-            (when-let [place (get-in @state [:opened saved])]
+            (when-let [place (get @opened saved)]
               (spawn
                 (try
                   (ops/upload! place.host saved place.remote)
