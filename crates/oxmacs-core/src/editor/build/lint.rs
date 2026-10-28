@@ -57,7 +57,7 @@ fn running(tool: RustLint) -> &'static str {
 }
 
 fn cargo_lint(editor: &Editor, path: &Path) -> Option<LintRun> {
-    let tool = editor.settings.rust_lint;
+    let tool = editor.config.rust_lint;
     let subcommand = subcommand(tool)?;
     let root = path.parent().and_then(tools::cargo_root)?;
     Some(LintRun {

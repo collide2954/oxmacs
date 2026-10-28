@@ -175,7 +175,7 @@ impl Editor {
         let layout = Layout::new(
             self.buffers.current(),
             self.viewport.wrap_width(),
-            crate::editor::tab_width_in(self.buffers.current(), self.tab_width),
+            crate::editor::tab_width_in(self.buffers.current(), self.config.tab_width),
         );
         self.viewport.scroll_by(delta, &layout);
         let point = self.buffers.current().point();

@@ -344,13 +344,13 @@ impl Editor {
         let always = self
             .formatter_for(index)
             .is_some_and(|formatter| formatter.on_save);
-        let by_server = self.settings.format_on_save
+        let by_server = self.config.format_on_save
             && self.formatter_for(index).is_none()
             && self.lsp_formats(index);
         if by_server && self.format_then_save(index) {
             return true;
         }
-        self.write_buffer_at(index, self.settings.format_on_save || always)
+        self.write_buffer_at(index, self.config.format_on_save || always)
     }
 
     pub(in crate::editor) fn write_buffer_at(&mut self, index: usize, format: bool) -> bool {

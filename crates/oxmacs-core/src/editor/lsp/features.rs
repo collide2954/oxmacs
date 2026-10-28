@@ -255,7 +255,7 @@ impl Editor {
     fn lsp_hints(&mut self) {
         let buffer = self.buffers.current();
         let (id, revision, lines) = (buffer.id(), buffer.revision(), buffer.len_lines());
-        if !self.settings.inlay_hints || self.lsp.assist.hints_asked == Some((id, revision)) {
+        if !self.config.inlay_hints || self.lsp.assist.hints_asked == Some((id, revision)) {
             return;
         }
         let Some((server, params)) = self.serving_here("inlayHintProvider", true) else {

@@ -1,22 +1,15 @@
 use std::path::{Path, PathBuf};
 
-use crate::command::{Command, CommandId};
+use crate::command::Command;
 use crate::display::LineStyle;
+use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
-use crate::editor::{Axis, Editor, Effect};
 use crate::files;
-use crate::input::{KeySequence, Lookup};
 use crate::special_buffer::SpecialBuffer;
 use crate::text::{Buffer, BufferId};
 
-pub(super) type Segment = fn(&Editor) -> Option<String>;
-
 impl Editor {
-    pub fn repeated(&self) -> bool {
-        self.repeated
-    }
-
     pub fn buffer_shown(&self, id: BufferId) -> bool {
         self.window_showing(id).is_some()
     }
@@ -27,28 +20,6 @@ impl Editor {
 
     pub fn move_points(&mut self, id: BufferId, to: impl Fn(usize, usize) -> Option<usize>) {
         self.move_windows(id, to);
-    }
-
-    pub fn open_externally(&mut self, target: impl Into<PathBuf>) {
-        self.effects.push(Effect::OpenExternally(target.into()));
-    }
-
-    pub fn show_buffer_beside(&mut self, id: BufferId) {
-        self.show_beside(move |editor| editor.buffers.position(|buffer| buffer.id() == id));
-    }
-
-    pub fn display_buffer(&mut self, id: BufferId, near: Option<(BufferId, Axis)>, select: bool) {
-        if self.window_showing(id).is_none() {
-            let place = move |editor: &mut Self| editor.show_buffer(id);
-            let beside = near.and_then(|(other, axis)| Some((self.window_showing(other)?, axis)));
-            match beside {
-                Some((window, axis)) => self.split_off(window, axis, place),
-                None => self.beside(place),
-            }
-        }
-        if select && let Some(window) = self.window_showing(id) {
-            self.select_window(window);
-        }
     }
 
     pub fn set_header_lines(&mut self, id: BufferId, lines: Vec<(String, LineStyle)>) {
@@ -124,14 +95,6 @@ impl Editor {
         self.name_file_buffers();
     }
 
-    pub(super) fn bound_command(&self, keys: &str) -> Option<CommandId> {
-        let keys: KeySequence = keys.parse().ok()?;
-        match self.keymaps.get(self.buffer_scope()).lookup(keys.keys()) {
-            Lookup::Command(command) => Some(command),
-            Lookup::Prefix | Lookup::Unbound => None,
-        }
-    }
-
     pub fn buffer_ids(&self) -> Vec<BufferId> {
         self.buffers.iter().map(Buffer::id).collect()
     }
@@ -150,23 +113,6 @@ impl Editor {
         self.buffers
             .position(|buffer| buffer.id() == id)
             .is_some_and(|index| self.save_buffer_at(index))
-    }
-
-    pub fn add_mode_line_segment(&mut self, segment: Segment) {
-        self.mode_line_segments.push(segment);
-    }
-
-    pub fn mode_line_segments(&self) -> Vec<String> {
-        self.macros
-            .recording()
-            .then(|| "Recording macro".to_owned())
-            .into_iter()
-            .chain(
-                self.mode_line_segments
-                    .iter()
-                    .filter_map(|segment| segment(self)),
-            )
-            .collect()
     }
 
     #[cfg(test)]
@@ -192,7 +138,7 @@ impl Editor {
         id
     }
 
-    pub(super) fn guard_input(&mut self, command: Command) -> bool {
+    pub(in crate::editor) fn guard_input(&mut self, command: Command) -> bool {
         if !command.modifies_text() {
             return false;
         }
@@ -274,6 +220,3 @@ impl Editor {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

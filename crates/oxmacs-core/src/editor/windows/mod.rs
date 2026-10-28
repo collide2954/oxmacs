@@ -1,5 +1,6 @@
 pub(super) mod numbers;
 pub(super) mod pane;
+mod placing;
 pub(super) mod side;
 pub(super) mod status;
 mod stored;
@@ -174,7 +175,7 @@ impl Editor {
             current.set_point(point);
             self.reveal_point();
         }
-        let tab_width = self.tab_width;
+        let tab_width = self.config.tab_width;
         let Some(index) = self.buffers.position(|text| text.id() == buffer) else {
             return;
         };
@@ -423,7 +424,7 @@ impl Editor {
             self.scroll_lines(delta);
             return;
         }
-        let tab_width = self.tab_width;
+        let tab_width = self.config.tab_width;
         let Some((_, parked)) = self.windows.parked.iter_mut().find(|(id, _)| *id == window) else {
             return;
         };
@@ -538,7 +539,7 @@ impl Editor {
     }
 
     fn resize_parked(&mut self, window: WindowId, rows: usize, columns: usize) {
-        let tab_width = self.tab_width;
+        let tab_width = self.config.tab_width;
         let Some((_, parked)) = self.windows.parked.iter_mut().find(|(id, _)| *id == window) else {
             return;
         };

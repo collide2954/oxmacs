@@ -1,11 +1,13 @@
 mod buffers;
 mod build;
+mod config;
 mod console;
 mod decorations;
 mod dispatch;
 mod editing;
 mod effect;
 mod events;
+mod host;
 mod idle;
 mod job;
 mod keystrokes;
@@ -15,8 +17,8 @@ mod motion;
 #[cfg(test)]
 mod opening;
 mod page;
-mod plugins;
 mod presentation;
+mod processes;
 mod prompts;
 mod search;
 mod sent;
@@ -42,6 +44,7 @@ pub use lsp::{SERVERS, ServerId, ServerSpec};
 pub use motion::mouse::{Cell, Clicks};
 pub use page::{Page, fill};
 pub use presentation::Presentation;
+pub use processes::{ProcessInfo, ProcessStatus};
 pub use prompts::callbacks::{InputStyle, Offer, Picked};
 pub use prompts::input_line::InputLine;
 pub use prompts::minibuffer::{Choice, Completion, Minibuffer};
@@ -53,7 +56,6 @@ pub use prompts::transient::{
 pub use search::isearch::Search;
 pub use search::replace::Replace;
 pub use special::places::{OnRefresh, OnVisit, Place, Places};
-pub use special::processes::{ProcessInfo, ProcessStatus};
 pub use windows::Arrangement;
 pub use windows::numbers::Gutter;
 pub use windows::pane::{Pane, ScreenRow};
@@ -69,7 +71,7 @@ use std::{env, mem};
 use buffers::{BufferList, Mode};
 
 use crate::command::{Command, CommandId, Commands, DynamicSpec, Scope, ScopeId};
-use crate::config::{Config, LineNumbers, OnDiskChange, RustLint};
+use crate::config::Config;
 use crate::display::{Layout, LineStyle, Viewport};
 use crate::input::bindings::Keymaps;
 use crate::input::{Key, KeyCode, KeyParseError, KeySequence, Keymap, Lookup, Modifiers};
@@ -87,39 +89,6 @@ use crate::theme::{self, Appearance, Highlight, Theme};
 
 const DEFAULT_ROWS: usize = 24;
 
-#[derive(Debug, Clone, Copy)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "each flag is its own setting"
-)]
-struct Settings {
-    format_on_save: bool,
-    rust_lint: RustLint,
-    line_numbers: LineNumbers,
-    line_number_separator: bool,
-    auto_save: bool,
-    auto_save_visited: bool,
-    delete_to_trash: bool,
-    language_servers: bool,
-    inlay_hints: bool,
-}
-
-impl From<&Config> for Settings {
-    fn from(config: &Config) -> Self {
-        Self {
-            format_on_save: config.format_on_save,
-            rust_lint: config.rust_lint,
-            line_numbers: config.line_numbers,
-            line_number_separator: config.line_number_separator,
-            auto_save: config.auto_save,
-            auto_save_visited: config.auto_save_visited,
-            delete_to_trash: config.delete_to_trash,
-            language_servers: config.language_servers,
-            inlay_hints: config.inlay_hints,
-        }
-    }
-}
-
 #[derive(Debug)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -136,7 +105,7 @@ pub struct Editor {
     keymaps: Keymaps,
     xref: Vec<(crate::text::BufferId, usize)>,
     headers: Vec<(crate::text::BufferId, Vec<(String, LineStyle)>)>,
-    processes: special::processes::Processes,
+    processes: processes::Processes,
     toolbox: special::toolbox::Toolbox,
     pending: Vec<Key>,
     keystrokes: keystrokes::Keystrokes,
@@ -161,14 +130,12 @@ pub struct Editor {
     message: Option<String>,
     quit_requested: bool,
     viewport: Viewport,
-    tab_width: usize,
-    on_disk_change: OnDiskChange,
-    settings: Settings,
+
     appearance: Appearance,
     configured_theme: Option<&'static Theme>,
     themes: Vec<&'static Theme>,
     splash_entries: Vec<(CommandId, String)>,
-    mode_line_segments: Vec<plugins::Segment>,
+    mode_line_segments: Vec<host::Segment>,
     holding_saves: bool,
     held_saves: Vec<(crate::text::BufferId, bool)>,
     releasing: Option<crate::text::BufferId>,
@@ -219,7 +186,7 @@ impl Editor {
             keymaps: Keymaps::default(),
             xref: Vec::new(),
             headers: Vec::new(),
-            processes: special::processes::Processes::default(),
+            processes: processes::Processes::default(),
             toolbox: special::toolbox::Toolbox::default(),
             pending: Vec::new(),
             keystrokes: keystrokes::Keystrokes::default(),
@@ -244,9 +211,7 @@ impl Editor {
             message: None,
             quit_requested: false,
             viewport: Viewport::new(DEFAULT_ROWS, 0),
-            tab_width: Config::default().tab_width,
-            on_disk_change: OnDiskChange::default(),
-            settings: Settings::from(&Config::default()),
+
             appearance: Appearance::Light,
             configured_theme: None,
             themes: theme::builtin().to_vec(),
@@ -289,9 +254,6 @@ impl Editor {
     }
 
     pub fn apply_config(&mut self, config: &Config) {
-        self.tab_width = config.tab_width;
-        self.on_disk_change = config.on_disk_change;
-        self.settings = Settings::from(config);
         self.configured_theme = config.theme.as_deref().and_then(theme::find);
         self.config = config.clone();
         self.settings_changed();
@@ -336,7 +298,7 @@ impl Editor {
         Layout::new(
             self.buffers.current(),
             self.viewport.wrap_width(),
-            tab_width_in(self.buffers.current(), self.tab_width),
+            tab_width_in(self.buffers.current(), self.config.tab_width),
         )
     }
 
@@ -348,7 +310,7 @@ impl Editor {
         let layout = Layout::new(
             self.buffers.current(),
             self.viewport.wrap_width(),
-            tab_width_in(self.buffers.current(), self.tab_width),
+            tab_width_in(self.buffers.current(), self.config.tab_width),
         );
         let spot = layout.screen_line(self.buffers.current().point());
         self.viewport.reveal(spot, &layout);
@@ -368,13 +330,14 @@ impl Editor {
     }
 
     pub fn tab_width(&self) -> usize {
-        self.tab_width
+        self.config.tab_width
     }
 
     pub fn tab_width_of(&self, id: crate::text::BufferId) -> usize {
-        self.buffer_by_id(id).map_or(self.tab_width, |buffer| {
-            tab_width_in(buffer, self.tab_width)
-        })
+        self.buffer_by_id(id)
+            .map_or(self.config.tab_width, |buffer| {
+                tab_width_in(buffer, self.config.tab_width)
+            })
     }
 
     pub fn indent_size_of(&self, id: crate::text::BufferId) -> Option<usize> {
@@ -399,7 +362,7 @@ impl Editor {
         motion::movement::display_column(
             buffer,
             buffer.point(),
-            tab_width_in(buffer, self.tab_width),
+            tab_width_in(buffer, self.config.tab_width),
         )
     }
 

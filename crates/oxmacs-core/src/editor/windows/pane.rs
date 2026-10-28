@@ -83,7 +83,7 @@ impl<'a> Pane<'a> {
             style,
             buffer.line_of(self.point),
             buffer.line_of(buffer.len_chars()) + 1,
-            self.editor.settings.line_number_separator,
+            self.editor.config.line_number_separator,
         ))
     }
 
@@ -92,7 +92,7 @@ impl<'a> Pane<'a> {
     }
 
     pub fn tab_width(&self) -> usize {
-        tab_width_in(self.buffer(), self.editor.tab_width)
+        tab_width_in(self.buffer(), self.editor.config.tab_width)
     }
 
     fn layout(&self) -> Layout<'a> {

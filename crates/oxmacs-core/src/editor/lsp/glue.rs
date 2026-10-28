@@ -63,8 +63,7 @@ impl Editor {
                 .map(Buffer::contents)
                 .unwrap_or_default()
         };
-        self.lsp
-            .sync(&visited, self.settings.language_servers, &text);
+        self.lsp.sync(&visited, self.config.language_servers, &text);
         self.flush_lsp();
     }
 

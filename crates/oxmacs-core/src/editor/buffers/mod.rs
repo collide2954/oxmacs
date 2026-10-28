@@ -1,3 +1,4 @@
+mod access;
 pub(super) mod auto_save;
 pub(super) mod disk;
 pub(super) mod files;

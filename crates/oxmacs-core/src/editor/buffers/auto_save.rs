@@ -33,7 +33,7 @@ impl Editor {
 
     fn unrecovered(&self) -> impl Iterator<Item = usize> + '_ {
         self.modified_files()
-            .filter(|_| self.settings.auto_save && self.recovery.is_some())
+            .filter(|_| self.config.auto_save && self.recovery.is_some())
             .filter(|index| {
                 self.buffers.get(*index).is_some_and(|buffer| {
                     !self.recovered.contains(&(buffer.id(), buffer.revision()))
@@ -52,16 +52,16 @@ impl Editor {
     }
 
     pub fn deletes_to_trash(&self) -> bool {
-        self.settings.delete_to_trash
+        self.config.delete_to_trash
     }
 
     pub fn wants_auto_save(&self) -> bool {
-        (self.settings.auto_save_visited && self.modified_files().next().is_some())
+        (self.config.auto_save_visited && self.modified_files().next().is_some())
             || self.unrecovered().next().is_some()
     }
 
     pub fn auto_save(&mut self) {
-        if self.settings.auto_save_visited {
+        if self.config.auto_save_visited {
             self.save_visited();
         }
         let due: Vec<usize> = self.unrecovered().collect();

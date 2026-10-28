@@ -41,7 +41,7 @@ impl Editor {
 
     pub fn check_disk_changes(&mut self) {
         self.record(Event::DiskChanged);
-        if self.on_disk_change == OnDiskChange::Ignore {
+        if self.config.on_disk_change == OnDiskChange::Ignore {
             return;
         }
         for index in 0..self.buffers.len() {
@@ -71,7 +71,9 @@ impl Editor {
                     self.note_disk_state(index, now, true);
                     self.show_message(format!("{name} changed on disk; keeping your edits"));
                 }
-                Some(_) if self.on_disk_change == OnDiskChange::Revert => self.revert_at(index),
+                Some(_) if self.config.on_disk_change == OnDiskChange::Revert => {
+                    self.revert_at(index);
+                }
                 Some(_) => {
                     if self.prompts.question().is_none() {
                         self.ask_to_reread(index, &name, now);

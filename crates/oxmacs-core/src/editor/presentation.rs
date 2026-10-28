@@ -36,7 +36,7 @@ impl Editor {
         let layout = Layout::new(
             buffer,
             self.viewport.wrap_width(),
-            tab_width_in(buffer, self.tab_width),
+            tab_width_in(buffer, self.config.tab_width),
         );
         let spot = layout.screen_line(buffer.point());
         let half = (self.viewport.rows() / 2).cast_signed();

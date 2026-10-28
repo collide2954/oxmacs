@@ -49,7 +49,7 @@ impl Gutter {
 
 impl Editor {
     pub(in crate::editor) fn line_numbers_at(&self, index: usize) -> Option<LineNumbers> {
-        let configured = self.settings.line_numbers;
+        let configured = self.config.line_numbers;
         let visiting = !self.buffers.is_special(index)
             && self
                 .buffers

@@ -20,7 +20,7 @@ impl Editor {
         } else {
             self.viewport.wrap_width()
         };
-        let tab_width = crate::editor::tab_width_in(self.buffers.current(), self.tab_width);
+        let tab_width = crate::editor::tab_width_in(self.buffers.current(), self.config.tab_width);
         let buffer = self.current_mut();
         let layout = Layout::new(buffer, width, tab_width);
         let point = buffer.point();

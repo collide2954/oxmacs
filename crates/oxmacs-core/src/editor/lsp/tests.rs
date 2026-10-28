@@ -781,7 +781,7 @@ fn renames_for_text_that_changed_since_the_request_are_dropped() {
 #[test]
 fn format_on_save_through_a_server_formats_first_and_writes_once() {
     let (dir, mut editor) = toml_with_a_formatter();
-    editor.settings.format_on_save = true;
+    editor.config.format_on_save = true;
     let path = dir.path().join("notes.toml");
     press(&mut editor, "M->");
     type_text(&mut editor, "b=2");
@@ -799,7 +799,7 @@ fn format_on_save_through_a_server_formats_first_and_writes_once() {
 #[test]
 fn format_on_save_still_saves_when_the_server_fails_or_stops() {
     let (dir, mut editor) = toml_with_a_formatter();
-    editor.settings.format_on_save = true;
+    editor.config.format_on_save = true;
     let path = dir.path().join("notes.toml");
     press(&mut editor, "M->");
     type_text(&mut editor, "b=2");
