@@ -5,15 +5,14 @@ use iced::{Element, Length};
 use oxmacs_core::clock;
 use oxmacs_core::editor::{Axis, Edge, Pane, Tiling, WindowId};
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_core::view::ViewBuffer;
 use oxmacs_core::view::takeover::{self, Takeover};
+use oxmacs_core::view::{Node, ViewBuffer};
 use oxmacs_core::view::{overlays, tabbar};
 
 use super::{App, Message};
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
 use crate::widgets::drawing::Drawing;
-use crate::widgets::game::GameScreen;
 use crate::widgets::mode_line::{self, Look};
 use crate::widgets::{completions, echo_area, overlay, ox_view, tab_bar, transient};
 use crate::{style, units};
@@ -229,18 +228,6 @@ impl App {
 
     fn body<'a>(&'a self, pane: Pane<'a>, window: WindowId, faces: Faces) -> Element<'a, Message> {
         let buffer = pane.buffer().id();
-        if let Some(screen) = oxmacs_core::view::game::screen(&self.editor, buffer) {
-            let drawn = canvas(GameScreen {
-                screen,
-                font: self.font,
-                size: self.text_size,
-            })
-            .width(Length::Fill)
-            .height(Length::Fill);
-            return mouse_area(drawn)
-                .on_press(Message::FocusWindow(window))
-                .into();
-        }
         if let Some((_, shown)) = self.editor.special_buffer::<ViewBuffer>(buffer) {
             let look = ox_view::Look {
                 faces,
@@ -256,9 +243,14 @@ impl App {
             let sized = sensor(container(drawn).width(Length::Fill).height(Length::Fill))
                 .on_show(move |size| Message::ViewSized(buffer, size))
                 .on_resize(move |size| Message::ViewSized(buffer, size));
+            let padding = if matches!(shown.node, Node::Game(_)) {
+                0.0
+            } else {
+                4.0
+            };
             return mouse_area(
                 container(sized)
-                    .padding([4, 8])
+                    .padding([padding, padding * 2.0])
                     .width(Length::Fill)
                     .height(Length::Fill),
             )

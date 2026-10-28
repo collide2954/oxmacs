@@ -15,7 +15,7 @@ use oxmacs_core::theme::{Highlight, Theme as Faces};
 use oxmacs_core::view::Arg;
 use oxmacs_core::view::book::{At, Block, Kind, Pages, Run, Spread, Typeface};
 
-use crate::widgets::ox_view;
+use crate::widgets::ox_view::{self, Slots};
 use crate::{fonts, style};
 
 const MEASURE: f32 = 32.0;
@@ -380,7 +380,7 @@ pub struct PagesView<'a, Message> {
     pages: &'a Pages<usize>,
     faces: Faces,
     mono: Font,
-    on_call: Box<dyn Fn(usize, Vec<Arg>) -> Message + 'a>,
+    on_call: Slots<'a, Message>,
 }
 
 impl<Message> std::fmt::Debug for PagesView<'_, Message> {
@@ -403,7 +403,7 @@ impl<'a, Message> PagesView<'a, Message> {
             pages,
             faces,
             mono,
-            on_call: Box::new(on_call),
+            on_call: Slots::new(on_call),
         }
     }
 
@@ -413,10 +413,6 @@ impl<'a, Message> PagesView<'a, Message> {
             Typeface::Sans => fonts::sans(),
             Typeface::Mono => self.mono,
         }
-    }
-
-    fn call(&self, press: Option<&usize>, args: Vec<Arg>) -> Option<Message> {
-        press.map(|slot| (self.on_call)(*slot, args))
     }
 
     fn key(&self, bounds: Size) -> Key {
@@ -791,7 +787,7 @@ where
                 Arg::List(report.0.iter().copied().map(anchor_arg).collect()),
                 Arg::Int(i64::try_from(report.1).unwrap_or(1)),
             ];
-            if let Some(message) = self.call(self.pages.on_pages.as_ref(), args) {
+            if let Some(message) = self.on_call.send(self.pages.on_pages.as_ref(), args) {
                 shell.publish(message);
             }
             state.reported = Some(report);
@@ -806,8 +802,9 @@ where
                 };
                 if let Some((anchor, link)) = located(typeset, origins, first, point) {
                     if let Some(target) = link {
-                        if let Some(message) =
-                            self.call(self.pages.on_link.as_ref(), vec![Arg::Text(target)])
+                        if let Some(message) = self
+                            .on_call
+                            .send(self.pages.on_link.as_ref(), vec![Arg::Text(target)])
                         {
                             shell.publish(message);
                         }
@@ -817,8 +814,9 @@ where
                     state.pressed = Some(anchor);
                     state.dragged = false;
                     if state.selection.take().is_some()
-                        && let Some(message) =
-                            self.call(self.pages.on_select.as_ref(), vec![Arg::Nil])
+                        && let Some(message) = self
+                            .on_call
+                            .send(self.pages.on_select.as_ref(), vec![Arg::Nil])
                     {
                         shell.publish(message);
                     }
@@ -840,7 +838,7 @@ where
                 if state.pressed.take().is_some()
                     && state.dragged
                     && let Some((from, to)) = state.selection
-                    && let Some(message) = self.call(
+                    && let Some(message) = self.on_call.send(
                         self.pages.on_select.as_ref(),
                         vec![anchor_arg(from), anchor_arg(to)],
                     )
@@ -854,8 +852,9 @@ where
                 if state.wheel.abs() >= 1.0 {
                     let by = if state.wheel > 0.0 { -1 } else { 1 };
                     state.wheel = 0.0;
-                    if let Some(message) =
-                        self.call(self.pages.on_turn.as_ref(), vec![Arg::Int(by)])
+                    if let Some(message) = self
+                        .on_call
+                        .send(self.pages.on_turn.as_ref(), vec![Arg::Int(by)])
                     {
                         shell.publish(message);
                     }

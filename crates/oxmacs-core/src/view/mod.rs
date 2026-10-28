@@ -87,6 +87,7 @@ pub enum Node<P> {
     },
     Pages(Box<book::Pages<P>>),
     Pdf(Box<pdf::View<P>>),
+    Game(Box<game::Screen>),
 }
 
 impl<P> Node<P> {
@@ -131,6 +132,7 @@ impl<P> Node<P> {
             },
             Self::Pages(pages) => Node::Pages(Box::new(pages.map(press))),
             Self::Pdf(view) => Node::Pdf(Box::new(view.map(press))),
+            Self::Game(screen) => Node::Game(screen),
         }
     }
 }

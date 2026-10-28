@@ -14,6 +14,7 @@ use oxmacs_core::view::Arg;
 use oxmacs_core::view::pdf::{Go, View, Zoom};
 use oxmacs_pdf::{self as pdf, Bitmap, Document, Ink, PageSize, Target, words};
 
+use crate::widgets::ox_view::Slots;
 use crate::{style, units};
 
 pub const GAP: f32 = 12.0;
@@ -261,7 +262,7 @@ struct State {
 pub struct PdfView<'a, Message> {
     view: &'a View<usize>,
     faces: Faces,
-    on_call: Box<dyn Fn(usize, Vec<Arg>) -> Message + 'a>,
+    on_call: Slots<'a, Message>,
 }
 
 impl<Message> std::fmt::Debug for PdfView<'_, Message> {
@@ -282,12 +283,8 @@ impl<'a, Message> PdfView<'a, Message> {
         Self {
             view,
             faces,
-            on_call: Box::new(on_call),
+            on_call: Slots::new(on_call),
         }
-    }
-
-    fn call(&self, press: Option<&usize>, args: Vec<Arg>) -> Option<Message> {
-        press.map(|slot| (self.on_call)(*slot, args))
     }
 
     fn arrange(&self, document: &Document, state: &State) -> (Vec<Sheet>, Size) {
@@ -489,7 +486,7 @@ impl<'a, Message> PdfView<'a, Message> {
                 Target::Page(page) => Arg::Int(i64::try_from(page).unwrap_or(0)),
                 Target::Uri(uri) => Arg::Text(uri),
             };
-            if let Some(message) = self.call(self.view.on_link.as_ref(), vec![arg]) {
+            if let Some(message) = self.on_call.send(self.view.on_link.as_ref(), vec![arg]) {
                 shell.publish(message);
             }
             return;
@@ -497,7 +494,9 @@ impl<'a, Message> PdfView<'a, Message> {
         state.pressed = self.place(state, document, bounds, point);
         state.dragged = false;
         if state.selection.take().is_some()
-            && let Some(message) = self.call(self.view.on_select.as_ref(), vec![Arg::Nil])
+            && let Some(message) = self
+                .on_call
+                .send(self.view.on_select.as_ref(), vec![Arg::Nil])
         {
             shell.publish(message);
         }
@@ -508,7 +507,7 @@ impl<'a, Message> PdfView<'a, Message> {
             && state.dragged
             && let Some((from, to)) = state.selection
             && let Some(texts) = pdf::texts_now(&self.view.path)
-            && let Some(message) = self.call(
+            && let Some(message) = self.on_call.send(
                 self.view.on_select.as_ref(),
                 vec![Arg::Text(words::between(&texts, from, to))],
             )
@@ -577,7 +576,7 @@ where
         if report.is_some() && state.reported != report {
             state.reported = report;
             if let Some((page, percent)) = report
-                && let Some(message) = self.call(
+                && let Some(message) = self.on_call.send(
                     self.view.on_view.as_ref(),
                     vec![
                         Arg::Int(i64::try_from(page).unwrap_or(0)),

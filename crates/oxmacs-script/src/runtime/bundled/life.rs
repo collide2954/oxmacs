@@ -36,7 +36,8 @@ fn walk(node: &Node<usize>, texts: &mut Vec<String>, cells: &mut usize) {
         | Node::Space { .. }
         | Node::Image { .. }
         | Node::Pages(_)
-        | Node::Pdf(_) => {}
+        | Node::Pdf(_)
+        | Node::Game(_) => {}
     }
 }
 

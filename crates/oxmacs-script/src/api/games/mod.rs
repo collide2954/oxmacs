@@ -20,7 +20,8 @@ use ox_rodeo::spacetime::{Disk, Scene, Sky, Star};
 use ox_rodeo::texture::{TextureId, Textures};
 use oxmacs_core::editor::{Editor, EventKind};
 use oxmacs_core::text::BufferId;
-use oxmacs_core::view::game::{Caption, GameBuffer, Screen};
+use oxmacs_core::view::game::{self, Caption, Screen};
+use oxmacs_core::view::{Node, ViewBuffer};
 
 use crate::ide::log;
 
@@ -364,9 +365,11 @@ fn play(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             let scope = editor.add_scope(NAME);
             editor.add_special_buffer_with(NAME, |buffer| {
                 buffer.set_read_only(true);
-                GameBuffer {
+                ViewBuffer {
                     scope,
-                    screen: Screen::blank(size),
+                    file: None,
+                    watched: None,
+                    node: Node::Game(Box::new(Screen::blank(size))),
                 }
             })
         });
@@ -1033,20 +1036,20 @@ fn present(editor: &mut Editor, render: bool) {
     } else {
         None
     };
-    let Some((_, view)) = editor.special_buffer_mut::<GameBuffer>(buffer) else {
+    let Some(screen) = game::screen_mut(editor, buffer) else {
         return;
     };
     if let Some(frame) = frame {
-        view.screen.width = frame.width;
-        view.screen.height = frame.height;
-        view.screen.pixels = frame.pixels.into();
+        screen.width = frame.width;
+        screen.height = frame.height;
+        screen.pixels = frame.pixels.into();
     }
     if let Some(captions) = captions {
-        view.screen.captions = captions;
+        screen.captions = captions;
     }
-    view.screen.generation = generation;
-    view.screen.smooth = smooth;
-    view.screen.status = state;
+    screen.generation = generation;
+    screen.smooth = smooth;
+    screen.status = state;
 }
 
 fn fail(editor: &mut Editor, error: &Error, origin: Option<(&str, &str)>) {
@@ -1239,7 +1242,7 @@ mod tests {
 
     use super::wants_keys;
     use crate::Ox;
-    use oxmacs_core::view::game::{GameBuffer, screen};
+    use oxmacs_core::view::game::screen;
 
     fn game_file(source: &str) -> (tempfile::TempDir, String) {
         let folder = tempfile::tempdir().unwrap();
@@ -1286,7 +1289,7 @@ mod tests {
     fn playing_a_game_shows_its_frames_beside_the_code() {
         let (mut editor, mut ox, start, _folder) = playing(COUNTER);
         let id = editor.buffer_named("*game*").unwrap();
-        assert!(editor.special_buffer::<GameBuffer>(id).is_some());
+        assert!(screen(&editor, id).is_some());
         assert_eq!(editor.buffer().id(), id);
         assert_eq!(pixel(&editor, 0, 0), [255, 0, 0, 255]);
         assert_eq!(pixel(&editor, 3, 3), [16, 32, 48, 255]);

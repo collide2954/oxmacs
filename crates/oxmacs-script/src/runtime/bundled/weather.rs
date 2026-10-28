@@ -82,7 +82,8 @@ fn lines(node: &Node<usize>, out: &mut Vec<String>) {
         | Node::Canvas { .. }
         | Node::Image { .. }
         | Node::Pages(_)
-        | Node::Pdf(_) => {}
+        | Node::Pdf(_)
+        | Node::Game(_) => {}
         Node::Scrollable(child) => lines(child, out),
     }
 }

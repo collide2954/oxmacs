@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
-use crate::command::ScopeId;
 use crate::editor::Editor;
-use crate::special_buffer::SpecialBuffer;
 use crate::text::BufferId;
+use crate::view::{Node, ViewBuffer};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Caption {
@@ -39,20 +38,16 @@ impl Screen {
     }
 }
 
-#[derive(Debug)]
-pub struct GameBuffer {
-    pub scope: ScopeId,
-    pub screen: Screen,
-}
-
-impl SpecialBuffer for GameBuffer {
-    fn scope(&self) -> ScopeId {
-        self.scope
+pub fn screen(editor: &Editor, buffer: BufferId) -> Option<&Screen> {
+    match &editor.special_buffer::<ViewBuffer>(buffer)?.1.node {
+        Node::Game(screen) => Some(screen),
+        _ => None,
     }
 }
 
-pub fn screen(editor: &Editor, buffer: BufferId) -> Option<&Screen> {
-    editor
-        .special_buffer::<GameBuffer>(buffer)
-        .map(|(_, view)| &view.screen)
+pub fn screen_mut(editor: &mut Editor, buffer: BufferId) -> Option<&mut Screen> {
+    match &mut editor.special_buffer_mut::<ViewBuffer>(buffer)?.1.node {
+        Node::Game(screen) => Some(screen),
+        _ => None,
+    }
 }

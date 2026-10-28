@@ -9,6 +9,7 @@ use oxmacs_core::view::{Arg, Node, Picture};
 
 use crate::style;
 use crate::widgets::drawing::Drawing;
+use crate::widgets::game::GameScreen;
 use crate::widgets::pages::PagesView;
 use crate::widgets::pdf::PdfView;
 
@@ -30,6 +31,24 @@ pub(crate) fn handle(picture: &Picture) -> image::Handle {
         known.push((picture.clone(), handle.clone()));
         handle
     })
+}
+
+pub struct Slots<'a, Message>(Box<dyn Fn(usize, Vec<Arg>) -> Message + 'a>);
+
+impl<Message> std::fmt::Debug for Slots<'_, Message> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("Slots").finish_non_exhaustive()
+    }
+}
+
+impl<'a, Message> Slots<'a, Message> {
+    pub fn new(call: impl Fn(usize, Vec<Arg>) -> Message + 'a) -> Self {
+        Self(Box::new(call))
+    }
+
+    pub fn send(&self, slot: Option<&usize>, args: Vec<Arg>) -> Option<Message> {
+        slot.map(|slot| (self.0)(*slot, args))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -126,6 +145,14 @@ pub fn view<'a, Message: Clone + 'a>(
         }
         Node::Pages(pages) => PagesView::new(pages, look.faces, look.font, call).into(),
         Node::Pdf(shown) => PdfView::new(shown, look.faces, call).into(),
+        Node::Game(screen) => canvas(GameScreen {
+            screen: screen.as_ref(),
+            font: look.font,
+            size: look.size,
+        })
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into(),
         Node::Scrollable(child) => scrollable(view(child, look, press, call))
             .height(Length::Fill)
             .into(),
