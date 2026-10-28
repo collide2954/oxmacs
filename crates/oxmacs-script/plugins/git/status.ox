@@ -50,7 +50,7 @@
     (conj segments (string/repeat " " (if (< used column) (- column used) 2)))))
 
 (def (add out row line)
-  {lines: (conj out.lines line) rows: (conj out.rows row)})
+  {lines: (conj out.lines (if (map? line) (merge line row) (assoc row :line line)))})
 
 (def (blank out)
   (add out {kind: :blank} ""))
@@ -114,7 +114,7 @@
               (if (get folds.hidden [section path i])
                 out
                 (reduce (fn [out j]
-                          (add out {kind: :line section: section path: path hunk: i line: j}
+                          (add out {kind: :line section: section path: path hunk: i at: j}
                                (diff-line (nth hunk.lines j))))
                         out (range (count hunk.lines))))))
           out (range (count found))))
@@ -171,7 +171,7 @@
                     out (range (count recent)))))))))
 
 (def (render snapshot folds diffs now)
-  (let [out (head {lines: [] rows: []} snapshot)
+  (let [out (head {lines: []} snapshot)
         out (reduce (fn [out section] (file-section out snapshot folds diffs section))
                     out [:untracked :unstaged :staged])
         out (stash-section out snapshot folds)]

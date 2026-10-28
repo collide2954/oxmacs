@@ -1,5 +1,5 @@
 (plugin git
-  :version "0.4.1"
+  :version "0.4.2"
   :opt-in true
   :summary "Git status and staging in the style of Magit"
   :commands {git-status: "Show the Git status of the current repository"}

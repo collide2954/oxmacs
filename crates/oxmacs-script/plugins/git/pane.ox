@@ -9,7 +9,7 @@
 (def labels {untracked: "Untracked" unstaged: "Unstaged" staged: "Staged"})
 
 (def (add out row line)
-  {lines: (conj out.lines line) rows: (conj out.rows row)})
+  {lines: (conj out.lines (if (map? line) (merge line row) (assoc row :line line)))})
 
 (def (blank out)
   (add out {kind: :blank} ""))
@@ -89,7 +89,7 @@
            (walk (+ j 1)
                  (if (nil? left) old (+ old 1))
                  (if (nil? right) new (+ new 1))
-                 (add out {kind: :line section: file.section path: file.path hunk: index line: j}
+                 (add out {kind: :line section: file.section path: file.path hunk: index at: j}
                       (cond
                         [(= kind :removed) {line: shown background: :removed}]
                         [(= kind :added) {line: shown background: :added}]
@@ -151,7 +151,7 @@
 
 (def (render file hunks layout columns)
   (let [width (digits hunks)
-        out (add {lines: [] rows: []} {kind: :file section: file.section path: file.path} (header file))]
+        out (add {lines: []} {kind: :file section: file.section path: file.path} (header file))]
     (reduce (fn [out index]
               (let [hunk (nth hunks index)
                     out (add (blank out) {kind: :hunk section: file.section path: file.path hunk: index}
@@ -163,13 +163,13 @@
 
 (def (overview files layout columns)
   (if (empty? files)
-    {lines: [[["Nothing staged" :comment]]] rows: [{kind: :blank}]}
+    {lines: [{line: [["Nothing staged" :comment]] kind: :blank}]}
     (reduce (fn [out i]
               (let [item (nth files i)
                     shown (render item.file item.hunks layout columns)
                     out (if (> i 0) (blank out) out)]
-                {lines: (vec (concat out.lines shown.lines)) rows: (vec (concat out.rows shown.rows))}))
-            {lines: [] rows: []} (range (count files)))))
+                {lines: (vec (concat out.lines shown.lines))}))
+            {lines: []} (range (count files)))))
 
 (def (nothing path)
-  {lines: [[["No changes to {path}" :comment]]] rows: [{kind: :blank}]})
+  {lines: [{line: [["No changes to {path}" :comment]] kind: :blank}]})

@@ -642,7 +642,7 @@ fn rendered(layout: &str, width: usize) -> Session {
     let dir = tempfile::tempdir().unwrap();
     let mut session = opened(dir.path());
     let shown = session.evaluated(&format!(
-        r#"(let [out (pane/render {{section: :unstaged path: "a.txt" counted: [2 1]}} {SAMPLE} {layout} {width})] (open-buffer "*pane*" out.lines) (count out.rows))"#
+        r#"(let [out (pane/render {{section: :unstaged path: "a.txt" counted: [2 1]}} {SAMPLE} {layout} {width})] (open-buffer "*pane*" out.lines) (count out.lines))"#
     ));
     assert!(!shown.starts_with("error"), "{shown}");
     session

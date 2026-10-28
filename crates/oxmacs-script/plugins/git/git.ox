@@ -19,27 +19,18 @@
 (def (quietly work)
   (try (work) (catch error e (unless (= e.message "Quit") (message e.message)))))
 
-(def (row-at rows line)
-  (when (and (>= line 0) (< line (count rows)))
-    (nth rows line)))
-
 (def (here)
   (if-let [git (buffer-value :git)]
-    (let [state @git] {git: git state: state rows: state.rows pane: false})
+    {git: git state: @git pane: false}
     (when-let [git (buffer-value :git-pane)]
-      (let [state @git] {git: git state: state rows: state.pane.rows pane: true}))))
+      {git: git state: @git pane: true})))
+
 (def (spot row)
   (when (and row (not (= row.kind :info)) (not (= row.kind :blank)))
-    row))
+    (dissoc row :line :background)))
 
-(def ^:shadow (line-of rows wanted)
-  (when wanted
-    (first (filter (fn [i] (= (nth rows i) wanted)) (range (count rows))))))
-
-(def (first-line rows)
-  (or (first (filter (fn [i] (= (get (nth rows i) :kind) :file)) (range (count rows))))
-      (first (filter (fn [i] (= (get (nth rows i) :kind) :section)) (range (count rows))))
-      0))
+(def (last-line)
+  (line-of (buffer-size)))
 
 (def (now)
   (// (time/now) 1000))
@@ -89,7 +80,6 @@
                                        columns)]
                   [else (pane/nothing (nth key 1))])
             placed (if (some? line) [:line line] [])]
-        (swap! git (fn [state] (assoc state :pane (assoc state.pane :rows out.rows))))
         (if reveal
           (with-buffer (apply open-buffer pane-name out.lines
                               (concat [:keys pane-keys :directory state.root :beside true
@@ -100,7 +90,7 @@
 
 (def (follow git line)
   (let [state @git]
-    (when-let [row (row-at state.rows line)]
+    (when-let [row (line-item line)]
       (when (and (some? row.path) (some? row.section))
         (let [key [row.section row.path]]
           (unless (and (= key state.pane.file) (not state.pane.staged))
@@ -114,12 +104,10 @@
         shown (status/render state.snapshot state.folds state.diffs (now))
         here (= (buffer-name) name)
         line (if here (current-line) 0)
-        wanted (or focus (and here (spot (row-at state.rows line))))]
-    (swap! git assoc :rows shown.rows)
+        wanted (or focus (and here (spot (line-item line))))]
     (set-lines name shown.lines)
-    (when here
-      (goto-line (or (line-of shown.rows wanted)
-                     (min line (max 0 (- (count shown.rows) 1))))))
+    (when (and here (not (and wanted (goto-item wanted))))
+      (goto-line (min line (last-line))))
     (draw-pane git false nil)))
 
 (def (reread git)
@@ -148,19 +136,18 @@
         known (when (buffer-exists? name) (with-buffer name (buffer-value :git)))
         git (or known
                 (atom {name: name root: found.root metadata: found.metadata
-                       folds: {closed: {} open: {} hidden: {}} diffs: {} rows: [] snapshot: nil
-                       pane: {name: "git diff: {(path/name found.root)}" file: nil layout: :unified rows: [] staged: false}}))]
+                       folds: {closed: {} open: {} hidden: {}} diffs: {} snapshot: nil
+                       pane: {name: "git diff: {(path/name found.root)}" file: nil layout: :unified staged: false}}))]
     (reread git)
     (let [state (ensure-diffs git)
-          shown (status/render state.snapshot state.folds state.diffs (now))
-          placed (if known [] [:line (first-line shown.rows)])]
-      (swap! git assoc :rows shown.rows)
-      (with-buffer (apply open-buffer name shown.lines
-                          (concat [:keys status-keys :directory state.root :watch state.metadata
-                                   :on-move (fn [line] (follow git line))]
-                                  placed))
+          shown (status/render state.snapshot state.folds state.diffs (now))]
+      (with-buffer (open-buffer name shown.lines
+                                :keys status-keys :directory state.root :watch state.metadata
+                                :on-move (fn [line] (follow git line)))
         (set-buffer-value! :git git))
-      (let [row (row-at shown.rows (current-line))]
+      (unless known
+        (or (goto-item {kind: :file}) (goto-item {kind: :section}) (goto-line 0)))
+      (let [row (line-item)]
         (when (and row (some? row.path))
           (swap! git (fn [state] (assoc state :pane (assoc state.pane :file [row.section row.path]))))
           (draw-pane git true 0))))))
@@ -171,13 +158,12 @@
        (show found)
        (message "Not inside a Git repository")))))
 (def (step kinds forward)
-  (when-let [found (here)]
+  (when (here)
     (let [line (current-line)
-          rows found.rows
           lines (if forward
-                  (range (+ line 1) (count rows))
+                  (range (+ line 1) (inc (last-line)))
                   (reverse (range 0 line)))
-          at (first (filter (fn [i] (some (fn [kind] (= (get (nth rows i) :kind) kind)) kinds)) lines))]
+          at (first (filter (fn [i] (some (fn [kind] (= (get (line-item i) :kind) kind)) kinds)) lines))]
       (when (some? at) (goto-line at)))))
 
 (def items [:section :file :hunk :stash :commit])
@@ -202,7 +188,7 @@
 
 (defcommand git-toggle "Fold or unfold the section, file or hunk at point"
   (when-let [git (buffer-value :git)]
-    (when-let [row (row-at (get @git :rows) (current-line))]
+    (when-let [row (line-item)]
       (let [hunk {kind: :hunk section: row.section path: row.path hunk: row.hunk}]
         (quietly
          (fn []
@@ -222,7 +208,7 @@
              [else nil])))))))
 
 (def (row-line row)
-  (if (= row.kind :pair) (or row.right row.left) row.line))
+  (if (= row.kind :pair) (or row.right row.left) row.at))
 
 (def (line-number state row)
   (when (some? row.hunk)
@@ -237,7 +223,7 @@
 (defcommand git-visit "Visit the file at point"
   (when-let [found (here)]
     (let [state found.state
-          row (row-at found.rows (current-line))]
+          row (line-item)]
       (if (and row (some? row.path))
         (quietly
          (fn []
@@ -256,7 +242,7 @@
 
 (def (line-indexes row)
   (cond
-    [(= row.kind :line) [row.line]]
+    [(= row.kind :line) [row.at]]
     [(= row.kind :pair) (filter some? [row.left row.right])]
     [else nil]))
 
@@ -264,8 +250,8 @@
   (and (some? (line-indexes row))
        (= row.section lead.section) (= row.path lead.path) (= row.hunk lead.hunk)))
 
-(def (region-target rows first-line last-line)
-  (let [picked (map (fn [i] (nth rows i)) (range first-line (+ (min last-line (- (count rows) 1)) 1)))
+(def (region-target first-line final-line)
+  (let [picked (keep line-item (range first-line (inc (min final-line (last-line)))))
         lead (first picked)]
     (cond
       [(nil? lead) nil]
@@ -285,14 +271,14 @@
      {kind: :hunk section: row.section path: row.path hunk: row.hunk lines: nil}]
     [else nil]))
 
-(def (target found)
+(def (target)
   (if-let [region (region-lines)]
-    (region-target found.rows (nth region 0) (nth region 1))
-    (row-target (row-at found.rows (current-line)))))
+    (region-target (nth region 0) (nth region 1))
+    (row-target (line-item))))
 
 (def (acting nothing act)
   (when-let [found (here)]
-    (let [chosen (target found)]
+    (let [chosen (target)]
       (cond
         [(nil? chosen) (message nothing)]
         [(= chosen.kind :invalid) (message "Select lines of one hunk or files of one section")]
@@ -402,7 +388,7 @@
 
 (def (unstaged-pane git)
   (let [state @git
-        row (row-at state.rows (current-line))
+        row (line-item)
         key (if (and row (some? row.path)) [row.section row.path] state.pane.file)]
     (swap! git (fn [state] (assoc state :pane (assoc state.pane :staged false :file key))))
     (draw-pane git false 0)))
