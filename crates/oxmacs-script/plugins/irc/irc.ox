@@ -214,10 +214,10 @@
         operator (fn [person] (some (fn [mark] (string/includes? person.prefix mark)) ["~" "&" "@" "%"]))
         voiced (fn [person] (and (not (operator person)) (string/includes? person.prefix "+")))
         plain (fn [person] (and (not (operator person)) (not (voiced person))))]
-    (vec (concat [{line: [[entry.target :heading] [(str "  " (count people) " people") :comment]]} {line: []}]
-                 (group "Operators" operator)
-                 (group "Voiced" voiced)
-                 (group "Everyone" plain)))))
+    {header: [[[entry.target :heading] [(str "  " (count people) " people") :comment]]]
+     lines: (vec (concat (group "Operators" operator)
+                         (group "Voiced" voiced)
+                         (group "Everyone" plain)))}))
 
 (defcommand irc-nicks "Show or hide the people in this channel beside it"
   (quietly (fn []
@@ -226,7 +226,9 @@
                (let [entry (here-or-complain)]
                  (when (= entry.kind :server)
                    (raise (error "Nick lists are for channels")))
-                 (open-buffer nicks-buffer (nick-lines entry) :beside true :keys {"q" 'quit-window}))))))
+                 (let [shown (nick-lines entry)]
+                   (open-buffer nicks-buffer shown.lines :beside true :keys {"q" 'quit-window})
+                   (set-header nicks-buffer shown.header)))))))
 
 (def (target-message entry)
   (let [line (current-line)]

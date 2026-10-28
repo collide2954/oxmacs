@@ -297,17 +297,12 @@ fn typing_sends_messages_commands_and_completes_nicks() {
 
     run(&mut editor, &mut ox, "irc-nicks");
     let nicks = contents(&editor, "*irc nicks*");
-    for wanted in [
-        "3 people",
-        "Operators 1",
-        "@bo",
-        "Voiced 1",
-        "+cy",
-        "Everyone 1",
-        "ana",
-    ] {
+    for wanted in ["Operators 1", "@bo", "Voiced 1", "+cy", "Everyone 1", "ana"] {
         assert!(nicks.contains(wanted), "{wanted} missing from {nicks}");
     }
+    let id = editor.buffer_named("*irc nicks*").unwrap();
+    editor.show_buffer(id);
+    assert_eq!(editor.pane().header_lines()[0].0, "#oxmacs  3 people");
 }
 
 #[test]

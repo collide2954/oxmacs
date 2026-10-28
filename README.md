@@ -51,11 +51,11 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `epub` | 0.2.1 | opt-in | Read EPUB books in pages, with contents, search, highlights, notes and a library |
 | `explorer` | 0.2.1 | on | A file tree beside the windows that follows the file you're in |
 | `git` | 0.4.2 | opt-in | Git status and staging in the style of Magit |
-| `irc` | 0.10.2 | opt-in | An IRCv3 client in the style of ERC |
+| `irc` | 0.10.3 | opt-in | An IRCv3 client in the style of ERC |
 | `keycast` | 0.2.3 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `languages` | 0.1.0 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
 | `life` | 0.2.3 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.68 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.69 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.5 | opt-in | Markdown rendered as styled text |
 | `pdf` | 0.2.0 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
 | `processes` | 0.1.5 | on | List the processes oxmacs runs, with their usage |
