@@ -25,16 +25,19 @@ fn control_c_control_e_asks_r_and_lists_objects_by_group() {
     listing(&mut r, job);
 
     let shown = r.lines();
-    assert_eq!(shown[0], "RET opens   g refreshes   q quits");
-    assert_eq!(shown[2], "Data");
+    assert_eq!(
+        r.editor.pane().header_lines()[0].0,
+        "RET opens   g refreshes   q quits"
+    );
+    assert_eq!(shown[0], "Data");
     assert!(
-        shown[3].starts_with("  cars  data.frame  32 x 11  32 obs. of 11 variables"),
+        shown[1].starts_with("  cars  data.frame  32 x 11  32 obs. of 11 variables"),
         "{shown:?}"
     );
-    assert_eq!(shown[5], "Values");
-    assert_eq!(shown[6], "  s     character         1  \"hello world\"");
-    assert_eq!(shown[9], "Functions");
-    assert_eq!(r.editor.line_style(2).spans[0].1, Highlight::Heading);
+    assert_eq!(shown[3], "Values");
+    assert_eq!(shown[4], "  s     character         1  \"hello world\"");
+    assert_eq!(shown[7], "Functions");
+    assert_eq!(r.editor.line_style(0).spans[0].1, Highlight::Heading);
     assert_eq!(r.editor.tiling().windows().len(), 3);
     assert_eq!(r.logged(), "");
 }
@@ -45,14 +48,7 @@ fn an_empty_environment_says_so() {
 
     r.output(job, &format!("\u{1}environment\u{2}\u{3}{PROMPT}"));
 
-    assert_eq!(
-        r.lines(),
-        [
-            "RET opens   g refreshes   q quits",
-            "",
-            "The environment is empty"
-        ]
-    );
+    assert_eq!(r.lines(), ["The environment is empty"]);
 }
 
 #[test]
@@ -61,7 +57,7 @@ fn return_opens_tables_as_tables_and_other_objects_with_str() {
     listing(&mut r, job);
     r.editor.take_effects();
 
-    r.press("M-< C-n C-n C-n RET");
+    r.press("M-< C-n RET");
     assert_eq!(r.sent(), [view_call("0L, \"\", FALSE, \"\"")]);
     r.press("C-n C-n C-n RET");
     assert_eq!(r.sent(), ["getOption(\"oxmacs\")$inspect(\"s\")\n"]);

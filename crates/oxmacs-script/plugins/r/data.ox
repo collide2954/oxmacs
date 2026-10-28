@@ -38,35 +38,30 @@
 
 (def (page found width)
   (if (empty? found)
-    {lines: [[[help :comment]] [] [["The environment is empty" :comment]]] rows: []}
+    [[["The environment is empty" :comment]]]
     (let [names (widest found (fn [entry] entry.name))
           classes (widest found (fn [entry] entry.class))
           sizes (widest found (fn [entry] entry.size))
           fixed (+ 2 names 2 classes 2 sizes 2)
           shown-width (min (max 0 (- width fixed)) value-width)
           line (fn [entry]
-                 [["  {(string/pad-end entry.name names)}  " :link]
-                  ["{(string/pad-end entry.class classes)}  " :comment]
-                  "{(string/pad-start entry.size sizes)}  "
-                  [(if (>= shown-width least-value) (string/truncate entry.value shown-width) "") :comment]])]
-      (reduce (fn [built [group title]]
+                 {line: [["  {(string/pad-end entry.name names)}  " :link]
+                         ["{(string/pad-end entry.class classes)}  " :comment]
+                         "{(string/pad-start entry.size sizes)}  "
+                         [(if (>= shown-width least-value) (string/truncate entry.value shown-width) "") :comment]]
+                  entry: entry})]
+      (reduce (fn [lines [group title]]
                 (let [members (filter (fn [entry] (= entry.group group)) found)]
                   (if (empty? members)
-                    built
-                    (let [lines (conj built.lines [] [[title :heading]])]
-                      (reduce (fn [done entry]
-                                {lines: (conj done.lines (line entry))
-                                 rows: (conj done.rows [(count done.lines) entry])})
-                              {lines: lines rows: built.rows}
-                              members)))))
-              {lines: [[[help :comment]]] rows: []}
+                    lines
+                    (vec (concat lines (if (empty? lines) [] [[]]) [[[title :heading]]] (map line members))))))
+              []
               groups))))
 
 (def (draw-environment name width)
   (when-let [listing (value-of name :r-environment)]
-    (let [drawn (page (get @listing :entries) (if (and width (> width 0)) width room))]
-      (swap! listing assoc :rows drawn.rows)
-      (set-lines name drawn.lines))))
+    (set-lines name (page (get @listing :entries) (if (and width (> width 0)) width room)))
+    (set-header name [[[help :comment]]])))
 
 (def environment-keys
   {"RET" 'r-environment-visit "n" 'next-line "p" 'previous-line
@@ -75,9 +70,9 @@
 (def (environment-buffer session)
   (let [name (environment-name session)]
     (unless (buffer-exists? name)
-      (with-buffer (open-buffer name [help] :keys environment-keys :show false
+      (with-buffer (open-buffer name [] :keys environment-keys :show false
                                 :on-resize (fn [width] (draw-environment name width)))
-        (set-buffer-value! :r-environment (atom {session: session entries: [] rows: []})))
+        (set-buffer-value! :r-environment (atom {session: session entries: []})))
       (session/own! name session))
     name))
 
@@ -127,11 +122,9 @@
 
 (defcommand r-environment-visit "Open the object on this line"
   (let [listing (when-let [held (buffer-value :r-environment)] @held)
-        line (current-line)
-        found (when listing (find (fn [[row _]] (= row line)) listing.rows))]
-    (if found
-      (let [entry (second found)]
-        (ask-object listing.session entry.name (contains? tabular entry.class)))
+        entry (get (line-item) :entry)]
+    (if (and listing entry)
+      (ask-object listing.session entry.name (contains? tabular entry.class))
       (message "No object on this line"))))
 
 (def (short-type name)

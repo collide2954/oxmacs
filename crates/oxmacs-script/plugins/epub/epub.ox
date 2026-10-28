@@ -320,9 +320,9 @@
                  (let [entry (nth book.chapters kept.chapter)
                        found (when (string? entry) (find (fn [item] (= item.entry entry)) book.toc))
                        title (if found found.title "Chapter {(inc kept.chapter)}")]
-                   (concat [[[title :heading]]
-                            ["  " [(string/truncate (package/tidy kept.text) 120) (if kept.note :added :marked)]]]
-                           (if kept.note [["    " [kept.note :comment]]] [])
+                   (concat [{line: [[title :heading]] highlight: kept}
+                            {line: ["  " [(string/truncate (package/tidy kept.text) 120) (if kept.note :added :marked)]] highlight: kept}]
+                           (if kept.note [{line: ["    " [kept.note :comment]] highlight: kept}] [])
                            [""])))
                book.highlights)))
 
@@ -340,16 +340,9 @@
 (defcommand epub-notes-visit "Turn to the highlight on this line"
   (when-let [notes (buffer-value :epub-notes)]
     (when (buffer-live? notes.buffer)
-      (let [state notes.state
-            book @state
-            line (current-line)
-            counts (map (fn [kept] (if kept.note 4 3)) book.highlights)
-            ends (reduce (fn [out n] (conj out (+ (or (last out) 0) n))) [] counts)
-            at (count (take-while (fn [end] (<= end line)) ends))]
-        (when (< at (count book.highlights))
-          (let [kept (nth book.highlights at)]
-            (switch-to-buffer notes.buffer)
-            (quietly (fn [] (go state kept.chapter kept.from)))))))))
+      (when-let [kept (get (line-item) :highlight)]
+        (switch-to-buffer notes.buffer)
+        (quietly (fn [] (go notes.state kept.chapter kept.from)))))))
 
 (def (resize state by)
   (swap! state (fn [book] (assoc book :size (max 10 (min 48 (+ (or book.size (setting :size)) by))))))
