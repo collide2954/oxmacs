@@ -21,7 +21,7 @@ A plugin shows its work in buffers of text lines, in views of widgets, or in men
              :keys {"n" 'fruit-next "q" 'quit-window})
 ```
 
-The faces are `:heading`, `:link`, `:comment`, `:doc-comment`, `:keyword`, `:string`, `:function`, `:type`, `:constant`, `:attribute`, `:macro`, `:success`, `:warning`, `:error`, `:added`, `:removed`, `:marked`, `:flagged`, `:region` and `:symlink`, and `:nick-0` to `:nick-7` for names in a chat. `[text face :pill]` draws a piece as a rounded label, and `[text face :link target]` makes it a link.
+The faces are `:heading`, `:link`, `:comment`, `:doc-comment`, `:keyword`, `:string`, `:function`, `:type`, `:constant`, `:attribute`, `:macro`, `:success`, `:warning`, `:error`, `:added`, `:removed`, `:marked`, `:flagged`, `:region`, `:symlink`, `:lifetime`, `:search-match`, `:search-current` and `:paren-match`, and `:nick-0` to `:nick-7` for names in a chat. `[text face :pill]` draws a piece as a rounded label, and `[text face :link target]` makes it a link.
 
 A line written as a map, such as `{line: pieces background: :region}`, gets a background, and fields of your own in it make the line an item. `line-item` gives the map of the line at point, `goto-item` moves to the line whose item has the fields it is given, and `next-item` steps from item to item, so commands find their rows without counting lines:
 

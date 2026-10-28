@@ -55,6 +55,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- Plugins and init.ox name faces one way everywhere, the same names tree-sitter queries use, and can now also use `:lifetime`, `:search-match`, `:search-current` and `:paren-match`.
+
 - `open-buffer`, `set-lines`, `append-lines`, `set-header` and `set-overlay` read lines and pieces the same way, and `set-lines` and `append-lines` take a buffer handle as well as a name. Overlay rows are written like other lines, `{line: pieces opacity: 0.5}` instead of `{pieces: ...}`, and a key is drawn with `[text face :keycap]` instead of the face `:keycap`. A `nil` piece is left out instead of showing as `nil`.
 - Popups, transient menus, the headers kept above plugin buffers and the key overlay share one raised background, and dimmed text in the mode line, tab bar, completions and menus is one shade, a little easier to read than before.
 - The headings of `M-x remote`, `list-processes`, `customize`, `vault`, `calendar`, the Ox profiler, R's package and environment lists, IRC channel lists and dired stay above their lines while they scroll.

@@ -6,7 +6,7 @@ use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::text::BufferId;
-use oxmacs_core::theme::{Highlight, NICK_COLORS};
+use oxmacs_core::theme::face_named;
 use oxmacs_core::view::{Arg, Node, Picture, Pixels, ViewBuffer};
 
 use crate::ide::log;
@@ -54,50 +54,6 @@ struct Views {
     open: Vec<Open>,
     dirty: bool,
     seen: u64,
-}
-
-const FACES: &[(&str, Highlight)] = &[
-    ("heading", Highlight::Heading),
-    ("link", Highlight::Link),
-    ("symlink", Highlight::Symlink),
-    ("comment", Highlight::Comment),
-    ("doc-comment", Highlight::DocComment),
-    ("keyword", Highlight::Keyword),
-    ("string", Highlight::String),
-    ("function", Highlight::Function),
-    ("type", Highlight::Type),
-    ("constant", Highlight::Constant),
-    ("attribute", Highlight::Attribute),
-    ("macro", Highlight::Macro),
-    ("success", Highlight::Success),
-    ("warning", Highlight::Warning),
-    ("error", Highlight::Error),
-    ("added", Highlight::Added),
-    ("removed", Highlight::Removed),
-    ("marked", Highlight::Marked),
-    ("flagged", Highlight::Flagged),
-    ("region", Highlight::Region),
-];
-
-pub(crate) fn face_name(highlight: Highlight) -> Option<&'static str> {
-    FACES
-        .iter()
-        .find(|(_, known)| *known == highlight)
-        .map(|(name, _)| *name)
-}
-
-pub(crate) fn face_named(name: &str) -> Option<Highlight> {
-    if let Some(number) = name.strip_prefix("nick-") {
-        return number
-            .parse::<u8>()
-            .ok()
-            .filter(|number| *number < NICK_COLORS)
-            .map(Highlight::Nick);
-    }
-    FACES
-        .iter()
-        .find(|(face, _)| *face == name)
-        .map(|(_, highlight)| *highlight)
 }
 
 #[expect(

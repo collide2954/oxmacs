@@ -10,7 +10,7 @@ use oxmacs_core::editor::{Editor, Place, Places};
 use oxmacs_core::theme::Highlight;
 
 use crate::ide::log;
-use crate::view::views::face_named;
+use oxmacs_core::theme::face_named;
 
 const NAME: &str = "show-places";
 const OPTIONS: [&str; 7] = [

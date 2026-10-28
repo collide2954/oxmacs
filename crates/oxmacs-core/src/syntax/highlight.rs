@@ -21,29 +21,11 @@ impl Highlighter {
         let faces = query
             .capture_names()
             .iter()
-            .map(|name| face(name))
+            .map(|name| crate::theme::face_named(name))
             .collect();
         Some(Self { query, faces })
     }
 }
-fn face(capture: &str) -> Option<Highlight> {
-    Some(match capture {
-        "keyword" => Highlight::Keyword,
-        "string" => Highlight::String,
-        "comment" => Highlight::Comment,
-        "comment.documentation" => Highlight::DocComment,
-        "function" => Highlight::Function,
-        "function.macro" => Highlight::Macro,
-        "type" => Highlight::Type,
-        "constant" => Highlight::Constant,
-        "attribute" => Highlight::Attribute,
-        "lifetime" => Highlight::Lifetime,
-        "heading" => Highlight::Heading,
-        "link" => Highlight::Link,
-        _ => return None,
-    })
-}
-
 fn contains_others(highlight: Highlight) -> bool {
     matches!(
         highlight,

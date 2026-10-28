@@ -91,6 +91,60 @@ pub enum Highlight {
 
 pub const NICK_COLORS: u8 = 8;
 
+const FACE_NAMES: &[(&str, Highlight)] = &[
+    ("heading", Highlight::Heading),
+    ("link", Highlight::Link),
+    ("symlink", Highlight::Symlink),
+    ("comment", Highlight::Comment),
+    ("doc-comment", Highlight::DocComment),
+    ("keyword", Highlight::Keyword),
+    ("string", Highlight::String),
+    ("function", Highlight::Function),
+    ("type", Highlight::Type),
+    ("constant", Highlight::Constant),
+    ("attribute", Highlight::Attribute),
+    ("macro", Highlight::Macro),
+    ("lifetime", Highlight::Lifetime),
+    ("success", Highlight::Success),
+    ("warning", Highlight::Warning),
+    ("error", Highlight::Error),
+    ("added", Highlight::Added),
+    ("removed", Highlight::Removed),
+    ("marked", Highlight::Marked),
+    ("flagged", Highlight::Flagged),
+    ("region", Highlight::Region),
+    ("search-match", Highlight::SearchMatch),
+    ("search-current", Highlight::SearchCurrent),
+    ("paren-match", Highlight::ParenMatch),
+];
+
+const CAPTURE_ALIASES: &[(&str, Highlight)] = &[
+    ("comment.documentation", Highlight::DocComment),
+    ("function.macro", Highlight::Macro),
+];
+
+pub fn face_named(name: &str) -> Option<Highlight> {
+    if let Some(number) = name.strip_prefix("nick-") {
+        return number
+            .parse::<u8>()
+            .ok()
+            .filter(|number| *number < NICK_COLORS)
+            .map(Highlight::Nick);
+    }
+    FACE_NAMES
+        .iter()
+        .chain(CAPTURE_ALIASES)
+        .find(|(known, _)| *known == name)
+        .map(|(_, highlight)| *highlight)
+}
+
+pub fn face_name(highlight: Highlight) -> Option<&'static str> {
+    FACE_NAMES
+        .iter()
+        .find(|(_, known)| *known == highlight)
+        .map(|(name, _)| *name)
+}
+
 pub const DIFF_TINT: f32 = 0.18;
 
 const DIFF_STEPS: u8 = 6;
@@ -468,6 +522,23 @@ mod tests {
                     < theme.default.foreground.contrast_ratio(background)
             );
         }
+    }
+
+    #[test]
+    fn faces_have_one_name_each_with_tree_sitter_captures_as_aliases() {
+        for (name, highlight) in FACE_NAMES {
+            assert_eq!(face_named(name), Some(*highlight));
+            assert_eq!(face_name(*highlight), Some(*name));
+        }
+        assert_eq!(
+            face_named("comment.documentation"),
+            Some(Highlight::DocComment)
+        );
+        assert_eq!(face_named("function.macro"), Some(Highlight::Macro));
+        assert_eq!(face_name(Highlight::DocComment), Some("doc-comment"));
+        assert_eq!(face_named("nick-3"), Some(Highlight::Nick(3)));
+        assert_eq!(face_named("nick-8"), None);
+        assert_eq!(face_named("nope"), None);
     }
 
     #[test]

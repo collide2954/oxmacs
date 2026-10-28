@@ -11,7 +11,7 @@ use oxmacs_core::theme::Highlight;
 use oxmacs_core::view::overlays::{self, Look};
 
 use crate::api::handles;
-use crate::view::views::face_named;
+use oxmacs_core::theme::face_named;
 
 const SHAPES: &str =
     "text, [text face], [text face :pill], [text face :keycap] or [text face :link target]";

@@ -6,7 +6,7 @@ use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 
-use crate::{DOCS, PRELUDE, ide::ox_mode, ide::repl, view::views};
+use crate::{DOCS, PRELUDE, ide::ox_mode, ide::repl};
 
 #[derive(Debug, Default)]
 struct Asked(Vec<Hold>);
@@ -25,7 +25,7 @@ fn segments(
             items.push(heap.string(&text(at..range.start))?);
         }
         let shown = heap.string(&text(range.clone()))?;
-        items.push(match views::face_name(*highlight) {
+        items.push(match oxmacs_core::theme::face_name(*highlight) {
             Some(face) => heap.vector_from(&[shown, Value::keyword(face)])?,
             None => shown,
         });

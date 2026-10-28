@@ -14,7 +14,7 @@ use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
 use crate::ide::log;
-use crate::view::views::face_named;
+use oxmacs_core::theme::face_named;
 
 type Spans = Vec<(Range<usize>, Highlight)>;
 

@@ -152,7 +152,7 @@ fn marks(heap: &Heap, value: Value) -> Result<Vec<Mark>, Error> {
                     field(heap, item, "to").unwrap_or_default(),
                 )?,
                 face: match face {
-                    Value::Keyword(name) => views::face_named(name.name()),
+                    Value::Keyword(name) => oxmacs_core::theme::face_named(name.name()),
                     _ => None,
                 }
                 .ok_or_else(|| expected(heap, "ui/pages", "a mark's :face", face))?,

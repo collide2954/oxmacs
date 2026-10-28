@@ -10,7 +10,7 @@ use oxmacs_core::theme::Highlight;
 
 use crate::api::handlers;
 use crate::api::handles;
-use crate::view::views::face_named;
+use oxmacs_core::theme::face_named;
 
 fn wrong(heap: &Heap, what: &str, value: Value) -> Error {
     Error::new(format!(

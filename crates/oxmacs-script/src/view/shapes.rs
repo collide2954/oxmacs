@@ -3,7 +3,7 @@ use ox_lang::heap::Heap;
 use ox_lang::value::{Value, print};
 use oxmacs_core::view::shapes::{Ink, Paint, Shape};
 
-use crate::view::views::face_named;
+use oxmacs_core::theme::face_named;
 
 const SHAPES: &str = "[:rect x y width height color], [:circle x y radius color], [:line x1 y1 x2 y2 color width] or [:text x y text color size]";
 
