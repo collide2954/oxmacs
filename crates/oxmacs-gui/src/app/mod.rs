@@ -485,7 +485,7 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         std::fs::write(
             home.path().join("init.ox"),
-            r#"(set-overlay :keys [[["C-x" :keycap] ["C-s" :keycap] "save-buffer"]])"#,
+            r#"(set-overlay :keys [[["C-x" nil :keycap] ["C-s" nil :keycap] "save-buffer"]])"#,
         )
         .unwrap();
         let mut app = App::default();

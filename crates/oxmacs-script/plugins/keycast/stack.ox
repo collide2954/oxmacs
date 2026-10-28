@@ -53,13 +53,13 @@
        (min 1 (max 0 (/ left fade))))))
 
 (def (pieces cast)
-  (concat (map (fn [key] [key :keycap]) cast.keys)
+  (concat (map (fn [key] [key nil :keycap]) cast.keys)
           (if (> cast.count 1) [["×{cast.count}" :comment]] [])
           [cast.command]))
 
 (def (rows casts now)
   "Overlay rows for casts at now, oldest first and faintest, each fading out in its last moments."
-  (vec (map (fn [index] {pieces: (pieces (nth casts index)) opacity: (opacity casts index now)})
+  (vec (map (fn [index] {line: (pieces (nth casts index)) opacity: (opacity casts index now)})
             (range (count casts)))))
 
 (def (caption cast)

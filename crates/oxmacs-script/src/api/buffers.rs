@@ -12,7 +12,7 @@ use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
-use crate::view::views::face_named;
+use crate::api::lines::{self, Line};
 
 type Pills = Vec<(Range<usize>, Highlight)>;
 
@@ -27,9 +27,11 @@ pub struct LinesBuffer {
     scope: ScopeId,
     styles: Vec<LineStyle>,
     pills: Vec<Pills>,
+    links: Vec<Vec<Range<usize>>>,
     directory: Option<PathBuf>,
     file: Option<PathBuf>,
     watched: Option<PathBuf>,
+    linked: Option<Hold>,
     moved: Option<Hold>,
     resized: Option<Hold>,
     clicked: Option<Hold>,
@@ -87,6 +89,10 @@ impl SpecialBuffer for LinesBuffer {
         self.pills.get(line).cloned().unwrap_or_default()
     }
 
+    fn links(&self, line: usize) -> Vec<Range<usize>> {
+        self.links.get(line).cloned().unwrap_or_default()
+    }
+
     fn unsaved(&self) -> bool {
         self.unsaved
     }
@@ -96,121 +102,20 @@ struct Rendered {
     text: String,
     styles: Vec<LineStyle>,
     pills: Vec<Pills>,
+    links: Vec<Vec<Range<usize>>>,
 }
 
-struct Line {
-    column: usize,
-    style: LineStyle,
-    pills: Pills,
-}
-
-fn segment(
-    heap: &Heap,
-    name: &str,
-    value: Value,
-    text: &mut String,
-    line: &mut Line,
-) -> Result<(), Error> {
-    let parts = heap
-        .text(value)
-        .is_none()
-        .then(|| heap.elements(value))
-        .flatten();
-    let (shown, face, pill) = match parts.as_deref() {
-        Some([shown, face]) => (*shown, Some(*face), false),
-        Some([shown, face, Value::Keyword(pill)]) if pill.name() == "pill" => {
-            (*shown, Some(*face), true)
-        }
-        Some(_) => {
-            return Err(Error::new(format!(
-                "{name} expects text, [text face] or [text face :pill] in a line, got {}",
-                print::brief(heap, value)
-            )));
-        }
-        None => (value, None, false),
-    };
-    let shown = print::display(heap, shown);
-    let start = line.column;
-    line.column += shown.chars().count();
-    text.push_str(&shown);
-    if let Some(given) = face {
-        let highlight = self::face(heap, name, given)?;
-        line.style.spans.push((start..line.column, highlight));
-        if pill {
-            line.pills.push((start..line.column, highlight));
-        }
+fn render(lines: &[Line]) -> Rendered {
+    Rendered {
+        text: lines.iter().map(Line::text).collect::<Vec<_>>().join("\n"),
+        styles: lines.iter().map(Line::style).collect(),
+        pills: lines.iter().map(Line::pills).collect(),
+        links: lines
+            .iter()
+            .map(|line| line.links().into_iter().map(|(range, _)| range).collect())
+            .collect(),
     }
-    Ok(())
 }
-
-fn face(heap: &Heap, name: &str, value: Value) -> Result<Highlight, Error> {
-    match value {
-        Value::Keyword(face) => face_named(face.name()),
-        _ => None,
-    }
-    .ok_or_else(|| {
-        Error::new(format!(
-            "{name} doesn't know the face {}",
-            print::brief(heap, value)
-        ))
-    })
-}
-
-fn render(heap: &Heap, name: &str, lines: Value) -> Result<Rendered, Error> {
-    let lines = heap.elements(lines).ok_or_else(|| {
-        Error::new(format!(
-            "{name} expects a vector of lines, got {}",
-            print::brief(heap, lines)
-        ))
-    })?;
-    let mut text = String::new();
-    let mut styles = Vec::with_capacity(lines.len());
-    let mut pills = Vec::with_capacity(lines.len());
-    for (index, given) in lines.into_iter().enumerate() {
-        if index > 0 {
-            text.push('\n');
-        }
-        let mut line = Line {
-            column: 0,
-            style: LineStyle::default(),
-            pills: Vec::new(),
-        };
-        let mut shown = given;
-        if let Some(fields) = heap.entries(given) {
-            shown = Value::Nil;
-            for (key, value) in fields {
-                match key {
-                    Value::Keyword(key) if key.name() == "line" => shown = value,
-                    Value::Keyword(key) if key.name() == "background" && value != Value::Nil => {
-                        line.style.background = Some(face(heap, name, value)?);
-                    }
-                    _ => {}
-                }
-            }
-        }
-        match heap
-            .text(shown)
-            .is_none()
-            .then(|| heap.elements(shown))
-            .flatten()
-        {
-            Some(segments) => {
-                for part in segments {
-                    segment(heap, name, part, &mut text, &mut line)?;
-                }
-            }
-            None => text.push_str(&print::display(heap, shown)),
-        }
-        styles.push(line.style);
-        pills.push(line.pills);
-    }
-    Ok(Rendered {
-        text,
-        styles,
-        pills,
-    })
-}
-
 fn special_buffer(editor: &Editor, name: &str) -> Option<BufferId> {
     editor
         .special_buffers::<LinesBuffer>()
@@ -220,6 +125,22 @@ fn special_buffer(editor: &Editor, name: &str) -> Option<BufferId> {
                 .buffer_by_id(*id)
                 .is_some_and(|buffer| buffer.name() == name)
         })
+}
+
+fn lines_buffer(
+    heap: &Heap,
+    editor: &Editor,
+    native: &str,
+    value: Value,
+) -> Result<BufferId, Error> {
+    let id = crate::api::handles::target(heap, editor, native, value)?;
+    match editor.special_buffer::<LinesBuffer>(id) {
+        Some(_) => Ok(id),
+        None => Err(Error::new(format!(
+            "{} isn't a buffer of lines from open-buffer",
+            editor.buffer_by_id(id).map_or("", Buffer::name)
+        ))),
+    }
 }
 
 fn prompt_start(buffer: &Buffer, chat: &Chat) -> usize {
@@ -304,6 +225,7 @@ fn start_chat(editor: &mut Editor, id: BufferId, prompt: String) {
     buffer.set_point(buffer.len_chars());
     view.styles.push(prompt_style(&prompt));
     view.pills.push(Vec::new());
+    view.links.push(Vec::new());
     view.chat = Some(Chat { input, prompt });
     let scope = view.scope;
     editor.bind(scope, "M-p", Command::ComintPreviousInput).ok();
@@ -331,6 +253,8 @@ fn fill_chat(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Opti
     view.styles.push(prompt);
     view.pills = rendered.pills;
     view.pills.push(Vec::new());
+    view.links = rendered.links;
+    view.links.push(Vec::new());
     let wanted = placed.map(|line| (line, 0)).or(here);
     if let Some((line, column)) = wanted {
         let line = line.min(lines.saturating_sub(1));
@@ -340,13 +264,12 @@ fn fill_chat(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Opti
 }
 
 fn append(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
-    let name = crate::view::views::buffer_name(heap, editor, "append-lines", arguments[0])?;
-    let id = special_buffer(editor, &name)
-        .ok_or_else(|| Error::new(format!("There is no plugin buffer named {name}")))?;
-    let rendered = render(heap, "append-lines", arguments[1])?;
-    if rendered.styles.is_empty() {
+    let id = lines_buffer(heap, editor, "append-lines", arguments[0])?;
+    let given = lines::lines(heap, "append-lines", arguments[1])?;
+    if given.is_empty() {
         return Ok(Value::Nil);
     }
+    let rendered = render(&given);
     let Some((buffer, view)) = editor.special_buffer_mut::<LinesBuffer>(id) else {
         return Ok(Value::Nil);
     };
@@ -367,9 +290,11 @@ fn append(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     let following = at + text.chars().count();
     view.styles.splice(index..index, rendered.styles);
     view.pills.splice(index..index, rendered.pills);
+    view.links.splice(index..index, rendered.links);
     if view.chat.is_some() {
         editor.move_points(id, |point, _| (point >= following).then_some(point));
     }
+    lines::keep_more(heap, editor, id, index, &given);
     Ok(Value::Nil)
 }
 
@@ -468,6 +393,7 @@ fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<us
     if let Some((buffer, view)) = editor.special_buffer_mut::<LinesBuffer>(id) {
         view.styles = rendered.styles;
         view.pills = rendered.pills;
+        view.links = rendered.links;
         let line = line.min(buffer.len_lines().saturating_sub(1));
         let start = buffer.line_start(line);
         let position = (start + column).min(buffer.line_end(line));
@@ -512,6 +438,7 @@ struct Options {
     clicked: Option<Value>,
     dropped: Option<Value>,
     typed: Option<Value>,
+    linked: Option<Value>,
     line_cursor: Option<bool>,
     line: Option<usize>,
     unsaved: Option<bool>,
@@ -519,7 +446,7 @@ struct Options {
     hidden: bool,
 }
 
-const OPEN_BUFFER: [&str; 16] = [
+const OPEN_BUFFER: [&str; 17] = [
     "keys",
     "directory",
     "file",
@@ -531,6 +458,7 @@ const OPEN_BUFFER: [&str; 16] = [
     "on-click",
     "on-drop",
     "on-type",
+    "on-link",
     "cursor",
     "line",
     "unsaved",
@@ -553,6 +481,7 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
             "on-click" => found.clicked = Some(value),
             "on-drop" => found.dropped = Some(value),
             "on-type" => found.typed = Some(value),
+            "on-link" => found.linked = Some(value),
             "cursor" => {
                 found.line_cursor = Some(match value {
                     Value::Keyword(shape) if shape.name() == "line" => true,
@@ -617,7 +546,7 @@ pub(crate) fn reveal(editor: &mut Editor, id: BufferId, beside: bool, select: bo
 
 fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = crate::view::views::buffer_name(heap, editor, "open-buffer", arguments[0])?;
-    let rendered = render(heap, "open-buffer", arguments[1])?;
+    let shown = lines::lines(heap, "open-buffer", arguments[1])?;
     let mut given = options(heap, &arguments[2..])?;
     let file = given.file.take().map(|file| editor.absolute(&file));
     let found = match &file {
@@ -634,9 +563,11 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
                 scope,
                 styles: Vec::new(),
                 pills: Vec::new(),
+                links: Vec::new(),
                 directory: None,
                 file,
                 watched: None,
+                linked: None,
                 moved: None,
                 resized: None,
                 clicked: None,
@@ -653,11 +584,13 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     if let Some(prompt) = given.input.take() {
         start_chat(editor, id, prompt);
     }
-    fill(editor, id, rendered, given.line.take());
+    fill(editor, id, render(&shown), given.line.take());
+    lines::keep(heap, editor, id, &shown);
     for (wanted, kind) in [
         (given.clicked.is_some(), EventKind::Clicked),
         (given.dropped.is_some(), EventKind::Dropped),
         (given.typed.is_some(), EventKind::Typed),
+        (given.linked.is_some(), EventKind::Link),
     ] {
         if wanted {
             editor.subscribe(kind);
@@ -676,6 +609,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         view.clicked = hold(heap, view.clicked, given.clicked);
         view.dropped = hold(heap, view.dropped, given.dropped);
         view.typed = hold(heap, view.typed, given.typed);
+        view.linked = hold(heap, view.linked, given.linked);
         if let Some(unsaved) = given.unsaved {
             view.unsaved = unsaved;
         }
@@ -715,6 +649,14 @@ pub(crate) fn hear(isolate: &mut Isolate, editor: &mut Editor, event: Event) {
                 return;
             };
             (buffer, |view| view.typed, vec![text])
+        }
+        Event::Link { buffer, line, link } => {
+            let Some(target) =
+                lines::target(editor, buffer, line, link).and_then(|hold| isolate.held(hold))
+            else {
+                return;
+            };
+            (buffer, |view| view.linked, vec![target])
         }
         _ => return,
     };
@@ -760,16 +702,15 @@ pub fn watch(isolate: &mut Isolate, editor: &mut Editor) {
     }
 }
 fn set_lines(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
-    let name = crate::view::views::buffer_name(heap, editor, "set-lines", arguments[0])?;
-    let id = special_buffer(editor, &name)
-        .ok_or_else(|| Error::new(format!("There is no plugin buffer named {name}")))?;
-    let rendered = render(heap, "set-lines", arguments[1])?;
+    let id = lines_buffer(heap, editor, "set-lines", arguments[0])?;
+    let shown = lines::lines(heap, "set-lines", arguments[1])?;
     let line = match arguments[2] {
         Value::Nil => None,
         given => Some(number(heap, given)?),
     };
     let unsaved = (arguments[3] != Value::Nil).then(|| arguments[3].truthy());
-    fill(editor, id, rendered, line);
+    fill(editor, id, render(&shown), line);
+    lines::keep(heap, editor, id, &shown);
     if let Some(unsaved) = unsaved
         && let Some((_, view)) = editor.special_buffer_mut::<LinesBuffer>(id)
     {
@@ -1423,6 +1364,6 @@ mod tests {
             "[true false]"
         );
         assert!(line.is_ok());
-        assert_eq!(missing.message, "There is no plugin buffer named *nowhere*");
+        assert_eq!(missing.message, "There is no buffer named *nowhere*");
     }
 }

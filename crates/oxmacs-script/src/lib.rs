@@ -35,6 +35,7 @@ fn install_editor_api(isolate: &mut Isolate, answers: &api::prompts::Inbox) {
     view::pdf::install(isolate);
     api::buffers::install(isolate);
     api::handles::install(isolate);
+    api::lines::install(isolate);
     api::editing::install(isolate);
     api::hooks::install(isolate);
     api::annotations::install(isolate);

@@ -1,4 +1,5 @@
 pub(crate) mod equal;
+pub use equal::equal;
 pub(crate) mod foreign;
 pub(crate) mod map;
 pub(crate) mod number;

@@ -210,6 +210,15 @@ pub enum Command {
     #[strum(message = "Leave this buffer and put it out of the way")]
     QuitWindow,
     #[strum(
+        message = "Follow the link at point",
+        detailed_message = "Follows the link under point, or else the first link on its line, the way the buffer showing it says."
+    )]
+    FollowLink,
+    #[strum(message = "Move to the next link, wrapping around")]
+    NextLink,
+    #[strum(message = "Move to the previous link, wrapping around")]
+    PreviousLink,
+    #[strum(
         message = "Cancel the current command or prompt",
         detailed_message = "Clears the selection, closes the minibuffer or cancels a half-typed key sequence."
     )]

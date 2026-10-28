@@ -43,6 +43,10 @@ pub trait SpecialBuffer: Any + Send + fmt::Debug {
         Vec::new()
     }
 
+    fn links(&self, _line: usize) -> Vec<Range<usize>> {
+        Vec::new()
+    }
+
     fn hears_clicks(&self) -> bool {
         false
     }

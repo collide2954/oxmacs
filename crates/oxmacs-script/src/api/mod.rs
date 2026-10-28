@@ -13,6 +13,7 @@ pub mod idle;
 pub(crate) mod keepass;
 pub(crate) mod keystrokes;
 pub(crate) mod layout;
+pub(crate) mod lines;
 pub(crate) mod natives;
 pub(crate) mod outside;
 pub(crate) mod places;

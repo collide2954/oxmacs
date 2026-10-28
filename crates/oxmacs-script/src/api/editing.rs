@@ -4,12 +4,10 @@ use std::sync::Arc;
 use ox_lang::heap::Heap;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::display::LineStyle;
 use oxmacs_core::editor::{Axis, Editor};
 use oxmacs_core::text::{Buffer, BufferId, Marker};
 
 use crate::api::handles::{current_buffer, current_buffer_mut, target};
-use crate::view::views::face_named;
 
 #[derive(Debug)]
 struct Placed {
@@ -219,53 +217,12 @@ fn display(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<
     Ok(Value::Nil)
 }
 
-fn header_line(heap: &Heap, value: Value) -> Result<(String, LineStyle), Error> {
-    let wrong = || {
-        Error::new(format!(
-            "set-header expects lines of text and [text face] pieces, got {}",
-            print::brief(heap, value)
-        ))
-    };
-    let pieces = match heap.text(value) {
-        Some(_) => vec![value],
-        None => heap.elements(value).ok_or_else(wrong)?,
-    };
-    let mut shown_text = String::new();
-    let mut style = LineStyle::default();
-    for piece in pieces {
-        let (shown, face) = match heap.text(piece) {
-            Some(shown) => (shown.to_owned(), None),
-            None => match heap.elements(piece).as_deref() {
-                Some([shown, Value::Keyword(face)]) => (
-                    print::display(heap, *shown),
-                    Some(face_named(face.name()).ok_or_else(wrong)?),
-                ),
-                _ => return Err(wrong()),
-            },
-        };
-        let start = shown_text.chars().count();
-        shown_text.push_str(&shown);
-        if let Some(face) = face {
-            style.spans.push((start..shown_text.chars().count(), face));
-        }
-    }
-    Ok((shown_text, style))
-}
-
 fn header(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let id = target(heap, editor, "set-header", arguments[0])?;
-    let lines = heap
-        .elements(arguments[1])
-        .filter(|_| heap.text(arguments[1]).is_none())
-        .ok_or_else(|| {
-            Error::new(format!(
-                "set-header expects a vector of lines, got {}",
-                print::brief(heap, arguments[1])
-            ))
-        })?
-        .into_iter()
-        .map(|line| header_line(heap, line))
-        .collect::<Result<Vec<_>, Error>>()?;
+    let lines = crate::api::lines::lines(heap, "set-header", arguments[1])?
+        .iter()
+        .map(|line| (line.text(), line.style()))
+        .collect();
     editor.set_header_lines(id, lines);
     Ok(Value::Nil)
 }

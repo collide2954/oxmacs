@@ -81,10 +81,10 @@ Three hooks follow the buffers people type in, leaving plugin buffers out. `on-b
 (set-mode-line :status nil)
 ```
 
-`set-overlay` floats rows over the windows, at the bottom right or larger at the bottom center, each row a vector of text and `[text face]` pieces, where the face `:keycap` draws a key. `nil` takes them away.
+`set-overlay` floats rows over the windows, at the bottom right or larger at the bottom center, each row a line as `open-buffer` takes it, where a piece `[text face :keycap]` draws a key. `nil` takes them away.
 
 ```
-(set-overlay :hint [[["C-x" :keycap] ["C-s" :keycap] "save-buffer"]])
+(set-overlay :hint [[["C-x" nil :keycap] ["C-s" nil :keycap] "save-buffer"]])
 (set-overlay :hint nil)
 ```
 

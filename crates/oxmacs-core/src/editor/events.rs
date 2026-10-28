@@ -26,6 +26,11 @@ pub enum Event {
         buffer: BufferId,
         text: String,
     },
+    Link {
+        buffer: BufferId,
+        line: usize,
+        link: usize,
+    },
     Saved(BufferId),
     DiskChanged,
     Configured,
@@ -210,6 +215,9 @@ impl Editor {
     }
 
     pub(super) fn hear_click(&mut self, position: usize, clicks: Clicks, extend: bool) -> bool {
+        if !extend && clicks == Clicks::Single && self.follow_link_at(position) {
+            return true;
+        }
         if extend || !self.hears(SpecialBuffer::hears_clicks) {
             return false;
         }

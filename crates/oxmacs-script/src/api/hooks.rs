@@ -7,7 +7,7 @@ use oxmacs_core::editor::{Editor, Event, EventKind};
 use oxmacs_core::text::{Buffer, Splice};
 
 use crate::api::handlers::{self, Hook};
-use crate::api::{buffers, games, handles};
+use crate::api::{buffers, games, handles, lines};
 use crate::ide::{log, repl};
 use crate::{PATIENT, runtime::plugins};
 
@@ -112,7 +112,10 @@ fn holds(editor: &Editor, event: &Event) -> Vec<Hold> {
         Event::ModeChanged(..) => Hook::ModeEnter,
         Event::Windows => Hook::WindowChange,
         Event::Diagnostics => Hook::DiagnosticsChange,
-        Event::Clicked { .. } | Event::Dropped { .. } | Event::Typed { .. } => return Vec::new(),
+        Event::Clicked { .. }
+        | Event::Dropped { .. }
+        | Event::Typed { .. }
+        | Event::Link { .. } => return Vec::new(),
     };
     handlers::held(editor, hook)
 }
@@ -122,6 +125,7 @@ fn dispatch(isolate: &mut Isolate, editor: &mut Editor, event: Event) -> Result<
     let heap = isolate.heap_mut();
     if let Event::Killed(id) = event {
         handles::release_values(heap, editor, id);
+        lines::release(heap, editor, id);
     }
     let arguments = match event {
         Event::Killed(id) if holds.is_empty() => {
@@ -166,7 +170,10 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
     for event in waiting {
         if matches!(
             event,
-            Event::Clicked { .. } | Event::Dropped { .. } | Event::Typed { .. }
+            Event::Clicked { .. }
+                | Event::Dropped { .. }
+                | Event::Typed { .. }
+                | Event::Link { .. }
         ) {
             buffers::hear(isolate, editor, event);
         } else if let Err(error) = dispatch(isolate, editor, event) {

@@ -2,9 +2,7 @@ use ox_lang::heap::Heap;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
-use oxmacs_core::view::overlays::{Look, Overlay, Overlays, Piece, Place, Row};
-
-use crate::view::views;
+use oxmacs_core::view::overlays::{Overlay, Overlays, Place};
 
 const NAME: &str = "set-overlay";
 
@@ -18,86 +16,14 @@ fn wrong(heap: &Heap, wanted: &str, value: Value) -> Error {
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
-    reason = "opacities and scales are small numbers"
+    reason = "scales are small numbers"
 )]
-fn number(value: Value) -> Option<f32> {
+fn scale(value: Value) -> Option<f32> {
     match value {
         Value::Int(number) => Some(number as f32),
         Value::Float(number) => Some(number as f32),
         _ => None,
     }
-}
-
-fn piece(heap: &Heap, value: Value) -> Result<Piece, Error> {
-    if let Some(text) = heap.text(value) {
-        return Ok(Piece {
-            text: text.to_owned(),
-            look: Look::Plain,
-        });
-    }
-    let pair = heap.elements(value).unwrap_or_default();
-    let [text, Value::Keyword(face)] = pair[..] else {
-        return Err(wrong(heap, "pieces are text or [text face]", value));
-    };
-    let Some(text) = heap.text(text) else {
-        return Err(wrong(heap, "pieces are text or [text face]", value));
-    };
-    let look = match face.name() {
-        "keycap" => Look::Keycap,
-        name => Look::Face(
-            views::face_named(name)
-                .ok_or_else(|| Error::new(format!("{NAME} doesn't know the face :{name}")))?,
-        ),
-    };
-    Ok(Piece {
-        text: text.to_owned(),
-        look,
-    })
-}
-
-fn pieces(heap: &Heap, value: Value) -> Result<Vec<Piece>, Error> {
-    heap.elements(value)
-        .ok_or_else(|| {
-            wrong(
-                heap,
-                "rows are text, vectors of pieces or maps of :pieces and :opacity",
-                value,
-            )
-        })?
-        .into_iter()
-        .map(|item| piece(heap, item))
-        .collect()
-}
-
-fn row(heap: &Heap, value: Value) -> Result<Row, Error> {
-    if heap.text(value).is_some() {
-        return Ok(Row {
-            pieces: vec![piece(heap, value)?],
-            opacity: 1.0,
-        });
-    }
-    let Some(entries) = heap.entries(value) else {
-        return Ok(Row {
-            pieces: pieces(heap, value)?,
-            opacity: 1.0,
-        });
-    };
-    let mut row = Row {
-        pieces: Vec::new(),
-        opacity: 1.0,
-    };
-    for (key, given) in entries {
-        match key {
-            Value::Keyword(key) if key.name() == "pieces" => row.pieces = pieces(heap, given)?,
-            Value::Keyword(key) if key.name() == "opacity" => {
-                row.opacity = number(given)
-                    .ok_or_else(|| wrong(heap, ":opacity must be a number", given))?
-                    .clamp(0.0, 1.0);
-            }
-            _ => return Err(wrong(heap, "rows take :pieces and :opacity", key)),
-        }
-    }
-    Ok(row)
 }
 
 fn place(heap: &Heap, value: Value) -> Result<Place, Error> {
@@ -123,17 +49,18 @@ fn set_overlay(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Res
         overlay.place = place(heap, arguments[2])?;
     }
     if arguments[3] != Value::Nil {
-        overlay.scale = number(arguments[3])
+        overlay.scale = scale(arguments[3])
             .filter(|scale| *scale > 0.0)
             .ok_or_else(|| wrong(heap, ":scale must be a number above 0", arguments[3]))?;
     }
-    let rows = heap
-        .elements(arguments[1])
-        .ok_or_else(|| wrong(heap, "takes a vector of rows", arguments[1]))?;
-    overlay.rows = rows
-        .into_iter()
-        .map(|item| row(heap, item))
-        .collect::<Result<_, _>>()?;
+    overlay.rows = if arguments[1] == Value::Nil {
+        Vec::new()
+    } else {
+        crate::api::lines::lines(heap, NAME, arguments[1])?
+            .iter()
+            .map(crate::api::lines::Line::row)
+            .collect()
+    };
     let mut overlays = editor.take_plugin_state::<Overlays>().unwrap_or_default();
     let at = overlays.0.iter().position(|(known, _)| *known == key);
     match (at, overlay.rows.is_empty()) {
@@ -185,7 +112,7 @@ mod tests {
 
         ox.eval(
             &mut editor,
-            r#"(set-overlay :keys [{pieces: [["C-x" :keycap] ["C-s" :keycap] ["×2" :comment] "save-buffer"] opacity: 0.5} "plain"] :place :bottom-center :scale 1.5)
+            r#"(set-overlay :keys [{line: [["C-x" nil :keycap] ["C-s" nil :keycap] ["×2" :comment] "save-buffer"] opacity: 0.5} "plain"] :place :bottom-center :scale 1.5)
 (set-overlay :other [["hi" "there"]])"#,
         )
         .unwrap();
@@ -255,9 +182,9 @@ mod tests {
             error(
                 &mut ox,
                 &mut editor,
-                r#"(set-overlay :x [["C-x" :keycap]])"#
+                r#"(set-overlay :x [{line: "a" opacity: :half}])"#
             ),
-            "set-overlay pieces are text or [text face], got :keycap"
+            "set-overlay expects a number from 0 to 1 for :opacity, got :half"
         );
         assert_eq!(
             error(
