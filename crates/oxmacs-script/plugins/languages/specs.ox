@@ -1,5 +1,5 @@
 (module
-  (import (languages lexer :as lexer))
+  (import (ox lexer))
   (export python go c cpp javascript typescript json))
 
 (def slash-comment {"/*" {close: #"\*/" face: :comment}})

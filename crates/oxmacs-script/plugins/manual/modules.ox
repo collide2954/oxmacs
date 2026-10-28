@@ -91,6 +91,7 @@ ox/ease      Easing curves for tweens, from linear to bounce
 ox/camera    Cameras as plain maps: following, bounds, zoom, shake and world to screen points
 ox/collide   Overlaps, swept boxes that slide along walls, tile collision and spatial grids
 ox/tiled     Tiled .tmx maps as plain data: layers, tiles, objects, properties and tilesets
+ox/lexer     Line lexers that highlight code from a token regex, blocks that run across lines and word lists
 ox/pdf       PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only
 ox/keepass   KeePass databases: reading their entries; in oxmacs only
 ox/ui        Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only

@@ -10,6 +10,7 @@ pub use files::{remove, to_trash};
 pub mod geometry;
 mod http;
 pub mod image;
+mod lexer;
 mod net;
 mod process;
 pub mod random;
@@ -69,6 +70,10 @@ const MODULES: &[(&str, &str)] = &[
         "ox/tiled",
         "Tiled .tmx maps as plain data: layers, tiles, objects, properties and tilesets",
     ),
+    (
+        "ox/lexer",
+        "Line lexers that highlight code from a token regex, blocks that run across lines and word lists",
+    ),
 ];
 
 pub(crate) fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> {
@@ -107,6 +112,7 @@ pub fn install(isolate: &mut Isolate) {
     camera::install(isolate);
     collide::install(isolate);
     tiled::install(isolate);
+    lexer::install(isolate);
     isolate.add_native_docs(DOCS);
 }
 

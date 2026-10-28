@@ -116,10 +116,6 @@ const LANGUAGES: Bundle = Bundle {
             include_str!("../../../plugins/languages/languages.ox"),
         ),
         (
-            "lexer.ox",
-            include_str!("../../../plugins/languages/lexer.ox"),
-        ),
-        (
             "specs.ox",
             include_str!("../../../plugins/languages/specs.ox"),
         ),

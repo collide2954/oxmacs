@@ -53,9 +53,9 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `git` | 0.4.5 | opt-in | Git status and staging in the style of Magit |
 | `irc` | 0.10.7 | opt-in | An IRCv3 client in the style of ERC |
 | `keycast` | 0.2.4 | opt-in | Shows the keys you press and the commands they run, for demos |
-| `languages` | 0.1.2 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
+| `languages` | 0.1.3 | on | Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers |
 | `life` | 0.2.5 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.77 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.78 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.7 | opt-in | Markdown rendered as styled text |
 | `pdf` | 0.2.3 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
 | `processes` | 0.1.6 | on | List the processes oxmacs runs, with their usage |
@@ -96,6 +96,7 @@ Ox code uses these built-in modules, importing them as in `(import (ox file))`; 
 | `ox/camera` | Cameras as plain maps: following, bounds, zoom, shake and world to screen points |
 | `ox/collide` | Overlaps, swept boxes that slide along walls, tile collision and spatial grids |
 | `ox/tiled` | Tiled .tmx maps as plain data: layers, tiles, objects, properties and tilesets |
+| `ox/lexer` | Line lexers that highlight code from a token regex, blocks that run across lines and word lists |
 | `ox/pdf` | PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only |
 | `ox/keepass` | KeePass databases: reading their entries; in oxmacs only |
 | `ox/ui` | Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only |

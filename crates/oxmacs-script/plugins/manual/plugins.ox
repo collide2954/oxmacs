@@ -94,9 +94,9 @@ explorer     0.2.4    on       A file tree beside the windows that follows the f
 git          0.4.5    opt-in   Git status and staging in the style of Magit
 irc          0.10.7   opt-in   An IRCv3 client in the style of ERC
 keycast      0.2.4    opt-in   Shows the keys you press and the commands they run, for demos
-languages    0.1.2    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
+languages    0.1.3    on       Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers
 life         0.2.5    opt-in   Conway's Game of Life on a canvas
-manual       0.5.77   on       The oxmacs tutorial and the Ox manual
+manual       0.5.78   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.7    opt-in   Markdown rendered as styled text
 pdf          0.2.3    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
 processes    0.1.6    on       List the processes oxmacs runs, with their usage

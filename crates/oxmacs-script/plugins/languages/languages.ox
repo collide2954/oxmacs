@@ -1,10 +1,11 @@
 (module
-  (import (languages lexer :as lexer)
+  (import (ox lexer)
           (languages specs :as specs)
           (markdown style :as style)))
 
 (def (highlighter spec)
-  (fn [_line text state] (lexer/lex spec text state)))
+  (let [lexer (lexer/spec spec)]
+    (fn [_line text state] (lexer/lex lexer text state))))
 
 (def braces {after: #"[{(\[]\s*(//.*)?$" dedent: #"^\s*[}\])]"})
 

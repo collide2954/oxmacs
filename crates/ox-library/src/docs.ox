@@ -140,6 +140,8 @@
 (ease/apply ease t) "The eased progress at t from 0 to 1, for an ease such as :linear, :quad-in, :cubic-out, :sine-in-out, :back-out, :elastic-out or :bounce-out; ease/names lists them all."
 (ease/between ease from to t) "The value t of the way from from to to, eased: numbers or [x y] points."
 (ease/names) "Every ease's name, as keywords."
+(lexer/spec spec) "A line lexer made from spec, a map of :token, a regex whose named groups comment, block, key, string, attribute, macro, number, call and word find the pieces of a line; :blocks, from each opener the block group finds to a map of the :close regex that ends it and its :face; and the sets of :keywords, :constants and :types. Make it once and give it to lexer/lex."
+(lexer/lex spec text state) "The spans of a line of code as {{spans: [[start end face] ...] state: s}}, for a spec made by lexer/spec; state is the opener of a comment or string that runs on past the line, or nil, and is what the next line starts from."
 (random/new seed) "A generator seeded with the whole number seed, to draw from with :from: an atom holding its state as four whole numbers, so saving and resetting the atom repeats what it draws, and defonce keeps it across reloads."
 (random/float {from nil}) "A float from 0 up to but not including 1, from the system's randomness or drawn from the generator :from."
 (random/range low high {from nil}) "A float from low up to but not including high."

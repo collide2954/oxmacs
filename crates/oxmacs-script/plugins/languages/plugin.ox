@@ -1,5 +1,5 @@
 (plugin languages
-  :version "0.1.2"
+  :version "0.1.3"
   :summary "Python, Go, C, C++, TypeScript, JavaScript, JSON and Markdown modes with their language servers"
   :requires {markdown: "^0.2"}
   :modes [{title: "Python" extensions: ["py" "pyi" "pyw"] comment: "#" roots: ["pyproject.toml" "setup.py" "setup.cfg" "requirements.txt"]}

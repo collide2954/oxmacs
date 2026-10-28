@@ -10,6 +10,7 @@ mod geometry;
 mod grid;
 mod http;
 mod image;
+mod lexer;
 mod net;
 mod process;
 mod random;

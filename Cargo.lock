@@ -3901,6 +3901,7 @@ dependencies = [
  "oxmacs-files",
  "oxmacs-process",
  "rayon",
+ "regex",
  "resvg",
  "ring",
  "roxmltree 0.21.2",
