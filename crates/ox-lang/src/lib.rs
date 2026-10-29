@@ -2,6 +2,7 @@ mod builder;
 mod builtins;
 pub mod bytecode;
 pub mod check;
+pub mod clock;
 mod compile;
 pub mod describe;
 pub mod error;

@@ -142,6 +142,7 @@ impl Film {
     }
 
     fn ticking(self, start: Instant) -> Self {
+        ox_lang::clock::pin(Some(start));
         Self {
             clock: Some(start),
             ..self
@@ -182,6 +183,7 @@ impl Film {
         if let Some(clock) = &mut self.clock {
             *clock += Duration::from_secs_f64(seconds);
             let now = *clock;
+            ox_lang::clock::pin(Some(now));
             track(app.update(Message::Tick(now)));
         }
     }

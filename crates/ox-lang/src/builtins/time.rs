@@ -359,7 +359,7 @@ pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "now")
         .arity(0, Some(0))
-        .function(|_, _| Ok(Value::Int(Timestamp::now().as_millisecond())));
+        .function(|_, _| Ok(Value::Int(crate::clock::wall().as_millisecond())));
     isolate
         .native(MODULE, "parse")
         .arity(1, Some(1))

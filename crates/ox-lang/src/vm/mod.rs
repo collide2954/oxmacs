@@ -425,9 +425,8 @@ impl Runtime {
                 };
                 let delay =
                     Duration::try_from_secs_f64(millis.max(0.0) / 1000.0).unwrap_or(Duration::MAX);
-                let until = Instant::now()
-                    .checked_add(delay)
-                    .unwrap_or_else(Instant::now);
+                let now = crate::clock::now();
+                let until = now.checked_add(delay).unwrap_or(now);
                 Ok((Wait::Until(until), landing))
             }
             _ => Err(Error::new(

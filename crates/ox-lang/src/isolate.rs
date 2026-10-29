@@ -690,11 +690,12 @@ impl Isolate {
             if self.runnable() > 0 {
                 continue;
             }
-            let until = match self.next_wake() {
+            let pause = match self.next_wake() {
                 Wake::Never => break,
-                Wake::Soon => Instant::now() + IDLE_POLL,
-                Wake::At(when) => when,
+                Wake::Soon => IDLE_POLL,
+                Wake::At(when) => when.saturating_duration_since(crate::clock::now()),
             };
+            let until = Instant::now() + pause;
             let until = stop.map_or(until, |stop| until.min(stop));
             std::thread::sleep(until.saturating_duration_since(Instant::now()));
         }

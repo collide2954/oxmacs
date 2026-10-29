@@ -171,7 +171,7 @@ impl Runtime {
     pub(super) fn attempt(&mut self, wait: &Wait, landing: Landing) -> Option<Step> {
         match wait {
             Wait::Until(deadline) => {
-                (Instant::now() >= *deadline).then_some(Ok(Flow::Land(landing, Value::Nil)))
+                (crate::clock::now() >= *deadline).then_some(Ok(Flow::Land(landing, Value::Nil)))
             }
             Wait::Promise(promise) => match self.heap.promise_of(*promise)? {
                 Promise::Pending { .. } => None,
@@ -318,7 +318,7 @@ impl Runtime {
                 .min();
             let timeout = deadline.map_or(OUTSIDE_WAIT, |deadline| {
                 deadline
-                    .saturating_duration_since(Instant::now())
+                    .saturating_duration_since(crate::clock::now())
                     .min(OUTSIDE_WAIT)
             });
             self.heap.signal().wait(timeout);

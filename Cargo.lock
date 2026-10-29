@@ -4028,6 +4028,7 @@ dependencies = [
  "native-theme",
  "notify",
  "open",
+ "ox-lang",
  "oxmacs-api",
  "oxmacs-core",
  "oxmacs-pdf",
