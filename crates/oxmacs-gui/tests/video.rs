@@ -1,6 +1,8 @@
+mod music;
 mod sample_book;
 mod sample_paper;
 mod support;
+mod tank;
 
 use std::cell::{Cell, RefCell};
 use std::fmt::Write as _;
@@ -123,6 +125,7 @@ struct Film {
     output: Option<(u32, u32)>,
     pace: f64,
     clock: Option<Instant>,
+    dry: bool,
 }
 
 impl Film {
@@ -138,7 +141,12 @@ impl Film {
             output: None,
             pace: 1.0,
             clock: None,
+            dry: false,
         }
+    }
+
+    fn dry(self, dry: bool) -> Self {
+        Self { dry, ..self }
     }
 
     fn ticking(self, start: Instant) -> Self {
@@ -169,15 +177,17 @@ impl Film {
     }
 
     fn shot(&mut self, app: &mut App, seconds: f64) {
-        let mut ui = Simulator::with_size(settings(), self.size, app.view());
-        for _ in 0..self.uploads {
-            let _ = ui.snapshot(&app.theme());
-        }
-        let snapshot = ui.snapshot(&app.theme()).unwrap();
         let stem = format!("frame-{:05}", self.frames.len());
-        snapshot.matches_image(self.folder.join(&stem)).unwrap();
-        for message in ui.into_messages() {
-            track(app.update(message));
+        if !self.dry {
+            let mut ui = Simulator::with_size(settings(), self.size, app.view());
+            for _ in 0..self.uploads {
+                let _ = ui.snapshot(&app.theme());
+            }
+            let snapshot = ui.snapshot(&app.theme()).unwrap();
+            snapshot.matches_image(self.folder.join(&stem)).unwrap();
+            for message in ui.into_messages() {
+                track(app.update(message));
+            }
         }
         self.frames.push((stem, seconds));
         if let Some(clock) = &mut self.clock {
@@ -268,6 +278,14 @@ impl Film {
     }
 
     fn finish(&self, out: &Path) {
+        self.encode(out, false);
+    }
+
+    fn finish_scored(&self, out: &Path) {
+        self.encode(out, true);
+    }
+
+    fn encode(&self, out: &Path, scored: bool) {
         let names: Vec<String> = fs::read_dir(&self.folder)
             .unwrap()
             .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
@@ -291,7 +309,8 @@ impl Film {
             }
             None => "fps=30,format=yuv420p".to_owned(),
         };
-        let status = Command::new("ffmpeg")
+        let mut ffmpeg = Command::new("ffmpeg");
+        ffmpeg
             .args([
                 "-y",
                 "-loglevel",
@@ -302,7 +321,22 @@ impl Film {
                 "0",
                 "-i",
             ])
-            .arg(&listed)
+            .arg(&listed);
+        if scored {
+            let length: f64 = self.frames.iter().map(|(_, seconds)| seconds).sum();
+            let score = self.folder.join("score.wav");
+            music::vaporwave(length + 1.0, &score);
+            ffmpeg
+                .arg("-i")
+                .arg(&score)
+                .arg("-af")
+                .arg(format!(
+                    "afade=t=in:st=0:d=3,afade=t=out:st={:.2}:d=5",
+                    (length - 5.0).max(0.0)
+                ))
+                .args(["-c:a", "aac", "-b:a", "192k", "-shortest"]);
+        }
+        let status = ffmpeg
             .arg("-vf")
             .arg(&filters)
             .args([
@@ -2441,4 +2475,42 @@ fn black_hole_video() {
     }
     film.hold(2.0);
     film.finish(&out);
+}
+
+fn tank_home(source: &str) -> PathBuf {
+    let user = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap();
+    let home = user.join("oxmacs-tank-demo");
+    if home.join(".oxmacs-demo").exists() {
+        fs::remove_dir_all(&home).unwrap();
+    }
+    assert!(
+        !home.exists(),
+        "{} exists and wasn't made by this demo",
+        home.display()
+    );
+    fs::create_dir_all(&home).unwrap();
+    fs::write(home.join(".oxmacs-demo"), "").unwrap();
+    fs::write(
+        home.join("init.ox"),
+        "(settings {theme: :adwaita-dark animations: false font-size: 11})\n(use-plugin rodeo)\n(use-plugin keycast :config {placement: :bottom-center})\n",
+    )
+    .unwrap();
+    fs::write(home.join("tank.ox"), source).unwrap();
+    home
+}
+
+fn tank_app(home: &Path) -> App {
+    let visit = Visit {
+        path: home.join("tank.ox"),
+        line: None,
+        column: None,
+    };
+    let (mut app, booted) = App::boot(&[visit], Some(home));
+    track(booted);
+    track(app.update(Message::Focus(true)));
+    settle(&mut app);
+    app
 }
