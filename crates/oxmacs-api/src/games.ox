@@ -12,6 +12,7 @@
 (rodeo/rect rect color {stroke nil layer 0}) "Draws the [x y w h] rect filled with color, or outlined :stroke pixels wide."
 (rodeo/circle center radius color {stroke nil layer 0}) "Draws a circle around the [x y] center, filled or outlined :stroke pixels wide."
 (rodeo/line from to color {width 1 layer 0}) "Draws a line between two [x y] points."
+(rodeo/polygon points color {stroke nil layer 0}) "Draws the closed shape through a vector of three or more [x y] points, filled with color or outlined :stroke pixels wide."
 (rodeo/text text at {color :white size 8 layer 0}) "Writes text with its top-left corner at the [x y] point, :size pixels tall in game pixels."
 (rodeo/image path) "Loads the image at path, relative to the game's file, as a map of :id, :width and :height for rodeo/sprite; loading it again gives the same image."
 (rodeo/cells image width height) "The [x y w h] cells of a sprite sheet image cut into width by height frames, row by row."

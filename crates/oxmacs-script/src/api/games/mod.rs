@@ -225,6 +225,15 @@ fn point(heap: &Heap, name: &str, value: Value) -> Result<Vec2, Error> {
     Ok(Vec2::new(found[0], found[1]))
 }
 
+fn points(heap: &Heap, name: &str, value: Value) -> Result<Vec<Vec2>, Error> {
+    heap.elements(value)
+        .filter(|items| items.len() >= 3)
+        .ok_or_else(|| wrong(heap, name, "a vector of three or more [x y] points", value))?
+        .into_iter()
+        .map(|item| point(heap, name, item))
+        .collect()
+}
+
 fn rect(heap: &Heap, name: &str, value: Value) -> Result<Rect, Error> {
     let found = numbers(heap, name, "a rect as [x y w h]", value, 4)?;
     Ok(Rect::new(found[0], found[1], found[2], found[3]))
@@ -472,6 +481,15 @@ fn shape(
             &arguments[3..],
             &["stroke", "layer"],
         ),
+        "polygon" => (
+            Shape::Polygon {
+                points: points(heap, name, arguments[0])?,
+                stroke: None,
+            },
+            arguments[1],
+            &arguments[2..],
+            &["stroke", "layer"],
+        ),
         _ => (
             Shape::Line {
                 from: point(heap, name, arguments[0])?,
@@ -500,7 +518,7 @@ fn shape(
             to,
             width: options.number(heap, name, "width", 1.0)?,
         },
-        other @ Shape::Polygon { .. } => other,
+        Shape::Polygon { points, .. } => Shape::Polygon { points, stroke },
     };
     let paint = color(heap, name, paint)?;
     let layer = options.layer(heap, name)?;
@@ -953,6 +971,11 @@ fn install_drawing(isolate: &mut Isolate) {
         .keywords(&["stroke", "layer"])
         .host::<Editor>(|heap, editor, arguments| shape(heap, editor, arguments, "circle"));
     isolate
+        .native(MODULE, "polygon")
+        .arity(2, Some(2))
+        .keywords(&["stroke", "layer"])
+        .host::<Editor>(|heap, editor, arguments| shape(heap, editor, arguments, "polygon"));
+    isolate
         .native(MODULE, "line")
         .arity(3, Some(3))
         .keywords(&["width", "layer"])
@@ -1296,6 +1319,29 @@ mod tests {
         ox.games_frame(&mut editor, start + sixtieths(3));
         assert_eq!(ox.eval(&mut editor, "@ticks").unwrap(), "3");
         assert_eq!(screen(&editor, id).unwrap().status, None);
+    }
+
+    #[test]
+    fn polygons_fill_the_shape_through_their_points() {
+        let (mut editor, mut ox, start, _folder) = playing(COUNTER);
+        ox.eval(
+            &mut editor,
+            r##"(def (draw) (rodeo/clear "#000000") (rodeo/polygon [[0 0] [4 0] [0 4]] "#ffffff"))"##,
+        )
+        .unwrap();
+        ox.games_frame(&mut editor, start + sixtieths(1));
+        assert_eq!(pixel(&editor, 0, 0), [255, 255, 255, 255]);
+        assert_eq!(pixel(&editor, 3, 3), [0, 0, 0, 255]);
+        let error = ox
+            .eval(
+                &mut editor,
+                r##"(module (import (ox rodeo))) (rodeo/polygon [[0 0] [1 1]] "#ffffff")"##,
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.message,
+            "rodeo/polygon expects a vector of three or more [x y] points, got [[0 0] [1 1]]"
+        );
     }
 
     #[test]
