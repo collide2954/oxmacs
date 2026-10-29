@@ -156,6 +156,7 @@ mod tests {
             outline: Outline::NONE,
             features: &[Feature::Highlighting],
             roots: crate::syntax::Roots::default(),
+            name_chars: "",
         }
     }
 

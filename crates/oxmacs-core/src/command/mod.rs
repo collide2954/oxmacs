@@ -333,19 +333,19 @@ pub enum Command {
     LspLog,
     #[strum(
         message = "Go to where the name at point is defined",
-        detailed_message = "Asks the buffer's language server where the name at point is defined and goes there; when there are several places they are listed in *xref*. M-, comes back."
+        detailed_message = "Asks the buffer's mode, or else its language server, where the name at point is defined and goes there; when there are several places they are listed in *xref*. M-, comes back."
     )]
-    LspFindDefinition,
+    FindDefinition,
     #[strum(
         message = "List every use of the name at point",
-        detailed_message = "Asks the buffer's language server for every reference to the name at point and lists them in *xref*, grouped by file. RET visits one, n and p step and q quits."
+        detailed_message = "Asks the buffer's mode, or else its language server, for every use of the name at point and lists them in *xref*, grouped by file. RET visits one, n and p step and q quits."
     )]
-    LspFindReferences,
+    FindReferences,
     #[strum(
         message = "Show the documentation of the name at point",
-        detailed_message = "Asks the buffer's language server about the name at point and shows its signature and documentation in *doc* beside the current window; q closes it."
+        detailed_message = "Asks the buffer's mode, or else its language server, about the name at point and shows its signature and documentation in *doc* beside the current window; q closes it."
     )]
-    LspDescribe,
+    DescribeAtPoint,
     #[strum(
         message = "Rename the name at point everywhere",
         detailed_message = "Asks for the new name, then has the buffer's language server rename the name at point in every file of the project. Changed files are left unsaved; C-x s saves them."
@@ -417,7 +417,7 @@ pub enum Command {
     ToolRemove,
     #[strum(
         message = "Complete the code before point",
-        detailed_message = "Asks the buffer's language server how the code before point could go on. Several answers appear in a popup at point; a single answer is inserted at once."
+        detailed_message = "Asks the buffer's mode, or else its language server, how the code before point could go on. Several answers appear in a popup at point; a single answer is inserted at once."
     )]
     CompletionAtPoint,
 }

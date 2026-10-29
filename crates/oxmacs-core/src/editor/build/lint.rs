@@ -371,6 +371,7 @@ mod tests {
             outline: Outline::NONE,
             features: &[],
             roots: crate::syntax::Roots::default(),
+            name_chars: "",
         }
     }
 

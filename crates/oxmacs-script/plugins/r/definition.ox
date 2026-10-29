@@ -93,7 +93,7 @@
         ((and (session/running? running) (console-waiting? running))
          (reset! asked {name: name origin: origin})
          (session/request running "getOption(\"oxmacs\")$definition({(session/r-string name)})"))
-        ((language/ready?) (run-command 'lsp-find-definition))
+        ((language/ready?) (run-command 'find-definition))
         (else (message "No definition of {name} in open R buffers or the project"))))
     (message "No symbol at point")))
 

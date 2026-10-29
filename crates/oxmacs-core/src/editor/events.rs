@@ -49,7 +49,11 @@ pub enum Event {
         path: PathBuf,
         owner: String,
     },
-    Items(BufferId),
+    Asked {
+        buffer: BufferId,
+        service: Service,
+        explicit: bool,
+    },
     ItemChosen {
         buffer: BufferId,
         index: usize,
@@ -62,8 +66,18 @@ enum Claim {
     Directories,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Service {
+    Items,
+    Complete,
+    Signature,
+    Definition,
+    References,
+    Docs,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ItemSource {
+pub enum Source {
     Mode(String),
     Buffer(BufferId),
 }
@@ -73,7 +87,7 @@ pub(super) struct Events {
     queued: Vec<Event>,
     subscribed: Vec<EventKind>,
     claims: Vec<(Claim, String)>,
-    item_sources: Vec<ItemSource>,
+    provided: Vec<(Service, Source)>,
     windows: Option<(WindowId, BufferId, Arrangement)>,
     diagnostics: u64,
     modes: HashMap<BufferId, String>,
@@ -135,28 +149,46 @@ impl Editor {
         self.record(Event::Configured);
     }
 
-    pub fn claim_items(&mut self, source: ItemSource) {
-        if !self.events.item_sources.contains(&source) {
-            self.events.item_sources.push(source);
+    pub fn provide(&mut self, service: Service, source: Source) {
+        let provided = (service, source);
+        if !self.events.provided.contains(&provided) {
+            self.events.provided.push(provided);
         }
-        self.subscribe(EventKind::Items);
-        self.subscribe(EventKind::ItemChosen);
+        self.subscribe(EventKind::Asked);
+        if service == Service::Items {
+            self.subscribe(EventKind::ItemChosen);
+        }
     }
 
-    pub(in crate::editor) fn items_claimed(&self) -> bool {
+    pub fn withdraw(&mut self, source: &Source) {
+        self.events.provided.retain(|(_, known)| known != source);
+    }
+
+    pub fn provided(&self, service: Service) -> bool {
         let id = self.buffer().id();
         let mode = self
             .buffer_language(id)
             .map(|language| language.name().to_owned());
-        self.events.item_sources.iter().any(|source| match source {
-            ItemSource::Buffer(buffer) => *buffer == id,
-            ItemSource::Mode(name) => mode.as_deref() == Some(name),
+        self.events.provided.iter().any(|(known, source)| {
+            *known == service
+                && match source {
+                    Source::Buffer(buffer) => *buffer == id,
+                    Source::Mode(name) => mode.as_deref() == Some(name),
+                }
         })
     }
 
-    pub(in crate::editor) fn ask_for_items(&mut self) {
-        let id = self.buffer().id();
-        self.record(Event::Items(id));
+    pub(in crate::editor) fn ask_provider(&mut self, service: Service, explicit: bool) -> bool {
+        if !self.provided(service) {
+            return false;
+        }
+        let buffer = self.buffer().id();
+        self.record(Event::Asked {
+            buffer,
+            service,
+            explicit,
+        });
+        true
     }
 
     pub fn choose_item(&mut self, buffer: BufferId, index: usize) {
@@ -324,12 +356,14 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use super::{Event, EventKind};
+    use std::time::{Duration, Instant};
+
+    use super::{Event, EventKind, Service, Source};
     use crate::command::ScopeId;
     use crate::editor::{Cell, Clicks, Editor};
     use crate::special_buffer::SpecialBuffer;
     use crate::syntax::Language;
-    use crate::testing::press;
+    use crate::testing::{press, type_text};
     use crate::text::BufferId;
 
     #[derive(Debug)]
@@ -465,6 +499,85 @@ mod tests {
                 Event::ModeChanged(id, Language::toml().name().to_owned())
             ]
         );
+    }
+
+    fn asked(editor: &mut Editor) -> Vec<(Service, bool)> {
+        editor
+            .take_events()
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::Asked {
+                    service, explicit, ..
+                } => Some((service, explicit)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn rested(editor: &mut Editor) {
+        let since = Instant::now();
+        editor.idle(since, since + Duration::from_secs(2));
+    }
+
+    #[test]
+    fn a_mode_that_provides_a_service_is_asked_instead_of_the_language_server() {
+        let mut editor = Editor::new();
+        editor.set_major_mode(Some(Language::rust()));
+        editor.provide(Service::Definition, Source::Mode("Rust".to_owned()));
+
+        press(&mut editor, "M-.");
+        assert_eq!(asked(&mut editor), [(Service::Definition, true)]);
+        assert_eq!(editor.message(), None);
+
+        press(&mut editor, "M-?");
+        assert_eq!(asked(&mut editor), []);
+        assert_eq!(
+            editor.message(),
+            Some("No language server works on this buffer")
+        );
+    }
+
+    #[test]
+    fn three_letters_of_a_name_outside_strings_and_comments_ask_for_completions() {
+        let mut editor = Editor::new();
+        editor.set_major_mode(Some(Language::rust()));
+        editor.provide(Service::Complete, Source::Mode("Rust".to_owned()));
+        editor.provide(Service::Signature, Source::Mode("Rust".to_owned()));
+
+        type_text(&mut editor, "le");
+        rested(&mut editor);
+        assert_eq!(asked(&mut editor), [(Service::Signature, false)]);
+        type_text(&mut editor, "t");
+        rested(&mut editor);
+        assert_eq!(
+            asked(&mut editor),
+            [(Service::Complete, false), (Service::Signature, false)]
+        );
+        rested(&mut editor);
+        assert_eq!(asked(&mut editor), []);
+
+        type_text(&mut editor, " x = \"abc");
+        rested(&mut editor);
+        assert_eq!(asked(&mut editor), [(Service::Signature, false)]);
+        type_text(&mut editor, "\";");
+        press(&mut editor, "RET");
+        type_text(&mut editor, "// abc");
+        rested(&mut editor);
+        assert_eq!(asked(&mut editor), [(Service::Signature, false)]);
+
+        press(&mut editor, "C-M-i");
+        assert_eq!(asked(&mut editor), [(Service::Complete, true)]);
+    }
+
+    #[test]
+    fn a_language_s_name_characters_count_toward_the_name_typed() {
+        let mut editor = Editor::new();
+        editor.set_major_mode(Some(Language::r()));
+        editor.provide(Service::Complete, Source::Mode("R".to_owned()));
+
+        type_text(&mut editor, "a.b");
+        rested(&mut editor);
+        assert_eq!(asked(&mut editor), [(Service::Complete, false)]);
     }
 
     #[test]

@@ -4,7 +4,7 @@ use ox_lang::heap::{Heap, Hold};
 use ox_lang::native::expected;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::editor::{Editor, ItemSource};
+use oxmacs_core::editor::{Editor, Service, Source};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::face_named;
 use oxmacs_core::view::{Arg, Node, Picture, Pixels, ViewBuffer};
@@ -379,7 +379,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     }
     crate::api::commands::bind_keys(editor, scope, &bindings)?;
     if items != Value::Nil {
-        crate::api::items::claim(heap, editor, ItemSource::Buffer(buffer), items);
+        crate::api::provided::provide(heap, editor, Service::Items, Source::Buffer(buffer), items);
     }
     if show {
         crate::api::buffers::reveal(editor, buffer, beside, select);

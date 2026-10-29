@@ -204,6 +204,7 @@ pub struct LanguageSpec {
     pub outline: Outline,
     pub features: &'static [Feature],
     pub roots: Roots,
+    pub name_chars: &'static str,
 }
 
 impl LanguageSpec {
@@ -221,6 +222,7 @@ impl LanguageSpec {
             outline: Outline::NONE,
             features: &[],
             roots: Roots::default(),
+            name_chars: "",
         }
     }
 }
@@ -275,6 +277,10 @@ impl Language {
 
     pub fn roots(&self) -> &Roots {
         &self.0.roots
+    }
+
+    pub fn in_name(&self, character: char) -> bool {
+        character.is_alphanumeric() || character == '_' || self.0.name_chars.contains(character)
     }
 
     fn named_file(&self, path: &Path) -> bool {

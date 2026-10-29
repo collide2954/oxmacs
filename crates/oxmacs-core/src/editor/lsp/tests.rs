@@ -919,6 +919,7 @@ fn markdown_spec() -> crate::syntax::LanguageSpec {
         outline: crate::syntax::Outline::NONE,
         features: &[],
         roots: crate::syntax::Roots::default(),
+        name_chars: "",
     }
 }
 

@@ -4,7 +4,7 @@ use super::edits::{files, position};
 use super::{Encoding, ServerId, number, protocol};
 use crate::command::Command;
 use crate::editor::decorations::Owner;
-use crate::editor::{Editor, Lasts, Look, Offer, Picked, Place};
+use crate::editor::{Editor, Lasts, Look, Offer, Picked, Place, Service};
 use crate::text::BufferId;
 use crate::theme::Highlight;
 
@@ -171,7 +171,7 @@ impl Editor {
                 .count()
     }
 
-    pub(in crate::editor) fn lsp_complete(&mut self, explicit: bool) {
+    fn lsp_complete(&mut self, explicit: bool) {
         let Some((id, params)) = self.serving_here("completionProvider", !explicit) else {
             return;
         };
@@ -191,64 +191,136 @@ impl Editor {
         self.lsp.triggered_by(buffer.id(), typed)
     }
 
-    pub(in crate::editor) fn lsp_wants_auto_complete(&self) -> bool {
+    fn name_typed(&self) -> usize {
         let buffer = self.buffers.current();
-        let typed = buffer
+        let language = self.buffers.language(0);
+        buffer
             .chars_before(buffer.point())
-            .take_while(|c| word_char(*c))
-            .count();
-        self.last_command == Some(Command::SelfInsertCommand)
-            && !self.prompts.reading()
-            && !self.prompts.showing_popup()
-            && self.lsp_serves_here()
-            && (typed >= AUTO_PREFIX || self.trigger_typed())
-            && self.lsp.assist.auto_mark != Some((buffer.id(), buffer.revision()))
+            .take_while(|c| {
+                language
+                    .as_ref()
+                    .map_or(word_char(*c), |known| known.in_name(*c))
+            })
+            .count()
     }
 
-    pub(in crate::editor) fn lsp_auto_complete(&mut self) {
-        let buffer = self.buffers.current();
-        self.lsp.assist.auto_mark = Some((buffer.id(), buffer.revision()));
-        self.lsp_complete(false);
-    }
-
-    pub(in crate::editor) fn lsp_wants_signature(&self) -> bool {
-        let buffer = self.buffers.current();
-        self.lsp_serves_here()
-            && self.lsp.assist.signature != Some((buffer.id(), buffer.revision(), buffer.point()))
-    }
-
-    pub(in crate::editor) fn completion_at_point(&mut self) {
-        self.lsp_complete(true);
-    }
-
-    fn in_comment(&self) -> bool {
+    fn in_comment_or_string(&self) -> bool {
         let buffer = self.buffers.current();
         let point = buffer.point();
         let line = buffer.line_of(point);
-        self.buffers
+        let column = point - buffer.line_start(line);
+        let commented = self
+            .buffers
             .syntax(0)
             .and_then(|syntax| syntax.comment_start(buffer, line))
-            .is_some_and(|column| buffer.line_start(line) + column < point)
+            .is_some_and(|start| start < column);
+        commented
+            || column.checked_sub(1).is_some_and(|typed| {
+                self.line_style(line)
+                    .spans
+                    .iter()
+                    .any(|(range, highlight)| {
+                        range.contains(&typed)
+                            && matches!(
+                                highlight,
+                                Highlight::Comment | Highlight::DocComment | Highlight::String
+                            )
+                    })
+            })
+    }
+
+    fn assisted(&self, service: Service) -> bool {
+        self.provided(service) || self.lsp_serves_here()
+    }
+
+    pub(in crate::editor) fn completion_at_point(&mut self) {
+        if !self.ask_provider(Service::Complete, true) {
+            self.lsp_complete(true);
+        }
+    }
+
+    pub(in crate::editor) fn find_definition(&mut self) {
+        if !self.ask_provider(Service::Definition, true) {
+            self.lsp_find_definition();
+        }
+    }
+
+    pub(in crate::editor) fn find_references(&mut self) {
+        if !self.ask_provider(Service::References, true) {
+            self.lsp_find_references();
+        }
+    }
+
+    pub(in crate::editor) fn describe_at_point(&mut self) {
+        if !self.ask_provider(Service::Docs, true) {
+            self.lsp_describe();
+        }
+    }
+
+    pub fn fall_back(&mut self, service: Service, explicit: bool) {
+        match service {
+            Service::Items => self.outline_items(),
+            Service::Complete => self.lsp_complete(explicit),
+            Service::Signature => self.lsp_signature(),
+            Service::Definition => self.lsp_find_definition(),
+            Service::References => self.lsp_find_references(),
+            Service::Docs => self.lsp_describe(),
+        }
     }
 
     pub fn wants_auto_complete(&self) -> bool {
-        self.lsp_wants_auto_complete() && !self.in_comment()
+        let buffer = self.buffers.current();
+        self.last_command == Some(Command::SelfInsertCommand)
+            && !self.prompts.reading()
+            && !self.prompts.showing_popup()
+            && self.assisted(Service::Complete)
+            && (self.name_typed() >= AUTO_PREFIX || self.trigger_typed())
+            && self.lsp.assist.auto_mark != Some((buffer.id(), buffer.revision()))
+            && !self.in_comment_or_string()
     }
 
     pub fn auto_complete(&mut self) {
-        if self.wants_auto_complete() {
-            self.lsp_auto_complete();
+        if !self.wants_auto_complete() {
+            return;
+        }
+        let buffer = self.buffers.current();
+        self.lsp.assist.auto_mark = Some((buffer.id(), buffer.revision()));
+        if !self.ask_provider(Service::Complete, false) {
+            self.lsp_complete(false);
         }
     }
 
     pub fn wants_signature(&self) -> bool {
-        let quiet = self.prompts.quiet();
-        quiet && self.lsp_wants_signature()
+        let buffer = self.buffers.current();
+        self.prompts.quiet()
+            && self.assisted(Service::Signature)
+            && self.lsp.assist.signature != Some((buffer.id(), buffer.revision(), buffer.point()))
     }
 
     pub fn show_signature(&mut self) {
-        if self.wants_signature() {
+        if !self.wants_signature() {
+            return;
+        }
+        let buffer = self.buffers.current();
+        self.lsp.assist.signature = Some((buffer.id(), buffer.revision(), buffer.point()));
+        self.lsp_hints();
+        if !self.ask_provider(Service::Signature, false) {
             self.lsp_signature();
+        }
+    }
+
+    pub fn answer_signature(&mut self, label: Option<String>) {
+        let ours = self.message.is_none() || self.message == self.lsp.assist.signature_shown;
+        match label {
+            Some(label) if ours => {
+                self.show_message(label.clone());
+                self.lsp.assist.signature_shown = Some(label);
+            }
+            None if ours && self.lsp.assist.signature_shown.is_some() => {
+                self.message = None;
+                self.lsp.assist.signature_shown = None;
+            }
+            _ => {}
         }
     }
 
@@ -326,28 +398,26 @@ impl Editor {
         }
     }
 
-    pub(in crate::editor) fn lsp_signature(&mut self) {
-        self.lsp_hints();
-        let buffer = self.buffers.current();
-        self.lsp.assist.signature = Some((buffer.id(), buffer.revision(), buffer.point()));
-        let buffer = buffer.id();
-        if let Some((id, params)) = self.serving_here("signatureHelpProvider", true) {
-            self.ask_server(
+    fn lsp_signature(&mut self) {
+        let buffer = self.buffers.current().id();
+        match self.serving_here("signatureHelpProvider", true) {
+            Some((id, params)) => self.ask_server(
                 id,
                 "textDocument/signatureHelp",
                 &params,
                 Asked::Signature { buffer },
-            );
+            ),
+            None => self.answer_signature(None),
         }
     }
 
-    pub(in crate::editor) fn lsp_describe(&mut self) {
+    fn lsp_describe(&mut self) {
         if let Some((id, params)) = self.serving_here("hoverProvider", false) {
             self.ask_server(id, "textDocument/hover", &params, Asked::Hover);
         }
     }
 
-    pub(in crate::editor) fn lsp_find_definition(&mut self) {
+    fn lsp_find_definition(&mut self) {
         let origin = self.current_location();
         if let Some((id, params)) = self.serving_here("definitionProvider", false) {
             self.ask_server(
@@ -371,7 +441,7 @@ impl Editor {
         name
     }
 
-    pub(in crate::editor) fn lsp_find_references(&mut self) {
+    fn lsp_find_references(&mut self) {
         let name = self.symbol_here();
         if let Some((id, mut params)) = self.serving_here("referencesProvider", false) {
             params["context"] = json!({"includeDeclaration": true});
@@ -636,18 +706,7 @@ impl Editor {
             .or_else(|| result["signatures"].get(0))
             .and_then(|signature| signature["label"].as_str())
             .map(str::to_owned);
-        let ours = self.message.is_none() || self.message == self.lsp.assist.signature_shown;
-        match label {
-            Some(label) if ours => {
-                self.show_message(label.clone());
-                self.lsp.assist.signature_shown = Some(label);
-            }
-            None if ours && self.lsp.assist.signature_shown.is_some() => {
-                self.message = None;
-                self.lsp.assist.signature_shown = None;
-            }
-            _ => {}
-        }
+        self.answer_signature(label);
     }
 
     fn hovered(&mut self, result: &Value) {

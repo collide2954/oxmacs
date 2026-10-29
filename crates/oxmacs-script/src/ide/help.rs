@@ -1,6 +1,5 @@
 use std::fmt::Write as _;
 use std::path::Path;
-use std::time::Duration;
 
 use ox_lang::Isolate;
 use ox_lang::describe::{Description, Kind};
@@ -12,16 +11,12 @@ use oxmacs_core::text::BufferId;
 use crate::{ide::ox_mode, ide::repl, ide::stacktrace, runtime::plugins};
 
 const LOOK_BACK: usize = 400;
-const AUTO_PREFIX: usize = 3;
 
 type Spot = (BufferId, u64, usize);
 
 #[derive(Debug, Default)]
 pub(crate) struct Help {
     seen: Option<(Spot, Option<String>)>,
-    rested: Option<Spot>,
-    shown: Option<String>,
-    completed: Option<(BufferId, u64)>,
 }
 
 pub(crate) fn in_ox(editor: &Editor) -> bool {
@@ -82,33 +77,13 @@ fn spot(editor: &Editor) -> Spot {
     (buffer.id(), buffer.revision(), buffer.point())
 }
 
-pub(crate) fn signature_wait(editor: &Editor, help: &Help) -> Option<Duration> {
-    (in_ox(editor) && help.rested != Some(spot(editor))).then(|| editor.signature_delay())
-}
-
 pub(crate) fn echo_signature(
     isolate: &Isolate,
     editor: &mut Editor,
     home: Option<&Path>,
     help: &mut Help,
 ) {
-    if !in_ox(editor) {
-        return;
-    }
     let key = spot(editor);
-    help.rested = Some(key);
-    if editor.minibuffer().is_some()
-        || editor.question().is_some()
-        || editor.pane().popup().is_some()
-    {
-        return;
-    }
-    let ours = editor
-        .message()
-        .is_none_or(|shown| help.shown.as_deref() == Some(shown));
-    if !ours {
-        return;
-    }
     let text = match &help.seen {
         Some((seen, text)) if *seen == key => text.clone(),
         _ => {
@@ -123,12 +98,7 @@ pub(crate) fn echo_signature(
             text
         }
     };
-    if let Some(text) = text
-        && editor.message() != Some(text.as_str())
-    {
-        editor.show_message(text.clone());
-        help.shown = Some(text);
-    }
+    editor.answer_signature(text);
 }
 
 fn typed_name(editor: &Editor) -> (usize, String) {
@@ -146,10 +116,10 @@ pub(crate) fn complete(
     home: Option<&Path>,
     explicit: bool,
 ) {
-    if !in_ox(editor) {
+    let (start, typed) = typed_name(editor);
+    if typed.is_empty() && !explicit {
         return;
     }
-    let (start, typed) = typed_name(editor);
     let module = module(editor, home);
     let candidates = with_file(editor, |file| {
         ide::completions(isolate, &module, file, &typed)
@@ -158,31 +128,6 @@ pub(crate) fn complete(
     .map(|candidate| candidate.name)
     .collect();
     editor.complete_at(start, candidates, explicit);
-}
-
-pub(crate) fn auto_complete(
-    isolate: &Isolate,
-    editor: &mut Editor,
-    home: Option<&Path>,
-    help: &mut Help,
-) {
-    if !editor.just_typed()
-        || editor.minibuffer().is_some()
-        || editor.pane().popup().is_some()
-        || !in_ox(editor)
-    {
-        return;
-    }
-    let buffer = editor.buffer();
-    let key = (buffer.id(), buffer.revision());
-    if help.completed == Some(key) {
-        return;
-    }
-    help.completed = Some(key);
-    let (_, typed) = typed_name(editor);
-    if typed.chars().count() >= AUTO_PREFIX {
-        complete(isolate, editor, home, false);
-    }
 }
 
 pub(crate) fn name_at_point(editor: &Editor) -> Option<String> {
@@ -284,9 +229,13 @@ mod tests {
         press(editor, ox, "C-b");
     }
 
+    fn rest_for(editor: &mut Editor, ox: &mut Ox, since: Instant, rested: Duration) {
+        editor.idle(since, since + rested);
+        settle(editor, ox);
+    }
+
     fn rest(editor: &mut Editor, ox: &mut Ox) {
-        let since = Instant::now();
-        ox.idle(editor, since, since + editor.signature_delay());
+        rest_for(editor, ox, Instant::now(), Duration::from_secs(2));
     }
 
     #[test]
@@ -354,13 +303,13 @@ mod tests {
 
         go(&mut editor, &mut ox, call + 7);
         assert_eq!(editor.message(), None);
-        assert_eq!(ox.idle_wait(&editor, since), Some(pause));
-        ox.idle(&mut editor, since, since + pause / 2);
+        assert_eq!(editor.idle_wait(since), Some(pause));
+        rest_for(&mut editor, &mut ox, since, pause / 2);
         assert_eq!(editor.message(), None);
 
-        ox.idle(&mut editor, since, since + pause);
+        rest_for(&mut editor, &mut ox, since, pause);
         assert_eq!(editor.message(), Some("(area w h)  Width times height."));
-        assert_ne!(ox.idle_wait(&editor, since), Some(pause));
+        assert_eq!(editor.idle_wait(since), None);
     }
 
     #[test]
@@ -373,9 +322,9 @@ mod tests {
         let since = Instant::now();
 
         go(&mut editor, &mut ox, call + 7);
-        ox.idle(&mut editor, since, since + Duration::from_secs(1));
+        rest_for(&mut editor, &mut ox, since, Duration::from_secs(1));
         assert_eq!(editor.message(), None);
-        ox.idle(&mut editor, since, since + Duration::from_secs(2));
+        rest_for(&mut editor, &mut ox, since, Duration::from_secs(2));
         assert_eq!(editor.message(), Some("(area w h)  Width times height."));
     }
 
@@ -459,17 +408,42 @@ mod tests {
         at_end(&mut editor, "\n");
 
         typed(&mut editor, &mut ox, "(li");
+        rest(&mut editor, &mut ox);
         assert_eq!(offered(&editor), None);
         typed(&mut editor, &mut ox, "m");
+        assert_eq!(offered(&editor), None);
+        rest(&mut editor, &mut ox);
         assert_eq!(offered(&editor), Some(vec!["limit".to_owned()]));
         assert_eq!(editor.message(), None);
 
         press(&mut editor, &mut ox, "C-g");
         typed(&mut editor, &mut ox, " ; lim");
+        rest(&mut editor, &mut ox);
         assert_eq!(offered(&editor), None);
         press(&mut editor, &mut ox, "RET");
         typed(&mut editor, &mut ox, "\"lim");
+        rest(&mut editor, &mut ox);
         assert_eq!(offered(&editor), None);
+    }
+
+    #[test]
+    fn names_with_dashes_count_whole_toward_the_three_characters() {
+        let home = tempfile::tempdir().unwrap();
+        let (mut editor, mut ox) = visiting(home.path());
+        at_end(
+            &mut editor,
+            "\n(def area-of-a-circle 3)\n(def area-of-a-square 4)\n",
+        );
+
+        typed(&mut editor, &mut ox, "(area-of-a-");
+        rest(&mut editor, &mut ox);
+        assert_eq!(
+            offered(&editor),
+            Some(vec![
+                "area-of-a-circle".to_owned(),
+                "area-of-a-square".to_owned()
+            ])
+        );
     }
 
     #[test]

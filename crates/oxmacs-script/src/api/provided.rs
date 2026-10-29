@@ -4,58 +4,68 @@ use ox_lang::heap::{Heap, Hold};
 use ox_lang::native::field;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::editor::{Editor, Event, ItemSource, Offer, Picked};
+use oxmacs_core::editor::{Editor, Event, Offer, Picked, Service, Source};
 use oxmacs_core::text::BufferId;
 
-use crate::ide::log;
+use crate::ide::{log, repl};
 
 #[derive(Debug, Default)]
-struct Items {
-    sources: Vec<(ItemSource, Hold)>,
+struct Provided {
+    hooks: Vec<(Service, Source, Hold)>,
     offered: HashMap<BufferId, Hold>,
 }
 
-pub(crate) fn claim(heap: &mut Heap, editor: &mut Editor, source: ItemSource, hook: Value) {
+pub(crate) fn provide(
+    heap: &mut Heap,
+    editor: &mut Editor,
+    service: Service,
+    source: Source,
+    hook: Value,
+) {
     let hold = heap.hold(hook);
-    let mut items = editor.take_plugin_state::<Items>().unwrap_or_default();
-    for (_, old) in items.sources.extract_if(.., |(known, _)| *known == source) {
+    let mut provided = editor.take_plugin_state::<Provided>().unwrap_or_default();
+    for (_, _, old) in provided
+        .hooks
+        .extract_if(.., |(known, from, _)| *known == service && *from == source)
+    {
         heap.release(old);
     }
-    items.sources.push((source.clone(), hold));
-    editor.set_plugin_state(items);
-    editor.claim_items(source);
+    provided.hooks.push((service, source.clone(), hold));
+    editor.set_plugin_state(provided);
+    editor.provide(service, source);
 }
 
 pub(crate) fn release(heap: &mut Heap, editor: &mut Editor, buffer: BufferId) {
-    let Some(items) = editor.plugin_state_mut::<Items>() else {
+    editor.withdraw(&Source::Buffer(buffer));
+    let Some(provided) = editor.plugin_state_mut::<Provided>() else {
         return;
     };
-    let mut gone: Vec<Hold> = items.offered.remove(&buffer).into_iter().collect();
+    let mut gone: Vec<Hold> = provided.offered.remove(&buffer).into_iter().collect();
     gone.extend(
-        items
-            .sources
-            .extract_if(.., |(known, _)| *known == ItemSource::Buffer(buffer))
-            .map(|(_, hold)| hold),
+        provided
+            .hooks
+            .extract_if(.., |(_, from, _)| *from == Source::Buffer(buffer))
+            .map(|(_, _, hold)| hold),
     );
     for hold in gone {
         heap.release(hold);
     }
 }
 
-fn hook_for(editor: &Editor, buffer: BufferId) -> Option<Hold> {
-    let items = editor.plugin_state::<Items>()?;
+fn hook_for(editor: &Editor, buffer: BufferId, service: Service) -> Option<Hold> {
+    let provided = editor.plugin_state::<Provided>()?;
     let mode = editor
         .buffer_language(buffer)
-        .map(|language| ItemSource::Mode(language.name().to_owned()));
-    [Some(ItemSource::Buffer(buffer)), mode]
+        .map(|language| Source::Mode(language.name().to_owned()));
+    [Some(Source::Buffer(buffer)), mode]
         .into_iter()
         .flatten()
         .find_map(|wanted| {
-            items
-                .sources
+            provided
+                .hooks
                 .iter()
-                .find(|(known, _)| *known == wanted)
-                .map(|(_, hold)| *hold)
+                .find(|(known, from, _)| *known == service && *from == wanted)
+                .map(|(_, _, hold)| *hold)
         })
 }
 
@@ -64,7 +74,8 @@ fn text_field(heap: &Heap, item: Value, key: &str) -> Option<String> {
 }
 
 fn offer(isolate: &mut Isolate, editor: &mut Editor, buffer: BufferId) -> Result<(), Error> {
-    let Some(hook) = hook_for(editor, buffer).and_then(|hold| isolate.held(hold)) else {
+    let Some(hook) = hook_for(editor, buffer, Service::Items).and_then(|hold| isolate.held(hold))
+    else {
         return Ok(());
     };
     let found = isolate.call_with(editor, hook, &[])?;
@@ -87,11 +98,11 @@ fn offer(isolate: &mut Isolate, editor: &mut Editor, buffer: BufferId) -> Result
         })
         .collect();
     let hold = heap.hold(found);
-    let mut items = editor.take_plugin_state::<Items>().unwrap_or_default();
-    if let Some(old) = items.offered.insert(buffer, hold) {
+    let mut provided = editor.take_plugin_state::<Provided>().unwrap_or_default();
+    if let Some(old) = provided.offered.insert(buffer, hold) {
         heap.release(old);
     }
-    editor.set_plugin_state(items);
+    editor.set_plugin_state(provided);
     editor.prompt_pick(
         "Index item: ",
         move |_| offers.clone(),
@@ -111,8 +122,8 @@ fn choose(
     index: usize,
 ) -> Result<(), Error> {
     let Some(found) = editor
-        .plugin_state::<Items>()
-        .and_then(|items| items.offered.get(&buffer).copied())
+        .plugin_state::<Provided>()
+        .and_then(|provided| provided.offered.get(&buffer).copied())
         .and_then(|hold| isolate.held(hold))
     else {
         return Ok(());
@@ -144,9 +155,23 @@ fn choose(
 }
 
 pub(crate) fn hear(isolate: &mut Isolate, editor: &mut Editor, event: &Event) {
-    let result = match event {
-        Event::Items(buffer) => offer(isolate, editor, *buffer),
-        Event::ItemChosen { buffer, index } => choose(isolate, editor, *buffer, *index),
+    let result = match *event {
+        Event::Asked {
+            buffer,
+            service: Service::Items,
+            ..
+        } => offer(isolate, editor, buffer),
+        Event::Asked {
+            buffer,
+            service,
+            explicit,
+        } => {
+            if !repl::asked(editor, buffer, service, explicit) && editor.buffer().id() == buffer {
+                editor.fall_back(service, explicit);
+            }
+            Ok(())
+        }
+        Event::ItemChosen { buffer, index } => choose(isolate, editor, buffer, index),
         _ => Ok(()),
     };
     if let Err(error) = result {

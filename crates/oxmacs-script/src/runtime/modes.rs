@@ -8,7 +8,7 @@ use ox_lang::native::{field, given, name_of};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{ScopeId, intern};
-use oxmacs_core::editor::{Editor, ItemSource};
+use oxmacs_core::editor::{Editor, Service, Source};
 use oxmacs_core::syntax::{Language, LanguageSpec, Roots};
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
@@ -464,7 +464,13 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     }
     crate::api::commands::bind_keys(editor, scope, &given.keys)?;
     if let Some(hook) = given.items {
-        crate::api::items::claim(heap, editor, ItemSource::Mode(title.clone()), hook);
+        crate::api::provided::provide(
+            heap,
+            editor,
+            Service::Items,
+            Source::Mode(title.clone()),
+            hook,
+        );
     }
     let highlight = given.highlight.map(|function| heap.hold(function));
     if highlight.is_some() {

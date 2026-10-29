@@ -11,14 +11,15 @@ use ox_lang::testing;
 use ox_lang::value::Value;
 use ox_lang::{Error, read};
 use oxmacs_core::command::{Command, CommandId, DynamicSpec, Scope, ScopeId};
-use oxmacs_core::editor::{Editor, EventKind, InputLine};
+use oxmacs_core::editor::{Editor, EventKind, InputLine, Service, Source};
 use oxmacs_core::files;
 use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
 use crate::{
-    Ox, api::evaluations, ide::help, ide::log, ide::stacktrace, ide::xref, runtime::plugins,
+    Ox, api::evaluations, ide::help, ide::log, ide::ox_mode, ide::stacktrace, ide::xref,
+    runtime::plugins,
 };
 
 pub const REPL: &str = "*ox repl*";
@@ -38,6 +39,7 @@ enum Request {
     Test,
     Doc,
     Complete(bool),
+    Signature,
     IndentOrComplete,
     FindDefinition,
     Usages,
@@ -259,48 +261,22 @@ type Keys = &'static [(Home, &'static str)];
 
 type Spec = (&'static str, &'static str, Home, Request, Keys);
 
-fn looking_up() -> [Spec; 5] {
-    [
-        (
-            "ox-find-definition",
-            "Go to the definition of the Ox name at point; M-, comes back",
-            Home::Everywhere,
-            Request::FindDefinition,
-            &[(Home::Mode, "M-."), (Home::Repl, "M-.")],
-        ),
-        (
-            "ox-usages",
-            "List the usages of the Ox name at point",
-            Home::Everywhere,
-            Request::Usages,
-            &[(Home::Mode, "M-?"), (Home::Repl, "M-?")],
-        ),
-        (
-            "ox-doc",
-            "Show the docs of the Ox name at point",
-            Home::Everywhere,
-            Request::Doc,
-            &[(Home::Mode, "C-c C-d"), (Home::Repl, "C-c C-d")],
-        ),
-        (
-            "ox-complete",
-            "Complete the Ox name before point",
-            Home::Everywhere,
-            Request::Complete(true),
-            &[
-                (Home::Mode, "C-M-i"),
-                (Home::Repl, "C-M-i"),
-                (Home::Repl, "TAB"),
-            ],
-        ),
-        (
-            "ox-indent-or-complete",
-            "Complete the Ox name before point, or indent",
-            Home::Mode,
-            Request::IndentOrComplete,
-            &[(Home::Mode, "TAB")],
-        ),
-    ]
+const SERVICES: [Service; 5] = [
+    Service::Complete,
+    Service::Signature,
+    Service::Definition,
+    Service::References,
+    Service::Docs,
+];
+
+fn completing() -> [Spec; 1] {
+    [(
+        "ox-indent-or-complete",
+        "Complete the Ox name before point, or indent",
+        Home::Mode,
+        Request::IndentOrComplete,
+        &[(Home::Mode, "TAB")],
+    )]
 }
 
 fn evaluating() -> [Spec; 6] {
@@ -397,7 +373,7 @@ pub fn install(editor: &mut Editor) {
     };
     let specs = evaluating()
         .into_iter()
-        .chain(looking_up())
+        .chain(completing())
         .chain(repl_commands());
     for (name, summary, home, request, keys) in specs {
         let id = match request {
@@ -413,7 +389,43 @@ pub fn install(editor: &mut Editor) {
             editor.bind(scope(*place), keys, id).ok();
         }
     }
+    editor
+        .bind(
+            repl_scope,
+            "TAB",
+            CommandId::from(Command::CompletionAtPoint),
+        )
+        .ok();
+    for service in SERVICES {
+        editor.provide(service, Source::Mode(ox_mode::language().name().to_owned()));
+    }
     editor.subscribe(EventKind::Saved);
+}
+
+pub(crate) fn asked(
+    editor: &mut Editor,
+    buffer: BufferId,
+    service: Service,
+    explicit: bool,
+) -> bool {
+    if !help::in_ox(editor) {
+        return false;
+    }
+    if editor.buffer().id() != buffer {
+        return true;
+    }
+    queue(
+        editor,
+        match service {
+            Service::Complete => Request::Complete(explicit),
+            Service::Signature => Request::Signature,
+            Service::Definition => Request::FindDefinition,
+            Service::References => Request::Usages,
+            Service::Docs => Request::Doc,
+            Service::Items => return false,
+        },
+    );
+    true
 }
 
 fn source_name(editor: &Editor) -> String {
@@ -431,12 +443,16 @@ fn repl(editor: &mut Editor) -> Option<BufferId> {
     let scope = editor
         .plugin_state::<Requests>()
         .and_then(|requests| requests.repl)?;
-    Some(editor.add_special_buffer_with(REPL, |buffer| {
+    let id = editor.add_special_buffer_with(REPL, |buffer| {
         buffer.insert_at(0, &format!("{GREETING}{PROMPT}"));
         let input = InputLine::new(buffer);
         buffer.set_point(buffer.len_chars());
         ReplView { scope, input }
-    }))
+    });
+    for service in SERVICES {
+        editor.provide(service, Source::Buffer(id));
+    }
+    Some(id)
 }
 
 pub(crate) fn printed(editor: &mut Editor, text: &str) {
@@ -500,7 +516,7 @@ fn indent_or_complete(editor: &mut Editor) {
     let line = buffer.text_in(buffer.line_start(buffer.line_of(point))..point);
     let after_name = !ox_lang::names::typed_name(&line).is_empty();
     if unchanged && after_name && !selecting {
-        queue(editor, Request::Complete(true));
+        editor.execute(Command::CompletionAtPoint);
     }
 }
 
@@ -536,6 +552,14 @@ impl Ox {
                 Request::Doc => help::show_doc(&self.isolate, editor, self.home.as_deref()),
                 Request::Complete(explicit) => {
                     help::complete(&self.isolate, editor, self.home.as_deref(), explicit);
+                }
+                Request::Signature => {
+                    help::echo_signature(
+                        &self.isolate,
+                        editor,
+                        self.home.as_deref(),
+                        &mut self.help,
+                    );
                 }
                 Request::IndentOrComplete => indent_or_complete(editor),
                 Request::FindDefinition => {

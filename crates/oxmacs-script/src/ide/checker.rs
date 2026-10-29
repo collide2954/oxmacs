@@ -303,7 +303,7 @@ mod tests {
         );
         let since = Instant::now();
 
-        assert_eq!(ox.idle_wait(&editor, since), Some(editor.signature_delay()));
+        assert_eq!(ox.idle_wait(&editor, since), Some(CHECK_PAUSE));
         rest(&mut editor, &mut ox, since, 100);
         assert_eq!(waves(&editor, 1), []);
         rest(&mut editor, &mut ox, since, 400);
@@ -321,7 +321,7 @@ mod tests {
         editor.buffer_mut().delete_range(26..30);
         editor.buffer_mut().insert_at(26, "area");
         let later = since + Duration::from_secs(1);
-        assert_eq!(ox.idle_wait(&editor, later), Some(editor.signature_delay()));
+        assert_eq!(ox.idle_wait(&editor, later), Some(CHECK_PAUSE));
         rest(&mut editor, &mut ox, later, 400);
         assert_eq!(ox.idle_wait(&editor, later), Some(CHECK_PAUSE));
         rest(&mut editor, &mut ox, later, 600);

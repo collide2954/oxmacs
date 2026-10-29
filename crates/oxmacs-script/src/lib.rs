@@ -177,19 +177,14 @@ impl Ox {
     pub fn idle(&mut self, editor: &mut Editor, since: Instant, now: Instant) {
         let rested = now.saturating_duration_since(since);
         api::idle::run(&mut self.isolate, editor, since, now);
-        if rested >= editor.signature_delay() {
-            ide::help::echo_signature(&self.isolate, editor, self.home.as_deref(), &mut self.help);
-        }
         self.checker.run(editor, rested, self.home.as_deref());
     }
 
     pub fn idle_wait(&self, editor: &Editor, since: Instant) -> Option<Duration> {
         let check = self.checker.wait(editor);
-        let signature = ide::help::signature_wait(editor, &self.help);
         api::idle::next(editor, since)
             .into_iter()
             .chain(check)
-            .chain(signature)
             .min()
     }
 
@@ -283,7 +278,6 @@ impl Ox {
         let refreshing = self.isolate.profiling().then(Instant::now);
         view::views::refresh(&mut self.isolate, editor);
         self.timed("views", refreshing);
-        ide::help::auto_complete(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         self.timed("tick", started);
         if ide::repl::requests_waiting(editor) || api::hooks::waiting(editor) {
             return Pace::Running;
@@ -305,6 +299,7 @@ impl Ox {
         api::hooks::collect(editor);
         runtime::plugins::wake_waiting(&mut self.isolate, editor);
         api::hooks::run(&mut self.isolate, editor);
+        self.handle_requests(editor);
         api::keystrokes::run(&mut self.isolate, editor);
         api::consoles::run(&mut self.isolate, editor);
         api::buffers::watch(&mut self.isolate, editor);

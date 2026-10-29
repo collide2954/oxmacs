@@ -81,6 +81,7 @@ fn rust() -> LanguageSpec {
                 "plain",
             ])),
         },
+        name_chars: "",
     }
 }
 
@@ -104,6 +105,7 @@ fn toml() -> LanguageSpec {
         },
         features: &[],
         roots: Roots::default(),
+        name_chars: "",
     }
 }
 
@@ -141,6 +143,7 @@ fn r() -> LanguageSpec {
         },
         features: &[Feature::Completion, Feature::Repl],
         roots: Roots::marked(&["DESCRIPTION", "renv.lock", "*.Rproj"]),
+        name_chars: ".",
     }
 }
 
