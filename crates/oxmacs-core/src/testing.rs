@@ -1,4 +1,5 @@
 use crate::editor::{Editor, ErrorPattern};
+use crate::external::managed::{Checksum, Form, Managed, ToolSpec};
 use crate::input::KeySequence;
 use crate::syntax::Language;
 use crate::text::Buffer;
@@ -13,6 +14,64 @@ pub fn rust_errors() -> Vec<ErrorPattern> {
         .iter()
         .filter_map(|pattern| ErrorPattern::new(pattern).ok())
         .collect()
+}
+
+fn archives(names: [&str; 6]) -> Vec<(String, String, String)> {
+    let systems = [
+        ("windows", "x86_64"),
+        ("windows", "aarch64"),
+        ("macos", "x86_64"),
+        ("macos", "aarch64"),
+        ("linux", "x86_64"),
+        ("linux", "aarch64"),
+    ];
+    systems
+        .into_iter()
+        .zip(names)
+        .map(|((os, arch), name)| (os.to_owned(), arch.to_owned(), name.to_owned()))
+        .collect()
+}
+
+pub fn air() -> Managed {
+    Managed::new(ToolSpec {
+        name: "air".to_owned(),
+        repository: "posit-dev/air".to_owned(),
+        summary: "R formatter".to_owned(),
+        group: "R".to_owned(),
+        form: Form::Program,
+        tag_prefix: "v".to_owned(),
+        archives: archives([
+            "air-x86_64-pc-windows-msvc.zip",
+            "air-aarch64-pc-windows-msvc.zip",
+            "air-x86_64-apple-darwin.tar.gz",
+            "air-aarch64-apple-darwin.tar.gz",
+            "air-x86_64-unknown-linux-gnu.tar.gz",
+            "air-aarch64-unknown-linux-gnu.tar.gz",
+        ]),
+        checksum: Checksum::Sidecar,
+        setting: Some("air-program".to_owned()),
+    })
+}
+
+pub fn pdfium() -> Managed {
+    Managed::new(ToolSpec {
+        name: "pdfium".to_owned(),
+        repository: "bblanchon/pdfium-binaries".to_owned(),
+        summary: "Draws pages for the PDF viewer".to_owned(),
+        group: "PDF".to_owned(),
+        form: Form::Library,
+        tag_prefix: "chromium/".to_owned(),
+        archives: archives([
+            "pdfium-win-x64.tgz",
+            "pdfium-win-arm64.tgz",
+            "pdfium-mac-x64.tgz",
+            "pdfium-mac-arm64.tgz",
+            "pdfium-linux-x64.tgz",
+            "pdfium-linux-arm64.tgz",
+        ]),
+        checksum: Checksum::Digest,
+        setting: Some("library".to_owned()),
+    })
 }
 
 pub fn add_kits(editor: &mut Editor) {

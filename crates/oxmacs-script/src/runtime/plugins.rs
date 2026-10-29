@@ -11,10 +11,16 @@ use oxmacs_core::command::{DynamicSpec, Scope};
 use oxmacs_core::editor::{
     Editor, ErrorPattern, LINT_FORMATS, LintArg, LintFormat, LintRoot, Linter, lint_format,
 };
+use oxmacs_core::external::managed::{Managed, ToolSpec};
 use regex::Regex;
 use semver::{Version, VersionReq};
 
-use crate::{api::commands, ide::log, runtime::modes, view::views};
+use crate::{
+    api::commands,
+    ide::log,
+    runtime::{modes, tools},
+    view::views,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Bundle {
@@ -89,6 +95,7 @@ struct Manifest {
     builds: Vec<(String, String)>,
     lint: Option<Lint>,
     error_patterns: Vec<ErrorPattern>,
+    tools: Vec<ToolSpec>,
 }
 
 #[derive(Debug, Clone)]
@@ -463,21 +470,27 @@ fn patterns_of(heap: &Heap, value: Value) -> Result<Vec<ErrorPattern>, String> {
 }
 
 fn lint_settings_declared(manifest: &Manifest) -> Result<(), String> {
+    let declared = |key: &str| manifest.settings.iter().any(|setting| setting.key == key);
     let unknown = manifest
         .lint
         .iter()
         .flat_map(|lint| &lint.args)
         .find_map(|part| match part {
-            LintPart::Setting(key)
-                if !manifest.settings.iter().any(|setting| setting.key == *key) =>
-            {
-                Some(key)
-            }
+            LintPart::Setting(key) if !declared(key) => Some(key),
             _ => None,
         });
-    match unknown {
-        Some(key) => Err(format!(
+    if let Some(key) = unknown {
+        return Err(format!(
             ":lint's :args name the setting :{key}, which :settings doesn't declare"
+        ));
+    }
+    match manifest
+        .tools
+        .iter()
+        .find_map(|tool| tool.setting.as_deref().filter(|key| !declared(key)))
+    {
+        Some(key) => Err(format!(
+            ":tools name the setting :{key}, which :settings doesn't declare"
         )),
         None => Ok(()),
     }
@@ -521,6 +534,7 @@ pub(crate) const MANIFEST_KEYS: &[&str] = &[
     "builds",
     "lint",
     "error-patterns",
+    "tools",
 ];
 
 fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
@@ -557,6 +571,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
         builds: Vec::new(),
         lint: None,
         error_patterns: Vec::new(),
+        tools: Vec::new(),
     };
     for pair in options.chunks(2) {
         let [key, value] = pair else {
@@ -600,6 +615,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
             Some("builds") => manifest.builds = builds_of(heap, *value)?,
             Some("lint") => manifest.lint = Some(lint_of(heap, *value)?),
             Some("error-patterns") => manifest.error_patterns = patterns_of(heap, *value)?,
+            Some("tools") => manifest.tools = tools::declared(heap, &manifest.name, *value)?,
             Some("wakes-for") => {
                 manifest.wakes_for = texts_of(heap, *value)
                     .ok_or_else(|| ":wakes-for must be a vector of mode names".to_owned())?;
@@ -786,7 +802,16 @@ fn linter(heap: &Heap, plugin: &Plugin) -> Option<Linter> {
     })
 }
 
-fn apply_lint(heap: &Heap, editor: &mut Editor, plugin: &Plugin) {
+fn apply_settings(heap: &Heap, editor: &mut Editor, plugin: &Plugin) {
+    for tool in &plugin.manifest.tools {
+        let program = tool
+            .setting
+            .as_deref()
+            .map(|key| setting_of(heap, plugin, key))
+            .and_then(|value| heap.text(value).map(str::to_owned))
+            .filter(|_| plugin.active);
+        editor.set_tool_program(&tool.name, program);
+    }
     if plugin.manifest.lint.is_none() {
         return;
     }
@@ -811,6 +836,10 @@ fn unstub(editor: &mut Editor, plugin: &Plugin) {
             editor.set_linter(language, None);
         }
     }
+    for tool in &plugin.manifest.tools {
+        editor.remove_managed_tool(&tool.name);
+        editor.set_tool_program(&tool.name, None);
+    }
     editor.wake_dormant_modes(&plugin.manifest.name);
     dormant(editor, plugin);
 }
@@ -830,6 +859,9 @@ fn stubs(editor: &mut Editor, plugin: &Plugin) {
         &plugin.manifest.name,
         plugin.manifest.error_patterns.clone(),
     );
+    for tool in &plugin.manifest.tools {
+        editor.add_managed_tool(Managed::new(tool.clone()));
+    }
     if !plugin.loaded {
         for (command, summary) in &plugin.manifest.commands {
             stub(editor, &plugin.manifest.name, command, summary);
@@ -976,7 +1008,7 @@ pub fn discover(
     for plugin in &known {
         if plugin.active {
             stubs(editor, plugin);
-            apply_lint(isolate.heap(), editor, plugin);
+            apply_settings(isolate.heap(), editor, plugin);
         } else {
             dormant(editor, plugin);
         }
@@ -1163,7 +1195,7 @@ pub(crate) fn configure_named(
     {
         Some(plugin) => {
             let problems = merge(heap, plugin, changes);
-            apply_lint(heap, editor, plugin);
+            apply_settings(heap, editor, plugin);
             problems
         }
         None => vec![format!("There is no plugin named {name}")],
@@ -1202,7 +1234,7 @@ fn configure(
         unstub(editor, plugin);
     } else {
         stubs(editor, plugin);
-        apply_lint(heap, editor, plugin);
+        apply_settings(heap, editor, plugin);
     }
     problems
 }
@@ -1550,7 +1582,7 @@ fn start_now(isolate: &mut Isolate, editor: &mut Editor, path: &Path) {
     };
     limit_imports(isolate, &plugin.manifest);
     stubs(editor, &plugin);
-    apply_lint(isolate.heap(), editor, &plugin);
+    apply_settings(isolate.heap(), editor, &plugin);
     if wake(isolate, editor, &name) {
         views::redraw(editor);
         editor.show_message(format!(
@@ -1908,6 +1940,47 @@ mod tests {
         assert!(shows, "{:?}", editor.buffer_names());
     }
 
+    const SMITH: Bundle = Bundle {
+        name: "smith",
+        files: &[
+            (
+                "plugin.ox",
+                r#"(plugin smith
+  :settings {hammer-program: {type: :text}}
+  :tools [{name: "hammer" repository: "example/hammer" summary: "Hits things" group: "Smithing"
+           tag-prefix: "v" checksum: :digest setting: :hammer-program
+           archives: {linux: {x86_64: "hammer-linux.tgz"} windows: {x86_64: "hammer-windows.zip"}}}])"#,
+            ),
+            ("smith.ox", ""),
+        ],
+    };
+
+    #[test]
+    fn tools_from_the_manifest_are_listed_while_the_plugin_is_on() {
+        let home = home_with(&[]);
+        let (mut editor, mut ox) = started(&[SMITH], home.path());
+
+        let hammer = editor.managed_tool("hammer").unwrap();
+        assert_eq!(hammer.repository, "example/hammer");
+        assert_eq!(hammer.group, "Smithing");
+        assert_eq!(
+            hammer.archive("windows", "x86_64").as_deref(),
+            Some("hammer-windows.zip")
+        );
+        assert_eq!(editor.tool_program("hammer"), None);
+        ox.eval(
+            &mut editor,
+            r#"(settings 'smith {hammer-program: "my-hammer"})"#,
+        )
+        .unwrap();
+        assert_eq!(editor.tool_program("hammer"), Some("my-hammer"));
+
+        ox.eval(&mut editor, "(use-plugin smith :disabled true)")
+            .unwrap();
+        assert!(editor.managed_tool("hammer").is_none());
+        assert_eq!(editor.tool_program("hammer"), None);
+    }
+
     #[test]
     fn mistakes_in_lint_and_error_patterns_are_logged() {
         let home = home_with(&[
@@ -1923,10 +1996,18 @@ mod tests {
                 "plugins/format/plugin.ox",
                 "(plugin format :lint {program: \"x\" format: :json})",
             ),
+            (
+                "plugins/kit/plugin.ox",
+                "(plugin kit :tools [{name: \"x\" repository: \"a/x\" setting: :path archives: {linux: {x86_64: \"x.tgz\"}}}])",
+            ),
         ]);
         let (editor, _) = started(&[], home.path());
         let log = logged(&editor);
 
+        assert!(
+            log.contains(":tools name the setting :path, which :settings doesn't declare"),
+            "{log}"
+        );
         assert!(
             log.contains(":lint's :args name the setting :level, which :settings doesn't declare"),
             "{log}"

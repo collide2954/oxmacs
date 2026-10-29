@@ -37,8 +37,6 @@ pub struct Config {
     pub mode_line_style: ModeLineStyle,
     pub language_servers: bool,
     pub inlay_hints: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub air_program: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, VariantNames)]
@@ -107,7 +105,6 @@ impl Default for Config {
             mode_line_style: ModeLineStyle::default(),
             language_servers: true,
             inlay_hints: true,
-            air_program: None,
         }
     }
 }
@@ -313,7 +310,6 @@ mod tests {
         assert!(config.auto_save);
         assert!(!config.auto_save_visited);
         assert!(config.splash);
-        assert_eq!(config.air_program, None);
 
         let config = read(&json!({
             "format-on-save": true,
@@ -321,8 +317,7 @@ mod tests {
             "auto-save": false,
             "auto-save-visited": true,
             "splash": false,
-            "animations": false,
-            "air-program": "C:/tools/air.exe"
+            "animations": false
         }))
         .unwrap();
         assert!(config.format_on_save);
@@ -331,7 +326,6 @@ mod tests {
         assert!(config.auto_save_visited);
         assert!(!config.splash);
         assert!(!config.animations);
-        assert_eq!(config.air_program.as_deref(), Some("C:/tools/air.exe"));
     }
 
     #[test]
@@ -339,7 +333,6 @@ mod tests {
         let full = Config {
             theme: Some("adwaita".to_owned()),
             font_family: Some("Iosevka".to_owned()),
-            air_program: Some("air".to_owned()),
             ..Config::default()
         };
         let mut keys: Vec<String> = full.entries().keys().cloned().collect();

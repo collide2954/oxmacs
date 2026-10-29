@@ -234,7 +234,7 @@ impl App {
             }
             Message::Delivered(delivery) => self.runner.deliver(&mut self.editor, delivery),
             Message::Fetched(id, result) => self.editor.fetched(id, result),
-            Message::ToolInstalled(tool, result) => self.editor.tool_installed(tool, result),
+            Message::ToolInstalled(tool, result) => self.editor.tool_installed(&tool, result),
             Message::OxPress(buffer, slot) => {
                 self.ox
                     .event(&mut self.editor, UiEvent::Press { buffer, slot });
@@ -359,9 +359,9 @@ impl App {
                 Task::perform(fetch::get(url), move |result| Message::Fetched(id, result))
             }
             Effect::InstallTool(install) => {
-                let tool = install.tool;
+                let tool = install.tool.clone();
                 Task::perform(fetch::install(*install), move |result| {
-                    Message::ToolInstalled(tool, result)
+                    Message::ToolInstalled(tool.clone(), result)
                 })
             }
             Effect::Notify { title, body } => {

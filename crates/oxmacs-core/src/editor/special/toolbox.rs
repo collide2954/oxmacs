@@ -30,42 +30,32 @@ enum Latest {
     Failed,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(in crate::editor) struct Toolbox {
     tools: Vec<Managed>,
+    programs: Vec<(String, String)>,
     latest: Vec<(Managed, Latest)>,
     checks: Vec<(FetchId, Managed)>,
     installing: Vec<(Managed, String)>,
 }
 
-impl Default for Toolbox {
-    fn default() -> Self {
-        Self {
-            tools: vec![managed::AIR],
-            latest: Vec::new(),
-            checks: Vec::new(),
-            installing: Vec::new(),
-        }
-    }
-}
-
 impl Toolbox {
-    fn latest(&self, tool: Managed) -> Option<&Latest> {
+    fn latest(&self, tool: &Managed) -> Option<&Latest> {
         self.latest
             .iter()
-            .find(|(known, _)| *known == tool)
+            .find(|(known, _)| known == tool)
             .map(|(_, latest)| latest)
     }
 
-    fn set_latest(&mut self, tool: Managed, latest: Latest) {
-        self.latest.retain(|(known, _)| *known != tool);
-        self.latest.push((tool, latest));
+    fn set_latest(&mut self, tool: &Managed, latest: Latest) {
+        self.latest.retain(|(known, _)| known != tool);
+        self.latest.push((tool.clone(), latest));
     }
 
-    fn installing(&self, tool: Managed) -> Option<&str> {
+    fn installing(&self, tool: &Managed) -> Option<&str> {
         self.installing
             .iter()
-            .find(|(known, _)| *known == tool)
+            .find(|(known, _)| known == tool)
             .map(|(_, version)| version.as_str())
     }
 }
@@ -87,11 +77,11 @@ impl ToolList {
         self.rows
             .iter()
             .find(|(lines, _)| lines.contains(&line))
-            .map(|(_, tool)| *tool)
+            .map(|(_, tool)| tool.clone())
     }
 }
 
-fn latest_cell(latest: Option<&Latest>, tool: Managed, installed: Option<&str>) -> String {
+fn latest_cell(latest: Option<&Latest>, tool: &Managed, installed: Option<&str>) -> String {
     match latest {
         Some(Latest::Checking) | None => "checking…".to_owned(),
         Some(Latest::Failed) => "check failed".to_owned(),
@@ -121,23 +111,54 @@ impl Editor {
         self.buffers.find_special::<ToolList>(|_| true)
     }
 
-    fn tool_setting(&self, tool: Managed) -> Option<&str> {
-        (tool == managed::AIR)
-            .then_some(self.config.air_program.as_deref())
-            .flatten()
+    pub fn tool_program(&self, name: &str) -> Option<&str> {
+        self.toolbox
+            .programs
+            .iter()
+            .find(|(known, _)| known == name)
+            .map(|(_, program)| program.as_str())
+    }
+
+    pub fn set_tool_program(&mut self, name: &str, program: Option<String>) {
+        self.toolbox.programs.retain(|(known, _)| known != name);
+        if let Some(program) = program {
+            self.toolbox.programs.push((name.to_owned(), program));
+        }
     }
 
     pub fn add_managed_tool(&mut self, tool: Managed) {
-        if !self.toolbox.tools.contains(&tool) {
-            self.toolbox.tools.push(tool);
-        }
+        self.toolbox.tools.retain(|known| *known != tool);
+        self.toolbox.tools.push(tool);
+    }
+
+    pub fn remove_managed_tool(&mut self, name: &str) {
+        self.toolbox.tools.retain(|known| known.name != name);
+    }
+
+    pub fn managed_tool(&self, name: &str) -> Option<Managed> {
+        self.toolbox
+            .tools
+            .iter()
+            .find(|known| known.name == name)
+            .cloned()
+    }
+
+    pub fn tool_path(&self, name: &str) -> Option<PathBuf> {
+        let tool = self.managed_tool(name)?;
+        let search = env::var_os("PATH");
+        tool.locate(
+            self.tool_program(name),
+            self.tools_root.as_deref(),
+            search.as_deref(),
+        )
+        .map(|(path, _)| path)
     }
 
     pub fn set_tools_root(&mut self, root: Option<PathBuf>) {
         self.tools_root = root;
     }
 
-    pub fn installed_tool(&self, tool: Managed) -> Option<(String, PathBuf)> {
+    pub fn installed_tool(&self, tool: &Managed) -> Option<(String, PathBuf)> {
         self.tools_root
             .as_deref()
             .and_then(|root| tool.installed(root))
@@ -170,9 +191,9 @@ impl Editor {
             let id = FetchId(self.next_fetch);
             self.next_fetch += 1;
             self.toolbox.checks.retain(|(_, known)| *known != tool);
-            self.toolbox.checks.push((id, tool));
-            self.toolbox.set_latest(tool, Latest::Checking);
+            self.toolbox.set_latest(&tool, Latest::Checking);
             self.effects.push(Effect::Fetch(id, tool.latest_url()));
+            self.toolbox.checks.push((id, tool));
         }
         self.render_tools();
     }
@@ -202,7 +223,7 @@ impl Editor {
                 Latest::Failed
             }
         };
-        self.toolbox.set_latest(tool, latest);
+        self.toolbox.set_latest(&tool, latest);
         self.render_tools();
         true
     }
@@ -284,33 +305,33 @@ impl Editor {
         let Some(tool) = self.tool_at_point() else {
             return;
         };
-        if let Some((version, _)) = self.installed_tool(tool) {
+        if let Some((version, _)) = self.installed_tool(&tool) {
             self.show_message(format!("{} {version} is already installed", tool.name));
             return;
         }
-        self.start_install(tool);
+        self.start_install(&tool);
     }
 
     pub(in crate::editor) fn tool_update(&mut self) {
         let Some(tool) = self.tool_at_point() else {
             return;
         };
-        let Some((version, _)) = self.installed_tool(tool) else {
+        let Some((version, _)) = self.installed_tool(&tool) else {
             self.show_message(format!("{} is not installed; i installs it", tool.name));
             return;
         };
-        match self.toolbox.latest(tool) {
+        match self.toolbox.latest(&tool) {
             Some(Latest::Known(release)) if managed::newer(&release.version, &version) => {
-                self.start_install(tool);
+                self.start_install(&tool);
             }
             Some(Latest::Known(_)) => {
                 self.show_message(format!("{} {version} is up to date", tool.name));
             }
-            _ => self.start_install(tool),
+            _ => self.start_install(&tool),
         }
     }
 
-    fn start_install(&mut self, tool: Managed) {
+    fn start_install(&mut self, tool: &Managed) {
         if self.toolbox.installing(tool).is_some() {
             self.show_message(format!("Already installing {}", tool.name));
             return;
@@ -352,9 +373,9 @@ impl Editor {
         };
         self.toolbox
             .installing
-            .push((tool, release.version.clone()));
+            .push((tool.clone(), release.version.clone()));
         self.effects.push(Effect::InstallTool(Box::new(Install {
-            tool,
+            tool: tool.clone(),
             version: release.version.clone(),
             archive,
             checksum,
@@ -364,12 +385,12 @@ impl Editor {
         self.render_tools();
     }
 
-    pub fn tool_installed(&mut self, tool: Managed, result: Result<PathBuf, String>) {
+    pub fn tool_installed(&mut self, tool: &Managed, result: Result<PathBuf, String>) {
         let position = self
             .toolbox
             .installing
             .iter()
-            .position(|(known, _)| *known == tool);
+            .position(|(known, _)| known == tool);
         let version = position
             .map(|position| self.toolbox.installing.remove(position).1)
             .unwrap_or_default();
@@ -384,14 +405,14 @@ impl Editor {
         let Some(tool) = self.tool_at_point() else {
             return;
         };
-        let Some((version, _)) = self.installed_tool(tool) else {
+        let Some((version, _)) = self.installed_tool(&tool) else {
             self.show_message(format!("{} is not installed by oxmacs", tool.name));
             return;
         };
         self.ask_to_remove_tool(tool, &version);
     }
 
-    pub(in crate::editor) fn finish_tool_removal(&mut self, tool: Managed) {
+    pub(in crate::editor) fn finish_tool_removal(&mut self, tool: &Managed) {
         let Some(root) = self.tools_root.clone() else {
             return;
         };
@@ -402,7 +423,7 @@ impl Editor {
         self.render_tools();
     }
 
-    fn tool_state(&self, tool: Managed) -> (&'static str, Highlight, String) {
+    fn tool_state(&self, tool: &Managed) -> (&'static str, Highlight, String) {
         if let Some(version) = self.toolbox.installing(tool) {
             return ("!", Highlight::Warning, format!("installing {version}…"));
         }
@@ -419,22 +440,22 @@ impl Editor {
             return (mark, highlight, format!("{have} (oxmacs)"));
         }
         let search = env::var_os("PATH");
-        match tool.locate(self.tool_setting(tool), None, search.as_deref()) {
+        match tool.locate(self.tool_program(&tool.name), None, search.as_deref()) {
             Some((_, Origin::Setting)) => (
                 "✓",
                 Highlight::Success,
-                format!("found ({})", tool.setting.unwrap_or("a setting")),
+                format!("found ({})", tool.setting.as_deref().unwrap_or("a setting")),
             ),
             Some(_) => ("✓", Highlight::Success, "found (PATH)".to_owned()),
             None => ("✗", Highlight::Comment, "not installed".to_owned()),
         }
     }
 
-    fn tool_details_lines(&self, page: &mut Page, tool: Managed) {
+    fn tool_details_lines(&self, page: &mut Page, tool: &Managed) {
         let search = env::var_os("PATH");
         let runs = tool
             .locate(
-                self.tool_setting(tool),
+                self.tool_program(&tool.name),
                 self.tools_root.as_deref(),
                 search.as_deref(),
             )
@@ -442,7 +463,7 @@ impl Editor {
                 || "nothing yet".to_owned(),
                 |(path, origin)| {
                     let from = match origin {
-                        Origin::Setting => tool.setting.unwrap_or("a setting"),
+                        Origin::Setting => tool.setting.as_deref().unwrap_or("a setting"),
                         Origin::Managed => "oxmacs",
                         Origin::Path => "PATH",
                     };
@@ -484,9 +505,9 @@ impl Editor {
         let cells: Vec<_> = tools
             .iter()
             .map(|tool| {
-                let installed = self.installed_tool(*tool).map(|(version, _)| version);
-                let latest = latest_cell(self.toolbox.latest(*tool), *tool, installed.as_deref());
-                (*tool, self.tool_state(*tool), latest)
+                let installed = self.installed_tool(tool).map(|(version, _)| version);
+                let latest = latest_cell(self.toolbox.latest(tool), tool, installed.as_deref());
+                (tool.clone(), self.tool_state(tool), latest)
             })
             .collect();
         let languages = self.languages();
@@ -515,8 +536,8 @@ impl Editor {
             - 2;
         let mut groups: Vec<&str> = Vec::new();
         for tool in tools {
-            if !groups.contains(&tool.group) {
-                groups.push(tool.group);
+            if !groups.contains(&tool.group.as_str()) {
+                groups.push(&tool.group);
             }
         }
         let mut page = Page::default();
@@ -540,9 +561,9 @@ impl Editor {
                     (latest, Some(Highlight::Comment)),
                 ]);
                 if open.contains(tool) {
-                    self.tool_details_lines(&mut page, *tool);
+                    self.tool_details_lines(&mut page, tool);
                 }
-                rows.push((line..page.line_count(), *tool));
+                rows.push((line..page.line_count(), tool.clone()));
             }
         }
         let mut servers = Vec::new();
@@ -576,7 +597,9 @@ impl Editor {
             let line = buffer.line_of(point);
             let column = point - buffer.line_start(line);
             let on_card = list.rows.iter().find_map(|(lines, tool)| {
-                lines.contains(&line).then(|| (*tool, line - lines.start))
+                lines
+                    .contains(&line)
+                    .then(|| (tool.clone(), line - lines.start))
             });
             page.fill(buffer);
             let moved = on_card.and_then(|(tool, offset)| {
@@ -611,13 +634,13 @@ mod tests {
     use std::path::Path;
 
     use crate::editor::{Editor, Effect, FetchId};
-    use crate::testing::{lines, press, question, type_text};
+    use crate::testing::{air, lines, press, question, type_text};
     use std::env;
 
-    use crate::external::managed::{AIR, Checksum, Expected, Form, Install, Managed};
+    use crate::external::managed::{Checksum, Expected, Form, Install, Managed, ToolSpec};
 
     fn release(version: &str) -> String {
-        let archive = AIR.archive_here().unwrap();
+        let archive = air().archive_here().unwrap();
         format!(
             r#"{{"tag_name": "{version}", "assets": [
                 {{"name": "{archive}", "browser_download_url": "https://example.com/{archive}", "size": 5347737}},
@@ -629,11 +652,12 @@ mod tests {
     fn place(root: &Path, version: &str) {
         let folder = root.join("air").join(version);
         fs::create_dir_all(&folder).unwrap();
-        fs::write(folder.join(AIR.binary()), "binary").unwrap();
+        fs::write(folder.join(air().binary()), "binary").unwrap();
     }
 
     fn opened(root: &Path) -> Editor {
         let mut editor = Editor::new();
+        editor.add_managed_tool(air());
         editor.tools_root = Some(root.to_owned());
         press(&mut editor, "M-x");
         type_text(&mut editor, "list-tools");
@@ -770,7 +794,7 @@ mod tests {
 
         press(&mut editor, "i");
 
-        let archive = AIR.archive_here().unwrap();
+        let archive = air().archive_here().unwrap();
         let install = installs(&mut editor).pop().unwrap();
         assert_eq!(install.version, "0.12.0");
         assert_eq!(install.archive.name, archive);
@@ -783,7 +807,7 @@ mod tests {
         assert!(air_line(&editor).contains("installing 0.12.0…"));
 
         place(root.path(), "0.12.0");
-        editor.tool_installed(AIR, Ok(root.path().join("air")));
+        editor.tool_installed(&air(), Ok(root.path().join("air")));
 
         assert_eq!(editor.message(), Some("Installed air 0.12.0"));
         assert!(air_line(&editor).contains("✓ 0.12.0 (oxmacs)"));
@@ -795,7 +819,7 @@ mod tests {
         let mut editor = answered(root.path(), "0.12.0");
         press(&mut editor, "i");
 
-        editor.tool_installed(AIR, Err("connection reset".to_owned()));
+        editor.tool_installed(&air(), Err("connection reset".to_owned()));
 
         assert_eq!(
             editor.message(),
@@ -858,23 +882,29 @@ mod tests {
         );
     }
 
-    const ENGINE: Managed = Managed {
-        name: "engine",
-        repository: "example/engine",
-        summary: "Test engine",
-        group: "Engines",
-        form: Form::Library,
-        tag_prefix: "build/",
-        archives: &[(env::consts::OS, env::consts::ARCH, "engine.tgz")],
-        checksum: Checksum::Digest,
-        setting: None,
-    };
+    fn engine() -> Managed {
+        Managed::new(ToolSpec {
+            name: "engine".to_owned(),
+            repository: "example/engine".to_owned(),
+            summary: "Test engine".to_owned(),
+            group: "Engines".to_owned(),
+            form: Form::Library,
+            tag_prefix: "build/".to_owned(),
+            archives: vec![(
+                env::consts::OS.to_owned(),
+                env::consts::ARCH.to_owned(),
+                "engine.tgz".to_owned(),
+            )],
+            checksum: Checksum::Digest,
+            setting: None,
+        })
+    }
 
     #[test]
     fn plugins_add_tools_that_install_by_their_published_digest() {
         let root = tempfile::tempdir().unwrap();
         let mut editor = Editor::new();
-        editor.add_managed_tool(ENGINE);
+        editor.add_managed_tool(engine());
         let mut editor = {
             editor.tools_root = Some(root.path().to_owned());
             press(&mut editor, "M-x");
@@ -908,7 +938,7 @@ mod tests {
         press(&mut editor, "i");
 
         let install = installs(&mut editor).pop().unwrap();
-        assert_eq!(install.tool, ENGINE);
+        assert_eq!(install.tool, engine());
         assert_eq!(install.archive.name, "engine.tgz");
         assert_eq!(install.checksum, Expected::Digest("abcd".to_owned()));
     }

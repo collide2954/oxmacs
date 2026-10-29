@@ -63,7 +63,7 @@ fn blocking_install(install: &Install) -> Result<PathBuf, String> {
     };
     let archive = download(&install.archive.url)?;
     managed::install(
-        install.tool,
+        &install.tool,
         &install.version,
         &install.archive.name,
         &archive,
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     #[ignore = "downloads air from GitHub; set OXMACS_TOOLS_ROOT to keep it"]
     fn air_installs_from_its_latest_release() {
-        let air = managed::AIR;
+        let air = oxmacs_core::testing::air();
         let release = air
             .parse_release(&blocking_get(&air.latest_url()).unwrap())
             .unwrap();
@@ -95,7 +95,7 @@ mod tests {
         let root = kept.unwrap_or_else(|| scratch.path().to_owned());
 
         let installed = blocking_install(&Install {
-            tool: air,
+            tool: air.clone(),
             version: release.version.clone(),
             archive: release.asset(&name).unwrap().clone(),
             checksum: Expected::Download(release.asset(&format!("{name}.sha256")).unwrap().clone()),

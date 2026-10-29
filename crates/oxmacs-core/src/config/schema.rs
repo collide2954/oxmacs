@@ -41,7 +41,6 @@ const fn optional(setting: Setting, unset: &'static str) -> Setting {
 const APPEARANCE: &str = "Appearance";
 const EDITING: &str = "Editing";
 const FILES: &str = "Files";
-const R: &str = "R";
 
 pub const SETTINGS: &[Setting] = &[
     optional(
@@ -170,15 +169,6 @@ pub const SETTINGS: &[Setting] = &[
         "delete-to-trash",
         Kind::Toggle,
         "Move files and folders you delete to the system's trash instead of deleting them for good",
-    ),
-    optional(
-        setting(
-            R,
-            "air-program",
-            Kind::Text,
-            "air executable that formats R; M-x list-tools installs one",
-        ),
-        "auto-detect",
     ),
 ];
 

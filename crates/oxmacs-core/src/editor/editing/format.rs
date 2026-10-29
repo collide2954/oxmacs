@@ -1,11 +1,9 @@
-use std::env;
 use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use crate::command::Command;
 use crate::editor::Editor;
-use crate::external::managed::AIR;
 use crate::external::tools;
 
 #[derive(Debug, Clone, Copy)]
@@ -133,17 +131,11 @@ impl Editor {
     }
 
     pub(in crate::editor) fn air_program(&self) -> Result<PathBuf, String> {
-        let search = env::var_os("PATH");
-        AIR.locate(
-            self.config.air_program.as_deref(),
-            self.tools_root.as_deref(),
-            search.as_deref(),
-        )
-        .map(|(path, _)| path)
-        .ok_or_else(|| match &self.config.air_program {
-            Some(program) => format!("air-program not found: {program}"),
-            None => "air is not installed; M-x list-tools installs it".to_owned(),
-        })
+        self.tool_path("air")
+            .ok_or_else(|| match self.tool_program("air") {
+                Some(program) => format!("air-program not found: {program}"),
+                None => "air is not installed; M-x list-tools installs it".to_owned(),
+            })
     }
 
     fn format_region(&mut self, formatter: Formatter, range: Range<usize>) -> Result<(), String> {
@@ -405,13 +397,6 @@ mod tests {
         on_save: false,
     };
 
-    fn with_air(air_program: &str) -> Config {
-        Config {
-            air_program: Some(air_program.to_owned()),
-            ..Config::default()
-        }
-    }
-
     fn r(text: &str, point: usize) -> Editor {
         let mut editor = editor_with(text, point);
         editor.set_major_mode(Some(Language::r()));
@@ -456,8 +441,14 @@ mod tests {
     fn a_missing_air_program_is_named() {
         let mut editor = editor_with("x<-1", 0);
         editor.set_major_mode(Some(Language::r()));
-        editor.apply_config(&with_air("oxmacs-no-such-air"));
+        press(&mut editor, "C-c C-f");
+        assert_eq!(
+            editor.message(),
+            Some("air is not installed; M-x list-tools installs it")
+        );
 
+        editor.add_managed_tool(crate::testing::air());
+        editor.set_tool_program("air", Some("oxmacs-no-such-air".to_owned()));
         press(&mut editor, "C-c C-f");
 
         assert_eq!(editor.buffer().contents(), "x<-1");

@@ -226,7 +226,7 @@ impl Editor {
             }
             Pending::RemoveTool(tool) => {
                 if answer == 'y' {
-                    self.finish_tool_removal(tool);
+                    self.finish_tool_removal(&tool);
                 }
             }
             Pending::Callback => {

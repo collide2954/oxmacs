@@ -64,6 +64,7 @@ Saving a loaded plugin's file evaluates it again in place, so a change takes eff
 - `:builds` names build commands, as `{check: "cargo check" test: "cargo test"}`, which become commands named after the plugin, such as `rust-check`, run in the project of the current buffer.
 - `:lint` runs a linter when a file of the plugin's modes is saved, as `{program: "cargo" args: [:lint "--message-format=json"] root: :language format: :cargo}`. In `:args`, `:file` is the saved file and any other keyword is the value of the plugin's setting of that name, and `:off` or `nil` there turns linting off; `:root` is `:language` (the default), `:project` or `:folder`, and `:format` names the reader of the output, `:cargo`.
 - `:error-patterns` makes locations in build output clickable, as `[#"--> (?P<file>.+):(?P<line>\d+):(?P<column>\d+)"]`: each regex names the groups `file` and `line`, and may name `column`.
+- `:tools` lists programs or libraries `M-x list-tools` installs from GitHub releases while the plugin is on, as `[{name: "air" repository: "posit-dev/air" summary: "R formatter" group: "R" tag-prefix: "v" checksum: :sidecar setting: :air-program archives: {linux: {x86_64: "air-x86_64-unknown-linux-gnu.tar.gz"}}}]`. `archives` maps each system (`windows`, `macos`, `linux`) and architecture (`x86_64`, `aarch64`) to its file; `checksum` is `:sidecar`, a `.sha256` file beside each archive, or `:digest`, the digest GitHub publishes; `form: :library` is for a shared library, which is never looked for on PATH; and `setting` names the plugin's setting that points at a copy of your own instead.
 
 `(use-plugin hello :disabled true)` turns a plugin off, and a plugin in your folder with the name of a bundled one replaces it. `(plugin-setting 'weather :units)` reads another plugin's setting, `(oxmacs-home)` gives the folder that holds `init.ox`, and `(plugin-folder 'hello)` gives the plugin a folder of its own for its files, as the tutorial keeps your place in the manual's.
 
@@ -103,14 +104,14 @@ javascript   0.1.0    opt-in   JavaScript with highlighting, indentation and typ
 json         0.1.0    opt-in   JSON and JSON with comments, with highlighting and indentation
 keycast      0.2.4    opt-in   Shows the keys you press and the commands they run, for demos
 life         0.2.5    opt-in   Conway's Game of Life on a canvas
-manual       0.5.82   on       The oxmacs tutorial and the Ox manual
+manual       0.5.83   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.8    on       Markdown with highlighting, a rendered preview and the marksman language server
 ox-lang      0.1.0    on       Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL
-pdf          0.2.3    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
+pdf          0.2.4    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
 processes    0.1.6    on       List the processes oxmacs runs, with their usage
 profiler     0.1.4    on       Find where the Ox code in oxmacs spends its time
 python       0.1.0    opt-in   Python with highlighting, indentation and the basedpyright, pyright or pylsp language server
-r            0.20.12  opt-in   R consoles, plots, data and help in the style of ESS and RStudio
+r            0.20.13  opt-in   R consoles, plots, data and help in the style of ESS and RStudio
 remote       0.3.8    on       Browse and edit files on other machines over ssh, sftp and ftp
 rodeo        0.1.2    opt-in   Play 2D games written in Ox beside their code, and change them while they run
 rust         0.1.0    opt-in   Rust with highlighting, cargo builds and lints, and the rust-analyzer language server

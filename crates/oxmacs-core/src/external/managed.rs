@@ -1,7 +1,9 @@
 use std::ffi::OsStr;
 use std::fmt::Write;
 use std::io::{self, Cursor, Read};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::{env, fs};
 
 use flate2::read::GzDecoder;
@@ -20,56 +22,41 @@ pub enum Checksum {
     Digest,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Managed {
-    pub name: &'static str,
-    pub repository: &'static str,
-    pub summary: &'static str,
-    pub group: &'static str,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolSpec {
+    pub name: String,
+    pub repository: String,
+    pub summary: String,
+    pub group: String,
     pub form: Form,
-    pub tag_prefix: &'static str,
-    pub archives: &'static [(&'static str, &'static str, &'static str)],
+    pub tag_prefix: String,
+    pub archives: Vec<(String, String, String)>,
     pub checksum: Checksum,
-    pub setting: Option<&'static str>,
+    pub setting: Option<String>,
 }
 
-pub const AIR: Managed = Managed {
-    name: "air",
-    repository: "posit-dev/air",
-    summary: "R formatter",
-    group: "R",
-    form: Form::Program,
-    tag_prefix: "v",
-    archives: &[
-        ("windows", "x86_64", "air-x86_64-pc-windows-msvc.zip"),
-        ("windows", "aarch64", "air-aarch64-pc-windows-msvc.zip"),
-        ("macos", "x86_64", "air-x86_64-apple-darwin.tar.gz"),
-        ("macos", "aarch64", "air-aarch64-apple-darwin.tar.gz"),
-        ("linux", "x86_64", "air-x86_64-unknown-linux-gnu.tar.gz"),
-        ("linux", "aarch64", "air-aarch64-unknown-linux-gnu.tar.gz"),
-    ],
-    checksum: Checksum::Sidecar,
-    setting: Some("air-program"),
-};
+#[derive(Debug, Clone, Eq)]
+pub struct Managed(Arc<ToolSpec>);
 
-pub const PDFIUM: Managed = Managed {
-    name: "pdfium",
-    repository: "bblanchon/pdfium-binaries",
-    summary: "Draws pages for the PDF viewer",
-    group: "PDF",
-    form: Form::Library,
-    tag_prefix: "chromium/",
-    archives: &[
-        ("windows", "x86_64", "pdfium-win-x64.tgz"),
-        ("windows", "aarch64", "pdfium-win-arm64.tgz"),
-        ("macos", "x86_64", "pdfium-mac-x64.tgz"),
-        ("macos", "aarch64", "pdfium-mac-arm64.tgz"),
-        ("linux", "x86_64", "pdfium-linux-x64.tgz"),
-        ("linux", "aarch64", "pdfium-linux-arm64.tgz"),
-    ],
-    checksum: Checksum::Digest,
-    setting: None,
-};
+impl Managed {
+    pub fn new(spec: ToolSpec) -> Self {
+        Self(Arc::new(spec))
+    }
+}
+
+impl Deref for Managed {
+    type Target = ToolSpec;
+
+    fn deref(&self) -> &ToolSpec {
+        &self.0
+    }
+}
+
+impl PartialEq for Managed {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.name == other.0.name
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Asset {
@@ -128,8 +115,8 @@ struct Published {
     digest: Option<String>,
 }
 
-impl Managed {
-    pub fn binary(self) -> String {
+impl ToolSpec {
+    pub fn binary(&self) -> String {
         match self.form {
             Form::Program => format!("{}{}", self.name, env::consts::EXE_SUFFIX),
             Form::Library => format!(
@@ -141,25 +128,25 @@ impl Managed {
         }
     }
 
-    pub fn latest_url(self) -> String {
+    pub fn latest_url(&self) -> String {
         format!(
             "https://api.github.com/repos/{}/releases/latest",
             self.repository
         )
     }
 
-    pub fn archive(self, os: &str, arch: &str) -> Option<String> {
+    pub fn archive(&self, os: &str, arch: &str) -> Option<String> {
         self.archives
             .iter()
-            .find(|(known_os, known_arch, _)| *known_os == os && *known_arch == arch)
-            .map(|(_, _, name)| (*name).to_owned())
+            .find(|(known_os, known_arch, _)| known_os == os && known_arch == arch)
+            .map(|(_, _, name)| name.clone())
     }
 
-    pub fn parse_release(self, json: &str) -> Result<Release, String> {
+    pub fn parse_release(&self, json: &str) -> Result<Release, String> {
         let latest: Latest = serde_json::from_str(json).map_err(|error| error.to_string())?;
         let version = latest
             .tag_name
-            .strip_prefix(self.tag_prefix)
+            .strip_prefix(self.tag_prefix.as_str())
             .unwrap_or(&latest.tag_name)
             .to_owned();
         if !plain(&version) {
@@ -184,7 +171,7 @@ impl Managed {
         })
     }
     pub fn locate(
-        self,
+        &self,
         configured: Option<&str>,
         root: Option<&Path>,
         search_path: Option<&OsStr>,
@@ -201,15 +188,15 @@ impl Managed {
         let path = search_path.filter(|_| self.form == Form::Program);
         root.and_then(|root| self.installed(root))
             .map(|(_, path)| (path, Origin::Managed))
-            .or_else(|| oxmacs_process::find(self.name, path).map(|path| (path, Origin::Path)))
+            .or_else(|| oxmacs_process::find(&self.name, path).map(|path| (path, Origin::Path)))
     }
 
-    pub fn archive_here(self) -> Option<String> {
+    pub fn archive_here(&self) -> Option<String> {
         self.archive(env::consts::OS, env::consts::ARCH)
     }
 
-    pub fn installed(self, root: &Path) -> Option<(String, PathBuf)> {
-        fs::read_dir(root.join(self.name))
+    pub fn installed(&self, root: &Path) -> Option<(String, PathBuf)> {
+        fs::read_dir(root.join(&self.name))
             .ok()?
             .flatten()
             .filter_map(|entry| {
@@ -245,7 +232,7 @@ pub fn newer(candidate: &str, current: &str) -> bool {
 }
 
 pub fn install(
-    tool: Managed,
+    tool: &ToolSpec,
     version: &str,
     archive_name: &str,
     archive: &[u8],
@@ -266,7 +253,7 @@ pub fn install(
         ));
     }
     let binary = extract(archive_name, archive, &tool.binary())?;
-    let folder = root.join(tool.name);
+    let folder = root.join(&tool.name);
     let target = folder.join(version);
     if target.exists() {
         fs::remove_dir_all(&target).map_err(|error| error.to_string())?;
@@ -293,8 +280,8 @@ pub fn install(
     Ok(installed)
 }
 
-pub fn remove(tool: Managed, root: &Path) -> Result<(), String> {
-    let folder = root.join(tool.name);
+pub fn remove(tool: &ToolSpec, root: &Path) -> Result<(), String> {
+    let folder = root.join(&tool.name);
     if !folder.exists() {
         return Ok(());
     }
@@ -363,6 +350,7 @@ mod tests {
     use flate2::write::GzEncoder;
 
     use super::*;
+    use crate::testing::{air, pdfium};
 
     const LATEST: &str = r#"{
         "tag_name": "0.12.0",
@@ -374,7 +362,7 @@ mod tests {
 
     #[test]
     fn releases_give_their_version_and_assets() {
-        let release = AIR.parse_release(LATEST).unwrap();
+        let release = air().parse_release(LATEST).unwrap();
 
         assert_eq!(release.version, "0.12.0");
         assert_eq!(
@@ -392,36 +380,36 @@ mod tests {
     #[test]
     fn versions_lose_a_leading_v_and_must_be_plain() {
         let tagged =
-            |tag: &str| AIR.parse_release(&format!(r#"{{"tag_name": "{tag}", "assets": []}}"#));
+            |tag: &str| air().parse_release(&format!(r#"{{"tag_name": "{tag}", "assets": []}}"#));
 
         assert_eq!(tagged("v1.2.3").unwrap().version, "1.2.3");
         assert!(tagged("../1.2.3").is_err());
         assert!(tagged("").is_err());
-        assert!(AIR.parse_release("not json").is_err());
+        assert!(air().parse_release("not json").is_err());
     }
 
     #[test]
     fn each_platform_has_its_archive() {
         assert_eq!(
-            AIR.archive("windows", "x86_64").as_deref(),
+            air().archive("windows", "x86_64").as_deref(),
             Some("air-x86_64-pc-windows-msvc.zip")
         );
         assert_eq!(
-            AIR.archive("macos", "aarch64").as_deref(),
+            air().archive("macos", "aarch64").as_deref(),
             Some("air-aarch64-apple-darwin.tar.gz")
         );
         assert_eq!(
-            AIR.archive("linux", "x86_64").as_deref(),
+            air().archive("linux", "x86_64").as_deref(),
             Some("air-x86_64-unknown-linux-gnu.tar.gz")
         );
-        assert_eq!(AIR.archive("freebsd", "x86_64"), None);
-        assert_eq!(AIR.archive("linux", "riscv64"), None);
+        assert_eq!(air().archive("freebsd", "x86_64"), None);
+        assert_eq!(air().archive("linux", "riscv64"), None);
     }
 
     #[test]
     fn the_latest_release_comes_from_github() {
         assert_eq!(
-            AIR.latest_url(),
+            air().latest_url(),
             "https://api.github.com/repos/posit-dev/air/releases/latest"
         );
     }
@@ -438,7 +426,7 @@ mod tests {
     fn place(root: &Path, version: &str) -> PathBuf {
         let folder = root.join("air").join(version);
         fs::create_dir_all(&folder).unwrap();
-        let binary = folder.join(AIR.binary());
+        let binary = folder.join(air().binary());
         fs::write(&binary, "binary").unwrap();
         binary
     }
@@ -451,17 +439,17 @@ mod tests {
         fs::create_dir_all(root.path().join("air").join("0.13.0")).unwrap();
 
         assert_eq!(
-            AIR.installed(root.path()),
+            air().installed(root.path()),
             Some(("0.12.0".to_owned(), newest))
         );
-        assert_eq!(AIR.installed(&root.path().join("missing")), None);
+        assert_eq!(air().installed(&root.path().join("missing")), None);
     }
 
     fn archive_of(binary: &str) -> (tempfile::TempDir, Vec<u8>) {
-        packed(AIR, "air-x86_64-unknown-linux-gnu", binary)
+        packed(&air(), "air-x86_64-unknown-linux-gnu", binary)
     }
 
-    fn packed(tool: Managed, folder: &str, contents: &str) -> (tempfile::TempDir, Vec<u8>) {
+    fn packed(tool: &ToolSpec, folder: &str, contents: &str) -> (tempfile::TempDir, Vec<u8>) {
         let mut builder = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::fast()));
         let mut readme = tar::Header::new_gnu();
         readme.set_size(5);
@@ -484,7 +472,7 @@ mod tests {
         (tempfile::tempdir().unwrap(), bytes)
     }
 
-    fn zipped(tool: Managed, folder: &str, contents: &str) -> Vec<u8> {
+    fn zipped(tool: &ToolSpec, folder: &str, contents: &str) -> Vec<u8> {
         let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Stored);
@@ -497,10 +485,10 @@ mod tests {
     #[test]
     fn zip_archives_give_up_their_binary_and_nothing_else() {
         let root = tempfile::tempdir().unwrap();
-        let bytes = zipped(AIR, "air-x86_64-pc-windows-msvc", "zipped binary");
+        let bytes = zipped(&air(), "air-x86_64-pc-windows-msvc", "zipped binary");
 
         let installed = install(
-            AIR,
+            &air(),
             "0.12.0",
             "air-x86_64-pc-windows-msvc.zip",
             &bytes,
@@ -536,7 +524,7 @@ mod tests {
         let (_dir, bytes) = archive_of("new binary");
 
         let installed = install(
-            AIR,
+            &air(),
             "0.12.0",
             "air.tar.gz",
             &bytes,
@@ -547,12 +535,12 @@ mod tests {
 
         assert_eq!(
             installed,
-            root.path().join("air").join("0.12.0").join(AIR.binary())
+            root.path().join("air").join("0.12.0").join(air().binary())
         );
         assert_eq!(fs::read_to_string(&installed).unwrap(), "new binary");
         assert!(!root.path().join("air").join("0.11.0").exists());
         assert_eq!(
-            AIR.installed(root.path()),
+            air().installed(root.path()),
             Some(("0.12.0".to_owned(), installed))
         );
     }
@@ -564,7 +552,7 @@ mod tests {
         let (_dir, bytes) = archive_of("new binary");
 
         let result = install(
-            AIR,
+            &air(),
             "0.12.0",
             "air.tar.gz",
             &bytes,
@@ -576,69 +564,72 @@ mod tests {
             result,
             Err("air.tar.gz does not match its published checksum".to_owned())
         );
-        assert_eq!(AIR.installed(root.path()), Some(("0.11.0".to_owned(), old)));
+        assert_eq!(
+            air().installed(root.path()),
+            Some(("0.11.0".to_owned(), old))
+        );
     }
 
     #[test]
     fn the_setting_wins_then_the_managed_copy_then_the_path() {
         let root = tempfile::tempdir().unwrap();
         let on_path = tempfile::tempdir().unwrap();
-        let path_air = on_path.path().join(AIR.binary());
+        let path_air = on_path.path().join(air().binary());
         fs::write(&path_air, "binary").unwrap();
         let search = env::join_paths([on_path.path()]).unwrap();
         let configured = root.path().join("my-air");
         fs::write(&configured, "binary").unwrap();
 
         assert_eq!(
-            AIR.locate(None, Some(root.path()), Some(&search)),
+            air().locate(None, Some(root.path()), Some(&search)),
             Some((path_air.clone(), Origin::Path))
         );
         let managed = place(root.path(), "0.12.0");
         assert_eq!(
-            AIR.locate(None, Some(root.path()), Some(&search)),
+            air().locate(None, Some(root.path()), Some(&search)),
             Some((managed, Origin::Managed))
         );
         assert_eq!(
-            AIR.locate(configured.to_str(), Some(root.path()), Some(&search)),
+            air().locate(configured.to_str(), Some(root.path()), Some(&search)),
             Some((configured, Origin::Setting))
         );
-        assert_eq!(AIR.locate(Some("missing-air"), None, None), None);
-        assert_eq!(AIR.locate(None, None, None), None);
+        assert_eq!(air().locate(Some("missing-air"), None, None), None);
+        assert_eq!(air().locate(None, None, None), None);
     }
 
     #[test]
     fn libraries_are_named_the_way_the_platform_names_them() {
         assert_eq!(
-            PDFIUM.binary(),
+            pdfium().binary(),
             format!(
                 "{}pdfium{}",
                 env::consts::DLL_PREFIX,
                 env::consts::DLL_SUFFIX
             )
         );
-        assert_eq!(AIR.binary(), format!("air{}", env::consts::EXE_SUFFIX));
+        assert_eq!(air().binary(), format!("air{}", env::consts::EXE_SUFFIX));
     }
 
     #[test]
     fn archives_come_from_each_tools_table() {
         assert_eq!(
-            PDFIUM.archive("windows", "aarch64").as_deref(),
+            pdfium().archive("windows", "aarch64").as_deref(),
             Some("pdfium-win-arm64.tgz")
         );
-        assert_eq!(PDFIUM.archive("freebsd", "x86_64"), None);
+        assert_eq!(pdfium().archive("freebsd", "x86_64"), None);
     }
 
     #[test]
     fn tags_lose_the_tools_prefix() {
         let tagged = r#"{"tag_name": "chromium/8111", "assets": []}"#;
 
-        assert_eq!(PDFIUM.parse_release(tagged).unwrap().version, "8111");
-        assert!(AIR.parse_release(tagged).is_err());
+        assert_eq!(pdfium().parse_release(tagged).unwrap().version, "8111");
+        assert!(air().parse_release(tagged).is_err());
     }
 
     #[test]
     fn assets_carry_their_published_digest() {
-        let release = PDFIUM
+        let release = pdfium()
             .parse_release(
                 r#"{"tag_name": "chromium/8111", "assets": [
                     {"name": "pdfium-linux-x64.tgz", "browser_download_url": "https://example.com/p.tgz", "size": 3828739, "digest": "sha256:BDC6"},
@@ -657,19 +648,19 @@ mod tests {
     #[test]
     fn libraries_are_not_looked_for_on_the_path() {
         let on_path = tempfile::tempdir().unwrap();
-        fs::write(on_path.path().join(PDFIUM.binary()), "library").unwrap();
+        fs::write(on_path.path().join(pdfium().binary()), "library").unwrap();
         let search = env::join_paths([on_path.path()]).unwrap();
 
-        assert_eq!(PDFIUM.locate(None, None, Some(&search)), None);
+        assert_eq!(pdfium().locate(None, None, Some(&search)), None);
     }
 
     #[test]
     fn libraries_install_from_wherever_their_archive_keeps_them() {
         let root = tempfile::tempdir().unwrap();
-        let (_dir, bytes) = packed(PDFIUM, "pdfium/lib", "library");
+        let (_dir, bytes) = packed(&pdfium(), "pdfium/lib", "library");
 
         let installed = install(
-            PDFIUM,
+            &pdfium(),
             "8111",
             "pdfium-linux-x64.tgz",
             &bytes,
@@ -683,10 +674,10 @@ mod tests {
             root.path()
                 .join("pdfium")
                 .join("8111")
-                .join(PDFIUM.binary())
+                .join(pdfium().binary())
         );
         assert_eq!(
-            PDFIUM.installed(root.path()),
+            pdfium().installed(root.path()),
             Some(("8111".to_owned(), installed))
         );
     }
@@ -697,9 +688,9 @@ mod tests {
         place(root.path(), "0.11.0");
         place(root.path(), "0.12.0");
 
-        remove(AIR, root.path()).unwrap();
+        remove(&air(), root.path()).unwrap();
 
-        assert_eq!(AIR.installed(root.path()), None);
+        assert_eq!(air().installed(root.path()), None);
         assert!(!root.path().join("air").exists());
     }
 }

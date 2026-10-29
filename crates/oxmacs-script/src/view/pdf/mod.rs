@@ -6,7 +6,6 @@ use ox_lang::portable::{Failure, Portable};
 use ox_lang::value::Value;
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
-use oxmacs_core::external::managed::PDFIUM;
 use oxmacs_core::view::Node;
 use oxmacs_core::view::pdf::{Go, MAX_SCALE, MIN_SCALE, Mark, View, Zoom};
 use oxmacs_pdf::{Document, Rect, open, texts, use_library, words};
@@ -227,14 +226,12 @@ pub fn install(isolate: &mut Isolate) {
         .native(MODULE, "library")
         .arity(0, Some(1))
         .host::<Editor>(|heap, editor, arguments| {
-            editor.add_managed_tool(PDFIUM);
             let configured = arguments
                 .first()
                 .and_then(|value| heap.text(*value))
                 .map(PathBuf::from)
                 .filter(|path| path.is_file());
-            let library =
-                configured.or_else(|| editor.installed_tool(PDFIUM).map(|(_, path)| path));
+            let library = configured.or_else(|| editor.tool_path("pdfium"));
             use_library(library.clone());
             match library {
                 Some(path) => heap
@@ -278,7 +275,6 @@ pub fn install(isolate: &mut Isolate) {
 #[cfg(test)]
 mod tests {
     use oxmacs_core::editor::Editor;
-    use oxmacs_core::external::managed::PDFIUM;
 
     use crate::Ox;
     use crate::testing::settle;
@@ -401,18 +397,20 @@ mod tests {
     }
 
     #[test]
-    fn the_library_is_offered_in_list_tools_and_found_where_it_was_installed() {
+    fn the_library_is_found_where_list_tools_installed_it() {
         let root = tempfile::tempdir().unwrap();
         let folder = root.path().join("pdfium").join("8111");
         std::fs::create_dir_all(&folder).unwrap();
-        std::fs::write(folder.join(PDFIUM.binary()), "library").unwrap();
+        let pdfium = oxmacs_core::testing::pdfium();
+        std::fs::write(folder.join(pdfium.binary()), "library").unwrap();
         let (mut editor, mut ox) = (Editor::new(), Ox::new());
         editor.set_tools_root(Some(root.path().to_owned()));
+        assert_eq!(evaluate(&mut editor, &mut ox, "(pdf/library)"), "nil");
 
+        editor.add_managed_tool(pdfium);
         let library = evaluate(&mut editor, &mut ox, "(pdf/library)");
 
         assert!(library.contains("8111"), "{library}");
-        assert!(editor.installed_tool(PDFIUM).is_some());
     }
 
     #[test]
