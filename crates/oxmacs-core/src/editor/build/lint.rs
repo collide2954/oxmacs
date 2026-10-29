@@ -12,15 +12,83 @@ use crate::syntax::Language;
 use crate::text::Buffer;
 
 #[derive(Clone, Copy)]
-pub struct Linter {
-    pub start: fn(&Editor, &Path) -> Option<LintRun>,
+pub struct LintFormat {
+    pub name: &'static str,
     pub read: fn(&str, &Path) -> LintLine,
     pub complete: fn(&Outcome) -> bool,
 }
 
-impl fmt::Debug for Linter {
+impl fmt::Debug for LintFormat {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.debug_struct("Linter").finish_non_exhaustive()
+        formatter.write_str(self.name)
+    }
+}
+
+pub const CARGO: LintFormat = LintFormat {
+    name: "cargo",
+    read: diagnostics::parse,
+    complete: |_| false,
+};
+
+pub const LINT_FORMATS: [LintFormat; 1] = [CARGO];
+
+pub fn lint_format(name: &str) -> Option<LintFormat> {
+    LINT_FORMATS.into_iter().find(|format| format.name == name)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LintArg {
+    Text(String),
+    File,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LintRoot {
+    #[default]
+    Language,
+    Project,
+    Folder,
+}
+
+#[derive(Debug, Clone)]
+pub struct Linter {
+    pub program: String,
+    pub args: Vec<LintArg>,
+    pub root: LintRoot,
+    pub format: LintFormat,
+}
+
+impl Linter {
+    fn run(&self, editor: &Editor, language: &Language, path: &Path) -> Option<LintRun> {
+        let folder = path.parent()?;
+        let root = match self.root {
+            LintRoot::Language => editor.language_root(folder, Some(language.clone()))?,
+            LintRoot::Project => editor.project_root(folder)?,
+            LintRoot::Folder => folder.to_path_buf(),
+        };
+        let args: Vec<String> = self
+            .args
+            .iter()
+            .map(|arg| match arg {
+                LintArg::Text(text) => text.clone(),
+                LintArg::File => path.display().to_string(),
+            })
+            .collect();
+        let named = self.args.iter().find_map(|arg| match arg {
+            LintArg::Text(text) => Some(text.as_str()),
+            LintArg::File => None,
+        });
+        let name = std::iter::once(self.program.as_str())
+            .chain(named)
+            .collect::<Vec<_>>()
+            .join(" ");
+        Some(LintRun {
+            root,
+            program: self.program.clone(),
+            args,
+            label: name.clone(),
+            name,
+        })
     }
 }
 
@@ -29,7 +97,7 @@ pub struct LintRun {
     pub root: PathBuf,
     pub program: String,
     pub args: Vec<String>,
-    pub label: &'static str,
+    pub label: String,
     pub name: String,
 }
 
@@ -48,43 +116,26 @@ fn subcommand(tool: RustLint) -> Option<&'static str> {
     }
 }
 
-fn running(tool: RustLint) -> &'static str {
-    match tool {
-        RustLint::Clippy => "Clippy",
-        RustLint::Check | RustLint::Off => "Checking",
-    }
-}
-
-fn cargo_lint(editor: &Editor, path: &Path) -> Option<LintRun> {
-    let tool = editor.config.rust_lint;
-    let subcommand = subcommand(tool)?;
-    let root = editor.language_root(path.parent()?, Some(Language::rust()))?;
-    Some(LintRun {
-        root,
-        program: "cargo".to_owned(),
-        args: [
-            subcommand,
-            "--workspace",
-            "--all-targets",
-            "--message-format=json",
-        ]
-        .map(str::to_owned)
-        .to_vec(),
-        label: running(tool),
-        name: format!("cargo {subcommand}"),
-    })
-}
-
-pub(in crate::editor) const CARGO_LINT: Linter = Linter {
-    start: cargo_lint,
-    read: diagnostics::parse,
-    complete: |_| false,
-};
-
 impl Editor {
-    #[cfg(test)]
-    pub fn add_linter(&mut self, language: Language, linter: Linter) {
-        self.builds.add_linter(language, linter);
+    pub fn set_linter(&mut self, language: Language, linter: Option<Linter>) {
+        self.builds.set_linter(language, linter);
+    }
+
+    pub(in crate::editor) fn sync_rust_lint(&mut self) {
+        let linter = subcommand(self.config.rust_lint).map(|subcommand| Linter {
+            program: "cargo".to_owned(),
+            args: [
+                subcommand,
+                "--workspace",
+                "--all-targets",
+                "--message-format=json",
+            ]
+            .map(|arg| LintArg::Text(arg.to_owned()))
+            .to_vec(),
+            root: LintRoot::Language,
+            format: CARGO,
+        });
+        self.set_linter(Language::rust(), linter);
     }
 
     pub fn diagnostics_revision(&self) -> u64 {
@@ -118,7 +169,7 @@ impl Editor {
         let Some(due) = self.builds.take_due() else {
             return;
         };
-        let Some(run) = (due.2.start)(self, &due.1) else {
+        let Some(run) = due.2.run(self, &due.0, &due.1) else {
             return;
         };
         for stale in self.builds.stale(&due.0) {
@@ -302,7 +353,9 @@ mod tests {
 
     use super::fixtures::{FINISHED, linting, project, report, reported, save, spawned};
     use crate::config::Config;
-    use crate::editor::{Editor, Job, LintLine, LintRun, Linter, Outcome, ProcessStatus};
+    use crate::editor::{
+        Editor, Job, LintArg, LintFormat, LintLine, LintRoot, Linter, Outcome, ProcessStatus,
+    };
     use crate::external::diagnostics::{Diagnostic, Severity, sample};
     use crate::syntax::{Indentation, Language, LanguageSpec, Outline};
     use crate::testing::{press, type_text};
@@ -350,24 +403,23 @@ mod tests {
         })
     }
 
-    const SHOUT_LINT: Linter = Linter {
-        start: |_, path| {
-            Some(LintRun {
-                root: path.parent()?.to_owned(),
-                program: "shoutlint".to_owned(),
-                args: vec![path.display().to_string()],
-                label: "Shouting",
-                name: "shoutlint".to_owned(),
-            })
-        },
-        read: shout_line,
-        complete: |outcome| matches!(outcome, Outcome::Exited(Some(0 | 1))),
-    };
+    fn shout_lint() -> Linter {
+        Linter {
+            program: "shoutlint".to_owned(),
+            args: vec![LintArg::File],
+            root: LintRoot::Folder,
+            format: LintFormat {
+                name: "shout",
+                read: shout_line,
+                complete: |outcome| matches!(outcome, Outcome::Exited(Some(0 | 1))),
+            },
+        }
+    }
 
     fn shouting(editor: &mut Editor, dir: &Path) -> PathBuf {
         let shouty = Language::new(shouty_spec());
         editor.add_language(shouty.clone(), None);
-        editor.add_linter(shouty, SHOUT_LINT);
+        editor.set_linter(shouty, Some(shout_lint()));
         let path = dir.join("a.shout");
         fs::write(&path, "hello there\n").unwrap();
         editor.open_file(&path);
@@ -386,7 +438,7 @@ mod tests {
         assert_eq!(jobs[0].program, "shoutlint");
         assert_eq!(jobs[0].args, [path.display().to_string()]);
         assert_eq!(jobs[0].directory, dir.path());
-        assert_eq!(editor.pane().status().lint.as_deref(), Some("Shouting"));
+        assert_eq!(editor.pane().status().lint.as_deref(), Some("shoutlint"));
         editor.job_output(jobs[0].id, "a.shout:1:1: too quiet");
         editor.job_finished(jobs[0].id, &Outcome::Exited(Some(1)));
         assert_eq!(editor.pane().status().lint.as_deref(), Some("E1"));
@@ -447,7 +499,7 @@ mod tests {
         assert_eq!(jobs[0].directory, dir.path());
         assert_eq!(
             editor.mode_line(),
-            "-- main.rs   L1 C13   (Rust)   Checking"
+            "-- main.rs   L1 C13   (Rust)   cargo check"
         );
     }
 
@@ -509,7 +561,7 @@ mod tests {
         );
         assert_eq!(
             editor.mode_line(),
-            "-- main.rs   L1 C14   (Rust)   Checking"
+            "-- main.rs   L1 C14   (Rust)   cargo check"
         );
     }
 

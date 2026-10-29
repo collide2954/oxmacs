@@ -1,14 +1,14 @@
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
+use regex::Regex;
+
 use crate::display::LineStyle;
 use crate::editor::Editor;
 use crate::editor::build::run::Run;
 use crate::editor::windows::tiling::Axis;
 use crate::text::BufferId;
 use crate::theme::Highlight;
-
-const PANICKED: &str = "panicked at ";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Severity {
@@ -35,9 +35,50 @@ pub struct ErrorAt {
     pub link: Range<usize>,
 }
 
-pub type ErrorPattern = fn(&str) -> Option<ErrorAt>;
+#[derive(Debug, Clone)]
+pub struct ErrorPattern(Regex);
 
-pub(in crate::editor) const BUILT_IN: &[ErrorPattern] = &[arrow_at, panic_at];
+impl ErrorPattern {
+    pub fn new(pattern: &str) -> Result<Self, String> {
+        let regex = Regex::new(pattern).map_err(|error| format!("{pattern}: {error}"))?;
+        let named: Vec<&str> = regex.capture_names().flatten().collect();
+        if !named.contains(&"file") || !named.contains(&"line") {
+            return Err(format!(
+                "{pattern} needs groups named file and line, and may name column"
+            ));
+        }
+        Ok(Self(regex))
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    fn find(&self, text: &str) -> Option<ErrorAt> {
+        let found = self.0.captures(text)?;
+        let file = found.name("file")?;
+        let line = found.name("line")?;
+        let column = found.name("column");
+        Some(ErrorAt {
+            path: file.as_str().to_owned(),
+            row: line.as_str().parse().ok()?,
+            column: column
+                .and_then(|column| column.as_str().parse().ok())
+                .unwrap_or(1),
+            link: file.start()..column.map_or(line.end(), |column| column.end()),
+        })
+    }
+}
+
+const ARROW: &str = r"^\s*--> (?P<file>.+):(?P<line>\d+):(?P<column>\d+):?\s*$";
+const PANIC: &str = r"panicked at (?P<file>.+):(?P<line>\d+):(?P<column>\d+):?\s*$";
+
+pub(in crate::editor) fn built_in() -> Vec<ErrorPattern> {
+    [ARROW, PANIC]
+        .into_iter()
+        .filter_map(|pattern| ErrorPattern::new(pattern).ok())
+        .collect()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Location {
@@ -73,7 +114,7 @@ impl Errors {
         } else if severity_of(text).is_some() {
             self.header = Some((line, text.to_owned()));
             self.open = false;
-        } else if let Some(at) = patterns.iter().find_map(|pattern| pattern(text)) {
+        } else if let Some(at) = patterns.iter().find_map(|pattern| pattern.find(text)) {
             let header = self.header.take();
             self.push(line, header, at, directory);
         } else if self.open
@@ -164,35 +205,6 @@ fn severity_of(line: &str) -> Option<Severity> {
         let rest = line.strip_prefix(label)?;
         (rest.starts_with(':') || rest.starts_with('[')).then_some(severity)
     })
-}
-
-fn arrow_at(line: &str) -> Option<ErrorAt> {
-    let rest = line.trim_start().strip_prefix("--> ")?;
-    located(rest, line.len() - rest.len())
-}
-
-fn panic_at(line: &str) -> Option<ErrorAt> {
-    let at = line.find(PANICKED)? + PANICKED.len();
-    located(&line[at..], at)
-}
-
-fn located(rest: &str, start: usize) -> Option<ErrorAt> {
-    let (path, row, column) = position(rest)?;
-    let end = start + rest.trim_end().trim_end_matches(':').len();
-    Some(ErrorAt {
-        path: path.to_owned(),
-        row,
-        column,
-        link: start..end,
-    })
-}
-
-fn position(rest: &str) -> Option<(&str, usize, usize)> {
-    let mut parts = rest.trim_end().trim_end_matches(':').rsplitn(3, ':');
-    let column = parts.next()?.parse().ok()?;
-    let row = parts.next()?.parse().ok()?;
-    let path = parts.next().filter(|path| !path.is_empty())?;
-    Some((path, row, column))
 }
 
 fn style(text: &str, link: Option<Range<usize>>, current: bool) -> LineStyle {
@@ -335,7 +347,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::editor::{Cell, Clicks, Effect, ErrorAt, Outcome};
+    use crate::editor::{Cell, Clicks, Effect, Outcome};
     use crate::testing::{press, type_text};
 
     #[test]
@@ -354,9 +366,9 @@ mod tests {
     }
 
     fn found(text: &str) -> Option<(String, usize, usize)> {
-        BUILT_IN
+        built_in()
             .iter()
-            .find_map(|pattern| pattern(text))
+            .find_map(|pattern| pattern.find(text))
             .map(|at| (at.path, at.row, at.column))
     }
 
@@ -378,9 +390,9 @@ mod tests {
     }
 
     fn found_link(text: &str) -> Option<Range<usize>> {
-        BUILT_IN
+        built_in()
             .iter()
-            .find_map(|pattern| pattern(text))
+            .find_map(|pattern| pattern.find(text))
             .map(|at| at.link)
     }
 
@@ -422,7 +434,7 @@ mod tests {
         .into_iter()
         .enumerate()
         {
-            errors.scan(line, text, directory, BUILT_IN);
+            errors.scan(line, text, directory, &built_in());
         }
 
         assert_eq!(
@@ -555,25 +567,15 @@ mod tests {
         assert_eq!(editor.mode_line(), "-- main.rs   L2 C4   (Rust)");
     }
 
-    fn traceback(line: &str) -> Option<ErrorAt> {
-        let rest = line.trim_start().strip_prefix("File \"")?;
-        let (path, rest) = rest.split_once("\", line ")?;
-        let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
-        let start = line.find("File \"")? + 6;
-        Some(ErrorAt {
-            path: path.to_owned(),
-            row: digits.parse().ok()?,
-            column: 1,
-            link: start..start + path.len(),
-        })
-    }
-
     #[test]
     fn plugins_add_patterns_that_make_their_errors_clickable() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("a.py"), "x = 1\nprint(y)\n").unwrap();
         let mut editor = Editor::new();
-        editor.add_error_pattern(traceback);
+        editor.set_error_patterns(
+            "python",
+            vec![ErrorPattern::new(r#"File "(?P<file>[^"]+)", line (?P<line>\d+)"#).unwrap()],
+        );
 
         editor.compile_in("python a.py", dir.path().to_owned());
         let job = editor
@@ -599,7 +601,7 @@ mod tests {
         let window = editor.tiling().windows()[1];
         assert_eq!(
             editor.pane_of(window).unwrap().line_style(4).spans,
-            [(8..12, Highlight::Link)]
+            [(8..21, Highlight::Link)]
         );
 
         press(&mut editor, "M-g n");

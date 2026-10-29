@@ -30,7 +30,9 @@ mod windows;
 pub use crate::external::diagnostics::{Diagnostic, LintLine, Severity};
 pub use buffers::files::Visit;
 pub use build::errors::{ErrorAt, ErrorPattern};
-pub use build::lint::{LintRun, Linter};
+pub use build::lint::{
+    CARGO, LINT_FORMATS, LintArg, LintFormat, LintRoot, LintRun, Linter, lint_format,
+};
 pub use build::run::{OnExit, OnLine, RunSpec};
 pub use console::{ConsoleHook, ConsoleSpec, MarkerHook};
 pub use decorations::{Lasts, LineDecorations, Look};
@@ -255,12 +257,14 @@ impl Editor {
         for language in editor.languages() {
             editor.add_mode_command(language);
         }
+        editor.sync_rust_lint();
         editor
     }
 
     pub fn apply_config(&mut self, config: &Config) {
         self.configured_theme = config.theme.as_deref().and_then(theme::find);
         self.config = config.clone();
+        self.sync_rust_lint();
         self.settings_changed();
     }
 

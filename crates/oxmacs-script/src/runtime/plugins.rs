@@ -8,7 +8,10 @@ use ox_lang::symbol::Sym;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{DynamicSpec, Scope};
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{
+    Editor, ErrorPattern, LINT_FORMATS, LintArg, LintFormat, LintRoot, Linter, lint_format,
+};
+use regex::Regex;
 use semver::{Version, VersionReq};
 
 use crate::{api::commands, ide::log, runtime::modes, view::views};
@@ -45,6 +48,21 @@ struct Setting {
 }
 
 #[derive(Debug, Clone)]
+enum LintPart {
+    Text(String),
+    Setting(String),
+    File,
+}
+
+#[derive(Debug, Clone)]
+struct Lint {
+    program: String,
+    args: Vec<LintPart>,
+    root: LintRoot,
+    format: LintFormat,
+}
+
+#[derive(Debug, Clone)]
 enum Startup {
     Always,
     When(String),
@@ -68,6 +86,9 @@ struct Manifest {
     modes: Vec<modes::Declared>,
     wakes_for: Vec<String>,
     requires: Vec<(String, VersionReq)>,
+    builds: Vec<(String, String)>,
+    lint: Option<Lint>,
+    error_patterns: Vec<ErrorPattern>,
 }
 
 #[derive(Debug, Clone)]
@@ -320,6 +341,148 @@ fn requires_of(heap: &Heap, name: &str, value: Value) -> Result<Vec<(String, Ver
         .collect()
 }
 
+fn builds_of(heap: &Heap, value: Value) -> Result<Vec<(String, String)>, String> {
+    let wrong =
+        || ":builds must map names to commands, such as {check: \"cargo check\"}".to_owned();
+    heap.entries(value)
+        .ok_or_else(wrong)?
+        .into_iter()
+        .map(|(name, command)| {
+            let name = keyword(name).ok_or_else(wrong)?;
+            let command = heap.text(command).ok_or_else(wrong)?;
+            Ok((name.to_owned(), command.to_owned()))
+        })
+        .collect()
+}
+
+fn lint_part(heap: &Heap, value: Value) -> Result<LintPart, String> {
+    match value {
+        Value::Keyword(name) if name.name() == "file" => Ok(LintPart::File),
+        Value::Keyword(name) => Ok(LintPart::Setting(name.name().to_owned())),
+        _ => heap
+            .text(value)
+            .map(|text| LintPart::Text(text.to_owned()))
+            .ok_or_else(|| {
+                format!(
+                    ":lint's :args are strings, :file or a setting's keyword, not {}",
+                    print::brief(heap, value)
+                )
+            }),
+    }
+}
+
+fn lint_of(heap: &Heap, value: Value) -> Result<Lint, String> {
+    let entries = heap
+        .entries(value)
+        .ok_or_else(|| ":lint must be a map of :program, :args, :root and :format".to_owned())?;
+    let (mut program, mut args, mut root, mut format) =
+        (None, Vec::new(), LintRoot::Language, None);
+    for (key, value) in entries {
+        match keyword(key) {
+            Some("program") => {
+                program = heap.text(value).map(str::to_owned);
+            }
+            Some("args") => {
+                args = heap
+                    .elements(value)
+                    .ok_or_else(|| ":lint's :args must be a vector".to_owned())?
+                    .into_iter()
+                    .map(|arg| lint_part(heap, arg))
+                    .collect::<Result<_, _>>()?;
+            }
+            Some("root") => {
+                root = match keyword(value) {
+                    Some("language") => LintRoot::Language,
+                    Some("project") => LintRoot::Project,
+                    Some("folder") => LintRoot::Folder,
+                    _ => {
+                        return Err(format!(
+                            ":lint's :root is :language, :project or :folder, not {}",
+                            print::brief(heap, value)
+                        ));
+                    }
+                };
+            }
+            Some("format") => {
+                let named = keyword(value).unwrap_or_default();
+                format = Some(lint_format(named).ok_or_else(|| {
+                    let known: Vec<String> = LINT_FORMATS
+                        .iter()
+                        .map(|format| format!(":{}", format.name))
+                        .collect();
+                    format!(
+                        ":lint's :format is one of {}, not {}",
+                        known.join(", "),
+                        print::brief(heap, value)
+                    )
+                })?);
+            }
+            _ => {
+                return Err(format!(
+                    ":lint takes :program, :args, :root and :format, not {}",
+                    print::brief(heap, key)
+                ));
+            }
+        }
+    }
+    Ok(Lint {
+        program: program.ok_or_else(|| ":lint needs a :program".to_owned())?,
+        args,
+        root,
+        format: format.ok_or_else(|| ":lint needs a :format, such as :cargo".to_owned())?,
+    })
+}
+
+fn patterns_of(heap: &Heap, value: Value) -> Result<Vec<ErrorPattern>, String> {
+    heap.elements(value)
+        .ok_or_else(|| ":error-patterns must be a vector of regexes".to_owned())?
+        .into_iter()
+        .map(|item| {
+            let quoted = heap
+                .elements(item)
+                .and_then(|parts| match parts.as_slice() {
+                    [Value::Symbol(called), source] if called.name() == "regex" => {
+                        heap.text(*source).map(str::to_owned)
+                    }
+                    _ => None,
+                });
+            let pattern = heap
+                .foreign_of::<Regex>(item)
+                .map(|regex| regex.as_str().to_owned())
+                .or_else(|| heap.text(item).map(str::to_owned))
+                .or(quoted)
+                .ok_or_else(|| {
+                    format!(
+                        ":error-patterns holds regexes, not {}",
+                        print::brief(heap, item)
+                    )
+                })?;
+            ErrorPattern::new(&pattern).map_err(|error| format!(":error-patterns: {error}"))
+        })
+        .collect()
+}
+
+fn lint_settings_declared(manifest: &Manifest) -> Result<(), String> {
+    let unknown = manifest
+        .lint
+        .iter()
+        .flat_map(|lint| &lint.args)
+        .find_map(|part| match part {
+            LintPart::Setting(key)
+                if !manifest.settings.iter().any(|setting| setting.key == *key) =>
+            {
+                Some(key)
+            }
+            _ => None,
+        });
+    match unknown {
+        Some(key) => Err(format!(
+            ":lint's :args name the setting :{key}, which :settings doesn't declare"
+        )),
+        None => Ok(()),
+    }
+}
+
 fn startup_of(value: Value) -> Result<Startup, String> {
     match value {
         Value::Bool(true) => Ok(Startup::Always),
@@ -355,6 +518,9 @@ pub(crate) const MANIFEST_KEYS: &[&str] = &[
     "opens-directories",
     "opens-files",
     "opt-in",
+    "builds",
+    "lint",
+    "error-patterns",
 ];
 
 fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
@@ -382,6 +548,9 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
         modes: Vec::new(),
         wakes_for: Vec::new(),
         requires: Vec::new(),
+        builds: Vec::new(),
+        lint: None,
+        error_patterns: Vec::new(),
     };
     for pair in options.chunks(2) {
         let [key, value] = pair else {
@@ -422,6 +591,9 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
             Some("opt-in") => manifest.opt_in = value.truthy(),
             Some("modes") => manifest.modes = modes::declared(heap, *value)?,
             Some("requires") => manifest.requires = requires_of(heap, &manifest.name, *value)?,
+            Some("builds") => manifest.builds = builds_of(heap, *value)?,
+            Some("lint") => manifest.lint = Some(lint_of(heap, *value)?),
+            Some("error-patterns") => manifest.error_patterns = patterns_of(heap, *value)?,
             Some("wakes-for") => {
                 manifest.wakes_for = texts_of(heap, *value)
                     .ok_or_else(|| ":wakes-for must be a vector of mode names".to_owned())?;
@@ -436,6 +608,7 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
             }
         }
     }
+    lint_settings_declared(&manifest)?;
     Ok(manifest)
 }
 
@@ -563,8 +736,94 @@ fn dormant(editor: &mut Editor, plugin: &Plugin) {
     }
 }
 
+fn build_name(plugin: &Plugin, build: &str) -> String {
+    format!("{}-{build}", plugin.manifest.name)
+}
+
+fn setting_of(heap: &Heap, plugin: &Plugin, key: &str) -> Value {
+    let default = plugin
+        .manifest
+        .settings
+        .iter()
+        .find(|setting| setting.key == key)
+        .and_then(|setting| setting.default);
+    plugin
+        .config
+        .iter()
+        .find(|(name, _)| name == key)
+        .map(|(_, hold)| *hold)
+        .or(default)
+        .and_then(|hold| heap.held(hold))
+        .unwrap_or(Value::Nil)
+}
+
+fn linter(heap: &Heap, plugin: &Plugin) -> Option<Linter> {
+    let lint = plugin.manifest.lint.as_ref().filter(|_| plugin.active)?;
+    let mut args = Vec::new();
+    for part in &lint.args {
+        args.push(match part {
+            LintPart::Text(text) => LintArg::Text(text.clone()),
+            LintPart::File => LintArg::File,
+            LintPart::Setting(key) => match setting_of(heap, plugin, key) {
+                Value::Nil => return None,
+                Value::Keyword(name) if name.name() == "off" => return None,
+                Value::Keyword(name) => LintArg::Text(name.name().to_owned()),
+                value => LintArg::Text(print::display(heap, value)),
+            },
+        });
+    }
+    Some(Linter {
+        program: lint.program.clone(),
+        args,
+        root: lint.root,
+        format: lint.format,
+    })
+}
+
+fn apply_lint(heap: &Heap, editor: &mut Editor, plugin: &Plugin) {
+    if plugin.manifest.lint.is_none() {
+        return;
+    }
+    let found = linter(heap, plugin);
+    for declared in &plugin.manifest.modes {
+        if let Some(language) = editor.language_named(declared.title()) {
+            editor.set_linter(language, found.clone());
+        }
+    }
+}
+
+fn unstub(editor: &mut Editor, plugin: &Plugin) {
+    for (command, _) in &plugin.manifest.commands {
+        editor.remove_dynamic_command(command);
+    }
+    for (build, _) in &plugin.manifest.builds {
+        editor.remove_dynamic_command(&build_name(plugin, build));
+    }
+    editor.set_error_patterns(&plugin.manifest.name, Vec::new());
+    for declared in &plugin.manifest.modes {
+        if let Some(language) = editor.language_named(declared.title()) {
+            editor.set_linter(language, None);
+        }
+    }
+    editor.wake_dormant_modes(&plugin.manifest.name);
+    dormant(editor, plugin);
+}
+
 fn stubs(editor: &mut Editor, plugin: &Plugin) {
     editor.wake_dormant_modes(&plugin.manifest.name);
+    for (build, command) in &plugin.manifest.builds {
+        let command = command.clone();
+        editor.add_dynamic_command(DynamicSpec {
+            name: build_name(plugin, build),
+            summary: format!("Run {command} in the project"),
+            scope: Scope::Global.into(),
+            run: Arc::new(move |editor: &mut Editor| editor.compile_in_project(&command)),
+        });
+    }
+    editor.set_error_patterns(
+        &plugin.manifest.name,
+        plugin.manifest.error_patterns.clone(),
+    );
     if !plugin.loaded {
         for (command, summary) in &plugin.manifest.commands {
             stub(editor, &plugin.manifest.name, command, summary);
@@ -711,6 +970,7 @@ pub fn discover(
     for plugin in &known {
         if plugin.active {
             stubs(editor, plugin);
+            apply_lint(isolate.heap(), editor, plugin);
         } else {
             dormant(editor, plugin);
         }
@@ -895,7 +1155,11 @@ pub(crate) fn configure_named(
         .iter_mut()
         .find(|plugin| plugin.manifest.name == name)
     {
-        Some(plugin) => merge(heap, plugin, changes),
+        Some(plugin) => {
+            let problems = merge(heap, plugin, changes);
+            apply_lint(heap, editor, plugin);
+            problems
+        }
         None => vec![format!("There is no plugin named {name}")],
     };
     start_if_due(heap, &mut plugins, &name);
@@ -929,13 +1193,10 @@ fn configure(
     let disabled = disabled.truthy();
     plugin.active = !disabled;
     if disabled {
-        for (command, _) in &plugin.manifest.commands {
-            editor.remove_dynamic_command(command);
-        }
-        editor.wake_dormant_modes(&plugin.manifest.name);
-        dormant(editor, plugin);
+        unstub(editor, plugin);
     } else {
         stubs(editor, plugin);
+        apply_lint(heap, editor, plugin);
     }
     problems
 }
@@ -1283,6 +1544,7 @@ fn start_now(isolate: &mut Isolate, editor: &mut Editor, path: &Path) {
     };
     limit_imports(isolate, &plugin.manifest);
     stubs(editor, &plugin);
+    apply_lint(isolate.heap(), editor, &plugin);
     if wake(isolate, editor, &name) {
         views::redraw(editor);
         editor.show_message(format!(
@@ -1554,6 +1816,120 @@ mod tests {
         crate::testing::press(&mut editor, &mut ox, "RET");
 
         assert!(editor.buffer().contents().contains("Say hello"));
+    }
+
+    const CRAB: Bundle = Bundle {
+        name: "crab",
+        files: &[
+            (
+                "plugin.ox",
+                r#"(plugin crab
+  :version "0.1.0"
+  :modes [{title: "Crab" grammar: "rust" extensions: ["crab"] comment: "//"}]
+  :settings {lint: {type: [:check :clippy :off] default: :check}}
+  :builds {build: "cargo build --release"}
+  :lint {program: "cargo" args: [:lint "--message-format=json" :file] root: :folder format: :cargo}
+  :error-patterns [#"^crab at (?P<file>\S+):(?P<line>\d+)"])"#,
+            ),
+            ("crab.ox", ""),
+        ],
+    };
+
+    fn spawned(editor: &mut Editor) -> Vec<(String, Vec<String>)> {
+        editor
+            .take_effects()
+            .into_iter()
+            .filter_map(|effect| match effect {
+                oxmacs_core::editor::Effect::Spawn(job) => Some((job.program, job.args)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn saved(editor: &mut Editor, ox: &mut Ox) -> Vec<(String, Vec<String>)> {
+        editor.take_effects();
+        crate::testing::press(editor, ox, "C-e");
+        crate::testing::typed(editor, ox, " ");
+        crate::testing::press(editor, ox, "C-x C-s");
+        spawned(editor)
+    }
+
+    #[test]
+    fn builds_lint_and_error_patterns_come_from_the_manifest() {
+        let home = home_with(&[]);
+        let path = home.path().join("a.crab");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let (mut editor, mut ox) = started(&[CRAB], home.path());
+        editor.open_file(&path);
+        let file = path.display().to_string();
+
+        assert_eq!(
+            saved(&mut editor, &mut ox),
+            [(
+                "cargo".to_owned(),
+                vec![
+                    "check".to_owned(),
+                    "--message-format=json".to_owned(),
+                    file.clone()
+                ]
+            )]
+        );
+        ox.eval(&mut editor, "(settings 'crab {lint: :clippy})")
+            .unwrap();
+        assert_eq!(saved(&mut editor, &mut ox)[0].1[0], "clippy");
+        ox.eval(&mut editor, "(settings 'crab {lint: :off})")
+            .unwrap();
+        assert_eq!(saved(&mut editor, &mut ox), []);
+
+        run_command(&mut editor, &mut ox, "crab-build");
+        let effects = editor.take_effects();
+        let job = effects
+            .iter()
+            .find_map(|effect| match effect {
+                oxmacs_core::editor::Effect::Spawn(job) => Some(job.clone()),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(
+            (job.program.as_str(), job.args.as_slice()),
+            ("cargo", &["build".to_owned(), "--release".to_owned()][..])
+        );
+        editor.job_output(job.id, "crab at a.crab:1");
+        let shows = editor
+            .buffer_names()
+            .into_iter()
+            .any(|name| name.contains("compilation"));
+        assert!(shows, "{:?}", editor.buffer_names());
+    }
+
+    #[test]
+    fn mistakes_in_lint_and_error_patterns_are_logged() {
+        let home = home_with(&[
+            (
+                "plugins/lint/plugin.ox",
+                "(plugin lint :lint {program: \"x\" args: [:level] format: :cargo})",
+            ),
+            (
+                "plugins/pattern/plugin.ox",
+                "(plugin pattern :error-patterns [#\"at (?P<where>\\S+)\"])",
+            ),
+            (
+                "plugins/format/plugin.ox",
+                "(plugin format :lint {program: \"x\" format: :json})",
+            ),
+        ]);
+        let (editor, _) = started(&[], home.path());
+        let log = logged(&editor);
+
+        assert!(
+            log.contains(":lint's :args name the setting :level, which :settings doesn't declare"),
+            "{log}"
+        );
+        assert!(log.contains("needs groups named file and line"), "{log}");
+        assert!(
+            log.contains(":lint's :format is one of :cargo, not :json"),
+            "{log}"
+        );
     }
 
     #[test]

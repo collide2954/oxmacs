@@ -114,6 +114,10 @@ fn grammars() -> String {
 }
 
 impl Declared {
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
     pub fn extensions(&self) -> &[String] {
         &self.extensions
     }

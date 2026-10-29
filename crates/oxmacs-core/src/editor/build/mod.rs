@@ -21,7 +21,7 @@ struct Run {
     linter: Linter,
     root: PathBuf,
     scope: PathBuf,
-    label: &'static str,
+    label: String,
     name: String,
     found: Vec<Diagnostic>,
     built: bool,
@@ -46,6 +46,7 @@ pub(in crate::editor) enum Finished {
 pub(in crate::editor) struct Builds {
     linters: Vec<(Language, Linter)>,
     patterns: Vec<ErrorPattern>,
+    owners: Vec<String>,
     last_command: Option<String>,
     walks: Walks,
     due: Option<(Language, PathBuf)>,
@@ -61,8 +62,9 @@ pub(in crate::editor) struct Builds {
 impl Default for Builds {
     fn default() -> Self {
         Self {
-            linters: vec![(Language::rust(), lint::CARGO_LINT)],
-            patterns: errors::BUILT_IN.to_vec(),
+            linters: Vec::new(),
+            owners: vec![String::new(); errors::built_in().len()],
+            patterns: errors::built_in(),
             last_command: None,
             walks: Walks::default(),
             due: None,
@@ -78,15 +80,26 @@ impl Default for Builds {
 }
 
 impl Builds {
-    #[cfg(test)]
-    pub(in crate::editor) fn add_linter(&mut self, language: Language, linter: Linter) {
+    pub(in crate::editor) fn set_linter(&mut self, language: Language, linter: Option<Linter>) {
         self.linters.retain(|(known, _)| *known != language);
-        self.linters.push((language, linter));
+        if let Some(linter) = linter {
+            self.linters.push((language, linter));
+        }
     }
 
-    #[cfg(test)]
-    pub(in crate::editor) fn add_pattern(&mut self, pattern: ErrorPattern) {
-        self.patterns.push(pattern);
+    pub(in crate::editor) fn set_patterns(&mut self, owner: &str, patterns: Vec<ErrorPattern>) {
+        let kept: Vec<(String, ErrorPattern)> = self
+            .owners
+            .drain(..)
+            .zip(self.patterns.drain(..))
+            .filter(|(known, _)| known != owner)
+            .chain(
+                patterns
+                    .into_iter()
+                    .map(|pattern| (owner.to_owned(), pattern)),
+            )
+            .collect();
+        (self.owners, self.patterns) = kept.into_iter().unzip();
     }
 
     pub(in crate::editor) fn patterns(&self) -> &[ErrorPattern] {
@@ -130,7 +143,7 @@ impl Builds {
             .linters
             .iter()
             .find(|(known, _)| *known == language)
-            .map(|(_, linter)| *linter)?;
+            .map(|(_, linter)| linter.clone())?;
         Some((language, path, linter))
     }
 
@@ -166,7 +179,7 @@ impl Builds {
         let Some(run) = self.runs.iter_mut().find(|run| run.job == job) else {
             return;
         };
-        match (run.linter.read)(line, &run.root) {
+        match (run.linter.format.read)(line, &run.root) {
             LintLine::Diagnostic(diagnostic) => {
                 if !run.found.contains(&diagnostic) {
                     run.found.push(diagnostic);
@@ -191,7 +204,7 @@ impl Builds {
             return Finished::Unknown;
         };
         let run = self.runs.remove(at);
-        let completed = run.built || (run.linter.complete)(outcome);
+        let completed = run.built || (run.linter.format.complete)(outcome);
         match outcome {
             Outcome::Exited(_) if completed => {
                 let Self {
@@ -307,7 +320,7 @@ impl Builds {
             .iter()
             .find(|run| identity.starts_with(&run.scope) && Some(&run.language) == language)
         {
-            return Some(run.label.to_owned());
+            return Some(run.label.clone());
         }
         let count = |severity| {
             self.on_file(identity)
@@ -340,20 +353,32 @@ impl Builds {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use super::lint::LintRun;
     use super::lint::fixtures::FINISHED;
+    use super::lint::{CARGO, LintArg, LintRoot, LintRun, Linter};
     use super::{Builds, Finished};
     use crate::editor::{JobId, Outcome};
     use crate::external::diagnostics::sample;
     use crate::files;
     use crate::syntax::Language;
 
+    fn builds() -> Builds {
+        let mut builds = Builds::default();
+        let cargo = Linter {
+            program: "cargo".to_owned(),
+            args: vec![LintArg::Text("check".to_owned())],
+            root: LintRoot::Language,
+            format: CARGO,
+        };
+        builds.set_linter(Language::rust(), Some(cargo));
+        builds
+    }
+
     fn run(root: &Path) -> LintRun {
         LintRun {
             root: root.to_path_buf(),
             program: "cargo".to_owned(),
             args: Vec::new(),
-            label: "Checking",
+            label: "Checking".to_owned(),
             name: "cargo check".to_owned(),
         }
     }
@@ -367,7 +392,7 @@ mod tests {
 
     #[test]
     fn rechecking_before_anything_ran_leaves_what_is_due() {
-        let mut builds = Builds::default();
+        let mut builds = builds();
         builds.request(Language::rust(), Path::new("main.rs"));
 
         assert!(!builds.recheck());
@@ -381,7 +406,7 @@ mod tests {
     #[test]
     fn a_finished_check_replaces_its_language_s_results_under_its_root() {
         let dir = tempfile::tempdir().unwrap();
-        let mut builds = Builds::default();
+        let mut builds = builds();
         let job = checking(&mut builds, dir.path(), 1);
         let main = dir.path().join("src").join("main.rs");
         let identity = files::identity(&main);
@@ -415,7 +440,7 @@ mod tests {
     #[test]
     fn failed_or_unknown_runs_change_nothing() {
         let dir = tempfile::tempdir().unwrap();
-        let mut builds = Builds::default();
+        let mut builds = builds();
         let job = checking(&mut builds, dir.path(), 1);
 
         builds.output(job, "error: could not find `Cargo.toml`");
@@ -434,7 +459,7 @@ mod tests {
     #[test]
     fn compiling_takes_next_error_back_from_the_lints() {
         let dir = tempfile::tempdir().unwrap();
-        let mut builds = Builds::default();
+        let mut builds = builds();
         let job = checking(&mut builds, dir.path(), 1);
         builds.output(job, FINISHED);
         builds.finished(job, &Outcome::Exited(Some(0)), |_| None);

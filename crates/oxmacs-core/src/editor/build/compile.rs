@@ -66,9 +66,13 @@ impl Editor {
         self.start_compile(command, directory);
     }
 
-    #[cfg(test)]
-    pub fn add_error_pattern(&mut self, pattern: super::errors::ErrorPattern) {
-        self.builds.add_pattern(pattern);
+    pub fn set_error_patterns(&mut self, owner: &str, patterns: Vec<super::errors::ErrorPattern>) {
+        self.builds.set_patterns(owner, patterns);
+    }
+
+    pub fn compile_in_project(&mut self, command: &str) {
+        let directory = self.project_directory();
+        self.start_compile(command, directory);
     }
 
     pub(in crate::editor) fn start_compile(&mut self, command: &str, directory: PathBuf) {
