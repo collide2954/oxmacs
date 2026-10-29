@@ -24,12 +24,7 @@ pub(crate) fn spec() -> LanguageSpec {
         grammar: None,
         grammars: &[],
         outline: Outline::NONE,
-        features: &[
-            Feature::Highlighting,
-            Feature::Comments,
-            Feature::Pairs,
-            Feature::Repl,
-        ],
+        features: &[Feature::Repl],
         roots: Roots::marked(&["plugin.ox", "init.ox"]),
         ..LanguageSpec::named("Ox")
     }

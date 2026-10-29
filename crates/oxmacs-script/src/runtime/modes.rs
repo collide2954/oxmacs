@@ -9,7 +9,7 @@ use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{ScopeId, intern};
 use oxmacs_core::editor::Editor;
-use oxmacs_core::syntax::{Feature, Language, LanguageSpec, Roots};
+use oxmacs_core::syntax::{Language, LanguageSpec, Roots};
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
@@ -17,8 +17,6 @@ use crate::ide::log;
 use oxmacs_core::theme::face_named;
 
 type Spans = Vec<(Range<usize>, Highlight)>;
-
-const FEATURES: &[Feature] = &[Feature::Highlighting, Feature::Comments];
 
 #[derive(Debug, Clone, Default)]
 struct Rules {
@@ -192,10 +190,7 @@ fn spec(title: &str, alias: String, declared: Declared) -> Language {
         .grammar
         .as_deref()
         .and_then(kit)
-        .unwrap_or_else(|| LanguageSpec {
-            features: FEATURES,
-            ..LanguageSpec::named(title)
-        });
+        .unwrap_or_else(|| LanguageSpec::named(title));
     let mut aliases = vec![alias];
     for alias in &base.aliases {
         if !aliases.contains(alias) {

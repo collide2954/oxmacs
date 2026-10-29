@@ -10,22 +10,36 @@ use crate::external::diagnostics::Severity;
 use crate::external::lsp::{Event, Launch};
 use crate::testing::{kits, press, type_text};
 
-const SERVERS: &[ServerSpec] = &[
+fn server(name: &str, language: (&str, &str), program: &[&str], install: &str) -> ServerSpec {
+    let (command, args) = program.split_first().unwrap();
     ServerSpec {
-        name: "rust-analyzer",
-        languages: &[("Rust", "rust")],
-        programs: &[("rust-analyzer", &[])],
-        install: "rustup component add rust-analyzer",
-        runs: true,
-    },
-    ServerSpec {
-        name: "taplo",
-        languages: &[("TOML", "toml")],
-        programs: &[("taplo", &["lsp", "stdio"])],
-        install: "cargo install taplo-cli --locked --features lsp",
-        runs: true,
-    },
-];
+        name: name.to_owned(),
+        languages: vec![(language.0.to_owned(), language.1.to_owned())],
+        programs: vec![(
+            (*command).to_owned(),
+            args.iter().map(|arg| (*arg).to_owned()).collect(),
+        )],
+        install: install.to_owned(),
+        runs: !install.is_empty(),
+    }
+}
+
+fn servers() -> Vec<ServerSpec> {
+    vec![
+        server(
+            "rust-analyzer",
+            ("Rust", "rust"),
+            &["rust-analyzer"],
+            "rustup component add rust-analyzer",
+        ),
+        server(
+            "taplo",
+            ("TOML", "toml"),
+            &["taplo", "lsp", "stdio"],
+            "cargo install taplo-cli --locked --features lsp",
+        ),
+    ]
+}
 
 fn project() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
@@ -46,7 +60,7 @@ fn project() -> tempfile::TempDir {
 fn editor() -> Editor {
     let mut editor = kits();
     editor.lsp.find = |program| Some(PathBuf::from(program));
-    editor.add_language_servers(SERVERS);
+    editor.add_language_servers(&servers());
     editor
 }
 
@@ -908,20 +922,21 @@ fn markdown_spec() -> crate::syntax::LanguageSpec {
     }
 }
 
-const MARKSMAN: ServerSpec = ServerSpec {
-    name: "marksman",
-    languages: &[("Markdown", "markdown")],
-    programs: &[("marksman", &["server"])],
-    install: "",
-    runs: false,
-};
+fn marksman() -> ServerSpec {
+    server(
+        "marksman",
+        ("Markdown", "markdown"),
+        &["marksman", "server"],
+        "",
+    )
+}
 
 #[test]
 fn list_tools_lists_only_the_servers_of_languages_oxmacs_knows() {
     let mut editor = kits();
     editor.lsp.find = |_| None;
-    editor.add_language_servers(SERVERS);
-    editor.add_language_servers(&[MARKSMAN]);
+    editor.add_language_servers(&servers());
+    editor.add_language_servers(&[marksman()]);
     let listed = |editor: &mut Editor| {
         press(editor, "M-x");
         type_text(editor, "list-tools");
@@ -947,7 +962,7 @@ fn list_tools_lists_only_the_servers_of_languages_oxmacs_knows() {
 fn list_tools_names_the_language_servers_and_offers_to_install_them() {
     let mut editor = kits();
     editor.lsp.find = |program| (program == "taplo").then(|| PathBuf::from("taplo"));
-    editor.add_language_servers(SERVERS);
+    editor.add_language_servers(&servers());
 
     press(&mut editor, "M-x");
     type_text(&mut editor, "list-tools");

@@ -2,14 +2,9 @@ use ox_lang::heap::Heap;
 use ox_lang::native::{given, name_of};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::command::intern;
 use oxmacs_core::editor::{Editor, ServerSpec};
 
 const NATIVE: &str = "define-language-server";
-
-fn leak_all<T>(items: Vec<T>) -> &'static [T] {
-    Box::leak(items.into_boxed_slice())
-}
 
 fn texts(heap: &Heap, option: &str, value: Value) -> Result<Vec<String>, Error> {
     heap.elements(value)
@@ -102,26 +97,11 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
             )));
         }
     };
-    let programs: Vec<(&'static str, &'static [&'static str])> = choices
-        .into_iter()
-        .map(|(program, args)| {
-            (
-                intern(&program),
-                leak_all(args.iter().map(|arg| intern(arg)).collect()),
-            )
-        })
-        .collect();
     let spec = ServerSpec {
-        name: intern(&name),
-        languages: leak_all(
-            given
-                .languages
-                .into_iter()
-                .map(|(mode, id)| (intern(&mode), intern(&id)))
-                .collect(),
-        ),
-        programs: leak_all(programs),
-        install: intern(&given.install),
+        name,
+        languages: given.languages,
+        programs: choices,
+        install: given.install,
         runs: given.runs,
     };
     editor.add_language_servers(&[spec]);

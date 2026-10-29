@@ -5,13 +5,15 @@ use oxmacs_core::editor::{Editor, ServerSpec};
 use oxmacs_core::external::runner::{Delivery, Runner};
 use oxmacs_script::Ox;
 
-const OX_LSP: ServerSpec = ServerSpec {
-    name: "ox lsp",
-    languages: &[("Ox", "ox")],
-    programs: &[(env!("CARGO_BIN_EXE_ox"), &["lsp"])],
-    install: "cargo install --path crates/ox",
-    runs: true,
-};
+fn ox_lsp() -> ServerSpec {
+    ServerSpec {
+        name: "ox lsp".to_owned(),
+        languages: vec![("Ox".to_owned(), "ox".to_owned())],
+        programs: vec![(env!("CARGO_BIN_EXE_ox").to_owned(), vec!["lsp".to_owned()])],
+        install: "cargo install --path crates/ox".to_owned(),
+        runs: true,
+    }
+}
 
 struct Host {
     runner: Runner,
@@ -58,7 +60,7 @@ fn oxmacs_runs_ox_lsp_and_shows_its_findings() {
     let mut editor = Editor::new();
     let mut ox = Ox::new();
     ox.start(&mut editor, Some(home.path()));
-    editor.add_language_servers(&[OX_LSP]);
+    editor.add_language_servers(&[ox_lsp()]);
     let mut host = Host::new();
 
     assert!(editor.open_file(&file));

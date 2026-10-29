@@ -31,9 +31,54 @@ impl SpecialBuffer for LanguageList {
 }
 
 impl Editor {
+    fn features_of(&self, language: &Language) -> Vec<Feature> {
+        let registered = self.registered(language);
+        let grammar = language.grammar().is_some();
+        let served = self
+            .server_specs()
+            .iter()
+            .any(|spec| spec.language_id(language.name()).is_some());
+        Feature::ALL
+            .into_iter()
+            .filter(|feature| match feature {
+                Feature::Highlighting => {
+                    grammar || registered.is_some_and(|known| known.highlight.is_some())
+                }
+                Feature::Indentation => {
+                    registered.is_some_and(|known| known.indent.is_some())
+                        || (grammar && !language.indentation().keeps())
+                }
+                Feature::Comments => language.line_comment().is_some(),
+                Feature::Pairs => !language.pairs().is_empty(),
+                Feature::Formatting => self.formatters.iter().any(|(known, _)| known == language),
+                Feature::Lint => self.builds.has_linter(language),
+                Feature::Motion => grammar || !language.pairs().is_empty(),
+                Feature::Items => grammar,
+                Feature::Completion => served || language.supports(*feature),
+                Feature::Lsp => served,
+                Feature::Preview | Feature::Repl => language.supports(*feature),
+            })
+            .collect()
+    }
+
     pub(in crate::editor) fn list_languages(&mut self) {
+        let rows: Vec<(Language, Vec<Feature>)> = self
+            .languages()
+            .into_iter()
+            .map(|language| {
+                let found = self.features_of(&language);
+                (language, found)
+            })
+            .collect();
+        let previewed = rows
+            .iter()
+            .any(|(_, found)| found.contains(&Feature::Preview));
+        let columns: Vec<Feature> = Feature::ALL
+            .into_iter()
+            .filter(|feature| *feature != Feature::Preview || previewed)
+            .collect();
         let mut page = Page::default();
-        table(&mut page, &self.languages());
+        table(&mut page, &rows, &columns);
         let id = match self.find_special_buffer::<LanguageList>(|_| true) {
             Some(id) => id,
             None => self.add_special_buffer_with(NAME, |buffer| {
@@ -50,10 +95,10 @@ impl Editor {
     }
 }
 
-fn table(page: &mut Page, languages: &[Language]) {
-    let names: Vec<String> = languages
+fn table(page: &mut Page, rows: &[(Language, Vec<Feature>)], columns: &[Feature]) {
+    let names: Vec<String> = rows
         .iter()
-        .map(|language| {
+        .map(|(language, _)| {
             let extensions: Vec<String> = language
                 .extensions()
                 .iter()
@@ -69,21 +114,21 @@ fn table(page: &mut Page, languages: &[Language]) {
         .unwrap_or(0)
         .max(NAME_WIDTH);
     let mut header = format!("{:<width$}", "Languages", width = name_width + 2);
-    for feature in Feature::ALL {
+    for feature in columns {
         let _ = write!(
             header,
             "{:<width$}",
             feature.label(),
-            width = column_width(feature)
+            width = column_width(*feature)
         );
     }
     page.line(&[(header.trim_end(), Some(Highlight::Heading))]);
-    for (language, name) in languages.iter().zip(names) {
+    for ((_, found), name) in rows.iter().zip(names) {
         let name = format!("  {name:<name_width$}");
         let mut parts: Vec<(String, Option<Highlight>)> = vec![(name, None)];
-        for feature in Feature::ALL {
-            let width = column_width(feature);
-            parts.push(if language.supports(feature) {
+        for feature in columns {
+            let width = column_width(*feature);
+            parts.push(if found.contains(feature) {
                 (format!("{:<width$}", "✓"), Some(Highlight::Success))
             } else {
                 (format!("{:<width$}", "–"), None)
@@ -103,7 +148,7 @@ fn column_width(feature: Feature) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::Editor;
+    use crate::editor::{Editor, ServerSpec};
     use crate::syntax::{Feature, Indentation, Language, LanguageSpec, Outline};
     use crate::testing::{lines, press, type_text};
 
@@ -140,6 +185,17 @@ mod tests {
     #[test]
     fn list_languages_shows_what_works_in_each_language() {
         let mut editor = crate::testing::kits();
+        editor.set_linter(
+            Language::rust(),
+            Some(crate::editor::build::lint::fixtures::cargo_check()),
+        );
+        editor.add_language_servers(&[ServerSpec {
+            name: "rust-analyzer".to_owned(),
+            languages: vec![("Rust".to_owned(), "rust".to_owned())],
+            programs: vec![("rust-analyzer".to_owned(), Vec::new())],
+            install: String::new(),
+            runs: false,
+        }]);
 
         listed(&mut editor);
 
@@ -150,17 +206,23 @@ mod tests {
         let mark =
             |row: &str, label: &str| line_with(&editor, row).chars().nth(column(label)).unwrap();
         assert_eq!(mark("Rust (.rs)", "Highlight"), '✓');
-        assert_eq!(mark("Rust (.rs)", "LSP"), '–');
+        assert_eq!(mark("Rust (.rs)", "LSP"), '✓');
+        assert_eq!(mark("Rust (.rs)", "Complete"), '✓');
         assert_eq!(mark("Rust (.rs)", "Lint"), '✓');
+        assert_eq!(mark("Rust (.rs)", "REPL"), '–');
         assert_eq!(mark("TOML (", "Lint"), '–');
+        assert_eq!(mark("TOML (", "Indent"), '–');
+        assert_eq!(mark("TOML (", "LSP"), '–');
+        assert_eq!(mark("TOML (", "Items"), '✓');
         assert_eq!(mark("R (.R .r)", "Indent"), '✓');
         assert_eq!(mark("R (.R .r)", "Items"), '✓');
         assert_eq!(mark("R (.R .r)", "Format"), '✓');
         assert_eq!(mark("R (.R .r)", "Complete"), '✓');
         assert_eq!(mark("R (.R .r)", "REPL"), '✓');
-        assert_eq!(mark("Rust (.rs)", "REPL"), '–');
-        assert_eq!(mark("TOML (", "Items"), '✓');
-        assert_eq!(mark("TOML (", "Preview"), '–');
+        assert!(
+            !header.contains("Fold") && !header.contains("Preview"),
+            "{header}"
+        );
     }
 
     #[test]

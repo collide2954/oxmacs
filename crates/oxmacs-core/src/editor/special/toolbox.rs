@@ -247,7 +247,7 @@ impl Editor {
             .servers
             .iter()
             .find(|(row, _)| *row == line)
-            .map(|(_, spec)| *spec)
+            .map(|(_, spec)| spec.clone())
     }
 
     fn install_server(&mut self, spec: ServerSpec) {
@@ -268,7 +268,7 @@ impl Editor {
             move |editor, yes| {
                 if yes {
                     editor.retry_servers();
-                    editor.start_compile(spec.install, directory);
+                    editor.start_compile(&spec.install, directory.clone());
                 }
             },
         );
@@ -572,12 +572,13 @@ impl Editor {
         }
         for spec in specs {
             let (mark, highlight, state) = self.server_state(&spec);
-            servers.push((page.line_count(), spec));
+            let line = page.line_count();
             page.line(&[
                 (&format!("  {:<name_width$}", spec.name), None),
                 (mark, Some(highlight)),
                 (&format!(" {state}"), None),
             ]);
+            servers.push((line, spec));
         }
         (page, rows, servers)
     }

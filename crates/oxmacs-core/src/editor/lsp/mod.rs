@@ -104,8 +104,8 @@ pub(in crate::editor) struct Lsp {
     specs: Vec<ServerSpec>,
     running: Vec<Client>,
     next: u64,
-    told: Vec<&'static str>,
-    missing: Vec<(&'static str, Instant)>,
+    told: Vec<String>,
+    missing: Vec<(String, Instant)>,
     out: Vec<Out>,
     assist: Assist,
     pub(in crate::editor) find: fn(&str) -> Option<PathBuf>,
@@ -151,7 +151,7 @@ impl Client {
             State::Stopped(_) => format!("{} stopped", self.spec.name),
             State::Ready => match self.progress.last() {
                 Some((_, text)) => format!("{} {text}", self.spec.name),
-                None => self.spec.name.to_owned(),
+                None => self.spec.name.clone(),
             },
         }
     }
@@ -236,7 +236,7 @@ impl Lsp {
     fn add_specs(&mut self, specs: &[ServerSpec]) {
         for spec in specs {
             self.specs.retain(|known| known.name != spec.name);
-            self.specs.push(*spec);
+            self.specs.push(spec.clone());
         }
     }
 
@@ -244,7 +244,7 @@ impl Lsp {
         self.specs
             .iter()
             .find(|spec| spec.language_id(language).is_some())
-            .copied()
+            .cloned()
     }
 
     fn client(&self, id: ServerId) -> Option<&Client> {
@@ -252,7 +252,7 @@ impl Lsp {
     }
 
     fn name_of(&self, id: ServerId) -> Option<String> {
-        self.client(id).map(|client| client.spec.name.to_owned())
+        self.client(id).map(|client| client.spec.name.clone())
     }
 
     fn client_mut(&mut self, id: ServerId) -> Option<&mut Client> {
@@ -264,7 +264,7 @@ impl Lsp {
     }
 
     fn log(&mut self, id: ServerId, text: &str) {
-        let name = self.client(id).map_or("server", |client| client.spec.name);
+        let name = self.name(id).to_owned();
         self.out
             .push(Out::Log(format!("[{name}] {}\n", text.trim_end())));
     }
@@ -284,7 +284,7 @@ impl Lsp {
             };
             seen.push(file.buffer);
             if enabled {
-                self.sync_buffer(spec, file, text);
+                self.sync_buffer(&spec, file, text);
             }
         }
         self.close_documents(&seen);
@@ -309,7 +309,7 @@ impl Lsp {
 
     fn sync_buffer(
         &mut self,
-        spec: ServerSpec,
+        spec: &ServerSpec,
         file: &Visited<'_>,
         text: &dyn Fn(BufferId) -> String,
     ) {
@@ -320,7 +320,7 @@ impl Lsp {
             .find(|client| client.spec.name == spec.name && client.root == root)
         {
             Some(client) => client.id,
-            None => match self.start_server(spec, &root) {
+            None => match self.start_server(spec.clone(), &root) {
                 Some(id) => id,
                 None => return,
             },
@@ -401,11 +401,11 @@ impl Lsp {
         let Some((program, args)) = spec
             .programs
             .iter()
-            .find_map(|(program, args)| find(program).map(|found| (found, *args)))
+            .find_map(|(program, args)| find(program).map(|found| (found, args.clone())))
         else {
-            self.missing.push((spec.name, now));
+            self.missing.push((spec.name.clone(), now));
             if !self.told.contains(&spec.name) {
-                self.told.push(spec.name);
+                self.told.push(spec.name.clone());
                 self.out.push(Out::Tell(if spec.runs {
                     format!(
                         "{} would add completion, docs and more here; M-x list-tools can install it",
@@ -441,7 +441,7 @@ impl Lsp {
             id,
             Launch {
                 program,
-                args: args.iter().map(|arg| (*arg).to_owned()).collect(),
+                args,
                 directory: root.to_path_buf(),
             },
         ));
@@ -479,7 +479,7 @@ impl Lsp {
             .collect();
         client.state = State::Stopped(reason.clone());
         client.progress.clear();
-        let name = client.spec.name;
+        let name = client.spec.name.clone();
         let note = reason.clone().unwrap_or_else(|| "exited".to_owned());
         self.log(id, &format!("stopped: {note}"));
         if !expected && let Some(reason) = reason {
@@ -572,7 +572,7 @@ impl Lsp {
                     .and_then(Value::as_u64)
                     .is_some_and(|kind| kind <= 2);
                 if urgent && let Some(client) = self.client(id) {
-                    let name = client.spec.name;
+                    let name = client.spec.name.clone();
                     self.out.push(Out::Tell(format!("{name}: {text}")));
                 }
             }
@@ -743,8 +743,9 @@ impl Lsp {
             .map(|client| client.id)
     }
 
-    fn name(&self, id: ServerId) -> &'static str {
-        self.client(id).map_or("server", |client| client.spec.name)
+    fn name(&self, id: ServerId) -> &str {
+        self.client(id)
+            .map_or("server", |client| client.spec.name.as_str())
     }
 
     fn capable(&self, id: ServerId, capability: &str) -> bool {
@@ -847,7 +848,7 @@ impl Lsp {
         self.missing.clear();
     }
 
-    fn restart(&mut self, buffer: BufferId) -> Option<&'static str> {
+    fn restart(&mut self, buffer: BufferId) -> Option<String> {
         self.retry();
         let at = self
             .running
@@ -855,7 +856,7 @@ impl Lsp {
             .position(|client| client.document(buffer).is_some())?;
         let client = self.running.remove(at);
         self.out.push(Out::Stop(client.id));
-        Some(client.spec.name)
+        Some(client.spec.name.clone())
     }
 }
 

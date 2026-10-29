@@ -18,7 +18,6 @@ pub enum Feature {
     Lint,
     Motion,
     Items,
-    Folding,
     Preview,
     Completion,
     Repl,
@@ -26,7 +25,7 @@ pub enum Feature {
 }
 
 impl Feature {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 12] = [
         Self::Highlighting,
         Self::Indentation,
         Self::Comments,
@@ -35,7 +34,6 @@ impl Feature {
         Self::Lint,
         Self::Motion,
         Self::Items,
-        Self::Folding,
         Self::Preview,
         Self::Completion,
         Self::Repl,
@@ -52,7 +50,6 @@ impl Feature {
             Self::Lint => "Lint",
             Self::Motion => "Motion",
             Self::Items => "Items",
-            Self::Folding => "Fold",
             Self::Preview => "Preview",
             Self::Completion => "Complete",
             Self::Repl => "REPL",
@@ -139,6 +136,10 @@ impl Indentation {
         hanging: false,
         guess: None,
     };
+
+    pub fn keeps(&self) -> bool {
+        !self.continues && !self.from_owner && !self.hanging && self.guess.is_none()
+    }
 }
 
 #[derive(Clone, Copy)]

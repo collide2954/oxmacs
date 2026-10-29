@@ -29,15 +29,6 @@ static R_GRAMMAR: Grammar = Grammar::new(
 
 const BRACKETS: &[(char, char)] = &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"')];
 
-const EDITING: &[Feature] = &[
-    Feature::Highlighting,
-    Feature::Indentation,
-    Feature::Comments,
-    Feature::Pairs,
-    Feature::Motion,
-    Feature::Items,
-];
-
 fn rust() -> LanguageSpec {
     LanguageSpec {
         name: "Rust".to_owned(),
@@ -79,16 +70,7 @@ fn rust() -> LanguageSpec {
             sections: false,
             statements: &[],
         },
-        features: &[
-            Feature::Highlighting,
-            Feature::Indentation,
-            Feature::Comments,
-            Feature::Pairs,
-            Feature::Formatting,
-            Feature::Lint,
-            Feature::Motion,
-            Feature::Items,
-        ],
+        features: &[],
         roots: Roots {
             markers: owned(&["Cargo.toml"]),
             locate: Some(owned(&[
@@ -120,7 +102,7 @@ fn toml() -> LanguageSpec {
             sections: false,
             statements: &[],
         },
-        features: EDITING,
+        features: &[],
         roots: Roots::default(),
     }
 }
@@ -157,17 +139,7 @@ fn r() -> LanguageSpec {
             sections: true,
             statements: &["program", "braced_expression"],
         },
-        features: &[
-            Feature::Highlighting,
-            Feature::Indentation,
-            Feature::Comments,
-            Feature::Pairs,
-            Feature::Formatting,
-            Feature::Motion,
-            Feature::Items,
-            Feature::Completion,
-            Feature::Repl,
-        ],
+        features: &[Feature::Completion, Feature::Repl],
         roots: Roots::marked(&["DESCRIPTION", "renv.lock", "*.Rproj"]),
     }
 }
