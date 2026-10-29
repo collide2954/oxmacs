@@ -276,7 +276,13 @@ pub fn vaporwave(seconds: f64, out: &Path) {
     let step = SPEED / rate;
     let mut noise = Noise(0x9e37_79b9_7f4a_7c15);
     let mut pad_filters: [[Lowpass; 2]; 2] = Default::default();
-    let [mut clap_high, mut clap_low, mut hat_low, mut hiss_low] = <[Lowpass; 4]>::default();
+    let [
+        mut clap_high,
+        mut clap_low,
+        mut clap_tone,
+        mut hat_low,
+        mut hiss_low,
+    ] = <[Lowpass; 5]>::default();
     let mut lows: [Lowpass; 2] = Default::default();
     let mut highs: [Lowpass; 2] = Default::default();
     let mut rooms = [Reverb::new(0), Reverb::new(23)];
@@ -368,16 +374,17 @@ pub fn vaporwave(seconds: f64, out: &Path) {
         let white = noise.next();
         let kick = drums
             * (thump(in_bar) + thump(in_bar - 2.0 * BEAT) + 0.4 * thump(in_bar - 2.75 * BEAT));
-        let band = clap_high.run(white, 1400.0) - clap_low.run(white, 300.0);
+        let band = clap_high.run(white, 900.0) - clap_low.run(white, 250.0);
         let since_clap = (beat % 2.0 - 1.0) * BEAT;
-        let clap = if (0.0..0.6).contains(&since_clap) {
-            (band * (-since_clap * 11.0).exp() * 0.6
-                + 0.35 * (TAU * 180.0 * since_clap).sin() * (-since_clap * 22.0).exp())
-                * (since_clap / 0.004).min(1.0)
+        let struck = if (0.0..0.6).contains(&since_clap) {
+            (band * (-since_clap * 9.0).exp() * 0.5
+                + 0.25 * (TAU * 160.0 * since_clap).sin() * (-since_clap * 20.0).exp())
+                * (since_clap / 0.008).min(1.0)
                 * drums
         } else {
             0.0
         };
+        let clap = clap_tone.run(struck, 1200.0);
         let eighth = (beat * 2.0).fract() * BEAT / 2.0;
         let accent = if (beat * 2.0).floor() as u64 % 2 == 1 {
             1.0
@@ -407,9 +414,9 @@ pub fn vaporwave(seconds: f64, out: &Path) {
 
         let duck = 1.0 - 0.25 * drums * (-(beat % 2.0) * BEAT * 4.0).exp();
         let hiss = hiss_low.run(white, 6000.0) * 0.0015;
-        let reverb_send = (pad[0] + pad[1]) * 0.3 + keys * 0.6 + lead * 0.7 + clap * 0.45;
+        let reverb_send = (pad[0] + pad[1]) * 0.3 + keys * 0.6 + lead * 0.7 + clap * 0.18;
         let echoed = echo.run(keys * 0.3 + lead * 0.5);
-        let dry = keys * 0.8 + bass + kick * 0.3 + clap * 0.08 + hat + lead * 0.8 + hiss;
+        let dry = keys * 0.8 + bass + kick * 0.3 + clap * 0.035 + hat + lead * 0.8 + hiss;
         for (side, room) in rooms.iter_mut().enumerate() {
             let wet = room.run(reverb_send);
             let mixed = (pad[side] * duck + dry + wet * 1.5 + echoed[side] * 0.5) * intro.sqrt();
