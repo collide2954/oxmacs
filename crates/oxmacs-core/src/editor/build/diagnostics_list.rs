@@ -117,10 +117,16 @@ mod tests {
     use crate::external::diagnostics::sample;
     use crate::testing::{lines, press, type_text};
 
+    fn list(editor: &mut Editor) {
+        press(editor, "M-x");
+        type_text(editor, "list-diagnostics");
+        press(editor, "RET");
+    }
+
     fn listed() -> (tempfile::TempDir, Editor) {
         let (dir, mut editor) = project();
         reported(&mut editor);
-        press(&mut editor, "C-c !");
+        list(&mut editor);
         (dir, editor)
     }
 
@@ -138,7 +144,7 @@ mod tests {
     }
 
     #[test]
-    fn c_c_bang_lists_problems_by_file() {
+    fn list_diagnostics_lists_problems_by_file() {
         let (_dir, editor) = listed();
 
         assert_eq!(editor.buffer().name(), "*Diagnostics*");
@@ -243,7 +249,7 @@ mod tests {
 
         let job = linting(&mut editor);
         report(&mut editor, job, &[FINISHED.to_owned()]);
-        press(&mut editor, "C-c !");
+        list(&mut editor);
 
         assert_eq!(lines(&editor)[3], "No problems");
         let job = linting_from_list(&mut editor);

@@ -606,6 +606,7 @@ mod tests {
     #[test]
     fn text_is_shown_in_a_buffer_of_its_own_mode() {
         let (mut editor, mut ox) = editing("x", 0);
+        oxmacs_core::testing::add_kits(&mut editor);
 
         eval(
             &mut editor,

@@ -208,7 +208,7 @@ mod tests {
             std::fs::write(path, text).unwrap();
         }
         let mut editor = Editor::new();
-        let mut ox = Ox::with_bundled(&[]);
+        let mut ox = Ox::with_bundled(&[crate::runtime::bundled::OX]);
         ox.start(&mut editor, Some(home.path()));
         editor.open_file(&home.path().join(name));
         (home, editor, ox)

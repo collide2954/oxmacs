@@ -243,7 +243,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(".editorconfig"), editorconfig).unwrap();
         std::fs::write(dir.path().join("a.rs"), text).unwrap();
-        let mut editor = Editor::new();
+        let mut editor = crate::testing::kits();
         editor.open_file(&dir.path().join("a.rs"));
         (dir, editor)
     }

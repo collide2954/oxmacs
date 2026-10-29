@@ -531,6 +531,12 @@ fn manifest_of(heap: &mut Heap, value: Value) -> Result<Manifest, String> {
         return Err("plugin.ox must hold a (plugin name …) form".to_owned());
     };
     let name = name.name().to_owned();
+    if name == "ox" {
+        return Err(
+            "ox names Ox's built-in modules, such as (ox string); give the plugin another name"
+                .to_owned(),
+        );
+    }
     let mut manifest = Manifest {
         entry: format!("{name}.ox"),
         version: Version::new(0, 0, 0),
@@ -2099,7 +2105,7 @@ mod tests {
         files: &[
             (
                 "plugin.ox",
-                r#"(plugin shouter :commands [shout] :mode-keys {"R" {"C-c s" shout} "Cobol" {"C-c s" shout}})"#,
+                r#"(plugin shouter :commands [shout] :modes [{title: "R" grammar: "r" extensions: ["R"]}] :mode-keys {"R" {"C-c s" shout} "Cobol" {"C-c s" shout}})"#,
             ),
             (
                 "shouter.ox",
@@ -2190,14 +2196,26 @@ mod tests {
         ],
     };
 
+    const RESERVED: Bundle = Bundle {
+        name: "ox",
+        files: &[
+            ("plugin.ox", "(plugin ox :version \"1.0.0\")"),
+            ("ox.ox", ""),
+        ],
+    };
+
     #[test]
     fn manifests_need_a_semantic_version_and_known_keys() {
         let home = home_with(&[]);
-        let (editor, _) = started(&[LOOSE, TYPO], home.path());
+        let (editor, _) = started(&[LOOSE, TYPO, RESERVED], home.path());
 
         assert!(editor.command_named("lax").is_none());
         assert!(editor.command_named("oops").is_none());
         let shown = logged(&editor);
+        assert!(
+            shown.contains("ox names Ox's built-in modules, such as (ox string)"),
+            "{shown}"
+        );
         assert!(
             shown.contains("loose's :version must be a version such as 1.2.0, got \"1.0\""),
             "{shown}"

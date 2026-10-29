@@ -230,8 +230,10 @@ pub fn declare(editor: &mut Editor, plugin: &str, declared: &Declared) {
     let language = spec(&declared.title, alias, declared.clone());
     let scope = editor.scope_named(&declared.title);
     editor.add_language(language.clone(), Some(scope));
-    if declared.grammar.is_none() {
-        editor.set_indenter(&language, indent_by_rules);
+    match declared.grammar.as_deref() {
+        None => editor.set_indenter(&language, indent_by_rules),
+        Some("ox") => crate::ide::ox_mode::attach(editor, &language),
+        Some(_) => {}
     }
     if let Some(modes) = modes(editor) {
         modes.defined.push(Mode {

@@ -6,7 +6,6 @@ use std::sync::{LazyLock, Mutex, PoisonError};
 use ox_lang::forms::{self, Forms};
 use ox_lang::syntax::{self, Bracket, Kind, Prefix, tokens};
 
-use oxmacs_core::command::ScopeId;
 use oxmacs_core::editor::{Editor, Formatter};
 use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline, Roots, owned};
 use oxmacs_core::text::{Buffer, BufferId};
@@ -436,13 +435,12 @@ fn indent(editor: &Editor, id: BufferId, line: usize) -> Option<usize> {
     ox_lang::format::indentation_with(&before, forms_of(editor, buffer))
 }
 
-pub fn install(editor: &mut Editor, scope: ScopeId) {
-    editor.add_language(language(), Some(scope));
-    editor.set_scratch_language(Some(language()));
+pub(crate) fn attach(editor: &mut Editor, language: &Language) {
+    editor.set_scratch_language(Some(language.clone()));
     editor.set_plugin_state(Lexed::default());
-    editor.set_highlighter(&language(), highlight);
-    editor.set_indenter(&language(), indent);
-    editor.add_formatter(language(), OX_FMT);
+    editor.set_highlighter(language, highlight);
+    editor.set_indenter(language, indent);
+    editor.add_formatter(language.clone(), OX_FMT);
 }
 
 #[cfg(test)]

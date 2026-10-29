@@ -1129,7 +1129,7 @@ fn moving_a_visited_file_follows_it_into_its_new_language() {
     let from = dir.path().join("notes.txt");
     std::fs::write(&from, "fn main() {}\n").unwrap();
     let to = dir.path().join("notes.rs");
-    let mut editor = Editor::new();
+    let mut editor = crate::testing::kits();
     editor.open_file(&from);
     std::fs::rename(&from, &to).unwrap();
 

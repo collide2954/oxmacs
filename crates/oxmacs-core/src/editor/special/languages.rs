@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn list_languages_shows_what_works_in_each_language() {
-        let mut editor = Editor::new();
+        let mut editor = crate::testing::kits();
 
         listed(&mut editor);
 

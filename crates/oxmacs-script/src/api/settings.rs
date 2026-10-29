@@ -341,8 +341,8 @@ mod tests {
             ),
             ("(settings {tab-width: 0})", "tab-width must be at least 1"),
             (
-                "(settings {tab-width: 2 rust-lint: :miri})",
-                "rust-lint must be one of :check, :clippy, :off, got :miri",
+                "(settings {tab-width: 2 line-numbers: :roman})",
+                "line-numbers must be one of :absolute, :relative, :off, got :roman",
             ),
             (
                 "(settings {theme: :solarized})",

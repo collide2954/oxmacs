@@ -3,12 +3,29 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 
-use super::{SERVERS, ServerId, ServerSpec};
+use super::{ServerId, ServerSpec};
 use crate::config::Config;
 use crate::editor::{Editor, Effect, ProcessStatus};
 use crate::external::diagnostics::Severity;
 use crate::external::lsp::{Event, Launch};
-use crate::testing::{press, type_text};
+use crate::testing::{kits, press, type_text};
+
+const SERVERS: &[ServerSpec] = &[
+    ServerSpec {
+        name: "rust-analyzer",
+        languages: &[("Rust", "rust")],
+        programs: &[("rust-analyzer", &[])],
+        install: "rustup component add rust-analyzer",
+        runs: true,
+    },
+    ServerSpec {
+        name: "taplo",
+        languages: &[("TOML", "toml")],
+        programs: &[("taplo", &["lsp", "stdio"])],
+        install: "cargo install taplo-cli --locked --features lsp",
+        runs: true,
+    },
+];
 
 fn project() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
@@ -27,7 +44,7 @@ fn project() -> tempfile::TempDir {
 }
 
 fn editor() -> Editor {
-    let mut editor = Editor::new();
+    let mut editor = kits();
     editor.lsp.find = |program| Some(PathBuf::from(program));
     editor.add_language_servers(SERVERS);
     editor
@@ -901,7 +918,7 @@ const MARKSMAN: ServerSpec = ServerSpec {
 
 #[test]
 fn list_tools_lists_only_the_servers_of_languages_oxmacs_knows() {
-    let mut editor = Editor::new();
+    let mut editor = kits();
     editor.lsp.find = |_| None;
     editor.add_language_servers(SERVERS);
     editor.add_language_servers(&[MARKSMAN]);
@@ -928,7 +945,7 @@ fn list_tools_lists_only_the_servers_of_languages_oxmacs_knows() {
 
 #[test]
 fn list_tools_names_the_language_servers_and_offers_to_install_them() {
-    let mut editor = Editor::new();
+    let mut editor = kits();
     editor.lsp.find = |program| (program == "taplo").then(|| PathBuf::from("taplo"));
     editor.add_language_servers(SERVERS);
 

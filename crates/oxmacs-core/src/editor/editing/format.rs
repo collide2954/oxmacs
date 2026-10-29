@@ -226,7 +226,7 @@ mod tests {
     use crate::config::Config;
     use crate::editor::Editor;
     use crate::syntax::{Indentation, Language, LanguageSpec, Outline};
-    use crate::testing::{editor_with, press, type_text};
+    use crate::testing::{editor_with, kits, press, type_text};
 
     const SQUEEZE: Formatter = Formatter {
         name: "rustfmt",
@@ -368,7 +368,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a.rs");
         fs::write(&path, "fn a() {}").unwrap();
-        let mut editor = Editor::new();
+        let mut editor = kits();
         editor.apply_config(&Config {
             format_on_save,
             ..Config::default()
@@ -472,7 +472,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a.R");
         fs::write(&path, "x<-1\n").unwrap();
-        let mut editor = Editor::new();
+        let mut editor = kits();
         editor.apply_config(&Config {
             format_on_save: true,
             ..Config::default()

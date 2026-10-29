@@ -446,6 +446,7 @@ mod tests {
         );
         let path = home.path().join("notes.rs");
         std::fs::write(&path, "fn main() {}\n").unwrap();
+        oxmacs_core::testing::add_kits(&mut editor);
 
         editor.open_file(&path);
         settle(&mut editor, &mut ox);
@@ -743,7 +744,7 @@ mod tests {
         std::fs::create_dir_all(dir.path().join("repo").join(".git")).unwrap();
         std::fs::create_dir_all(&code).unwrap();
         std::fs::write(dir.path().join("repo").join("pkg").join("DESCRIPTION"), "").unwrap();
-        let mut editor = Editor::new();
+        let mut editor = oxmacs_core::testing::kits();
         editor.set_home_directory(Some(dir.path().to_owned()));
         let mut ox = Ox::new();
         let quoted = |path: &Path| format!("{:?}", path.display().to_string());

@@ -305,9 +305,9 @@ mod tests {
     fn mode_commands_say_where_they_work() {
         let mut editor = Editor::new();
 
-        describe(&mut editor, "rust-check");
+        describe(&mut editor, "kill-compilation");
 
-        assert!(lines(&editor).contains(&"Works in  Rust buffers".to_owned()));
+        assert!(lines(&editor).contains(&"Works in  *compilation*".to_owned()));
     }
 
     #[test]
@@ -315,12 +315,12 @@ mod tests {
         let mut editor = Editor::new();
 
         press(&mut editor, "C-h f");
-        type_text(&mut editor, "rust-check");
+        type_text(&mut editor, "kill-compilation");
 
-        assert_eq!(labels(&editor), ["rust-check"]);
+        assert_eq!(labels(&editor), ["kill-compilation"]);
         assert_eq!(
             editor.completions()[0].summary,
-            Some("Run cargo check in *compilation*")
+            Some("Stop the running compilation")
         );
     }
 

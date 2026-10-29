@@ -75,7 +75,7 @@ fn customize_lists_every_setting_by_group_with_plugins_after() {
     let title = &editor.pane().header_lines()[0].0;
     assert!(title.starts_with("Settings  "), "{title}");
     assert!(title.ends_with("custom.ox"), "{title}");
-    for group in ["Appearance", "Editing", "Files", "Rust", "weather plugin"] {
+    for group in ["Appearance", "Editing", "Files", "R", "weather plugin"] {
         assert!(shown.iter().any(|line| line == group), "{group}");
     }
     for setting in SETTINGS {

@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 pub use protocol::Encoding;
-pub use servers::{SERVERS, ServerSpec};
+pub use servers::ServerSpec;
 
 use crate::external::lsp::{Event, Launch};
 use crate::text::BufferId;

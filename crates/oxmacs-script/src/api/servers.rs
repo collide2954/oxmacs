@@ -167,7 +167,7 @@ mod tests {
         std::fs::create_dir_all(folder.path().join("R")).unwrap();
         let script = folder.path().join("R").join("a.R");
         std::fs::write(&script, "x <- 1\n").unwrap();
-        let mut editor = Editor::new();
+        let mut editor = oxmacs_core::testing::kits();
         let mut ox = Ox::new();
 
         assert_eq!(
@@ -229,7 +229,7 @@ mod tests {
         std::fs::write(&second, "").unwrap();
         let script = folder.path().join("a.R");
         std::fs::write(&script, "x <- 1\n").unwrap();
-        let mut editor = Editor::new();
+        let mut editor = oxmacs_core::testing::kits();
         let mut ox = Ox::new();
         eval(
             &mut editor,

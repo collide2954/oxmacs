@@ -284,16 +284,6 @@ pub enum Command {
     ShrinkWindowHorizontally,
     #[strum(message = "Go back to where the last jump started")]
     XrefGoBack,
-    #[strum(message = "Run cargo check in *compilation*")]
-    RustCheck,
-    #[strum(message = "Run cargo build in *compilation*")]
-    RustCompile,
-    #[strum(message = "Run cargo test in *compilation*")]
-    RustTest,
-    #[strum(message = "Run cargo run in *compilation*")]
-    RustRun,
-    #[strum(message = "Run cargo clippy in *compilation*")]
-    RustRunClippy,
     #[strum(message = "Send the input after the prompt")]
     ComintSendInput,
     #[strum(message = "Bring back the previous input")]
@@ -507,11 +497,6 @@ impl Command {
             | Self::MinibufferDeleteBackward
             | Self::ExitMinibufferWithInput => Scope::Minibuffer,
             Self::ForwardButton | Self::BackwardButton | Self::PushButton => Scope::Splash,
-            Self::RustCheck
-            | Self::RustCompile
-            | Self::RustTest
-            | Self::RustRun
-            | Self::RustRunClippy => Scope::Rust,
             Self::ComintSendInput | Self::ComintPreviousInput | Self::ComintNextInput => {
                 Scope::Console
             }
@@ -556,8 +541,6 @@ pub enum Scope {
     Minibuffer,
     Search,
     Splash,
-    Rust,
-    R,
     Console,
     Compilation,
     Help,
@@ -573,8 +556,6 @@ impl Scope {
             Self::Minibuffer => Some("the minibuffer"),
             Self::Search => Some("searches"),
             Self::Splash => Some("the start screen"),
-            Self::Rust => Some("Rust buffers"),
-            Self::R => Some("R buffers"),
             Self::Console => Some("consoles"),
             Self::Compilation => Some("*compilation*"),
             Self::Help => Some("*Help*"),

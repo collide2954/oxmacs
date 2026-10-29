@@ -7,23 +7,6 @@ pub struct ServerSpec {
     pub runs: bool,
 }
 
-pub const SERVERS: &[ServerSpec] = &[
-    ServerSpec {
-        name: "rust-analyzer",
-        languages: &[("Rust", "rust")],
-        programs: &[("rust-analyzer", &[])],
-        install: "rustup component add rust-analyzer",
-        runs: true,
-    },
-    ServerSpec {
-        name: "taplo",
-        languages: &[("TOML", "toml")],
-        programs: &[("taplo", &["lsp", "stdio"])],
-        install: "cargo install taplo-cli --locked --features lsp",
-        runs: true,
-    },
-];
-
 impl ServerSpec {
     pub fn language_id(&self, language: &str) -> Option<&'static str> {
         self.languages

@@ -42,7 +42,7 @@ pub(in crate::editor) enum Finished {
     Unknown,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(in crate::editor) struct Builds {
     linters: Vec<(Language, Linter)>,
     patterns: Vec<ErrorPattern>,
@@ -57,26 +57,6 @@ pub(in crate::editor) struct Builds {
     root: Option<PathBuf>,
     current: Option<usize>,
     revision: u64,
-}
-
-impl Default for Builds {
-    fn default() -> Self {
-        Self {
-            linters: Vec::new(),
-            owners: vec![String::new(); errors::built_in().len()],
-            patterns: errors::built_in(),
-            last_command: None,
-            walks: Walks::default(),
-            due: None,
-            last: None,
-            runs: Vec::new(),
-            diagnostics: Vec::new(),
-            identities: HashMap::new(),
-            root: None,
-            current: None,
-            revision: 0,
-        }
-    }
 }
 
 impl Builds {

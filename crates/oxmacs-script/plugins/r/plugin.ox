@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.20.11"
+  :version "0.20.12"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands [run-r r-new-session r-send-statement r-send-function r-switch-to-console r-help
              r-environment r-peek r-layout r-layout-restore r-load-all r-document r-check
@@ -11,7 +11,9 @@
              r-debug-next r-debug-step r-debug-finish r-debug-continue r-debug-stop
              r-debug-function r-undebug-function r-renv-status r-renv-snapshot r-renv-restore
              r-renv-init]
-  :modes [{title: "R Markdown" extensions: ["Rmd" "rmd" "qmd"] roots: ["DESCRIPTION" "renv.lock" "*.Rproj"]}]
+  :modes [{title: "R" grammar: "r" extensions: ["R" "r"] file-names: [".Rprofile"] comment: "#"
+           roots: ["DESCRIPTION" "renv.lock" "*.Rproj"]}
+          {title: "R Markdown" extensions: ["Rmd" "rmd" "qmd"] roots: ["DESCRIPTION" "renv.lock" "*.Rproj"]}]
   :mode-keys {"R" {"M--" r-insert-assignment
                    "C-S-m" r-insert-pipe
                    "C-RET" r-send-statement
@@ -20,6 +22,7 @@
                    "C-c C-v" r-help
                    "C-c C-e" r-environment
                    "C-c C-o" r-peek
+                   "C-c C-f" format-buffer
                    "M-." r-find-definition
                    "TAB" r-indent-or-complete
                    "C-M-i" r-complete

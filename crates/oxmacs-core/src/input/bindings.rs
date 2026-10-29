@@ -163,18 +163,6 @@ const SPLASH: &[(&str, Command)] = &[
     ("q", Command::QuitWindow),
 ];
 
-const RUST: &[(&str, Command)] = &[
-    ("C-c C-f", Command::FormatBuffer),
-    ("C-c C-c C-k", Command::RustCheck),
-    ("C-c C-c C-b", Command::RustCompile),
-    ("C-c C-c C-t", Command::RustTest),
-    ("C-c C-c C-r", Command::RustRun),
-    ("C-c C-c C-l", Command::RustRunClippy),
-    ("C-c !", Command::ListDiagnostics),
-];
-
-const R: &[(&str, Command)] = &[("C-c C-f", Command::FormatBuffer)];
-
 const CONSOLE: &[(&str, Command)] = &[
     ("RET", Command::ComintSendInput),
     ("M-p", Command::ComintPreviousInput),
@@ -295,8 +283,6 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::Minibuffer => MINIBUFFER,
         Scope::Search => SEARCH,
         Scope::Splash => SPLASH,
-        Scope::Rust => RUST,
-        Scope::R => R,
         Scope::Console => CONSOLE,
         Scope::Compilation => COMPILATION,
         Scope::Help => HELP,

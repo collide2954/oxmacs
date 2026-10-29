@@ -28,7 +28,6 @@ pub struct Config {
     pub format_on_save: bool,
     pub clock: bool,
     pub clock_format: String,
-    pub rust_lint: RustLint,
     pub auto_save: bool,
     pub auto_save_visited: bool,
     pub delete_to_trash: bool,
@@ -84,16 +83,6 @@ pub enum ModeLineStyle {
     Boxed,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, VariantNames)]
-#[serde(rename_all = "kebab-case")]
-#[strum(serialize_all = "kebab-case")]
-pub enum RustLint {
-    #[default]
-    Check,
-    Clippy,
-    Off,
-}
-
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -109,7 +98,6 @@ impl Default for Config {
             format_on_save: false,
             clock: true,
             clock_format: "%H:%M".to_owned(),
-            rust_lint: RustLint::default(),
             auto_save: true,
             auto_save_visited: false,
             delete_to_trash: true,
@@ -402,21 +390,11 @@ mod tests {
             config.with("tab-width", json!(0)).unwrap_err(),
             ConfigError::TabWidth
         );
-        assert!(config.with("rust-lint", json!("miri")).is_err());
+        assert!(config.with("line-numbers", json!("roman")).is_err());
         assert_eq!(
             config.with("font-size", json!(0)).unwrap_err().to_string(),
             "font-size must be a positive number of points"
         );
-    }
-
-    #[test]
-    fn rust_lints_use_cargo_check_unless_configured() {
-        let lint = |name: &str| read(&json!({ "rust-lint": name })).map(|c| c.rust_lint);
-
-        assert_eq!(Config::default().rust_lint, RustLint::Check);
-        assert_eq!(lint("clippy").unwrap(), RustLint::Clippy);
-        assert_eq!(lint("off").unwrap(), RustLint::Off);
-        assert!(lint("miri").is_err());
     }
 
     #[test]

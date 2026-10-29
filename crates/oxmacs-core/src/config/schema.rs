@@ -1,6 +1,6 @@
 use strum::VariantNames;
 
-use crate::config::{LineNumbers, ModeLineStyle, OnDiskChange, RustLint, WindowMode};
+use crate::config::{LineNumbers, ModeLineStyle, OnDiskChange, WindowMode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -41,7 +41,6 @@ const fn optional(setting: Setting, unset: &'static str) -> Setting {
 const APPEARANCE: &str = "Appearance";
 const EDITING: &str = "Editing";
 const FILES: &str = "Files";
-const RUST: &str = "Rust";
 const R: &str = "R";
 
 pub const SETTINGS: &[Setting] = &[
@@ -153,12 +152,6 @@ pub const SETTINGS: &[Setting] = &[
         "on-disk-change",
         Kind::Choice(OnDiskChange::VARIANTS),
         "What to do when a visited file changes on disk",
-    ),
-    setting(
-        RUST,
-        "rust-lint",
-        Kind::Choice(RustLint::VARIANTS),
-        "Cargo command that lints Rust projects on save",
     ),
     setting(
         FILES,

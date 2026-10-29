@@ -1601,7 +1601,7 @@ fn showcase_home() -> PathBuf {
     fs::write(
         home.join("init.ox"),
         format!(
-            "(settings {{theme: :adwaita-dark animations: false font-size: 12 language-servers: false rust-lint: :off}})\n(use-plugin keycast :config {{placement: :bottom-center}})\n(use-plugin tabs)\n(use-plugin zen :config {{fullscreen: false width: 72}})\n(use-plugin epub :config {{library: {:?} size: 16}})\n(use-plugin pdf)\n",
+            "(settings {{theme: :adwaita-dark animations: false font-size: 12 language-servers: false}})\n(use-plugin keycast :config {{placement: :bottom-center}})\n(use-plugin tabs)\n(use-plugin zen :config {{fullscreen: false width: 72}})\n(use-plugin epub :config {{library: {:?} size: 16}})\n(use-plugin pdf)\n",
             books.display().to_string()
         ),
     )

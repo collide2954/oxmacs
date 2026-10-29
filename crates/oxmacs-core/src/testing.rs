@@ -1,6 +1,32 @@
-use crate::editor::Editor;
+use crate::editor::{Editor, ErrorPattern};
 use crate::input::KeySequence;
+use crate::syntax::Language;
 use crate::text::Buffer;
+
+pub const RUST_ERRORS: [&str; 2] = [
+    r"^\s*--> (?P<file>.+):(?P<line>\d+):(?P<column>\d+):?\s*$",
+    r"panicked at (?P<file>.+):(?P<line>\d+):(?P<column>\d+):?\s*$",
+];
+
+pub fn rust_errors() -> Vec<ErrorPattern> {
+    RUST_ERRORS
+        .iter()
+        .filter_map(|pattern| ErrorPattern::new(pattern).ok())
+        .collect()
+}
+
+pub fn add_kits(editor: &mut Editor) {
+    for language in Language::built_in() {
+        editor.add_language(language, None);
+    }
+    editor.set_error_patterns("rust", rust_errors());
+}
+
+pub fn kits() -> Editor {
+    let mut editor = Editor::new();
+    add_kits(&mut editor);
+    editor
+}
 
 pub fn press(editor: &mut Editor, notation: &str) {
     let sequence: KeySequence = notation.parse().unwrap();

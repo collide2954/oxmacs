@@ -18,8 +18,7 @@ use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
 
 use crate::{
-    Ox, api::evaluations, ide::help, ide::log, ide::ox_mode, ide::stacktrace, ide::xref,
-    runtime::plugins,
+    Ox, api::evaluations, ide::help, ide::log, ide::stacktrace, ide::xref, runtime::plugins,
 };
 
 pub const REPL: &str = "*ox repl*";
@@ -385,13 +384,12 @@ fn repl_commands() -> [Spec; 4] {
 }
 
 pub fn install(editor: &mut Editor) {
-    let mode_scope = editor.add_scope("Ox");
+    let mode_scope = editor.scope_named("Ox");
     let repl_scope = editor.add_scope("Ox REPL");
     editor.set_plugin_state(Requests {
         waiting: Vec::new(),
         repl: Some(repl_scope),
     });
-    ox_mode::install(editor, mode_scope);
     let scope = |home: Home| match home {
         Home::Mode => mode_scope,
         Home::Repl => repl_scope,

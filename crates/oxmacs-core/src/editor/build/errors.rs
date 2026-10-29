@@ -70,16 +70,6 @@ impl ErrorPattern {
     }
 }
 
-const ARROW: &str = r"^\s*--> (?P<file>.+):(?P<line>\d+):(?P<column>\d+):?\s*$";
-const PANIC: &str = r"panicked at (?P<file>.+):(?P<line>\d+):(?P<column>\d+):?\s*$";
-
-pub(in crate::editor) fn built_in() -> Vec<ErrorPattern> {
-    [ARROW, PANIC]
-        .into_iter()
-        .filter_map(|pattern| ErrorPattern::new(pattern).ok())
-        .collect()
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Location {
     start: usize,
@@ -348,7 +338,7 @@ mod tests {
 
     use super::*;
     use crate::editor::{Cell, Clicks, Effect, Outcome};
-    use crate::testing::{press, type_text};
+    use crate::testing::{kits, press, rust_errors, type_text};
 
     #[test]
     fn headers_set_the_severity() {
@@ -366,7 +356,7 @@ mod tests {
     }
 
     fn found(text: &str) -> Option<(String, usize, usize)> {
-        built_in()
+        rust_errors()
             .iter()
             .find_map(|pattern| pattern.find(text))
             .map(|at| (at.path, at.row, at.column))
@@ -390,7 +380,7 @@ mod tests {
     }
 
     fn found_link(text: &str) -> Option<Range<usize>> {
-        built_in()
+        rust_errors()
             .iter()
             .find_map(|pattern| pattern.find(text))
             .map(|at| at.link)
@@ -434,7 +424,7 @@ mod tests {
         .into_iter()
         .enumerate()
         {
-            errors.scan(line, text, directory, &built_in());
+            errors.scan(line, text, directory, &rust_errors());
         }
 
         assert_eq!(
@@ -475,7 +465,7 @@ mod tests {
             "fn main() {\n    oops;\n}\n",
         )
         .unwrap();
-        let mut editor = Editor::new();
+        let mut editor = kits();
         editor.open_file(&dir.path().join("src").join("main.rs"));
         press(&mut editor, "M-x");
         type_text(&mut editor, "compile");

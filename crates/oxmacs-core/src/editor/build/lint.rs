@@ -3,7 +3,6 @@ use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use crate::config::RustLint;
 use crate::editor::build::Finished;
 use crate::editor::decorations::{Lasts, Look, Owner};
 use crate::editor::{Editor, JobEvent, JobId, JobSpec, Outcome};
@@ -108,34 +107,9 @@ fn position(buffer: &Buffer, (row, column): (usize, usize)) -> usize {
     (buffer.line_start(line) + column.saturating_sub(1)).min(buffer.line_end(line))
 }
 
-fn subcommand(tool: RustLint) -> Option<&'static str> {
-    match tool {
-        RustLint::Check => Some("check"),
-        RustLint::Clippy => Some("clippy"),
-        RustLint::Off => None,
-    }
-}
-
 impl Editor {
     pub fn set_linter(&mut self, language: Language, linter: Option<Linter>) {
         self.builds.set_linter(language, linter);
-    }
-
-    pub(in crate::editor) fn sync_rust_lint(&mut self) {
-        let linter = subcommand(self.config.rust_lint).map(|subcommand| Linter {
-            program: "cargo".to_owned(),
-            args: [
-                subcommand,
-                "--workspace",
-                "--all-targets",
-                "--message-format=json",
-            ]
-            .map(|arg| LintArg::Text(arg.to_owned()))
-            .to_vec(),
-            root: LintRoot::Language,
-            format: CARGO,
-        });
-        self.set_linter(Language::rust(), linter);
     }
 
     pub fn diagnostics_revision(&self) -> u64 {
@@ -281,11 +255,29 @@ impl Editor {
 pub(crate) mod fixtures {
     use std::fs;
 
+    use super::{CARGO, LintArg, LintRoot, Linter};
     use crate::editor::{Editor, Effect, Job, JobId, Outcome};
     use crate::external::diagnostics::sample;
-    use crate::testing::{press, type_text};
+    use crate::syntax::Language;
+    use crate::testing::{kits, press, type_text};
 
     pub(crate) const FINISHED: &str = r#"{"reason":"build-finished","success":false}"#;
+
+    pub(crate) fn cargo_check() -> Linter {
+        Linter {
+            program: "cargo".to_owned(),
+            args: [
+                "check",
+                "--workspace",
+                "--all-targets",
+                "--message-format=json",
+            ]
+            .map(|arg| LintArg::Text(arg.to_owned()))
+            .to_vec(),
+            root: LintRoot::Language,
+            format: CARGO,
+        }
+    }
 
     pub(crate) fn project() -> (tempfile::TempDir, Editor) {
         let dir = tempfile::tempdir().unwrap();
@@ -293,7 +285,8 @@ pub(crate) mod fixtures {
         fs::create_dir(dir.path().join("src")).unwrap();
         fs::write(dir.path().join("src").join("main.rs"), "fn main() {}\n").unwrap();
         fs::write(dir.path().join("src").join("other.rs"), "\nfn f() {}\n").unwrap();
-        let mut editor = Editor::new();
+        let mut editor = kits();
+        editor.set_linter(Language::rust(), Some(cargo_check()));
         editor.open_file(&dir.path().join("src").join("main.rs"));
         (dir, editor)
     }
@@ -349,10 +342,7 @@ mod tests {
 
     use std::path::{Path, PathBuf};
 
-    use serde_json::json;
-
     use super::fixtures::{FINISHED, linting, project, report, reported, save, spawned};
-    use crate::config::Config;
     use crate::editor::{
         Editor, Job, LintArg, LintFormat, LintLine, LintRoot, Linter, Outcome, ProcessStatus,
     };
@@ -504,20 +494,13 @@ mod tests {
     }
 
     #[test]
-    fn clippy_can_replace_check_and_lints_can_be_turned_off() {
-        for (setting, expected) in [("clippy", Some("clippy")), ("off", None)] {
-            let (_dir, mut editor) = project();
-            editor.apply_config(&Config::default().with("rust-lint", json!(setting)).unwrap());
+    fn languages_without_a_linter_are_not_linted() {
+        let (_dir, mut editor) = project();
+        editor.set_linter(Language::rust(), None);
 
-            save(&mut editor);
+        save(&mut editor);
 
-            let jobs = spawned(&mut editor);
-            assert_eq!(
-                jobs.first().map(|job| job.args[0].as_str()),
-                expected,
-                "{setting}"
-            );
-        }
+        assert_eq!(spawned(&mut editor), []);
     }
 
     #[test]

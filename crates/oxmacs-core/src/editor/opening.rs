@@ -12,11 +12,8 @@ use crate::text::{Buffer, BufferId};
 
 const BUDGET: Duration = Duration::from_millis(50);
 const TRIES: usize = 3;
-fn starts() -> [(Scope, Option<Language>, &'static str); 2] {
-    [
-        (Scope::Global, None, ""),
-        (Scope::Rust, Some(Language::rust()), "fn main() {}\n"),
-    ]
+fn starts() -> [(Scope, Option<Language>, &'static str); 1] {
+    [(Scope::Global, None, "")]
 }
 
 fn start(folder: &Path, language: Option<Language>, text: &str) -> Editor {
@@ -84,7 +81,7 @@ fn every_opening() -> Vec<(String, String, Duration)> {
 fn every_buffer_command_opens_its_buffer() {
     let opened = every_opening();
 
-    assert!(opened.len() >= 14, "{opened:?}");
+    assert!(opened.len() >= 9, "{opened:?}");
 }
 
 #[test]

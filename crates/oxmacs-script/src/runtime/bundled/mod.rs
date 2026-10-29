@@ -18,6 +18,9 @@ pub const BUNDLED: &[Bundle] = &[
     R,
     ZAP,
     KEYCAST,
+    OX,
+    RUST,
+    TOML,
     PYTHON,
     GO,
     C,
@@ -107,6 +110,36 @@ const TABS: Bundle = Bundle {
         ("plugin.ox", include_str!("../../../plugins/tabs/plugin.ox")),
         ("tabs.ox", include_str!("../../../plugins/tabs/tabs.ox")),
         ("strip.ox", include_str!("../../../plugins/tabs/strip.ox")),
+    ],
+};
+
+pub(crate) const OX: Bundle = Bundle {
+    name: "ox-lang",
+    files: &[
+        (
+            "plugin.ox",
+            include_str!("../../../plugins/ox-lang/plugin.ox"),
+        ),
+        (
+            "ox-lang.ox",
+            include_str!("../../../plugins/ox-lang/ox-lang.ox"),
+        ),
+    ],
+};
+
+const RUST: Bundle = Bundle {
+    name: "rust",
+    files: &[
+        ("plugin.ox", include_str!("../../../plugins/rust/plugin.ox")),
+        ("rust.ox", include_str!("../../../plugins/rust/rust.ox")),
+    ],
+};
+
+const TOML: Bundle = Bundle {
+    name: "toml",
+    files: &[
+        ("plugin.ox", include_str!("../../../plugins/toml/plugin.ox")),
+        ("toml.ox", include_str!("../../../plugins/toml/toml.ox")),
     ],
 };
 

@@ -43,7 +43,7 @@ pub use idle::SIGNATURE_DELAY;
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
 pub use keystrokes::Keystroke;
 pub use languages::registry::{LineHighlighter, LineIndenter};
-pub use lsp::{SERVERS, ServerId, ServerSpec};
+pub use lsp::{ServerId, ServerSpec};
 pub use motion::mouse::{Cell, Clicks};
 pub use page::{Page, fill};
 pub use presentation::Presentation;
@@ -180,7 +180,7 @@ impl Editor {
     }
 
     pub fn with_buffer(buffer: Buffer) -> Self {
-        let mut editor = Self {
+        Self {
             buffers: BufferList::new(buffer),
             windows: windows::Windows::new(),
             prompts: prompts::Prompts::default(),
@@ -242,7 +242,7 @@ impl Editor {
             next_fetch: 0,
             fetches: effect::Fetches::default(),
             job_handlers: job::JobHandlers::default(),
-            languages: languages::registry::built_in(),
+            languages: Vec::new(),
             paren_pair: None,
             next_job: 0,
             builds: build::Builds::default(),
@@ -253,18 +253,12 @@ impl Editor {
             config: Config::default(),
             roots: roots::Found::default(),
             dormant: languages::dormant::Dormant::default(),
-        };
-        for language in editor.languages() {
-            editor.add_mode_command(language);
         }
-        editor.sync_rust_lint();
-        editor
     }
 
     pub fn apply_config(&mut self, config: &Config) {
         self.configured_theme = config.theme.as_deref().and_then(theme::find);
         self.config = config.clone();
-        self.sync_rust_lint();
         self.settings_changed();
     }
 

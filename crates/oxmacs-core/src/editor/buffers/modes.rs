@@ -85,7 +85,7 @@ mod tests {
 
     use crate::editor::Editor;
     use crate::syntax::{Indentation, Language, LanguageSpec, Outline};
-    use crate::testing::{press, type_text};
+    use crate::testing::{kits, press, type_text};
     use crate::theme::Highlight;
 
     fn run(editor: &mut Editor, command: &str) {
@@ -99,7 +99,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("main.rs"), "fn main() {}\n").unwrap();
         fs::write(dir.path().join("notes.txt"), "notes\n").unwrap();
-        let mut editor = Editor::new();
+        let mut editor = kits();
 
         editor.open_file(&dir.path().join("main.rs"));
         assert_eq!(editor.language(), Some(Language::rust()));
@@ -114,7 +114,7 @@ mod tests {
     fn toml_files_open_in_toml_mode() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("Cargo.toml"), "[package]\n").unwrap();
-        let mut editor = Editor::new();
+        let mut editor = kits();
 
         editor.open_file(&dir.path().join("Cargo.toml"));
 
@@ -126,19 +126,19 @@ mod tests {
     fn r_scripts_open_in_r_mode_and_r_mode_is_a_command() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("analysis.R"), "x <- 1\n").unwrap();
-        let mut editor = Editor::new();
+        let mut editor = kits();
 
         editor.open_file(&dir.path().join("analysis.R"));
         assert_eq!(editor.mode_line(), "-- analysis.R   L1 C0   (R)");
 
-        let mut scratch = Editor::new();
+        let mut scratch = kits();
         run(&mut scratch, "r-mode");
         assert_eq!(scratch.language(), Some(Language::r()));
     }
 
     #[test]
     fn toml_comments_use_hashes() {
-        let mut editor = Editor::new();
+        let mut editor = kits();
         run(&mut editor, "toml-mode");
         type_text(&mut editor, "a = 1");
 
@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn mode_commands_switch_the_major_mode() {
-        let mut editor = Editor::new();
+        let mut editor = kits();
 
         run(&mut editor, "rust-mode");
         assert_eq!(editor.language(), Some(Language::rust()));
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn every_language_added_gets_a_mode_command() {
-        let mut editor = Editor::new();
+        let mut editor = kits();
         let field_notes = Language::new(field_notes_spec());
         editor.add_language(field_notes.clone(), None);
         editor.add_language(field_notes.clone(), None);
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn scratch_can_start_in_a_language_and_comes_back_in_it() {
-        let mut editor = Editor::new();
+        let mut editor = kits();
         let field_notes = Language::new(field_notes_spec());
         editor.add_language(field_notes.clone(), None);
 
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn writing_to_a_rust_file_name_turns_on_rust_mode() {
         let dir = tempfile::tempdir().unwrap();
-        let mut editor = Editor::new();
+        let mut editor = kits();
         type_text(&mut editor, "fn x() {}");
 
         editor.finish_write(dir.path().join("x.rs"));
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn rust_buffers_are_highlighted_as_you_type() {
-        let mut editor = Editor::new();
+        let mut editor = kits();
         run(&mut editor, "rust-mode");
 
         type_text(&mut editor, "fn main() {}");
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn special_buffers_keep_their_mode() {
-        let mut editor = Editor::new();
+        let mut editor = kits();
         editor.about();
 
         run(&mut editor, "rust-mode");

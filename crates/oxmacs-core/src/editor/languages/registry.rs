@@ -20,23 +20,6 @@ pub(in crate::editor) struct Registered {
     pub(in crate::editor) tabs: Option<bool>,
 }
 
-pub(in crate::editor) fn built_in() -> Vec<Registered> {
-    [
-        (Language::rust(), Some(Scope::Rust)),
-        (Language::toml(), None),
-        (Language::r(), Some(Scope::R)),
-    ]
-    .into_iter()
-    .map(|(language, scope)| Registered {
-        language,
-        scope: scope.map(ScopeId::from),
-        highlight: None,
-        indent: None,
-        tabs: None,
-    })
-    .collect()
-}
-
 impl Editor {
     pub fn add_language(&mut self, language: Language, scope: Option<ScopeId>) {
         if let Some(known) = self
@@ -224,10 +207,6 @@ mod tests {
         editor.add_language(notes(), Some(scope));
 
         assert_eq!(editor.language_scope("Notes"), Some(scope));
-        assert_eq!(
-            editor.language_scope("r"),
-            Some(crate::command::Scope::R.into())
-        );
         assert_eq!(editor.language_scope("TOML"), None);
         assert_eq!(editor.language_scope("Cobol"), None);
     }

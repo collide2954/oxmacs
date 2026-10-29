@@ -14,7 +14,7 @@ use native_theme::detect::prefers_reduced_motion;
 use oxmacs_core::clock;
 use oxmacs_core::config::{Config, ModeLineStyle};
 use oxmacs_core::editor::Visit;
-use oxmacs_core::editor::{Editor, FetchId, SERVERS, WindowId};
+use oxmacs_core::editor::{Editor, FetchId, WindowId};
 use oxmacs_core::external::managed::Managed;
 use oxmacs_core::external::runner::{Delivery, Runner};
 use oxmacs_core::external::usage::Usage;
@@ -150,7 +150,6 @@ impl App {
 
     pub fn boot_with(visits: &[Visit], home: Option<&Path>, init: bool) -> (Self, Task<Message>) {
         let mut app = Self::default();
-        app.editor.add_language_servers(SERVERS);
         if let Some(home) = home {
             app.editor.set_folders(Folders::for_home(home));
         }
@@ -1329,6 +1328,8 @@ mod tests {
     #[test]
     fn pasted_rust_is_highlighted_at_once() {
         let mut app = App::default();
+        app.editor
+            .add_language(oxmacs_core::syntax::Language::rust(), None);
         press(&mut app, "x", Modifiers::ALT);
         for c in "rust-mode".chars() {
             press(&mut app, &c.to_string(), Modifiers::empty());

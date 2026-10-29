@@ -59,14 +59,13 @@ mod tests {
     use std::fs;
 
     use super::{BufferState, Status};
-    use crate::editor::Editor;
     use crate::testing::{editor_with, press};
 
     #[test]
     fn the_status_describes_the_buffer_in_parts() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("main.rs"), "fn main() {}\r\n").unwrap();
-        let mut editor = Editor::new();
+        let mut editor = crate::testing::kits();
         editor.open_file(&dir.path().join("main.rs"));
         press(&mut editor, "C-e x");
 
