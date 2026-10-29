@@ -39,7 +39,6 @@ pub use decorations::{Lasts, LineDecorations, Look};
 pub use editing::format::{FormatRequest, Formatter};
 pub use effect::{Effect, FetchId};
 pub use events::{Event, EventKind, ItemSource};
-pub use idle::SIGNATURE_DELAY;
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
 pub use keystrokes::Keystroke;
 pub use languages::registry::{LineHighlighter, LineIndenter};

@@ -2,8 +2,6 @@ use std::time::{Duration, Instant};
 
 use crate::editor::Editor;
 
-pub const SIGNATURE_DELAY: Duration = Duration::from_millis(400);
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Chore {
     Reparse,
@@ -20,10 +18,11 @@ const CHORES: [Chore; 4] = [
 ];
 
 impl Chore {
-    fn delay(self) -> Duration {
+    fn delay(self, editor: &Editor) -> Duration {
         match self {
-            Self::Reparse | Self::AutoComplete => Duration::from_millis(250),
-            Self::Signature => SIGNATURE_DELAY,
+            Self::Reparse => Duration::from_millis(250),
+            Self::AutoComplete => editor.completion_delay(),
+            Self::Signature => editor.signature_delay(),
             Self::AutoSave => Duration::from_millis(1500),
         }
     }
@@ -53,7 +52,19 @@ pub(in crate::editor) struct Rest {
     done: Vec<Chore>,
 }
 
+fn seconds(seconds: f64) -> Duration {
+    Duration::try_from_secs_f64(seconds).unwrap_or_default()
+}
+
 impl Editor {
+    pub fn completion_delay(&self) -> Duration {
+        seconds(self.config.completion_delay)
+    }
+
+    pub fn signature_delay(&self) -> Duration {
+        seconds(self.config.signature_delay)
+    }
+
     fn done_in(&self, since: Instant, chore: Chore) -> bool {
         self.rest.since == Some(since) && self.rest.done.contains(&chore)
     }
@@ -62,7 +73,7 @@ impl Editor {
         CHORES
             .into_iter()
             .filter(|chore| !self.done_in(since, *chore) && chore.wanted(self))
-            .map(Chore::delay)
+            .map(|chore| chore.delay(self))
             .min()
     }
 
@@ -75,7 +86,8 @@ impl Editor {
         }
         let rested = now.saturating_duration_since(since);
         for chore in CHORES {
-            if rested >= chore.delay() && !self.rest.done.contains(&chore) && chore.wanted(self) {
+            if rested >= chore.delay(self) && !self.rest.done.contains(&chore) && chore.wanted(self)
+            {
                 self.rest.done.push(chore);
                 chore.run(self);
             }

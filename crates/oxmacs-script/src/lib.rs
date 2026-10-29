@@ -177,7 +177,7 @@ impl Ox {
     pub fn idle(&mut self, editor: &mut Editor, since: Instant, now: Instant) {
         let rested = now.saturating_duration_since(since);
         api::idle::run(&mut self.isolate, editor, since, now);
-        if rested >= ide::help::SIGNATURE_PAUSE {
+        if rested >= editor.signature_delay() {
             ide::help::echo_signature(&self.isolate, editor, self.home.as_deref(), &mut self.help);
         }
         self.checker.run(editor, rested, self.home.as_deref());

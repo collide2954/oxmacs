@@ -227,12 +227,13 @@ fn rested_for(r: &mut R, millis: u64) {
 }
 
 #[test]
-fn the_pauses_before_completion_and_signatures_are_settings() {
-    let mut r = super::configured_script(
-        "completion-delay: 1.0 signature-delay: 1.5",
-        "x <- 1:10\nplot(x, \n",
-        18,
-    );
+fn the_pauses_before_completion_and_signatures_are_the_editor_s_settings() {
+    let mut r = super::configured_script("", "x <- 1:10\nplot(x, \n", 18);
+    r.ox.eval(
+        &mut r.editor,
+        "(settings {completion-delay: 1.0 signature-delay: 1.5})",
+    )
+    .unwrap();
     let job = r.running();
     r.typed("mea");
     r.sent();

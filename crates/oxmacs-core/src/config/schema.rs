@@ -142,6 +142,18 @@ pub const SETTINGS: &[Setting] = &[
     ),
     setting(
         EDITING,
+        "completion-delay",
+        Kind::Number,
+        "Seconds of rest after typing three letters of a name before completions pop up on their own",
+    ),
+    setting(
+        EDITING,
+        "signature-delay",
+        Kind::Number,
+        "Seconds of rest before the arguments of the call at point show in the echo area",
+    ),
+    setting(
+        EDITING,
         "format-on-save",
         Kind::Toggle,
         "Format Rust with rustfmt and R with air when saving",

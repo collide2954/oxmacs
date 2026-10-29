@@ -37,6 +37,8 @@ pub struct Config {
     pub mode_line_style: ModeLineStyle,
     pub language_servers: bool,
     pub inlay_hints: bool,
+    pub completion_delay: f64,
+    pub signature_delay: f64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, VariantNames)]
@@ -105,6 +107,8 @@ impl Default for Config {
             mode_line_style: ModeLineStyle::default(),
             language_servers: true,
             inlay_hints: true,
+            completion_delay: 0.25,
+            signature_delay: 0.4,
         }
     }
 }
@@ -123,6 +127,8 @@ pub enum ConfigError {
     FontSize,
     #[error("clock-format: {0}")]
     ClockFormat(String),
+    #[error("{0} must be a number of seconds, 0 or more")]
+    Delay(&'static str),
 }
 
 impl Config {
@@ -180,6 +186,14 @@ impl Config {
         }
         if !(self.font_size.is_finite() && self.font_size > 0.0) {
             return Err(ConfigError::FontSize);
+        }
+        for (key, delay) in [
+            ("completion-delay", self.completion_delay),
+            ("signature-delay", self.signature_delay),
+        ] {
+            if !(delay.is_finite() && delay >= 0.0) {
+                return Err(ConfigError::Delay(key));
+            }
         }
         let sample = jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC);
         clock::text(&self.clock_format, &sample).map_err(ConfigError::ClockFormat)?;
@@ -388,6 +402,14 @@ mod tests {
             config.with("font-size", json!(0)).unwrap_err().to_string(),
             "font-size must be a positive number of points"
         );
+        assert_eq!(
+            config
+                .with("signature-delay", json!(-1))
+                .unwrap_err()
+                .to_string(),
+            "signature-delay must be a number of seconds, 0 or more"
+        );
+        assert!(config.with("completion-delay", json!(0)).is_ok());
     }
 
     #[test]

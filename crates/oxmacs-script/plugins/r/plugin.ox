@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.20.15"
+  :version "0.20.16"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands [run-r r-new-session r-send-statement r-send-function r-switch-to-console r-help
              r-environment r-peek r-layout r-layout-restore r-load-all r-document r-check
@@ -52,9 +52,7 @@
   :settings {program: {type: :text doc: "The R to run, such as Rterm or a full path; unset finds R on PATH, in R_HOME or where R installs itself"}
              air-program: {type: :text doc: "The air that formats R; unset uses the one M-x list-tools installs, or air on PATH"}
              render-on-save: {type: :toggle default: false doc: "Render R Markdown and Quarto documents each time they are saved"}
-             language-server: {type: :toggle default: true doc: "Run R's languageserver package for diagnostics, completion and definitions when it is installed"}
-             completion-delay: {type: :number default: 0.25 doc: "Seconds of rest after typing before R completion pops up on its own"}
-             signature-delay: {type: :number default: 0.4 doc: "Seconds of rest before the arguments of the call at point show in the echo area"}}
+             language-server: {type: :toggle default: true doc: "Run R's languageserver package for diagnostics, completion and definitions when it is installed"}}
   :tools [{name: "air" repository: "posit-dev/air" summary: "R formatter" group: "R" tag-prefix: "v"
            checksum: :sidecar setting: :air-program
            archives: {windows: {x86_64: "air-x86_64-pc-windows-msvc.zip" aarch64: "air-aarch64-pc-windows-msvc.zip"}

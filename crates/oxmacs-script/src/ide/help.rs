@@ -11,7 +11,6 @@ use oxmacs_core::text::BufferId;
 
 use crate::{ide::ox_mode, ide::repl, ide::stacktrace, runtime::plugins};
 
-pub(crate) use oxmacs_core::editor::SIGNATURE_DELAY as SIGNATURE_PAUSE;
 const LOOK_BACK: usize = 400;
 const AUTO_PREFIX: usize = 3;
 
@@ -84,7 +83,7 @@ fn spot(editor: &Editor) -> Spot {
 }
 
 pub(crate) fn signature_wait(editor: &Editor, help: &Help) -> Option<Duration> {
-    (in_ox(editor) && help.rested != Some(spot(editor))).then_some(SIGNATURE_PAUSE)
+    (in_ox(editor) && help.rested != Some(spot(editor))).then(|| editor.signature_delay())
 }
 
 pub(crate) fn echo_signature(
@@ -256,11 +255,10 @@ pub(crate) fn show_doc(isolate: &Isolate, editor: &mut Editor, home: Option<&Pat
 #[cfg(test)]
 mod tests {
     use std::path::Path;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
     use oxmacs_core::editor::Editor;
 
-    use super::SIGNATURE_PAUSE;
     use crate::Ox;
     use crate::testing::{press, settle, typed};
 
@@ -288,7 +286,7 @@ mod tests {
 
     fn rest(editor: &mut Editor, ox: &mut Ox) {
         let since = Instant::now();
-        ox.idle(editor, since, since + SIGNATURE_PAUSE);
+        ox.idle(editor, since, since + editor.signature_delay());
     }
 
     #[test]
@@ -352,16 +350,33 @@ mod tests {
         let (mut editor, mut ox) = visiting(home.path());
         let call = SOURCE.find("(area 2 3)").unwrap();
         let since = Instant::now();
+        let pause = editor.signature_delay();
 
         go(&mut editor, &mut ox, call + 7);
         assert_eq!(editor.message(), None);
-        assert_eq!(ox.idle_wait(&editor, since), Some(SIGNATURE_PAUSE));
-        ox.idle(&mut editor, since, since + SIGNATURE_PAUSE / 2);
+        assert_eq!(ox.idle_wait(&editor, since), Some(pause));
+        ox.idle(&mut editor, since, since + pause / 2);
         assert_eq!(editor.message(), None);
 
-        ox.idle(&mut editor, since, since + SIGNATURE_PAUSE);
+        ox.idle(&mut editor, since, since + pause);
         assert_eq!(editor.message(), Some("(area w h)  Width times height."));
-        assert_ne!(ox.idle_wait(&editor, since), Some(SIGNATURE_PAUSE));
+        assert_ne!(ox.idle_wait(&editor, since), Some(pause));
+    }
+
+    #[test]
+    fn the_signature_delay_setting_sets_how_long_point_rests_first() {
+        let home = tempfile::tempdir().unwrap();
+        let (mut editor, mut ox) = visiting(home.path());
+        ox.eval(&mut editor, "(settings {signature-delay: 1.5})")
+            .unwrap();
+        let call = SOURCE.find("(area 2 3)").unwrap();
+        let since = Instant::now();
+
+        go(&mut editor, &mut ox, call + 7);
+        ox.idle(&mut editor, since, since + Duration::from_secs(1));
+        assert_eq!(editor.message(), None);
+        ox.idle(&mut editor, since, since + Duration::from_secs(2));
+        assert_eq!(editor.message(), Some("(area w h)  Width times height."));
     }
 
     #[test]

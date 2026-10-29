@@ -53,9 +53,10 @@
 (session/on-ready :signatures complete/forget-signatures)
 (session/on-ready :asked complete/settled)
 (def (pauses)
-  (on-idle :r-complete (setting :completion-delay)
-           (fn [] (when (just-typed?) (complete/typed))))
-  (on-idle :r-signature (setting :signature-delay) complete/signature-due))
+  (let [editor (settings)]
+    (on-idle :r-complete (get editor :completion-delay)
+             (fn [] (when (just-typed?) (complete/typed))))
+    (on-idle :r-signature (get editor :signature-delay) complete/signature-due)))
 
 (pauses)
 (on-settings-change :r-pauses pauses)
