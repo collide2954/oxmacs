@@ -1,5 +1,6 @@
 (module
-  (import (ox string) (ox regex))
+  (import (ox string)
+          (markdown grammar :as grammar))
   (export inline wrap render body))
 
 (def (body text)
@@ -10,22 +11,20 @@
                     (range 1 (count lines))))]
     (if end (string/join "\n" (drop (+ end 1) lines)) text)))
 
-(def token #"`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)\s]+)\)")
-
-(def (styled groups)
+(def (styled found)
   (cond
-    [(nth groups 0) {text: (nth groups 0) face: :constant}]
-    [(nth groups 1) {text: (nth groups 1) face: :keyword}]
-    [else {text: (nth groups 2) face: :link target: (nth groups 3)}]))
+    [(= found.kind :code) {text: found.text face: :constant}]
+    [(= found.kind :strong) {text: found.text face: :keyword}]
+    [else {text: found.text face: :link target: found.target}]))
 
 (def (inline text)
   "The runs of a line of Markdown: maps of :text with a :face for `code`, **strong** text and [links](targets), which also have a :target."
   (let [found (reduce (fn [acc match]
                         (let [plain (string/slice text acc.at match.start)
                               runs (if (= plain "") acc.runs (conj acc.runs {text: plain}))]
-                          {at: match.end runs: (conj runs (styled match.groups))}))
+                          {at: match.end runs: (conj runs (styled match))}))
                       {at: 0 runs: []}
-                      (regex/find-all token text))
+                      (grammar/tokens text))
         rest (string/slice text found.at)]
     (if (= rest "") found.runs (conj found.runs {text: rest}))))
 
@@ -103,7 +102,12 @@
         page (assoc page :para nil)]
     (cond
       [(nil? para) page]
-      [(= para.kind :bullet) (add-lines page (wrap (inline para.text) width :lead "  • " :indent "    "))]
+      [(= para.kind :bullet)
+       (let [lead (if (contains? #{"-" "*" "+"} para.marker) "  • " "  {para.marker} ")]
+         (add-lines page (wrap (inline para.text) width
+                               :lead lead
+                               :indent (string/repeat " " (string/length lead)))))]
+      [(= para.kind :quote) (add-lines page (wrap (inline para.text) width :lead "  │ " :indent "  │ "))]
       [else (add-lines page (wrap (inline para.text) width))])))
 
 (def ox-fences #{"" "ox" "clojure"})
@@ -128,26 +132,35 @@
            :lines (conj page.lines [[text :heading]])
            :headings (conj page.headings {line: (count page.lines) title: text}))))
 
+(def (continues? page read)
+  (and page.para
+       (or (= read.kind :text)
+           (and (= read.kind :quote) (= page.para.kind :quote)))))
+
 (def (step page line width)
-  (cond
-    [(some? page.code) (if (string/starts-with? line "```")
-                         (code-block page)
-                         (update page :code conj line))]
-    [(string/starts-with? line "```") (assoc (flush page width) :code [] :fence (string/trim (string/slice line 3)))]
-    [(string/blank? line) (blank (flush page width))]
-    [(string/starts-with? line "# ") (blank (heading (flush page width) (string/slice line 2)))]
-    [(string/starts-with? line "## ") (heading (flush page width) (string/slice line 3))]
-    [(string/starts-with? line "- ") (assoc (flush page width) :para {kind: :bullet text: (string/slice line 2)})]
-    [page.para (assoc-in page [:para :text] (str page.para.text " " (string/trim line)))]
-    [else (assoc page :para {kind: :text text: (string/trim line)})]))
+  (let [read (grammar/step page.open line)
+        page (assoc page :open read.state)]
+    (cond
+      [(= read.kind :code) (update page :code conj line)]
+      [(= read.kind :fence-close) (code-block page)]
+      [(= read.kind :fence-open) (assoc (flush page width) :code [] :fence read.info)]
+      [(= read.kind :blank) (blank (flush page width))]
+      [(= read.kind :heading)
+       (let [page (heading (flush page width) read.title)]
+         (if (= read.level 1) (blank page) page))]
+      [(continues? page read)
+       (assoc-in page [:para :text] (str page.para.text " " (string/trim (or read.text line))))]
+      [(= read.kind :quote) (assoc (flush page width) :para {kind: :quote text: read.text})]
+      [(= read.kind :bullet) (assoc (flush page width) :para {kind: :bullet marker: read.marker text: read.text})]
+      [else (assoc (flush page width) :para {kind: :text text: (string/trim line)})])))
 
 (def (render text width)
-  "Renders a page of Markdown at width: a map of :lines for open-buffer, whose links are [text :link :link target] pieces, :headings with their :line and :title, and :blocks of Ox code with their :first and :last line and :source. Fences marked text, or any language but ox, show as plain text."
+  "Renders a page of Markdown at width: a map of :lines for open-buffer, whose links are [text :link :link target] pieces, :headings with their :line and :title, and :blocks of Ox code with their :first and :last line and :source. Headings of every level, quotes, bullets and numbered items, and ``` or ~~~ fences are understood; fences marked text, or any language but ox, show as plain text."
   (let [page (reduce (fn [page line] (step page line width))
-                     {lines: [] headings: [] blocks: [] para: nil code: nil fence: nil}
+                     {lines: [] headings: [] blocks: [] para: nil code: nil fence: nil open: nil}
                      (string/lines text))
         page (if (some? page.code) (code-block page) (flush page width))]
-    (dissoc page :para :code :fence)))
+    (dissoc page :para :code :fence :open)))
 
 (test "lines are read into code, strong text and links"
   (expect (= (inline "Use `x` with **care**, see [the start](start).")
@@ -157,6 +170,16 @@
 (test "a link of several words is one link piece"
   (expect (= (first (get (render "See [the start page](start), then [more](next)." 80) :lines))
              ["" "See" " " ["the start page" :link :link "start"] "," " " "then" " " ["more" :link :link "next"] "."])))
+
+(test "headings of any level, quotes, every kind of bullet and ~~~ fences render"
+  (let [page (render "### Third\n> wise words\n* star\n2. two\n~~~text\ncode\n~~~" 40)]
+    (expect (= page.headings [{line: 0 title: "Third"}]))
+    (expect (= page.lines
+               [[["Third" :heading]]
+                ["  │ " "wise" " " "words"]
+                ["  • " "star"]
+                ["  2. " "two"]
+                ["    " ["code" :string]]]))))
 
 (test "front matter is left out of the page"
   (expect (= (body "---\ntitle: x\n...\n# A\n") "# A"))

@@ -2,14 +2,12 @@
   (import (ox string) (ox regex) (ox path) (ox file)
           (r session :as session)
           (r jobs :as jobs)
+          (markdown grammar :as grammar)
           (markdown style :as style)
           (markdown preview :as preview))
   (export parse highlight render-with script-file saved))
 
 (def opening #"^\s*```+\s*\{\s*([A-Za-z][\w.-]*)(?:[\s,]+([^\s,}=]+)(?:[\s,}]|$))?")
-(def fence #"^\s*```")
-(def closing #"^\s*```+\s*$")
-(def heading #"^(#{1,6})\s+(\S.*?)[\s#]*$")
 (def label-option #"^\s*#\|\s*label:\s*(\S+)")
 (def option-line #"^\s*#\|")
 (def comment-line #"^\s*#")
@@ -36,26 +34,24 @@
         total (count lines)
         front (front-matter-end lines)
         step (fn [state at]
-               (let [line (nth lines at)]
-                 (cond ((and front (<= at front)) state)
-                   (state.open
-                    (if (regex/matches? closing line)
-                      (-> state
-                          (update :blocks conj (assoc state.open :end at))
-                          (assoc :open nil))
-                      state))
-                   ((regex/matches? fence line)
-                    (let [hit (regex/find opening line)]
-                      (assoc state :open {start: at
-                                          language: (when hit (first hit.groups))
-                                          name: (when hit (second hit.groups))})))
-                   (else
-                    (if-let [hit (regex/find heading line)]
-                      (update state :headings conj {line: at
-                                                    level: (string/length (first hit.groups))
-                                                    title: (second hit.groups)})
-                      state)))))
-        done (reduce step {open: nil blocks: [] headings: []} (range total))
+               (if (and front (<= at front))
+                 state
+                 (let [line (nth lines at)
+                       read (grammar/step state.fence line)
+                       state (assoc state :fence read.state)]
+                   (cond ((= read.kind :fence-close)
+                          (-> state
+                              (update :blocks conj (assoc state.open :end at))
+                              (assoc :open nil)))
+                     ((= read.kind :fence-open)
+                      (let [hit (regex/find opening line)]
+                        (assoc state :open {start: at
+                                            language: (when hit (first hit.groups))
+                                            name: (when hit (second hit.groups))})))
+                     ((and (= read.kind :heading) (not (string/blank? read.title)))
+                      (update state :headings conj {line: at level: read.level title: read.title}))
+                     (else state)))))
+        done (reduce step {fence: nil open: nil blocks: [] headings: []} (range total))
         blocks (if done.open (conj done.blocks (assoc done.open :end total)) done.blocks)]
     {lines: lines
      chunks: (map (fn [chunk] (labelled chunk lines)) (filter (fn [block] block.language) blocks))
@@ -68,13 +64,15 @@
     (cond ((and (= line 0) (= trimmed "---")) {spans: (whole :string) state: :front})
       ((= state :front)
        {spans: (whole :string) state: (if (contains? #{"---" "..."} trimmed) nil :front)})
-      ((= state :fenced)
-       (cond ((regex/matches? closing text) {spans: (whole :keyword) state: nil})
-         ((regex/matches? option-line text) {spans: (whole :attribute) state: :fenced})
-         ((regex/matches? comment-line text) {spans: (whole :comment) state: :fenced})
-         (else {spans: [] state: :fenced})))
-      ((regex/matches? fence text) {spans: (whole :keyword) state: :fenced})
-      (else {spans: (style/prose text) state: nil}))))
+      (else
+       (let [read (grammar/step state text)]
+         {spans: (cond ((contains? #{:fence-open :fence-close} read.kind) (whole :keyword))
+                   ((= read.kind :code)
+                    (cond ((regex/matches? option-line text) (whole :attribute))
+                      ((regex/matches? comment-line text) (whole :comment))
+                      (else [])))
+                   (else (style/prose text)))
+          state: read.state})))))
 
 (def (here) (parse (buffer-text)))
 

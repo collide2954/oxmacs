@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.20.13"
+  :version "0.20.14"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands [run-r r-new-session r-send-statement r-send-function r-switch-to-console r-help
              r-environment r-peek r-layout r-layout-restore r-load-all r-document r-check
@@ -61,7 +61,7 @@
            archives: {windows: {x86_64: "air-x86_64-pc-windows-msvc.zip" aarch64: "air-aarch64-pc-windows-msvc.zip"}
                       macos: {x86_64: "air-x86_64-apple-darwin.tar.gz" aarch64: "air-aarch64-apple-darwin.tar.gz"}
                       linux: {x86_64: "air-x86_64-unknown-linux-gnu.tar.gz" aarch64: "air-aarch64-unknown-linux-gnu.tar.gz"}}}]
-  :requires {markdown: "^0.2"}
+  :requires {markdown: "^0.2.9"}
   :wakes-for ["R"]
   :opt-in true
   :entry "r.ox")

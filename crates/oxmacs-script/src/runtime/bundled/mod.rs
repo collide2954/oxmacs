@@ -346,6 +346,10 @@ const MARKDOWN: Bundle = Bundle {
             include_str!("../../../plugins/markdown/render.ox"),
         ),
         (
+            "grammar.ox",
+            include_str!("../../../plugins/markdown/grammar.ox"),
+        ),
+        (
             "style.ox",
             include_str!("../../../plugins/markdown/style.ox"),
         ),
