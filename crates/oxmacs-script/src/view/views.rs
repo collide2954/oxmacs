@@ -4,7 +4,7 @@ use ox_lang::heap::{Heap, Hold};
 use ox_lang::native::expected;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Editor, ItemSource};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::face_named;
 use oxmacs_core::view::{Arg, Node, Picture, Pixels, ViewBuffer};
@@ -264,7 +264,7 @@ pub(crate) fn buffer_name(
     crate::api::handles::name(heap, editor, native, value)
 }
 
-const OPEN_VIEW: [&str; 8] = [
+const OPEN_VIEW: [&str; 9] = [
     "keys",
     "label",
     "beside",
@@ -273,6 +273,7 @@ const OPEN_VIEW: [&str; 8] = [
     "on-resize",
     "watch",
     "file",
+    "items",
 ];
 
 fn existing(editor: &Editor, name: &str, file: Option<&std::path::Path>) -> Option<BufferId> {
@@ -285,7 +286,17 @@ fn existing(editor: &Editor, name: &str, file: Option<&std::path::Path>) -> Opti
 
 fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let name = buffer_name(heap, editor, "open-view", arguments[0])?;
-    let [keyed, label, beside, select, show, resized, watched, file] = [
+    let [
+        keyed,
+        label,
+        beside,
+        select,
+        show,
+        resized,
+        watched,
+        file,
+        items,
+    ] = [
         arguments[2],
         arguments[3],
         arguments[4],
@@ -294,6 +305,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         arguments[7],
         arguments[8],
         arguments[9],
+        arguments[10],
     ];
     let file = (file != Value::Nil)
         .then(|| editor.absolute(std::path::Path::new(&print::display(heap, file))));
@@ -366,6 +378,9 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         view.scope = scope;
     }
     crate::api::commands::bind_keys(editor, scope, &bindings)?;
+    if items != Value::Nil {
+        crate::api::items::claim(heap, editor, ItemSource::Buffer(buffer), items);
+    }
     if show {
         crate::api::buffers::reveal(editor, buffer, beside, select);
     }

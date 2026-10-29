@@ -1,9 +1,19 @@
 (module
-  (import (markdown preview :as preview)
+  (import (ox string)
+          (markdown grammar :as grammar)
+          (markdown preview :as preview)
           (markdown style :as style)))
 
+(def (items)
+  "The headings of the current buffer, indented by level, for M-g i."
+  (vec (map (fn [found] {label: (str (string/repeat "  " (- found.level 1)) found.title)
+                         note: "L{(+ found.line 1)}"
+                         line: found.line})
+            (grammar/headings (buffer-text)))))
+
 (defmode markdown "Markdown"
-  :highlight style/highlight)
+  :highlight style/highlight
+  :items items)
 
 (define-language-server "marksman"
   :languages {"Markdown" "markdown"}

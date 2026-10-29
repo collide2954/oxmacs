@@ -154,14 +154,15 @@
    "DEL" 'epub-previous-page "S-SPC" 'epub-previous-page "<prior>" 'epub-previous-page "<left>" 'epub-previous-page
    "M-v" 'epub-previous-page "p" 'epub-previous-page
    "]" 'epub-next-chapter "[" 'epub-previous-chapter "M-<" 'epub-beginning "M->" 'epub-end
-   "o" 'epub-contents "M-g i" 'epub-contents
+   "o" 'imenu
    "s" 'epub-search "C-s" 'epub-search-next "C-r" 'epub-search-previous
    "h" 'epub-highlight "N" 'epub-note "H" 'epub-notes "M-w" 'epub-copy
    "+" 'epub-larger "=" 'epub-larger "-" 'epub-smaller "i" 'epub-info "q" 'quit-window})
 
 (def (open-book place)
   (let [state (atom {path: place title: (path/stem place) docs: {}})
-        buffer (open-view (path/name place) (render state) :keys book-keys :file place :label "EPUB books")]
+        buffer (open-view (path/name place) (render state) :keys book-keys :file place :label "EPUB books"
+                          :items (fn [] (contents-items state)))]
     (with-buffer buffer (set-buffer-value! :epub state))
     (try
       (let [rootfile (package/rootfile (await (zip/read place "META-INF/container.xml")))
@@ -225,19 +226,12 @@
 (defcommand epub-end "Go to the end of the book"
   (with-book (fn [state book] (quietly (fn [] (go state (dec (count book.chapters)) :end))))))
 
-(defcommand epub-contents "Jump to a part of the book from its table of contents"
-  (with-book
-    (fn [state book]
-      (if (empty? book.toc)
-        (message "This book has no table of contents")
-        (quietly
-         (fn []
-           (let [labels (map (fn [item] (str (string/repeat "  " item.depth) item.title)) book.toc)
-                 picked (await (prompt "Contents: " :choices labels))
-                 at (first (keep (fn [at] (when (= (nth labels at) picked) at)) (range (count labels))))]
-             (when at
-               (let [item (nth book.toc at)]
-                 (follow state (if item.fragment (str item.entry "#" item.fragment) item.entry)))))))))))
+(def (contents-items state)
+  "The book's table of contents as items for M-g i, each following its link."
+  (vec (map (fn [item]
+              {label: (str (string/repeat "  " item.depth) item.title)
+               go: (fn [] (follow state (if item.fragment (str item.entry "#" item.fragment) item.entry)))})
+            (or (get @state :toc) []))))
 
 (def (chapter-texts book)
   (let [total (count book.chapters)]

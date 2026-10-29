@@ -3,6 +3,10 @@ use crate::editor::{Choice, Completion, Editor};
 
 impl Editor {
     pub(in crate::editor) fn imenu(&mut self) {
+        if self.items_claimed() {
+            self.ask_for_items();
+            return;
+        }
         self.sync_syntax();
         let items = self
             .buffers
@@ -101,6 +105,26 @@ mod tests {
         assert!(editor.minibuffer().is_none());
         assert_eq!(editor.buffer().point(), 23);
         assert_eq!(editor.buffer().mark(), Some(0));
+    }
+
+    #[test]
+    fn modes_and_buffers_that_claim_items_are_asked_for_them() {
+        let mut editor = rust("struct S;\n");
+        editor.claim_items(crate::editor::ItemSource::Mode("Rust".to_owned()));
+        let id = editor.buffer().id();
+
+        press(&mut editor, "M-g i");
+
+        assert!(editor.minibuffer().is_none());
+        assert_eq!(editor.take_events(), [crate::editor::Event::Items(id)]);
+        editor.choose_item(id, 2);
+        assert_eq!(
+            editor.take_events(),
+            [crate::editor::Event::ItemChosen {
+                buffer: id,
+                index: 2
+            }]
+        );
     }
 
     #[test]

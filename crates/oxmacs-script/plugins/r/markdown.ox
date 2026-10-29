@@ -251,6 +251,7 @@
       (catch error e (message e.message)))))
 
 (def (outline found)
+  "The headings and chunks of parsed R Markdown, in order, as items for M-g i."
   (let [chunks found.chunks
         headings (map (fn [heading] {line: heading.line label: heading.title note: "L{(+ heading.line 1)}"})
                       found.headings)
@@ -259,21 +260,7 @@
                                 label: "chunk {(or chunk.name (+ at 1))}"
                                 note: "{chunk.language}  L{(+ chunk.start 1)}"}))
                     (range (count chunks)))]
-    (reduce (fn [built item]
-              (let [label (if (contains? built.places item.label) "{item.label} L{(+ item.line 1)}" item.label)]
-                (-> built
-                    (assoc-in [:notes label] item.note)
-                    (assoc-in [:places label] item.line))))
-            {notes: {} places: {}}
-            (sort-by (fn [item] item.line) (concat headings blocks)))))
-
-(defcommand r-markdown-outline "Jump to a heading or chunk of the document"
-  (let [built (outline (here))]
-    (if (empty? built.places)
-      (message "No headings or chunks in this document")
-      (let [answer (await (prompt "Index item: " :choices built.notes))]
-        (when-let [line (get built.places answer)]
-          (goto-line line))))))
+    (vec (sort-by (fn [item] item.line) (concat headings blocks)))))
 
 (defonce rendering (atom #{}))
 
@@ -353,4 +340,5 @@ cat("oxmacs-rendered\t", normalizePath(out, winslash = "/"), "\n", sep = "")
     (render file)))
 
 (defmode r-markdown "R Markdown"
-  :highlight highlight)
+  :highlight highlight
+  :items (fn [] (outline (here))))

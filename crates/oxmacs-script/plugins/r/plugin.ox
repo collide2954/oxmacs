@@ -1,12 +1,12 @@
 (plugin r
-  :version "0.20.14"
+  :version "0.20.15"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands [run-r r-new-session r-send-statement r-send-function r-switch-to-console r-help
              r-environment r-peek r-layout r-layout-restore r-load-all r-document r-check
              r-install r-build r-test r-packages r-complete r-indent-or-complete r-find-definition
              r-insert-assignment r-insert-pipe r-markdown-run-chunk r-markdown-run-all
              r-markdown-run-above r-markdown-next-chunk r-markdown-previous-chunk
-             r-markdown-send-statement r-markdown-insert-chunk r-markdown-outline
+             r-markdown-send-statement r-markdown-insert-chunk
              r-markdown-comment r-markdown-render r-markdown-preview r-run-job r-run-app
              r-debug-next r-debug-step r-debug-finish r-debug-continue r-debug-stop
              r-debug-function r-undebug-function r-renv-status r-renv-snapshot r-renv-restore
@@ -41,7 +41,6 @@
                             "C-c C-r" r-markdown-run-above
                             "M-n" r-markdown-next-chunk "M-p" r-markdown-previous-chunk
                             "C-c C-i" r-markdown-insert-chunk
-                            "M-g i" r-markdown-outline
                             "M-;" r-markdown-comment
                             "C-c C-k" r-markdown-render "C-S-k" r-markdown-render
                             "C-c C-z" r-switch-to-console

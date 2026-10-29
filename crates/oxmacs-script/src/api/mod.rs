@@ -10,6 +10,7 @@ pub(crate) mod handlers;
 pub(crate) mod handles;
 pub(crate) mod hooks;
 pub mod idle;
+pub(crate) mod items;
 pub(crate) mod keepass;
 pub(crate) mod keystrokes;
 pub(crate) mod layout;

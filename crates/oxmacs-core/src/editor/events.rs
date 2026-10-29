@@ -49,6 +49,11 @@ pub enum Event {
         path: PathBuf,
         owner: String,
     },
+    Items(BufferId),
+    ItemChosen {
+        buffer: BufferId,
+        index: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,11 +62,18 @@ enum Claim {
     Directories,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ItemSource {
+    Mode(String),
+    Buffer(BufferId),
+}
+
 #[derive(Debug, Default)]
 pub(super) struct Events {
     queued: Vec<Event>,
     subscribed: Vec<EventKind>,
     claims: Vec<(Claim, String)>,
+    item_sources: Vec<ItemSource>,
     windows: Option<(WindowId, BufferId, Arrangement)>,
     diagnostics: u64,
     modes: HashMap<BufferId, String>,
@@ -121,6 +133,34 @@ impl Editor {
 
     pub fn settings_changed(&mut self) {
         self.record(Event::Configured);
+    }
+
+    pub fn claim_items(&mut self, source: ItemSource) {
+        if !self.events.item_sources.contains(&source) {
+            self.events.item_sources.push(source);
+        }
+        self.subscribe(EventKind::Items);
+        self.subscribe(EventKind::ItemChosen);
+    }
+
+    pub(in crate::editor) fn items_claimed(&self) -> bool {
+        let id = self.buffer().id();
+        let mode = self
+            .buffer_language(id)
+            .map(|language| language.name().to_owned());
+        self.events.item_sources.iter().any(|source| match source {
+            ItemSource::Buffer(buffer) => *buffer == id,
+            ItemSource::Mode(name) => mode.as_deref() == Some(name),
+        })
+    }
+
+    pub(in crate::editor) fn ask_for_items(&mut self) {
+        let id = self.buffer().id();
+        self.record(Event::Items(id));
+    }
+
+    pub fn choose_item(&mut self, buffer: BufferId, index: usize) {
+        self.record(Event::ItemChosen { buffer, index });
     }
 
     pub fn take_events(&mut self) -> Vec<Event> {

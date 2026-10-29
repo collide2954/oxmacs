@@ -1,6 +1,6 @@
 (module
   (import (ox string) (ox regex))
-  (export fence heading quoted bullet tokens step))
+  (export fence heading quoted bullet tokens step headings))
 
 (def fence-line #"^\s*(`{3,}|~{3,})\s*([^`\s]*)")
 (def heading-line #"^(#{1,6})(?:\s+(.*?))?\s*#*\s*$")
@@ -61,6 +61,23 @@
     [(quoted text) (assoc (quoted text) :kind :quote :state nil)]
     [(bullet text) (assoc (bullet text) :kind :bullet :state nil)]
     [else {kind: :text text: text state: nil}]))
+
+(def (headings text)
+  "The headings of a document outside its code blocks: maps of :line, counting from 0, :level and :title."
+  (let [lines (string/lines text)]
+    (get (reduce (fn [acc at]
+                   (let [read (step acc.state (nth lines at))]
+                     {state: read.state
+                      found: (if (= read.kind :heading)
+                               (conj acc.found {line: at level: read.level title: read.title})
+                               acc.found)}))
+                 {state: nil found: []}
+                 (range (count lines)))
+         :found)))
+
+(test "a document's headings skip the ones inside code blocks"
+  (expect (= (headings "# One\ntext\n```\n# not a heading\n```\n## Two")
+             [{line: 0 level: 1 title: "One"} {line: 5 level: 2 title: "Two"}])))
 
 (test "headings carry their level and title, and need a space after the hashes"
   (expect (= (heading "### Notes ##") {level: 3 title: "Notes"}))

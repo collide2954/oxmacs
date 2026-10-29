@@ -63,7 +63,7 @@
    "M-<" 'pdf-first-page "<home>" 'pdf-first-page "M->" 'pdf-last-page "<end>" 'pdf-last-page
    "M-g g" 'pdf-goto-page "M-g M-g" 'pdf-goto-page
    "+" 'pdf-zoom-in "-" 'pdf-zoom-out "=" 'pdf-actual-size "W" 'pdf-fit-width "H" 'pdf-fit-page
-   "c" 'pdf-toggle-continuous "m" 'pdf-theme-colors "o" 'pdf-outline "M-g i" 'pdf-outline
+   "c" 'pdf-toggle-continuous "m" 'pdf-theme-colors "o" 'imenu
    "s" 'pdf-search "C-s" 'pdf-search-next "C-r" 'pdf-search-previous "M-w" 'pdf-copy
    "i" 'pdf-info "g" 'pdf-reload "q" 'quit-window})
 
@@ -91,7 +91,8 @@
 (def (open-document place)
   (let [state (atom {path: place zoom: (start-zoom) continuous: (setting :continuous)
                      dark: (setting :theme-colors)})]
-    (with-buffer (open-view (path/name place) (render state) :keys doc-keys :file place :label "PDF documents")
+    (with-buffer (open-view (path/name place) (render state) :keys doc-keys :file place :label "PDF documents"
+                            :items (fn [] (outline-items state)))
       (set-buffer-value! :pdf state))
     (load state)
     (let [doc @state]
@@ -185,17 +186,12 @@
 (defcommand pdf-theme-colors "Switch between the theme's colors and black on white"
   (with-doc (fn [state doc] (swap! state assoc :dark (not doc.dark)))))
 
-(defcommand pdf-outline "Jump to a heading in the document's outline"
-  (with-doc
-    (fn [state doc]
-      (if (empty? doc.outline)
-        (message "This document has no outline")
-        (quietly
-         (fn []
-           (let [labels (reading/outline-labels doc.outline)
-                 picked (await (prompt "Go to heading: " :choices labels))
-                 at (find (fn [at] (= (nth labels at) picked)) (range (count labels)))]
-             (when at (to-page state doc (get (nth doc.outline at) :page))))))))))
+(def (outline-items state)
+  "The document's outline as items for M-g i, each turning to its heading's page."
+  (let [outline (or (get @state :outline) [])]
+    (vec (map (fn [[label heading]]
+                {label: label go: (fn [] (when (get @state :pages) (to-page state @state heading.page)))})
+              (map vector (reading/outline-labels outline) outline)))))
 
 (def (show-match state by)
   (let [doc @state

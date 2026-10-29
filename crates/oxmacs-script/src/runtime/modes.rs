@@ -8,7 +8,7 @@ use ox_lang::native::{field, given, name_of};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{ScopeId, intern};
-use oxmacs_core::editor::Editor;
+use oxmacs_core::editor::{Editor, ItemSource};
 use oxmacs_core::syntax::{Language, LanguageSpec, Roots};
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
@@ -318,6 +318,7 @@ struct Options {
     roots: Vec<String>,
     keys: Vec<(String, String)>,
     highlight: Option<Value>,
+    items: Option<Value>,
     indent: Rules,
 }
 
@@ -362,7 +363,7 @@ fn rules(heap: &Heap, value: Value) -> Result<Rules, Error> {
     Ok(found)
 }
 
-const DEFINE_MODE: [&str; 7] = [
+const DEFINE_MODE: [&str; 8] = [
     "extensions",
     "file-names",
     "comment",
@@ -370,6 +371,7 @@ const DEFINE_MODE: [&str; 7] = [
     "keys",
     "highlight",
     "indent",
+    "items",
 ];
 
 fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
@@ -389,6 +391,7 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
                     .collect();
             }
             "highlight" => found.highlight = Some(value),
+            "items" => found.items = Some(value),
             _ => found.indent = rules(heap, value)?,
         }
     }
@@ -460,6 +463,9 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
         editor.set_indent_tabs(&language, tabs);
     }
     crate::api::commands::bind_keys(editor, scope, &given.keys)?;
+    if let Some(hook) = given.items {
+        crate::api::items::claim(heap, editor, ItemSource::Mode(title.clone()), hook);
+    }
     let highlight = given.highlight.map(|function| heap.hold(function));
     if highlight.is_some() {
         editor.set_highlighter(&language, cached);
