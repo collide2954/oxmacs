@@ -22,9 +22,7 @@
    "C-c C-v" 'r-help
    "C-c C-e" 'r-environment
    "C-c C-o" 'r-peek
-   "M-." 'r-find-definition
-   "TAB" 'r-complete
-   "C-M-i" 'r-complete
+   "TAB" 'completion-at-point
    "<f10>" 'r-debug-next
    "S-<f4>" 'r-debug-step
    "S-<f6>" 'r-debug-finish
@@ -52,14 +50,12 @@
 (session/on-marker "definition" definition/answered)
 (session/on-ready :signatures complete/forget-signatures)
 (session/on-ready :asked complete/settled)
-(def (pauses)
-  (let [editor (settings)]
-    (on-idle :r-complete (get editor :completion-delay)
-             (fn [] (when (just-typed?) (complete/typed))))
-    (on-idle :r-signature (get editor :signature-delay) complete/signature-due)))
 
-(pauses)
-(on-settings-change :r-pauses pauses)
+(def hooks
+  {complete: complete/complete signature: complete/signature definition: definition/find-definition})
+
+(defmode r "R" :complete hooks.complete :signature hooks.signature :definition hooks.definition)
+(session/use-hooks! hooks)
 
 (def (insert-operator operator)
   (let [at (point)
@@ -135,14 +131,8 @@
     (when topic
       (pane/ask-help topic))))
 
-(defcommand r-complete "Complete the R code before point from the session"
-  (complete/complete true))
-
 (defcommand r-indent-or-complete "Indent the line, or complete the R code once it is indented"
   (complete/indent-or-complete))
-
-(defcommand r-find-definition "Jump to the definition of the R name at point"
-  (definition/find-definition))
 
 (defcommand r-insert-assignment "Insert the assignment arrow <-"
   (insert-operator "<-"))

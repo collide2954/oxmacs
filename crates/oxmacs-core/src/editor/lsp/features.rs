@@ -192,16 +192,7 @@ impl Editor {
     }
 
     fn name_typed(&self) -> usize {
-        let buffer = self.buffers.current();
-        let language = self.buffers.language(0);
-        buffer
-            .chars_before(buffer.point())
-            .take_while(|c| {
-                language
-                    .as_ref()
-                    .map_or(word_char(*c), |known| known.in_name(*c))
-            })
-            .count()
+        self.buffers.current().point() - self.name_start()
     }
 
     fn in_comment_or_string(&self) -> bool {
@@ -429,16 +420,32 @@ impl Editor {
         }
     }
 
+    fn in_name(&self, character: char) -> bool {
+        self.buffers
+            .language(0)
+            .map_or(word_char(character), |language| language.in_name(character))
+    }
+
     fn symbol_here(&self) -> String {
         let buffer = self.buffers.current();
         let point = buffer.point();
         let before: Vec<char> = buffer
             .chars_before(point)
-            .take_while(|c| word_char(*c))
+            .take_while(|c| self.in_name(*c))
             .collect();
         let mut name: String = before.into_iter().rev().collect();
-        name.extend(buffer.chars_after(point).take_while(|c| word_char(*c)));
+        name.extend(buffer.chars_after(point).take_while(|c| self.in_name(*c)));
         name
+    }
+
+    pub fn name_start(&self) -> usize {
+        let buffer = self.buffers.current();
+        let point = buffer.point();
+        point
+            - buffer
+                .chars_before(point)
+                .take_while(|c| self.in_name(*c))
+                .count()
     }
 
     fn lsp_find_references(&mut self) {
@@ -741,12 +748,20 @@ impl Editor {
     fn defined(&mut self, id: ServerId, origin: (BufferId, usize), result: &Value) {
         let found = locations(result);
         let places = self.places(id, &found);
+        self.go_to_definition(origin, places);
+    }
+
+    pub fn answer_definition(&mut self, places: Vec<Place>) {
+        let origin = self.current_location();
+        self.go_to_definition(origin, places);
+    }
+
+    fn go_to_definition(&mut self, origin: (BufferId, usize), places: Vec<Place>) {
         match places.as_slice() {
             [] => self.show_message("No definition found"),
             [place] => {
-                if self.open_file(&place.path) {
+                if self.open_place(place) {
                     self.remember_location(origin);
-                    self.go_to_line(place.line, place.column);
                 }
             }
             _ => {
@@ -760,6 +775,15 @@ impl Editor {
     fn referenced(&mut self, id: ServerId, name: &str, result: &Value) {
         let found = locations(result);
         let places = self.places(id, &found);
+        self.list_references(name, places);
+    }
+
+    pub fn answer_references(&mut self, places: Vec<Place>) {
+        let name = self.symbol_here();
+        self.list_references(&name, places);
+    }
+
+    fn list_references(&mut self, name: &str, places: Vec<Place>) {
         if places.is_empty() {
             self.show_message(format!("No references to {name}"));
             return;

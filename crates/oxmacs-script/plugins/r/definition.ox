@@ -88,14 +88,16 @@
   (if-let [name (help/symbol-in (or (line-text (current-line)) "") (current-column))]
     (let [origin [(buffer-name) (point)]
           running (session/current-session)]
-      (cond ((in-buffers name origin) nil)
-        ((in-project name origin) nil)
+      (cond ((in-buffers name origin) true)
+        ((in-project name origin) true)
         ((and (session/running? running) (console-waiting? running))
          (reset! asked {name: name origin: origin})
-         (session/request running "getOption(\"oxmacs\")$definition({(session/r-string name)})"))
-        ((language/ready?) (run-command 'find-definition))
-        (else (message "No definition of {name} in open R buffers or the project"))))
-    (message "No symbol at point")))
+         (session/request running "getOption(\"oxmacs\")$definition({(session/r-string name)})")
+         true)
+        ((language/ready?) nil)
+        (else (message "No definition of {name} in open R buffers or the project") true)))
+    (cond ((language/ready?) nil)
+      (else (message "No symbol at point") true))))
 
 (def (answered _ payload)
   (when-let [question @asked]

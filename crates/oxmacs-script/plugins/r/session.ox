@@ -3,7 +3,7 @@
           (r helper :as helper))
   (export label sessions known? current-session running? link! linked own! project-of project-here
           windows? arguments locate find-r launch ensure show-console evaluate request send script?
-          r-string helper-of on-marker on-ready use-keys! use-patterns! directory-of))
+          r-string helper-of on-marker on-ready use-keys! use-patterns! use-hooks! directory-of))
 
 (def label "R")
 (def missing "R not found; install it from https://cran.r-project.org or set the r plugin's program")
@@ -13,8 +13,11 @@
 (defonce ready-hooks (atom {}))
 (defonce ^:shadow keys (atom {}))
 (defonce patterns (atom {prompts: [] watch: {}}))
+(defonce hooks (atom {}))
 
 (def (use-keys! bindings) (reset! keys bindings))
+
+(def (use-hooks! given) (reset! hooks given))
 
 (def (use-patterns! prompts watch) (reset! patterns {prompts: prompts watch: watch}))
 
@@ -200,7 +203,9 @@
                      :prompts (get @patterns :prompts) :errors ["^Error"] :watch (get @patterns :watch)
                      :on-output (fn [kind payload] (heard name kind payload))
                      :on-idle (fn [] (idle name))
-                     :on-resize (fn [_] (fit name)))
+                     :on-resize (fn [_] (fit name))
+                     :complete (get @hooks :complete) :signature (get @hooks :signature)
+                     :definition (get @hooks :definition))
       (swap! state (fn [old] (-> old
                                  (assoc-in [:helpers name] profile)
                                  (assoc-in [:roots name] root)

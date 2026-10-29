@@ -5,7 +5,7 @@ use ox_lang::native::{given, name_of};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{ScopeId, intern};
-use oxmacs_core::editor::{ConsoleSpec, Editor, JobSpec};
+use oxmacs_core::editor::{ConsoleSpec, Editor, JobSpec, Service, Source};
 use oxmacs_core::text::BufferId;
 use regex::Regex;
 
@@ -117,9 +117,10 @@ struct Options {
     errors: Vec<String>,
     watches: Vec<(String, String)>,
     prompter: Option<String>,
+    provides: Vec<(Service, Value)>,
 }
 
-const START: [&str; 13] = [
+const START: [&str; 18] = [
     "program",
     "args",
     "directory",
@@ -133,6 +134,11 @@ const START: [&str; 13] = [
     "errors",
     "watch",
     "prompter",
+    "complete",
+    "signature",
+    "definition",
+    "references",
+    "docs",
 ];
 
 fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
@@ -168,7 +174,9 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
                     value,
                 )?);
             }
-            _ => {}
+            option => found
+                .provides
+                .extend(crate::api::provided::hook(option, value)),
         }
     }
     Ok(found)
@@ -247,6 +255,9 @@ fn start(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Va
         prompter: given.prompter,
     };
     let buffer = editor.start_console(spec, existing);
+    for (service, hook) in given.provides {
+        crate::api::provided::provide(heap, editor, service, Source::Buffer(buffer), hook);
+    }
     let output = given.output.map(|function| heap.hold(function));
     let waiting = given.idle.map(|function| heap.hold(function));
     let resized = given.resized.map(|function| heap.hold(function));

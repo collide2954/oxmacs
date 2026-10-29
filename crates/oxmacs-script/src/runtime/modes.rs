@@ -318,7 +318,7 @@ struct Options {
     roots: Vec<String>,
     keys: Vec<(String, String)>,
     highlight: Option<Value>,
-    items: Option<Value>,
+    provides: Vec<(Service, Value)>,
     indent: Rules,
 }
 
@@ -363,7 +363,7 @@ fn rules(heap: &Heap, value: Value) -> Result<Rules, Error> {
     Ok(found)
 }
 
-const DEFINE_MODE: [&str; 8] = [
+const DEFINE_MODE: [&str; 13] = [
     "extensions",
     "file-names",
     "comment",
@@ -372,6 +372,11 @@ const DEFINE_MODE: [&str; 8] = [
     "highlight",
     "indent",
     "items",
+    "complete",
+    "signature",
+    "definition",
+    "references",
+    "docs",
 ];
 
 fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
@@ -391,8 +396,10 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
                     .collect();
             }
             "highlight" => found.highlight = Some(value),
-            "items" => found.items = Some(value),
-            _ => found.indent = rules(heap, value)?,
+            "indent" => found.indent = rules(heap, value)?,
+            option => found
+                .provides
+                .extend(crate::api::provided::hook(option, value)),
         }
     }
     Ok(found)
@@ -441,6 +448,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     if let Some((_, _, Some(plugin))) = &known {
         repeated(&title, plugin, &given)?;
     }
+    let fresh = known.is_none();
     let known = known.map(|(language, scope, _)| (language, scope));
     let (language, scope) = known.unwrap_or_else(|| {
         let declared = Declared {
@@ -458,19 +466,15 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
         )
     });
     editor.add_language(language.clone(), Some(scope));
-    editor.set_indenter(&language, indent_by_rules);
+    if fresh {
+        editor.set_indenter(&language, indent_by_rules);
+    }
     if let Some(tabs) = given.indent.tabs {
         editor.set_indent_tabs(&language, tabs);
     }
     crate::api::commands::bind_keys(editor, scope, &given.keys)?;
-    if let Some(hook) = given.items {
-        crate::api::provided::provide(
-            heap,
-            editor,
-            Service::Items,
-            Source::Mode(title.clone()),
-            hook,
-        );
+    for (service, hook) in given.provides {
+        crate::api::provided::provide(heap, editor, service, Source::Mode(title.clone()), hook);
     }
     let highlight = given.highlight.map(|function| heap.hold(function));
     if highlight.is_some() {

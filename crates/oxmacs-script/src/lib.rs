@@ -316,7 +316,8 @@ impl Ox {
             let report = self
                 .isolate
                 .run_with(editor, deadline.saturating_duration_since(Instant::now()));
-            let evaluated = self.evaluated(editor, report.finished);
+            let finished = api::provided::finished(&mut self.isolate, editor, report.finished);
+            let evaluated = self.evaluated(editor, finished);
             for error in report.unhandled.into_iter().chain(evaluated) {
                 failed = true;
                 ide::log::report(editor, &error, None);
@@ -333,7 +334,8 @@ impl Ox {
                 break;
             }
             let report = self.isolate.run_with(editor, left);
-            let evaluated = self.evaluated(editor, report.finished);
+            let finished = api::provided::finished(&mut self.isolate, editor, report.finished);
+            let evaluated = self.evaluated(editor, finished);
             for error in report.unhandled.into_iter().chain(evaluated) {
                 failed = true;
                 ide::log::report(editor, &error, None);

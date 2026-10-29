@@ -1,10 +1,9 @@
 (plugin r
-  :version "0.20.17"
+  :version "0.21.0"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands [run-r r-new-session r-send-statement r-send-function r-switch-to-console r-help
              r-environment r-peek r-layout r-layout-restore r-load-all r-document r-check
-             r-install r-build r-test r-packages r-complete r-indent-or-complete r-find-definition
-             r-insert-assignment r-insert-pipe r-markdown-run-chunk r-markdown-run-all
+             r-install r-build r-test r-packages r-indent-or-complete r-insert-assignment r-insert-pipe r-markdown-run-chunk r-markdown-run-all
              r-markdown-run-above r-markdown-next-chunk r-markdown-previous-chunk
              r-markdown-send-statement r-markdown-insert-chunk
              r-markdown-comment r-markdown-render r-markdown-preview r-run-job r-run-app
@@ -23,9 +22,7 @@
                    "C-c C-e" r-environment
                    "C-c C-o" r-peek
                    "C-c C-f" format-buffer
-                   "M-." r-find-definition
                    "TAB" r-indent-or-complete
-                   "C-M-i" r-complete
                    "C-c C-w l" r-load-all "C-S-l" r-load-all
                    "C-c C-w d" r-document "C-S-d" r-document
                    "C-c C-w c" r-check "C-S-e" r-check

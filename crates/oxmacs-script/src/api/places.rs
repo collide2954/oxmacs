@@ -52,7 +52,7 @@ struct Lists {
     waiting: Vec<Call>,
 }
 
-fn place(heap: &Heap, value: Value) -> Result<Place, Error> {
+pub(crate) fn place(heap: &Heap, value: Value) -> Result<Place, Error> {
     if heap.map_of(value).is_none() {
         return Err(expected(
             heap,

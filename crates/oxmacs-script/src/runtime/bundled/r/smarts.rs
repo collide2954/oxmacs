@@ -215,14 +215,14 @@ fn the_innermost_open_call_is_found() {
 }
 
 fn rested(r: &mut R) {
-    let since = Instant::now();
-    r.ox.idle(&mut r.editor, since, since + Duration::from_secs(2));
-    crate::testing::settle(&mut r.editor, &mut r.ox);
+    rested_for(r, 2000);
 }
 
 fn rested_for(r: &mut R, millis: u64) {
     let since = Instant::now();
-    r.ox.idle(&mut r.editor, since, since + Duration::from_millis(millis));
+    let now = since + Duration::from_millis(millis);
+    r.editor.idle(since, now);
+    r.ox.idle(&mut r.editor, since, now);
     crate::testing::settle(&mut r.editor, &mut r.ox);
 }
 
@@ -304,6 +304,7 @@ fn running_code_forgets_known_signatures() {
     r.typed("plot <- function(z) z");
     r.press("RET");
     r.output(job, PROMPT);
+    rested(&mut r);
     r.sent();
     r.press("C-c C-z C-a");
     r.press("C-e");
