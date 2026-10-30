@@ -86,41 +86,6 @@ fn cond(heap: &mut Heap, clauses: &[Value]) -> Result<Value, Error> {
     call(heap, "if", &[test, body, otherwise])
 }
 
-fn case(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
-    let mut branches = vec![word("cond")];
-    for clause in &arguments[1..] {
-        let parts = if heap.vector_of(*clause).is_some() || heap.pair_of(*clause).is_some() {
-            spliced(heap, *clause)?
-        } else {
-            Vec::new()
-        };
-        let Some((constants, body)) = parts.split_first() else {
-            return Err(Error::new("case clauses are [value body...] vectors"));
-        };
-        let test = if equal(heap, *constants, word("else")) {
-            word("else")
-        } else {
-            let options = if heap.pair_of(*constants).is_some() {
-                spliced(heap, *constants)?
-            } else {
-                vec![*constants]
-            };
-            let mut checks = vec![word("or")];
-            for option in options {
-                let constant = quoted(heap, option)?;
-                checks.push(call(heap, "=", &[word("value"), constant])?);
-            }
-            list(heap, &checks)?
-        };
-        let mut branch = vec![test];
-        branch.extend_from_slice(body);
-        branches.push(make_vector(heap, &branch)?);
-    }
-    let bound = binding(heap, word("value"), arguments[0])?;
-    let chosen = list(heap, &branches)?;
-    call(heap, "let", &[bound, chosen])
-}
-
 enum Step {
     Over(Value, Value),
     When(Value),
@@ -259,15 +224,6 @@ fn rules_macro(
     call(heap, "defmacro", &[name, parameters, expanded])
 }
 
-fn defrule(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
-    let (pattern, template) = (arguments[0], arguments[1]);
-    let name = collections::first(heap, pattern)?;
-    let literals = make_vector(heap, &[])?;
-    let rule = make_vector(heap, &[pattern, template])?;
-    let rules = make_vector(heap, &[rule])?;
-    rules_macro(heap, name, literals, rules)
-}
-
 fn defrules(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let literals = quoted(heap, arguments[1])?;
     let rules = make_vector(heap, &arguments[2..])?;
@@ -399,7 +355,6 @@ pub(super) fn install(isolate: &mut Isolate) {
         chained(heap, arguments, Value::Nil, "or", true)
     });
     isolate.define_expander("cond", 0, None, cond);
-    isolate.define_expander("case", 1, None, case);
     isolate.define_expander("each", 1, None, each);
     isolate.define_expander("for", 1, None, comprehension);
     isolate.define_expander("while", 1, None, |heap, arguments| {
@@ -420,7 +375,6 @@ pub(super) fn install(isolate: &mut Isolate) {
     isolate.define_expander("when-let", 1, None, |heap, arguments| {
         if_let(heap, arguments, true)
     });
-    isolate.define_expander("defrule", 2, Some(2), defrule);
     isolate.define_expander("defrules", 2, None, defrules);
     isolate.define_expander("maybe", 1, Some(1), maybe);
     isolate.define_expander("atomically", 0, None, atomically);

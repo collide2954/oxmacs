@@ -17,14 +17,12 @@
 (defrecord Point x) ;! defrecord takes a name and a field vector
 
 ;; records change by copying
-(defrecord Point [x y]) (with (Point 1 2) :x 10) ;=> #Point{x: 10 y: 2}
-(defrecord Point [x y]) (with (Point 1 2) :x 10 :y 20) ;=> #Point{x: 10 y: 20}
+(defrecord Point [x y]) (assoc (Point 1 2) :x 10) ;=> #Point{x: 10 y: 2}
+(defrecord Point [x y]) (assoc (Point 1 2) :x 10 :y 20) ;=> #Point{x: 10 y: 20}
 (defrecord Point [x y]) (assoc (Point 1 2) :y 5) ;=> #Point{x: 1 y: 5}
-(defrecord Point [x y]) (def p (Point 1 2)) (with p :x 10) p ;=> #Point{x: 1 y: 2}
-(defrecord Point [x y]) (with (Point 1 2) :color :red) ;! Point has no field color
+(defrecord Point [x y]) (def p (Point 1 2)) (assoc p :x 10) p ;=> #Point{x: 1 y: 2}
 (defrecord Point [x y]) (assoc (Point 1 2) :color :red) ;! Point has no field color
-(defrecord Point [x y]) (with (Point 1 2) :x) ;! with takes a record and field value pairs
-(with {a: 1} :a 2) ;! with expects a record, got {a: 1}
+(defrecord Point [x y]) (assoc (Point 1 2) :x 1 :y) ;! assoc takes a collection and key value pairs
 
 ;; record literals read back what records print
 (defrecord Point [x y]) #Point{x: 1 y: 2} ;=> #Point{x: 1 y: 2}

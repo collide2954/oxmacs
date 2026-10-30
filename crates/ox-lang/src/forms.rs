@@ -72,7 +72,6 @@ pub(crate) const BUILT_IN: &[(&str, Form)] = &[
     ("when", body(1)),
     ("unless", body(1)),
     ("cond", body(0)),
-    ("case", body(1)),
     ("each", body(1)),
     ("for", body(1)),
     ("while", body(1)),
@@ -84,7 +83,6 @@ pub(crate) const BUILT_IN: &[(&str, Form)] = &[
     ("spawn", body(0)),
     ("atomically", body(0)),
     ("maybe", body(0)),
-    ("defrule", definition(1)),
     ("defrules", definition(2)),
 ];
 

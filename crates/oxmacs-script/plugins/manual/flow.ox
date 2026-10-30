@@ -18,17 +18,6 @@
 [(size 5) (size 50) (size 500)]
 ```
 
-`case` picks a clause by a constant, written as is, or a list of constants. No match gives `nil` unless an `else` clause catches the rest.
-
-```
-(def (arrow key)
-  (case key
-    [:up "↑"]
-    [(:left :right) "↔"]
-    [else "?"]))
-[(arrow :up) (arrow :right) (arrow :enter)]
-```
-
 `and` and `or` stop at the first answer and return it. `if-let` and `when-let` bind a value and go on only when it is true, that is, neither `false` nor `nil`:
 
 ```
@@ -156,15 +145,15 @@ Metadata before a macro's name tells `ox fmt`, highlighting and go-to-definition
   `(def ~name (widget ~@body)))
 ```
 
-`defrule` writes a simple macro as a pattern and a template, where `...` repeats what it follows:
+`defrules` writes a macro by example. Each `[pattern template]` rule turns a call that fits its pattern into its template, where `...` repeats what it follows:
 
 ```
-(defrule (my-unless test body ...)
-  (if test nil (do body ...)))
+(defrules my-unless []
+  [(my-unless test body ...) (if test nil (do body ...))])
 (my-unless false :ran)
 ```
 
-`defrules` takes several `[pattern template]` rules and uses the first that fits. The words in its first vector match only themselves.
+With several rules, the first that fits is used. The words in the vector after the name match only themselves.
 
 ```
 (defrules swap-order [with]

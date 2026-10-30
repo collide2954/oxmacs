@@ -43,16 +43,6 @@
 (def n (atom 0)) (until (>= @n 3) (swap! n inc)) @n ;=> 3
 (while false 1) ;=> nil
 
-;; case picks the clause holding the value
-(def (name n) (case n [1 :one] [(2 3) :few] [else :many])) [(name 1) (name 3) (name 9)] ;=> [:one :few :many]
-(case :b [:a 1] [:b 2 3]) ;=> 3
-(case "x" ["x" :found]) ;=> :found
-(case 5 [1 :one]) ;=> nil
-(case 'red [red :stop] [green :go]) ;=> :stop
-[(case nil [nil :none] [else :some]) (case 1 [nil :none] [else :some])] ;=> [:none :some]
-(case 1 (1 :one)) ;=> :one
-(case 1 :one) ;! case clauses are [value body...] vectors
 (each x [1 2]) ;! each takes a binding vector and a body
 (for [x [1] :while true] x) ;! for takes :when and :let, not :while
 (for [x] x) ;! for bindings come in name and collection pairs
-(let [calls (atom 0)] (case (do (swap! calls inc) 2) [1 :a] [2 :b] [3 :c]) @calls) ;=> 1

@@ -129,7 +129,6 @@
 (if-let 5 1) ;! second expects a collection, got 5
 (if-let [x nil] x 1 2) ;! if takes a test, a then form and an optional else form
 (when) ;! when takes at least 1 argument, got 0
-(defrule (x)) ;! defrule takes 2 arguments, got 1
 [(atomically 1 2) (await (spawn 3)) (vec (gen))] ;=> [2 3 []]
 (maybe (raise 5)) ;! Raised 5
 (let [and 1] (and true and)) ;! 1 is not a function
@@ -138,6 +137,6 @@
 [(try (expect (> 1 2 3)) (catch expectation-failed e e.message)) (try (expect ((fn [x] x) false)) (catch expectation-failed e e.message))] ;=> ["(> 1 2 3)" "((fn [x] x) false)"]
 (let [m {on: true off: false}] [(expect m.on) (try (expect m.off) (catch expectation-failed _ :failed))]) ;=> [true :failed]
 (do (test "x" 1) (test "y" (expect false)) [(map :name @registered-tests) (try ((:run (last @registered-tests))) (catch expectation-failed e e.message))]) ;=> [["x" "y"] "false"]
-(defrule (my-unless test body) (if test nil body)) [(my-unless false 1) (my-unless true 1)] ;=> [1 nil]
+(defrules my-unless [] [(my-unless test body) (if test nil body)]) [(my-unless false 1) (my-unless true 1)] ;=> [1 nil]
 (defrules swap-pair [] [(swap-pair a b) [b a]]) (swap-pair 1 2) ;=> [2 1]
 (defmacro quoted [form] (list 'quote form)) (quoted (-> a b (c d))) ;=> (-> a b (c d))

@@ -3,6 +3,7 @@ mod cli;
 mod fmt;
 mod lsp;
 mod lsp_client;
+mod migrate;
 mod perf;
 mod process;
 mod profile;

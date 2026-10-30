@@ -46,6 +46,14 @@ const SUBCOMMANDS: &[Subcommand] = &[
         run: fmt,
     },
     Subcommand {
+        name: "migrate",
+        usage: "[--check] PATH...",
+        summary: "update files written for an older Ox, or list the ones that need it",
+        flags: &["--check"],
+        valued: &[],
+        run: migrate,
+    },
+    Subcommand {
         name: "test",
         usage: "[PATH]...",
         summary: "run the test blocks in files or folders",
@@ -290,6 +298,24 @@ fn language_server(parsed: &Parsed) -> Result<ExitCode, String> {
 }
 
 fn fmt(parsed: &Parsed) -> Result<ExitCode, String> {
+    rewrite(parsed, "Formatted", |file, source| {
+        let forms = isolate_for(file, &[]).forms_for(&file.display().to_string(), source);
+        ox_lang::format::format_with(source, &forms)
+    })
+}
+
+fn migrate(parsed: &Parsed) -> Result<ExitCode, String> {
+    rewrite(parsed, "Migrated", |file, source| {
+        let mut isolate = isolate_for(file, &[]);
+        ox_lang::migrate::migrate(&mut isolate, &file.display().to_string(), source)
+    })
+}
+
+fn rewrite(
+    parsed: &Parsed,
+    done: &str,
+    change: fn(&Path, &str) -> Result<String, String>,
+) -> Result<ExitCode, String> {
     let check = parsed.flag("--check");
     let files = some_paths(parsed)?;
     let mut changed = 0;
@@ -303,23 +329,22 @@ fn fmt(parsed: &Parsed) -> Result<ExitCode, String> {
                 continue;
             }
         };
-        let forms = isolate_for(file, &[]).forms_for(&file.display().to_string(), &source);
-        let formatted = match ox_lang::format::format_with(&source, &forms) {
-            Ok(formatted) => formatted,
+        let rewritten = match change(file, &source) {
+            Ok(rewritten) => rewritten,
             Err(problem) => {
                 eprintln!("{}:{problem}", file.display());
                 failed = true;
                 continue;
             }
         };
-        if formatted == source {
+        if rewritten == source {
             continue;
         }
         changed += 1;
         if check {
             println!("{}", file.display());
         } else if let Err(error) =
-            oxmacs_files::write(file, formatted.as_bytes(), oxmacs_files::NewFile::Shared)
+            oxmacs_files::write(file, rewritten.as_bytes(), oxmacs_files::NewFile::Shared)
         {
             eprintln!("{}: {error}", file.display());
             failed = true;
@@ -336,7 +361,7 @@ fn fmt(parsed: &Parsed) -> Result<ExitCode, String> {
         });
     }
     let plural = if files.len() == 1 { "" } else { "s" };
-    println!("Formatted {changed} of {} file{plural}", files.len());
+    println!("{done} {changed} of {} file{plural}", files.len());
     Ok(ExitCode::SUCCESS)
 }
 

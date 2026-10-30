@@ -134,13 +134,7 @@ pub(crate) fn contains(heap: &Heap, collection: Value, key: Value) -> Result<Val
     Ok(Value::Bool(map.get(heap, key).is_some()))
 }
 
-fn with(heap: &mut Heap, value: Value, pairs: &[Value]) -> Result<Value, Error> {
-    let Some(record) = heap.record_of(value).cloned() else {
-        return Err(expected(heap, "with", "a record", value));
-    };
-    if pairs.len() % 2 == 1 {
-        return Err(Error::new("with takes a record and field value pairs"));
-    }
+fn assoc_record(heap: &mut Heap, record: &Record, pairs: &[Value]) -> Result<Value, Error> {
     let mut fields = record.fields.to_vec();
     for pair in pairs.chunks(2) {
         let [key, field] = pair else {
@@ -345,8 +339,8 @@ pub(crate) fn assoc(heap: &mut Heap, collection: Value, pairs: &[Value]) -> Resu
     if pairs.len() % 2 == 1 {
         return Err(Error::new("assoc takes a collection and key value pairs"));
     }
-    if heap.record_of(collection).is_some() {
-        return with(heap, collection, pairs);
+    if let Some(record) = heap.record_of(collection).cloned() {
+        return assoc_record(heap, &record, pairs);
     }
     let map = if collection == Value::Nil {
         Some(Map::EMPTY)
@@ -628,10 +622,6 @@ fn install_structures(isolate: &mut Isolate) {
             }
             heap.list(items.into_iter()).map_err(Error::from)
         });
-    isolate
-        .native("ox", "with")
-        .arity(1, None)
-        .function(|heap, arguments| with(heap, arguments[0], &arguments[1..]));
     isolate
         .native("ox", "record?")
         .arity(1, Some(1))

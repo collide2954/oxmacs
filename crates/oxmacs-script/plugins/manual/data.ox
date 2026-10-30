@@ -89,12 +89,12 @@ Vectors, maps, sets, lists and strings all work with the same functions. Results
 
 ## Records
 
-A record has a fixed set of fields and its own type. Its fields read like map keys, but a record isn't a map: `assoc` and `with` change only the fields it has, and `keys` and `count` don't take it.
+A record has a fixed set of fields and its own type. Its fields read like map keys, but a record isn't a map: `assoc` changes only the fields it has, and `keys` and `count` don't take it.
 
 ```
 (defrecord Point [x y])
 (def p (Point 1 2))
-[p.x (:y p) (with p :x 10) (type p) (record? p)]
+[p.x (:y p) (assoc p :x 10) (type p) (record? p)]
 ```
 
 Fields can have defaults, written like parameters:

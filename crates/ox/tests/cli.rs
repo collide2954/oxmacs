@@ -93,6 +93,7 @@ fn help_lists_the_subcommands_and_version_prints_the_version() {
         for subcommand in [
             "ox check",
             "ox fmt",
+            "ox migrate",
             "ox test",
             "ox profile",
             "ox perf bench",

@@ -219,8 +219,8 @@ body)
 (again i))
 (each [x xs]
 (f x))
-(case x
-[1 :one])
+(for [x xs]
+(f x))
 ";
 
     assert_eq!(
@@ -244,8 +244,8 @@ body)
   (again i))
 (each [x xs]
   (f x))
-(case x
-  [1 :one])
+(for [x xs]
+  (f x))
 "
     );
 }

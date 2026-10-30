@@ -136,11 +136,12 @@
     (paint 0 1 -1 1 k.color)
     (paint 0.05 0.95 -1 -0.4 (mix k.color [20 30 40] 0.35))
     (paint 0.05 0.9 0.3 1 (mix k.color [255 255 255] 0.45))
-    (case f.kind
+    (match f.kind
       [:tetra (paint 0.12 0.78 -0.45 -0.05 [70 230 255]) (paint 0.45 0.9 0.05 0.75 [235 40 60])]
       [:angel (each [q [0.2 0.45 0.68]] (paint q (+ q 0.08) -1 1 [40 40 44 220]))]
       [:gourami (each [q [0.2 0.38 0.56 0.72]] (paint q (+ q 0.07) -0.9 0.9 [70 120 230 200]))]
-      [:cory (each [q [0.2 0.35 0.5 0.65]] (paint q (+ q 0.05) -0.6 -0.2 [60 56 50]))])
+      [:cory (each [q [0.2 0.35 0.5 0.65]] (paint q (+ q 0.05) -0.6 -0.2 [60 56 50]))]
+      [_ nil])
     (rodeo/polygon (band 0 1 -1 1) [10 20 30 60] :stroke 1)
     (let [eye (first (place f [[(* 0.34 L) (* -0.15 hh)]]))]
       (rodeo/circle eye (max 1.4 (* 0.07 L)) (lit [240 240 236]))

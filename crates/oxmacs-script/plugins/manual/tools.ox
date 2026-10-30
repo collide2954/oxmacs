@@ -13,6 +13,7 @@ ox FILE                run a file
 ox check PATH…         find mistakes without running anything
 ox fmt PATH…           format files in the one Ox style
 ox fmt --check PATH…   list files that are not formatted
+ox migrate PATH…       update files written for an older Ox
 ox test PATH…          run the test blocks in files or folders
 ox profile FILE        run a file and show where the time went
 ox perf bench FILE     benchmark the functions a file returns
@@ -35,6 +36,10 @@ A name that starts with `_`, such as `_line`, is unused on purpose and draws no 
 ## Formatting
 
 There are no style settings: `ox fmt` keeps your line breaks and fixes indentation and spacing. oxmacs formats `.ox` files the same way when you save them.
+
+## Migrating
+
+When a new Ox removes or renames something, `ox migrate` rewrites your files to match: run it over `init.ox`, `custom.ox` and your plugins after upgrading. It changes only names the file doesn't define itself, and `ox migrate --check` lists the files it would change without touching them. So far it turns `with` into `assoc`, `defrule` into `defrules`, and `case` into `match`.
 
 ## Testing
 

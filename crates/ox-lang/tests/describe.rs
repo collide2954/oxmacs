@@ -197,7 +197,7 @@ fn completions_offer_what_a_module_can_see() {
     assert_eq!(isolate.completions("user", "s/upp"), ["s/upper"]);
     assert_eq!(
         isolate.completions("user", "defr"),
-        ["defrecord", "defrule", "defrules"]
+        ["defrecord", "defrules"]
     );
     assert_eq!(isolate.completions("user", "when"), ["when", "when-let"]);
     assert_eq!(isolate.completions("user", "#"), Vec::<String>::new());

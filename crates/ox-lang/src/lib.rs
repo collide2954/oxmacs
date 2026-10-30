@@ -12,6 +12,7 @@ pub mod forms;
 pub mod heap;
 pub mod ide;
 mod isolate;
+pub mod migrate;
 pub mod names;
 pub mod native;
 pub mod portable;

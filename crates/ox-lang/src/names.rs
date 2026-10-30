@@ -295,7 +295,7 @@ mod tests {
         );
 
         let found: Vec<(String, Option<String>)> = super::definitions_with(
-            "(defwidget dial \"Turns\" 1)\n(defrule (swap! a b) [b a])\n(other thing)",
+            "(defwidget dial \"Turns\" 1)\n(defrules swap! [] [(swap! a b) [b a]])\n(other thing)",
             &forms,
         )
         .into_iter()

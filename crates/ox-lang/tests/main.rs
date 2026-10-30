@@ -8,6 +8,7 @@ mod docs;
 mod foreign;
 mod format;
 mod host;
+mod migrate;
 mod modules;
 mod natives;
 mod profile;

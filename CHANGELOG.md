@@ -57,6 +57,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Lines in plugin buffers can hold links: a piece `[text face :link target]` is followed by a click or by the new `follow-link` command, which calls the buffer's `:on-link` with target, and `next-link` and `previous-link` move between links, wrapping around.
 - `open-buffer` and `open-view` take `:label`, the kind of buffer, such as `"remote folders"`; buffers of one kind share their keys, and `C-h f` names the kind where a command is bound.
 - A line given to `open-buffer`, `set-lines` or `append-lines` as a map with fields of the plugin's own is an item: `line-item` gives the map of the line at point or of any line, `goto-item` moves to the first line whose item has the fields it is given, and `next-item` steps between items.
+- `ox migrate PATH…` rewrites Ox files written for an older Ox to match it, changing only names a file doesn't define itself, and `ox migrate --check` lists the files it would change. Run it over `init.ox`, `custom.ox` and your plugins after upgrading.
 
 ### Changed
 
@@ -105,6 +106,10 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Completion, call signatures, `M-.`, `M-?` and `C-c C-d` work one way in every language: the buffer's mode answers when it can, and its language server otherwise. Completion pops up on its own after three characters of a name, counting the characters a language allows in names, such as `-` and `/` in Ox and `.` in R, and never inside strings or comments. `lsp-find-definition`, `lsp-find-references` and `lsp-describe` are now `find-definition`, `find-references` and `describe-at-point`, and Ox's own `ox-find-definition`, `ox-usages`, `ox-doc` and `ox-complete` are gone in their favor.
 - `define-mode` and `console-start` take `:complete`, `:signature`, `:definition`, `:references` and `:docs`, which answer `C-M-i` and completion while typing, the call signature, `M-.`, `M-?` and `C-c C-d` in the mode's buffers or the console before any language server does. Each, like `:items`, runs as a task of its own and may await, and gives its answer, `nil` to leave it to the language server, or `true` when it answers itself. The r plugin answers this way in R buffers and consoles, so `r-complete` and `r-find-definition` are gone in favor of `C-M-i` and `M-.`.
 - The editor settings `completion-delay` and `signature-delay` set how long typing rests before completion pops up on its own and before a call's arguments show, 0.25 and 0.4 seconds by default, for every language. The r plugin's settings of those names are gone.
+
+### Removed
+
+- `with`, `defrule` and `case`, which each repeated another form: `assoc` changes a record's fields, `defrules` takes a single rule, and `match` compares with numbers, strings, keywords and quoted symbols as `case` did. `ox migrate` rewrites them.
 
 ### Fixed
 
