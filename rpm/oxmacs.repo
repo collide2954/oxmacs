@@ -1,0 +1,6 @@
+[oxmacs]
+name=oxmacs for Fedora $releasever
+baseurl=https://collide2954.github.io/oxmacs/rpm/stable/fedora/$releasever/$basearch/
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0
