@@ -31,6 +31,7 @@ ox-library = { path = "crates/ox-library" }
 ox-lsp = { path = "crates/ox-lsp" }
 ox-perf = { path = "crates/ox-perf" }
 ox-rodeo = { path = "crates/ox-rodeo" }
+ox-synth = { path = "crates/ox-synth" }
 oxmacs-core = { path = "crates/oxmacs-core" }
 oxmacs-gui = { path = "crates/oxmacs-gui" }
 oxmacs-api = { path = "crates/oxmacs-api" }
@@ -99,6 +100,9 @@ opt-level = 3
 debug = false
 
 [profile.dev.package.ox-rodeo]
+opt-level = 3
+
+[profile.dev.package.ox-synth]
 opt-level = 3
 
 [profile.release]

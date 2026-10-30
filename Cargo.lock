@@ -3898,6 +3898,7 @@ dependencies = [
  "image",
  "imageproc",
  "ox-lang",
+ "ox-synth",
  "oxmacs-files",
  "oxmacs-process",
  "rayon",
@@ -3950,6 +3951,16 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "ox-synth"
+version = "0.14.0"
+dependencies = [
+ "ox-lang",
+ "oxmacs-files",
+ "rodio",
+ "tempfile",
 ]
 
 [[package]]

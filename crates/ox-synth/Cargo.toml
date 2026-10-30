@@ -1,0 +1,19 @@
+[package]
+name = "ox-synth"
+version.workspace = true
+description = "Sound for Ox: graphs of oscillators, noise, envelopes, filters and effects run at audio rate, songs of patterned tracks, and WAV files"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+ox-lang.workspace = true
+oxmacs-files.workspace = true
+rodio = { version = "0.23.0", default-features = false, features = ["flac", "mp3", "vorbis", "wav"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

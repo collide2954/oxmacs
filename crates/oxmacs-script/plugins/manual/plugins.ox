@@ -104,7 +104,7 @@ javascript   0.1.0    opt-in   JavaScript with highlighting, indentation and typ
 json         0.1.0    opt-in   JSON and JSON with comments, with highlighting and indentation
 keycast      0.2.4    opt-in   Shows the keys you press and the commands they run, for demos
 life         0.2.5    opt-in   Conway's Game of Life on a canvas
-manual       0.5.88   on       The oxmacs tutorial and the Ox manual
+manual       0.5.89   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.10   on       Markdown with highlighting, a rendered preview and the marksman language server
 ox-lang      0.1.0    on       Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL
 pdf          0.2.5    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying

@@ -113,6 +113,7 @@ pub fn install(isolate: &mut Isolate) {
     collide::install(isolate);
     tiled::install(isolate);
     lexer::install(isolate);
+    ox_synth::install(isolate);
     isolate.add_native_docs(DOCS);
 }
 
