@@ -59,19 +59,13 @@
   (string/truncate (string/trim (string/replace (string/replace (string/replace (string/replace line "[" "") "]" "") "`" "") "#" ""))
                    60))
 
-(def (encode term)
-  (string/replace (string/replace term " " "%20") ")" "%29"))
-
-(def (decode term)
-  (string/replace (string/replace term "%20" " ") "%29" ")"))
-
 (def (mentions? text term)
   (string/includes? (string/lower text) (string/lower term)))
 
 (def (search-text term modules)
   (let [pages (keep (fn [page]
                       (when-let [line (first (filter (fn [line] (mentions? line term)) (string/lines page.text)))]
-                        "- [{page.title}: {(snippet line)}]({page.id}?{(encode term)})"))
+                        "- [{page.title}: {(snippet line)}]({page.id}?{(string/url-encode term)})"))
                     guide)
         names (mapcat (fn [docs]
                         (keep (fn [entry]
@@ -90,7 +84,7 @@
        (when-let [docs (first (filter (fn [docs] (= docs.module module)) modules))]
          {title: (module-title module) text: (reference-text docs) entries: docs.entries}))]
     [(string/starts-with? id "search:")
-     {title: "Search" text: (search-text (decode (string/slice id 7)) modules)}]
+     {title: "Search" text: (search-text (string/url-decode (string/slice id 7)) modules)}]
     [else (first (filter (fn [page] (= page.id id)) guide))]))
 
 (def (order modules)
@@ -99,7 +93,7 @@
 (def (spot-of target)
   (cond
     [(string/includes? target "#") (let [[id anchor] (string/split target "#" 2)] {id: id anchor: anchor})]
-    [(string/includes? target "?") (let [[id term] (string/split target "?" 2)] {id: id term: (decode term)})]
+    [(string/includes? target "?") (let [[id term] (string/split target "?" 2)] {id: id term: (string/url-decode term)})]
     [else {id: target}]))
 
 (def (width)
@@ -203,7 +197,7 @@
 (defcommand ox-manual-search "Search the manual"
   (let [term (string/trim (await (prompt "Search the manual: ")))]
     (unless (= term "")
-      (show! {id: (str "search:" (encode term))} :from (remember-here)))))
+      (show! {id: (str "search:" (string/url-encode term))} :from (remember-here)))))
 
 (defcommand ox-manual-lookup "Look up an Ox name in the manual"
   (let [modules (reference)

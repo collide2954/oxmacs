@@ -12,22 +12,6 @@ use ox_lang::value::print;
 const MODULE: &str = "ox/http";
 const TIMEOUT: Duration = Duration::from_secs(15);
 const USER_AGENT: &str = concat!("ox/", env!("CARGO_PKG_VERSION"));
-const HEX: &[u8; 16] = b"0123456789ABCDEF";
-
-fn encode(text: &str) -> String {
-    let mut encoded = String::new();
-    for byte in text.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
-            encoded.push(char::from(byte));
-        } else {
-            encoded.push('%');
-            encoded.push(char::from(HEX[usize::from(byte >> 4)]));
-            encoded.push(char::from(HEX[usize::from(byte & 0xF)]));
-        }
-    }
-    encoded
-}
-
 #[derive(Debug, Default)]
 struct Asked {
     method: String,
@@ -150,13 +134,5 @@ pub fn install(isolate: &mut Isolate) {
         .function(|heap, arguments| {
             let url = text(heap, "http/get", arguments[0])?.to_owned();
             heap.background("ox http/get", move || get(&url))
-        });
-    isolate
-        .native(MODULE, "encode")
-        .arity(1, Some(1))
-        .outside()
-        .function(|heap, arguments| {
-            let encoded = encode(text(heap, "http/encode", arguments[0])?);
-            heap.string(&encoded).map_err(Error::from)
         });
 }

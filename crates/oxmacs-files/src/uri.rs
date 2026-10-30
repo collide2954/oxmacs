@@ -1,19 +1,13 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-fn keeps(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || b"-._~/:".contains(&byte)
+fn unreserved(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || b"-._~".contains(&byte)
 }
 
-pub fn from_path(path: &Path) -> String {
-    let text = path.to_string_lossy().replace('\\', "/");
-    let rooted = if text.starts_with('/') {
-        text
-    } else {
-        format!("/{text}")
-    };
-    let mut encoded = String::from("file://");
-    for byte in rooted.bytes() {
+fn escaped(text: &str, keeps: impl Fn(u8) -> bool) -> String {
+    let mut encoded = String::new();
+    for byte in text.bytes() {
         if keeps(byte) {
             encoded.push(char::from(byte));
         } else {
@@ -23,7 +17,22 @@ pub fn from_path(path: &Path) -> String {
     encoded
 }
 
-fn decoded(text: &str) -> String {
+pub fn encode(text: &str) -> String {
+    escaped(text, unreserved)
+}
+
+pub fn from_path(path: &Path) -> String {
+    let text = path.to_string_lossy().replace('\\', "/");
+    let rooted = if text.starts_with('/') {
+        text
+    } else {
+        format!("/{text}")
+    };
+    let path = escaped(&rooted, |byte| unreserved(byte) || b"/:".contains(&byte));
+    format!("file://{path}")
+}
+
+pub fn decode(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut at = 0;
@@ -44,7 +53,7 @@ fn decoded(text: &str) -> String {
 }
 
 pub fn to_path(uri: &str) -> Option<PathBuf> {
-    let rest = decoded(uri.strip_prefix("file://")?);
+    let rest = decode(uri.strip_prefix("file://")?);
     let drive = rest.as_bytes().get(2) == Some(&b':')
         && rest.starts_with('/')
         && rest.as_bytes()[1].is_ascii_alphabetic();
@@ -88,5 +97,11 @@ mod tests {
             assert_eq!(to_path(encoded), Some(PathBuf::from(local)), "{encoded}");
         }
         assert_eq!(to_path("https://example.com"), None);
+    }
+
+    #[test]
+    fn text_encodes_all_but_unreserved_bytes_and_decodes_back() {
+        assert_eq!(encode("a b/c?d#é~"), "a%20b%2Fc%3Fd%23%C3%A9~");
+        assert_eq!(decode("a%20b%2Fc%3Fd%23%C3%A9~"), "a b/c?d#é~");
     }
 }

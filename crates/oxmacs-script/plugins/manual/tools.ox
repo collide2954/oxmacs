@@ -39,7 +39,7 @@ There are no style settings: `ox fmt` keeps your line breaks and fixes indentati
 
 ## Migrating
 
-When a new Ox removes or renames something, `ox migrate` rewrites your files to match: run it over `init.ox`, `custom.ox` and your plugins after upgrading. It changes only names the file doesn't define itself, and `ox migrate --check` lists the files it would change without touching them. So far it turns `with` into `assoc`, `defrule` into `defrules`, and `case` into `match`.
+When a new Ox removes or renames something, `ox migrate` rewrites your files to match: run it over `init.ox`, `custom.ox` and your plugins after upgrading. It changes only names the file doesn't define itself, and `ox migrate --check` lists the files it would change without touching them. So far it turns `with` into `assoc`, `defrule` into `defrules`, `case` into `match`, and `http/encode` into `string/url-encode`, importing `(ox string)` when the file doesn't.
 
 ## Testing
 

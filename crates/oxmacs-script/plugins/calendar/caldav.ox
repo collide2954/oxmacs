@@ -47,7 +47,7 @@
   (if (string/ends-with? url "/") url (str url "/")))
 
 (def (file-name href)
-  (let [name (store/safe (path/name (string/replace href "%40" "@")))]
+  (let [name (store/safe (path/name (string/url-decode href)))]
     (if (string/ends-with? (string/lower name) ".ics") name (str name ".ics"))))
 
 (def (header response name)

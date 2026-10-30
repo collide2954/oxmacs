@@ -31,7 +31,7 @@ const MODULES: &[(&str, &str)] = &[
     ),
     (
         "ox/string",
-        "Text: searching, splitting, joining, trimming, padding and changing case",
+        "Text: searching, splitting, joining, trimming, padding, changing case and URL encoding",
     ),
     (
         "ox/regex",

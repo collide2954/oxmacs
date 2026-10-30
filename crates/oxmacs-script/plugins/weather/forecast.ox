@@ -1,5 +1,5 @@
 (module
-  (import (ox http) (ox json) (ox string) (ox time))
+  (import (ox json) (ox string) (ox time))
   (export geocode-url forecast-url parse-place parse-forecast place-label upcoming
           describe icon brief compass sparkline degrees percent clock weekday))
 
@@ -10,7 +10,7 @@
 (def daily-fields "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset")
 
 (def (geocode-url name)
-  "{geocoding}?name={(http/encode (string/trim name))}&count=1&language=en&format=json")
+  "{geocoding}?name={(string/url-encode (string/trim name))}&count=1&language=en&format=json")
 
 (def (forecast-url place units)
   (let [imperial (if (= units :imperial) "&temperature_unit=fahrenheit&wind_speed_unit=mph" "")]

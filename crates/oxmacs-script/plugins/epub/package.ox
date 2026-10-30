@@ -2,23 +2,6 @@
   (import (ox string) (ox xml))
   (export rootfile folder-of resolve fragment package toc-from-nav toc-from-ncx tidy))
 
-(def hex "0123456789abcdef")
-(def printable " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{{|}}~")
-
-(def (decoded text)
-  "text with %20-style escapes of ASCII characters read back."
-  (loop [rest text
-         out ""]
-    (let [at (string/index-of rest "%")]
-      (if (or (nil? at) (> (+ at 3) (count rest)))
-        (str out rest)
-        (let [high (string/index-of hex (string/lower (string/slice rest (+ at 1) (+ at 2))))
-              low (string/index-of hex (string/lower (string/slice rest (+ at 2) (+ at 3))))
-              code (when (and high low) (+ (* high 16) low))]
-          (if (and code (>= code 32) (< code 127))
-            (again (string/slice rest (+ at 3) (count rest)) (str out (string/slice rest 0 at) (string/slice printable (- code 32) (- code 31))))
-            (again (string/slice rest (+ at 1) (count rest)) (str out (string/slice rest 0 (inc at))))))))))
-
 (def (tidy text)
   "text with its whitespace run together into single spaces and trimmed."
   (string/join " " (string/words (or text ""))))
@@ -37,7 +20,7 @@
                                  [(= part "..") (if (empty? out) out (pop out))]
                                  [else (conj out part)]))
                              []
-                             (string/split (decoded joined) "/")))))
+                             (string/split (string/url-decode joined) "/")))))
 
 (def (fragment href)
   "The part of href after #, or nil."
@@ -111,6 +94,7 @@
 
 (test "entries resolve against their folder"
   (expect (= (resolve "OEBPS/text" "../images/a%20b.jpg#x") "OEBPS/images/a b.jpg"))
+  (expect (= (resolve "OEBPS" "caf%C3%A9.xhtml") "OEBPS/café.xhtml"))
   (expect (= (resolve "" "./chapter.xhtml") "chapter.xhtml"))
   (expect (= (fragment "c.xhtml#part-2") "part-2"))
   (expect (= (fragment "c.xhtml") nil))

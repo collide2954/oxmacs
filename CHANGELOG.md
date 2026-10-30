@@ -57,6 +57,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Lines in plugin buffers can hold links: a piece `[text face :link target]` is followed by a click or by the new `follow-link` command, which calls the buffer's `:on-link` with target, and `next-link` and `previous-link` move between links, wrapping around.
 - `open-buffer` and `open-view` take `:label`, the kind of buffer, such as `"remote folders"`; buffers of one kind share their keys, and `C-h f` names the kind where a command is bound.
 - A line given to `open-buffer`, `set-lines` or `append-lines` as a map with fields of the plugin's own is an item: `line-item` gives the map of the line at point or of any line, `goto-item` moves to the first line whose item has the fields it is given, and `next-item` steps between items.
+- `string/url-encode` and `string/url-decode` write text as URL-safe `%XX` escapes of its UTF-8 and read them back, in any Ox code.
 - `ox migrate PATH…` rewrites Ox files written for an older Ox to match it, changing only names a file doesn't define itself, and `ox migrate --check` lists the files it would change. Run it over `init.ox`, `custom.ox` and your plugins after upgrading.
 
 ### Changed
@@ -111,9 +112,12 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 ### Removed
 
 - `with`, `defrule` and `case`, which each repeated another form: `assoc` changes a record's fields, `defrules` takes a single rule, and `match` compares with numbers, strings, keywords and quoted symbols as `case` did. `ox migrate` rewrites them.
+- `http/encode`, in favor of `string/url-encode`, which needs no network module; `ox migrate` rewrites it.
 
 ### Fixed
 
+- EPUB books whose files have accented or other non-ASCII names, written as `%C3%A9`-style escapes, open their chapters and images instead of missing them.
+- FTP paths holding `#`, `?`, `%` or spaces reach the file they name instead of another one, and CalDAV events keep any escaped character of their names, not only `@`, when saved.
 - An edit in a buffer whose mode highlights with an Ox `:highlight` function highlights again only the lines whose state it changes, instead of every line to the end of the buffer. Ox buffers are highlighted the same way, from the start of the file, so a string or block comment opened more than 300 lines above still colors the lines below it.
 - The Rust edition used for formatting is read from `Cargo.toml` as TOML, so a commented-out `edition` line or a comment after it no longer confuses it.
 - Changing zap's `flash`, screensaver's `idle`, calendar's `reminders` or weather's `mode-line` takes effect at once instead of at the next start, and a plugin setting changed in `M-x customize` reaches `tabs` and `zen` at once.

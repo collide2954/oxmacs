@@ -36,7 +36,7 @@ const MODULES: &[(&str, &str)] = &[
         "Running programs, talking to them while they run, and the environment",
     ),
     ("ox/net", "TCP connections, with or without TLS"),
-    ("ox/http", "HTTP requests and URL encoding"),
+    ("ox/http", "HTTP requests"),
     (
         "ox/crypto",
         "Hashes, encryption with a password, random numbers, base64 and one-time codes",

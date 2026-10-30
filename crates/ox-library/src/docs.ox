@@ -91,7 +91,6 @@
 (process/kill process) "Stops a started process, and every program it started, at once. process/stop asks first, and kill-process does the same by its :id."
 (process/stop process) "Asks a started process to end, closing its input, and stops it with every program it started a few seconds later if it hasn't ended. process/kill stops it at once."
 (http/get url) "A promise of the response to a GET of url, as a map of :status, :headers and :body."
-(http/encode text) "text made safe for a URL, with other characters written as %XX."
 (http/request method url {headers nil body nil user nil password nil}) "A promise of the response to a request with any method, such as :put or :propfind, as a map of :status, :headers and :body. :headers is a map, :body the text to send, and :user and :password log in with HTTP basic authentication."
 (net/connect host port {tls false}) "A promise of a connection to host on port, encrypted with :tls true: a map whose :lines channel gives each line the server sends and is closed when the connection ends."
 (net/send connection line) "Sends line to the server, ending it with CR LF; false when the connection has ended. A line holding CR or LF raises an error instead of reaching the server as two."

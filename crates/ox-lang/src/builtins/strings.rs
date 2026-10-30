@@ -128,6 +128,8 @@ pub fn install(isolate: &mut Isolate) {
     unary(isolate, "upper", str::to_uppercase);
     unary(isolate, "lower", str::to_lowercase);
     unary(isolate, "capitalize", capitalize);
+    unary(isolate, "url-encode", oxmacs_files::uri::encode);
+    unary(isolate, "url-decode", oxmacs_files::uri::decode);
     test(isolate, "starts-with?", |whole, part| {
         whole.starts_with(part)
     });

@@ -178,6 +178,8 @@
 (string/lower text) "Returns text in lower case."
 (string/capitalize text) "text with its first character in upper case."
 (string/trim text) "text without whitespace at either end."
+(string/url-encode text) "text made safe for a URL: every byte of its UTF-8 but letters, digits and -_.~ written as %XX, so \"a b/c\" becomes \"a%20b%2Fc\"."
+(string/url-decode text) "text with its %XX escapes read back as UTF-8; a % not followed by two hex digits stays as it is."
 (string/trim-start text) "text without whitespace at the start."
 (string/trim-end text) "text without whitespace at the end."
 (string/blank? text) "True when text is empty or only whitespace."

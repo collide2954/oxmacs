@@ -67,6 +67,22 @@ fn names_the_file_gives_its_own_meaning_are_left_alone() {
 }
 
 #[test]
+fn moved_functions_take_their_new_name_and_module() {
+    assert_eq!(
+        migrated("(module (import (ox http) (ox string)))\n(http/encode (string/trim q))"),
+        "(module (import (ox http) (ox string)))\n(string/url-encode (string/trim q))"
+    );
+    assert_eq!(
+        migrated("(module (import (ox http :as h) (ox string :as s)))\n(map h/encode qs)"),
+        "(module (import (ox http :as h) (ox string :as s)))\n(map s/url-encode qs)"
+    );
+    assert_eq!(
+        migrated("(module (import (ox http)))\n(http/encode q)"),
+        "(module (import (ox http) (ox string)))\n(string/url-encode q)"
+    );
+}
+
+#[test]
 fn files_that_cannot_be_read_are_refused() {
     let mut isolate = Isolate::new();
 

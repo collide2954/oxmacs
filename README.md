@@ -85,7 +85,7 @@ Ox code uses these built-in modules, importing them as in `(import (ox file))`; 
 | Module | What it gives |
 | --- | --- |
 | prelude | Numbers, collections, text, records, errors, pattern matching, tasks, channels and promises, there without an import |
-| `ox/string` | Text: searching, splitting, joining, trimming, padding and changing case |
+| `ox/string` | Text: searching, splitting, joining, trimming, padding, changing case and URL encoding |
 | `ox/regex` | Regular expressions: matching, finding, replacing and splitting |
 | `ox/json` | Reading and writing JSON |
 | `ox/xml` | Reading XML into maps, finding elements along paths, and writing XML |
@@ -96,7 +96,7 @@ Ox code uses these built-in modules, importing them as in `(import (ox file))`; 
 | `ox/file` | Reading, writing, listing, copying, renaming and removing files and folders |
 | `ox/process` | Running programs, talking to them while they run, and the environment |
 | `ox/net` | TCP connections, with or without TLS |
-| `ox/http` | HTTP requests and URL encoding |
+| `ox/http` | HTTP requests |
 | `ox/crypto` | Hashes, encryption with a password, random numbers, base64 and one-time codes |
 | `ox/image` | Opening, editing, drawing on and saving images, with filters and color adjustments |
 | `ox/zip` | Reading the files inside zip archives, such as EPUB books |

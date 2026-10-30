@@ -55,8 +55,9 @@
     {user: (or host.user "anonymous") password: (if host.user "" "anonymous")}))
 
 (def (ftp-url host remote)
-  (str (if host.tls "ftps://" "ftp://") (or host.address host.name) (if host.port (str ":" host.port) "")
-       (if (string/starts-with? remote "/") "" "/") remote))
+  (let [path (string/join "/" (map string/url-encode (string/split remote "/")))]
+    (str (if host.tls "ftps://" "ftp://") (or host.address host.name) (if host.port (str ":" host.port) "")
+         (if (string/starts-with? path "/") "" "/") path)))
 
 (def (curl host remote arguments)
   (let [login (credentials host)
@@ -214,3 +215,7 @@
   (expect (= (parent-of "/a") "/"))
   (expect (= (parent-of "/") "/"))
   (expect (= (join-path "/a/" "b") "/a/b")))
+
+(test "ftp URLs escape what a path holds"
+  (expect (= (ftp-url {name: "files.example"} "/up/a b#1%.txt") "ftp://files.example/up/a%20b%231%25.txt"))
+  (expect (= (ftp-url {name: "h" port: 2121 tls: true} "dir/") "ftps://h:2121/dir/")))

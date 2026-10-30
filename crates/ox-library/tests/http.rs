@@ -76,16 +76,9 @@ fn unreachable_servers_fail_the_promise() {
 }
 
 #[test]
-fn query_text_is_percent_encoded() {
+fn get_takes_a_url() {
     let mut isolate = ox_library::isolate();
 
-    assert_eq!(
-        evaluated(
-            &mut isolate,
-            "(module (import (ox http))) (http/encode \"São Paulo & co\")"
-        ),
-        "\"S%C3%A3o%20Paulo%20%26%20co\""
-    );
     assert_eq!(
         evaluated(&mut isolate, "(module (import (ox http))) (http/get 5)"),
         "error: http/get expects a string, got 5"
