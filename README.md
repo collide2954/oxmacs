@@ -59,7 +59,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `json` | 0.1.0 | opt-in | JSON and JSON with comments, with highlighting and indentation |
 | `keycast` | 0.2.4 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `life` | 0.2.5 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.89 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.90 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.10 | on | Markdown with highlighting, a rendered preview and the marksman language server |
 | `ox-lang` | 0.1.0 | on | Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL |
 | `pdf` | 0.2.5 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
@@ -109,7 +109,7 @@ Ox code uses these built-in modules, importing them as in `(import (ox file))`; 
 | `ox/synth` | Sound from graphs of oscillators, noise, samples, envelopes, filters and effects, songs of patterned tracks, and WAV files |
 | `ox/pdf` | PDF documents drawn by PDFium: find the library, open and search them; in oxmacs only |
 | `ox/keepass` | KeePass databases: reading their entries; in oxmacs only |
-| `ox/ui` | Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only |
+| `ox/ui` | Widgets for plugin views: text, rows, columns, buttons, sliders, images, canvases, book pages and PDF pages; in oxmacs only |
 | `ox/rodeo` | Games played with rodeo-play: drawing, images, keys, actions and game time; in oxmacs only |
 
 ## Configuration

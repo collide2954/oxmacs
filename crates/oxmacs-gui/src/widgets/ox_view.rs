@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use iced::widget::{
-    Column, Row, button, canvas, container, image, mouse_area, scrollable, space, text,
+    Column, Row, button, canvas, container, image, mouse_area, scrollable, slider, space, text,
 };
 use iced::{Border, Color, ContentFit, Element, Font, Length};
 use oxmacs_core::theme::Theme as Faces;
@@ -58,6 +58,55 @@ pub struct Look {
     pub size: f32,
 }
 
+fn framed<'a, Message: Clone + 'a>(
+    picture: &Picture,
+    width: Option<f32>,
+    height: Option<f32>,
+    selected: bool,
+    look: Look,
+    pressed: Option<Message>,
+) -> Element<'a, Message> {
+    let shown = image(handle(picture))
+        .content_fit(ContentFit::Contain)
+        .width(width.map_or(Length::Shrink, Length::Fixed))
+        .height(height.map_or(Length::Shrink, Length::Fixed));
+    let accent = style::color(look.faces.cursor);
+    let framed = container(shown)
+        .padding(FRAME)
+        .style(move |_| container::Style {
+            border: Border {
+                color: if selected { accent } else { Color::TRANSPARENT },
+                width: FRAME,
+                radius: FRAME_RADIUS.into(),
+            },
+            ..container::Style::default()
+        });
+    match pressed {
+        Some(message) => mouse_area(framed).on_press(message).into(),
+        None => framed.into(),
+    }
+}
+
+fn ranged<'a, Message: Clone + 'a>(
+    value: f32,
+    range: std::ops::RangeInclusive<f32>,
+    step: Option<f32>,
+    width: Option<f32>,
+    change: Option<usize>,
+    call: impl Fn(usize, Vec<Arg>) -> Message + Copy + 'a,
+) -> Element<'a, Message> {
+    let step = step.unwrap_or((range.end() - range.start()) / 200.0);
+    slider(range, value, move |changed| {
+        change.map_or_else(
+            || call(usize::MAX, Vec::new()),
+            |slot| call(slot, vec![Arg::Float(f64::from(changed))]),
+        )
+    })
+    .step(step)
+    .width(width.map_or(Length::Fill, Length::Fixed))
+    .into()
+}
+
 pub fn view<'a, Message: Clone + 'a>(
     node: &'a Node<usize>,
     look: Look,
@@ -95,6 +144,14 @@ pub fn view<'a, Message: Clone + 'a>(
                 .on_press_maybe(message)
                 .into()
         }
+        Node::Slider {
+            value,
+            low,
+            high,
+            step,
+            width,
+            change,
+        } => ranged(*value, *low..=*high, *step, *width, *change, call),
         Node::Space { size: Some(size) } => space().width(*size).height(*size).into(),
         Node::Space { size: None } => space().width(Length::Fill).into(),
         Node::Canvas {
@@ -118,31 +175,7 @@ pub fn view<'a, Message: Clone + 'a>(
             height,
             press: slot,
             selected,
-        } => {
-            let shown = image(handle(picture))
-                .content_fit(ContentFit::Contain)
-                .width(width.map_or(Length::Shrink, Length::Fixed))
-                .height(height.map_or(Length::Shrink, Length::Fixed));
-            let accent = style::color(look.faces.cursor);
-            let framed = container(shown)
-                .padding(FRAME)
-                .style(move |_| container::Style {
-                    border: Border {
-                        color: if *selected {
-                            accent
-                        } else {
-                            Color::TRANSPARENT
-                        },
-                        width: FRAME,
-                        radius: FRAME_RADIUS.into(),
-                    },
-                    ..container::Style::default()
-                });
-            match slot {
-                Some(slot) => mouse_area(framed).on_press(press(*slot)).into(),
-                _ => framed.into(),
-            }
-        }
+        } => framed(picture, *width, *height, *selected, look, slot.map(press)),
         Node::Pages(pages) => PagesView::new(pages, look.faces, look.font, call).into(),
         Node::Pdf(shown) => PdfView::new(shown, look.faces, call).into(),
         Node::Game(screen) => canvas(GameScreen {

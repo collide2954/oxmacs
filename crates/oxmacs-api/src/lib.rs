@@ -48,7 +48,7 @@ const EDITOR_MODULES: &[(&str, &str)] = &[
     ),
     (
         "ox/ui",
-        "Widgets for plugin views: text, rows, columns, buttons, images, canvases, book pages and PDF pages; in oxmacs only",
+        "Widgets for plugin views: text, rows, columns, buttons, sliders, images, canvases, book pages and PDF pages; in oxmacs only",
     ),
     (
         "ox/rodeo",

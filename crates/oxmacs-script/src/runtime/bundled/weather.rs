@@ -79,6 +79,7 @@ fn lines(node: &Node<usize>, out: &mut Vec<String>) {
         Node::Text { text, .. } => out.push(text.clone()),
         Node::Button { label, .. } => out.push(label.clone()),
         Node::Space { .. }
+        | Node::Slider { .. }
         | Node::Canvas { .. }
         | Node::Image { .. }
         | Node::Pages(_)

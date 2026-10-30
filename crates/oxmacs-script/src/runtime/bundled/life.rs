@@ -33,6 +33,7 @@ fn walk(node: &Node<usize>, texts: &mut Vec<String>, cells: &mut usize) {
                 .count();
         }
         Node::Button { .. }
+        | Node::Slider { .. }
         | Node::Space { .. }
         | Node::Image { .. }
         | Node::Pages(_)

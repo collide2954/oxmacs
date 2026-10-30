@@ -169,6 +169,7 @@
 (ui/row & children {spacing 0}) "Lays children out from left to right, :spacing apart."
 (ui/text value {face nil size nil}) "Text in a theme :face such as :keyword or :comment, at an optional :size."
 (ui/button label {on-click nil}) "A button that calls :on-click when clicked."
+(ui/slider value low high {on-change nil step nil width nil}) "A slider from low to high set at value, calling :on-change with the new value while it is dragged, moving in :step increments, :width pixels wide or as wide as there is room."
 (ui/space (size)) "Empty space size across, or filling what is left."
 (ui/scrollable child) "child in an area that scrolls."
 (ui/image image {width nil height nil on-click nil selected false}) "Shows an ox/image image, scaled to fit :width and :height in pixels, or at its own size when the view has room, keeping its proportions. A click calls :on-click, and :selected true frames it in the cursor's color."

@@ -162,6 +162,32 @@ fn button(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     widget(heap, "button", Node::Button { label, press })
 }
 
+fn slider(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
+    let low = size(heap, "slider", arguments[1])?;
+    let high = size(heap, "slider", arguments[2])?;
+    if high <= low {
+        return Err(Error::new(format!(
+            "slider needs high above low, got {low} and {high}"
+        )));
+    }
+    let value = size(heap, "slider", arguments[0])?.clamp(low, high);
+    let step = size_given(heap, "slider", arguments[4])?;
+    let width = size_given(heap, "slider", arguments[5])?;
+    let change = pressed(heap, arguments[3]);
+    widget(
+        heap,
+        "slider",
+        Node::Slider {
+            value,
+            low,
+            high,
+            step,
+            width,
+            change,
+        },
+    )
+}
+
 fn image(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let image = ox_library::image::image_of(heap, arguments[0])
         .ok_or_else(|| expected(heap, "image", "an image", arguments[0]))?;
@@ -203,6 +229,11 @@ pub fn install(isolate: &mut Isolate) {
         .arity(1, Some(1))
         .keywords(&["on-click"])
         .function(button);
+    isolate
+        .native(UI, "slider")
+        .arity(3, Some(3))
+        .keywords(&["on-change", "step", "width"])
+        .function(slider);
     isolate
         .native(UI, "space")
         .arity(0, Some(1))
@@ -512,6 +543,7 @@ fn value(heap: &mut Heap, arg: &Arg) -> Result<Value, Error> {
     match arg {
         Arg::Nil => Ok(Value::Nil),
         Arg::Int(number) => Ok(Value::Int(*number)),
+        Arg::Float(number) => Ok(Value::Float(*number)),
         Arg::Text(text) => heap.string(text).map_err(Error::from),
         Arg::List(items) => {
             let mut values = Vec::with_capacity(items.len());
@@ -577,7 +609,8 @@ mod tests {
     use crate::{Ox, ide::log};
     use oxmacs_core::view::{Node, ViewBuffer};
 
-    const UI: &str = "(module (import (ox ui :only [column row text button space scrollable])))";
+    const UI: &str =
+        "(module (import (ox ui :only [column row text button slider space scrollable])))";
 
     fn shown(editor: &Editor, name: &str) -> Node<usize> {
         let id = editor.buffer_named(name).unwrap();
@@ -890,6 +923,41 @@ mod tests {
                 ],
             }
         );
+    }
+
+    #[test]
+    fn sliders_show_their_value_and_call_on_change_with_the_new_one() {
+        let (mut editor, mut ox) = opened(
+            r#"(def level (atom 0.25)) (open-view "*level*" (fn [] (slider @level 0 1 :on-change (fn [v] (reset! level v)) :width 120)))"#,
+        );
+        assert_eq!(
+            shown(&editor, "*level*"),
+            Node::Slider {
+                value: 0.25,
+                low: 0.0,
+                high: 1.0,
+                step: None,
+                width: Some(120.0),
+                change: Some(0),
+            }
+        );
+        let id = editor.buffer_named("*level*").unwrap();
+
+        ox.event(
+            &mut editor,
+            UiEvent::Call {
+                buffer: id,
+                slot: 0,
+                args: vec![oxmacs_core::view::Arg::Float(0.75)],
+            },
+        );
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(ox.eval(&mut editor, "@level").unwrap(), "0.75");
+        let Node::Slider { value, .. } = shown(&editor, "*level*") else {
+            panic!("not a slider");
+        };
+        assert!((value - 0.75).abs() < f32::EPSILON);
     }
 
     #[test]

@@ -69,6 +69,14 @@ pub enum Node<P> {
         label: String,
         press: Option<P>,
     },
+    Slider {
+        value: f32,
+        low: f32,
+        high: f32,
+        step: Option<f32>,
+        width: Option<f32>,
+        change: Option<P>,
+    },
     Space {
         size: Option<f32>,
     },
@@ -105,6 +113,21 @@ impl<P> Node<P> {
             Self::Button { label, press: on } => Node::Button {
                 label,
                 press: on.map(&mut *press),
+            },
+            Self::Slider {
+                value,
+                low,
+                high,
+                step,
+                width,
+                change,
+            } => Node::Slider {
+                value,
+                low,
+                high,
+                step,
+                width,
+                change: change.map(&mut *press),
             },
             Self::Space { size } => Node::Space { size },
             Self::Scrollable(child) => Node::Scrollable(Box::new(child.map(press))),
@@ -165,6 +188,7 @@ pub enum UiEvent {
 pub enum Arg {
     Nil,
     Int(i64),
+    Float(f64),
     Text(String),
     List(Vec<Arg>),
 }
