@@ -983,7 +983,7 @@ mod tests {
             ]
         );
         let (_, errors) = read(":(x)");
-        assert!(errors.is_empty());
+        assert_eq!(errors, []);
         let (_, errors) = read(r#":$"{x}""#);
         assert_eq!(
             errors.first().map(|error| error.message.as_str()),

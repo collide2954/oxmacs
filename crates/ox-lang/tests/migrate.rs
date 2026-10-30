@@ -96,7 +96,7 @@ fn old_strings_take_their_new_spelling_and_keep_their_values() {
         r#"$"outer {(f $"inner {y}")} {{x}}""#
     );
     assert_eq!(
-        strings(r##"[#r"C:\Users" #r#"say "hi""# #r"" #"\d{2}"]"##),
+        strings("[#r\"C:\\Users\" #r#\"say \"hi\"\"# #r\"\" #\"\\d{2}\"]"),
         r#"["""C:\Users""" "say \"hi\"" "" #"\d{2}"]"#
     );
     let block = strings("(def page #r#\"# Title\n\n  indented {x}\n\"#)");

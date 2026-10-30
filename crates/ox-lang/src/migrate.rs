@@ -80,8 +80,10 @@ impl Imports {
             .map(|module| {
                 let spec = format!("({})", module.replace('/', " "));
                 match (self.clause, self.module) {
-                    (Some(clause), _) => insertion(clause.end - 1, format!(" {spec}")),
-                    (None, Some(form)) => insertion(form.end - 1, format!(" (import {spec})")),
+                    (Some(clause), _) => insertion(clause.end as usize - 1, format!(" {spec}")),
+                    (None, Some(form)) => {
+                        insertion(form.end as usize - 1, format!(" (import {spec})"))
+                    }
                     (None, None) => insertion(0, format!("(module (import {spec}))\n")),
                 }
             })
@@ -89,9 +91,9 @@ impl Imports {
     }
 }
 
-fn insertion(at: u32, text: String) -> Rewrite {
+fn insertion(at: usize, text: String) -> Rewrite {
     Rewrite {
-        span: Span::new(at as usize, at as usize),
+        span: Span::new(at, at),
         text,
     }
 }
@@ -211,7 +213,7 @@ pub fn migrate_strings(source: &str) -> Result<String, String> {
             Kind::StringEnd => {
                 if let Some(Frame::String(opened)) = frames.pop() {
                     if opened.holes {
-                        edits.push(insertion(opened.start as u32, "$".to_owned()));
+                        edits.push(insertion(opened.start, "$".to_owned()));
                     } else {
                         edits.extend(opened.escapes.iter().map(|escape| Rewrite {
                             span: escape.span,
