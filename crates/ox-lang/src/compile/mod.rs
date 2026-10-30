@@ -7,6 +7,7 @@ use patterns::{Matching, Mode};
 
 use std::cell::Cell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::bytecode::{Arity, Capture, Code, NO_FORM, Op, Prim, Register};
 use crate::error::Error;
@@ -1220,6 +1221,15 @@ impl Compiler<'_> {
         let Some((callee, arguments)) = items.split_first() else {
             return self.load(Value::Nil, target, span);
         };
+        if let Some(pattern) = regex_literal(callee, arguments) {
+            let regex = crate::builtins::regex::compile(pattern)
+                .map_err(|error| Error::at(span, error.message).of(error.kind))?;
+            let value = self
+                .heap
+                .shared("regex", Arc::new((*regex).clone()))
+                .map_err(|full| Error::at(span, full.to_string()))?;
+            return self.load(value, target, span);
+        }
         if let Some(done) = self.special(callee, arguments, target, span, tail) {
             return done;
         }
@@ -1319,6 +1329,20 @@ impl Compiler<'_> {
         );
         self.release(base);
         Ok(())
+    }
+}
+
+pub(crate) fn regex_literal<'a>(head: &Syntax, arguments: &'a [Syntax]) -> Option<&'a str> {
+    let literal = head.marks.last() == Some(PRELUDE_MARK)
+        && matches!(&head.datum, Datum::Symbol(name) if name.ends_with("regex"));
+    match arguments {
+        [
+            Syntax {
+                datum: Datum::Str(pattern),
+                ..
+            },
+        ] if literal => Some(pattern),
+        _ => None,
     }
 }
 

@@ -15,7 +15,7 @@ thread_local! {
     static COMPILED: RefCell<HashMap<String, Arc<Regex>>> = RefCell::new(HashMap::new());
 }
 
-fn compile(pattern: &str) -> Result<Arc<Regex>, Error> {
+pub(crate) fn compile(pattern: &str) -> Result<Arc<Regex>, Error> {
     if let Some(found) = COMPILED.with_borrow(|compiled| compiled.get(pattern).cloned()) {
         return Ok(found);
     }
@@ -36,13 +36,13 @@ fn compile(pattern: &str) -> Result<Arc<Regex>, Error> {
     Ok(made)
 }
 
-fn regex_of(heap: &Heap, name: &str, value: Value) -> Result<Arc<Regex>, Error> {
+pub fn regex_of(heap: &Heap, name: &str, value: Value) -> Result<Arc<Regex>, Error> {
     if let Some(found) = heap.foreign_of::<Regex>(value) {
         return compile(found.as_str());
     }
     let pattern = heap.text(value).ok_or_else(|| {
         Error::new(format!(
-            "regex/{name} expects a regex or a pattern string, got {}",
+            "{name} expects a regex or a pattern string, got {}",
             print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
@@ -111,7 +111,7 @@ pub fn install(isolate: &mut Isolate) {
         .native("ox", "regex")
         .arity(1, Some(1))
         .function(|heap, arguments| {
-            let regex = regex_of(heap, "compile", arguments[0])?;
+            let regex = regex_of(heap, "regex", arguments[0])?;
             heap.shared("regex", Arc::new((*regex).clone()))
                 .map_err(Error::from)
         });
@@ -119,7 +119,7 @@ pub fn install(isolate: &mut Isolate) {
         .native(MODULE, "matches?")
         .arity(2, Some(2))
         .function(|heap, arguments| {
-            let regex = regex_of(heap, "matches?", arguments[0])?;
+            let regex = regex_of(heap, "regex/matches?", arguments[0])?;
             Ok(Value::Bool(regex.is_match(text(
                 heap,
                 "matches?",
@@ -130,7 +130,7 @@ pub fn install(isolate: &mut Isolate) {
         .native(MODULE, "find")
         .arity(2, Some(2))
         .function(|heap, arguments| {
-            let regex = regex_of(heap, "find", arguments[0])?;
+            let regex = regex_of(heap, "regex/find", arguments[0])?;
             let whole = text(heap, "find", arguments[1])?.to_owned();
             match regex.captures(&whole) {
                 Some(captures) => found(heap, &regex, &whole, &captures),
@@ -141,7 +141,7 @@ pub fn install(isolate: &mut Isolate) {
         .native(MODULE, "find-all")
         .arity(2, Some(2))
         .function(|heap, arguments| {
-            let regex = regex_of(heap, "find-all", arguments[0])?;
+            let regex = regex_of(heap, "regex/find-all", arguments[0])?;
             let whole = text(heap, "find-all", arguments[1])?.to_owned();
             let mut all = Vec::new();
             for captures in regex.captures_iter(&whole) {
@@ -153,7 +153,7 @@ pub fn install(isolate: &mut Isolate) {
         .native(MODULE, "replace")
         .arity(3, Some(3))
         .function(|heap, arguments| {
-            let regex = regex_of(heap, "replace", arguments[0])?;
+            let regex = regex_of(heap, "regex/replace", arguments[0])?;
             let whole = text(heap, "replace", arguments[1])?;
             let with = text(heap, "replace", arguments[2])?;
             let replaced = regex.replace_all(whole, with).into_owned();
@@ -163,7 +163,7 @@ pub fn install(isolate: &mut Isolate) {
         .native(MODULE, "split")
         .arity(2, Some(2))
         .function(|heap, arguments| {
-            let regex = regex_of(heap, "split", arguments[0])?;
+            let regex = regex_of(heap, "regex/split", arguments[0])?;
             let whole = text(heap, "split", arguments[1])?.to_owned();
             let parts = regex
                 .split(&whole)

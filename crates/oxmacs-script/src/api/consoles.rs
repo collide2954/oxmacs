@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use ox_lang::heap::{Heap, Hold};
 use ox_lang::native::{given, name_of};
 use ox_lang::value::{Value, print};
-use ox_lang::{Error, Isolate};
+use ox_lang::{Error, Isolate, regex_of};
 use oxmacs_core::command::{ScopeId, intern};
 use oxmacs_core::editor::{ConsoleSpec, Editor, JobSpec, Service, Source};
 use oxmacs_core::text::BufferId;
@@ -86,12 +86,35 @@ fn texts(heap: &Heap, value: Value, wanted: &str) -> Result<Vec<String>, Error> 
         })
 }
 
-fn pairs(heap: &Heap, value: Value, option: &str) -> Result<Vec<(String, String)>, Error> {
+fn regexes(heap: &Heap, value: Value, wanted: &str) -> Result<Vec<Regex>, Error> {
+    let items = heap
+        .elements(value)
+        .filter(|_| heap.text(value).is_none())
+        .ok_or_else(|| {
+            Error::new(format!(
+                "console-start expects {wanted}, got {}",
+                print::brief(heap, value)
+            ))
+        })?;
+    items
+        .into_iter()
+        .map(|item| Ok((*regex_of(heap, "console-start", item)?).clone()))
+        .collect()
+}
+
+fn watched(heap: &Heap, value: Value) -> Result<Vec<(String, Regex)>, Error> {
+    pairs(heap, value, "watch")?
+        .into_iter()
+        .map(|(kind, item)| Ok((kind, (*regex_of(heap, "console-start", item)?).clone())))
+        .collect()
+}
+
+fn pairs(heap: &Heap, value: Value, option: &str) -> Result<Vec<(String, Value)>, Error> {
     heap.entries(value)
         .map(|entries| {
             entries
                 .into_iter()
-                .map(|(key, item)| (name_of(heap, key), name_of(heap, item)))
+                .map(|(key, item)| (name_of(heap, key), item))
                 .collect()
         })
         .ok_or_else(|| {
@@ -113,9 +136,9 @@ struct Options {
     output: Option<Value>,
     idle: Option<Value>,
     resized: Option<Value>,
-    prompts: Vec<String>,
-    errors: Vec<String>,
-    watches: Vec<(String, String)>,
+    prompts: Vec<Regex>,
+    errors: Vec<Regex>,
+    watches: Vec<(String, Regex)>,
     prompter: Option<String>,
     provides: Vec<(Service, Value)>,
 }
@@ -155,7 +178,12 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
                     value,
                 )?));
             }
-            "env" => found.env = pairs(heap, value, "env")?,
+            "env" => {
+                found.env = pairs(heap, value, "env")?
+                    .into_iter()
+                    .map(|(key, item)| (key, name_of(heap, item)))
+                    .collect();
+            }
             "label" => found.label = Some(print::display(heap, value)),
             "keys" => {
                 found.keys = crate::api::commands::key_bindings(heap, "console-start", value)?;
@@ -163,9 +191,9 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
             "on-output" => found.output = Some(value),
             "on-idle" => found.idle = Some(value),
             "on-resize" => found.resized = Some(value),
-            "prompts" => found.prompts = texts(heap, value, "a vector of patterns for :prompts")?,
-            "errors" => found.errors = texts(heap, value, "a vector of patterns for :errors")?,
-            "watch" => found.watches = pairs(heap, value, "watch")?,
+            "prompts" => found.prompts = regexes(heap, value, "a vector of patterns for :prompts")?,
+            "errors" => found.errors = regexes(heap, value, "a vector of patterns for :errors")?,
+            "watch" => found.watches = watched(heap, value)?,
             "prompter" => {
                 found.prompter = Some(text(
                     heap,
@@ -184,18 +212,6 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
 
 fn scope(editor: &mut Editor, label: &str) -> ScopeId {
     editor.scope_named(&format!("{label} console"))
-}
-
-fn pattern_of(pattern: &str) -> Result<Regex, Error> {
-    Regex::new(pattern).map_err(|error| {
-        Error::new(format!(
-            "console-start can't read the pattern {pattern}: {error}"
-        ))
-    })
-}
-
-fn patterns(given: &[String]) -> Result<Vec<Regex>, Error> {
-    given.iter().map(|pattern| pattern_of(pattern)).collect()
 }
 
 fn release(heap: &mut Heap, hold: Option<Hold>) {
@@ -222,7 +238,7 @@ fn start(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Va
         .buffer_named(&name)
         .filter(|id| editor.consoles(label).contains(id));
     let spec = ConsoleSpec {
-        prompts: patterns(&given.prompts)?,
+        prompts: given.prompts,
         watches: given
             .watches
             .into_iter()
@@ -232,8 +248,7 @@ fn start(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Va
                     .into_iter()
                     .map(|pattern| (ERRORS.to_owned(), pattern)),
             )
-            .map(|(kind, pattern)| Ok((kind, pattern_of(&pattern)?)))
-            .collect::<Result<_, Error>>()?,
+            .collect(),
         name: name.clone(),
         label,
         job: JobSpec {
@@ -572,7 +587,7 @@ mod tests {
         let (mut editor, mut ox, job) = started(
             r#"(def heard (atom []))
 (console-start "*shell*" :program "shell" :args ["-i"] :env {TERM: "dumb"}
-               :prompts ["""^Browse\[\d+\]> $"""] :watch {debug: "^debug at "}
+               :prompts [#"^Browse\[\d+\]> $"] :watch {debug: #"^debug at "}
                :on-output (fn [kind payload] (swap! heard conj [kind payload]))
                :on-idle (fn [] (swap! heard conj :idle)))"#,
         );
@@ -598,7 +613,7 @@ mod tests {
                 r#"(try (console-start "*bad*" :program "x" :prompts ["("]) (catch error e e.message))"#
             )
             .unwrap()
-            .contains("console-start can't read the pattern (")
+            .contains("Invalid regex (")
         );
     }
 

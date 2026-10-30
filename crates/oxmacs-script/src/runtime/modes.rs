@@ -5,7 +5,7 @@ use regex::Regex;
 use ox_lang::heap::{Heap, Hold};
 use ox_lang::native::{field, given, name_of};
 use ox_lang::value::{Value, print};
-use ox_lang::{Error, Isolate};
+use ox_lang::{Error, Isolate, regex_of};
 use oxmacs_core::command::{ScopeId, intern};
 use oxmacs_core::editor::{Editor, Service, Source};
 use oxmacs_core::syntax::{Language, LanguageSpec, Roots};
@@ -324,14 +324,8 @@ fn rules(heap: &Heap, value: Value) -> Result<Rules, Error> {
             print::brief(heap, value)
         ))
     })?;
-    let pattern = |value: Value| {
-        if let Some(found) = heap.foreign_of::<Regex>(value) {
-            return Ok(found.clone());
-        }
-        let text = print::display(heap, value);
-        Regex::new(&text)
-            .map_err(|error| Error::new(format!("define-mode's :indent pattern {text:?}: {error}")))
-    };
+    let pattern =
+        |value: Value| regex_of(heap, "define-mode's :indent", value).map(|found| (*found).clone());
     let mut found = Rules::default();
     for (key, value) in entries {
         match (key, value) {

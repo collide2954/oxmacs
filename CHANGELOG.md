@@ -110,6 +110,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - The editor settings `completion-delay` and `signature-delay` set how long typing rests before completion pops up on its own and before a call's arguments show, 0.25 and 0.4 seconds by default, for every language. The r plugin's settings of those names are gone.
 - `C-g` in a prompt raises `quit` in the task waiting for it, a new type that only `(catch quit e …)` stops: `(catch error e …)` lets it pass, so a cancelled command simply ends, and a quit nothing catches leaves only "Quit" in the echo area. An error nothing catches shows just its message there, without the "Ox:" before it, and still goes to `*ox log*` with its traceback. Built-in error types raised again keep their type, so `*ox stacktrace*` names it.
 - Ox strings come in four kinds, each with one rule. `"…"` takes escapes and keeps braces as they are. `$"…"` fills `{expression}` holes, with `{{` and `}}` for braces. `"""…"""` keeps its text as it is, quotes and backslashes included; as a block it starts on the line after `"""` and loses the indentation of its closing `"""`, which `ox fmt` moves together with its lines, and four or more quotes fence text that holds three. `#"…"` and `#"""…"""` are regexes. `#r"…"` is gone. A docstring can't be a `$` string, a lone `}` in a `$` string is an error, and holes and `@` reach the built-in `str` and `deref` even where a local takes those names. `ox migrate --strings` rewrites files written for 0.14, once, and `ox check` warns about a plain string holding what looks like an old hole, such as `"Hi {name}"`.
+- A regex literal is compiled once, when its code is, and a pattern that can't compile is an error there and in `ox check`. `type` gives `:regex` for a regex, and other host values their own names, such as `:image`, instead of `:foreign`; regexes print as `#"…"`.
 - `csv/read` with `:header true` gives maps with keyword keys, such as `:title` and `:"Login URI"`, like `json/read`, XML attributes and HTTP headers, instead of string keys.
 
 ### Removed
@@ -119,6 +120,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- `console-start` takes regexes in `:prompts`, `:errors` and `:watch` instead of turning them into the text `#<regex>`, which never matched.
 - `pr-str` writes braces once instead of doubling them, so FTP logins whose user name or password holds a brace reach the server as typed.
 - CalDAV calendars remember each event's ETag again, so changing or deleting an event no longer overwrites a newer copy on the server, and `M-x irc-preview` tells images from pages again; both looked the response headers up by text instead of keyword.
 - EPUB books whose files have accented or other non-ASCII names, written as `%C3%A9`-style escapes, open their chapters and images instead of missing them.

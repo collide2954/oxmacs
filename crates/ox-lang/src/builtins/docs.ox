@@ -42,7 +42,7 @@
 (identical? a b) "True when a and b are the very same value, not just equal ones."
 (compare a b) "-1, 0 or 1 as a sorts before, with or after b. Numbers, strings, keywords, symbols, characters and sequences of them compare; nil sorts first."
 (hash value) "A whole number such that equal values hash the same."
-(type value) "The type of value as a keyword: :int, :float, :string, :keyword, :symbol, :list, :vector, :map, :set, :fn, :nil, :bool, :char, :atom, :promise, :generator, :channel, or a record's own type name."
+(type value) "The type of value as a keyword: :int, :float, :string, :keyword, :symbol, :list, :vector, :map, :set, :fn, :nil, :bool, :char, :atom, :promise, :generator, :channel, :regex, the name of another host value such as :image, or a record's own type name."
 (int? value) "True when value is a whole number."
 (float? value) "True when value is a float."
 (number? value) "True when value is a whole number or a float."
@@ -166,7 +166,7 @@
 (shown-plainly? form) "True when form reads the same as its value, so expect doesn't repeat it."
 (explain form values) "The text expect shows when form failed: the form, then what each argument evaluated to."
 
-(regex pattern) "Compiles pattern into a regex once, for reuse. The regex/ functions also take pattern strings."
+(regex pattern) "Compiles pattern into a regex, which prints as #\"…\". A #\"…\" literal is compiled once, and ox check reports a pattern it can't compile. The regex/ functions, console-start and define-mode's :indent take regexes or pattern strings."
 (regex/matches? pattern text) "True when the regex pattern matches anywhere in text."
 (regex/find pattern text) "The first match of pattern in text, or nil, as a map of :text, :start, :end, :groups and :named groups."
 (regex/find-all pattern text) "Every match of pattern in text, as a vector of match maps like regex/find returns."

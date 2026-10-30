@@ -4,8 +4,8 @@
           (r help :as help))
   (export prompts watches heard))
 
-(def prompts ["""^Browse\[\d+\]> $"""])
-(def watches {debug: "^(debug at |debug: |Called from: |debugging in: )"})
+(def prompts [#"^Browse\[\d+\]> $"])
+(def watches {debug: #"^(debug at |debug: |Called from: |debugging in: )"})
 (def guide "Debugging: <f10> next  S-<f4> step in  S-<f6> finish  S-<f5> continue  S-<f8> stop")
 
 (def (show-source session path line)

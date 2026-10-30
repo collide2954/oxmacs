@@ -7,7 +7,7 @@ pub(crate) mod ordering;
 pub(crate) mod paths;
 mod patterns;
 mod prelude;
-mod regex;
+pub(crate) mod regex;
 mod rules;
 mod strings;
 mod tasks;

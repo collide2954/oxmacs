@@ -185,6 +185,8 @@ impl<'a> Printer<'a> {
             self.holder(value, "atom", held);
         } else if heap.channel_of(value).is_some() {
             self.out.push_str("#<chan>");
+        } else if let Some(regex) = heap.foreign_of::<regex::Regex>(value) {
+            regex_literal(regex.as_str(), &mut self.out);
         } else if let Some(foreign) = heap.foreign_entry(value) {
             let _ = write!(self.out, "#<{}>", foreign.name.name());
         } else if heap.generator_of(value).is_some() {
@@ -273,6 +275,18 @@ fn string(text: &str, out: &mut String) {
         }
     }
     out.push('"');
+}
+
+fn regex_literal(pattern: &str, out: &mut String) {
+    let fenced = pattern.contains('"')
+        && !pattern.contains("\"\"\"")
+        && !pattern.starts_with('"')
+        && !pattern.ends_with('"');
+    if fenced {
+        let _ = write!(out, "#\"\"\"{pattern}\"\"\"");
+    } else {
+        let _ = write!(out, "#\"{}\"", pattern.replace('"', "\\\""));
+    }
 }
 
 fn plain(name: &str) -> bool {

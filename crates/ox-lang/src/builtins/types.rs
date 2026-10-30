@@ -46,7 +46,9 @@ fn type_of(heap: &Heap, value: Value) -> Value {
             Kind::Generator => "generator",
             Kind::Promise => "promise",
             Kind::Channel => "channel",
-            Kind::Foreign => "foreign",
+            Kind::Foreign => heap
+                .foreign_entry(value)
+                .map_or("foreign", |foreign| foreign.name.name()),
             Kind::RecordType => "record-type",
             Kind::Record => {
                 return heap

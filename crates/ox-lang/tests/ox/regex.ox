@@ -8,3 +8,9 @@
 ;; and replace and split
 (module (import (ox regex))) [(regex/replace #"(\w+)@(\w+)" "ada@home bob@work" "$2:$1") (regex/split #",\s*" "a, b,c")] ;=> ["home:ada work:bob" ["a" "b" "c"]]
 (module (import (ox regex))) (regex/find "(" "x") ;! Invalid regex (: unclosed group
+
+;; a regex literal is made once, has the type :regex and prints as a literal
+[(type #"\d+") (type (regex "a"))] ;=> [:regex :regex]
+(pr-str [#"\d+" #"""a"b"""]) ;=> "[#\"\\d+\" #\"\"\"a\"b\"\"\"]"
+(let [f (fn [] #"x")] (identical? (f) (f))) ;=> true
+(fn [] #"(") ;! Invalid regex (: unclosed group

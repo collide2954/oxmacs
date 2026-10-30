@@ -28,6 +28,7 @@ pub mod value;
 mod vm;
 
 pub use builder::NativeBuilder;
+pub use builtins::regex::regex_of;
 pub use error::Error;
 pub use isolate::{Isolate, Stubs};
 pub use vm::{Runtime, build, routine};

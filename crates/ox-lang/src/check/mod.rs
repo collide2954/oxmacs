@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use crate::compile::parameters::parse_parameters;
+use crate::compile::regex_literal;
 use crate::expand::patterns;
 use crate::native::arguments;
 use crate::read::{Datum, Marks, Syntax, meta_flag, split_meta};
@@ -680,6 +681,14 @@ impl Walker<'_> {
         let Some((head, rest)) = items.split_first() else {
             return;
         };
+        if let Some(pattern) = regex_literal(head, rest) {
+            if let Err(error) = crate::builtins::regex::compile(pattern) {
+                let span = head.span.through(rest[0].span);
+                self.found
+                    .push(Diagnostic::error("regex", error.message, span));
+            }
+            return;
+        }
         let rest = match symbol(head) {
             Some("def" | "defonce" | "defmacro") => split_meta(rest).1,
             _ => rest,

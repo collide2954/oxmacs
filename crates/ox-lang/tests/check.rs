@@ -20,6 +20,14 @@ fn rewrite(path: &Path, text: &str, step: u64) {
 }
 
 #[test]
+fn regex_literals_are_checked_before_they_run() {
+    let found = Isolate::new().check("user", "(def (ok) #\"\\d+\")\n(def (bad) #\"(\")");
+
+    assert_eq!(messages(&found), ["Invalid regex (: unclosed group"]);
+    assert_eq!(found[0].severity, Severity::Error);
+}
+
+#[test]
 fn modules_that_need_the_host_to_load_are_skipped_quietly() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(
