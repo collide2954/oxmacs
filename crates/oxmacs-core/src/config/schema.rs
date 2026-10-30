@@ -156,7 +156,7 @@ pub const SETTINGS: &[Setting] = &[
         EDITING,
         "format-on-save",
         Kind::Toggle,
-        "Format Rust with rustfmt and R with air when saving",
+        "Format files with their language's formatter, or with a language server that formats, when saving",
     ),
     setting(
         FILES,

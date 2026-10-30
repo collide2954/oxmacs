@@ -75,7 +75,7 @@ pub enum Command {
     DownList,
     #[strum(
         message = "Jump to a function, type or heading by name",
-        detailed_message = "Lists the items in the buffer, such as functions, types and impls in Rust, functions and sections in R, and headings in Markdown. Type to narrow the list and press RET to jump."
+        detailed_message = "Lists the items in the buffer, such as functions, types and impls in Rust, functions and sections in R, headings in Markdown, and the outline of a PDF or the contents of a book. Plugin modes and views list their own with :items. Type to narrow the list and press RET to jump."
     )]
     Imenu,
     #[strum(
@@ -183,7 +183,7 @@ pub enum Command {
     SaveBuffer,
     #[strum(
         message = "Format the buffer or selection with its language's formatter",
-        detailed_message = "Uses the formatter the buffer's language provides, such as rustfmt for Rust and air for R. With a selection, formatters that can handle part of a file format only the selected lines and keep their indentation. Saving formats first when format-on-save is on."
+        detailed_message = "Uses the formatter the buffer's language provides, such as rustfmt for Rust and air for R, and otherwise a language server that formats. With a selection, formatters that can handle part of a file format only the selected lines and keep their indentation; a language server formats the whole buffer. Saving formats first when format-on-save is on."
     )]
     FormatBuffer,
     #[strum(message = "Save the buffer to a different file")]
@@ -404,7 +404,7 @@ pub enum Command {
     ListLanguages,
     #[strum(
         message = "List the tools oxmacs can install and update",
-        detailed_message = "Opens *Tools*: each tool oxmacs can install itself, such as air for formatting R, with the version installed, the latest release, and which program runs. Opening it, or g, asks GitHub for the latest releases; nothing is downloaded until you press i to install or u to update, and d removes oxmacs's copy."
+        detailed_message = "Opens *Tools*: the formatters, language servers and libraries the plugins you have on use, such as air for formatting R, rust-analyzer for Rust and PDFium for drawing PDFs. Tools oxmacs installs itself show the version installed, the latest release, and which program runs; opening the list, or g, asks GitHub for the latest releases, and nothing is downloaded until you press i to install or u to update, while d removes oxmacs's copy. Language servers show whether their program is found, and i runs a server's install command when it has one."
     )]
     ListTools,
     #[strum(message = "Show or hide the details of the tool on this line")]
