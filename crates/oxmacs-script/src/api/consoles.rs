@@ -570,11 +570,11 @@ mod tests {
     #[test]
     fn consoles_know_prompts_and_watched_lines_by_their_patterns() {
         let (mut editor, mut ox, job) = started(
-            r##"(def heard (atom []))
+            r#"(def heard (atom []))
 (console-start "*shell*" :program "shell" :args ["-i"] :env {TERM: "dumb"}
                :prompts ["""^Browse\[\d+\]> $"""] :watch {debug: "^debug at "}
                :on-output (fn [kind payload] (swap! heard conj [kind payload]))
-               :on-idle (fn [] (swap! heard conj :idle)))"##,
+               :on-idle (fn [] (swap! heard conj :idle)))"#,
         );
 
         editor.session_output(job, "debug at a.R#2: x\nBrowse[1]> ");
