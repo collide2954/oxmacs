@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex, PoisonError};
@@ -10,6 +11,8 @@ use oxmacs_core::editor::{Editor, Formatter};
 use oxmacs_core::syntax::{Feature, Indentation, Language, LanguageSpec, Outline, Roots, owned};
 use oxmacs_core::text::{Buffer, BufferId};
 use oxmacs_core::theme::Highlight;
+
+use crate::runtime::lexing::{Lexed, LineLexer, Spans, relex};
 
 pub(crate) fn spec() -> LanguageSpec {
     LanguageSpec {
@@ -43,8 +46,6 @@ const CONSTANTS: &[&str] = &["nil", "true", "false"];
 pub fn language() -> Language {
     OX.clone()
 }
-
-type Spans = Vec<(Range<usize>, Highlight)>;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct State {
@@ -292,102 +293,52 @@ pub(crate) fn highlight_lines(lines: &[&str]) -> Vec<Spans> {
         .collect()
 }
 
-const HIGHLIGHT_LOOK_BACK: usize = 300;
-const LEXED_BUFFERS: usize = 8;
-
 fn top_level(line: &str) -> bool {
     ["(def", "(module", "(plugin", "(use-plugin"]
         .iter()
         .any(|head| line.starts_with(head))
 }
 
-fn after(text: &str, state: &State) -> State {
-    if top_level(text) {
-        return highlight_with(text, &State::default()).1;
-    }
-    highlight_with(text, state).1
-}
+struct OxLexer<'f>(&'f Forms);
 
-fn starting(buffer: &Buffer, line: usize) -> (usize, State) {
-    let floor = line.saturating_sub(HIGHLIGHT_LOOK_BACK);
-    let first = (floor..line)
-        .rev()
-        .find(|candidate| top_level(&buffer.line_text(*candidate)))
-        .unwrap_or(floor);
-    if first == line {
-        return (line, State::default());
-    }
-    let state = highlight_with(&buffer.line_text(first), &State::default()).1;
-    (first + 1, state)
-}
+impl LineLexer for OxLexer<'_> {
+    type State = State;
+    type Error = Infallible;
 
-#[derive(Debug)]
-struct Starts {
-    buffer: BufferId,
-    revision: u64,
-    first: usize,
-    states: Vec<State>,
-}
-
-impl Starts {
-    fn new(buffer: &Buffer, line: usize) -> Self {
-        let (first, state) = starting(buffer, line);
-        Self {
-            buffer: buffer.id(),
-            revision: buffer.revision(),
-            first,
-            states: vec![state],
+    fn lex(&mut self, _: usize, text: &str, state: &State) -> Result<(Spans, State), Infallible> {
+        let (spans, after) = highlight_in(text, state, self.0);
+        if top_level(text) {
+            return Ok((spans, highlight_with(text, &State::default()).1));
         }
+        Ok((spans, after))
     }
 
-    fn state(&mut self, buffer: &Buffer, line: usize) -> State {
-        let end = self.first + self.states.len();
-        if line < self.first || line > end + HIGHLIGHT_LOOK_BACK {
-            *self = Self::new(buffer, line);
-        }
-        while self.first + self.states.len() <= line {
-            let last = self.first + self.states.len() - 1;
-            let next = after(&buffer.line_text(last), &self.states[self.states.len() - 1]);
-            self.states.push(next);
-        }
-        self.states[line - self.first].clone()
+    fn same(&self, a: &State, b: &State) -> bool {
+        a == b
     }
 }
 
 #[derive(Debug, Default)]
-struct Lexed(Mutex<Vec<Starts>>);
-
-impl Lexed {
-    fn state(&self, buffer: &Buffer, line: usize) -> State {
-        let mut known = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        known.retain(|starts| starts.buffer != buffer.id() || starts.revision == buffer.revision());
-        if let Some(at) = known.iter().position(|starts| starts.buffer == buffer.id()) {
-            return known[at].state(buffer, line);
-        }
-        if known.len() == LEXED_BUFFERS {
-            known.remove(0);
-        }
-        let mut starts = Starts::new(buffer, line);
-        let state = starts.state(buffer, line);
-        known.push(starts);
-        state
-    }
-}
+struct Lines(Mutex<HashMap<BufferId, (u64, Lexed<State>)>>);
 
 #[derive(Debug, Default)]
-struct FileForms(HashMap<PathBuf, Forms>);
+struct FileForms {
+    known: HashMap<PathBuf, Forms>,
+    generation: u64,
+}
 
 pub(crate) fn remember_forms(editor: &mut Editor, path: &Path, forms: Forms) {
     if editor.plugin_state::<FileForms>().is_none() {
         editor.set_plugin_state(FileForms::default());
     }
-    if let Some(known) = editor.plugin_state_mut::<FileForms>() {
-        known.0.insert(path.to_path_buf(), forms);
+    if let Some(file_forms) = editor.plugin_state_mut::<FileForms>() {
+        file_forms.known.insert(path.to_path_buf(), forms);
+        file_forms.generation += 1;
     }
 }
 
 fn forms_at<'e>(editor: &'e Editor, path: Option<&Path>) -> &'e Forms {
-    path.and_then(|path| editor.plugin_state::<FileForms>()?.0.get(path))
+    path.and_then(|path| editor.plugin_state::<FileForms>()?.known.get(path))
         .unwrap_or(&EDITOR_FORMS)
 }
 
@@ -399,11 +350,33 @@ fn highlight(editor: &Editor, id: BufferId, line: usize) -> Spans {
     let Some(buffer) = editor.buffer_by_id(id) else {
         return Vec::new();
     };
-    let state = editor.plugin_state::<Lexed>().map_or_else(
-        || Starts::new(buffer, line).state(buffer, line),
-        |lexed| lexed.state(buffer, line),
-    );
-    highlight_in(&buffer.line_text(line), &state, forms_of(editor, buffer)).0
+    let Some(lines) = editor.plugin_state::<Lines>() else {
+        return highlight_with(&buffer.line_text(line), &State::default()).0;
+    };
+    let generation = editor
+        .plugin_state::<FileForms>()
+        .map_or(0, |file_forms| file_forms.generation);
+    let mut known = lines.0.lock().unwrap_or_else(PoisonError::into_inner);
+    let fresh = known
+        .get(&id)
+        .is_some_and(|(seen, lexed)| *seen == generation && lexed.revision == buffer.revision());
+    if !fresh {
+        let old = known
+            .remove(&id)
+            .filter(|(seen, _)| *seen == generation)
+            .map(|(_, lexed)| lexed);
+        let text = (0..buffer.len_lines())
+            .map(|number| buffer.line_text(number).into_owned())
+            .collect();
+        let mut ox = OxLexer(forms_of(editor, buffer));
+        let (lexed, _) = relex(old, buffer.revision(), text, &State::default(), &mut ox);
+        known.retain(|other, _| editor.buffer_by_id(*other).is_some());
+        known.insert(id, (generation, lexed));
+    }
+    known
+        .get(&id)
+        .map(|(_, lexed)| lexed.spans(line))
+        .unwrap_or_default()
 }
 const LOOK_BACK: usize = 2000;
 
@@ -433,7 +406,7 @@ fn indent(editor: &Editor, id: BufferId, line: usize) -> Option<usize> {
 
 pub(crate) fn attach(editor: &mut Editor, language: &Language) {
     editor.set_scratch_language(Some(language.clone()));
-    editor.set_plugin_state(Lexed::default());
+    editor.set_plugin_state(Lines::default());
     editor.set_highlighter(language, highlight);
     editor.set_indenter(language, indent);
     editor.add_formatter(language.clone(), OX_FMT);
@@ -663,15 +636,16 @@ mod tests {
         assert_eq!(lines[8], [(1..2, Highlight::Function)]);
     }
 
-    fn lexed_from_the_form_start(editor: &Editor, line: usize) -> Vec<(Range<usize>, Highlight)> {
+    fn lexed_from_the_start(editor: &Editor, line: usize) -> Vec<(Range<usize>, Highlight)> {
         let buffer = editor.buffer();
-        let floor = line.saturating_sub(super::HIGHLIGHT_LOOK_BACK);
-        let first = (floor..line)
-            .rev()
-            .find(|candidate| super::top_level(&buffer.line_text(*candidate)))
-            .unwrap_or(floor);
-        let state = (first..line).fold(super::State::default(), |state, earlier| {
-            super::highlight_with(&buffer.line_text(earlier), &state).1
+        let state = (0..line).fold(super::State::default(), |state, earlier| {
+            let text = buffer.line_text(earlier);
+            let from = if super::top_level(&text) {
+                super::State::default()
+            } else {
+                state
+            };
+            super::highlight_with(&text, &from).1
         });
         super::highlight_with(&buffer.line_text(line), &state).0
     }
@@ -680,7 +654,7 @@ mod tests {
         for line in order {
             assert_eq!(
                 editor.line_style(*line).spans,
-                lexed_from_the_form_start(editor, *line),
+                lexed_from_the_start(editor, *line),
                 "line {line}"
             );
         }

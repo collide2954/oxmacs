@@ -105,6 +105,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- An edit in a buffer whose mode highlights with an Ox `:highlight` function highlights again only the lines whose state it changes, instead of every line to the end of the buffer. Ox buffers are highlighted the same way, from the start of the file, so a string or block comment opened more than 300 lines above still colors the lines below it.
 - The Rust edition used for formatting is read from `Cargo.toml` as TOML, so a commented-out `edition` line or a comment after it no longer confuses it.
 - Changing zap's `flash`, screensaver's `idle`, calendar's `reminders` or weather's `mode-line` takes effect at once instead of at the next start, and a plugin setting changed in `M-x customize` reaches `tabs` and `zen` at once.
 - Opening plugin buffers no longer adds a set of keys for each one that lasts until oxmacs quits, so `C-h f remote-visit` no longer lists every remote folder ever browsed, and reopening a buffer reuses its keys.

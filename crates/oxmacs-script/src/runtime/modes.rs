@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::ops::Range;
 
 use regex::Regex;
 
@@ -11,12 +10,10 @@ use oxmacs_core::command::{ScopeId, intern};
 use oxmacs_core::editor::{Editor, Service, Source};
 use oxmacs_core::syntax::{Language, LanguageSpec, Roots};
 use oxmacs_core::text::{Buffer, BufferId};
-use oxmacs_core::theme::Highlight;
 
 use crate::ide::log;
+use crate::runtime::lexing::{Lexed, LineLexer, Spans, relex};
 use oxmacs_core::theme::face_named;
-
-type Spans = Vec<(Range<usize>, Highlight)>;
 
 #[derive(Debug, Clone, Default)]
 struct Rules {
@@ -264,10 +261,8 @@ pub fn wakes(editor: &Editor) -> Vec<String> {
 
 #[derive(Debug)]
 struct Cached {
-    revision: u64,
-    lines: Vec<String>,
-    spans: Vec<Spans>,
-    states: Option<Hold>,
+    lexed: Lexed<Value>,
+    rooted: Option<Hold>,
 }
 
 #[derive(Debug, Default)]
@@ -280,8 +275,8 @@ impl Modes {
     fn forget(&mut self, heap: &mut Heap, keep: impl Fn(&BufferId) -> bool) {
         let gone: Vec<BufferId> = self.cache.keys().filter(|id| !keep(id)).copied().collect();
         for id in gone {
-            if let Some(states) = self.cache.remove(&id).and_then(|cached| cached.states) {
-                heap.release(states);
+            if let Some(rooted) = self.cache.remove(&id).and_then(|cached| cached.rooted) {
+                heap.release(rooted);
             }
         }
     }
@@ -409,8 +404,7 @@ fn cached(editor: &Editor, id: BufferId, line: usize) -> Spans {
     editor
         .plugin_state::<Modes>()
         .and_then(|modes| modes.cache.get(&id))
-        .and_then(|cached| cached.spans.get(line))
-        .cloned()
+        .map(|cached| cached.lexed.spans(line))
         .unwrap_or_default()
 }
 
@@ -561,89 +555,44 @@ fn takes_state(heap: &Heap, function: Value) -> bool {
         .is_some_and(|native| native.least <= 3 && native.most.is_none_or(|most| most >= 3))
 }
 
-struct Highlighted {
-    spans: Vec<Spans>,
-    states: Vec<Hold>,
+struct Highlighter<'a> {
+    isolate: &'a mut Isolate,
+    editor: &'a mut Editor,
+    title: &'a str,
+    function: Value,
+    stateful: bool,
+    fresh: Vec<Hold>,
 }
 
-fn highlight_lines(
-    isolate: &mut Isolate,
-    editor: &mut Editor,
-    title: &str,
-    function: Value,
-    lines: &[String],
-    from: usize,
-    mut state: Value,
-) -> Result<Highlighted, Error> {
-    let stateful = takes_state(isolate.heap(), function);
-    let mut found = Highlighted {
-        spans: Vec::with_capacity(lines.len() - from),
-        states: Vec::with_capacity(lines.len() - from),
-    };
-    let outcome = (from..lines.len()).try_for_each(|number| {
-        let shown = isolate.heap_mut().string(&lines[number])?;
-        let line = Value::Int(i64::try_from(number).unwrap_or(i64::MAX));
-        let arguments = if stateful {
-            vec![line, shown, state]
+impl LineLexer for Highlighter<'_> {
+    type State = Value;
+    type Error = Error;
+
+    fn lex(&mut self, line: usize, text: &str, state: &Value) -> Result<(Spans, Value), Error> {
+        let shown = self.isolate.heap_mut().string(text)?;
+        let number = Value::Int(i64::try_from(line).unwrap_or(i64::MAX));
+        let arguments = if self.stateful {
+            vec![number, shown, *state]
         } else {
-            vec![line, shown]
+            vec![number, shown]
         };
-        let result = isolate.within(crate::QUICK, |isolate| {
+        let (editor, function) = (&mut *self.editor, self.function);
+        let result = self.isolate.within(crate::QUICK, |isolate| {
             isolate.call_with(editor, function, &arguments)
         })?;
-        let heap = isolate.heap_mut();
+        let heap = self.isolate.heap_mut();
         let (shape, next) = match field(heap, result, "spans") {
             Some(shape) => (shape, field(heap, result, "state").unwrap_or(Value::Nil)),
             None => (result, Value::Nil),
         };
-        found.spans.push(spans(heap, title, shape)?);
-        found.states.push(heap.hold(next));
-        state = next;
-        Ok(())
-    });
-    match outcome {
-        Ok(()) => Ok(found),
-        Err(error) => {
-            for hold in found.states {
-                isolate.release(hold);
-            }
-            Err(error)
-        }
+        let found = spans(heap, self.title, shape)?;
+        self.fresh.push(heap.hold(next));
+        Ok((found, next))
     }
-}
 
-fn stored(isolate: &mut Isolate, old: Option<Hold>, from: usize, fresh: Vec<Hold>) -> Option<Hold> {
-    let mut states: Vec<Value> = old
-        .and_then(|old| isolate.held(old))
-        .and_then(|old| isolate.heap().elements(old))
-        .map(|old| old.into_iter().take(from).collect())
-        .unwrap_or_default();
-    states.extend(fresh.iter().filter_map(|hold| isolate.held(*hold)));
-    let vector = ox_lang::build::make_vector(isolate.heap_mut(), &states).ok();
-    let kept = vector.map(|vector| isolate.hold(vector));
-    for hold in fresh.into_iter().chain(old) {
-        isolate.release(hold);
+    fn same(&self, a: &Value, b: &Value) -> bool {
+        ox_lang::value::equal(self.isolate.heap(), *a, *b)
     }
-    kept
-}
-
-fn resume(isolate: &Isolate, old: Option<&Cached>, lines: &[String]) -> (usize, Value) {
-    let from = old.map_or(0, |old| {
-        old.lines
-            .iter()
-            .zip(lines)
-            .take_while(|(was, now)| was == now)
-            .count()
-            .min(old.spans.len())
-    });
-    let incoming = old
-        .and_then(|old| old.states)
-        .filter(|_| from > 0)
-        .and_then(|states| isolate.held(states))
-        .and_then(|states| isolate.heap().elements(states))
-        .and_then(|states| states.get(from - 1).copied())
-        .unwrap_or(Value::Nil);
-    (from, incoming)
 }
 
 pub fn highlight(isolate: &mut Isolate, editor: &mut Editor) {
@@ -671,7 +620,7 @@ pub fn highlight(isolate: &mut Isolate, editor: &mut Editor) {
         let fresh = editor
             .plugin_state::<Modes>()
             .and_then(|modes| modes.cache.get(id))
-            .is_some_and(|cached| cached.revision == revision);
+            .is_some_and(|cached| cached.lexed.revision == revision);
         if fresh {
             continue;
         }
@@ -692,42 +641,28 @@ pub fn highlight(isolate: &mut Isolate, editor: &mut Editor) {
         let Some(function) = isolate.held(hold) else {
             continue;
         };
-        let (from, incoming) = resume(isolate, old.as_ref(), &lines);
-        let (mut spans, old_states) = old.map_or((Vec::new(), None), |old| (old.spans, old.states));
-        spans.truncate(from);
-        let found = highlight_lines(
-            isolate,
-            editor,
-            language.name(),
+        let (old, old_rooted) = old.map_or((None, None), |old| (Some(old.lexed), old.rooted));
+        let stateful = takes_state(isolate.heap(), function);
+        let mut highlighter = Highlighter {
+            isolate: &mut *isolate,
+            editor: &mut *editor,
+            title: language.name(),
             function,
-            &lines,
-            from,
-            incoming,
-        );
-        let states = match found {
-            Ok(found) => {
-                spans.extend(found.spans);
-                stored(isolate, old_states, from, found.states)
-            }
-            Err(error) => {
-                log::report(editor, &error, None);
-                spans.resize(lines.len(), Vec::new());
-                if let Some(old) = old_states {
-                    isolate.release(old);
-                }
-                None
-            }
+            stateful,
+            fresh: Vec::new(),
         };
+        let (lexed, failed) = relex(old, revision, lines, &Value::Nil, &mut highlighter);
+        let fresh = highlighter.fresh;
+        if let Some(error) = failed {
+            log::report(editor, &error, None);
+        }
+        let vector = ox_lang::build::make_vector(isolate.heap_mut(), lexed.states()).ok();
+        let rooted = vector.map(|vector| isolate.hold(vector));
+        for hold in fresh.into_iter().chain(old_rooted) {
+            isolate.release(hold);
+        }
         if let Some(modes) = modes(editor) {
-            modes.cache.insert(
-                id,
-                Cached {
-                    revision,
-                    lines,
-                    spans,
-                    states,
-                },
-            );
+            modes.cache.insert(id, Cached { lexed, rooted });
         }
     }
     let alive: HashSet<BufferId> = ids.into_iter().collect();
@@ -809,6 +744,30 @@ mod tests {
 
         press(&mut editor, &mut ox, "C-n < <");
         assert_eq!(styled(&editor), [false, false, true, true, false]);
+    }
+
+    #[test]
+    fn an_edit_highlights_only_the_lines_whose_state_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.cnt");
+        std::fs::write(&path, "plain\n".repeat(40)).unwrap();
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        ox.eval(
+            &mut editor,
+            r#"(def lexed (atom 0))
+               (defmode counted "Counted" :extensions ["cnt"]
+                 :highlight (fn [line text open] (swap! lexed inc) {spans: [] state: open}))"#,
+        )
+        .unwrap();
+        editor.open_file(&path);
+        settle(&mut editor, &mut ox);
+        assert_eq!(ox.eval(&mut editor, "@lexed").unwrap(), "41");
+
+        press(&mut editor, &mut ox, "C-n C-n x");
+        assert_eq!(ox.eval(&mut editor, "@lexed").unwrap(), "42");
+        press(&mut editor, &mut ox, "RET");
+        assert_eq!(ox.eval(&mut editor, "@lexed").unwrap(), "44");
     }
 
     fn opened(ox: &mut Ox, source: &str, name: &str, text: &str) -> (tempfile::TempDir, Editor) {
