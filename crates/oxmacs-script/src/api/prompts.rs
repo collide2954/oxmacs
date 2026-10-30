@@ -116,12 +116,14 @@ pub fn install(isolate: &mut Isolate, inbox: &Inbox) {
     let asking = Arc::clone(inbox);
     isolate
         .native("ox", "prompt")
+        .suspends()
         .arity(1, Some(1))
         .keywords(&["initial", "choices", "secret"])
         .host::<Editor>(move |heap, editor, arguments| prompt(heap, editor, arguments, &asking));
     let locating = Arc::clone(inbox);
     isolate
         .native("ox", "prompt-path")
+        .suspends()
         .arity(1, Some(1))
         .keywords(&["directories", "initial"])
         .host::<Editor>(move |heap, editor, arguments| {
@@ -137,6 +139,7 @@ pub fn install(isolate: &mut Isolate, inbox: &Inbox) {
     let deciding = Arc::clone(inbox);
     isolate
         .native("ox", "yes-or-no")
+        .suspends()
         .arity(1, Some(1))
         .host::<Editor>(move |heap, editor, arguments| {
             let question = print::display(heap, arguments[0]);

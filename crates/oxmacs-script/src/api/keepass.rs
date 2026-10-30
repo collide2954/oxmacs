@@ -40,6 +40,7 @@ fn read(path: &str, password: &str) -> Result<Portable, Failure> {
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox/keepass", "read")
+        .suspends()
         .arity(2, Some(2))
         .outside()
         .host::<Editor>(|heap, _, arguments| {

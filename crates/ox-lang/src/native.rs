@@ -36,7 +36,7 @@ pub struct Native {
     pub most: Option<usize>,
     pub function: Rc<NativeFn>,
     pub control: Option<Control>,
-    pub awaits: bool,
+    pub suspends: bool,
     pub outside: bool,
     pub keywords: Box<[Sym]>,
     pub(crate) resumable: Option<Rc<Resumable>>,

@@ -258,6 +258,7 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "run")
+        .suspends()
         .arity(2, Some(2))
         .keywords(&["cwd", "env", "input"])
         .outside()

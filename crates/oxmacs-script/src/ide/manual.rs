@@ -62,6 +62,7 @@ fn highlight(heap: &mut Heap, lines: Value) -> Result<Value, Error> {
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "ox-reference")
+        .suspends()
         .arity(0, Some(0))
         .host::<Editor>(|heap, editor, _| {
             let promise = heap.new_promise()?;

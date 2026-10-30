@@ -190,6 +190,7 @@ fn command(heap: &Heap, name: &str, connection: Value, command: Command) -> Resu
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "connect")
+        .suspends()
         .arity(2, Some(2))
         .keywords(&["tls"])
         .outside()

@@ -308,6 +308,7 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "derive-key")
+        .suspends()
         .arity(2, Some(2))
         .keywords(&["memory", "iterations", "parallelism"])
         .function(derive_key);

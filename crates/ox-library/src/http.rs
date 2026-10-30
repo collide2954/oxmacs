@@ -118,6 +118,7 @@ fn asked(heap: &Heap, arguments: &[Value]) -> Result<Asked, Error> {
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "request")
+        .suspends()
         .arity(2, Some(2))
         .keywords(&["headers", "body", "user", "password"])
         .outside()
@@ -129,6 +130,7 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "get")
+        .suspends()
         .arity(1, Some(1))
         .outside()
         .function(|heap, arguments| {

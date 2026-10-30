@@ -6,7 +6,7 @@
    text: """
 # Tasks, time and I/O
 
-Ox code runs in small slices between keystrokes, so it never freezes the editor. Anything slow, such as reading a file or a web page, returns a promise, and `await` waits for it without blocking anything else.
+Ox code runs in small slices between keystrokes, so it never freezes the editor. Anything slow, such as reading a file or a web page, pauses only the task that asked, the way `sleep` does, and gives its result when it comes.
 
 ## Tasks and promises
 
@@ -27,7 +27,7 @@ Ox code runs in small slices between keystrokes, so it never freezes the editor.
 
 An error in a task is raised again in whatever awaits its promise; when nothing does, oxmacs shows it in the echo area. Commands, hooks and buttons each run as tasks of their own. At the top level, as in the REPL, awaiting a promise that nothing can deliver raises an error instead of hanging.
 
-`swap!` is safe when tasks change the same atom. For anything longer, `atomically` runs its body without letting other tasks in.
+`swap!` is safe when tasks change the same atom. For anything longer, `atomically` runs its body without letting other tasks in, so nothing inside it may wait: no `sleep`, `await`, prompt, file, process or web call.
 
 ## Time
 
@@ -50,18 +50,18 @@ The `ox time` module reads, formats and adds times in any time zone; see its [re
 
 ## Files, processes and the web
 
-These modules return promises, so their results need `await`. Paths are used as they are given, so expand a leading `~` with `path/expand`.
+These calls pause their task until the answer comes, so their results are ready to use; to run several at once, `spawn` each and `await` the promises. Paths are used as they are given, so expand a leading `~` with `path/expand`.
 
 ```text
 (module (import (ox file) (ox path) (ox process) (ox http) (ox json)))
 
-(def notes (await (file/read (path/expand "~/notes.txt"))))
-(def listing (await (process/run "git" ["status" "--short"])))
-(def reply (await (http/get "https://example.com/data.json")))
+(def notes (file/read (path/expand "~/notes.txt")))
+(def listing (process/run "git" ["status" "--short"]))
+(def reply (http/get "https://example.com/data.json"))
 (json/read reply.body)
 ```
 
-`process/run` gives `{status stdout stderr}`, and `http/get` gives `{status headers body}`. A file that can't be read or a program that can't start raises an error where it is awaited.
+`process/run` gives `{status stdout stderr}`, and `http/get` gives `{status headers body}`. A file that can't be read or a program that can't start raises an error at the call.
 
 `process/start` runs a program alongside your code instead. Its `:lines` channel gives each line the program prints, as it comes, and `:exit` is a promise of its exit status. `process/stop` asks it to end and `process/kill` ends it at once, with any programs it started. In oxmacs it shows in `M-x list-processes`, where its `:id` names it for `stop-process` and `kill-process`.
 
@@ -71,7 +71,7 @@ These modules return promises, so their results need `await`. Paths are used as 
   (await git.exit))
 ```
 
-`net/connect` gives a promise of a TCP connection whose `:lines` channel works the same way, and `net/send` writes a line to it. `ox/csv` reads CSV, and `ox/crypto` hashes, encrypts and makes one-time codes.
+`net/connect` gives a TCP connection whose `:lines` channel works the same way, and `net/send` writes a line to it. `ox/csv` reads CSV, and `ox/crypto` hashes, encrypts and makes one-time codes.
 
 ## Generators
 

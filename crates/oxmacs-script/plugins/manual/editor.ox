@@ -22,16 +22,16 @@ Everything below works in `init.ox`, in a plugin, or straight from the REPL. The
 
 ## Asking
 
-`prompt` asks in the minibuffer and returns a promise of the answer. `:choices` offers completion, `:initial` fills in text and `:secret true` hides what is typed. `yes-or-no` asks a question.
+`prompt` asks in the minibuffer and returns the answer, pausing only its task while you type. `:choices` offers completion, `:initial` fills in text and `:secret true` hides what is typed. `yes-or-no` asks a question.
 
 ```
 (defcommand greet "Greet someone"
-  (let [name (await (prompt "Name: " :choices ["Ana" "Bo"]))]
-    (when (await (yes-or-no $"Greet {name}?"))
+  (let [name (prompt "Name: " :choices ["Ana" "Bo"])]
+    (when (yes-or-no $"Greet {name}?")
       (message $"Hello, {name}"))))
 ```
 
-`prompt-path` asks for a file or a folder, with completion. `C-g` cancels a prompt by failing its promise, which ends the command unless it catches the error.
+`prompt-path` asks for a file or a folder, with completion. `C-g` cancels a prompt by raising `quit`, which ends the command quietly unless it catches `quit`.
 
 ## The current buffer
 

@@ -152,7 +152,7 @@ impl Runtime {
                 most,
                 function: Rc::clone(&kind.stub),
                 control: None,
-                awaits: false,
+                suspends: false,
                 outside: false,
                 keywords: Box::new([]),
                 resumable: Some(Rc::clone(kind)),

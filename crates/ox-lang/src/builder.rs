@@ -22,7 +22,7 @@ pub struct NativeBuilder<'a> {
     most: Option<usize>,
     keywords: Vec<Sym>,
     outside: bool,
-    awaits: bool,
+    suspends: bool,
     drains: Option<Drains>,
 }
 
@@ -36,7 +36,7 @@ impl Isolate {
             most: Some(0),
             keywords: Vec::new(),
             outside: false,
-            awaits: false,
+            suspends: false,
             drains: None,
         }
     }
@@ -67,7 +67,7 @@ impl NativeBuilder<'_> {
 
     pub fn suspends(self) -> Self {
         Self {
-            awaits: true,
+            suspends: true,
             ..self
         }
     }
@@ -125,7 +125,7 @@ impl NativeBuilder<'_> {
             )
         };
         let native = Native {
-            awaits: self.awaits,
+            suspends: self.suspends,
             outside: self.outside,
             keywords: self.keywords.into(),
             resumable,

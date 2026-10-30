@@ -60,7 +60,7 @@ pub(crate) fn plain(
         most,
         function,
         control: None,
-        awaits: false,
+        suspends: false,
         outside: false,
         keywords: Box::new([]),
         resumable: None,

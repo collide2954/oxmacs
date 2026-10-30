@@ -242,6 +242,7 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "open")
+        .suspends()
         .arity(1, Some(1))
         .outside()
         .function(|heap, arguments| {
@@ -254,6 +255,7 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "search")
+        .suspends()
         .arity(2, Some(2))
         .outside()
         .function(|heap, arguments| {

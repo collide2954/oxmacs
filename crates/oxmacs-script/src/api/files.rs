@@ -23,6 +23,7 @@ fn moved(editor: &mut Editor, from: &Path, to: &Path) -> Answer {
 pub fn install(isolate: &mut Isolate, inbox: &Inbox) {
     isolate
         .native("ox", "delete-path")
+        .suspends()
         .arity(1, Some(1))
         .outside()
         .host::<Editor>(|heap, editor, arguments| {
@@ -42,6 +43,7 @@ pub fn install(isolate: &mut Isolate, inbox: &Inbox) {
     let asking = Arc::clone(inbox);
     isolate
         .native("ox", "move-path")
+        .suspends()
         .arity(2, Some(2))
         .outside()
         .host::<Editor>(move |heap, editor, arguments| {
@@ -97,7 +99,7 @@ mod tests {
         ox.eval(
             &mut editor,
             &format!(
-                "(def first (move-path {} {}))",
+                "(def first (spawn (move-path {} {})))",
                 literal(&from),
                 literal(&to)
             ),
@@ -110,12 +112,13 @@ mod tests {
         ox.eval(
             &mut editor,
             &format!(
-                "(def second (move-path {} {}))",
+                "(def second (spawn (move-path {} {})))",
                 literal(&to),
                 literal(&taken)
             ),
         )
         .unwrap();
+        settle(&mut editor, &mut ox);
         assert!(
             question(&editor)
                 .unwrap()

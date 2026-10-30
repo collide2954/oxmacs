@@ -329,6 +329,7 @@ fn single(
 ) {
     isolate
         .native(MODULE, name)
+        .suspends()
         .arity(1, Some(1))
         .outside()
         .function(move |heap, arguments| {
@@ -344,6 +345,7 @@ fn pair(
 ) {
     isolate
         .native(MODULE, name)
+        .suspends()
         .arity(2, Some(2))
         .outside()
         .function(move |heap, arguments| {
@@ -387,11 +389,13 @@ fn write_base64(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "append")
+        .suspends()
         .arity(2, Some(2))
         .outside()
         .function(append);
     isolate
         .native(MODULE, "write-base64")
+        .suspends()
         .arity(2, Some(2))
         .outside()
         .function(write_base64);
@@ -402,6 +406,7 @@ pub fn install(isolate: &mut Isolate) {
     });
     isolate
         .native(MODULE, "list")
+        .suspends()
         .arity(1, Some(1))
         .keywords(&["sort"])
         .outside()
@@ -452,6 +457,7 @@ pub fn install(isolate: &mut Isolate) {
     });
     isolate
         .native(MODULE, "write")
+        .suspends()
         .arity(2, Some(2))
         .outside()
         .function(write);

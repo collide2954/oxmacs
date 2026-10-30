@@ -63,6 +63,7 @@ fn bytes(path: &Path, name: &str) -> Result<Vec<u8>, Failure> {
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "entries")
+        .suspends()
         .arity(1, Some(1))
         .outside()
         .function(|heap, arguments| {
@@ -71,6 +72,7 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "read")
+        .suspends()
         .arity(2, Some(2))
         .outside()
         .function(|heap, arguments| {
@@ -83,6 +85,7 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "read-base64")
+        .suspends()
         .arity(2, Some(2))
         .outside()
         .function(|heap, arguments| {

@@ -162,11 +162,11 @@
   (if (= ran.status 0) ran.stdout ""))
 
 (def (read-status root)
-  (let [status (run root ["status" "--porcelain=v2" "--branch" "-z"])
-        unstaged (run root ["diff" "--numstat" "-z" "--no-ext-diff"])
-        staged (run root ["diff" "--cached" "--numstat" "-z" "--no-ext-diff"])
-        stashes (run root ["stash" "list" "-z" "--format=%gd%x1f%gs"])
-        recent (run root ["log" "-n" "10" "-z" "--format=%h%x1f%s%x1f%an%x1f%at"])
+  (let [status (spawn (run root ["status" "--porcelain=v2" "--branch" "-z"]))
+        unstaged (spawn (run root ["diff" "--numstat" "-z" "--no-ext-diff"]))
+        staged (spawn (run root ["diff" "--cached" "--numstat" "-z" "--no-ext-diff"]))
+        stashes (spawn (run root ["stash" "list" "-z" "--format=%gd%x1f%gs"]))
+        recent (spawn (run root ["log" "-n" "10" "-z" "--format=%h%x1f%s%x1f%an%x1f%at"]))
         found (parse-status (output (await status)))]
     (assoc found
            :stashes (parse-stashes (quietly-read (await stashes)))

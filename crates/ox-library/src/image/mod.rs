@@ -245,7 +245,6 @@ pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "info")
         .arity(1, Some(1))
-        .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "info", arguments[0])?;
             info(heap, &image)
@@ -253,17 +252,14 @@ pub fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "width")
         .arity(1, Some(1))
-        .suspends()
         .function(|heap, arguments| Ok(int(wanted(heap, "width", arguments[0])?.pixels.width())));
     isolate
         .native(MODULE, "height")
         .arity(1, Some(1))
-        .suspends()
         .function(|heap, arguments| Ok(int(wanted(heap, "height", arguments[0])?.pixels.height())));
     isolate
         .native(MODULE, "pixel")
         .arity(3, Some(3))
-        .suspends()
         .function(|heap, arguments| {
             let image = wanted(heap, "pixel", arguments[0])?;
             let place = |value: Value| match value {

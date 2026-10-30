@@ -188,6 +188,7 @@ fn probe(path: &Path) -> Result<Portable, String> {
 pub(super) fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "open")
+        .suspends()
         .arity(1, Some(1))
         .outside()
         .function(|heap, arguments| {
@@ -196,6 +197,7 @@ pub(super) fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "decode")
+        .suspends()
         .arity(1, Some(1))
         .function(|heap, arguments| {
             let bytes =
@@ -205,6 +207,7 @@ pub(super) fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "probe")
+        .suspends()
         .arity(1, Some(1))
         .outside()
         .function(|heap, arguments| {
