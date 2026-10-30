@@ -18,6 +18,31 @@ fn number(source: &str) -> f32 {
         .unwrap_or_else(|_| panic!("{source} gave {shown}"))
 }
 
+fn frames(source: &str) -> Vec<f32> {
+    let mut isolate = ox_lang::Isolate::new();
+    ox_synth::install(&mut isolate);
+    let value = isolate
+        .eval(&format!("(module (import (ox synth :as s))) {source}"))
+        .unwrap();
+    ox_synth::sample_of(isolate.heap(), value)
+        .unwrap()
+        .interleaved()
+}
+
+fn crossings(frames: &[f32]) -> usize {
+    frames
+        .chunks(2)
+        .zip(frames.chunks(2).skip(1))
+        .filter(|(before, after)| (before[0] < 0.0) != (after[0] < 0.0))
+        .count()
+}
+
+fn loudest(frames: &[f32], from: usize, to: usize) -> f32 {
+    frames[2 * from..2 * to]
+        .iter()
+        .fold(0.0_f32, |peak, value| peak.max(value.abs()))
+}
+
 #[test]
 fn a_held_sine_lasts_as_long_as_it_is_held_at_its_velocity() {
     let seconds = number("(get (s/info (s/render (s/sine) :seconds 0.5)) :seconds)");
@@ -42,6 +67,86 @@ fn a_lowpass_darkens_a_saw() {
     let closed = number("(get (s/info (s/render (s/lowpass (s/saw 110) 150) :seconds 0.3)) :rms)");
 
     assert!(closed < open * 0.8, "{closed} {open}");
+}
+
+#[test]
+fn a_crusher_steps_the_sound_into_few_levels_held_at_its_rate() {
+    let crushed = frames("(s/render (s/crush (s/sine 110) :bits 2) :seconds 0.2)");
+    let held = frames("(s/render (s/crush (s/sine 110) :bits 16 :rate 1000) :seconds 0.1)");
+
+    let mut levels: Vec<u32> = crushed[..2 * 9_000]
+        .iter()
+        .map(|value| value.to_bits())
+        .collect();
+    levels.sort_unstable();
+    levels.dedup();
+    let held = &held[..2 * 4_800];
+    let changes = held
+        .chunks(2)
+        .zip(held.chunks(2).skip(1))
+        .filter(|(before, after)| before[0].to_bits() != after[0].to_bits())
+        .count();
+    assert!(levels.len() <= 5, "{}", levels.len());
+    assert!((90..=110).contains(&changes), "{changes}");
+}
+
+#[test]
+fn a_folder_leaves_quiet_sound_alone_and_folds_loud_sound_into_overtones() {
+    let plain = frames("(s/render (s/sine 110) :seconds 0.2)");
+    let unfolded = frames("(s/render (s/fold (s/sine 110) 0) :seconds 0.2)");
+    let folded = frames("(s/render (s/fold (s/sine 110) 1) :seconds 0.2)");
+
+    assert_eq!(plain, unfolded);
+    assert!(
+        crossings(&folded) > 4 * crossings(&plain),
+        "{} {}",
+        crossings(&folded),
+        crossings(&plain)
+    );
+}
+
+#[test]
+fn a_compressor_holds_sound_down_and_ducks_under_a_keyed_track() {
+    let level = |source: &str| {
+        number(&format!(
+            "(get (s/info (s/render {source} :seconds 0.3)) :rms)"
+        ))
+    };
+    let open = level("(s/sine 110)");
+    let held = level("(s/compress (s/sine 110) :threshold 0.1 :ratio 10)");
+    let song = frames(
+        r#"(s/render (s/song :tempo 240
+             (s/track :kick (s/envelope (s/sine 120) :attack 0.001 :decay 0.03 :sustain 0 :release 0.01) (s/beats "x"))
+             (s/track :pad (s/sine 440) (s/notes "a4")
+                      :effects (s/compress (s/input) :key :kick :threshold 0.05 :ratio 20 :attack 0.001 :release 0.3))))"#,
+    );
+
+    assert!(held < open * 0.5, "{held} {open}");
+    let ducked = loudest(&song, 2_400, 4_800);
+    let recovered = loudest(&song, 40_000, 46_000);
+    assert!(ducked < recovered * 0.6, "{ducked} {recovered}");
+}
+
+#[test]
+fn vowels_shape_a_saw_like_a_singing_voice() {
+    let around = |vowel: &str| {
+        number(&format!(
+            "(get (s/info (s/process (s/render (s/vowel (s/saw 110) {vowel}) :seconds 0.3)
+                                     (s/bandpass (s/input) 800 :resonance 0.9) :tail 0)) :rms)"
+        ))
+    };
+
+    assert!(
+        around(":a") > 2.0 * around(":i"),
+        "{} {}",
+        around(":a"),
+        around(":i")
+    );
+    assert!(around("1.5") > 0.0);
+    assert_eq!(
+        evaluated("(s/vowel (s/saw) :y)"),
+        "error: synth/vowel expects :a, :e, :i, :o, :u or a sound from 0 to 4, got :y"
+    );
 }
 
 #[test]

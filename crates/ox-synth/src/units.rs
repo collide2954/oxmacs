@@ -239,14 +239,37 @@ impl Unit for Envelope {
     }
 }
 
+#[derive(Default)]
+struct Svf {
+    shape: [f32; 4],
+    state: [[f32; 2]; 2],
+}
+
+impl Svf {
+    fn tune(&mut self, cutoff: f32, k: f32, rate: f32) {
+        let g = (PI * cutoff.clamp(10.0, rate * 0.49) / rate).tan();
+        let a1 = 1.0 / (1.0 + g * (g + k));
+        self.shape = [a1, g * a1, g * g * a1, k];
+    }
+
+    fn step(&mut self, channel: usize, value: f32) -> (f32, f32) {
+        let [a1, a2, a3, _] = self.shape;
+        let [first, second] = self.state[channel];
+        let v3 = value - second;
+        let v1 = a1 * first + a2 * v3;
+        let v2 = second + a2 * first + a3 * v3;
+        self.state[channel] = [2.0 * v1 - first, 2.0 * v2 - second];
+        (v1, v2)
+    }
+}
+
 struct Filter {
     pass: Pass,
     input: Boxed,
     cutoff: Boxed,
     resonance: Boxed,
     last: (f32, f32),
-    shape: [f32; 4],
-    state: [[f32; 2]; 2],
+    svf: Svf,
 }
 
 impl Unit for Filter {
@@ -256,19 +279,12 @@ impl Unit for Filter {
         let resonance = self.resonance.next(context)[0].clamp(0.0, 0.98);
         if (cutoff, resonance) != self.last {
             self.last = (cutoff, resonance);
-            let g = (PI * cutoff / context.rate).tan();
-            let k = 2.0 - 2.0 * resonance;
-            let a1 = 1.0 / (1.0 + g * (g + k));
-            self.shape = [a1, g * a1, g * g * a1, k];
+            self.svf.tune(cutoff, 2.0 - 2.0 * resonance, context.rate);
         }
-        let [a1, a2, a3, k] = self.shape;
+        let k = self.svf.shape[3];
         let mut output = [0.0; 2];
         for (channel, value) in input.into_iter().enumerate() {
-            let [first, second] = self.state[channel];
-            let v3 = value - second;
-            let v1 = a1 * first + a2 * v3;
-            let v2 = second + a2 * first + a3 * v3;
-            self.state[channel] = [2.0 * v1 - first, 2.0 * v2 - second];
+            let (v1, v2) = self.svf.step(channel, value);
             output[channel] = match self.pass {
                 Pass::Low => v2,
                 Pass::Band => v1,
@@ -277,6 +293,150 @@ impl Unit for Filter {
             };
         }
         output
+    }
+}
+
+const VOWELS: [[(f32, f32, f32); 3]; 5] = [
+    [
+        (800.0, 1.0, 110.0),
+        (1150.0, 0.5, 120.0),
+        (2900.0, 0.1, 150.0),
+    ],
+    [
+        (350.0, 1.0, 90.0),
+        (2000.0, 0.2, 120.0),
+        (2800.0, 0.2, 150.0),
+    ],
+    [
+        (270.0, 1.0, 90.0),
+        (2140.0, 0.3, 120.0),
+        (2950.0, 0.15, 150.0),
+    ],
+    [
+        (450.0, 1.0, 90.0),
+        (800.0, 0.35, 110.0),
+        (2830.0, 0.06, 150.0),
+    ],
+    [
+        (325.0, 1.0, 80.0),
+        (700.0, 0.2, 100.0),
+        (2700.0, 0.04, 150.0),
+    ],
+];
+const VOWEL_LEVEL: f32 = 2.0;
+
+struct Vowel {
+    input: Boxed,
+    position: Boxed,
+    last: f32,
+    bands: [Svf; 3],
+    gains: [f32; 3],
+}
+
+impl Unit for Vowel {
+    fn next(&mut self, context: &Context) -> Frame {
+        let input = self.input.next(context);
+        let vowel = self.position.next(context)[0].clamp(0.0, 4.0);
+        if vowel.to_bits() != self.last.to_bits() {
+            self.last = vowel;
+            let low = samples(vowel.floor()).min(4);
+            let high = (low + 1).min(4);
+            let between = vowel - vowel.floor();
+            for (band, (svf, gain)) in self.bands.iter_mut().zip(&mut self.gains).enumerate() {
+                let (from, to) = (VOWELS[low][band], VOWELS[high][band]);
+                let blend = |a: f32, b: f32| a + (b - a) * between;
+                let hertz = blend(from.0, to.0);
+                *gain = blend(from.1, to.1);
+                svf.tune(hertz, blend(from.2, to.2) / hertz, context.rate);
+            }
+        }
+        let mut output = [0.0; 2];
+        for (channel, value) in input.into_iter().enumerate() {
+            for (svf, gain) in self.bands.iter_mut().zip(self.gains) {
+                let (band, _) = svf.step(channel, value);
+                output[channel] += band * svf.shape[3] * gain * VOWEL_LEVEL;
+            }
+        }
+        output
+    }
+}
+
+struct Fold {
+    input: Boxed,
+    amount: Boxed,
+}
+
+impl Unit for Fold {
+    fn next(&mut self, context: &Context) -> Frame {
+        let input = self.input.next(context);
+        let amount = self.amount.next(context)[0].max(0.0);
+        if amount <= 0.0 {
+            return input;
+        }
+        let gain = 1.0 + 9.0 * amount;
+        input.map(|value| {
+            let turned = (value * gain + 1.0).rem_euclid(4.0);
+            if turned < 2.0 {
+                turned - 1.0
+            } else {
+                3.0 - turned
+            }
+        })
+    }
+}
+
+struct Crush {
+    input: Boxed,
+    bits: Boxed,
+    rate: Boxed,
+    hold: f32,
+    held: Frame,
+}
+
+impl Unit for Crush {
+    fn next(&mut self, context: &Context) -> Frame {
+        let input = self.input.next(context);
+        let steps = (self.bits.next(context)[0].clamp(1.0, 24.0) - 1.0).exp2();
+        let rate = self.rate.next(context)[0];
+        self.hold += (rate / context.rate).clamp(0.0, 1.0);
+        if self.hold >= 1.0 {
+            self.hold -= 1.0;
+            self.held = input.map(|value| (value * steps).round() / steps);
+        }
+        self.held
+    }
+}
+
+struct Compress {
+    input: Boxed,
+    threshold: Boxed,
+    ratio: Boxed,
+    attack: f32,
+    release: f32,
+    key: Option<Arc<AtomicU32>>,
+    level: f32,
+}
+
+impl Unit for Compress {
+    fn next(&mut self, context: &Context) -> Frame {
+        let input = self.input.next(context);
+        let threshold = self.threshold.next(context)[0].max(1e-4);
+        let ratio = self.ratio.next(context)[0].max(1.0);
+        let heard = match &self.key {
+            Some(key) => f32::from_bits(key.load(Ordering::Relaxed)),
+            None => input[0].abs().max(input[1].abs()),
+        };
+        let speed = if heard > self.level {
+            self.attack
+        } else {
+            self.release
+        };
+        self.level += (heard - self.level) * speed;
+        if self.level <= threshold {
+            return input;
+        }
+        let gain = (threshold + (self.level - threshold) / ratio) / self.level;
+        input.map(|value| value * gain)
     }
 }
 
@@ -664,12 +824,48 @@ impl Compiler<'_> {
                 cutoff: self.compile(cutoff),
                 resonance: self.compile(resonance),
                 last: (f32::NAN, f32::NAN),
-                shape: [0.0; 4],
-                state: [[0.0; 2]; 2],
+                svf: Svf::default(),
             }),
             Node::Drive { input, amount } => Box::new(Drive {
                 input: self.compile(input),
                 amount: self.compile(amount),
+            }),
+            Node::Fold { input, amount } => Box::new(Fold {
+                input: self.compile(input),
+                amount: self.compile(amount),
+            }),
+            Node::Crush { input, bits, rate } => Box::new(Crush {
+                input: self.compile(input),
+                bits: self.compile(bits),
+                rate: self.compile(rate),
+                hold: 1.0,
+                held: [0.0; 2],
+            }),
+            Node::Compress {
+                input,
+                threshold,
+                ratio,
+                attack,
+                release,
+                key,
+            } => {
+                let speed = |seconds: f32| 1.0 - (-1.0 / (seconds.max(0.0001) * rate)).exp();
+                Box::new(Compress {
+                    input: self.compile(input),
+                    threshold: self.compile(threshold),
+                    ratio: self.compile(ratio),
+                    attack: speed(*attack),
+                    release: speed(*release),
+                    key: key.as_ref().map(|track| self.controls.key(track)),
+                    level: 0.0,
+                })
+            }
+            Node::Vowel { input, vowel } => Box::new(Vowel {
+                input: self.compile(input),
+                position: self.compile(vowel),
+                last: f32::NAN,
+                bands: Default::default(),
+                gains: [0.0; 3],
             }),
             Node::Pan { input, position } => Box::new(Pan {
                 input: self.compile(input),

@@ -11,7 +11,9 @@ use ox_lang::value::Value;
 use crate::graph::{Color, Knob, Node, Pass, Sound, Stages, Wave, constant};
 use crate::sample::Sample;
 use crate::song::{Automation, Kind, Pattern, Song, Track, pattern};
-use crate::{MODULE, Note, RATE, float, notes, render_song, render_sound, samples, single, wav};
+use crate::{
+    MODULE, Note, RATE, float, len_float, notes, render_song, render_sound, samples, single, wav,
+};
 
 const SOUND: &str = "synth/sound";
 const SAMPLE: &str = "synth/sample";
@@ -499,6 +501,20 @@ fn install_shaping(isolate: &mut Isolate) {
             .function(move |heap, arguments| filter(heap, pass, arguments));
     }
     isolate
+        .native(MODULE, "pan")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let name = "synth/pan";
+            let node = Node::Pan {
+                input: sound(heap, name, arguments[0])?,
+                position: sound(heap, name, arguments[1])?,
+            };
+            wrap(heap, node)
+        });
+}
+
+fn install_coloring(isolate: &mut Isolate) {
+    isolate
         .native(MODULE, "drive")
         .arity(2, Some(2))
         .function(|heap, arguments| {
@@ -510,13 +526,52 @@ fn install_shaping(isolate: &mut Isolate) {
             wrap(heap, node)
         });
     isolate
-        .native(MODULE, "pan")
+        .native(MODULE, "fold")
         .arity(2, Some(2))
         .function(|heap, arguments| {
-            let name = "synth/pan";
-            let node = Node::Pan {
+            let name = "synth/fold";
+            let node = Node::Fold {
                 input: sound(heap, name, arguments[0])?,
-                position: sound(heap, name, arguments[1])?,
+                amount: sound(heap, name, arguments[1])?,
+            };
+            wrap(heap, node)
+        });
+    isolate
+        .native(MODULE, "crush")
+        .arity(1, Some(1))
+        .keywords(&["bits", "rate"])
+        .function(|heap, arguments| {
+            let name = "synth/crush";
+            let node = Node::Crush {
+                input: sound(heap, name, arguments[0])?,
+                bits: or_sound(heap, name, arguments[1], 8.0)?,
+                rate: or_sound(heap, name, arguments[2], float(u64::from(RATE)))?,
+            };
+            wrap(heap, node)
+        });
+    isolate
+        .native(MODULE, "vowel")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let name = "synth/vowel";
+            let vowel = match arguments[1] {
+                Value::Keyword(key) => ["a", "e", "i", "o", "u"]
+                    .iter()
+                    .position(|known| *known == key.name())
+                    .map(|at| constant(len_float(at))),
+                value => sound_of(heap, value),
+            }
+            .ok_or_else(|| {
+                expected(
+                    heap,
+                    name,
+                    ":a, :e, :i, :o, :u or a sound from 0 to 4",
+                    arguments[1],
+                )
+            })?;
+            let node = Node::Vowel {
+                input: sound(heap, name, arguments[0])?,
+                vowel,
             };
             wrap(heap, node)
         });
@@ -549,6 +604,30 @@ fn install_effects(isolate: &mut Isolate) {
                 size: or_sound(heap, name, arguments[1], 0.8)?,
                 damping: or_sound(heap, name, arguments[2], 0.3)?,
                 mix: or_sound(heap, name, arguments[3], 0.35)?,
+            };
+            wrap(heap, node)
+        });
+    isolate
+        .native(MODULE, "compress")
+        .arity(1, Some(1))
+        .keywords(&["threshold", "ratio", "attack", "release", "key"])
+        .function(|heap, arguments| {
+            let name = "synth/compress";
+            let key = match arguments[5] {
+                Value::Nil => None,
+                value => Some(
+                    name_of(heap, value)
+                        .ok_or_else(|| expected(heap, name, "a track name such as :kick", value))?
+                        .into(),
+                ),
+            };
+            let node = Node::Compress {
+                input: sound(heap, name, arguments[0])?,
+                threshold: or_sound(heap, name, arguments[1], 0.25)?,
+                ratio: or_sound(heap, name, arguments[2], 4.0)?,
+                attack: amount(heap, name, arguments[3], 0.005)?,
+                release: amount(heap, name, arguments[4], 0.15)?,
+                key,
             };
             wrap(heap, node)
         });
@@ -780,6 +859,7 @@ pub(crate) fn install(isolate: &mut Isolate) {
     install_modulation(isolate);
     install_editing(isolate);
     install_shaping(isolate);
+    install_coloring(isolate);
     install_effects(isolate);
     install_songs(isolate);
     install_samples(isolate);

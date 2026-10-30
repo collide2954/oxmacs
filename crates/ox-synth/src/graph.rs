@@ -78,6 +78,27 @@ pub enum Node {
         input: Sound,
         amount: Sound,
     },
+    Fold {
+        input: Sound,
+        amount: Sound,
+    },
+    Crush {
+        input: Sound,
+        bits: Sound,
+        rate: Sound,
+    },
+    Compress {
+        input: Sound,
+        threshold: Sound,
+        ratio: Sound,
+        attack: f32,
+        release: f32,
+        key: Option<Arc<str>>,
+    },
+    Vowel {
+        input: Sound,
+        vowel: Sound,
+    },
     Pan {
         input: Sound,
         position: Sound,
@@ -145,7 +166,15 @@ impl Node {
                 resonance,
                 ..
             } => vec![input, cutoff, resonance],
-            Self::Drive { input, amount } => vec![input, amount],
+            Self::Drive { input, amount } | Self::Fold { input, amount } => vec![input, amount],
+            Self::Crush { input, bits, rate } => vec![input, bits, rate],
+            Self::Compress {
+                input,
+                threshold,
+                ratio,
+                ..
+            } => vec![input, threshold, ratio],
+            Self::Vowel { input, vowel } => vec![input, vowel],
             Self::Pan { input, position } => vec![input, position],
             Self::Delay {
                 input,

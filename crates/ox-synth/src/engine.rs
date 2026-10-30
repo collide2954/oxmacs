@@ -137,6 +137,7 @@ struct Player {
     voices: Vec<Voice>,
     effects: Option<Boxed>,
     quiet: usize,
+    key: Arc<AtomicU32>,
 }
 
 impl fmt::Debug for Player {
@@ -228,7 +229,12 @@ impl Player {
         } else {
             self.quiet = 0;
         }
-        output.map(|value| value * self.track.gain)
+        let output = output.map(|value| value * self.track.gain);
+        self.key.store(
+            output[0].abs().max(output[1].abs()).to_bits(),
+            Ordering::Relaxed,
+        );
+        output
     }
 }
 
@@ -354,6 +360,7 @@ impl Engine {
                         .compile(effects)
                     }),
                     quiet: 0,
+                    key: self.controls.key(&track.name),
                 },
             };
             player.retime(track.clone(), bar, global);

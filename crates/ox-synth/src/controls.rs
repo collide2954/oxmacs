@@ -19,11 +19,24 @@ pub struct Shown {
 }
 
 #[derive(Debug, Default)]
-pub struct Controls(Mutex<Vec<Entry>>);
+pub struct Controls {
+    entries: Mutex<Vec<Entry>>,
+    keys: Mutex<Vec<(Arc<str>, Arc<AtomicU32>)>>,
+}
 
 impl Controls {
     fn entries(&self) -> std::sync::MutexGuard<'_, Vec<Entry>> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+        self.entries.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub fn key(&self, track: &str) -> Arc<AtomicU32> {
+        let mut keys = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some((_, level)) = keys.iter().find(|(name, _)| &**name == track) {
+            return Arc::clone(level);
+        }
+        let level = Arc::new(AtomicU32::new(0));
+        keys.push((track.into(), Arc::clone(&level)));
+        level
     }
 
     pub fn slot(&self, knob: &Knob) -> Arc<AtomicU32> {
