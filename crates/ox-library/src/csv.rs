@@ -70,7 +70,7 @@ fn read(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
                 .iter()
                 .zip(row.iter().chain(std::iter::repeat(&String::new())))
             {
-                items.push(heap.string(name)?);
+                items.push(Value::keyword(name));
                 items.push(heap.string(value)?);
             }
             built.push(heap.map_from(&items)?);

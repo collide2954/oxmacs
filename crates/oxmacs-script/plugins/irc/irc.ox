@@ -310,7 +310,7 @@
                 (raise (error "Put point on a link to preview it")))]
     (message (str "Fetching " url "…"))
     (let [response (await (http/get url))
-          kind (or (get response.headers "content-type") "")]
+          kind (or (get response.headers :content-type) "")]
       (cond ((>= response.status 400) (message (str url " answered " response.status)))
         ((string/starts-with? kind "image/")
          (message (str "An image, " kind ", " (// (count response.body) 1024) " KB: RET opens it")))

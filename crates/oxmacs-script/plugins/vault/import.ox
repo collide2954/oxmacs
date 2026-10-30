@@ -7,32 +7,32 @@
     value))
 
 (def (lowered row)
-  (reduce (fn [all [key value]] (assoc all (string/lower key) (filled value)))
+  (reduce (fn [all [key value]] (assoc all (keyword (string/lower (name key))) (filled value)))
           {} (entries row)))
 
 (def (bitwarden text)
   "The logins of a Bitwarden CSV export."
   (vec (keep (fn [row]
                (let [row (lowered row)]
-                 (when (= (or (get row "type") "login") "login")
-                   {title: (get row "name")
-                    username: (get row "login_username")
-                    password: (get row "login_password")
-                    url: (get row "login_uri")
-                    totp: (get row "login_totp")
-                    notes: (get row "notes")})))
+                 (when (= (or (get row :type) "login") "login")
+                   {title: (get row :name)
+                    username: (get row :login_username)
+                    password: (get row :login_password)
+                    url: (get row :login_uri)
+                    totp: (get row :login_totp)
+                    notes: (get row :notes)})))
              (csv/read text :header true))))
 
 (def (one-password text)
   "The items of a 1Password CSV export."
   (vec (map (fn [row]
               (let [row (lowered row)]
-                {title: (get row "title")
-                 username: (get row "username")
-                 password: (get row "password")
-                 url: (or (get row "url") (get row "website") (get row "login url"))
-                 totp: (or (get row "otpauth") (get row "one-time password"))
-                 notes: (or (get row "notes") (get row "notesplain"))}))
+                {title: (get row :title)
+                 username: (get row :username)
+                 password: (get row :password)
+                 url: (or (get row :url) (get row :website) (get row :"login url"))
+                 totp: (or (get row :otpauth) (get row :"one-time password"))
+                 notes: (or (get row :notes) (get row :notesplain))}))
             (csv/read text :header true))))
 
 (def (store-folder)

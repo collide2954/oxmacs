@@ -159,6 +159,7 @@ fn highlight_in(text: &str, state: &State, known: &Forms) -> (Spans, State) {
     let mut faces: Vec<Highlight> = Vec::new();
     let mut meta: Option<(usize, usize)> = None;
     let mut quoted: Option<usize> = None;
+    let mut named = false;
     let mut defining = false;
     let mut summary = false;
     let mut head: Option<&str> = None;
@@ -211,6 +212,10 @@ fn highlight_in(text: &str, state: &State, known: &Forms) -> (Spans, State) {
             {
                 quoted = Some(start);
             }
+            Kind::Prefix(Prefix::Keyword) => {
+                paint(&mut spans, start..end, Highlight::Constant);
+                named = true;
+            }
             Kind::Prefix(_) => paint(&mut spans, start..end, Highlight::Macro),
             Kind::Comment | Kind::BlockComment { .. } => {
                 paint(&mut spans, start..end, Highlight::Comment);
@@ -222,7 +227,9 @@ fn highlight_in(text: &str, state: &State, known: &Forms) -> (Spans, State) {
                 paint(&mut spans, start..end, Highlight::String);
             }
             Kind::StringStart => {
-                let face = if summary || (first && state.after_def) {
+                let face = if std::mem::take(&mut named) {
+                    Highlight::Constant
+                } else if summary || (first && state.after_def) {
                     Highlight::DocComment
                 } else {
                     Highlight::String
@@ -749,5 +756,13 @@ mod tests {
         );
         assert_eq!(highlight_line("(if x"), [(1..3, Highlight::Keyword)]);
         assert_eq!(highlight_line("[if x]"), Vec::new());
+    }
+
+    #[test]
+    fn quoted_keywords_color_as_keywords() {
+        assert_eq!(
+            highlight_line(r#"{:"Unit Price" 3}"#),
+            [(1..14, Highlight::Constant), (15..16, Highlight::Constant)]
+        );
     }
 }

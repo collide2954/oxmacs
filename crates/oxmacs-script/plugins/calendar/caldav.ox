@@ -50,9 +50,6 @@
   (let [name (store/safe (path/name (string/url-decode href)))]
     (if (string/ends-with? (string/lower name) ".ics") name (str name ".ics"))))
 
-(def (header response name)
-  (or (get response.headers name) (get response.headers (string/lower name))))
-
 (def (login calendar)
   (if-let [title calendar.login]
     (vault/login title)
@@ -91,7 +88,7 @@
                                                            (if known.etag {"If-Match" known.etag} {"If-None-Match" "*"}))
                                            :body body)]
                      (cond ((< response.status 300)
-                            [(remember sync href (header response "ETag") change.file) problems])
+                            [(remember sync href (get response.headers :etag) change.file) problems])
                        ((= response.status 412)
                         [sync (conj problems (str change.file " changed on the server too; kept the server's copy"))])
                        (else [sync (conj problems (str "couldn't send " change.file " (" response.status ")"))]))))))]

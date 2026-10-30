@@ -57,6 +57,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - Lines in plugin buffers can hold links: a piece `[text face :link target]` is followed by a click or by the new `follow-link` command, which calls the buffer's `:on-link` with target, and `next-link` and `previous-link` move between links, wrapping around.
 - `open-buffer` and `open-view` take `:label`, the kind of buffer, such as `"remote folders"`; buffers of one kind share their keys, and `C-h f` names the kind where a command is bound.
 - A line given to `open-buffer`, `set-lines` or `append-lines` as a map with fields of the plugin's own is an item: `line-item` gives the map of the line at point or of any line, `goto-item` moves to the first line whose item has the fields it is given, and `next-item` steps between items.
+- Any keyword can be written `:"Unit Price"`, a colon before a string, and keywords whose names aren't plain, such as map keys read from JSON or CSV, print that way, so `pr-str` reads back. Map keys with dots print as `:a.b` instead of an `a.b:` that read as a field.
 - `string/url-encode` and `string/url-decode` write text as URL-safe `%XX` escapes of its UTF-8 and read them back, in any Ox code.
 - `ox migrate PATH…` rewrites Ox files written for an older Ox to match it, changing only names a file doesn't define itself, and `ox migrate --check` lists the files it would change. Run it over `init.ox`, `custom.ox` and your plugins after upgrading.
 
@@ -108,6 +109,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `define-mode` and `console-start` take `:complete`, `:signature`, `:definition`, `:references` and `:docs`, which answer `C-M-i` and completion while typing, the call signature, `M-.`, `M-?` and `C-c C-d` in the mode's buffers or the console before any language server does. Each, like `:items`, runs as a task of its own and may await, and gives its answer, `nil` to leave it to the language server, or `true` when it answers itself. The r plugin answers this way in R buffers and consoles, so `r-complete` and `r-find-definition` are gone in favor of `C-M-i` and `M-.`.
 - The editor settings `completion-delay` and `signature-delay` set how long typing rests before completion pops up on its own and before a call's arguments show, 0.25 and 0.4 seconds by default, for every language. The r plugin's settings of those names are gone.
 - `C-g` in a prompt raises `quit` in the task waiting for it, a new type that only `(catch quit e …)` stops: `(catch error e …)` lets it pass, so a cancelled command simply ends, and a quit nothing catches leaves only "Quit" in the echo area. An error nothing catches shows just its message there, without the "Ox:" before it, and still goes to `*ox log*` with its traceback. Built-in error types raised again keep their type, so `*ox stacktrace*` names it.
+- `csv/read` with `:header true` gives maps with keyword keys, such as `:title` and `:"Login URI"`, like `json/read`, XML attributes and HTTP headers, instead of string keys.
 
 ### Removed
 
@@ -116,6 +118,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- CalDAV calendars remember each event's ETag again, so changing or deleting an event no longer overwrites a newer copy on the server, and `M-x irc-preview` tells images from pages again; both looked the response headers up by text instead of keyword.
 - EPUB books whose files have accented or other non-ASCII names, written as `%C3%A9`-style escapes, open their chapters and images instead of missing them.
 - FTP paths holding `#`, `?`, `%` or spaces reach the file they name instead of another one, and CalDAV events keep any escaped character of their names, not only `@`, when saved.
 - An edit in a buffer whose mode highlights with an Ox `:highlight` function highlights again only the lines whose state it changes, instead of every line to the end of the buffer. Ox buffers are highlighted the same way, from the start of the file, so a string or block comment opened more than 300 lines above still colors the lines below it.

@@ -93,8 +93,7 @@ enum Frame {
         items: Vec<Syntax>,
     },
     Prefix {
-        name: Option<&'static str>,
-        mark: &'static str,
+        prefix: Prefix,
         start: usize,
     },
 }
@@ -120,6 +119,7 @@ fn marked(prefix: Prefix) -> (Option<&'static str>, &'static str) {
         Prefix::Splice => (Some("unquote-splicing"), "~@"),
         Prefix::Deref => (Some("deref"), "@"),
         Prefix::Skip => (None, "#;"),
+        Prefix::Keyword => (None, ":"),
     }
 }
 
@@ -196,10 +196,7 @@ impl<'a> Reader<'a> {
             Kind::Close | Kind::HoleEnd => {
                 self.closing(text.chars().next().unwrap_or(')'), token);
             }
-            Kind::Prefix(prefix) => {
-                let (name, mark) = marked(prefix);
-                self.frames.push(Frame::Prefix { name, mark, start });
-            }
+            Kind::Prefix(prefix) => self.frames.push(Frame::Prefix { prefix, start }),
             Kind::Flag => {
                 let after = start + 1;
                 let items = vec![
@@ -298,6 +295,18 @@ impl<'a> Reader<'a> {
         });
     }
 
+    fn quoted_keyword(&mut self, head: Span, syntax: Syntax) -> Syntax {
+        let span = head.through(syntax.span);
+        if let Datum::Str(name) = &syntax.datum {
+            return Syntax::new(Datum::Keyword(name.clone()), span);
+        }
+        self.error(
+            span,
+            "A colon makes a keyword of a plain string, as in :\"Unit Price\"",
+        );
+        syntax
+    }
+
     fn place(&mut self, mut syntax: Syntax) {
         loop {
             match self.frames.last_mut() {
@@ -306,13 +315,18 @@ impl<'a> Reader<'a> {
                     return;
                 }
                 Some(Frame::Prefix { .. }) => {
-                    let Some(Frame::Prefix { name, mark, start }) = self.frames.pop() else {
+                    let Some(Frame::Prefix { prefix, start }) = self.frames.pop() else {
                         return;
                     };
+                    let (name, mark) = marked(prefix);
+                    let head = Span::new(start, start + mark.len());
+                    if prefix == Prefix::Keyword {
+                        syntax = self.quoted_keyword(head, syntax);
+                        continue;
+                    }
                     let Some(name) = name else {
                         return;
                     };
-                    let head = Span::new(start, start + mark.len());
                     syntax = Syntax {
                         span: head.through(syntax.span),
                         datum: Datum::List(vec![
@@ -385,10 +399,13 @@ impl<'a> Reader<'a> {
                 Span::new(*start, start + opener.text().len()),
                 format!("This {} is never closed", opener.text()),
             ),
-            Frame::Prefix { mark, start, .. } => (
-                Span::new(*start, start + mark.len()),
-                format!("Put something after {mark}"),
-            ),
+            Frame::Prefix { prefix, start } => {
+                let (_, mark) = marked(*prefix);
+                (
+                    Span::new(*start, start + mark.len()),
+                    format!("Put something after {mark}"),
+                )
+            }
         };
         if at_end {
             self.unfinished(span, message);
@@ -809,6 +826,26 @@ mod tests {
                 (symbol(":"), Span::new(11, 12)),
                 (symbol("a:b"), Span::new(13, 16)),
             ]
+        );
+    }
+
+    #[test]
+    fn a_colon_before_a_string_reads_as_any_keyword() {
+        assert_eq!(
+            data(r#":"Unit Price" :"a.b" : "x""#),
+            [
+                (keyword("Unit Price"), Span::new(0, 13)),
+                (keyword("a.b"), Span::new(14, 20)),
+                (symbol(":"), Span::new(21, 22)),
+                (string("x"), Span::new(23, 26)),
+            ]
+        );
+        let (_, errors) = read(":(x)");
+        assert!(errors.is_empty());
+        let (_, errors) = read(r#":"{x}""#);
+        assert_eq!(
+            errors.first().map(|error| error.message.as_str()),
+            Some("A colon makes a keyword of a plain string, as in :\"Unit Price\"")
         );
     }
 

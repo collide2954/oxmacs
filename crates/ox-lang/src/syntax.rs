@@ -20,6 +20,7 @@ pub enum Prefix {
     Splice,
     Deref,
     Skip,
+    Keyword,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -370,6 +371,7 @@ impl<'a> Lexer<'a> {
             '~' if rest.starts_with("~@") => Some((Prefix::Splice, 2)),
             '~' => prefix(Prefix::Unquote),
             '@' => prefix(Prefix::Deref),
+            ':' if rest.starts_with(":\"") => prefix(Prefix::Keyword),
             _ => None,
         };
         if let Some((prefix, length)) = marked {
@@ -488,6 +490,20 @@ mod tests {
                 (Kind::Prefix(Prefix::Skip), "#;"),
                 (Kind::Symbol, "d"),
                 (Kind::Close, ")"),
+            ]
+        );
+        let found: Vec<Kind> = tokens(r#":"a b""#, &State::default())
+            .0
+            .iter()
+            .map(|token| token.kind)
+            .collect();
+        assert_eq!(
+            found,
+            [
+                Kind::Prefix(Prefix::Keyword),
+                Kind::StringStart,
+                Kind::Text,
+                Kind::StringEnd
             ]
         );
     }

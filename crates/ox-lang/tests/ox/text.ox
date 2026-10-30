@@ -34,3 +34,9 @@
 (module (import (ox string))) [(string/url-encode "a b&c/d?") (string/url-encode "São Paulo-_.~")] ;=> ["a%20b%26c%2Fd%3F" "S%C3%A3o%20Paulo-_.~"]
 (module (import (ox string))) [(string/url-decode "S%C3%A3o%20Paulo") (string/url-decode "100%") (string/url-decode "%zz%4")] ;=> ["São Paulo" "100%" "%zz%4"]
 (module (import (ox string))) (string/url-decode (string/url-encode "naïve €/#?")) ;=> "naïve €/#?"
+
+;; any keyword prints so that it reads back: :"…" when its name isn't plain
+(= :"Unit Price" (keyword "Unit Price")) ;=> true
+(pr-str [(keyword "Unit Price") (keyword "a.b") :plain]) ;=> "[:\"Unit Price\" :a.b :plain]"
+(pr-str {(keyword "Unit Price") 3 (keyword "a.b") 6 (keyword "1x") 4 plain: 7}) ;=> "{{:\"Unit Price\" 3 :a.b 6 :1x 4 plain: 7}}"
+(get {:"Unit Price" 3} (keyword "Unit Price")) ;=> 3

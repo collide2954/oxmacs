@@ -17,7 +17,7 @@ An Ox program is a series of forms. A list `(f a b)` calls `f` with `a` and `b`;
 - Numbers: `42`, `-3.5`, `1e3`. Whole numbers grow as large as they need to. `/` always gives a float and `//` a whole number; `=` tells `1` from `1.0`, and `==` doesn't.
 - Strings: `"text"`, with `\n`, `\t`, `\"`, `\\` and `\u{263A}` escapes. `{expression}` inside a string inserts its value; write `{{` and `}}` for braces.
 - Raw strings: `#r"C:\temp\{x}"` keeps backslashes and braces as they are. Write `#r#"…"#` when the text holds a quote.
-- Keywords: `:name`, or `name:` in front of a value. They name things, mostly as map keys.
+- Keywords: `:name`, or `name:` in front of a value. They name things, mostly as map keys. A name with spaces or other odd characters, as data read from JSON, CSV, XML or HTTP headers can have, is written `:"Unit Price"`.
 - Symbols: `'name` is a name as data, as when `(bind-key "C-c h" 'hello)` names a command.
 - `true`, `false` and `nil`. Only `false` and `nil` are false; `0`, `""` and `[]` are true.
 - Characters: `\a`, `\space`, `\newline`, `\tab`, `\u{263A}`.

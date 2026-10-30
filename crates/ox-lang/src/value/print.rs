@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 
 use crate::heap::Heap;
+use crate::syntax;
 use crate::value::Value;
 use crate::value::equal::identical;
 use crate::value::promise::Promise;
@@ -119,10 +120,7 @@ impl<'a> Printer<'a> {
             Value::Float(number) => float(number, &mut self.out),
             Value::Char(character) => self::character(character, &mut self.out),
             Value::Symbol(name) => self.out.push_str(name.name()),
-            Value::Keyword(name) => {
-                self.out.push(':');
-                self.out.push_str(name.name());
-            }
+            Value::Keyword(name) => keyword(name.name(), &mut self.out),
             Value::Ref(_) => self.reference(heap, value),
         }
     }
@@ -147,7 +145,9 @@ impl<'a> Printer<'a> {
                 .into_iter()
                 .map(|(key, item)| {
                     let key = match key {
-                        Value::Keyword(name) => Step::Owned(format!("{}:", name.name())),
+                        Value::Keyword(name) if label(name.name()) => {
+                            Step::Owned(format!("{}:", name.name()))
+                        }
                         other => Step::Value(other),
                     };
                     vec![key, Step::Text(" "), Step::Value(item)]
@@ -276,6 +276,27 @@ fn string(text: &str, out: &mut String) {
     }
     out.push('"');
 }
+
+fn plain(name: &str) -> bool {
+    !name.is_empty() && !name.contains(syntax::delimiter)
+}
+
+fn label(name: &str) -> bool {
+    plain(name)
+        && !name.contains([':', '.'])
+        && !syntax::numeric(name)
+        && !name.starts_with(['\'', '`', '~', '@', '#', '\\', '^'])
+}
+
+fn keyword(name: &str, out: &mut String) {
+    out.push(':');
+    if plain(name) {
+        out.push_str(name);
+    } else {
+        string(name, out);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{brief, display, write};

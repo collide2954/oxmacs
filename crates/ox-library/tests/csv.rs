@@ -20,9 +20,9 @@ fn rows_are_split_on_commas_outside_quotes() {
 fn a_header_row_turns_rows_into_maps() {
     assert_eq!(
         evaluated(
-            r#"(let [rows (csv/read "Title,Login URI\nmail,https://example.com\n" :header true)] [(count rows) (get (first rows) "Login URI")])"#
+            r#"(let [rows (csv/read "Title,Login URI\nmail,https://example.com\n" :header true)] [(count rows) (get (first rows) :"Login URI") (first rows)])"#
         ),
-        r#"[1 "https://example.com"]"#
+        r#"[1 "https://example.com" {Title: "mail" :"Login URI" "https://example.com"}]"#
     );
 }
 
