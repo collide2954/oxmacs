@@ -16,12 +16,13 @@ pub enum ErrorKind {
     Range,
     ZeroDivision,
     NoMatch,
+    Quit,
     Interrupt,
     Refused,
 }
 
 impl ErrorKind {
-    pub const NAMES: [(Self, &'static str); 7] = [
+    pub const NAMES: [(Self, &'static str); 8] = [
         (Self::Other, "error"),
         (Self::Type, "type-error"),
         (Self::Arity, "arity-error"),
@@ -29,6 +30,7 @@ impl ErrorKind {
         (Self::Range, "range-error"),
         (Self::ZeroDivision, "zero-division-error"),
         (Self::NoMatch, "no-match-error"),
+        (Self::Quit, "quit"),
     ];
 }
 

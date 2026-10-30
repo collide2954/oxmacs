@@ -16,9 +16,6 @@
    "g" 'git-refresh "s" 'git-stage "u" 'git-unstage "k" 'git-discard "c" 'git-commit-popup
    "q" 'quit-window})
 
-(def (quietly work)
-  (try (work) (catch error e (unless (= e.message "Quit") (message e.message)))))
-
 (def (here)
   (if-let [git (buffer-value :git)]
     {git: git state: @git pane: false}
@@ -152,11 +149,9 @@
           (swap! git (fn [state] (assoc state :pane (assoc state.pane :file [row.section row.path]))))
           (draw-pane git true 0))))))
 (defcommand git-status "Show the Git status of the current repository"
-  (quietly
-   (fn []
-     (if-let [found (repo/locate (default-directory))]
-       (show found)
-       (message "Not inside a Git repository")))))
+  (if-let [found (repo/locate (default-directory))]
+    (show found)
+    (message "Not inside a Git repository")))
 (def (step kinds forward)
   (when (here)
     (let [line (current-line)
@@ -178,7 +173,7 @@
     (swap! found.git (fn [state]
                        (assoc state :pane (assoc state.pane :layout
                                                  (if (= state.pane.layout :split) :unified :split)))))
-    (quietly (fn [] (draw-pane found.git false nil)))))
+    (draw-pane found.git false nil)))
 
 (def (flip folds key)
   (if (get folds key) (dissoc folds key) (assoc folds key true)))
@@ -190,22 +185,20 @@
   (when-let [git (buffer-value :git)]
     (when-let [row (line-item)]
       (let [hunk {kind: :hunk section: row.section path: row.path hunk: row.hunk}]
-        (quietly
-         (fn []
-           (cond
-             [(= row.kind :section)
-              (fold git :closed (fn [closed] (flip closed row.section)))
-              (redraw git nil)]
-             [(= row.kind :file)
-              (fold git :open (fn [open] (flip open [row.section row.path])))
-              (redraw git nil)]
-             [(= row.kind :hunk)
-              (fold git :hidden (fn [hidden] (flip hidden [row.section row.path row.hunk])))
-              (redraw git hunk)]
-             [(= row.kind :line)
-              (fold git :hidden (fn [hidden] (assoc hidden [row.section row.path row.hunk] true)))
-              (redraw git hunk)]
-             [else nil])))))))
+        (cond
+          [(= row.kind :section)
+           (fold git :closed (fn [closed] (flip closed row.section)))
+           (redraw git nil)]
+          [(= row.kind :file)
+           (fold git :open (fn [open] (flip open [row.section row.path])))
+           (redraw git nil)]
+          [(= row.kind :hunk)
+           (fold git :hidden (fn [hidden] (flip hidden [row.section row.path row.hunk])))
+           (redraw git hunk)]
+          [(= row.kind :line)
+           (fold git :hidden (fn [hidden] (assoc hidden [row.section row.path row.hunk] true)))
+           (redraw git hunk)]
+          [else nil])))))
 
 (def (row-line row)
   (if (= row.kind :pair) (or row.right row.left) row.at))
@@ -225,20 +218,18 @@
     (let [state found.state
           row (line-item)]
       (if (and row (some? row.path))
-        (quietly
-         (fn []
-           (let [target (path/join state.root row.path)
-                 number (line-number state row)]
-             (if (await (file/exists? target))
-               (do
-                 (open-file target)
-                 (when number (goto-line (- number 1))))
-               (message "{row.path} is not in the working tree")))))
+        (let [target (path/join state.root row.path)
+              number (line-number state row)]
+          (if (await (file/exists? target))
+            (do
+              (open-file target)
+              (when number (goto-line (- number 1))))
+            (message "{row.path} is not in the working tree")))
         (message "Nothing to visit here")))))
 
 (defcommand git-refresh "Read the repository again"
   (when-let [found (here)]
-    (quietly (fn [] (refresh found.git)))))
+    (refresh found.git)))
 
 (def (line-indexes row)
   (cond
@@ -282,7 +273,7 @@
       (cond
         [(nil? chosen) (message nothing)]
         [(= chosen.kind :invalid) (message "Select lines of one hunk or files of one section")]
-        [else (quietly (fn [] (act found.git chosen)))]))))
+        [else (act found.git chosen)]))))
 
 (def (describe paths)
   (if (= (count paths) 1) (first paths) "{(count paths)} files"))
@@ -436,8 +427,7 @@
 
 (defcommand git-commit-popup "Commit, amend, extend or reword"
   (when-let [found (here)]
-    (let [git found.git
-          act (fn [run] (fn [flags] (quietly (fn [] (run flags)))))]
+    (let [git found.git]
       (transient "Commit"
                  [{title: "Arguments"
                    switches: [["a" "--all" "Stage all modified and deleted files"]
@@ -445,11 +435,11 @@
                               ["n" "--no-verify" "Skip the commit hooks"]
                               ["s" "--signoff" "Add a Signed-off-by line"]]}
                   {title: "Create"
-                   actions: [["c" "Commit" (act (fn [flags] (write-message git :create flags)))]]}
+                   actions: [["c" "Commit" (fn [flags] (write-message git :create flags))]]}
                   {title: "Edit HEAD"
-                   actions: [["a" "Amend" (act (fn [flags] (write-message git :amend flags)))]
-                             ["e" "Extend" (act (fn [flags] (extend git flags)))]
-                             ["w" "Reword" (act (fn [flags] (write-message git :reword flags)))]]}]))))
+                   actions: [["a" "Amend" (fn [flags] (write-message git :amend flags))]
+                             ["e" "Extend" (fn [flags] (extend git flags))]
+                             ["w" "Reword" (fn [flags] (write-message git :reword flags))]]}]))))
 
 (defcommand git-commit-finish "Commit with this message"
   (if-let [found (buffer-value :git-commit)]
@@ -457,21 +447,19 @@
           buffer (current-buffer)]
       (if (= (commit/message-text text) "")
         (message "Write a commit message first")
-        (quietly
-         (fn []
-           (message "Committing…")
-           (repo/git-with found.root found.args text)
-           (close-buffer buffer)
-           (back-to-status found.git)
-           (refresh found.git)
-           (report-commit found.root)))))
+        (do (message "Committing…")
+          (repo/git-with found.root found.args text)
+          (close-buffer buffer)
+          (back-to-status found.git)
+          (refresh found.git)
+          (report-commit found.root))))
     (message "This buffer is not a commit message")))
 
 (defcommand git-commit-cancel "Cancel this commit"
   (if-let [found (buffer-value :git-commit)]
     (do
       (close-buffer (current-buffer))
-      (quietly (fn [] (back-to-status found.git)))
+      (back-to-status found.git)
       (message "Commit canceled"))
     (message "This buffer is not a commit message")))
 

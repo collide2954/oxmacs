@@ -7,6 +7,7 @@ pub enum Family {
     Plain,
     Error,
     AnyError,
+    Quit,
 }
 
 #[derive(Debug, Clone)]

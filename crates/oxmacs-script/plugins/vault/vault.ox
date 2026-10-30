@@ -17,12 +17,6 @@
   {"c" 'vault-copy-password "u" 'vault-copy-username "t" 'vault-copy-code "s" 'vault-reveal
    "e" 'vault-edit "d" 'vault-delete "L" 'vault-lock "q" 'quit-window})
 
-(def (quietly work)
-  (try (work)
-    (catch error e
-      (unless (= e.message "Quit")
-        (message e.message)))))
-
 (def (text value)
   (or value ""))
 
@@ -167,9 +161,8 @@
     (if (string/blank? typed) (store/generate) typed)))
 
 (defcommand vault "List the entries of the password vault"
-  (quietly (fn []
-             (store/unlock)
-             (show-list))))
+  (store/unlock)
+  (show-list))
 
 (defcommand vault-show "Show the vault entry on this line"
   (if-let [entry (entry-here)]
@@ -177,21 +170,18 @@
     (message "No entry on this line")))
 
 (defcommand vault-copy-password "Copy the password of a vault entry"
-  (quietly (fn []
-             (let [entry (target "Copy the password of: ")]
-               (copy! entry.password "password" true)))))
+  (let [entry (target "Copy the password of: ")]
+    (copy! entry.password "password" true)))
 
 (defcommand vault-copy-username "Copy the user name of a vault entry"
-  (quietly (fn []
-             (let [entry (target "Copy the user name of: ")]
-               (copy! entry.username "user name" false)))))
+  (let [entry (target "Copy the user name of: ")]
+    (copy! entry.username "user name" false)))
 
 (defcommand vault-copy-code "Copy the one-time code of a vault entry"
-  (quietly (fn []
-             (let [entry (target "Copy the code of: ")]
-               (when (blank? entry.totp)
-                 (raise (error "{entry.title} has no one-time code")))
-               (copy! (code entry) "code" true)))))
+  (let [entry (target "Copy the code of: ")]
+    (when (blank? entry.totp)
+      (raise (error "{entry.title} has no one-time code")))
+    (copy! (code entry) "code" true)))
 
 (defcommand vault-reveal "Show or hide the password of the entry"
   (swap! view update :reveal not)
@@ -203,56 +193,52 @@
 (defcommand vault-previous "Move to the previous entry" (next-item -1))
 
 (defcommand vault-add "Add an entry to the password vault"
-  (quietly (fn []
-             (store/unlock)
-             (let [title (string/trim (ask "Title: "))]
-               (when (string/blank? title)
-                 (raise (error "An entry needs a title")))
-               (store/add! {title: title
-                            username: (ask "User name: ")
-                            password: (ask-password "Password (empty makes one): ")
-                            url: (ask "URL: ")
-                            totp: (ask "One-time code secret or otpauth link (optional): ")
-                            notes: ""})
-               (redraw-list)
-               (message "Added {title}")))))
+  (store/unlock)
+  (let [title (string/trim (ask "Title: "))]
+    (when (string/blank? title)
+      (raise (error "An entry needs a title")))
+    (store/add! {title: title
+                 username: (ask "User name: ")
+                 password: (ask-password "Password (empty makes one): ")
+                 url: (ask "URL: ")
+                 totp: (ask "One-time code secret or otpauth link (optional): ")
+                 notes: ""})
+    (redraw-list)
+    (message "Added {title}")))
 
 (defcommand vault-edit "Change a field of a vault entry"
-  (quietly (fn []
-             (let [entry (target "Edit: ")
-                   field (await (prompt "Change: " :choices ["title" "username" "password" "url" "totp" "notes"]))
-                   key (keyword field)
-                   value (if (= field "password")
-                           (ask-password "New password (empty makes one): ")
-                           (ask "{field}: " :initial (text (get entry key))))]
-               (store/change! entry.id (fn [old] (assoc old key value)))
-               (redraw-list)
-               (redraw-entry)
-               (message "Changed the {field} of {entry.title}")))))
+  (let [entry (target "Edit: ")
+        field (await (prompt "Change: " :choices ["title" "username" "password" "url" "totp" "notes"]))
+        key (keyword field)
+        value (if (= field "password")
+                (ask-password "New password (empty makes one): ")
+                (ask "{field}: " :initial (text (get entry key))))]
+    (store/change! entry.id (fn [old] (assoc old key value)))
+    (redraw-list)
+    (redraw-entry)
+    (message "Changed the {field} of {entry.title}")))
 
 (defcommand vault-delete "Delete a vault entry"
-  (quietly (fn []
-             (let [entry (target "Delete: ")]
-               (when (await (yes-or-no "Delete {entry.title} from the vault? "))
-                 (store/remove! entry.id)
-                 (when (= (get @view :shown) entry.id)
-                   (close-buffer entry-buffer))
-                 (redraw-list)
-                 (message "Deleted {entry.title}"))))))
+  (let [entry (target "Delete: ")]
+    (when (await (yes-or-no "Delete {entry.title} from the vault? "))
+      (store/remove! entry.id)
+      (when (= (get @view :shown) entry.id)
+        (close-buffer entry-buffer))
+      (redraw-list)
+      (message "Deleted {entry.title}"))))
 
 (defcommand vault-lock "Lock the password vault now"
   (store/lock)
   (message "Vault locked"))
 
 (defcommand vault-generate "Make a new password or passphrase and copy it"
-  (quietly (fn []
-             (let [kind (await (prompt "Make: " :choices {"password" "20 letters, digits and symbols"
-                                                          "passphrase" "7 random words"
-                                                          "pin" "6 digits"}))
-                   made (cond ((= kind "passphrase") (store/passphrase))
-                          ((= kind "pin") (apply str (map (fn [_] (crypto/random-below 10)) (range 6))))
-                          (else (store/generate)))]
-               (copy! made "new {kind}" true)))))
+  (let [kind (await (prompt "Make: " :choices {"password" "20 letters, digits and symbols"
+                                               "passphrase" "7 random words"
+                                               "pin" "6 digits"}))
+        made (cond ((= kind "passphrase") (store/passphrase))
+               ((= kind "pin") (apply str (map (fn [_] (crypto/random-below 10)) (range 6))))
+               (else (store/generate)))]
+    (copy! made "new {kind}" true)))
 
 (def (imported kind)
   (cond ((= kind "keepass")
@@ -264,13 +250,12 @@
     (else (raise (error "oxmacs can't import from {kind}")))))
 
 (defcommand vault-import "Import passwords from KeePass, Bitwarden, 1Password or pass"
-  (quietly (fn []
-             (store/unlock)
-             (let [kind (await (prompt "Import from: " :choices {"keepass" "a KeePass .kdbx file"
-                                                                 "bitwarden" "a Bitwarden CSV export"
-                                                                 "1password" "a 1Password CSV export"
-                                                                 "pass" "the pass password store"}))
-                   found (imported kind)
-                   added (store/add-all! found)]
-               (redraw-list)
-               (message "Imported {added} of {(count found)} entries; the others were already there")))))
+  (store/unlock)
+  (let [kind (await (prompt "Import from: " :choices {"keepass" "a KeePass .kdbx file"
+                                                      "bitwarden" "a Bitwarden CSV export"
+                                                      "1password" "a 1Password CSV export"
+                                                      "pass" "the pass password store"}))
+        found (imported kind)
+        added (store/add-all! found)]
+    (redraw-list)
+    (message "Imported {added} of {(count found)} entries; the others were already there")))

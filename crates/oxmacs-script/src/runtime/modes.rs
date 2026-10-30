@@ -968,7 +968,7 @@ mod tests {
         assert_eq!(editor.line_style(0).spans, []);
         assert_eq!(
             editor.message(),
-            Some("Ox: Bad highlighting doesn't know the face :nope")
+            Some("Bad highlighting doesn't know the face :nope")
         );
     }
 }

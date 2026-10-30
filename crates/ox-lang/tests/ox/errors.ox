@@ -20,6 +20,12 @@
 (try (match 1 [2 :two]) (catch no-match-error e e.message)) ;=> "No match for 1"
 (try (/ 1 0) (catch type-error e :type)) ;! Division by zero
 
+;; quit cancels: only catch quit stops it, not catch error
+(try (raise (quit "Quit")) (catch quit e e.message)) ;=> "Quit"
+(try (try (raise (quit)) (catch error e :error)) (catch quit e :quit)) ;=> :quit
+(def log (atom [])) (try (try (raise (quit)) (finally (swap! log conj :cleanup))) (catch quit e (swap! log conj :quit))) @log ;=> [:cleanup :quit]
+(raise (quit)) ;! quit
+
 ;; finally always runs
 (def log (atom [])) (try (swap! log conj :body) (finally (swap! log conj :finally))) @log ;=> [:body :finally]
 (def log (atom [])) (try (try (raise (error "x")) (finally (swap! log conj :cleanup))) (catch error e (swap! log conj :caught))) @log ;=> [:cleanup :caught]

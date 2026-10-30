@@ -168,9 +168,6 @@
   (open-buffer tree-buffer [""] :keys tree-keys :show false :directory root :cursor :line
                :on-click clicked :on-drop dropped :on-type typed :on-resize resized))
 
-(def (quietly work)
-  (try (work) (catch error e (unless (= e.message "Quit") (message e.message)))))
-
 (def (show)
   (let [place (buffer-file)
         directory (default-directory)]
@@ -185,7 +182,7 @@
 (defcommand explorer "Show the file tree beside the windows, move to it, or hide it"
   (let [side (side-window)]
     (cond
-      [(not (shown?)) (quietly show)]
+      [(not (shown?)) (show)]
       [side.selected (close-side-window)]
       [else (select-side-window)])))
 
@@ -304,64 +301,56 @@
   (reset! files nil))
 
 (defcommand explorer-new-file "Make a file in the folder on this line and open it"
-  (quietly
-   (fn []
-     (let [folder (folder-for (here))
-           name (await (prompt "New file in {(relative folder)}/: "))
-           target (apply path/join folder (string/split name "/"))]
-       (if (await (file/exists? target))
-         (message "{(relative target)} already exists")
-         (do (await (file/make-dir (path/parent target)))
-           (await (file/write target ""))
-           (swap! state update :open conj folder)
-           (reload-around target)
-           (reveal target)
-           (visit target false)))))))
+  (let [folder (folder-for (here))
+        name (await (prompt "New file in {(relative folder)}/: "))
+        target (apply path/join folder (string/split name "/"))]
+    (if (await (file/exists? target))
+      (message "{(relative target)} already exists")
+      (do (await (file/make-dir (path/parent target)))
+        (await (file/write target ""))
+        (swap! state update :open conj folder)
+        (reload-around target)
+        (reveal target)
+        (visit target false)))))
 
 (defcommand explorer-new-folder "Make a folder in the folder on this line"
-  (quietly
-   (fn []
-     (let [folder (folder-for (here))
-           name (await (prompt "New folder in {(relative folder)}/: "))
-           target (apply path/join folder (string/split name "/"))]
-       (if (await (file/exists? target))
-         (message "{(relative target)} already exists")
-         (do (await (file/make-dir target))
-           (swap! state update :open conj folder)
-           (reload-around target)
-           (draw target)))))))
+  (let [folder (folder-for (here))
+        name (await (prompt "New folder in {(relative folder)}/: "))
+        target (apply path/join folder (string/split name "/"))]
+    (if (await (file/exists? target))
+      (message "{(relative target)} already exists")
+      (do (await (file/make-dir target))
+        (swap! state update :open conj folder)
+        (reload-around target)
+        (draw target)))))
 
 (def (transfer moving)
   (when-let [row (here)]
-    (quietly
-     (fn []
-       (let [root (get @state :root)
-             answer (await (prompt (if moving "Rename or move to: " "Copy to: ") :initial (relative row.path)))
-             target (absolute root answer)]
-         (await (file/make-dir (path/parent target)))
-         (when (if moving
-                 (await (move-path row.path target))
-                 (when (or (not (await (file/exists? target)))
-                           (await (yes-or-no "{answer} exists; replace it? ")))
-                   (await (file/copy row.path target))
-                   true))
-           (reload-around row.path target)
-           (reveal target)
-           (message "{(if moving "Moved" "Copied")} {(relative row.path)} to {answer}")))))))
+    (let [root (get @state :root)
+          answer (await (prompt (if moving "Rename or move to: " "Copy to: ") :initial (relative row.path)))
+          target (absolute root answer)]
+      (await (file/make-dir (path/parent target)))
+      (when (if moving
+              (await (move-path row.path target))
+              (when (or (not (await (file/exists? target)))
+                        (await (yes-or-no "{answer} exists; replace it? ")))
+                (await (file/copy row.path target))
+                true))
+        (reload-around row.path target)
+        (reveal target)
+        (message "{(if moving "Moved" "Copied")} {(relative row.path)} to {answer}")))))
 
 (defcommand explorer-rename "Rename or move the file or folder on this line" (transfer true))
 (defcommand explorer-copy "Copy the file or folder on this line" (transfer false))
 
 (defcommand explorer-delete "Delete the file or folder on this line"
   (when-let [row (here)]
-    (quietly
-     (fn []
-       (let [trash (get (settings) :delete-to-trash)]
-         (when (await (yes-or-no "{(if trash "Trash" "Delete")} {(relative row.path)}?"))
-           (await (delete-path row.path))
-           (reload-around row.path)
-           (draw (path/parent row.path))
-           (message "{(if trash "Trashed" "Deleted")} {(relative row.path)}")))))))
+    (let [trash (get (settings) :delete-to-trash)]
+      (when (await (yes-or-no "{(if trash "Trash" "Delete")} {(relative row.path)}?"))
+        (await (delete-path row.path))
+        (reload-around row.path)
+        (draw (path/parent row.path))
+        (message "{(if trash "Trashed" "Deleted")} {(relative row.path)}")))))
 
 (defcommand explorer-open-externally "Open the file or folder on this line with its usual app"
   (when-let [row (here)] (open-externally row.path)))
@@ -384,15 +373,13 @@
         (unless (or (same? (path/parent moving.path) into)
                     (same? moving.path into)
                     (inside? into moving.path))
-          (quietly
-           (fn []
-             (when (await (yes-or-no "Move {(relative moving.path)} into {(relative into)}/?"))
-               (if (await (file/exists? target))
-                 (message "{(relative target)} already exists")
-                 (do (await (move-path moving.path target))
-                   (swap! state update :open conj into)
-                   (reload-around moving.path target)
-                   (reveal target)))))))))))
+          (when (await (yes-or-no "Move {(relative moving.path)} into {(relative into)}/?"))
+            (if (await (file/exists? target))
+              (message "{(relative target)} already exists")
+              (do (await (move-path moving.path target))
+                (swap! state update :open conj into)
+                (reload-around moving.path target)
+                (reveal target)))))))))
 
 (def (resized width)
   (swap! state assoc :width width)
@@ -401,7 +388,7 @@
 (on-window-change :explorer
                   (fn []
                     (when (and (shown?) (not= (buffer-name) tree-buffer) (or (buffer-file) (nil? (get @state :root))))
-                      (quietly (fn [] (follow-to (buffer-file) (default-directory)))))))
+                      (follow-to (buffer-file) (default-directory)))))
 
 (on-saved :explorer (fn [_place] (refresh)))
 (on-disk-change :explorer (fn [] (refresh)))

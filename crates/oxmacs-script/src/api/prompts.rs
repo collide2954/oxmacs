@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
+use ox_lang::error::ErrorKind;
 use ox_lang::heap::{Heap, Hold};
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
@@ -161,10 +162,10 @@ pub fn deliver(isolate: &mut Isolate, inbox: &Inbox) {
                 isolate.resolve(promise, Value::Bool(yes));
             }
             Answer::Failed(message) => {
-                isolate.reject(promise, &message);
+                isolate.reject(promise, &Error::new(message));
             }
             Answer::Quit => {
-                isolate.reject(promise, "Quit");
+                isolate.reject(promise, &Error::new("Quit").of(ErrorKind::Quit));
             }
         }
     }
@@ -324,19 +325,36 @@ mod tests {
     }
 
     #[test]
-    fn quitting_a_prompt_raises_quit_in_the_task() {
+    fn quitting_a_prompt_raises_quit_which_only_catch_quit_stops() {
         let mut editor = Editor::new();
         let mut ox = Ox::new();
 
         run(
             &mut editor,
             &mut ox,
-            r#"(defcommand careful "Careful" (try (await (prompt "Name: ")) (catch error e (message "stopped: {e.message}"))))"#,
+            r#"(defcommand careful "Careful" (try (try (await (prompt "Name: ")) (catch error e (message "error"))) (catch quit e (message "stopped: {e.message}"))))"#,
             "careful",
         );
         press(&mut editor, &mut ox, "C-g");
 
         assert_eq!(editor.message(), Some("stopped: Quit"));
+    }
+
+    #[test]
+    fn a_quit_nothing_catches_ends_the_command_quietly() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+
+        run(
+            &mut editor,
+            &mut ox,
+            r#"(defcommand rename "Rename" (message (str "to " (await (prompt "New name: ")))))"#,
+            "rename",
+        );
+        press(&mut editor, &mut ox, "C-g");
+
+        assert_eq!(editor.message(), Some("Quit"));
+        assert_eq!(crate::ide::log::reports(&editor), 0);
     }
 
     #[test]
@@ -358,6 +376,6 @@ mod tests {
         let id = editor.command_named("broken").unwrap();
         editor.execute(id);
         settle(&mut editor, &mut ox);
-        assert_eq!(editor.message(), Some("Ox: Division by zero"));
+        assert_eq!(editor.message(), Some("Division by zero"));
     }
 }

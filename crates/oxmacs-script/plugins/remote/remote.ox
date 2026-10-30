@@ -11,12 +11,6 @@
 
 (defonce opened (atom {}))
 
-(def (quietly work)
-  (try (work)
-    (catch error e
-      (unless (= e.message "Quit")
-        (message e.message)))))
-
 (def (size-text size)
   (if (nil? size) "" (file/size-text size)))
 
@@ -28,16 +22,15 @@
    host: host})
 
 (defcommand remote "Browse the files of a host over ssh, sftp or ftp"
-  (quietly (fn []
-             (let [found (hosts/all-hosts)
-                   buffer (open-buffer hosts-buffer
-                                       (if (empty? found)
-                                         [[["  No hosts yet: a adds one, or name them in ~/.ssh/config" :comment]]]
-                                         (vec (map host-line found)))
-                                       :keys {"RET" 'remote-browse "s" 'remote-shell "a" 'remote-add-host "g" 'remote "q" 'quit-window}
-                                       :line 0)]
-               (set-header buffer [[["Remote hosts" :heading]]
-                                   [["RET browses  s opens a shell  a adds a host  g refreshes  q quits" :comment]]])))))
+  (let [found (hosts/all-hosts)
+        buffer (open-buffer hosts-buffer
+                            (if (empty? found)
+                              [[["  No hosts yet: a adds one, or name them in ~/.ssh/config" :comment]]]
+                              (vec (map host-line found)))
+                            :keys {"RET" 'remote-browse "s" 'remote-shell "a" 'remote-add-host "g" 'remote "q" 'quit-window}
+                            :line 0)]
+    (set-header buffer [[["Remote hosts" :heading]]
+                        [["RET browses  s opens a shell  a adds a host  g refreshes  q quits" :comment]]])))
 
 (def (host-here)
   (or (get (line-item) :host)
@@ -76,9 +69,8 @@
     (message "")))
 
 (defcommand remote-browse "Browse the host on this line"
-  (quietly (fn []
-             (let [host (or (host-here) (raise (error "No host on this line")))]
-               (browse! host (ops/home host))))))
+  (let [host (or (host-here) (raise (error "No host on this line")))]
+    (browse! host (ops/home host))))
 
 (def (browser)
   (or (buffer-value :remote) (raise (error "This isn't a remote folder"))))
@@ -88,18 +80,16 @@
   (get (line-item) :entry))
 
 (defcommand remote-refresh "List this remote folder again"
-  (quietly (fn []
-             (let [here (current-buffer)
-                   found (browser)
-                   line (current-line)
-                   entries (ops/list-dir found.host found.dir)]
-               (when (buffer-live? here)
-                 (set-lines here (browser-lines entries) :line line))))))
+  (let [here (current-buffer)
+        found (browser)
+        line (current-line)
+        entries (ops/list-dir found.host found.dir)]
+    (when (buffer-live? here)
+      (set-lines here (browser-lines entries) :line line))))
 
 (defcommand remote-up "Browse the folder above this one"
-  (quietly (fn []
-             (let [found (browser)]
-               (browse! found.host (ops/parent-of found.dir))))))
+  (let [found (browser)]
+    (browse! found.host (ops/parent-of found.dir))))
 
 (def (open-remote! host remote {line nil})
   (let [local (ops/local-copy host remote)]
@@ -113,13 +103,12 @@
     (message (str "Editing " (browser-name host remote) "; saving sends it back"))))
 
 (defcommand remote-visit "Open the file or folder on this line"
-  (quietly (fn []
-             (let [found (browser)
-                   entry (or (entry-here) (raise (error "No file on this line")))
-                   remote (ops/join-path found.dir entry.name)]
-               (if (or (= entry.kind :dir) (and (= entry.kind :link) (string/ends-with? (or entry.target "") "/")))
-                 (browse! found.host remote)
-                 (open-remote! found.host remote))))))
+  (let [found (browser)
+        entry (or (entry-here) (raise (error "No file on this line")))
+        remote (ops/join-path found.dir entry.name)]
+    (if (or (= entry.kind :dir) (and (= entry.kind :link) (string/ends-with? (or entry.target "") "/")))
+      (browse! found.host remote)
+      (open-remote! found.host remote))))
 
 (on-saved :remote
           (fn [saved]
@@ -132,108 +121,98 @@
                     (message (str "Couldn't send " place.remote " back: " e.message))))))))
 
 (defcommand remote-copy "Copy the remote file on this line to a local folder"
-  (quietly (fn []
-             (let [found (browser)
-                   entry (or (entry-here) (raise (error "No file on this line")))
-                   folder (await (prompt-path (str "Copy " entry.name " to: ") :directories true))
-                   local (path/join folder entry.name)
-                   remote (ops/join-path found.dir entry.name)]
-               (when (= entry.kind :dir)
-                 (raise (error "Copy files one at a time; folders aren't copied yet")))
-               (message (str "Copying " entry.name "…"))
-               (ops/download! found.host remote local
-                              :size entry.size
-                              :on-progress (fn [share] (message (str "Copying " entry.name "… " (round (* 100 share)) "%"))))
-               (message (str "Copied " entry.name " to " (path/abbreviate local)))))))
+  (let [found (browser)
+        entry (or (entry-here) (raise (error "No file on this line")))
+        folder (await (prompt-path (str "Copy " entry.name " to: ") :directories true))
+        local (path/join folder entry.name)
+        remote (ops/join-path found.dir entry.name)]
+    (when (= entry.kind :dir)
+      (raise (error "Copy files one at a time; folders aren't copied yet")))
+    (message (str "Copying " entry.name "…"))
+    (ops/download! found.host remote local
+                   :size entry.size
+                   :on-progress (fn [share] (message (str "Copying " entry.name "… " (round (* 100 share)) "%"))))
+    (message (str "Copied " entry.name " to " (path/abbreviate local)))))
 
 (defcommand remote-upload "Copy a local file into this remote folder"
-  (quietly (fn []
-             (let [found (browser)
-                   local (await (prompt-path "Upload: "))
-                   remote (ops/join-path found.dir (path/name local))]
-               (message (str "Uploading " (path/name local) "…"))
-               (ops/upload! found.host local remote)
-               (run-command 'remote-refresh)
-               (message (str "Uploaded " (path/name local)))))))
+  (let [found (browser)
+        local (await (prompt-path "Upload: "))
+        remote (ops/join-path found.dir (path/name local))]
+    (message (str "Uploading " (path/name local) "…"))
+    (ops/upload! found.host local remote)
+    (run-command 'remote-refresh)
+    (message (str "Uploaded " (path/name local)))))
 
 (defcommand remote-rename "Rename the remote file on this line"
-  (quietly (fn []
-             (let [found (browser)
-                   entry (or (entry-here) (raise (error "No file on this line")))
-                   fresh (string/trim (await (prompt "Rename to: " :initial entry.name)))]
-               (ops/rename! found.host (ops/join-path found.dir entry.name) (ops/join-path found.dir fresh))
-               (run-command 'remote-refresh)
-               (message (str "Renamed " entry.name " to " fresh))))))
+  (let [found (browser)
+        entry (or (entry-here) (raise (error "No file on this line")))
+        fresh (string/trim (await (prompt "Rename to: " :initial entry.name)))]
+    (ops/rename! found.host (ops/join-path found.dir entry.name) (ops/join-path found.dir fresh))
+    (run-command 'remote-refresh)
+    (message (str "Renamed " entry.name " to " fresh))))
 
 (defcommand remote-delete "Delete the remote file or folder on this line"
-  (quietly (fn []
-             (let [found (browser)
-                   entry (or (entry-here) (raise (error "No file on this line")))]
-               (when (await (yes-or-no (str "Delete " entry.name (if (= entry.kind :dir) " and everything in it" "") " on " found.host.name "? ")))
-                 (ops/remove! found.host (ops/join-path found.dir entry.name) (= entry.kind :dir))
-                 (run-command 'remote-refresh)
-                 (message (str "Deleted " entry.name)))))))
+  (let [found (browser)
+        entry (or (entry-here) (raise (error "No file on this line")))]
+    (when (await (yes-or-no (str "Delete " entry.name (if (= entry.kind :dir) " and everything in it" "") " on " found.host.name "? ")))
+      (ops/remove! found.host (ops/join-path found.dir entry.name) (= entry.kind :dir))
+      (run-command 'remote-refresh)
+      (message (str "Deleted " entry.name)))))
 
 (defcommand remote-make-dir "Make a folder in this remote folder"
-  (quietly (fn []
-             (let [found (browser)
-                   wanted (string/trim (await (prompt "New folder: ")))]
-               (ops/make-dir! found.host (ops/join-path found.dir wanted))
-               (run-command 'remote-refresh)))))
+  (let [found (browser)
+        wanted (string/trim (await (prompt "New folder: ")))]
+    (ops/make-dir! found.host (ops/join-path found.dir wanted))
+    (run-command 'remote-refresh)))
 
 (defcommand remote-run "Run a command in this remote folder"
-  (quietly (fn []
-             (let [found (browser)
-                   command (await (prompt (str "Run on " found.host.name ": ")))
-                   [program & arguments] (shell/command-of found.host)]
-               (unless (ops/can-run? found.host)
-                 (raise (error (str found.host.name " has no shell to run commands in"))))
-               (run-job output-buffer program (vec arguments)
-                        :input (shell/one-shot found.dir command)
-                        :title (str found.host.name ":" found.dir "$ " command))))))
+  (let [found (browser)
+        command (await (prompt (str "Run on " found.host.name ": ")))
+        [program & arguments] (shell/command-of found.host)]
+    (unless (ops/can-run? found.host)
+      (raise (error (str found.host.name " has no shell to run commands in"))))
+    (run-job output-buffer program (vec arguments)
+             :input (shell/one-shot found.dir command)
+             :title (str found.host.name ":" found.dir "$ " command))))
 
 (defcommand remote-search "Search the files below this remote folder"
-  (quietly (fn []
-             (let [found (browser)
-                   pattern (await (prompt (str "Search " found.dir " for: ")))
-                   results (ops/search found.host found.dir pattern)]
-               (show-places search-buffer
-                            (vec (map (fn [result] {file: result.path line: result.line text: result.text}) results))
-                            :title (str (count results) " lines with " (pr-str pattern) " below " (browser-name found.host found.dir))
-                            :root found.dir
-                            :empty "Nothing below here has that"
-                            :on-visit (fn [place] (open-remote! found.host place.file :line place.line)))))))
+  (let [found (browser)
+        pattern (await (prompt (str "Search " found.dir " for: ")))
+        results (ops/search found.host found.dir pattern)]
+    (show-places search-buffer
+                 (vec (map (fn [result] {file: result.path line: result.line text: result.text}) results))
+                 :title (str (count results) " lines with " (pr-str pattern) " below " (browser-name found.host found.dir))
+                 :root found.dir
+                 :empty "Nothing below here has that"
+                 :on-visit (fn [place] (open-remote! found.host place.file :line place.line)))))
 
 (def (shell-buffer host)
   (str "*shell " host.name "*"))
 
 (defcommand remote-shell "Open a shell on the host here, without a terminal: line by line commands work, full-screen programs don't"
-  (quietly (fn []
-             (let [host (or (host-here) (raise (error "Put point on a host or in a remote folder first")))
-                   name (shell-buffer host)
-                   [program & arguments] (shell/command-of host)]
-               (unless (console-running? name)
-                 (console-start name :program program :args (vec arguments) :label "Shell" :prompter shell/prompter))
-               (display-buffer name :select true)))))
+  (let [host (or (host-here) (raise (error "Put point on a host or in a remote folder first")))
+        name (shell-buffer host)
+        [program & arguments] (shell/command-of host)]
+    (unless (console-running? name)
+      (console-start name :program program :args (vec arguments) :label "Shell" :prompter shell/prompter))
+    (display-buffer name :select true)))
 
 (defcommand remote-disconnect "Close the connection kept open to the host here"
-  (quietly (fn []
-             (let [host (or (host-here) (raise (error "Put point on a host or in a remote folder first")))]
-               (shell/close! host)
-               (message (str "Disconnected from " host.name))))))
+  (let [host (or (host-here) (raise (error "Put point on a host or in a remote folder first")))]
+    (shell/close! host)
+    (message (str "Disconnected from " host.name))))
 
 (defcommand remote-add-host "Save a host to browse"
-  (quietly (fn []
-             (let [name (string/trim (await (prompt "Name: ")))
-                   protocol (await (prompt "Protocol: " :choices ["ssh" "sftp" "ftp"]))
-                   address (string/trim (await (prompt "Address: ")))
-                   user (string/trim (await (prompt "User (optional): ")))
-                   host (merge {name: name protocol: (keyword protocol) address: address}
-                               (if (= user "") {} {user: user}))
-                   others (vec (remove (fn [known] (= known.name name)) (setting :hosts)))]
-               (when (string/blank? name)
-                 (raise (error "A host needs a name")))
-               (message (if (save/plugin-setting! 'remote :hosts (conj others host))
-                          (str "Saved " name " in custom.ox, but init.ox sets the remote hosts too and wins; move them out of init.ox")
-                          (str "Saved " name " in custom.ox")))
-               (run-command 'remote)))))
+  (let [name (string/trim (await (prompt "Name: ")))
+        protocol (await (prompt "Protocol: " :choices ["ssh" "sftp" "ftp"]))
+        address (string/trim (await (prompt "Address: ")))
+        user (string/trim (await (prompt "User (optional): ")))
+        host (merge {name: name protocol: (keyword protocol) address: address}
+                    (if (= user "") {} {user: user}))
+        others (vec (remove (fn [known] (= known.name name)) (setting :hosts)))]
+    (when (string/blank? name)
+      (raise (error "A host needs a name")))
+    (message (if (save/plugin-setting! 'remote :hosts (conj others host))
+               (str "Saved " name " in custom.ox, but init.ox sets the remote hosts too and wins; move them out of init.ox")
+               (str "Saved " name " in custom.ox")))
+    (run-command 'remote)))

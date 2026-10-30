@@ -15,12 +15,6 @@
 
 (defonce view (atom {from: nil day: nil shown: nil}))
 
-(def (quietly work)
-  (try (work)
-    (catch error e
-      (unless (= e.message "Quit")
-        (message e.message)))))
-
 (def (today)
   (let [now (time/local (time/now))]
     (time/day-number now)))
@@ -110,15 +104,13 @@
     (else nil)))
 
 (defcommand calendar "Show the calendar's agenda"
-  (quietly (fn []
-             (store/load!)
-             (show-agenda!)
-             (reminders/watch!))))
+  (store/load!)
+  (show-agenda!)
+  (reminders/watch!))
 
 (defcommand calendar-refresh "Read the calendars again"
-  (quietly (fn []
-             (store/load!)
-             (redraw!))))
+  (store/load!)
+  (redraw!))
 
 (def (move-days! days)
   (swap! view update :from (fn [from] (+ (or from (today)) days)))
@@ -224,60 +216,57 @@
         {start: start end: (if (<= end start) (time/add end {days: 1}) end) all-day: false}))))
 
 (defcommand calendar-add "Add an event"
-  (quietly (fn []
-             (let [title (string/trim (ask "Title: "))]
-               (when (string/blank? title)
-                 (raise (error "An event needs a title")))
-               (let [day (ask-date "Date: " (or (get @view :day) (today)))
-                     when (timing day nil)
-                     repeat (await (prompt "Repeats: " :choices ["never" "daily" "weekdays" "weekly" "monthly" "yearly"]))
-                     calendar (choose-calendar nil)
-                     place (string/trim (ask "Where (optional): "))
-                     event (merge when
-                                  {uid: (store/new-uid) summary: title calendar: calendar
-                                   zone: (when (not when.all-day) (time/zone))
-                                   location: (when (not (string/blank? place)) place)
-                                   rrule: (get repeats repeat)
-                                   alarms: [{before: (time/minutes (default-reminder))}]})]
-                 (store/save-event! event)
-                 (redraw!)
-                 (message (str "Added " title)))))))
+  (let [title (string/trim (ask "Title: "))]
+    (when (string/blank? title)
+      (raise (error "An event needs a title")))
+    (let [day (ask-date "Date: " (or (get @view :day) (today)))
+          when (timing day nil)
+          repeat (await (prompt "Repeats: " :choices ["never" "daily" "weekdays" "weekly" "monthly" "yearly"]))
+          calendar (choose-calendar nil)
+          place (string/trim (ask "Where (optional): "))
+          event (merge when
+                       {uid: (store/new-uid) summary: title calendar: calendar
+                        zone: (when (not when.all-day) (time/zone))
+                        location: (when (not (string/blank? place)) place)
+                        rrule: (get repeats repeat)
+                        alarms: [{before: (time/minutes (default-reminder))}]})]
+      (store/save-event! event)
+      (redraw!)
+      (message (str "Added " title)))))
 
 (def (target)
   (or (occurrence-here) (raise (error "Put point on an event first"))))
 
 (defcommand calendar-edit "Change the event on this line"
-  (quietly (fn []
-             (let [occurrence (target)
-                   master occurrence.event
-                   what (await (prompt "Change: " :choices ["title" "time" "date" "place" "repeats" "reminder" "notes"]))
-                   changed (cond ((= what "title") (assoc master :summary (string/trim (ask "Title: " :initial master.summary))))
-                             ((= what "place") (assoc master :location (let [place (string/trim (ask "Where: " :initial (or master.location "")))] (when (not= place "") place))))
-                             ((= what "notes") (assoc master :description (ask "Notes: " :initial (or master.description ""))))
-                             ((= what "repeats") (assoc master :rrule (get repeats (await (prompt "Repeats: " :choices ["never" "daily" "weekdays" "weekly" "monthly" "yearly"])))))
-                             ((= what "reminder") (assoc master :alarms [{before: (time/minutes (or (string/to-number (ask "Minutes before: " :initial (str (default-reminder)))) (default-reminder)))}]))
-                             ((= what "date")
-                              (let [day (ask-date "Date: " (day-of master.start))
-                                    moved (- (day-start day) (day-start (day-of master.start)))]
-                                (merge master {start: (+ master.start moved) end: (+ master.end moved)})))
-                             (else (merge master (timing (day-of master.start) master))))]
-               (store/save-event! changed)
-               (redraw!)
-               (when (= (buffer-name) event-buffer)
-                 (show-event! (merge occurrence changed)))
-               (message (str "Changed " changed.summary))))))
+  (let [occurrence (target)
+        master occurrence.event
+        what (await (prompt "Change: " :choices ["title" "time" "date" "place" "repeats" "reminder" "notes"]))
+        changed (cond ((= what "title") (assoc master :summary (string/trim (ask "Title: " :initial master.summary))))
+                  ((= what "place") (assoc master :location (let [place (string/trim (ask "Where: " :initial (or master.location "")))] (when (not= place "") place))))
+                  ((= what "notes") (assoc master :description (ask "Notes: " :initial (or master.description ""))))
+                  ((= what "repeats") (assoc master :rrule (get repeats (await (prompt "Repeats: " :choices ["never" "daily" "weekdays" "weekly" "monthly" "yearly"])))))
+                  ((= what "reminder") (assoc master :alarms [{before: (time/minutes (or (string/to-number (ask "Minutes before: " :initial (str (default-reminder)))) (default-reminder)))}]))
+                  ((= what "date")
+                   (let [day (ask-date "Date: " (day-of master.start))
+                         moved (- (day-start day) (day-start (day-of master.start)))]
+                     (merge master {start: (+ master.start moved) end: (+ master.end moved)})))
+                  (else (merge master (timing (day-of master.start) master))))]
+    (store/save-event! changed)
+    (redraw!)
+    (when (= (buffer-name) event-buffer)
+      (show-event! (merge occurrence changed)))
+    (message (str "Changed " changed.summary))))
 
 (defcommand calendar-delete "Delete the event on this line"
-  (quietly (fn []
-             (let [occurrence (target)]
-               (if (and occurrence.rrule (await (yes-or-no (str "Delete only the " (time/format occurrence.start "%-d %B") " one? "))))
-                 (store/skip-occurrence! occurrence.event occurrence.start)
-                 (when (await (yes-or-no (str "Delete " occurrence.summary (if occurrence.rrule " and all its repeats" "") "? ")))
-                   (store/delete-event! occurrence.event)))
-               (when (= (buffer-name) event-buffer)
-                 (close-buffer event-buffer))
-               (redraw!)
-               (message (str "Deleted " occurrence.summary))))))
+  (let [occurrence (target)]
+    (if (and occurrence.rrule (await (yes-or-no (str "Delete only the " (time/format occurrence.start "%-d %B") " one? "))))
+      (store/skip-occurrence! occurrence.event occurrence.start)
+      (when (await (yes-or-no (str "Delete " occurrence.summary (if occurrence.rrule " and all its repeats" "") "? ")))
+        (store/delete-event! occurrence.event)))
+    (when (= (buffer-name) event-buffer)
+      (close-buffer event-buffer))
+    (redraw!)
+    (message (str "Deleted " occurrence.summary))))
 
 (def (me)
   (string/lower (or (setting :email) "")))
@@ -298,39 +287,37 @@
       (show-event! (merge occurrence answered))
       (message (str "Answered " (string/lower status) "; send " reply " to " (or master.organizer.email "the organizer"))))))
 
-(defcommand calendar-accept "Accept the invitation shown" (quietly (fn [] (answer! "ACCEPTED"))))
-(defcommand calendar-decline "Decline the invitation shown" (quietly (fn [] (answer! "DECLINED"))))
-(defcommand calendar-maybe "Answer maybe to the invitation shown" (quietly (fn [] (answer! "TENTATIVE"))))
+(defcommand calendar-accept "Accept the invitation shown" (answer! "ACCEPTED"))
+(defcommand calendar-decline "Decline the invitation shown" (answer! "DECLINED"))
+(defcommand calendar-maybe "Answer maybe to the invitation shown" (answer! "TENTATIVE"))
 
 (defcommand calendar-import "Add the events of an .ics file, such as an invitation"
-  (quietly (fn []
-             (let [file (await (prompt-path "Import .ics file: "))
-                   parsed (ics/parse (await (file/read file)))
-                   found (vec (map ics/event-of (ics/components parsed "VEVENT")))
-                   calendar (choose-calendar nil)]
-               (when (empty? found)
-                 (raise (error "That file has no events")))
-               (each [event found]
-                 (store/save-event! (merge event {calendar: calendar file: nil})))
-               (redraw!)
-               (let [first-one (first found)]
-                 (swap! view assoc :from (day-of first-one.start))
-                 (show-agenda!)
-                 (message (str "Imported " (count found) (if (= (count found) 1) " event" " events")
-                               (if (some (fn [event] (not (empty? (or event.attendees [])))) found) "; RET shows it, then a, x or ? answers" ""))))))))
+  (let [file (await (prompt-path "Import .ics file: "))
+        parsed (ics/parse (await (file/read file)))
+        found (vec (map ics/event-of (ics/components parsed "VEVENT")))
+        calendar (choose-calendar nil)]
+    (when (empty? found)
+      (raise (error "That file has no events")))
+    (each [event found]
+      (store/save-event! (merge event {calendar: calendar file: nil})))
+    (redraw!)
+    (let [first-one (first found)]
+      (swap! view assoc :from (day-of first-one.start))
+      (show-agenda!)
+      (message (str "Imported " (count found) (if (= (count found) 1) " event" " events")
+                    (if (some (fn [event] (not (empty? (or event.attendees [])))) found) "; RET shows it, then a, x or ? answers" ""))))))
 
 (defcommand calendar-sync "Sync the calendars that have a CalDAV address"
-  (quietly (fn []
-             (let [remote (filter :url (store/calendars))]
-               (if (empty? remote)
-                 (message "No calendar has a CalDAV :url to sync with")
-                 (let [problems (vec (mapcat (fn [calendar]
-                                               (message (str "Syncing " calendar.name "…"))
-                                               (map (fn [problem] (str calendar.name ": " problem)) (caldav/sync! calendar)))
-                                             remote))]
-                   (store/load!)
-                   (redraw!)
-                   (message (if (empty? problems) "Calendars synced" (string/join "; " problems)))))))))
+  (let [remote (filter :url (store/calendars))]
+    (if (empty? remote)
+      (message "No calendar has a CalDAV :url to sync with")
+      (let [problems (vec (mapcat (fn [calendar]
+                                    (message (str "Syncing " calendar.name "…"))
+                                    (map (fn [problem] (str calendar.name ": " problem)) (caldav/sync! calendar)))
+                                  remote))]
+        (store/load!)
+        (redraw!)
+        (message (if (empty? problems) "Calendars synced" (string/join "; " problems)))))))
 
 (def (month-of days)
   (let [date (time/date-of days)]
@@ -382,13 +369,12 @@
    "w" 'calendar-week "a" 'calendar "q" 'quit-window})
 
 (defcommand calendar-month "Show a month of the calendar"
-  (quietly (fn []
-             (store/load!)
-             (unless (get @view :day)
-               (swap! view assoc :day (today)))
-             (open-buffer month-buffer [] :keys month-keys :on-resize (fn [_] (draw-month!)))
-             (draw-month!)
-             (reminders/watch!))))
+  (store/load!)
+  (unless (get @view :day)
+    (swap! view assoc :day (today)))
+  (open-buffer month-buffer [] :keys month-keys :on-resize (fn [_] (draw-month!)))
+  (draw-month!)
+  (reminders/watch!))
 
 (def (move-day! days)
   (swap! view update :day (fn [day] (+ (or day (today)) days)))
@@ -490,10 +476,9 @@
                                           "a" 'calendar "m" 'calendar-month "q" 'quit-window}))
 
 (defcommand calendar-week "Show a week of the calendar as a grid of hours"
-  (quietly (fn []
-             (store/load!)
-             (draw-week!)
-             (reminders/watch!))))
+  (store/load!)
+  (draw-week!)
+  (reminders/watch!))
 
 (defcommand calendar-week-forward "Show the next week"
   (swap! view update :day (fn [day] (+ (or day (today)) 7)))

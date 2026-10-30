@@ -2,9 +2,6 @@
   (import (ox path) (ox string) (ox ui) (ox pdf)
           (pdf reading :as reading)))
 
-(def (quietly work)
-  (try (work) (catch error e (unless (= e.message "Quit") (message e.message)))))
-
 (def (current)
   (buffer-value :pdf))
 
@@ -153,12 +150,10 @@
 (defcommand pdf-goto-page "Go to a page by its number"
   (with-doc
     (fn [state doc]
-      (quietly
-       (fn []
-         (let [answer (await (prompt "Go to page (1-{doc.pages}): "))]
-           (if-let [page (reading/page-number answer doc.pages)]
-             (to-page state doc page)
-             (message "There is no page {answer}"))))))))
+      (let [answer (await (prompt "Go to page (1-{doc.pages}): "))]
+        (if-let [page (reading/page-number answer doc.pages)]
+          (to-page state doc page)
+          (message "There is no page {answer}"))))))
 
 (def (zoom-to state zoom)
   (swap! state assoc :zoom zoom))
@@ -207,14 +202,12 @@
 (defcommand pdf-search "Search the document, marking every match"
   (with-doc
     (fn [state doc]
-      (quietly
-       (fn []
-         (let [query (await (prompt "Search: " :initial (or doc.query "")))]
-           (if (string/blank? query)
-             (swap! state assoc :query nil :matches nil :match nil)
-             (let [matches (await (pdf/search doc.path query))]
-               (swap! state assoc :query query :matches matches :match nil)
-               (show-match state 1)))))))))
+      (let [query (await (prompt "Search: " :initial (or doc.query "")))]
+        (if (string/blank? query)
+          (swap! state assoc :query nil :matches nil :match nil)
+          (let [matches (await (pdf/search doc.path query))]
+            (swap! state assoc :query query :matches matches :match nil)
+            (show-match state 1)))))))
 
 (defcommand pdf-search-next "Go to the next match of the search, or search"
   (with-doc (fn [state doc] (if doc.query (show-match state 1) (run-command 'pdf-search)))))
@@ -233,4 +226,4 @@
               (message "{(or doc.title (path/name doc.path))}{(if doc.author " by {doc.author}" "")} · page {(inc (or doc.page 0))} of {doc.pages}"))))
 
 (defcommand pdf-reload "Read the document again"
-  (with-doc (fn [state _] (quietly (fn [] (load state) (message "Read {(buffer-name)} again"))))))
+  (with-doc (fn [state _] (load state) (message "Read {(buffer-name)} again"))))

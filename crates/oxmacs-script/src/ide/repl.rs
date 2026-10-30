@@ -985,7 +985,7 @@ mod tests {
         let (mut editor, mut ox) = visiting(home.path(), "scratch.ox");
 
         press(&mut editor, &mut ox, "C-x C-e");
-        assert_eq!(editor.message(), Some("Ox: x is not defined"));
+        assert_eq!(editor.message(), Some("x is not defined"));
         assert_eq!(note(&editor, 1), Some(failed("!! x is not defined")));
 
         editor.buffer_mut().set_point(9);
@@ -1073,7 +1073,7 @@ mod tests {
 
         press(&mut editor, &mut ox, "C-c C-b");
 
-        assert_eq!(editor.message(), Some("Ox: Division by zero"));
+        assert_eq!(editor.message(), Some("Division by zero"));
         assert_eq!(note(&editor, 1), Some(failed("!! Division by zero")));
         assert_eq!(ox.eval(&mut editor, "a").unwrap(), "1");
         assert!(ox.eval(&mut editor, "b").is_err());

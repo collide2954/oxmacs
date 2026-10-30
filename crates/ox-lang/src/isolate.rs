@@ -663,8 +663,8 @@ impl Isolate {
         self.runtime.settle(promise, Promise::Delivered(value))
     }
 
-    pub fn reject(&mut self, promise: Value, message: &str) -> bool {
-        let Ok(error) = self.runtime.error_value(&Error::new(message)) else {
+    pub fn reject(&mut self, promise: Value, error: &Error) -> bool {
+        let Ok(error) = self.runtime.error_value(error) else {
             return false;
         };
         self.runtime.settle(promise, Promise::Failed(error))

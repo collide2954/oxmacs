@@ -125,7 +125,17 @@ pub fn raised(heap: &Heap, value: Value) -> Error {
         .and_then(|record| record.get(heap, Sym::intern("message")))
         .and_then(|message| heap.text(message).map(str::to_owned))
         .unwrap_or_else(|| format!("Raised {}", print::brief(heap, value)));
-    Error::raised(message, value)
+    let kind = heap
+        .record_of(value)
+        .and_then(|record| heap.record_type_of(record.kind))
+        .filter(|kind| kind.module == Sym::intern("ox"))
+        .and_then(|kind| {
+            ErrorKind::NAMES
+                .iter()
+                .find(|(_, name)| *name == kind.name.name())
+        })
+        .map_or(ErrorKind::Other, |(kind, _)| *kind);
+    Error::raised(message, value).of(kind)
 }
 
 pub fn make_vector(heap: &mut Heap, items: &[Value]) -> Result<Value, Error> {

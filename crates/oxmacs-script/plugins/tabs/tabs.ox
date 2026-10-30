@@ -96,9 +96,6 @@
                         :current (strip/follow s.current from to))))
   (draw))
 
-(def (quietly work)
-  (try (work) (catch error e (unless (= e.message "Quit") (message e.message)))))
-
 (defcommand tab-new "Open a new tab"
   (new-tab))
 
@@ -146,39 +143,31 @@
   (draw))
 
 (defcommand tab-rename "Name the current tab"
-  (quietly
-   (fn []
-     (let [s @state
-           name (await (prompt "Rename tab to: "
-                               :initial (strip/label (nth s.tabs s.current) (buffer-name))))]
-       (swap! state (fn [s] (assoc-in s [:tabs s.current :name] (if (string/blank? name) nil name))))
-       (draw)))))
+  (let [s @state
+        name (await (prompt "Rename tab to: "
+                            :initial (strip/label (nth s.tabs s.current) (buffer-name))))]
+    (swap! state (fn [s] (assoc-in s [:tabs s.current :name] (if (string/blank? name) nil name))))
+    (draw)))
 
 (defcommand tab-switch "Go to a tab by its name"
-  (quietly
-   (fn []
-     (let [names (labels)
-           picked (await (prompt "Switch to tab: " :choices names))
-           at (first (keep (fn [at] (when (= (nth names at) picked) at)) (range (count names))))]
-       (if at (select at) (message "No tab is called {picked}"))))))
+  (let [names (labels)
+        picked (await (prompt "Switch to tab: " :choices names))
+        at (first (keep (fn [at] (when (= (nth names at) picked) at)) (range (count names))))]
+    (if at (select at) (message "No tab is called {picked}"))))
 
 (defcommand find-file-other-tab "Visit a file in a new tab"
-  (quietly
-   (fn []
-     (let [path (await (prompt-path "Find file in new tab: "))]
-       (new-tab)
-       (open-file path)
-       (draw)))))
+  (let [path (await (prompt-path "Find file in new tab: "))]
+    (new-tab)
+    (open-file path)
+    (draw)))
 
 (defcommand switch-to-buffer-other-tab "Show a buffer in a new tab"
-  (quietly
-   (fn []
-     (let [name (await (prompt "Switch to buffer in new tab: " :choices (buffer-list)))]
-       (new-tab)
-       (if (buffer-exists? name)
-         (switch-to-buffer name)
-         (show-text name ""))
-       (draw)))))
+  (let [name (await (prompt "Switch to buffer in new tab: " :choices (buffer-list)))]
+    (new-tab)
+    (if (buffer-exists? name)
+      (switch-to-buffer name)
+      (show-text name ""))
+    (draw)))
 
 (on-window-change :tabs (fn [] (draw)))
 (on-settings-change :tabs (fn [] (draw)))

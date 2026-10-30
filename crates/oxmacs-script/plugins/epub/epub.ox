@@ -10,9 +10,6 @@
 
 (def notes-buffer "*epub notes*")
 
-(def (quietly work)
-  (try (work) (catch error e (unless (= e.message "Quit") (message e.message)))))
-
 (def (places-file)
   (when-let [folder (plugin-folder 'epub)]
     (path/join folder "books.json")))
@@ -98,14 +95,14 @@
                           :progress (reading/progress book.chapter page (count starts) (count book.chapters))))))
   (show-progress)
   (let [book @state]
-    (when (vector? book.at) (quietly (fn [] (save! book))))))
+    (when (vector? book.at) (save! book))))
 
 (def (turn-by state by)
   (let [book @state]
     (if-let [place (reading/turn {chapter: book.chapter at: book.at} by book.starts book.turn (count book.chapters))]
       (if (= place.chapter book.chapter)
         (swap! state assoc :at place.at)
-        (quietly (fn [] (go state place.chapter place.at))))
+        (go state place.chapter place.at))
       (message (if (> by 0) "End of book" "Beginning of book")))))
 
 (def (chapter-of book entry)
@@ -119,11 +116,10 @@
           index (chapter-of @state entry)]
       (if (nil? index)
         (message "This link leads outside the book: {href}")
-        (quietly (fn []
-                   (ensure-chapter state index)
-                   (let [block (get (get @state :ids) index)
-                         start (or (when part (get block part)) 0)]
-                     (go state index [start 0]))))))))
+        (do (ensure-chapter state index)
+          (let [block (get (get @state :ids) index)
+                start (or (when part (get block part)) 0)]
+            (go state index [start 0])))))))
 
 (def (re-external? href)
   (or (string/starts-with? href "http:") (string/starts-with? href "https:") (string/starts-with? href "mailto:")))
@@ -210,21 +206,21 @@
 (defcommand epub-next-chapter "Go to the start of the next chapter"
   (with-book (fn [state book]
                (if (< (inc book.chapter) (count book.chapters))
-                 (quietly (fn [] (go state (inc book.chapter) [0 0])))
+                 (go state (inc book.chapter) [0 0])
                  (message "This is the last chapter")))))
 
 (defcommand epub-previous-chapter "Go to the start of this chapter, or the one before"
   (with-book (fn [state book]
                (cond
                  [(> (reading/page-index book.starts book.at) 0) (go state book.chapter [0 0])]
-                 [(> book.chapter 0) (quietly (fn [] (go state (dec book.chapter) [0 0])))]
+                 [(> book.chapter 0) (go state (dec book.chapter) [0 0])]
                  [else (message "This is the first chapter")]))))
 
 (defcommand epub-beginning "Go to the beginning of the book"
-  (with-book (fn [state _] (quietly (fn [] (go state 0 [0 0]))))))
+  (with-book (fn [state _] (go state 0 [0 0]))))
 
 (defcommand epub-end "Go to the end of the book"
-  (with-book (fn [state book] (quietly (fn [] (go state (dec (count book.chapters)) :end))))))
+  (with-book (fn [state book] (go state (dec (count book.chapters)) :end))))
 
 (def (contents-items state)
   "The book's table of contents as items for M-g i, each following its link."
@@ -253,21 +249,18 @@
       (let [at (mod (+ (or book.match -1) step) (count matches))
             found (nth matches at)]
         (swap! state assoc :match at)
-        (quietly (fn []
-                   (go state found.chapter [found.block found.start])
-                   (message "{(inc at)} of {(count matches)} for {book.query}")))))))
+        (go state found.chapter [found.block found.start])
+        (message "{(inc at)} of {(count matches)} for {book.query}")))))
 
 (defcommand epub-search "Search the whole book, showing every match"
   (with-book
     (fn [state book]
-      (quietly
-       (fn []
-         (let [query (await (prompt "Search book: " :initial (or book.query "")))]
-           (when (not (string/blank? query))
-             (let [texts (or book.texts (chapter-texts book))
-                   matches (reading/find-matches texts query)]
-               (swap! state assoc :texts texts :query query :matches matches :match nil)
-               (show-match state 1)))))))))
+      (let [query (await (prompt "Search book: " :initial (or book.query "")))]
+        (when (not (string/blank? query))
+          (let [texts (or book.texts (chapter-texts book))
+                matches (reading/find-matches texts query)]
+            (swap! state assoc :texts texts :query query :matches matches :match nil)
+            (show-match state 1)))))))
 
 (defcommand epub-search-next "Go to the next match of the search, or search"
   (with-book (fn [state book] (if book.query (show-match state 1) (run-command 'epub-search)))))
@@ -288,7 +281,7 @@
                             :highlights (conj book.highlights {chapter: book.chapter from: from to: to
                                                                text: (selection-text book) note: note})
                             :selection nil)))
-      (quietly (fn [] (save! @state)))
+      (save! @state)
       (message (if note "Noted" "Highlighted")))
     (message "Drag over some text first")))
 
@@ -299,7 +292,7 @@
   (with-book
     (fn [state book]
       (if book.selection
-        (quietly (fn [] (mark state (await (prompt "Note: ")))))
+        (mark state (await (prompt "Note: ")))
         (message "Drag over some text first")))))
 
 (defcommand epub-copy "Copy the text dragged over"
@@ -336,11 +329,11 @@
     (when (buffer-live? notes.buffer)
       (when-let [kept (get (line-item) :highlight)]
         (switch-to-buffer notes.buffer)
-        (quietly (fn [] (go notes.state kept.chapter kept.from)))))))
+        (go notes.state kept.chapter kept.from)))))
 
 (def (resize state by)
   (swap! state (fn [book] (assoc book :size (max 10 (min 48 (+ (or book.size (setting :size)) by))))))
-  (quietly (fn [] (save! @state))))
+  (save! @state))
 
 (defcommand epub-larger "Make the text larger" (with-book (fn [state _] (resize state 1))))
 (defcommand epub-smaller "Make the text smaller" (with-book (fn [state _] (resize state -1))))
@@ -350,15 +343,13 @@
                (message "{book.title}{(if book.creator " by {book.creator}" "")} · chapter {(inc book.chapter)} of {(count book.chapters)} · {(or book.progress 0)}%"))))
 
 (defcommand epub-recent "Open a book read lately"
-  (quietly
-   (fn []
-     (let [kept (remembered)]
-       (if (empty? kept)
-         (message "No books read yet")
-         (let [labels (map (fn [book] "{book.title} ({(path/name book.path)})") kept)
-               picked (await (prompt "Open book: " :choices labels))
-               at (first (keep (fn [at] (when (= (nth labels at) picked) at)) (range (count labels))))]
-           (when at (open-file (get (nth kept at) :path)))))))))
+  (let [kept (remembered)]
+    (if (empty? kept)
+      (message "No books read yet")
+      (let [labels (map (fn [book] "{book.title} ({(path/name book.path)})") kept)
+            picked (await (prompt "Open book: " :choices labels))
+            at (first (keep (fn [at] (when (= (nth labels at) picked) at)) (range (count labels))))]
+        (when at (open-file (get (nth kept at) :path)))))))
 
 (def (show-shelf)
   (open-view library/buffer (fn [] (library/view @shelf (fn [place] (open-file place))))
@@ -375,13 +366,11 @@
     (message "{(count (get @shelf :books))} books in {(path/abbreviate folder)}")))
 
 (defcommand epub-library "Show the books in a folder as covers"
-  (quietly
-   (fn []
-     (let [folder (or (setting :library) (await (prompt-path "Library folder: " :directories true)))]
-       (fill-shelf (path/expand folder))))))
+  (let [folder (or (setting :library) (await (prompt-path "Library folder: " :directories true)))]
+    (fill-shelf (path/expand folder))))
 
 (defcommand epub-library-refresh "Read the library folder again"
   (when-let [folder (get @shelf :folder)]
-    (quietly (fn [] (fill-shelf folder)))))
+    (fill-shelf folder)))
 
 (on-window-change :epub (fn [] (show-progress)))

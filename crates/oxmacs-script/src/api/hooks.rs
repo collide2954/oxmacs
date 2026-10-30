@@ -593,7 +593,7 @@ mod tests {
         press(&mut editor, &mut ox, "x C-x C-s");
 
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "abc");
-        assert_eq!(editor.message(), Some("Ox: not today"));
+        assert_eq!(editor.message(), Some("not today"));
         assert!(editor.buffer().is_modified());
     }
 

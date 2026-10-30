@@ -483,7 +483,7 @@ mod tests {
             .unwrap();
         run_command(&mut editor, &mut ox, "broken");
 
-        assert_eq!(editor.message(), Some("Ox: Division by zero"));
+        assert_eq!(editor.message(), Some("Division by zero"));
     }
 
     #[test]
@@ -636,6 +636,6 @@ mod tests {
             .unwrap();
         settle(&mut editor, &mut ox);
 
-        assert_eq!(editor.message(), Some("Ox: lost"));
+        assert_eq!(editor.message(), Some("lost"));
     }
 }

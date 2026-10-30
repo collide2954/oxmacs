@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 
 use ox_lang::Error;
+use ox_lang::error::ErrorKind;
 use oxmacs_core::command::{Command, ScopeId};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::special_buffer::SpecialBuffer;
@@ -79,6 +80,9 @@ fn append(editor: &mut Editor, entry: &str) {
 }
 
 pub fn report(editor: &mut Editor, error: &Error, origin: Option<(&str, &str)>) {
+    if error.kind == ErrorKind::Quit {
+        return;
+    }
     let mut entry = format!("[{}] {}{}\n", now(), place(error, origin), error.message);
     if error.traceback.len() > 1 {
         for frame in &error.traceback {
@@ -89,7 +93,7 @@ pub fn report(editor: &mut Editor, error: &Error, origin: Option<(&str, &str)>) 
     if let Some(log) = editor.plugin_state_mut::<Log>() {
         log.reports += 1;
     }
-    editor.show_message(format!("Ox: {}", error.message));
+    editor.show_message(error.message.clone());
 }
 
 pub fn printed(editor: &mut Editor, text: &str) {
@@ -133,8 +137,20 @@ mod tests {
         assert!(log.contains("init.ox:1:10: Division by zero"), "{log}");
         assert!(log.contains("  in f at init.ox:1:10"), "{log}");
         assert!(log.contains("  in top level at init.ox:2:1"), "{log}");
-        assert_eq!(editor.message(), Some("Ox: Division by zero"));
+        assert_eq!(editor.message(), Some("Division by zero"));
         assert!(!shown(&editor));
+    }
+
+    #[test]
+    fn a_quit_is_neither_logged_nor_echoed() {
+        let mut editor = Editor::new();
+        let error = Isolate::new().eval("(raise (quit \"Quit\"))").unwrap_err();
+
+        report(&mut editor, &error, None);
+
+        assert_eq!(editor.buffer_named(LOG), None);
+        assert_eq!(super::reports(&editor), 0);
+        assert_eq!(editor.message(), None);
     }
 
     #[test]

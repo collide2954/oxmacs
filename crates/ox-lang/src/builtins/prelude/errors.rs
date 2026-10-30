@@ -20,14 +20,14 @@ const ERRORS: [&str; 8] = [
     "expectation-failed",
 ];
 
-fn define(runtime: &mut Runtime, name: &'static str) -> Result<(), Error> {
+fn define(runtime: &mut Runtime, name: &'static str, family: Family) -> Result<(), Error> {
     let text = runtime.heap.string(name)?;
     let shown = print::write(&runtime.heap, text);
     let kind = runtime.heap.record_type(RecordType {
         name: Sym::intern(name),
         fields: Box::new([Sym::intern("message"), Sym::intern("traceback")]),
         constructor: Value::Nil,
-        family: Family::Error,
+        family,
         module: Sym::intern("ox"),
     })?;
     let build = Rc::new(Resumable::closure(
@@ -55,8 +55,12 @@ fn define(runtime: &mut Runtime, name: &'static str) -> Result<(), Error> {
 }
 
 pub(super) fn install(isolate: &mut Isolate) {
-    for name in ERRORS {
-        if let Err(error) = define(isolate.runtime_mut(), name) {
+    let kinds = ERRORS
+        .iter()
+        .map(|name| (*name, Family::Error))
+        .chain([("quit", Family::Quit)]);
+    for (name, family) in kinds {
+        if let Err(error) = define(isolate.runtime_mut(), name, family) {
             panic!("The Ox error type {name} failed to load: {error}");
         }
     }

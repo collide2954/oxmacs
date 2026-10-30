@@ -134,7 +134,7 @@ pub(crate) fn deliver(isolate: &mut Isolate, editor: &mut Editor) {
         };
         match isolate.docs_value(&docs) {
             Ok(value) => isolate.resolve(promise, value),
-            Err(error) => isolate.reject(promise, &error.message),
+            Err(error) => isolate.reject(promise, &error),
         };
     }
 }

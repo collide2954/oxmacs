@@ -11,8 +11,8 @@ pub(crate) fn catches(heap: &Heap, value: Value, kind: Value) -> bool {
     match wanted.family {
         Family::AnyError => heap
             .record_type_of(record.kind)
-            .is_some_and(|found| found.family != Family::Plain),
-        Family::Error | Family::Plain => record.kind == kind,
+            .is_some_and(|found| matches!(found.family, Family::Error | Family::AnyError)),
+        Family::Error | Family::Plain | Family::Quit => record.kind == kind,
     }
 }
 

@@ -192,6 +192,6 @@ mod tests {
         press(&mut editor, &mut ox, "<f4>");
 
         assert_eq!(editor.buffer().contents(), "aca");
-        assert_eq!(editor.message(), Some("Ox: no"));
+        assert_eq!(editor.message(), Some("no"));
     }
 }

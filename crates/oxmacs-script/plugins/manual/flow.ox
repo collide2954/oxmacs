@@ -113,6 +113,14 @@ An error is a record: `e.message` is its text, its own fields are there by name,
 
 Ox's own errors have types: `zero-division-error`, `type-error`, `name-error`, `arity-error`, `range-error`, `no-match-error` and `expectation-failed`, all caught by `error`. `(maybe expr)` gives `nil` instead of raising.
 
+`quit` is raised in the task waiting on a prompt when `C-g` cancels it. A quit isn't an error, so `(catch error e …)` lets it pass and the command simply stops; catch `quit` to clean up or carry on, and `finally` runs either way. An error nothing catches shows its message in the echo area and goes to `*ox log*` with its traceback, while a quit nothing catches leaves only "Quit".
+
+```
+(try
+  (try (raise (quit)) (catch error e :not-here))
+  (catch quit e :cancelled))
+```
+
 ```
 [(maybe (/ 1 0)) (try (/ 1 0) (catch zero-division-error e e.message))]
 ```

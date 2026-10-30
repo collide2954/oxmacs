@@ -82,11 +82,8 @@
     (unless (= old.directory directory)
       (close-buffer old.buffer))))
 
-(def (quietly work)
-  (try (work) (catch error e (unless (= e.message "Quit") (message e.message)))))
-
 (defcommand dired "List a directory to manage its files"
-  (quietly (fn [] (visit (await (prompt-path "Dired (directory): " :directories true)) nil :name true))))
+  (visit (await (prompt-path "Dired (directory): " :directories true)) nil :name true))
 
 (def (up-directory)
   (when-let [listing (current)]
@@ -97,8 +94,8 @@
   (if (current)
     (up-directory)
     (let [file (buffer-file)]
-      (quietly (fn [] (visit (if file (path/parent file) (default-directory))
-                             (when file (path/name file)) :name true))))))
+      (visit (if file (path/parent file) (default-directory))
+             (when file (path/name file)) :name true))))
 
 (def (step delta)
   (when-let [listing (current)]
@@ -115,13 +112,13 @@
       [(entry-here)
        (let [entry (entry-here)
              target (path/join listing.directory entry.name)]
-         (if entry.dir (quietly (fn [] (move-to target nil))) (open-file target)))]
+         (if entry.dir (move-to target nil) (open-file target)))]
       [else (message "No file on this line")])))
 
 (defcommand dired-up-directory "Go up to the parent directory" (up-directory))
 
 (defcommand dired-revert "Read the directory again"
-  (when-let [state (state-here)] (quietly (fn [] (refresh state)))))
+  (when-let [state (state-here)] (refresh state)))
 
 (defcommand dired-cycle-sort "Sort by name, newest or largest"
   (update-here (fn [listing]
@@ -184,12 +181,10 @@
         (message (if flagged "(No deletions requested)" "No file on this line"))
         (let [trash (get (settings) :delete-to-trash)
               names (map :name found)]
-          (quietly
-           (fn []
-             (when (await (yes-or-no "{(if trash "Trash" "Delete")} {(describe names)}?"))
-               (map (fn [entry] (await (delete-path (path/join listing.directory entry.name)))) found)
-               (refresh-all)
-               (message "{(if trash "Trashed" "Deleted")} {(files (count found))}")))))))))
+          (when (await (yes-or-no "{(if trash "Trash" "Delete")} {(describe names)}?"))
+            (map (fn [entry] (await (delete-path (path/join listing.directory entry.name)))) found)
+            (refresh-all)
+            (message "{(if trash "Trashed" "Deleted")} {(files (count found))}")))))))
 
 (defcommand dired-do-flagged-delete "Delete the files flagged for deletion" (delete true))
 (defcommand dired-do-delete "Delete the marked files, or this one" (delete false))
@@ -204,41 +199,37 @@
                      [else "{(if moving "Move" "Copy")} {(files (count found))} to: "])]
       (if (nil? question)
         (message "No file on this line")
-        (quietly
-         (fn []
-           (let [target (await (prompt-path question))
-                 into (await (file/exists? target))
-                 into (and into (get (await (file/metadata target)) :dir))]
-             (if (and (> (count found) 1) (not into))
-               (message "Target must be a directory: {(path/abbreviate target)}")
-               (do
-                 (map (fn [entry]
-                        (let [from (path/join listing.directory entry.name)
-                              to (if into (path/join target entry.name) target)]
-                          (if moving
-                            (await (move-path from to))
-                            (when (or (not (await (file/exists? to)))
-                                      (await (yes-or-no "{(path/abbreviate to)} exists; replace it? ")))
-                              (await (file/copy from to))))))
-                      found)
-                 (refresh-all)
-                 (message "{(if moving "Moved" "Copied")} {(files (count found))}"))))))))))
+        (let [target (await (prompt-path question))
+              into (await (file/exists? target))
+              into (and into (get (await (file/metadata target)) :dir))]
+          (if (and (> (count found) 1) (not into))
+            (message "Target must be a directory: {(path/abbreviate target)}")
+            (do
+              (map (fn [entry]
+                     (let [from (path/join listing.directory entry.name)
+                           to (if into (path/join target entry.name) target)]
+                       (if moving
+                         (await (move-path from to))
+                         (when (or (not (await (file/exists? to)))
+                                   (await (yes-or-no "{(path/abbreviate to)} exists; replace it? ")))
+                           (await (file/copy from to))))))
+                   found)
+              (refresh-all)
+              (message "{(if moving "Moved" "Copied")} {(files (count found))}"))))))))
 
 (defcommand dired-do-rename "Rename or move the marked files, or this one" (transfer true))
 (defcommand dired-do-copy "Copy the marked files, or this one" (transfer false))
 
 (defcommand dired-create-directory "Create a directory"
   (when-let [state (state-here)]
-    (quietly
-     (fn []
-       (let [target (await (prompt-path "Create directory: " :directories true))]
-         (if (await (file/exists? target))
-           (message "{(path/abbreviate target)} already exists")
-           (do
-             (await (file/make-dir target))
-             (refresh state)
-             (when (= (path/parent target) (get @state :directory))
-               (place @state (path/name target))))))))))
+    (let [target (await (prompt-path "Create directory: " :directories true))]
+      (if (await (file/exists? target))
+        (message "{(path/abbreviate target)} already exists")
+        (do
+          (await (file/make-dir target))
+          (refresh state)
+          (when (= (path/parent target) (get @state :directory))
+            (place @state (path/name target))))))))
 
 (defcommand dired-do-open "Open the marked files, or this one, with their usual apps"
   (when-let [listing (current)]
@@ -247,5 +238,5 @@
         (message "No file on this line")
         (map (fn [entry] (open-externally (path/join listing.directory entry.name))) found)))))
 
-(on-open-directory (fn [directory] (quietly (fn [] (visit directory nil :name true)))))
+(on-open-directory (fn [directory] (visit directory nil :name true)))
 (on-disk-change :dired (fn [] (refresh-all)))

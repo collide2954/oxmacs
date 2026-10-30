@@ -1,8 +1,9 @@
 use std::time::Duration;
 
-use ox_lang::Isolate;
+use ox_lang::error::ErrorKind;
 use ox_lang::task::TaskId;
 use ox_lang::value::Value;
+use ox_lang::{Error, Isolate};
 
 fn finish(isolate: &mut Isolate, task: TaskId) -> (Result<String, String>, usize) {
     for rounds in 1..10_000 {
@@ -197,9 +198,42 @@ fn rejected_promises_raise_in_the_tasks_that_wait() {
 
     let task = isolate.spawn(wait, &[promise]).unwrap();
     isolate.run(Duration::from_millis(1));
-    assert!(isolate.reject(held.get(), "offline"));
+    assert!(isolate.reject(held.get(), &Error::new("offline")));
 
     assert_eq!(finish(&mut isolate, task).0, Ok("\"offline\"".to_owned()));
+}
+
+#[test]
+fn a_quit_passes_error_handlers_and_keeps_its_kind_when_nothing_catches_it() {
+    let mut isolate = Isolate::new();
+    let quit = Error::new("Quit").of(ErrorKind::Quit);
+    let caught = isolate.promise().unwrap();
+    let held = isolate.root(caught);
+    let wait = isolate
+        .eval("(fn [p] (try (try (await p) (catch error e :error)) (catch quit e e.message)))")
+        .unwrap();
+    let task = isolate.spawn(wait, &[caught]).unwrap();
+    isolate.run(Duration::from_millis(1));
+    assert!(isolate.reject(held.get(), &quit));
+    assert_eq!(finish(&mut isolate, task).0, Ok("\"Quit\"".to_owned()));
+
+    let uncaught = isolate.promise().unwrap();
+    let held = isolate.root(uncaught);
+    let wait = isolate.eval("(fn [p] (await p))").unwrap();
+    isolate.spawn(wait, &[uncaught]).unwrap();
+    isolate.run(Duration::from_millis(1));
+    assert!(isolate.reject(held.get(), &quit));
+    let failed = loop {
+        let report = isolate.run(Duration::from_millis(2));
+        if let Some((_, result)) = report.finished.into_iter().next() {
+            break result.err();
+        }
+    };
+
+    assert_eq!(
+        failed.map(|error| (error.kind, error.message)),
+        Some((ErrorKind::Quit, "Quit".to_owned()))
+    );
 }
 
 #[test]
